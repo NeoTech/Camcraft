@@ -210,7 +210,7 @@ fn heidenhain_native_cycles_and_preset_use_numbered_tnc_blocks() {
 }
 
 #[test]
-fn heidenhain_drilling_posts_its_chain_with_the_dwell_at_the_bottom() {
+fn heidenhain_drilling_uses_native_dwell_and_preserves_unrepresentable_pecks() {
     let out = run(&drilling(true));
     assert!(out.warnings.is_empty(), "{:?}", out.warnings);
     let b = check_form(&out.program, "drilling");
@@ -218,17 +218,19 @@ fn heidenhain_drilling_posts_its_chain_with_the_dwell_at_the_bottom() {
     assert_eq!(b[0], "; T4 6MM DRILL", "the tool comment (#257) leads its tool call");
     assert_eq!(b[1], "T4 G17 S3000", "the manual's T block: number, spindle axis, speed");
     assert_eq!(b[2], "M3");
-    // The drill: down at feed, dwell 0.25 s in seconds, out at rapid.
-    let bottom = at("G01 X+10 Y+10 Z-6 F100");
-    assert_eq!(b[bottom + 1], "FUNCTION DWELL TIME0.25", "{}", out.program);
-    assert_eq!(b[bottom + 2], "G00 X+10 Y+10 Z+2");
-    // The deep hole: its two plunges and full retracts, no dwell.
-    let zs: Vec<&str> = b[bottom + 3..]
+    // The drill is called once; the control owns its bottom dwell.
+    let definition = at("G200 Q200=+2 Q201=-6 Q206=+100 Q202=+6 Q210=+0 Q203=+0 Q204=+2 Q211=+0.25 Q395=+0");
+    assert_eq!(b[definition + 1], "G00 X+10 Y+10 Z+2 M99");
+    assert_eq!(b.iter().filter(|x| x.contains("M99")).count(), 1);
+    assert!(!b.iter().any(|x| x == "G01 X+10 Y+10 Z-6 F100"));
+    // The deep hole's first peck starts at R, not the surface: its old
+    // explicit chain must remain unchanged rather than deepening that cut.
+    let zs: Vec<&str> = b[definition + 2..]
         .iter()
         .filter_map(|x| x.split(' ').find(|w| w.starts_with('Z')))
         .collect();
     assert_eq!(zs, ["Z+2", "Z-4", "Z+2", "Z-10", "Z+2", "Z+10"], "the chain, move for move");
-    assert_eq!(b.iter().filter(|x| x.starts_with("FUNCTION DWELL")).count(), 1);
+    assert_eq!(b.iter().filter(|x| x.starts_with("FUNCTION DWELL")).count(), 0);
     assert_eq!(b[b.len() - 1], "M2");
 }
 
