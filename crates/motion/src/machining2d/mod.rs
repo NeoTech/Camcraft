@@ -29,6 +29,9 @@ mod bore;
 mod chamfer;
 mod circular;
 mod thread_mill;
+mod trochoid_air;
+mod trochoid_loops;
+mod trochoid_slot;
 mod contour;
 mod contour_bore;
 mod contour_chain;
@@ -88,6 +91,11 @@ pub(crate) use levels::cut_levels;
 pub use pocket::{pocket, PocketParams, PocketStrategy};
 pub use ring::{on_boundary, ring_is_circular};
 pub use slots::{chord_clears, slot, trace, SlotParams, TraceParams};
+pub use trochoid_air::lifted_cut;
+pub use trochoid_slot::{
+    plan_trochoidal_slot, trochoidal_slot, TrochoidParams, TrochoidPlan, TrochoidReturn, DEFAULT_MAX_ENGAGEMENT,
+    DEFAULT_MICROLIFT,
+};
 pub use thread_mill::{thread_mill, ThreadHole, ThreadParams, THREAD_DEPTH_PER_PITCH};
 pub(crate) use pocket::plan_passes;
 pub(crate) use adaptive::PLAN_SAG;
