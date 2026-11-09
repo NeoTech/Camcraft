@@ -2262,6 +2262,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             feed,
             plunge_feed,
             tolerance,
+            infeed_plan,
             ..
         } => {
             if tool.kind != crate::tools::ToolKind::Thread {
@@ -2278,7 +2279,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 m_gen,
                 frame.as_ref(),
             )?;
-            let path = crate::turning::thread_in(
+            let path = crate::turning::thread_planned_in(
                 &material.facets,
                 &crate::turning::ThreadParams {
                     tolerance: *tolerance,
@@ -2293,6 +2294,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     insert_width: tool.width,
                     form_angle: tool.tip_angle,
                 },
+                infeed_plan,
                 turn_stock,
             )?;
             (region, path)

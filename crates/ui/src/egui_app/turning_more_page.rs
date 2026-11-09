@@ -29,6 +29,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             infeed,
             feed,
             plunge_feed,
+            infeed_plan,
         } => {
             if tab == SEC_HEIGHTS {
                 height_editor(
@@ -59,6 +60,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
                 hint(ui, "radial depth of the groove, crest to root - the deepest rung stands this far under the turned skin");
                 prop_row(ui, "Infeed", |ui| num(ui, u, infeed));
                 hint(ui, "radial growth per pass of the growing wave; the last pass reaches full depth and the turns between them are the spring pass");
+                super::thread_infeed_page::rows(ui, u, infeed_plan);
             }
             if tab == SEC_FEEDS {
                 prop_row(ui, "Feed", |ui| num_feed(ui, u, feed));

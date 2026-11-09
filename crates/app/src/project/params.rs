@@ -894,6 +894,11 @@ pub enum ParamsDto {
         infeed: f64,
         feed: f64,
         plunge_feed: f64,
+        /// #416 the infeed plan: absent (and written only when not the
+        /// default) is the radial constant-depth ladder every earlier
+        /// file cut - no version step, the approach precedent.
+        #[serde(default, skip_serializing_if = "ThreadInfeedDto::is_default")]
+        infeed_plan: ThreadInfeedDto,
     },
     /// Declared at v37 with the contour kinds (M5.2 stage E): the
     /// ride trio of heights and the kind's own promise-numbers -

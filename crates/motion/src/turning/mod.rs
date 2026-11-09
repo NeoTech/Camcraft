@@ -17,7 +17,8 @@
 //! pair. Stage C adds the blade: [`revolve`]'s meridian verdict of
 //! what a banded cut leaves, and [`blade`]'s grooving, groove-
 //! finish and parting sweeps built on the same silhouette. Stage D
-//! added [`thread`]'s helical ladder; stage E adds [`contour`]'s
+//! added [`thread`]'s helical ladder (its passes laid by
+//! [`infeed`]'s plan since #416); stage E adds [`contour`]'s
 //! promised-face rides - chamfer, taper, multi-pass - and stage E2
 //! [`form`]'s crown gauges. Stage F adds [`bore`]: the profile
 //! ride's inside twin, the nose walking a hole's inner wall. The
@@ -35,6 +36,7 @@ pub mod bore;
 pub mod contour;
 pub mod face;
 pub mod form;
+pub mod infeed;
 pub mod offset;
 pub mod parting;
 pub mod prof;
@@ -42,6 +44,7 @@ pub mod profile;
 pub mod revolve;
 pub mod stock;
 pub mod thread;
+mod thread_cycle;
 
 pub use blade::{
     groove_finish, groove_finish_in, groove_rough, groove_rough_in, part, part_in,
@@ -61,4 +64,5 @@ pub use prof::{
 pub use profile::{profile_of, silhouette, Profile};
 pub use revolve::{blade_program_warnings, blade_warnings, BladeLeg, BandMove, Floor};
 pub use stock::StockEnv;
-pub use thread::{thread, thread_in, thread_warnings, ThreadParams};
+pub use infeed::{DepthSchedule, InfeedMethod, ThreadInfeed};
+pub use thread::{thread, thread_in, thread_planned_in, thread_warnings, ThreadParams};

@@ -1192,6 +1192,7 @@ impl OpParams {
                 infeed,
                 feed,
                 plunge_feed,
+                infeed_plan,
             } => {
                 w(h, *tolerance);
                 wh(h, *clearance_z);
@@ -1199,6 +1200,18 @@ impl OpParams {
                 wh(h, *bottom_z);
                 for v in [*pitch, *depth, *infeed, *feed, *plunge_feed] {
                     w(h, v);
+                }
+                // The infeed plan (#416) moves every pass - bytes only
+                // when it differs from the default, so every earlier
+                // thread keeps its digest (the approach precedent).
+                if *infeed_plan != crate::turning::ThreadInfeed::default() {
+                    h.write_u8(0xD4);
+                    h.write_u8(infeed_plan.method as u8);
+                    h.write_u8(infeed_plan.schedule as u8);
+                    h.write_u32(infeed_plan.spring_passes);
+                    for v in [infeed_plan.flank_angle, infeed_plan.min_depth, infeed_plan.finish_allowance] {
+                        w(h, v);
+                    }
                 }
             }
             // The contour rides (M5.2 stage E, tags 25-27): each

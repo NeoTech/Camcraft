@@ -959,7 +959,11 @@ pub enum OpParams {
     /// the blank. The V itself (crest width, flank angle) is TOOL
     /// geometry, the blade's width law again; the feeds are mm/min
     /// with the spindle turning one rev per pitch of the
-    /// synchronized pass.
+    /// synchronized pass. `infeed` is also the FIRST pass's depth
+    /// when `infeed_plan` ladders by constant area (issue #416), and
+    /// `infeed_plan` says how the passes enter (radial, flank,
+    /// alternating), how deep each goes, the finish allowance and the
+    /// spring passes - its default is the radial constant-depth ladder.
     Threading {
         tolerance: f64,
         clearance_z: Height,
@@ -970,6 +974,7 @@ pub enum OpParams {
         infeed: f64,
         feed: f64,
         plunge_feed: f64,
+        infeed_plan: crate::turning::ThreadInfeed,
     },
     /// Chamfer turning (M5.2 stage E): one ride across the cone
     /// face the window `top_z`/`bottom_z` bounds. `angle_deg` is

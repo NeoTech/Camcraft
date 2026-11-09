@@ -1277,6 +1277,7 @@ fn seed_threading(c: &Carried) -> OpParams {
         infeed: 0.4,
         feed: c.feed,
         plunge_feed: c.plunge,
+        infeed_plan: crate::turning::ThreadInfeed::default(),
     }
 }
 

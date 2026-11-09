@@ -114,6 +114,9 @@ pub use params::*;
 mod entity;
 mod thread_dto;
 pub use thread_dto::ThreadCycleDto;
+// #416: the threading infeed plan's file mirror.
+mod thread_infeed_dto;
+pub use thread_infeed_dto::{DepthScheduleDto, InfeedMethodDto, ThreadInfeedDto};
 mod touch_dto;
 pub use touch_dto::ProbeTouchDto;
 mod params_impl;

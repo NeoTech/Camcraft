@@ -13,7 +13,7 @@ use crate::schema::{Location, Operation, OperationMeta, Toolpath};
 use crate::setup;
 use crate::verify::Warning;
 
-use super::gates::{area_gate, check_tool, family_gate, heights_gate, tool_gate, valid_src};
+use super::gates::{area_gate, check_tool, family_gate, heights_gate, thread_gate, tool_gate, valid_src};
 
 /// Create an operation entity. Deliberately does not generate: a new
 /// operation reads "never generated" until `GenerateOperation` runs, the
@@ -87,6 +87,7 @@ impl CreateOperation {
         // law makes that the first/legacy context byte-identically.
         let setup = crate::setup::active(world);
         valid_src(world, setup.as_deref(), &src)?;
+        thread_gate(world, &params, tool)?;
         if !params.is_sane() {
             return Err(CommandError::Invalid(format!(
                 "operation parameters are not usable for a {} operation",
@@ -166,6 +167,7 @@ impl PasteOperation {
         let context = operation.setup.as_deref();
         check_tool(world, &operation.tool)?;
         valid_src(world, context, &operation.src)?;
+        thread_gate(world, &operation.params, &operation.tool)?;
         if !operation.params.is_sane() {
             return Err(CommandError::Invalid("copied operation parameters are not usable".into()));
         }
