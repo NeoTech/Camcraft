@@ -18,7 +18,7 @@ fn read(rel: &str) -> String {
 fn machine(rigid: Option<bool>) -> Value {
     let mut m: Value = serde_json::from_str(&read("assets/machines/3axis-vmc.mch")).expect("machine json");
     if let Some(v) = rigid {
-        m["kinematics"]["static"]["head"]["spindle"]["rigid_tapping"] = json!(v);
+        m["kinematics"]["static"]["head"]["rigidTapping"] = json!(v);
     }
     m
 }
@@ -26,6 +26,19 @@ fn machine(rigid: Option<bool>) -> Value {
 fn post(stream: &str) -> engine::PostOutput {
     engine::run(&read("assets/posts/heidenhain.cps"), &machine(None), stream)
         .unwrap_or_else(|e| panic!("Heidenhain engine run: {e}"))
+}
+
+fn tap_output(kind: CycleKind, feed: f64, dwell: f64) -> engine::PostOutput {
+    let mut rs = setup(3000.0);
+    let mut n = 0;
+    add_hole(&mut rs, &mut n, hole(kind, 10.0, 2.0, -6.0, 0.0, dwell, Some(feed)), None);
+    finish(&mut rs);
+    let serialized = stream(&rs);
+    let parsed = cnc::parse(&serialized).expect("cycle fixture parses");
+    let cycle = parsed.iter().find_map(|r| match r { Record::Cycle(c) => Some(c), _ => None }).unwrap();
+    assert!((cycle.feed.unwrap() - feed).abs() < 0.000001, "fixture feed survives the public stream serializer");
+    assert!((cycle.dwell - dwell).abs() < 0.000001, "fixture dwell survives millisecond serialization");
+    post(&serialized)
 }
 
 fn param(name: &str, value: Value) -> Record {
@@ -234,7 +247,13 @@ fn rigid_and_floating_taps_keep_their_separate_pitch_contracts_and_refusals() {
     let mut m = 0;
     add_hole(&mut rigid, &mut m, hole(CycleKind::Tap, 10.0, 2.0, -6.0, 0.0, 0.0, Some(300.0)), None);
     finish(&mut rigid);
-    let out = engine::run(&read("assets/posts/heidenhain.cps"), &machine(Some(false)), &stream(&rigid)).unwrap();
+    let rigid_machine = machine(Some(false));
+    assert_eq!(
+        camcraft_app::post::machine::script_props(&rigid_machine)["rigidTapping"],
+        json!(false),
+        "the fixture must set the capability key mapped into the engine's machine global",
+    );
+    let out = engine::run(&read("assets/posts/heidenhain.cps"), &rigid_machine, &stream(&rigid)).unwrap();
     assert!(out.warnings.iter().any(|w| w.contains("rigid tapping is unavailable")), "{:?}", out.warnings);
     assert!(!out.program.contains("G206") && !out.program.contains("G207"), "no floating fallback or unsupported rigid cycle");
     assert!(!out.program.contains("G01"), "a refused tap does not fall through to feed moves");
@@ -247,6 +266,42 @@ fn rigid_and_floating_taps_keep_their_separate_pitch_contracts_and_refusals() {
     assert!(out.warnings.is_empty(), "explicit floating holder does not depend on rigid-tapping capability: {:?}", out.warnings);
     assert!(out.program.contains("G206"), "explicit floating intent maps to G206");
     assert!(!out.program.contains("G207"));
+}
+
+#[test]
+fn floating_tap_uses_q206_and_enforces_its_feed_and_dwell_resolution() {
+    let floating = tap_output(CycleKind::FloatingTap, 370.368, 0.25);
+    assert!(floating.warnings.is_empty(), "{:?}", floating.warnings);
+    let bs = bodies(&floating.program);
+    let g206 = definition(&bs, "G206");
+    assert_qs(g206, &[(200, "+2"), (201, "-6"), (206, "+370.368"), (211, "+0.25"), (203, "+0"), (204, "+2")]);
+    assert!(!g206.contains("Q239="), "floating pitch is derived from feed and rpm, not Q239");
+
+    let rigid = tap_output(CycleKind::Tap, 370.368, 0.0);
+    assert!(rigid.warnings.iter().any(|w| w.contains("cannot be represented at the control's pitch resolution")), "{:?}", rigid.warnings);
+    assert!(!rigid.program.contains("G206") && !rigid.program.contains("G207"));
+
+    let dwell_at_limit = tap_output(CycleKind::FloatingTap, 370.368, 0.5);
+    assert!(dwell_at_limit.warnings.is_empty(), "0.5 seconds is accepted: {:?}", dwell_at_limit.warnings);
+    assert!(definition(&bodies(&dwell_at_limit.program), "G206").contains("Q211=+0.5"));
+
+    let dwell_over_limit = tap_output(CycleKind::FloatingTap, 370.368, 0.501);
+    assert!(dwell_over_limit.warnings.iter().any(|w| w.contains("must be at most 0.5 seconds")), "{:?}", dwell_over_limit.warnings);
+    assert!(!dwell_over_limit.program.contains("G206") && !dwell_over_limit.program.contains("G207"));
+
+    // Only a hand-authored stream can exceed the serializer's 0.001 feed
+    // resolution. Establish that parsed premise before testing the refusal.
+    let mut rs = setup(3000.0);
+    let mut n = 0;
+    add_hole(&mut rs, &mut n, hole(CycleKind::FloatingTap, 10.0, 2.0, -6.0, 0.0, 0.25, Some(370.368)), None);
+    finish(&mut rs);
+    let raw = stream(&rs).replacen("F 370368", "F 370368.1", 1);
+    let parsed = cnc::parse(&raw).expect("precise hand-authored stream parses");
+    let feed = parsed.iter().find_map(|r| match r { Record::Cycle(c) => c.feed, _ => None }).unwrap();
+    assert!((feed - 370.3681).abs() < 0.0000001, "the raw stream keeps the distinguishing feed");
+    let feed_over_resolution = post(&raw);
+    assert!(feed_over_resolution.warnings.iter().any(|w| w.contains("floating tapping feed cannot be represented at the control's feed resolution")), "{:?}", feed_over_resolution.warnings);
+    assert!(!feed_over_resolution.program.contains("G206") && !feed_over_resolution.program.contains("G207"));
 }
 
 #[test]

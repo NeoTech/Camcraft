@@ -21,6 +21,7 @@ use camcraft_app::geometry::{Mesh, Point3, Triangle, cube};
 use camcraft_app::model;
 use camcraft_app::operation::{Height, OpParams, SrcRef};
 use camcraft_app::post::cnc::{self, Record};
+use camcraft_app::post::engine;
 use camcraft_app::posting;
 use camcraft_app::project;
 use camcraft_app::tools::catalog;
@@ -265,4 +266,78 @@ fn legacy_tap_spelling_and_stream_are_stable_and_unknown_kinds_are_rejected() {
     let unknown_stream = stream.replacen("CYCLE TAP ", "CYCLE UNKNOWNCYCLE ", 1);
     assert_ne!(unknown_stream, stream, "the unknown cycle word fixture changed");
     assert!(cnc::parse(&unknown_stream).is_err(), "unknown stream cycle words are refused");
+}
+
+#[test]
+fn generated_floating_tap_posts_as_one_native_cycle_with_its_safe_lift() {
+    let (world, mut history) = fresh_tap_world();
+    create_and_generate(&world, &mut history, CycleChoice::FloatingTap, 0.25);
+    let generated = assert_generated(&world, CycleKind::FloatingTap, 0.25);
+    let generated_cycle = generated.cycles[0];
+    assert!(generated_cycle.first_move > 0, "the tap approach precedes its first cutting move");
+    assert_eq!(generated.moves[generated_cycle.first_move - 1].kind, MoveKind::Rapid);
+    assert_eq!(generated.moves[generated_cycle.first_move].kind, MoveKind::Feed);
+
+    let records = posting::stream_records(&world).expect("generated operation dumps to actual posting records");
+    let cycle_at = records
+        .iter()
+        .position(|record| matches!(record, Record::Cycle(_)))
+        .expect("posting records contain the generated tap cycle");
+    let cycle = match &records[cycle_at] {
+        Record::Cycle(cycle) => cycle,
+        _ => unreachable!(),
+    };
+    assert_eq!(cycle.kind, CycleKind::FloatingTap);
+    assert_eq!(cycle.dwell, 0.25);
+    assert_eq!(cycle.first_move, generated_cycle.first_move);
+    let moves_before_cycle = records[..cycle_at]
+        .iter()
+        .filter(|record| matches!(record, Record::Move(_)))
+        .count();
+    assert_eq!(moves_before_cycle, cycle.first_move, "first_move counts the actual preceding move records");
+    assert!(cycle_at > 0);
+    assert!(matches!(&records[cycle_at - 1], Record::Move(m) if m.kind == MoveKind::Rapid), "the actual rapid approach precedes Cycle");
+    assert!(matches!(records.get(cycle_at + 1), Some(Record::Move(m)) if m.kind == MoveKind::Feed), "first_move is the first cutting feed after Cycle");
+
+    let stream = cnc::serialize(&records);
+    let machine = serde_json::from_str(include_str!("../../../assets/machines/3axis-vmc.mch"))
+        .expect("built-in VMC machine JSON");
+    let out = engine::run(include_str!("../../../assets/posts/heidenhain.cps"), &machine, &stream)
+        .expect("post the generated operation's actual record stream");
+    assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+    assert_eq!(out.program.matches("G206").count(), 1, "one native floating cycle definition");
+    assert_eq!(out.program.matches("M99").count(), 1, "one call for the generated hole");
+    let posted_feed: f64 = out.program.split_whitespace()
+        .find_map(|word| word.strip_prefix("Q206="))
+        .expect("native tapping feed").parse().expect("numeric Q206");
+    assert!((posted_feed - cycle.feed.expect("generated cycle feed")).abs() < 0.000001, "posted feed agrees with the actual generated tool feed");
+    assert!(out.program.contains("Q211=+0.25"), "{}", out.program);
+    assert!(!out.program.contains("Q239="), "floating cycle does not emit rigid pitch");
+    assert!(!out.program.contains("G01"), "native tapping replaces both expanded axial cuts");
+    assert!(
+        out.program.lines().any(|line| line.contains("G00") && line.contains("Z+30")),
+        "the generator's higher safe lift remains explicit: {}",
+        out.program,
+    );
+}
+
+#[test]
+fn generated_legacy_tap_posts_as_rigid_g207() {
+    let (world, mut history) = fresh_tap_world();
+    create_and_generate(&world, &mut history, CycleChoice::Tap, 0.25);
+    assert_generated(&world, CycleKind::Tap, 0.0);
+    assert_stream_cycle(&world, CycleKind::Tap, "CYCLE TAP ");
+
+    let records = posting::stream_records(&world).expect("generated legacy tap dumps to actual posting records");
+    let stream = cnc::serialize(&records);
+    let machine = serde_json::from_str(include_str!("../../../assets/machines/3axis-vmc.mch"))
+        .expect("built-in VMC machine JSON");
+    let out = engine::run(include_str!("../../../assets/posts/heidenhain.cps"), &machine, &stream)
+        .expect("post the generated legacy tap's actual record stream");
+    assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+    assert_eq!(out.program.matches("G207").count(), 1);
+    assert_eq!(out.program.matches("M99").count(), 1);
+    assert!(out.program.contains("Q239=+0.7"), "catalog pitch and rpm resolve into rigid Q239");
+    assert!(!out.program.contains("G206"), "legacy TAP stays rigid");
+    assert!(!out.program.contains("G01"), "native rigid tapping replaces its expanded axial cuts");
 }

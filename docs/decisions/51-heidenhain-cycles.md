@@ -48,8 +48,8 @@ All depths and clearances use the entry surface as datum:
 | `SPOT` / `DRILL` | G200 | Q200, Q201, Q206, Q202, Q210=0, Q203, Q204, Q211=P, Q395=0. A single plunge sets Q202 to total depth. |
 | `DEEP` | G200 | Same Q values; Q202=Q, retaining the deep-hole full-return class. |
 | `PECK` | G205 | Q200, Q201, Q206, Q202=Q, Q203, Q204, Q212=0, Q205=Q, Q258=0, Q259=0, Q257=Q, Q256=min(1 mm,Q), Q211=P, Q379=0, Q253=feed, Q208=FMAX, Q395=0. This is constant chip-break pecking with no decrement or deepened start. |
-| `TAP` (legacy, rigid) | G207 | Q200, Q201, Q239, Q203, Q204. `Q239 = positive cutting feed / positive integral spindle rpm`; no Q206 and no dwell. The current tool model is right-hand-only. |
-| `FLOATINGTAP` (explicit floating holder) | G206 | Q200, Q201, Q206=positive feed in mm/min, Q211=P in seconds, Q203, Q204. Spindle direction remains the handedness source. |
+| `TAP` (legacy, rigid) | G207 | Q200, Q201, Q239, Q203, Q204. `Q239 = positive cutting feed / positive integral spindle rpm`; rigid-only range and four-decimal representability checks; no Q206 and no dwell. The current tool model is right-hand-only. |
+| `FLOATINGTAP` (explicit floating holder) | G206 | Q200, Q201, Q206=positive feed in mm/min (0.001 mm/min resolution), Q211=P in seconds (0≤P≤0.5, inclusive, to avoid tool wedging), Q203, Q204. No Q239; spindle direction remains the handedness source. |
 | explicit work offset | G247 definition | Q339 is the house row: G54→1, G55→2, G56→3, G57→4, G58→5, G59→6. No `WorkOffset` means leave the active preset unchanged. Emit only on row change. |
 
 The G205 choices state the current stream's constant-peck/no-decrement policy;

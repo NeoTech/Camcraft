@@ -488,10 +488,15 @@ function onCycle() {
   if (tap) {
     if (!has(sRpm) || sRpm <= 0 || sRpm !== Math.round(sRpm)) { cycleBad("tapping needs a positive integral spindle speed to resolve pitch"); return; }
     var pitch = feed / sRpm;
-    if (pitch < 0.0001 || pitch > 99.9999) { cycleBad("tapping pitch is outside the documented range"); return; }
-    if (Math.abs(pitch - Math.round(pitch * 10000) / 10000) > 0.0000005) {
+    // Only G207 consumes Q239. G206 derives pitch from its feed and rpm.
+    if (!floating && (pitch < 0.0001 || pitch > 99.9999)) { cycleBad("tapping pitch is outside the documented range"); return; }
+    if (!floating && Math.abs(pitch - Math.round(pitch * 10000) / 10000) > 0.0000005) {
       cycleBad("tapping feed/spindle ratio cannot be represented at the control's pitch resolution"); return;
     }
+    if (floating && Math.abs(feed - Math.round(feed * 1000) / 1000) > 0.0000005) {
+      cycleBad("floating tapping feed cannot be represented at the control's feed resolution"); return;
+    }
+    if (floating && dwell > 0.5) { cycleBad("G206 floating tapping dwell must be at most 0.5 seconds to avoid tool wedging"); return; }
     // The current tool model is right-hand only (positive pitch and M3).
     // Do not infer a left-hand thread from a negative feed or rpm.
     if (!floating && typeof machine !== "undefined" && machine.rigidTapping === false) {
