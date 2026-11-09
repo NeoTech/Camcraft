@@ -9,8 +9,9 @@
 //! Gate map (#530): covers post::machine (def Kind, edm, parse),
 //! app::machine (validate, draft), app::posting (post_serves,
 //! op_streams family gate), app::project (Machine round trip).
-//! Provenance: our own fixtures; the template files carry no vendor
-//! values.
+//! Provenance: our own fixtures (`tests/edm/*.mch`, empty templates
+//! with no vendor values; they join the shipped library with their
+//! kind's first post, #533 / #542).
 
 use flecs_ecs::prelude::World;
 
@@ -22,8 +23,8 @@ use camcraft_app::tools::catalog;
 use camcraft_app::world::new_world;
 use camcraft_app::{posting, project};
 
-const WIRE: &str = include_str!("../../../assets/machines/wire-edm.mch");
-const SINKER: &str = include_str!("../../../assets/machines/sinker-edm.mch");
+const WIRE: &str = include_str!("edm/wire-edm.mch");
+const SINKER: &str = include_str!("edm/sinker-edm.mch");
 const TOOL: &str = "EM-0400-2FL";
 
 fn with_edm(base: &str, edm: &str) -> String {

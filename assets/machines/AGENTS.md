@@ -60,9 +60,11 @@ unstated capability into existence.
 
   Every key is optional and absent means NOT STATED (an op that needs
   it refuses by name). A garbled value refuses the file. No vendor
-  values are shipped: `wire-edm.mch` / `sinker-edm.mch` are empty
-  templates the user fills from their own manual, and are not yet in
-  the built-in picker (no EDM op exists until #532 / #541).
+  values are shipped. No EDM machine is in the built-in library yet:
+  every library machine must have a post (`machine_library`), so the
+  empty wire / sinker templates join it with their kind's first post
+  (#533 / #542). Until then they are test fixtures
+  (`crates/app/tests/edm/`).
 - `kinematics.default.units`: `"length": "mm"` (or `"inch"`/`"inches"`
   — the factor multiplies EVERY distance and distance-per-minute at
   load; the checker stays mm-only), `"angle": "degrees"`.
