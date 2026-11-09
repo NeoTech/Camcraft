@@ -37,6 +37,8 @@ use camcraft_app::{machine, model, posting, project, world::new_world};
 
 #[path = "state_per_op.rs"]
 mod per_op;
+#[path = "state_tool_library.rs"]
+mod tool_library_io;
 #[path = "state_setup_mount.rs"]
 mod setup_mount;
 use flecs_ecs::prelude::World;
@@ -3238,7 +3240,10 @@ impl State {
             }
         }
         if !any {
-            self.cam = Camera::default();
+            self.cam = Camera {
+                projection: self.cam.projection,
+                ..Camera::default()
+            };
             self.status = String::from("nothing to frame");
             return;
         }
@@ -3249,7 +3254,10 @@ impl State {
             .fold(0.0f64, |acc, r| acc.max(*r))
             .max(f64::EPSILON)
             * 3.0f64.sqrt();
-        self.cam = Camera::frame(center, radius);
+        self.cam = Camera {
+            projection: self.cam.projection,
+            ..Camera::frame(center, radius)
+        };
     }
 
     fn import_path(&mut self, path: PathBuf) {
