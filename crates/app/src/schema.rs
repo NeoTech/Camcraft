@@ -382,6 +382,21 @@ pub struct PostOptions {
     pub per_op: bool,
 }
 
+/// The document's program identity (#258), a flecs singleton beside
+/// `PostOptions`: the program number a numbering dialect writes as its
+/// O-word and the program comment (the program's name on a control
+/// that addresses programs by name). Moved only by `SetProgramInfo`
+/// (undoable, validated at creation) or a document load. `None` is "not
+/// stated": every post then writes exactly what it wrote before #258
+/// (O0001 and the machine's name), so the default changes no program.
+#[derive(Component, Debug, Clone, Default, PartialEq, Eq)]
+pub struct ProgramInfo {
+    /// The program number, 1..=9999 when stated.
+    pub number: Option<u32>,
+    /// The program comment / name, non-empty when stated.
+    pub comment: Option<String>,
+}
+
 /// The thread-output choice of [`PostOptions`].
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum ThreadingOutput {
@@ -496,6 +511,7 @@ pub fn register_schema(world: &World) {
     world.component::<PostOptions>();
     world.component::<ThemeRef>();
     world.component::<PostOptions>();
+    world.component::<ProgramInfo>();
     world.component::<ColorVision>();
     world.component::<WorkMaterialDef>();
     world.component::<RibbonPins>();

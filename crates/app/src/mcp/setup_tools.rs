@@ -9,7 +9,8 @@
 
 use super::tools::{opt_str, req_str, Tool};
 use crate::commands::{
-    ActivateSetup, CommandError, CreateSetup, LoadMachine, SetSetupMachine, SetSetupWorkOffset, SetWcsOrigin,
+    ActivateSetup, CommandError, CreateSetup, LoadMachine, SetProgramInfo, SetSetupMachine, SetSetupWorkOffset,
+    SetWcsOrigin,
 };
 use crate::geometry::{Point3, IDENTITY_Q};
 use crate::model;
@@ -24,6 +25,7 @@ pub(super) const TOOLS: &[Tool] = &[
     Tool { name: "activate_setup", description: "Make a declared setup the active one: where new operations, stock and WCS edits go.", schema: s_setup_name, run: activate_setup },
     Tool { name: "set_wcs", description: "Place the active setup's work coordinate system: an absolute origin, or a point of the stock's bounding box (min/center/max per axis) plus an optional offset. Rotation is a unit quaternion [x, y, z, w]; omitted keeps the current one.", schema: s_set_wcs, run: set_wcs },
     Tool { name: "set_work_offset", description: "Set the word (G54 to G59) the post writes for a declared setup's WCS; null clears it (posts G54). Moves no origin.", schema: s_work_offset, run: set_work_offset },
+    Tool { name: "set_program", description: "State the document's program number (1 to 9999: the O-word O0001-O9999) and program comment (the program's name on Heidenhain and SINUMERIK). An omitted key keeps its value; null clears it (O0001 and the machine's name). One undo step.", schema: s_set_program, run: set_program },
     Tool { name: "load_machine", description: "Mount a machine: a built-in by name or a .mch file, or clear it. With setup, the machine is that setup's own (clear: the setup follows the document's machine again); without, it is the document's.", schema: s_load_machine, run: load_machine },
 ];
 
@@ -172,6 +174,28 @@ fn set_work_offset(env: &mut Env, a: &Map<String, Value>) -> Result<Value, Strin
     }))
 }
 
+fn set_program(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
+    let mut next = crate::posting::program_info(&env.world);
+    match a.get("number") {
+        None => {}
+        Some(Value::Null) => next.number = None,
+        Some(v) => {
+            let n = v.as_u64().ok_or_else(|| format!("\"number\" must be a whole number 1 to 9999 or null, got {v}"))?;
+            next.number = Some(u32::try_from(n).map_err(|_| format!("program number {n} is outside 1 to 9999"))?);
+        }
+    }
+    match a.get("comment") {
+        None => {}
+        Some(Value::Null) => next.comment = None,
+        Some(Value::String(c)) => next.comment = Some(c.clone()),
+        Some(other) => return Err(format!("\"comment\" must be a string or null, got {other}")),
+    }
+    let cmd = SetProgramInfo::new(&env.world, next).map_err(cmd_err)?;
+    env.history.execute(&env.world, cmd);
+    let p = crate::posting::program_info(&env.world);
+    Ok(json!({ "number": p.number, "comment": p.comment }))
+}
+
 fn load_machine(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
     let builtin = opt_str(a, "builtin")?;
     let path = opt_str(a, "path")?;
@@ -285,6 +309,18 @@ fn s_load_machine() -> Value {
             "path": { "type": "string", "description": "A .mch machine file." },
             "clear": { "type": "boolean", "description": "true: no machine (with setup: follow the document's)." },
             "setup": { "type": "string", "description": "Mount on this declared setup only; omitted mounts the document's machine." }
+        }),
+        &[],
+    )
+}
+
+fn s_set_program() -> Value {
+    obj(
+        json!({
+            "number": { "type": ["integer", "null"], "minimum": 1, "maximum": 9999,
+                "description": "The program number; null clears it (O0001)." },
+            "comment": { "type": ["string", "null"],
+                "description": "The program comment, at most 40 printable ASCII characters without ( ) % ; *; null clears it (the machine's name)." }
         }),
         &[],
     )

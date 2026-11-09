@@ -40,6 +40,7 @@ mod stock_info;
 // the overlay lines read the palette; `cvd` is its maths.
 pub mod colorvision;
 mod post_options;
+mod program_info;
 pub mod cvd;
 mod icons;
 mod layout;
@@ -139,6 +140,8 @@ mod dialog_tests;
 mod coolant_tests;
 #[cfg(test)]
 mod after_op_tests;
+#[cfg(test)]
+mod program_info_tests;
 #[cfg(test)]
 mod colorvision_tests;
 #[cfg(test)]

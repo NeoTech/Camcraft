@@ -37,6 +37,8 @@ use camcraft_app::{machine, model, posting, project, world::new_world};
 
 #[path = "state_per_op.rs"]
 mod per_op;
+#[path = "state_program_info.rs"]
+mod program_info;
 #[path = "state_tool_library.rs"]
 mod tool_library_io;
 #[path = "state_setup_mount.rs"]
@@ -252,6 +254,12 @@ pub enum CommandKind {
     SetSkipStops(bool),
     /// The post page's Output choice (#111): `true` = one file per op.
     SetPerOpOutput(bool),
+    /// The post page's Program number field (#258), as typed: blank
+    /// clears it, anything else is parsed and refused by name.
+    SetProgramNumber(String),
+    /// The post page's Program comment field (#258), as typed: blank
+    /// clears it.
+    SetProgramComment(String),
     /// The op's context-menu retype (M9.1): change the operation's kind
     /// in place, numbers carried by the one retype law, one undo unit.
     ChangeOperationKind {
@@ -2802,6 +2810,8 @@ impl State {
                 }
             }
             CommandKind::SetPerOpOutput(per_op) => self.set_per_op_output(per_op),
+            CommandKind::SetProgramNumber(text) => self.set_program_number(&text),
+            CommandKind::SetProgramComment(text) => self.set_program_comment(text),
             CommandKind::ProgramEntry(verb) => self.program_entry_verb(verb),
             CommandKind::SetSkipStops(skip) => {
                 let next = camcraft_app::schema::PostOptions { skip_stops: skip, ..posting::post_options(&self.world) };

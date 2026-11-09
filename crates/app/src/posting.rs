@@ -308,6 +308,13 @@ mod wcs_rotation;
 mod wcs_slot;
 #[path = "posting_mounts.rs"]
 mod mounts;
+#[path = "posting_program.rs"]
+mod program;
+pub use program::{
+    document_program_id, parse_number as parse_program_number, program_id, program_info, program_info_set,
+    PROGRAM_COMMENT_MAX, PROGRAM_NUMBER_MAX,
+};
+pub(crate) use program::{check as check_program_info, normalised as normalised_program_info};
 pub(crate) use wcs_rotation::{offset_frame, OffsetFrame};
 pub use mounts::{
     machine_checks, machine_value_for, machine_value_of, post_mounts, post_mounts_script, post_of_setup, PostedMount,
@@ -375,7 +382,8 @@ fn post_script_body(world: &World, out_path: &Path, cps: &str) -> Result<Posted,
         return Err(format!("post blocked - {}", report.problems.join("; ")));
     }
     let stream = cnc::serialize(&records);
-    let out = engine::run_with(cps, &machine_value_for(&machine), &stream, &options_value(post_options(world)))
+    let id = document_program_id(world, 1)?;
+    let out = engine::run_program_with(cps, &machine_value_for(&machine), &stream, &options_value(post_options(world)), &id)
         .map_err(|e| format!("post engine: {e}"))?;
     if !out.warnings.is_empty() {
         return Err(format!(

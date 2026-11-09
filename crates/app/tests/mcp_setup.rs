@@ -4,7 +4,7 @@
 //! fixture findings read back as data - every step undoable, every bad
 //! input a tool error.
 //!
-//! Gate map (M4.4): covers app::mcp::setup_tools, app::mcp::fixture_tools,
+//! Gate map (M4.4): covers app::mcp::setup_tools (set_program, #258), app::mcp::fixture_tools,
 //! app::posting (fixture_findings).
 
 use camcraft_app::mcp::Server;
@@ -95,7 +95,7 @@ fn g54_off_the_stock_corner_a_machine_and_fixture_findings_as_data() {
         .as_array()
         .map(|t| t.iter().filter_map(|t| t["name"].as_str().map(str::to_owned)).collect())
         .unwrap_or_default();
-    for want in ["add_setup", "activate_setup", "set_wcs", "set_work_offset", "load_machine", "add_fixture", "remove_fixture", "move_fixture", "get_fixture_findings"] {
+    for want in ["add_setup", "activate_setup", "set_wcs", "set_work_offset", "set_program", "load_machine", "add_fixture", "remove_fixture", "move_fixture", "get_fixture_findings"] {
         assert!(names.iter().any(|n| n == want), "missing tool {want}: {names:?}");
     }
 
@@ -268,4 +268,24 @@ fn bad_setup_input_is_a_tool_error() {
     assert!(e.contains("position"), "{e}");
     let e = c.refused("set_wcs", json!({ "origin": [0.0, 0.0, 0.0], "typo": 1 }));
     assert!(e.contains("unknown argument"), "{e}");
+}
+
+/// #258: the program number and comment, one undo step; an omitted key
+/// keeps its value, null clears it, a bad value is the command's refusal.
+#[test]
+fn set_program_states_undoes_and_refuses_by_name() {
+    let mut c = Client::new();
+    let p = c.ok("set_program", json!({ "number": 1234, "comment": "Bracket A" }));
+    assert_eq!(p, json!({ "number": 1234, "comment": "Bracket A" }));
+    let p = c.ok("set_program", json!({ "number": null }));
+    assert_eq!(p, json!({ "number": null, "comment": "Bracket A" }), "the comment is kept");
+    c.ok("undo", json!({}));
+    let e = c.refused("set_program", json!({ "number": 0 }));
+    assert!(e.contains("outside 1 to 9999"), "{e}");
+    let e = c.refused("set_program", json!({ "comment": "A (B)" }));
+    assert!(e.contains("'('"), "{e}");
+    let e = c.refused("set_program", json!({ "number": "12" }));
+    assert!(e.contains("whole number"), "{e}");
+    let e = c.refused("set_program", json!({ "number": 1234 }));
+    assert!(e.contains("already set"), "undo restored 1234: {e}");
 }

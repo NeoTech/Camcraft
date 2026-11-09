@@ -118,6 +118,27 @@ function centerWords(p) {
   ];
 }
 
+// -------------------------------------------------------------- header
+// The document's program identity (#258), from the engine's `program`
+// global: its number (1 when the document states none; one file per
+// operation counts up from it, #111), whether the document stated it,
+// and its program comment ("" for none - the header then names the
+// machine, as before #258). A host that publishes none posts O0001.
+function progNo() {
+  var n = typeof program !== "undefined" ? program.number : (typeof programNumber !== "undefined" ? programNumber : 1);
+  return Math.round(Number(n) || 1);
+}
+function progNumbered() { return typeof program !== "undefined" && program.numbered === true; }
+function progComment() { return clean(typeof program !== "undefined" ? program.comment : ""); }
+// No O-word (#258): PathPilot runs the LinuxCNC interpreter, where an O
+// word opens a subroutine or a flow-control block (LinuxCNC G-code
+// reference, "O Codes") - a program number on a block of its own is not
+// a legal line. A stated number rides the header comment instead.
+function headTitle(nm) {
+  var t = progComment() || nm;
+  return progNumbered() ? "PROGRAM " + progNo() + " - " + t : t;
+}
+
 // ------------------------------------------------------------ comments
 // Program commentary (#257): the setup, the operation and the tool, for
 // the operator reading the program - never a word the control moves on.
@@ -175,7 +196,7 @@ function toolNote() {  // just before the tool change it describes
 function onOpen() {
   inch = typeof machine !== "undefined" && machine.units === "inch";
   var nm = (typeof machine !== "undefined" && machine.name) || "CAMCRAFT";
-  block(["(" + nm + ")"]);
+  block(["(" + headTitle(nm) + ")"]);
   block([inch ? "G20" : "G21", "G17", "G90", "G91.1", "G94", "G40", "G49", "G80"]);
   block(["G64", inch ? "P0.001" : "P0.025"]);
   var z = safeZ();

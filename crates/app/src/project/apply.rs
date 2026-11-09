@@ -509,6 +509,8 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
         // (#320): a setup may pick its stock source; absent is #317's
         // implicit rule. v57 -> v58 (#368): a tool may carry a modelled
         // body; absent is the holder cylinder every older tool judged.
+        // v58 -> v59 (#258): the document may state its program number
+        // and comment; absent states neither (O0001, the machine's name).
         // None of these rungs needs a rewrite.
         notes = super::wcs_one::settle(&mut file, from)?;
         file.version = PROJECT_VERSION;
@@ -532,6 +534,18 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
         skip_stops: file.skip_stops,
         per_op: file.per_op_files,
     };
+    // The program identity (#258): checked by `SetProgramInfo`'s rules,
+    // so a hand-edited value they refuse is a corrupt file, refused
+    // before any world write; absent is nothing stated.
+    let program = file
+        .program
+        .as_ref()
+        .map(|p| crate::schema::ProgramInfo { number: p.number, comment: p.comment.clone() })
+        .unwrap_or_default();
+    if program != crate::posting::normalised_program_info(program.clone()) {
+        return Err(corrupt("program comment must be trimmed and non-empty".to_owned()));
+    }
+    crate::posting::check_program_info(&program).map_err(corrupt)?;
     let doc_units = match file.units.as_deref() {
         None | Some("mm") => Unit::Millimeters,
         Some("in") => Unit::Inches,
@@ -596,6 +610,7 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
     // refusal is the net (`script_source` reads both, and both refuse
     // by name when gone).
     crate::posting::post_options_set(world, post_options);
+    crate::posting::program_info_set(world, program);
     crate::posting::post_set(
         world,
         &match file.post {

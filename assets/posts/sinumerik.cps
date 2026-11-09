@@ -209,9 +209,43 @@ function toolNote() {  // just before the tool change it describes
   toolKind = ""; toolCr = 0;
 }
 
+// -------------------------------------------------------------- header
+// The document's program identity (#258), from the engine's `program`
+// global: its number (1 when the document states none; one file per
+// operation counts up from it, #111), whether the document stated it,
+// and its program comment ("" for none - the header then names the
+// machine, as before #258).
+function progNo() {
+  var n = typeof program !== "undefined" ? program.number : (typeof programNumber !== "undefined" ? programNumber : 1);
+  return Math.round(Number(n) || 1);
+}
+function progNumbered() { return typeof program !== "undefined" && program.numbered === true; }
+function progComment() { return clean(typeof program !== "undefined" ? program.comment : ""); }
+// #258: the control addresses a main program by its name. Siemens'
+// published SINUMERIK 840D sl / 828D programming manual (Fundamentals,
+// "Program names") states the rules: letters, digits and underscores
+// only, the first two characters letters (or an underscore and a
+// letter), at most 24 characters; a program read in as text opens with
+// the `%_N_<name>_MPF` line naming it a main program. So a stated
+// program comment becomes that name (spaces and every other character
+// to `_`), and a name the rules refuse is refused by name here, never
+// renamed into another program. A stated number has no word on this
+// control - it rides the header comment. None stated: the header is
+// the machine's name, as before.
+function mpfName(said) {
+  var t = said.replace(/[^A-Za-z0-9_]/g, "_");
+  if (!/^([A-Za-z]{2}|_[A-Za-z])/.test(t) || t.length > 24) {
+    throw new Error("program name \"" + said + "\" cannot name a SINUMERIK program (" + t
+      + "): it must start with two letters (or _ and a letter) and be at most 24 characters");
+  }
+  return t;
+}
 function onOpen() {
   var nm = (typeof machine !== "undefined" && machine.name) || "CAMCRAFT";
-  writeln("; " + nm);
+  var said = progComment();
+  if (said) writeln("%_N_" + mpfName(said) + "_MPF");
+  var t = said || nm;
+  writeln("; " + (progNumbered() ? "PROGRAM " + progNo() + " - " + t : t));
   var z = safeZ();
   if (z !== null && z !== 0) note("SAFE RETRACT G53 Z" + fu(z) + " - STATED BY THE MACHINE");
 }

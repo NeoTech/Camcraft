@@ -119,7 +119,7 @@ fn post_per_op_with(
     let mut files = Vec::with_capacity(streams.len());
     for (k, (name, records)) in streams.iter().enumerate() {
         let index = k + 1;
-        let number = u32::try_from(index).map_err(|_| "too many operations to number".to_owned())?;
+        let id = super::document_program_id(world, index)?;
         let setup = crate::model::find_by_name(world, name)
             .and_then(|e| crate::model::operation_of(world, &e))
             .and_then(|op| op.setup);
@@ -128,7 +128,7 @@ fn post_per_op_with(
         let ext = engine::extension_of(&cps).map_err(|e| format!("post engine: {e}"))?;
         let ext = sanitise(&ext, "nc");
         let mch = machine_value_of(world, setup.as_deref());
-        let out = engine::run_numbered_with(&cps, &mch, &cnc::serialize(records), &options, number)
+        let out = engine::run_program_with(&cps, &mch, &cnc::serialize(records), &options, &id)
             .map_err(|e| format!("{name}: post engine: {e}"))?;
         if !out.warnings.is_empty() {
             return Err(format!(

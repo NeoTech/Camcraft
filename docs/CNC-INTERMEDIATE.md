@@ -170,7 +170,15 @@ EndY EndZ`, `MajorDiameter`, `MinorDiameter`, `Lead`, `ThreadHeight`,
 follow as motion records either way, and a script that writes the
 cycle skips them itself. `postOptions` is the document's post-option
 object (`engine::run_with`; `{ Threading: "G32" | "G76" }` from the
-app, `{}` from `run` and the CLI). `onClose`
+app, `{}` from `run` and the CLI). `program` is the program's identity
+(#258, `engine::run_program_with`): `{ number, numbered, comment }` -
+`number` the program number (1 when the document states none; one file
+per operation counts up from it, #111; `programNumber` holds it too),
+`numbered` true only when the document stated it, `comment` the
+document's program comment (`""` for none). The app validates both at
+`SetProgramInfo` (1-9999; at most 40 printable ASCII characters, no
+`( ) % ; *`); a script applies its dialect's own narrower rule and
+refuses by name. `onClose`
 ends the run; its lines belong to no record.
 
 A parsed stream is normalized to program order before the hooks

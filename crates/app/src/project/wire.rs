@@ -218,6 +218,12 @@ pub fn collect(world: &World) -> ProjectFile {
         skip_stops: crate::posting::post_options(world).skip_stops,
         // One combined program writes no key (#111).
         per_op_files: crate::posting::post_options(world).per_op,
+        // Nothing stated writes no key (#258).
+        program: {
+            let p = crate::posting::program_info(world);
+            (p != crate::schema::ProgramInfo::default())
+                .then_some(ProgramDto { number: p.number, comment: p.comment })
+        },
         entities,
     }
 }
