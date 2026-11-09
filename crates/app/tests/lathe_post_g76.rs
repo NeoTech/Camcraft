@@ -177,8 +177,11 @@ fn a_g76_thread_posts_to_the_lathe_golden() {
     assert!(refused.is_empty(), "the script refused the record: {refused:?}");
     // Root Ø9.6 at Z14, from the start point at the clearance radius on
     // the first centre; one finishing pass, square pull-out, radial
-    // infeed; 1.2 high in 0.4 rungs; lead 2.
-    assert!(text.contains("G76 P010000 Q400 R0\n"), "{text}");
+    // infeed; 1.2 high in 0.4 rungs; lead 2. R is the finishing pass's
+    // own 0.4 (#417): the control roughs 0.4, 0.8 and finishes at 1.2 -
+    // the three passes verified. R0 had it rough to 1.2 and cut the
+    // root once more.
+    assert!(text.contains("G76 P010000 Q400 R0.4\n"), "{text}");
     assert!(text.contains("G76 X9.6 Z14 P1200 Q400 F2\n"), "{text}");
     assert_eq!(text.matches("G76").count(), 2, "one two-block cycle: {text}");
     assert!(!text.contains("G32"), "the passes are the control's now: {text}");

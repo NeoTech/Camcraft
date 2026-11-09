@@ -22,6 +22,10 @@ pub struct ThreadCycleDto {
     pub infeed_angle: f64,
     pub spring_passes: u32,
     pub pull_out: f64,
+    /// #417: absent (and written only when set) is a single-flank or
+    /// radial record - every earlier cache.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub alternating: bool,
     pub first: u64,
     pub last: u64,
 }
@@ -44,6 +48,7 @@ impl ThreadCycleDto {
             infeed_angle: t.infeed_angle,
             spring_passes: t.spring_passes,
             pull_out: t.pull_out,
+            alternating: t.alternating,
             first: t.first as u64,
             last: t.last as u64,
         }
@@ -66,9 +71,14 @@ impl ThreadCycleDto {
             infeed_angle: self.infeed_angle,
             spring_passes: self.spring_passes,
             pull_out: self.pull_out,
+            alternating: self.alternating,
             first: usize::try_from(self.first).unwrap_or(usize::MAX),
             last: usize::try_from(self.last).unwrap_or(usize::MAX),
         };
         t.is_sane(moves).then_some(t)
     }
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
 }

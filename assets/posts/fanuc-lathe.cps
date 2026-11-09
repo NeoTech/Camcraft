@@ -54,6 +54,16 @@ liveTooling = true;  // voices PARAM LiveTool sections (issue #33): the engine r
 //    allowance in mm; the explicit passes inside the record are skipped.
 //    A straight external thread only; a record out of range, or thread
 //    passes with no record, is refused by name - never posted as G32.
+//    The words state the passes the kernel laid and the verdict judged
+//    (issue #417), read as the GSK988TA (Fanuc-compatible) G76 section
+//    defines them: pass n reaches depth max(dd*sqrt(n), previous + dmin)
+//    - dmin being the least cutting travel of a pass - up to k - d; the
+//    first finishing pass cuts d to k and the other m - 1 repeat k; with
+//    a non-zero a each pass starts tan(a/2) x its depth along Z from the
+//    start point. So d is the finishing pass's own depth (never 0 on a
+//    laid ladder, or the control would cut the root once more than was
+//    verified), and a record the cycle cannot state - alternating
+//    flank infeed, a one-pass thread - is refused by name.
 //  - Face cycles: G83 (Q peck in whole microns, the 0i-T word; P dwell
 //    in ms), G84 tap, G85 bore, cancelled by G80. A cycle off the
 //    spindle axis and a back-bore are refused - a 2-axis lathe has no
@@ -534,6 +544,10 @@ function g76Why(p, r0, r1) {
   for (var i = 0; i < nums.length; i++) if (!has(nums[i])) return "the thread record is missing a number";
   if (!(p.Lead > 0)) return "no lead";
   if (!(p.ThreadHeight > 0)) return "no thread height";
+  if (p.Alternating === true) return "alternating flank infeed is not a G76 cycle (the cycle infeeds along one flank only) - choose G32 passes, or radial or flank infeed";
+  if (has(p.FinishAllowance) && p.FinishAllowance >= p.ThreadHeight - EPS) {
+    return "a one-pass thread is not a G76 cycle (the cycle always roughs before its finishing pass) - choose G32 passes, or a first-pass depth under the thread height";
+  }
   if (!(p.FirstDepth > 0 && p.FirstDepth <= p.ThreadHeight + EPS)) return "first-pass depth outside the thread height";
   if (!(p.MinimumDepth > 0 && p.MinimumDepth <= p.ThreadHeight + EPS)) return "minimum depth outside the thread height";
   if (!(p.FinishAllowance >= 0 && p.FinishAllowance < p.ThreadHeight)) return "finish allowance outside the thread height";
