@@ -686,7 +686,7 @@ pub(super) fn op_icon(kind: OpType) -> Icon {
         // names (M2.4 A) - the Pocket3D precedent says: same word,
         // same pixels.
         OpType::Adaptive2D | OpType::Offset2D => Icon::Pocket,
-        OpType::Slot => Icon::Slot,
+        OpType::Slot | OpType::TrochoidalSlot => Icon::Slot,
         OpType::Trace => Icon::Trace,
         // The 2D run's new names keep their family's pixels (M2.4 B,
         // the twins' reuse law): the engrave twin IS Trace's field

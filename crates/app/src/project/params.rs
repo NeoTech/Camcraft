@@ -996,6 +996,10 @@ pub enum ParamsDto {
     },
     /// The probe (#108): an additive variant in the v50 grammar.
     Probe(ProbeDto),
+    /// The trochoidal slot (#220): an appended variant in the v58 grammar,
+    /// like the probe - no format rung (a file holding one cannot have
+    /// been written by a build without it).
+    TrochoidalSlot(TrochoidDto),
 }
 
 /// The angle an absent `ramp_angle` means: 45°, the ground the

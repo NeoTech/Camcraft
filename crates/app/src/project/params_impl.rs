@@ -4,6 +4,7 @@ impl ParamsDto {
     pub(super) fn from_params(p: &OpParams) -> Self {
         match p {
             OpParams::Probe { .. } => ParamsDto::Probe(ProbeDto::from_params(p)),
+            OpParams::TrochoidalSlot { .. } => ParamsDto::TrochoidalSlot(TrochoidDto::from_params(p)),
             OpParams::Face {
                 stepover,
                 clearance_z,
@@ -1176,6 +1177,7 @@ impl ParamsDto {
     pub(super) fn to_params(&self) -> OpParams {
         match self {
             ParamsDto::Probe(d) => d.to_params(),
+            ParamsDto::TrochoidalSlot(d) => d.to_params(),
             // Absent v5 keys decode (via serde defaults) to the legacy
             // single-level face, byte-exact; present ones land on the
             // domain as staged facing.

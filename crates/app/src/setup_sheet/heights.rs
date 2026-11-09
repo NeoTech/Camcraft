@@ -85,6 +85,13 @@ pub(super) fn height_fields(params: &OpParams) -> [(&'static str, &'static str, 
             bottom_z,
             ..
         }
+        | OpParams::TrochoidalSlot {
+            clearance_z,
+            retract_z,
+            top_z,
+            bottom_z,
+            ..
+        }
         | OpParams::Trace {
             clearance_z,
             retract_z,

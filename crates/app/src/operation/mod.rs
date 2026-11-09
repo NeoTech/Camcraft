@@ -75,6 +75,7 @@ pub use kinds::*;
 pub mod tool_law;
 pub mod tool_gate;
 mod params;
+mod trochoid_op;
 mod stamp;
 pub use stamp::*;
 mod stamp_stock;

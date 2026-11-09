@@ -197,7 +197,9 @@ fn source_region(
             let z = z?;
             section(&material.facets, z - oz)
         }
-        OpParams::Slot { a, b, width, .. } => stadium(*a, *b, width * 0.5),
+        OpParams::Slot { a, b, width, .. } | OpParams::TrochoidalSlot { a, b, width, .. } => {
+            stadium(*a, *b, width * 0.5)
+        }
         // The circular ladder's machine area is the AUTHORED disk -
         // the slot's authored-geometry law with a circle for a
         // stadium; the generator refuses a disk that meets no

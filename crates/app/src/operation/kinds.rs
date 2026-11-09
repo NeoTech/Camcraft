@@ -87,6 +87,7 @@ fn feed_of(p: &OpParams) -> f64 {
         | OpParams::Circular { feed, .. }
         | OpParams::Pocket3D { feed, .. }
         | OpParams::Slot { feed, .. }
+        | OpParams::TrochoidalSlot { feed, .. }
         | OpParams::Trace { feed, .. }
         | OpParams::Drill { feed, .. }
         | OpParams::Finish3D { feed, .. }
@@ -158,6 +159,7 @@ fn plunge_of(p: &OpParams) -> f64 {
         | OpParams::Circular { plunge_feed, .. }
         | OpParams::Pocket3D { plunge_feed, .. }
         | OpParams::Slot { plunge_feed, .. }
+        | OpParams::TrochoidalSlot { plunge_feed, .. }
         | OpParams::Trace { plunge_feed, .. }
         | OpParams::Drill { plunge_feed, .. }
         | OpParams::Finish3D { plunge_feed, .. }
@@ -226,6 +228,7 @@ fn climb_of(p: &OpParams) -> bool {
         | OpParams::Circular { climb, .. }
         | OpParams::Pocket3D { climb, .. }
         | OpParams::Slot { climb, .. }
+        | OpParams::TrochoidalSlot { climb, .. }
         | OpParams::Trace { climb, .. }
         | OpParams::Finish3D { climb, .. }
         | OpParams::Contour5D { climb, .. }
@@ -299,6 +302,8 @@ fn stepover_of(p: &OpParams) -> Option<f64> {
         // The stamped ladder's spacing is the pocket's plain number.
         | OpParams::MultiAxisRough { stepover, .. }
         | OpParams::Slot { stepover, .. } => Some(*stepover),
+        // The trochoid's forward step is no stepover: a retype seeds.
+        OpParams::TrochoidalSlot { .. } => None,
         // Parallel5D's spacing - and the swarf kinds', which run the
         // same derivation - is an Option the same way Finish3D's
         // raster's is: a derivation by default, so the fold reads the
@@ -397,6 +402,7 @@ fn stepdown_of(p: &OpParams) -> Option<f64> {
         // ceiling (M5.2 E).
         | OpParams::MultiPassTurning { stepdown, .. }
         | OpParams::Slot { stepdown, .. }
+        | OpParams::TrochoidalSlot { stepdown, .. }
         // The boring ladder's axial bite is the pocket's rung law
         // spoken on one circle (M2.4 C).
         | OpParams::Bore { stepdown, .. }
@@ -457,6 +463,7 @@ pub fn top_of(p: &OpParams) -> Option<Height> {
         | OpParams::Circular { top_z, .. }
         | OpParams::Pocket3D { top_z, .. }
         | OpParams::Slot { top_z, .. }
+        | OpParams::TrochoidalSlot { top_z, .. }
         | OpParams::Trace { top_z, .. }
         | OpParams::Drill { top_z, .. }
         | OpParams::Finish3D { top_z, .. }
@@ -520,6 +527,7 @@ pub fn bottom_of(p: &OpParams) -> Option<Height> {
         | OpParams::Circular { bottom_z, .. }
         | OpParams::Pocket3D { bottom_z, .. }
         | OpParams::Slot { bottom_z, .. }
+        | OpParams::TrochoidalSlot { bottom_z, .. }
         | OpParams::Trace { bottom_z, .. }
         | OpParams::Finish3D { bottom_z, .. }
         | OpParams::Contour5D { bottom_z, .. }
@@ -592,6 +600,7 @@ fn retract_of(p: &OpParams) -> Option<Height> {
         | OpParams::Circular { retract_z, .. }
         | OpParams::Pocket3D { retract_z, .. }
         | OpParams::Slot { retract_z, .. }
+        | OpParams::TrochoidalSlot { retract_z, .. }
         | OpParams::Trace { retract_z, .. }
         | OpParams::Drill { retract_z, .. }
         // Both new rides hop between holes at the authored plane,
@@ -864,6 +873,32 @@ fn seed_slot(c: &Carried) -> OpParams {
         entry: Entry3D::Plunge,
         helix_radius: 1.0,
         tilt: c.tilt,
+    }
+}
+
+/// The trochoidal slot's draft (#220): the Slot's authored line at a
+/// width that leaves a 10 mm cutter room to loop, a 10%-of-D step and
+/// a 90 degree limit; the planner cuts the step if the stock needs it.
+fn seed_trochoidal_slot(c: &Carried) -> OpParams {
+    OpParams::TrochoidalSlot {
+        a: Point2::new(-20.0, 0.0),
+        b: Point2::new(20.0, 0.0),
+        width: 16.0,
+        loop_width: None,
+        step: 1.0,
+        max_engagement: crate::machining2d::DEFAULT_MAX_ENGAGEMENT,
+        ret: crate::machining2d::TrochoidReturn::Microlift { height: crate::machining2d::DEFAULT_MICROLIFT },
+        smoothing: 1.0,
+        stock_to_leave: 0.0,
+        clearance_z: c.clearance,
+        retract_z: None,
+        top_z: c.top,
+        bottom_z: c.bottom,
+        stepdown: c.stepdown,
+        feed: c.feed,
+        return_feed: c.feed * 2.0,
+        plunge_feed: c.plunge,
+        climb: c.climb,
     }
 }
 
@@ -2204,6 +2239,17 @@ impl KindInfo {
             seed: seed_probe,
             tool_kinds: tk::PROBE,
         },
+        KindInfo {
+            ty: OpType::TrochoidalSlot,
+            label: "Trochoidal slot",
+            caption: "Trochoid",
+            tag: 39,
+            // The slot's authored stadium, hollowed: area laws rule.
+            mode: Mode::Area,
+            section: Section::Mill2D,
+            seed: seed_trochoidal_slot,
+            tool_kinds: tk::FLAT_MILLS,
+        },
     ];
 
     /// Whose machine this kind drives - read off the row's section
@@ -2276,6 +2322,7 @@ pub const ALL_LABELS: [&str; KIND_COUNT] = [
     KindInfo::ALL[36].label,
     KindInfo::ALL[37].label,
     KindInfo::ALL[38].label,
+    KindInfo::ALL[39].label,
 ];
 
 impl OpType {
@@ -2334,6 +2381,8 @@ impl OpType {
             // in the Drilling section: a section's kinds are read by
             // `Section::kinds` in table order, not as a contiguous run.
             OpType::Probe => 38,
+            // #220: appended the probe's way (stored ids never move).
+            OpType::TrochoidalSlot => 39,
         }
     }
 

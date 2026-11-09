@@ -1585,6 +1585,26 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             )?;
             (region, path)
         }
+        OpParams::TrochoidalSlot { a, b, .. } => {
+            let tp = super::trochoid_op::trochoid_params(
+                &params,
+                d,
+                hl.clearance,
+                hl.retract,
+                req_z(hl.top, "Top of Part Z")?,
+                req_z(hl.bottom, "Bottom of Part Z")?,
+            )?;
+            let path = machining2d::trochoidal_slot(&[*a, *b], &tp)?;
+            let region = region_for_job(
+                    &mut picked_region,
+                    &mut section_z,
+                    &src,
+                    &params,
+                m_gen,
+                frame.as_ref(),
+            )?;
+            (region, path)
+        }
         OpParams::Trace {
             stepdown,
             feed,
@@ -2612,6 +2632,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         | OpParams::Adaptive2D { stock_to_leave, .. }
         | OpParams::Offset2D { stock_to_leave, .. }
         | OpParams::Slot { stock_to_leave, .. }
+        | OpParams::TrochoidalSlot { stock_to_leave, .. }
         // The circular ladder leaves the pocket's shelf, ring 0 eroded
         // off the wall by it (M2.4 B).
         | OpParams::Circular { stock_to_leave, .. }

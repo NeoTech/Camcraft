@@ -271,6 +271,12 @@ pub enum OpType {
     /// declaration order is the stored kind id - and listed in the
     /// Drilling section by display order only.
     Probe,
+    /// Trochoidal slotting (#220): a channel along a centre line cleared
+    /// by engagement-controlled trochoid loops (see
+    /// [`crate::machining2d::trochoidal_slot`]). Appended like the
+    /// probe - the stored kind id never moves - and listed in the 2D
+    /// mill section by display order.
+    TrochoidalSlot,
 }
 
 impl core::fmt::Display for OpType {

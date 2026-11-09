@@ -342,6 +342,34 @@ pub enum OpParams {
         /// 3+2 index; see [`OpParams::Face`]'s field.
         tilt: Option<Tilt>,
     },
+    /// Trochoidal slotting (#220): the channel of `width` along `a -> b`
+    /// cleared by trochoid loops whose engagement the planner measures
+    /// (see [`crate::machining2d::TrochoidParams`] for every number).
+    TrochoidalSlot {
+        a: Point2,
+        b: Point2,
+        width: f64,
+        /// Band the loop centres sweep; `None` is all the channel leaves.
+        loop_width: Option<f64>,
+        /// Forward step per loop, mm (the most the planner may use).
+        step: f64,
+        /// Engagement limit, degrees.
+        max_engagement: f64,
+        ret: crate::machining2d::TrochoidReturn,
+        /// Fillet from the wall lead into each loop, mm.
+        smoothing: f64,
+        stock_to_leave: f64,
+        clearance_z: Height,
+        retract_z: Option<Height>,
+        top_z: Height,
+        bottom_z: Height,
+        stepdown: f64,
+        feed: f64,
+        /// Feed on the lifted return.
+        return_feed: f64,
+        plunge_feed: f64,
+        climb: bool,
+    },
     Trace {
         clearance_z: Height,
         retract_z: Option<Height>,
@@ -1172,6 +1200,7 @@ impl OpParams {
             OpParams::Bore { .. } => OpType::Bore,
             OpParams::Thread { .. } => OpType::Thread,
             OpParams::Probe { .. } => OpType::Probe,
+            OpParams::TrochoidalSlot { .. } => OpType::TrochoidalSlot,
         }
     }
 
@@ -1194,6 +1223,8 @@ impl OpParams {
             | OpParams::Circular { tilt, .. }
             | OpParams::Slot { tilt, .. }
             | OpParams::Trace { tilt, .. } => *tilt,
+            // The trochoid carries no index (#220 slice 1).
+            OpParams::TrochoidalSlot { .. } => None,
             // The probe touches along the machine's axes (#108).
             OpParams::Probe { .. } => None,
             // The 5-axis kinds (M5.1 C) are the third answer, not the
@@ -1274,6 +1305,7 @@ impl OpParams {
             | OpParams::Chamfer2D { clearance_z, .. }
             | OpParams::Circular { clearance_z, .. }
             | OpParams::Slot { clearance_z, .. }
+            | OpParams::TrochoidalSlot { clearance_z, .. }
             | OpParams::Trace { clearance_z, .. }
             | OpParams::Drill { clearance_z, .. }
             | OpParams::Pocket3D { clearance_z, .. }
@@ -1326,6 +1358,7 @@ impl OpParams {
             | OpParams::Chamfer2D { top_z, .. }
             | OpParams::Circular { top_z, .. }
             | OpParams::Slot { top_z, .. }
+            | OpParams::TrochoidalSlot { top_z, .. }
             | OpParams::Trace { top_z, .. }
             | OpParams::Drill { top_z, .. }
             | OpParams::Pocket3D { top_z, .. }
@@ -1397,7 +1430,8 @@ impl OpParams {
                 f(*top_z);
                 f(*bottom_z);
             }
-            OpParams::Pocket { clearance_z, retract_z, top_z, bottom_z, .. } => {
+            OpParams::Pocket { clearance_z, retract_z, top_z, bottom_z, .. }
+            | OpParams::TrochoidalSlot { clearance_z, retract_z, top_z, bottom_z, .. } => {
                 f(*clearance_z);
                 opt(retract_z, &mut f);
                 f(*top_z);
