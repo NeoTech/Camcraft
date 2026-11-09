@@ -192,7 +192,7 @@ impl ChangeOperationKind {
                 prev.params.kind()
             )));
         }
-        family_gate(world, &params)?;
+        family_gate(world, prev.setup.as_deref(), &params)?;
         thread_gate(world, &params, &prev.tool)?;
         if !params.is_sane() {
             return Err(CommandError::Invalid(format!(
