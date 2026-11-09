@@ -1723,6 +1723,8 @@ fn model_page(ui: &mut Ui, state: &mut State, name: String) {
             apply_model_draft(state);
         }
     });
+    // Pockets and slots (#511): recognition on a click, Create per row.
+    super::pockets_page::section(ui, state, &name);
     // Mesh repair (M13.11): weld and fill on the user's say-so, never on
     // import. The button queues `RepairModel`; the report lands in the
     // status line and stays here while this model is on the page.

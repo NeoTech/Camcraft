@@ -42,6 +42,8 @@ mod vertex_pick_tests;
 #[cfg(test)]
 mod setup_chip_tests;
 #[cfg(test)]
+mod pockets_tests;
+#[cfg(test)]
 mod axis_note_tests;
 
 /// Entry point used by `main.rs`; returns the process exit code. The egui

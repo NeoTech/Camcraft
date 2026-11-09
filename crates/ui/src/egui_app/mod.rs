@@ -76,6 +76,8 @@ mod fields;
 mod geo_page;
 mod heights_page;
 mod holes_page;
+mod pockets_page;
+pub(crate) use pockets_page::row_text as pockets_row_text;
 mod probe_page;
 mod kind_editors;
 mod mill2d_more_page;

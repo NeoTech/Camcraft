@@ -41,6 +41,9 @@ mod per_op;
 mod tool_library_io;
 #[path = "state_setup_mount.rs"]
 mod setup_mount;
+#[path = "state_pockets.rs"]
+mod pockets;
+pub use pockets::PocketScan;
 use flecs_ecs::prelude::World;
 
 use crate::egui_app::{theme, theme_files};
@@ -1251,6 +1254,8 @@ pub struct State {
     pub model_ui: ModelUi,
     /// The Model page's repair draft (M13.11).
     pub repair_ui: RepairUi,
+    /// The Model page's last Detect pockets / slots pass (#511).
+    pub pocket_scan: PocketScan,
     /// The setups-page context (setup binding) the next finished import
     /// gets tagged with - `Some` only between ImportFixtureDialog and the
     /// import's finish; discarded with the import itself.
@@ -1505,6 +1510,7 @@ impl State {
             fixture_ui: FixtureUi::default(),
             model_ui: ModelUi::default(),
             repair_ui: RepairUi::default(),
+            pocket_scan: PocketScan::default(),
             import_as_fixture: None,
             // The tool draft carries a plausible name from the first
             // frame: an empty Name field made Add look dead (refused
