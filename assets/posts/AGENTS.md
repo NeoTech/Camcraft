@@ -19,7 +19,7 @@ the property table there is the vocabulary, this file is the grammar.
 
 Manifest: top-level assignments only — `description`, `vendor`, `legal`,
 `certificationLevel`, `minimumRevision`, `extension`, `setCodePage`,
-`capabilities`, `coolantModes`, `liveTooling`, `afterModes`, `axisInversion`. All but the last four are
+`capabilities`, `coolantModes`, `liveTooling`, `afterModes`, `axisInversion`, `continuousThreading`. All but the last five are
 text the engine reads none of; `liveTooling = true` (issue #33) says the
 script voices a `PARAM LiveTool` section - C-axis live-tool work, the
 stream's X Y Z the part-frame tip and C the stated spindle angle - and
@@ -36,7 +36,14 @@ output on the engine's mirrored stream (an inverted X / Y: negated
 coordinates, centres and origin, CW/CCW reversed in a plane holding one
 inverted axis, the comp side swapped) is verified by goldens and the
 controller-interpretation test - without it a machine with an inverted
-axis is refused by name. Fanuc and Haas set it. The file-viewer's about box reads
+axis is refused by name. Fanuc and Haas set it. `continuousThreading = true`
+(#419) says the script posts a thread pass's chip-break dips (`PARAM
+ChipBreakDips`: half-turns whose radius changes) as segments of one
+unbroken synchronized chain, on a control whose own manual states that
+consecutive threading blocks keep spindle sync with no new index wait -
+cite that manual section in the script's header before setting it.
+Without it the engine refuses the section by name. Only fanuc-lathe sets
+it (FANUC B-64304EN-1 §3.2 / §3.4). The file-viewer's about box reads
 the text ones, and every shipped post carries them.
 New files: `vendor = "Camcraft"` (the M4.3 naming law — the shipped
 five still carry the old label; do not copy that line's value).

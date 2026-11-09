@@ -160,6 +160,12 @@ pub struct Script {
     /// engine's mirrored stream for an inverted X / Y axis. Without it a
     /// machine with an inverted axis is refused by name.
     axis_inversion: bool,
+    /// The `continuousThreading = true` manifest flag (issue #419): the
+    /// script posts a thread's passes as one continuous synchronized
+    /// chain per pass, chip-break dips included, on a control whose
+    /// manual states that consecutive threading blocks keep sync.
+    /// Without it a `PARAM ChipBreakDips` section is refused by name.
+    continuous_threading: bool,
 }
 
 impl Script {
@@ -178,6 +184,7 @@ impl Script {
             live_tooling: false,
             after_modes: false,
             axis_inversion: false,
+            continuous_threading: false,
         };
         let mut present = Vec::new();
         for h in HOOKS {
@@ -202,6 +209,10 @@ impl Script {
             .unwrap_or(false);
         s.axis_inversion = s
             .eval("typeof axisInversion !== \"undefined\" && axisInversion === true")
+            .map(|v| is_true(&v))
+            .unwrap_or(false);
+        s.continuous_threading = s
+            .eval("typeof continuousThreading !== \"undefined\" && continuousThreading === true")
             .map(|v| is_true(&v))
             .unwrap_or(false);
         Ok(s)
@@ -301,6 +312,12 @@ impl Script {
     /// on the engine's mirrored stream for an inverted axis (#374).
     pub fn translates_inverted_axes(&self) -> bool {
         self.axis_inversion
+    }
+
+    /// True when the script declares `continuousThreading = true` - it
+    /// posts chip-break dips inside one G32 chain (issue #419).
+    pub fn voices_continuous_threading(&self) -> bool {
+        self.continuous_threading
     }
 
     /// Lines flushed so far (the driver's section boundary marker).

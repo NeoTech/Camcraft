@@ -53,6 +53,7 @@ use super::profile;
 use super::revolve;
 use super::stock::StockEnv;
 use super::thread_cycle;
+use super::thread_dips;
 
 /// The lean an XY-circle helix can live with: the circles must stand
 /// in planes square to the axis, or the pass stops being one turn
@@ -244,6 +245,9 @@ pub fn thread_planned_in(
     let c_last = c0 + k_hi * p.pitch;
     let n = ((k_hi - k_lo) * 2.0) as usize;
     let passes = plan.passes(ref_top, root, p.infeed)?;
+    // The radius at each half-turn end (issue #419): the tip, lifted
+    // where a chip-break dip stands. Dips off - the tip, bit for bit.
+    let radii = thread_dips::radii(&plan.dips, &passes, ref_top, root, p.pitch, n)?;
     let s_out = f.station_of(p.clearance_z);
     let ax = f.axis_point(c_first);
     let center = Point2::new(ax.x, ax.y);
@@ -255,12 +259,14 @@ pub fn thread_planned_in(
         let back = (ref_top - root) * plan.flank_angle.to_radians().tan();
         b.push(MoveKind::Rapid, f.point(rho_clear, c_first - back), None);
     }
-    for pass in &passes {
+    for (k, pass) in passes.iter().enumerate() {
         let (t, s0) = (pass.tip, c_first + pass.shift);
         b.push(MoveKind::Rapid, f.point(rho_clear, s0), None);
         b.push(MoveKind::Feed, f.point(t, s0), Some(p.plunge_feed));
+        let row = radii.get(k);
         for i in 1..=n {
             let s = s0 + (i as f64) * (p.pitch * 0.5);
+            let t = row.and_then(|r| r.get(i)).copied().unwrap_or(t);
             let to = if i % 2 == 0 {
                 f.point(t, s)
             } else {
@@ -274,6 +280,15 @@ pub fn thread_planned_in(
     b.push(MoveKind::Rapid, f.point(rho_clear, s_out), None);
     let mut path = b.finish();
     thread_cycle::attach_cycle(&mut path, first, last, ref_top, root, p, plan, &passes);
+    // A dip is posted only where the record marks it (the stream's
+    // ChipBreakDips gate): no record, no dips.
+    if plan.dips.is_on() && path.threads.is_empty() {
+        return Err(GenError::Invalid(
+            "chip-break dips need the thread cycle record that marks them, and the passes did \
+             not lay as planned - turn the dips off"
+                .into(),
+        ));
+    }
     Ok(path)
 }
 
@@ -354,5 +369,9 @@ pub fn thread_warnings(
             });
         }
     }
-    revolve::judge(&pts, moves, tol, 0.0, true, None)
+    let mut out = revolve::judge(&pts, moves, tol, 0.0, true, None);
+    // The chip-break dip laws (issue #419): phase, depth, slope, and
+    // where a dip may stand - read off the path's own chains.
+    out.extend(thread_dips::dip_warnings(&f, path));
+    out
 }

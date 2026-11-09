@@ -164,6 +164,10 @@ pub fn run_numbered_with(
                         "{who}is C-axis live-tool work (the spindle turns as C under a radial live tool), but this post script does not declare liveTooling - use a lathe post that voices the C axis"
                     ));
                 }
+                if name == "ChipBreakDips" && !s.voices_continuous_threading() {
+                    let op = base.get("OperationName").and_then(Value::as_str).unwrap_or("");
+                    warnings.push(super::cnc_thread::dips_unvoiced(op));
+                }
                 s.set_properties(&merged(&base, &BTreeMap::new(), pos))?;
                 s.call("onParameter", &format!("{}, {}", json!(name), value))?;
                 if name == "SpindleSpeed" {

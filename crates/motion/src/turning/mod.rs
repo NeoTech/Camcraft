@@ -45,6 +45,7 @@ pub mod revolve;
 pub mod stock;
 pub mod thread;
 mod thread_cycle;
+mod thread_dips;
 
 pub use blade::{
     groove_finish, groove_finish_in, groove_rough, groove_rough_in, part, part_in,
@@ -65,4 +66,5 @@ pub use profile::{profile_of, silhouette, Profile};
 pub use revolve::{blade_program_warnings, blade_warnings, BladeLeg, BandMove, Floor};
 pub use stock::StockEnv;
 pub use infeed::{DepthSchedule, InfeedMethod, ThreadInfeed};
+pub use thread_dips::{ThreadDips, MIN_DIP_HEIGHT};
 pub use thread::{thread, thread_in, thread_planned_in, thread_warnings, ThreadParams};

@@ -208,6 +208,12 @@ pub fn dump(t: &Toolpath, d: &Dump) -> Vec<Record> {
     if t.moves.iter().any(|m| m.rotary.is_some()) {
         out.push(Record::Param { name: "LiveTool".into(), value: json!("radial") });
     }
+    // Chip-break dips (issue #419) are posted only by a script that
+    // declares `continuousThreading`: the section says so, and the
+    // engine refuses it by name everywhere else.
+    if t.threads.iter().any(|r| r.chip_break_dips) {
+        out.push(Record::Param { name: "ChipBreakDips".into(), value: json!(1.0) });
+    }
     for w in &d.warnings {
         out.push(Record::Warn { text: w.clone() });
     }

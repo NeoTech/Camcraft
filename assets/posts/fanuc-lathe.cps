@@ -17,6 +17,17 @@ capabilities = 2; // reference contract: integer feature mask (bit 2 = turning)
 coolantModes = true; // reads PARAM Coolant (#112/#150): the engine refuses non-Flood ops for a post without it
 afterModes = true; // reads PARAM AfterOperation (#110): the engine refuses a stop or home ask for a post without it
 liveTooling = true;  // voices PARAM LiveTool sections (issue #33): the engine refuses them for a post without it
+// Continuous thread cutting (issue #419): posts chip-break dips (PARAM
+// ChipBreakDips) as G32 X Z F segments inside one unbroken G32 chain;
+// the engine refuses dips for a post without it. Cited from FANUC
+// Series 0i-TD/0i Mate-TD USER'S MANUAL (For Lathe System) B-64304EN-1,
+// Part II: section 3.4 "Continuous Threading" (consecutive threading
+// blocks keep synchronism with the spindle at the joint between
+// blocks); section 3.2 "Constant Lead Threading (G32)" WARNING 6 (a
+// threading block following a threading block starts without waiting
+// for the one-spindle-rotation signal) and its taper rule (G32 cuts
+// tapers; at a taper angle up to 45 degrees the lead F is the Z lead).
+continuousThreading = true;
 
 // Determinism law: no timestamps, no randomness - the same stream
 // always posts to the same text (golden files depend on it).
@@ -44,6 +55,18 @@ liveTooling = true;  // voices PARAM LiveTool sections (issue #33): the engine r
 //    half-turn arcs about the axis, rising half a pitch each. Two
 //    half-turns at one radius are one lead of Z travel under G32 with
 //    F = lead (mm/rev). Anything else in XY is refused.
+//  - Chip-break dips (issue #419, continuousThreading above): a thread
+//    half-turn whose end radius differs from its start is a dip segment
+//    of the pass's chain, written G32 X(end dia) Z F(lead) - the taper
+//    form, F still the Z lead. Posted only when it CONTINUES the chain
+//    (the block before it was a G32: a fresh G32 would wait for the
+//    index and restart mid-thread, never posted), stays under 45
+//    degrees (diameter change below its Z travel, or the control
+//    would read F as the X lead and move the helix), and never stands
+//    inside the radius the chain's plunge put the tool at (a dip only
+//    lifts). Anything else is refused by name. The dip layout itself
+//    is the kernel's and the verdict's (no dip in the first or last
+//    lead, none on the finishing or spring passes).
 //  - G76 (user option postOptions.Threading = "G76"; G32 is the
 //    default): the stream's THREAD record becomes the two-block cycle
 //      G76 P(m)(r)(a) Q(dmin) R(d)
@@ -64,7 +87,8 @@ liveTooling = true;  // voices PARAM LiveTool sections (issue #33): the engine r
 //    laid ladder, or the control would cut the root once more than was
 //    verified), and a record the cycle cannot state - alternating
 //    flank infeed, a one-pass thread, every roughing depth cut twice
-//    (issue #418: the cycle cuts each depth once) - is refused by name.
+//    (issue #418: the cycle cuts each depth once), chip-break dips
+//    (issue #419: a cycle states no dip) - is refused by name.
 //  - Face cycles: G83 (Q peck in whole microns, the 0i-T word; P dwell
 //    in ms), G84 tap, G85 bore, cancelled by G80. A cycle off the
 //    spindle axis and a back-bore are refused - a 2-axis lathe has no
@@ -106,6 +130,9 @@ var orgX = 0, orgY = 0, orgZ = 0; // the WCS slot origin (world -> program)
 var clampDone = false;     // G50 once per program
 var inThread = false;      // a G76 cycle stands for the passes being skipped
 var threadSeen = false;    // inside a THREAD record's span (cycle or not)
+var chainOn = false;       // the last block written was a G32 of an open chain (#419)
+var chainTip = 0;          // |radius| the chain's plunge stood at
+var modalR = 0;            // the signed radius the last X word put the tool at
 var refused = {};          // each refusal counted once per program, by name
 var EPS = 0.0005;          // half a micron: the stream's own lattice
 var liveAsk = false;       // the section's PARAM LiveTool (issue #33)
@@ -367,6 +394,7 @@ function afterOp() {
 function endPreamble() {
   if (!sectionOpen) return;
   sectionOpen = false;
+  chainOn = false;
   if (inCycle) block(["G80"]);
   inCycle = false;
   if (coolant) block(["M9"]);
@@ -472,6 +500,8 @@ function onRapid() {
   if (posed(p) || inCycle || inThread) return;
   var r = radiusOf(p.X, p.Y, "rapid");
   if (r === null) return;
+  chainOn = false;
+  modalR = r;
   block(["G00", xWord(r), zWord(p.Z)]);
 }
 function onLinear() {
@@ -481,6 +511,8 @@ function onLinear() {
   if (posed(p) || inCycle || inThread) return;
   var r = radiusOf(p.X, p.Y, "feed move");
   if (r === null) return;
+  chainOn = false;
+  modalR = r;
   block(["G01", xWord(r), zWord(p.Z), feedWord(p.FeedRate)]);
 }
 
@@ -494,6 +526,8 @@ function meridianArc(p) {
   var rc = yz ? radiusOf(orgX, c.J, "arc centre") : radiusOf(c.I, orgY, "arc centre");
   if (r0 === null || r1 === null || rc === null) return;
   if (!has(c.K)) { refuse("arc without a K centre word"); return; }
+  chainOn = false;
+  modalR = r1;
   var cw = p.CircularDirection === "CW";
   if (yz) cw = !cw;                       // the +Y meridian seen from +Y is mirrored
   block([
@@ -504,25 +538,49 @@ function meridianArc(p) {
   ]);
 }
 
-// An XY arc is a thread half-turn: centre on the axis, one radius at
-// both ends, antipodal ends - a synchronized half lead of Z. G32 with
-// F = lead; the X word stays modal (the plunge put the tool there).
+// An XY arc is a thread half-turn: centre on the axis, antipodal ends -
+// a synchronized half lead of Z. G32 with F = lead. One radius at both
+// ends: the X word stays modal (the plunge put the tool there). A
+// changed radius is a chip-break dip segment (issue #419, the law in
+// the header): G32 X Z F inside the open chain, or a refusal by name.
 function threadHalfTurn(p) {
   var c = p.IJKIncrement || {};
   if (!has(c.I) || !has(c.J)) { refuse("thread half-turn without an I J centre"); return; }
   var ok = Math.abs(c.I - orgX) <= EPS && Math.abs(c.J - orgY) <= EPS;
-  var rho0 = Math.sqrt(Math.pow(p.StartX - orgX, 2) + Math.pow(p.StartY - orgY, 2));
-  var rho1 = Math.sqrt(Math.pow(p.X - orgX, 2) + Math.pow(p.Y - orgY, 2));
-  ok = ok && Math.abs(rho0 - rho1) <= EPS;
-  ok = ok && Math.abs(p.StartX + p.X - 2 * c.I) <= EPS && Math.abs(p.StartY + p.Y - 2 * c.J) <= EPS;
+  var ax = p.StartX - c.I, ay = p.StartY - c.J, bx = p.X - c.I, by = p.Y - c.J;
+  var rho0 = Math.sqrt(ax * ax + ay * ay);
+  var rho1 = Math.sqrt(bx * bx + by * by);
+  // Antipodal: the ends on one line through the axis, either side.
+  // (2 microns of slack: a dip's two ends round to the lattice apart.)
+  ok = ok && Math.abs(ax * by - ay * bx) <= 0.002 * Math.max(rho0, rho1, 1) && ax * bx + ay * by < 0;
   if (!ok) { refuse("XY arc that is not a thread half-turn about the spindle axis"); return; }
-  var lead = 2 * Math.abs(p.Z - p.StartZ);
+  var dz = Math.abs(p.Z - p.StartZ);
+  var lead = 2 * dz;
   if (!(lead > 0)) { refuse("thread half-turn with no lead"); return; }
   if (g76Wanted() && !threadSeen) {
     refuse("G76 threading cycle chosen but the stream carries no thread cycle record for these passes - regenerate the thread, or choose G32 passes");
     return;
   }
-  block(["G32", zWord(p.Z), "F" + fr(lead)]);
+  if (!chainOn) chainTip = Math.abs(modalR);
+  if (Math.abs(rho0 - rho1) <= EPS) {
+    chainOn = true;
+    block(["G32", zWord(p.Z), "F" + fr(lead)]);
+    return;
+  }
+  if (!chainOn) {
+    refuse("chip-break dip that does not continue a G32 chain - a new G32 waits for the spindle index and restarts mid-thread; never posted");
+    return;
+  }
+  if (!(2 * Math.abs(rho1 - rho0) < dz)) {
+    refuse("chip-break dip steeper than 45 degrees - past 45 the control reads F as the X lead and the helix moves");
+    return;
+  }
+  if (rho1 < chainTip - EPS || rho0 < chainTip - EPS) {
+    refuse("chip-break dip deeper than the pass it rides - a dip only lifts");
+    return;
+  }
+  modalR = modalR < 0 ? -rho1 : rho1;
+  block(["G32", xWord(modalR), zWord(p.Z), "F" + fr(lead)]);
 }
 
 function onCircular() {
@@ -547,6 +605,7 @@ function g76Why(p, r0, r1) {
   if (!(p.ThreadHeight > 0)) return "no thread height";
   if (p.Alternating === true) return "alternating flank infeed is not a G76 cycle (the cycle infeeds along one flank only) - choose G32 passes, or radial or flank infeed";
   if (p.RepeatEachDepth === true) return "repeat each roughing depth is not a G76 cycle (the cycle cuts each depth once) - choose G32 passes, or turn the repeat off";
+  if (p.ChipBreakDips === true) return "chip-break dips are not a G76 cycle (the cycle states no dip) - choose G32 passes, or turn the dips off";
   if (has(p.FinishAllowance) && p.FinishAllowance >= p.ThreadHeight - EPS) {
     return "a one-pass thread is not a G76 cycle (the cycle always roughs before its finishing pass) - choose G32 passes, or a first-pass depth under the thread height";
   }
@@ -584,6 +643,8 @@ function onThreadCycle() {
   if (why) { refuse("G76 threading cycle refused - " + why); return; }
   var m = Math.round(p.SpringPasses) + 1;
   var r = Math.round(10 * p.PullOut / p.Lead);
+  chainOn = false;
+  modalR = r1;
   block(["G00", xWord(r0), zWord(p.Z)]);
   block(["G76", "P" + pad2(m) + pad2(r) + pad2(Math.round(p.InfeedAngle)), "Q" + um(p.MinimumDepth), "R" + fu(p.FinishAllowance)]);
   block(["G76", xWord(r1), zWord(p.EndZ), "P" + um(p.ThreadHeight), "Q" + um(p.FirstDepth), "F" + fr(p.Lead)]);
@@ -599,6 +660,7 @@ function onCycle() {
   startPreamble();
   var p = properties;
   if (liveAsk) { refuse("a drilling cycle in a C-axis section - not supported"); return; }
+  chainOn = false;
   var r = radiusOf(p.X, p.Y, "cycle");
   if (r === null) return;
   if (Math.abs(r) > EPS) { refuse("drilling cycle off the spindle axis - a 2-axis lathe drills on centre only"); return; }

@@ -212,6 +212,7 @@ fn the_plan_rides_the_project_file_and_a_default_one_is_absent() {
         finish_allowance: 0.03,
         spring_passes: 2,
         repeat_each_depth: true,
+        dips: Default::default(),
     };
     create(&world, &mut history, "TH1", plan);
     let b = dir.join(format!("camcraft-infeed-b-{}.json", std::process::id()));

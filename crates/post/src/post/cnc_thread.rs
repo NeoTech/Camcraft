@@ -35,6 +35,9 @@ pub struct ThreadRec {
     /// Every roughing depth cut twice (issue #418): written `REP 1`
     /// only when set, the `ALT` precedent.
     pub repeat_each_depth: bool,
+    /// The passes carry chip-break dips (issue #419): written `DIP 1`
+    /// only when set, the `ALT` precedent.
+    pub chip_break_dips: bool,
 }
 
 /// µm-integer text, the stream's length law.
@@ -64,6 +67,7 @@ impl ThreadRec {
             pull_out: t.pull_out,
             alternating: t.alternating,
             repeat_each_depth: t.repeat_each_depth,
+            chip_break_dips: t.chip_break_dips,
         }
     }
 
@@ -90,6 +94,7 @@ impl ThreadRec {
         m.insert("PullOut".into(), json!(self.pull_out));
         m.insert("Alternating".into(), json!(self.alternating));
         m.insert("RepeatEachDepth".into(), json!(self.repeat_each_depth));
+        m.insert("ChipBreakDips".into(), json!(self.chip_break_dips));
         m
     }
 
@@ -98,7 +103,7 @@ impl ThreadRec {
     pub fn line(&self) -> String {
         format!(
             "THREAD X {} Y {} Z {} EX {} EY {} EZ {} MAJOR {} MINOR {} LEAD {:.6} HEIGHT {} \
-             FIRST {} MIN {} FINISH {} ANGLE {:.6} SPRING {} PULLOUT {}{}{}\n",
+             FIRST {} MIN {} FINISH {} ANGLE {:.6} SPRING {} PULLOUT {}{}{}{}\n",
             q(self.start[0]),
             q(self.start[1]),
             q(self.start[2]),
@@ -117,6 +122,7 @@ impl ThreadRec {
             q(self.pull_out),
             if self.alternating { " ALT 1" } else { "" },
             if self.repeat_each_depth { " REP 1" } else { "" },
+            if self.chip_break_dips { " DIP 1" } else { "" },
         )
     }
 
@@ -131,14 +137,15 @@ impl ThreadRec {
 }
 
 /// Parse the words after `THREAD`: `Ok(None)` is `THREAD END`. Every
-/// key but `ALT` (issue #417) and `REP` (issue #418) - absent is 0 -
+/// key but `ALT` (issue #417), `REP` (issue #418) and `DIP` (issue
+/// #419) - absent is 0 -
 /// is required, each once; a
 /// missing, repeated, unknown or non-finite word is refused by name - a cycle the parser guessed at
 /// is a thread cut to the wrong depth.
 pub fn parse<'a>(mut it: impl Iterator<Item = &'a str>) -> Result<Option<ThreadRec>, String> {
-    const KEYS: [&str; 18] = [
+    const KEYS: [&str; 19] = [
         "X", "Y", "Z", "EX", "EY", "EZ", "MAJOR", "MINOR", "LEAD", "HEIGHT", "FIRST", "MIN", "FINISH", "ANGLE",
-        "SPRING", "PULLOUT", "ALT", "REP",
+        "SPRING", "PULLOUT", "ALT", "REP", "DIP",
     ];
     let mut seen: BTreeMap<&str, f64> = BTreeMap::new();
     let mut first = true;
@@ -177,6 +184,7 @@ pub fn parse<'a>(mut it: impl Iterator<Item = &'a str>) -> Result<Option<ThreadR
     };
     let alternating = flag("ALT")?;
     let repeat_each_depth = flag("REP")?;
+    let chip_break_dips = flag("DIP")?;
     Ok(Some(ThreadRec {
         start: [um("X")?, um("Y")?, um("Z")?],
         end: [um("EX")?, um("EY")?, um("EZ")?],
@@ -192,5 +200,21 @@ pub fn parse<'a>(mut it: impl Iterator<Item = &'a str>) -> Result<Option<ThreadR
         pull_out: um("PULLOUT")?,
         alternating,
         repeat_each_depth,
+        chip_break_dips,
     }))
+}
+
+/// The refusal of a section carrying chip-break dips (issue #419,
+/// `PARAM ChipBreakDips`) through a script that does not declare
+/// `continuousThreading`: such a script would post a dip's radius
+/// change as a move its control may not keep in sync with the spindle,
+/// or would restart the thread mid-pass - a gouge either way.
+#[must_use]
+pub fn dips_unvoiced(op: &str) -> String {
+    let who = if op.is_empty() { String::new() } else { format!("operation {op}: ") };
+    format!(
+        "{who}carries chip-break dips inside its thread passes, but this post script does not \
+         declare continuousThreading (a cited continuous G32 chain) - turn the dips off or use a \
+         post that declares it"
+    )
 }
