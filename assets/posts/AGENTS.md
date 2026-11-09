@@ -19,7 +19,7 @@ the property table there is the vocabulary, this file is the grammar.
 
 Manifest: top-level assignments only — `description`, `vendor`, `legal`,
 `certificationLevel`, `minimumRevision`, `extension`, `setCodePage`,
-`capabilities`, `coolantModes`, `liveTooling`, `afterModes`, `axisInversion`, `continuousThreading`. All but the last five are
+`capabilities`, `coolantModes`, `liveTooling`, `afterModes`, `axisInversion`, `probeAxisInversion`, `continuousThreading`. All but the last six are
 text the engine reads none of; `liveTooling = true` (issue #33) says the
 script voices a `PARAM LiveTool` section - C-axis live-tool work, the
 stream's X Y Z the part-frame tip and C the stated spindle angle - and
@@ -36,7 +36,12 @@ output on the engine's mirrored stream (an inverted X / Y: negated
 coordinates, centres and origin, CW/CCW reversed in a plane holding one
 inverted axis, the comp side swapped) is verified by goldens and the
 controller-interpretation test - without it a machine with an inverted
-axis is refused by name. Fanuc and Haas set it. `continuousThreading = true`
+axis is refused by name. Fanuc and Haas set it. `probeAxisInversion =
+true` (#392) says the script's probing blocks on that mirrored stream
+(negated touch target and trip, back-off delta, found expected values)
+are verified by the macro-B interpreter on a simulated inverted machine
+(`crates/app/tests/inverted_probe.rs`) - without it probing on an
+inverted axis is refused by name. Only Fanuc sets it. `continuousThreading = true`
 (#419) says the script posts a thread pass's chip-break dips (`PARAM
 ChipBreakDips`: half-turns whose radius changes) as segments of one
 unbroken synchronized chain, on a control whose own manual states that

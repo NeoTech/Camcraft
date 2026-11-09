@@ -47,6 +47,10 @@ mod load_field;
 // pub(crate) past egui_app: `State::machine_editor` names its draft
 // type (M3.3 stage C), so state.rs has to see through the door.
 pub(crate) mod machine_editor;
+// pub(crate) for the same reason: `State::post_refusal` names its type.
+pub(crate) mod post_refusal;
+// pub(crate) for the same reason: `State::machines_pane` (#287).
+pub(crate) mod machines_pane;
 mod feeds_page;
 mod spindle_row;
 mod approach_page;
@@ -79,6 +83,8 @@ mod mill2d_page;
 mod mill3d_page;
 mod multiaxis_page;
 mod op_page;
+// #144: macOS Cmd+Q / app-menu Quit routed through the guarded Quit.
+pub(crate) mod os_quit;
 mod params_page;
 mod rotary_page;
 mod turning_more_page;
@@ -87,6 +93,8 @@ mod turning_page;
 // #107: Save / Don't Save / Cancel over unsaved changes.
 mod unsaved_prompt;
 mod panes;
+// #441: the ribbon's Theme door and its dropdown.
+mod theme_drop;
 // #343: the browser tree, split from panes (rows / pane / operation menu).
 mod browser_tree;
 mod browser_pane;
