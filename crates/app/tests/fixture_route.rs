@@ -24,7 +24,7 @@ use camcraft_app::posting;
 use camcraft_app::schema::Location;
 use camcraft_app::stock::StockShape;
 use camcraft_app::tools::catalog;
-use camcraft_app::verify::{FixturePart, SteelBand, Warning};
+use camcraft_app::verify::{bands_vs_fixtures, rapids_vs_fixtures, FixturePart, SteelBand, ToolGeom, Warning};
 use camcraft_app::world::new_world;
 use flecs_ecs::prelude::World;
 
@@ -186,6 +186,29 @@ fn a_clamp_taller_than_the_z_stroke_refuses_generation_by_name() {
     assert!(err.contains("cannot clear fixture 'Clamp1'") && err.contains("Z 400.000"), "{err}");
 }
 
+/// The 4 mm end mill [`stack`] reads: flute r2 x 15, shank r2 x 25,
+/// holder r15 x 50.
+fn geom() -> ToolGeom {
+    ToolGeom {
+        radius: 2.0,
+        nose_radius: 0.0,
+        flute_len: 15.0,
+        shank_len: 25.0,
+        shank_radius: 2.0,
+        holder_radius: 15.0,
+        holder_len: 50.0,
+    }
+}
+
+/// The gate's own fixture laws on a run, as the generate hook hands
+/// them to the planner: (c2) bands and (d2) rapids, the whole upright
+/// stack over each move's true z span (#424).
+fn gate(path: &Toolpath, boxes: &[(String, FixtureBox)]) -> bool {
+    let b: Vec<FixtureBox> = boxes.iter().map(|(_, b)| *b).collect();
+    let t = geom();
+    !(bands_vs_fixtures(path, &t, &b, None, 0.01).is_empty() && rapids_vs_fixtures(path, &t, &b).is_empty())
+}
+
 /// The fixture-free stack of a 4 mm end mill: flute, shank, holder.
 fn stack() -> Vec<SteelBand> {
     vec![
@@ -209,8 +232,8 @@ fn a_stay_down_rapid_link_becomes_retract_traverse_plunge() {
     let post = FixtureBox { min: p(-3.0, -3.0, 0.0), max: p(3.0, 3.0, 30.0) };
     let boxes = vec![("Bolt".to_string(), post)];
     let stack = stack();
-    let steel = LinkSteel { boxes: &boxes, meshes: &[], stack: &stack, ceiling: None };
-    let t = plan_links(stay_down(), &steel, |_| false).expect("routable");
+    let steel = LinkSteel { boxes: &boxes, stack: &stack, ceiling: None };
+    let t = plan_links(stay_down(), &steel, |q| gate(q, steel.boxes)).expect("routable");
     let h = 30.0 + ROUTE_GAP;
     let want = [
         (MoveKind::Feed, p(-40.0, 0.0, 10.0), p(-30.0, 0.0, 10.0)),
@@ -225,10 +248,10 @@ fn a_stay_down_rapid_link_becomes_retract_traverse_plunge() {
 
     // The same run clear of the bolt (moved off its line) is untouched.
     let far = vec![("Bolt".to_string(), FixtureBox { min: p(-3.0, 30.0, 0.0), max: p(3.0, 36.0, 30.0) })];
-    let steel = LinkSteel { boxes: &far, meshes: &[], stack: &stack, ceiling: None };
-    assert_eq!(plan_links(stay_down(), &steel, |_| false).expect("routable"), stay_down());
+    let steel = LinkSteel { boxes: &far, stack: &stack, ceiling: None };
+    assert_eq!(plan_links(stay_down(), &steel, |q| gate(q, steel.boxes)).expect("routable"), stay_down());
     // No steel at all: untouched.
-    let steel = LinkSteel { boxes: &[], meshes: &[], stack: &stack, ceiling: None };
+    let steel = LinkSteel { boxes: &[], stack: &stack, ceiling: None };
     assert_eq!(plan_links(stay_down(), &steel, |_| true).expect("routable"), stay_down());
 }
 
@@ -239,8 +262,8 @@ fn steel_over_the_links_own_end_is_left_as_laid_and_said() {
     let arm = FixtureBox { min: p(-40.0, -5.0, 60.0), max: p(-20.0, 5.0, 70.0) };
     let boxes = vec![("Arm".to_string(), arm)];
     let stack = stack();
-    let steel = LinkSteel { boxes: &boxes, meshes: &[], stack: &stack, ceiling: None };
-    let t = plan_links(stay_down(), &steel, |_| false).expect("not a refusal");
+    let steel = LinkSteel { boxes: &boxes, stack: &stack, ceiling: None };
+    let t = plan_links(stay_down(), &steel, |q| gate(q, steel.boxes)).expect("not a refusal");
     assert_eq!(t.moves, stay_down().moves, "left as laid");
     assert!(t.notes.iter().any(|n| n.contains("no height clears it")), "{:?}", t.notes);
 }
@@ -250,10 +273,10 @@ fn a_ceiling_under_the_steel_refuses_and_over_it_caps_the_rise() {
     let post = FixtureBox { min: p(-3.0, -3.0, 0.0), max: p(3.0, 3.0, 30.0) };
     let boxes = vec![("Bolt".to_string(), post)];
     let stack = stack();
-    let steel = LinkSteel { boxes: &boxes, meshes: &[], stack: &stack, ceiling: Some(29.0) };
-    let err = plan_links(stay_down(), &steel, |_| false).err().map(|e| e.to_string()).unwrap_or_default();
+    let steel = LinkSteel { boxes: &boxes, stack: &stack, ceiling: Some(29.0) };
+    let err = plan_links(stay_down(), &steel, |q| gate(q, steel.boxes)).err().map(|e| e.to_string()).unwrap_or_default();
     assert!(err.contains("moves 1..1, (-30.000, 0.000) to (30.000, 0.000)") && err.contains("'Bolt'") && err.contains("Z 29.000"), "{err}");
-    let steel = LinkSteel { boxes: &boxes, meshes: &[], stack: &stack, ceiling: Some(32.0) };
-    let t = plan_links(stay_down(), &steel, |_| false).expect("capped");
+    let steel = LinkSteel { boxes: &boxes, stack: &stack, ceiling: Some(32.0) };
+    let t = plan_links(stay_down(), &steel, |q| gate(q, steel.boxes)).expect("capped");
     assert!(t.moves.iter().map(|m| m.to.z).fold(f64::MIN, f64::max) == 32.0, "{:?}", t.moves);
 }

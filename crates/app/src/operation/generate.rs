@@ -2543,7 +2543,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
     let path = if frame.is_none() && rotary_axis.is_none() && is_mill && !lathe_tool {
         let named: Vec<_> = fixture_names.into_iter().zip(fixture_boxes.iter().copied()).collect();
         let stack = verify::steel_stack(&geom, &holder, spindle);
-        let steel = super::fixture_route::LinkSteel { boxes: &named, meshes: mesh_steel, stack: &stack, ceiling: z_ceiling };
+        let steel = super::fixture_route::LinkSteel { boxes: &named, stack: &stack, ceiling: z_ceiling };
         super::fixture_route::plan_links(path, &steel, |p| {
             !workholding_warnings(p, (&geom, &holder), &fixture_boxes, &workholding, rotary_axis, spindle, mesh_steel)
                 .is_empty()

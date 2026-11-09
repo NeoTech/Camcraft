@@ -20,10 +20,12 @@
 //!   stacks sweep too - its hits stay reported (the post is blocked by
 //!   name). A rapid run that stays down at depth is a keep-down link,
 //!   and it does become retract / traverse / plunge.
-//! - **Only a struck link moves.** A run the gate's own laws and the
-//!   whole-stack law below both find clear is left byte for byte, so a
-//!   document without fixtures, or whose links already clear, posts
-//!   exactly what it did.
+//! - **Only a struck link moves.** A run the gate's own fixture laws
+//!   find clear is left byte for byte, so a document without fixtures,
+//!   or whose links already clear, posts exactly what it did. Those
+//!   laws read the whole upright stack on a rapid - shank, holder
+//!   bands, housing, flute - over each move's true z span since #424,
+//!   each meshed fixture acquitting what its box flagged (#476).
 //! - **The height.** The tip rises to `H = max(the run's own top,
 //!   highest steel under the traverse + ROUTE_GAP)`. "Under the
 //!   traverse" is every box the widest band of the stack (flute, shank,
@@ -33,10 +35,8 @@
 //! - **The cap.** With a stated Z stroke, `H` stops at its top (still
 //!   [`MIN_GAP`] over the steel); steel taller than that is refused by
 //!   name: no link can cross it.
-//! - **Re-judged.** The re-laid link is judged again by the gate's laws
-//!   and by the whole-stack law over each move's true z span (the
-//!   #424/#425 rule, which the box rapid law will read once that fix
-//!   lands, so a routed link passes it too). Still struck means the
+//! - **Re-judged.** The re-laid link is judged again by the gate's
+//!   laws, so a routed link posts. Still struck means the
 //!   steel stands over the link's own end columns - no height helps:
 //!   the link is left as laid, its hit stays reported, and the path's
 //!   notes say why.
@@ -45,7 +45,7 @@
 //!   today's report-only verdict. A run inside a compensated span too.
 
 use crate::cl::{is_vertical, lattice, Move, MoveKind, Toolpath};
-use crate::fixture::{band_hits_box, FixtureBox, MeshedFixture, FIXTURE_HIT_TOL};
+use crate::fixture::{band_hits_box, FixtureBox};
 use crate::geometry::Point3;
 use crate::machining2d::GenError;
 use crate::verify::SteelBand;
@@ -61,8 +61,6 @@ pub const MIN_GAP: f64 = 0.5;
 pub struct LinkSteel<'a> {
     /// The setup's whole collision set, each box with its name.
     pub boxes: &'a [(String, FixtureBox)],
-    /// The tagged models' meshes (they acquit what their box flagged).
-    pub meshes: &'a [MeshedFixture],
     /// The tool assembly, `verify::steel_stack`.
     pub stack: &'a [SteelBand],
     /// The highest world Z the tip reaches, when the machine states it.
@@ -78,8 +76,9 @@ enum Plan {
 }
 
 /// Plan every struck link of `path` over `steel`. `laws` is the gate's
-/// own verdict on a path of rapids (true: a fixture is struck), so a
-/// routed link is accepted only where the post would accept it.
+/// own verdict on a path of rapids (true: a fixture is struck) and the
+/// only one read: a run it finds clear is never touched, and a routed
+/// link is accepted only where the post would accept it.
 pub fn plan_links(
     path: Toolpath,
     steel: &LinkSteel<'_>,
@@ -97,7 +96,7 @@ pub fn plan_links(
         }
         let Some(run) = path.moves.get(i..=j) else { continue };
         let (Some(head), Some(tail)) = (run.first(), run.last()) else { continue };
-        if !struck(run, steel, &laws) {
+        if !struck(run, &laws) {
             continue;
         }
         match plan(run, steel) {
@@ -112,7 +111,7 @@ pub fn plan_links(
                     a.x, a.y, b.x, b.y
                 )));
             }
-            Plan::Raised(moves, h, k) if !struck(&moves, steel, &laws) => {
+            Plan::Raised(moves, h, k) if !struck(&moves, &laws) => {
                 raised += 1;
                 first.get_or_insert((head.from, h, k));
                 swaps.push((i, j, moves));
@@ -175,39 +174,9 @@ fn rapid_runs(path: &Toolpath) -> Vec<(usize, usize)> {
     out
 }
 
-/// Does `run` strike steel, by the gate's laws or the whole stack?
-fn struck(run: &[Move], steel: &LinkSteel<'_>, laws: &impl Fn(&Toolpath) -> bool) -> bool {
-    laws(&Toolpath::new(run.to_vec())) || run.iter().any(|m| stack_hit(m, steel).is_some())
-}
-
-/// The whole stack along one straight move against every box: each band
-/// over the move's true z span (low end + its foot, high end + its top),
-/// a box's own mesh acquitting what the box flagged. The struck box.
-fn stack_hit(m: &Move, steel: &LinkSteel<'_>) -> Option<usize> {
-    let (zl, zh) = (m.from.z.min(m.to.z), m.from.z.max(m.to.z));
-    for band in steel.stack {
-        for (k, (_, b)) in steel.boxes.iter().enumerate() {
-            let hit = band_hits_box(m.from.x, m.from.y, m.to.x, m.to.y, zl + band.lo, zh + band.hi, band.r, b);
-            if hit && !mesh_acquits(steel, b, m, band) {
-                return Some(k);
-            }
-        }
-    }
-    None
-}
-
-/// The box's own closed mesh proves the band clear of it: no facet
-/// within tolerance along the move and not standing inside the solid.
-/// Only a box exactly one fixture owns, and only once, can be read.
-fn mesh_acquits(steel: &LinkSteel<'_>, b: &FixtureBox, m: &Move, band: &SteelBand) -> bool {
-    if steel.boxes.iter().filter(|(_, o)| o == b).count() != 1 {
-        return false;
-    }
-    let mut owners = steel.meshes.iter().filter(|f| f.aabb == *b);
-    let (Some(f), None) = (owners.next(), owners.next()) else { return false };
-    let Ok(mesh) = f.mesh() else { return false };
-    let foot = Point3::new(m.from.x, m.from.y, m.from.z + band.lo);
-    !mesh.band_meets(m.from, m.to, band.lo, band.hi, band.r, FIXTURE_HIT_TOL) && !mesh.contains(foot)
+/// Does `run` strike steel by the gate's laws?
+fn struck(run: &[Move], laws: &impl Fn(&Toolpath) -> bool) -> bool {
+    laws(&Toolpath::new(run.to_vec()))
 }
 
 /// Retract, traverse, plunge at a height over every box the widest band

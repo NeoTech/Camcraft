@@ -5,8 +5,7 @@ workholding at generation (`operation::fixture_route::plan_links`, one
 hook in `generate.rs` before the verify pass). A link is the maximal run
 of straight rapids between two non-rapid moves (or a path end). A run
 the gate's own fixture laws (`workholding_warnings`: c2/d2 plus #476's
-mesh acquittal) AND the whole-stack law below both find clear is left
-byte for byte. A struck run is re-laid as retract, traverse, plunge
+mesh acquittal) find clear is left byte for byte. A struck run is re-laid as retract, traverse, plunge
 (G0 up at its start XY, G0 across, G0 down to its end) at
 
 `H = max(the run's own top, highest steel under the traverse + 5 mm)`
@@ -15,7 +14,7 @@ where "under the traverse" is every fixture box the widest band of the
 stack (flute, shank, holder bands, spindle housing when stated) reaches
 along the run's XY segment. The tip above all of it puts every band
 (they all stand above the tip) above the steel. The re-laid run is then
-judged again by both laws; only a clean one replaces the original. The
+judged again by the gate's laws; only a clean one replaces the original. The
 path's notes say how many links rose, from where, over which fixture
 and to what Z.
 
@@ -56,14 +55,25 @@ material consulted.
   a drill), thread or probe records, and any run inside a compensated
   span (spans outside re-index).
 
-**The whole-stack law used for detection and re-judging:** every band
-over each move's true z span (low end + its foot to high end + its top)
-against every box (strict-dip z rule), a box's own closed mesh
-acquitting what it flagged (#476: no facet within tolerance and not
-inside the solid). This is the #424/#425 rule (PR #464), which this
-branch does not yet carry: the current upright-rapid law reads only the
-flute disc. Judging with both laws means a routed link passes the gate
-today and after #464 merges.
+**Detection and re-judging are the gate's own laws, nothing else:**
+since #464 (#424/#425) law (d2) sweeps every band of an upright rapid
+(shank, holder bands, housing, flute column) over each move's true z
+span - the window `[low end + band foot, high end + band top]` - under
+the strict-dip z rule, after its flute-disc test, and the mesh law
+(#476) re-reads every band of the stack against each meshed fixture's
+closed mesh. The slice first carried its own copy of that whole-stack
+law (each band against every box, a box's mesh acquitting what it
+flagged), because #464 was not yet on its base. Once merged, that copy
+was a subset of (d2): the same windows and the same box predicate, the
+same acquittal rule (only a box exactly one fixture owns; no facet
+within tolerance and not inside the solid - (d2)'s mesh read is the
+stricter, judging the whole stack against the mesh), plus (d2)'s disc
+test on top. It was removed, with `LinkSteel::meshes`, which only it
+read. Keeping it as a second check was considered and dropped: it could
+only ever agree with the gate, and two copies of one law drift.
+`fixture_route`'s unit pins now hand the planner the gate's real laws
+(`bands_vs_fixtures` + `rapids_vs_fixtures`) instead of `|_| false`, so
+the arm-over-the-end case is detected by (d2)'s holder band.
 
 **Stamp:** fixtures and the machine stay off the stamp (M3.2 law), so a
 routed path does not stale when a clamp moves; the post gate re-checks
