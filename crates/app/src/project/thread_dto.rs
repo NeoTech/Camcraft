@@ -26,6 +26,9 @@ pub struct ThreadCycleDto {
     /// radial record - every earlier cache.
     #[serde(default, skip_serializing_if = "is_false")]
     pub alternating: bool,
+    /// #418: absent (and written only when set) is one cut per depth.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub repeat_each_depth: bool,
     pub first: u64,
     pub last: u64,
 }
@@ -49,6 +52,7 @@ impl ThreadCycleDto {
             spring_passes: t.spring_passes,
             pull_out: t.pull_out,
             alternating: t.alternating,
+            repeat_each_depth: t.repeat_each_depth,
             first: t.first as u64,
             last: t.last as u64,
         }
@@ -72,6 +76,7 @@ impl ThreadCycleDto {
             spring_passes: self.spring_passes,
             pull_out: self.pull_out,
             alternating: self.alternating,
+            repeat_each_depth: self.repeat_each_depth,
             first: usize::try_from(self.first).unwrap_or(usize::MAX),
             last: usize::try_from(self.last).unwrap_or(usize::MAX),
         };

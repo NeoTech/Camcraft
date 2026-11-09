@@ -11,7 +11,8 @@
 //! point. Pinned: a constant-area flank thread's golden whose words
 //! reproduce its laid depths and stations; the default thread's words
 //! reproducing its three passes; a refusal by name for each plan the
-//! cycle cannot state.
+//! cycle cannot state - the repeat of each roughing depth (issue #418)
+//! among them, which posts as G32 passes.
 //!
 //! Regenerate after an intentional change:
 //! `WRITE_GOLDEN=1 cargo test -p camcraft-app --test lathe_post_g76_schedule`
@@ -208,6 +209,7 @@ fn a_constant_area_flank_g76_states_its_verified_passes() {
         min_depth: 0.1,
         finish_allowance: 0.05,
         spring_passes: 1,
+        repeat_each_depth: false,
     };
     let world = g76_world(0.4, plan);
     let (text, refused) = post(&world);
@@ -238,10 +240,12 @@ fn the_default_thread_g76_states_its_three_passes() {
 fn a_plan_the_cycle_cannot_state_is_refused_by_name() {
     let alt = ThreadInfeed { method: InfeedMethod::Alternating, flank_angle: 30.0, ..ThreadInfeed::default() };
     let modified = ThreadInfeed { method: InfeedMethod::Flank, flank_angle: 29.5, ..ThreadInfeed::default() };
-    let cases: [(f64, ThreadInfeed, &str); 3] = [
+    let repeat = ThreadInfeed { repeat_each_depth: true, ..ThreadInfeed::default() };
+    let cases: [(f64, ThreadInfeed, &str); 4] = [
         (0.4, alt, "alternating flank infeed"),
         (0.4, modified, "not a G76 tool angle"),
         (1.5, ThreadInfeed::default(), "one-pass thread"),
+        (0.4, repeat, "repeat each roughing depth"),
     ];
     for (infeed, plan, why) in cases {
         let world = g76_world(infeed, plan);
@@ -275,4 +279,32 @@ fn the_alternating_flag_rides_the_stream_and_the_file() {
     let world = g76_world(0.4, ThreadInfeed::default());
     let text = camcraft_app::post::cnc::serialize(&posting::stream_records(&world).expect("generated"));
     assert!(!text.contains(" ALT "), "{text}");
+}
+
+#[test]
+fn a_repeated_depth_posts_as_g32_and_its_flag_rides_the_stream() {
+    let repeat = ThreadInfeed { repeat_each_depth: true, ..ThreadInfeed::default() };
+    let world = g76_world(0.4, repeat);
+    let records = posting::stream_records(&world).expect("generated");
+    let text = camcraft_app::post::cnc::serialize(&records);
+    assert!(text.lines().any(|l| l.starts_with("THREAD X") && l.ends_with(" REP 1")), "{text}");
+    let back = camcraft_app::post::cnc::parse(&text).expect("parses");
+    assert_eq!(camcraft_app::post::cnc::serialize(&back), text, "write-parse-write is a fixed point");
+    // With G32 output the same passes post: five plunges, each a G32 run.
+    let mut history = History::default();
+    let g32 = PostOptions { threading: ThreadingOutput::G32Passes, ..PostOptions::default() };
+    history.execute(&world, SetPostOptions::new(&world, g32).expect("G32"));
+    let (nc, refused) = post(&world);
+    assert!(refused.is_empty(), "{refused:?}");
+    assert!(nc.contains("G32") && !nc.contains("G76"), "{nc}");
+    let (laid, _) = laid(&world);
+    let depths: Vec<f64> = laid.iter().map(|&(_, d)| d).collect();
+    assert_eq!(depths.len(), 5, "{depths:?}");
+    for (d, w) in depths.iter().zip([0.4, 0.4, 0.8, 0.8, 1.2]) {
+        assert!((d - w).abs() < 1e-9, "{depths:?}");
+    }
+    // Off writes no REP word: every earlier stream's bytes.
+    let world = g76_world(0.4, ThreadInfeed::default());
+    let text = camcraft_app::post::cnc::serialize(&posting::stream_records(&world).expect("generated"));
+    assert!(!text.contains(" REP "), "{text}");
 }

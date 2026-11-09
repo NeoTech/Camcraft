@@ -54,6 +54,10 @@ pub struct ThreadCycle {
     /// included angle of each flank's line, the side flipping every
     /// roughing pass - a single-flank cycle cannot state it.
     pub alternating: bool,
+    /// Every roughing depth is cut twice before the next (issue #418):
+    /// the passes are not a cycle's one-cut-per-depth ladder, so a
+    /// cycle cannot state them.
+    pub repeat_each_depth: bool,
     /// Axial length of the angled pull-out at the thread's end (0: a
     /// square, radial retract).
     pub pull_out: f64,

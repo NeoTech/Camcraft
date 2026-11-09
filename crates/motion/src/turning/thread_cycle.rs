@@ -29,7 +29,9 @@ use super::thread::ThreadParams;
 ///   root twice (one pass the verdict never saw). A one-pass thread
 ///   states the whole height, which no cycle can rough to.
 /// - infeed angle: the INCLUDED angle of the compound infeed (twice the
-///   flank angle; 0 radial); alternating infeed sets `alternating`.
+///   flank angle; 0 radial); alternating infeed sets `alternating`;
+/// - a plan that repeats every roughing depth (#418) sets
+///   `repeat_each_depth` - no single cycle states it.
 ///
 /// A span the builder did not lay as planned gets no record; the
 /// passes still post.
@@ -82,6 +84,7 @@ pub(super) fn attach_cycle(
         spring_passes: plan.spring_passes,
         pull_out: 0.0,
         alternating: plan.method == InfeedMethod::Alternating,
+        repeat_each_depth: plan.repeat_each_depth,
         first,
         last,
     };

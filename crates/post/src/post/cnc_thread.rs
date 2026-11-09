@@ -32,6 +32,9 @@ pub struct ThreadRec {
     /// Alternating flank infeed (issue #417): written `ALT 1` only when
     /// set, so every earlier stream reads and writes the same bytes.
     pub alternating: bool,
+    /// Every roughing depth cut twice (issue #418): written `REP 1`
+    /// only when set, the `ALT` precedent.
+    pub repeat_each_depth: bool,
 }
 
 /// µm-integer text, the stream's length law.
@@ -60,6 +63,7 @@ impl ThreadRec {
             spring_passes: t.spring_passes,
             pull_out: t.pull_out,
             alternating: t.alternating,
+            repeat_each_depth: t.repeat_each_depth,
         }
     }
 
@@ -85,6 +89,7 @@ impl ThreadRec {
         m.insert("SpringPasses".into(), json!(self.spring_passes));
         m.insert("PullOut".into(), json!(self.pull_out));
         m.insert("Alternating".into(), json!(self.alternating));
+        m.insert("RepeatEachDepth".into(), json!(self.repeat_each_depth));
         m
     }
 
@@ -93,7 +98,7 @@ impl ThreadRec {
     pub fn line(&self) -> String {
         format!(
             "THREAD X {} Y {} Z {} EX {} EY {} EZ {} MAJOR {} MINOR {} LEAD {:.6} HEIGHT {} \
-             FIRST {} MIN {} FINISH {} ANGLE {:.6} SPRING {} PULLOUT {}{}\n",
+             FIRST {} MIN {} FINISH {} ANGLE {:.6} SPRING {} PULLOUT {}{}{}\n",
             q(self.start[0]),
             q(self.start[1]),
             q(self.start[2]),
@@ -111,6 +116,7 @@ impl ThreadRec {
             self.spring_passes,
             q(self.pull_out),
             if self.alternating { " ALT 1" } else { "" },
+            if self.repeat_each_depth { " REP 1" } else { "" },
         )
     }
 
@@ -125,13 +131,14 @@ impl ThreadRec {
 }
 
 /// Parse the words after `THREAD`: `Ok(None)` is `THREAD END`. Every
-/// key but `ALT` (issue #417, absent is 0) is required, each once; a
+/// key but `ALT` (issue #417) and `REP` (issue #418) - absent is 0 -
+/// is required, each once; a
 /// missing, repeated, unknown or non-finite word is refused by name - a cycle the parser guessed at
 /// is a thread cut to the wrong depth.
 pub fn parse<'a>(mut it: impl Iterator<Item = &'a str>) -> Result<Option<ThreadRec>, String> {
-    const KEYS: [&str; 17] = [
+    const KEYS: [&str; 18] = [
         "X", "Y", "Z", "EX", "EY", "EZ", "MAJOR", "MINOR", "LEAD", "HEIGHT", "FIRST", "MIN", "FINISH", "ANGLE",
-        "SPRING", "PULLOUT", "ALT",
+        "SPRING", "PULLOUT", "ALT", "REP",
     ];
     let mut seen: BTreeMap<&str, f64> = BTreeMap::new();
     let mut first = true;
@@ -162,12 +169,14 @@ pub fn parse<'a>(mut it: impl Iterator<Item = &'a str>) -> Result<Option<ThreadR
     if !(spring >= 0.0 && spring.fract() == 0.0 && spring <= f64::from(u32::MAX)) {
         return Err(format!("THREAD SPRING {spring} is not a pass count"));
     }
-    let alternating = match seen.get("ALT").copied() {
-        None => false,
-        Some(v) if v.to_bits() == 0.0_f64.to_bits() => false,
-        Some(v) if v.to_bits() == 1.0_f64.to_bits() => true,
-        Some(v) => return Err(format!("THREAD ALT {v} is not 0 or 1")),
+    let flag = |k: &str| match seen.get(k).copied() {
+        None => Ok(false),
+        Some(v) if v.to_bits() == 0.0_f64.to_bits() => Ok(false),
+        Some(v) if v.to_bits() == 1.0_f64.to_bits() => Ok(true),
+        Some(v) => Err(format!("THREAD {k} {v} is not 0 or 1")),
     };
+    let alternating = flag("ALT")?;
+    let repeat_each_depth = flag("REP")?;
     Ok(Some(ThreadRec {
         start: [um("X")?, um("Y")?, um("Z")?],
         end: [um("EX")?, um("EY")?, um("EZ")?],
@@ -182,5 +191,6 @@ pub fn parse<'a>(mut it: impl Iterator<Item = &'a str>) -> Result<Option<ThreadR
         spring_passes: spring as u32,
         pull_out: um("PULLOUT")?,
         alternating,
+        repeat_each_depth,
     }))
 }

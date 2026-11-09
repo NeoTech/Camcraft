@@ -1209,6 +1209,11 @@ impl OpParams {
                     h.write_u8(infeed_plan.method as u8);
                     h.write_u8(infeed_plan.schedule as u8);
                     h.write_u32(infeed_plan.spring_passes);
+                    // #418: a byte only when set, so a #416 plan's
+                    // digest is unchanged.
+                    if infeed_plan.repeat_each_depth {
+                        h.write_u8(0xD5);
+                    }
                     for v in [infeed_plan.flank_angle, infeed_plan.min_depth, infeed_plan.finish_allowance] {
                         w(h, v);
                     }

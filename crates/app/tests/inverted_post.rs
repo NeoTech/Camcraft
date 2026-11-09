@@ -169,6 +169,7 @@ fn a_threading_cycle_refuses_by_name() {
         spring_passes: 1,
         pull_out: 0.0,
         alternating: false,
+        repeat_each_depth: false,
     }));
     let e = refused("fanuc", &["X"], &with(vec![t, Record::Thread(None)]));
     assert!(e.contains("a threading cycle is not supported for an inverted axis"), "{e}");
