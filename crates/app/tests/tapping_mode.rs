@@ -112,7 +112,7 @@ fn operation(world: &World) -> camcraft_app::schema::Operation {
 
 fn path(world: &World) -> Toolpath {
     let entity = model::find_by_name(world, OP).expect("tap operation entity");
-    model::toolpath_of(world, &entity).expect("generated toolpath")
+    model::toolpath_of(world, &entity).expect("generated toolpath").path
 }
 
 fn assert_generated(world: &World, want: CycleKind, dwell: f64) -> Toolpath {
