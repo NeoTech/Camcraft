@@ -10,5 +10,5 @@ mod parse;
 
 pub use def::*;
 pub use direction::{inverted_axis_line, inverted_motion, inverted_phrase, untranslated_inversion, AxisDirection};
-pub use edm::{Edm, OrbitWord, ORBIT_KINDS};
+pub use edm::{Condition, ConditionField, Edm, OrbitWord, CONDITION_ROLES, ORBIT_KINDS};
 pub use parse::parse_mch;
