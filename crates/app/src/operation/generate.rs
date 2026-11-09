@@ -84,6 +84,8 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         machine_rotaries,
         spindle,
         fixtures,
+        fixture_names,
+        z_ceiling,
         workholding,
         fixture_meshes,
         rotary_axis,
@@ -105,8 +107,8 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
     // a mill's cutter. A lathe's insert, blade or gauge keeps the box
     // verdict (its body is not that stack).
     use crate::tools::ToolKind as K;
-    let mesh_steel: &[crate::fixture::MeshedFixture] =
-        if is_mill && !matches!(tool.kind, K::Turning | K::Groove | K::Thread | K::Form) { &fixture_meshes } else { &[] };
+    let lathe_tool = matches!(tool.kind, K::Turning | K::Groove | K::Thread | K::Form);
+    let mesh_steel: &[crate::fixture::MeshedFixture] = if is_mill && !lathe_tool { &fixture_meshes } else { &[] };
     // Tool: the diameter drives the path, the body drives the reach law.
     let d = tool.diameter;
 
@@ -2535,6 +2537,20 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
     // #368: what the fixture laws sweep above the shank.
     let holder = crate::tool_body::stack(&geom, body.as_ref());
     let fixture_boxes = fixtures;
+    // #339 slice 5: an upright mill's links are planned over the steel -
+    // a struck link rises over it, an unclearable one refuses by name.
+    // Posed and rotary paths keep the report-only verdict below.
+    let path = if frame.is_none() && rotary_axis.is_none() && is_mill && !lathe_tool {
+        let named: Vec<_> = fixture_names.into_iter().zip(fixture_boxes.iter().copied()).collect();
+        let stack = verify::steel_stack(&geom, &holder, spindle);
+        let steel = super::fixture_route::LinkSteel { boxes: &named, meshes: mesh_steel, stack: &stack, ceiling: z_ceiling };
+        super::fixture_route::plan_links(path, &steel, |p| {
+            !workholding_warnings(p, (&geom, &holder), &fixture_boxes, &workholding, rotary_axis, spindle, mesh_steel)
+                .is_empty()
+        })?
+    } else {
+        path
+    };
     let stl = match &params {
         OpParams::Face { .. }
         | OpParams::Probe { .. }
