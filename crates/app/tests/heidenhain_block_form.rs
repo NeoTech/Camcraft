@@ -4,8 +4,8 @@
 //! 892909-25, English, 9/2016 (content.heidenhain.de) - p. 130: blocks
 //! are numbered, the first is `%name G71 *`, the last `N99999999 %name
 //! G71 *`; pp. 66/71/131: blocks end in `*`, coordinates are signed
-//! (`X+0 Y+38.5`); p. 752: the drilling cycles are G200-G209 (no
-//! G81-G89); p. 756: G54 = datum shift, G73 = rotation, G80 = working
+//! (`X+0 Y+38.5`); cycle names/Q inventories come from Cycle Programming
+//! manual 892905-25 §§3.3/3.8/4.2/4.3; p. 756: G54 = datum shift, G73 = rotation, G80 = working
 //! plane; p. 456: `FUNCTION DWELL TIME<seconds>`. These tests parse the
 //! posted programs and assert exactly that.
 //!
@@ -86,9 +86,9 @@ fn check_form(nc: &str, what: &str) -> Vec<String> {
             }
             if head == 'G' {
                 assert!(
-                    matches!(w, "G00" | "G01" | "G02" | "G03" | "G17" | "G40" | "G90"),
-                    "{what}: {w} is not a word this post may write (G54/G55/G73/G80/G81-G89 mean \
-                     other things on a TNC): {l:?}"
+                    matches!(w, "G00" | "G01" | "G02" | "G03" | "G17" | "G40" | "G90"
+                        | "G200" | "G205" | "G206" | "G207" | "G247"),
+                    "{what}: {w} is outside the exact move/cycle/preset G-word allowlist: {l:?}"
                 );
             }
             assert!(w != "M6", "{what}: M6 is machine-dependent; the T block calls the tool: {l:?}");
@@ -151,6 +151,64 @@ fn drilling(dwell_reaches_bottom: bool) -> String {
     ])
 }
 
+fn native_cycles() -> String {
+    use cnc::Record as R;
+    let mut rs = vec![
+        R::Param { name: "WorkOffset".into(), value: json!("G55") },
+        R::Param { name: "SpindleSpeed".into(), value: json!(3000) },
+        R::Tool { number: 4, name: "TAP-M4".into() },
+        R::Section { begin: true },
+    ];
+    let specs = [
+        (CycleKind::Drill, 2.0, 0.0, -6.0, 0.0, 0.0, 120.0),
+        (CycleKind::Peck, 0.0, 0.0, -4.0, 2.0, 0.0, 120.0),
+        (CycleKind::FloatingTap, 2.0, 0.0, -6.0, 0.0, 0.25, 300.0),
+        (CycleKind::Tap, 2.0, 0.0, -6.0, 0.0, 0.0, 300.0),
+    ];
+    let mut move_no = 0;
+    for (i, (kind, r, entry, bottom, peck, dwell, feed)) in specs.into_iter().enumerate() {
+        let x = 10.0 + (i as f64) * 10.0;
+        rs.push(R::Cycle(cnc::CycleRec {
+            kind, x, y: 10.0, r_z: r, bottom_z: bottom, entry_z: entry,
+            peck, dwell, first_move: move_no, feed: Some(feed),
+        }));
+        let mut chain = vec![mv(MoveKind::Rapid, x, 10.0, r, None)];
+        match kind {
+            CycleKind::Peck => chain.extend([
+                mv(MoveKind::Plunge, x, 10.0, -2.0, Some(feed)),
+                mv(MoveKind::Rapid, x, 10.0, -1.0, None),
+                mv(MoveKind::Plunge, x, 10.0, -4.0, Some(feed)),
+                mv(MoveKind::Rapid, x, 10.0, 0.0, None),
+            ]),
+            CycleKind::FloatingTap | CycleKind::Tap => {
+                chain.push(mv(MoveKind::Feed, x, 10.0, bottom, Some(feed)));
+                chain.push(mv(MoveKind::Feed, x, 10.0, r, Some(feed)));
+            }
+            _ => {
+                chain.push(mv(MoveKind::Plunge, x, 10.0, bottom, Some(feed)));
+                chain.push(mv(MoveKind::Rapid, x, 10.0, r, None));
+            }
+        }
+        chain.push(mv(MoveKind::Rapid, x, 10.0, 10.0, None));
+        move_no += chain.len();
+        rs.extend(chain);
+    }
+    rs.push(R::Section { begin: false });
+    cnc::serialize(&rs)
+}
+
+#[test]
+fn heidenhain_native_cycles_and_preset_use_numbered_tnc_blocks() {
+    let out = run(&native_cycles());
+    assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+    let b = check_form(&out.program, "native cycles");
+    for g in ["G200", "G205", "G206", "G207", "G247 Q339=2"] {
+        assert!(b.iter().any(|line| line.starts_with(g)), "missing {g}: {}", out.program);
+    }
+    assert_eq!(b.iter().flat_map(|line| line.split_whitespace()).filter(|w| *w == "M99").count(), 4);
+    assert!(!out.program.contains("G80") && !out.program.contains("M89"));
+}
+
 #[test]
 fn heidenhain_drilling_posts_its_chain_with_the_dwell_at_the_bottom() {
     let out = run(&drilling(true));
@@ -181,21 +239,24 @@ fn heidenhain_refuses_a_dwell_its_chain_never_reaches() {
 }
 
 #[test]
-fn heidenhain_refuses_tapping_and_a_non_first_work_offset_by_name() {
+fn heidenhain_keeps_the_legacy_no_spindle_tap_refusal_and_maps_presets() {
     let out = run(&read("crates/app/tests/golden/tap_plate.cl"));
-    assert!(out.warnings.iter().any(|w| w.contains("tapping")), "{:?}", out.warnings);
+    assert!(out.warnings.iter().any(|w| w.contains("tapping needs a positive integral spindle speed")), "{:?}", out.warnings);
+
     use cnc::Record as R;
-    let s = cnc::serialize(&[
-        R::Param { name: "WorkOffset".into(), value: json!("G55") },
-        R::Section { begin: true },
-        mv(MoveKind::Rapid, 0.0, 0.0, 5.0, None),
-        R::Section { begin: false },
-    ]);
-    let out = run(&s);
-    assert!(out.warnings.iter().any(|w| w.contains("work offset G55")), "{:?}", out.warnings);
-    // The first work offset is the active preset: no word, no refusal.
-    let s = s.replace("G55", "G54");
-    let out = run(&s);
+    let section = |offset: Option<&str>| {
+        let mut rs = Vec::new();
+        if let Some(word) = offset { rs.push(R::Param { name: "WorkOffset".into(), value: json!(word) }); }
+        rs.extend([R::Section { begin: true }, mv(MoveKind::Rapid, 0.0, 0.0, 5.0, None), R::Section { begin: false }]);
+        cnc::serialize(&rs)
+    };
+    let out = run(&section(Some("G55")));
     assert!(out.warnings.is_empty(), "{:?}", out.warnings);
-    assert!(!out.program.contains("G54"), "{}", out.program);
+    assert!(out.program.contains("G247 Q339=2"), "G55 maps to preset row 2: {}", out.program);
+    let out = run(&section(Some("G54")));
+    assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+    assert!(out.program.contains("G247 Q339=1"), "explicit G54 maps to row 1: {}", out.program);
+    let out = run(&section(None));
+    assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+    assert!(!out.program.contains("G247"), "no WorkOffset keeps the control's active preset: {}", out.program);
 }

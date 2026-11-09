@@ -38,7 +38,7 @@ committed golden is a legal post input.
 | `PROBE <µm>` | the measurement ask (M5.3 D): the deviation budget, in µm, that the finished part is to be probed to after this section's last cut. The number is the switch - no word when no ask - and the verdict it deserves (whether the program's own cuts can measure to it, and which pass owes a re-run) is the app post gate's, never the streams |
 | `START X <i> Y <i> Z <i>` / `END` | legacy `.cl` position lines: consumed silently (END ends the record span) |
 
-`CYCLE` TYPE ∈ SPOT DRILL PECK DEEP TAP BORE BACKBORE. Word meanings
+`CYCLE` TYPE ∈ SPOT DRILL PECK DEEP TAP FLOATINGTAP BORE BACKBORE. Word meanings
 match the `.cl` v3 `; CYCLE` marker the M1.6 goldens use, and one
 parser reads both: X Y center, Z (or `BZ`) bottom, R (or `RZ`)
 retract/feed plane, `ENTRY` entry plane, Q (or `PECK`) peck, P (or
@@ -51,6 +51,16 @@ position in the file). A bare number
 separated key (`X:1000` / `X=1000`) are the same word to the parser,
 so the canonical spaced writer, the compact joined form, and the
 legacy positional form all round-trip.
+
+`FLOATINGTAP` is the appended stream choice for tapping with an
+explicitly selected floating holder; legacy `TAP` remains rigid. The
+operation choice persists as `floating_tap` (legacy `tap` stays rigid).
+When the engine publishes cycle properties to a script, both tapping
+cycles use `CycleType = "TAP"`; `TappingMode` is `"rigid"` for `TAP`
+and `"floating"` only for `FLOATINGTAP`. The Heidenhain manifest declares
+`floatingTapping = true`; when a script lacks that capability, the engine
+counts a refusal for floating-holder tapping. A machine's lack of rigid-
+tapping capability never turns a rigid request into floating mode.
 
 ## Rotary address words (stage D)
 
@@ -97,8 +107,11 @@ behavior only):
 | `From` `To` | the `PART TRANSFER` stations, 1-based (present only on transfer events) |
 | `Tolerance` | the `PROBE` ask's deviation budget in mm (present only on probe events; the µm lattice word `PROBE <µm>` is its stream spelling) |
 | `CircularDirection` | `CW` / `CCW` (arcs) |
-| `CycleType` | the `CYCLE` TYPE token (cycles) |
+| `CycleType` | cycle intent delivered to hooks: `SPOT` `DRILL` `PECK` `DEEP` `TAP` `BORE` `BACKBORE`; `FLOATINGTAP` is normalized to `TAP` here and distinguished by `TappingMode` |
+| `TappingMode` | `rigid` for legacy `TAP`; `floating` only for the explicit `FLOATINGTAP` stream kind |
 | `EntryZ` `Q` `P` `FeedRate` | cycle entry plane, peck mm, dwell s, cutting feed mm/min (`null` for legacy markers) |
+| `ChainFeedRate` | optional-valued engine property: feed on the first subsequent non-rapid move in the expanded cycle chain, mm/min; `null` if absent; legacy posts may use it when cycle `FeedRate` is `null` |
+| `ChainBottomZ` | optional-valued engine property: lowest Z among subsequent non-rapid cycle-chain moves, mm; `null` when no cutting move follows; a native-cycle post validates its bottom against this value when present |
 | `LinearMovementIncludeOpts` | `{L:[1]}` on plunges (the skip-the-rapid convention) |
 
 ## The hook contract

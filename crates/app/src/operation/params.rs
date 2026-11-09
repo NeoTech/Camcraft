@@ -1004,6 +1004,7 @@ impl OpParams {
                     CycleChoice::Drill => 2,
                     CycleChoice::Peck => 3,
                     CycleChoice::Tap => 4,
+                    CycleChoice::FloatingTap => 7,
                     CycleChoice::Bore => 5,
                     CycleChoice::BackBore => 6,
                 });

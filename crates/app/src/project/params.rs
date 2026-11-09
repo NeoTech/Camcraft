@@ -1312,8 +1312,10 @@ pub enum CycleChoiceDto {
     Drill,
     Peck,
     Tap,
+
     Bore,
     BackBore,
+    FloatingTap,
 }
 
 /// The reference part of a stored height. Serialized as a plain string;

@@ -193,7 +193,8 @@ impl CycleRec {
     pub fn props(&self) -> BTreeMap<String, Value> {
         let mut m = BTreeMap::new();
         m.insert("command".into(), json!("Drilling"));
-        m.insert("CycleType".into(), json!(cycle_name(self.kind)));
+        m.insert("CycleType".into(), json!(if self.kind == CycleKind::FloatingTap { "TAP" } else { cycle_name(self.kind) }));
+        m.insert("TappingMode".into(), json!(if self.kind == CycleKind::FloatingTap { "floating" } else { "rigid" }));
         m.insert("X".into(), json!(self.x));
         m.insert("Y".into(), json!(self.y));
         m.insert("Z".into(), json!(self.bottom_z));
@@ -214,6 +215,7 @@ pub fn cycle_name(kind: CycleKind) -> &'static str {
         CycleKind::Peck => "PECK",
         CycleKind::Deep => "DEEP",
         CycleKind::Tap => "TAP",
+        CycleKind::FloatingTap => "FLOATINGTAP",
         CycleKind::Bore => "BORE",
         CycleKind::BackBore => "BACKBORE",
     }
@@ -970,6 +972,7 @@ fn cycle_kind(name: &str) -> Option<CycleKind> {
         "PECK" => CycleKind::Peck,
         "DEEP" => CycleKind::Deep,
         "TAP" => CycleKind::Tap,
+        "FLOATINGTAP" => CycleKind::FloatingTap,
         "BORE" => CycleKind::Bore,
         "BACKBORE" => CycleKind::BackBore,
         _ => return None,

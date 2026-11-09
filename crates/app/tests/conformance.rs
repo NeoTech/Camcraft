@@ -57,10 +57,10 @@ const POSTS: &[(&str, &str, &str)] = &[
 ];
 
 /// (post stem, golden, named reason): a golden a dialect must REFUSE
-/// rather than post, so it has no `.nc` there. #50: the Heidenhain
-/// DIN/ISO post has no tapping form (G206/G207 are not specced) and a
-/// tap cannot be plain moves.
-const REFUSED: &[(&str, &str, &str)] = &[("heidenhain", "tap_plate", "tapping")];
+/// rather than post, so it has no `.nc` there. #51: Heidenhain now has
+/// native rigid/floating cycle mappings; the legacy tap golden has no
+/// spindle-speed parameter, so it remains a named refusal by exact reason.
+const REFUSED: &[(&str, &str, &str)] = &[("heidenhain", "tap_plate", "tapping needs a positive integral spindle speed")];
 
 /// The TURNING dialects (M13.5): their goldens are the lathe
 /// documents' own streams (`lathe_post.rs`); on a mill golden they
@@ -158,13 +158,12 @@ fn every_builtin_posts_every_golden_byte_exact() {
 /// the whole group ahead of the contour, whose moves then die in
 /// that same guard - the stream must be shaped like a real one.
 ///
-/// #50: each hole carries its real expanded chain (approach, plunges,
-/// peck retracts, exit - the generator's `drilling::cycle` shape), so
-/// a dialect that posts drilling as plain moves (Heidenhain DIN/ISO)
-/// posts the motion a real stream would carry; the cycle dialects
-/// suppress it unchanged. `wcs` and `tap` let the Heidenhain variant
-/// drop the two records its dialect refuses by name (a non-first work
-/// offset, a tap), which `heidenhain_block_form` pins separately.
+/// #51: each hole carries its real expanded chain (approach, plunges,
+/// peck retracts, exit), matching the generator's `drilling::cycle` shape.
+/// Cycle-capable posts suppress the expanded cuts; Heidenhain keeps safe
+/// links and replaces its native cycle's cuts. The Heidenhain variant now
+/// uses this same G55 + rigid-tap stream as the others; its one remaining
+/// golden refusal is `tap_plate`, whose legacy stream does not carry spindle speed.
 fn synth_stream_with(wcs: &str, tap: bool) -> String {
     use cnc::Record as R;
     let rec = |kind: MoveKind, x: f64, y: f64, z: f64, feed: Option<f64>| {
@@ -244,7 +243,7 @@ fn synth_stream_with(wcs: &str, tap: bool) -> String {
                 }
                 chain.push(rec(MoveKind::Rapid, x, y, r_z, None));
             }
-            CycleKind::Tap => {
+            CycleKind::Tap | CycleKind::FloatingTap => {
                 chain.push(rec(MoveKind::Feed, x, y, bottom, Some(feed)));
                 chain.push(rec(MoveKind::Feed, x, y, r_z, Some(feed)));
             }
@@ -270,9 +269,9 @@ fn the_synthesized_stream_locks_the_tool_and_spindle_words() {
         serde_json::from_str(&read("assets/machines/3axis-vmc.mch")).expect("machine json");
     let write = std::env::var_os("WRITE_GOLDEN").is_some();
     for (name, cps_stem, _) in POSTS {
-        // #50: Heidenhain refuses a G55 offset and a tap by name, so
-        // its golden locks the same stream without those two records.
-        let stream = if *cps_stem == "heidenhain" { synth_stream_with("G54", false) } else { synth_stream() };
+        // #51: Heidenhain posts this exact G55 + tap fixture through
+        // its native preset and rigid-tapping cycles, like the other posts.
+        let stream = synth_stream();
         let cps = read(&format!("assets/posts/{cps_stem}.cps"));
         let out = engine::run(&cps, &mch, &stream)
             .unwrap_or_else(|e| panic!("{name} on the synth stream: must post: {e}"));
