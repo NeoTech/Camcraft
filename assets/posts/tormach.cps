@@ -297,6 +297,9 @@ function beltNote(rpm) {
 function startPreamble() {
   if (sectionOpen) return;
   sectionOpen = true;
+  // #574: a touch probe (a stated speed of 0) states its spindle
+  // stopped before its first move, whatever the tool change did.
+  var probeStop = spindleWait && !(sRpm > 0);
   opNotes();
   block(["G17", "G90", wcsWord, "G40", "G49", "G80"]);
   planeG = 17;              // the preamble states the plane
@@ -313,6 +316,7 @@ function startPreamble() {
     block(["S" + ni(sRpm), "M3"]);
     spindleWait = false;
   }
+  if (probeStop) block(["M5"]);
   coolant = coolantCode();
   if (coolant) block([coolant]);
 }

@@ -264,6 +264,9 @@ function onToolChange(number, name) {
 function startPreamble() {
   if (sectionOpen) return;
   sectionOpen = true;
+  // #574: a touch probe (a stated speed of 0) states its spindle
+  // stopped before its first move, whatever the tool change did.
+  var probeStop = spindleWait && !(sRpm > 0);
   opNotes();
   modalWait = true;
   if (toolWait) {
@@ -277,6 +280,7 @@ function startPreamble() {
     block(["M3"]);
     spindleWait = false;
   }
+  if (probeStop) block(["M5"]);
   coolant = coolantFor(coolantAsk);
   if (coolant) block([coolant]);
 }
