@@ -364,6 +364,9 @@ fn required_by_kind(v: &Value, text: &str, axes: &[(String, &Value, bool)], out:
     let need: &[&str] = match k {
         Kind::Lathe => &["X", "Z"],
         Kind::Mill | Kind::MillTurn => &["X", "Y", "Z"],
+        // #530: a wire cuts in X/Y (U/V add taper); a sinker burns in Z.
+        Kind::WireEdm => &["X", "Y"],
+        Kind::SinkerEdm => &["Z"],
     };
     for l in need {
         if !has_linear(l) {

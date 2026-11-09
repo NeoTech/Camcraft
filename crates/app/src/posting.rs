@@ -59,6 +59,9 @@ pub fn post_serves(name: &str, kind: crate::machine::Kind) -> bool {
         Kind::Mill => !lathe_post,
         Kind::Lathe => lathe_post,
         Kind::MillTurn => true,
+        // #530: no EDM post ships yet (#533, #542); no milling or
+        // turning dialect speaks to an EDM control.
+        Kind::WireEdm | Kind::SinkerEdm => false,
     }
 }
 
@@ -731,6 +734,23 @@ pub fn op_streams(world: &World) -> Result<Vec<(String, Vec<cnc::Record>)>, Stri
         .collect();
     if let Some(msg) = crate::tool_numbers::clash(world, &used) {
         return Err(msg);
+    }
+
+    // #530: the family door again, at post. An op created on one
+    // machine and then remounted onto steel that cannot run it (an EDM,
+    // a lathe under a milling op) is refused by name - never posted in
+    // a dialect its machine does not speak. Same law as `family_gate`.
+    for (name, e) in &ops {
+        if let Some(op) = model::operation_of(world, e) {
+            let machine = crate::machine::kind_of_setup(world, op.setup.as_deref());
+            if !op.params.kind().info().admits(machine) {
+                return Err(format!(
+                    "{name}: a {} operation cannot run on its setup's {} machine - mount a machine that runs it, or suppress the operation",
+                    op.params.kind(),
+                    machine.label()
+                ));
+            }
+        }
     }
 
     let skip_stops = post_options(world).skip_stops;

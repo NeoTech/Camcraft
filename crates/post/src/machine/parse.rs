@@ -184,7 +184,7 @@ pub fn parse_mch(text: &str) -> Result<Machine, String> {
         Some(serde_json::Value::String(w)) => {
             if Kind::from_word(w).is_none() {
                 return Err(format!(
-                    "machine file: kind {w:?} is not mill, lathe or mill-turn"
+                    "machine file: kind {w:?} is not mill, lathe, mill-turn, wire_edm or sinker_edm"
                 ));
             }
             m.kind = Some(w.clone());
@@ -201,6 +201,10 @@ pub fn parse_mch(text: &str) -> Result<Machine, String> {
     if matches!(length, Some("inch" | "inches")) {
         m.units = Some("inch".to_owned());
     }
+
+    // #530: the EDM section, read whatever the kind (a mill that states
+    // one carries it inertly; a garbled one refuses the file either way).
+    m.edm = super::edm::parse_edm(v.get("edm"), f)?;
 
     if let Some(parts) = kine {
         if let Some(head) = find_type(parts, "head") {

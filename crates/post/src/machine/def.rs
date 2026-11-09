@@ -173,6 +173,10 @@ pub struct Machine {
     /// post that needs it refuses rather than guess where up is.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub safe_retract_z: Option<f64>,
+    /// The `edm` section of a wire or sinker EDM machine (#530), or
+    /// None: unstated.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub edm: Option<super::edm::Edm>,
 }
 
 /// The words a control needs around C-axis live-tool work (issue
@@ -209,6 +213,12 @@ pub enum Kind {
     Mill,
     Lathe,
     MillTurn,
+    /// Wire EDM (#530): a wire through lower and upper guides, X/Y plus
+    /// U/V for taper. Declared only - no axis inventory infers it.
+    WireEdm,
+    /// Sinker (die-sink, ram) EDM (#530): an electrode burned down Z.
+    /// Declared only.
+    SinkerEdm,
 }
 
 impl Kind {
@@ -219,6 +229,8 @@ impl Kind {
             Kind::Mill => "milling",
             Kind::Lathe => "turning",
             Kind::MillTurn => "mill-turning",
+            Kind::WireEdm => "wire EDM",
+            Kind::SinkerEdm => "sinker EDM",
         }
     }
 
@@ -231,6 +243,8 @@ impl Kind {
             Kind::Mill => "mill",
             Kind::Lathe => "lathe",
             Kind::MillTurn => "mill-turn",
+            Kind::WireEdm => "wire_edm",
+            Kind::SinkerEdm => "sinker_edm",
         }
     }
 
@@ -251,6 +265,8 @@ impl Kind {
             "mill" | "milling" => Some(Kind::Mill),
             "lathe" | "turning" | "turn" => Some(Kind::Lathe),
             "millturn" | "turnmill" | "millturning" | "turningmill" => Some(Kind::MillTurn),
+            "wireedm" | "wedm" | "wirecut" => Some(Kind::WireEdm),
+            "sinkeredm" | "sinker" | "diesinker" | "ramedm" | "diesinkedm" => Some(Kind::SinkerEdm),
             _ => None,
         }
     }
@@ -341,6 +357,7 @@ impl Machine {
                 (Some(lo), Some(hi)) => hi >= lo,
                 _ => true,
             }
+            && self.edm.as_ref().is_none_or(super::edm::Edm::is_sane)
     }
 
     /// The one-line identity for the Setup pane and the stage E sheet.

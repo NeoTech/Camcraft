@@ -5,8 +5,10 @@
 
 pub mod def;
 mod direction;
+pub mod edm;
 mod parse;
 
 pub use def::*;
 pub use direction::{inverted_axis_line, inverted_motion, inverted_phrase, untranslated_inversion, AxisDirection};
+pub use edm::{Edm, OrbitWord, ORBIT_KINDS};
 pub use parse::parse_mch;
