@@ -4,8 +4,9 @@
 workholding at generation (`operation::fixture_route::plan_links`, one
 hook in `generate.rs` before the verify pass). A link is the maximal run
 of straight rapids between two non-rapid moves (or a path end). A run
-the gate's own fixture laws (`workholding_warnings`: c2/d2 plus #476's
-mesh acquittal) find clear is left byte for byte. A struck run is re-laid as retract, traverse, plunge
+the gate's own fixture laws (`fixture_struck::path_hits`, the per-op
+law #482 shares with the post gate: c2/d2 plus #476's mesh acquittal,
+over the op's own setup's boxes, meshes and machine spindle) find clear is left byte for byte. A struck run is re-laid as retract, traverse, plunge
 (G0 up at its start XY, G0 across, G0 down to its end) at
 
 `H = max(the run's own top, highest steel under the traverse + 5 mm)`
@@ -96,3 +97,15 @@ G0 moves.
   so a link already clear inside a vise's box is never re-laid.
 - *5 mm gap:* the conventional retract margin; any positive margin is
   safe (the tip clears the box top). Named `ROUTE_GAP`.
+
+**Merged with #482 / #471 (2026-11-09):** the re-judge no longer calls
+the generator's private `workholding_warnings`; the per-op law #482 put
+in `fixture_struck::op_hits` (the post gate's) was split into a
+world-free `fixture_struck::path_hits`, and the generator's warnings,
+the planner's re-judge and the post gate all call it over the same
+per-setup inputs (`workholding_for` / `meshes_for` of the op's setup,
+`machine::of_setup` for the spindle housing). The Z-stroke cap reads
+`machine::of_setup` of the op's own setup too, never the active one.
+Considered and dropped: calling `op_hits` itself from the planner - it
+needs the `World`, which the generator job (run off the world) does not
+carry.

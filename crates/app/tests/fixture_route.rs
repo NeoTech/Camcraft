@@ -10,7 +10,10 @@
 //! generate, job), app::posting, app::verify.
 
 use camcraft_app::cl::{Move, MoveKind, Toolpath};
-use camcraft_app::commands::{AddTool, CreateOperation, GenerateOperation, History, ImportModel, SetStock, TagFixture};
+use camcraft_app::commands::{
+    ActivateSetup, AddTool, CreateOperation, CreateSetup, GenerateOperation, History, ImportModel, SetSetupMachine, SetStock,
+    TagFixture,
+};
 use camcraft_app::fixture::FixtureBox;
 use camcraft_app::geometry::{cube, Mesh, Point3, Triangle};
 use camcraft_app::links::Links;
@@ -184,6 +187,52 @@ fn a_clamp_taller_than_the_z_stroke_refuses_generation_by_name() {
         Err(e) => e.to_string(),
     };
     assert!(err.contains("cannot clear fixture 'Clamp1'") && err.contains("Z 400.000"), "{err}");
+}
+
+#[test]
+fn the_z_stroke_cap_reads_the_ops_own_setups_machine_not_the_active_one() {
+    // #471/#482: the op lives in Setup1 (the implicit first setup); the
+    // ACTIVE setup is Setup2. Only Setup1's stroke may cap the route.
+    let (world, mut h) = two_pockets();
+    let axis = |n: &str, lo: f64, hi: f64| AxisLimits { name: n.to_string(), travel: Some((lo, hi)), ..Default::default() };
+    let mill = |model: &str, z_top: f64| Machine {
+        model: model.to_string(),
+        kind: Some("mill".to_string()),
+        axes: vec![axis("X", -200.0, 200.0), axis("Y", -200.0, 200.0), axis("Z", -100.0, z_top)],
+        ..Default::default()
+    };
+    for _ in 0..2 {
+        h.execute(&world, CreateSetup::new(&world, None, None).expect("setup"));
+    }
+    let mount = |h: &mut History, setup: &str, m: Machine| {
+        let file = format!("{}.mch", m.model);
+        h.execute(&world, SetSetupMachine::new(&world, setup, Some((file, Some(m)))).expect("mount"));
+    };
+    mount(&mut h, "Setup1", mill("Tall VMC", 1000.0));
+    mount(&mut h, "Setup2", mill("Short VMC", 100.0));
+    h.execute(&world, ActivateSetup::new(&world, Some("Setup2")).expect("activate"));
+    // A 400 mm clamp across the links: over the short stroke, under the
+    // tall one. It starts at y 40, so the holder at the path's
+    // start point (0, 0) stands clear of it - a link's own end column
+    // under steel is no height's to clear.
+    let e = model::spawn(&world, "Clamp1");
+    model::set_facets(&world, &e, cube(p(-5.0, 40.0, 0.0), p(5.0, 70.0, 400.0)).facets.to_vec().into());
+    model::set_rev(&world, &e, 1);
+    h.execute(&world, TagFixture::new(&world, "Clamp1", None).expect("tagged"));
+    h.execute(&world, GenerateOperation::new(&world, "Contour1").expect("routes on its own tall machine"));
+    let notes = path_of(&world).notes;
+    assert!(notes.iter().any(|n| n.contains("raised over the workholding") && n.contains("Z 405.000")), "{notes:?}");
+    assert!(!struck(&posting::verification_gate(&world)), "{:?}", posting::verification_gate(&world));
+
+    // Swap the steel: now the op's own machine is the short one, and the
+    // active setup's tall stroke must not rescue it.
+    mount(&mut h, "Setup1", mill("Short VMC", 100.0));
+    mount(&mut h, "Setup2", mill("Tall VMC", 1000.0));
+    let err = match GenerateOperation::new(&world, "Contour1") {
+        Ok(_) => panic!("a 400 mm clamp under its own setup's 100 mm stroke must refuse"),
+        Err(e) => e.to_string(),
+    };
+    assert!(err.contains("cannot clear fixture 'Clamp1'"), "{err}");
 }
 
 /// The 4 mm end mill [`stack`] reads: flute r2 x 15, shank r2 x 25,

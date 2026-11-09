@@ -2544,9 +2544,12 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         let named: Vec<_> = fixture_names.into_iter().zip(fixture_boxes.iter().copied()).collect();
         let stack = verify::steel_stack(&geom, &holder, spindle);
         let steel = super::fixture_route::LinkSteel { boxes: &named, stack: &stack, ceiling: z_ceiling };
+        // The re-judge is the post gate's own per-op law over the same
+        // per-setup inputs (#482's `fixture_struck`), so a routed link
+        // posts exactly when the gate would pass it.
+        let wh = verify::Workholding { turning: &workholding.0, fixed: &workholding.1, axis: rotary_axis };
         super::fixture_route::plan_links(path, &steel, |p| {
-            !workholding_warnings(p, (&geom, &holder), &fixture_boxes, &workholding, rotary_axis, spindle, mesh_steel)
-                .is_empty()
+            !crate::fixture_struck::path_hits(p, (&geom, &holder), &wh, spindle, mesh_steel).is_empty()
         })?
     } else {
         path
@@ -3093,8 +3096,8 @@ fn rotary_letter_gate(
 /// spindle band is never tested on its own. A fixed box loses a hit only
 /// where the machine frame proves the move clear; the turning boxes keep
 /// the path-frame verdict untouched. #339: `meshes` (the tagged models'
-/// closed meshes, empty for a lathe's tool) then acquit the upright
-/// moves a box flagged and its real steel does not meet
+/// closed meshes, empty for a lathe's tool) then acquit the moves
+/// (upright, posed or turned) a box flagged and its real steel does not meet
 /// (`verify::mesh_refined` - the mesh never adds a hit).
 #[allow(clippy::too_many_arguments)] // the gate's inputs + the meshes
 fn workholding_warnings(
@@ -3110,14 +3113,8 @@ fn workholding_warnings(
         return Vec::new();
     }
     let wh = verify::Workholding { turning, fixed, axis };
-    let stack = verify::steel_stack(geom, holder, spindle);
-    let steel = verify::MeshSteel { fixtures: meshes, stack: &stack, chord_tol: GOUGE_TOL };
-    let mut warns = verify::mesh_refined(path, &wh, &steel, false, |w| {
-        verify::bands_vs_workholding_held(path, geom, holder, w, spindle, GOUGE_TOL)
-    });
-    warns.extend(verify::mesh_refined(path, &wh, &steel, true, |w| {
-        verify::rapids_vs_workholding_held(path, geom, holder, w, spindle)
-    }));
+    // The post gate's own per-op law (#339 slice 5): one law, one verdict.
+    let warns = crate::fixture_struck::path_hits(path, (geom, holder), &wh, spindle, meshes);
     crate::fixture::log_mesh_refusals(meshes);
     warns
 }
