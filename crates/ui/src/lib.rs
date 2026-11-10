@@ -6,6 +6,7 @@
 //! is the shell, `interact` and `state` the shared law underneath it.
 
 pub mod actions;
+pub mod align_pick_viz;
 mod axis_note;
 mod build_info;
 pub mod boundary_draft;
@@ -23,6 +24,7 @@ pub mod operations;
 pub mod path_lines;
 pub mod post_file;
 pub mod plane_pick;
+pub mod pick_words;
 pub mod axis_pick;
 pub mod points_pick;
 pub mod state;

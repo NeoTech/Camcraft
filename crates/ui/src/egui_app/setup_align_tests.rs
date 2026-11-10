@@ -225,3 +225,54 @@ fn the_typed_turn_pivots_on_the_wcs_origin_by_real_clicks_and_undoes() {
     assert!(near(held_at(h.state(), [0.0, 0.0, 4.0]), [0.0, 0.0, 4.0]), "the centre stays put");
     assert_eq!(camcraft_app::setup::work_offset(&h.state().world, "Setup1"), None, "the work offset is untouched");
 }
+
+/// #738: the page is one flow. A preset chosen AFTER a face lay flips the
+/// part from the laid pose (the laid wall ends face down, where the
+/// absolute "Flip over X" from as modelled would leave it facing +Y) -
+/// it never wipes the face pick's move. Ctrl+Z steps back to the lay
+/// exactly; "As modelled" is the one reset, and the header says so.
+#[test]
+fn a_preset_after_a_face_lay_composes_and_as_modelled_is_the_one_reset() {
+    let mut state = with_part();
+    let wall = {
+        let e = camcraft_app::model::find_by_name(&state.world, "part").expect("part");
+        let f = camcraft_app::model::features_of(&state.world, &e).expect("features");
+        f.faces.iter().find(|x| x.normal[1].abs() > 0.99 && (x.normal[1] * -10.0 - x.offset).abs() < 1e-9).map(|x| x.id).expect("the front wall")
+    };
+    let picks = vec![camcraft_app::operation::GeoSel {
+        entity: "part".into(),
+        feature: camcraft_app::operation::FeatureSel::Face(wall),
+    }];
+    let lay = camcraft_app::pick::PlaneLay { plane: camcraft_app::cl::ArcPlane::Xy, flip: false, place: true };
+    run(&mut state, CommandKind::LayPartOnPlane { setup: "Setup1".into(), picks, lay });
+    let laid = setup_align::stored(&state.world, "Setup1").expect("laid");
+    let wall_dir = |a: camcraft_app::schema::Location| {
+        let v = camcraft_app::geometry::quat_rotate_point(a.rot, Point3::new(0.0, -1.0, 0.0));
+        [v.x, v.y, v.z]
+    };
+    assert!(near(wall_dir(laid), [0.0, 0.0, 1.0]), "the wall faces up");
+
+    let mut h = Harness::builder()
+        .with_size(Vec2::new(600.0, 400.0))
+        .build_ui_state(frame, state);
+    h.run();
+    assert!(h.query_by_label_contains("each move starts from where the part sits now").is_some(), "the header says the flow");
+    let now = held(h.state());
+    h.get_by(|n| n.role() == Role::ComboBox && n.value().as_deref() == Some(now.as_str())).click();
+    h.run();
+    h.get_by_label("Flip over X").click();
+    h.run();
+    let flipped = setup_align::stored(&h.state().world, "Setup1").expect("flipped");
+    assert!(near(wall_dir(flipped), [0.0, 0.0, -1.0]), "composed: the laid wall now faces down: {:?}", wall_dir(flipped));
+    key(&mut h, Key::Z);
+    assert_eq!(setup_align::stored(&h.state().world, "Setup1"), Some(laid), "undo: back to the lay, exactly");
+
+    let now = held(h.state());
+    h.get_by(|n| n.role() == Role::ComboBox && n.value().as_deref() == Some(now.as_str())).click();
+    h.run();
+    h.get_by_label("As modelled").click();
+    h.run();
+    assert_eq!(held(h.state()), "As modelled", "the one reset");
+    key(&mut h, Key::Z);
+    assert_eq!(setup_align::stored(&h.state().world, "Setup1"), Some(laid), "undo brings the lay back");
+}

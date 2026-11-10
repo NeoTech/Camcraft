@@ -43,7 +43,7 @@ pub(super) fn rows(ui: &mut Ui, state: &mut State, setup: &str) {
         if held {
             "applied - tick Flip +Y / Flip +X and Apply again to turn the part the other way".to_owned()
         } else {
-            e.to_string()
+            crate::pick_words::plain(&e.to_string())
         }
     });
     ui.horizontal(|ui| {
@@ -61,7 +61,8 @@ pub(super) fn rows(ui: &mut Ui, state: &mut State, setup: &str) {
     ui.horizontal(|ui| {
         ui.label("     ");
         let tip = match &check {
-            Ok(()) => "Turn the part about Z so the picks run along their axes.".to_owned(),
+            Ok(()) => "Turn the part about Z from where it sits now so the picks run along their axes (one undo step)."
+                .to_owned(),
             Err(why) => why.clone(),
         };
         if ui

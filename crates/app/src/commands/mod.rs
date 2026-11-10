@@ -30,6 +30,7 @@ pub mod setup;
 pub mod setup_delete;
 // #196: a setup's picked program offset.
 pub mod setup_align;
+mod align_stock;
 pub mod setup_wcs;
 // #343: a setup's own machine and post.
 pub mod setup_mount;

@@ -18,8 +18,8 @@ pub mod winding;
 
 pub use align::{Alignment, align_321};
 pub use axis::{AxisPick, InPlaneAxes, InPlaneAxis, in_plane_turn_deg, pick_coords, turn_in_plane};
-pub use plane::{PlaneLay, lay_on_plane, plane_label, plane_side};
-pub use points::{PointsLay, lay_on_points, points_side};
+pub use plane::{PlaneLay, lay_on_plane, lay_on_plane_in, plane_label, plane_side};
+pub use points::{PointsLay, lay_on_points, lay_on_points_in, points_side};
 pub use face::{FaceOrigin, face_origin, facets_centroid};
 pub use feature_arc::ArcCentre;
 pub use feature_graph::{FeatureGraph, FeaturePoint, PointKind, WeldedFace, feature_graph, feature_graph_cached};

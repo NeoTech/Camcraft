@@ -209,7 +209,7 @@ pub fn take(state: &mut State, pick: GeoSel) {
     d.applied = false;
     let by = d.by(axis);
     let setup = d.setup.clone();
-    let words = format!("{} of '{}'", pick.feature, pick.entity);
+    let words = format!("that pick on '{}'", pick.entity); // #738: no internal id
     let refuse = |what: &str| format!("{setup}: {words} is {what} - {} takes {}", axis.label(), by.noun());
     let status = match (by, pick.feature) {
         (AxisBy::Edge, FeatureSel::Chain(_)) => {
@@ -230,14 +230,29 @@ pub fn take(state: &mut State, pick: GeoSel) {
     state.status = status;
 }
 
-/// The picked row's words (#557 hand check): what was picked and where,
-/// in the document's units - never an internal feature id. Points read
-/// "1 of 2 points on 'block' (x, y, z) mm" / "2 points on 'block' (..)
-/// -> (..) mm"; an edge reads "edge on 'block', 50.000 mm long, along
-/// (dx, dy, dz)". Coordinates are the document frame (as modelled).
+/// One picked point where it is (#738): "on 'block' (x, y, z) mm", in
+/// the document's units and frame - never its internal id.
+#[must_use]
+pub fn point_words(world: &World, g: &GeoSel, unit: Unit) -> String {
+    match pick::pick_coords(world, g).as_deref() {
+        Some([p]) => {
+            let c: Vec<String> = p.iter().map(|v| units::len(*v, unit, 3)).collect();
+            format!("on '{}' ({}) {}", g.entity, c.join(", "), unit.suffix())
+        }
+        _ => format!("on '{}' (no longer in the model - re-pick it)", g.entity),
+    }
+}
+
+/// The picked row's words (#557 hand check, #738): how many of what are
+/// selected, then where, in the document's units - never an internal
+/// feature id. Points read "1 point selected (pick 1 more) - on 'block'
+/// (x, y, z) mm" / "2 points selected - on 'block' (..) -> (..) mm"; an
+/// edge reads "1 edge selected - on 'block', 50.000 mm long, along (dx,
+/// dy, dz)". Coordinates are the document frame (as modelled).
 #[must_use]
 pub fn picks_text(world: &World, picks: &[GeoSel], unit: Unit) -> String {
-    let Some(first) = picks.first() else { return "nothing picked".to_owned() };
+    let Some(first) = picks.first() else { return "nothing selected".to_owned() };
+    let head = crate::pick_words::selected(picks);
     let mut names: Vec<&str> = Vec::new();
     for g in picks {
         if !names.contains(&g.entity.as_str()) {
@@ -261,15 +276,15 @@ pub fn picks_text(world: &World, picks: &[GeoSel], unit: Unit) -> String {
                 } else {
                     String::new()
                 };
-                format!("edge on {on}, {} {suffix} long{dir}", units::len(l, unit, 3))
+                format!("{head} - on {on}, {} {suffix} long{dir}", units::len(l, unit, 3))
             }
-            _ => format!("edge on {on} (no longer straight or in the model - re-pick it)"),
+            _ => format!("{head} - on {on} (no longer straight or in the model - re-pick it)"),
         },
         _ => {
             let pts: Vec<String> = coords.iter().filter_map(|c| c.first()).map(at).collect();
             let head = match picks.len() {
-                1 => format!("1 of 2 points on {on}"),
-                n => format!("{n} points on {on}"),
+                1 => format!("{head} (pick 1 more) - on {on}"),
+                _ => format!("{head} - on {on}"),
             };
             if pts.is_empty() { head } else { format!("{head} {} {suffix}", pts.join(" -> ")) }
         }

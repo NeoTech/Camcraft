@@ -1312,14 +1312,10 @@ fn viewport_panel(
                 ui.painter().text(at, egui::Align2::LEFT_TOP, text, font.clone(), rgb8(rgb));
             }
         }
+        // #738: the alignment draft's picks - filled faces, bold edges, discs.
+        crate::align_pick_viz::paint(ui.painter(), egui::Rect::from_min_size(to_px([0.0, 0.0]), egui::vec2(rw, rh)), state, aspect);
         for (a, b) in interact::hover_features(state, aspect) {
-            ui.painter().line_segment(
-                [
-                    egui::pos2(rx0 + a[0] * rw, ry0 + a[1] * rh),
-                    egui::pos2(rx0 + b[0] * rw, ry0 + b[1] * rh),
-                ],
-                egui::Stroke::new(1.0, egui::Color32::from_rgb(255, 217, 102)),
-            );
+            ui.painter().line_segment([to_px(a), to_px(b)], egui::Stroke::new(1.0, egui::Color32::from_rgb(255, 217, 102)));
         }
         // The machined mesh's hovered facet (#25): the hover ink's yellow,
         // a veil over the class colour and its outline.

@@ -59,7 +59,7 @@ pub fn clear(state: &mut State) {
 pub fn take(state: &mut State, pick: GeoSel) {
     let Some(d) = state.points_pick.as_mut() else { return };
     let setup = d.setup.clone();
-    let words = format!("{} of '{}'", pick.feature, pick.entity);
+    let words = format!("that pick on '{}'", pick.entity); // #738: no internal id
     state.status = match pick.feature {
         FeatureSel::Vertex(_) if d.picks.len() >= 3 => {
             format!("{setup}: three points are picked - Remove last or Clear to re-pick")
