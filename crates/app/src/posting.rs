@@ -146,6 +146,10 @@ pub const MACHINES: &[(&str, &str)] = &[
     ("Tormach 1100M+", include_str!("../../../assets/machines/tormach-1100m-plus.mch")),
     // #710: a generic grbl-family router / mill; pairs with the "grblHAL" post.
     ("grblHAL 3-axis", include_str!("../../../assets/machines/grblhal-3axis.mch")),
+    // #728: Sienci's AltMill routers (SLB-EXT, grblHAL); pair with the "grblHAL" post.
+    ("Sienci AltMill 2x4", include_str!("../../../assets/machines/sienci-altmill-2x4.mch")),
+    ("Sienci AltMill 4x4", include_str!("../../../assets/machines/sienci-altmill-4x4.mch")),
+    ("Sienci AltMill 4x8", include_str!("../../../assets/machines/sienci-altmill-4x8.mch")),
 ];
 
 /// The mount path a built-in library entry records (stage C): the
