@@ -14,7 +14,7 @@
 //! thread kernel's pass layout and attach_cycle, thread_warnings).
 //! Lane shape (M4.4): all tests here run in seconds.
 
-use camcraft_motion::cl::{MoveKind, Toolpath};
+use camcraft_motion::cl::{MoveKind, ThreadHand, Toolpath};
 use camcraft_motion::geometry::{Point3, Triangle};
 use camcraft_motion::turning::infeed::{DepthSchedule, InfeedMethod, ThreadInfeed};
 use camcraft_motion::turning::profile::Frame;
@@ -80,6 +80,7 @@ fn th() -> ThreadParams {
         plunge_feed: 40.0,
         insert_width: width(),
         form_angle: 60.0,
+        hand: ThreadHand::Right,
     }
 }
 
@@ -194,20 +195,22 @@ fn flank_infeed_shifts_each_pass_along_its_flank() {
     let path = run(&th(), &pl);
     let ps = plunges(&path);
     assert_eq!(ps.len(), 3);
-    // The last pass stands on the lattice centre (8); each shallower
-    // pass stands (its height above the root) * tan(angle) behind it.
+    // Every pass runs toward the chuck (-Z, #629) from the top lattice
+    // centre (14): the last pass stands on it; each shallower pass
+    // stands (its height above the root) * tan(angle) behind it - toward
+    // the free end, +Z.
     for &(s, r) in &ps {
-        let want = 8.0 - (r - ROOT) * tan;
+        let want = 14.0 + (r - ROOT) * tan;
         assert!((s - want).abs() < 1e-9, "pass at r {r}: s {s}, want {want}");
     }
-    assert!((ps[2].0 - 8.0).abs() < 1e-9, "the finishing pass is on the lattice");
+    assert!((ps[2].0 - 14.0).abs() < 1e-9, "the finishing pass is on the lattice");
     // Every arc of a pass rides the same lattice offset: the helix
     // keeps its lead, only its start moved.
     let f = Frame::about(&threaded()).expect("frame");
     let t = path.threads[0];
     assert!(close(t.infeed_angle, 2.0 * ang), "{t:?}");
     let (s0, _) = f.sr(t.start);
-    assert!((s0 - (8.0 - DEPTH * tan)).abs() < 1e-9, "the cycle starts on the crest's flank station: {s0}");
+    assert!((s0 - (14.0 + DEPTH * tan)).abs() < 1e-9, "the cycle starts on the crest's flank station: {s0}");
     assert_eq!(path.moves[t.first].to, t.start);
     let warns = thread_warnings(&threaded(), &path, width(), 60.0, TOL);
     assert!(warns.is_empty(), "flank infeed reported: {warns:?}");
@@ -233,7 +236,8 @@ fn alternating_infeed_flips_the_side_every_pass() {
     assert!(ps.len() >= 4, "{ps:?}");
     for (j, &(s, r)) in ps.iter().enumerate() {
         let back = (r - ROOT) * tan;
-        let want = if j % 2 == 0 { 8.0 - back } else { 8.0 + back };
+        // Toward the chuck from 14 (#629): behind the travel is +Z.
+        let want = if j % 2 == 0 { 14.0 + back } else { 14.0 - back };
         assert!((s - want).abs() < 1e-9, "pass {j}: s {s}, want {want}");
     }
     let t = path.threads.first().copied().expect("a record, flagged");
@@ -261,15 +265,17 @@ fn the_verdict_reads_the_shifted_pass() {
     // the finished thread's: the judge must see the moved V, not the
     // lattice it assumes.
     let mut path = run(&th(), &ThreadInfeed::default());
+    let plunge = path.moves.iter().position(|m| m.kind == MoveKind::Feed).expect("plunge");
+    // The pass ends where it reaches the bottom lattice point and
+    // retracts (toward the chuck since #629): the first rapid after it.
     let first_retract = path
         .moves
         .iter()
         .enumerate()
-        .skip(1)
-        .find(|(_, m)| m.kind == MoveKind::Rapid && m.from.z > 13.0)
+        .skip(plunge)
+        .find(|(_, m)| m.kind == MoveKind::Rapid)
         .map(|(i, _)| i)
         .expect("the first pass's retract");
-    let plunge = path.moves.iter().position(|m| m.kind == MoveKind::Feed).expect("plunge");
     for m in &mut path.moves[plunge..first_retract] {
         m.from.z += 0.8;
         m.to.z += 0.8;

@@ -65,4 +65,4 @@ pub use profile::{profile_of, silhouette, Profile};
 pub use revolve::{blade_program_warnings, blade_warnings, BladeLeg, BandMove, Floor};
 pub use stock::StockEnv;
 pub use infeed::{DepthSchedule, InfeedMethod, ThreadInfeed};
-pub use thread::{thread, thread_in, thread_planned_in, thread_warnings, ThreadParams};
+pub use thread::{thread, thread_in, thread_hand_warnings, thread_planned_in, thread_warnings, ThreadParams};

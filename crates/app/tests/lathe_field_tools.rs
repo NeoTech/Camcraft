@@ -116,6 +116,7 @@ fn a_generated_threading_op_refuses_the_field_by_name() {
         feed: 120.0,
         plunge_feed: 40.0,
         infeed_plan: Default::default(),
+        hand: camcraft_app::cl::ThreadHand::Right,
     };
     generate(&world, &mut history, "TH1", "TD-1732-60", p);
     let e = model::find_by_name(&world, "TH1").expect("op exists");
