@@ -1015,8 +1015,9 @@ fn plasma_plate_with_holes_matches_golden() {
     // The in-app writer and the golden writer agree byte for byte.
     assert_eq!(camcraft_app::cl::text::to_text(&path).unwrap(), text);
     assert_eq!(camcraft_app::cl::text::from_text(&text).unwrap().plasma, path.plasma);
-    // The superset law: the post's stream reader takes it (the records
-    // are comment lines to it until the plasma post voices them, #671).
-    assert!(camcraft_app::post::cnc::parse(&text).is_ok());
+    // The superset law: the post's stream reader takes it - the `; PLASMA`
+    // / `; TORCH` lines read as its plasma records (#671, plasma_post.rs).
+    let recs = camcraft_app::post::cnc::parse(&text).unwrap();
+    assert!(recs.iter().any(|r| matches!(r, camcraft_app::post::cnc::Record::Plasma(_))));
     write_golden("plasma_plate_with_holes.cl", &text);
 }

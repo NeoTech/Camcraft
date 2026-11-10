@@ -62,6 +62,7 @@ argument semantics in `docs/CNC-INTERMEDIATE.md`):
 | `onCycle` → `onCyclePoint` → `onDwell(s)` → `onCycleEnd` | per canned cycle |
 | `onComment(text)` | per `WARN` (the PRELUDE default echoes it verbatim) |
 | `onRadiusCompensation(side)` | per `COMP` (M13.11): `"left"` / `"right"` engage G41 / G42 on the NEXT motion record (a straight lead at least a radius long, by the generator's law; `properties.CompensationRadius` is the register's radius), `"off"` cancels (G40) on the next one. The records between are the PART contour - or, when `properties.CompensationType` is `"wear"` (#38), the cutter-centre path with the register holding only the wear delta - so a post that cannot write the words must `message()` a refusal — the engine refuses a script that lacks the hook outright |
+| `onPlasma` / `onTorchOn` / `onTorchOff` | per `PLASMA` header / `TORCH ON` / `TORCH OFF` (#671): a plasma section's kerf and stated heights (`PlasmaKerf`, `PierceHeight`, ... - absent = the controller's AutoFS), then the torch struck before the next motion record and put out after the previous. The engine refuses a script lacking either torch hook when a header arrives, and keeps the torch law (no torch without a header, no ON while lit, no rapid while lit, nothing left lit) - only `tormach-plasma.cps` defines them |
 | `onThreadCycle` / `onThreadCycleEnd` | per `THREAD` / `THREAD END` (issue #34): a threading cycle's numbers bracket its explicit passes; a script that writes the cycle (G76) skips the passes itself, one that does not define the hooks posts them. `postOptions` (global) carries the document's post options |
 | `onClose` | once, after all records (retract + `%`-end here) |
 
@@ -147,6 +148,17 @@ word, spindle words (`S.. M3` vs `MOTON S..`), tool-change words
 (`T.. M6`, +`D..` on Sinumerik), and whether a G98 retract word
 exists to write at all (DIN families retract to R by documented
 default — inventing a word is the same lying as omitting one).
+
+## The plasma post
+
+`tormach-plasma.cps` (#671, "Tormach PathPilot Plasma") is the one
+`posting::PLASMA_POSTS` entry: it serves a plasma table only, and no
+milling post serves one. It writes XY only - the control owns Z (G15
+probe, G16 pierce, THC) - and refuses by name every op that carries
+no `PLASMA` header, any rpm, coolant, rotary, cycle or Z cutting move,
+and any machine not declared `kind: plasma` (`machine.kind`). Its
+goldens ride under `nc/tormach-plasma/` (`plasma_post.rs`), not the
+milling matrix.
 
 ## Adding a post to the app
 

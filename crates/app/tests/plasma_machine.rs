@@ -160,11 +160,11 @@ fn the_1300pl_states_its_manuals_figures() {
     assert_eq!(m.tool_count, Some(1));
     assert_eq!(m.safe_retract_z, None, "the plasma post retracts with G30 (#671)");
     assert!(m.summary().contains("torch, no spindle"), "{}", m.summary());
-    // No cutting post serves it; none is offered until the plasma post ships.
+    // No cutting post serves it; the plasma post (#671) alone does.
     for (n, _) in posting::BUILTINS {
-        assert!(!posting::post_serves(n, Kind::Plasma), "{n} must not serve a plasma table");
+        assert_eq!(posting::post_serves(n, Kind::Plasma), posting::PLASMA_POSTS.contains(n), "{n}");
     }
-    assert!(posting::PLASMA_POSTS.is_empty(), "#671 ships the first plasma post - update this pin then");
+    assert_eq!(posting::PLASMA_POSTS, &["Tormach PathPilot Plasma"], "#671 ships the first plasma post");
 }
 
 /// A faced document (one mill Face op, generated) - no machine mounted.
