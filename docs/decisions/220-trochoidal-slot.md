@@ -60,7 +60,7 @@ returns.
 full-width pin (D10, W16, step 1) reads 66.5 degrees against the straight
 slot's 180.
 
-**Operation.** A new appended kind (`OpType::TrochoidalSlot`, id/tag 39,
+**Operation.** A new appended kind (`OpType::TrochoidalSlot`, id/tag 40 (39 is the plasma profile, #670),
 listed in the 2D mill section), authored like the Slot by two endpoints and a
 width (the stadium region verifies it). Appended the probe's way, so no pin or
 digest tag moves and - following the probe precedent (#108/#344) - no

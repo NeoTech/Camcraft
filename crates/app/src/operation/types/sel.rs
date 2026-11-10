@@ -271,6 +271,10 @@ pub enum OpType {
     /// declaration order is the stored kind id - and listed in the
     /// Drilling section by display order only.
     Probe,
+    /// Plasma profile (#670): the torch's 2D through-cut of picked
+    /// contours - the plasma table's family (see [`crate::plasma`]).
+    /// Appended: stored kind ids never move.
+    PlasmaProfile,
     /// Trochoidal slotting (#220): a channel along a centre line cleared
     /// by engagement-controlled trochoid loops (see
     /// [`crate::machining2d::trochoidal_slot`]). Appended like the
