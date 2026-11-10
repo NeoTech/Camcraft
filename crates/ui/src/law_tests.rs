@@ -83,7 +83,7 @@ mod gizmo_tests {
         assert_eq!(lines.len(), 6, "the triad replaces the world axes");
         assert!(lines[0][3] > 0.5, "the single gizmo is the bright triad");
         let labels = overlay_labels(&state, 1.0);
-        // #641: the letters, and the triad's own name in place of the
+        // #727: the letters, and the triad's own name in place of the
         // suppressed world set.
         assert_eq!(labels.len(), 4, "one letter per triad axis and its name, no ghost set");
         assert!(
@@ -98,7 +98,7 @@ mod gizmo_tests {
         set_origin(&mut state, [50.0, 0.0, 0.0], 0.0);
         assert_eq!(collect_overlay(&state).len(), 12, "both gizmos");
         let labels = overlay_labels(&state, 1.0);
-        assert_eq!(labels.len(), 8, "three tips and a name per gizmo, both gizmos (#641)");
+        assert_eq!(labels.len(), 8, "three tips and a name per gizmo, both gizmos (#727)");
         let xs: Vec<f32> = labels
             .iter()
             .filter(|(_, _, text)| *text == "X")
@@ -154,7 +154,7 @@ mod gizmo_tests {
         assert_eq!(collect_overlay(&state).len(), 6, "only world axes remain");
     }
 
-    /// #641: every gizmo wears its name - the offset triads take the
+    /// #727: every gizmo wears its name - the offset triads take the
     /// entity name the Setup pane shows them under, the dimmed world axes
     /// take "World". Always visible: telling whose origin is whose must
     /// not need a hover or a click.
@@ -260,7 +260,7 @@ mod gizmo_tests {
         assert!(overlay_labels(&state, 1.0).is_empty(), "and no labels for it");
         set_origin(&mut state, [50.0, 0.0, 0.0], 0.0);
         assert_eq!(collect_overlay(&state).len(), 6, "the work offset still shows");
-        assert_eq!(overlay_labels(&state, 1.0).len(), 4, "letters plus the offset's name (#641)");
+        assert_eq!(overlay_labels(&state, 1.0).len(), 4, "letters plus the offset's name (#727)");
         assert!(
             overlay_labels(&state, 1.0)
                 .iter()

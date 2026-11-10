@@ -99,7 +99,7 @@ fn the_chip_and_planes_read_the_shown_operations_setup() {
     show(&mut state, "F2");
     let texts = chips(&state);
     assert!(texts.iter().any(|t| t == "F2 · Clearance 23.00 (WCS G55 +25.00)"), "Setup2's word: {texts:?}");
-    // Chips only: #641 puts Setup1's own name on its origin gizmo, and
+    // Chips only: #727 puts Setup1's own name on its origin gizmo, and
     // that is legitimate - the law here is that no *plane chip* on
     // Setup2's op carries Setup1's word.
     assert!(!texts.iter().any(|t| t.contains(" · ") && t.contains("G54")), "never Setup1's word on Setup2's op: {texts:?}");

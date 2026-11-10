@@ -1,6 +1,6 @@
-# Decisions for #641
+# Decisions for #727
 
-## #641 - viewport origin gizmos wear their names
+## #727 - viewport origin gizmos wear their names
 
 **What was decided:** every origin gizmo in the viewport labels itself. Each
 work-offset triad draws its entity name - exactly what the Setup pane

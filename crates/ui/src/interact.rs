@@ -593,7 +593,7 @@ pub(crate) struct Gizmo {
     pub rot: [f64; 4],
     /// Triad axes sit on X/Y/Z at this exact position with no rotation.
     pub world_axes: bool,
-    /// #641: whose origin this is - the work offset's entity name as the
+    /// #727: whose origin this is - the work offset's entity name as the
     /// Setup pane shows it (`G54`, `Setup2/WCS`), or `World` for the
     /// dimmed neutral axes. Drawn beside the origin so whose-zero is
     /// whose reads at a glance, with no hover.
@@ -613,12 +613,12 @@ const AXES: [([f32; 3], [f64; 3]); 3] = [
 /// triad (#195: was 0.55 for the lines - too dark to read).
 const WORLD_DIM: f32 = 0.8;
 
-/// #641: the name the dimmed world axes carry, and the gray they wear it
+/// #727: the name the dimmed world axes carry, and the gray they wear it
 /// in - neutral, because no axis color belongs to the world as a whole.
 const WORLD_LABEL: &str = "World";
 const WORLD_GRAY: f32 = 0.75;
 
-/// #641: how far a gizmo's name sits below its projected origin, in uv
+/// #727: how far a gizmo's name sits below its projected origin, in uv
 /// (same currency as `axis_note::NOTE_DROP_UV`) - enough to clear the
 /// axis lines that meet at the origin, close enough to read as the
 /// origin's own tag.
@@ -828,7 +828,7 @@ fn push_poly(
 }
 
 /// Screen-space labels for the gizmos just drawn (feedback 7): each axis
-/// tip gets its letter, projected through the same camera math. #641:
+/// tip gets its letter, projected through the same camera math. #727:
 /// each gizmo also wears its name just under its origin - the work
 /// offset's entity name, or `World` for the dimmed neutral axes. Entries
 /// are (uv within the viewport image, linear rgb, text); tips behind the
@@ -896,7 +896,7 @@ pub(crate) fn overlay_labels(state: &State, aspect: f64) -> Vec<([f32; 2], [f32;
     let mut notes = crate::axis_note::triad_notes(state);
     for gizmo in gizmos(state) {
         let base = Point3::new(gizmo.pos[0], gizmo.pos[1], gizmo.pos[2]);
-        // #641: the gizmo's own name, at its origin - whose zero this is,
+        // #727: the gizmo's own name, at its origin - whose zero this is,
         // readable without a hover. Emitted before the letters so each
         // name leads its gizmo's labels. Bright triad blue for offsets
         // (the same blue #195 lifted for the dark ground); neutral gray
