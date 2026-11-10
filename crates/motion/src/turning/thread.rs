@@ -12,7 +12,8 @@
 //! lattice point nearest it - and a pass is one full turn per
 //! pitch of synchronized spindle, spelled in CL as the helix the
 //! M2.1 law already owns: XY half-turn arcs about the axis line,
-//! rising `pitch / 2` of station as they cross. The deepest pass
+//! falling `pitch / 2` of station as they cross
+//! (toward the chuck, issue #629). The deepest pass
 //! is the finishing one: a full-form insert (whose reach,
 //! `width / 2 * cot(A/2)`, stands at or above the blank's crest -
 //! the door's first question) tiles the window's whole cut with
@@ -33,6 +34,11 @@
 //! (issue #34): the same thread as a lathe control's threading cycle
 //! states it, for a post that writes the cycle instead of the passes.
 //!
+//! Hand and direction (issue #629): every pass runs TOWARD the chuck
+//! (the free end is +Z; a pass enters at the top lattice point, in free
+//! air, and falls); a right-hand thread turns clockwise seen from +Z
+//! (M03's sense), a left-hand one counter-clockwise; the record says so.
+//!
 //! Provenance: single-point and V-form thread whirling as a
 //! synchronized helix, full-form and multi-pass infeed ladders,
 //! and the included-angle relation `width = 2 * depth * tan(A/2)`,
@@ -41,7 +47,7 @@
 //! valley-run phase law are our own, on the same silhouette the
 //! blade kinds ride. No vendor strategy consulted.
 
-use crate::cl::{MoveKind, PathBuilder, Toolpath};
+use crate::cl::{MoveKind, PathBuilder, ThreadHand, Toolpath};
 use crate::geo2d::Point2;
 use crate::geometry::Triangle;
 use crate::machining2d::GenError;
@@ -80,6 +86,9 @@ pub struct ThreadParams {
     pub insert_width: f64,
     /// The flanks' INCLUDED angle, degrees.
     pub form_angle: f64,
+    /// The hand the helix winds (issue #629); the passes always run
+    /// toward the chuck (-Z), so this alone sets the arcs' sense.
+    pub hand: ThreadHand,
 }
 
 /// Threading: ladder the V from a hair under the blank's crest
@@ -143,6 +152,7 @@ pub fn thread_planned_in(
         stock,
     )?;
     if f.lean() > LEAN_MAX {
+        // #677: names no spot - the bar's axis tilt, true along its whole length.
         return Err(GenError::Invalid(format!(
             "the bar's axis stands {:.1} degrees off the spindle (that is {:.0} mm over \
              100 mm of length) - threading rides XY circles square to the axis; a tilted \
@@ -247,28 +257,36 @@ pub fn thread_planned_in(
     let s_out = f.station_of(p.clearance_z);
     let ax = f.axis_point(c_first);
     let center = Point2::new(ax.x, ax.y);
+    // Toward the chuck (#629): each pass enters at the top lattice
+    // point and falls half a pitch per half-turn to the bottom one;
+    // the hand alone picks the turn's sense.
+    let ccw = p.hand.ccw_for(true);
     let mut b = PathBuilder::new(f.point(rho_clear, s_out));
     let first = b.moves_len();
+    // A pass's `shift` runs along its travel (#416), and every pass
+    // travels -Z here (#629): a shift `behind` the pass stands toward
+    // the free end, so the station offset is its negation.
     // A flank plan's cycle starts where a pass at the crest would: the
     // station the flank line meets the crest on (issue #416/#417).
     if plan.method == InfeedMethod::Flank {
         let back = (ref_top - root) * plan.flank_angle.to_radians().tan();
-        b.push(MoveKind::Rapid, f.point(rho_clear, c_first - back), None);
+        b.push(MoveKind::Rapid, f.point(rho_clear, c_last + back), None);
     }
     for pass in &passes {
-        let (t, s0) = (pass.tip, c_first + pass.shift);
+        let (t, off) = (pass.tip, -pass.shift);
+        let s0 = c_last + off;
         b.push(MoveKind::Rapid, f.point(rho_clear, s0), None);
         b.push(MoveKind::Feed, f.point(t, s0), Some(p.plunge_feed));
         for i in 1..=n {
-            let s = s0 + (i as f64) * (p.pitch * 0.5);
+            let s = s0 - (i as f64) * (p.pitch * 0.5);
             let to = if i % 2 == 0 {
                 f.point(t, s)
             } else {
                 f.antipode(t, s)
             };
-            b.push_arc(MoveKind::Feed, to, Some(p.feed), center, true);
+            b.push_arc(MoveKind::Feed, to, Some(p.feed), center, ccw);
         }
-        b.push(MoveKind::Rapid, f.point(rho_clear, c_last + pass.shift), None);
+        b.push(MoveKind::Rapid, f.point(rho_clear, c_first + off), None);
     }
     let last = b.moves_len().saturating_sub(1);
     b.push(MoveKind::Rapid, f.point(rho_clear, s_out), None);
@@ -355,4 +373,18 @@ pub fn thread_warnings(
         }
     }
     revolve::judge(&pts, moves, tol, 0.0, true, None)
+}
+
+/// The hand verdict (issue #629): a half-turn that does not wind the
+/// asked hand cuts a groove the drawing never had - a gouge at that
+/// move, so the post gate refuses the program by name.
+pub fn thread_hand_warnings(path: &Toolpath, hand: ThreadHand) -> Vec<Warning> {
+    path.moves
+        .iter()
+        .enumerate()
+        .filter(|(_, m)| m.arc.is_some())
+        .filter(|(_, m)| ThreadHand::of_move(m) != Some(hand))
+        .map(|(at, _)| Warning::Gouge { at })
+        .take(1)
+        .collect()
 }

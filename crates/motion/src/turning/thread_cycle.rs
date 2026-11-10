@@ -72,6 +72,7 @@ pub(super) fn attach_cycle(
         pull_out: 0.0,
         first,
         last,
+        hand: p.hand,
     };
     if m0.kind == MoveKind::Rapid && rec.is_sane(&path.moves) {
         path.threads.push(rec);
