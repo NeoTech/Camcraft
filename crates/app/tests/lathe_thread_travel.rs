@@ -119,7 +119,8 @@ fn a_thread_passes_the_built_in_lathe() {
 #[test]
 fn a_real_over_travel_on_a_lathe_is_still_refused() {
     // The same lathe with an X stroke short of the thread's radius (3 mm).
-    let short = builtin_lathe().replacen("\"min\": 0.0, \"max\": 320.0", "\"min\": 0.0, \"max\": 2.0", 1);
+    // Only the X stroke reaches 320 (Z is +-615); its min is left as shipped.
+    let short = builtin_lathe().replacen("\"max\": 320.0", "\"max\": 2.0", 1);
     assert_ne!(short, builtin_lathe(), "fixture: the X band was rewritten");
     let world = thread_on(&short);
     let p = travel_problems(&world);
