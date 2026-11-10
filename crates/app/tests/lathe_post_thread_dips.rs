@@ -105,6 +105,7 @@ fn params(plan: ThreadInfeed) -> OpParams {
         feed: 120.0,
         plunge_feed: 40.0,
         infeed_plan: plan,
+        hand: camcraft_app::cl::ThreadHand::Right,
     }
 }
 

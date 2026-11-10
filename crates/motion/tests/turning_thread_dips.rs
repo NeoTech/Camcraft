@@ -8,18 +8,19 @@
 //! the verdict is silent on the laid dips and convicts a path that
 //! breaks a law (a dip in the first lead, on the finishing pass, deeper
 //! than its pass, or a moved station); the refusals by name; the cycle
-//! record marks the dips.
+//! record marks the dips; dipped passes keep #629's chuck-ward travel
+//! and wind the asked hand.
 //!
 //! Gate map (M4.4): covers camcraft_motion::turning (thread_dips: the
 //! dip layout and its verdict; the thread kernel's dipped half-turns;
 //! attach_cycle's chip_break_dips; thread_warnings).
 //! Lane shape (M4.4): all tests here run in seconds.
 
-use camcraft_motion::cl::{MoveKind, Toolpath};
+use camcraft_motion::cl::{MoveKind, ThreadHand, Toolpath};
 use camcraft_motion::geometry::{Point3, Triangle};
 use camcraft_motion::turning::infeed::ThreadInfeed;
 use camcraft_motion::turning::profile::Frame;
-use camcraft_motion::turning::{thread_planned_in, thread_warnings, ThreadDips, ThreadParams};
+use camcraft_motion::turning::{thread_hand_warnings, thread_planned_in, thread_warnings, ThreadDips, ThreadParams};
 
 const TAU: f64 = std::f64::consts::TAU;
 const TOL: f64 = 0.05;
@@ -87,6 +88,7 @@ fn th(end: f64) -> ThreadParams {
         plunge_feed: 40.0,
         insert_width: width(),
         form_angle: 60.0,
+        hand: ThreadHand::Right,
     }
 }
 
@@ -181,7 +183,8 @@ fn the_phase_is_unchanged_across_the_chain() {
         let Some(first) = turns.first() else { continue };
         let s0 = first.1 .0;
         for (k, t) in turns.iter().enumerate() {
-            let along = t.2 .0 - s0;
+            // Every pass travels toward the chuck, -Z (#629).
+            let along = s0 - t.2 .0;
             let want = (k + 1) as f64 * PITCH * 0.5;
             assert!((along - want).abs() < 1e-9, "half-turn {k} ends {along} along the chain, not {want}");
             let phase = along.rem_euclid(PITCH);
@@ -241,6 +244,24 @@ fn the_verdict_is_silent_on_laid_dips() {
     let w = thread_warnings(&long_bar(), &path, width(), 60.0, TOL);
     assert!(w.is_empty(), "{w:?}");
     assert!(path.threads.iter().all(|t| t.chip_break_dips), "the record marks the dips");
+}
+
+#[test]
+fn dips_keep_the_hand_and_the_chuck_ward_travel() {
+    // #629: every pass travels toward the chuck, and every half-turn,
+    // a dip's ramps included, winds the asked hand.
+    for hand in [ThreadHand::Right, ThreadHand::Left] {
+        let p = ThreadParams { hand, ..th(24.0) };
+        let path = thread_planned_in(&long_bar(), &p, &plan_with(dips()), None).expect("the thread cuts");
+        assert!(thread_hand_warnings(&path, hand).is_empty(), "{hand:?}: a half-turn of the other hand");
+        assert!(thread_warnings(&long_bar(), &path, width(), 60.0, TOL).is_empty(), "{hand:?}");
+        for (_, turns) in chains(&path) {
+            for t in &turns {
+                assert!(t.2 .0 < t.1 .0, "{hand:?}: a half-turn travelling away from the chuck");
+            }
+        }
+        assert!(path.threads.iter().all(|t| t.hand == hand && t.chip_break_dips && t.toward_minus_z()));
+    }
 }
 
 /// Rewrite the end radius of half-turn `k` (1-based) of chain `c` and

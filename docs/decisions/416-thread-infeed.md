@@ -15,7 +15,8 @@
 - **Defaults reproduce today exactly.** The default plan (radial,
   constant depth, allowance 0, 0 spring passes) calls the same
   `blade::rungs(root, ref_top, infeed, 0.0)` the kernel called before,
-  every station is `c_first + 0.0`, and the record is filled the same way.
+  every station is `c_last - 0.0` (the chuck-ward start #629 set), and the
+  record is filled the same way.
   The existing golden suites (motion `turning_thread`,
   `turning_thread_cycle`; app `turning_thread`, `lathe_post_g76` with its
   G76 golden, `lathe_field_tools`, `project_roundtrip`) pass with no golden
@@ -62,9 +63,9 @@
   post as G32. With G76 chosen, the post refuses on the missing record;
   #417 gives the record a flag and the refusal its own name.
 - **A flank plan's record starts at the crest's flank station:** a rapid
-  at the clearance radius to `c_first - height·tan(θ)` opens the span, so
+  at the clearance radius to `c_last + height·tan(θ)` opens the span, so
   the record's start is where a pass at the crest would start, and pass n
-  is at `start + depth_n·tan(θ)`. Only flank plans get this extra rapid,
+  is at `start - depth_n·tan(θ)`. Only flank plans get this extra rapid,
   so the radial path is unchanged.
 - **The verdict reads the laid geometry:** `thread_warnings` takes each
   pass's station from its own plunge and arc endpoints. So a shifted pass
@@ -72,6 +73,20 @@
   which moves a pass past the half-angle and is convicted). The lathe
   stock simulation does not simulate threads (it refuses them by name, as
   before).
+- **Rebuilt on #629's chuck-ward ladder (merge of main, 2026-11-10):**
+  #629 reversed every pass to run toward the chuck (enter at the top
+  lattice point `c_last`, fall to `c_first`), gave the arcs the thread's
+  hand and put the hand on the record. The plan rides that ladder
+  unchanged: `shift` is still measured along the pass's travel, and the
+  travel is now -Z, so a pass's station offset is `-shift` - shallower
+  flank passes stand toward the free end (+Z), the leading flank (the
+  chuck side) cuts. Kept as main had it: the direction, `c_last`, the
+  hand's arc sense and `ThreadCycle.hand` (filled from `p.hand` in
+  `thread_cycle::attach_cycle`). The OpParams/DTO/digest carry both
+  `infeed_plan` and `hand`; the hand is digested after the plan, as
+  main wrote it for both hands. Considered and dropped: keeping the
+  plan's stations measured from `c_first` - that would undo #629's
+  direction, a P0 safety fix.
 - **Defaults of the new numbers:** flank angle 29.5° (the modified-flank
   figure the tooling guides give for 60° forms; read only by flank and
   alternating) and minimum depth 0.05 mm (the guides' smallest

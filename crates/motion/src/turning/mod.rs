@@ -67,4 +67,4 @@ pub use revolve::{blade_program_warnings, blade_warnings, BladeLeg, BandMove, Fl
 pub use stock::StockEnv;
 pub use infeed::{DepthSchedule, InfeedMethod, ThreadInfeed};
 pub use thread_dips::{ThreadDips, MIN_DIP_HEIGHT};
-pub use thread::{thread, thread_in, thread_planned_in, thread_warnings, ThreadParams};
+pub use thread::{thread, thread_in, thread_hand_warnings, thread_planned_in, thread_warnings, ThreadParams};

@@ -272,6 +272,20 @@ pub(super) fn radii(
     Ok(out)
 }
 
+/// A dip is posted only where the record marks it (the stream's
+/// ChipBreakDips gate): dips on and no cycle record attached is refused
+/// by name, so a dip is never laid unmarked.
+pub(super) fn require_record(dips: &ThreadDips, path: &Toolpath) -> Result<(), GenError> {
+    if dips.is_on() && path.threads.is_empty() {
+        return Err(GenError::Invalid(
+            "chip-break dips need the thread cycle record that marks them, and the passes did \
+             not lay as planned - turn the dips off"
+                .into(),
+        ));
+    }
+    Ok(())
+}
+
 /// One synchronized chain of a laid path: the plunge that opens it and
 /// the half-turns that follow it unbroken.
 struct Chain {

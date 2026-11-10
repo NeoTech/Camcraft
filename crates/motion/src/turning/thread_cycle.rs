@@ -89,6 +89,7 @@ pub(super) fn attach_cycle(
         chip_break_dips: plan.dips.is_on(),
         first,
         last,
+        hand: p.hand,
     };
     if m0.kind == MoveKind::Rapid && rec.is_sane(&path.moves) {
         path.threads.push(rec);

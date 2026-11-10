@@ -131,3 +131,14 @@
   - A flank-vector lift would need F recomputed per segment.
   - A dip count or placement other than "every interval" changes only
     `thread_dips::radii`.
+- **Rebased onto #629's chuck-ward ladder (merge of the refreshed #418
+  stack).** Every pass now enters at the free-end lattice point and
+  travels -Z. The dip layout is counted in half-turns along the pass's
+  own travel, from its entry, so it carries over unchanged: the first
+  lead after the entry and the last lead before the retract stay whole,
+  and the dips stand mirrored in Z against the old +Z layout. The hand
+  check (#629) runs on every half-turn before the dip logic, in both
+  the kernel verdict and the lathe script, so a dip ramp is held to the
+  hand like any other half-turn. Dropped: keeping dips measured from
+  the chuck end, which would have put the "first lead" law on the exit
+  end of the pass.
