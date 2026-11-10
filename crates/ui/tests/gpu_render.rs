@@ -605,7 +605,15 @@ fn docs_images_match_the_rendered_steps() {
     // One fixed camera for the whole series: the 100x60x20 mm stock fills
     // most of an 800x600 frame, and the raised target keeps the rapids'
     // clearance height (25 mm over the stock top) inside the picture.
-    let cam = Camera { target: [0.0, 0.0, 10.0], yaw: 0.9, pitch: 0.42, dist: 150.0 };
+    let cam = Camera {
+        target: [0.0, 0.0, 10.0],
+        yaw: 0.9,
+        pitch: 0.42,
+        dist: 150.0,
+        // The goldens were rendered with the house perspective; #434's
+        // field must stay spelled out here so the pictures keep their framing.
+        projection: ProjectionMode::Perspective,
+    };
 
     // Step law: step 0 shows the model and the stock blank; step n reveals
     // the first n operations' paths, in operation order. Paths appear
