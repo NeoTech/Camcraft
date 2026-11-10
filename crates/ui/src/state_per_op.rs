@@ -1,6 +1,7 @@
 //! The post page's Output choice and the per-operation post (#111):
 //! the switch rides `SetPostOptions` (one undo unit), and a per-op
-//! post asks for a folder instead of a file.
+//! post asks for a folder instead of a file. A program whose setups run
+//! on different machines or posts writes one file per mount (#388).
 //! Provenance: our own page law (issue #111); no vendor material consulted.
 
 use std::path::{Path, PathBuf};
@@ -12,19 +13,10 @@ use super::{ErrorScope, PostView, State};
 impl State {
     /// The Output choice: `true` writes one file per operation.
     pub(super) fn set_per_op_output(&mut self, per_op: bool) {
+        // #389: routed to the active setup's own options when it has them.
         let next = camcraft_app::schema::PostOptions { per_op, ..posting::post_options(&self.world) };
-        match camcraft_app::commands::SetPostOptions::new(&self.world, next) {
-            Ok(command) => {
-                self.history.execute(&self.world, command);
-                self.doc_version += 1;
-                self.status = if per_op {
-                    "post writes one file per operation".to_owned()
-                } else {
-                    "post writes one combined program".to_owned()
-                };
-            }
-            Err(err) => self.refuse(ErrorScope::Operation, format!("post options not changed: {err}")),
-        }
+        let done = if per_op { "post writes one file per operation" } else { "post writes one combined program" };
+        self.route_post_options(next, done, "post options not changed", ErrorScope::Operation);
     }
 
     /// The program name a per-op post stamps on its files: the
@@ -66,6 +58,35 @@ impl State {
                 }
             }
             Err(err) => self.status = format!("post refused: {err}"),
+        }
+    }
+
+    /// A per-mount post's outcome (#388): the status line names every
+    /// file and its setups; the viewer shows the first.
+    pub(super) fn show_posted_mounts(&mut self, files: Vec<posting::PostedMount>) {
+        let names: Vec<String> = files
+            .iter()
+            .map(|f| {
+                let file = f.path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+                format!("{file} ({})", f.mount.setups.join(", "))
+            })
+            .collect();
+        self.status = format!("posted {} file(s), one per machine and post: {}", files.len(), names.join("; "));
+        if let Some(line) = files.first().and_then(|f| f.posted.not_judged.clone()) {
+            self.status = format!("{} - WARNING: {line}", self.status);
+        }
+        if let Some(first) = files.into_iter().next() {
+            let p = first.posted;
+            self.post_view = Some(PostView {
+                path: first.path,
+                program: p.program,
+                line_pos: p.line_pos,
+                open: true,
+                line: 0,
+                blocks: p.blocks,
+                trace: false,
+                not_judged: p.not_judged,
+            });
         }
     }
 

@@ -22,7 +22,9 @@
 //! own files add a `"travel": {"min": .., "max": ..}` object to a
 //! linear part. Those numbers are read in PROGRAM coordinates through
 //! the active WCS - the file cannot know a work offset, and guessing a
-//! machine origin would invent the very number the check needs.
+//! machine origin would invent the very number the check needs. So a
+//! stroke L is stated `-L..L` (the origin may sit anywhere along it);
+//! a machine-frame `-500..0` refused every retract (#457).
 //!
 //! M3.3 stage C widened the readable grammar, all of it optional -
 //! files written before stage C parse exactly as they always did:
@@ -51,13 +53,23 @@ pub use camcraft_post::machine::*;
 
 // #287: the Machines pane's catalogue, property sheet and validator.
 pub mod library;
+// #669: the machine check on a plasma table, and the per-move helpers
+// it shares with the cutting check.
+mod judge;
+mod plasma;
+use judge::{c_letter_problem, move_extremes, say, slowest_axis};
 mod sheet;
 pub mod validate;
+// #383: the machine editor - property grid, draft, user folder and save.
+pub mod draft;
+pub mod fields;
+pub mod order;
+pub mod store;
+// #647: a lathe's slides judged on the posted meridian radius.
+mod lathe_stroke;
 
-use flecs_ecs::core::WorldGet;
 use flecs_ecs::prelude::World;
 
-use crate::geometry::Point3;
 use crate::model;
 use crate::posting;
 use crate::schema::MachineDef;
@@ -98,17 +110,14 @@ pub fn set(world: &World, path: &str, machine: Option<&Machine>) {
 }
 
 /// The mounted machine's kind (the active setup's, #343) - the
-/// per-frame accessor for ribbon gating. Reads the singleton without a
-/// clone unless the active setup owns its machine.
+/// per-frame accessor for ribbon gating and the new-op door (a new op
+/// joins the active setup). An op's own laws read [`kind_of_setup`].
 #[must_use]
 pub fn kind_of(world: &World) -> Kind {
-    if let Some(own) = crate::setup_mount::own_machine(world, crate::setup::active(world).as_deref()) {
-        return kind(own.machine.as_ref());
-    }
-    world
-        .try_get::<&MachineDef>(|d| kind(d.machine.as_ref()))
-        .unwrap_or(Kind::Mill)
+    kind_of_setup(world, crate::setup::active(world).as_deref())
 }
+
+pub use crate::setup_mount::kind_of_setup;
 
 /// What a program asks that the machine cannot give. Located like the
 /// deviation verdict - every line names its op - because a limit
@@ -119,6 +128,10 @@ pub struct MachineCheck {
     /// How many more the reporter withheld (the walk caps its list;
     /// the count never lies).
     pub more: usize,
+    /// What the machine's kind puts outside this check (#669 - a plasma
+    /// table's Z depth and rpm), named so a skip is never silent. Notes
+    /// never block: they say what was NOT judged, not what failed.
+    pub notes: Vec<String>,
 }
 
 impl MachineCheck {
@@ -134,7 +147,16 @@ const REPORT_CAP: usize = 40;
 /// share, so the gate that stage D wires sees one machine judgment
 /// over exactly what would post. Never re-plans: cached moves only.
 pub fn check_document(world: &World, machine: &Machine) -> Result<MachineCheck, String> {
-    let ops = posting::program_ops(world)?;
+    check_ops(world, machine, &posting::program_ops(world)?)
+}
+
+/// [`check_document`] over a slice of the program (#388): the ops one
+/// machine runs, when setups mount different machines.
+pub fn check_ops(world: &World, machine: &Machine, program: &[(String, flecs_ecs::prelude::Entity)]) -> Result<MachineCheck, String> {
+    if kind(Some(machine)) == Kind::Plasma {
+        return plasma::check_plasma_ops(world, machine, program);
+    }
+    let ops = program.to_vec();
     let mut out = MachineCheck::default();
 
     // The changer (M3.3 C): a program whose ops draw on more distinct
@@ -174,20 +196,23 @@ pub fn check_document(world: &World, machine: &Machine) -> Result<MachineCheck, 
         // origin law (one copy, in posting), so a G54 slide shifts
         // what passes exactly as it shifts the G-code.
         let (_, origin) = posting::wcs_context(world, op.setup.as_deref());
+        let lathe = kind(Some(machine)) == Kind::Lathe;
 
-        // Spindle: the tool's suggested speed is what the op runs -
-        // today every op posts its tool's rpm, so the tool IS the
-        // program's spindle word.
-        if tool.rpm > 0.0 {
+        // Spindle: the speed the program commands for this op - the
+        // post's own answer (`posting::posted_rpm`), so a touch probe,
+        // which is never spun, is not judged against the spindle range
+        // (#565); every cutter is, by its own rpm.
+        let rpm = posting::posted_rpm(&tool);
+        if rpm > 0.0 {
             if let Some(hi) = machine.spindle_max
-                && tool.rpm > hi
+                && rpm > hi
             {
-                say(&mut out, format!("{name}: tool {} runs {:.0} rpm, above the machine's {hi:.0}", op.tool, tool.rpm));
+                say(&mut out, format!("{name}: tool {} runs {rpm:.0} rpm, above the machine's {hi:.0}", op.tool));
             }
             if let Some(lo) = machine.spindle_min
-                && tool.rpm < lo
+                && rpm < lo
             {
-                say(&mut out, format!("{name}: tool {} runs {:.0} rpm, below the machine's {lo:.0}", op.tool, tool.rpm));
+                say(&mut out, format!("{name}: tool {} runs {rpm:.0} rpm, below the machine's {lo:.0}", op.tool));
             }
         }
         // Spindle power (M13.2): the estimate the cutting data makes
@@ -244,6 +269,10 @@ pub fn check_document(world: &World, machine: &Machine) -> Result<MachineCheck, 
                 ),
             );
         }
+
+        // #647: on a lathe the slides are judged on the POSTED path's
+        // meridian radius (`lathe_stroke`), not on the cache's world X.
+        let lathe_judged = lathe_stroke::judge(&mut out, name, &op.params, &op.tool, &tool, &cache.path, machine, origin);
 
         for (i, mv) in cache.path.moves.iter().enumerate() {
             // Pose (M5.1 stage A): a move that leans the tool asks
@@ -325,16 +354,33 @@ pub fn check_document(world: &World, machine: &Machine) -> Result<MachineCheck, 
                     ));
                 }
             }
+            if lathe_judged {
+                continue; // its stroke was judged above, as posted (#647)
+            }
             // Travel: endpoints and - for arcs - the quarter points
             // the sweep can bulge past. A straight move's extremes
             // ARE its endpoints. The stroke is the machine's own; an
             // inverted axis (#373) reads program `v` as `-v`, so the
             // band is judged in the machine's coordinates.
+            // #631: on a lathe, an arc about the SPINDLE axis (a thread's
+            // half-turn) is the spindle turning, not the slide: its far
+            // side (negative X, and the quarter points) is the CL's
+            // antipode, never a slide position. The slide reaches the
+            // radius - judge |r| in X. Every other move keeps its signed X,
+            // so a real move past centre is judged as before.
+            let spindle_arc = lathe
+                && mv.arc.is_some_and(|a| {
+                    a.plane.is_xy() && (a.center.x - origin[0]).abs() < 1e-6 && (a.center.y - origin[1]).abs() < 1e-6
+                });
             for p in move_extremes(mv) {
                 for (k, w) in [p.x, p.y, p.z].iter().enumerate() {
                     let Some(ax) = machine.axis(k) else { continue };
                     let Some((lo, hi)) = ax.travel else { continue };
-                    let v = (w - origin[k]) * ax.direction.sign();
+                    let v = if spindle_arc && k == 0 {
+                        (p.x - origin[0]).hypot(p.y - origin[1]) * ax.direction.sign()
+                    } else {
+                        (w - origin[k]) * ax.direction.sign()
+                    };
                     if v < lo || v > hi {
                         let inv = if ax.direction.is_standard() { "" } else { " (inverted axis)" };
                         say(&mut out, format!(
@@ -347,64 +393,4 @@ pub fn check_document(world: &World, machine: &Machine) -> Result<MachineCheck, 
         }
     }
     Ok(out)
-}
-
-/// The arc's four XY quarter points plus both endpoints; a straight
-/// move's two endpoints. (A quarter is outside the sweep only when
-/// the arc goes the other way around it; checking all four can only
-/// over-report a limit the post would then also cross, never hide a
-/// violation - and over-reporting a REAL stroke is stage C's honest
-/// direction of error.)
-fn move_extremes(mv: &crate::cl::Move) -> Vec<Point3> {
-    let mut v = vec![mv.from, mv.to];
-    // XZ / YZ (M11.2 A): the same four quarters, in the arc's plane.
-    if let Some(arc) = mv.arc.filter(|a| !a.plane.is_xy()) {
-        let pl = arc.plane;
-        let (cu, cv) = pl.center_uv(arc.center);
-        let (u0, v0, _) = pl.uvw(mv.from);
-        let (_, _, w1) = pl.uvw(mv.to);
-        let r = ((u0 - cu).powi(2) + (v0 - cv).powi(2)).sqrt();
-        v.push(pl.point(cu + r, cv, w1));
-        v.push(pl.point(cu - r, cv, w1));
-        v.push(pl.point(cu, cv + r, w1));
-        v.push(pl.point(cu, cv - r, w1));
-        return v;
-    }
-    if let Some(arc) = &mv.arc {
-        let dx = mv.from.x - arc.center.x;
-        let dy = mv.from.y - arc.center.y;
-        let r = (dx * dx + dy * dy).sqrt();
-        v.push(Point3::new(arc.center.x + r, arc.center.y, mv.to.z));
-        v.push(Point3::new(arc.center.x - r, arc.center.y, mv.to.z));
-        v.push(Point3::new(arc.center.x, arc.center.y + r, mv.to.z));
-        v.push(Point3::new(arc.center.x, arc.center.y - r, mv.to.z));
-    }
-    v
-}
-
-fn slowest_axis(axes: &[AxisLimits], ceil: f64) -> String {
-    axes.iter()
-        .find(|a| a.feed == Some(ceil))
-        .map(|a| a.name.clone())
-        .unwrap_or_else(|| "an axis".into())
-}
-
-fn say(out: &mut MachineCheck, s: String) {
-    if out.problems.len() < REPORT_CAP {
-        out.problems.push(s);
-    } else {
-        out.more += 1;
-    }
-}
-
-/// The C letter gate (issue #33): a move stating spindle C angle `c`
-/// needs a rotary named C on the machine, and a stated C travel must
-/// hold the unwrapped angle. None when it is fine.
-fn c_letter_problem(machine: &Machine, i: usize, c: f64) -> Option<String> {
-    let Some(ax) = machine.axes.iter().find(|x| x.rotary && x.name.eq_ignore_ascii_case("C")) else {
-        return Some(format!("move {i} turns the spindle as C {c:.3} deg; {} states no C axis", machine.model));
-    };
-    let (lo, hi) = ax.travel?;
-    (c < lo - 1e-9 || c > hi + 1e-9)
-        .then(|| format!("move {i} commands C {c:.3} deg, the travel is {lo:.3}..{hi:.3}"))
 }

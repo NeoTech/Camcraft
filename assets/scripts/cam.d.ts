@@ -29,10 +29,14 @@ interface DocumentInfo {
 }
 
 interface VerifyReport {
+  /** The post's whole verdict: every op in scope fresh, the gate passed,
+   *  and no op in scope holding the post with its own warnings. */
   ok: boolean;
   operations: OperationInfo[];
   /** The program-level gate; skipped (with reason) while anything is stale. */
   gate: { ok: boolean; problems: string[]; skipped?: string };
+  /** Ops in scope whose own cached warnings refuse the post (#722). */
+  held_by: string[];
 }
 
 interface PostOptions {
@@ -48,6 +52,19 @@ interface PostOptions {
 
 interface PostResult {
   path: string;
+  ops: number;
+  lines: number;
+  program?: string;
+  /** Setups on different machines or posts: every file written, one per mount. */
+  files?: string[];
+  mounts?: PostedMountInfo[];
+}
+
+interface PostedMountInfo {
+  path: string;
+  setups: string[];
+  machine: string;
+  post: string;
   ops: number;
   lines: number;
   program?: string;

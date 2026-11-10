@@ -31,10 +31,14 @@ var currentPosition = { X: 0, Y: 0, Z: 0 };
 // writes an O-word reads it at onOpen.
 var programNumber = 1;
 var postOptions = {};
-var machine = { name: "", rapidRate: 0, feedRateMax: 0, spindleMax: 0, coolants: [], rotaries: [], rtcp: false, units: "mm", spindleRanges: [], rigidTapping: true };
+var machine = { name: "", rapidRate: 0, feedRateMax: 0, spindleMax: 0, coolants: [], rotaries: [], rtcp: false, units: "mm", spindleRanges: [], rigidTapping: true, safeRetractZ: null, model: "" };
 function _flushLine() { if (LINE !== "") { OUT.push(LINE); LINE = ""; } }
 function writeln(s) { if (s !== undefined) LINE += String(s); _flushLine(); }
 function write(s) { if (s !== undefined) LINE += String(s); }
+// Lines written so far, a pending partial line included (#504): a
+// script marks where a block ended and later asks whether anything
+// followed it.
+function linesWritten() { _flushLine(); return OUT.length; }
 function writeBlock() {
   _flushLine();
   var parts = [];
@@ -50,7 +54,13 @@ function writeAddress(letter, value, dp) {
   if (value === undefined || value === null) return;
   write(String(letter) + formatUnit(Number(value), dp));
 }
-function writeComment(s) { writeln("(" + String(s) + ")"); }
+// #594: the default comment is the RS-274 / ISO 6983 `( )` form, so
+// its text loses every parenthesis (one would end or nest the comment)
+// and every control character (one would end the block).
+function writeComment(s) {
+  var t = String(s === null || s === undefined ? "" : s);
+  writeln("(" + t.replace(/[()]/g, " ").replace(/[\x00-\x1F\x7F]/g, " ") + ")");
+}
 function writeBlankLine() { _flushLine(); OUT.push(""); }
 function writeOutput(s) { write(s); }
 function message(s) { MESSAGES.push(String(s)); }
@@ -135,6 +145,7 @@ pub const HOOKS: &[&str] = &[
     "onProbe",
     "onProbeMove",
     "onProbeRetreat",
+    "onProbeGuard",
     "onProbeResult",
     "onComment",
     "onClose",
@@ -162,6 +173,17 @@ pub struct Script {
     /// engine's mirrored stream for an inverted X / Y axis. Without it a
     /// machine with an inverted axis is refused by name.
     axis_inversion: bool,
+    /// The `probeAxisInversion = true` manifest flag (#392): the script's
+    /// probing blocks (skip move, trip read, back-off, deviation, work
+    /// offset write) are verified on the mirrored stream by a macro
+    /// interpreter on a simulated inverted machine. Without it probing
+    /// on an inverted axis is refused by name.
+    probe_axis_inversion: bool,
+    /// The `threadHands = true` manifest flag (issue #629): the script
+    /// reads `PARAM SpindleDirection` and states the thread's hand.
+    /// Without it a thread that needs the spindle reversed is refused
+    /// by name - the script would cut it the other hand under M03.
+    thread_hands: bool,
 }
 
 impl Script {
@@ -181,6 +203,8 @@ impl Script {
             after_modes: false,
             floating_tapping: false,
             axis_inversion: false,
+            probe_axis_inversion: false,
+            thread_hands: false,
         };
         let mut present = Vec::new();
         for h in HOOKS {
@@ -207,8 +231,16 @@ impl Script {
             .eval("typeof floatingTapping !== \"undefined\" && floatingTapping === true")
             .map(|v| is_true(&v))
             .unwrap_or(false);
+        s.thread_hands = s
+            .eval("typeof threadHands !== \"undefined\" && threadHands === true")
+            .map(|v| is_true(&v))
+            .unwrap_or(false);
         s.axis_inversion = s
             .eval("typeof axisInversion !== \"undefined\" && axisInversion === true")
+            .map(|v| is_true(&v))
+            .unwrap_or(false);
+        s.probe_axis_inversion = s
+            .eval("typeof probeAxisInversion !== \"undefined\" && probeAxisInversion === true")
             .map(|v| is_true(&v))
             .unwrap_or(false);
         Ok(s)
@@ -292,6 +324,12 @@ impl Script {
         self.coolant_modes
     }
 
+    /// True when the script declares `threadHands = true` - it reads
+    /// `PARAM SpindleDirection` and voices a thread's hand (#629).
+    pub fn voices_thread_hands(&self) -> bool {
+        self.thread_hands
+    }
+
     /// True when the script declares `liveTooling = true` - it voices
     /// a C-axis live-tool section (issue #33).
     pub fn voices_live_tooling(&self) -> bool {
@@ -312,6 +350,12 @@ impl Script {
     /// on the engine's mirrored stream for an inverted axis (#374).
     pub fn translates_inverted_axes(&self) -> bool {
         self.axis_inversion
+    }
+
+    /// True when the script declares `probeAxisInversion = true` - its
+    /// probing blocks are verified on the mirrored stream (#392).
+    pub fn translates_inverted_probing(&self) -> bool {
+        self.probe_axis_inversion
     }
 
     /// Lines flushed so far (the driver's section boundary marker).

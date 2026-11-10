@@ -142,13 +142,28 @@ pub(crate) fn v_generate(env: &mut Env, args: Vec<Value>) -> Result<Value, Strin
     Ok(Value::Array(done))
 }
 
+/// Does this operation hold the post with its own warnings? The rule
+/// `posting::stream_records` applies when it writes the program: a
+/// suppressed op is not in the program, and every cached warning that
+/// `blocks_post()` becomes a `WARN` record, any one of which refuses the
+/// post (a scallop or probe-search note never does). #722: `ok` read only
+/// generation status, so it said `true` for a program the post refused.
+fn holds_post(env: &Env, entity: &Entity) -> bool {
+    let suppressed = model::operation_of(&env.world, entity).is_some_and(|op| op.suppressed);
+    !suppressed
+        && model::toolpath_of(&env.world, entity).is_some_and(|t| t.warnings.iter().any(|w| w.blocks_post()))
+}
+
 /// `cam.verify(...names)` - what the post would say, without writing:
 /// per-operation status and cached warnings, and the program-level
 /// gate over the whole document (gouge, machine limits, the probe
 /// verdict) once everything in scope is fresh. While any operation is
 /// stale or never generated the gate is SKIPPED and says why - its
 /// verdict would speak of paths older than the inputs, and a stale
-/// answer about metal is worse than none.
+/// answer about metal is worse than none. `ok` is the post's whole
+/// verdict: every op in scope fresh, the gate passed, and no op in
+/// scope holding the post with its own warnings (named under
+/// `held_by`).
 pub(crate) fn v_verify(env: &mut Env, args: Vec<Value>) -> Result<Value, String> {
     let all = inventory(env);
     let scope: Vec<(String, Entity, OpStatus)> = if args.is_empty() {
@@ -182,8 +197,13 @@ pub(crate) fn v_verify(env: &mut Env, args: Vec<Value>) -> Result<Value, String>
         json!({ "ok": false, "problems": [], "skipped": "an operation is stale or never generated - regenerate before judging the program" })
     };
     let ops_ok = operations.iter().all(|o| o["status"] == json!("ok"));
-    let ok = ops_ok && fresh && gate["ok"] == json!(true);
-    Ok(json!({ "ok": ok, "operations": operations, "gate": gate }))
+    let held_by: Vec<String> = scope
+        .iter()
+        .filter(|(_, e, _)| holds_post(env, e))
+        .map(|(n, e, _)| model::operation_label(&env.world, n, e))
+        .collect();
+    let ok = ops_ok && fresh && gate["ok"] == json!(true) && held_by.is_empty();
+    Ok(json!({ "ok": ok, "operations": operations, "gate": gate, "held_by": held_by }))
 }
 
 /// `cam.check()` - the whole document's `verify`, the way the post
@@ -205,13 +225,14 @@ pub(crate) fn v_post(env: &mut Env, args: Vec<Value>) -> Result<Value, String> {
         Some(_) => return Err("\"to\" must be a path string".into()),
         None => return Err("a \"to\" path is required - a program that exists nowhere is not a result".into()),
     };
+    // Omitted: each mount's own post (#388); named: that script for all.
     let cps = match opts.get("cps") {
-        None | Some(Value::Null) => posting::script_source(&env.world).map(|(_, text)| text)?,
+        None | Some(Value::Null) => None,
         Some(Value::String(s)) => {
             if let Some(text) = builtin_cps(s) {
-                text.to_owned()
+                Some(text.to_owned())
             } else if Path::new(s).extension().is_some_and(|e| e.eq_ignore_ascii_case("cps")) {
-                std::fs::read_to_string(s).map_err(|e| format!("cannot read post script {s}: {e}"))?
+                Some(std::fs::read_to_string(s).map_err(|e| format!("cannot read post script {s}: {e}"))?)
             } else {
                 let names: Vec<&str> = crate::posting::BUILTINS.iter().map(|(n, _)| *n).collect();
                 return Err(format!("unknown built-in post '{s}' - names: {}; or give a .cps file path", names.join(", ")));
@@ -224,16 +245,12 @@ pub(crate) fn v_post(env: &mut Env, args: Vec<Value>) -> Result<Value, String> {
         Some(Value::Bool(b)) => *b,
         Some(_) => return Err("\"program\" must be true or false".into()),
     };
-    let posted = posting::post_script(&env.world, &to, &cps).map_err(|e| e.to_string())?;
-    env.posted = Some(to.clone());
-    let mut out = json!({ "path": to.display().to_string(), "ops": posted.ops, "lines": posted.lines });
-    if let Some(line) = &posted.not_judged {
-        out["not_judged"] = json!(line);
+    let files = match &cps {
+        None => posting::post_mounts(&env.world, &to),
+        Some(text) => posting::post_mounts_script(&env.world, &to, text),
     }
-    if with_program {
-        out["program"] = json!(posted.program);
-    }
-    Ok(out)
+    .map_err(|e| e.to_string())?;
+    Ok(super::report::posted_view(env, files, with_program))
 }
 
 /// `cam.report()` - the job on one page: the tree, the tool list, the

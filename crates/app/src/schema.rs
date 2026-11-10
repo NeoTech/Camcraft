@@ -130,6 +130,10 @@ pub struct ToolBody {
     pub source: String,
     /// The placed facets, in the frame `frame` names.
     pub facets: std::sync::Arc<[Triangle]>,
+    /// The drawn outline when the body is a spun profile (#93): the
+    /// facets are its revolve and the spindle frame's `profile` its exact
+    /// bands. `None` for an imported mesh (and every lathe-frame body).
+    pub spun: Option<camcraft_tools::spun::SpunProfile>,
     /// The frame, the placement it landed with, and the derived read.
     pub frame: crate::tool_body::BodyFrame,
 }
@@ -188,6 +192,9 @@ impl ToolBody {
 /// file before v57, reads as #317's implicit rule
 /// ([`crate::setup_stock::implicit`]). Written only by
 /// `SetSetupStockSource` and the project loader.
+/// `post_options` (#389) is the setup's own post options; `None`, the
+/// default and every earlier file, follows the document's `PostOptions`.
+/// Written only by `SetSetupPostOptions` and the project loader.
 #[derive(Component, Debug, Clone, PartialEq)]
 pub struct SetupDef {
     pub stock: String,
@@ -199,6 +206,7 @@ pub struct SetupDef {
     pub post: Option<PostRef>,
     pub relative_to: Option<String>,
     pub stock_source: Option<crate::setup_stock::StockSource>,
+    pub post_options: Option<PostOptions>,
 }
 
 /// The M3.2 stage B marker turning a model entity into a FIXTURE: the
@@ -267,6 +275,22 @@ pub struct Operation {
 pub struct OperationMeta {
     pub label: Option<String>,
     pub order: Option<u32>,
+}
+
+/// A standalone Pause or Home entry in the operation list (#155): an
+/// after-action with no tool and no toolpath, placed between operations
+/// by the same `OperationMeta::order` its siblings use. It is not an
+/// `Operation`, so every program walk that needs a tool or a toolpath
+/// (`setup::operation_order` and all who walk it) never sees it; the
+/// post folds it into the gap it stands in (`program_entry`).
+#[derive(Component, Debug, Clone, PartialEq)]
+pub struct ProgramEntry {
+    /// What the machine does here - never `AfterOperation::None`.
+    pub action: AfterOperation,
+    /// The setup it stands in, the `Operation::setup` law.
+    pub setup: Option<String>,
+    /// Left out of the posted program, like a suppressed operation.
+    pub suppressed: bool,
 }
 
 /// The cached result of generating an operation: the path plus the
@@ -360,6 +384,32 @@ pub struct PostOptions {
     pub skip_stops: bool,
     /// One standalone program per operation (#111).
     pub per_op: bool,
+    /// Per-operation smoothing (#616): off (the default) posts no
+    /// smoothing words; on, each op asks its tolerance and the dialect
+    /// writes its control's mode (G64 P, G5.1, G187, CYCLE832, CYCL
+    /// DEF 32), reset at the op's end. Opt-in because several controls
+    /// need an option for it (Fanuc's AI contour control).
+    pub smoothing: bool,
+    /// The length unit the control is left in after the program (#596).
+    pub end_units: EndUnits,
+}
+
+/// The end-units choice of [`PostOptions`] (#596). LinuxCNC's M2 / M30
+/// reset list (linuxcnc.org/docs, M-codes, "M2, M30 Program End") names
+/// offsets, plane, distance and feed modes, overrides, comp, spindle,
+/// motion mode and coolant - never G20 / G21 - so a program posted in mm
+/// for a control the operator runs in inches leaves it in mm. A post
+/// that knows the option (Tormach PathPilot) writes the target's unit
+/// word before its program end when it differs from the program's unit.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum EndUnits {
+    /// The program's own unit stays modal (every older document).
+    #[default]
+    Leave,
+    /// End in inches: a mm program writes G20 before M30.
+    Inch,
+    /// End in millimetres: an inch program writes G21 before M30.
+    Millimeters,
 }
 
 /// The thread-output choice of [`PostOptions`].
@@ -468,6 +518,7 @@ pub fn register_schema(world: &World) {
     world.component::<ToolBody>();
     world.component::<Operation>();
     world.component::<OperationMeta>();
+    world.component::<ProgramEntry>();
     world.component::<Toolpath>();
     world.component::<Units>();
     world.component::<MachineDef>();

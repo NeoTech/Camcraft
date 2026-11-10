@@ -134,7 +134,7 @@ fn general(v: &Value, out: &mut Vec<Refusal>) {
     match g.and_then(|g| g.get("kind")) {
         None | Some(Value::Null) => {}
         Some(Value::String(w)) if w.is_empty() || Kind::from_word(w).is_some() => {}
-        Some(other) => out.push(Refusal::new("general.kind", format!("{other} is not mill, lathe or mill-turn"))),
+        Some(other) => out.push(Refusal::new("general.kind", format!("{other} is not mill, lathe, mill-turn or plasma"))),
     }
 }
 
@@ -252,16 +252,47 @@ fn station(ts: Option<&Value>, out: &mut Vec<Refusal>) {
                 format!("states {stated} of the 4 words (c_axis_on, c_axis_off, spindle_on, spindle_off) - all four or none"),
             ));
         }
+        // Each stated word is written as a block of its own: it must be
+        // a well-formed M word (an unstated one is the rule above's).
+        for k in words {
+            if let Some(w) = lt.get(k).and_then(Value::as_str).filter(|w| !w.trim().is_empty())
+                && let Err(why) = m_word(w.trim())
+            {
+                out.push(Refusal::new(format!("live_tool.{k}"), format!("code \"{w}\" is not an M word like M8 ({why})")));
+            }
+        }
     }
 }
 
-/// An M-code word: `M` and one to four digits (`M8`, `M88`), the
-/// shape the reader normalizes a bare number to.
-fn is_m_word(s: &str) -> bool {
-    let mut c = s.chars();
-    matches!(c.next(), Some('M' | 'm'))
-        && (1..=4).contains(&c.clone().count())
-        && c.all(|d| d.is_ascii_digit())
+/// The highest M number a machine file may state. RS-274/NGC (NIST
+/// IR 6556) and ISO 6983-1 give M a two-digit standard range; controls
+/// extend it (LinuxCNC user codes M100-M199, three-digit builder codes),
+/// so four digits is a sanity bound, not a standard's ceiling - see
+/// `docs/decisions/383-machines-edit.md`.
+pub const M_WORD_MAX: u32 = 9999;
+
+/// Is `s` an M word: an uppercase `M` and a whole number
+/// 0..=[`M_WORD_MAX`], leading zeros allowed (`M8`, `M08`, `M155`)?
+/// `Err` says what is wrong with it. One word only - a post writes the
+/// statement as it stands, so `M8 M7` or `M8.5` would reach the program.
+fn m_word(s: &str) -> Result<(), &'static str> {
+    let rest = match s.strip_prefix('M') {
+        Some(r) => r,
+        None if s.starts_with('m') => return Err("write it with an uppercase M"),
+        None => return Err("it must start with M"),
+    };
+    if rest.is_empty() {
+        return Err("no number after M");
+    }
+    if !rest.bytes().all(|b| b.is_ascii_digit()) {
+        return Err("only digits may follow M");
+    }
+    let digits = rest.trim_start_matches('0');
+    match digits.parse::<u32>() {
+        _ if digits.is_empty() => Ok(()),
+        Ok(n) if digits.len() <= 4 && n <= M_WORD_MAX => Ok(()),
+        _ => Err("above M9999"),
+    }
 }
 
 fn coolants(list: Option<&Value>, out: &mut Vec<Refusal>) {
@@ -285,8 +316,12 @@ fn coolants(list: Option<&Value>, out: &mut Vec<Refusal>) {
         let key = format!("coolant {name}");
         match e.get("mCode").or_else(|| e.get("mcode")) {
             None | Some(Value::Null) => {}
-            Some(Value::String(s)) if is_m_word(s.trim()) => {}
-            Some(Value::Number(n)) if n.as_u64().is_some_and(|n| n < 10_000) => {}
+            Some(Value::Number(n)) if n.as_u64().is_some_and(|n| n <= u64::from(M_WORD_MAX)) => {}
+            Some(Value::String(s)) => {
+                if let Err(why) = m_word(s.trim()) {
+                    out.push(Refusal::new(key, format!("code \"{s}\" is not an M word like M8 ({why})")));
+                }
+            }
             Some(other) => out.push(Refusal::new(key, format!("code {other} is not an M word like M8"))),
         }
     }
@@ -311,7 +346,8 @@ fn controller(v: &Value, out: &mut Vec<Refusal>) {
 
 /// The keys every machine of its kind must carry: the kinematics tree,
 /// and the linear axes the kind moves - X/Y/Z for a mill, X/Z for a
-/// lathe, X/Y/Z and a rotary for a mill-turn. The kind is the declared
+/// lathe, X/Y/Z and a rotary for a mill-turn, X/Y/Z and the plasma
+/// rules (no spindle, coolant or rotary) for a plasma table. The kind is the declared
 /// word, else the reader's axis-inventory inference.
 fn required_by_kind(v: &Value, text: &str, axes: &[(String, &Value, bool)], out: &mut Vec<Refusal>) {
     if !v.pointer("/kinematics/default/parts").is_some_and(Value::is_array) {
@@ -328,12 +364,18 @@ fn required_by_kind(v: &Value, text: &str, axes: &[(String, &Value, bool)], out:
     let has_linear = |l: &str| axes.iter().any(|(n, _, r)| !r && n.eq_ignore_ascii_case(l));
     let need: &[&str] = match k {
         Kind::Lathe => &["X", "Z"],
-        Kind::Mill | Kind::MillTurn => &["X", "Y", "Z"],
+        // #669: a plasma table's Z is the torch lifter - required, as
+        // the axis the control raises and probes with.
+        Kind::Mill | Kind::MillTurn | Kind::Plasma => &["X", "Y", "Z"],
     };
     for l in need {
         if !has_linear(l) {
             out.push(Refusal::new(format!("{l} axis"), format!("required for a {} machine", k.word())));
         }
+    }
+    // #669: the plasma rules, the same list the reader refuses on.
+    if k == Kind::Plasma {
+        out.extend(super::plasma_refusals(v).into_iter().map(|(key, rule)| Refusal::new(key, rule)));
     }
     if k == Kind::MillTurn && !axes.iter().any(|(_, _, r)| *r) {
         out.push(Refusal::new("rotary axis", "required for a mill-turn machine (the turning spindle, C)"));

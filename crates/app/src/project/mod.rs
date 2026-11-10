@@ -113,13 +113,18 @@ mod params;
 pub use params::*;
 mod entity;
 mod thread_dto;
-pub use thread_dto::ThreadCycleDto;
+mod break_dto;
+pub use break_dto::EdgeBreakDto;
+pub use thread_dto::{ThreadCycleDto, ThreadHandDto};
 mod touch_dto;
 pub use touch_dto::ProbeTouchDto;
 mod params_impl;
 // #108: the Probe operation's file mirror.
 mod probe_dto;
 pub use probe_dto::*;
+// #670: the plasma profile's file mirror and its path record.
+mod plasma_dto;
+pub use plasma_dto::*;
 mod approach;
 pub use approach::*;
 mod links;
@@ -139,8 +144,14 @@ mod wcs_one;
 // #343: a setup's own machine and post (v55).
 mod mount_dto;
 pub use mount_dto::{SetupMachineDto, SetupPostDto};
+// #389: a setup's own post options (additive).
+mod setup_options_dto;
+pub use setup_options_dto::SetupPostOptionsDto;
 // #316: setup links (v56), checked before any world write.
 mod setup_links;
 // #368: a tool's modelled body on file (v57).
 mod tool_body_wire;
 pub use tool_body_wire::ToolBodyDto;
+// #155: Pause / Home entries of the operation list.
+mod program_entry_dto;
+pub use program_entry_dto::ProgramEntryDto;

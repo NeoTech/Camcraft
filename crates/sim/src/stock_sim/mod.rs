@@ -52,6 +52,9 @@
 //!   trusted to be right, or wrong. Columns that answer no verdict
 //!   (air in the stock, or air in the model) carry NaN, never a zero
 //!   dressed up as a clean bill of health.
+//! - **A gouge is judged with `tol` sideways too** (#299, `wall_slack`):
+//!   against the lowest part top within `tol` of the column centre, so
+//!   a centre microns inside a finished wall is not charged the wall.
 
 
 
@@ -64,10 +67,16 @@ mod dexel;
 mod dexel_arc;
 mod dexel_bull;
 mod deviate;
+mod edge_break;
 mod display;
 mod dual;
 mod field;
+mod field_arc;
 mod field_batch;
+mod field_box;
+mod field_carry;
+mod field_body;
+mod field_floor;
 mod field_blade;
 mod field_bull;
 mod field_cut;
@@ -88,9 +97,11 @@ pub mod preview;
 mod ridge;
 mod ridge_scan;
 mod scan;
+mod scan_arc;
 mod scan_hidden;
 mod scan_near;
 mod tiles;
+mod wall_slack;
 
 pub use backend::{Backend, Stock, FIELD_BAND, FIELD_VERDICT_EPS, LATHE_COLUMN_REFUSAL};
 pub use carry::{Body, LatticeTurn, CARRY_TURN_REFUSAL};
@@ -98,7 +109,11 @@ pub use columns::Columns;
 pub use cut::{auto_cell, first_posed, simulate, SimOp, POSED_REFUSAL};
 pub use deviate::{color_classes, deviate, Deviation, DEV_TOL, ProgramSim, SimSurface};
 pub use dexel::{reach, Dexel};
+pub use edge_break::credit_breaks;
 pub use field::SdfField;
+pub use field_body::Lattice;
+pub use field_carry::{box_signed, CarriedField, Clip, ClipRefusal};
+pub use field_floor::FloorRead;
 pub use field_batch::CutStats;
 pub use field_blade::{LatheProfile, CROWN_SAG_TOL};
 pub use field_cut::SdfTool;

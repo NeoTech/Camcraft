@@ -30,7 +30,7 @@ unstated capability into existence.
       "tooling":    { "number_of_tools": N }
     }
 
-- `general.kind` ∈ `mill` | `lathe` | `mill-turn`. The DECLARATION
+- `general.kind` ∈ `mill` | `lathe` | `mill-turn` | `plasma`. The DECLARATION
   outranks the axis inventory (`kind()` checks the word first; an
   unknown word REFUSES the file at the door — never a silent demotion
   to inference). The inference, when no kind is stated: Y + a TURNING
@@ -40,6 +40,20 @@ unstated capability into existence.
   — the same tilt test the RTCP judgment and `can_tilt` read, one law
   at three sites): an XYZ machine with A/B trunnions or a tilt head is
   a MILL whose axes can lean, not a mill-turn.
+- `plasma` (#669) is DECLARED only, never inferred (its X/Y/Z reads as
+  a mill), and the word carries rules both doors refuse BY NAME
+  (`post::machine::plasma_refusals` - the reader the first, the
+  Machines pane's validator all): no `spindle` on any head (each stated
+  key named: `spindle.max_speed`, `spindle.power`, ...), no
+  `live_tool`, no coolant list (station or tooling root), no rotary
+  axis. X, Y and Z are required; Z is the TORCH LIFTER - the control
+  owns pierce height, cut height and THC - so the machine check judges
+  only X/Y travel and feed, and skips Z depth and rpm with a named note
+  (`MachineCheck.notes`). The torch is Tool 1 (`tooling.number_of_tools:
+  1`); its KERF is the torch tool's diameter, not a machine number
+  (docs/decisions/669-plasma-kind.md). A plasma table states no
+  `safe_retract` (its post retracts with G30). `tormach-1300pl.mch` is
+  the shipped one.
 - `kinematics.default.units`: `"length": "mm"` (or `"inch"`/`"inches"`
   — the factor multiplies EVERY distance and distance-per-minute at
   load; the checker stays mm-only), `"angle": "degrees"`.
@@ -54,16 +68,32 @@ unstated capability into existence.
     coordinates, absolute world, not joint-local (the checker's
     traverse bands and collision sweep read these directly). Linear:
     mm (unit-scaled); rotary: DEGREES, never unit-scaled. Must be
-    finite with `max > min` or the field is dropped.
+    finite with `max > min` or the field is dropped. The file cannot
+    know the work offset, so a linear slide of stroke L is written
+    `-L..L` - the FULL stroke each way, never the machine-frame band
+    (`-500..0` for a 500 mm column refuses every retract above the
+    work origin, #457; the Tormach files follow the same rule).
   - linear only: `direction` `1` | `-1` (#373) - which way the slide
     moves for a + command; absent or null is `1`, and anything else
     refuses the file NAMING the axis. The program frame stays standard
     (ISO 841); the stated `travel` is the machine's own stroke, so an
     inverted axis is judged as `-v` against it. The post (#374) writes
     an inverted X / Y mirrored (sign, I/J/K, G2/G3, G41/G42) through a
-    script that declares `axisInversion = true`; an inverted Z or any
+    script that declares `axisInversion = true` (probing too only when it
+    also declares `probeAxisInversion = true`, #392); an inverted Z or any
     other letter refuses posting by name. A rotary part's numeric `-1` refuses (a reversed
     rotary is not supported).
+  - linear Z only: `safe_retract` (#495) - the Z, in MACHINE
+    coordinates (the file's length unit, scaled like travel), a post
+    rapids to with `G53 G0 Z..` before a tool change and at program
+    end. Zero is a statement here, not "unstated": `0.0` says machine
+    Z0 is the top of travel (every shipped Tormach file, `vmc.mch`,
+    `tilthead.mch`; the mirror-form default `3axis-vmc.mch` states
+    `"safeRetractZ": 0.0`). Absent or null is unstated, and the
+    Tormach post refuses a non-Tormach machine that states none (the
+    Siemens 840D post, #503, any machine that states none); a
+    non-number, or the key on any other axis, refuses the file naming
+    the axis. The mirror carries it as `safeRetractZ` (mm).
   - rotary only: `axis` `[x,y,z]` — the rotation direction; three
     finite numbers or the file refuses NAMING the axis (a garbled
     tilt vector must never read as "no tilt": the RTCP judgment rides

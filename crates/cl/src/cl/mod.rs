@@ -24,6 +24,7 @@
 
 mod comp;
 mod cycle;
+mod edge_break;
 mod frame;
 mod moves;
 mod path;
@@ -32,15 +33,18 @@ mod pose;
 mod rotary;
 pub mod text;
 mod thread;
+mod torch;
 mod touch;
 
 pub use comp::{CompSide, CompSpan};
 pub use cycle::{Cycle, CycleKind};
+pub use edge_break::EdgeBreak;
 pub use frame::TiltedFrame;
 pub use moves::{arc_chords, lattice, ArcMove, Move, MoveKind, MAX_ARC_CHORDS};
 pub use path::{PathBuilder, Toolpath};
 pub use plane::ArcPlane;
-pub use thread::ThreadCycle;
+pub use thread::{ThreadCycle, ThreadHand};
+pub use torch::{ContourRole, PlasmaCut, TorchSpan};
 pub use touch::ProbeTouch;
 pub use rotary::{stamp_c, unwrap_near};
 pub use pose::{angles_to_axis, axis_to_angles, is_vertical, normalize_axis};

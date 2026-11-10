@@ -83,36 +83,50 @@ pub(super) fn check_tool(world: &World, tool: &str) -> Result<(), CommandError> 
 }
 
 /// The family gate (M5.2 stage A): which machine a kind lives on is
-/// registry data - the row's [`Family`] read against the document's
-/// machine kind - so the door opens on the table in `kinds.rs`, not
+/// registry data - the row's [`Family`] read against the kind of the
+/// machine the op's setup mounts (#388) - so the door opens on the table in `kinds.rs`, not
 /// on a hand-typed list that forgets the twenty-second kind. A
 /// mill-turn admits both families; an unstated machine is a mill
 /// (the kind_of law the whole app already reads the document by).
 /// The ribbon's darkening is a courtesy; this door is the law - an
 /// op whose family the steel cannot spin never enters the document,
 /// and the refusal names both sides by name.
-pub(super) fn family_gate(world: &World, params: &OpParams) -> Result<(), CommandError> {
+pub(super) fn family_gate(world: &World, context: Option<&str>, params: &OpParams) -> Result<(), CommandError> {
     use crate::operation::Family;
     let info = params.kind().info();
     let family = info.family();
-    let machine = crate::machine::kind_of(world);
+    // #388: the machine of the setup the op lives in - the active one
+    // for a new op, the op's own for a paste or a retype.
+    let machine = crate::machine::kind_of_setup(world, context);
     // The per-kind word (M13.5 A): the family table, plus the Drill
     // kind's admission on a plain lathe for the axial hole.
     if info.admits(machine) {
         return Ok(());
     }
+    // #669: a plasma table cuts only the plasma family (#670); the
+    // refusal names the table's rule, not a mill to mount.
+    if machine == crate::machine::Kind::Plasma {
+        return Err(CommandError::Invalid(format!(
+            "a {} operation is {} work; the setup's machine is a plasma table, which cuts only plasma operations (a Plasma Profile)",
+            params.kind(),
+            family.work(),
+        )));
+    }
+    // #670: plasma work needs a plasma table - no mill or lathe (nor a
+    // mill-turn) strikes an arc.
+    if family == Family::Plasma {
+        return Err(CommandError::Invalid(format!(
+            "a {} operation is plasma cutting work; the setup's machine is a {} - mount a plasma table first",
+            params.kind(),
+            machine.word(),
+        )));
+    }
     Err(CommandError::Invalid(format!(
-        "a {} operation is {} work; the document's machine is a {} - mount a {} (or a mill-turn) first",
+        "a {} operation is {} work; the setup's machine is a {} - mount a {} (or a mill-turn) first",
         params.kind(),
-        match family {
-            Family::Mill => "milling",
-            Family::Turn => "turning",
-        },
+        family.work(),
         machine.word(),
-        match family {
-            Family::Mill => "mill",
-            Family::Turn => "lathe",
-        }
+        family.machine(),
     )))
 }
 

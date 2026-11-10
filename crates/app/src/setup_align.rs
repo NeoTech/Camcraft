@@ -313,7 +313,8 @@ pub fn describe(a: Option<Location>) -> String {
 }
 
 /// The parts' bounds centre in the DOCUMENT frame - the pivot every
-/// preset and numeric turn rotates about. `None` with no part geometry.
+/// preset turns about (typed angles pivot on the WCS origin by default,
+/// #606, [`crate::setup_turn`]). `None` with no part geometry.
 #[must_use]
 pub fn part_centre(world: &World) -> Option<Point3> {
     let tris: Vec<Triangle> = model::model_entities(world)
@@ -362,7 +363,7 @@ pub fn generation_problem(world: &World, op: &crate::schema::Operation) -> Optio
     let setup = crate::setup::effective(world, op.setup.as_deref())?;
     stored(world, &setup)?;
     let head = format!("setup '{setup}' holds the part turned (part alignment)");
-    if crate::machine::kind_of(world) != crate::machine::Kind::Mill {
+    if crate::machine::kind_of_setup(world, Some(&setup)) != crate::machine::Kind::Mill {
         return Some(format!("{head} - an aligned part is not supported yet on a lathe or mill-turn machine"));
     }
     if !verified_kind(&op.params) {

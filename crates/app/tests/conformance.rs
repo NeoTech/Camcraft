@@ -54,13 +54,17 @@ const POSTS: &[(&str, &str, &str)] = &[
     ("Heidenhain", "heidenhain", "heidenhain"),
     ("Mazak", "mazak", "mazak"),
     ("Tormach PathPilot", "tormach", "tormach"),
+    ("Makera Carvera", "carvera", "carvera"),
 ];
 
 /// (post stem, golden, named reason): a golden a dialect must REFUSE
-/// rather than post, so it has no `.nc` there. #51: Heidenhain now has
-/// native rigid/floating cycle mappings; the legacy tap golden has no
-/// spindle-speed parameter, so it remains a named refusal by exact reason.
-const REFUSED: &[(&str, &str, &str)] = &[("heidenhain", "tap_plate", "tapping needs a positive integral spindle speed")];
+/// rather than post, so it has no `.nc` there. Heidenhain (#51) supports
+/// tapping, but this legacy golden lacks spindle speed. Carvera (#707)
+/// cannot tap (no canned cycles or spindle reverse).
+const REFUSED: &[(&str, &str, &str)] = &[
+    ("heidenhain", "tap_plate", "tapping needs a positive integral spindle speed"),
+    ("carvera", "tap_plate", "tapping"),
+];
 
 /// The TURNING dialects (M13.5): their goldens are the lathe
 /// documents' own streams (`lathe_post.rs`); on a mill golden they
@@ -269,9 +273,13 @@ fn the_synthesized_stream_locks_the_tool_and_spindle_words() {
         serde_json::from_str(&read("assets/machines/3axis-vmc.mch")).expect("machine json");
     let write = std::env::var_os("WRITE_GOLDEN").is_some();
     for (name, cps_stem, _) in POSTS {
-        // #51: Heidenhain posts this exact G55 + tap fixture through
-        // its native preset and rigid-tapping cycles, like the other posts.
-        let stream = synth_stream();
+        // #51: Heidenhain supports the full G55 + tap stream.
+        // #707: the Carvera refuses the tap the same way (no canned
+        // cycles, no spindle reverse); its G55 stands.
+        let stream = match *cps_stem {
+            "carvera" => synth_stream_with("G55", false),
+            _ => synth_stream(),
+        };
         let cps = read(&format!("assets/posts/{cps_stem}.cps"));
         let out = engine::run(&cps, &mch, &stream)
             .unwrap_or_else(|e| panic!("{name} on the synth stream: must post: {e}"));
@@ -351,6 +359,7 @@ const EXTENSIONS: &[(&str, &str)] = &[
     ("heidenhain", "I"),
     ("mazak", "nc"),
     ("tormach", "nc"),
+    ("carvera", "nc"),
     ("fanuc-lathe", "nc"),
 ];
 

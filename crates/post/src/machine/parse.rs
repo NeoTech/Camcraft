@@ -182,10 +182,17 @@ pub fn parse_mch(text: &str) -> Result<Machine, String> {
         None | Some(serde_json::Value::Null) => {}
         Some(serde_json::Value::String(w)) if w.is_empty() => {}
         Some(serde_json::Value::String(w)) => {
-            if Kind::from_word(w).is_none() {
+            let Some(k) = Kind::from_word(w) else {
                 return Err(format!(
-                    "machine file: kind {w:?} is not mill, lathe or mill-turn"
+                    "machine file: kind {w:?} is not mill, lathe, mill-turn or plasma"
                 ));
+            };
+            // #669: a declared plasma table keeps the plasma rules at
+            // the door - the first one broken names its key.
+            if k == Kind::Plasma
+                && let Some((key, rule)) = super::plasma::plasma_refusals(&v).into_iter().next()
+            {
+                return Err(format!("machine file: {key}: {rule}"));
             }
             m.kind = Some(w.clone());
         }
@@ -289,6 +296,9 @@ pub fn parse_mch(text: &str) -> Result<Machine, String> {
                 }
             }
             let direction = axis_direction(name, part, *rotary)?;
+            if let Some(z) = safe_retract(name, part, *rotary, f)? {
+                m.safe_retract_z = Some(z);
+            }
             axes.push(AxisLimits {
                 name: name.clone(),
                 rotary: *rotary,
@@ -326,6 +336,29 @@ fn axis_direction(name: &str, part: &serde_json::Value, rotary: bool) -> Result<
         };
     }
     sign.ok_or_else(|| format!("machine file: axis {name} direction must be +1 or -1, not {v}"))
+}
+
+/// A part's `"safe_retract"` (#495): the machine-coordinate Z a post
+/// retracts to (`G53 G0 Z..`), in the file's length unit. Absent or
+/// null is unstated; a finite number on the linear Z states it (zero
+/// included - it is a position, not a limit); anything else, or the
+/// key on any other axis, refuses naming the axis, because a garbled
+/// retract height must never read as "unstated" and fall back to a
+/// guess about which way is up.
+fn safe_retract(name: &str, part: &serde_json::Value, rotary: bool, f: f64) -> Result<Option<f64>, String> {
+    let v = match part.get("safe_retract") {
+        None | Some(serde_json::Value::Null) => return Ok(None),
+        Some(v) => v,
+    };
+    if rotary || name != "Z" {
+        return Err(format!(
+            "machine file: axis {name} states safe_retract - only the linear Z axis states one"
+        ));
+    }
+    match v.as_f64() {
+        Some(z) if z.is_finite() => Ok(Some(z * f)),
+        _ => Err(format!("machine file: axis Z safe_retract must be a number, not {v}")),
+    }
 }
 
 fn text_of(v: Option<&serde_json::Value>) -> String {

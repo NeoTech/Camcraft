@@ -68,7 +68,7 @@ use crate::actions;
 use crate::interact;
 use crate::state::{CommandKind, ErrorScope, FixtureUi, ModelUi, PostView, State, UiTarget, quat_yaw_deg};
 
-use super::layout::{check_row, hint};
+use super::layout::hint;
 use super::panes::kind_name;
 use super::theme::Tokens;
 
@@ -78,7 +78,7 @@ use super::theme::Tokens;
 pub(crate) use super::fields::{combo, combo_owned, field, num, num_feed, num_plain};
 
 /// Tool kind labels, same order as `ToolKind` (mirrors the tool page).
-const TOOL_KINDS: [&str; 11] = [
+const TOOL_KINDS: [&str; 13] = [
     "End mill",
     "Ball nose",
     "Bull nose",
@@ -90,6 +90,9 @@ const TOOL_KINDS: [&str; 11] = [
     "Threading insert",
     "Form gauge",
     "Chamfer mill",
+    "Touch probe",
+    // #670: the kerf is its diameter; it turns no spindle.
+    "Plasma torch",
 ];
 
 /// The note gray the model page's notes use ([0.62,0.66,0.72]).
@@ -101,6 +104,8 @@ const NOTE: Color32 = Color32::from_rgb(0x9E, 0xA8, 0xB8);
 /// like operations.rs's contents() dispatcher. The operation page owns
 /// its scroll (its action bar stays fixed under it); every other page
 /// scrolls whole.
+/// The Setups page's pick rows mark themselves drawn; the shell's
+/// per-frame sweep (#664, #667) disarms the rest after the dock.
 pub fn properties(ui: &mut Ui, state: &mut State, pal: &Tokens) {
     let t = state.pane_target();
     // Only an open Boundary group draws its viewport marks (M11.5 UX):
@@ -403,6 +408,8 @@ pub(super) fn post_section(ui: &mut Ui, state: &mut State) {
         state.pending.push_back(CommandKind::SetPerOpOutput(pick));
     }
     super::post_options::threading_picker(ui, state);
+    super::post_options::smoothing_switch(ui, state);
+    super::post_options::end_units_picker(ui, state);
 }
 
 /// The post offer (M13.5 B): when the mounted machine's kind is not
@@ -441,8 +448,8 @@ fn post_offer_banner(ui: &mut Ui, state: &mut State) {
 
 /// The document's machine (M2.3 C, group completed by M3.3 stage C):
 /// setup furniture read live off the world singleton - no mirror to go
-/// stale. The summary is exactly what the file stated; a blank is a
-/// `?`, never an invented ceiling. The library combo picks a shipped
+/// stale. The overview grid is exactly what the file stated; a blank is
+/// "not stated", never an invented ceiling. The library combo picks a shipped
 /// machine BY NAME, "Load other" reaches any `.mch` through the file
 /// law, and "Edit" opens the draft editor; all three land on the
 /// same `LoadMachine` command, so every change here is undoable
@@ -451,9 +458,9 @@ fn post_offer_banner(ui: &mut Ui, state: &mut State) {
 pub(super) fn machine_section(ui: &mut Ui, state: &mut State) {
     let (path, m) = machine::of(&state.world);
     ui.label("Machine");
+    let names: Vec<&str> = posting::MACHINES.iter().map(|(n, _)| *n).collect();
     ui.horizontal(|ui| {
         ui.label("Library");
-        let names: Vec<&str> = posting::MACHINES.iter().map(|(n, _)| *n).collect();
         let sel: Option<usize> = names.iter().position(|n| path == posting::builtin_path(n));
         let text = match sel {
             Some(i) => names[i].to_owned(),
@@ -477,11 +484,15 @@ pub(super) fn machine_section(ui: &mut Ui, state: &mut State) {
     });
     match &m {
         Some(m) => {
-            ui.label(m.summary());
-            ui.label(format!("{} workspace", machine::kind(Some(m)).label()));
-            if !path.is_empty() {
-                ui.label(format!("loaded from {path}"));
-            }
+            let source = if path.is_empty() {
+                "not stated".to_owned()
+            } else {
+                match names.iter().find(|n| path == posting::builtin_path(n)) {
+                    Some(n) => format!("Built-in: {n}"),
+                    None => path.clone(),
+                }
+            };
+            super::machine_grid::machine_grid(ui, "machine_overview", m, state.units(), &[("Source", source)]);
             ui.horizontal(|ui| {
                 if ui.button("Load other").clicked() {
                     state.pending.push_back(CommandKind::LoadMachineDialog);
@@ -754,6 +765,8 @@ fn setups_page(ui: &mut Ui, state: &mut State) {
             ui.label(line);
             super::setup_align_pick::picker(ui, state, name);
             super::setup_plane_pick::row(ui, state, name);
+            super::setup_points_pick::row(ui, state, name);
+            super::setup_axis_pick::rows(ui, state, name);
             super::setup_wcs_pick::picker(ui, state, name);
         }
     }
@@ -838,7 +851,7 @@ pub(super) fn sheet_footer(ui: &mut Ui, state: &mut State) {
 pub(super) fn fixtures_section(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
     let u = state.units();
     let fixtures = camcraft_app::fixture::tagged(&state.world, ctx);
-    let table = camcraft_app::fixture::table_box(&state.world);
+    let table = camcraft_app::fixture::table_box(&state.world, ctx);
     // A draft whose row vanished (deleted or untagged, here or via
     // undo) retires with it - the pane never edits a ghost.
     if !state.fixture_ui.name.is_empty()
@@ -853,67 +866,8 @@ pub(super) fn fixtures_section(ui: &mut Ui, state: &mut State, ctx: Option<&str>
     });
     for (name, entity) in fixtures {
         let loc = model::transform_of(&state.world, &entity).unwrap_or_default();
-        let is_draft = state.fixture_ui.name == name;
-        ui.horizontal(|ui| {
-            if ui.selectable_label(is_draft, &name).clicked() {
-                state.fixture_ui = FixtureUi {
-                    name: name.clone(),
-                    x: loc.pos.x,
-                    y: loc.pos.y,
-                    z: loc.pos.z,
-                    yaw_deg: quat_yaw_deg(loc.rot),
-                };
-            }
-            ui.label(format!(
-                "{}, {}, {}  yaw {:.1}",
-                units::len(loc.pos.x, u, 2),
-                units::len(loc.pos.y, u, 2),
-                units::len(loc.pos.z, u, 2),
-                quat_yaw_deg(loc.rot)
-            ));
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.small_button("Delete").clicked() {
-                    state
-                        .pending
-                        .push_back(CommandKind::DeleteFixture(name.clone()));
-                }
-                if ui.small_button("Unmark").clicked() {
-                    state
-                        .pending
-                        .push_back(CommandKind::UntagFixture(name.clone()));
-                }
-            });
-        });
-        // Whether the steel turns with the part (M13.8 (2)): a chuck
-        // rides the rotary, a tailstock or a table stands still and is
-        // judged in the machine frame. The box edits a copy - the flag
-        // lands through `SetFixtureFixed`, one undo unit, never a poke.
-        let mut fixed = camcraft_app::fixture::def_of(&state.world, &entity).is_some_and(|d| d.fixed);
-        if check_row(ui, "Fixed (does not turn with the part)", &mut fixed).changed() {
-            state.pending.push_back(CommandKind::SetFixtureFixed { name: name.clone(), fixed });
-        }
-        hint(
-            ui,
-            "On: a table or tailstock - it stands still while a rotary turns the part, \
-             so it is collision-checked in the machine frame. Off: a chuck, turning with the part.",
-        );
-        if is_draft {
-            ui.horizontal(|ui| {
-                ui.label("    place");
-                num(ui, u, &mut state.fixture_ui.x);
-                num(ui, u, &mut state.fixture_ui.y);
-                num(ui, u, &mut state.fixture_ui.z);
-                ui.label("yaw");
-                num_plain(ui, &mut state.fixture_ui.yaw_deg);
-                if ui.small_button("Apply").clicked() {
-                    state.pending.push_back(CommandKind::MoveFixture {
-                        name: name.clone(),
-                        pos: [state.fixture_ui.x, state.fixture_ui.y, state.fixture_ui.z],
-                        yaw_deg: state.fixture_ui.yaw_deg,
-                    });
-                }
-            });
-        }
+        let fixed = camcraft_app::fixture::def_of(&state.world, &entity).is_some_and(|d| d.fixed);
+        super::fixture_rows::row(ui, state, &name, &loc, fixed);
     }
     if let Some(t) = table {
         ui.label(format!(
@@ -923,7 +877,7 @@ pub(super) fn fixtures_section(ui: &mut Ui, state: &mut State, ctx: Option<&str>
             units::len(t.max.z, u, 2),
         ));
     }
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         if ui.button("Import fixture…").clicked() {
             state.pending.push_back(CommandKind::ImportFixtureDialog);
         }
@@ -1297,8 +1251,10 @@ pub(crate) fn tool_editor_window(ctx: &egui::Context, state: &mut State) {
         .open(&mut open)
         .collapsible(false)
         .resizable(false)
+        // #371 widened the window by the Body column (~270 px); its
+        // default anchor moved left by as much, so it stays centred.
         .default_pos([
-            ctx.viewport_rect().center().x - 270.0,
+            ctx.viewport_rect().center().x - 520.0,
             ctx.viewport_rect().center().y - 210.0,
         ])
         .show(ctx, |ui| {
@@ -1396,9 +1352,26 @@ pub(crate) fn tool_editor_window(ctx: &egui::Context, state: &mut State) {
                         {
                             state.tool_ui.tip_angle = 90.0;
                         }
+                        // The torch (#670): no spindle, no corner - a
+                        // kerf. Leaving it, a spinning kind needs an rpm.
+                        if state.tool_ui.tool_kind() == tools::ToolKind::Torch {
+                            state.tool_ui.rpm = 0.0;
+                            state.tool_ui.corner_r = 0.0;
+                        } else if before == 12 && (state.tool_ui.rpm.is_nan() || state.tool_ui.rpm <= 0.0) {
+                            state.tool_ui.rpm = 10000.0;
+                        }
                     }
-                    field(ui, "Diameter");
-                    num(ui, u, &mut state.tool_ui.diameter);
+                    let torch = state.tool_ui.tool_kind() == tools::ToolKind::Torch;
+                    if torch {
+                        // The kerf width IS the torch's diameter (#669 /
+                        // #670): every offset reads radius = kerf / 2.
+                        field(ui, "Kerf width");
+                        num(ui, u, &mut state.tool_ui.diameter);
+                        ui.label("the cut's width - about 1.5x the nozzle orifice; confirm it with a test cut");
+                    } else {
+                        field(ui, "Diameter");
+                        num(ui, u, &mut state.tool_ui.diameter);
+                    }
                     // Kind-read fields (the inert-unless-the-kind-reads-them
                     // law): a point angle means nothing on an end mill, a
                     // pitch means nothing on a drill - show each only where
@@ -1423,6 +1396,8 @@ pub(crate) fn tool_editor_window(ctx: &egui::Context, state: &mut State) {
                         num(ui, u, &mut state.tool_ui.nose_radius);
                         ui.label("the ground tip circle the bar rides the hole wall on (M5.2 F) - inert on drilling cycles, which size by the slide");
                     }
+                    // #630: which point of the nose the lathe posts write.
+                    super::tool_orientation_row::orientation_row(ui, state);
                     if state.tool_ui.kind == 7 {
                         field(ui, "Blade width");
                         num(ui, u, &mut state.tool_ui.width);
@@ -1456,7 +1431,7 @@ pub(crate) fn tool_editor_window(ctx: &egui::Context, state: &mut State) {
                         field(ui, "Corner radius");
                         ui.label(format!("{} {}", units::len(state.tool_ui.diameter * 0.5, u, 3), u.suffix()));
                         ui.label("half the diameter - a ball nose's whole tip is its ball");
-                    } else if state.tool_ui.tool_kind() != tools::ToolKind::Tap {
+                    } else if !matches!(state.tool_ui.tool_kind(), tools::ToolKind::Tap | tools::ToolKind::Torch) {
                         field(ui, "Corner radius");
                         num(ui, u, &mut state.tool_ui.corner_r);
                     }
@@ -1475,8 +1450,10 @@ pub(crate) fn tool_editor_window(ctx: &egui::Context, state: &mut State) {
                         TextEdit::singleline(&mut state.tool_ui.material_group)
                             .desired_width(140.0),
                     );
-                    field(ui, "Spindle rpm");
-                    num_plain(ui, &mut state.tool_ui.rpm);
+                    if !torch {
+                        field(ui, "Spindle rpm");
+                        num_plain(ui, &mut state.tool_ui.rpm);
+                    }
                     field(ui, &format!("Feed ({})", u.feed_suffix()));
                     num_feed(ui, u, &mut state.tool_ui.feed);
                     // M11.3: an entry may plunge into solid only with a
@@ -1489,7 +1466,14 @@ pub(crate) fn tool_editor_window(ctx: &egui::Context, state: &mut State) {
                     ui.add(egui::DragValue::new(&mut state.tool_ui.number).range(0..=camcraft_app::tool_numbers::MAX));
                 });
                 ui.vertical(|ui| {
-                    draw_tool_preview(ui, &preview_tool, u);
+                    // #371: the placed body's envelope rides the profile.
+                    let body = if exists { super::tool_body_page::envelope(state) } else { None };
+                    draw_tool_preview(ui, &preview_tool, u, body.as_deref());
+                });
+                ui.vertical(|ui| {
+                    ui.set_width(260.0);
+                    // #93: Body / Profile tabs for a milling tool.
+                    super::tool_profile_page::third_column(ui, state, exists, u);
                 });
             });
             ui.separator();
@@ -1551,7 +1535,7 @@ fn push_number_if_changed(state: &mut State, name: &str) {
 /// the fields beside it are editing. Tip at the bottom (z = 0 upward),
 /// equal aspect both axes - "to scale" means to scale. A half-typed draft
 /// renders a stub and a word, never a NaN.
-fn draw_tool_preview(ui: &mut Ui, t: &tools::Tool, u: Unit) {
+fn draw_tool_preview(ui: &mut Ui, t: &tools::Tool, u: Unit, body: Option<&[(f64, f64, f64)]>) {
     const SIDE: f32 = 260.0;
     const PAD: f32 = 18.0;
     let (resp, painter) = ui.allocate_painter(Vec2::splat(SIDE), Sense::hover());
@@ -1559,8 +1543,10 @@ fn draw_tool_preview(ui: &mut Ui, t: &tools::Tool, u: Unit) {
     let axis_x = rect.center().x;
     painter.rect_filled(rect, 4.0, Color32::from_rgb(24, 26, 31));
     let outline = t.profile();
-    let r_max = outline.iter().map(|q| q.1).fold(0.0f64, f64::max);
-    let z_max = outline.iter().map(|q| q.0).fold(0.0f64, f64::max);
+    // #371: a body's bands (above, len, r) widen the frame to hold them.
+    let bands = body.unwrap_or_default();
+    let r_max = outline.iter().map(|q| q.1).chain(bands.iter().map(|b| b.2)).fold(0.0f64, f64::max);
+    let z_max = outline.iter().map(|q| q.0).chain(bands.iter().map(|b| b.0 + b.1)).fold(0.0f64, f64::max);
     if r_max <= 0.0 || z_max <= 0.0 || !r_max.is_finite() || !z_max.is_finite() {
         painter.line_segment(
             [
@@ -1617,6 +1603,20 @@ fn draw_tool_preview(ui: &mut Ui, t: &tools::Tool, u: Unit) {
             steel[band],
             Stroke::NONE,
         ));
+    }
+    // #371: the modelled body's revolved envelope, translucent amber over
+    // the cylinders it replaces in the judging laws.
+    for &(above, len, r) in bands {
+        if !(above.is_finite() && len.is_finite() && r.is_finite()) || len <= 0.0 || r <= 0.0 {
+            continue;
+        }
+        painter.rect(
+            egui::Rect::from_two_pos(at(above, -r), at(above + len, r)),
+            0.0,
+            Color32::from_rgba_unmultiplied(230, 160, 60, 70),
+            Stroke::new(1.0, Color32::from_rgb(230, 160, 60)),
+            egui::StrokeKind::Inside,
+        );
     }
     // The outline as one closed polyline (a stroke has no convexity rule):
     // right side up, then the mirrored left side back down. Axis points
@@ -1723,6 +1723,8 @@ fn model_page(ui: &mut Ui, state: &mut State, name: String) {
             apply_model_draft(state);
         }
     });
+    // #561: the part into a fixture (or a fixture onto the part) by mates.
+    super::locate_form::model_row(ui, state, &name);
     // Mesh repair (M13.11): weld and fill on the user's say-so, never on
     // import. The button queues `RepairModel`; the report lands in the
     // status line and stays here while this model is on the page.
