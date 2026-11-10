@@ -184,6 +184,10 @@ pub struct ProjectFile {
     /// posted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub program: Option<ProgramDto>,
+    /// Per-operation smoothing at post (#616), additive like
+    /// `skip_stops`: an absent key is off - no smoothing words.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub smoothing: bool,
     pub entities: Vec<EntityDto>,
 }
 

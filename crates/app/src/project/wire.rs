@@ -233,6 +233,8 @@ pub fn collect(world: &World) -> ProjectFile {
             (p != crate::schema::ProgramInfo::default())
                 .then_some(ProgramDto { number: p.number, comment: p.comment })
         },
+        // Off writes no key (#616).
+        smoothing: crate::setup_post_options::document(world).smoothing,
         entities,
     }
 }

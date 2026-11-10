@@ -143,6 +143,11 @@ pub const MACHINES: &[(&str, &str)] = &[
     // #618: the M+ upgrade kits - the M's figures with the MX's axis speeds.
     ("Tormach 770M+", include_str!("../../../assets/machines/tormach-770m-plus.mch")),
     ("Tormach 1100M+", include_str!("../../../assets/machines/tormach-1100m-plus.mch")),
+    // #620: the PathPilot routers, each from its own manual / spec sheet
+    // (the plain xsTECH from its spec sheet and knowledge base: no manual).
+    ("Tormach 24R", include_str!("../../../assets/machines/tormach-24r.mch")),
+    ("Tormach xsTECH Pro", include_str!("../../../assets/machines/tormach-xstech-pro.mch")),
+    ("Tormach xsTECH", include_str!("../../../assets/machines/tormach-xstech.mch")),
     // #611: Tormach's lathes, from their operator manuals (UM10753, UM10225).
     ("Tormach 8L", include_str!("../../../assets/machines/tormach-8l.mch")),
     ("Tormach 15L Slant-PRO", include_str!("../../../assets/machines/tormach-15l-slant-pro.mch")),
@@ -233,6 +238,12 @@ pub fn options_value(o: PostOptions) -> Value {
         ThreadingOutput::G76Cycle => "G76",
     };
     let mut v = serde_json::json!({ "Threading": threading });
+    // #616: stated only when on - off, the object a script sees is
+    // byte-identical to before (the posts read the per-op PARAMs; this
+    // word is for a script that wants the document-wide switch).
+    if o.smoothing {
+        v["Smoothing"] = serde_json::json!(true);
+    }
     let end = match o.end_units {
         EndUnits::Leave => None,
         EndUnits::Inch => Some("inch"),
@@ -833,6 +844,15 @@ pub fn op_streams(world: &World) -> Result<Vec<(String, Vec<cnc::Record>)>, Stri
             part_unload,
             part_transfer,
             probe_tol,
+            // #616: the op's smoothing ask, only when its OWN setup's
+            // post options turn smoothing on (off: byte-identical output) -
+            // read per op like "Skip pauses and homes" (#389), never from
+            // whichever setup happens to be active.
+            smoothing: if crate::setup_post_options::of(world, op.setup.as_deref()).smoothing {
+                crate::smoothing::of(&op.params)
+            } else {
+                None
+            },
             coolant: op.coolant,
             // "Skip pauses and homes" (#110) mutes every after-action
             // at post; the ops keep their choices. Entries ride it (#155).

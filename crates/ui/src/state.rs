@@ -49,6 +49,7 @@ mod setup_post_options;
 mod fixture_view;
 #[path = "state_locate.rs"]
 mod locate_ui;
+use locate_ui::with_warning;
 #[path = "state_fixture_library.rs"]
 mod fixture_library;
 pub use fixture_library::{FixtureLibDialog, InsertFixtureDraft, LibraryRow, SaveFixtureDraft};
@@ -1435,6 +1436,9 @@ pub struct State {
     /// The Boundary group's view state and caches (M11.5 UX): open this
     /// frame, the draft's machined-area preview, the entries' shapes.
     pub boundary_view: crate::boundary_draft::BoundaryView,
+    /// The incoming stock's viewport sheet (#406), cached per document
+    /// version while a carried setup's settings page is open.
+    pub incoming_view: crate::incoming_view::IncomingView,
     /// The Geometry list row under the pointer this frame, if any: the
     /// pane answers "which one is that?" by lighting the feature in the
     /// viewport, like pointer hover does. Ephemeral view state (the
@@ -1632,6 +1636,7 @@ impl State {
             axis_rows_shown: false,
             setup_pick_rows: Vec::new(),
             boundary_view: Default::default(),
+            incoming_view: Default::default(),
             geo_hover: None,
             op_tab: 0,
             hidden_models: Vec::new(),
@@ -2466,6 +2471,8 @@ impl State {
         // A refusal that no longer describes the page retires, with its
         // status-strip mirror (crate::feedback).
         self.retire_stale_feedback();
+        // #406: the incoming stock's sheet follows the open setup page.
+        crate::incoming_view::refresh(self);
         // The editor window's ghost law (M1.4), mirroring `pane_target`:
         // an open editor never keeps pointing at a name the document lost
         // under it - deleted, undone, or swapped by New/Open all land here.
@@ -3317,9 +3324,10 @@ impl State {
                 };
                 match MoveFixture::new(&self.world, &name, location) {
                     Ok(command) => {
+                        let warning = command.warning().map(str::to_owned);
                         self.history.execute(&self.world, command);
                         self.doc_version += 1;
-                        self.status = format!("moved fixture {name}");
+                        self.status = with_warning(format!("moved fixture {name}"), warning);
                     }
                     Err(err) => {
                         self.refuse(ErrorScope::Setup, format!("fixture not moved: {err}"));
@@ -3364,6 +3372,7 @@ impl State {
                 };
                 match MoveModel::new(&self.world, &name, location) {
                     Ok(command) => {
+                        let warning = command.warning().map(str::to_owned);
                         self.history.execute(&self.world, command);
                         self.doc_version += 1;
                         self.model_ui = ModelUi {
@@ -3375,7 +3384,7 @@ impl State {
                             pitch_deg,
                             yaw_deg,
                         };
-                        self.status = format!("moved {name}");
+                        self.status = with_warning(format!("moved {name}"), warning);
                     }
                     Err(err) => self.refuse(ErrorScope::Setup, format!("part not moved: {err}")),
                 }
