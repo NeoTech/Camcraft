@@ -7,9 +7,13 @@
 //! opens the span of explicit passes the record stands for and
 //! `THREAD END` closes it; the passes between stay ordinary `MOVE`
 //! records, so a post with no cycle hook posts them as it always did.
+//! `HAND right|left` (#629) states the thread's hand; a record without
+//! it is refused by name.
 
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
+
+use crate::cl::ThreadHand;
 
 /// One threading-cycle record. Points and lengths are millimeters
 /// (lengths on the µm lattice in the text), radial quantities radius
@@ -29,6 +33,8 @@ pub struct ThreadRec {
     pub infeed_angle: f64,
     pub spring_passes: u32,
     pub pull_out: f64,
+    /// The hand the passes cut (#629): `HAND right|left`, required.
+    pub hand: ThreadHand,
     /// Alternating flank infeed (issue #417): written `ALT 1` only when
     /// set, so every earlier stream reads and writes the same bytes.
     pub alternating: bool,
@@ -59,6 +65,7 @@ impl ThreadRec {
             infeed_angle: t.infeed_angle,
             spring_passes: t.spring_passes,
             pull_out: t.pull_out,
+            hand: t.hand,
             alternating: t.alternating,
         }
     }
@@ -84,6 +91,7 @@ impl ThreadRec {
         m.insert("InfeedAngle".into(), json!(self.infeed_angle));
         m.insert("SpringPasses".into(), json!(self.spring_passes));
         m.insert("PullOut".into(), json!(self.pull_out));
+        m.insert("Hand".into(), json!(self.hand.word()));
         m.insert("Alternating".into(), json!(self.alternating));
         m
     }
@@ -93,7 +101,7 @@ impl ThreadRec {
     pub fn line(&self) -> String {
         format!(
             "THREAD X {} Y {} Z {} EX {} EY {} EZ {} MAJOR {} MINOR {} LEAD {:.6} HEIGHT {} \
-             FIRST {} MIN {} FINISH {} ANGLE {:.6} SPRING {} PULLOUT {}{}\n",
+             FIRST {} MIN {} FINISH {} ANGLE {:.6} SPRING {} PULLOUT {} HAND {}{}\n",
             q(self.start[0]),
             q(self.start[1]),
             q(self.start[2]),
@@ -110,6 +118,7 @@ impl ThreadRec {
             self.infeed_angle,
             self.spring_passes,
             q(self.pull_out),
+            self.hand.word(),
             if self.alternating { " ALT 1" } else { "" },
         )
     }
@@ -118,8 +127,8 @@ impl ThreadRec {
     #[must_use]
     pub fn label(&self) -> String {
         format!(
-            "thread cycle · lead {:.4} · Z {:.3} → {:.3}",
-            self.lead, self.start[2], self.end[2]
+            "thread cycle · {}-hand · lead {:.4} · Z {:.3} → {:.3}",
+            self.hand.word(), self.lead, self.start[2], self.end[2]
         )
     }
 }
@@ -134,6 +143,7 @@ pub fn parse<'a>(mut it: impl Iterator<Item = &'a str>) -> Result<Option<ThreadR
         "SPRING", "PULLOUT", "ALT",
     ];
     let mut seen: BTreeMap<&str, f64> = BTreeMap::new();
+    let mut hand: Option<ThreadHand> = None;
     let mut first = true;
     while let Some(k) = it.next() {
         if first && k == "END" {
@@ -143,6 +153,14 @@ pub fn parse<'a>(mut it: impl Iterator<Item = &'a str>) -> Result<Option<ThreadR
             };
         }
         first = false;
+        if k == "HAND" {
+            let v = it.next().ok_or("THREAD HAND needs a value")?;
+            let h = ThreadHand::from_word(v).ok_or_else(|| format!("THREAD HAND {v:?} is not right or left"))?;
+            if hand.replace(h).is_some() {
+                return Err("THREAD HAND given twice".into());
+            }
+            continue;
+        }
         let Some(key) = KEYS.iter().find(|&&c| c == k) else {
             return Err(format!("THREAD: unknown word {k:?}"));
         };
@@ -158,6 +176,9 @@ pub fn parse<'a>(mut it: impl Iterator<Item = &'a str>) -> Result<Option<ThreadR
     }
     let get = |k: &str| seen.get(k).copied().ok_or_else(|| format!("THREAD needs {k}"));
     let um = |k: &str| get(k).map(|v| v / 1000.0);
+    // The hand is never guessed (#629): a record without it would
+    // post its cycle under whichever spindle sense the script assumed.
+    let hand = hand.ok_or("THREAD needs HAND")?;
     let spring = get("SPRING")?;
     if !(spring >= 0.0 && spring.fract() == 0.0 && spring <= f64::from(u32::MAX)) {
         return Err(format!("THREAD SPRING {spring} is not a pass count"));
@@ -181,6 +202,7 @@ pub fn parse<'a>(mut it: impl Iterator<Item = &'a str>) -> Result<Option<ThreadR
         infeed_angle: get("ANGLE")?,
         spring_passes: spring as u32,
         pull_out: um("PULLOUT")?,
+        hand,
         alternating,
     }))
 }

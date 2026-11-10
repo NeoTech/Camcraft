@@ -84,6 +84,7 @@ pub(super) fn attach_cycle(
         alternating: plan.method == InfeedMethod::Alternating,
         first,
         last,
+        hand: p.hand,
     };
     if m0.kind == MoveKind::Rapid && rec.is_sane(&path.moves) {
         path.threads.push(rec);

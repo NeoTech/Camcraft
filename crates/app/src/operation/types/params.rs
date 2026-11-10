@@ -964,6 +964,9 @@ pub enum OpParams {
     /// `infeed_plan` says how the passes enter (radial, flank,
     /// alternating), how deep each goes, the finish allowance and the
     /// spring passes - its default is the radial constant-depth ladder.
+    /// `hand` (#629) is the way the thread winds -
+    /// right-hand unless the drawing says LH; the passes run toward
+    /// the chuck either way and the hand sets the helix's sense.
     Threading {
         tolerance: f64,
         clearance_z: Height,
@@ -975,6 +978,7 @@ pub enum OpParams {
         feed: f64,
         plunge_feed: f64,
         infeed_plan: crate::turning::ThreadInfeed,
+        hand: crate::cl::ThreadHand,
     },
     /// Chamfer turning (M5.2 stage E): one ride across the cone
     /// face the window `top_z`/`bottom_z` bounds. `angle_deg` is

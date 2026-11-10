@@ -117,6 +117,7 @@ fn g76_world(infeed: f64, plan: ThreadInfeed) -> World {
         feed: 120.0,
         plunge_feed: 40.0,
         infeed_plan: plan,
+        hand: camcraft_app::cl::ThreadHand::Right,
     };
     let cmd = CreateOperation::new(&world, "TH1", "TD-1732-60", SrcRef::Entity("bar".into()), params);
     history.execute(&world, cmd.expect("create"));
@@ -195,7 +196,10 @@ fn same_ladder(world: &World, text: &str) {
     let tan = (a * 0.5).to_radians().tan();
     for ((z, depth), w) in got.iter().zip(&want) {
         assert!((depth - w).abs() < 1e-3, "depth: laid {got:?} vs the control's {want:?}");
-        assert!((z - (z0 + w * tan)).abs() < 1e-3, "station: laid {got:?}, start {z0}, a {a}");
+        // #629's ladder runs toward the chuck (-Z): the record starts a
+        // full flank shift toward the free end, each pass `w·tan` back
+        // toward the chuck from it (the merge of #416 onto #629).
+        assert!((z - (z0 - w * tan)).abs() < 1e-3, "station: laid {got:?}, start {z0}, a {a}");
     }
 }
 

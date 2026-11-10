@@ -169,6 +169,7 @@ fn a_threading_cycle_refuses_by_name() {
         spring_passes: 1,
         pull_out: 0.0,
         alternating: false,
+        hand: camcraft_app::cl::ThreadHand::Right,
     }));
     let e = refused("fanuc", &["X"], &with(vec![t, Record::Thread(None)]));
     assert!(e.contains("a threading cycle is not supported for an inverted axis"), "{e}");
@@ -182,9 +183,15 @@ fn probing_refuses_by_name() {
         feed: 100.0,
         measure: Some(0),
     });
-    // #392 lifted it for Fanuc (probeAxisInversion = true, pinned by
-    // inverted_probe); Haas translates the motion but not its probing.
-    let e = refused("haas", &["X"], &with(vec![t]));
+    // #392 lifted it for Fanuc and Haas (probeAxisInversion = true,
+    // pinned by inverted_probe); a script that translates the motion but
+    // does not declare its probing verified still refuses it.
+    let haas = cps("haas");
+    let flag = haas.lines().find(|l| l.starts_with("probeAxisInversion = true;")).expect("haas declares it");
+    let e = match engine::run(&haas.replacen(flag, "", 1), &machine(&["X"]), &cnc::serialize(&with(vec![t]))) {
+        Ok(out) => panic!("must refuse, posted:\n{}", out.program),
+        Err(e) => e.to_string(),
+    };
     assert!(
         e.contains("operation Op1: probing with a post script that does not declare probeAxisInversion = true"),
         "{e}"
