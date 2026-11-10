@@ -137,7 +137,8 @@ fn role_picks_land_in_the_draft_and_apply_queues_one_undoable_setwcs() {
     assert_eq!(d.picks, vec![(top, Role::Z), (front, Role::X), (c, Role::Origin)], "each pick keeps its stamped role");
     assert!(!apply_disabled(&h), "a whole frame lights Apply up");
     apply_button(&h);
-    h.run();
+    h.run(); // the click queues SetWcs...
+    h.run(); // ...and the next frame's drain lands it, as the shell does
     let (pos, angles) = wcs(h.state()).expect("the WCS is placed");
     assert!(pos.iter().zip([0.0, 0.0, 10.0]).all(|(a, b)| (a - b).abs() < 1e-9), "on the corner: {pos:?}");
     assert!(angles.iter().all(|a| a.abs() < 1e-9), "square to the block: {angles:?}");
@@ -159,7 +160,8 @@ fn an_incomplete_frame_greys_apply_and_shows_the_apps_why() {
     h.get_by_label("Pick for WCS").click();
     h.run();
     assert!(apply_disabled(&h), "nothing picked yet");
-    crate::wcs_pick::take(h.state_mut(), top_face(h.state()));
+    let top = top_face(h.state());
+    crate::wcs_pick::take(h.state_mut(), top);
     h.run();
     assert!(apply_disabled(&h), "one axis is no frame");
     let why = h.query_by_label_contains("at least two picks").is_some();
@@ -183,7 +185,7 @@ fn re_picking_a_role_replaces_its_earlier_pick() {
         let id = features(&state)
             .faces
             .iter()
-            .find(|f| f.normal[2] < -0.99)
+            .find(|f| f.normal[2].abs() > 0.99 && f.offset.abs() < 1e-9) // z = 0: sign-canonical normal, zero offset
             .map(|f| f.id)
             .expect("the bottom face");
         GeoSel { entity: "part".into(), feature: FeatureSel::Face(id) }

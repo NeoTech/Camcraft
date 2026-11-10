@@ -8,12 +8,14 @@ pub mod align;
 pub mod axis;
 pub mod face;
 pub mod plane;
+pub mod roles;
 pub mod winding;
 
 pub use align::{Alignment, align_321};
 pub use axis::{AxisPick, InPlaneAxes, InPlaneAxis, in_plane_turn_deg, pick_coords, turn_in_plane};
 pub use plane::{PlaneLay, lay_on_plane, plane_label, plane_side};
 pub use face::{FaceOrigin, face_origin, facets_centroid};
+pub use roles::{Role, align_roles};
 
 use flecs_ecs::prelude::World;
 

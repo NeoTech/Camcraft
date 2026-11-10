@@ -1381,6 +1381,9 @@ pub struct State {
     /// The setups whose pick rows (plane, axes) were drawn this frame
     /// (#664): any other setup's armed pick is disarmed at frame end.
     pub setup_pick_rows: Vec<String>,
+    /// The Setups page's WCS-from-features role draft (#701); while it
+    /// is collecting, feature picks land in it ahead of everything else.
+    pub wcs_pick: Option<crate::wcs_pick::WcsPick>,
     /// The Boundary group's view state and caches (M11.5 UX): open this
     /// frame, the draft's machined-area preview, the entries' shapes.
     pub boundary_view: crate::boundary_draft::BoundaryView,
@@ -1577,6 +1580,7 @@ impl State {
             axis_pick: None,
             axis_rows_shown: false,
             setup_pick_rows: Vec::new(),
+            wcs_pick: None,
             boundary_view: Default::default(),
             geo_hover: None,
             op_tab: 0,
@@ -2736,6 +2740,7 @@ impl State {
                     Ok(command) => {
                         self.history.execute(&self.world, command);
                         self.doc_version += 1;
+                        self.wcs_pick = None; // #701: a landed frame ends the role draft
                         let active = camcraft_app::setup::active(&self.world);
                         self.status =
                             format!("{} origin set", camcraft_app::setup::wcs_label(&self.world, active.as_deref()));

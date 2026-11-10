@@ -160,6 +160,7 @@ fn settings(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
     super::setup_relative_pick::picker(ui, state, name);
     super::setup_plane_pick::row(ui, state, name);
     super::setup_axis_pick::rows(ui, state, name);
+    super::wcs_pick_row::row(ui, state, name); // #701
     super::setup_wcs_pick::picker(ui, state, name);
     ui.separator();
     if ui.button(format!("Delete {name}")).clicked() {

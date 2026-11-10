@@ -77,6 +77,8 @@ pub(crate) use setup_align_pick::align_text;
 // #330: the Setups page's lay-on-a-plane row.
 mod setup_plane_pick;
 mod setup_axis_pick;
+// #701: the Setups page's set-WCS-from-features role row.
+mod wcs_pick_row;
 // #316: the setup page's "relative to the previous setup" control.
 mod setup_relative_pick;
 // The operation dialog, split out of `pages` with the property grid

@@ -157,6 +157,10 @@ fn pick_face(state: &mut State, p: [f32; 2], mods: Mods) {
         return;
     };
     let pick = GeoSel { entity, feature: sel };
+    if crate::wcs_pick::collecting(state) {
+        crate::wcs_pick::take(state, pick); // #701: the Setups page's role draft
+        return;
+    }
     if crate::axis_pick::collecting(state) {
         crate::axis_pick::take(state, pick); // #557: refuses a face by name
         return;
@@ -211,8 +215,9 @@ fn pick_edge(state: &mut State, p: [f32; 2], mods: Mods) {
     };
     let sel = if mods.alt {
         feature::singleton_chain_id(&features, edge).map(FeatureSel::Chain)
-    } else if state.boundary_pick.is_some() || crate::plane_pick::collecting(state) || crate::axis_pick::collecting(state) {
-        // A boundary (and a #557 axis pick) takes ONE edge per click (M11.5 UX): the run - one
+    } else if state.boundary_pick.is_some() || crate::plane_pick::collecting(state) || crate::axis_pick::collecting(state) || crate::wcs_pick::collecting(state) {
+        // A boundary (and a #557 axis pick, and a #701 role pick) takes
+        // ONE edge per click (M11.5 UX): the run - one
         // straight stretch or one arc - never the whole tangent loop a
         // filleted rim chains into.
         feature::run_containing(&features, edge).map(|r| FeatureSel::Chain(r.id))
@@ -240,6 +245,10 @@ fn pick_edge(state: &mut State, p: [f32; 2], mods: Mods) {
         facet,
         feature: Some(sel),
     });
+    if crate::wcs_pick::collecting(state) {
+        crate::wcs_pick::take(state, GeoSel { entity, feature: sel }); // #701
+        return;
+    }
     if crate::axis_pick::collecting(state) {
         crate::axis_pick::take(state, GeoSel { entity, feature: sel }); // #557
         return;

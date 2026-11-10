@@ -108,6 +108,7 @@ fn mode_of(by: AxisBy) -> GeoPick {
 /// Vertex mode for two points. The lay-on-a-plane draft stops.
 pub fn arm(state: &mut State, setup: &str, axis: InPlaneAxis) {
     state.plane_pick = None;
+    crate::wcs_pick::disarm(state); // #701: one draft collects at a time
     let d = draft_for(state, setup);
     d.picking = Some(axis);
     let by = d.by(axis);
@@ -139,6 +140,9 @@ pub fn disarm_hidden(state: &mut State) {
     }
     if state.plane_pick.as_ref().is_some_and(|d| !shown.contains(&d.setup)) {
         crate::plane_pick::pause(state);
+    }
+    if state.wcs_pick.as_ref().is_some_and(|d| !shown.contains(&d.setup)) {
+        crate::wcs_pick::pause(state); // #701: same law for the role draft
     }
 }
 
