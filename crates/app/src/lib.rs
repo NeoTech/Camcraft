@@ -10,6 +10,8 @@ pub mod commands;
 pub mod cutting;
 pub use camcraft_motion::drilling;
 pub mod fixture;
+// #339 slice 6: the user fixture library file.
+pub mod fixture_library;
 pub mod fixture_carried;
 pub mod fixture_struck;
 pub mod fixture_view;
@@ -37,8 +39,11 @@ pub mod posting;
 pub mod program_entry;
 pub use camcraft_motion::probing;
 pub mod project;
+// #35: pocket and slot recognition on the model's faces.
+pub mod recognize;
 // #182: the CPU rasteriser behind the MCP stock render.
 pub mod raster;
+pub mod recent;
 pub mod rest;
 pub mod ribbon;
 pub mod schema;
