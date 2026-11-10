@@ -47,6 +47,12 @@ pub const BUILTINS: &[(&str, &str)] = &[
 /// machine's kind through [`post_serves`]; a mill-turn lists both.
 pub const LATHE_POSTS: &[&str] = &["Fanuc Lathe"];
 
+/// The registry entries that speak PLASMA (#669): the torch words, no
+/// spindle and no Z depth. None ships yet - the PathPilot plasma post
+/// is #671 - so a plasma machine lists no post and nothing posts on it
+/// (its machine check refuses every op by name, `machine::plasma`).
+pub const PLASMA_POSTS: &[&str] = &[];
+
 /// Whether a registry entry can post programs for a machine of this
 /// kind: a lathe post serves lathes and mill-turns, a mill post serves
 /// mills and mill-turns. A mismatched choice is not refused here (a
@@ -56,10 +62,13 @@ pub const LATHE_POSTS: &[&str] = &["Fanuc Lathe"];
 pub fn post_serves(name: &str, kind: crate::machine::Kind) -> bool {
     use crate::machine::Kind;
     let lathe_post = LATHE_POSTS.contains(&name);
+    let plasma_post = PLASMA_POSTS.contains(&name);
     match kind {
-        Kind::Mill => !lathe_post,
+        Kind::Mill => !lathe_post && !plasma_post,
         Kind::Lathe => lathe_post,
-        Kind::MillTurn => true,
+        Kind::MillTurn => !plasma_post,
+        // #669: a cutting post would write spindle words a torch has not.
+        Kind::Plasma => plasma_post,
     }
 }
 
@@ -72,6 +81,11 @@ pub fn post_serves(name: &str, kind: crate::machine::Kind) -> bool {
 pub fn default_post_for(kind: crate::machine::Kind) -> PostRef {
     match kind {
         crate::machine::Kind::Lathe => LATHE_POSTS
+            .first()
+            .map_or(PostRef::Builtin, |n| PostRef::Named((*n).to_owned())),
+        // #669: until a plasma post ships (#671) there is none to name;
+        // the entry-0 answer is then refused by `post_offer`'s own check.
+        crate::machine::Kind::Plasma => PLASMA_POSTS
             .first()
             .map_or(PostRef::Builtin, |n| PostRef::Named((*n).to_owned())),
         _ => PostRef::Builtin,
@@ -105,7 +119,10 @@ pub fn post_offer(world: &World) -> Option<(&'static str, PostRef)> {
         return None;
     }
     let serves = if LATHE_POSTS.contains(&name) { "lathe" } else { "mill" };
-    Some((serves, default_post_for(kind)))
+    // #669: an offer that would not serve the mount either (a plasma
+    // table before any plasma post ships) is no offer.
+    let offer = default_post_for(kind);
+    post_name(&offer).is_some_and(|n| post_serves(n, kind)).then_some((serves, offer))
 }
 
 /// The default machine as text: a plain 3-axis VMC with flood coolant.
@@ -148,6 +165,8 @@ pub const MACHINES: &[(&str, &str)] = &[
     ("Tormach 24R", include_str!("../../../assets/machines/tormach-24r.mch")),
     ("Tormach xsTECH Pro", include_str!("../../../assets/machines/tormach-xstech-pro.mch")),
     ("Tormach xsTECH", include_str!("../../../assets/machines/tormach-xstech.mch")),
+    // #669: the plasma table, from UM10720 §2 and the 03/24 spec sheet.
+    ("Tormach 1300PL", include_str!("../../../assets/machines/tormach-1300pl.mch")),
     // #611: Tormach's lathes, from their operator manuals (UM10753, UM10225).
     ("Tormach 8L", include_str!("../../../assets/machines/tormach-8l.mch")),
     ("Tormach 15L Slant-PRO", include_str!("../../../assets/machines/tormach-15l-slant-pro.mch")),
@@ -204,7 +223,8 @@ pub fn document_post_of(world: &World) -> PostRef {
 /// one answer the post and the machine's spindle-range check both read.
 #[must_use]
 pub fn posted_rpm(tool: &crate::tools::Tool) -> f64 {
-    if tool.kind == crate::tools::ToolKind::Probe { 0.0 } else { tool.rpm }
+    // A torch states rpm 0 by law (#670): no spindle word, like a probe.
+    if matches!(tool.kind, crate::tools::ToolKind::Probe | crate::tools::ToolKind::Torch) { 0.0 } else { tool.rpm }
 }
 
 /// Write the singleton. For the `SelectPost` command and the project
@@ -238,6 +258,12 @@ pub fn options_value(o: PostOptions) -> Value {
         ThreadingOutput::G76Cycle => "G76",
     };
     let mut v = serde_json::json!({ "Threading": threading });
+    // #616: stated only when on - off, the object a script sees is
+    // byte-identical to before (the posts read the per-op PARAMs; this
+    // word is for a script that wants the document-wide switch).
+    if o.smoothing {
+        v["Smoothing"] = serde_json::json!(true);
+    }
     let end = match o.end_units {
         EndUnits::Leave => None,
         EndUnits::Inch => Some("inch"),
@@ -830,6 +856,15 @@ pub fn op_streams(world: &World) -> Result<Vec<(String, Vec<cnc::Record>)>, Stri
             part_unload,
             part_transfer,
             probe_tol,
+            // #616: the op's smoothing ask, only when its OWN setup's
+            // post options turn smoothing on (off: byte-identical output) -
+            // read per op like "Skip pauses and homes" (#389), never from
+            // whichever setup happens to be active.
+            smoothing: if crate::setup_post_options::of(world, op.setup.as_deref()).smoothing {
+                crate::smoothing::of(&op.params)
+            } else {
+                None
+            },
             coolant: op.coolant,
             // "Skip pauses and homes" (#110) mutes every after-action
             // at post; the ops keep their choices. Entries ride it (#155).
@@ -888,6 +923,7 @@ impl HeightRefs for OpParams {
     fn heights(&self) -> Vec<&Height> {
         match self {
             OpParams::Probe { clearance_z, .. } => vec![clearance_z],
+            OpParams::PlasmaProfile(p) => vec![&p.clearance_z, &p.top_z, &p.bottom_z],
             OpParams::Face {
                 clearance_z,
                 cut_z,

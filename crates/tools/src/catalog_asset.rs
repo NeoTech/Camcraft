@@ -52,6 +52,7 @@ enum KindWord {
     Form,
     Taper,
     Probe,
+    Torch,
 }
 
 #[derive(Deserialize, Clone, Copy)]
@@ -115,6 +116,7 @@ impl Def {
                 KindWord::Form => ToolKind::Form,
                 KindWord::Taper => ToolKind::Taper,
                 KindWord::Probe => ToolKind::Probe,
+                KindWord::Torch => ToolKind::Torch,
             },
             diameter: self.diameter,
             corner_r: self.corner_r,

@@ -589,6 +589,27 @@
         "feed": 300.0,
         "center_cutting": false
       }
+    },
+    {
+      "name": "PT-KERF-150",
+      "definition": {
+        "kind": "torch",
+        "diameter": 1.5,
+        "corner_r": 0.0,
+        "tip_angle": 0.0,
+        "pitch": 0.0,
+        "nose_radius": 0.0,
+        "width": 0.0,
+        "flute_len": 10.0,
+        "shank_d": 30.0,
+        "shank_len": 100.0,
+        "holder_d": 0.0,
+        "holder_len": 0.0,
+        "material_group": "mild steel",
+        "rpm": 0.0,
+        "feed": 2500.0,
+        "center_cutting": false
+      }
     }
   ]
 }
