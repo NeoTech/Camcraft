@@ -55,6 +55,7 @@ const POSTS: &[(&str, &str, &str)] = &[
     ("Mazak", "mazak", "mazak"),
     ("Tormach PathPilot", "tormach", "tormach"),
     ("grblHAL", "grblhal", "grblhal"),
+    ("Makera Carvera", "carvera", "carvera"),
 ];
 
 /// (post stem, golden, named reason): a golden a dialect must REFUSE
@@ -64,6 +65,8 @@ const POSTS: &[(&str, &str, &str)] = &[
 /// #710: grblHAL's core G-code list has no G84 either.
 const REFUSED: &[(&str, &str, &str)] = &[
     ("heidenhain", "tap_plate", "tapping"),
+    // #707: no canned cycles and no spindle reverse on the Carvera.
+    ("carvera", "tap_plate", "tapping"),
     ("grblhal", "tap_plate", "tapping"),
 ];
 
@@ -278,8 +281,11 @@ fn the_synthesized_stream_locks_the_tool_and_spindle_words() {
         // #50: Heidenhain refuses a G55 offset and a tap by name, so
         // its golden locks the same stream without those two records.
         // #710: grblHAL has no G84, so its golden drops only the tap.
+        // #707: the Carvera refuses the tap the same way (no canned
+        // cycles, no spindle reverse); its G55 stands.
         let stream = match *cps_stem {
             "heidenhain" => synth_stream_with("G54", false),
+            "carvera" => synth_stream_with("G55", false),
             "grblhal" => synth_stream_with("G55", false),
             _ => synth_stream(),
         };
@@ -363,6 +369,7 @@ const EXTENSIONS: &[(&str, &str)] = &[
     ("mazak", "nc"),
     ("tormach", "nc"),
     ("grblhal", "nc"),
+    ("carvera", "nc"),
     ("fanuc-lathe", "nc"),
 ];
 
