@@ -44,6 +44,8 @@ pub mod theme;
 // M13.4: the viewer's colour-vision remap, `SetTheme`'s twin.
 pub mod color_vision;
 pub mod set_wcs;
+// #739: the WCS origin on a picked circle's centre.
+pub mod wcs_circle;
 pub mod tool;
 // #368: a tool's modelled body.
 pub mod tool_body;
@@ -89,6 +91,7 @@ pub use set_units::SetUnits;
 pub use theme::{theme_of, theme_set, SetTheme};
 pub use color_vision::{color_vision_of, color_vision_set, SetColorVision};
 pub use set_wcs::SetWcsOrigin;
+pub use wcs_circle::SetWcsAtCircleCentre;
 pub use tool::{AddTool, ChangeTool, DeleteTool};
 pub use tool_body::{LatheBodySpec, SetToolBody, ToolBodySpec};
 pub use tool_import::{ImportReport, ImportTools};

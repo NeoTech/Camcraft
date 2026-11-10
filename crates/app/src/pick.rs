@@ -6,6 +6,8 @@
 
 pub mod align;
 pub mod axis;
+// #739: circle centre from a picked edge (WCS anchor, alignment, probing).
+pub mod circle;
 pub mod face;
 pub mod feature_arc;
 pub mod feature_graph;
@@ -21,6 +23,7 @@ pub use align::{Alignment, align_321};
 pub use axis::{AxisPick, InPlaneAxes, InPlaneAxis, in_plane_turn_deg, pick_coords, turn_in_plane};
 pub use plane::{PlaneLay, lay_on_plane, plane_label, plane_side};
 pub use points::{PointsLay, lay_on_points, points_side};
+pub use circle::{Circle, CircleRefusal, circle_centre, circle_of_edge, circle_of_run};
 pub use face::{FaceOrigin, face_origin, facets_centroid};
 pub use feature_arc::ArcCentre;
 pub use feature_graph::{

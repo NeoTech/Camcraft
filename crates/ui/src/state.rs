@@ -19,7 +19,7 @@ use camcraft_app::commands::{
     ClearToolpath, CreateSetup, DeleteEntity, DeleteFixture, DeleteOperation, DeleteSetup, DeleteTool,
     EditOperationLinks, EditOperationParams, GenerateOperation, History, ImportModel,
     MoveFixture, MoveModel, PasteOperation, RegenerateAll, RenameOperation, ReorderOperation, RepairModel, SelectEntity, SetOperationGeometry,
-    SetColorVision, SetFixtureFixed, SetOperationSetup, SetStock, SetTheme, SetToolNumber, SetUnits, SetWcsOrigin,
+    SetColorVision, SetFixtureFixed, SetOperationSetup, SetStock, SetTheme, SetToolNumber, SetUnits,
     SetWorkMaterial, TagFixture, UntagFixture, ImportFixture,
     UpdateModel, theme_of, theme_set,
 };
@@ -61,6 +61,8 @@ pub use tool_body_ui::{BodyDraft, BodyPickMode, ToolBodyUi, ZOOM_MAX, ZOOM_MIN, 
 mod tool_profile_ui;
 #[path = "state_recent.rs"]
 mod recent_ui;
+#[path = "state_wcs.rs"]
+mod wcs_ui;
 pub use tool_profile_ui::{ToolColumn, ToolProfileUi, is_spun_kind, parametric_points};
 use flecs_ecs::prelude::World;
 
@@ -200,6 +202,9 @@ pub enum CommandKind {
         pitch_deg: f64,
         yaw_deg: f64,
     },
+    /// #739: the active setup's WCS on the centre of a picked circular
+    /// edge (`SetWcsAtCircleCentre`), at the pane's angles.
+    SetWcsCircle { pick: GeoSel, roll_deg: f64, pitch_deg: f64, yaw_deg: f64 },
     /// Tool library: create a tool entity (catalog row or hand-typed page).
     AddTool {
         name: String,
@@ -542,6 +547,12 @@ pub struct WcsUi {
     /// clickable markers in the viewport. Transient UI mode, not undoable
     /// (AGENTS.md) - the origin change it triggers is the command.
     pub pick_anchor: bool,
+    /// #739: viewport picking of a circular edge for the "Circle centre"
+    /// anchor (anchor_source 2). Transient like `pick_anchor`.
+    pub pick_circle: bool,
+    /// The last circle the pick read (what the page shows), or the
+    /// refusal it named. Display only; the world stores the origin.
+    pub circle: Option<Result<camcraft_app::pick::Circle, String>>,
     /// Whether the selected slot currently has a placed origin entity. Lets
     /// `sync_setup_ui` zero the readout when an origin is undone without
     /// wiping typing into a never-placed slot.
@@ -2760,40 +2771,11 @@ impl State {
                 };
                 self.apply_stock_fit(stock::fit_box_sides(&bounds, sides));
             }
-            CommandKind::SetWcs {
-                pos,
-                roll_deg,
-                pitch_deg,
-                yaw_deg,
-            } => {
-                // The axis-angle builders quietly substitute identity for
-                // non-finite angles; refuse that here rather than silently
-                // dropping a NaN rotation (Prime Directive).
-                if !roll_deg.is_finite() || !pitch_deg.is_finite() || !yaw_deg.is_finite() {
-                    self.refuse(
-                        ErrorScope::Setup,
-                        "WCS not set: rotation angles must be finite".to_owned(),
-                    );
-                    return;
-                }
-                let location = Location {
-                    pos: Point3::new(pos[0], pos[1], pos[2]),
-                    rot: quat_from_euler(
-                        roll_deg.to_radians(),
-                        pitch_deg.to_radians(),
-                        yaw_deg.to_radians(),
-                    ),
-                };
-                match SetWcsOrigin::new(&self.world, location) {
-                    Ok(command) => {
-                        self.history.execute(&self.world, command);
-                        self.doc_version += 1;
-                        let active = camcraft_app::setup::active(&self.world);
-                        self.status =
-                            format!("{} origin set", camcraft_app::setup::wcs_label(&self.world, active.as_deref()));
-                    }
-                    Err(err) => self.refuse(ErrorScope::Setup, format!("WCS not set: {err}")),
-                }
+            CommandKind::SetWcs { pos, roll_deg, pitch_deg, yaw_deg } => {
+                self.dispatch_set_wcs(pos, [roll_deg, pitch_deg, yaw_deg]);
+            }
+            CommandKind::SetWcsCircle { pick, roll_deg, pitch_deg, yaw_deg } => {
+                self.dispatch_set_wcs_circle(&pick, [roll_deg, pitch_deg, yaw_deg]);
             }
             CommandKind::AddTool { name, tool } => match AddTool::new(&self.world, &name, tool) {
                 Ok(command) => {

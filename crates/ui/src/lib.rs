@@ -33,6 +33,7 @@ pub mod trace;
 pub mod unsaved;
 pub mod vertex_pick;
 pub mod viewport;
+pub mod wcs_pick;
 
 #[cfg(test)]
 mod law_tests;

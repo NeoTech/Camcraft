@@ -58,6 +58,9 @@ impl Ask {
 /// else the pick mode (Edge falls back to the face between the edges). A
 /// boundary and an axis take one run per edge click; Alt one segment.
 pub(crate) fn ask(state: &State, mods: Mods) -> Ask {
+    if state.wcs_ui.pick_circle {
+        return crate::wcs_pick::CIRCLE_ASK; // #739: the WCS circle-centre pick
+    }
     let chain = if mods.alt {
         EdgeUnit::Segment
     } else if state.boundary_pick.is_some() || crate::axis_pick::collecting(state) {

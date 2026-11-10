@@ -62,6 +62,8 @@ mod op_tabs;
 mod painted;
 mod tree_glyphs;
 mod pages;
+// #739: the WCS page, split out of pages.rs.
+mod wcs_page;
 // #371: the tool editor's Body section and its picking preview.
 mod tool_body_page;
 // #630: the tool editor's lathe orientation row.
@@ -177,6 +179,10 @@ mod fresh_op_tests;
 mod tool_number_tests;
 #[cfg(test)]
 mod setup_wcs_tests;
+#[cfg(test)]
+mod wcs_page_tests;
+#[cfg(test)]
+mod wcs_circle_tests;
 #[cfg(test)]
 mod setup_align_tests;
 #[cfg(test)]

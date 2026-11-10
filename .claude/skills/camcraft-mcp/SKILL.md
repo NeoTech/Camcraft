@@ -73,6 +73,7 @@ The server exposes tools across three modules in `crates/app/src/mcp/` (see `cra
 - `add_setup { "name": string, "datum_from"?: string }`: Declare a new setup and activate it. Can copy stock/WCS from an existing setup.
 - `activate_setup { "name": string }`: Switch the active setup context for subsequent operations and edits.
 - `set_wcs { "origin"?: [x, y, z], "stock_point"?: string, "offset"?: [dx, dy, dz], "rotation"?: [qx, qy, qz, qw] }`: Place the active setup's WCS origin and orientation quaternion.
+- `set_wcs_circle_centre { "edge": { "model": string, "id": "chain:0x…" }, "rotation"?: [qx, qy, qz, qw] }`: Place the active setup's WCS origin on the centre of a picked circular edge (a hole rim or boss edge, full circle or arc), at the edge's height; returns the circle's centre, axis and diameter. Refuses a straight edge, a non-circular curve, a face or a vertex by name (#739).
 - `set_work_offset { "word": "G54" | "G55" | ... | "G59" | null, "setup"?: string }`: Set the posted G-code fixture coordinate word (G54–G59); `null` clears it.
 - `load_machine { "builtin"?: string, "path"?: string, "clear"?: boolean, "setup"?: string }`: Mount a machine configuration at document or setup level: a built-in preset by name (`"VMC 3-axis"`, `"Lathe"`, the Tormach models, ...) or a `.mch` file by path; `clear: true` mounts none.
 
@@ -120,6 +121,7 @@ When issue #356 was originally filed, several core features were GUI-only. The f
 - **Pocket and slot recognition (#35):** Shipped via `detect_pockets` (with `create`, it adds the Pocket or Slot that machines one).
 - **Part axes in the work plane (#557):** Shipped via `set_part_axes` (a straight edge or two points along +Y and/or +X).
 - **Three-point plane alignment (#555):** Shipped via `lay_part_on_points` (three vertex ids onto G17, G18 or G19).
+- **WCS on a circle's centre (#739):** Shipped via `set_wcs_circle_centre` (one edge chain id; the same command as the WCS page's "Circle centre" anchor).
 - **Locating the part in a fixture (#561):** Shipped via `locate_part` (one to three face or vertex mates between part and fixture).
 - **Live GUI session (#183, #567):** Shipped: start the app with `--mcp-port <n>` and connect with `camcraft-cli mcp --connect 127.0.0.1:<n>`; the agent's steps land on the open window's History.
 
