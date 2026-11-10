@@ -10,6 +10,9 @@
 //! any vendor catalog file. The catalog is user data, not code -
 //! this crate only says what a tool record IS.
 
+pub mod catalog_asset;
+#[cfg(test)]
+mod catalog_asset_tests;
 pub mod cutting;
 // #368: a modelled tool body as the stack laws read it.
 pub mod holder_profile;
