@@ -20,7 +20,7 @@ use camcraft_app::commands::{
     EditOperationLinks, EditOperationParams, GenerateOperation, History, ImportModel,
     MoveFixture, MoveModel, PasteOperation, RegenerateAll, RenameOperation, ReorderOperation, RepairModel, SelectEntity, SetOperationGeometry,
     SetColorVision, SetFixtureFixed, SetOperationSetup, SetStock, SetTheme, SetToolNumber, SetUnits, SetWcsOrigin,
-    SetWorkMaterial, TagFixture, UntagFixture,
+    SetWorkMaterial, TagFixture, UntagFixture, ImportFixture,
     UpdateModel, theme_of, theme_set,
 };
 use camcraft_app::geometry::{
@@ -41,6 +41,15 @@ mod per_op;
 mod tool_library_io;
 #[path = "state_setup_mount.rs"]
 mod setup_mount;
+#[path = "state_setup_post_options.rs"]
+mod setup_post_options;
+#[path = "state_fixture.rs"]
+mod fixture_view;
+#[path = "state_locate.rs"]
+mod locate_ui;
+#[path = "state_fixture_library.rs"]
+mod fixture_library;
+pub use fixture_library::{FixtureLibDialog, InsertFixtureDraft, LibraryRow, SaveFixtureDraft};
 #[path = "state_program_entry.rs"]
 mod program_entry;
 pub use program_entry::EntryVerb;
@@ -49,6 +58,8 @@ mod tool_body_ui;
 pub use tool_body_ui::{BodyDraft, BodyPickMode, ToolBodyUi, ZOOM_MAX, ZOOM_MIN, clamp_zoom};
 #[path = "state_tool_profile.rs"]
 mod tool_profile_ui;
+#[path = "state_recent.rs"]
+mod recent_ui;
 pub use tool_profile_ui::{ToolColumn, ToolProfileUi, is_spun_kind, parametric_points};
 use flecs_ecs::prelude::World;
 
@@ -65,6 +76,11 @@ pub enum CommandKind {
     SaveProjectDialog,
     SaveProjectAsDialog,
     SaveProjectFile(PathBuf),
+    /// One recent project or model (#662): the same open / import the
+    /// dialogs run, a missing file refused by name.
+    OpenRecent(camcraft_app::recent::RecentKind, PathBuf),
+    /// "Clear recent" (#662): empty one list (preference state, not undoable).
+    ClearRecent(camcraft_app::recent::RecentKind),
     /// Post NC through the save-dialog law (M1.7b): path via rfd, gate
     /// via `posting::post_setup`.
     PostProgramDialog,
@@ -123,6 +139,10 @@ pub enum CommandKind {
         path: String,
         machine: Box<camcraft_app::machine::Machine>,
     },
+    /// The Machines pane's "Use for this setup" (#384): re-read and
+    /// re-validate a catalogue machine (a refused file never mounts),
+    /// then route it like every machine verb (`state_setup_mount`).
+    UseCatalogueMachine(camcraft_app::machine::library::MachineSource),
     /// The post script (M3.3 A): the built-in arm ships, the dialog arm
     /// picks a user `.cps` through the file-pick law, and the path arm
     /// is what the headless tests run. Selection is a command like
@@ -145,6 +165,12 @@ pub enum CommandKind {
         own: bool,
     },
     SetupOwnPost {
+        setup: String,
+        own: bool,
+    },
+    /// #389: a setup takes its own post options (a copy of what it posts
+    /// with now) or follows the document's again (`SetSetupPostOptions`).
+    SetupOwnPostOptions {
         setup: String,
         own: bool,
     },
@@ -301,11 +327,13 @@ pub enum CommandKind {
         slot: Option<usize>,
     },
     /// Turn the part in a setup (#326): about X, then Y, then Z, degrees,
-    /// about the centre of the parts' bounds. All zero is "As modelled".
+    /// about `pivot` (#606: the setup's WCS origin, or the centre of the
+    /// parts' bounds - the presets'). All zero is "As modelled".
     /// Undoable (`AlignPartToSetup`). Never touches the work offset.
     AlignPart {
         setup: String,
         angles: [f64; 3],
+        pivot: camcraft_app::setup_turn::TurnPivot,
     },
     /// Place a setup relative to another (#316): `to` the setup it is a
     /// re-clamp of, turned by `angles` (about X, then Y, then Z, degrees)
@@ -323,12 +351,28 @@ pub enum CommandKind {
         source: camcraft_app::setup_stock::StockSource,
     },
     /// Lay the part on a G17 / G18 / G19 plane in a setup (#330): one
-    /// flat face or two straight edges, read by the app. Undoable
+    /// flat face (#554: faces only), read by the app. Undoable
     /// (`AlignPartToSetup`). Never touches the work offset.
     LayPartOnPlane {
         setup: String,
         picks: Vec<camcraft_app::operation::GeoSel>,
         lay: camcraft_app::pick::PlaneLay,
+    },
+    /// Turn the part in a setup's work plane (#557): a straight edge or
+    /// two points for +Y and/or +X, read by the app. Undoable
+    /// (`AlignPartToSetup`). Never touches the work offset.
+    TurnPartInPlane {
+        setup: String,
+        axes: camcraft_app::pick::InPlaneAxes,
+    },
+    /// Lay the part on a G17 / G18 / G19 plane through three picked
+    /// points (#555), read by the app through the face pick's apply
+    /// path; optionally the 3-2-1 frame. Undoable (`AlignPartToSetup`).
+    /// Never touches the work offset.
+    LayPartOnPoints {
+        setup: String,
+        picks: Vec<camcraft_app::operation::GeoSel>,
+        lay: camcraft_app::pick::PointsLay,
     },
     /// Which setup an operation machines in (the Properties page's Setup
     /// combo). Keeps the operation's stamp; the resolved-Z digest answers
@@ -363,6 +407,27 @@ pub enum CommandKind {
     },
     DeleteFixture(String),
     ImportFixtureDialog,
+    /// Locate the part in a fixture, or the fixture on the part, by mates
+    /// (#561): one undoable `Locate` (`LocatePart` / `LocateFixture`).
+    Locate {
+        spec: camcraft_app::fixture_locate::LocateSpec,
+        mover: camcraft_app::fixture_locate::Mover,
+    },
+    /// #339 slice 6: open the fixture library's Save / Insert dialog over
+    /// a setup's Fixtures node (`""` - the implicit setup). View state;
+    /// saving and deleting entries are confirmed file edits, not undo
+    /// entries (the #383 machine-file law).
+    FixtureLibrarySaveDialog(String),
+    FixtureLibraryInsertDialog(String),
+    /// Insert library entry `entry` as a fixture of `setup`, its datum
+    /// at `pos` (mm) turned by roll/pitch/yaw degrees (R = Rz ⊗ Ry ⊗ Rx):
+    /// one `InsertFixture`, one undo unit.
+    InsertFixtureFromLibrary {
+        entry: String,
+        setup: Option<String>,
+        pos: [f64; 3],
+        rpy_deg: [f64; 3],
+    },
     /// Part orientation (M5.2 G): a model's full rigid placement -
     /// position plus yaw-pitch-roll degrees (R = Rz ⊗ Ry ⊗ Rx, the
     /// `SetWcs` voice). The world stores a unit quaternion; the
@@ -390,6 +455,11 @@ pub enum CommandKind {
     /// the save-dialog law; the path arm is what headless tests run.
     SetupSheetDialog,
     SetupSheetFile(PathBuf),
+    /// #389: one setup's tool list (`None` - the implicit setup) as CSV
+    /// or text, the sheet's law: a view, no history. Dialog arm and the
+    /// headless path arm.
+    ToolListExportDialog(Option<String>),
+    ToolListExportFile { setup: Option<String>, path: PathBuf },
     /// M7.2 D: what the program leaves, as binary STL - the traced
     /// stock's field iso-extracted. A view of the document like the
     /// sheet: no command, no history; dialog arm and headless path arm.
@@ -778,6 +848,9 @@ pub struct ToolUi {
     pub flutes: Option<u32>,
     /// M11.3: may the tool plunge axially into solid?
     pub center_cutting: bool,
+    /// #630: the lathe tool orientation (LinuxCNC 1-9), None = the
+    /// kind's default - carried so an Apply never rewrites it.
+    pub orientation: Option<u8>,
 }
 
 impl Default for ToolUi {
@@ -827,6 +900,7 @@ impl ToolUi {
             tool_material: t.tool_material,
             flutes: t.flutes,
             center_cutting: t.center_cutting,
+            orientation: t.orientation,
         }
     }
 
@@ -875,6 +949,7 @@ impl ToolUi {
             tool_material: self.tool_material,
             flutes: self.flutes,
             center_cutting: self.center_cutting,
+            orientation: self.orientation,
         };
         tool.corner_r = tool.tip_corner_r();
         tool
@@ -1104,6 +1179,14 @@ pub struct OperationClipboard {
 pub enum TreeMenuTarget {
     Operation(String),
     Operations,
+    /// #339 slice 4: a model row (Models section, or a setup's Fixtures
+    /// child) - "Use as fixture" / "Stop using as fixture". `row` is the
+    /// clicked row's index, so the menu anchors on the row clicked even
+    /// when the name stands in the tree twice.
+    Model { name: String, row: usize },
+    /// A setup's Fixtures node (`""` - the implicit setup): "Import
+    /// fixture…".
+    Fixtures(String),
     /// A Pause / Home entry row (#155).
     Entry(String),
 }
@@ -1233,6 +1316,15 @@ pub struct State {
     /// The Theme door's open flag (#441): the same dropdown law as
     /// `ribbon_view_open` - a frame fact, one door open at a time.
     pub ribbon_theme_open: bool,
+    /// The open recent-files drop-down (#662) under the Open (projects)
+    /// or Model (models) button - the same door law, one open at a time.
+    pub ribbon_recent_open: Option<camcraft_app::recent::RecentKind>,
+    /// The recent projects and models (#662): user preference state,
+    /// never document state and never on the history.
+    pub recent: camcraft_app::recent::RecentFiles,
+    /// Where the recents are written back; `None` (every headless
+    /// State) keeps them in memory only.
+    pub recent_store: Option<PathBuf>,
     /// The dock's closable panels as of this frame (see [`PanelsOpen`]).
     pub panels_open: PanelsOpen,
     /// The View door's pending dock ask (see [`LayoutRequest`]).
@@ -1250,6 +1342,9 @@ pub struct State {
     /// Operation key being dragged in the browser; discarded on release.
     pub dragging_op: Option<String>,
     pub pending: VecDeque<CommandKind>,
+    /// #183: the live MCP session's inbox when the app was started with
+    /// `--mcp-port` / `CAMCRAFT_MCP_PORT`; drained with `pending`.
+    pub mcp: Option<camcraft_app::mcp::Inbox>,
     pub request_quit: bool,
     /// #107: a New / Open / Quit held back because the document has
     /// unsaved changes; while Some, the shell shows the Save / Don't Save
@@ -1286,6 +1381,16 @@ pub struct State {
     /// implicit first setup. Public so tests run the dialog hand-off
     /// without a modal file picker.
     pub import_as_fixture: Option<Option<String>>,
+    /// #339 slice 4: each fixture's mesh state, per document version
+    /// (view cache - never truth, never saved).
+    pub fixture_mesh_cache: camcraft_app::fixture_view::MeshStateCache,
+    /// #339 slice 6: the open fixture library dialog (view state).
+    pub fixture_lib: Option<FixtureLibDialog>,
+    /// The fixture library folder override (tests; `None` = the user
+    /// folder, `CAMCRAFT_FIXTURES` first).
+    pub fixture_lib_dir: Option<PathBuf>,
+    /// The selected op's struck fixtures, per (version, op, path sig).
+    pub struck_cache: camcraft_app::fixture_view::StruckCache,
     /// Properties / Tool Library pane drafts (ephemeral; see [`OpUi`]).
     pub op_ui: OpUi,
     /// Viewport click routing: whole models vs feature faces vs edge
@@ -1296,8 +1401,29 @@ pub struct State {
     /// the selection as always.
     pub boundary_pick: Option<BoundaryPick>,
     /// The Setups page's lay-on-a-plane draft (#330); `Some` routes
-    /// Face/Edge picks into it ahead of the boundary and the selection.
+    /// Face picks into it ahead of the boundary and the selection.
     pub plane_pick: Option<crate::plane_pick::PlanePick>,
+    /// The locate-in-fixture mate draft (#561); `Some` routes Face and
+    /// Vertex picks into it ahead of everything else.
+    pub locate_pick: Option<crate::locate_pick::LocateDraft>,
+    /// Was the locate form drawn this frame? Reset before the dock, set
+    /// by the form; a draft whose form is off screen is dropped after
+    /// the dock (`locate_pick::sweep`) - a kept draft must never capture
+    /// picks with no form to show them (review of #566).
+    pub locate_form_drawn: bool,
+    /// The Setups page's axes-in-the-plane draft (#557); while it is
+    /// collecting, Edge/Vertex picks land in it ahead of everything else.
+    pub axis_pick: Option<crate::axis_pick::AxisDraft>,
+    /// The Setups page's three-points draft (#555); `Some` routes Vertex
+    /// picks into it (and refuses faces and edges by name).
+    pub points_pick: Option<crate::points_pick::PointsPick>,
+    /// The axes-in-the-plane rows were drawn this frame (#557): a
+    /// feature click with no axis armed says what to do, never falls
+    /// through to the operation pick.
+    pub axis_rows_shown: bool,
+    /// The setups whose pick rows (plane, axes) were drawn this frame
+    /// (#664): any other setup's armed pick is disarmed at frame end.
+    pub setup_pick_rows: Vec<String>,
     /// The Boundary group's view state and caches (M11.5 UX): open this
     /// frame, the draft's machined-area preview, the entries' shapes.
     pub boundary_view: crate::boundary_draft::BoundaryView,
@@ -1371,6 +1497,10 @@ pub struct State {
     /// the document version, the page draft): once any of it moves, the
     /// refusal retires - see [`crate::feedback`].
     pub feedback_ctx: Option<crate::feedback::FeedbackCtx>,
+    /// #261 part 2: the world spot a refused generation named, beside
+    /// [`State::feedback`]; read only through [`State::refusal_focus`],
+    /// which retires it with the refusal it belongs to.
+    pub feedback_at: Option<[f64; 3]>,
 }
 
 /// Which page of the Operations pane a refused command's message belongs
@@ -1487,6 +1617,12 @@ impl State {
             geo_pick: GeoPick::Model,
             boundary_pick: None,
             plane_pick: None,
+            locate_pick: None,
+            locate_form_drawn: false,
+            axis_pick: None,
+            points_pick: None,
+            axis_rows_shown: false,
+            setup_pick_rows: Vec::new(),
             boundary_view: Default::default(),
             geo_hover: None,
             op_tab: 0,
@@ -1513,6 +1649,9 @@ impl State {
             ribbon_mode_open: false,
             ribbon_view_open: false,
             ribbon_theme_open: false,
+            ribbon_recent_open: None,
+            recent: camcraft_app::recent::RecentFiles::default(),
+            recent_store: None,
             panels_open: PanelsOpen { browser: true, properties: true, machines: false },
             layout_request: None,
             tree_menu: None,
@@ -1520,6 +1659,7 @@ impl State {
             rename_draft: None,
             dragging_op: None,
             pending: VecDeque::new(),
+            mcp: None,
             request_quit: false,
             unsaved_prompt: None,
             discard_confirmed: false,
@@ -1539,6 +1679,10 @@ impl State {
             model_ui: ModelUi::default(),
             repair_ui: RepairUi::default(),
             import_as_fixture: None,
+            fixture_mesh_cache: Default::default(),
+            fixture_lib: None,
+            fixture_lib_dir: None,
+            struck_cache: Default::default(),
             // The tool draft carries a plausible name from the first
             // frame: an empty Name field made Add look dead (refused
             // silently). The operation draft has no form to prefill
@@ -1567,6 +1711,7 @@ impl State {
             ui_target: UiTarget::None,
             feedback: None,
             feedback_ctx: None,
+            feedback_at: None,
         }
     }
 
@@ -1637,6 +1782,8 @@ impl State {
         }
         self.feedback_ctx = self.feedback_ctx_for(scope);
         self.feedback = Some((scope, msg));
+        // A new refusal names no spot until its caller says so (#261).
+        self.feedback_at = None;
     }
 
     /// Refetch the Setup pane's drafts from the world after any document
@@ -2305,6 +2452,8 @@ impl State {
         while let Some(action) = self.pending.pop_front() {
             self.run(action);
         }
+        // #183: an agent's live calls, after the user's own clicks.
+        crate::mcp_host::pump(self);
         self.poll_import();
         // A refusal that no longer describes the page retires, with its
         // status-strip mirror (crate::feedback).
@@ -2346,6 +2495,7 @@ impl State {
         // command (even a successful one) retires an old refusal.
         self.feedback = None;
         self.feedback_ctx = None;
+        self.feedback_at = None;
         // #107: New, Open and Quit over unsaved changes wait for the
         // prompt's answer instead of discarding the document.
         let Some(action) = self.hold_if_unsaved(action) else {
@@ -2408,6 +2558,8 @@ impl State {
                 }
             }
             CommandKind::SaveProjectFile(path) => self.save_project_path(path),
+            CommandKind::OpenRecent(kind, path) => self.open_recent(kind, path),
+            CommandKind::ClearRecent(kind) => self.clear_recent(kind),
             CommandKind::PostProgramDialog => self.post_program_dialog(),
             CommandKind::PostProgramFile(path) => self.post_program_path(path),
             CommandKind::PostProgramFolder(dir) => self.post_program_folder(dir),
@@ -2500,6 +2652,7 @@ impl State {
             CommandKind::LoadBuiltinMachine(name) => self.mount_builtin(&name),
             CommandKind::SetupOwnMachine { setup, own } => self.own_machine(&setup, own),
             CommandKind::SetupOwnPost { setup, own } => self.own_post(&setup, own),
+            CommandKind::SetupOwnPostOptions { setup, own } => self.own_post_options(&setup, own),
             CommandKind::EditMachineDialog => {
                 let (path, m) = machine::of(&self.world);
                 match m {
@@ -2517,6 +2670,9 @@ impl State {
                 }
             }
             CommandKind::EditMachineApply { path, machine } => self.mount_edited(path, *machine),
+            // #384: the Machines pane's "Use for this setup" - routed
+            // like every machine verb (`setup_mount`).
+            CommandKind::UseCatalogueMachine(source) => self.mount_catalogue(&source),
             CommandKind::SelectPostBuiltin => self.select_post(PostRef::Builtin),
             CommandKind::SelectPostDialog => {
                 if let Some(path) = pick_post_file() {
@@ -2527,14 +2683,10 @@ impl State {
                 self.select_post(PostRef::File(path.display().to_string()));
             }
             CommandKind::SelectPostNamed(name) => self.select_post(PostRef::Named(name)),
-            CommandKind::SetPostOptions(next) => match camcraft_app::commands::SetPostOptions::new(&self.world, next) {
-                Ok(command) => {
-                    self.history.execute(&self.world, command);
-                    self.doc_version += 1;
-                    self.status = "post options set".into();
-                }
-                Err(err) => self.refuse(ErrorScope::Setup, format!("post options not set: {err}")),
-            },
+            // #389: routed to the active setup's own options when it has them.
+            CommandKind::SetPostOptions(next) => {
+                self.route_post_options(next, "post options set", "post options not set", ErrorScope::Setup);
+            }
             CommandKind::SelectTheme(next) => self.select_theme(next),
             CommandKind::SelectColorVision(next) => self.select_color_vision(next),
             CommandKind::SelectThemeDialog => {
@@ -2678,7 +2830,13 @@ impl State {
             CommandKind::ApplyCuttingData(name) => match ApplyCuttingData::new(&self.world, &name) {
                 Ok(command) => {
                     let s = command.suggestion();
-                    self.status = format!("{name}: suggestion applied - {:.0} rpm, {:.0} mm/min", s.rpm, s.feed);
+                    let u = self.units();
+                    self.status = format!(
+                        "{name}: suggestion applied - {:.0} rpm, {} {}",
+                        s.rpm,
+                        units::feed(s.feed, u),
+                        u.feed_suffix()
+                    );
                     self.history.execute(&self.world, command);
                     self.doc_version += 1;
                 }
@@ -2788,18 +2946,8 @@ impl State {
             CommandKind::ProgramEntry(verb) => self.program_entry_verb(verb),
             CommandKind::SetSkipStops(skip) => {
                 let next = camcraft_app::schema::PostOptions { skip_stops: skip, ..posting::post_options(&self.world) };
-                match camcraft_app::commands::SetPostOptions::new(&self.world, next) {
-                    Ok(command) => {
-                        self.history.execute(&self.world, command);
-                        self.doc_version += 1;
-                        self.status = if skip {
-                            "post skips every pause and home".to_owned()
-                        } else {
-                            "post writes the operations' pauses and homes".to_owned()
-                        };
-                    }
-                    Err(err) => self.refuse(ErrorScope::Operation, format!("post options not changed: {err}")),
-                }
+                let done = if skip { "post skips every pause and home" } else { "post writes the operations' pauses and homes" };
+                self.route_post_options(next, done, "post options not changed", ErrorScope::Operation);
             }
             CommandKind::ChangeOperationKind { name, kind } => {
                 match ChangeOperationKind::new(&self.world, &name, kind) {
@@ -2891,7 +3039,9 @@ impl State {
                         };
                     }
                     Err(err) => {
-                        self.refuse(ErrorScope::Operation, format!("generate failed: {err}"))
+                        self.refuse(ErrorScope::Operation, format!("generate failed: {err}"));
+                        // #261 part 2: where the generator refused, if it said.
+                        self.feedback_at = err.location().map(|p| [p.x, p.y, p.z]);
                     }
                 }
             }
@@ -2989,8 +3139,8 @@ impl State {
                     }
                 }
             }
-            CommandKind::AlignPart { setup, angles } => {
-                match AlignPartToSetup::angles(&self.world, &setup, angles) {
+            CommandKind::AlignPart { setup, angles, pivot } => {
+                match AlignPartToSetup::turn(&self.world, &setup, angles, pivot) {
                     Ok(command) => {
                         self.history.execute(&self.world, command);
                         self.doc_version += 1;
@@ -3050,6 +3200,44 @@ impl State {
                     }
                     Err(err) => {
                         self.refuse(ErrorScope::Setup, format!("part not laid on the plane: {err}"));
+                    }
+                }
+            }
+            CommandKind::LayPartOnPoints { setup, picks, lay } => {
+                match AlignPartToSetup::lay_on_points(&self.world, &setup, &picks, lay) {
+                    Ok(command) => {
+                        self.history.execute(&self.world, command);
+                        self.doc_version += 1;
+                        self.points_pick = None;
+                        self.status = format!(
+                            "{setup} part laid on {} through three points: {}",
+                            camcraft_app::pick::plane_label(lay.lay.plane),
+                            crate::egui_app::align_text(camcraft_app::setup_align::stored(&self.world, &setup))
+                        );
+                    }
+                    Err(err) => {
+                        self.refuse(ErrorScope::Setup, format!("part not laid on the three points: {err}"));
+                    }
+                }
+            }
+            CommandKind::TurnPartInPlane { setup, axes } => {
+                match AlignPartToSetup::turn_in_plane(&self.world, &setup, &axes) {
+                    Ok(command) => {
+                        self.history.execute(&self.world, command);
+                        self.doc_version += 1;
+                        // The picks stay (disarmed) so Flip re-applies
+                        // onto what the setup now holds (#557 hand check).
+                        if let Some(d) = self.axis_pick.as_mut().filter(|d| d.setup == setup) {
+                            d.picking = None;
+                            d.applied = true;
+                        }
+                        self.status = format!(
+                            "{setup} part turned in the plane: {}",
+                            crate::egui_app::align_text(camcraft_app::setup_align::stored(&self.world, &setup))
+                        );
+                    }
+                    Err(err) => {
+                        self.refuse(ErrorScope::Setup, format!("part not turned in the plane: {err}"));
                     }
                 }
             }
@@ -3128,6 +3316,7 @@ impl State {
                     }
                 }
             }
+            CommandKind::Locate { spec, mover } => self.dispatch_locate(&spec, mover),
             CommandKind::DeleteFixture(name) => match DeleteFixture::new(&self.world, &name) {
                 Ok(command) => {
                     self.history.execute(&self.world, command);
@@ -3202,12 +3391,19 @@ impl State {
                     self.import_path(path);
                 }
             }
+            CommandKind::FixtureLibrarySaveDialog(setup) => self.open_fixture_library_save(setup),
+            CommandKind::FixtureLibraryInsertDialog(setup) => self.open_fixture_library_insert(setup),
+            CommandKind::InsertFixtureFromLibrary { entry, setup, pos, rpy_deg } => {
+                self.insert_fixture_from_library(&entry, setup, pos, rpy_deg);
+            }
             CommandKind::SetupSheetDialog => {
                 if let Some(path) = save_sheet_dialog() {
                     self.setup_sheet_path(path);
                 }
             }
             CommandKind::SetupSheetFile(path) => self.setup_sheet_path(path),
+            CommandKind::ToolListExportDialog(setup) => self.tool_list_export_dialog(setup),
+            CommandKind::ToolListExportFile { setup, path } => self.tool_list_export_path(setup.as_deref(), &path),
             CommandKind::ExportStockDialog => {
                 if let Some(path) = save_stl_dialog() {
                     self.export_stock_path(path);
@@ -3343,7 +3539,8 @@ impl State {
     /// Called on this thread when a worker result arrives (or inline
     /// fallback completes). Execution stays a normal history command.
     fn finish_import(&mut self, result: Result<ImportModel, CommandError>) {
-        self.import_file = None;
+        // #662: the file a landed import came from joins the recent models.
+        let file = self.import_file.take();
         let secs = self
             .import_started
             .take()
@@ -3364,12 +3561,35 @@ impl State {
                 // the name exists; the worker stayed world-blind on purpose.
                 // UpdateModel::new classifies further: setup furniture
                 // under this name is refused as Invalid, never overwritten.
+                // #339 slice 4: an import-as-fixture lands mesh and
+                // marker as ONE undo unit (`ImportFixture`) - one Ctrl+Z
+                // takes the whole import away.
+                if let Some(binding) = self.import_as_fixture.take() {
+                    match ImportFixture::new(&self.world, command, binding.as_deref()) {
+                        Ok(cmd) => {
+                            let verb = match cmd.update_summary() {
+                                Some(summary) => timed("updated", &format!(" ({summary})")),
+                                None => timed("imported", ""),
+                            };
+                            self.history.execute(&self.world, cmd);
+                            self.doc_version += 1;
+                            self.note_recent_model(file.as_deref());
+                            self.status = match &binding {
+                                Some(s) => format!("{verb}; marked as {s}'s fixture"),
+                                None => format!("{verb}; marked as a fixture"),
+                            };
+                        }
+                        Err(err) => self.refuse(ErrorScope::Setup, format!("fixture not imported: {err}")),
+                    }
+                    return;
+                }
                 if model::find_by_name(&self.world, &name).is_some() {
                     match UpdateModel::new(&self.world, &name, command.mesh) {
                         Ok(upd) => {
                             let summary = upd.changes().describe();
                             self.history.execute(&self.world, upd);
                             self.doc_version += 1;
+                            self.note_recent_model(file.as_deref());
                             self.status = timed("updated", &format!(" ({summary})"));
                         }
                         Err(err) => self.status = format!("import refused: {err}"),
@@ -3378,31 +3598,15 @@ impl State {
                     // Fresh model: the spawn path, unchanged.
                     self.history.execute(&self.world, command);
                     self.doc_version += 1;
+                    self.note_recent_model(file.as_deref());
                     self.status = timed("imported", "");
                 }
-                // Stage B: an import-as-fixture tags whatever landed.
-                // Two undo units (the import, then the marker) is the
-                // honest shape - each is invertible on its own, and the
-                // worker never needed a world to begin with.
-                if let Some(binding) = self.import_as_fixture.take() {
-                    match TagFixture::new(&self.world, &name, binding.as_deref()) {
-                        Ok(tag) => {
-                            self.history.execute(&self.world, tag);
-                            self.doc_version += 1;
-                            let note = match &binding {
-                                Some(s) => format!("; marked as {s}'s fixture"),
-                                None => "; marked as a fixture".to_string(),
-                            };
-                            self.status.push_str(&note);
-                        }
-                        Err(err) => self.refuse(
-                            ErrorScope::Setup,
-                            format!("imported, but not marked as a fixture: {err}"),
-                        ),
-                    }
-                }
             }
-            Err(err) => self.status = format!("import refused: {err}"),
+            Err(err) => {
+                // A refused import-as-fixture must not tag the NEXT import.
+                self.import_as_fixture = None;
+                self.status = format!("import refused: {err}");
+            }
         }
     }
 
@@ -3634,6 +3838,7 @@ impl State {
         match project::load_noted(&self.world, &path) {
             Ok(notes) => {
                 self.project_path = Some(path.clone());
+                self.note_recent(camcraft_app::recent::RecentKind::Project, &path);
                 // The loaded document is the new clean point (#107).
                 self.history.mark_clean();
                 self.doc_version += 1;
@@ -3654,6 +3859,7 @@ impl State {
                 // What is on disk now matches the history position (#107).
                 self.history.mark_clean();
                 self.status = format!("saved {}", path.display());
+                self.note_recent(camcraft_app::recent::RecentKind::Project, &path);
                 self.project_path = Some(path);
             }
             Err(err) => self.status = format!("save failed: {err}"),

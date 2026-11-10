@@ -32,6 +32,7 @@ use camcraft_app::{posting, project};
 
 const FANUC: &str = include_str!("../../../assets/posts/fanuc.cps");
 const HEIDENHAIN: &str = include_str!("../../../assets/posts/heidenhain.cps");
+const TORMACH: &str = include_str!("../../../assets/posts/tormach.cps");
 
 fn cycle(mode: ProbeMode, dir: ProbeDir, dir_y: ProbeDir, target: Point3, radius: f64) -> ProbeParams {
     ProbeParams {
@@ -279,6 +280,27 @@ fn a_dialect_without_probing_refuses_the_op_by_name() {
     let _ = std::fs::remove_file(&path);
 }
 
+/// #362: the Tormach PathPilot post probes too (G38.2), so the same
+/// document posts on it instead of being refused; no spindle and no
+/// coolant on the default machine's flood entry.
+#[test]
+fn the_tormach_post_probes_the_op_with_g38_2() {
+    let (world, mut h) = probe_world(Height::of(HeightReference::TopOfStock, 0.0));
+    let top = stock_top(&world);
+    set_target(&world, &mut h, top);
+    generate(&world, &mut h);
+    let path = std::env::temp_dir().join(format!("camcraft_probe_tormach_{}.nc", std::process::id()));
+    let ok = posting::post_script(&world, &path, TORMACH).expect("tormach probes");
+    assert!(ok.program.contains("G38.2 "), "{}", ok.program);
+    assert!(ok.program.contains("G10 L20 P1 Z[#5422-#190]"), "the result sets G54 Z: {}", ok.program);
+    assert!(
+        !ok.program.lines().any(|l| l.split_whitespace().any(|w| w == "M3" || w == "M8")),
+        "a touch probe starts no spindle and no coolant: {}",
+        ok.program
+    );
+    let _ = std::fs::remove_file(&path);
+}
+
 #[test]
 fn the_probe_round_trips_through_the_project_file() {
     let (world, mut h) = probe_world(Height::of(HeightReference::TopOfStock, 0.0));
@@ -378,11 +400,13 @@ fn the_posted_g31_z_is_the_tip_at_the_expected_contact() {
         let stream = cnc::serialize(&post::dump(t, &d));
         let out = engine::run(FANUC, &serde_json::Value::Null, &stream).expect("post");
         assert!(out.warnings.is_empty(), "{:?}", out.warnings);
-        let zs = out
-            .program
-            .lines()
-            .filter(|l| l.starts_with("G31 "))
-            .filter_map(|l| l.split_whitespace().find(|w| w.starts_with('Z')).map(str::to_string))
+        // The touches only: a protected positioning move (#174) is a G31
+        // too, told apart by its contact alarm on the next line.
+        let lines: Vec<&str> = out.program.lines().collect();
+        let zs = lines
+            .windows(2)
+            .filter(|w| w[0].starts_with("G31 ") && w[1].contains("NO CONTACT"))
+            .filter_map(|w| w[0].split_whitespace().find(|t| t.starts_with('Z')).map(str::to_string))
             .collect();
         (zs, out.program)
     };
