@@ -104,7 +104,11 @@ write (the gate), so the released program never carries one.
   with Z0 at the bottom would rapid down into the part. Unstated and
   not a known-convention machine is a `message()` refusal by name
   (`sinumerik.cps`, #503: no name is a known convention there - only
-  "no machine at all" keeps the old `G53 Z0`).
+  "no machine at all" keeps the old `G53 Z0`). A dialect whose machines
+  often run unhomed (`grblhal.cps`, #710: with `$22=0` machine Z0 is the
+  power-on height) reads an unstated `safe_retract` as "not homed" and
+  lifts in the work offset to the section's `ClearancePlane` instead,
+  refused by name when that height is unknown or not above `StockZTop`.
 - **Refuse, never lie.** A record you cannot honor in this dialect
   gets a counted `message()` naming why (Fanuc's `tilt()` returns null
   after one refusal per program — a per-line refusal is noise, a

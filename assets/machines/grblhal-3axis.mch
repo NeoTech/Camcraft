@@ -4,7 +4,7 @@
     "units": { "length": "mm", "angle": "degrees" },
     "parts": [
       { "id": "base", "name": "table", "type": "table", "parts": [
-        { "id": "col", "name": "Z", "type": "linear", "travel": { "min": -100.0, "max": 100.0 }, "safe_retract": 0.0, "parts": [
+        { "id": "col", "name": "Z", "type": "linear", "travel": { "min": -100.0, "max": 100.0 }, "parts": [
           { "id": "ram", "name": "Y", "type": "linear", "travel": { "min": -300.0, "max": 300.0 }, "parts": [
             { "id": "sld", "name": "X", "type": "linear", "travel": { "min": -300.0, "max": 300.0 } }
           ] }

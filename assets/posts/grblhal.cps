@@ -220,39 +220,43 @@ function onOpen() {
   block([inch ? "G20" : "G21", "G17", "G90", "G91.1", "G94", "G40", "G80"]);
 }
 
-// #495: where "straight up" is, in machine coordinates. Where machine Z0
-// sits on a grblHAL machine is its builder's choice (homing direction,
-// pull-off, origin setting), so the machine file states the height (its
-// Z part's `safe_retract`, `machine.safeRetractZ`, mm); a document with
-// no machine keeps G53 Z0, and any other machine stating none is refused
-// by name - never a guess about which way is up. Judged once.
-var safeZDone = false;
-var safeZValue = null;     // null = refused, nothing is written
-function safeZ() {
-  if (safeZDone) return safeZValue;
-  safeZDone = true;
+// #495 / #710: where "straight up" is. On grblHAL machine Z0 is only a
+// height when the machine has homed: with homing off ($22=0) the control
+// takes its power-on position as machine zero, so `G53 G0 Z0` goes to
+// wherever Z stood at switch-on - possibly DOWN into the part. So:
+// - a machine file stating its Z part's `safe_retract`
+//   (`machine.safeRetractZ`, mm) says it is homed and where up is: the
+//   lift is `G53 G0 Z<that>`, in machine coordinates;
+// - otherwise (no machine, or one stating none) the lift stays in the
+//   work offset: `G0 Z<h>`, h the highest Z the program has proven clear -
+//   the section's ClearancePlane, or any higher Z it has already
+//   commanded. A height that is unknown, or not above the stock top, is
+//   refused by name - never a guess about which way is up.
+var liftZ = null;          // world mm: the highest proven-clear Z so far
+var stockTop = null;       // world mm: the stock's top, when stated
+function seeZ(z) { if (has(z) && (liftZ === null || z > liftZ)) liftZ = Number(z); }
+function machineSafeZ() {
   var m = typeof machine !== "undefined" ? machine : null;
-  var stated = m ? m.safeRetractZ : null;
-  if (has(stated)) {
-    safeZValue = Number(stated);
-    return safeZValue;
-  }
-  var nm = (m && (m.name || m.model)) || "";
-  if (nm === "") {
-    safeZValue = 0;
-  } else {
-    msg("machine " + nm + " does not state its safe Z retract - this post lifts Z with G53 G0 before each tool change and at the end, and where machine Z0 sits is the machine builder's choice on grblHAL; state the Z axis's safe_retract (machine coordinates) in the machine file");
-  }
-  return safeZValue;
+  return m && has(m.safeRetractZ) ? Number(m.safeRetractZ) : null;
+}
+var liftRefused = false;   // one named refusal per program
+function liftRefuse(why) {
+  if (liftRefused) return;
+  liftRefused = true;
+  msg(why + " - this post lifts Z in the work offset before each tool change and at the end, because without homing machine Z0 is the power-on height; set the operation's clearance height above the stock, or state the Z axis's safe_retract (machine coordinates) in the machine file if the machine homes");
 }
 
-// Z straight up in machine coordinates. No G28 / G30: their stored
-// positions are controller settings the post cannot see, and an unset
-// one is machine zero on all three axes.
+// No G28 / G30: their stored positions are controller settings the post
+// cannot see, and an unset one is machine zero on all three axes.
 function retract() {
-  var z = safeZ();
-  if (z === null) return;
-  block(["G53", "G0", "Z" + fu(z)]);
+  var mz = machineSafeZ();
+  if (mz !== null) { block(["G53", "G0", "Z" + fu(mz)]); return; }
+  if (liftZ === null) { liftRefuse("no clearance height is known for the Z lift"); return; }
+  if (stockTop !== null && !(liftZ > stockTop)) {
+    liftRefuse("the clearance height Z" + fu(liftZ - orgZ) + " is not above the stock top Z" + fu(stockTop - orgZ));
+    return;
+  }
+  block(["G0", wo("Z", liftZ, orgZ)]);
 }
 
 // grblHAL lists G40 only: there is no cutter compensation in the
@@ -270,6 +274,8 @@ function onParameter(name, value) {
   else if (name === "OriginX" && has(value)) orgX = Number(value);
   else if (name === "OriginY" && has(value)) orgY = Number(value);
   else if (name === "OriginZ" && has(value)) orgZ = Number(value);
+  else if (name === "ClearancePlane") seeZ(value);
+  else if (name === "StockZTop" && has(value)) stockTop = Number(value);
 }
 
 function onSpindleSpeed() {
@@ -378,12 +384,14 @@ function startXY(p) {
 // cycle block's business only.
 function onRapid() {
   startPreamble();
+  seeZ(properties.Z);
   if (!tiltOk(properties) || inCycle) return;
   xyFirst(properties.X, properties.Y);
   block(["G0"].concat(xyz(properties)));
 }
 function onLinear() {
   startPreamble();
+  seeZ(properties.Z); seeZ(properties.StartZ);
   if (!tiltOk(properties) || inCycle) return;
   startXY(properties);
   block(["G1"].concat(xyz(properties), [fw(properties.FeedRate)]));
@@ -392,6 +400,7 @@ function onCircular() {
   startPreamble();
   if (!tiltOk(properties) || inCycle) return;
   var p = properties;
+  seeZ(p.Z); seeZ(p.StartZ);
   startXY(p);
   block([
     planeWord(planeOf(p)),
@@ -412,6 +421,7 @@ function onCycle() {
   startPreamble();
   restorePlane();            // a cycle drills along G17's Z
   var p = properties;
+  seeZ(p.R);
   var dwell = has(p.P) && p.P > 0 ? p.P : 0; // P is seconds
   var g = "G81";
   if (p.CycleType === "SPOT" || p.CycleType === "DRILL") g = dwell > 0 ? "G82" : "G81";

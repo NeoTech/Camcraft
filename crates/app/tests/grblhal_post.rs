@@ -1,10 +1,14 @@
 //! The grblHAL post (#710): the program shape a grbl-family controller
 //! reads (no % fence, no O word, no N numbers, no G64, M30), no tool
 //! length word at all (the controller's tool-change handling owns the
-//! offset), `T<n> M6` alone on its line after a machine-coordinate Z
-//! lift, dwell in seconds, the machine's stated safe Z (refused by name
-//! when unstated), and the words grblHAL's core does not list - G84 -
-//! refused by name. The generic machine file mounts and posts clean.
+//! offset), `T<n> M6` alone on its line after a Z lift, dwell in
+//! seconds, and the words grblHAL's core does not list - G84 - refused
+//! by name. The Z lift never trusts machine Z0 unless the machine file
+//! says it is homed (states `safe_retract`): without homing grblHAL's
+//! machine zero is the power-on height, so the lift stays in the work
+//! offset at the clearance height, refused by name when that height is
+//! unknown or not above the stock. The generic machine file mounts and
+//! posts clean.
 //! Provenance: our own tests over our own post and machine file.
 //!
 //! Gate map (#710): covers app::post (grblhal.cps), post::machine
@@ -16,7 +20,7 @@ use camcraft_app::posting::{BUILTINS, MACHINES};
 use serde_json::{Value, json};
 use std::path::Path;
 
-const STREAM: &str = "PARAM SpindleSpeed 8000\nTOOL 3 EM6\nSECTION\nRapid X 0 Y 0 Z 5000\nFeed X 10000 Y 0 Z -1000 F 500000\nENDSECTION\n\
+const STREAM: &str = "PARAM ClearancePlane 15\nPARAM StockZTop 0\nPARAM SpindleSpeed 8000\nTOOL 3 EM6\nSECTION\nRapid X 0 Y 0 Z 5000\nFeed X 10000 Y 0 Z -1000 F 500000\nENDSECTION\n\
                       PARAM SpindleSpeed 6000\nTOOL 4 DRILL5\nSECTION\nCYCLE DRILL X 20000 Y 5000 Z -3000 R 2000 P 1500 F 100000\nENDSECTION\n";
 
 fn read(rel: &str) -> String {
@@ -48,7 +52,7 @@ fn post(m: &Value, stream: &str) -> String {
 fn the_registry_and_the_library_ship_it() {
     assert!(BUILTINS.iter().any(|(n, s)| *n == "grblHAL" && *s == cps()), "the post is built in");
     let m = generic();
-    assert_eq!(m["safeRetractZ"], json!(0.0), "the generic file states grbl's Z0-at-top convention");
+    assert!(m.get("safeRetractZ").is_none_or(Value::is_null), "the generic file assumes no homing: {m}");
 }
 
 #[test]
@@ -74,9 +78,10 @@ fn each_tool_change_lifts_z_then_stands_alone() {
     let lines: Vec<&str> = nc.lines().collect();
     for call in ["T3 M6", "T4 M6"] {
         let at = lines.iter().position(|l| *l == call).unwrap_or_else(|| panic!("no {call:?}\n{nc}"));
-        assert_eq!(lines[at - 1], "G53 G0 Z0", "Z goes up first\n{nc}");
+        assert_eq!(lines[at - 1], "G0 Z15", "Z goes up first, in the work offset\n{nc}");
     }
-    assert_eq!(nc.matches("G53 G0 Z0\n").count(), 3, "two changes and the end\n{nc}");
+    assert_eq!(nc.matches("G0 Z15\n").count(), 3, "two changes and the end\n{nc}");
+    assert!(!nc.contains("G53"), "no machine-coordinate move without homing\n{nc}");
     // X Y move first after a change, at the safe height; Z comes down after.
     let t4 = lines.iter().position(|l| *l == "T4 M6").expect("T4");
     assert!(lines[t4 + 1..].iter().any(|l| *l == "G0 X20 Y5"), "{nc}");
@@ -97,29 +102,47 @@ fn a_tap_is_refused_by_name() {
 }
 
 #[test]
-fn the_safe_z_is_the_machines_word_or_a_refusal() {
-    // No machine at all keeps G53 Z0.
-    assert!(post(&Value::Null, STREAM).contains("G53 G0 Z0\nT3 M6\n"));
-    // A builder whose Z0 sits elsewhere states its height.
-    let mut m = generic();
-    m["safeRetractZ"] = json!(-5.0);
-    let nc = post(&m, STREAM);
-    assert_eq!(nc.matches("G53 G0 Z-5\n").count(), 3, "{nc}");
-    assert!(!nc.contains("G53 G0 Z0"), "{nc}");
-    // A named machine stating none is refused, never guessed.
-    let mut m = generic();
-    if let Some(o) = m.as_object_mut() {
-        o.remove("safeRetractZ");
+fn a_homed_machine_lifts_in_machine_coordinates() {
+    // Stating safe_retract is the machine file saying it homes.
+    for z in [0.0, -5.0] {
+        let mut m = generic();
+        m["safeRetractZ"] = json!(z);
+        let nc = post(&m, STREAM);
+        let want = format!("G53 G0 Z{z}\nT3 M6\n");
+        assert!(nc.contains(&want), "{want:?}\n{nc}");
+        assert_eq!(nc.matches("G53 G0 Z").count(), 3, "{nc}");
     }
-    let out = engine::run(&cps(), &m, STREAM).expect("the script runs");
-    assert!(
-        out.warnings.iter().any(|w| w.contains("does not state its safe Z retract")),
-        "{:?}",
-        out.warnings
-    );
-    assert!(!out.program.contains("G53"), "nothing guessed:\n{}", out.program);
 }
 
+#[test]
+fn without_homing_the_lift_stays_in_the_work_offset() {
+    // No machine at all is grbl's default too: no homing assumed.
+    let nc = post(&Value::Null, STREAM);
+    assert!(nc.contains("G0 Z15\nT3 M6\n") && !nc.contains("G53"), "{nc}");
+    // A higher Z the program already commanded is clear as well.
+    let high = STREAM.replacen("Rapid X 0 Y 0 Z 5000", "Rapid X 0 Y 0 Z 40000", 1);
+    let nc = post(&generic(), &high);
+    assert!(nc.contains("G0 Z40\nT4 M6\n") && nc.ends_with("G0 Z40\nM30\n"), "{nc}");
+    // The lift is written from the work offset, like every Z word.
+    let shifted = format!("PARAM OriginZ 10\n{STREAM}");
+    assert!(post(&generic(), &shifted).contains("G0 Z5\nT3 M6\n"));
+}
+
+#[test]
+fn an_unknown_or_buried_lift_height_is_refused_by_name() {
+    let refused = |stream: &str| {
+        let out = engine::run(&cps(), &generic(), stream).expect("the script runs");
+        assert!(!out.program.contains("G53"), "nothing guessed:\n{}", out.program);
+        out.warnings
+    };
+    // No clearance stated and nothing commanded yet at the first change.
+    let w = refused(&STREAM.replacen("PARAM ClearancePlane 15\n", "", 1));
+    assert!(w.iter().any(|w| w.contains("no clearance height is known")), "{w:?}");
+    // A clearance at or below the stock top is no clearance.
+    let w = refused(&STREAM.replacen("PARAM StockZTop 0", "PARAM StockZTop 20", 1));
+    assert!(w.iter().any(|w| w.contains("is not above the stock top")), "{w:?}");
+    assert_eq!(w.iter().filter(|w| w.contains("Z lift") || w.contains("stock top")).count(), 1, "once: {w:?}");
+}
 #[test]
 fn an_inch_machine_posts_g20_and_inches() {
     let mut m = generic();

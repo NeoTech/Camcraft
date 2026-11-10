@@ -12,7 +12,7 @@ G-code list in grblHAL's public core README and the LinuxCNC G-code reference
   in a preamble would throw that measured length away. *Dropped:* `G43 H<n>`
   (needs a tool table, which is driver-dependent); a G43/G43.1 post option
   (can be added later without changing the default).
-- **`T<n> M6` alone on its line**, after `G53 G0 Z<safe>`. Some senders hold
+- **`T<n> M6` alone on its line**, after the Z lift (below). Some senders hold
   the M6 block and drop the rest of it. No G28/G30 before the change: their
   stored positions are controller settings, machine zero when unset.
 - **No control compensation**: grblHAL lists G40 only, so Control and Wear ops
@@ -26,18 +26,30 @@ G-code list in grblHAL's public core README and the LinuxCNC G-code reference
   the result test and offset arithmetic need parameters and expressions the
   core does not list.
 - **Go home after an operation refused by name**: same reason as the G30 above.
-- **Safe Z from the machine file**, refused by name when unstated (only "no
-  machine" keeps G53 Z0): where machine Z0 sits is the builder's choice on
-  grblHAL (homing direction, pull-off, origin setting).
+- **The Z lift trusts machine Z0 only on a homed machine.** With homing off
+  (`$22=0`, common on routers without limit switches) grblHAL takes its
+  power-on position as machine zero, so `G53 G0 Z0` goes to wherever Z stood
+  at switch-on, possibly down into the part (the first version of this PR
+  did exactly that on its generic machine). Rule: a machine file stating `safe_retract` (the statement
+  "this machine homes, and up is here") lifts with `G53 G0 Z<that>`;
+  otherwise the lift is `G0 Z<h>` in the work offset, where h is the highest
+  Z the program has proven clear (the section's `ClearancePlane`, or any
+  higher Z it already commanded). The lift is refused by name when h is
+  unknown or not above `StockZTop`. A G-code program cannot test "only if
+  Z is lower", so h must be a clearance, never an arbitrary park height.
+  *Dropped:* `G53 G0 Z0` as the default (unsafe without homing); a fixed
+  park height above the work zero (could sit inside a tall stock); a post
+  option for the mode (the machine file already carries the one fact that
+  decides it).
 - **Header without G64, O word, % or N numbers**: grblHAL lists G61 only, and
   O words need its macro plugins.
 
-- **Generic machine `grblhal-3axis.mch` ("grblHAL 3-axis") states
-  `safe_retract: 0.0`**: grbl's default homing drives Z up and puts machine
-  Z0 at the top of travel (all-negative work space), so 0 is the stated
-  convention, not a guess. A build homed the other way states its own
-  height in its copy of the file. *Dropped:* leaving it unstated (every
-  program on the shipped file would be refused, a trap for the first user).
+- **Generic machine `grblhal-3axis.mch` ("grblHAL 3-axis") states no
+  `safe_retract`**, so it assumes no homing and lifts in the work offset.
+  A homed build adds `safe_retract` (0.0 with grbl's default Z-up homing) to
+  its copy of the file. *Dropped:* stating 0.0 (first version of this PR):
+  it would have rapided to the power-on height on every machine without
+  limit switches.
 - **Generic machine figures** (300 x 300 x 100 mm stroke written `-L..L`,
   spindle 1000-24000 rpm, X/Y 4000/5000 and Z 1500/2000 mm/min, Flood M8 and
   Mist M7): a typical small router, meant to be copied and edited. No tool
