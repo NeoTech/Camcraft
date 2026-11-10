@@ -15,7 +15,7 @@ use std::sync::Mutex;
 use egui_wgpu::wgpu;
 use camcraft_app::stock::{StockShape, stock_mesh};
 use camcraft_ui::state::DisplayMode;
-use camcraft_ui::viewport::{Camera, GpuPart, View3D};
+use camcraft_ui::viewport::{Camera, GpuPart, ProjectionMode, View3D};
 
 const SIDE: u32 = 256;
 const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
@@ -188,6 +188,26 @@ fn box_stock_paints_steel_over_background() {
         changed > total / 20 && changed < total - total / 20,
         "box stock should cover a solid but partial band: {changed}/{total}"
     );
+}
+
+#[test]
+fn ortho_box_stock_paints_like_perspective() {
+    // #600: the ortho depth row was GL's -1..1, so WebGPU's 0..1 clip
+    // volume cut the whole scene away (0 pixels vs 9,326). Same part,
+    // same camera, only the projection flipped: ortho must paint a
+    // comparable band.
+    let shape = StockShape::Box { dx: 60.0, dy: 60.0, dz: 40.0 };
+    let persp = render(&[stock_part(&shape)], &test_cam());
+    let ortho_cam = Camera { projection: ProjectionMode::Orthographic, ..test_cam() };
+    let ortho = render(&[stock_part(&shape)], &ortho_cam);
+    let (Some((pi, _, _)), Some((oi, w, h))) = (persp, ortho) else {
+        eprintln!("gpu test skipped: no usable adapter");
+        return;
+    };
+    let (p, o) = (changed_pixels(&pi), changed_pixels(&oi));
+    let total = (w * h) as usize;
+    assert!(o > total / 20, "ortho must paint the stock: {o}/{total}");
+    assert!(o * 2 > p, "ortho paints a comparable band to perspective: {o} vs {p}");
 }
 
 #[test]

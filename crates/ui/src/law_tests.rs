@@ -2019,6 +2019,43 @@ mod projection_tests {
         );
     }
 
+    /// The column-major point through an mvp as (ndc_z, clip_w).
+    fn depth(m: &[[f32; 4]; 4], p: [f64; 3]) -> (f32, f32) {
+        let v = [p[0] as f32, p[1] as f32, p[2] as f32, 1.0f32];
+        let (mut z, mut w) = (0.0f32, 0.0f32);
+        for (c, vc) in v.iter().enumerate() {
+            z += vc * m[c][2];
+            w += vc * m[c][3];
+        }
+        (z / w, w)
+    }
+
+    #[test]
+    fn ortho_depth_spans_wgpus_zero_to_one_clip_range() {
+        // #600: WebGPU clips 0 <= z <= w. The ortho box's near plane
+        // (0.1 in front of the eye) lands on z = 0, its far plane
+        // (max(40 dist, 1000)) on z = 1, the target plane strictly
+        // between - the GL -1..1 row put it at z < 0 and blanked it all.
+        let cam = ortho();
+        let m = cam.mvp(ASPECT);
+        let (_, _, f) = cam.view_basis();
+        let eye = cam.eye();
+        let far = (cam.dist * 40.0).max(1000.0);
+        let (zn, wn) = depth(&m, shifted(eye, f, 0.1));
+        let (zf, _) = depth(&m, shifted(eye, f, far));
+        let (zt, _) = depth(&m, cam.target);
+        assert!((wn - 1.0).abs() < 1e-6, "ortho clip.w is 1");
+        assert!(zn.abs() < 1e-5, "near maps to 0, got {zn}");
+        assert!((zf - 1.0).abs() < 1e-5, "far maps to 1, got {zf}");
+        assert!(zt > 0.0 && zt < 1.0, "the target plane must survive clipping: {zt}");
+        // Linear, nearer is smaller - the Less depth test keeps the
+        // nearest surface, as in perspective.
+        let (zh, _) = depth(&m, shifted(eye, f, 0.5 * (0.1 + far)));
+        assert!((zh - 0.5).abs() < 1e-4, "ortho depth is linear: {zh}");
+        let (zp, _) = depth(&Camera::default().mvp(ASPECT), Camera::default().target);
+        assert!(zp > 0.0 && zp < 1.0, "perspective target sits inside 0..1 too: {zp}");
+    }
+
     #[test]
     fn camera_transforms_carry_the_projection_mode() {
         assert_eq!(Camera::default().projection, ProjectionMode::Perspective);

@@ -1341,13 +1341,18 @@ impl Camera {
             // mode switch never jumps the framing. Depth is linear and
             // clip.w is 1 everywhere, so every screen-space consumer that
             // divides by w degenerates cleanly onto this matrix too.
+            // #600: WebGPU's clip volume is 0 <= z <= w (not GL's -w..w),
+            // so view depth near..far maps to z 0..1 - the GL row put
+            // everything nearer than (near + far) / 2 at z < 0 and the
+            // rasterizer clipped the whole scene. Same near/far and the
+            // same Less-against-1.0 depth test as perspective.
             let h = self.ortho_half_height();
             let w = h * aspect;
             [
                 [1.0 / w, 0.0, 0.0, 0.0],
                 [0.0, 1.0 / h, 0.0, 0.0],
-                [0.0, 0.0, 2.0 / (near - far), 0.0],
-                [0.0, 0.0, (near + far) / (near - far), 1.0],
+                [0.0, 0.0, 1.0 / (near - far), 0.0],
+                [0.0, 0.0, near / (near - far), 1.0],
             ]
         } else {
             let g = (std::f64::consts::FRAC_PI_6).tan().recip(); // 60 deg vertical fov
