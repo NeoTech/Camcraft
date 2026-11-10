@@ -30,6 +30,10 @@
 //!   welded in 3D here, not borrowed from the drape's boundary
 //!   loops: that walk flattens to XY to ground Z, and this ride
 //!   needs the loop's own Z.
+//! - **No steep edges.** An edge climbing faster than the cone's
+//!   flank (a vertical corner, always) is skipped with a note: the
+//!   apex under its low end would cut its high end deeper than the
+//!   drop (#303).
 //! - **The window.** A tip below `bottom_z` or above `top_z` is
 //!   clipped by the segment's own line - deburr breaks the edges the
 //!   operation reaches, and a rim running off the programmed floor
@@ -42,7 +46,7 @@
 
 use std::collections::HashMap;
 
-use crate::cl::{MoveKind, PathBuilder, Toolpath};
+use crate::cl::{EdgeBreak, MoveKind, PathBuilder, Toolpath};
 use crate::geometry::{Point3, Triangle};
 use crate::machining2d::GenError;
 
@@ -130,6 +134,7 @@ pub fn deburr(facets: &[Triangle], p: &DeburrParams) -> Result<Toolpath, GenErro
     p.validate(facets)?;
     let drop = p.drop();
     if !drop.is_finite() || drop <= 0.0 {
+        // #677: names no spot - a tool/width mismatch, true at every edge.
         return Err(GenError::Invalid(format!(
             "deburr tip depth {drop} is not a standable drop for width {} at {} deg",
             p.width, p.tip_angle_deg
@@ -163,6 +168,14 @@ pub fn deburr(facets: &[Triangle], p: &DeburrParams) -> Result<Toolpath, GenErro
     let mut keys: Vec<(usize, usize)> = edges.keys().copied().collect();
     keys.sort_unstable();
 
+    // The cone's flank rises `slope` mm per plan mm (cot of the half-
+    // angle). An edge climbing faster than that cannot be broken by a
+    // vertical cone: riding it, the apex under its low end stands
+    // inside the cone's reach of its high end, so the ride cuts deeper
+    // than the drop - a vertical corner turns into a countersink down
+    // to the window floor (#303). Such an edge is skipped out loud.
+    let slope = 1.0 / (0.5 * p.tip_angle_deg.to_radians()).tan();
+    let mut steeps = 0usize;
     let mut segs: Vec<Seg> = Vec::new();
     let mut flips = 0usize;
     let mut manifold = 0usize;
@@ -173,7 +186,11 @@ pub fn deburr(facets: &[Triangle], p: &DeburrParams) -> Result<Toolpath, GenErro
             // A rim: an open mesh's own edge. Nothing tilts here, so
             // nothing but the window can refuse it.
             if let Some((q0, q1)) = clip(e0, e1, p, drop) {
-                segs.push(seg(q0, q1, s));
+                if steep(q0, q1, slope) {
+                    steeps += 1;
+                } else {
+                    segs.push(seg(q0, q1, s));
+                }
             }
             continue;
         }
@@ -211,7 +228,11 @@ pub fn deburr(facets: &[Triangle], p: &DeburrParams) -> Result<Toolpath, GenErro
             continue; // concave: the pencil pair's corner, not a burr
         }
         if let Some((q0, q1)) = clip(e0, e1, p, drop) {
-            segs.push(seg(q0, q1, s));
+            if steep(q0, q1, slope) {
+                steeps += 1;
+            } else {
+                segs.push(seg(q0, q1, s));
+            }
         }
     }
 
@@ -223,13 +244,18 @@ pub fn deburr(facets: &[Triangle], p: &DeburrParams) -> Result<Toolpath, GenErro
     }
     runs.sort_by(|a, b| cmp_pt(a[0], b[0]));
 
-    let mut b = PathBuilder::new(Point3::new(0.0, 0.0, p.clearance_z));
+    let mut b = PathBuilder::approached(Point3::new(0.0, 0.0, p.clearance_z));
     if flips > 0 {
         b.note(format!("deburr: {flips} shared edges skipped for inconsistent winding"));
     }
     if manifold > 0 {
         b.note(format!(
             "deburr: {manifold} edges touch more than two facets and were skipped"
+        ));
+    }
+    if steeps > 0 {
+        b.note(format!(
+            "deburr: {steeps} edges climb steeper than the cone's flank and were skipped - a vertical cone cannot break them"
         ));
     }
     for run in &runs {
@@ -250,10 +276,18 @@ pub fn deburr(facets: &[Triangle], p: &DeburrParams) -> Result<Toolpath, GenErro
         }
     }
     retract(&mut b, p.clearance_z);
-    let path = b.finish();
+    let mut path = b.finish();
     if !path.all_finite() {
         return Err(GenError::Invalid("deburr path left the finite horizon".into()));
     }
+    // The breaks this ride was asked to cut (#303): every run at the
+    // edge's own height, the drop and the cone's slope - the edges the
+    // window admitted, never read back off the moves.
+    path.breaks = runs
+        .iter()
+        .map(|run| EdgeBreak { edge: run.clone(), depth: drop, slope })
+        .filter(EdgeBreak::is_sane)
+        .collect();
     Ok(path)
 }
 
@@ -267,6 +301,13 @@ fn retract(b: &mut PathBuilder, clearance_z: f64) {
     if cur.z < clearance_z {
         b.push(MoveKind::Rapid, Point3::new(cur.x, cur.y, clearance_z), None);
     }
+}
+
+/// Does the edge climb faster than the cone's flank (see `deburr`)?
+/// A vertical edge always does.
+fn steep(q0: Point3, q1: Point3, slope: f64) -> bool {
+    let plan = ((q1.x - q0.x).powi(2) + (q1.y - q0.y).powi(2)).sqrt();
+    (q1.z - q0.z).abs() > slope * plan + 1e-9
 }
 
 /// Weld one edge's endpoints to a chain segment.
