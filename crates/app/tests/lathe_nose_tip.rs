@@ -24,6 +24,7 @@ use camcraft_app::post::{cnc, engine};
 use camcraft_app::posting;
 use camcraft_app::schema::Location;
 use camcraft_app::tools::{catalog, Tool};
+use camcraft_app::turret::Turret;
 use camcraft_app::world::new_world;
 
 const TAU: f64 = std::f64::consts::TAU;
@@ -234,11 +235,11 @@ fn a_boring_bar_defaults_to_the_id_tip_and_refuses_an_od_one() {
         plunge_feed: 50.0,
     };
     let mut bar = tool("BR-1000");
-    assert_eq!(posting::nose::checked_orientation(&bore, "BR-1000", &bar), Ok(Some(3)), "a bar cuts toward the chuck on +X");
+    assert_eq!(posting::nose::checked_orientation(&bore, "BR-1000", &bar, Turret::Front), Ok(Some(3)), "a bar cuts toward the chuck on +X");
     bar.orientation = Some(2);
-    let e = posting::nose::checked_orientation(&bore, "BR-1000", &bar).expect_err("an OD tip in a bore");
+    let e = posting::nose::checked_orientation(&bore, "BR-1000", &bar, Turret::Front).expect_err("an OD tip in a bore");
     assert!(e.contains("orientation [3, 4, 5, 7, 8]") && e.contains("+X"), "{e}");
     // A drill or a mill posts as it always did: no nose centre, no
     // orientation (a blade posts its corner - #641, lathe_blade_corner).
-    assert_eq!(posting::nose::checked_orientation(&facing(), "EM", &tool("EM-0400-2FL")), Ok(None));
+    assert_eq!(posting::nose::checked_orientation(&facing(), "EM", &tool("EM-0400-2FL"), Turret::Front), Ok(None));
 }

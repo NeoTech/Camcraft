@@ -63,6 +63,11 @@ fn revolve(meridian: &[(f64, f64)], segs: usize) -> Mesh {
 }
 
 fn bar_world() -> (World, History) {
+    bar_world_on(None)
+}
+
+/// The bench on a stated turret side (#650; None = unstated, front).
+fn bar_world_on(turret: Option<&str>) -> (World, History) {
     let world = new_world();
     let mut history = History::default();
     let at = Location { pos: Point3::new(0.0, 0.0, -40.0), ..Location::default() };
@@ -73,6 +78,7 @@ fn bar_world() -> (World, History) {
         kind: Some("lathe".into()),
         spindle_max: Some(12000.0),
         coolants: vec![Coolant { name: "Flood".into(), m_code: "M8".into() }],
+        turret: turret.map(str::to_owned),
         ..Default::default()
     };
     history.execute(&world, LoadMachine::new(&world, "lathe.mch".into(), Some(lathe)).expect("lathe"));
@@ -219,4 +225,25 @@ fn the_corner_edit_is_one_undoable_command() {
     assert!(history.redo(&world));
     assert_eq!(model::tool_of(&world, &e).and_then(|t| t.orientation), Some(1));
     all_at(&posted_plunge_z(&world), -8.5, "after redo");
+}
+
+/// #650: a rear turret numbers the blade's corners mirrored in X - the
+/// left corner is 3, the right 4, the width centre 8 - and posts the
+/// same corner the front numbers name; a front-only code is refused in
+/// rear numbers.
+#[test]
+fn a_rear_turret_numbers_the_corners_in_its_own_frame() {
+    use camcraft_app::turret::Turret;
+    let (world, mut history) = bar_world_on(Some("rear"));
+    create(&world, &mut history, "G1", groove());
+    all_at(&posted_plunge_z(&world), -11.5, "the rear default is the left corner");
+    assert!(program(&world).contains("ORIENTATION 3)"), "the rear note names the left corner 3");
+    for (shown, z) in [(3u8, -11.5), (4, -8.5), (8, -10.0)] {
+        set_corner(&world, &mut history, Some(Turret::Rear.canonical(shown)));
+        all_at(&posted_plunge_z(&world), z, &format!("rear {shown}"));
+        assert!(program(&world).contains(&format!("ORIENTATION {shown})")), "rear note {shown}");
+    }
+    set_corner(&world, &mut history, Some(Turret::Rear.canonical(2)));
+    let e = posting::stream_records(&world).expect_err("rear 2 is an ID code");
+    assert!(e.contains("orientation [3, 4, 8] (rear turret numbering)") && e.contains("is orientation 2"), "{e}");
 }

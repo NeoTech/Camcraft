@@ -194,6 +194,21 @@ pub fn parse_mch(text: &str) -> Result<Machine, String> {
         }
     }
 
+    // The turret side (#650): which frame the lathe's tool table
+    // numbers orientations in. A stated word must be front or rear -
+    // a misspelt side must not read as the default and post every
+    // orientation 2r off on the diameter.
+    match general.and_then(|g| g.get("turret")) {
+        None | Some(serde_json::Value::Null) => {}
+        Some(serde_json::Value::String(w)) if w.trim().is_empty() => {}
+        Some(serde_json::Value::String(w)) if matches!(w.trim().to_ascii_lowercase().as_str(), "front" | "rear") => {
+            m.turret = Some(w.trim().to_ascii_lowercase());
+        }
+        Some(other) => {
+            return Err(format!("machine file: turret {other} is not front or rear"));
+        }
+    }
+
     let kine = v.pointer("/kinematics/default/parts");
     let f = mm_factor(v.pointer("/kinematics/default/units")).unwrap_or(1.0);
     // #131: keep the stated unit for the posts (the numbers stay mm).

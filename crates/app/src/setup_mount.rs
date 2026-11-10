@@ -80,6 +80,30 @@ pub fn kind_of_setup(world: &World, declared: Option<&str>) -> crate::machine::K
         .unwrap_or(crate::machine::Kind::Mill)
 }
 
+/// The turret side of the machine a declared setup context mounts
+/// (#650) - the frame its lathe tool orientation numbers are read in.
+/// Front for a machine that states none, and for no machine at all.
+#[must_use]
+pub fn turret_of_setup(world: &World, declared: Option<&str>) -> camcraft_tools::turret::Turret {
+    turret_of_machine(machine_of(world, declared).1.as_ref())
+}
+
+/// The ACTIVE setup's turret side (#650): what the tool editor numbers
+/// orientations in.
+#[must_use]
+pub fn turret_of_active(world: &World) -> camcraft_tools::turret::Turret {
+    turret_of_setup(world, setup::active(world).as_deref())
+}
+
+/// A machine's stated turret side; front when unstated.
+#[must_use]
+pub fn turret_of_machine(machine: Option<&Machine>) -> camcraft_tools::turret::Turret {
+    machine
+        .and_then(|m| m.turret.as_deref())
+        .and_then(camcraft_tools::turret::Turret::from_word)
+        .unwrap_or_default()
+}
+
 /// The setup's own machine, `None` when it follows the document.
 #[must_use]
 pub fn own_machine(world: &World, declared: Option<&str>) -> Option<MachineDef> {

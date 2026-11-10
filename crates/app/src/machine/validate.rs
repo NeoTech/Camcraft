@@ -136,6 +136,12 @@ fn general(v: &Value, out: &mut Vec<Refusal>) {
         Some(Value::String(w)) if w.is_empty() || Kind::from_word(w).is_some() => {}
         Some(other) => out.push(Refusal::new("general.kind", format!("{other} is not mill, lathe or mill-turn"))),
     }
+    // #650: the lathe's turret side, the frame of its orientation numbers.
+    match g.and_then(|g| g.get("turret")) {
+        None | Some(Value::Null) => {}
+        Some(Value::String(w)) if w.trim().is_empty() || camcraft_tools::turret::Turret::from_word(w).is_some() => {}
+        Some(other) => out.push(Refusal::new("general.turret", format!("{other} is not front or rear"))),
+    }
 }
 
 fn units(v: &Value, out: &mut Vec<Refusal>) {

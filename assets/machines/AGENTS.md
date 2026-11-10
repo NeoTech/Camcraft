@@ -40,6 +40,15 @@ unstated capability into existence.
   — the same tilt test the RTCP judgment and `can_tilt` read, one law
   at three sites): an XYZ machine with A/B trunnions or a tilt head is
   a MILL whose axes can lean, not a mill-turn.
+- `general.turret` ∈ `front` | `rear` (#650) - which side of the
+  spindle a lathe's tools stand on, the frame its tool table numbers
+  the 1-9 tool orientations in (a rear turret reads the chart mirrored
+  in X: its standard OD tool is 3, not 2). Absent, null or empty is
+  `front` - every file before #650 - and any other word refuses the
+  file naming `turret`. Tools store the chart's front-frame code; the
+  editor, refusals and the tool note show the machine's number. The
+  built-in `lathe.mch` states `front`; `millturn.mch` states nothing
+  (front). State `rear` on a rear-turret lathe (e.g. a Tormach 8L/15L).
 - `kinematics.default.units`: `"length": "mm"` (or `"inch"`/`"inches"`
   — the factor multiplies EVERY distance and distance-per-minute at
   load; the checker stays mm-only), `"angle": "degrees"`.

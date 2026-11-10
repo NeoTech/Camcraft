@@ -23,10 +23,12 @@
 //! | 8 | (+1,  0) | pointing +X |
 //! | 9 | ( 0,  0) | the nose centre itself (touched off on the centre) |
 //!
-//! The numbering is stated in X/Z coordinates, so it does not change
-//! with the turret side: the figure is drawn for a front tool post
-//! (X+ toward the operator) and a rear turret reads the same numbers
-//! with its own X+. Fanuc-style "imaginary tool nose" tip numbers are
+//! The figure is drawn for a FRONT tool post (X+ toward the operator),
+//! and the table above is that frame - the CANONICAL code a tool
+//! stores. A rear turret numbers the same physical tool with the
+//! drawing mirrored in X (#650: its standard OD tool is 3); the
+//! offsets above are physical and do not change, only the number a
+//! person reads and types does ([`crate::turret`]). Fanuc-style "imaginary tool nose" tip numbers are
 //! a different chart (the usual OD tool is tip 3 there); no post of
 //! ours writes either number to the control - they post G40 and the
 //! control point itself - so the LinuxCNC numbering is the one the
@@ -39,8 +41,8 @@
 //! (5-8) presents the half of the nose facing its point - within 90
 //! degrees; 9 says nothing about the insert and refuses nothing. This
 //! is the reading under which PathPilot's conversational refusal
-//! ("the X and Z inputs call for orientation [1, 5, 6]") is
-//! reproduced for a cut needing the -X and +Z contacts.
+//! (a list such as [1, 5, 6], numbered in its rear-turret frame) is
+//! reproduced - see [`crate::turret`] for the frame.
 //!
 //! Blades (#641): a grooving/parting blade has no nose circle - its
 //! CL is the middle of its tip edge (the band's centre at the tip
@@ -188,33 +190,49 @@ pub fn blade_corner(q: u8) -> Option<f64> {
     }
 }
 
-/// A short label for the editor's list, read for a blade.
+/// What a code states about a blade, without its number (the number
+/// is the machine's frame, [`crate::turret::Turret::blade_label`]).
 #[must_use]
-pub fn blade_label(q: u8) -> &'static str {
+pub fn blade_describe(q: u8) -> &'static str {
     match q {
-        1 => "1 - right corner (+Z, toward the free end)",
-        2 => "2 - left corner (-Z, toward the chuck)",
-        6 => "6 - width centre",
-        9 => "9 - width centre",
+        1 => "right corner (+Z, toward the free end)",
+        2 => "left corner (-Z, toward the chuck)",
+        6 | 9 => "width centre",
         _ => "not an OD blade",
     }
 }
 
-/// A short label for the editor's list.
+/// A short label for the editor's list, read for a blade, numbered in
+/// the chart's own (front) frame.
 #[must_use]
-pub fn label(q: u8) -> &'static str {
+pub fn blade_label(q: u8) -> String {
+    crate::turret::Turret::Front.blade_label(q)
+}
+
+/// What a code states about an insert, without its number - physical
+/// (X is the radius, + away from the axis), so the same on every
+/// turret side.
+#[must_use]
+pub fn describe(q: u8) -> &'static str {
     match q {
-        1 => "1 - OD, cuts away from the chuck",
-        2 => "2 - OD, cuts toward the chuck",
-        3 => "3 - ID, cuts toward the chuck",
-        4 => "4 - ID, cuts away from the chuck",
-        5 => "5 - points +Z",
-        6 => "6 - points -X (neutral OD)",
-        7 => "7 - points -Z",
-        8 => "8 - points +X (neutral ID)",
-        9 => "9 - nose centre",
+        1 => "OD, cuts away from the chuck",
+        2 => "OD, cuts toward the chuck",
+        3 => "ID, cuts toward the chuck",
+        4 => "ID, cuts away from the chuck",
+        5 => "points +Z",
+        6 => "points -X (neutral OD)",
+        7 => "points -Z",
+        8 => "points +X (neutral ID)",
+        9 => "nose centre",
         _ => "unknown",
     }
+}
+
+/// A short label for the editor's list, numbered in the chart's own
+/// (front) frame.
+#[must_use]
+pub fn label(q: u8) -> String {
+    crate::turret::Turret::Front.label(q)
 }
 
 #[cfg(test)]
@@ -234,7 +252,9 @@ mod tests {
 
     #[test]
     fn the_pathpilot_listing_is_reproduced() {
-        // A cut needing the -X and +Z contacts fits 1, 5 and 6 only.
+        // A cut needing the -X and +Z contacts fits 1, 5 and 6 only
+        // (front frame; PathPilot's rear-frame [1, 5, 6] is the +X/+Z
+        // mirror of this, crate::turret).
         assert_eq!(fitting(&[Contact::MinusX, Contact::PlusZ]), vec![1, 5, 6]);
         // An OD diameter alone: every tip with a -X reach.
         assert_eq!(fitting(&[Contact::MinusX]), vec![1, 2, 5, 6, 7]);

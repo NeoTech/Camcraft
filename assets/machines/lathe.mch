@@ -1,5 +1,5 @@
 {
-  "general": { "model": "TURNING CENTER 2-AXIS", "vendor": "Camcraft", "kind": "lathe" },
+  "general": { "model": "TURNING CENTER 2-AXIS", "vendor": "Camcraft", "kind": "lathe", "turret": "front" },
   "kinematics": { "default": {
     "units": { "length": "mm", "angle": "degrees" },
     "parts": [

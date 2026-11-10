@@ -173,6 +173,11 @@ pub struct Machine {
     /// post that needs it refuses rather than guess where up is.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub safe_retract_z: Option<f64>,
+    /// A lathe's turret side word (#650, `general.turret`: `front` or
+    /// `rear`) - the frame its tool table numbers orientations in.
+    /// `None` = unstated, read as front (`camcraft_tools::turret`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub turret: Option<String>,
 }
 
 /// The words a control needs around C-axis live-tool work (issue

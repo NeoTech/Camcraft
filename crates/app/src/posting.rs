@@ -774,7 +774,9 @@ pub fn op_streams(world: &World) -> Result<Vec<(String, Vec<cnc::Record>)>, Stri
         // #630: a nose-centre turning path posts as the tool's control
         // point for its orientation (or is refused by name when the
         // orientation cannot cut it); the cache stays the nose truth.
-        let (posted, tool_orientation) = nose::posted_path(&op.params, &op.tool, &tool, &cache.path, origin)
+        // #650: numbered in the frame of the op's own setup's machine.
+        let turret = crate::setup_mount::turret_of_setup(world, setup);
+        let (posted, tool_orientation) = nose::posted_path(&op.params, &op.tool, &tool, &cache.path, origin, turret)
             .map_err(|e| format!("{display_name}: {e}"))?;
         let d = Dump {
             op_kind: &op_kind,

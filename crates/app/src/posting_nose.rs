@@ -25,6 +25,13 @@
 //! already the CL's radius, so X does not move). A code that states no
 //! OD blade is refused by name.
 //!
+//! The turret side (#650): the tool stores its code in the chart's
+//! own (front) frame and every number this module SHOWS - the refusal's
+//! fitting list, the tool's own code, the orientation handed to the
+//! post's tool note - is renumbered into the mounted machine's frame
+//! (`turret::Turret`). The geometry reads the canonical code, so a rear
+//! machine's 3 and a front machine's 2 post the same control point.
+//!
 //! Provenance: LinuxCNC Lathe User Information (control point and
 //! tool orientation, public docs); behaviour of PathPilot's own
 //! orientation refusal, read as a syntax/behaviour reference only.
@@ -36,6 +43,7 @@ use crate::cl::Toolpath;
 use crate::operation::OpParams;
 use crate::orientation::{self, Contact};
 use crate::tools::{Tool, ToolKind};
+use crate::turret::Turret;
 
 /// The nose contacts an operation's cut needs, or None when the
 /// operation does not post a nose-centre path at all.
@@ -56,10 +64,11 @@ pub fn nose_contacts(params: &OpParams, tool: &Tool) -> Option<&'static [Contact
     }
 }
 
-/// The orientation `tool` posts `params` with, or a refusal by name
-/// when its nose cannot present the cut's contacts. Ok(None) for an
-/// operation that posts no nose centre.
-pub fn checked_orientation(params: &OpParams, tool_name: &str, tool: &Tool) -> Result<Option<u8>, String> {
+/// The CANONICAL orientation `tool` posts `params` with, or a refusal
+/// by name - numbered in `turret`'s frame - when its nose cannot
+/// present the cut's contacts. Ok(None) for an operation that posts
+/// no nose centre.
+pub fn checked_orientation(params: &OpParams, tool_name: &str, tool: &Tool, turret: Turret) -> Result<Option<u8>, String> {
     let Some(need) = nose_contacts(params, tool) else { return Ok(None) };
     let Some(q) = tool.lathe_orientation().filter(|q| orientation::is_valid(*q)) else {
         return Err(format!("tool '{tool_name}' states no lathe orientation (1-9) - set it in the tool editor"));
@@ -68,14 +77,17 @@ pub fn checked_orientation(params: &OpParams, tool_name: &str, tool: &Tool) -> R
         return Ok(Some(q));
     }
     let needs: Vec<String> = need.iter().map(ToString::to_string).collect();
-    let fit: Vec<String> = orientation::fitting(need).iter().map(ToString::to_string).collect();
+    let fit: Vec<String> = turret.fitting(need).iter().map(ToString::to_string).collect();
     Err(format!(
-        "a {} cut needs the {} nose contact{}, which call for orientation [{}]; tool '{tool_name}' is orientation {q} - \
-         set the tool's orientation to match how it is mounted, or pick a tool that is",
+        "a {} cut needs the {} nose contact{}, which call for orientation [{}] ({} turret numbering); tool \
+         '{tool_name}' is orientation {} - set the tool's orientation to match how it is mounted, or pick a tool \
+         that is",
         params.kind(),
         needs.join(" and "),
         if need.len() > 1 { "s" } else { "" },
         fit.join(", "),
+        turret.word(),
+        turret.shown(q),
     ))
 }
 
@@ -87,11 +99,16 @@ pub fn is_blade_cut(params: &OpParams, tool: &Tool) -> bool {
         && matches!(params, OpParams::GrooveRough { .. } | OpParams::GrooveFinish { .. } | OpParams::Part { .. })
 }
 
-/// The blade's touched-off corner as (orientation, Z shift in mm from
-/// the middle of the tip edge), or a refusal by name when the code
-/// states no OD blade or the width is no width. Ok(None) for a cut
-/// that is not a blade's.
-pub fn checked_blade_corner(params: &OpParams, tool_name: &str, tool: &Tool) -> Result<Option<(u8, f64)>, String> {
+/// The blade's touched-off corner as (canonical orientation, Z shift
+/// in mm from the middle of the tip edge), or a refusal by name -
+/// numbered in `turret`'s frame - when the code states no OD blade or
+/// the width is no width. Ok(None) for a cut that is not a blade's.
+pub fn checked_blade_corner(
+    params: &OpParams,
+    tool_name: &str,
+    tool: &Tool,
+    turret: Turret,
+) -> Result<Option<(u8, f64)>, String> {
     if !is_blade_cut(params, tool) {
         return Ok(None);
     }
@@ -99,13 +116,15 @@ pub fn checked_blade_corner(params: &OpParams, tool_name: &str, tool: &Tool) -> 
         return Err(format!("blade '{tool_name}' states no touched-off corner - set its lathe orientation in the tool editor"));
     };
     let Some(side) = orientation::blade_corner(q) else {
-        let fit: Vec<String> = orientation::BLADE_FITTING.iter().map(ToString::to_string).collect();
+        let fit: Vec<String> = turret.blade_fitting().iter().map(ToString::to_string).collect();
         return Err(format!(
             "a {} plunges an OD blade toward the axis, touched off on a corner or the centre of its tip edge, which \
-             call for orientation [{}]; blade '{tool_name}' is orientation {q} (an ID or face blade) - set the \
-             orientation to the corner it was touched off on, or pick a blade that is",
+             call for orientation [{}] ({} turret numbering); blade '{tool_name}' is orientation {} (an ID or face \
+             blade) - set the orientation to the corner it was touched off on, or pick a blade that is",
             params.kind(),
             fit.join(", "),
+            turret.word(),
+            turret.shown(q),
         ));
     };
     let w = tool.width;
@@ -116,30 +135,35 @@ pub fn checked_blade_corner(params: &OpParams, tool_name: &str, tool: &Tool) -> 
 }
 
 /// The path the post is handed, and the orientation it was converted
-/// for: the control-point path for a nose-centre operation, the
-/// touched-off corner's path for a blade's (#641), the cached path
-/// itself for every other one.
+/// for NUMBERED IN `turret`'s FRAME (the code the operator types into
+/// that machine's tool table - what the tool note writes): the
+/// control-point path for a nose-centre operation, the touched-off
+/// corner's path for a blade's (#641), the cached path itself for
+/// every other one.
 pub fn posted_path<'a>(
     params: &OpParams,
     tool_name: &str,
     tool: &Tool,
     path: &'a Toolpath,
     origin: [f64; 3],
+    turret: Turret,
 ) -> Result<(Cow<'a, Toolpath>, Option<u8>), String> {
-    if let Some((q, dz)) = checked_blade_corner(params, tool_name, tool)? {
+    if let Some((q, dz)) = checked_blade_corner(params, tool_name, tool, turret)? {
+        let shown = turret.shown(q);
         let posted = crate::post::nose_tip::control_point_path(path, (0.0, dz), origin)
-            .map_err(|e| format!("the touched-off corner for orientation {q}: {e}"))?;
-        return Ok((Cow::Owned(posted), Some(q)));
+            .map_err(|e| format!("the touched-off corner for orientation {shown}: {e}"))?;
+        return Ok((Cow::Owned(posted), Some(shown)));
     }
-    let Some(q) = checked_orientation(params, tool_name, tool)? else {
+    let Some(q) = checked_orientation(params, tool_name, tool, turret)? else {
         return Ok((Cow::Borrowed(path), None));
     };
+    let shown = turret.shown(q);
     let (ox, oz) = orientation::tip_offset(q).unwrap_or((0.0, 0.0));
     let r = tool.nose_radius;
     if !r.is_finite() || r < 0.0 {
         return Err(format!("tool '{tool_name}' has no usable nose radius"));
     }
     let posted = crate::post::nose_tip::control_point_path(path, (r * ox, r * oz), origin)
-        .map_err(|e| format!("the control point for orientation {q}: {e}"))?;
-    Ok((Cow::Owned(posted), Some(q)))
+        .map_err(|e| format!("the control point for orientation {shown}: {e}"))?;
+    Ok((Cow::Owned(posted), Some(shown)))
 }

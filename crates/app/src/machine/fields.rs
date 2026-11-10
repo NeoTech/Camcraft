@@ -147,6 +147,7 @@ pub fn groups(raw: &Value) -> Vec<FieldGroup> {
     g.add(s("Model"), s("general.model"), s("/general/model"), T, &[s("general.model")]);
     g.add(s("Vendor"), s("general.vendor"), s("/general/vendor"), T, &[]);
     g.add(s("Kind"), s("general.kind (mill, lathe or mill-turn)"), s("/general/kind"), T, &[s("general.kind")]);
+    g.add(s("Turret side"), s("general.turret (front or rear - a lathe's orientation numbering)"), s("/general/turret"), T, &[s("general.turret")]);
     out.push(g.group);
 
     let axes = axes_with_pointers(raw);

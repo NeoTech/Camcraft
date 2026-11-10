@@ -68,6 +68,8 @@ pub mod tool_numbers;
 pub use camcraft_tools::tools;
 // #630: the lathe tool orientation code (LinuxCNC 1-9) and its control point.
 pub use camcraft_tools::orientation;
+// #650: the turret side the orientation numbers are read in.
+pub use camcraft_tools::turret;
 // #93: the drawn spun profile of a milling holder.
 pub use camcraft_tools::spun;
 // #368: a tool's modelled body and the reads the judging laws take from it.

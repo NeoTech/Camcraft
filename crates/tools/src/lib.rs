@@ -21,4 +21,6 @@ pub mod lathe_holder;
 pub mod lathe_insert_zone;
 // #630: the lathe tool orientation code and its control point.
 pub mod orientation;
+// #650: the turret side orientation numbers are read in.
+pub mod turret;
 pub mod tools;
