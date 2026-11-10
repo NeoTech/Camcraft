@@ -32,5 +32,24 @@ G-code list in grblHAL's public core README and the LinuxCNC G-code reference
 - **Header without G64, O word, % or N numbers**: grblHAL lists G61 only, and
   O words need its macro plugins.
 
+- **Generic machine `grblhal-3axis.mch` ("grblHAL 3-axis") states
+  `safe_retract: 0.0`**: grbl's default homing drives Z up and puts machine
+  Z0 at the top of travel (all-negative work space), so 0 is the stated
+  convention, not a guess. A build homed the other way states its own
+  height in its copy of the file. *Dropped:* leaving it unstated (every
+  program on the shipped file would be refused, a trap for the first user).
+- **Generic machine figures** (300 x 300 x 100 mm stroke written `-L..L`,
+  spindle 1000-24000 rpm, X/Y 4000/5000 and Z 1500/2000 mm/min, Flood M8 and
+  Mist M7): a typical small router, meant to be copied and edited. No tool
+  count and no spindle power: unstated rather than invented (manual changes
+  have no magazine).
+- **Post registered as "grblHAL"** before "Fanuc Lathe" in `BUILTINS`: the
+  conformance test expects the mill posts first, then the lathe post;
+  entries are addressed by name, so the lathe post's index moving is
+  harmless. The synth golden drops only the tap record (G55 stays).
+- **End units option** (`EndUnits`) is read by the script, but the Setup
+  pane's end-units row still shows only for Tormach; widening it is UI
+  work left out of this PR.
+
 **Cost to change later:** low - a post option for the length offset or for G30
 before M6 adds words without moving any existing golden.

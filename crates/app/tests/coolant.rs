@@ -75,7 +75,7 @@ fn has_word(line: &str, code: &str) -> bool {
     line.split_whitespace().any(|w| w.trim_end_matches('*') == code)
 }
 
-const MILLS: [&str; 5] = ["Fanuc", "Haas", "Siemens 840D", "Heidenhain", "Mazak"];
+const MILLS: [&str; 6] = ["Fanuc", "Haas", "Siemens 840D", "Heidenhain", "Mazak", "grblHAL"];
 
 fn script(name: &str) -> &'static str {
     posting::BUILTINS.iter().find(|(n, _)| *n == name).map(|(_, s)| *s).expect("a built-in")
