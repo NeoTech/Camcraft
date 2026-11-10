@@ -27,7 +27,9 @@ pub use lathe::{LathePlan, LATHE_HELIX_REFUSAL, LATHE_THREAD_REFUSAL, LATHE_VERD
 // next setup's frame through the transform between the two.
 #[path = "stock_sim_carry.rs"]
 pub mod carry;
-pub use carry::{CARRY_MACHINE_REFUSAL, incoming_body};
+#[path = "stock_sim_breaks.rs"]
+pub mod breaks;
+pub use carry::{CARRY_MACHINE_CHANGE_REFUSAL, CARRY_MACHINE_REFUSAL, incoming_body};
 
 use crate::geometry::Triangle;
 
@@ -87,7 +89,19 @@ pub fn stock_grid(
             ((x1 - x0).max(0.0), (y1 - y0).max(0.0))
         }
     };
-    let cell = auto_cell(tool_r, span_x, span_y);
+    // A program none of whose ops sweeps a tool through material (a
+    // probe-only program, #592: the probe stays out of the plan) has no
+    // radius to size the lattice by - `min` over nothing is +inf, and
+    // an infinite cell was refused as "invalid stock simulation setup",
+    // naming the wrong cause. The stock then simply stands uncut: size
+    // its lattice by the span alone (the grid ceiling's floor), and the
+    // verdict reads the raw stock against the part - clean when they
+    // agree, rest where they don't, never a gouge it did not cut.
+    // Exactly +inf (the empty fold), nothing wider: a NaN or negative
+    // radius still reaches `auto_cell` and is refused by name (review
+    // of #599) - only "no tool cut" falls back to the span.
+    let sizing_r = if tool_r == f64::INFINITY { 0.0 } else { tool_r };
+    let cell = auto_cell(sizing_r, span_x, span_y);
     let dex = match &shape {
         StockShape::FromModel { .. } => {
             Dexel::from_facets(&stock_facets, cell).map_err(|e| e.to_string())?
@@ -137,6 +151,9 @@ pub fn simulate_document(
         carry::Held::Plain(dex) => (deviate(&dex, &model_facets, DEV_TOL).map_err(|e| e.to_string())?, dex),
         carry::Held::Carried(body) => (body.deviate(&model_facets, DEV_TOL).map_err(|e| e.to_string())?, body.display()),
     };
+    // #303: the op owns its break - a chamfer's or deburr's declared
+    // bevel is part of the finished part, judged by its own depth.
+    credit_breaks(&mut dev, &display, &model_facets, &program_breaks(world, &planned, walked.spanned, &walked.frame));
     // #320: a gouge on a block a later setup set aside for a new one.
     if let Some(left) = &walked.left {
         carry::fold_left(&mut dev, left);
@@ -144,6 +161,23 @@ pub fn simulate_document(
     let classes = color_classes(&dev);
     let surface = display.surface(&classes);
     Ok(ProgramSim { dev, surface })
+}
+
+/// The edge breaks the program declares, in the frame the verdict is
+/// read in: every op's when one frame holds the whole program, only
+/// the final frame's ops' when the program spans setups that hold the
+/// part differently (an earlier frame's bevel is not this frame's).
+fn program_breaks(
+    world: &flecs_ecs::prelude::World,
+    planned: &[Planned],
+    spanned: bool,
+    frame: &Option<String>,
+) -> Vec<crate::cl::EdgeBreak> {
+    planned
+        .iter()
+        .filter(|p| !spanned || crate::setup::effective(world, p.setup.as_deref()) == *frame)
+        .flat_map(|p| p.breaks.iter().cloned())
+        .collect()
 }
 
 /// The kinds the column verdict cannot judge, refused by name before
@@ -197,6 +231,9 @@ pub(crate) struct Planned {
     /// its moves about the axis (`lathe::lathe_plan`); the column
     /// verdict refuses the program by name. `None` for every mill op.
     pub lathe: Option<LathePlan>,
+    /// The edge breaks the op was asked to cut (#303); empty for every
+    /// kind but the chamfer and the deburr.
+    pub breaks: Vec<crate::cl::EdgeBreak>,
 }
 
 /// The corner radius a tool's atom carries (M13.1): Some only for a
@@ -285,6 +322,8 @@ pub(crate) fn plan_program(world: &flecs_ecs::prelude::World) -> Result<Vec<Plan
         planned.push(Planned {
             name: name.clone(),
             moves: cache.path.moves,
+            // #529: only what the op itself declared, never wider.
+            breaks: breaks::bounded(name, &op.params, cache.path.breaks),
             // A turning insert's cutting feature is its nose (a
             // blade's, half its band - `LathePlan::feature`): the
             // display cell law (`auto_cell`) reads it, not the IC.

@@ -171,6 +171,12 @@ impl HolderProfile {
         Ok(Self { bands: merge(fine, MAX_BANDS) })
     }
 
+    /// A profile from contiguous bands already known exactly (a drawn
+    /// spun profile, #93), merged to [`MAX_BANDS`] - merging only grows.
+    pub(crate) fn from_bands(bands: Vec<HolderBand>) -> Self {
+        Self { bands: merge(bands, MAX_BANDS) }
+    }
+
     #[must_use]
     pub fn bands(&self) -> &[HolderBand] {
         &self.bands
@@ -240,8 +246,8 @@ impl HolderProfile {
     }
 }
 
-/// Twice the facet's area.
-fn area2(t: &Tri) -> f64 {
+/// Twice the facet's area (#369's lathe clearance reads it too).
+pub(crate) fn area2(t: &Tri) -> f64 {
     let u = [t[1][0] - t[0][0], t[1][1] - t[0][1], t[1][2] - t[0][2]];
     let v = [t[2][0] - t[0][0], t[2][1] - t[0][1], t[2][2] - t[0][2]];
     let c = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
@@ -267,8 +273,8 @@ fn clipped_reach(t: &Tri, lo: f64, hi: f64) -> f64 {
 }
 
 /// One Sutherland-Hodgman pass: keep the side `z >= c` (`keep_above`)
-/// or `z <= c`.
-fn clip(poly: &[[f64; 3]], c: f64, keep_above: bool) -> Vec<[f64; 3]> {
+/// or `z <= c` (#369's lathe clearance clips with it too).
+pub(crate) fn clip(poly: &[[f64; 3]], c: f64, keep_above: bool) -> Vec<[f64; 3]> {
     let inside = |p: &[f64; 3]| if keep_above { p[2] >= c } else { p[2] <= c };
     let mut out = Vec::with_capacity(poly.len() + 2);
     for (i, p) in poly.iter().enumerate() {
@@ -290,7 +296,7 @@ fn clip(poly: &[[f64; 3]], c: f64, keep_above: bool) -> Vec<[f64; 3]> {
 /// the pair whose joined cylinder adds the least volume, at the larger
 /// radius - so every merge only grows the envelope. Equal neighbours
 /// join first for free.
-fn merge(mut b: Vec<HolderBand>, cap: usize) -> Vec<HolderBand> {
+pub(crate) fn merge(mut b: Vec<HolderBand>, cap: usize) -> Vec<HolderBand> {
     let join = |x: &HolderBand, y: &HolderBand| HolderBand { above: x.above, len: (y.above + y.len) - x.above, r: x.r.max(y.r) };
     let cost = |x: &HolderBand, y: &HolderBand| {
         let j = join(x, y);

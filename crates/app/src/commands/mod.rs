@@ -7,12 +7,19 @@
 pub mod cutting_data;
 pub mod delete_entity;
 pub mod fixture;
+pub mod import_fixture;
 pub mod import_model;
+// #339 slice 6: a fixture library entry placed into a setup.
+pub mod insert_fixture;
 pub mod load_machine;
+// #561: locate the part in a fixture (or the fixture on the part) by mates.
+pub mod locate;
 pub mod move_model;
 pub mod operation;
 pub mod post;
 pub mod post_options;
+// #155: Pause / Home entries of the operation list.
+pub mod program_entry;
 // M13.11: mesh repair (weld + fill holes) as one undo unit over UpdateModel.
 pub mod repair_model;
 // Issue #143: ribbon pins are saved with the project, so they are a command.
@@ -26,6 +33,7 @@ pub mod setup_align;
 pub mod setup_wcs;
 // #343: a setup's own machine and post.
 pub mod setup_mount;
+pub mod setup_post_options;
 // #316: a setup placed relative to another (flip / turn presets).
 pub mod setup_relative;
 // #320: a setup's stock source.
@@ -39,6 +47,8 @@ pub mod set_wcs;
 pub mod tool;
 // #368: a tool's modelled body.
 pub mod tool_body;
+// #300: a tool library file imported as one undo unit.
+pub mod tool_import;
 // #221: a tool's controller number.
 pub mod tool_number;
 pub mod update_model;
@@ -50,8 +60,11 @@ pub use delete_entity::DeleteEntity;
 pub use fixture::{
     AddFixtureModel, DeleteFixture, MoveFixture, SetFixtureFixed, TagFixture, UntagFixture,
 };
+pub use import_fixture::ImportFixture;
 pub use import_model::ImportModel;
+pub use insert_fixture::InsertFixture;
 pub use load_machine::LoadMachine;
+pub use locate::{Locate, LocateFixture, LocatePart};
 pub use move_model::MoveModel;
 pub use operation::{
     ChangeOperationKind, ClearToolpath, CreateOperation, DeleteOperation, EditOperationLinks,
@@ -60,6 +73,7 @@ pub use operation::{
 };
 pub use post::SelectPost;
 pub use post_options::SetPostOptions;
+pub use program_entry::{AddProgramEntry, EditProgramEntry};
 pub use repair_model::RepairModel;
 pub use ribbon_pins::SetRibbonPins;
 pub use select_entity::SelectEntity;
@@ -68,6 +82,7 @@ pub use setup::{ActivateSetup, CreateSetup, DeleteSetup, SetOperationSetup};
 pub use setup_align::AlignPartToSetup;
 pub use setup_wcs::SetSetupWorkOffset;
 pub use setup_mount::{SetSetupMachine, SetSetupPost};
+pub use setup_post_options::SetSetupPostOptions;
 pub use setup_relative::SetSetupRelative;
 pub use setup_stock::SetSetupStockSource;
 pub use set_units::SetUnits;
@@ -75,7 +90,8 @@ pub use theme::{theme_of, theme_set, SetTheme};
 pub use color_vision::{color_vision_of, color_vision_set, SetColorVision};
 pub use set_wcs::SetWcsOrigin;
 pub use tool::{AddTool, ChangeTool, DeleteTool};
-pub use tool_body::{SetToolBody, ToolBodySpec};
+pub use tool_body::{LatheBodySpec, SetToolBody, ToolBodySpec};
+pub use tool_import::{ImportReport, ImportTools};
 pub use tool_number::SetToolNumber;
 pub use update_model::UpdateModel;
 
@@ -93,6 +109,22 @@ pub enum CommandError {
     UnsupportedType(String),
     #[error("could not generate the toolpath: {0}")]
     Machining(String),
+    /// A [`Machining`](CommandError::Machining) refusal about one spot
+    /// of the part (#261 part 2): `at` is world coordinates. Reads as
+    /// `Machining` does.
+    #[error("could not generate the toolpath: {msg}")]
+    MachiningAt { msg: String, at: crate::geometry::Point3 },
+}
+
+impl CommandError {
+    /// The spot a refused generation names, in world coordinates.
+    #[must_use]
+    pub fn location(&self) -> Option<crate::geometry::Point3> {
+        match self {
+            CommandError::MachiningAt { at, .. } => Some(*at),
+            _ => None,
+        }
+    }
 }
 
 pub trait Command {

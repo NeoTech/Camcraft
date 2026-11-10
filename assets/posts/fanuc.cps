@@ -17,6 +17,7 @@ capabilities = 1; // reference contract: integer feature mask (bit 1 = milling)
 coolantModes = true; // reads PARAM Coolant (#112/#150): the engine refuses non-Flood ops for a post without it
 afterModes = true; // reads PARAM AfterOperation (#110): the engine refuses a stop or home ask for a post without it
 axisInversion = true; // verified on the engine's mirrored stream for an inverted X/Y (#374): goldens + equivalence test
+probeAxisInversion = true; // probing blocks verified on the mirrored stream (#392): macro interpreter on a simulated inverted machine
 
 // Determinism law: no timestamps, no randomness - the same stream
 // always posts to the same text (golden files depend on it).
@@ -33,6 +34,7 @@ var retractSet = false;    // G98 written once per program
 var coolant = "";          // the M-code this program started, if any
 var coolantAsk = "flood";  // the section's PARAM Coolant (#112), flood when unstated
 var afterAsk = "";         // the section's PARAM AfterOperation (#110), none when unstated
+var homedAt = -1;          // linesWritten() just after a trip home (#504): onClose skips its own home when nothing followed
 var coolantOp = "";        // the section's OperationName, for refusals (#150)
 var sectionOpen = false;   // preamble written (a legacy .cl carries no SECTION)
 var tcpmOn = false;        // G43.4 armed (stage D RTCP): re-armed at tool change
@@ -306,7 +308,9 @@ function invertedNotes() {
 function onOpen() {
   var nm = (typeof machine !== "undefined" && machine.name) || "CAMCRAFT";
   writeln("%");
-  block([oWord(), "(" + nm + ")"]);
+  // #594: the name is user text from the machine file - cleaned like
+  // every other comment text, so `Tormach 770MX (ML)` never nests.
+  block([oWord(), "(" + (clean(nm) || "CAMCRAFT") + ")"]);
   invertedNotes();
 }
 
@@ -379,6 +383,7 @@ function afterOp() {
     block(["G91", "G28", "Z0"]);  // straight up to the reference point first
     block(["G28", "X0", "Y0"]);
     block(["G90"]);               // absolute again before the next section
+    homedAt = linesWritten();
     return;
   }
   msg(coolantWho() + "unknown after-operation ask " + ask);
@@ -517,10 +522,36 @@ function onProbeRetreat() {
   block(["G91", "G01", w("X", p.DeltaX), w("Y", p.DeltaY), w("Z", p.DeltaZ), fw(p.Feed)]);
   block(["G90"]);
 }
+// #174. A protected positioning move (the descent to a touch's start,
+// the travel between touches, the rise) is the same G31 skip, read the
+// other way round: with no skip signal the block ends at its target and
+// #5061-#5063 hold that end point; a trip on the way stops it short, so
+// any moving axis whose skip position is not the target alarms (#3000)
+// - an obstacle where the model has none stops the program instead of
+// the stylus being driven into it. Same public sources as above.
+function onProbeGuard() {
+  startPreamble();
+  compRefuse("a protected probe move");
+  var p = properties;
+  block(["G31", wo("X", p.X, orgX), wo("Y", p.Y, orgY), wo("Z", p.Z, orgZ), fw(p.Feed)]);
+  var to = [p.X, p.Y, p.Z], from = [p.StartX, p.StartY, p.StartZ], org = [orgX, orgY, orgZ];
+  for (var ai = 0; ai < 3; ai++) {
+    if (has(from[ai]) && Math.abs(to[ai] - from[ai]) < 1e-6) continue;  // an axis that holds still
+    block(["IF[ABS[" + minusU("#" + (5061 + ai), to[ai] - org[ai]) + "]GT0.001]THEN#3000=3(PROBE HIT ON POSITIONING)"]);
+  }
+}
 function slotOf(word) {  // "G55" -> 1
   var n = Number(String(word).replace(/[^0-9]/g, "")) - 54;
   return n >= 0 && n <= 5 ? n : 0;
 }
+// #575: no deviation report is written before the offset write. Fanuc's
+// published custom macro B documentation (also the Haas and Mazak EIA
+// macro conventions this post family follows) gives an operator message
+// only as #3000 (an alarm, which stops) or #3006 (stop with a message);
+// DPRNT/POPEN go to an external I/O device, not the control's screen. No
+// documented message shows a value without stopping, so nothing is
+// emitted - a stop on every good probe is not a report. The measure-only
+// #3006 below stops by intent: there the operator must act on #190.. .
 function onProbeResult() {
   var p = properties;
   var org = [orgX, orgY, orgZ];
@@ -551,8 +582,12 @@ function onProbeResult() {
 // ------------------------------------------------------------ footer
 function onClose() {
   endPreamble();
-  block(["G91", "G28", "Z0"]);
-  block(["G28", "X0", "Y0"]);
+  // #504: a trip home with nothing written after it (a trailing Go
+  // home) already is the program-end home - written once, not twice.
+  if (linesWritten() !== homedAt) {
+    block(["G91", "G28", "Z0"]);
+    block(["G28", "X0", "Y0"]);
+  }
   block(["M30"]);
   writeln("%");
 }
