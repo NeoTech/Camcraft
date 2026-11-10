@@ -24,7 +24,7 @@ use camcraft_app::tools::catalog;
 use camcraft_app::world::new_world;
 use serde_json::json;
 
-const MILLS: [&str; 6] = ["Fanuc", "Haas", "Siemens 840D", "Heidenhain", "Mazak", "grblHAL"];
+const MILLS: [&str; 7] = ["Fanuc", "Haas", "Siemens 840D", "Heidenhain", "Mazak", "grblHAL", "TinyG"];
 const LATHE_CPS: &str = include_str!("../../../assets/posts/fanuc-lathe.cps");
 
 fn face_params(cut_z: f64) -> OpParams {

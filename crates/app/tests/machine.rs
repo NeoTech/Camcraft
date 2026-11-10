@@ -742,6 +742,7 @@ fn every_shipped_machine_mounts_and_speaks_its_declaration() {
         ("Tormach 770M+", Kind::Mill),
         ("Tormach 1100M+", Kind::Mill),
         ("grblHAL 3-axis", Kind::Mill),
+        ("TinyG 3-axis", Kind::Mill),
     ];
     assert_eq!(MACHINES.len(), expectations.len(), "the pane offers what the tests pin");
     for ((name, text), (want_name, want_kind)) in MACHINES.iter().zip(expectations) {

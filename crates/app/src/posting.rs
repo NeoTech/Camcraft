@@ -39,6 +39,8 @@ pub const BUILTINS: &[(&str, &str)] = &[
     ("Tormach PathPilot", include_str!("../../../assets/posts/tormach.cps")),
     // #710: grbl-family controllers (hobby and small-shop routers and mills).
     ("grblHAL", include_str!("../../../assets/posts/grblhal.cps")),
+    // Synthetos TinyG: the other grbl-family controller, no canned cycles, M0 after each tool change.
+    ("TinyG", include_str!("../../../assets/posts/tinyg.cps")),
     ("Fanuc Lathe", include_str!("../../../assets/posts/fanuc-lathe.cps")),
 ];
 
@@ -146,6 +148,8 @@ pub const MACHINES: &[(&str, &str)] = &[
     ("Tormach 1100M+", include_str!("../../../assets/machines/tormach-1100m-plus.mch")),
     // #710: a generic grbl-family router / mill; pairs with the "grblHAL" post.
     ("grblHAL 3-axis", include_str!("../../../assets/machines/grblhal-3axis.mch")),
+    // A generic TinyG router / mill; pairs with the "TinyG" post.
+    ("TinyG 3-axis", include_str!("../../../assets/machines/tinyg-3axis.mch")),
 ];
 
 /// The mount path a built-in library entry records (stage C): the

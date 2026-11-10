@@ -55,16 +55,20 @@ const POSTS: &[(&str, &str, &str)] = &[
     ("Mazak", "mazak", "mazak"),
     ("Tormach PathPilot", "tormach", "tormach"),
     ("grblHAL", "grblhal", "grblhal"),
+    ("TinyG", "tinyg", "tinyg"),
 ];
 
 /// (post stem, golden, named reason): a golden a dialect must REFUSE
 /// rather than post, so it has no `.nc` there. #50: the Heidenhain
 /// DIN/ISO post has no tapping form (G206/G207 are not specced) and a
 /// tap cannot be plain moves.
-/// #710: grblHAL's core G-code list has no G84 either.
+/// #710: grblHAL's core G-code list has no G84 either; TinyG has no
+/// canned cycles at all and posts drilling as plain moves, but a tap
+/// cannot be plain moves.
 const REFUSED: &[(&str, &str, &str)] = &[
     ("heidenhain", "tap_plate", "tapping"),
     ("grblhal", "tap_plate", "tapping"),
+    ("tinyg", "tap_plate", "tapping"),
 ];
 
 /// The TURNING dialects (M13.5): their goldens are the lathe
@@ -277,10 +281,11 @@ fn the_synthesized_stream_locks_the_tool_and_spindle_words() {
     for (name, cps_stem, _) in POSTS {
         // #50: Heidenhain refuses a G55 offset and a tap by name, so
         // its golden locks the same stream without those two records.
-        // #710: grblHAL has no G84, so its golden drops only the tap.
+        // #710: grblHAL has no G84, so its golden drops only the tap;
+        // TinyG the same (its drill chains post as plain moves).
         let stream = match *cps_stem {
             "heidenhain" => synth_stream_with("G54", false),
-            "grblhal" => synth_stream_with("G55", false),
+            "grblhal" | "tinyg" => synth_stream_with("G55", false),
             _ => synth_stream(),
         };
         let cps = read(&format!("assets/posts/{cps_stem}.cps"));
@@ -363,6 +368,7 @@ const EXTENSIONS: &[(&str, &str)] = &[
     ("mazak", "nc"),
     ("tormach", "nc"),
     ("grblhal", "nc"),
+    ("tinyg", "gcode"),
     ("fanuc-lathe", "nc"),
 ];
 

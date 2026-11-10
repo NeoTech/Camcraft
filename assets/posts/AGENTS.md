@@ -129,7 +129,8 @@ write (the gate), so the released program never carries one.
   cycle block per hole, bare X Y continuations when the signature is
   unchanged, `G80` before any cycle-signature change or section end.
   A dialect whose documented cycles this post was not specced from
-  (Heidenhain DIN/ISO: G200-G209 with Q parameters, #50) posts the
+  (Heidenhain DIN/ISO: G200-G209 with Q parameters, #50; TinyG, which
+  has no canned cycles at all) posts the
   expanded chain as plain moves instead and refuses what plain moves
   cannot do (tapping) - never a cycle word the manual does not list.
   The arc plane (M11.2 A) is modal too: `CircularPlane` XY/XZ/YZ maps
