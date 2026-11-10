@@ -18,7 +18,7 @@
 use crate::model;
 use crate::operation::{self, Height, OpStatus, OpParams};
 use crate::post::{self, cnc, engine, Dump};
-use crate::schema::{PostOptions, PostRef, ThreadingOutput, WCS_SLOTS};
+use crate::schema::{EndUnits, PostOptions, PostRef, ThreadingOutput, WCS_SLOTS};
 use flecs_ecs::prelude::*;
 use serde_json::Value;
 use std::path::Path;
@@ -37,6 +37,7 @@ pub const BUILTINS: &[(&str, &str)] = &[
     ("Heidenhain", include_str!("../../../assets/posts/heidenhain.cps")),
     ("Mazak", include_str!("../../../assets/posts/mazak.cps")),
     ("Tormach PathPilot", include_str!("../../../assets/posts/tormach.cps")),
+    ("Makera Carvera", include_str!("../../../assets/posts/carvera.cps")),
     ("Fanuc Lathe", include_str!("../../../assets/posts/fanuc-lathe.cps")),
 ];
 
@@ -142,6 +143,17 @@ pub const MACHINES: &[(&str, &str)] = &[
     ("Tormach PCNC 1100 (Series I)", include_str!("../../../assets/machines/tormach-pcnc1100-s1.mch")),
     ("Tormach PCNC 1100 (Series II)", include_str!("../../../assets/machines/tormach-pcnc1100-s2.mch")),
     ("Tormach PCNC 1100 (Series 3)", include_str!("../../../assets/machines/tormach-pcnc1100-s3.mch")),
+    // #618: the M+ upgrade kits - the M's figures with the MX's axis speeds.
+    ("Tormach 770M+", include_str!("../../../assets/machines/tormach-770m-plus.mch")),
+    ("Tormach 1100M+", include_str!("../../../assets/machines/tormach-1100m-plus.mch")),
+    // #611: Tormach's lathes, from their operator manuals (UM10753, UM10225).
+    ("Tormach 8L", include_str!("../../../assets/machines/tormach-8l.mch")),
+    ("Tormach 15L Slant-PRO", include_str!("../../../assets/machines/tormach-15l-slant-pro.mch")),
+    // #619: the 15LX (UM10860 §3.1).
+    ("Tormach 15LX Slant-PRO", include_str!("../../../assets/machines/tormach-15lx-slant-pro.mch")),
+    // #707: Makera's desktop mills, from Makera's product spec tables.
+    ("Makera Carvera", include_str!("../../../assets/machines/makera-carvera.mch")),
+    ("Makera Carvera Air", include_str!("../../../assets/machines/makera-carvera-air.mch")),
 ];
 
 /// The mount path a built-in library entry records (stage C): the
@@ -184,17 +196,27 @@ pub fn document_post_of(world: &World) -> PostRef {
     crate::setup_mount::document_post(world)
 }
 
+/// The spindle speed a program commands for `tool`, rpm (#565): a touch
+/// probe is never spun (0 - its catalog `rpm` is never posted, and the
+/// posts start no spindle for it, #523); every cutter runs its own. The
+/// one answer the post and the machine's spindle-range check both read.
+#[must_use]
+pub fn posted_rpm(tool: &crate::tools::Tool) -> f64 {
+    if tool.kind == crate::tools::ToolKind::Probe { 0.0 } else { tool.rpm }
+}
+
 /// Write the singleton. For the `SelectPost` command and the project
 /// reader only.
 pub fn post_set(world: &World, next: &PostRef) {
     world.set(next.clone());
 }
 
-/// The document's post options (issue #34), from the `PostOptions`
-/// singleton; the default when none was ever set.
+/// The post options the program posts with (issue #34): the active
+/// setup's (#389 - its own, else the document's `PostOptions`
+/// singleton, [`crate::setup_post_options::document`]).
 #[must_use]
 pub fn post_options(world: &World) -> PostOptions {
-    world.try_get::<&PostOptions>(|p| *p).unwrap_or_default()
+    crate::setup_post_options::in_force(world)
 }
 
 /// Write the options singleton. For `SetPostOptions` and the project
@@ -204,14 +226,25 @@ pub fn post_options_set(world: &World, next: PostOptions) {
 }
 
 /// The options as the script's `postOptions` object: the words a
-/// script compares against (`Threading`: `"G32"` or `"G76"`).
+/// script compares against (`Threading`: `"G32"` or `"G76"`;
+/// `EndUnits`: `"inch"` or `"mm"`, absent when the program's unit is
+/// left modal, #596).
 #[must_use]
 pub fn options_value(o: PostOptions) -> Value {
     let threading = match o.threading {
         ThreadingOutput::G32Passes => "G32",
         ThreadingOutput::G76Cycle => "G76",
     };
-    serde_json::json!({ "Threading": threading })
+    let mut v = serde_json::json!({ "Threading": threading });
+    let end = match o.end_units {
+        EndUnits::Leave => None,
+        EndUnits::Inch => Some("inch"),
+        EndUnits::Millimeters => Some("mm"),
+    };
+    if let (Some(end), Some(map)) = (end, v.as_object_mut()) {
+        map.insert("EndUnits".to_owned(), Value::from(end));
+    }
+    v
 }
 
 /// The document's post for display: built-in name, or the file path
@@ -311,6 +344,8 @@ mod wcs_rotation;
 mod wcs_slot;
 #[path = "posting_mounts.rs"]
 mod mounts;
+#[path = "posting_nose.rs"]
+pub mod nose;
 pub(crate) use wcs_rotation::{offset_frame, OffsetFrame};
 pub use mounts::{
     machine_checks, machine_value_for, machine_value_of, post_mounts, post_mounts_script, post_of_setup, PostedMount,
@@ -420,9 +455,11 @@ fn viewer_map(records: &[cnc::Record], out: &engine::PostOutput) -> Vec<Option<[
         .iter()
         .filter_map(|r| match r {
             cnc::Record::Move(m) => Some([m.x, m.y, m.z]),
-            // Probing (#108): each touch and retreat stands for one move.
+            // Probing (#108): each touch, retreat and protected move (#174)
+            // stands for one move.
             cnc::Record::Touch(t) => Some(t.expect),
             cnc::Record::Retreat(t) => Some(t.expect),
+            cnc::Record::Guard(g) => Some(g.to),
             _ => None,
         })
         .collect();
@@ -435,6 +472,7 @@ fn viewer_map(records: &[cnc::Record], out: &engine::PostOutput) -> Vec<Option<[
             cnc::Record::Move(m) => Some([m.x, m.y, m.z]),
             cnc::Record::Touch(t) => Some(t.expect),
             cnc::Record::Retreat(t) => Some(t.expect),
+            cnc::Record::Guard(g) => Some(g.to),
             cnc::Record::Cycle(c) => moves.get(c.first_move).copied(),
             _ => None,
         };
@@ -549,6 +587,10 @@ pub fn verification_report(world: &World) -> GateReport {
     problems.extend(suppressed::suppressed_problems(world));
     // The rotated-offset clause (#315): the post carries translation only.
     problems.extend(wcs_rotation::rotated_wcs_problems(world));
+    // #389: the setups' post options must agree on what shapes the whole
+    // program (the Output and the thread output) - never posted half one
+    // way. Judged program-wide, ahead of #388's per-mount split.
+    problems.extend(crate::setup_post_options::program_problems(world));
     // The carried-stock clause (#319): a feed move into carried material
     // outside a setup's declared stock is engagement nothing verified.
     problems.extend(crate::operation::carried_problems(world));
@@ -611,69 +653,32 @@ pub struct FixtureFindings {
 pub fn fixture_findings(world: &World) -> Result<FixtureFindings, String> {
     let mut out = FixtureFindings::default();
     let ops = program_ops(world)?;
-    let spindle_of = |setup: Option<&str>| crate::machine::of_setup(world, setup)
-        .1
-        .and_then(|m| m.spindle_d.zip(m.spindle_len))
-        .map(|(d, l)| (d * 0.5, l));
     let mut mesh_cache: std::collections::HashMap<Option<String>, Vec<crate::fixture::MeshedFixture>> =
         std::collections::HashMap::new();
     for (name, e) in ops {
         let Some(op) = model::operation_of(world, &e) else {
             continue;
         };
-        let spindle = spindle_of(op.setup.as_deref()); // #388: its own machine's
         let Some(cache) = model::toolpath_of(world, &e) else {
             continue;
         };
-        let Some((tool_entity, tool)) = model::find_by_name(world, &op.tool)
-            .and_then(|t| model::tool_of(world, &t).map(|d| (t, d)))
-        else {
-            continue;
-        };
-        // #368: the body's enclosing cylinder and band stack; a body
-        // that no longer fits its tool is itself the problem, by name.
-        let (tool, body) = match crate::tool_body::judged(world, &tool_entity, tool) {
-            Ok(v) => v,
-            Err(e) => {
-                out.unjudged.push(format!("{name}: tool {}: {e}", op.tool));
-                continue;
-            }
-        };
-        // `boxes_for` already folds in the machine-derived table, so an
-        // empty list means no steel this op could strike at all (the
-        // spindle band is tested against that list, never on its own).
         // Split by whether the steel turns with the part (M13.8 (2)):
         // fixed boxes are judged in the machine frame where the op's
         // rotary axis is known, in the path frame otherwise.
         let (turning, fixed) = crate::fixture::workholding_for(world, op.setup.as_deref());
-        if turning.is_empty() && fixed.is_empty() {
-            continue;
-        }
         // #339: the tagged models' meshes, indexed once per setup and
         // shared by every op in it.
         let meshes = mesh_cache
             .entry(crate::setup::effective(world, op.setup.as_deref()))
             .or_insert_with(|| crate::fixture::meshes_for(world, op.setup.as_deref()));
-        let wh = crate::verify::Workholding {
-            turning: &turning,
-            fixed: &fixed,
-            axis: crate::fixture::rotary_axis_of(world, &op),
-        };
-        let geom = tool.geom();
-        let holder = crate::tool_body::stack(&geom, body.as_ref());
-        // #339: each law's hits on a meshed fixture re-read against its
-        // closed mesh - the mesh only ever acquits.
-        let stack = crate::verify::steel_stack(&geom, &holder, spindle);
-        let steel = crate::verify::MeshSteel { fixtures: meshes, stack: &stack, chord_tol: operation::GOUGE_TOL };
-        let path = &cache.path;
-        let mut hits = crate::verify::mesh_refined(path, &wh, &steel, false, |w| {
-            crate::verify::bands_vs_workholding_held(path, &geom, &holder, w, spindle, operation::GOUGE_TOL)
-        });
-        // The spindle housing rides posed rapids too (M13.8 (1)).
-        hits.extend(crate::verify::mesh_refined(path, &wh, &steel, true, |w| {
-            crate::verify::rapids_vs_workholding_held(path, &geom, &holder, w, spindle)
-        }));
-        out.hits.extend(hits.into_iter().map(|hit| (name.clone(), hit)));
+        // The one per-op law, shared with the viewport's struck-fixture
+        // view (#339 slice 4) so the two can never disagree. Its `Err`
+        // is #368's tool body that no longer fits its tool: unjudged,
+        // by name, never read as clear.
+        match crate::fixture_struck::op_hits(world, &op, &cache.path, &turning, &fixed, meshes) {
+            Ok(hits) => out.hits.extend(hits.into_iter().map(|hit| (name.clone(), hit))),
+            Err(why) => out.unjudged.push(format!("{name}: {why}")),
+        }
     }
     for meshes in mesh_cache.values() {
         crate::fixture::log_mesh_refusals(meshes);
@@ -711,7 +716,7 @@ pub(crate) fn join_streams(streams: Vec<(String, Vec<cnc::Record>)>) -> Vec<cnc:
         // contour in place of its centre moves.
         moved += recs
             .iter()
-            .filter(|r| matches!(r, cnc::Record::Move(_) | cnc::Record::Touch(_) | cnc::Record::Retreat(_)))
+            .filter(|r| matches!(r, cnc::Record::Move(_) | cnc::Record::Touch(_) | cnc::Record::Retreat(_) | cnc::Record::Guard(_)))
             .count();
         records.extend(recs);
     }
@@ -726,13 +731,10 @@ pub fn op_streams(world: &World) -> Result<Vec<(String, Vec<cnc::Record>)>, Stri
 
     // The T../H.. law (#221): a tool's own number when it has one, else
     // its 1-based position among the named tools in document order - and
-    // two tools of one program posting the same number refuse by name.
+    // two tools of one machine posting the same number refuse by name.
     let tool_numbers = crate::tool_numbers::numbers(world);
-    let used: Vec<String> = ops
-        .iter()
-        .filter_map(|(_, e)| model::operation_of(world, e).map(|op| op.tool))
-        .collect();
-    if let Some(msg) = crate::tool_numbers::clash(world, &used) {
+    // Judged per machine (#438): two machines are two tool tables.
+    if let Some(msg) = crate::tool_numbers::clash_per_machine(world, &ops) {
         return Err(msg);
     }
 
@@ -753,9 +755,12 @@ pub fn op_streams(world: &World) -> Result<Vec<(String, Vec<cnc::Record>)>, Stri
         }
     }
 
-    let skip_stops = post_options(world).skip_stops;
-    // #155: Pause / Home entries fold into the gap they stand in.
-    let afters = crate::program_entry::posted_afters(world, &ops, skip_stops)?;
+    // #155: Pause / Home entries fold into the gap they stand in; #389:
+    // "Skip pauses and homes" is read per op, from its own setup.
+    let afters = crate::program_entry::posted_afters(world, &ops, |e| {
+        model::operation_of(world, e)
+            .is_some_and(|op| crate::setup_post_options::of(world, op.setup.as_deref()).skip_stops)
+    })?;
     let mut streams = Vec::with_capacity(ops.len());
     for (name, e) in &ops {
         let op = model::operation_of(world, e)
@@ -816,18 +821,24 @@ pub fn op_streams(world: &World) -> Result<Vec<(String, Vec<cnc::Record>)>, Stri
             }),
             _ => None,
         };
-        let rpm = if tool.kind == crate::tools::ToolKind::Probe { 0.0 } else { tool.rpm };
+        let rpm = posted_rpm(&tool);
         // Commentary for the program (#257): kinds by their panel
         // labels, the setup by the resolution law (implicit members
         // name the first setup, as the setup sheet does).
         let op_kind = op.params.kind().to_string();
         let tool_kind = tool.kind.to_string();
         let setup_name = crate::setup::effective(world, setup).unwrap_or_default();
+        // #630: a nose-centre turning path posts as the tool's control
+        // point for its orientation (or is refused by name when the
+        // orientation cannot cut it); the cache stays the nose truth.
+        let (posted, tool_orientation) = nose::posted_path(&op.params, &op.tool, &tool, &cache.path, origin)
+            .map_err(|e| format!("{display_name}: {e}"))?;
         let d = Dump {
             op_kind: &op_kind,
             setup_name: &setup_name,
             tool_kind: &tool_kind,
             tool_corner_r: tool.corner_r,
+            tool_orientation,
             probe_result,
             op_name: &display_name,
             part_load,
@@ -859,7 +870,7 @@ pub fn op_streams(world: &World) -> Result<Vec<(String, Vec<cnc::Record>)>, Stri
                 .map(|w| format!("{name}: {w}"))
                 .collect(),
         };
-        streams.push((name.clone(), post::dump(&cache.path, &d)));
+        streams.push((name.clone(), post::dump(&posted, &d)));
     }
     Ok(streams)
 }

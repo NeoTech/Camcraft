@@ -153,6 +153,7 @@ pub use crate::tools::ToolGeom;
 
 mod air;
 mod arc_bulge;
+mod c_steel;
 mod contact;
 mod crossing;
 mod cut_index;
@@ -163,6 +164,8 @@ mod laws;
 mod mesh_posed;
 mod mesh_steel;
 mod midpose;
+// #672: the plasma through-cut laws (cut order, kerf crossing, tip-up).
+pub mod plasma;
 mod posed_steel;
 mod prior;
 mod probe;
