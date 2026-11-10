@@ -1,7 +1,7 @@
 //! The Tormach PathPilot (LinuxCNC) LATHE post (#612):
 //! `assets/posts/tormach-lathe.cps` posts the turning documents' own
-//! streams - profile rough and finish, threading (G33 passes or the
-//! one-block LinuxCNC G76), the axial drill as plain moves - to
+//! streams - profile rough and finish (the tool's control point, #630),
+//! the axial drill as plain moves - to
 //! byte-identical G-code in inch and mm, and refuses by name what the
 //! dialect cannot say (a tap, a back-bore, a hole off the axis, a G76
 //! record it cannot state exactly, a tool number outside T01-T99,
@@ -9,6 +9,9 @@
 //! LinuxCNC syntax sanity check: G7 stated, no G32 / G80 / G81 / G83 /
 //! M6 / G43, no O word or % fence, no nested comment, every word from
 //! the sets the LinuxCNC reference and Tormach's lathe tables list.
+//! Threading (G33 passes, the one-block G76, the hand) is the sibling
+//! suite `lathe_post_tormach_thread`; the fixtures are shared from
+//! `tormach_lathe_support`.
 //!
 //! Regenerate after an intentional change:
 //! `WRITE_GOLDEN=1 cargo test -p camcraft-app --test lathe_post_tormach`
@@ -19,96 +22,24 @@
 //! Lane shape (M4.4): all tests here run in seconds.
 
 mod common;
+mod tormach_lathe_support;
 
 use flecs_ecs::prelude::World;
 use serde_json::json;
 
 use camcraft_app::cl::{CycleKind, MoveKind};
-use camcraft_app::commands::{
-    AddTool, CreateOperation, GenerateOperation, History, ImportModel, LoadMachine, SelectPost, SetPostOptions,
-    SetStock,
-};
+use camcraft_app::commands::{History, SelectPost};
 use camcraft_app::drilling::{CycleChoice, Hole};
 use camcraft_app::geo2d::Point2;
-use camcraft_app::geometry::{Mesh, Point3, Triangle};
-use camcraft_app::machine::{Coolant, Kind, Machine};
-use camcraft_app::operation::{Height, OpParams, SrcRef};
-use camcraft_app::post::{cnc, cnc_thread, engine};
+use camcraft_app::machine::Kind;
+use camcraft_app::operation::{Height, OpParams};
+use camcraft_app::post::{cnc, engine};
 use camcraft_app::posting;
-use camcraft_app::schema::{Location, PostOptions, PostRef, ThreadingOutput};
-use camcraft_app::tools::catalog;
+use camcraft_app::schema::{PostOptions, PostRef};
 use camcraft_app::world::new_world;
-
-const TAU: f64 = std::f64::consts::TAU;
-const CPS: &str = include_str!("../../../assets/posts/tormach-lathe.cps");
-const NAME: &str = "Tormach PathPilot Lathe";
+use tormach_lathe_support::{create, gated, lathe_mch, linuxcnc_sane, program_with, revolve, world_with, CPS, NAME};
 
 // ------------------------------------------------------------ fixtures
-
-fn revolve(meridian: &[(f64, f64)], segs: usize) -> Mesh {
-    let v = |j: usize, r: f64, z: f64| {
-        let th = TAU * j as f64 / segs as f64;
-        Point3::new(r * th.cos(), r * th.sin(), z)
-    };
-    let mut facets = Vec::new();
-    for seg in meridian.windows(2) {
-        let ((ra, za), (rb, zb)) = (seg[0], seg[1]);
-        for j in 0..segs {
-            let (a1, a2, b1, b2) = (v(j, ra, za), v(j + 1, ra, za), v(j, rb, zb), v(j + 1, rb, zb));
-            if ra <= 1e-12 {
-                facets.push(Triangle::new(a1, b2, b1));
-            } else if rb <= 1e-12 {
-                facets.push(Triangle::new(a1, a2, b2));
-            } else {
-                facets.push(Triangle::new(a1, a2, b2));
-                facets.push(Triangle::new(a1, b2, b1));
-            }
-        }
-    }
-    Mesh::from_facets(facets)
-}
-
-/// A PathPilot-style lathe: a stated ceiling (G96's D cap), flood M8,
-/// in the unit asked.
-fn lathe(inch: bool) -> Machine {
-    Machine {
-        model: "TestBench PathPilot lathe".into(),
-        vendor: "Camcraft Testbench".into(),
-        kind: Some("lathe".into()),
-        units: inch.then(|| "inch".into()),
-        spindle_min: Some(25.0),
-        spindle_max: Some(12000.0),
-        coolants: vec![Coolant { name: "Flood".into(), m_code: "M8".into() }],
-        ..Default::default()
-    }
-}
-
-fn world_with(bar: Mesh, stock: camcraft_app::stock::StockShape, z0: f64, tools: &[&str], inch: bool) -> (World, History) {
-    let world = new_world();
-    let mut history = History::default();
-    let at = Location { pos: Point3::new(0.0, 0.0, z0), ..Location::default() };
-    history.execute(&world, SetStock::new(&world, stock, at).expect("stock"));
-    history.execute(&world, LoadMachine::new(&world, "lathe.mch".into(), Some(lathe(inch))).expect("lathe"));
-    for t in tools {
-        let tool = catalog().into_iter().find(|(n, _)| n == t).map(|(_, t)| t).expect("catalog entry");
-        history.execute(&world, AddTool::new(&world, t, tool).expect("tool"));
-    }
-    history.execute(&world, ImportModel::from_mesh("bar", bar));
-    history.execute(&world, SelectPost::new(&world, PostRef::Named(NAME.into())).expect("a registry name"));
-    (world, history)
-}
-
-fn create(world: &World, history: &mut History, name: &str, tool: &str, params: OpParams) {
-    let cmd = CreateOperation::new(world, name, tool, SrcRef::Entity("bar".into()), params);
-    history.execute(world, cmd.expect("create"));
-    history.execute(world, GenerateOperation::new(world, name).expect("generate"));
-    let e = camcraft_app::model::find_by_name(world, name).expect("op");
-    assert_eq!(
-        camcraft_app::operation::status_of(world, &e),
-        camcraft_app::operation::OpStatus::Ok,
-        "{name} generates"
-    );
-}
 
 /// The flanged bar's rough and finish (the Fanuc lathe suite's stage B).
 fn turning_world(inch: bool) -> (World, History) {
@@ -138,49 +69,6 @@ fn turning_world(inch: bool) -> (World, History) {
     (world, history)
 }
 
-const MAJOR: f64 = 6.0;
-const PITCH: f64 = 2.0;
-const DEPTH: f64 = 1.2;
-
-/// The threading suite's bar: wall r 6, a 60-degree V every 2.0 from
-/// z 8 to z 14, 1.2 deep.
-fn threaded() -> Mesh {
-    let half = DEPTH * (30.0_f64).to_radians().tan();
-    let root = MAJOR - DEPTH;
-    let mut m = vec![(0.0, -16.0), (MAJOR, -16.0), (MAJOR, 8.0 - half)];
-    let mut c = 8.0;
-    while c <= 14.0 + 1e-9 {
-        m.push((root, c));
-        m.push((MAJOR, c + half));
-        if c + PITCH <= 14.0 + 1e-9 {
-            m.push((MAJOR, c + PITCH - half));
-        }
-        c += PITCH;
-    }
-    m.push((MAJOR, 14.0 + half));
-    m.push((MAJOR, 40.0));
-    m.push((0.0, 40.0));
-    revolve(&m, 16)
-}
-
-fn thread_world(inch: bool) -> (World, History) {
-    let stock = camcraft_app::stock::StockShape::Cylinder { diameter: 12.0, height: 56.0 };
-    let (world, mut history) = world_with(threaded(), stock, -16.0, &["TD-1732-60"], inch);
-    let params = OpParams::Threading {
-        tolerance: 0.05,
-        clearance_z: Height::fixed(24.0),
-        top_z: Height::fixed(14.3),
-        bottom_z: Height::fixed(7.7),
-        pitch: PITCH,
-        depth: DEPTH,
-        infeed: 0.4,
-        feed: 120.0,
-        plunge_feed: 40.0,
-    };
-    create(&world, &mut history, "TH1", "TD-1732-60", params);
-    (world, history)
-}
-
 /// The axial drill fixture of the Fanuc lathe suite: a Ø4.1 hole 10 deep
 /// on centre.
 fn drill_world(inch: bool) -> (World, History) {
@@ -205,85 +93,6 @@ fn drill_world(inch: bool) -> (World, History) {
     (world, history)
 }
 
-fn g76() -> PostOptions {
-    PostOptions { threading: ThreadingOutput::G76Cycle, ..PostOptions::default() }
-}
-
-/// The document's stream through the script with these options; the
-/// script must add no warning beyond the stream's own WARN records.
-fn program_with(world: &World, options: PostOptions) -> String {
-    let records = posting::stream_records(world).expect("every op generated");
-    let out = engine::run_with(CPS, &posting::machine_value(world), &cnc::serialize(&records), &posting::options_value(options))
-        .expect("the script runs");
-    let warns: Vec<String> = records
-        .iter()
-        .filter_map(|r| match r {
-            cnc::Record::Warn { text } => Some(text.clone()),
-            _ => None,
-        })
-        .collect();
-    assert_eq!(out.warnings, warns, "the PathPilot lathe post refused a turning stream by name");
-    linuxcnc_sane(&out.program);
-    out.program
-}
-
-/// The document's program through the in-app gate (the post chosen by
-/// name, the gate run, the file written) - and it must equal the
-/// stream's own translation.
-fn gated(world: &World, tag: &str) -> String {
-    let path = std::env::temp_dir().join(format!("camcraft-tormach-lathe-{tag}-{}.nc", std::process::id()));
-    let _ = std::fs::remove_file(&path);
-    posting::post_setup(world, &path).expect("a clean lathe program posts through the gate");
-    let text = std::fs::read_to_string(&path).expect("written");
-    let _ = std::fs::remove_file(&path);
-    text
-}
-
-// ------------------------------------------------------------ syntax
-
-const GCODES: &[&str] = &[
-    "G0", "G1", "G2", "G3", "G4", "G7", "G18", "G20", "G21", "G30", "G33", "G40", "G54", "G55", "G56", "G57",
-    "G58", "G59", "G64", "G76", "G90", "G91.1", "G95", "G96", "G97",
-];
-const MCODES: &[&str] = &["M0", "M1", "M3", "M5", "M7", "M8", "M9", "M30"];
-
-/// A LinuxCNC / PathPilot lathe syntax check over a posted program:
-/// G7 stated before any motion, every comment one un-nested
-/// parenthesis pair, every word a letter the lathe tables list with a
-/// number, every G and M from the documented sets above (G32, G80-G83,
-/// M6, G43 and friends are not among them), no Y, no O, no %.
-fn linuxcnc_sane(text: &str) {
-    let first_motion = text.lines().position(|l| l.starts_with("G0 ") || l.starts_with("G1 "));
-    let g7 = text.lines().position(|l| l.split(' ').any(|w| w == "G7"));
-    assert!(g7.is_some() && g7 < first_motion.or(Some(usize::MAX)), "G7 before any motion: {text}");
-    assert!(!text.contains('%'), "no % fence: {text}");
-    for line in text.lines() {
-        if line.starts_with('(') {
-            assert!(line.ends_with(')'), "a comment is one line: {line}");
-            let inner = &line[1..line.len() - 1];
-            assert!(!inner.contains('(') && !inner.contains(')'), "no nested comment: {line}");
-            continue;
-        }
-        assert!(!line.contains('(') && !line.contains(';'), "no trailing comment on a motion line: {line}");
-        for w in line.split(' ') {
-            let mut ch = w.chars();
-            let letter = ch.next().unwrap_or(' ');
-            let num = ch.as_str();
-            assert!("GMTSFXZIJKPRQHD".contains(letter), "a word LinuxCNC's lathe lists: {w} in {line}");
-            assert!(num.parse::<f64>().is_ok(), "a word with a number: {w} in {line}");
-            if letter == 'G' {
-                assert!(GCODES.contains(&w), "G code outside the PathPilot lathe set: {w} in {line}");
-            }
-            if letter == 'M' {
-                assert!(MCODES.contains(&w), "M code outside the PathPilot lathe set: {w} in {line}");
-            }
-            if letter == 'T' {
-                assert!(num.len() == 4, "T word is tool + offset, T0101: {w}");
-            }
-        }
-    }
-}
-
 // ------------------------------------------------------------ goldens
 
 #[test]
@@ -303,45 +112,17 @@ fn turning_posts_to_the_pathpilot_lathe_goldens_in_mm_and_inch() {
             assert!(text.contains("F0.05") && text.contains("F0.04"), "{text}");
         }
         assert!(text.ends_with("M5\nG30\nM30\n"), "{text}");
+        // #630: the stream is the r0.8 insert's control point for
+        // orientation 2 (its imaginary tip), not the nose centre - the
+        // finish stands ON the part's Ø7 neck and its Z2 shoulder face
+        // (the nose centre would read X8.6 Z2.8: +1.6 on X, +0.8 on Z),
+        // and the tool note names the orientation to touch it off by.
+        assert_eq!(text.matches("TURNING INSERT ORIENTATION 2)").count(), 2, "{text}");
+        let finish = &text[text.find("PROFILE FINISH").expect("the finish")..];
+        let neck = if inch { "G1 X0.2756 Z0.0787 " } else { "G1 X7 Z2 " };
+        assert!(finish.contains(neck), "the tip on the neck and the shoulder: {finish}");
+        assert!(!finish.contains(if inch { "X0.3386" } else { "X8.6 " }), "no nose-centre diameter: {finish}");
         assert_eq!(gated(&world, file), text, "the gated program is the stream's own translation");
-        common::write_golden(&format!("nc/tormach-lathe/{file}.nc"), &text);
-    }
-}
-
-#[test]
-fn a_thread_posts_as_g33_passes_by_default_in_mm_and_inch() {
-    for (inch, file) in [(false, "thread_g33_mm"), (true, "thread_g33_inch")] {
-        let (world, _history) = thread_world(inch);
-        let text = program_with(&world, PostOptions::default());
-        assert!(!text.contains("G76"), "{text}");
-        let k = if inch { "K0.07874" } else { "K2\n" };
-        assert!(text.contains(k), "K = the lead, distance per revolution: {text}");
-        // One synchronized block per pass: three rungs of 0.4 to 1.2.
-        assert_eq!(text.matches("G33 ").count(), 3, "one G33 per pass, half-turns merged: {text}");
-        common::write_golden(&format!("nc/tormach-lathe/{file}.nc"), &text);
-    }
-}
-
-#[test]
-fn a_thread_posts_as_one_g76_block_with_the_option_in_mm_and_inch() {
-    for (inch, file) in [(false, "thread_g76_mm"), (true, "thread_g76_inch")] {
-        let (world, mut history) = thread_world(inch);
-        history.execute(&world, SetPostOptions::new(&world, g76()).expect("G76 chosen"));
-        let text = program_with(&world, g76());
-        assert_eq!(text.matches("G76").count(), 1, "one block, LinuxCNC's form: {text}");
-        assert!(!text.contains("G33"), "the passes are the control's now: {text}");
-        if !inch {
-            // Drive line at the start radius; peak Ø12, so I = 12 - drive Ø;
-            // J 0.8 = the first 0.4 rung on the diameter; K 2.4 = 1.2 deep.
-            let line = text.lines().find(|l| l.starts_with("G76")).expect("G76");
-            assert!(line.starts_with("G76 P2 Z14 I-"), "{line}");
-            assert!(line.ends_with(" J0.8 R1 K2.4 Q0 H0"), "{line}");
-        } else {
-            let line = text.lines().find(|l| l.starts_with("G76")).expect("G76");
-            assert!(line.starts_with("G76 P0.07874 Z0.5512 I-"), "{line}");
-            assert!(line.ends_with(" J0.0315 R1 K0.0945 Q0 H0"), "{line}");
-        }
-        assert_eq!(gated(&world, file), text, "the in-app post follows the document's option");
         common::write_golden(&format!("nc/tormach-lathe/{file}.nc"), &text);
     }
 }
@@ -363,10 +144,6 @@ fn an_axial_drill_posts_as_plain_moves_in_mm_and_inch() {
 }
 
 // ------------------------------------------------------- synthetic
-
-fn lathe_mch(inch: bool) -> serde_json::Value {
-    camcraft_app::post::machine::mirror(&lathe(inch))
-}
 
 fn mv(kind: MoveKind, x: f64, y: f64, z: f64, feed: Option<f64>) -> cnc::Record {
     cnc::Record::Move(cnc::MoveRec { kind, x, y, z, feed, center: None, ccw: false, plane: Default::default(), abc: None })
@@ -482,41 +259,6 @@ fn what_the_dialect_cannot_say_is_refused_by_name() {
     r.insert(0, cnc::Record::Param { name: "LiveTool".into(), value: json!(true) });
     r.push(cnc::Record::Section { begin: false });
     assert!(run(r).warnings.iter().any(|w| w.contains("liveTooling")));
-}
-
-#[test]
-fn a_g76_record_the_cycle_cannot_state_exactly_is_refused_by_name() {
-    let (world, _history) = thread_world(false);
-    let records = posting::stream_records(&world).expect("generated");
-    let bend = |f: fn(&mut cnc_thread::ThreadRec)| -> Vec<cnc::Record> {
-        records
-            .iter()
-            .cloned()
-            .map(|r| match r {
-                cnc::Record::Thread(Some(mut t)) => {
-                    f(&mut t);
-                    cnc::Record::Thread(Some(t))
-                }
-                other => other,
-            })
-            .collect()
-    };
-    let bare: Vec<cnc::Record> = records.iter().filter(|r| !matches!(r, cnc::Record::Thread(_))).cloned().collect();
-    type Bend = fn(&mut cnc_thread::ThreadRec);
-    let cases: [(&str, Vec<cnc::Record>); 6] = [
-        ("no thread cycle record", bare),
-        ("infeed angle", bend((|t| t.infeed_angle = 29.5) as Bend)),
-        ("finish allowance", bend((|t| t.finish_allowance = 0.05) as Bend)),
-        ("pull-out", bend((|t| t.pull_out = 1.0) as Bend)),
-        ("not equal rungs", bend((|t| t.min_depth = 0.1) as Bend)),
-        ("not an external thread", bend((|t| t.minor_diameter = 13.0) as Bend)),
-    ];
-    for (why, recs) in cases {
-        let out = engine::run_with(CPS, &posting::machine_value(&world), &cnc::serialize(&recs), &posting::options_value(g76()))
-            .expect("runs");
-        assert!(out.warnings.iter().any(|w| w.contains("G76") && w.contains(why)), "{why}: {:?}", out.warnings);
-        assert!(!out.program.contains("G76 P"), "{why}: a refused cycle was written: {}", out.program);
-    }
 }
 
 // ------------------------------------------------------------ registry

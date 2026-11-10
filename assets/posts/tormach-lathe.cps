@@ -26,6 +26,7 @@ setCodePage = "utf-8";
 capabilities = 2; // reference contract: integer feature mask (bit 2 = turning)
 coolantModes = true; // reads PARAM Coolant (#112/#150)
 afterModes = true;   // reads PARAM AfterOperation (#110)
+threadHands = true;  // reads PARAM SpindleDirection (#629): M4 when the thread's hand needs it
 // liveTooling is NOT declared: PathPilot's lathe tables list no C axis
 // and no live-tool words, so the engine refuses a C-axis section by
 // name before this script ever sees it.
@@ -36,11 +37,17 @@ afterModes = true;   // reads PARAM AfterOperation (#110)
 // The lathe laws this script states, so a reviewer need not infer them:
 //  - G7 DIAMETER mode, stated in the header (PathPilot runs G7 only):
 //    the X word is twice the stream's radius. The stream speaks world
-//    mm with the insert's nose centre on ONE meridian half-plane of the
-//    spindle axis; the radius is that plane's signed in-plane
-//    coordinate, origin-relative. A move with BOTH in-plane coordinates
-//    off the axis is off every meridian - milling work - refused by
-//    name, never projected.
+//    mm on ONE meridian half-plane of the spindle axis; the radius is
+//    that plane's signed in-plane coordinate, origin-relative. A move
+//    with BOTH in-plane coordinates off the axis is off every meridian
+//    - milling work - refused by name, never projected.
+//  - G40 throughout, and the stream's point IS the control point
+//    (#630/#641): the app has already moved a nose-radiused insert's
+//    path to its imaginary tip for the tool's orientation (PARAM
+//    ToolOrientation, the LinuxCNC 1-9 tip chart), and a blade's to its
+//    touched-off corner. This script never shifts a point; it writes
+//    the orientation in the tool note so the setup can be checked
+//    against the tool table's Q.
 //  - Units from the machine: G20 (every length / 25.4, four decimals,
 //    feeds per rev at five, pitches at six) or G21 (mm, three decimals,
 //    feeds per rev at four, pitches at six). Angles and rpm never scale.
@@ -51,25 +58,41 @@ afterModes = true;   // reads PARAM AfterOperation (#110)
 //  - G97 S constant rpm from the stream's SpindleSpeed; G96 constant
 //    surface speed ONLY when the stream states a SurfaceSpeed PARAM
 //    (m/min; ft/min under G20), with D = the machine's stated maximum
-//    rpm as the cap. M3 always (the stream carries no spindle sense).
+//    rpm as the cap. M3, unless the stream states PARAM
+//    SpindleDirection reverse (#629, a thread whose hand needs it):
+//    then M4, with a note to mount the insert for reverse rotation.
 //  - Arcs: G18 ZX arcs with I K centre increments (G91.1, stated), I a
 //    RADIUS under G7 (LinuxCNC lathe page). Direction by the view-
 //    from-+Y law: a YZ-stated meridian arc flips CW<->CCW, an XZ one
 //    does not. An XY arc is a thread half-turn or a refusal.
 //  - Threading, default: G33 Z K - the LinuxCNC spindle-synchronized
 //    move, K = distance per revolution (the lead). The threading
-//    kernel spells a pass as XY half-turn arcs about the axis; the
-//    half-turns of one pass at one radius are merged into ONE G33
-//    block per pass, so synchronization starts once per pass on the
-//    spindle index (never a G32 - LinuxCNC has none).
+//    kernel spells a pass as XY half-turn arcs about the axis (toward
+//    the chuck, -Z, by default); the half-turns of one pass at one
+//    radius are merged into ONE G33 block per pass, so synchronization
+//    starts once per pass on the spindle index (never a G32 - LinuxCNC
+//    has none). K is ONE number per thread: the THREAD record's lead,
+//    never re-derived from a block's rounded Z travel.
+//  - The thread's HAND (#629) is never dropped. The stream's +Z is the
+//    free end, the chuck below. A half-turn clockwise seen from +Z is
+//    the tool's motion about a part turning M3; counter-clockwise needs
+//    M4 - the stream says so beforehand (PARAM SpindleDirection
+//    reverse). A half-turn turning against the section's spindle is
+//    refused by name (it would cut the other hand), and so is a G76
+//    record whose hand and Z direction disagree with it. G33 and G76
+//    both cut from where the tool stands toward their Z word, so the
+//    direction is the stream's own.
 //  - Threading, postOptions.Threading = "G76": the record becomes the
-//    one-block LinuxCNC cycle G76 P Z I J R K Q H, the passes inside it
-//    skipped. Only what the record states exactly is written: radial
-//    infeed (Q0), equal rungs (R1: depth J x pass number, LinuxCNC's
-//    degression law at R = 1), no finish allowance (G76 has no word
+//    one-block LinuxCNC cycle G76 P Z I J K R Q H (the word order of
+//    PathPilot's own conversational threading), the passes inside it
+//    skipped. Only what the record states is written: R1 for its equal
+//    rungs (LinuxCNC: "R1.0 selects constant depth"), Q0 for its radial
+//    infeed, H its spring passes; no finish allowance (G76 has no word
 //    for one), no pull-out (no E/L taper), an external thread cut from
-//    the +X side. Anything else is refused by name, never posted as a
-//    different thread.
+//    the +X side. I J K are diameters on the control's resolution
+//    grid, rounded so the last pass never goes deeper than the
+//    record's minor diameter. Anything else is refused by name, never
+//    posted as a different thread.
 //  - Drilling on centre: PathPilot's lathe lists no G81/G83 (and under
 //    G18 LinuxCNC drills along Y), so a hole posts as the stream's own
 //    expanded chain - plain G0/G1 moves on X0 - with a G4 dwell (P in
@@ -100,10 +123,12 @@ var coolantOp = "";        // the section's OperationName, for refusals (#150)
 var orgX = 0, orgY = 0, orgZ = 0; // the WCS slot origin (world -> program)
 var inThread = false;      // a G76 cycle stands for the passes being skipped
 var threadSeen = false;    // inside a THREAD record's span (cycle or not)
+var threadLead = 0;        // ... and that record's lead (mm/rev), 0 = none stated
+var spinRev = false;       // PARAM SpindleDirection reverse (#629): this section's spindle runs M4
 var refused = {};          // each refusal counted once per program, by name
 var EPS = 0.0005;          // half a micron: the stream's own lattice
 var inch = false;          // the machine is programmed in inches (onOpen)
-var pass = null;           // the G33 pass being merged: { r, z, lead, dir }
+var pass = null;           // the G33 pass being merged: { r, z0, z, halves, lead, dir }
 var drillDwell = 0;        // the open hole's floor dwell, seconds (0 = none)
 var drillFloor = null;     // ... and its floor Z (world mm)
 var drillIgnore = false;   // the open hole was refused: its chain posts nothing
@@ -215,7 +240,7 @@ function coolantFor(ask) {
 // the comment, ; opens an end-of-line comment and % is a file fence,
 // so all become spaces; printable ASCII only, capped.
 var setupName = "", setupSaid = "", opName = "", opKind = "";
-var toolName = "", toolKind = "", toolDia = 0, toolCr = 0;
+var toolName = "", toolKind = "", toolDia = 0, toolCr = 0, toolQ = 0;
 function clean(s, cap) {
   var t = String(s === null || s === undefined ? "" : s);
   t = t.replace(/[()%;]/g, " ").replace(/[^\x20-\x7E]/g, "?").replace(/\s+/g, " ").trim();
@@ -235,6 +260,7 @@ function commentParam(name, value) {
   else if (name === "ToolKind") toolKind = clean(value).toUpperCase();
   else if (name === "ToolDiameter" && has(value)) toolDia = Number(value);
   else if (name === "ToolCornerRadius" && has(value)) toolCr = Number(value);
+  else if (name === "ToolOrientation" && has(value)) toolQ = Math.round(Number(value));
 }
 function opNotes() {
   if (setupName && setupName !== setupSaid) { note("SETUP: " + setupName); setupSaid = setupName; }
@@ -250,8 +276,9 @@ function toolNote() {
   if (toolKind) desc.push(toolKind);
   if (toolDia > 0 && BLADE_KINDS.indexOf(toolKind) < 0) desc.push("D" + fu(toolDia));
   if (toolCr > 0) desc.push("R" + fu(toolCr));
+  if (toolQ > 0) desc.push("ORIENTATION " + toolQ);  // #630: the tip the program's points are for
   note(joinDash([tWord() + (toolName ? " " + toolName : ""), desc.join(" ")]));
-  toolKind = ""; toolCr = 0;
+  toolKind = ""; toolCr = 0; toolQ = 0;
 }
 // A WARN record (only a gate-refused program carries one) is voiced as
 // a cleaned comment - never a bare line, never a nested parenthesis.
@@ -299,6 +326,7 @@ function onParameter(name, value) {
   else if (name === "OriginY" && has(value)) orgY = Number(value);
   else if (name === "OriginZ" && has(value)) orgZ = Number(value);
   else if (name === "SurfaceSpeed" && has(value)) sCss = Number(value);
+  else if (name === "SpindleDirection") spinRev = String(value || "") === "reverse";
 }
 
 function onSpindleSpeed() {
@@ -336,12 +364,14 @@ function startPreamble() {
     toolWait = false;
   }
   if (spindleWait) {
+    var m = spinRev ? "M4" : "M3";
+    if (spinRev) note("SPINDLE M4 - THREAD HAND NEEDS REVERSE ROTATION - MOUNT THE INSERT FOR M4");
     if (sCss > 0) {
       var cap = (typeof machine !== "undefined" && machine.spindleMax > 0) ? "D" + ff(machine.spindleMax) : "";
       var css = inch ? sCss / 0.3048 : sCss;          // m/min -> ft/min under G20
-      block(["G96", cap, "S" + ff(css), "M3"]);
+      block(["G96", cap, "S" + ff(css), m]);
     } else {
-      block(["G97", "S" + ff(sRpm), "M3"]);
+      block(["G97", "S" + ff(sRpm), m]);
     }
     spindleWait = false;
   }
@@ -374,6 +404,7 @@ function endPreamble() {
   coolant = "";
   coolantAsk = "flood";
   block(["M5"]);
+  spinRev = false;           // the next section states its own
   afterOp();
 }
 
@@ -429,6 +460,10 @@ function meridianArc(p) {
 // both ends, antipodal ends - a synchronized half lead of Z. Half-
 // turns continuing one pass (same radius, same lead, same direction)
 // merge into the pass being built; flushPass writes it as one G33.
+// "Same lead" allows the stream's lattice: each Z is rounded to half a
+// micron, so a half-turn's 2 x dZ may differ from the true lead by up
+// to 2 um (24 TPI's half lead is no lattice number) - LEAD_SLOP.
+var LEAD_SLOP = 0.0025;
 function threadHalfTurn(p) {
   var c = p.IJKIncrement || {};
   if (!has(c.I) || !has(c.J)) { flushPass(); refuse("thread half-turn without an I J centre"); return; }
@@ -446,22 +481,41 @@ function threadHalfTurn(p) {
     refuse("G76 threading cycle chosen but the stream carries no thread cycle record for these passes - regenerate the thread, or choose G33 passes");
     return;
   }
+  // The hand (#629): clockwise seen from +Z is M3's, counter-clockwise
+  // M4's. A half-turn against the section's spindle would cut the
+  // other hand - refused, never posted.
+  var cw = p.CircularDirection === "CW";
+  if (cw === spinRev) {
+    flushPass();
+    refuse("thread half-turn turns " + (cw ? "clockwise" : "counter-clockwise") + " seen from +Z but the spindle runs " + (spinRev ? "M4" : "M3") + " - it would cut the other hand; regenerate the thread");
+    return;
+  }
+  if (threadLead > 0 && Math.abs(lead - threadLead) > LEAD_SLOP) {
+    flushPass();
+    refuse("thread half-turn's Z travel does not match the thread record's lead - regenerate the thread");
+    return;
+  }
   var dir = dz > 0 ? 1 : -1;
-  if (pass && Math.abs(pass.r - rho1) <= EPS && Math.abs(pass.lead - lead) <= EPS && pass.dir === dir
+  if (pass && Math.abs(pass.r - rho1) <= EPS && Math.abs(pass.lead - lead) <= 2 * LEAD_SLOP && pass.dir === dir
       && Math.abs(pass.z - p.StartZ) <= EPS) {
     pass.z = p.Z;
+    pass.halves += 1;
     return;
   }
   flushPass();
-  pass = { r: rho1, z: p.Z, lead: lead, dir: dir };
+  pass = { r: rho1, z0: p.StartZ, z: p.Z, halves: 1, lead: lead, dir: dir };
 }
 // The merged pass: G33 Z K, X modal (the plunge put the tool on the
-// pass's radius). K is the lead - LinuxCNC's distance per revolution.
+// pass's radius). K is the lead - LinuxCNC's distance per revolution -
+// ONE number for the thread: the THREAD record's lead when the stream
+// states one (it rides at six decimals, never re-derived from a
+// block's rounded Z), else the pass's whole Z travel over its turns.
 function flushPass() {
   if (!pass) return;
   var q = pass;
   pass = null;
-  block(["G33", zWord(q.z), "K" + fp(q.lead)]);
+  var k = threadLead > 0 ? threadLead : 2 * Math.abs(q.z - q.z0) / q.halves;
+  block(["G33", zWord(q.z), "K" + fp(k)]);
 }
 
 function onCircular() {
@@ -475,6 +529,24 @@ function onCircular() {
 // ---------------------------------------------------------- G76 cycle
 function g76Wanted() { return typeof postOptions !== "undefined" && postOptions.Threading === "G76"; }
 
+// The G76 words are diameters on the control's resolution grid (G21:
+// 0.001 mm, G20: 0.0001 in - the digits this post writes). Every value
+// is taken to the grid ONCE, as a whole count of grid steps, and the
+// cycle's words are differences of those counts - so the drive line X,
+// the peak (X + I) and the root (X + I - K) the control computes are
+// exactly the grid numbers chosen here, never three roundings that
+// disagree. The root is rounded OUTWARD (never deeper than the
+// record's minor diameter - a deeper root is a gouge of the thread
+// form); J, the first depth, is rounded shallower.
+function gridStep() { return inch ? 0.0001 : 0.001; }
+function gridOf(mm) { return len(mm) / gridStep(); }               // mm -> grid steps (real)
+function gridWord(n) { return trim0(Number(n * gridStep()).toFixed(inch ? 4 : 3)); }
+// The record's numbers ride the stream's half-micron lattice one by one
+// (each length rounded on its own), so two of them may disagree by up
+// to a couple of microns: LAT is that allowance on a diameter. Wider is
+// never needed - the record states one thread.
+var LAT = 0.0025;
+
 // Why the record cannot be a LinuxCNC G76 (null: it can). r0 / r1 are
 // the start (drive line) and end radii on the meridian.
 function g76Why(p, r0, r1) {
@@ -485,51 +557,79 @@ function g76Why(p, r0, r1) {
   if (!(p.ThreadHeight > 0)) return "no thread height";
   if (!(p.FirstDepth > 0 && p.FirstDepth <= p.ThreadHeight + EPS)) return "first-pass depth outside the thread height";
   if (Math.abs(p.MinimumDepth - Math.min(p.FirstDepth, p.ThreadHeight)) > EPS) {
-    return "the passes are not equal rungs (minimum depth differs from the first) - LinuxCNC's degression R only states equal rungs here (R1)";
+    return "the passes are not equal rungs (minimum depth differs from the first) - only LinuxCNC's constant-depth degression (R1) states the record's ladder exactly";
   }
-  if (Math.abs(p.InfeedAngle) > 1e-6) return "infeed angle " + p.InfeedAngle + " - a compound infeed is not posted on this control yet (radial only, Q0)";
+  if (Math.abs(p.InfeedAngle) > 1e-6) return "infeed angle " + p.InfeedAngle + " - a compound infeed (Q) is not posted on this control yet (radial only, Q0)";
   if (Math.abs(p.FinishAllowance) > EPS) return "finish allowance - LinuxCNC's G76 has no finish-pass allowance word";
   if (Math.abs(p.PullOut) > EPS) return "pull-out - an angled thread exit (E/L taper) is not posted on this control yet";
   if (!(p.SpringPasses >= 0 && Math.round(p.SpringPasses) === p.SpringPasses)) return "spring passes not a whole count";
   if (!(p.MinorDiameter < p.MajorDiameter)) return "not an external thread (minor diameter at or over the major)";
-  if (Math.abs(p.MajorDiameter - p.MinorDiameter - 2 * p.ThreadHeight) > 2 * EPS) return "the diameters and the thread height disagree";
+  if (Math.abs(p.MajorDiameter - p.MinorDiameter - 2 * p.ThreadHeight) > LAT) return "the diameters and the thread height disagree";
   if (!(r0 > 0 && r1 > 0)) return "the thread is not cut from the +X side of the axis";
-  if (Math.abs(2 * r1 - p.MinorDiameter) > 2 * EPS) return "the end point does not stand on the minor diameter";
+  if (Math.abs(2 * r1 - p.MinorDiameter) > LAT) return "the end point does not stand on the minor diameter";
   if (!(r0 > p.MajorDiameter / 2 + EPS)) return "the drive line stands at or inside the crest";
   if (!(Math.abs(p.EndZ - p.Z) > EPS)) return "no thread length";
+  // The hand (#629): right-hand toward the chuck (-Z) and left-hand away
+  // from it turn clockwise seen from +Z - M3; the other two need M4.
+  // G76 cuts from the drive line's Z toward its Z word, so the record's
+  // own Z -> EndZ is the direction the control cuts.
+  if (p.Hand !== "right" && p.Hand !== "left") return "the thread record states no hand";
+  var rev = (p.Hand === "right") === (p.EndZ > p.Z);
+  if (rev !== spinRev) {
+    return "a " + p.Hand + "-hand thread cut " + (p.EndZ < p.Z ? "toward" : "away from") + " the chuck needs " + (rev ? "M4" : "M3") + ", the section's spindle runs " + (spinRev ? "M4" : "M3");
+  }
   return null;
 }
 
+// The cycle's grid counts: X drive line, P peak, root; I J K from them.
+// null with a reason when the grid cannot state the thread.
+function g76Grid(p, r0) {
+  var x = Math.round(gridOf(2 * r0));
+  var peak = Math.round(gridOf(p.MajorDiameter));
+  var root = Math.ceil(gridOf(p.MinorDiameter) - 1e-6);   // outward: never deeper than the minor
+  var j = Math.floor(gridOf(2 * p.FirstDepth) + 1e-6);     // shallower: never a heavier first cut
+  var k = peak - root;
+  if (!(x - peak >= 1)) return { why: "the drive line is not clear of the crest at the control's resolution" };
+  if (!(k >= 1)) return { why: "the thread depth is below the control's resolution" };
+  if (!(j >= 1)) return { why: "the first-pass depth is below the control's resolution" };
+  return { x: x, i: peak - x, j: Math.min(j, k), k: k };
+}
+
 // A THREAD record: with G76 chosen, a rapid to the drive line at the
-// thread's start and the one G76 block (P pitch, Z end; I peak offset,
-// J first depth, K full depth - diameter values under G7; R1 equal
-// rungs; Q0 radial; H spring passes); the passes inside are skipped.
-// With G33 (the default) nothing is written here.
+// thread's start and the one G76 block, in PathPilot's conversational
+// word order (P pitch, Z end; I peak offset, J first depth, K full depth
+// - diameters under G7, negative I = external; R1 equal rungs; Q0
+// radial; H spring passes); the passes inside are skipped. With G33
+// (the default) nothing is written here; the record's lead is kept as
+// the passes' K.
 function onThreadCycle() {
   flushPass();
   threadSeen = true;
+  var p = properties;
+  threadLead = has(p.Lead) && p.Lead > 0 ? Number(p.Lead) : 0;
   if (!g76Wanted()) return;
   startPreamble();
-  var p = properties;
   if (posed(p)) return;
   var r0 = radiusOf(p.X, p.Y, "thread cycle start");
   var r1 = radiusOf(p.EndX, p.EndY, "thread cycle end");
   if (r0 === null || r1 === null) return;
   var why = g76Why(p, r0, r1);
+  var g = why ? null : g76Grid(p, r0);
+  if (g && g.why) why = g.why;
   if (why) { refuse("G76 threading cycle refused - " + why); return; }
-  block(["G0", xWord(r0), zWord(p.Z)]);
+  block(["G0", "X" + gridWord(g.x), zWord(p.Z)]);
   block([
     "G76", "P" + fp(p.Lead), zWord(p.EndZ),
-    "I" + fu(p.MajorDiameter - 2 * r0),        // peak - drive line, diameter: negative = external
-    "J" + fu(2 * p.FirstDepth),
+    "I" + gridWord(g.i),
+    "J" + gridWord(g.j),
+    "K" + gridWord(g.k),
     "R1",
-    "K" + fu(2 * p.ThreadHeight),
     "Q0",
     "H" + String(Math.round(p.SpringPasses)),
   ]);
   inThread = true;
 }
-function onThreadCycleEnd() { flushPass(); inThread = false; threadSeen = false; }
+function onThreadCycleEnd() { flushPass(); inThread = false; threadSeen = false; threadLead = 0; }
 
 // ------------------------------------------------------------- drilling
 // No canned cycle on the PathPilot lathe: the CYCLE record is checked

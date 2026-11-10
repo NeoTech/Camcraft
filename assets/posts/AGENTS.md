@@ -23,7 +23,7 @@ Manifest: top-level assignments only — `description`, `vendor`, `legal`,
 text the engine reads none of; `threadHands = true` (#629) says the script
 reads `PARAM SpindleDirection` and states a thread's hand (M04 when the
 helix needs the spindle reversed) - without it the engine refuses a
-reverse-spindle thread section by name (only fanuc-lathe.cps sets it); `liveTooling = true` (issue #33) says the
+reverse-spindle thread section by name (fanuc-lathe.cps and tormach-lathe.cps set it); `liveTooling = true` (issue #33) says the
 script voices a `PARAM LiveTool` section - C-axis live-tool work, the
 stream's X Y Z the part-frame tip and C the stated spindle angle - and
 without it the engine refuses such a section by name (only
