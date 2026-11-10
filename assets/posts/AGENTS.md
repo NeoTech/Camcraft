@@ -30,8 +30,8 @@ Mist or Through tool by name, since the script would post its own
 flood. Every shipped post sets it. `afterModes = true` says the script
 reads `PARAM AfterOperation` (#110) - without it the engine refuses a
 section asking Optional stop, Program stop or Go home by name, since
-the script would run straight on into the next tool. The six posts
-that write it set it. `axisInversion = true` (#374) says the script's
+the script would run straight on into the next tool. Every post
+that writes it sets it. `axisInversion = true` (#374) says the script's
 output on the engine's mirrored stream (an inverted X / Y: negated
 coordinates, centres and origin, CW/CCW reversed in a plane holding one
 inverted axis, the comp side swapped) is verified by goldens and the
@@ -139,7 +139,9 @@ write (the gate), so the released program never carries one.
 ## The shipped five, and what actually differs
 
 Fanuc (entry 0 — the default, goldens at `crates/app/tests/golden/nc/`),
-Haas, Siemens 840D, Heidenhain (DIN/ISO mode), Mazak — each
+Haas, Siemens 840D, Heidenhain (DIN/ISO mode), Mazak, Tormach PathPilot,
+and the lathe posts Fanuc Lathe and Tormach PathPilot Lathe (#612:
+LinuxCNC G7 / G33 / one-block G76, drilling as plain moves) — each
 addressed BY NAME through `BUILTINS` in `crates/app/src/posting.rs`;
 their dialect goldens ride under `nc/<dialect>/`. The knobs that
 legitimately differ: header delimiters (`%` vs `;` vs bare), the `O`
