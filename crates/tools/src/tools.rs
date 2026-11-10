@@ -183,9 +183,24 @@ pub struct Tool {
     /// cutter with a center hole is not, and its entries may then only
     /// helix or ramp into solid (or the op is refused by name).
     pub center_cutting: bool,
+    /// Lathe tool orientation (#630, [`crate::orientation`]): the
+    /// LinuxCNC 1-9 code that says where the control point the
+    /// operator touches off stands on the nose circle. `None` = not
+    /// stated, read as the kind's default
+    /// ([`crate::orientation::default_for`]). On a grooving blade it
+    /// names the touched-off corner of the tip edge (#641,
+    /// [`crate::orientation::blade_corner`]); inert on every other kind.
+    pub orientation: Option<u8>,
 }
 
 impl Tool {
+    /// The orientation the posts read: the stated code, else the
+    /// kind's default; None for a kind that has none.
+    #[must_use]
+    pub fn lathe_orientation(&self) -> Option<u8> {
+        self.orientation.or_else(|| crate::orientation::default_for(self.kind))
+    }
+
     /// Finite, positive where it must be, and geometrically consistent:
     /// a corner radius cannot exceed half the diameter, lengths cannot be
     /// negative. The gate every tool command runs before writing.
@@ -224,6 +239,7 @@ impl Tool {
             && self.rpm > 0.0
             && self.feed > 0.0
             && self.flutes.is_none_or(|z| (1..=32).contains(&z))
+            && self.orientation.is_none_or(crate::orientation::is_valid)
             && match self.kind {
                 // A point that cannot self-center is not a drill, and a
                 // tap with no thread pitch has no feed the cycle could
@@ -469,6 +485,7 @@ pub fn probe_tool(ball_d: f64, stylus_len: f64) -> Tool {
         tool_material: None,
         flutes: None,
         center_cutting: false,
+        orientation: None,
     }
 }
 

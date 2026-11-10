@@ -90,6 +90,9 @@ struct Def {
     flutes: Option<u32>,
     #[serde(default = "yes")]
     center_cutting: bool,
+    /// Lathe tool orientation (LinuxCNC 1-9); the starter catalog states none.
+    #[serde(default)]
+    orientation: Option<u8>,
 }
 
 fn yes() -> bool {
@@ -133,6 +136,7 @@ impl Def {
             }),
             flutes: self.flutes,
             center_cutting: self.center_cutting,
+            orientation: self.orientation,
         }
     }
 }
