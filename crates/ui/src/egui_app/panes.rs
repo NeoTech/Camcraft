@@ -340,7 +340,7 @@ fn text_of(c: Cmd, state: &State) -> String {
             Some(k) => k.caption.to_owned(),
             None => {
                 debug_assert!(false, "Create({i}) past the kind table");
-                eprintln!("ribbon: unknown op kind {i}");
+                diag_warn!("ribbon: unknown op kind {i}");
                 "op".to_owned()
             }
         },
@@ -634,7 +634,7 @@ pub(super) fn icon_of(c: Cmd, state: &State) -> Option<Icon> {
             Some(k) => Some(op_icon(k.ty)),
             None => {
                 debug_assert!(false, "Create({i}) past the kind table");
-                eprintln!("ribbon: unknown op kind {i}");
+                diag_warn!("ribbon: unknown op kind {i}");
                 Some(Icon::Generate)
             }
         },
@@ -694,7 +694,7 @@ pub(super) fn op_icon(kind: OpType) -> Icon {
         // names (M2.4 A) - the Pocket3D precedent says: same word,
         // same pixels.
         OpType::Adaptive2D | OpType::Offset2D => Icon::Pocket,
-        OpType::Slot => Icon::Slot,
+        OpType::Slot | OpType::TrochoidalSlot => Icon::Slot,
         OpType::Trace => Icon::Trace,
         // The 2D run's new names keep their family's pixels (M2.4 B,
         // the twins' reuse law): the engrave twin IS Trace's field
@@ -845,7 +845,7 @@ fn run_cmd(c: Cmd, state: &mut State) {
 pub(super) fn toggle_pin(state: &mut State, i: usize) {
     let Some(k) = operation::KindInfo::ALL.get(i) else {
         debug_assert!(false, "toggle_pin({i}) past the kind table");
-        eprintln!("ribbon: unknown op kind {i}");
+        diag_warn!("ribbon: unknown op kind {i}");
         return;
     };
     let mut pins = camcraft_app::ribbon::pinned_of(&state.world);
@@ -905,7 +905,7 @@ pub(super) struct Drop {
 /// the longest registry label, rows one theme row tall.
 /// What one layout pass answers: cells to draw, group captions (mid x,
 /// title), divider x's, and the doors with their dropdown rows.
-pub(super) type RibbonGeom = (Vec<Cell>, Vec<(f32, &'static str)>, Vec<f32>, Vec<Drop>);
+pub(super) type RibbonGeom = (Vec<Cell>, Vec<(f32, f32, &'static str)>, Vec<f32>, Vec<Drop>);
 
 /// The machine door's dropdown rows, pure geometry (the section doors'
 /// `Drop` law, worn by the switcher): the three workspaces in switcher
@@ -1053,7 +1053,7 @@ pub(super) fn ribbon_cells(strip: Rect, pal: &Tokens, plan: &[Group]) -> RibbonG
             x += cell_w + GAP;
         }
         x -= GAP;
-        captions.push(((start + x) * 0.5, group.title));
+        captions.push(((start + x) * 0.5, (x - start).max(0.0), group.title));
         if gi + 1 < n_groups {
             x += GAP + 2.0;
             dividers.push(x - (GAP + 2.0) / 2.0 - 1.0);
@@ -1128,12 +1128,11 @@ pub fn ribbon(
             toggle_pin(state, i);
         }
     }
-    for (mid, title) in captions {
-        // The caption row sits under its cells' row: PAD_V (4) + the
-        // cell box + 5 - 44 at the defaults, one derivation now that
-        // cell_h is a token.
-        painted::caption(ui.painter(), mid, rect.top() + 4.0 + pal.cell_h + 5.0, title, pal);
-    }
+    // Group captions are intentionally NOT drawn: each cell already names
+    // itself, and a second line under the row only duplicated and clipped
+    // the section name (the user's "unreadable" complaint). The dividers
+    // alone separate the groups.
+    let _ = captions;
     for dx in dividers {
         painted::divider(ui.painter(), dx, rect, pal);
     }
@@ -1150,7 +1149,7 @@ pub fn ribbon(
         match drops.iter().find(|d| d.section == s) {
             None => {
                 debug_assert!(false, "ribbon: open door has no dropdown");
-                eprintln!("ribbon: closing a dropdown whose button is gone");
+                diag_warn!("ribbon: closing a dropdown whose button is gone");
                 state.ribbon_more = None;
             }
             Some(drop) => {
@@ -1268,7 +1267,7 @@ pub fn ribbon(
                 // frame; finding none means that broke - named, not
                 // silent, and the state drops itself.
                 debug_assert!(false, "ribbon: machine door missing from the bar");
-                eprintln!("ribbon: closing a mode list whose button is gone");
+                diag_warn!("ribbon: closing a mode list whose button is gone");
                 state.ribbon_mode_open = false;
             }
             Some(cell) => {
@@ -1350,7 +1349,7 @@ pub fn ribbon(
         match cells.iter().find(|c| c.cmd == Cmd::View) {
             None => {
                 debug_assert!(false, "ribbon: view door missing from the bar");
-                eprintln!("ribbon: closing a view list whose button is gone");
+                diag_warn!("ribbon: closing a view list whose button is gone");
                 state.ribbon_view_open = false;
             }
             Some(cell) => {
@@ -1364,7 +1363,7 @@ pub fn ribbon(
         match cells.iter().find(|c| c.cmd == Cmd::Theme) {
             None => {
                 debug_assert!(false, "ribbon: theme door missing from the bar");
-                eprintln!("ribbon: closing a theme list whose button is gone");
+                diag_warn!("ribbon: closing a theme list whose button is gone");
                 state.ribbon_theme_open = false;
             }
             Some(cell) => {
@@ -1478,11 +1477,6 @@ pub fn status(ui: &mut Ui, state: &mut State, pal: &Tokens, icons: Option<&IconS
             if super::debug_info::button(ui, icons).clicked() {
                 state.debug_info_open = !state.debug_info_open;
             }
-            ui.label(
-                RichText::new("egui shell (M-g) - imgui retired")
-                    .color(pal.text_faint)
-                    .small(),
-            );
             // #183: the live MCP server says it is listening.
             if let Some(note) = crate::mcp_host::badge(state) {
                 ui.label(RichText::new(note).color(pal.text_faint).small());

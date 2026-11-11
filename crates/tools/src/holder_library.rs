@@ -2,7 +2,8 @@
 //! and BT40 (JIS B 6339 / MAS 403 BT), CAT40 (ASME B5.50) - in ER collet
 //! chuck (ISO 15488 / DIN 6499 collets and nuts) and Weldon side-lock
 //! (DIN 1835 form B / DIN 6359 bores) versions, plus standalone
-//! (straight-shank) ER11-ER40 collet chucks, each drawn as a spun
+//! (straight-shank) ER11-ER40 collet chucks, plus the Tormach TTS
+//! straight-shank holders (#794, `holder_library_tts.rs`), each drawn as a spun
 //! profile (#93) the tool editor drops into a tool's holder. Specced
 //! from the published standards' dimension tables (the numbers and
 //! their sources are recorded in docs/decisions/793-taper-holders.md
@@ -31,11 +32,16 @@
 
 use crate::spun::SpunPoint;
 
-/// One steep-taper shank: what stands between the gauge line and the
-/// tool (mm).
+/// One spindle mount: what stands between the gauge line and the tool
+/// (mm). A steep taper (its V-flange), or a straight-shank system's
+/// locating collar (TTS, #794: no standoff, the collar's top face is
+/// the gauge line).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Taper {
     pub name: &'static str,
+    /// What the editor calls the ring below the gauge line: "flange"
+    /// or "collar".
+    pub ring: &'static str,
     /// The taper's diameter at the gauge line.
     pub gauge_d: f64,
     /// The V-flange's outside diameter.
@@ -63,12 +69,12 @@ impl Taper {
 }
 
 /// JIS B 6339 / MAS 403 BT30.
-pub const BT30: Taper = Taper { name: "BT30", gauge_d: 31.75, flange_d: 46.0, standoff: 2.0, flange_t: 20.0 };
+pub const BT30: Taper = Taper { name: "BT30", ring: "flange", gauge_d: 31.75, flange_d: 46.0, standoff: 2.0, flange_t: 20.0 };
 /// JIS B 6339 / MAS 403 BT40.
-pub const BT40: Taper = Taper { name: "BT40", gauge_d: 44.45, flange_d: 63.0, standoff: 2.0, flange_t: 25.0 };
+pub const BT40: Taper = Taper { name: "BT40", ring: "flange", gauge_d: 44.45, flange_d: 63.0, standoff: 2.0, flange_t: 25.0 };
 /// ASME B5.50 size 40 (CAT40, V-flange): 1.750 in gauge, 2.500 in
 /// flange, 0.125 in standoff, 0.625 in flange.
-pub const CAT40: Taper = Taper { name: "CAT40", gauge_d: 44.45, flange_d: 63.5, standoff: 3.175, flange_t: 15.875 };
+pub const CAT40: Taper = Taper { name: "CAT40", ring: "flange", gauge_d: 44.45, flange_d: 63.5, standoff: 3.175, flange_t: 15.875 };
 
 /// One ER collet size (ISO 15488) with its clamping nut (DIN 6499,
 /// the standard round nut, not a slim "mini" nut).
@@ -258,15 +264,12 @@ impl HolderEntry {
                 let front = gauge - t.front_face();
                 let back = gauge - t.standoff;
                 let fr = t.flange_d * 0.5;
-                pts.extend([
-                    p(front - self.flare_len(), r),
-                    p(front, fr.max(r)),
-                    p(front, fr),
-                    p(back, fr),
-                    p(back, t.standoff_r()),
-                    p(gauge, t.standoff_r()),
-                    p(gauge, 0.0),
-                ]);
+                pts.extend([p(front - self.flare_len(), r), p(front, fr.max(r)), p(front, fr), p(back, fr)]);
+                // A collar (no standoff) tops out at the gauge line.
+                if t.standoff > 0.0 {
+                    pts.extend([p(back, t.standoff_r()), p(gauge, t.standoff_r())]);
+                }
+                pts.push(p(gauge, 0.0));
             }
         }
         // A body as wide as the flange leaves a zero-length step.
@@ -332,6 +335,8 @@ pub fn library() -> Vec<HolderEntry> {
     // #792: the standalone straight-shank chucks, nose face to the
     // body's back face (where the shank goes into the spindle).
     v.extend(ER_SIZES.iter().zip(STANDALONE_GAUGE).map(|(e, g)| er(None, e, g)));
+    // #794: the Tormach TTS holders.
+    v.extend(tts::entries());
     v
 }
 
@@ -342,6 +347,10 @@ pub fn find(name: &str) -> Result<HolderEntry, LibraryError> {
     let want = key(name);
     library().into_iter().find(|e| key(&e.name()) == want).ok_or_else(|| LibraryError::Unknown(name.to_owned()))
 }
+
+#[path = "holder_library_tts.rs"]
+mod tts;
+pub use tts::{TTS, TTS_BODY_D};
 
 #[cfg(test)]
 #[path = "holder_library_tests.rs"]
