@@ -163,7 +163,9 @@ fn the_reported_outside_contour_enters_every_level_on_one_arc() {
     assert!(summary.contains("7 level(s)"), "{summary}");
     let notes = t.notes.join(" | ");
     assert!(!notes.contains("needs bounded air"), "the arc is no longer refused on the wall: {notes}");
-    // The seams: no lead-in and lead-out left crossing. Before #689 the
+    // The seams: no lead-in and lead-out left crossing - the seam law
+    // writes "kept as planned" only when it could not part a crossing
+    // pair, so its absence is the no-crossing-left check. Before #689 the
     // rings' fitted walks ended on a chord whose tangent kinked at the
     // seam, and the lead-out was re-solved to close on the lead-in's
     // start; a closed ring now fits whole, so the tangents agree and the
@@ -197,7 +199,10 @@ fn the_reported_outside_contour_enters_every_level_on_one_arc() {
     // bore's own levels, never below its floor, and the verifier above
     // holds every one of them silent.
     let bore: Vec<_> = all.iter().filter(|&&(s, _)| !outer(&t.moves[s])).collect();
-    assert!(bore.len() <= 5, "at most one bore entry per bore level: {bore:?}");
+    // Five: one proved arc entry per bore level (20, 15, 10, 5, 0), each
+    // a chord fan of an arc entry - no graze, no warning (the verifier
+    // silence above covers them: none is a gouge or a crossing).
+    assert_eq!(bore.len(), 5, "one arc entry per bore level: {bore:?}");
     for &&(_, e) in &bore {
         let z = t.moves[e - 1].to.z;
         assert!([20.0, 15.0, 10.0, 5.0, 0.0].contains(&z), "a bore entry lands on a bore level, got {z}");
@@ -248,7 +253,8 @@ fn the_reported_outside_contour_enters_every_level_on_one_arc() {
     // for its arc entries, and one graze per bore level that took no
     // arc (all five grazed on the coarse mesh before #689).
     let plunges = t.moves.iter().filter(|m| m.kind == MoveKind::Plunge).count();
-    assert_eq!(plunges, 5 + bore.len().saturating_sub(2) + (5 - bore.len()));
+    // 5 outer + 3 bore (its levels past the second) + 0 grazes.
+    assert_eq!(plunges, 8);
 }
 
 fn disc() -> Region {

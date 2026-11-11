@@ -82,3 +82,39 @@ arc by its inscribed chords. The coarse mesh had hidden the other two.
 are the verified polygon. Nine `golden_cl` goldens moved and were
 regenerated in their own commit. The PR lists which goldens moved and why.
 Law (b) reads arcs with about twice as many chords.
+
+**Verdict flip, named (review of PR #839).** The quarter reading turns
+some former gouge verdicts into passes, and some former passes into
+gouges.
+- **Former gouge, now a pass:** a nominal arc round a convex wall. With
+  the r = 5 cutter on r = 34.998 round an r = 30 island, the true
+  clearance is 4.998 against a 4.99 floor. The old chords read 4.988 and
+  convicted it.
+- **Former pass, now a gouge:** an r = 20 arc bowing 5 um past the floor
+  into a straight wall. The old 5-chord reading put the apex mid-chord,
+  0.0096 mm low, and passed it.
+
+Both flips are pinned in `crates/app/tests/verify_arc_reading.rs`. With
+the share set back to 1.0, exactly those two tests fail. Arcs cut past
+the floor round a convex wall and inside a concave one are convicted
+under both readings.
+
+**STEP timing (debug build).**
+
+| Model | Before (no cap) | After (0.005 mm cap) |
+|---|---|---|
+| sample_ap214.step | 1550 facets, ~81 ms | 1550 facets, ~64 ms |
+| Milling-test.step | 448 facets, ~14 ms | 952 facets, ~27 ms |
+| tool_csys_box_iso13399.step | 12 facets | 12 facets |
+
+The facet budget bounds a huge model:
+- Refinement passes run only while the mesh is at most `budget / 8`
+  (`MAX_FACETS` = 30 M, less what earlier shells used).
+- A pass at most quadruples the count, so a kept mesh stays under about
+  `budget / 2` (15 M).
+- Any triangulation past the budget is dropped and the last mesh is kept.
+- There are at most 24 passes.
+
+Such a model stops short of the 0.005 mm target and logs "reduced
+fidelity". Its concave walls can then still read a nominal finish as a
+gouge, as STL/OBJ can.

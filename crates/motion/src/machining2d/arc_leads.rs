@@ -2,7 +2,10 @@
 //! tangential approaches onto a fitted path and off its end. Split from
 //! `arcs.rs` (#689, the 400-line law); structure only.
 //!
-//! Provenance: circular interpolation per RS-274 / ISO 6983 (G2/G3) and
+//! Provenance: the lead shapes (perpendicular, linear, quarter-arc and
+//! tangential half-circle approaches tangent to the wall) are general
+//! machining-handbook practice for contour entry and exit, and their arcs
+//! are circular interpolation per RS-274 / ISO 6983 (G2/G3) solved with
 //! plane geometry; no vendor material consulted.
 
 use crate::geo2d::Point2;
