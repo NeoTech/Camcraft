@@ -12,6 +12,7 @@
 
 use std::path::{Path, PathBuf};
 
+use camcraft_app::recent;
 use camcraft_app::view::{self, ViewPrefs, FILE_NAME, FORMAT};
 
 /// A fresh, empty folder for one test.
@@ -82,4 +83,23 @@ fn defaults_wear_the_seventy_twenty_seven_decision() {
     assert!(ViewPrefs::default().show_gizmo_names);
     let d = dir("defaults");
     assert!(view::load(&file_in(&d)).0.show_gizmo_names);
+}
+
+#[test]
+fn the_config_dir_override_houses_the_view_file() {
+    // The re-review's note: the persistence claim names CAMCRAFT_CONFIG_DIR,
+    // so the override gets its own gate. The folder resolver is the
+    // recents' (#662) and view.rs hangs FILE_NAME on it (`store_path`),
+    // so an absolute override must be the folder the choice round-trips
+    // through. Fake getter, as `recent_files`' resolver test does -
+    // edition 2024 keeps process env writes out of tests.
+    let d = dir("override");
+    let over =
+        |k: &str| (k == recent::ENV_VAR).then(|| std::ffi::OsString::from(d.as_os_str()));
+    let folder = recent::config_dir_for(std::env::consts::OS, over)
+        .expect("the override names a folder on every platform");
+    assert_eq!(folder, d, "the absolute override wins over any home folder");
+    let file = file_in(&folder);
+    view::save(&file, &ViewPrefs { show_gizmo_names: false }).expect("save under the override");
+    assert!(!view::load(&file).0.show_gizmo_names, "the restart reads it back from there");
 }

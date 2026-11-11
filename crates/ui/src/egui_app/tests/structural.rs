@@ -310,3 +310,86 @@ fn setup_page_alignment_rows_structure() {
     }
     assert!(h.state().state.points_pick.is_none(), "nothing is armed by drawing the page");
 }
+
+/// #645 re-review: the structural both-states check for the "Show origin
+/// names" switch. The seeded document's G54 offset sits at world zero and
+/// its triad carries the name row; while the switch is on (the #727
+/// default) the painted frame shows that name inside the viewport and
+/// the checkbox click drops it. The big `X`/`Y`/`Z` letters and the
+/// triad's strokes ignore the switch. `view_names.rs` drives the same
+/// checkbox through State and the view file; this pins what the shell
+/// paints. The properties pane's WCS row also reads "G54", so the
+/// painted probe stays inside the viewport, as the view-cube check does.
+#[test]
+fn origin_names_paint_on_and_quiet_off_letters_and_lines_always() {
+    let _g = snapshot_guard();
+    let mut h = shell_harness();
+    // Redirect the at-once persist away from the real user's view.json -
+    // the flip would otherwise write it out of this test process.
+    let d = std::env::temp_dir().join(format!(
+        "camcraft-view-structural-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&d);
+    std::fs::create_dir_all(&d).expect("make the test folder");
+    h.state_mut().state.view_store = Some(d.join("view.json"));
+    // On: the painted frame shows the offset's name row in the viewport,
+    // and the shared projection law agrees.
+    h.run_steps(2);
+    let texts = painted(&h);
+    let v = at(&texts, "viewport").x;
+    let p = at(&texts, "properties").x;
+    let in_viewport = |(t, q): &(String, egui::Pos2)| t == "G54" && q.x > v && q.x < p;
+    let letters = |labels: &[([f32; 2], [f32; 3], String)]| -> Vec<String> {
+        labels
+            .iter()
+            .filter(|(_, _, t)| interact::is_axis_label(t))
+            .map(|(_, _, t)| t.clone())
+            .collect()
+    };
+    let (segs_on, letters_on) = {
+        let st = &h.state().state;
+        assert!(st.show_gizmo_names, "the #727 default is on");
+        let labels = interact::overlay_labels(st, 1.0);
+        assert!(
+            labels.iter().any(|(_, _, t)| t == "G54"),
+            "on: the offset's name is in the labels: {labels:?}"
+        );
+        assert!(
+            texts.iter().any(in_viewport),
+            "on: the name row is painted in the viewport"
+        );
+        let segs = interact::gizmo_segments(st, 1.0);
+        assert!(!segs.is_empty(), "the triad's strokes draw");
+        let letters = letters(&labels);
+        assert!(!letters.is_empty(), "the axis letters draw");
+        (segs.len(), letters)
+    };
+    // Off: the checkbox clicks the flag through the real widget and the
+    // name row leaves the painted frame; letters and lines stay.
+    h.get_by_label("Show origin names").click();
+    h.run_steps(2);
+    let texts = painted(&h);
+    {
+        let st = &h.state().state;
+        assert!(!st.show_gizmo_names, "the click flipped the flag");
+        let labels = interact::overlay_labels(st, 1.0);
+        assert!(
+            labels.iter().all(|(_, _, t)| t != "G54"),
+            "off: no name row anywhere: {labels:?}"
+        );
+        assert!(
+            !texts.iter().any(in_viewport),
+            "off: the painted viewport no longer shows the name row"
+        );
+        // Letters and strokes ignore the switch: the same letters and
+        // the same segments draw either way.
+        assert_eq!(letters(&labels), letters_on, "the letters survive untouched");
+        assert_eq!(
+            interact::gizmo_segments(st, 1.0).len(),
+            segs_on,
+            "the strokes ignore the switch"
+        );
+    }
+    let _ = std::fs::remove_dir_all(&d);
+}
