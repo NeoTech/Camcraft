@@ -83,3 +83,58 @@
   `face`/`shell_in` are two ten-line functions shared by both marches;
   the sliver scan is one loop whose per-pair rule is stated in the
   module doc.
+- **Review fix (PR #817): the marches walk centres, never points.**
+  The review found `march_up`'s `phi == 0 => Floor(z)` exit (copied from
+  `march`) reading a flipped floor 0.25 high: a probe's magnitude is the
+  CELL's, so a cell whose centre lies on a stock plane reads zero at
+  every point of the cell, and the exit answered whatever height the
+  ascent had reached. `march` has the same exit upright (#824, filed by
+  the reviewer). Tracing the sweep further showed two more holes of the
+  same root in both marches: the sphere trace stepped by the cell's
+  magnitude from points BETWEEN centres (the band value can over-read
+  the truth by up to sqrt(3) cells, `field_gen`), so it could land past
+  a web thinner than a cell and read the body below it; and its "last
+  air probe", returned where the landing cell's centre was air, was no
+  proof under a cut claim (a claim proves the centre and its half-line,
+  not the cell's other half). Decided: one shared `march::walk` visits
+  cell centres only, with the exact parity-and-claim sign at each
+  (`sign_at`; the half-open `[floor, top)` law puts a centre on a floor
+  plane in material and one on a top plane in air), skipping only runs
+  the field proves air (a centre outside the shell: its magnitude's
+  cells less two; a claimed centre: its claim's cells), and reads the
+  surface at the first material centre from the one-cell bracket to the
+  proven-air centre before it (`face`, unchanged). `march` and
+  `march_up` are the two directions of that walk; `refine`,
+  `refine_down`, `probe`, `STEP_MIN` and `MAX_MARCH_STEPS` are gone. The
+  sliver scan's upper bound follows the same law (a centre ON the
+  ceiling is already the one above it), which is what lets the
+  reviewer's scenario read `[5.8, 6.25]` exactly through the record
+  instead of refusing. Pinned by
+  `field_floor::a_stock_plane_on_a_cell_centre_reads_exactly_on_both_sides`
+  (the reviewer's flipped scenario, #824's upright twin, the uncut
+  plate both ways, a top on a centre) and
+  `field_floor::no_column_under_reports_across_plates_and_slots_on_and_off_the_lattice`
+  (the reviewer's sweep: 4 floors x 3 tops x 9 slot depths, under and
+  beside the slot, upright and flipped - 432 reads, every one exact,
+  none under-read; both fail on the old marches). Every existing suite
+  reads the same floats (the bracket read is unchanged; only the way to
+  the bracket is), and the app's release heavy lane agrees with the
+  column engine on every golden program as before.
+- **Considered and dropped (review fix):**
+  - Treating `phi == 0` as "refine from this cell" with the old
+    `refine_down`: the cell's centre on a top plane is air, so the
+    refine's promise breaks and it answers the last air probe - which
+    under a cut claim can stand in material (in the reviewer's scenario
+    the ascent's last "air" probe sits in the cut cell's upper half,
+    above the tool's top). The hole is the point probe, not the exit.
+  - Restoring E2a's `bounded_cuts` on a flipped bake (the review's
+    "until then"): it would refuse every column under an earlier
+    setup's cut - the read E2b exists to give - and leave `march`'s
+    upright twin (#824) and the two trace holes in place.
+  - A safe sphere-trace step (`magnitude - sqrt(3) cells` from a
+    centre only): it is the centre walk with a floating-point step;
+    whole cells make the skip's proof a count and the budget a bound.
+  - Fixing `march_up` alone and leaving `march` for #824: the fix is
+    the shared walk, and with `march` unfixed the reviewer's scenario
+    reads a top of 6.44 (the same exit, over-reporting) and the floor
+    `Unreadable`; `Refs #824` on the commit, the main session decides.

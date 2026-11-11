@@ -6,8 +6,8 @@
 //! `cut_downs`. Only a bounded tool (a truncated taper) keeps the refusal.
 //!
 //! Gate map (#637): covers sim::stock_sim::field_floor (SdfField::floor_at,
-//! SdfField::column_span), march_up (march_up, refine_down), march
-//! (refine's shell-crossing read).
+//! SdfField::column_span), march_up (march_up), march (walk, the centre
+//! walk shared by both marches, its shell-crossing face read).
 //! Provenance: our own fixtures.
 
 use camcraft_sim::cl::{Move, MoveKind};
@@ -223,4 +223,132 @@ fn an_unaligned_plane_reads_its_shell_crossing_on_both_sides() {
         ColumnSpan::Material { top, floor } => assert!(near(top, 6.3) && near(floor, 2.0), "top {top} floor {floor}"),
         other => panic!("the slot after the flip: {other:?}"),
     }
+}
+
+/// A plate whose floor plane sits ON a cell centre (-6.25 on a 0.5 cell).
+fn plate_on_centre(floor: f64, top: f64) -> SdfField {
+    SdfField::from_mesh(&cube(Point3::new(0.0, 0.0, floor), Point3::new(20.0, 12.0, top)).facets, 0.5, FIELD_BAND)
+        .unwrap_or_else(|e| panic!("plate {floor}..{top}: {e:?}"))
+}
+
+#[test]
+fn a_stock_plane_on_a_cell_centre_reads_exactly_on_both_sides() {
+    // Review of #817 (and #824 upright): a probe's magnitude belongs to
+    // its CELL, so a cell whose centre lies on a stock plane reads zero
+    // for every point of the cell. The old marches took that zero as "the
+    // surface is here" and answered whatever height they had reached -
+    // the flipped floor read 6.05 over material standing from 5.8. A
+    // centre on a plane is read by parity like any other (the half-open
+    // law: on the floor plane material, on the top plane air), and the
+    // surface comes from the bracket's record or crossing.
+    let f = plate_on_centre(-6.25, 0.0);
+    assert_eq!(f.column_span(10.25, 6.25), ColumnSpan::Material { top: 0.0, floor: -6.25 }, "uncut");
+    assert_eq!(flipped(&f).column_span(10.25, -6.25), ColumnSpan::Material { top: 6.25, floor: 0.0 }, "uncut, flipped");
+    // #824: upright, a slot to -6.0 leaves [-6.25, -6.0]; the floor cell's
+    // centre -6.25 is material by parity, its record places the tool.
+    let g = cut(plate_on_centre(-6.25, 0.0), -6.0);
+    assert_eq!(g.column_span(10.25, 6.25), ColumnSpan::Material { top: -6.0, floor: -6.25 }, "the slot, upright");
+    // The reviewer's scenario: a slot to -5.8 flipped is [5.8, 6.25] under
+    // the new top; the top cell's centre 6.25 is air by parity (on the
+    // top plane), 5.75 is inside the cut, so the sliver law reads the
+    // floor from the record above it - 5.8, not 6.05.
+    let h = flipped(&cut(plate_on_centre(-6.25, 0.0), -5.8));
+    match h.column_span(10.25, -6.25) {
+        ColumnSpan::Material { top, floor } => {
+            assert!(near(top, 6.25) && near(floor, 5.8), "the slot, flipped: top {top} floor {floor}");
+        }
+        other => panic!("the slot, flipped: {other:?}"),
+    }
+    match h.floor_at(10.25, -6.25) {
+        FloorRead::Floor(z) => assert!(near(z, 5.8), "floor {z}"),
+        other => panic!("floor_at: {other:?}"),
+    }
+    // A plane on a centre on the OTHER side too: top 0.25, floor -6.25.
+    let k = flipped(&cut(plate_on_centre(-6.25, 0.25), -6.0));
+    match k.column_span(10.25, -6.25) {
+        ColumnSpan::Material { top, floor } => {
+            assert!(near(top, 6.25) && near(floor, 6.0), "top on a centre, flipped: top {top} floor {floor}");
+        }
+        other => panic!("top on a centre, flipped: {other:?}"),
+    }
+}
+
+/// What a column under the slot truly holds: `[floor, min(top, slot)]`,
+/// `None` when the slot went through.
+fn truth(floor: f64, top: f64, slot: f64) -> Option<(f64, f64)> {
+    (slot >= floor).then_some((floor, top.min(slot)))
+}
+
+/// Is `read` a safe verdict for `truth`? Material is never hidden:
+/// a read interval covers the truth (to rounding), or the column is
+/// refused by name. `Empty` where material stands is an under-report,
+/// as is a top read low or a floor read high. Returns whether the read
+/// was exact.
+fn safe(read: ColumnSpan, truth: Option<(f64, f64)>, what: &str) -> bool {
+    match (read, truth) {
+        (ColumnSpan::Material { top, floor }, Some((f, t))) => {
+            assert!(top >= t - 1e-9 && floor <= f + 1e-9, "{what}: read [{floor}, {top}] under [{f}, {t}]");
+            near(top, t) && near(floor, f)
+        }
+        (ColumnSpan::Empty, Some((f, t))) => {
+            assert!(t - f <= 1e-9, "{what}: read empty under [{f}, {t}]");
+            true
+        }
+        (ColumnSpan::Empty, None) => true,
+        (ColumnSpan::Material { .. }, None) => false, // over-reported: safe, not exact
+        (ColumnSpan::CutFromBelow | ColumnSpan::Unreadable, _) => false, // refused by name
+    }
+}
+
+/// An 8 x 6 plate `floor..top` with a flat r 2 slot along y 3 at `z`:
+/// the sweep's fixture, a quarter of the plate's cells for the same
+/// planes (the sweep builds a hundred of them).
+fn small_plate_with_slot(floor: f64, top: f64, z: f64) -> SdfField {
+    let f = SdfField::from_mesh(&cube(Point3::new(0.0, 0.0, floor), Point3::new(8.0, 6.0, top)).facets, 0.5, FIELD_BAND)
+        .unwrap_or_else(|e| panic!("plate {floor}..{top}: {e:?}"));
+    let mut s = Stock::Field(f);
+    let p = |x: f64, y: f64, z: f64| Point3::new(x, y, z);
+    let moves = [
+        Move::new(MoveKind::Rapid, p(-4.0, 3.0, 5.0), p(-4.0, 3.0, z), None),
+        Move::new(MoveKind::Feed, p(-4.0, 3.0, z), p(12.0, 3.0, z), Some(500.0)),
+    ];
+    if let Err(e) = s.simulate(&[SimOp { moves: &moves, radius: 2.0, ball: false, cone: None, corner: None }]) {
+        panic!("cut: {e:?}");
+    }
+    s.field().expect("a field").clone()
+}
+
+#[test]
+fn no_column_under_reports_across_plates_and_slots_on_and_off_the_lattice() {
+    // The reviewer's sweep (#817): plate floors on and off cell centres
+    // and boundaries, tops likewise, a flat slot from half a cell under
+    // the floor to well above it - every column under the slot and beside
+    // it, upright and flipped, is covered or refused, never under-read.
+    // The exact count is pinned so a regression toward refusal shows.
+    let (mut exact, mut total) = (0usize, 0usize);
+    for floor in [-6.0, -6.25, -6.1, -6.3] {
+        for top in [0.0, 0.25, -0.2] {
+            for d in [-0.5, 0.0, 0.05, 0.2, 0.25, 0.45, 0.5, 0.75, 1.5] {
+                let slot_z = floor + d;
+                let g = small_plate_with_slot(floor, top, slot_z);
+                let h = flipped(&g);
+                let under = truth(floor, top, slot_z);
+                let beside = Some((floor, top));
+                let what = format!("plate {floor}..{top}, slot {slot_z}");
+                for (read, t, side) in [
+                    (g.column_span(4.25, 3.25), under, "upright, under the slot"),
+                    (g.column_span(4.25, 0.75), beside, "upright, beside the slot"),
+                    (h.column_span(4.25, -3.25), under.map(|(f, t)| (-t, -f)), "flipped, under the slot"),
+                    (h.column_span(4.25, -0.75), beside.map(|(f, t)| (-t, -f)), "flipped, beside the slot"),
+                ] {
+                    total += 1;
+                    if safe(read, t, &format!("{what}, {side}")) {
+                        exact += 1;
+                    }
+                }
+            }
+        }
+    }
+    eprintln!("exact {exact} of {total}");
+    assert!(exact * 10 >= total * 9, "exact reads {exact} of {total}: the sweep is refusing where it read");
 }

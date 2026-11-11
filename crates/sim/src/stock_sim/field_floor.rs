@@ -169,8 +169,12 @@ impl SdfField {
         if center_of(k0, cell) >= floor {
             k0 = k0.saturating_sub(1);
         }
+        // The half-open law `[floor, top)`: a centre ON the floor plane is
+        // inside, so the centre below the floor is the first strictly
+        // under it; a centre ON the ceiling is outside already, so it is
+        // the centre over the ceiling (a pair above it holds nothing).
         let mut k1 = cell_of(ceiling, cell);
-        if center_of(k1, cell) <= ceiling {
+        if center_of(k1, cell) < ceiling {
             k1 = k1.saturating_add(1);
         }
         if i64::from(k1) - i64::from(k0) > i64::from(super::march::BRACKET_WALK) {

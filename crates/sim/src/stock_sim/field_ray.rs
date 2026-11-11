@@ -185,7 +185,7 @@ fn floor_entry(rho: f64, r: f64, tip: f64, q: Point3, cell: f64) -> Option<f64> 
     if !(rho.is_finite() && rho <= r && tip > q.z && tip - q.z <= cell) {
         return None;
     }
-    // The read is `center + u` (`march::refine`): pick the `u` whose
+    // The read is `center + u` (`march::walk`): pick the `u` whose
     // sum lands ON the plane, never below it (an ulp low would claim
     // steel the tool never removed).
     let mut u = tip - q.z;
