@@ -106,6 +106,14 @@ ruststep = "=0.4.0"
 
 # Third-party code is optimized even in dev builds: an unoptimized truck
 # tessellation or wgpu pass is 5-20x slower and makes imports feel like
-# freezes. Our own crates keep full debug settings. One-time rebuild cost.
+# freezes. opt-level 1 is as fast as 2 on the compute-heavy suites (motion finish3d: 48.7 s vs 46.7 s;
+# opt-level 0 is 3x slower) and cuts the cold dependency build (#900).
+# Debug info is line tables only (file:line in panics and backtraces) and none for dependencies: the
+# target/ is ~43% smaller. `--config profile.dev.debug=true` restores full info for a debugger session.
+# Release is untouched.
+[profile.dev]
+debug = "line-tables-only"
+
 [profile.dev.package."*"]
-opt-level = 2
+opt-level = 1
+debug = false
