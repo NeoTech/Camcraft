@@ -159,6 +159,9 @@ fn shell_facets(
     // wall's full height. Half the verdict leaves the other half for the
     // cut itself, so a nominal finish passes and 0.05 mm into the wall is
     // still a gouge. The facet budget below still bounds the mesh.
+    // min/max, not clamp: a NaN extent then lands on a finite target
+    // instead of carrying NaN into truck's tolerance assert.
+    #[allow(clippy::manual_clamp)]
     let tol_target = (extent * 1e-3).min(MAX_CHORD).max(MIN_TOL);
     // Start 250x coarser than the target - the first pass then costs a few
     // dozen triangles per face no matter how big the model, so no shell can
