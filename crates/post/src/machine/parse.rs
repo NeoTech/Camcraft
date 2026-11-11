@@ -313,7 +313,7 @@ pub fn parse_mch(text: &str) -> Result<Machine, String> {
                 resolution,
                 axis,
                 direction,
-                turns_part: super::swing::turns_part(part, *rotary),
+                turns_part: rotary.then(|| super::swing::turns_part(part, true)),
                 nose_to_axis,
             });
         }

@@ -15,7 +15,9 @@
 //! - **Who is judged.** Every posted op whose machine states a rotary
 //!   that turns the work about X ([`work_a`]): a G30 or a section start
 //!   can turn A before any op, so every op's retract is an index pose.
-//!   Machines without one are untouched.
+//!   A rotary with no `axis` vector takes its RS-274 letter's line (an
+//!   A is about X, #813); one with neither refuses by name - it may be
+//!   an A under the tool. Machines without one are untouched.
 //! - **Where the tip is.** WCS Y0 Z0 sits on the A centerline (the
 //!   indexed post's setup law), so at the safe Z the tip is at program
 //!   Z `nose_to_axis - tool length` (cutter, shank and holder: the same
@@ -36,17 +38,59 @@ use flecs_ecs::prelude::World;
 /// a tool-length measurement and the chuck's centring.
 pub const MARGIN_MM: f64 = 5.0;
 
-/// The work-turning rotary about X a machine states: its letter and
-/// stated `nose_to_axis` (None = unstated). None when there is none.
-fn work_a(m: &crate::machine::Machine) -> Option<(String, Option<f64>)> {
-    m.axes
-        .iter()
-        .find(|a| {
-            a.rotary
-                && a.turns_part
-                && a.axis.is_some_and(|d| d[0] * d[0] >= 0.99 * (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]))
+/// Which line a rotary turns about, as far as the swing clause can
+/// tell (#813).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RotaryLine {
+    /// About X: a stated axis vector along X, or an unstated one on a
+    /// rotary named A (RS-274 / ISO 6983: A turns about X - the post's
+    /// own reading of the tool axis as A, `a = atan2(-y, z)`).
+    AboutX,
+    /// Off X: a stated vector off X, or an unstated one on a rotary
+    /// named B (about Y) or C (about Z).
+    OffX,
+    /// No vector and no RS-274 rotary letter: the line is unknown.
+    Unknown,
+}
+
+/// The line rotary `a` turns about (#813): its stated `axis` vector,
+/// else the RS-274 letter's default line, else [`RotaryLine::Unknown`].
+#[must_use]
+pub fn rotary_line(a: &crate::machine::AxisLimits) -> RotaryLine {
+    match a.axis {
+        Some(d) if d[0] * d[0] >= 0.99 * (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]) => RotaryLine::AboutX,
+        Some(_) => RotaryLine::OffX,
+        None => match a.name.trim().to_ascii_uppercase().as_str() {
+            "A" => RotaryLine::AboutX,
+            "B" | "C" => RotaryLine::OffX,
+            _ => RotaryLine::Unknown,
+        },
+    }
+}
+
+/// What the clause makes of a machine's work-turning rotaries.
+enum WorkA {
+    /// A rotary turning the work about X: its letter and stated
+    /// `nose_to_axis` (None = unstated).
+    Judged(String, Option<f64>),
+    /// A rotary turning the work about a line nobody stated (#813):
+    /// its name. Refused - it may be an A about X under the tool.
+    Unlined(String),
+}
+
+/// The machine's work-turning rotary the clause judges; an unknown
+/// line wins (it refuses), then the first about X. None when there is
+/// none.
+fn work_a(m: &crate::machine::Machine) -> Option<WorkA> {
+    let turning = || m.axes.iter().filter(|a| a.rotary && a.turns_part == Some(true));
+    turning()
+        .find(|a| rotary_line(a) == RotaryLine::Unknown)
+        .map(|a| WorkA::Unlined(a.name.clone()))
+        .or_else(|| {
+            turning()
+                .find(|a| rotary_line(a) == RotaryLine::AboutX)
+                .map(|a| WorkA::Judged(a.name.clone(), a.nose_to_axis))
         })
-        .map(|a| (a.name.clone(), a.nose_to_axis))
 }
 
 /// The A an op indexes to: the first leaning move's tool axis read as a
@@ -99,7 +143,19 @@ pub(super) fn index_swing_problems(world: &World) -> Vec<String> {
     for (name, e) in ops {
         let Some(op) = model::operation_of(world, &e) else { continue };
         let Some(m) = crate::machine::of_setup(world, op.setup.as_deref()).1 else { continue };
-        let Some((letter, nose)) = work_a(&m) else { continue };
+        let (letter, nose) = match work_a(&m) {
+            None => continue,
+            Some(WorkA::Unlined(r)) => {
+                out.push(format!(
+                    "{name}: {} turns the work on rotary {r} but states no axis vector for it, and {r} is no \
+                     RS-274 rotary letter - whether its index swings the work under the tool cannot be judged \
+                     (state its \"axis\" in the machine file)",
+                    m.model
+                ));
+                continue;
+            }
+            Some(WorkA::Judged(letter, nose)) => (letter, nose),
+        };
         let a = model::toolpath_of(world, &e).map_or(0.0, |c| index_angle(&c.path));
         let Some(nose) = nose else {
             out.push(format!(
