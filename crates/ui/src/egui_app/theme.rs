@@ -108,7 +108,7 @@ pub mod clamp {
 
 /// The ribbon strip's height: the cell box plus the caption row and the
 /// pad, so a theme that grows the cells grows the ribbon with them
-/// (61 = 35 + 26 is today's arithmetic, kept exact at the defaults).
+/// (64 = 38 + 26 is today's arithmetic, kept exact at the defaults).
 #[must_use]
 pub const fn ribbon_h(t: &Tokens) -> f32 {
     t.cell_h + 26.0
@@ -142,13 +142,13 @@ impl Tokens {
         button_padding_y: 1.0,
         control_height: 18.0,
         row_height: 20.0,
-        cell_h: 35.0,
-        cell_w: 56.0,
-        glyph_px: 20.0,
-        font_label: 11.5,
-        font_caption: 10.0,
-        font_row: 12.5,
-        font_row_suffix: 10.5,
+        cell_h: 40.0,
+        cell_w: 72.0,
+        glyph_px: 24.0,
+        font_label: 13.0,
+        font_caption: 12.5,
+        font_row: 13.5,
+        font_row_suffix: 11.5,
     };
 
     /// The same shell, inverted: paper grounds, dark ink, the steel
@@ -184,13 +184,13 @@ impl Tokens {
         button_padding_y: 1.0,
         control_height: 18.0,
         row_height: 20.0,
-        cell_h: 35.0,
-        cell_w: 56.0,
-        glyph_px: 20.0,
-        font_label: 11.5,
-        font_caption: 10.0,
-        font_row: 12.5,
-        font_row_suffix: 10.5,
+        cell_h: 40.0,
+        cell_w: 72.0,
+        glyph_px: 24.0,
+        font_label: 13.0,
+        font_caption: 12.5,
+        font_row: 13.5,
+        font_row_suffix: 11.5,
     };
 
     /// The panel ground behind the ribbon/browser strips (painted.rs).

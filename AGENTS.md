@@ -590,6 +590,21 @@ gate <tier>`, from the workspace's `xtask/` crate. `scripts/gate.ps1`
 Any tier takes `--dry-run` to print its plan without running it; logs go
 to `gate-logs/<tier>-<timestamp>/`.
 
+**Shared compile cache (optional, #900).** Every worktree has its own
+`target/`, so a fresh one recompiles every third-party crate. With
+[sccache](https://github.com/mozilla/sccache) (`cargo install sccache
+--locked`, user account only) those compilations are cache hits across
+worktrees. `cargo xtask gate` sets `RUSTC_WRAPPER=sccache` and
+`SCCACHE_CACHE_SIZE=20G` for its cargo calls when `sccache` is on PATH (an
+existing `RUSTC_WRAPPER`, or `CAMCRAFT_NO_SCCACHE=1`, wins); a machine without
+it builds as before, and release packaging never uses it. For plain `cargo`
+set `RUSTC_WRAPPER=sccache` only when `sccache` is on PATH (cargo fails if the wrapper is missing), and never export `CARGO_TARGET_DIR`; `cargo xtask release` clears any wrapper for the packaging build. The cache lives in the sccache
+default dir (Windows `%LOCALAPPDATA%\Mozilla\sccache\cache`, Linux
+`~/.cache/sccache`; `SCCACHE_DIR` moves it). Hits need each worktree's default
+`target/`: sccache hashes `CARGO_*` env vars, so a `CARGO_TARGET_DIR` env var
+makes every worktree miss. Dev builds carry line tables only (no variable
+debug info; `--config profile.dev.debug=true` restores it for a debugger).
+
 **GitHub Actions minutes are budgeted** (3000/month; Windows bills 2x,
 macOS 10x). Nothing runs on push or PR: every gate tier runs locally
 through `cargo xtask gate`. GitHub runs only `release.yml` on a pushed tag

@@ -27,7 +27,7 @@ const TOOLS: &[Tool] = &[
     Tool { name: "get_job", description: "The whole document as JSON: setups, stock, work offsets, models, tools, and operations with their parameters and status.", schema: s_empty, run: job::get_job },
     Tool { name: "list_operation_types", description: "Every operation kind with its parameter fields, JSON types and default values, and the tool kinds it accepts.", schema: s_empty, run: job::list_operation_types },
     Tool { name: "list_tool_catalog", description: "The built-in tool catalog: names and definitions add_tool can copy into the document.", schema: s_empty, run: job::list_tool_catalog },
-    Tool { name: "add_tool", description: "Add a tool to the document, from the catalog by name or from a full definition (the shape get_job shows).", schema: s_add_tool, run: edit::add_tool },
+    Tool { name: "add_tool", description: "Add a tool to the document, from the catalog by name or from a full definition (the shape get_job shows). It starts with the machine's default holder unless \"holder\" says otherwise; one undo removes the tool and its holder.", schema: s_add_tool, run: edit::add_tool },
     Tool { name: "export_tool_library", description: "Write the document's tools to a tool library file (.camtools), the same format the Tool library page's Export writes. Refuses a document with no tools or a path that cannot be written.", schema: s_library, run: export_tool_library },
     Tool { name: "import_tool_library", description: "Import a tool library file into the document as one undo step, through the same command as the Tool library page's Import: an identical tool is skipped, a clashing name arrives as \"Name (2)\", a malformed or insane file is refused naming the tool.", schema: s_library, run: import_tool_library },
     Tool { name: "set_stock", description: "Set the active setup's stock: a box, a cylinder, or a copy of a model.", schema: s_stock, run: edit::set_stock },
@@ -205,7 +205,8 @@ fn s_add_tool() -> Value {
         json!({
             "name": { "type": "string", "description": "Tool name in the document; defaults to the catalog name." },
             "catalog": { "type": "string", "description": "A list_tool_catalog name to copy." },
-            "definition": { "type": "object", "description": "A full tool definition (get_job's tool shape)." }
+            "definition": { "type": "object", "description": "A full tool definition (get_job's tool shape)." },
+            "holder": { "type": "string", "description": "A built-in library holder for it (\"BT30 ER20\"), or \"none\" for no holder body. Omitted: the active setup's machine's default holder (tooling.default_holder), when it states one and the holder takes the tool. The reply names the holder it landed with (holder, holder_from) or why the default was left off (note)." }
         }),
         &[],
     )
