@@ -97,6 +97,15 @@ impl UpdateModel {
         })
     }
 
+    /// Drop the plate snapshot, so apply/invert leave the plate's grid and
+    /// its riders' mount markers alone. For `SetPlate`, which edits the
+    /// grid and re-seats the riders itself (#826 review).
+    #[must_use]
+    pub(crate) fn keeping_plate(mut self) -> Self {
+        self.plate = None;
+        self
+    }
+
     /// What moved between the two revisions this command trades. Computed
     /// on demand (the message wants it once, at import); cached Features
     /// make both sides cheap after the first call anywhere.

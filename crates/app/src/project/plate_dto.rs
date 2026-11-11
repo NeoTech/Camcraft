@@ -34,13 +34,13 @@ pub fn link_from(plate: Option<&Value>, on_plate: Option<&Value>, model: &str, n
             Ok(()) => Some(p),
             Err(why) => {
                 tracing::warn!(model, "fixture plate grid dropped on load, kept as plain steel: {why}");
-                notes.push(format!("fixture '{model}': plate grid dropped on load, kept as plain steel: {why}"));
+            notes.push(format!("fixture '{model}': plate grid dropped on load, kept as plain steel: {why}"));
                 None
             }
         },
         Err(why) => {
             tracing::warn!(model, "fixture plate key not understood, dropped on load: {why}");
-                notes.push(format!("fixture '{model}': plate key not understood, dropped on load: {why}"));
+            notes.push(format!("fixture '{model}': plate key not understood, dropped on load: {why}"));
             None
         }
     });
@@ -48,12 +48,12 @@ pub fn link_from(plate: Option<&Value>, on_plate: Option<&Value>, model: &str, n
         Ok(m) if m.yaw_deg.is_finite() && !m.plate.is_empty() => Some(m),
         Ok(_) => {
             tracing::warn!(model, "fixture plate location dropped on load: no plate or a non-finite turn");
-                notes.push(format!("fixture '{model}': plate location dropped on load: no plate or a non-finite turn"));
+            notes.push(format!("fixture '{model}': plate location dropped on load: no plate or a non-finite turn"));
             None
         }
         Err(why) => {
             tracing::warn!(model, "fixture plate location not understood, dropped on load: {why}");
-                notes.push(format!("fixture '{model}': plate location not understood, dropped on load: {why}"));
+            notes.push(format!("fixture '{model}': plate location not understood, dropped on load: {why}"));
             None
         }
     });
