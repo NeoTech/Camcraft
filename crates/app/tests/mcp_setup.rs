@@ -286,7 +286,7 @@ fn locate_part_seats_the_part_on_the_fixture_by_feature_ids() {
     c.ok("import_model", json!({ "path": vise.display().to_string() }));
     c.ok("add_fixture", json!({ "model": "vise" }));
     c.ok("move_fixture", json!({ "name": "vise", "position": [100.0, 0.0, -20.0] }));
-    // The flat face lying at world Z `z` ("facing" is winding-free).
+    // The flat face lying at world Z `z`.
     let face = |c: &mut Client, model: &str, z: f64| -> String {
         let f = c.ok("list_features", json!({ "model": model, "kinds": ["faces"] }));
         f["faces"]
