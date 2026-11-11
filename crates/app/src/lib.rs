@@ -20,6 +20,7 @@ pub mod fixture_locate;
 pub mod fixture_struck;
 pub mod fixture_view;
 pub mod vise;
+pub mod accessory;
 pub use camcraft_motion::finishing3d;
 pub use camcraft_geometry::geo2d;
 pub mod geometry;
