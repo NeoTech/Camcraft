@@ -97,7 +97,14 @@ unstated capability into existence.
   - rotary only: `axis` `[x,y,z]` — the rotation direction; three
     finite numbers or the file refuses NAMING the axis (a garbled
     tilt vector must never read as "no tilt": the RTCP judgment rides
-    on it). A stated zero vector refuses too. `resolution` is the
+    on it). A stated zero vector refuses too. The vector's SIGN is the
+    rotary's direction sense (#785): a 4th axis about X states
+    `[1, 0, 0]` when a + A turns the tool right-handed about +X relative
+    to the part (RS-274 / ISO 841 - the table turns the part the other
+    way), `[-1, 0, 0]` when it turns the other way; the Tormach post
+    negates its A words for the second. `tormach-770mx-microarc4.mch` is
+    the shipped 4th-axis mill (an A about X, travel -360..360 degrees,
+    rates unstated: TD10749 states none). `resolution` is the
     positioning step (same scaling law as travel).
   - `type: "head"` parts carry the spindle and station, first match
     wins: `spindle { min_speed, max_speed }` rpm, `power` kW (stated,

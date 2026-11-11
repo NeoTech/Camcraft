@@ -148,6 +148,8 @@ pub const MACHINES: &[(&str, &str)] = &[
     ("Tormach 770MX", include_str!("../../../assets/machines/tormach-770mx.mch")),
     // #170: the other Tormach mills, each from its own operator's manual.
     ("Tormach 770MX (ML)", include_str!("../../../assets/machines/tormach-770mx-ml.mch")),
+    // #785: the 770MX with Tormach's microARC 4 (TD10749) as an A about X.
+    ("Tormach 770MX + microARC 4", include_str!("../../../assets/machines/tormach-770mx-microarc4.mch")),
     ("Tormach 770M", include_str!("../../../assets/machines/tormach-770m.mch")),
     ("Tormach 1100MX", include_str!("../../../assets/machines/tormach-1100mx.mch")),
     ("Tormach 1500MX", include_str!("../../../assets/machines/tormach-1500mx.mch")),
