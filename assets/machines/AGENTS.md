@@ -106,6 +106,23 @@ unstated capability into existence.
     the shipped 4th-axis mill (an A about X, travel -360..360 degrees,
     rates unstated: TD10749 states none). `resolution` is the
     positioning step (same scaling law as travel).
+  - rotary that turns the WORK only (#804): `nose_to_axis` - how far
+    the spindle nose sits above the rotary's centerline with Z at
+    `safe_retract` (the file's length unit, scaled like travel). A
+    rotary turns the work when no `head` part hangs below it (a table
+    bolted to the bed); one that carries the head tilts the tool and
+    may not state it. With WCS Y0 Z0 on the centerline, the program
+    gate puts the retracted tool tip at `nose_to_axis` minus the tool
+    length and refuses an op on a work-turning A about X whose tip
+    there is inside the stock / part / turning fixtures' swept radius
+    plus 5 mm - or whose machine states no `nose_to_axis` at all. A
+    work-turning rotary with no `axis` vector takes its RS-274 letter's
+    line (an A is about X and is judged, #813); one whose name is no
+    RS-274 rotary letter refuses every op by name - state its `axis`.
+    The
+    microARC 4 file states 10.6 in: the 770MX's 13.75 in spindle nose
+    to table (Tormach 770MX spec page) less the microARC 4's 3.15 in
+    table to centerline (4th-axis comparison sheet 02/24).
   - `type: "head"` parts carry the spindle and station, first match
     wins: `spindle { min_speed, max_speed }` rpm, `power` kW (stated,
     not judged — the sheet renders it, no model consumes it),

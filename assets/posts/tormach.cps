@@ -236,7 +236,14 @@ function retract() {
   var z = safeZ();
   if (z === null) return;
   block(["G53", "G0", "Z" + fu(z)]);
-  if (z === 0) block(["G30"]);
+  if (z === 0) {
+    block(["G30"]);
+    // #785 (review of PR #798): a G30 with no axis words moves EVERY
+    // axis to the stored G30 position (LinuxCNC params 5181-5189), A
+    // included - the A the control held is gone, so the next section
+    // always restates it.
+    aNow = null;
+  }
 }
 
 // Cutter compensation in the control: not stated by this post yet -
@@ -333,6 +340,9 @@ function smoothOff() {
 function startPreamble() {
   if (sectionOpen) return;
   sectionOpen = true;
+  // #574: a touch probe (a stated speed of 0) states its spindle
+  // stopped before its first move, whatever the tool change did.
+  var probeStop = spindleWait && !(sRpm > 0);
   opNotes();
   block(["G17", "G90", wcsWord, "G40", "G49", "G80"]);
   planeG = 17;              // the preamble states the plane
@@ -351,6 +361,7 @@ function startPreamble() {
     block([beltNote(sRpm)]);
     block(["S" + ni(sRpm), "M3"]);
   }
+  if (probeStop) block(["M5"]);
   spindleWait = false;
   coolant = touchProbe ? "" : coolantCode();
   if (coolant) block([coolant]);
@@ -362,6 +373,9 @@ function endPreamble() {
   restorePlane();            // the plane never leaks past its section
   sectionOpen = false;
   aSection = null;           // #785: the next section indexes afresh
+  aNow = null;               // ... and restates A: a section boundary is
+                             // where an operator may stop and jog (M0/M1,
+                             // a probe check), so no section inherits A
   smoothOff();
   if (inCycle) block(["G80"]);
   inCycle = false;
@@ -394,8 +408,9 @@ function onSectionEnd() { endPreamble(); }
 //   A about X.
 // - No clamp code: none of the three guides names an M-code; the microARC
 //   4 has no clamp, the older tables clamp by hand (loosened to rotate).
-// A machine with an A states it at its first motion (G0 A0 for an upright
-// section): a program never assumes where the last run left the table.
+// A machine with an A states it at every section's first motion (G0 A0
+// for an upright section): a program never assumes where the last run -
+// or the last section, or a G30 - left the table.
 var A_EPS = 1e-6;
 var aAxis;               // undefined: not judged; null: no A about X stated
 var aNow = null;         // the A word the control holds (null: unknown)

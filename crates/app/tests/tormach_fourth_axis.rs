@@ -369,3 +369,75 @@ fn the_canonical_b180_pose_posts_as_a180() {
     let letters = run(&mirrored(ARC4), &tilted_stream([180.0, 0.0, 0.0]));
     assert_eq!(canon.program, letters.program);
 }
+
+/// Each section's opening lines, M6 (or the section's first block) to its
+/// first cutting move, for the two-ops-on-one-face pins below.
+fn openings(nc: &str) -> Vec<Vec<&str>> {
+    let mut out: Vec<Vec<&str>> = Vec::new();
+    let mut open = false;
+    for l in nc.lines() {
+        if l.starts_with("G17 G90") {
+            out.push(Vec::new());
+            open = true;
+        } else if l.starts_with("G1 ") {
+            open = false;
+        }
+        if open && let Some(s) = out.last_mut() {
+            s.push(l);
+        }
+    }
+    out
+}
+
+/// Two operations on the same face, both at `a`; `tool_between` re-issues
+/// a tool (T4) before the second, the way the app does before every op.
+fn same_face_stream(a: f64, tool_between: bool) -> String {
+    let mut recs = head();
+    face_section(&mut recs, "ROUGH", a);
+    if tool_between {
+        recs.push(cnc::Record::Tool { number: 4, name: "3MM END MILL".into() });
+    }
+    face_section(&mut recs, "FINISH", a);
+    cnc::serialize(&recs)
+}
+
+/// Review of PR #798: the bare G30 before every `T.. M6` moves EVERY axis
+/// to the stored G30 position, A included (LinuxCNC G30 with no axis
+/// words), so the A the control held before it is gone. Two ops on the
+/// same non-zero face with a tool change between must both index after
+/// their M6 - the second never cuts wherever G30 left the table.
+#[test]
+fn a_tool_change_on_the_same_face_restates_a_after_the_g30() {
+    let out = run(&mirrored(ARC4), &same_face_stream(90.0, true));
+    assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+    let nc = out.program;
+    let secs = openings(&nc);
+    assert_eq!(secs.len(), 2, "{nc}");
+    for (i, s) in secs.iter().enumerate() {
+        let m6 = s.iter().position(|l| l.ends_with(" M6"));
+        let g30 = s.iter().position(|l| *l == "G30");
+        let a = s.iter().position(|l| *l == "G0 A90");
+        assert!(g30.is_some() && m6.is_some(), "section {i} changes tools\n{nc}");
+        assert!(a > m6, "section {i}: G0 A90 after its M6\n{nc}");
+        let a = a.unwrap_or(0);
+        assert_eq!(s[a - 1], "G53 G0 Z0", "section {i}: Z up before A\n{nc}");
+    }
+}
+
+/// The same-tool continuation (no tool record, so no G30): A is restated
+/// at every section all the same. Nothing in the program moved A, but a
+/// section boundary is where an operator may stop (M0/M1, a probe check)
+/// and jog, so a section never inherits the last one's A.
+#[test]
+fn a_same_tool_continuation_on_the_same_face_restates_a() {
+    let out = run(&mirrored(ARC4), &same_face_stream(90.0, false));
+    assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+    let nc = out.program;
+    assert_eq!(nc.matches(" M6").count(), 1, "one tool change only\n{nc}");
+    let secs = openings(&nc);
+    assert_eq!(secs.len(), 2, "{nc}");
+    for (i, s) in secs.iter().enumerate() {
+        let a = s.iter().position(|l| *l == "G0 A90");
+        assert!(a.is_some_and(|a| a > 0 && s[a - 1] == "G53 G0 Z0"), "section {i}: G53 G0 Z0 / G0 A90\n{nc}");
+    }
+}

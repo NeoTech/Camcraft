@@ -10,7 +10,7 @@
           ] }
         ] },
         { "id": "arc4", "name": "A", "type": "rotary", "axis": [1.0, 0.0, 0.0],
-          "travel": { "min": -360.0, "max": 360.0 } },
+          "travel": { "min": -360.0, "max": 360.0 }, "nose_to_axis": 10.6 },
         { "id": "head", "name": "head", "type": "head",
           "spindle": { "min_speed": 175.0, "max_speed": 10000.0, "power": 1.1,
             "ranges": [{ "min_speed": 175.0, "max_speed": 3250.0 }, { "min_speed": 525.0, "max_speed": 10000.0 }],
