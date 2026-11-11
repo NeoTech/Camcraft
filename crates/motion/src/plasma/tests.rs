@@ -306,3 +306,25 @@ fn a_sharp_inside_corner_generates_with_its_tip_left_not_refused() {
         assert!(path.is_ok_and(|p| p.plasma.is_some_and(|r| r.torches.len() == 1)));
     }
 }
+
+/// #791 delta review: the corner tip zone is capped at one kerf width.
+/// Uncapped it grows without bound as the opening closes, and a deep
+/// narrow V-slot was exempted whole and generated with the feature
+/// uncut; now only 2 r of its tip is left and the rest of its walls is
+/// judged, so each of these is refused by name.
+#[test]
+fn a_deep_narrow_wedge_is_refused_not_exempted_as_a_corner_tip() {
+    let q = Point2::new;
+    // A 100 x 60 plate with a V-slot `deg` wide at its tip and `depth` deep.
+    let wedge = |deg: f64, depth: f64| {
+        let half = depth * (deg.to_radians() * 0.5).tan();
+        Loop::new(vec![q(0.0, 0.0), q(100.0, 0.0), q(100.0, 60.0), q(50.0 + half, 60.0), q(50.0, 60.0 - depth), q(50.0 - half, 60.0), q(0.0, 60.0)])
+            .unwrap()
+    };
+    for (deg, depth) in [(4.0, 20.0), (2.0, 40.0), (10.0, 5.0)] {
+        let l = wedge(deg, depth);
+        let part = Region::new(vec![l.clone()]).unwrap();
+        let e = plasma_profile(&[l], &[], &part, &params()).err().map(|e| e.to_string()).unwrap_or_default();
+        assert!(e.contains("contour C0") && e.contains("bridged"), "{deg}° x {depth} mm wedge: {e:?}");
+    }
+}

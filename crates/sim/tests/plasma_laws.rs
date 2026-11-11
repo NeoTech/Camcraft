@@ -282,3 +282,25 @@ fn an_overlapping_ring_meeting_only_at_vertices_and_edges_is_refused() {
     assert!(matches!(f.as_slice(), [PlasmaFinding::KerfCrossing { contour: 2, earlier: 1, .. }]), "{f:?}");
     assert!(!f[0].refuses(), "common-line cutting is legal");
 }
+
+/// #791 delta review: a later part laid inside an earlier one and
+/// touching its edge has nothing outside it, yet its inner edge (x = 25)
+/// runs through the freed part - the 2D gouge, refused, not the
+/// torch-height warning. A hole touching its outline at a vertex, cut
+/// first, stays legal.
+#[test]
+fn a_ring_inside_an_earlier_part_touching_its_edge_is_refused() {
+    let e = cut(1, Outer, None, square(0.0, 0.0, 50.0));
+    let l = cut(2, Outer, None, vec![p(0.0, 0.0), p(25.0, 0.0), p(25.0, 50.0), p(0.0, 50.0), p(0.0, 0.0)]);
+    let f = judge(&PlasmaProgram { kerf: 1.5, cuts: vec![e.clone(), l], rapids: vec![None, None] });
+    assert!(
+        matches!(f.as_slice(), [PlasmaFinding::CutCrossing { contour: 2, earlier: 1, at }]
+            if at.x > 0.0 && at.x < 50.0 && at.y > 0.0 && at.y < 50.0),
+        "{f:?}"
+    );
+    assert!(f[0].refuses());
+    // A diamond hole whose left vertex touches the outline's left edge.
+    let hole = cut(2, Inner, Some(1), vec![p(0.0, 25.0), p(10.0, 15.0), p(20.0, 25.0), p(10.0, 35.0), p(0.0, 25.0)]);
+    let f = judge(&PlasmaProgram { kerf: 1.5, cuts: vec![hole, e], rapids: vec![None, None] });
+    assert!(f.iter().all(|x| !matches!(x, PlasmaFinding::CutCrossing { .. })), "{f:?}");
+}

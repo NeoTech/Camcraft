@@ -96,9 +96,12 @@ pub(super) fn near(a: &[Point2], b: &[Point2], gap: f64) -> Option<Point2> {
 /// only at vertices or along collinear edges (#791 review) cross when
 /// `a` has a stretch strictly inside `b` AND one strictly outside it -
 /// each edge of `a` is split at its contacts with `b` and judged by the
-/// midpoints of the pieces. A ring inside the other is enclosure (the
-/// cut-order law's), and a shared edge with nothing entering (common-
-/// line cutting) is legal: neither has a piece inside.
+/// midpoints of the pieces - or when `a` has a stretch strictly inside
+/// `b` and lies on `b`'s edge somewhere (a part laid inside an earlier
+/// one, touching its edge: its inner edge runs through the freed part).
+/// A ring strictly inside the other is enclosure (the cut-order law's),
+/// and a shared edge with nothing entering (common-line cutting) is
+/// legal: neither has a piece inside.
 #[must_use]
 pub(super) fn rings_cross(a: &[Point2], b: &[Point2]) -> Option<Point2> {
     let (n, m) = (a.len(), b.len());
@@ -124,7 +127,7 @@ pub(super) fn rings_cross(a: &[Point2], b: &[Point2]) -> Option<Point2> {
             }
         }
     }
-    if outside { within } else { None }
+    if outside || !encloses(b, a) { within } else { None }
 }
 
 /// Where segment a-b runs through the area closed by `ring`: the segment

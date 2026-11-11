@@ -72,6 +72,14 @@ crossing (warning) and tip-up (warning):
   legal common-line cutting (pinned). *Dropped:* sampling only vertices
   and edge midpoints, which misses an edge entering at one vertex and
   leaving at another with its midpoint on the ring.
+  *Delta review:* "inside AND outside" still missed a later part laid
+  inside an earlier one and touching its edge (`square(0,0,50)` then
+  `[0,25]×[0,50]`): nothing of it is outside, yet its x=25 edge runs
+  through the freed part. A piece strictly inside now crosses unless the
+  later ring is wholly, strictly enclosed (no point on the earlier edge) -
+  that case alone is enclosure. Shared edges, and a hole touching its
+  outline at a vertex (cut first, as the cut-order law demands - the
+  outline then has no piece inside the hole), stay legal.
 
 **4. The cover law (#676 decision 12), at generation.** An outward offset
 bridges a slot or notch narrower than the kerf (and an inward offset drops
@@ -116,15 +124,30 @@ and not r / sin(θ/2) as a radius:* it is derived from the law's own
 threshold - what the ideal miter path cannot cover, nothing more - so a
 real path worse than the ideal at a corner is still refused, and the 1 mm
 notch and the 1 mm keyway (90° corners) are refused exactly as before.
-*Consequence accepted:* a V-notch whose mouth is under the kerf is wholly
-a corner tip and generates with the tip left, like any sharp corner; its
-walls are shorter than the zone, so no path could reach them. The
+*The zone is capped at one kerf width, 2 r* (delta review of #791): the
+uncapped r (tan(δ/2) − √3) grows without bound as the opening closes, so
+a deep narrow V-slot (2° × 40 mm, 4° × 20 mm, 10° × 5 mm at the 1.5 mm
+kerf) exempted both walls whole and generated silently with the feature
+uncut, and a zero-width slit (a turn of π, tan ≈ 1.6e16 - finite) did the
+same. 2 r is exactly the 30° zone, so the 30°, 45° and 55° notches keep
+theirs; anything sharper keeps 2 r of tip and has the rest of its walls
+judged, so a narrow deep wedge is refused by name. A non-finite tan
+takes the cap. *Considered and dropped:* a cap at the corner's depth or
+a fraction of the wall length (it scales with the feature, so a long
+enough slit still escapes), and refusing every opening under 30° (the
+shallow ones are cut fine). *Consequence accepted:* a V-notch whose
+mouth and walls are both inside 2 r is wholly a corner tip and generates
+with the tip left, like any sharp corner. On a slot's floor (inside
+corners at both ends) the gap the refusal names is the smaller of the
+nearest non-adjacent edge and the floor's own length, so a floor point
+reports the slot's width, not its depth. The
 refusal now names the gap it measured against the kerf ("a slot, notch
 or keyway about 1.000 mm across, narrower than the kerf (1.500 mm), is
 bridged by the offset"): the nearest edge of the same contour that is
 not the point's own edge or its neighbours, when that is under the kerf.
-Pinned: 30°, 45° and 55° V-notches 20 mm wide generate; the 1 mm notch
-and keyway are still refused, the 3 mm notch still cuts.
+Pinned: 30°, 45° and 55° V-notches 20 mm wide generate; a 4° × 20 mm
+wedge is refused; the 1 mm notch and keyway are still refused, the 3 mm
+notch still cuts.
 
 **5. The machine check's note** (#674) now names where the through-cut IS
 judged: the plasma laws at the post gate, the kerf and cover laws at

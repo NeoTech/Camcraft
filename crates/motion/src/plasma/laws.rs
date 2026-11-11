@@ -115,30 +115,46 @@ pub(super) fn cover_law(
 /// vertex (δ the turn angle), and the stretch before that which even
 /// this best path leaves more than 2 r away, r (tan(δ/2) − √3), is the
 /// corner's uncut tip. Zero at a convex corner, a straight run, or any
-/// opening of 60° and more.
+/// opening of 60° and more; capped at one kerf width (2 r, reached at a
+/// 30° opening) - the tip grows without bound as the opening closes, and
+/// uncapped a deep narrow V-slot or a zero-width slit would be exempted
+/// whole and generate silently uncut (#791 review). A non-finite tan
+/// (a turn of π) takes the cap too.
 fn tip_zone(c: &Contour, i: usize, r: f64) -> f64 {
     let n = c.pts.len();
     let (u, v, w) = (c.pts[(i + n - 1) % n], c.pts[i], c.pts[(i + 1) % n]);
     let (e1, e2) = (unit(u, v), unit(v, w));
-    let turn_sign = e1.x * e2.y - e1.y * e2.x;
-    let inside_corner = if c.role == ContourRole::Inner { turn_sign > 0.0 } else { turn_sign < 0.0 };
-    if !inside_corner {
+    if !inside_corner(c.role, e1, e2) {
         return 0.0;
     }
+    let cap = 2.0 * r;
     let turn = (e1.x * e2.x + e1.y * e2.y).clamp(-1.0, 1.0).acos();
     let tip = r * ((turn * 0.5).tan() - 3.0_f64.sqrt());
-    if tip.is_finite() { tip.max(0.0) } else { 0.0 }
+    if tip.is_finite() { tip.clamp(0.0, cap) } else { cap }
+}
+
+/// Is the turn from direction `e1` to `e2` an inside corner of the
+/// material - a right turn on an outer ring, a left turn on a hole?
+fn inside_corner(role: ContourRole, e1: Point2, e2: Point2) -> bool {
+    let turn_sign = e1.x * e2.y - e1.y * e2.x;
+    if role == ContourRole::Inner { turn_sign > 0.0 } else { turn_sign < 0.0 }
 }
 
 /// The refusal at an uncovered edge point `q` of edge `i`, naming the
 /// gap across the feature - the nearest edge of the same contour that
 /// is not `q`'s own or its neighbours - when that gap is under the kerf.
+/// On a slot's floor (an edge with inside corners at both ends) that
+/// nearest edge is beyond the walls, about the slot's depth away, so the
+/// floor's own length - the slot's width - is taken when it is smaller.
 fn uncovered(contour: u32, c: &Contour, i: usize, q: Point2, kerf: f64) -> String {
     let n = c.pts.len();
-    let gap = (0..n)
+    let (u, a, b, w) = (c.pts[(i + n - 1) % n], c.pts[i], c.pts[(i + 1) % n], c.pts[(i + 2) % n]);
+    let floor = inside_corner(c.role, unit(u, a), unit(a, b)) && inside_corner(c.role, unit(a, b), unit(b, w));
+    let across = (0..n)
         .filter(|&k| k != i && k != (i + 1) % n && k != (i + n - 1) % n)
         .map(|k| pt_seg(q, c.pts[k], c.pts[(k + 1) % n]))
         .fold(f64::INFINITY, f64::min);
+    let gap = if floor { across.min(dist(a, b)) } else { across };
     let what = if gap < kerf {
         format!("a slot, notch or keyway about {gap:.3} mm across, narrower than the kerf ({kerf:.3} mm),")
     } else {
