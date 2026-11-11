@@ -251,6 +251,15 @@ impl Planner<'_> {
         Ok(Grown::Done)
     }
 
+    /// Append a run to the walk, dropping a repeat of the joint.
+    pub(super) fn push_walk(&mut self, run: &[Point2]) {
+        for &p in run {
+            if self.walk.last().is_none_or(|&l| super::front::dist(l, p) > 1e-6) {
+                self.walk.push(p);
+            }
+        }
+    }
+
     /// Walk `run` on the stock whole and keep it.
     fn cut_run(&mut self, run: &[Point2]) {
         let mut ras = self.ras.clone();

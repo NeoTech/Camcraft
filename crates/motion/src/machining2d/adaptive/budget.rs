@@ -64,15 +64,34 @@ pub(super) const GEOM_MAX: u64 = 600_000;
 pub(super) const GEOM_LEN: f64 = 5_000.0;
 
 /// The growth plan's running work: revolution length (mm, law 2) and
-/// polygon vertices (law 3), summed over every margin attempt.
-#[derive(Debug, Default)]
+/// polygon vertices (law 3), summed over every margin attempt, and the
+/// law-3 limits it is held to ([`GEOM_MAX`], [`GEOM_LEN`]; a test lowers
+/// them through [`Work::with_limits`]).
+#[derive(Debug)]
 pub(super) struct Work {
     len: Cell<f64>,
     verts: Cell<u64>,
+    geom_max: u64,
+    geom_len: f64,
+}
+
+impl Default for Work {
+    fn default() -> Self {
+        Self { len: Cell::new(0.0), verts: Cell::new(0), geom_max: GEOM_MAX, geom_len: GEOM_LEN }
+    }
 }
 
 impl Work {
-    /// A revolution `mm` long was tried.
+    /// A plan's work held to law 3 at `geom_max` vertices over `geom_len`
+    /// tool radii (tests: a refusal reached in a few revolutions).
+    #[cfg(test)]
+    pub(super) fn with_limits(geom_max: u64, geom_len: f64) -> Self {
+        Self { geom_max, geom_len, ..Self::default() }
+    }
+
+    /// A revolution `mm` long was tried. A NaN or non-positive length
+    /// (degenerate input) is not counted: it would poison the sum and
+    /// switch law 2 off for every later revolution.
     pub(super) fn add_len(&self, mm: f64) {
         if mm.is_finite() && mm > 0.0 {
             self.len.set(self.len.get() + mm);
@@ -100,8 +119,8 @@ impl Work {
         let len = self.len.get();
         if len > WORK_MAX * r {
             Some(over_work(revs))
-        } else if self.verts.get() > GEOM_MAX && len > GEOM_LEN * r {
-            Some(over_geometry(revs, self.verts.get(), len / r.max(1e-9)))
+        } else if self.verts.get() > self.geom_max && len > self.geom_len * r {
+            Some(over_geometry(revs, (self.verts.get(), self.geom_max), (len / r.max(1e-9), self.geom_len)))
         } else {
             None
         }
@@ -141,14 +160,16 @@ pub(super) fn over_work(revs: usize) -> String {
     format!("is refused: growing the cleared area ran past its planning budget after {revs} revolutions")
 }
 
-/// The refusal once the growth geometry ran past [`GEOM_MAX`] over
-/// `len` tool radii of revolutions (past [`GEOM_LEN`]).
-pub(super) fn over_geometry(revs: usize, verts: u64, len: f64) -> String {
+/// The refusal once the growth geometry ran past both law-3 limits:
+/// `verts` outline vertices over its limit and `len` tool radii of
+/// revolutions over its limit.
+pub(super) fn over_geometry(revs: usize, (verts, verts_max): (u64, u64), (len, len_max): (f64, f64)) -> String {
     format!(
-        "is refused: growing the cleared area ran past its planning budget after {revs} revolutions - its rings (~{} k outline vertices worked over ~{:.0} k tool radii of revolutions, over {} k) are too detailed to plan in seconds (an island?)",
+        "is refused: growing the cleared area ran past its planning budget after {revs} revolutions - its outline is too detailed and its path too long to plan in seconds (an island?): both limits passed, ~{} k outline vertices processed (limit {} k) and ~{:.1} k tool radii of path (limit {:.1} k)",
         verts / 1000,
+        verts_max / 1000,
         len / 1000.0,
-        GEOM_MAX / 1000
+        len_max / 1000.0
     )
 }
 
@@ -200,9 +221,27 @@ mod tests {
         assert!(w.over(5.0, 9).is_none(), "the bore's kind: heavy, short");
         w.add_len(2.0);
         let Some(m) = w.over(5.0, 9) else { panic!("over the geometry budget") };
-        assert!(m.contains("planning budget after 9 revolutions") && m.contains("too detailed"), "{m}");
+        assert!(m.contains("planning budget after 9 revolutions") && m.contains("too detailed and its path too long") && m.contains("both limits passed"), "{m}");
+        assert!(m.contains("(limit 600 k)") && m.contains("(limit 5.0 k)"), "{m}");
         w.verts.set(u64::MAX);
         w.add_geometry(&[&reg]);
         assert_eq!(w.verts(), u64::MAX);
+    }
+
+    /// A NaN (or non-positive) revolution length is degenerate input: it
+    /// neither refuses the plan nor switches law 2 off. Before #850 a NaN
+    /// poisoned the sum and no later revolution was ever refused.
+    #[test]
+    fn a_nan_length_neither_refuses_nor_disables_the_budget() {
+        let w = Work::default();
+        for bad in [f64::NAN, f64::INFINITY, -1.0, 0.0] {
+            w.add_len(bad);
+        }
+        assert!(w.over(5.0, 1).is_none(), "nothing real was walked");
+        w.add_len(WORK_MAX * 5.0 - 1.0);
+        assert!(w.over(5.0, 2).is_none());
+        w.add_len(f64::NAN);
+        w.add_len(2.0);
+        assert!(w.over(5.0, 3).is_some_and(|m| m.contains("planning budget after 3 revolutions")), "law 2 still refuses");
     }
 }

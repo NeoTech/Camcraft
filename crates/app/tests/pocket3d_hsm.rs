@@ -98,13 +98,11 @@ fn the_users_bore_roughs_adaptive_level_by_level_and_verifies_clean() {
     // change the path silently under the assertions above.
     assert!(!path.notes.iter().any(|n| n.contains("planning budget") || n.contains("too detailed")), "{:?}", path.notes);
     assert!(fell.len() == 1 && fell[0].contains("crosses itself") && fell[0].contains("Z 20.000"), "{fell:?}");
-    let digest = {
-        use std::hash::{Hash, Hasher};
-        let mut h = std::collections::hash_map::DefaultHasher::new();
-        format!("{:?}", path.moves).hash(&mut h);
-        h.finish()
-    };
-    println!("moves {} planar {planar} arcs {arcs} digest {digest:016x} notes {:?}", path.moves.len(), path.notes);
+    // The path as main plans it (measured on main bdd29e00 and on #850's
+    // head alike: 5530 moves, 5497 planar feeds, 600 arcs). A change to
+    // the planner that moves these re-measures them and says why.
+    println!("moves {} planar {planar} arcs {arcs} notes {:?}", path.moves.len(), path.notes);
+    assert_eq!((path.moves.len(), planar, arcs), (5530, 5497, 600), "the bore's path as main plans it: {:?}", path.notes);
 }
 
 #[test]

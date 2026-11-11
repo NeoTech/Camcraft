@@ -83,3 +83,27 @@ outcome as on main.
 island) and app `pocket3d_hsm` (the bore plans every level as on main). The
 refusal names both counts, so a real part refused by it shows where it
 stood.
+
+**Review round (PR #865).**
+- *Degenerate lengths, a deliberate change.* `Work::add_len` drops a NaN,
+  infinite or non-positive revolution length. Before #850 a NaN poisoned
+  the length sum, and from then on law 2 never refused a later revolution.
+  Now law 2 keeps counting. This changes behaviour only for degenerate
+  input, where the old code was silently wrong. Pinned by
+  `budget::tests::a_nan_length_neither_refuses_nor_disables_the_budget`.
+- *The island pin moved to the heavy lane.* It ran 46 s and 59 s in debug
+  on a loaded machine, at the 60 s limit. Its fast default-suite twin
+  drives the planner's own loop through a test-only constructor
+  (`Work::with_limits`, passed to the private `plan_within`; no global,
+  no env var). At limits of 20 k vertices and 200 r it refuses the island
+  by name after 10 revolutions, in 1.9 s debug.
+- *The bore's path is asserted, not printed.* The test asserts 5530 moves,
+  5497 planar feeds and 600 arcs, plus the per-level strategy. A
+  `DefaultHasher` digest is not stable across Rust releases, so it is not
+  used.
+- *Not done: counters reachable from integration tests.* The counts live
+  in a per-plan `Planner` inside `pocket()`. Reaching them would mean
+  returning them through the toolpath or a global, which is more than a
+  small accessor. The bore's walk (1.93x under the limit) and the rotary
+  counts stay pinned through their heavy tests' no-refusal and strategy
+  assertions.

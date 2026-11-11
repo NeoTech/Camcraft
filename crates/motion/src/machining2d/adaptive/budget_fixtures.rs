@@ -1,10 +1,12 @@
 //! Issue #850: the growth plans' geometry budget (`budget`, law 3)
 //! measured on our own pockets - every fixture that grows today stays
-//! well under it (the island it refuses is pinned in `adaptive_hsm`).
+//! well under it, and the island trips it by name (fast, at lowered
+//! limits; the full island is pinned in `adaptive_hsm`'s heavy lane).
 //! Gate map: covers motion::machining2d::adaptive (budget, grow).
 //! Provenance: our own regressions; no vendor material consulted.
 
-use super::{GEOM_MAX, PEAK};
+use super::super::{AdaptiveSpec, plan_within};
+use super::{GEOM_MAX, PEAK, Work};
 use crate::cl::Toolpath;
 use crate::entry::Entry3D;
 use crate::geo2d::{Loop, Point2, Region};
@@ -15,10 +17,14 @@ use crate::machining2d::{PocketParams, PocketStrategy, pocket};
 /// [`GEOM_MAX`].
 const MARGIN: f64 = 1.9;
 
-fn rect(x0: f64, y0: f64, x1: f64, y1: f64) -> Region {
+fn rect_loop(x0: f64, y0: f64, x1: f64, y1: f64) -> Loop {
     let pts = [(x0, y0), (x1, y0), (x1, y1), (x0, y1)];
     let Ok(l) = Loop::new(pts.iter().map(|&(x, y)| Point2::new(x, y)).collect()) else { panic!("fixture loop") };
-    let Ok(r) = Region::new(vec![l]) else { panic!("fixture region") };
+    l
+}
+
+fn rect(x0: f64, y0: f64, x1: f64, y1: f64) -> Region {
+    let Ok(r) = Region::new(vec![rect_loop(x0, y0, x1, y1)]) else { panic!("fixture region") };
     r
 }
 
@@ -50,6 +56,40 @@ fn spent(reg: &Region) -> (Toolpath, u64) {
     PEAK.with(|p| p.set(0));
     let Ok(t) = pocket(reg, &params()) else { panic!("pocket") };
     (t, PEAK.with(|p| p.get()))
+}
+
+/// The island's growth refused at lowered law-3 limits (the planner's
+/// own loop, [`Work::with_limits`]): named, through the plan's `refused`
+/// path - no passes, so `pocket_hsm` hands the area to the Offset rings
+/// by that name (as `adaptive_band` pins for #13's up-front refusal). The
+/// fast default-suite twin of `adaptive_hsm`'s heavy island pin.
+#[test]
+fn the_island_trips_lowered_geometry_limits_by_name() {
+    let r = 5.0;
+    let isl = Region::new(vec![
+        rect_loop(0.0, 0.0, 60.0, 40.0),
+        rect_loop(24.0, 14.0, 36.0, 26.0),
+    ]);
+    let Ok(isl) = isl else { panic!("island") };
+    let (Ok(center), seed) = (isl.offset(-r), Point2::new(13.0, 18.0)) else { panic!("center") };
+    let Ok(reach) = center.offset(r) else { panic!("reach") };
+    let spec = AdaptiveSpec {
+        r,
+        load: DEFAULT_OPTIMAL_LOAD,
+        tol: 0.05,
+        climb: true,
+        seed,
+        start: Point2::new(seed.x - 2.0, seed.y),
+        bore: r + 2.0,
+        helix_r: 2.0,
+        smooth: 2.5,
+    };
+    let t0 = std::time::Instant::now();
+    let Ok(pl) = plan_within(&reach, &center, &spec, Work::with_limits(20_000, 200.0)) else { panic!("plan") };
+    eprintln!("island at lowered limits: {:.1} s, {:?}", t0.elapsed().as_secs_f64(), pl.refused);
+    let Some(why) = &pl.refused else { panic!("refused: {:?}", pl.notes) };
+    assert!(why.contains("too detailed and its path too long") && why.contains("both limits passed") && why.contains("(limit 20 k)") && why.contains("(limit 0.2 k)"), "{why}");
+    assert!(pl.passes.is_empty() && pl.joins.is_empty(), "a refused plan has no passes: the Offset rings take the area");
 }
 
 /// The pockets that grow today keep their plans: each spends at most

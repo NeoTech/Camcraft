@@ -391,8 +391,11 @@ fn hsm_on_the_user_bore_enters_once_and_holds_every_law() {
 /// name, and the Offset rings cut it, named - verifier silent. The
 /// count in the note is deterministic: past the 600 k budget by at most
 /// one revolution (~6 k on the island). The wall clock is a loose
-/// backstop only, so a loaded machine cannot fail it.
+/// backstop only, so a loaded machine cannot fail it. Its fast twin in
+/// the default suite (the same refusal at lowered limits) is
+/// `adaptive::budget::fixtures::the_island_trips_lowered_geometry_limits_by_name`.
 #[test]
+#[ignore = "heavy lane: release --ignored (the island grown to the 600 k geometry budget, 46-59 s debug)"]
 fn the_island_is_refused_by_the_geometry_budget_in_seconds() {
     let (_, reg) = fixtures().swap_remove(3);
     let t0 = std::time::Instant::now();
@@ -402,7 +405,7 @@ fn the_island_is_refused_by_the_geometry_budget_in_seconds() {
     let Some(n) = t.notes.iter().find(|n| n.contains("too detailed") && n.contains("Offset rings cut this pocket instead")) else {
         panic!("refused by the geometry budget, by name: {:?}", t.notes)
     };
-    let k = n.split("(~").nth(1).and_then(|s| s.split(" k").next()).and_then(|s| s.parse::<u64>().ok());
+    let k = n.split("both limits passed, ~").nth(1).and_then(|s| s.split(" k").next()).and_then(|s| s.parse::<u64>().ok());
     assert!(k.is_some_and(|k| (600..=620).contains(&k)), "the count past the budget by at most a revolution: {n}");
     assert!(!t.moves.is_empty() && t.is_chained() && t.all_finite(), "the Offset rings cut it");
     let w = verified(&t, &reg, D);
