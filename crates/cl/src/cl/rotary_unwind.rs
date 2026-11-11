@@ -21,10 +21,11 @@
 //! not seen.
 //!
 //! A link is a point between two moves, reached by a rapid, that
-//! stands at the path's own clearance: the highest Z any move reaches
+//! stands at the path's own clearance: the highest Z its rapids reach
 //! (the axial clearance plane a standing bar's rings retract to before
 //! the next ring's plunge) or the largest radius (the retract cylinder
-//! of a laid bar's radial links). Between two links the cut runs as
+//! of a laid bar's radial links) - each only where it stands strictly
+//! beyond every cutting move's reach. Between two links the cut runs as
 //! stamped; a stretch whose C span no shift by whole turns fits inside
 //! the travel is refused by name - there is no clear point to rewind
 //! at. The first stretch is shifted without an orbit: the section opens
@@ -61,9 +62,17 @@ pub fn unwind_c(path: &Toolpath, center: [f64; 2], travel: (f64, f64), tol: f64)
         return Err("C unwind: a move states no finite C - only a C-stamped path unwinds".into());
     }
     let radius = |p: Point3| (p.x - center[0]).hypot(p.y - center[1]);
-    let zmax = moves.iter().flat_map(|m| [m.from.z, m.to.z]).fold(f64::NEG_INFINITY, f64::max);
-    let rmax = moves.iter().flat_map(|m| [radius(m.from), radius(m.to)]).fold(0.0, f64::max);
-    let clear = |p: Point3| p.z >= zmax - CLEAR_EPS || radius(p) >= rmax - CLEAR_EPS;
+    // The clearance is the path's outermost reach - and counts only
+    // where it stands strictly beyond everything the tool cuts (a
+    // ring's own radius is never a clearance, however outermost).
+    let ends = |cut: bool| moves.iter().filter(move |m| (m.kind != MoveKind::Rapid) == cut).flat_map(|m| [m.from, m.to]);
+    let zmax = ends(false).map(|p| p.z).fold(f64::NEG_INFINITY, f64::max);
+    let rmax = ends(false).map(radius).fold(f64::NEG_INFINITY, f64::max);
+    let z_cut = ends(true).map(|p| p.z).fold(f64::NEG_INFINITY, f64::max);
+    let r_cut = ends(true).map(radius).fold(f64::NEG_INFINITY, f64::max);
+    let clear = |p: Point3| {
+        (zmax > z_cut + CLEAR_EPS && p.z >= zmax - CLEAR_EPS) || (rmax > r_cut + CLEAR_EPS && radius(p) >= rmax - CLEAR_EPS)
+    };
     // Stretch starts: 0, then every move leaving a clear point a rapid
     // brought the tool to (a ring's retract, before its next plunge).
     let mut starts: Vec<usize> = vec![0];

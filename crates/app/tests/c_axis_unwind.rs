@@ -104,7 +104,8 @@ fn contour() -> Operation {
         src: SrcRef::Entity("bar".into()),
         params: OpParams::RotaryContour {
             tolerance: 0.05,
-            clearance_z: Height::fixed(25.0),
+            // Above the box stock's top, so the clearance plane is air.
+            clearance_z: Height::fixed(40.0),
             retract_z: None,
             top_z: Height::fixed(6.0),
             bottom_z: Height::fixed(-8.0),
@@ -150,7 +151,8 @@ fn a_rotary_contour_on_a_stated_c_travel_unwinds_at_its_links_and_posts() {
     assert!(lo >= travel.0 - 1e-9 && hi <= travel.1 + 1e-9, "C {lo}..{hi} inside the travel");
     assert!(path.moves.len() > raw.moves.len(), "the rewinds are moves of the path");
     // Every rewind chord is a rapid at the clearance plane, out of the work.
-    let orbit: Vec<&Move> = path.moves.iter().filter(|m| m.from.z >= 25.0 - 1e-6 && m.to.z >= 25.0 - 1e-6).collect();
+    let top = path.moves.iter().map(|m| m.to.z).fold(f64::NEG_INFINITY, f64::max);
+    let orbit: Vec<&Move> = path.moves.iter().filter(|m| m.from.z >= top - 1e-6 && m.to.z >= top - 1e-6).collect();
     assert!(!orbit.is_empty() && orbit.iter().all(|m| m.kind == MoveKind::Rapid), "rewinds ride as clearance rapids");
     for w in path.moves.windows(2) {
         assert_eq!(w[0].to, w[1].from, "the chain holds through the rewinds");
