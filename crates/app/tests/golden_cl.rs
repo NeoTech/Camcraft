@@ -1021,3 +1021,32 @@ fn plasma_plate_with_holes_matches_golden() {
     assert!(camcraft_app::post::cnc::parse(&text).is_ok());
     write_golden("plasma_plate_with_holes.cl", &text);
 }
+
+#[test]
+fn trochoid_slot_small_matches_golden() {
+    // #220: a D6 in a 10 mm channel, 12 mm long, one level - the bore
+    // helix, the front arcs with their wall leads and fillets, the
+    // microlift retraces and the cap pencil, every arc an arc.
+    let p = camcraft_app::machining2d::TrochoidParams {
+        tool_diameter: 6.0,
+        width: 10.0,
+        loop_width: None,
+        step: 1.5,
+        max_engagement: 90.0,
+        ret: camcraft_app::machining2d::TrochoidReturn::Microlift { height: 0.3 },
+        smoothing: 0.5,
+        stock_to_leave: 0.0,
+        clearance_z: 5.0,
+        retract_z: Some(1.0),
+        top_z: -2.0,
+        bottom_z: -2.0,
+        stepdown: 2.0,
+        feed: 800.0,
+        return_feed: 2000.0,
+        plunge_feed: 200.0,
+        climb: true,
+    };
+    let t = camcraft_app::machining2d::trochoidal_slot(&[Point2::new(0.0, 0.0), Point2::new(12.0, 0.0)], &p).unwrap();
+    assert!(t.has_arcs());
+    write_golden("trochoid_slot_small.cl", &gen_to_cltext(&t));
+}

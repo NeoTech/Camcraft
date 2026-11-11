@@ -761,7 +761,13 @@ pub(crate) fn ftoz(v: f64) -> f32 {
 /// Staleness is not a display state here - what is drawn is the cache
 /// itself, and the tree's STALE badge is where a stale path is called
 /// out.
-pub(crate) fn toolpath_lines(state: &State) -> Vec<[f32; 6]> {
+///
+/// Public for the docs-image harness (`crates/ui/tests/docs_images.rs`):
+/// tutorial pictures must carry the app's own path display - same colors,
+/// same chords, same chevrons - never a test-local reconstitution that
+/// can drift from what the viewport actually paints.
+#[must_use]
+pub fn toolpath_lines(state: &State) -> Vec<[f32; 6]> {
     let mut out = Vec::new();
     let arm = chevron_arm(state);
     // M13.4: the move kinds wear the viewer's colour-vision palette
@@ -1076,6 +1082,7 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
         | operation::OpParams::Flow5D { retract_z, .. }
         | operation::OpParams::MultiAxisContour { retract_z, .. }
         | operation::OpParams::Slot { retract_z, .. }
+        | operation::OpParams::TrochoidalSlot { retract_z, .. }
         // The engrave twin hops where trace hops, the circular ladder
         // where the pocket hops, and the chamfer ride between its
         // chains the trace's way (M2.4 B) - all the store-either shape.
@@ -1220,6 +1227,7 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
         | operation::OpParams::Flow5D { top_z, bottom_z, .. }
         | operation::OpParams::MultiAxisContour { top_z, bottom_z, .. }
         | operation::OpParams::Slot { top_z, bottom_z, .. }
+        | operation::OpParams::TrochoidalSlot { top_z, bottom_z, .. }
         // The engrave twin draws the trace's ladder - first level up
         // top, floor below - and the circular ladder its rings' two
         // rungs: vault or flat, the dome law's stations live between

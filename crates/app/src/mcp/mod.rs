@@ -31,6 +31,8 @@ mod render;
 mod setup_tools;
 mod tools;
 mod wcs_circle;
+mod vise_tools;
+mod accessory_tools;
 
 // #183: the same tool table served live from inside the GUI, over a
 // loopback socket, against the app's own document and History.

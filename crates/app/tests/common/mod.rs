@@ -198,6 +198,7 @@ pub fn gen_to_cltext(t: &Toolpath) -> String {
             camcraft_app::cl::CycleKind::Peck => "Peck",
             camcraft_app::cl::CycleKind::Deep => "Deep",
             camcraft_app::cl::CycleKind::Tap => "Tap",
+            camcraft_app::cl::CycleKind::FloatingTap => "FloatingTap",
             camcraft_app::cl::CycleKind::Bore => "Bore",
             camcraft_app::cl::CycleKind::BackBore => "BackBore",
         };

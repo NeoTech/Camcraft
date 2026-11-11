@@ -207,8 +207,10 @@ pub enum CycleKindDto {
     Peck,
     Deep,
     Tap,
+
     Bore,
     BackBore,
+    FloatingTap,
 }
 
 impl CycleDto {
@@ -220,6 +222,7 @@ impl CycleDto {
                 CycleKind::Peck => CycleKindDto::Peck,
                 CycleKind::Deep => CycleKindDto::Deep,
                 CycleKind::Tap => CycleKindDto::Tap,
+                CycleKind::FloatingTap => CycleKindDto::FloatingTap,
                 CycleKind::Bore => CycleKindDto::Bore,
                 CycleKind::BackBore => CycleKindDto::BackBore,
             },
@@ -241,6 +244,7 @@ impl CycleDto {
                 CycleKindDto::Peck => CycleKind::Peck,
                 CycleKindDto::Deep => CycleKind::Deep,
                 CycleKindDto::Tap => CycleKind::Tap,
+                CycleKindDto::FloatingTap => CycleKind::FloatingTap,
                 CycleKindDto::Bore => CycleKind::Bore,
                 CycleKindDto::BackBore => CycleKind::BackBore,
             },
@@ -352,7 +356,7 @@ impl AlignmentDto {
 /// DECLARED binding, same grammar as `OperationDto::setup`: absent
 /// means the first setup by name (the implicit-setup law), so a tagged
 /// model in a setup-free document saves as one key and nothing more.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
 pub struct FixtureDto {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub setup: Option<String>,
@@ -361,6 +365,15 @@ pub struct FixtureDto {
     /// and false saves as no key, so such files round-trip unchanged.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub fixed: bool,
+    /// A built-in vise's parameters (#788); absent - plain steel. Kept
+    /// as raw JSON so a key this build can't read is dropped with a load
+    /// note, never a failed load (#812, `fixture_keys`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vise: Option<serde_json::Value>,
+    /// A built-in accessory's kind and dimensions (#789); absent - not
+    /// one. Same lenient read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accessory: Option<serde_json::Value>,
 }
 
 /// An operation as files hold it: definition, the stamp the last generate

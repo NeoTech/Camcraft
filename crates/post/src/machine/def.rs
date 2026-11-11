@@ -58,6 +58,23 @@ pub struct AxisLimits {
     /// file's `"direction": 1 | -1`; the program frame never changes.
     #[serde(default, skip_serializing_if = "AxisDirection::is_standard")]
     pub direction: AxisDirection,
+    /// A rotary that turns the WORK, not the spindle (#804): the file
+    /// places it outside the head's chain (no `head` part below it), as
+    /// a 4th-axis table bolted to the bed is. Read by the index-swing
+    /// clause of the program gate. `Some(false)` for a head's own tilt,
+    /// `None` for every linear axis - and for a rotary read back from a
+    /// project saved before #804, which never stated it (#813: the load
+    /// names such a machine so it is reloaded, never silently unjudged).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub turns_part: Option<bool>,
+    /// How far the spindle nose sits above this rotary's centerline
+    /// with Z at the post's `safe_retract`, mm (#804): the file's
+    /// `"nose_to_axis"`. With WCS Y0 Z0 on the centerline (the indexed
+    /// post's setup law) it puts the retracted tool tip in program Z.
+    /// `None` = unstated, and an index on a work-turning A is refused
+    /// by name rather than guessed clear.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nose_to_axis: Option<f64>,
 }
 
 fn is_false(b: &bool) -> bool {
@@ -217,6 +234,7 @@ impl Machine {
             && self.axes.iter().all(|a| {
                 rate_ok(a.feed) && rate_ok(a.rapid) && rate_ok(a.resolution) && a.travel.is_none_or(|(lo, hi)| lo.is_finite() && hi.is_finite() && hi > lo)
                     && a.axis.is_none_or(|d| d.iter().all(|x| x.is_finite()))
+                    && rate_ok(a.nose_to_axis)
             })
             && match (self.spindle_min, self.spindle_max) {
                 (Some(lo), Some(hi)) => hi >= lo,

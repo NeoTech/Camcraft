@@ -203,6 +203,8 @@ fn the_plasma_check_skips_depth_and_rpm_with_a_note_and_judges_xy() {
     let c = check_document(&world, &shipped_1300pl()).expect("checks");
     assert_eq!(c.notes.len(), 2, "{:?}", c.notes);
     assert!(c.notes.iter().any(|n| n.contains("Z is the torch lifter") && n.contains("not judged")));
+    // #672: the note names where the through-cut IS judged.
+    assert!(c.notes.iter().any(|n| n.contains("plasma laws at the post gate") && n.contains("cut order") && n.contains("stock sim does not run")), "{:?}", c.notes);
     assert!(c.notes.iter().any(|n| n.contains("no spindle") && n.contains("rpm")));
     assert!(c.problems.iter().any(|p| p.contains("Face1: a Face operation is milling work - a plasma table cuts only plasma operations")), "{:?}", c.problems);
     assert!(c.problems.iter().any(|p| p.contains("rpm - a plasma table has no spindle")), "{:?}", c.problems);
