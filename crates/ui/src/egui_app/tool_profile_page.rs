@@ -113,6 +113,7 @@ fn profile_section(ui: &mut Ui, state: &mut State, exists: bool, u: Unit) {
     {
         state.queue_apply_tool_profile();
     }
+    super::tool_holder_picker::holder_picker(ui, state, u);
 }
 
 /// The points, tip-up: z, r, arc radius (0 = line), insert after,
@@ -158,7 +159,7 @@ fn points_table(ui: &mut Ui, state: &mut State, u: Unit) {
 }
 
 /// A compact unit-lens length cell (the `fields::num` law, narrower).
-fn len_cell(ui: &mut Ui, u: Unit, v: &mut f64) {
+pub(super) fn len_cell(ui: &mut Ui, u: Unit, v: &mut f64) {
     let w = [54.0, ui.spacing().interact_size.y];
     if u == Unit::Millimeters {
         ui.add_sized(w, egui::DragValue::new(v).speed(0.1));

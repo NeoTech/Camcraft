@@ -13,6 +13,8 @@
 pub mod cutting;
 // #368: a modelled tool body as the stack laws read it.
 pub mod holder_profile;
+// #793: the built-in BT/CAT taper holder library, drawn as spun profiles.
+pub mod holder_library;
 // #93: a drawn revolved (spun) profile for milling tools and holders.
 pub mod spun;
 // #369: a lathe-held body as the revolved-stock law reads it.
