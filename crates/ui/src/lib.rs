@@ -13,6 +13,10 @@
 // is owed on #31, after which this line goes.
 #![cfg_attr(target_arch = "wasm32", allow(dead_code))]
 
+// First, so every module below sees its macros (`diag_warn!`, `diag_info!`).
+#[macro_use]
+pub mod diag;
+
 pub mod actions;
 mod axis_note;
 mod build_info;
@@ -76,12 +80,12 @@ pub fn run(args: &[String]) -> i32 {
         if a == "--ui" {
             match it.next().map(String::as_str) {
                 None => {
-                    eprintln!("--ui needs a value: egui is the only shell (imgui retired at M1.4.2 M-g)");
+                    diag_warn!("--ui needs a value: egui is the only shell (imgui retired at M1.4.2 M-g)");
                     return 2;
                 }
                 Some("egui") => {}
                 Some(other) => {
-                    eprintln!("unknown --ui {other}: the imgui stack retired at M1.4.2 M-g; egui is the only shell");
+                    diag_warn!("unknown --ui {other}: the imgui stack retired at M1.4.2 M-g; egui is the only shell");
                     return 2;
                 }
             }

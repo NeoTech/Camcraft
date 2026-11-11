@@ -34,9 +34,18 @@ pub(crate) fn sync_scene(
     }
 }
 
+/// The pixel ratio a shell may size the 3D target with: what the window or
+/// the browser reports, held to 0.1..=8 (1 when it is not a number), so a
+/// zero or absurd ratio can neither collapse nor explode the target.
+pub(crate) fn target_scale(reported: f64) -> f64 {
+    if reported.is_nan() { 1.0 } else { reported.clamp(0.1, 8.0) }
+}
+
 /// The 3D target's pixel size for a laid-out viewport of `points` at
-/// `scale` pixels per point: never zero, never past what a u32 holds.
+/// `scale` pixels per point (held by `target_scale`): never zero, never
+/// past what a u32 holds.
 pub(crate) fn target_extent(points: [f32; 2], scale: f64) -> (u32, u32) {
+    let scale = target_scale(scale);
     let px = |p: f32| (f64::from(p) * scale).max(1.0) as u32;
     (px(points[0]), px(points[1]))
 }
@@ -148,6 +157,15 @@ mod tests {
         // A collapsed or not-yet-laid-out viewport still gets a 1x1 target.
         assert_eq!(target_extent([0.0, -5.0], 2.0), (1, 1));
         assert_eq!(target_extent([f32::NAN, 10.0], 1.0), (1, 10));
+        // The first browser frame passes the reported pixel ratio straight
+        // in: zero, negative, absurd or not-a-number must still size a
+        // usable target (the clamp the frame paths apply, 0.1..=8).
+        assert_eq!(target_extent([600.0, 400.0], 0.0), (60, 40));
+        assert_eq!(target_extent([600.0, 400.0], -3.0), (60, 40));
+        assert_eq!(target_extent([600.0, 400.0], 1.0e9), (4800, 3200));
+        assert_eq!(target_extent([600.0, 400.0], f64::INFINITY), (4800, 3200));
+        assert_eq!(target_extent([600.0, 400.0], f64::NAN), (600, 400));
+        assert_eq!(target_extent([0.0, 0.0], 0.0), (1, 1));
     }
 
     #[test]

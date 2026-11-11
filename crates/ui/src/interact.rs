@@ -877,7 +877,7 @@ pub(crate) fn chevrons(out: &mut Vec<[f32; 6]>, from: Point3, to: Point3, c: [f3
 /// and say so in the log.
 pub(crate) fn capped(mut lines: Vec<[f32; 6]>) -> Vec<[f32; 6]> {
     if lines.len() > MAX_OVERLAY_VERTICES {
-        eprintln!(
+        diag_warn!(
             "overlay: {} vertices exceed the display budget; the rest of this frame's \
              lines are dropped",
             lines.len()

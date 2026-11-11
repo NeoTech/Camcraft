@@ -24,7 +24,9 @@
 # them in the page, wired in by the import map in web/index.html.
 #   3. wasm-bindgen's CLI must be the exact version of the wasm-bindgen
 #      crate in Cargo.lock. A matching one on PATH is used; otherwise that
-#      version is installed under the tools dir (never into ~/.cargo).
+#      version is installed from crates.io under the tools dir (never into
+#      ~/.cargo), after saying so. CAMCRAFT_WASM_NO_INSTALL=1 turns that
+#      install into a refusal that names the version to provide.
 # Output: <target>/web/ holds index.html, wasi_shim.js, camcraft-ui.js and
 # camcraft-ui_bg.wasm - serve that folder over http to run the shell.
 #
@@ -129,9 +131,23 @@ BINDGEN="$(command -v wasm-bindgen || true)"
 if [[ -z "$BINDGEN" || "$("$BINDGEN" --version 2>/dev/null)" != "wasm-bindgen $BINDGEN_VER" ]]; then
     BINDGEN="$TOOLS/bindgen/bin/wasm-bindgen"
     if [[ "$("$BINDGEN" --version 2>/dev/null || true)" != "wasm-bindgen $BINDGEN_VER" ]]; then
-        cargo install wasm-bindgen-cli --version "$BINDGEN_VER" --locked --root "$(native_path "$TOOLS/bindgen")"             || die "cannot install wasm-bindgen-cli $BINDGEN_VER"
+        # The one step that fetches and builds outside code: the CLI is not
+        # in the workspace lock and has no checksum in this repo, and its
+        # build scripts run. It is announced, and CAMCRAFT_WASM_NO_INSTALL=1
+        # refuses it with what to do by hand instead.
+        INSTALL_ROOT="$(native_path "$TOOLS/bindgen")"
+        INSTALL_CMD="cargo install wasm-bindgen-cli --version $BINDGEN_VER --locked --root $INSTALL_ROOT"
+        if [[ "${CAMCRAFT_WASM_NO_INSTALL:-}" == "1" ]]; then
+            die "no wasm-bindgen $BINDGEN_VER on PATH or under $TOOLS/bindgen, and CAMCRAFT_WASM_NO_INSTALL=1 forbids installing it. Put that exact version on PATH (it must match the wasm-bindgen crate in Cargo.lock), or run: $INSTALL_CMD"
+        fi
+        echo "build-app-wasm: no wasm-bindgen $BINDGEN_VER on PATH - installing wasm-bindgen-cli $BINDGEN_VER from crates.io (downloads and builds it and its dependencies) into $INSTALL_ROOT"
+        echo "build-app-wasm:   running: $INSTALL_CMD"
+        echo "build-app-wasm:   set CAMCRAFT_WASM_NO_INSTALL=1 to refuse this and be told what to install by hand"
+        cargo install wasm-bindgen-cli --version "$BINDGEN_VER" --locked --root "$INSTALL_ROOT" \
+            || die "cannot install wasm-bindgen-cli $BINDGEN_VER"
     fi
 fi
+echo "build-app-wasm: using $("$BINDGEN" --version) at $BINDGEN"
 WEB_OUT="${CARGO_TARGET_DIR:-$ROOT/target}/web"
 rm -rf "$WEB_OUT"
 mkdir -p "$WEB_OUT"
@@ -143,8 +159,10 @@ grep -q 'camcraft_start' "$WEB_OUT/camcraft-ui.js" || die "the glue does not exp
 # the page fails at instantiation with a link error instead of a message.
 # The names are read from the module's import section (module name, one
 # length byte, field name).
-WASI_FNS="$(LC_ALL=C grep -a -o 'wasi_snapshot_preview1[^a-z_][a-z_0-9]*' "$WEB_OUT/camcraft-ui_bg.wasm" | LC_ALL=C sed 's/^wasi_snapshot_preview1.//' | sort -u)"
-[[ -n "$WASI_FNS" ]] || die "found no WASI imports in the module - re-check how they are read"
+# (`|| true`: grep finding nothing must reach the named message below, not
+# end the script through pipefail.)
+WASI_FNS="$(LC_ALL=C grep -a -o 'wasi_snapshot_preview1[^a-z_][a-z_0-9]*' "$WEB_OUT/camcraft-ui_bg.wasm" | LC_ALL=C sed 's/^wasi_snapshot_preview1.//' | sort -u || true)"
+[[ -n "$WASI_FNS" ]] || die "found no WASI imports in $WEB_OUT/camcraft-ui_bg.wasm - the module should import its clock and log calls; re-check how the import section is read"
 for fn in $WASI_FNS; do
     grep -q "^export function $fn(" "$WEB_OUT/wasi_shim.js" || die "web/wasi_shim.js does not answer the WASI import $fn"
 done

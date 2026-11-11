@@ -115,3 +115,52 @@
   `shell.rs` (still 923 lines; only an import and a `cfg` changed here);
   a WebGPU run; and the wasm32 `allow(dead_code)` in `lib.rs`, which now
   covers 17 native-only helpers that need gating one by one.
+
+### Review round (2026-11-11, PR #847)
+
+- **Chosen: one diagnostics seam for the UI crate, `crate::diag`.**
+  `diag_warn!` / `diag_info!` take the arguments `eprintln!` / `println!`
+  took. Natively they print to stderr / stdout as before; on wasm32, where
+  std drops both streams, they call `console.warn` / `console.log`. All 35
+  direct prints in the UI code that is compiled for the browser moved to
+  it (the stock eye falling back to the CPU march, the file dialog
+  answering "cancelled", import and ribbon notes, the wasm32 entry
+  refusals). A law test (`diag::tests::shared_ui_code_prints_only_through_the_diag_seam`)
+  walks the crate sources and fails on a direct print outside the seam,
+  the native-only files and the tests.
+  - *Why not the `tracing` facade:* camcraft-app has it, but its subscriber
+    writes to stderr and is installed from the native `main`; the UI crate
+    does not depend on tracing, and a console writer for it is a separate
+    piece of work. No new dependency was added: the console binding is
+    eframe's re-exported web-sys, already a wasm32 dependency.
+  - *Still owed:* camcraft-app's own diagnostics (its `tracing` events and
+    its direct prints) are still dropped in a browser. They need a console
+    writer installed by the browser shell.
+- **Chosen: `poll_oneoff` succeeds at once and says so.** The shim used to
+  answer ENOSYS under a comment that promised an immediate return. The
+  callers are the wasi libc's sleeps (flecs' frame pacing) and poll. An
+  error from a sleep is ignored by flecs but is a failure to any caller
+  that checks it, and "the sleep is over" is the answer that lets every
+  caller go on. So the call now returns success and reports each clock
+  subscription as elapsed; a descriptor subscription gets an ENOTSUP
+  event. No time passes, so the first skipped wait is written to the
+  console with its length. A caller that loops until a clock has advanced
+  still terminates, because the clocks are real.
+- **Chosen: the shim answers the nine imports and nothing else.** The
+  extra functions (fd_read, environ, sched_yield and others) are gone:
+  the build fails by name if the module asks for a tenth, which is better
+  than a guessed answer nobody reads. Unknown clock ids answer EINVAL and
+  a write, close or seek on a descriptor that is not open answers EBADF,
+  each with one console warning. The two expected probe answers (ESPIPE
+  for a seek on stdout, EBADF ending the preopen walk) are documented and
+  not reported.
+- **Chosen: the wasm-bindgen install is announced and can be refused.**
+  The script prints the exact `cargo install` command and that it fetches
+  from crates.io before running it; `CAMCRAFT_WASM_NO_INSTALL=1` turns it
+  into a refusal naming the version to put on PATH. Whether CI and the
+  release build may run that install is the maintainer decision this
+  switch exists for.
+- **Chosen: the pixel-ratio clamp lives in `view_pass::target_extent`.**
+  Both shells clamped (or, for the first browser frame, forgot to clamp)
+  the ratio before calling it. It now holds the ratio to 0.1..=8 itself
+  (1 for NaN), so no caller can size a zero or runaway target.

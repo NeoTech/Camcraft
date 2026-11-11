@@ -115,7 +115,7 @@ impl StockEye {
         let trace = match TracePass::new_async(device).await {
             Ok(t) => Some(t),
             Err(e) => {
-                eprintln!("stock eye: {e} - the CPU march stands in");
+                diag_warn!("stock eye: {e} - the CPU march stands in");
                 None
             }
         };
@@ -208,7 +208,7 @@ impl StockEye {
                 Ok(None) => {} // a CPU picture is pending: what stands, stands
                 Err(e) => {
                     self.refused = Some(key);
-                    eprintln!("stock eye: {e}");
+                    diag_warn!("stock eye: {e}");
                     return Err(e);
                 }
             }
@@ -266,26 +266,26 @@ impl StockEye {
         let Some(trace) = self.trace.as_mut() else { return false };
         if let Some(p) = &fv.packed {
             let Some(cut) = full_cut(fv) else {
-                eprintln!("stock eye: the playback cut layer would not pack - the CPU march stands in");
+                diag_warn!("stock eye: the playback cut layer would not pack - the CPU march stands in");
                 return false;
             };
             return match trace.upload_layers(device, &p.base.meta, &p.base.mesh, &cut, p.base.target.as_ref()) {
                 Ok(()) => true,
                 Err(e) => {
-                    eprintln!("stock eye: {e} - the CPU march stands in");
+                    diag_warn!("stock eye: {e} - the CPU march stands in");
                     false
                 }
             };
         }
         let Some(stock) = fv.stock.field().and_then(pack_field) else {
-            eprintln!("stock eye: the stock field would not pack - the CPU march stands in");
+            diag_warn!("stock eye: the stock field would not pack - the CPU march stands in");
             return false;
         };
         let target = fv.target.as_ref().and_then(|t| t.field()).and_then(pack_target);
         match trace.upload(device, &stock, target.as_ref()) {
             Ok(()) => true,
             Err(e) => {
-                eprintln!("stock eye: {e} - the CPU march stands in");
+                diag_warn!("stock eye: {e} - the CPU march stands in");
                 false
             }
         }

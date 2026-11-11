@@ -219,7 +219,7 @@ pub fn run(args: &[String]) -> i32 {
     let pick = match gpu::pick_from(args, env.as_deref()) {
         Ok(p) => p,
         Err(err) => {
-            eprintln!("gpu: {err}");
+            diag_warn!("gpu: {err}");
             return 2;
         }
     };
@@ -228,7 +228,7 @@ pub fn run(args: &[String]) -> i32 {
     let want = match gpu::adapter_from(args, want_env.as_deref()) {
         Ok(w) => w,
         Err(err) => {
-            eprintln!("gpu: {err}");
+            diag_warn!("gpu: {err}");
             return 2;
         }
     };
@@ -237,13 +237,13 @@ pub fn run(args: &[String]) -> i32 {
     let mcp_port = match camcraft_app::mcp::port_from(args, mcp_env.as_deref()) {
         Ok(p) => p,
         Err(err) => {
-            eprintln!("mcp: {err}");
+            diag_warn!("mcp: {err}");
             return 2;
         }
     };
     if args.iter().any(|a| a == "--headless") {
         if pick != gpu::GpuPick::Auto || want.is_some() {
-            println!("gpu: --headless pins the fallback adapter for determinism; backend and adapter picks ignored");
+            diag_info!("gpu: --headless pins the fallback adapter for determinism; backend and adapter picks ignored");
         }
         run_headless()
     } else {
@@ -255,11 +255,11 @@ pub fn run(args: &[String]) -> i32 {
 fn run_headless() -> i32 {
     match shell::headless::run() {
         Ok(()) => {
-            println!("egui shell headless: seeded document, command world, View3D green");
+            diag_info!("egui shell headless: seeded document, command world, View3D green");
             0
         }
         Err(err) => {
-            eprintln!("egui shell headless FAILED: {err}");
+            diag_warn!("egui shell headless FAILED: {err}");
             1
         }
     }
@@ -269,7 +269,7 @@ fn run_headless() -> i32 {
 /// browser build refuses it by name like the windowed entry.
 #[cfg(target_arch = "wasm32")]
 fn run_headless() -> i32 {
-    eprintln!("{WASM_NO_WINDOW}");
+    diag_warn!("{WASM_NO_WINDOW}");
     2
 }
 
@@ -283,7 +283,7 @@ fn run_windowed(pick: gpu::GpuPick, want: Option<String>, mcp_port: Option<u16>)
 /// name instead of pretending.
 #[cfg(target_arch = "wasm32")]
 fn run_windowed(_pick: gpu::GpuPick, _want: Option<String>, _mcp_port: Option<u16>) -> i32 {
-    eprintln!("{WASM_NO_WINDOW}");
+    diag_warn!("{WASM_NO_WINDOW}");
     2
 }
 

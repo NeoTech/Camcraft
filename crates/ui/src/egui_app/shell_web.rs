@@ -86,8 +86,9 @@ fn refuse(why: &str) {
     report("refused", &line);
 }
 
+/// A plain note for the console, through the crate's diagnostics seam.
 fn console_log(line: &str) {
-    web_sys::console::log_1(&line.into());
+    crate::diag::info(line);
 }
 
 /// Put `text` and a machine-readable `data-state` on the status element.
@@ -132,6 +133,9 @@ impl WebShell {
         state.gpu_line = Some(gpu_line);
 
         let viewport_points = [600.0, 400.0];
+        // `target_extent` holds the pixel ratio to 0.1..=8 like every later
+        // frame: a ratio the browser reports as zero or absurd still gives a
+        // usable first target.
         let (vw, vh) = view_pass::target_extent(viewport_points, f64::from(cc.egui_ctx.pixels_per_point()));
         let mut view = View3D::new(&rs.device, VIEW3D_FORMAT, vw, vh);
         let scene = world::collect(&state);
@@ -179,7 +183,7 @@ impl WebShell {
         let landed = self.eye_slot.try_borrow_mut().ok().and_then(|mut s| s.take());
         match landed {
             Some(Ok(eye)) => self.stock_eye = Some(eye),
-            Some(Err(err)) => console_log(&format!("stock eye: {err} - the deviate sheet stands in")),
+            Some(Err(err)) => diag_warn!("stock eye: {err} - the deviate sheet stands in"),
             None => {}
         }
     }

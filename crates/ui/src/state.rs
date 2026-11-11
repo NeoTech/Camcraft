@@ -2493,7 +2493,7 @@ impl State {
             if Instant::now() >= deadline {
                 self.abandon_imports();
                 self.status = String::from("import timed out");
-                eprintln!("settle: queued work did not finish before the deadline");
+                diag_warn!("settle: queued work did not finish before the deadline");
                 return;
             }
             std::thread::sleep(Duration::from_millis(2));
@@ -3534,14 +3534,14 @@ impl State {
                 // A dropped rx means the document changed or we are closing;
                 // the command is simply never applied.
                 if tx.send(result).is_err() {
-                    eprintln!("import: result discarded, no receiver");
+                    diag_warn!("import: result discarded, no receiver");
                 }
             });
         match spawned {
             Ok(_) => self.import_rx = Some(rx),
             Err(err) => {
                 // Thread exhaustion must not lose the import: run inline.
-                eprintln!("import: worker spawn failed ({err}); running inline");
+                diag_warn!("import: worker spawn failed ({err}); running inline");
                 let result = ImportModel::new(&path);
                 self.finish_import(result);
             }
@@ -3646,7 +3646,7 @@ impl State {
                 self.import_file = None;
                 self.import_started = None;
                 self.status = String::from("import failed: worker lost");
-                eprintln!("import: worker thread exited without a result");
+                diag_warn!("import: worker thread exited without a result");
             }
             None => {}
         }
@@ -3679,7 +3679,7 @@ impl State {
     /// A worker still running finishes in the background and discards itself.
     fn abandon_imports(&mut self) {
         if self.import_rx.take().is_some() {
-            eprintln!("import: document changed; pending import discarded");
+            diag_warn!("import: document changed; pending import discarded");
         }
         self.import_queue.clear();
         self.import_file = None;
