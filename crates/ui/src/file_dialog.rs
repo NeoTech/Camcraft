@@ -137,7 +137,7 @@ mod imp {
     use std::path::PathBuf;
 
     fn unavailable(what: &str, d: &FileDialog) -> Option<PathBuf> {
-        eprintln!(
+        diag_warn!(
             "{what} dialog ({}) is not available in the browser build yet (#31): treated as cancelled",
             d.title.as_deref().unwrap_or("untitled")
         );

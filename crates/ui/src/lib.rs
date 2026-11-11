@@ -5,11 +5,17 @@
 //! The imgui stack that lived here until M1.4.2 M-g is retired: `egui_app`
 //! is the shell, `interact` and `state` the shared law underneath it.
 
-// #31 rung 2: on wasm32 the native window is cfg'd out and the browser
-// runner that will call `egui_app::shell::shell_layout` is still owed, so
-// the whole shared shell is unreachable there. Native builds keep the
-// dead-code lint; drop this line when the web runner lands.
+// #31: on wasm32 the browser shell (`egui_app::shell_web`) draws the shared
+// frame, but 17 helpers only the native window, the adapter-by-adapter
+// bring-up and the headless proof reach (gpu_select, gpu's backend mask,
+// world::seed, the recent-files read) are left without a caller there.
+// Native builds keep the dead-code lint; gating those helpers one by one
+// is owed on #31, after which this line goes.
 #![cfg_attr(target_arch = "wasm32", allow(dead_code))]
+
+// First, so every module below sees its macros (`diag_warn!`, `diag_info!`).
+#[macro_use]
+pub mod diag;
 
 pub mod actions;
 mod axis_note;
@@ -80,12 +86,12 @@ pub fn run(args: &[String]) -> i32 {
         if a == "--ui" {
             match it.next().map(String::as_str) {
                 None => {
-                    eprintln!("--ui needs a value: egui is the only shell (imgui retired at M1.4.2 M-g)");
+                    diag_warn!("--ui needs a value: egui is the only shell (imgui retired at M1.4.2 M-g)");
                     return 2;
                 }
                 Some("egui") => {}
                 Some(other) => {
-                    eprintln!("unknown --ui {other}: the imgui stack retired at M1.4.2 M-g; egui is the only shell");
+                    diag_warn!("unknown --ui {other}: the imgui stack retired at M1.4.2 M-g; egui is the only shell");
                     return 2;
                 }
             }
