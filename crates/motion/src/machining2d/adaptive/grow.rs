@@ -94,7 +94,18 @@ impl Planner<'_> {
     /// open), from the orbit `ring0` the walk stands on. `false` when the
     /// area cannot be grown as one ring family (the caller plans it
     /// otherwise).
-    pub(super) fn grow(&mut self, ring0: &[Point2], (scale, last): (f64, bool)) -> Result<Grown, GenError> {
+    pub(super) fn grow(&mut self, ring0: &[Point2], sl: (f64, bool)) -> Result<Grown, GenError> {
+        use std::sync::atomic::Ordering::Relaxed;
+        use super::raster::{PROBE_BITE, PROBE_CUTS, PROBE_LIVE, PROBE_SAMPLES, PROBE_WALK_NS};
+        let (c0, b0) = (PROBE_CUTS.load(Relaxed), PROBE_BITE.load(Relaxed));
+        let (w0, s0, l0, n0, t0) = (self.work.get(), PROBE_SAMPLES.load(Relaxed), PROBE_LIVE.load(Relaxed), PROBE_WALK_NS.load(Relaxed), std::time::Instant::now());
+        let out = self.grow_inner(ring0, sl);
+        let (ds, dl) = (PROBE_SAMPLES.load(Relaxed) - s0, PROBE_LIVE.load(Relaxed) - l0);
+        eprintln!("PROBE grow scale {:.1}: {:?} work {:.0} r (this call {:.0} r), {:.2} s total, walk {:.2} s, samples {ds} live {dl} ({:.1}%)", sl.0, out.as_ref().ok(), self.work.get() / self.s.r, (self.work.get() - w0) / self.s.r, t0.elapsed().as_secs_f64(), (PROBE_WALK_NS.load(Relaxed) - n0) as f64 * 1e-9, 100.0 * dl as f64 / (ds.max(1)) as f64);
+        eprintln!("PROBE   cut-cells samples {} ({:.1}%), biting >15deg {} ({:.1}%)", PROBE_CUTS.load(Relaxed) - c0, 100.0 * (PROBE_CUTS.load(Relaxed) - c0) as f64 / ds.max(1) as f64, PROBE_BITE.load(Relaxed) - b0, 100.0 * (PROBE_BITE.load(Relaxed) - b0) as f64 / ds.max(1) as f64);
+        out
+    }
+    fn grow_inner(&mut self, ring0: &[Point2], (scale, last): (f64, bool)) -> Result<Grown, GenError> {
         let s = self.s;
         let a0 = orbit_radius(&s);
         let Some(dom) = slit::open_islands(self.center, s.seed, a0 + 0.5)? else { return Ok(Grown::Unfit) };
@@ -111,7 +122,7 @@ impl Planner<'_> {
         // revolution is planned (`budget`).
         let len = budget::channel_len(d0.area(), clear);
         let (least, revs) = budget::least_work(len, CAP * self.width(1.0), s.r);
-        if least > budget::LEAST_WORK_MAX {
+        if least > budget::LEAST_WORK_MAX && std::env::var_os("PROBE_LIFT").is_none() {
             self.refused = Some(budget::too_long(2.0 * (clear + s.r), len, revs));
             return Ok(Grown::Refused);
         }
@@ -147,7 +158,7 @@ impl Planner<'_> {
         let mut overloaded = false;
         let mut grown = false;
         for rev_k in 0..MAX_REVS {
-            if self.work.get() > budget::WORK_MAX * s.r {
+            if self.work.get() > budget::WORK_MAX * s.r && std::env::var_os("PROBE_LIFT").is_none() {
                 self.refused = Some(budget::over_work(rev_k));
                 return Ok(Grown::Refused);
             }

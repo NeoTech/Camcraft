@@ -134,6 +134,7 @@ impl Raster {
             let i1 = (i1 as usize).min(self.nx - 1);
             let row = iy * self.nx;
             for ix in i0..=i1 {
+                if self.cells[row + ix] { PROBE_FLIP.store(true, std::sync::atomic::Ordering::Relaxed); }
                 self.cells[row + ix] = false;
             }
         }
@@ -230,6 +231,12 @@ impl Raster {
     /// (a trial that already failed need not finish; the stock it
     /// leaves is then partial and only fit to be dropped).
     pub(super) fn walk_until(&mut self, pts: &[Point2], (r, rim, step): (f64, f64, f64), limit: f64) -> (f64, Point2) {
+        let _t0 = std::time::Instant::now();
+        let out = self.walk_until_inner(pts, (r, rim, step), limit);
+        PROBE_WALK_NS.fetch_add(_t0.elapsed().as_nanos() as u64, std::sync::atomic::Ordering::Relaxed);
+        out
+    }
+    fn walk_until_inner(&mut self, pts: &[Point2], (r, rim, step): (f64, f64, f64), limit: f64) -> (f64, Point2) {
         let mut worst = (0.0f64, pts.first().copied().unwrap_or_default());
         // Where the tool stands it has already cleared its own disc (the
         // walk before it, or the entry, brought it there).
@@ -248,13 +255,18 @@ impl Raster {
                 let t = k as f64 / n as f64;
                 let p = Point2::new(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t);
                 let deg = self.engage(p, Point2::new((b.x - a.x) / len, (b.y - a.y) / len), rim);
+                PROBE_SAMPLES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 if deg > worst.0 {
                     worst = (deg, p);
                     if deg > limit {
                         return worst;
                     }
                 }
+                PROBE_FLIP.store(false, std::sync::atomic::Ordering::Relaxed);
                 self.cut(prev, p, r);
+                if deg > 0.0 || PROBE_FLIP.load(std::sync::atomic::Ordering::Relaxed) { PROBE_LIVE.fetch_add(1, std::sync::atomic::Ordering::Relaxed); }
+                if PROBE_FLIP.load(std::sync::atomic::Ordering::Relaxed) { PROBE_CUTS.fetch_add(1, std::sync::atomic::Ordering::Relaxed); }
+                if deg > 15.0 { PROBE_BITE.fetch_add(1, std::sync::atomic::Ordering::Relaxed); }
                 prev = p;
             }
         }
@@ -396,3 +408,10 @@ fn capsule_row(a: Point2, b: Point2, r: f64, y: f64) -> Option<(f64, f64)> {
     }
     (lo <= hi).then_some((lo, hi))
 }
+
+pub(super) static PROBE_FLIP: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+pub(super) static PROBE_SAMPLES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+pub(super) static PROBE_LIVE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+pub(super) static PROBE_WALK_NS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+pub(super) static PROBE_CUTS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+pub(super) static PROBE_BITE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
