@@ -21,11 +21,19 @@ slat spacing; a kerf-width floor - a hole under the kerf is already
 refused at generation (`ring.rs`), so it would exempt nothing.
 *The departure.* A hole's lead-out ends inside its own slug (the scrap
 side, as every hole is cut), so the rapid out of the hole just cut
-always starts over that slug. When the rapid starts inside or on the
+always starts over that slug. When the rapid starts strictly inside the
 ring of the hole cut immediately before it, its first stretch (up to its
 first contact with the ring) is the departure and is not judged against
 that hole; any later stretch back over the same slug is (an L-shaped
-hole, pinned). A part's outline gets no such exemption - its lead-out
+hole, pinned). A rapid starting ON the ring gets no exemption (#814
+review): a hole with no lead-out - every small hole, by rule, and any
+hole with `lead_out = 0` - ends on its own wall, and a rapid from there
+either leaves outward (its first piece is outside the ring, so nothing
+to judge and nothing to excuse) or runs straight over the slug just
+freed, which is a real tip-up. Exempting "on the ring" never excused a
+genuine departure and hid exactly those crossings (pinned: from an
+edge's middle and from a corner across the slug, both warned; straight
+outward, clear). A part's outline gets no such exemption - its lead-out
 ends on the scrap side, outside the part, so a rapid starting inside a
 freed part stays a tip-up (#791, pinned).
 

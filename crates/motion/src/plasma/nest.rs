@@ -62,7 +62,7 @@ pub(super) fn contours(loops: &[Loop], chains: &[Vec<Point2>], part: &Region) ->
         // refused by name, never cut as the plain outline.
         if let Some(q) = dropped_vertex(l.points(), ring.points()) {
             return Err(invalid(format!(
-                "picked contour {n} runs out to X{:.3} Y{:.3} and back along the same line - a zero-width spike or slit encloses no area, so its kerf would never cut it; pick the slit as an open run",
+                "picked contour {n} has a picked point the contour no longer reaches, X{:.3} Y{:.3} - a zero-width slit or spike encloses no area, so its kerf would never cut it; pick it as an open run",
                 q.x, q.y
             )));
         }
@@ -128,8 +128,6 @@ pub(super) fn contours(loops: &[Loop], chains: &[Vec<Point2>], part: &Region) ->
     Ok(out)
 }
 
-/// An open run, deduplicated and checked: at least one segment of real
-/// length, every point finite, never crossing itself.
 /// How far (mm) a picked vertex may stand from the normalised ring and
 /// still be on it: the region's 1 µm lattice, with room to spare.
 const ON_RING: f64 = 1e-3;
@@ -142,6 +140,8 @@ fn dropped_vertex(picked: &[Point2], ring: &[Point2]) -> Option<Point2> {
     picked.iter().copied().find(|q| (0..n).all(|k| super::laws::pt_seg(*q, ring[k], ring[(k + 1) % n]) > ON_RING))
 }
 
+/// An open run, deduplicated and checked: at least one segment of real
+/// length, every point finite, never crossing itself.
 fn open_run(n: usize, c: &[Point2]) -> Result<Vec<Point2>, GenError> {
     let mut pts: Vec<Point2> = Vec::new();
     for p in c {

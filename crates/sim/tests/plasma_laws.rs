@@ -402,3 +402,25 @@ fn a_rapid_leaving_a_hole_and_running_back_over_its_slug_is_a_tip_up() {
         "{f:?}"
     );
 }
+
+/// #814 review: a hole with no lead-out (a small hole, or `lead_out = 0`)
+/// ends ON its own wall. A rapid starting there is judged in full: across
+/// the slug it is a tip-up - from an edge's middle or from a corner - and
+/// only a rapid straight outward from the wall stays clear.
+#[test]
+fn a_rapid_from_a_holes_wall_across_its_slug_is_a_tip_up() {
+    let outline = cut(1, Outer, None, square(0.0, 0.0, 100.0));
+    let hole = cut(2, Inner, Some(1), square(40.0, 40.0, 20.0));
+    let run = |a: Point2, b: Point2| {
+        judge(&PlasmaProgram { kerf: 1.5, cuts: vec![hole.clone(), outline.clone()], rapids: vec![None, Some((a, b))] })
+    };
+    for (a, b) in [(p(40.0, 50.0), p(110.0, 50.0)), (p(40.0, 40.0), p(110.0, 110.0))] {
+        let f = run(a, b);
+        assert!(
+            matches!(f.as_slice(), [PlasmaFinding::TipUp { contour: 1, freed: 2, slug: true, at }]
+                if at.x > 40.0 && at.x < 60.0 && at.y > 40.0 && at.y < 60.0),
+            "{a:?} -> {b:?}: {f:?}"
+        );
+    }
+    assert_eq!(run(p(40.0, 50.0), p(-10.0, 50.0)), vec![]);
+}
