@@ -6,12 +6,13 @@
 //!
 //! Gate map (#637): covers sim::stock_sim::field_body (CarriedField::
 //! column_body), carry::Body (from_parts) against carry::Body::carry,
-//! field_turn (SdfField::turned against the view, #779).
+//! field_turn (SdfField::turned against the view, #779), march_up and
+//! field_floor's two-sided read (#780).
 //! Provenance: our own fixtures.
 
 use camcraft_sim::cl::{Move, MoveKind};
 use camcraft_sim::geometry::Point3;
-use camcraft_sim::stock_sim::{Backend, Body, CarriedField, Lattice, LatticeTurn, SimOp, Stock, FIELD_BAND};
+use camcraft_sim::stock_sim::{simulate, Backend, Body, CarriedField, Lattice, LatticeTurn, SimOp, Stock, FIELD_BAND};
 
 const TOP: f64 = 5.0;
 const CELL: f64 = 0.5;
@@ -43,7 +44,12 @@ fn cut(b: Backend, z: f64) -> Stock {
 
 /// A slot across the block along y = `y`, depth `z`, radius `r`.
 fn cut_with(b: Backend, y: f64, z: f64, r: f64, ball: bool) -> Stock {
-    let mut s = Stock::block(b, 0.0, 0.0, 20.0, 12.0, TOP, CELL).expect("block");
+    cut_block(b, TOP, y, z, r, ball)
+}
+
+/// A slot across a block `top` tall along y = `y`, depth `z`, radius `r`.
+fn cut_block(b: Backend, top: f64, y: f64, z: f64, r: f64, ball: bool) -> Stock {
+    let mut s = Stock::block(b, 0.0, 0.0, 20.0, 12.0, top, CELL).expect("block");
     let p = |x: f64, y: f64, z: f64| Point3::new(x, y, z);
     let moves = [
         Move::new(MoveKind::Rapid, p(-4.0, y, 8.0), p(-4.0, y, z), None),
@@ -134,9 +140,9 @@ fn an_off_grid_ball_slot_carries_the_same_on_both_engines() {
 /// #637 E2a (#779): a field with the turn baked into its bricks, seen
 /// through the translation alone, is the view. Through all eight turns the
 /// distance at every column centre of the carried lattice, at every cell
-/// centre height, is bit-identical; for the four upright turns the whole
-/// column read-back is too (a flipped bake's floor under a cut is E2b's
-/// up-march - until then it refuses by name, never guesses).
+/// centre height, is bit-identical, and so is the whole column read-back -
+/// a flipped bake's floor under a cut read by the up-march from the same
+/// record the view's down-march reads (#780, E2b).
 fn baked_agrees(field: Stock) {
     let f = field.field().expect("a field").clone();
     let col = match cut(Backend::Column, 3.0) {
@@ -161,11 +167,10 @@ fn baked_agrees(field: Stock) {
                 }
             }
         }
-        if t.flips() {
-            continue;
-        }
         let a = view.column_body(lat, false).unwrap_or_else(|e| panic!("{t:?}: view: {e}"));
-        let b = baked.column_body(lat, false).unwrap_or_else(|e| panic!("{t:?}: baked: {e}"));
+        // The bake keeps the flip's floor flag with its caller (E2c): the
+        // read-back through the translation alone is told it.
+        let b = baked.column_body(lat, t.flips()).unwrap_or_else(|e| panic!("{t:?}: baked: {e}"));
         assert_eq!(a.floor_judged(), b.floor_judged(), "{t:?}");
         for k in 0..d.nx * d.ny {
             assert_eq!(a.empty_at(k), b.empty_at(k), "{t:?} column {k}: empty");
@@ -182,4 +187,101 @@ fn a_baked_turn_reads_what_the_view_reads_through_every_turn() {
     baked_agrees(cut(field, -1.0));
     baked_agrees(cut(field, 0.2));
     baked_agrees(cut_with(field, 6.3, 3.2, 1.7, true));
+}
+
+#[test]
+fn an_unaligned_block_top_carries_the_same_on_both_engines() {
+    // #780: a top of 5.1 is off the 0.5 lattice; flipped, so is the floor.
+    // Both ends are read from the shell's own crossing, not a cell
+    // boundary, so they agree with the column engine's exact heights.
+    let field = Backend::Field { band: FIELD_BAND };
+    for z in [3.0, 0.2, -1.0] {
+        agree_with(cut_block(Backend::Column, 5.1, 6.0, z, 2.0, false), cut_block(field, 5.1, 6.0, z, 2.0, false), EPS);
+    }
+}
+
+/// #780's "done means": the block, a slot from the top, flipped (the bake:
+/// the signed permutation in the bricks, the translation on the moves),
+/// then a slot from the NEW top across it. Each column's span - a floor
+/// from the first cut, a top from the second, a sliver between them, or
+/// nothing - equals the column body's to 1e-6.
+fn cut_after_flip_agrees(first_z: f64, second_z: f64) {
+    let flip = LatticeTurn::from_matrix([[1.0, 0.0, 0.0], [0.0, -1.0, 0.0], [0.0, 0.0, -1.0]], [0.0, 12.0, 5.0])
+        .unwrap_or_else(|e| panic!("a flip: {e}"));
+    let p = |x: f64, y: f64, z: f64| Point3::new(x, y, z);
+    let second = |shift: Point3| {
+        [
+            Move::new(MoveKind::Rapid, p(10.0 - shift.x, -4.0 - shift.y, 8.0 - shift.z), p(10.0 - shift.x, -4.0 - shift.y, second_z - shift.z), None),
+            Move::new(MoveKind::Feed, p(10.0 - shift.x, -4.0 - shift.y, second_z - shift.z), p(10.0 - shift.x, 16.0 - shift.y, second_z - shift.z), Some(500.0)),
+        ]
+    };
+    // The field: the block as it built it (its floor read off an uncut
+    // corner), baked through the flip.
+    let f = cut(Backend::Field { band: FIELD_BAND }, first_z).field().expect("a field").clone();
+    let floor = match f.floor_at(0.25, 0.25) {
+        camcraft_sim::stock_sim::FloorRead::Floor(z) => z,
+        r => panic!("the block's floor: {r:?}"),
+    };
+    // The column engine: carry, then cut in the new frame.
+    let col = match cut(Backend::Column, first_z) {
+        Stock::Column(d) => d,
+        Stock::Field(_) => panic!("a column stock"),
+    };
+    let mut a = Body::on_floor(col, floor).carry(&flip).unwrap_or_else(|e| panic!("column carry: {e}"));
+    let moves = second(Point3::new(0.0, 0.0, 0.0));
+    simulate(&mut a.dex, &[SimOp { moves: &moves, radius: 1.5, ball: false, cone: None, corner: None }]).expect("second cut");
+    // Bake, cut through the residual translation, read back.
+    let (g, shift) = f.turned(&flip);
+    let mut s = Stock::Field(g);
+    let moves = second(shift);
+    s.simulate(&[SimOp { moves: &moves, radius: 1.5, ball: false, cone: None, corner: None }]).expect("second cut");
+    let g = s.field().expect("a field").clone();
+    let only = LatticeTurn::from_matrix([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]], [shift.x, shift.y, shift.z])
+        .unwrap_or_else(|e| panic!("a translation: {e}"));
+    let d = &a.dex;
+    let lat = Lattice { x0: d.x0, y0: d.y0, cell: d.cell, nx: d.nx, ny: d.ny };
+    let b = CarriedField::new(g, only).column_body(lat, true).unwrap_or_else(|e| panic!("field read-back: {e}"));
+    assert!(a.floor_judged() && b.floor_judged());
+    let (mut two_sided, mut empties) = (0, 0);
+    let (block_top, block_floor) = (5.0 - floor, 0.0);
+    for k in 0..d.nx * d.ny {
+        assert_eq!(a.empty_at(k), b.empty_at(k), "({first_z}, {second_z}) column {k}: empty");
+        if a.empty_at(k) {
+            empties += 1;
+            continue;
+        }
+        let (ta, tb) = (a.dex.top_at(k), b.dex.top_at(k));
+        let (fa, fb) = (a.floor_at(k), b.floor_at(k));
+        assert!((ta - tb).abs() <= EPS, "({first_z}, {second_z}) column {k}: top {ta} vs {tb}");
+        assert!((fa - fb).abs() <= EPS, "({first_z}, {second_z}) column {k}: floor {fa} vs {fb}");
+        two_sided += usize::from(ta < block_top && fa > block_floor);
+    }
+    let cells = (d.nx * d.ny) as f64 * d.cell * d.cell;
+    assert!((a.volume() - b.volume()).abs() <= EPS * cells, "volume {} vs {}", a.volume(), b.volume());
+    // The fixture exercised what it claims: where the slots cross, a column
+    // bounded by both cuts, or one cut through.
+    assert!(two_sided > 0 || empties > 0, "({first_z}, {second_z}): the slots never met");
+}
+
+#[test]
+fn a_slot_cut_after_the_flip_carries_the_same_on_both_engines() {
+    // The first slot at 3 leaves [2, 5] in the new frame; the second at 4
+    // sits above it (two-sided columns with a centre each).
+    cut_after_flip_agrees(3.0, 4.0);
+}
+
+#[test]
+fn a_sliver_between_a_cut_from_below_and_one_from_above_carries_the_same() {
+    // [2, 2.2] where the slots cross: no centre (2.25 is inside the second
+    // cut), the floor from the first cut's record, the top from the
+    // second's - and [2.3, 2.6], a sliver floating between the two cuts.
+    cut_after_flip_agrees(3.0, 2.2);
+    cut_after_flip_agrees(2.7, 2.6);
+}
+
+#[test]
+fn a_second_slot_through_the_first_carries_the_same_on_both_engines() {
+    // The second cut passes the first's floor: the crossing is cut through.
+    cut_after_flip_agrees(3.0, 1.5);
+    cut_after_flip_agrees(-1.0, 2.5);
 }

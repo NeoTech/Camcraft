@@ -27,11 +27,11 @@
 //!   that is the distance DOWN, so the flipped bake moves every record into
 //!   `cut_downs` and vice versa. The swap IS the record: nothing is
 //!   recomputed, the cut hot path is untouched.
-//! - **The monotone floor law is suspended after a flip.** `field_floor`'s
-//!   exact floor under a cut assumes every cut came from above; a flipped
-//!   bake's cuts came from below, so it marks itself `bounded_cuts` (the
-//!   refusal by name `CutFromBelow` near such a floor) until E2b's
-//!   up-march reads `cut_downs`. Never a guess.
+//! - **The floor law follows the records.** A flipped bake's cuts came
+//!   from below in the new frame; `field_floor` reads their tops from
+//!   `cut_downs` by the up-march (`march_up`, #637 E2b), so the bake keeps
+//!   `bounded_cuts` as it stood: only a bounded tool (one that never
+//!   spanned the world above its tip) still refuses by name.
 //! - **The cost ledger follows the data.** The region is rebuilt
 //!   (`region_of`), the full-brick counts are re-keyed, and every cut
 //!   brick is marked dirty: everything moved, and the dirty ledger is a
@@ -140,7 +140,7 @@ impl SdfField {
             cut_downs: ax.layer(downs),
             cost: self.cost.clone(),
             analytic,
-            bounded_cuts: self.bounded_cuts || (flips && !self.cuts.is_empty()),
+            bounded_cuts: self.bounded_cuts,
         };
         g.cost.full = self.cost.full.iter().map(|(k, n)| (ax.key(*k), *n)).collect();
         g.cost.region = super::field_batch::region_of(&g);
@@ -150,16 +150,6 @@ impl SdfField {
             HashSet::new()
         };
         (g, turn.shift())
-    }
-
-    /// The `cut_downs` record at a cell (NaN: none) - the mirror of
-    /// `up_at`, read by tests until E2b's up-march.
-    #[cfg(test)]
-    pub(crate) fn down_at(&self, key: [i32; 3]) -> f64 {
-        match self.cut_downs.get(&super::field::brick_of(key)) {
-            Some(b) => b[super::field::in_brick(key)],
-            None => f64::NAN,
-        }
     }
 }
 
@@ -226,7 +216,7 @@ mod tests {
             }
         }
         assert!(seen > 0, "the fixture recorded entries");
-        assert!(g.bounded_cuts, "a flipped bake suspends the monotone floor law");
+        assert!(!g.bounded_cuts, "a flipped bake keeps the floor law: the up-march reads cut_downs (#780)");
         let back = g.turned(&flip).0;
         assert!(same(&f.cut_ups, &back.cut_ups) && back.cut_downs.is_empty());
         assert!(same(&f.cuts, &back.cuts));

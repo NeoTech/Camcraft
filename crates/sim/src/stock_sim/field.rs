@@ -100,7 +100,8 @@ pub struct SdfField {
     /// #637 E2a: `cut_ups`'s mirror - the distance DOWN from a claimed
     /// cell's centre to the ray's entry into the swept solid. Written
     /// only by a flipped bake (`field_turn`), where every "up" record
-    /// becomes a "down" one; nothing reads it yet (E2b's `march_up`).
+    /// becomes a "down" one; read by the up-march (`march_up`, E2b)
+    /// for the floor of a column a cut from below reached.
     pub(crate) cut_downs: HashMap<[i32; 3], Box<[f64; BRICK3]>>,
     /// M7.3's cost law: the cut region, the full-brick ledger and the
     /// counters (`field_batch::CostLedger`), boxed so the `Stock`
