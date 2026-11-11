@@ -138,3 +138,55 @@
     the shared walk, and with `march` unfixed the reviewer's scenario
     reads a top of 6.44 (the same exit, over-reporting) and the floor
     `Unreadable`; `Refs #824` on the commit, the main session decides.
+- **Review fix 2 (PR #817): a centre-less floor skin is a verdict, never
+  NaN.** The second review found that `walk` answered `NoMaterial` for a
+  column whose skin held no cell centre (a plate -6.05..0 at cell 0.5
+  with a slot at -5.8 leaves [-6.05, -5.8] between the air centre -6.25
+  and the claimed centre -5.75), and every verdict reader that marches
+  alone - `Stock::top` (`column_top`), `deviate_field`, `measure_field`,
+  the sheet, `Columns::top_at`/`above` (the rest and program masks) -
+  read that as NaN: the rest under the slot vanished from the report and
+  the rest mask would have treated the steel as air. Only `column_span`
+  read such skins, through `field_floor::sliver`. On the old sphere
+  trace the same columns over-read (-4.5 for -5.8) through its
+  broken-promise path; the centre walk removed the accident and left the
+  hole. Decided: the walk reads the centre-less column itself, before it
+  ever answers "no material", through the ONE sliver law
+  (`field_floor::sliver`, now `pub(crate)`, called from
+  `march::centreless` with the shell's extent from the shared
+  `shell_extent`): a column the shell never crosses is `NoMaterial` (air
+  beside the stock), a sliver the records place answers its top (a
+  descent) or floor (an ascent), one the records prove cut through is
+  `NoMaterial`, and one the records cannot place - or a bounded tool's -
+  is `Unreadable`, never `NoMaterial` where the shell says material
+  stands. The mesh-only walk (`cuts == false`, `measure_field`'s own-top
+  read) answers the shell's highest crossing (a descent) or lowest (an
+  ascent), exact for any plane. `column_span`'s own `NoMaterial =>
+  sliver` arm is now `Empty` (the walk has read the sliver). Pinned by
+  `field_skin::a_floor_skin_under_a_slot_is_a_verdict_on_every_path`
+  (the reviewer's scenario through `Stock::top`, `deviate` - 192 of 192
+  columns rest, 0 NaN, dev 0.2 under the slot - `Columns::top_at` and
+  `above`, flipped through `Stock::top` and `column_span`, the older
+  -6.0 / -5.8 skin, and a cut-through column still air on every path)
+  and `field_skin::no_column_the_shell_proves_reads_nan_or_air_through_stock_top`
+  (6 floors x 3 tops x 12 slot depths with skins 0.01-0.3, upright and
+  flipped, `Stock::top` under and beside the slot plus the flipped
+  `column_span`, and `deviate` against the plate's bottom on every
+  upright fixture: 1296 reads, 1296 exact, no NaN, no refusal; on
+  dc4873e7 the same sweep had 186 NaN reads where the shell proves
+  material and 81 `deviate` runs with NaN columns). Both pins fail on
+  the unfixed source.
+- **Considered and dropped (review fix 2):**
+  - Falling back to `column_span`'s top from `march` (the review's
+    example): `column_span` calls `march`, so the fallback belongs in the
+    walk, where both marches and every verdict reader reach it.
+  - Over-reporting the shell's ceiling (or the record's height) where
+    the sliver cannot be placed: the module law is that a surface the
+    field cannot place is refused by name, and a ceiling over-read on the
+    verdict path would be a false rest in `deviate`; `Unreadable` blocks
+    the same way NaN did but is a named refusal in the enum, and the
+    sweep pins that no column the shell proves reaches it.
+  - A new `Read` arm for the bounded tool's `CutFromBelow`: `walk` maps
+    it to `Unreadable` (the sliver's own refusal); `column_span` still
+    refuses by name before marching wherever `cut_near(floor)` holds, so
+    the name is kept on every fixture that reaches it.

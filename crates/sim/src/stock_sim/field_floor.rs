@@ -28,7 +28,13 @@
 //!   where no record does. Material stands iff floor `<=` top - the
 //!   column body's own `top < floor` empty law, same strictness. An air
 //!   centre inside the shell proves a cut, so a record that must then
-//!   exist and does not is refused by name, never read as air.
+//!   exist and does not is refused by name, never read as air. The scan
+//!   is `sliver`, and it is the ONE sliver law: `march::walk` reads a
+//!   centre-less column through it before it ever answers "no material"
+//!   (the review of #817: a floor skin under a cut read as NaN on every
+//!   verdict path that marched alone), so `column_span`, `Stock::top`,
+//!   the deviate/measure verdicts, the sheet and the column masks all
+//!   see the same skin.
 //! - **A bounded tool suspends the laws.** A solid that does not span
 //!   the world above its tip (the truncated taper, a bare ball, a lathe
 //!   sweep, a posed axis) can leave material above a cut; the field marks
@@ -75,6 +81,16 @@ pub enum ColumnSpan {
     Unreadable,
 }
 
+/// The shell's extent on a column: its lowest and highest finite
+/// crossing - `None` where the ray crosses nothing (beside the stock).
+/// A single crossing is both ends.
+pub(crate) fn shell_extent(cross: &[f64]) -> Option<(f64, f64)> {
+    let finite = cross.iter().copied().filter(|z| z.is_finite());
+    let floor = finite.clone().reduce(f64::min)?;
+    let ceiling = finite.reduce(f64::max).unwrap_or(floor);
+    Some((floor, ceiling))
+}
+
 impl SdfField {
     /// The floor under `(x, y)`: `column_span`'s floor.
     #[must_use]
@@ -97,11 +113,9 @@ impl SdfField {
         let Some(cross) = self.shell_crossings(x, y) else {
             return ColumnSpan::Unreadable;
         };
-        let finite = cross.iter().copied().filter(|z| z.is_finite());
-        let Some(floor) = finite.clone().reduce(f64::min) else {
+        let Some((floor, _)) = shell_extent(&cross) else {
             return ColumnSpan::Empty;
         };
-        let ceiling = finite.reduce(f64::max).unwrap_or(floor);
         if self.bounded_cuts && self.cut_near(x, y, floor) {
             return ColumnSpan::CutFromBelow;
         }
@@ -110,7 +124,9 @@ impl SdfField {
         let top = match march(self, &cx, x, y, z_hi, z_lo, true) {
             Read::Top(top) if top.is_finite() => top,
             Read::Top(_) | Read::Unreadable => return ColumnSpan::Unreadable,
-            Read::NoMaterial => return self.sliver(x, y, floor, ceiling),
+            // The walk has read the sliver itself (the module law): no
+            // material means the records proved every pair cut through.
+            Read::NoMaterial => return ColumnSpan::Empty,
         };
         // A material centre proves the interval reaches the shell floor
         // where every cut came from above (the monotone law); with cuts
@@ -161,8 +177,9 @@ impl SdfField {
     /// floor to the one above its ceiling is air; the material, if any,
     /// lies between two adjacent ones, and their records place it (the
     /// module law). The hull of what the pairs hold is the span - one
-    /// interval for every spanning-tool program.
-    fn sliver(&self, x: f64, y: f64, floor: f64, ceiling: f64) -> ColumnSpan {
+    /// interval for every spanning-tool program. `floor` and `ceiling`
+    /// are the shell's own extent on the column (`shell_extent`).
+    pub(crate) fn sliver(&self, x: f64, y: f64, floor: f64, ceiling: f64) -> ColumnSpan {
         let cell = self.cell;
         let (ix, iy) = (cell_of(x, cell), cell_of(y, cell));
         let mut k0 = cell_of(floor, cell);

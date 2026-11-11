@@ -49,15 +49,27 @@
 //!   air. The old sphere trace stepped by the magnitude from points
 //!   between centres and recovered with a climb; it could land past a
 //!   thin web, and its last "air" probe was no proof under a claim.
+//! - **No material centre is not "no material".** A walk that reaches
+//!   the world's far end without a material centre has proven every
+//!   centre air, not every point: a floor skin left under a cut, or a
+//!   plate thinner than the lattice, stands between two air centres
+//!   with no centre of its own. Where the shell crosses the column at
+//!   all, the walk reads that material through the one sliver law
+//!   (`field_floor::sliver`: the cut records of the two centres around
+//!   each pair, the shell binding where no record does) and answers its
+//!   top (a descent) or floor (an ascent); a column the shell never
+//!   crosses is air by the shell's own word, and one whose records prove
+//!   every pair cut through is `NoMaterial`. A sliver the records cannot
+//!   place is `Unreadable` - never `NoMaterial` where the shell says
+//!   material stands (the review of #817: a 0.25 skin under a slot read
+//!   NaN on every verdict path that marched alone, and the rest mask
+//!   would have treated that steel as air).
 //! - **A march that cannot finish says so.** The walk budget turns
 //!   into `Unreadable`, whose verdict is NaN - the no-verdict value the
 //!   column engine already uses for air, never a zero dressed up as a
-//!   clean bill of health. `NoMaterial` (the walk reached the world's
-//!   far end without finding a material centre) is NaN too: the
-//!   field's stock has a bottom the semi-infinite column does not,
-//!   and a column past it holds nothing to judge - or material thinner
-//!   than a cell, which `field_floor`'s sliver law reads from the
-//!   records.
+//!   clean bill of health. `NoMaterial` is NaN too: the field's stock
+//!   has a bottom the semi-infinite column does not, and a column past
+//!   it holds nothing to judge.
 //! - **An `Open` column answers its ceiling.** Parity `Open` is
 //!   material everywhere (stage A's never-hide rule), and the
 //!   watertight gate makes it unreachable; should a future mesh ever
@@ -65,6 +77,7 @@
 //!   rest over-reported, the blessed direction.
 
 use super::field::{cell_of, center_of, SdfField};
+use super::field_floor::{shell_extent, ColumnSpan};
 use super::kernel::{StockError, MAX_CELLS_PER_AXIS};
 
 /// How one column's descent ended.
@@ -252,16 +265,40 @@ pub(crate) fn walk(
             return face(entry, shell, down).map_or(Read::Unreadable, Read::Top);
         }
         if past_end(j.saturating_add(step)) {
-            return Read::NoMaterial; // the world's end, every centre air
+            return centreless(f, cx, x, y, down, cuts); // the world's end, every centre air
         }
         cleared = true;
         let next = j.saturating_add(step.saturating_mul(s.clear));
         if past_end(next) {
-            return Read::NoMaterial; // the proven run reaches the world's end
+            return centreless(f, cx, x, y, down, cuts); // the proven run reaches the world's end
         }
         j = next;
     }
     Read::Unreadable
+}
+
+/// The walk proved every centre of the column air (the module law):
+/// what stands is thinner than a cell and sits between two air
+/// centres. Read it from the shell and the records - the surface
+/// toward the walk's origin, the top for a descent (`down`) and the
+/// floor for an ascent - or name why it cannot be read.
+fn centreless(f: &SdfField, cx: &Option<Vec<f64>>, x: f64, y: f64, down: bool, cuts: bool) -> Read {
+    let Some(cross) = cx.as_ref() else {
+        return Read::Unreadable; // unreachable: `walk` answers `Open` before it walks
+    };
+    let Some((floor, ceiling)) = shell_extent(cross) else {
+        return Read::NoMaterial; // the shell never crosses this column: air beside the stock
+    };
+    if !cuts {
+        // Mesh only: the material's top is the shell's highest crossing
+        // and its floor the lowest, exact for any plane.
+        return Read::Top(if down { ceiling } else { floor });
+    }
+    match f.sliver(x, y, floor, ceiling) {
+        ColumnSpan::Material { top, floor } => Read::Top(if down { top } else { floor }),
+        ColumnSpan::Empty => Read::NoMaterial, // every pair proven cut through
+        ColumnSpan::CutFromBelow | ColumnSpan::Unreadable => Read::Unreadable,
+    }
 }
 
 /// Walk down `(x, y)` from `z_hi` until the steel's top (or a bail
