@@ -167,7 +167,9 @@ fn a_cross_reach_refusal_speaks_the_document_unit() {
         assert!(e.contains(s), "the mm refusal names '{s}': {e}");
     }
     units::set(&world, Unit::Inches);
-    let err = operation::generate(&world, &op, "").err().expect("the raw-bar cross hole must refuse in inches");
+    let err = operation::generate(&world, &op, "")
+        .err()
+        .unwrap_or_else(|| panic!("the raw-bar cross hole must refuse in inches"));
     // The At mark stays millimeters: the lens is for the sentence.
     assert_eq!(err.location(), Some(Point3::new(10.0, 0.0, 0.0)), "the location stays millimeters");
     let e = err.to_string();
@@ -244,7 +246,9 @@ fn a_shank_fit_refusal_speaks_the_document_unit() {
     // BR-1000's re-ground Ø14 shank fed into a Ø12 hole 25 mm deep.
     let (world, _h) = fit_world(6.0, "BR-1000", tool("BR-1000", |t| t.shank_d = 14.0));
     let op = raw_op("BR-1000", params(6.0, CycleChoice::Bore));
-    let err = operation::generate(&world, &op, "").err().expect("the Ø14 shank in a Ø12 hole must refuse in mm");
+    let err = operation::generate(&world, &op, "")
+        .err()
+        .unwrap_or_else(|| panic!("the Ø14 shank in a Ø12 hole must refuse in mm"));
     let at = err.location();
     assert!(at.is_some_and(|p| p.x == 0.0 && p.y == 0.0 && p.z.is_finite()), "marks the hole at (0, 0): {at:?}");
     let e = err.to_string();
@@ -384,7 +388,7 @@ fn a_circle_fit_refusal_speaks_the_document_unit() {
     units::set(&world, Unit::Inches);
     let e = refusal(&world, &op, "the square pocket pick must refuse in inches");
     assert!(e.contains("the selection is not a circle (deviation"), "the inch refusal: {e}");
-    assert!(e.contains(" in at (0.39370, 0.39370))"), "the inch refusal names the point in inches: {e}");
+    assert!(e.contains("deviation 0.11482 in at (0.39370, 0.39370))"), "the inch refusal names the deviation and point in inches: {e}");
     assert!(e.contains("clear the selection to use the typed centre and radius"), "the inch refusal: {e}");
     assert!(!e.contains("2.917"), "the deviation number itself crosses the lens: {e}");
     assert!(!e.contains(" mm"), "an inch document reads no millimeters: {e}");
@@ -526,6 +530,6 @@ fn a_part_fills_the_selection_refusal_speaks_the_document_unit() {
     units::set(&world, Unit::Inches);
     let e = refusal(&world, &op, "a pick of solid part material must refuse in inches");
     assert!(e.contains("the part fills the whole selection"), "the inch refusal: {e}");
-    assert!(e.contains(" at Z 0.47244"), "the inch refusal names the plane in inches: {e}");
+    assert!(e.contains(" at Z 0.27559"), "the inch refusal names the plane in inches: {e}");
     assert!(!e.contains(" mm"), "an inch document reads no millimeters: {e}");
 }
