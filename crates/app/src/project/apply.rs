@@ -812,12 +812,9 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
         // anything else). Setting it after keeps the geometry-first
         // order of every other load.
         if let Some(f) = &dto.fixture {
-            entity.entity_view(world).set(FixtureDef {
-                setup: f.setup.clone(),
-                fixed: f.fixed,
-                vise: f.vise.as_ref().and_then(|v| v.to_params(&dto.name)),
-                accessory: f.accessory.as_ref().and_then(|a| crate::accessory::checked_on_load(a, &dto.name)),
-            });
+            // #812: a parameter key this build can't read is dropped
+            // with a note, never a failed load.
+            entity.entity_view(world).set(super::fixture_keys::fixture_def(f, &dto.name, &mut notes));
         }
     }
     Ok(notes)

@@ -48,12 +48,13 @@ impl ViseDto {
         }
     }
 
-    /// The parameters, when they keep the vise law; a file whose vise
-    /// key was hand-edited into nonsense keeps its facets as plain steel
-    /// (logged), never a vise that would regenerate wrongly.
+    /// The parameters as read, unchecked: the load (`fixture_keys`)
+    /// holds them to the vise law, so a file whose vise key was
+    /// hand-edited into nonsense keeps its facets as plain steel (noted),
+    /// never a vise that would regenerate wrongly.
     #[must_use]
-    pub fn to_params(&self, model: &str) -> Option<ViseParams> {
-        let p = ViseParams {
+    pub fn to_params(&self) -> ViseParams {
+        ViseParams {
             size: self.size.clone(),
             jaw_width: self.jaw_width,
             jaw_height: self.jaw_height,
@@ -66,13 +67,6 @@ impl ViseDto {
             housing_length: self.housing_length,
             housing_height: self.housing_height,
             opening: self.opening,
-        };
-        match p.check() {
-            Ok(()) => Some(p),
-            Err(why) => {
-                tracing::warn!(model, "vise parameters dropped on load, kept as plain steel: {why}");
-                None
-            }
         }
     }
 }

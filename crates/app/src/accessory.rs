@@ -175,7 +175,7 @@ impl Accessory {
 
     /// The accessory law: every dimension a finite length over zero and
     /// at most `MAX_DIM`; a step block 1..=`MAX_STEPS` steps; a strap
-    /// clamp's stud on the strap between the toe and the heel block.
+    /// clamp's stud narrower than the strap, between the toe and the heel block.
     /// Refusals name the accessory and the dimension.
     pub fn check(&self) -> Result<(), String> {
         let what = self.label();
@@ -195,8 +195,16 @@ impl Accessory {
             Self::StepBlock { steps, .. } if !(1..=MAX_STEPS).contains(steps) => {
                 Err(format!("{what} step count must be 1 to {MAX_STEPS} (got {steps})"))
             }
-            Self::StrapClamp { strap_length, stud_diameter, stud_offset, heel_length, .. } => {
+            Self::StrapClamp { strap_length, strap_width, stud_diameter, stud_offset, heel_length, .. } => {
                 let r = mesh::stud_radius(*stud_diameter);
+                // #812: the stud passes through the strap's slot, and the
+                // strap's band is drawn only as wide as the strap - a
+                // wider stud would be modelled narrower than typed.
+                if 2.0 * r >= *strap_width {
+                    return Err(format!(
+                        "{what} stud diameter {stud_diameter:.3} mm must be less than the strap width {strap_width:.3} mm (the stud passes through the strap)"
+                    ));
+                }
                 if *heel_length >= *strap_length {
                     return Err(format!(
                         "{what} heel block length {heel_length:.3} mm must be less than the strap length {strap_length:.3} mm"
@@ -309,17 +317,4 @@ pub fn fit_parallels(
     let mid = quat_rotate_point(pose.rot, Point3::new(0.0, -0.5 * opening, 0.0));
     let parallels = Location { pos: Point3::new(vise.pos.x + mid.x, vise.pos.y + mid.y, vise.pos.z + mid.z), rot: pose.rot };
     Ok(ParallelsFit { height, spacing, vise, parallels })
-}
-
-/// An accessory read from a file, when it keeps the law; nonsense is
-/// dropped (logged) and the fixture stays plain steel.
-#[must_use]
-pub fn checked_on_load(a: &Accessory, model: &str) -> Option<Accessory> {
-    match a.check() {
-        Ok(()) => Some(a.clone()),
-        Err(why) => {
-            tracing::warn!(model, "accessory parameters dropped on load, kept as plain steel: {why}");
-            None
-        }
-    }
 }
