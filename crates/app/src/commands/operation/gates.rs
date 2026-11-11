@@ -146,7 +146,8 @@ pub(super) fn tool_gate(world: &World, params: &OpParams, tool: &str) -> Result<
 /// params or a source: ordering on resolved values (an op that would cut
 /// upward), then every From: Selection height resolving against the
 /// op's own source - an empty or vanished selection refuses by name
-/// here, never reaches a generator as a silent 0.
+/// here, never reaches a generator as a silent 0 - and a trochoidal
+/// microlift that would feed above the clearance plane (#774).
 pub(super) fn heights_gate(
     world: &World,
     setup: Option<&str>,
@@ -161,6 +162,9 @@ pub(super) fn heights_gate(
             "a {} operation must cut downward: its top height resolves below its bottom height (check the From references)",
             params.kind()
         )));
+    }
+    if let Some(why) = operation::microlift_sane(world, setup, Some(src), params) {
+        return Err(CommandError::Invalid(why));
     }
     Ok(())
 }

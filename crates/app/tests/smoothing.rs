@@ -5,7 +5,8 @@
 //! at the section's end.
 //!
 //! Gate map (#616): covers app::smoothing (of, rough_tol), post::dump
-//! (the Smoothing PARAMs), the mill posts' smoothOn/smoothOff (grblHAL's #710 note included).
+//! (the Smoothing PARAMs), the mill posts' smoothOn/smoothOff (Carvera: #757;
+//! grblHAL's #710 note included).
 //! Provenance: our own fixtures; each dialect's words from its public
 //! programming documentation (see the posts).
 
@@ -107,6 +108,28 @@ fn fanuc_and_mazak_name_the_ask_once_and_write_no_unbounded_word() {
         let prog = program(name, FINISH);
         assert_eq!(lines_with(&prog, "SMOOTHING NOT WRITTEN").len(), 1, "{name}:\n{prog}");
         assert!(!prog.contains("G5.1 Q"), "{name}: no unbounded G5.1:\n{prog}");
+    }
+}
+
+#[test]
+fn carvera_names_the_ask_once_and_otherwise_posts_the_off_program() {
+    // #757: the Carvera firmware's supported-codes tables list no blending
+    // or smoothing word, so the ask is named once - never a guessed G64 -
+    // and the program is otherwise byte-identical to smoothing off.
+    let off = program("Makera Carvera", None);
+    for ask in [FINISH, ROUGH] {
+        let on = program("Makera Carvera", ask);
+        let named = lines_with(&on, "SMOOTHING NOT WRITTEN");
+        assert_eq!(named, ["(SMOOTHING NOT WRITTEN - NO CARVERA FORM STATED)"], "{on}");
+        for w in ["G64", "G61", "G5.1", "G187"] {
+            assert!(!on.contains(w), "Carvera wrote {w}:\n{on}");
+        }
+        let feed = on.lines().position(|l| l.starts_with("G1 ")).unwrap_or(usize::MAX);
+        let note = on.lines().position(|l| l.contains("SMOOTHING NOT WRITTEN")).unwrap_or(usize::MAX);
+        assert!(note < feed, "named before the first cut:\n{on}");
+        let stripped: String = on.lines().filter(|l| !l.contains("SMOOTHING NOT WRITTEN")).map(|l| format!("{l}\n")).collect();
+        let off_lines: String = off.lines().map(|l| format!("{l}\n")).collect();
+        assert_eq!(stripped, off_lines, "only the note differs");
     }
 }
 
