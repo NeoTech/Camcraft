@@ -231,6 +231,10 @@ go to `CHANGELOG.md`.
   - **Set at filing.** Whoever files an issue sets its effort label with
     its `P*` and `area:*`, from the table. A human-filed issue without
     one gets it at triage (the first agent that reads it for a pick).
+    The `classify-effort` skill (`.claude/skills/classify-effort/`) is how
+    the label is chosen: `/classify-effort <N>` for one issue,
+    `/classify-effort` for every open issue without one,
+    `/classify-effort audit` to list labels that look wrong (read-only).
   - **Safety floor.** Anything that can change posted G-code, a collision
     or gouge check, stock simulation or geometry is at least
     `effort:high`, however small the diff; every `P0` is at least
