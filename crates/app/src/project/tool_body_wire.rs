@@ -19,6 +19,10 @@
 //!
 //! A drawn spun holder (#93) also writes its outline under `spun`, which
 //! is re-drawn on load (a spindle-frame body; never beside `lathe`).
+//!
+//! A tool's drawn cutter (#93 slice 2) rides the tool record as
+//! `cutter`, the same `[z, r, arc]` points, re-judged against the
+//! tool's numbers on load (`spun_to_dto`, `cutter_from_dto`).
 
 use serde::{Deserialize, Serialize};
 
@@ -122,4 +126,17 @@ impl ToolBodyDto {
         };
         built.map_err(|e| format!("tool '{tool}': {e}"))
     }
+}
+
+/// A drawn outline on file: `[z, r, arc]` per point, tip-up.
+#[must_use]
+pub fn spun_to_dto(s: &SpunProfile) -> Vec<[f64; 3]> {
+    s.points().iter().map(|p| [p.z, p.r, p.arc]).collect()
+}
+
+/// A tool's drawn cutter from file, judged against `tool`'s numbers
+/// (`cutter_profile::check`); a refusal names the tool.
+pub fn cutter_from_dto(tool: &crate::tools::Tool, pts: &[[f64; 3]], name: &str) -> Result<SpunProfile, String> {
+    let points = pts.iter().map(|p| SpunPoint { z: p[0], r: p[1], arc: p[2] }).collect();
+    camcraft_tools::cutter_profile::check(tool, points).map_err(|e| format!("tool '{name}': cutter profile: {e}"))
 }

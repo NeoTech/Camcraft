@@ -43,6 +43,11 @@ pub fn run_job(mut job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
     tracing::debug!(kind = %kind, "generation started");
     let (mut path, warns) = run_job_arms(job)
         .map_err(|e| e.map_location(|p| frame.map_or(p, |f| f.to_world(p))))
+        // #261 part 3: a refusal's ghost rides the same frame map as a path.
+        .map_err(|e| match &frame {
+            Some(f) => e.map_ghost(|t| f.world_path(t, machining2d::ARC_FIT_TOL)),
+            None => e,
+        })
         .inspect_err(|e| {
             tracing::warn!(kind = %kind, ms = crate::logging::elapsed_ms(started), "generation refused: {e}");
         })?;

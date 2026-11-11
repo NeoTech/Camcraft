@@ -73,6 +73,8 @@ mod tool_orientation_row;
 mod tool_profile_page;
 // #793: the built-in taper holder picker in the Profile section.
 mod tool_holder_picker;
+// #93 slice 2: the Profile tab's drawn cutter, neck and shank.
+mod tool_cutter_page;
 mod setup_wcs_pick;
 // #343: a setup's own node pages (settings, machine, post, fixtures, tools).
 mod setup_pages;
