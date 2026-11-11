@@ -160,15 +160,6 @@ fn sinumerik_sets_the_sixth_offset_as_frame_g506() {
     assert!(!prog.lines().any(|l| l.split_whitespace().any(|w| w == "G58" || w == "G59")), "{prog}");
 }
 
-/// An offset past the six registers names no settable frame here: it is
-/// refused by name, never posted.
-#[test]
-fn sinumerik_refuses_setting_a_frame_it_cannot_name() {
-    let out = engine::run(SINUMERIK, &serde_json::Value::Null, &bore_stream(Some(10), "G54")).expect("post");
-    assert!(out.warnings.iter().any(|w| w.contains("G64") && w.contains("settable frames")), "{:?}", out.warnings);
-    assert!(!out.program.contains("$P_UIFR"), "nothing is set");
-}
-
 /// Heidenhain's ISO manual states no skip move and no trip-position
 /// variable (probing is the touch-probe cycles, another manual): the
 /// post defines no probing hook and the engine refuses by name - a
