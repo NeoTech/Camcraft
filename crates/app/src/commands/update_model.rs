@@ -21,7 +21,7 @@ use flecs_ecs::prelude::{Entity, World};
 use crate::commands::{Command, CommandError};
 use crate::geometry::{Mesh, revision};
 use crate::model;
-use crate::schema::Facets;
+use crate::schema::{Facets, FixtureDef};
 use crate::stock::StockShape;
 
 /// Every stock entity that is a `FromModel` copy of `name` (M3.1 B's
@@ -58,6 +58,11 @@ pub struct UpdateModel {
     /// flag describes the facets, so it is traded with them, both ways.
     coarse_mm: Option<f64>,
     prev_coarse_mm: Option<f64>,
+    /// #826: a fixture plate's marker, when the model is one. Its grid was
+    /// measured on the old mesh, so it goes with it and the riders leave
+    /// the plate (the safe reading: the user re-detects), in this same
+    /// undo step - the rule `ImportFixture` already kept for itself.
+    plate: Option<Box<(FixtureDef, crate::plate::mount::Unmounts)>>,
 }
 
 impl UpdateModel {
@@ -77,7 +82,7 @@ impl UpdateModel {
         };
         if !model::is_model(world, &entity) {
             return Err(CommandError::Invalid(format!(
-                "'{name}' is setup furniture, not a model"
+                "'{name}' is not a model - it is a setup's stock or work offset, a setup, a tool, an operation or other CAM data"
             )));
         }
         // Every copy of this model holds the same local facets, so one
@@ -92,6 +97,9 @@ impl UpdateModel {
             prev_stock,
             coarse_mm: None,
             prev_coarse_mm: crate::model_fidelity::chord_of(world, &entity),
+            plate: crate::fixture::def_of(world, &entity)
+                .filter(|d| d.plate.plate.is_some())
+                .map(|d| Box::new((d, crate::plate::mount::Unmounts::of(world, name)))),
         })
     }
 
@@ -109,6 +117,15 @@ impl UpdateModel {
     #[must_use]
     pub fn keeping_fidelity(mut self) -> Self {
         self.coarse_mm = self.prev_coarse_mm;
+        self
+    }
+
+    /// Drop the plate snapshot, so apply/invert leave the plate's grid and
+    /// its riders' mount markers alone. For `SetPlate`, which edits the
+    /// grid and re-seats the riders itself (#826 review).
+    #[must_use]
+    pub(crate) fn keeping_plate(mut self) -> Self {
+        self.plate = None;
         self
     }
 
@@ -145,6 +162,12 @@ impl Command for UpdateModel {
                 model::set_facets(world, &stock, self.mesh.facets.clone());
             }
         }
+        if let Some(p) = &self.plate {
+            let mut off = p.0.clone();
+            off.plate.plate = None;
+            entity.entity_view(world).set(off);
+            p.1.write(world, true);
+        }
     }
 
     fn invert(&self, world: &World) {
@@ -159,6 +182,10 @@ impl Command for UpdateModel {
             }
             model::set_rev(world, &entity, self.prev_rev);
             crate::model_fidelity::set(world, &entity, self.prev_coarse_mm);
+            if let Some(p) = &self.plate {
+                entity.entity_view(world).set(p.0.clone());
+                p.1.write(world, false);
+            }
         }
         if let Some(tris) = &self.prev_stock {
             for stock in stock_copies(world, &self.name) {

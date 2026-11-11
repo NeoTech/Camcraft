@@ -345,7 +345,8 @@ pub(super) fn ladder(
     b.push(MoveKind::Rapid, Point3::new(cur.x, cur.y, p.clearance_z), None);
     let path = b.finish();
     if let Some(why) = crate::approach::refusal(&path) {
-        return Err(GenError::Invalid(why));
+        // #261 part 3: the moves built so far ride the refusal, display-only.
+        return Err(GenError::Invalid(why).with_ghost(&path));
     }
     if path.moves.is_empty() {
         return Err(GenError::Empty(

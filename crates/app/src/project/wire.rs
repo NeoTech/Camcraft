@@ -61,6 +61,8 @@ pub fn collect(world: &World) -> ProjectFile {
                 number: model::tool_number_of(world, &entity),
                 body: crate::tool_body::body_of(world, &entity)
                     .map(|b| super::tool_body_wire::ToolBodyDto::from_body(&b)),
+                cutter: crate::tool_cutter::cutter_of(world, &entity)
+                    .map(|c| super::tool_body_wire::spun_to_dto(&c)),
                 ..ToolDto::from_tool(&t)
             });
             // The setup payload only ever rides a setup row (the kind test

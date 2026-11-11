@@ -47,6 +47,32 @@ tabs it has settings for:
 Edits on a page are pending until you click **Apply** or **Generate**.
 Both are undoable with Ctrl+Z.
 
+## What a click picks
+
+Every page that takes a pick from the viewport (operation geometry,
+boundaries, setup alignment, fixture mates, the work origin) follows the
+same rule:
+
+- **A face is the whole face.** Clicking anywhere on a flat face, or on a
+  smooth curved wall, picks all of it, never one of the triangles the model
+  is drawn with.
+- **An edge is a real model edge:** where two faces meet at a crease, or the
+  open border of a sheet. The lines between the triangles inside a face, or
+  around a smooth wall, are never pickable.
+- **A point is a corner** where model edges meet, or the end of an open
+  edge. A vertex inside a face or along a round edge is not a point.
+- **Only what you can see.** A click takes the surface in front, and an
+  edge or a corner only when it is visible there. Nothing behind the part
+  is picked through it; turn the view to reach it.
+- **Only what the page asks for.** Near a feature, a corner wins over an
+  edge and an edge over a face, but only among the kinds the page takes: a
+  plane is picked by a face, so it never snaps to an edge.
+
+Edge mode picks the face between the edges when no edge is under the
+cursor; Alt+click picks a single edge segment instead of the whole chain.
+The same rule holds for picks an AI agent makes over MCP by feature id: an
+id a click could not have picked is refused by name.
+
 ## Generating
 
 **Generate** computes the toolpath and checks it. An operation can be in

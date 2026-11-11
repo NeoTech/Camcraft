@@ -37,22 +37,23 @@ const MIN_FILL: f64 = 0.5;
 const TURNED: &str = " - the holes don't line up with the model's X/Y axes: is the plate turned in its model, or are its holes irregular?";
 
 /// Whether the plate's outline has straight edges along both model axes:
-/// the vertices at its least X span at least half its Y extent, and
-/// those at its least Y half its X extent. A plate turned in its model
-/// meets its least X at a corner, not along an edge.
+/// on each axis, the vertices at the least OR the greatest coordinate
+/// span at least half the plate's extent the other way (#826: a clamp
+/// ear or a chamfered corner spoils one side, not both). A plate turned
+/// in its model meets its extremes at corners, not along an edge.
 fn square_edges(tris: &[Triangle]) -> bool {
     let pts: Vec<Point3> = tris.iter().flat_map(|t| [t.a, t.b, t.c]).collect();
     let range = |v: &mut dyn Iterator<Item = f64>| v.fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), x| (a.min(x), b.max(x)));
-    // The edge at the least `key`: does it run at least half the plate's
-    // extent along `along`?
-    let edge = |key: fn(&Point3) -> f64, along: fn(&Point3) -> f64| {
-        let (lo, _) = range(&mut pts.iter().map(key));
+    // Does the edge at the least (or greatest) `key` run at least half the
+    // plate's extent along `along`?
+    let edge = |key: fn(&Point3) -> f64, along: fn(&Point3) -> f64, greatest: bool| {
+        let (lo, hi) = range(&mut pts.iter().map(key));
         let (amin, amax) = range(&mut pts.iter().map(along));
-        let (emin, emax) = range(&mut pts.iter().filter(|p| key(p) <= lo + ON_NODE).map(along));
+        let (emin, emax) = range(&mut pts.iter().filter(|p| if greatest { key(p) >= hi - ON_NODE } else { key(p) <= lo + ON_NODE }).map(along));
         let run = emax - emin;
         run.is_finite() && run >= 0.5 * (amax - amin)
     };
-    edge(|p| p.x, |p| p.y) && edge(|p| p.y, |p| p.x)
+    (edge(|p| p.x, |p| p.y, false) || edge(|p| p.x, |p| p.y, true)) && (edge(|p| p.y, |p| p.x, false) || edge(|p| p.y, |p| p.x, true))
 }
 
 /// Distinct values of `v` (sorted), clustered within `ON_NODE`.

@@ -101,7 +101,6 @@ pub(crate) fn body(ui: &mut Ui, u: Unit, d: &mut AccessoryDraft) -> Option<Acces
     }
     dims_grid(ui, u, "accessory-dims", &mut d.params, fitting);
     if fitting {
-        ui.label(RichText::new("The height is set to fit; the vise drops to suit.").small());
         ui.label(RichText::new(FIT_SINKS_HINT).small());
     } else {
         egui::Grid::new("accessory-place").num_columns(2).show(ui, |ui| {
