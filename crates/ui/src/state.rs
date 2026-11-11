@@ -12,7 +12,8 @@
 use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, TryRecvError};
-use std::time::{Duration, Instant};
+use camcraft_app::clock::Instant;
+use std::time::Duration;
 
 use camcraft_app::commands::{
     ActivateSetup, AlignPartToSetup, SetSetupRelative, SetSetupStockSource, SetSetupWorkOffset, AddTool, ApplyCuttingData, ChangeOperationKind, ChangeTool, CommandError, CreateOperation,
@@ -4023,13 +4024,13 @@ impl Default for State {
 
 fn pick_mesh_file() -> Option<PathBuf> {
     // STEP arrives tessellated through truck (mesh, not B-rep).
-    rfd::FileDialog::new()
+    crate::file_dialog::FileDialog::new()
         .add_filter("Mesh", &["stl", "obj", "step", "stp"])
         .pick_file()
 }
 
 fn pick_project_file() -> Option<PathBuf> {
-    rfd::FileDialog::new()
+    crate::file_dialog::FileDialog::new()
         .add_filter("CamCraft Project", &["camproj"])
         .pick_file()
 }
@@ -4037,7 +4038,7 @@ fn pick_project_file() -> Option<PathBuf> {
 fn pick_machine_file() -> Option<PathBuf> {
     // The `.mch` layout is the machine-definition JSON format we reuse
     // by user instruction (M2.3 C); the filter just names it.
-    rfd::FileDialog::new()
+    crate::file_dialog::FileDialog::new()
         .add_filter("Machine Definition", &["mch"])
         .pick_file()
 }
@@ -4045,7 +4046,7 @@ fn pick_machine_file() -> Option<PathBuf> {
 fn pick_post_file() -> Option<PathBuf> {
     // The `.cps` script format is the one we reuse by user instruction
     // (M3.3 A) - plain JavaScript, the user's own; the filter names it.
-    rfd::FileDialog::new()
+    crate::file_dialog::FileDialog::new()
         .add_filter("Post Script", &["cps"])
         .pick_file()
 }
@@ -4076,7 +4077,7 @@ fn pick_theme_file() -> Option<PathBuf> {
     // filter names it; the selection-time parse decides it. The dialog
     // opens on the discovered folder (`theme_dir`, M13.3) when there is
     // one; `State::new` already said so on the status line when not.
-    let mut dialog = rfd::FileDialog::new().add_filter("CamCraft Theme", &["json"]);
+    let mut dialog = crate::file_dialog::FileDialog::new().add_filter("CamCraft Theme", &["json"]);
     if let Ok(dir) = crate::theme_dir::from_process() {
         dialog = dialog.set_directory(dir);
     }
@@ -4084,7 +4085,7 @@ fn pick_theme_file() -> Option<PathBuf> {
 }
 
 pub(crate) fn save_project_dialog(current: Option<&Path>) -> Option<PathBuf> {
-    let mut dialog = rfd::FileDialog::new().add_filter("CamCraft Project", &["camproj"]);
+    let mut dialog = crate::file_dialog::FileDialog::new().add_filter("CamCraft Project", &["camproj"]);
     if let Some(parent) = current.and_then(Path::parent) {
         dialog = dialog.set_directory(parent);
     }
@@ -4100,7 +4101,7 @@ pub(crate) fn save_project_dialog(current: Option<&Path>) -> Option<PathBuf> {
 fn post_program_dialog(target: &crate::post_file::PostTarget) -> Option<PathBuf> {
     // The extension law lives with the script (fanuc.cps's `extension`
     // is "nc"); the dialog just offers it.
-    let mut dialog = rfd::FileDialog::new().add_filter("NC Program", &["nc"]);
+    let mut dialog = crate::file_dialog::FileDialog::new().add_filter("NC Program", &["nc"]);
     if let Some(dir) = &target.dir {
         dialog = dialog.set_directory(dir);
     }
@@ -4108,7 +4109,7 @@ fn post_program_dialog(target: &crate::post_file::PostTarget) -> Option<PathBuf>
 }
 
 fn save_stl_dialog() -> Option<PathBuf> {
-    rfd::FileDialog::new()
+    crate::file_dialog::FileDialog::new()
         .add_filter("STL", &["stl"])
         .set_file_name("machined-stock.stl")
         .save_file()
@@ -4117,7 +4118,7 @@ fn save_stl_dialog() -> Option<PathBuf> {
 fn save_sheet_dialog() -> Option<PathBuf> {
     // Plain text on purpose: the sheet is meant to be read on paper
     // next to the machine, so the format is whatever Notepad opens.
-    rfd::FileDialog::new()
+    crate::file_dialog::FileDialog::new()
         .add_filter("Text", &["txt"])
         .set_file_name("setup-sheets.txt")
         .save_file()

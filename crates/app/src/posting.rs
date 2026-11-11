@@ -408,7 +408,7 @@ pub fn post_setup(world: &World, out_path: &Path) -> Result<Posted, String> {
 /// parameterized - what a caller holding a script text runs, and
 /// what the tests use to exercise the script seam directly.
 pub fn post_script(world: &World, out_path: &Path, cps: &str) -> Result<Posted, String> {
-    let started = std::time::Instant::now();
+    let started = crate::clock::Instant::now();
     let posted = post_script_body(world, out_path, cps);
     match &posted {
         Ok(p) => tracing::info!(
