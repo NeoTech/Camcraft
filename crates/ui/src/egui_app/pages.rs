@@ -1723,6 +1723,8 @@ fn model_page(ui: &mut Ui, state: &mut State, name: String) {
             apply_model_draft(state);
         }
     });
+    // Pockets and slots (#511): recognition on a click, Create per row.
+    super::pockets_page::section(ui, state, &name);
     // #561: the part into a fixture (or a fixture onto the part) by mates.
     super::locate_form::model_row(ui, state, &name);
     // Mesh repair (M13.11): weld and fill on the user's say-so, never on
