@@ -450,16 +450,14 @@ pub enum ThreadingOutput {
     G76Cycle,
 }
 
-/// Which theme the document wears (M6.1 C), a flecs singleton like
-/// `PostRef`: setup furniture, never a browser row. `Dark` is the
-/// shipped default - the meaning of a file with no theme key at all;
-/// `Named` addresses a built-in theme BY NAME (the post law, M3.3 B:
-/// names survive growth, indices don't); `File` names the user's
-/// `.json` theme by path. The constructor validates (registry names
-/// exist, files are there and within the byte budget - the JSON parse
-/// itself is the ui seam's, since the parser lives there); a value
-/// landed from a project file reads as written and refuses by name at
-/// apply time, never silently swapping back to the default.
+/// Which theme the user wears (M6.1 C), a flecs singleton. Since #877 a
+/// user preference, not a document setting: `app::prefs` keeps it per
+/// user, and no project file carries it. `Dark` is the shipped default;
+/// `Named` addresses a built-in theme BY NAME (names survive growth,
+/// indices don't); `File` names the user's `.json` theme by path. A pick
+/// is validated before it is set (`commands::check_theme`, plus the ui
+/// seam's JSON parse); a stored `File` reads as written and refuses by
+/// name at apply time, never silently swapping back to the default.
 #[derive(Component, Debug, Clone, Default, PartialEq)]
 pub enum ThemeRef {
     #[default]
@@ -469,9 +467,9 @@ pub enum ThemeRef {
 }
 
 /// The colour-vision remap the viewer wears (M13.4), a flecs singleton
-/// switched by `SetColorVision` under the theme's command law. `Off`
-/// is the default and changes nothing on screen. Unlike `ThemeRef` it
-/// is a VIEW preference, not a document setting: a deficiency belongs
+/// kept per user with the theme (`app::prefs`, #877). `Off` is the
+/// default and changes nothing on screen. Like `ThemeRef` it is a VIEW
+/// preference, not a document setting: a deficiency belongs
 /// to the person at the screen, not to the part - a protan's document
 /// opened by a colleague must not wear the protan palette - so the
 /// project file never carries it and opening a document leaves it as
