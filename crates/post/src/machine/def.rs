@@ -61,10 +61,12 @@ pub struct AxisLimits {
     /// A rotary that turns the WORK, not the spindle (#804): the file
     /// places it outside the head's chain (no `head` part below it), as
     /// a 4th-axis table bolted to the bed is. Read by the index-swing
-    /// clause of the program gate; false for every linear axis and for
-    /// a head's own tilt.
-    #[serde(default, skip_serializing_if = "is_false")]
-    pub turns_part: bool,
+    /// clause of the program gate. `Some(false)` for a head's own tilt,
+    /// `None` for every linear axis - and for a rotary read back from a
+    /// project saved before #804, which never stated it (#813: the load
+    /// names such a machine so it is reloaded, never silently unjudged).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub turns_part: Option<bool>,
     /// How far the spindle nose sits above this rotary's centerline
     /// with Z at the post's `safe_retract`, mm (#804): the file's
     /// `"nose_to_axis"`. With WCS Y0 Z0 on the centerline (the indexed

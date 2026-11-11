@@ -136,6 +136,8 @@ mod json;
 pub use json::*;
 mod apply;
 use apply::*;
+// #813: the load note for a machine embedded before #804.
+mod swing_note;
 mod validate;
 use validate::*;
 mod wcs_migrate;

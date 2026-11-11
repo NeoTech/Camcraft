@@ -563,6 +563,9 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
             }
         }
     }
+    // #813: a machine embedded before #804 may hold a table A the
+    // index-swing clause cannot judge; say so by name.
+    notes.extend(super::swing_note::notes(&file));
     if let Some(m) = &file.machine
         && !m.machine.is_sane()
     {

@@ -115,7 +115,11 @@ unstated capability into existence.
     gate puts the retracted tool tip at `nose_to_axis` minus the tool
     length and refuses an op on a work-turning A about X whose tip
     there is inside the stock / part / turning fixtures' swept radius
-    plus 5 mm - or whose machine states no `nose_to_axis` at all. The
+    plus 5 mm - or whose machine states no `nose_to_axis` at all. A
+    work-turning rotary with no `axis` vector takes its RS-274 letter's
+    line (an A is about X and is judged, #813); one whose name is no
+    RS-274 rotary letter refuses every op by name - state its `axis`.
+    The
     microARC 4 file states 10.6 in: the 770MX's 13.75 in spindle nose
     to table (Tormach 770MX spec page) less the microARC 4's 3.15 in
     table to centerline (4th-axis comparison sheet 02/24).
