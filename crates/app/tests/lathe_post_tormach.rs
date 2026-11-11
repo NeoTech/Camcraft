@@ -220,6 +220,32 @@ fn css_arcs_part_load_and_a_trip_home_speak_linuxcnc() {
 }
 
 #[test]
+fn a_section_without_surface_speed_posts_g97_after_one_with_it() {
+    // #772: a CSS turning section, then an axial drill that states no
+    // SurfaceSpeed. The drill must run at its own rpm (G97), never at
+    // the stale G96 with the D cap - on centre that is the machine max.
+    let mut r = vec![cnc::Record::Param { name: "SurfaceSpeed".into(), value: json!(200.0) }];
+    r.extend(preface());
+    r.push(mv(MoveKind::Rapid, 0.0, 6.0, 10.0, None));
+    r.push(mv(MoveKind::Feed, 0.0, 6.0, 0.0, Some(100.0)));
+    r.push(cnc::Record::Section { begin: false });
+    r.push(cnc::Record::Param { name: "SpindleSpeed".into(), value: json!(500.0) });
+    r.push(cnc::Record::Tool { number: 2, name: "DRILL-6".into() });
+    r.push(cnc::Record::Section { begin: true });
+    r.push(cycle(CycleKind::Drill, 0.0, 0.0));
+    r.push(mv(MoveKind::Rapid, 0.0, 0.0, 22.0, None));
+    r.push(cnc::Record::Section { begin: false });
+    let out = run(r);
+    assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+    let p = &out.program;
+    assert_eq!(p.matches("G96").count(), 1, "only the turning section is CSS: {p}");
+    assert!(p.contains("G96 D12000 S200 M3\n"), "{p}");
+    let drill = &p[p.find("T0202").expect("the drill's tool change")..];
+    assert!(drill.contains("G97 S500 M3\n"), "the drill states its own rpm: {drill}");
+    linuxcnc_sane(p);
+}
+
+#[test]
 fn what_the_dialect_cannot_say_is_refused_by_name() {
     // A tap (no G33.1 yet), a back-bore and a hole off the axis.
     for (kind, y, why) in [
