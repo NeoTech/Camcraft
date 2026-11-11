@@ -52,6 +52,8 @@ mod vertex_pick_tests;
 #[cfg(test)]
 mod setup_chip_tests;
 #[cfg(test)]
+mod pockets_tests;
+#[cfg(test)]
 mod wcs_gizmo_tests;
 #[cfg(test)]
 mod axis_note_tests;

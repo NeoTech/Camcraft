@@ -4,6 +4,7 @@
 //! malformed input never enters the history ("validate early").
 
 // M13.2: workpiece material + the feeds-and-speeds suggestion.
+pub mod accessory;
 pub mod builtin_vise;
 pub mod cutting_data;
 pub mod delete_entity;
@@ -58,6 +59,7 @@ pub mod update_model;
 
 use flecs_ecs::prelude::World;
 
+pub use accessory::{AccessoryPlacement, InsertAccessory, SetAccessory};
 pub use builtin_vise::{InsertVise, SetVise, VisePlacement};
 pub use cutting_data::{ApplyCuttingData, SetWorkMaterial};
 pub use delete_entity::DeleteEntity;

@@ -109,6 +109,7 @@ impl TagFixture {
                 plate: prev.as_ref().map(|d| d.plate.clone()).unwrap_or_default(),
                 // ...and a mod-vise jaw block's (#820).
                 mod_jaw: prev.as_ref().and_then(|d| d.mod_jaw.clone()),
+                accessory: prev.as_ref().and_then(|d| d.accessory.clone()),
             },
             prev,
         })

@@ -112,6 +112,8 @@ mod program_entry;
 mod tool_body;
 // #93: the tool editor's spun-profile (Profile) section.
 mod tool_profile;
+// #793: the tool editor's holder library picker.
+mod tool_holder;
 // #441: the Theme ribbon door; the Stock page shows stock only.
 mod theme_door;
 mod recent_door;

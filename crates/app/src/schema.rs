@@ -237,6 +237,9 @@ pub struct FixtureDef {
     /// A mod-vise jaw block's parameters (#820): its facets were
     /// generated from these. `None` - every other fixture.
     pub mod_jaw: Option<crate::modvise::JawParams>,
+    /// A built-in accessory's parameters (#789: parallels, blocks, a
+    /// strap clamp, a soft jaw); `None` - not one.
+    pub accessory: Option<crate::accessory::Accessory>,
 }
 
 /// The document's active setup, stored as a flecs singleton like `Units`:

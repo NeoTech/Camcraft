@@ -94,7 +94,8 @@ pub fn collect(world: &World) -> ProjectFile {
                 .try_get::<&FixtureDef>(|d| FixtureDto {
                     setup: d.setup.clone(),
                     fixed: d.fixed,
-                    vise: d.vise.as_ref().map(super::ViseDto::from_params),
+                    vise: d.vise.as_ref().and_then(super::fixture_keys::vise_value),
+                    accessory: d.accessory.as_ref().and_then(super::fixture_keys::accessory_value),
                     plate: super::plate_dto::plate_value(&d.plate),
                     on_plate: super::plate_dto::on_plate_value(&d.plate),
                     mod_jaw: super::modvise_dto::value(d.mod_jaw.as_ref()),

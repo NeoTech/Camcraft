@@ -126,6 +126,13 @@ impl InsertFixture {
         self
     }
 
+    /// Mark the insert as built-in accessory `accessory` (#789).
+    #[must_use]
+    pub fn with_accessory(mut self, accessory: crate::accessory::Accessory) -> Self {
+        self.def.accessory = Some(accessory);
+        self
+    }
+
     /// The marker the insert writes.
     #[must_use]
     pub fn def(&self) -> &FixtureDef {

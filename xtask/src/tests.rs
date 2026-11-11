@@ -241,3 +241,39 @@ fn log_names_stamps_and_notes_match_the_old_script() {
     assert_eq!(exec::read_log("error: could not compile `x`\n", 101).expect("note"), "compile error");
     assert_eq!(exec::read_log("", 0).expect("note"), "");
 }
+
+/// Names, starts and ends of every scanned test fn, for compact assertions.
+fn spans(text: &str) -> Vec<(String, usize, usize)> {
+    scan::test_fns(text).expect("scan").into_iter().map(|t| (t.name, t.start, t.end)).collect()
+}
+
+#[test]
+fn braces_in_string_literals_do_not_swallow_the_next_test() {
+    // The #764 repro shape: refuse("{", ..) opens a brace the old counter never closed.
+    let text = "#[test]\nfn bad() {\n    refuse(\"{\", \"bad JSON\");\n}\n\n#[test]\nfn next() {\n    run();\n}\n";
+    assert_eq!(spans(text), [("bad".into(), 1, 4), ("next".into(), 6, 9)]);
+    // Escapes, and a string spanning lines.
+    let text = "#[test]\nfn a() {\n    let s = \"\\\"{\\\\\";\n    let t = \"x {\n    y\";\n}\n#[test]\nfn b() {}\n";
+    assert_eq!(spans(text), [("a".into(), 1, 6), ("b".into(), 7, 8)]);
+}
+
+#[test]
+fn braces_in_raw_strings_chars_comments_and_lifetimes_are_ignored() {
+    let text = "#[test]\nfn raw() {\n    let a = r#\"{ \"} \"#;\n    let b = r\"{\";\n}\n#[test]\nfn ch() {\n    let c = '}';\n    let d = '\\'';\n    let e = '\\u{7d}';\n}\n#[test]\nfn cm() {\n    // a stray { in a comment\n}\n#[test]\nfn lt<'a>(x: &'a str) {\n    let _ = x;\n}\n#[test]\nfn last() {}\n";
+    assert_eq!(
+        spans(text),
+        [("raw".into(), 1, 5), ("ch".into(), 6, 11), ("cm".into(), 12, 15), ("lt".into(), 16, 19), ("last".into(), 20, 21)]
+    );
+}
+
+#[test]
+fn a_change_in_the_test_after_a_brace_string_is_attributed_to_it() {
+    let fx = fixture();
+    let f = "crates/app/tests/brace.rs";
+    let text = "//! Gate map: covers app::x.\n#[test]\nfn first() {\n    refuse(\"{\");\n}\n\n#[test]\nfn second() {\n    run();\n}\n";
+    let p = fx.0.join(f);
+    std::fs::write(&p, text).expect("write");
+    // Line 9 is inside `second`; it must not be blamed on `first` or run the suite whole.
+    let got: Vec<String> = steps(quick_plan(&fx.0, &[f], &[], &[(f, "@@ -9 +9 @@")], false)).iter().map(line).collect();
+    assert_eq!(got, ["app brace (1 fn) | test -j 6 -p camcraft-app --test brace -- --test-threads=6 --exact second"]);
+}

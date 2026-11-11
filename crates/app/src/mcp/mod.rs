@@ -31,6 +31,7 @@ mod render;
 mod setup_tools;
 mod tools;
 mod vise_tools;
+mod accessory_tools;
 mod plate_tools;
 mod modvise_tools;
 
