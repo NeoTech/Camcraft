@@ -898,7 +898,7 @@ pub(super) struct Drop {
 /// the longest registry label, rows one theme row tall.
 /// What one layout pass answers: cells to draw, group captions (mid x,
 /// title), divider x's, and the doors with their dropdown rows.
-pub(super) type RibbonGeom = (Vec<Cell>, Vec<(f32, &'static str)>, Vec<f32>, Vec<Drop>);
+pub(super) type RibbonGeom = (Vec<Cell>, Vec<(f32, f32, &'static str)>, Vec<f32>, Vec<Drop>);
 
 /// The machine door's dropdown rows, pure geometry (the section doors'
 /// `Drop` law, worn by the switcher): the three workspaces in switcher
@@ -1046,7 +1046,7 @@ pub(super) fn ribbon_cells(strip: Rect, pal: &Tokens, plan: &[Group]) -> RibbonG
             x += cell_w + GAP;
         }
         x -= GAP;
-        captions.push(((start + x) * 0.5, group.title));
+        captions.push(((start + x) * 0.5, (x - start).max(0.0), group.title));
         if gi + 1 < n_groups {
             x += GAP + 2.0;
             dividers.push(x - (GAP + 2.0) / 2.0 - 1.0);
@@ -1121,12 +1121,11 @@ pub fn ribbon(
             toggle_pin(state, i);
         }
     }
-    for (mid, title) in captions {
-        // The caption row sits under its cells' row: PAD_V (4) + the
-        // cell box + 5 - 44 at the defaults, one derivation now that
-        // cell_h is a token.
-        painted::caption(ui.painter(), mid, rect.top() + 4.0 + pal.cell_h + 5.0, title, pal);
-    }
+    // Group captions are intentionally NOT drawn: each cell already names
+    // itself, and a second line under the row only duplicated and clipped
+    // the section name (the user's "unreadable" complaint). The dividers
+    // alone separate the groups.
+    let _ = captions;
     for dx in dividers {
         painted::divider(ui.painter(), dx, rect, pal);
     }
@@ -1471,11 +1470,6 @@ pub fn status(ui: &mut Ui, state: &mut State, pal: &Tokens, icons: Option<&IconS
             if super::debug_info::button(ui, icons).clicked() {
                 state.debug_info_open = !state.debug_info_open;
             }
-            ui.label(
-                RichText::new("egui shell (M-g) - imgui retired")
-                    .color(pal.text_faint)
-                    .small(),
-            );
             // #183: the live MCP server says it is listening.
             if let Some(note) = crate::mcp_host::badge(state) {
                 ui.label(RichText::new(note).color(pal.text_faint).small());

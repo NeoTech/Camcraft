@@ -62,12 +62,9 @@ fn disabled(h: &Harness<'static, ShellUi>, label: &str) -> bool {
 fn assert_shell_skeleton(h: &Harness<'static, ShellUi>) {
     let texts = painted(h);
     // Ribbon: the group headers and a cell per group, all above the dock.
-    let groups = [
-        "File", "Setup", "Milling 2D", "Milling 3D", "Drilling", "Multi-axis", "Modify",
-        "Inspect", "View",
-    ];
+    let groups: [&str; 0] = [];
     let cells = ["New", "Open", "Save", "Post", "Stock", "Origin", "Undo", "Redo", "Simulate"];
-    let tab_y = at(&texts, "browser").y;
+    let tab_y = at(&texts, "Browser").y;
     for t in groups.iter().chain(cells.iter()) {
         assert!(at(&texts, t).y < tab_y, "ribbon text {t:?} must sit above the dock tabs");
     }
@@ -84,8 +81,8 @@ fn assert_shell_skeleton(h: &Harness<'static, ShellUi>) {
         .unwrap_or_else(|| panic!("no painted build identity starting {ver:?}"));
     assert!(build.y < tab_y, "the build identity sits on the ribbon");
     // Dock: three leaves, left to right, titles on one row.
-    let (b, v, p) = (at(&texts, "browser"), at(&texts, "viewport"), at(&texts, "properties"));
-    assert!(b.x < v.x && v.x < p.x, "dock order must be browser | viewport | properties");
+    let (b, v, p) = (at(&texts, "Browser"), at(&texts, "Viewport"), at(&texts, "Properties"));
+    assert!(b.x < v.x && v.x < p.x, "dock order must be Browser | Viewport | Properties");
     assert!((b.y - v.y).abs() < 1.0 && (v.y - p.y).abs() < 1.0, "the tab titles share a row");
     // Browser rows of the seed, under its tab.
     let in_browser = |q: egui::Pos2| q.y > b.y && q.x < v.x;

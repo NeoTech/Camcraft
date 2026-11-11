@@ -325,6 +325,14 @@ fn sim_body_part(state: &State) -> Option<GpuPart> {
 /// committed-pick outlines, and the gizmos, built by the same functions the
 /// imgui shell uploads. (The pre-M-e mirror skipped the gizmos and the
 /// `show_all_paths` dimming; this delegation closes both gaps for free.)
+///
+/// The Z=0 ground grid goes FIRST, so a path-heavy document that fills the
+/// overlay buffer loses toolpath detail at the cap, never the floor: the
+/// grid is what makes the empty viewport read as a machine table rather
+/// than a void, and it is depth-tested against the part like the rest of
+/// the buffer.
 fn collect_overlay(state: &State) -> Vec<[f32; 6]> {
-    crate::interact::collect_overlay(state)
+    let mut out = crate::interact::ground_grid_lines(state);
+    out.extend(crate::interact::collect_overlay(state));
+    crate::interact::capped(out)
 }
