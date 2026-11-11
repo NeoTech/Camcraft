@@ -47,6 +47,7 @@ mod load_field;
 // pub(crate) past egui_app: `State::machine_editor` names its draft
 // type (M3.3 stage C), so state.rs has to see through the door.
 pub(crate) mod machine_editor;
+mod machine_grid;
 // pub(crate) for the same reason: `State::post_refusal` names its type.
 pub(crate) mod post_refusal;
 // pub(crate) for the same reason: `State::machines_pane` (#287).
@@ -95,6 +96,8 @@ mod pockets_page;
 #[cfg(test)]
 pub(crate) use pockets_page::row_text as pockets_row_text;
 mod probe_page;
+// #670: the Plasma Profile's page.
+mod plasma_page;
 mod kind_editors;
 mod mill2d_more_page;
 mod mill2d_page;
@@ -168,6 +171,8 @@ mod pin_tests;
 #[cfg(test)]
 mod ribbon_icon_tests;
 #[cfg(test)]
+mod plasma_ribbon_tests;
+#[cfg(test)]
 mod debug_info_tests;
 #[cfg(test)]
 mod fresh_op_tests;
@@ -182,6 +187,8 @@ mod setup_relative_tests;
 mod setup_stock_pick;
 #[cfg(test)]
 mod setup_stock_tests;
+#[cfg(test)]
+mod incoming_view_tests;
 #[cfg(test)]
 mod setup_plane_tests;
 #[cfg(test)]
