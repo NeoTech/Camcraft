@@ -44,7 +44,9 @@ impl BodyBands {
     /// plain holder cylinder or does not fit `g`: non-finite or negative
     /// numbers, more bands than [`BODY_BANDS_CAP`], a band reaching
     /// below the flutes' top, past the shank beside it or past the
-    /// holder above it, or a top other than the holder's.
+    /// holder above it, bands that are not contiguous from the shank's
+    /// top (a gap, a late start, an overlap), or a top other than the
+    /// holder's.
     #[must_use]
     pub fn of(g: &ToolGeom, stack: &HolderStack) -> Option<Self> {
         if *stack == HolderStack::cylinder(g) || stack.bands.len() > BODY_BANDS_CAP {
@@ -76,10 +78,18 @@ impl BodyBands {
             if band.r > g.holder_radius.max(g.shank_radius) + EPS {
                 return None;
             }
+            // Contiguous from the shank's top: a band that starts past
+            // where the last one ended (or the first past the shank's
+            // top) leaves a span no band judges, one that starts below it
+            // runs back down the axis. Either way the stack is not a
+            // profile, and the enclosing cylinder stands.
             let above = band.above.max(shank_top);
+            if (above - top).abs() > EPS {
+                return None;
+            }
             out.b[out.n] = HolderBand { above, len: hi - above, r: band.r };
             out.n += 1;
-            top = top.max(hi);
+            top = hi;
         }
         ((top - (shank_top + g.holder_len)).abs() <= EPS && out.n > 0).then_some(out)
     }

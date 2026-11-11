@@ -95,8 +95,14 @@ pub(super) fn band_reach(
         // h0, same r2, point p unshifted.
         // Moves law (c) convicted, for law (c3) below: a mid-turn
         // sweep of the same band on the same move is the same event
-        // reported twice, and (c)'s verdict stands.
+        // reported twice, and (c)'s verdict stands - when (c) already
+        // named the part (`shanked_part`, the worst there is). A move
+        // (c) convicted for stock only still has its sweep asked: a
+        // swing through the PART is a worse event than the stock (c)
+        // saw, and is never hidden behind it (#835 review); a stock-
+        // only sweep on such a move is the same event and is dropped.
         let mut shanked: Vec<usize> = Vec::new();
+        let mut shanked_part: Vec<usize> = Vec::new();
         for (i, m) in path.moves.iter().enumerate() {
             if m.kind == MoveKind::Rapid {
                 continue;
@@ -177,6 +183,9 @@ pub(super) fn band_reach(
                 }
                 if let Some(part) = convicted {
                     shanked.push(i);
+                    if part {
+                        shanked_part.push(i);
+                    }
                     warns.push(Warning::ShankHit { at: i, part });
                 }
             }
@@ -195,19 +204,24 @@ pub(super) fn band_reach(
         // generator ever touched hold every pose at home and convict
         // nothing, exactly as before this law existed.
         if cx.mode != Mode::Engrave {
-            warns.extend(super::sweep::mid_turn_sweeps(
+            let sweeps = super::sweep::mid_turn_sweeps(
                 path,
                 &bands,
                 r,
                 cx.gouge_tol,
                 chord_tol,
-                &shanked,
+                &shanked_part,
                 &samples,
                 &in_stock,
                 &|q: Point2| rest.surface_steps(q),
                 &part_at,
                 &|pc, r_in, r_out, h, upto| rest.hidden_in_annulus(pc, r_in, r_out, h, upto),
-            ));
+            );
+            warns.extend(
+                sweeps
+                    .into_iter()
+                    .filter(|w| !matches!(w, Warning::SweepHit { at, part: false } if shanked.contains(at))),
+            );
         }
     }
 }
