@@ -32,6 +32,8 @@ pub struct ImportFixture {
     /// old binding for the undo).
     prev: Option<FixtureDef>,
     next: FixtureDef,
+    /// #819: a re-import drops a plate's grid, so its riders leave it.
+    riders: crate::plate::mount::Unmounts,
 }
 
 impl ImportFixture {
@@ -51,6 +53,12 @@ impl ImportFixture {
         }
         let existing = model::find_by_name(world, &name);
         let prev = existing.as_ref().and_then(|e| fixture::def_of(world, e));
+        // #819: a re-import drops a plate's grid, so its riders leave it.
+        let riders = if prev.as_ref().is_some_and(|d| d.plate.plate.is_some()) {
+            crate::plate::mount::Unmounts::of(world, &name)
+        } else {
+            crate::plate::mount::Unmounts::default()
+        };
         let landing = match existing {
             Some(_) => Landing::Update(UpdateModel::new(world, &name, import.mesh)?),
             None => Landing::Fresh(import),
@@ -68,6 +76,7 @@ impl ImportFixture {
                 vise: None,
                 plate: crate::plate::PlateLink { plate: None, mount: prev.as_ref().and_then(|d| d.plate.mount.clone()) },
             },
+            riders,
             prev,
         })
     }
@@ -97,9 +106,11 @@ impl Command for ImportFixture {
         if let Some(entity) = model::find_by_name(world, &self.name) {
             entity.entity_view(world).set(self.next.clone());
         }
+        self.riders.write(world, true);
     }
 
     fn invert(&self, world: &World) {
+        self.riders.write(world, false);
         if let Some(entity) = model::find_by_name(world, &self.name) {
             match &self.prev {
                 Some(def) => {

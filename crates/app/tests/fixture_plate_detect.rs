@@ -136,3 +136,45 @@ fn a_staggered_plates_grid_is_read_as_staggered() {
     assert!(g.locate("A1").is_ok() && g.locate("B2").is_ok());
     assert!(g.locate("A2").err().is_some_and(|e| e.contains("staggered")));
 }
+
+/// A square plate whose square grid is turned exactly 45 degrees in its
+/// model reads, hole for hole, as a checkerboard - but its edges don't
+/// run along X/Y, so it is refused as turned (the decision's law), while
+/// the same checkerboard on a square-edged plate stays a staggered grid.
+/// A grid turned a few degrees is refused naming the likely cause.
+#[test]
+fn a_turned_plate_is_refused_naming_the_turn() {
+    let turn = |deg: f64, w: f64| {
+        let (s, c) = deg.to_radians().sin_cos();
+        let rot = move |x: f64, y: f64| (c * (x - w / 2.0) - s * (y - w / 2.0), s * (x - w / 2.0) + c * (y - w / 2.0));
+        let mut holes = Vec::new();
+        for r in 0..9 {
+            for k in 0..9 {
+                let (x, y) = rot(25.0 + 25.0 * f64::from(k), 25.0 + 25.0 * f64::from(r));
+                holes.push((x, y, 4.0));
+            }
+        }
+        let corners: Vec<(f64, f64)> = [(0.0, 0.0), (w, 0.0), (w, w), (0.0, w)].iter().map(|&(x, y)| rot(x, y)).collect();
+        (corners, holes)
+    };
+    let world = new_world();
+    let mut history = History::default();
+    for (name, deg) in [("Diamond", 45.0), ("Askew", 3.0)] {
+        let (outline, holes) = turn(deg, 250.0);
+        let mut t = holed_plate(1.0, 1.0, &holes);
+        // Swap the unit outline for the turned one.
+        t.drain(0..8);
+        let n = outline.len();
+        for i in 0..n {
+            let ((x0, y0), (x1, y1)) = (outline[i], outline[(i + 1) % n]);
+            let (a, b) = (Point3::new(x0, y0, -20.0), Point3::new(x1, y1, -20.0));
+            let (c, d) = (Point3::new(x1, y1, 0.0), Point3::new(x0, y0, 0.0));
+            t.push(Triangle::new(a, b, c));
+            t.push(Triangle::new(a, c, d));
+        }
+        history.execute(&world, ImportModel::from_mesh(name, Mesh::from_facets(t)));
+        history.execute(&world, TagFixture::new(&world, name, None).expect("tag"));
+        let e = SetPlateGrid::detect(&world, name).err().map(|e| e.to_string()).unwrap_or_default();
+        assert!(e.contains("don't line up with the model's X/Y axes") && e.contains("turned"), "{name}: {e}");
+    }
+}

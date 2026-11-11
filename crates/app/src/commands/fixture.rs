@@ -175,6 +175,8 @@ impl Command for TagFixture {
 pub struct UntagFixture {
     name: String,
     prev: FixtureDef,
+    /// #819: an untagged plate stops being one - its riders leave it.
+    riders: crate::plate::mount::Unmounts,
 }
 
 impl UntagFixture {
@@ -185,6 +187,7 @@ impl UntagFixture {
         Ok(UntagFixture {
             name: name.to_string(),
             prev,
+            riders: crate::plate::mount::Unmounts::of(world, name),
         })
     }
 }
@@ -196,12 +199,14 @@ impl Command for UntagFixture {
                 .entity_view(world)
                 .remove(world.component::<FixtureDef>());
         }
+        self.riders.write(world, true);
     }
 
     fn invert(&self, world: &World) {
         if let Some(entity) = model::find_by_name(world, &self.name) {
             entity.entity_view(world).set(self.prev.clone());
         }
+        self.riders.write(world, false);
     }
 }
 
@@ -227,7 +232,12 @@ impl MoveFixture {
     /// same sampled check a locate runs, never a refusal.
     pub fn new(world: &World, name: &str, location: Location) -> Result<Self, CommandError> {
         let mut command = Self::locating(world, name, location)?;
-        command.warning = crate::fixture_clash::after_fixture_move(world, name, command.next);
+        // #819: a moved plate's riders are judged where they land too.
+        let warnings: Vec<String> = std::iter::once(crate::fixture_clash::after_fixture_move(world, name, command.next))
+            .chain(command.carried.iter().map(|m| crate::fixture_clash::after_fixture_move(world, &m.name, m.after)))
+            .flatten()
+            .collect();
+        command.warning = (!warnings.is_empty()).then(|| warnings.join("; "));
         Ok(command)
     }
 
@@ -298,6 +308,9 @@ pub struct DeleteFixture {
     def: FixtureDef,
     location: Location,
     facets: std::sync::Arc<[Triangle]>,
+    /// #819: a deleted plate's riders leave it (they stay where they
+    /// stand), so a later plate given the same name never carries them.
+    riders: crate::plate::mount::Unmounts,
 }
 
 impl DeleteFixture {
@@ -310,6 +323,7 @@ impl DeleteFixture {
             def,
             location: model::transform_of(world, &entity).unwrap_or_default(),
             facets: model::facets_of(world, &entity).unwrap_or_default(),
+            riders: crate::plate::mount::Unmounts::of(world, name),
         })
     }
 }
@@ -319,9 +333,11 @@ impl Command for DeleteFixture {
         if let Some(e) = model::find_by_name(world, &self.name) {
             model::remove(world, &e);
         }
+        self.riders.write(world, true);
     }
 
     fn invert(&self, world: &World) {
+        self.riders.write(world, false);
         if model::find_by_name(world, &self.name).is_some() {
             return; // already restored (idempotent redo path)
         }

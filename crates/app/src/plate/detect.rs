@@ -11,23 +11,49 @@
 //!
 //! The lattice is read in the plate's MODEL frame, axis-aligned: rows
 //! along +Y from A, columns along +X from 1 (the `plate` convention),
-//! the top face at the holes' entry. A plate whose holes do not stand on
-//! its model Z, or whose grid is turned in its model frame, is refused.
+//! the top face at the holes' entry. A hole within `ON_NODE` (0.05 mm)
+//! of its lattice node is snapped to it. A plate whose holes do not
+//! stand on its model Z, or whose grid is turned in its model frame, is
+//! refused - including the one turn a lattice fit alone would accept:
+//! a square grid turned 45 degrees reads as a checkerboard, exactly like
+//! a staggered plate, so a staggered read also needs the plate's own
+//! edges to run along X and Y (`square_edges`).
 //!
 //! Provenance: our own grouping and lattice fit over the repo's hole
 //! recognition (`drilling::recognize`).
 
 use crate::drilling::{self, Hole};
-use crate::geometry::Triangle;
+use crate::geometry::{Point3, Triangle};
 
 use super::{Grid, MAX_HOLES, PlateDef, location_name};
 
 /// Two hole diameters closer than this are one size (mm).
 const SAME_SIZE: f64 = 0.005;
 /// A hole within this of its lattice node is on it (mm).
-const ON_NODE: f64 = 0.05;
+pub(crate) const ON_NODE: f64 = 0.05;
 /// At least this share of a lattice's nodes must hold a hole.
 const MIN_FILL: f64 = 0.5;
+/// What a refused fit adds when the likely cause is a turned plate.
+const TURNED: &str = " - the holes don't line up with the model's X/Y axes: is the plate turned in its model, or are its holes irregular?";
+
+/// Whether the plate's outline has straight edges along both model axes:
+/// the vertices at its least X span at least half its Y extent, and
+/// those at its least Y half its X extent. A plate turned in its model
+/// meets its least X at a corner, not along an edge.
+fn square_edges(tris: &[Triangle]) -> bool {
+    let pts: Vec<Point3> = tris.iter().flat_map(|t| [t.a, t.b, t.c]).collect();
+    let range = |v: &mut dyn Iterator<Item = f64>| v.fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), x| (a.min(x), b.max(x)));
+    // The edge at the least `key`: does it run at least half the plate's
+    // extent along `along`?
+    let edge = |key: fn(&Point3) -> f64, along: fn(&Point3) -> f64| {
+        let (lo, _) = range(&mut pts.iter().map(key));
+        let (amin, amax) = range(&mut pts.iter().map(along));
+        let (emin, emax) = range(&mut pts.iter().filter(|p| key(p) <= lo + ON_NODE).map(along));
+        let run = emax - emin;
+        run.is_finite() && run >= 0.5 * (amax - amin)
+    };
+    edge(|p| p.x, |p| p.y) && edge(|p| p.y, |p| p.x)
+}
 
 /// Distinct values of `v` (sorted), clustered within `ON_NODE`.
 fn levels(mut v: Vec<f64>) -> Vec<f64> {
@@ -56,13 +82,13 @@ fn pitch(l: &[f64], axis: &str) -> Result<(f64, u32), String> {
     let gap = l.windows(2).map(|w| w[1] - w[0]).fold(f64::MAX, f64::min);
     let steps = ((last - first) / gap).round();
     if !(steps.is_finite() && steps >= 1.0) || steps > MAX_HOLES as f64 {
-        return Err(format!("their {axis} spacing is not regular"));
+        return Err(format!("their {axis} spacing is not regular{TURNED}"));
     }
     let p = (last - first) / steps;
     for x in l {
         let k = ((x - first) / p).round();
         if (x - (first + k * p)).abs() > ON_NODE {
-            return Err(format!("a hole at {axis} {x:.3} mm is off the {p:.3} mm pitch"));
+            return Err(format!("a hole at {axis} {x:.3} mm is off the {p:.3} mm pitch{TURNED}"));
         }
     }
     Ok((p, steps as u32 + 1))
@@ -76,7 +102,7 @@ fn lattice(group: &[Hole]) -> Result<Grid, String> {
     let (py, rows) = pitch(&ys, "Y")?;
     let nodes = u64::from(cols) * u64::from(rows);
     if nodes > MAX_HOLES {
-        return Err(format!("the lattice would hold {nodes} holes, more than {MAX_HOLES}"));
+        return Err(format!("the lattice would hold {nodes} holes, more than {MAX_HOLES}{TURNED}"));
     }
     let (x0, y0) = (xs[0], ys[0]);
     let mut filled = vec![false; nodes as usize];
@@ -102,7 +128,7 @@ fn lattice(group: &[Hole]) -> Result<Grid, String> {
     };
     let places = all().filter(|&(r, c)| stagger.is_none_or(|p| (r + c) % 2 == u32::from(p))).count();
     if (have as f64) < MIN_FILL * places as f64 {
-        return Err(format!("only {have} of the lattice's {places} places hold a hole"));
+        return Err(format!("only {have} of the lattice's {places} places hold a hole{TURNED}"));
     }
     let missing = all()
         .filter(|&(r, c)| stagger.is_none_or(|p| (r + c) % 2 == u32::from(p)) && !at(r, c))
@@ -155,6 +181,14 @@ pub fn grid_from_facets(tris: &[Triangle]) -> Result<PlateDef, String> {
                 }
             }
         }
+    }
+    if found.as_ref().is_some_and(|(g, _)| g.stagger.is_some()) && !square_edges(tris) {
+        return Err(
+            "the holes don't line up with the model's X/Y axes - is the plate turned in its model? \
+             (its holes read as a staggered grid, but its edges don't run along X and Y; \
+             turn the plate square to X/Y and detect again)"
+                .into(),
+        );
     }
     let Some((holes, top_z)) = found else {
         return Err(first_err.unwrap_or_else(|| "its holes don't form a regular grid: fewer than four holes of any one size".into()));

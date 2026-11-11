@@ -136,8 +136,9 @@ impl Grid {
         out
     }
 
-    /// The grid law: finite, positive pitches and diameter, at least one
-    /// node each way, at most [`MAX_HOLES`] nodes.
+    /// The grid law: finite, positive pitches and diameter, holes clear
+    /// of each other (the nearest two more than a diameter apart), at
+    /// least one node each way, at most [`MAX_HOLES`] nodes.
     pub fn check(&self, what: &str) -> Result<(), String> {
         for (k, v) in [("x", self.x0), ("y", self.y0)] {
             if !v.is_finite() {
@@ -151,6 +152,23 @@ impl Grid {
         }
         if self.stagger.is_some_and(|p| p > 1) {
             return Err(format!("{what} stagger must be 0 or 1"));
+        }
+        // Holes must not run into each other, and the pitch must stand
+        // clear of the detection tolerance (#819 review): the nearest
+        // two holes of the lattice - along a row or column, or across
+        // the diagonal of a staggered one - more than a hole apart.
+        let near = match self.stagger {
+            None => self.pitch_x.min(self.pitch_y),
+            Some(_) => (2.0 * self.pitch_x).min(2.0 * self.pitch_y).min(self.pitch_x.hypot(self.pitch_y)),
+        };
+        if self.pitch_x.min(self.pitch_y) <= 2.0 * super::detect::ON_NODE {
+            return Err(format!("{what} pitch must be more than {:.2} mm", 2.0 * super::detect::ON_NODE));
+        }
+        if near <= self.diameter {
+            return Err(format!(
+                "{what} holes of {:.3} mm would run into each other {near:.3} mm apart - the pitch must be more than the hole diameter",
+                self.diameter
+            ));
         }
         if self.rows == 0 || self.cols == 0 {
             return Err(format!("{what} has no holes"));

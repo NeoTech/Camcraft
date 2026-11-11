@@ -50,7 +50,17 @@
   its named location on the new grid, refused by name if the location is
   gone or the fixture would hang off. Moving a placed fixture by hand
   takes it off its grid location (the marker change is in the same undo
-  step). Deleting a plate leaves its fixtures where they stand.
+  step). Deleting a plate (Fixtures page or tree), untagging it, or
+  re-importing it without its grid leaves its fixtures where they stand
+  AND takes them off it in the same undo step (PR #823 review): the
+  place names its plate by model name, and a later plate given the
+  freed name must never carry fixtures that were never placed on it.
+  A file whose place names a plate it does not hold loads with that
+  place dropped and logged. Keying the place by a stable id instead of
+  the name was considered and dropped: names are already the identity
+  every command and the save format use (#812 lenient load), and
+  clearing on the way out plus the load-time check close the hole
+  without a new id scheme or a format change.
 - **Grid from an imported plate (`SetPlateGrid::detect`)** landed in this
   PR, not split off. It runs the Drill operation's hole recognition
   (`drilling::recognize`, the rule behind MCP `detect_holes`) on the
@@ -62,7 +72,18 @@
   column parity) is a **staggered** grid: names from the full lattice,
   the off places refused. Holes off any pitch, or no Z holes at all, are
   refused by name. A grid turned in its model frame is refused (not a
-  lattice on X/Y); turning the model is the user's fix.
+  lattice on X/Y); turning the model is the user's fix. One turn fits
+  a lattice anyway: a square grid turned exactly 45 degrees is, hole for
+  hole, a checkerboard - the same set a staggered plate has. The holes
+  alone can't tell them apart, so a staggered read also needs the
+  plate's own edges to run along X and Y (the vertices at its least X
+  span at least half its Y extent, and the same for Y); a turned plate
+  meets its least X at a corner and is refused as turned (PR #823
+  review). The refusals of a fit (an off-pitch hole, a lattice too big
+  or too empty) say the likely cause: the holes don't line up with the
+  model's X/Y axes - a turned plate, or irregular holes. A loaded or
+  derived grid must keep its nearest two holes more than a hole apart
+  and its pitch above twice the 0.05 mm snap tolerance.
 - **The sanity check on a vendor plate STEP** (local only, never
   committed): recognition found the plate's tapped holes as one size and
   detection read them as a staggered lattice with a handful of gaps

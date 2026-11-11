@@ -27,7 +27,7 @@ use serde::{Deserialize, Serialize};
 use crate::fixture;
 use crate::geometry::{IDENTITY_Q, Point3, Triangle, quat_from_euler, transform_point};
 use crate::model;
-use crate::schema::Location;
+use crate::schema::{FixtureDef, Location};
 use crate::setup_align::{compose, inverse};
 
 use super::PlateDef;
@@ -189,6 +189,68 @@ pub fn stand(local: Location, fixture: &[Triangle]) -> Location {
         return local;
     }
     Location { pos: Point3::new(local.pos.x, local.pos.y, local.pos.z - low), rot: local.rot }
+}
+
+/// The direct riders of a plate that is going away - deleted, untagged,
+/// or re-imported without its grid (#819 review): their markers as they
+/// were. Forward, each rider loses its mount (it stays where it stands);
+/// on undo the markers come back verbatim. Without it a rider kept the
+/// gone plate's NAME, and the next plate given that name would carry it.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Unmounts(Vec<(String, FixtureDef)>);
+
+impl Unmounts {
+    /// Snapshot `plate`'s direct riders now (command construction).
+    #[must_use]
+    pub fn of(world: &World, plate: &str) -> Self {
+        Unmounts(
+            riders(world, plate)
+                .into_iter()
+                .filter_map(|n| model::find_by_name(world, &n).and_then(|e| fixture::def_of(world, &e)).map(|d| (n, d)))
+                .collect(),
+        )
+    }
+
+    /// The riders' names.
+    pub fn names(&self) -> impl Iterator<Item = &str> {
+        self.0.iter().map(|(n, _)| n.as_str())
+    }
+
+    /// Clear the mounts (`forward`) or put the markers back.
+    pub fn write(&self, world: &World, forward: bool) {
+        for (name, def) in &self.0 {
+            if let Some(e) = model::find_by_name(world, name) {
+                let mut d = def.clone();
+                if forward {
+                    d.plate.mount = None;
+                }
+                e.entity_view(world).set(d);
+            }
+        }
+    }
+}
+
+/// The load-time half of the law above: a mount naming a fixture that is
+/// not a plate (gone, untagged, or no grid) is dropped and logged - a
+/// file saved before the delete-clears-riders fix, or edited by hand.
+/// Returns the fixtures it unmounted.
+pub fn drop_dangling(world: &World) -> Vec<String> {
+    let is_plate = |name: &str| {
+        model::find_by_name(world, name).and_then(|e| fixture::def_of(world, &e)).is_some_and(|d| d.plate.plate.is_some())
+    };
+    let mut out = Vec::new();
+    for (name, e) in model::named_entities(world) {
+        let Some(mut d) = fixture::def_of(world, &e) else { continue };
+        let Some(m) = &d.plate.mount else { continue };
+        if m.plate != name && is_plate(&m.plate) {
+            continue;
+        }
+        tracing::warn!(model = %name, plate = %m.plate, "fixture plate location dropped on load: no such plate");
+        d.plate.mount = None;
+        e.entity_view(world).set(d);
+        out.push(name);
+    }
+    out
 }
 
 /// No turn.

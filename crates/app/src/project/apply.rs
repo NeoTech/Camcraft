@@ -817,5 +817,8 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
             });
         }
     }
+    // #819: a place on a plate the file does not hold is dropped, never
+    // left for the next plate of that name to pick up.
+    let _ = crate::plate::mount::drop_dangling(world);
     Ok(notes)
 }
