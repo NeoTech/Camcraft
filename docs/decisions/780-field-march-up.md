@@ -23,6 +23,21 @@
   the field verdict suites read the same floats; a plane off the
   lattice now reads exactly where it was off by up to half a cell
   (`field_floor::an_unaligned_plane_reads_its_shell_crossing_on_both_sides`).
+- **A level facet's crossing is exactly its height** (`solid_rest::plane_claim`).
+  The heavy lane (`stock_engine_agreement`, release) caught the crossing
+  read's one caveat: the barycentric sum `(1-u-v) a.z + u b.z + v c.z`
+  rounds by an ulp on some rays even when the three z are equal (the
+  stepped facing golden's uncut columns at y -6.25 read a top of
+  2.0 + 1 ulp over a 2.0 stock top), and the rest ladder's strict
+  `above(z)` mask at the stock's own plane saw it where the old boundary
+  read happened to be exact. The root is fixed where it is born: a facet
+  whose three z are equal answers that z; a tilted facet keeps the sum.
+  Every consumer gains (E1's floor read -638.0000000000001 on the same
+  columns is -638.0 now); nothing else in `solid_rest` changes. Pinned by
+  `solid_rest::tests::a_level_facet_crosses_at_exactly_its_height` (three
+  boxes, 441 rays each, bit for bit). Dropped: snapping a crossing within
+  a few ulps of a cell boundary to the boundary - a heuristic over the
+  symptom, wrong for a mesh stock whose column engine reads the crossing.
 - **A sign flip with neither a crossing nor a record is `Unreadable`.**
   Every proven-inside cell records entry 0 with its claim, and the cell
   under it always holds a finite entry (the same sweep, 1-Lipschitz), so
