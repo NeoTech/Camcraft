@@ -289,7 +289,7 @@ pub fn plan_trochoidal_slot(chain: &[Point2], p: &TrochoidParams) -> Result<Troc
 fn finish(lay: &Layout, p: &TrochoidParams, step: f64, deg: f64, b: f64, room: f64) -> Result<TrochoidPlan, GenError> {
     let zs = cut_levels(p.top_z, p.bottom_z, p.stepdown)?;
     let hop = p.retract_z.unwrap_or(p.clearance_z);
-    let mut bld = PathBuilder::new(Point3::new(0.0, 0.0, p.clearance_z));
+    let mut bld = PathBuilder::approached(Point3::new(0.0, 0.0, p.clearance_z));
     bld.push(MoveKind::Rapid, Point3::new(lay.entry.x, lay.entry.y, p.clearance_z), None);
     let mut above = p.top_z;
     for (i, &z) in zs.iter().enumerate() {
