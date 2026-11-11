@@ -225,20 +225,37 @@ For each line `<N> <login> <time>`:
   contributor still exists, or a fresh agent claim (4 h rule): do not
   mirror; reply once (only if no later comment mentions `@<login>`) naming
   the current claimant;
+- **stale or ended** (AGENTS.md "A claim must be live", "Withdrawn or
+  released"): the claim is not live - no open PR for the issue, no commit
+  on the claimant's branch for it in the last 48 hours, and no comment by
+  the claimant on the issue in the last 48 hours - or a later comment
+  ended it (the claimant's `unclaim` / "releasing this claim" / "claim
+  withdrawn", or a "released by the maintainer" comment). Do not mirror;
+  skip silently. Check liveness with
+  `gh pr list --state open --search "<N> in:title,body" --json number,headRefName`,
+  the issue's comment dates, and, for a branch the claim names,
+  `gh api "repos/<owner>/Camcraft/commits?sha=<branch>&per_page=1" --jq '.[0].commit.committer.date'`;
 - **otherwise**: `gh issue edit N --add-label claimed --add-assignee <login>`
   (if GitHub refuses the assignee, add the label alone) and reply
   `Claim recorded for @<login> - label and assignee set (only collaborators can set labels; your comment is the claim).`
-  A contributor's claim does not go stale on a timer; it stands while the
-  comment exists.
 
 **Withdraw.** For every open issue carrying `claimed`
 (`gh issue list --state open --label claimed --limit 200`), look for the
 claim behind it: a claim comment by a non-owner (or an agent's `claimed:`
 comment, which follows the 4 h rule instead). If the only claim behind the
 label was a contributor's comment that is now deleted, or that contributor
-later commented `unclaim`, remove the label and their assignment
+later withdrew it (`unclaim`, `/unclaim`, "claim withdrawn", "releasing
+this claim", "the issue is free" in their last comment), remove the label
+and their assignment
 (`gh issue edit N --remove-label claimed --remove-assignee <login>`) and
-comment `claim by @<login> withdrawn (comment removed) - issue is free again`.
+comment `claim by @<login> withdrawn - issue is free again`.
+If the claim is neither withdrawn nor released but is **stale** (none of:
+an open PR for the issue, a commit on the claimant's branch in the last
+48 hours, a comment by the claimant on the issue in the last 48 hours),
+remove the label and assignment the same way and comment
+`claim by @<login> released (stale: no open PR, branch commit or comment from the claimant for 48 h) - issue is free again; claim it again with a new comment if you are working on it`.
+An issue that carries a "released by the maintainer" comment after its
+claim comment is free: never mirror that old claim again.
 A label with no findable claim of any kind and no "Claim recorded" reply
 was set by a collaborator by hand: leave it.
 
