@@ -70,7 +70,7 @@ const REFUSED: &[(&str, &str, &str)] = &[
 /// The TURNING dialects (M13.5): their goldens are the lathe
 /// documents' own streams (`lathe_post.rs`); on a mill golden they
 /// must REFUSE by name - never project a Y move onto a diameter.
-const LATHE_POSTS: &[(&str, &str)] = &[("Fanuc Lathe", "fanuc-lathe")];
+const LATHE_POSTS: &[(&str, &str)] = &[("Fanuc Lathe", "fanuc-lathe"), ("Tormach PathPilot Lathe", "tormach-lathe")];
 
 #[test]
 fn every_lathe_post_refuses_every_mill_golden_by_name() {
@@ -365,6 +365,7 @@ const EXTENSIONS: &[(&str, &str)] = &[
     ("tormach", "nc"),
     ("carvera", "nc"),
     ("fanuc-lathe", "nc"),
+    ("tormach-lathe", "nc"),
 ];
 
 /// The top-level `extension = "..."` manifest line's value.

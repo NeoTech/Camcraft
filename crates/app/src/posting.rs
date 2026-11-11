@@ -39,13 +39,14 @@ pub const BUILTINS: &[(&str, &str)] = &[
     ("Tormach PathPilot", include_str!("../../../assets/posts/tormach.cps")),
     ("Makera Carvera", include_str!("../../../assets/posts/carvera.cps")),
     ("Fanuc Lathe", include_str!("../../../assets/posts/fanuc-lathe.cps")),
+    ("Tormach PathPilot Lathe", include_str!("../../../assets/posts/tormach-lathe.cps")),
 ];
 
 /// The registry entries that speak TURNING (M13.5): X as a diameter
 /// on one meridian, G18, G99, the face cycles. Everything else in
 /// `BUILTINS` is a milling dialect. The picker filters by the mounted
 /// machine's kind through [`post_serves`]; a mill-turn lists both.
-pub const LATHE_POSTS: &[&str] = &["Fanuc Lathe"];
+pub const LATHE_POSTS: &[&str] = &["Fanuc Lathe", "Tormach PathPilot Lathe"];
 
 /// The registry entries that speak PLASMA (#669): the torch words, no
 /// spindle and no Z depth. None ships yet - the PathPilot plasma post
