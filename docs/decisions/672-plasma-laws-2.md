@@ -50,8 +50,28 @@ crossing (warning) and tip-up (warning):
   open run is malformed; a closed-role cut whose path never returns to
   its start is malformed.
 - A rapid that *leaves from* the edge of the part just freed (a cut with
-  no lead-out ends on its ring) is not a tip-up; only an endpoint strictly
-  inside, or a proper crossing, is.
+  no lead-out ends on its ring) outward is not a tip-up. **Review fix
+  (#791):** "an endpoint strictly inside or a proper crossing" let a
+  rapid in or out of a part *through a corner* go unjudged (a corner hit
+  is never a proper edge crossing, and parts nested on a grid make exact
+  corner hits common). Now the rapid is split at every contact with the
+  ring - a proper crossing, a vertex it passes through, the ends of a
+  stretch along an edge - and judged piece by piece: a piece whose
+  midpoint lies strictly inside is a tip-up, reported at that midpoint.
+  The departure exemption falls out of it (every piece is outside); a
+  rapid that leaves the edge and then runs over the part does not. Pinned
+  by the review's three fixtures.
+- **Cut crossing, review fix (#791):** proper crossings alone missed two
+  overlapping rings that meet only at vertices or along collinear edges
+  (`square(0,0,50)` then `square(25,0,50)`): the later ring ran through
+  the earlier part and only the torch-height *warning* fired. Now a later
+  ring with a piece strictly inside the earlier ring AND a piece strictly
+  outside it (the same split, on each of its edges) is a crossing too,
+  reported at the inside piece. A ring wholly inside is enclosure (the
+  cut-order law's); two parts sharing an edge enter nothing and stay
+  legal common-line cutting (pinned). *Dropped:* sampling only vertices
+  and edge midpoints, which misses an edge entering at one vertex and
+  leaving at another with its midpoint on the ring.
 
 **4. The cover law (#676 decision 12), at generation.** An outward offset
 bridges a slot or notch narrower than the kerf (and an inward offset drops
@@ -71,6 +91,40 @@ inside corner the torch can only round; a closing-area measure
 shallow notch from a sharp corner's sliver. The law lives beside the kerf
 law in the generator (the nominal contours are there; the CL has no part),
 in `laws.rs`, with `kerf_law` moved out of `emit.rs`.
+
+**4a. Sharp inside corners are not refused (review of #791; decided by
+the main session).** The 2 r allowance alone refused every inside corner
+under 60°, whatever the width of its mouth - a 20 mm wide 30°, 45° or 55°
+V-notch, a chevron, the crotch of sign lettering - with a message that
+blamed a narrow slot and told the user to widen it, which does not help
+(only opening the angle would). That is ordinary plasma geometry: every
+inside corner leaves a kerf-radius tip uncut, and every CAM accepts it.
+*Decided:* the cover law exempts each inside corner's **tip zone** and
+judges only the material beyond it. The torch, radius r, can get no
+nearer an inside corner of opening θ than r / sin(θ/2) along the bisector
+(where the corner's opening equals the kerf width, 2 r), and its circle
+there touches each wall r / tan(θ/2) = r · tan(δ/2) from the vertex
+(δ = π − θ, the turn at the vertex); beyond that point the wall is
+reached at exactly r. The stretch of wall that even this best possible
+path leaves farther than 2 r away is r (tan(δ/2) − √3) from the vertex -
+the exempt zone. It is empty for openings of 60° and more (so the
+right-angle notch and keyway corners get nothing), 0.14 mm at 55°,
+0.51 mm at 45°, 1.5 mm at 30°. An inside corner is a right turn on an
+outer ring or a left turn on a hole (both rings run counter-clockwise);
+convex corners and straight runs have no zone. *Why the tighter measure
+and not r / sin(θ/2) as a radius:* it is derived from the law's own
+threshold - what the ideal miter path cannot cover, nothing more - so a
+real path worse than the ideal at a corner is still refused, and the 1 mm
+notch and the 1 mm keyway (90° corners) are refused exactly as before.
+*Consequence accepted:* a V-notch whose mouth is under the kerf is wholly
+a corner tip and generates with the tip left, like any sharp corner; its
+walls are shorter than the zone, so no path could reach them. The
+refusal now names the gap it measured against the kerf ("a slot, notch
+or keyway about 1.000 mm across, narrower than the kerf (1.500 mm), is
+bridged by the offset"): the nearest edge of the same contour that is
+not the point's own edge or its neighbours, when that is under the kerf.
+Pinned: 30°, 45° and 55° V-notches 20 mm wide generate; the 1 mm notch
+and keyway are still refused, the 3 mm notch still cuts.
 
 **5. The machine check's note** (#674) now names where the through-cut IS
 judged: the plasma laws at the post gate, the kerf and cover laws at

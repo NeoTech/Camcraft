@@ -234,3 +234,51 @@ fn a_rapid_leaving_a_freed_parts_edge_is_not_a_tip_up() {
     let f = judge(&PlasmaProgram { kerf: 1.5, cuts: vec![a, b], rapids: vec![None, from_inside] });
     assert!(matches!(f.as_slice(), [PlasmaFinding::TipUp { contour: 3, freed: 1, .. }]), "{f:?}");
 }
+
+/// #791 review: a rapid in or out of a freed part through one of its
+/// corners never crosses an edge properly, yet it runs over the part.
+/// The rapid is split at every contact with the ring and judged piece
+/// by piece, so each of these is a tip-up, placed inside the part: (a)
+/// leaving from the edge, across the part, out at the (0,0) corner; (b)
+/// from a corner along the whole diagonal; (c) in at one corner and
+/// out at the other. A rapid running along the part's edge stays clear.
+#[test]
+fn a_rapid_through_a_freed_parts_corner_is_a_tip_up() {
+    let a = cut(1, Outer, None, square(0.0, 0.0, 50.0));
+    let b = cut(3, Outer, None, square(120.0, 0.0, 30.0));
+    let run = |from: Point2, to: Point2| {
+        judge(&PlasmaProgram { kerf: 1.5, cuts: vec![a.clone(), b.clone()], rapids: vec![None, Some((from, to))] })
+    };
+    for (from, to) in [(p(50.0, 25.0), p(-50.0, -25.0)), (p(0.0, 0.0), p(70.0, 70.0)), (p(-10.0, -10.0), p(70.0, 70.0))] {
+        let f = run(from, to);
+        assert!(
+            matches!(f.as_slice(), [PlasmaFinding::TipUp { contour: 3, freed: 1, at }]
+                if at.x > 0.0 && at.x < 50.0 && at.y > 0.0 && at.y < 50.0),
+            "{from:?} -> {to:?}: {f:?}"
+        );
+    }
+    // Along the bottom edge and on past the corner: never over the area.
+    assert_eq!(run(p(50.0, 0.0), p(-20.0, 0.0)), vec![]);
+}
+
+/// #791 review: two overlapping rings that meet only at vertices and
+/// along collinear edges never cross properly, but the later ring runs
+/// through the earlier part all the same - the 2D gouge, refused. Two
+/// parts sharing an edge (common-line cutting) enter nothing and stay
+/// legal: the shared kerf is the torch-height warning, not a refusal.
+#[test]
+fn an_overlapping_ring_meeting_only_at_vertices_and_edges_is_refused() {
+    let a = cut(1, Outer, None, square(0.0, 0.0, 50.0));
+    let over = cut(2, Outer, None, square(25.0, 0.0, 50.0));
+    let f = judge(&PlasmaProgram { kerf: 1.5, cuts: vec![a.clone(), over], rapids: vec![None, None] });
+    assert!(
+        matches!(f.as_slice(), [PlasmaFinding::CutCrossing { contour: 2, earlier: 1, at }]
+            if at.x > 0.0 && at.x < 50.0 && at.y > 0.0 && at.y < 50.0),
+        "{f:?}"
+    );
+    assert!(f[0].refuses());
+    let shared = cut(2, Outer, None, square(50.0, 0.0, 50.0));
+    let f = judge(&PlasmaProgram { kerf: 1.5, cuts: vec![a, shared], rapids: vec![None, None] });
+    assert!(matches!(f.as_slice(), [PlasmaFinding::KerfCrossing { contour: 2, earlier: 1, .. }]), "{f:?}");
+    assert!(!f[0].refuses(), "common-line cutting is legal");
+}

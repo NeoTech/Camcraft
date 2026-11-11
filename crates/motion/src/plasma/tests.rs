@@ -267,6 +267,7 @@ fn a_slot_narrower_than_the_kerf_is_refused_not_bridged() {
     let e = err(plasma_profile(&[narrow], &[], &part, &params()));
     assert!(e.contains("contour C0") && e.contains("bridged") && e.contains("narrower than the kerf"), "{e}");
     assert!(e.contains("Y5") || e.contains("Y6"), "located in the notch: {e}");
+    assert!(e.contains("about 1.000 mm across") && e.contains("(1.500 mm)"), "names the gap against the kerf: {e}");
     // 3 mm wide (twice the 1.5 kerf): the torch enters it and every edge is reached.
     let wide = notched(3.0);
     let part = Region::new(vec![wide.clone()]).unwrap();
@@ -281,4 +282,27 @@ fn a_slot_narrower_than_the_kerf_is_refused_not_bridged() {
     let part = Region::new(loops.clone()).unwrap();
     let e = err(plasma_profile(&loops, &[], &part, &params()));
     assert!(e.contains("contour C0") && e.contains("bridged"), "{e}");
+    assert!(e.contains("about 1.000 mm across"), "names the keyway's gap: {e}");
+}
+
+/// #791 review: every inside corner leaves a kerf-radius tip the torch
+/// cannot reach - normal for plasma - so a sharp V-notch generates with
+/// its tip left, whatever its opening; the cover law judges only the
+/// material beyond that tip, which is what a bridged slot produces.
+#[test]
+fn a_sharp_inside_corner_generates_with_its_tip_left_not_refused() {
+    let q = Point2::new;
+    // A 100 x 60 plate with a V-notch 20 mm across its top edge, opening `deg`.
+    let vee = |deg: f64| {
+        let depth = 10.0 / (deg.to_radians() * 0.5).tan();
+        Loop::new(vec![q(0.0, 0.0), q(100.0, 0.0), q(100.0, 60.0), q(60.0, 60.0), q(50.0, 60.0 - depth), q(40.0, 60.0), q(0.0, 60.0)])
+            .unwrap()
+    };
+    for deg in [30.0, 45.0, 55.0] {
+        let l = vee(deg);
+        let part = Region::new(vec![l.clone()]).unwrap();
+        let path = plasma_profile(&[l], &[], &part, &params());
+        assert!(path.is_ok(), "{deg}° V-notch: {:?}", path.err().map(|e| e.to_string()));
+        assert!(path.is_ok_and(|p| p.plasma.is_some_and(|r| r.torches.len() == 1)));
+    }
 }

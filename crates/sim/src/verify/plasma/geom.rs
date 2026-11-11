@@ -1,6 +1,9 @@
 //! The plasma laws' plane geometry (#672): the closed ring of a cut, even-
 //! odd containment, segment distance and proper crossing, the kerf-wide
-//! nearness test and the freed-area test a rapid is judged by.
+//! nearness test, and the ring-through-ring and rapid-over-area tests -
+//! both by splitting a segment at every contact with a ring and judging
+//! the pieces by their midpoints, so a corner hit or a stretch along an
+//! edge is never mistaken for staying outside (#791 review).
 //!
 //! Provenance: textbook computational geometry (the orientation predicate
 //! for segment crossing, O'Rourke, "Computational Geometry in C"; even-odd
@@ -88,11 +91,20 @@ pub(super) fn near(a: &[Point2], b: &[Point2], gap: f64) -> Option<Point2> {
     None
 }
 
-/// Where ring `a` properly crosses ring `b` (two edges cutting through
-/// each other), or `None`: touching and shared edges are not crossings.
+/// Where ring `a` runs through the area of ring `b`, or `None`. Two
+/// edges cutting through each other is the plain case; rings that meet
+/// only at vertices or along collinear edges (#791 review) cross when
+/// `a` has a stretch strictly inside `b` AND one strictly outside it -
+/// each edge of `a` is split at its contacts with `b` and judged by the
+/// midpoints of the pieces. A ring inside the other is enclosure (the
+/// cut-order law's), and a shared edge with nothing entering (common-
+/// line cutting) is legal: neither has a piece inside.
 #[must_use]
 pub(super) fn rings_cross(a: &[Point2], b: &[Point2]) -> Option<Point2> {
     let (n, m) = (a.len(), b.len());
+    if n < 3 || m < 3 {
+        return None;
+    }
     for i in 0..n {
         let (p, q) = (a[i], a[(i + 1) % n]);
         for j in 0..m {
@@ -102,32 +114,72 @@ pub(super) fn rings_cross(a: &[Point2], b: &[Point2]) -> Option<Point2> {
             }
         }
     }
-    None
+    let (mut within, mut outside) = (None, false);
+    for i in 0..n {
+        for mid in piece_midpoints(a[i], a[(i + 1) % n], b) {
+            if inside(mid, b) {
+                within.get_or_insert(mid);
+            } else if !on_ring(mid, b) {
+                outside = true;
+            }
+        }
+    }
+    if outside { within } else { None }
 }
 
-/// Where segment a-b enters the area closed by `ring` (an endpoint
-/// strictly inside, or the segment cutting through an edge); `None` when
-/// it stays outside - a rapid leaving from the ring's own edge is not a
-/// crossing.
+/// Where segment a-b runs through the area closed by `ring`: the segment
+/// is split at every contact with the ring (a proper crossing, a vertex
+/// it passes through, the ends of a stretch along an edge) and the first
+/// piece whose midpoint lies strictly inside is the crossing, reported at
+/// that midpoint. `None` when every piece is on the ring or outside it -
+/// a rapid leaving from the ring's own edge outward is not a crossing,
+/// but one that then runs over the area is (#791 review: a rapid in or
+/// out through a corner is never a proper edge crossing).
 #[must_use]
 pub(super) fn crosses_area(a: Point2, b: Point2, ring: &[Point2]) -> Option<Point2> {
     if ring.len() < 3 {
         return None;
     }
-    if inside(a, ring) {
-        return Some(a);
-    }
-    if inside(b, ring) {
-        return Some(b);
-    }
+    piece_midpoints(a, b, ring).into_iter().find(|mid| inside(*mid, ring))
+}
+
+/// The midpoints of the pieces a-b falls into when split at every
+/// contact with `ring`: each piece lies wholly inside, on, or outside
+/// the ring, so its midpoint says which.
+fn piece_midpoints(a: Point2, b: Point2, ring: &[Point2]) -> Vec<Point2> {
     let n = ring.len();
+    let mut ts = vec![0.0, 1.0];
     for k in 0..n {
         let (c, d) = (ring[k], ring[(k + 1) % n]);
         if proper(a, b, c, d) {
-            return Some(meet(a, b, c, d));
+            ts.push(param(a, b, meet(a, b, c, d)));
+        }
+        if pt_seg(c, a, b) <= SAME {
+            ts.push(param(a, b, c));
         }
     }
-    None
+    ts.sort_by(f64::total_cmp);
+    ts.dedup_by(|x, y| (*x - *y).abs() <= SAME);
+    ts.windows(2)
+        .filter(|w| w[1] - w[0] > SAME)
+        .map(|w| {
+            let t = (w[0] + w[1]) * 0.5;
+            Point2::new(a.x + t * (b.x - a.x), a.y + t * (b.y - a.y))
+        })
+        .collect()
+}
+
+/// The parameter (0..=1) of `q`'s foot on segment a-b.
+fn param(a: Point2, b: Point2, q: Point2) -> f64 {
+    let (dx, dy) = (b.x - a.x, b.y - a.y);
+    let l2 = dx * dx + dy * dy;
+    if l2 > 0.0 { (((q.x - a.x) * dx + (q.y - a.y) * dy) / l2).clamp(0.0, 1.0) } else { 0.0 }
+}
+
+/// Is `p` on the ring itself (within [`SAME`] of an edge)?
+fn on_ring(p: Point2, ring: &[Point2]) -> bool {
+    let n = ring.len();
+    (0..n).any(|k| pt_seg(p, ring[k], ring[(k + 1) % n]) <= SAME)
 }
 
 fn cross(o: Point2, a: Point2, b: Point2) -> f64 {
