@@ -12,8 +12,8 @@ use egui_wgpu::wgpu;
 use egui_wgpu::{Renderer, ScreenDescriptor};
 
 use super::super::shell::*;
-use super::super::{icons, world};
-use super::{redraw_delay, resize_frame_deadline, Shell};
+use super::super::{icons, view_pass, world};
+use super::{resize_frame_deadline, Shell};
 
 
 impl Shell {
@@ -34,6 +34,8 @@ impl Shell {
             }
             self.window_title = title;
         }
+        // #866: a modal file dialog's open time is the user's, not ours.
+        self.frame_watch.excuse(crate::file_dialog::take_waited(), now());
         self.frame_watch.mark("commands", now());
         let scene = world::collect(&self.state);
 
@@ -85,25 +87,14 @@ impl Shell {
             return;
         };
 
-        // Re-upload only a scene whose content actually changed (the imgui
-        // shell's digest gate; camera motion costs zero traffic).
-        let d = scene.digest();
-        if d != *scene_digest {
-            view.set_document(device, queue, &scene.parts);
-            view.set_overlay(device, queue, &scene.overlay);
-            *scene_digest = d;
-        }
+        view_pass::sync_scene(view, device, queue, &scene, scene_digest);
 
         let scale = window.scale_factor().clamp(0.1, 8.0);
         let raw_input = winit_state.take_egui_input(window);
 
         // Size the 3D target from last frame's layout, like the imgui shell.
-        let want = (
-            (f64::from(viewport_points[0]) * scale).max(1.0) as u32,
-            (f64::from(viewport_points[1]) * scale).max(1.0) as u32,
-        );
-        if view.extent() != want {
-            view.resize(device, VIEW3D_FORMAT, want.0, want.1);
+        let want = view_pass::target_extent(*viewport_points, scale);
+        if view_pass::fit_target(view, device, want) {
             // Rebind the SAME egui texture id to the recreated view.
             renderer.update_egui_texture_from_wgpu_texture(
                 device,
@@ -138,13 +129,7 @@ impl Shell {
             .viewport_output
             .get(&egui::ViewportId::ROOT)
             .map_or(std::time::Duration::MAX, |v| v.repaint_delay);
-        let delay = redraw_delay(
-            egui_delay,
-            followup_redraw || !state.pending.is_empty() || state.layout_request.is_some(),
-            state.import_in_progress(),
-            state.sim.is_some_and(|sim| sim.playing),
-            state.field_play.as_ref().is_some_and(|play| play.needs_poll()),
-        );
+        let delay = view_pass::state_redraw_delay(state, egui_delay, followup_redraw);
         *next_repaint = delay.and_then(|d| now().checked_add(d));
         drain_textures(renderer, device, queue, &mut full_output);
         winit_state.handle_platform_output(window, full_output.platform_output);
@@ -154,6 +139,8 @@ impl Shell {
             .into_iter()
             .filter(renderable_paint_job)
             .collect();
+        // Panels open file dialogs while they draw, so collect that wait here too.
+        frame_watch.excuse(crate::file_dialog::take_waited(), now());
         frame_watch.mark("ui", now());
 
         let st = match surface.get_current_texture() {
@@ -179,45 +166,11 @@ impl Shell {
         frame_watch.mark("acquire", now());
         let target = st.texture.create_view(&wgpu::TextureViewDescriptor::default());
 
-        // Pass 1: the 3D offscreen target (its own bind group, mvp from the
-        // camera the panels' FrameAll and the orbit gestures just moved).
-        let (ew, eh) = view.extent();
-        let mvp = state.cam.mvp(f64::from(ew.max(1)) / f64::from(eh.max(1)));
-        let eye = state.cam.eye_f32();
+        // Pass 1: the 3D offscreen target (shared with the browser shell).
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("egui-shell-frame"),
         });
-        // The traced stock (M7.2 B3b) takes the sheet's slot when the eye
-        // has a frame; the field view is walked once per Deviate arming.
-        let mut traced = false;
-        if let Some(se) = stock_eye.as_mut().filter(|_| !state.active_stock_hidden()) {
-            if state.display != crate::state::DisplayMode::Wireframe {
-                crate::actions::ensure_field_view(state);
-            }
-            let fv = match &state.field_view {
-                Some(Ok(fv)) if state.display != crate::state::DisplayMode::Wireframe => Some(fv),
-                _ => None,
-            };
-            match se.prepare(device, queue, &mut encoder, fv, &state.cam, &mvp, (ew, eh)) {
-                Ok(t) => traced = t,
-                Err(err) => {
-                    state.status += &format!(" | traced stock: {err} - the sheet stands");
-                }
-            }
-        }
-        // M13.4: both verdict painters wear the viewer's palette.
-        let pal = super::super::colorvision::palette_of(&state.world);
-        view.set_palette(pal);
-        if let Some(se) = stock_eye.as_mut() {
-            se.set_palette(pal);
-        }
-        match stock_eye.as_ref().filter(|_| traced) {
-            Some(se) => {
-                let draw = |pass: &mut wgpu::RenderPass<'_>| se.draw(pass);
-                view.render_with(queue, &mut encoder, &mvp, eye, state.display, Some(&draw));
-            }
-            None => view.render(queue, &mut encoder, &mvp, eye, state.display),
-        }
+        view_pass::encode(state, view, stock_eye, device, queue, &mut encoder);
 
         // Pass 2: egui over the surface.
         let sd = ScreenDescriptor {

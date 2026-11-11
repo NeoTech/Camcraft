@@ -219,3 +219,25 @@ fn an_edited_plates_riders_are_clash_checked_where_they_land() {
     assert!(history.redo(&world));
     assert_eq!(model::find_by_name(&world, "Block").and_then(|e| model::transform_of(&world, &e)), Some(after), "redo is exact");
 }
+
+/// #826 review: `SetPlate` re-seats the riders itself, so they stay
+/// mounted - the plate still carries them - and undo/redo are exact.
+#[test]
+fn an_edited_plate_keeps_its_riders_mounted() {
+    let world = new_world();
+    let mut history = History::default();
+    let p = insert_plate(&world, &mut history, 0.0);
+    block_on(&world, &mut history, &p);
+    let base = plate::preset("300 x 300 mm").map(plate::PlatePreset::params).expect("preset");
+    let mount = mount_of(&world, "Block").expect("mounted");
+    let before = pose(&world, "Block");
+    history.execute(&world, SetPlate::new(&world, &p, plate::PlateParams { pitch_x: 25.4, dowels: None, ..base }).expect("edit"));
+    assert!(mount_of(&world, "Block").is_some_and(|m| m.plate == p), "still mounted after the edit");
+    let mv = MoveFixture::new(&world, &p, at(1.0, 0.0, 0.0)).expect("move the plate");
+    assert_eq!(mv.carried().count(), 1, "the plate still carries its block");
+    let after = pose(&world, "Block");
+    assert!(history.undo(&world));
+    assert!(close(pose(&world, "Block"), before) && mount_of(&world, "Block") == Some(mount.clone()));
+    assert!(history.redo(&world));
+    assert!(close(pose(&world, "Block"), after) && mount_of(&world, "Block").is_some());
+}

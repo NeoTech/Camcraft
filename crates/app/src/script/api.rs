@@ -134,12 +134,26 @@ pub(crate) fn v_generate(env: &mut Env, args: Vec<Value>) -> Result<Value, Strin
     };
     let mut done = Vec::with_capacity(targets.len());
     for (name, entity) in targets {
-        let cmd = GenerateOperation::new(&env.world, &name)
-            .map_err(|e| format!("{name} - {e}"))?;
+        let cmd = GenerateOperation::new(&env.world, &name).map_err(|e| refusal_text(&name, &e))?;
         env.history.execute(&env.world, cmd);
         done.push(op_view(env, &name, &entity, false));
     }
     Ok(Value::Array(done))
+}
+
+/// A refused generation as the script's (and MCP's) error: the refusal,
+/// plus - when the generator handed back the moves it had built (#261
+/// part 3) - how many there were. The moves themselves stay out: they are
+/// the GUI's display-only ghost, never kept, never a toolpath.
+pub fn refusal_text(name: &str, e: &crate::commands::CommandError) -> String {
+    match e.ghost() {
+        Some(g) => format!(
+            "{name} - {e} [a partial path of {} move(s){} was built before the refusal; it is not kept]",
+            g.len(),
+            if g.truncated() { ", capped" } else { "" }
+        ),
+        None => format!("{name} - {e}"),
+    }
 }
 
 /// Does this operation hold the post with its own warnings? The rule

@@ -33,7 +33,6 @@ use super::panes;
 use super::post_refusal;
 use super::theme;
 use super::viewcube;
-use super::world;
 
 pub(crate) const VIEW3D_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 /// Ribbon strip height: the cell box plus the caption row and the pad
@@ -57,10 +56,10 @@ pub(crate) enum Tab {
 impl Tab {
     pub(crate) fn title(&self) -> &'static str {
         match self {
-            Tab::Viewport => "viewport",
-            Tab::Browser => "browser",
-            Tab::Properties => "properties",
-            Tab::Machines => "machines",
+            Tab::Viewport => "Viewport",
+            Tab::Browser => "Browser",
+            Tab::Properties => "Properties",
+            Tab::Machines => "Machines",
         }
     }
 }
@@ -704,6 +703,30 @@ fn viewport_panel(
                 }
             }
         }
+        // Empty document: the viewport is the largest surface on screen,
+        // and on a fresh document it is a bare ground with an origin
+        // triad. One dim line names the door that fills it, so the shell
+        // never shows an unexplained void (the browser's empty groups say
+        // the same kind of thing one pane over).
+        let empty = {
+            use camcraft_app::model;
+            model::model_entities(&state.world).is_empty()
+                && !model::named_entities(&state.world)
+                    .iter()
+                    .any(|(_, e)| model::is_operation(&state.world, e))
+        };
+        if empty {
+            // Bottom-centre, clear of the origin triad and of the corner
+            // control legend (bottom-right): the hint names the door that
+            // fills the void without ever sitting on the scene's marks.
+            ui.painter().text(
+                egui::pos2(rx0 + rw * 0.5, (ry0 + rh - 56.0).max(ry0 + 24.0)),
+                egui::Align2::CENTER_CENTER,
+                "No model yet - File > Model imports an STL, STEP or OBJ file",
+                egui::FontId::proportional(font.size * 1.2),
+                egui::Color32::from_white_alpha(150),
+            );
+        }
         // Corner hint: the control legend, or the live mode while dragging.
         let hint = match state.drag {
             Some(DragMode::Orbit) => "orbit",
@@ -845,7 +868,9 @@ fn parr(p: egui::Pos2) -> [f32; 2] {
 /// path through set_overlay), and the readback showing a solid footprint of
 /// changed pixels. The second half of the proof is the world itself:
 /// Contour1 carries a non-empty cached toolpath, i.e. seed -> commands ->
-/// generate worked.
+/// generate worked. Native only: it blocks on the adapter and on the
+/// readback, which a browser cannot (#31).
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) mod headless {
     use camcraft_app::model;
 
@@ -854,7 +879,7 @@ pub(crate) mod headless {
 
     use super::VIEW3D_FORMAT;
     use super::wgpu;
-    use super::world;
+    use super::super::world;
 
     pub(crate) fn run() -> Result<(), String> {
         let mut state = State::new();

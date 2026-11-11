@@ -29,7 +29,7 @@ pub(super) fn reserved(world: &World, name: &str) -> Option<CommandError> {
             });
     if taken {
         return Some(CommandError::Invalid(format!(
-            "'{name}' is reserved for setup furniture"
+            "'{name}' is a name reserved for a setup's stock and work offsets"
         )));
     }
     None
@@ -187,6 +187,16 @@ impl ChangeTool {
             crate::tool_body::fits(&next, &body)
                 .map_err(|e| CommandError::Invalid(format!("tool '{name}': {e}")))?;
         }
+        // #93 slice 2: a drawn cutter states the numbers it was drawn
+        // to; an edit that leaves it disagreeing is refused by name
+        // (clear it back to the numbers' outline first).
+        if let Some(c) = crate::tool_cutter::cutter_of(world, &entity) {
+            camcraft_tools::cutter_profile::agrees(&next, &c).map_err(|e| {
+                CommandError::Invalid(format!(
+                    "tool '{name}': the drawn cutter profile no longer fits: {e} - reset the cutter profile to Parametric first"
+                ))
+            })?;
+        }
         Ok(ChangeTool {
             name: name.to_string(),
             prev,
@@ -226,6 +236,8 @@ pub struct DeleteTool {
     number: Option<u32>,
     /// #368: its modelled body, restored with it on undo.
     body: Option<ToolBody>,
+    /// #93: its drawn cutter, restored with it on undo.
+    cutter: Option<camcraft_tools::spun::SpunProfile>,
     location: Location,
 }
 
@@ -241,6 +253,7 @@ impl DeleteTool {
             tool,
             number: model::tool_number_of(world, &entity),
             body: crate::tool_body::body_of(world, &entity),
+            cutter: crate::tool_cutter::cutter_of(world, &entity),
             location: model::transform_of(world, &entity).unwrap_or_default(),
         })
     }
@@ -263,5 +276,6 @@ impl Command for DeleteTool {
             .entity_view(world)
             .set(ToolDef { tool: self.tool.clone(), number: self.number });
         crate::tool_body::set_body(world, &entity, self.body.as_ref());
+        crate::tool_cutter::set_cutter(world, &entity, self.cutter.as_ref());
     }
 }

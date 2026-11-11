@@ -37,7 +37,7 @@ pub(crate) fn move_colour(pal: &Semantic, kind: MoveKind, warned: bool, dim: f32
 }
 
 fn over_budget(out: &mut Vec<[f32; 6]>) {
-    eprintln!(
+    diag_warn!(
         "overlay: the cached paths outgrew the {MAX_OVERLAY_VERTICES}-vertex \
          display budget; the rest is truncated (the full path still posts)"
     );

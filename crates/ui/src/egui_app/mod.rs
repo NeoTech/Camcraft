@@ -73,6 +73,8 @@ mod tool_orientation_row;
 mod tool_profile_page;
 // #793: the built-in taper holder picker in the Profile section.
 mod tool_holder_picker;
+// #93 slice 2: the Profile tab's drawn cutter, neck and shank.
+mod tool_cutter_page;
 mod setup_wcs_pick;
 // #343: a setup's own node pages (settings, machine, post, fixtures, tools).
 mod setup_pages;
@@ -144,6 +146,11 @@ pub(crate) mod shell;
 // browser build keeps `shell` (the shared frame) and refuses `run` below.
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) mod shell_window;
+// #31: the browser shell - eframe's web runner over a canvas; wasm32 only.
+#[cfg(target_arch = "wasm32")]
+pub(crate) mod shell_web;
+// #31: the 3D pass and repaint law both shells share.
+pub(crate) mod view_pass;
 // pub past egui_app from M6.1 C: the switcher's resolution seam
 // (state.rs) installs the live table, the format tests read the
 // columns beside their parser, and every draw site already read
@@ -240,7 +247,7 @@ pub fn run(args: &[String]) -> i32 {
     let pick = match gpu::pick_from(args, env.as_deref()) {
         Ok(p) => p,
         Err(err) => {
-            eprintln!("gpu: {err}");
+            diag_warn!("gpu: {err}");
             return 2;
         }
     };
@@ -249,7 +256,7 @@ pub fn run(args: &[String]) -> i32 {
     let want = match gpu::adapter_from(args, want_env.as_deref()) {
         Ok(w) => w,
         Err(err) => {
-            eprintln!("gpu: {err}");
+            diag_warn!("gpu: {err}");
             return 2;
         }
     };
@@ -258,27 +265,40 @@ pub fn run(args: &[String]) -> i32 {
     let mcp_port = match camcraft_app::mcp::port_from(args, mcp_env.as_deref()) {
         Ok(p) => p,
         Err(err) => {
-            eprintln!("mcp: {err}");
+            diag_warn!("mcp: {err}");
             return 2;
         }
     };
     if args.iter().any(|a| a == "--headless") {
         if pick != gpu::GpuPick::Auto || want.is_some() {
-            println!("gpu: --headless pins the fallback adapter for determinism; backend and adapter picks ignored");
+            diag_info!("gpu: --headless pins the fallback adapter for determinism; backend and adapter picks ignored");
         }
-        match shell::headless::run() {
-            Ok(()) => {
-                println!("egui shell headless: seeded document, command world, View3D green");
-                0
-            }
-            Err(err) => {
-                eprintln!("egui shell headless FAILED: {err}");
-                1
-            }
-        }
+        run_headless()
     } else {
         run_windowed(pick, want, mcp_port)
     }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn run_headless() -> i32 {
+    match shell::headless::run() {
+        Ok(()) => {
+            diag_info!("egui shell headless: seeded document, command world, View3D green");
+            0
+        }
+        Err(err) => {
+            diag_warn!("egui shell headless FAILED: {err}");
+            1
+        }
+    }
+}
+
+/// #31: the headless proof blocks on the adapter and the readback; the
+/// browser build refuses it by name like the windowed entry.
+#[cfg(target_arch = "wasm32")]
+fn run_headless() -> i32 {
+    diag_warn!("{WASM_NO_WINDOW}");
+    2
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -291,11 +311,11 @@ fn run_windowed(pick: gpu::GpuPick, want: Option<String>, mcp_port: Option<u16>)
 /// name instead of pretending.
 #[cfg(target_arch = "wasm32")]
 fn run_windowed(_pick: gpu::GpuPick, _want: Option<String>, _mcp_port: Option<u16>) -> i32 {
-    eprintln!("{WASM_NO_WINDOW}");
+    diag_warn!("{WASM_NO_WINDOW}");
     2
 }
 
 /// What the wasm32 build says when asked for a native window (#31).
 #[cfg(target_arch = "wasm32")]
 pub(crate) const WASM_NO_WINDOW: &str =
-    "camcraft-ui: the windowed shell is native-only; the browser shell is not built yet (#31)";
+    "camcraft-ui: the windowed shell and the headless proof are native-only; in a browser the page starts the shell (camcraft_start, #31)";
