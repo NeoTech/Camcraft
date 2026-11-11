@@ -169,6 +169,7 @@ mod midpose;
 pub mod plasma;
 mod posed_steel;
 mod prior;
+mod body_bands;
 mod probe;
 mod rapids;
 mod rapids_posed;
@@ -200,6 +201,7 @@ pub use workholding::{
     bands_vs_workholding, bands_vs_workholding_held, rapids_vs_workholding,
     rapids_vs_workholding_held, Workholding,
 };
+pub use body_bands::{BodyBands, BODY_BANDS_CAP};
 pub use probe::Cutter;
 pub use rotary::{rotary_hits, RotaryAxis, RotaryLaw};
 pub use solid::{SolidLaw, solid_hits};
