@@ -138,6 +138,15 @@ pub struct ToolBody {
     pub frame: crate::tool_body::BodyFrame,
 }
 
+/// #93 slice 2: a milling tool's own drawn cutter, neck and shank
+/// outline (`SetToolCutter`, `crate::tool_cutter`). Display data: it
+/// agrees with the tool's numbers by law (`cutter_profile::check`) and
+/// no generator or judging law reads it. Absent = drawn from the numbers.
+#[derive(Component, Debug, Clone, PartialEq)]
+pub struct ToolCutter {
+    pub spun: camcraft_tools::spun::SpunProfile,
+}
+
 impl ToolBody {
     /// The revolved envelope of a milling (spindle-frame) body.
     #[must_use]
@@ -231,6 +240,12 @@ pub struct FixtureDef {
     /// from these, so the jaw opening can be edited and regenerated.
     /// `None` - every imported fixture - is plain steel.
     pub vise: Option<crate::vise::ViseParams>,
+    /// Fixture plates (#819): this fixture IS a plate (its hole grid),
+    /// and/or stands ON one at a named location. Default: neither.
+    pub plate: crate::plate::PlateLink,
+    /// A mod-vise jaw block's parameters (#820): its facets were
+    /// generated from these. `None` - every other fixture.
+    pub mod_jaw: Option<crate::modvise::JawParams>,
     /// A built-in accessory's parameters (#789: parallels, blocks, a
     /// strap clamp, a soft jaw); `None` - not one.
     pub accessory: Option<crate::accessory::Accessory>,
@@ -523,6 +538,7 @@ pub fn register_schema(world: &World) {
     world.component::<Wcs>();
     world.component::<ToolDef>();
     world.component::<ToolBody>();
+    world.component::<ToolCutter>();
     world.component::<Operation>();
     world.component::<OperationMeta>();
     world.component::<ProgramEntry>();

@@ -3,13 +3,16 @@
 //! the shop's own vise, then either fit it to the setup's stock (fixed
 //! jaw on the stock's +Y side, centred, floor under it, jaws opened to
 //! the stock) or type where its frame goes. Place queues one undoable
-//! `InsertVise` through the command queue.
+//! `InsertVise` through the command queue. The 5-axis self-centering
+//! sizes (#787) are a second row of the picker: centred on the stock,
+//! with a clamping range and an optional dovetail lip instead of a
+//! screw housing.
 //! Provenance: our own layout over our own vise commands.
 
 use egui::{RichText, Ui};
 
 use camcraft_app::units::Unit;
-use camcraft_app::vise;
+use camcraft_app::vise::{self, ViseStyle};
 
 use crate::state::{CommandKind, ViseDraft};
 
@@ -38,21 +41,25 @@ pub(crate) fn body(ui: &mut Ui, u: Unit, d: &mut ViseDraft) -> Option<ViseAct> {
     ui.heading("Add built-in vise");
     ui.label(RichText::new("A generic vise built from these figures; edit them to match yours.").small());
     ui.add_space(4.0);
-    ui.label("Size (jaw width)");
     let mut picked = None;
-    ui.horizontal_wrapped(|ui| {
-        for (k, row) in vise::SIZES.iter().enumerate() {
-            if ui.selectable_label(d.size == k, row.label).clicked() {
-                picked = Some(k);
+    for (title, self_centering) in [("Size (jaw width)", false), ("5-axis self-centering", true)] {
+        ui.label(title);
+        ui.horizontal_wrapped(|ui| {
+            for (k, row) in vise::presets().enumerate() {
+                if matches!(row.style, ViseStyle::SelfCentering(_)) == self_centering
+                    && ui.selectable_label(d.size == k, row.label).clicked()
+                {
+                    picked = Some(k);
+                }
             }
-        }
-    });
+        });
+    }
     if let Some(k) = picked {
         d.pick(k);
     }
     let p = &mut d.params;
     egui::Grid::new("builtin-vise-dims").num_columns(2).show(ui, |ui| {
-        for (label, v) in [
+        let mut rows: Vec<(&str, &mut f64)> = vec![
             ("Jaw width", &mut p.jaw_width),
             ("Jaw height", &mut p.jaw_height),
             ("Jaw thickness", &mut p.jaw_thickness),
@@ -61,21 +68,34 @@ pub(crate) fn body(ui: &mut Ui, u: Unit, d: &mut ViseDraft) -> Option<ViseAct> {
             ("Overall length", &mut p.length),
             ("Overall width", &mut p.width),
             ("Base height", &mut p.base_height),
-            ("Housing length", &mut p.housing_length),
-            ("Housing height", &mut p.housing_height),
-        ] {
+        ];
+        match &mut p.style {
+            ViseStyle::Standard => {
+                rows.push(("Housing length", &mut p.housing_length));
+                rows.push(("Housing height", &mut p.housing_height));
+            }
+            ViseStyle::SelfCentering(sc) => {
+                rows.push(("Min opening", &mut sc.min_opening));
+                rows.push(("Dovetail lip height", &mut sc.lip_height));
+                rows.push(("Dovetail lip depth", &mut sc.lip_depth));
+            }
+        }
+        for (label, v) in rows {
             ui.label(label);
             num(ui, u, v);
             ui.end_row();
         }
     });
-    ui.checkbox(&mut d.fit_stock, "Fit to the stock (jaws open to it)");
+    let centred = matches!(d.params.style, ViseStyle::SelfCentering(_));
+    let fit = if centred { "Fit to the stock (centred, jaws closed on it)" } else { "Fit to the stock (jaws open to it)" };
+    ui.checkbox(&mut d.fit_stock, fit);
     if !d.fit_stock {
         egui::Grid::new("builtin-vise-place").num_columns(2).show(ui, |ui| {
             ui.label("Jaw opening");
             num(ui, u, &mut d.params.opening);
             ui.end_row();
-            for (k, axis) in ["Fixed jaw X", "Fixed jaw Y", "Floor Z"].iter().enumerate() {
+            let axes = if centred { ["Centre X", "Centre Y", "Floor Z"] } else { ["Fixed jaw X", "Fixed jaw Y", "Floor Z"] };
+            for (k, axis) in axes.iter().enumerate() {
                 ui.label(*axis);
                 num(ui, u, &mut d.pos[k]);
                 ui.end_row();

@@ -704,6 +704,11 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
                     let body = b.to_body(&dto.name).map_err(corrupt)?;
                     crate::tool_body::set_body(world, &entity, Some(&body));
                 }
+                // #93: validate_kind already refused a cutter that disagrees.
+                if let Some(c) = &tdto.cutter {
+                    let spun = super::tool_body_wire::cutter_from_dto(&tdto.to_tool(), c, &dto.name).map_err(corrupt)?;
+                    crate::tool_cutter::set_cutter(world, &entity, Some(&spun));
+                }
             }
             EntityKind::Operation => {
                 let odto = dto
@@ -816,6 +821,11 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
             // with a note, never a failed load.
             entity.entity_view(world).set(super::fixture_keys::fixture_def(f, &dto.name, &mut notes));
         }
+    }
+    // #819: a place on a plate the file does not hold is dropped, never
+    // left for the next plate of that name to pick up.
+    for name in crate::plate::mount::drop_dangling(world) {
+        notes.push(format!("fixture '{name}': plate location dropped on load: no such plate"));
     }
     Ok(notes)
 }

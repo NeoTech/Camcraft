@@ -173,9 +173,10 @@ fn batch_skips_slow_binaries_and_release_runs_everything() {
     assert_eq!(b[b.len() - 2], "[ui] ui suites (cwd crates/ui) | test -j 6 -p camcraft-ui --no-fail-fast -- --test-threads=6");
     assert!(b[b.len() - 1].starts_with("clippy -D warnings | clippy -j 6 -p camcraft-geometry -p camcraft-cl"));
     let r: Vec<String> = plan::release(&fx.0).steps.iter().map(line).collect();
-    assert_eq!(r.len(), 8 + 1 + 1 + 2 + 1);
+    assert_eq!(r.len(), 8 + 1 + 1 + 2 + 1 + 1);
     assert!(r.iter().any(|s| s.starts_with("kernel suites")));
     assert_eq!(r[12], "[ui] ui snapshot lane (debug --ignored, cwd crates/ui) | test -j 6 -p camcraft-ui --lib --no-fail-fast -- --test-threads=6 --ignored snapshot");
+    assert_eq!(r[13], "[ui] ui gpu_render snapshot lane (debug --ignored) | test -j 6 -p camcraft-ui --test gpu_render --no-fail-fast -- --test-threads=6 --ignored snapshot");
 }
 
 #[test]

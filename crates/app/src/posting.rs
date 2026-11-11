@@ -41,6 +41,9 @@ pub const BUILTINS: &[(&str, &str)] = &[
     ("Makera Carvera", include_str!("../../../assets/posts/carvera.cps")),
     ("Fanuc Lathe", include_str!("../../../assets/posts/fanuc-lathe.cps")),
     ("Tormach PathPilot Lathe", include_str!("../../../assets/posts/tormach-lathe.cps")),
+    // #671: the plasma dialect, from UM10720 §6-7 and the PathPilot
+    // post guidelines; it serves plasma tables only (`PLASMA_POSTS`).
+    ("Tormach PathPilot Plasma", include_str!("../../../assets/posts/tormach-plasma.cps")),
 ];
 
 /// The registry entries that speak TURNING (M13.5): X as a diameter
@@ -50,10 +53,10 @@ pub const BUILTINS: &[(&str, &str)] = &[
 pub const LATHE_POSTS: &[&str] = &["Fanuc Lathe", "Tormach PathPilot Lathe"];
 
 /// The registry entries that speak PLASMA (#669): the torch words, no
-/// spindle and no Z depth. None ships yet - the PathPilot plasma post
-/// is #671 - so a plasma machine lists no post and nothing posts on it
-/// (its machine check refuses every op by name, `machine::plasma`).
-pub const PLASMA_POSTS: &[&str] = &[];
+/// spindle and no Z depth. #671 ships the PathPilot plasma post for the
+/// Tormach 1300PL; it serves plasma tables only, and no cutting post
+/// serves one (a torch has no spindle for their S/M3).
+pub const PLASMA_POSTS: &[&str] = &["Tormach PathPilot Plasma"];
 
 /// Whether a registry entry can post programs for a machine of this
 /// kind: a lathe post serves lathes and mill-turns, a mill post serves
@@ -85,8 +88,7 @@ pub fn default_post_for(kind: crate::machine::Kind) -> PostRef {
         crate::machine::Kind::Lathe => LATHE_POSTS
             .first()
             .map_or(PostRef::Builtin, |n| PostRef::Named((*n).to_owned())),
-        // #669: until a plasma post ships (#671) there is none to name;
-        // the entry-0 answer is then refused by `post_offer`'s own check.
+        // #669/#671: the first plasma post (PathPilot's, for the 1300PL).
         crate::machine::Kind::Plasma => PLASMA_POSTS
             .first()
             .map_or(PostRef::Builtin, |n| PostRef::Named((*n).to_owned())),
@@ -120,7 +122,13 @@ pub fn post_offer(world: &World) -> Option<(&'static str, PostRef)> {
     if post_serves(name, kind) {
         return None;
     }
-    let serves = if LATHE_POSTS.contains(&name) { "lathe" } else { "mill" };
+    let serves = if LATHE_POSTS.contains(&name) {
+        "lathe"
+    } else if PLASMA_POSTS.contains(&name) {
+        "plasma"
+    } else {
+        "mill"
+    };
     // #669: an offer that would not serve the mount either (a plasma
     // table before any plasma post ships) is no offer.
     let offer = default_post_for(kind);
@@ -419,7 +427,7 @@ pub fn post_setup(world: &World, out_path: &Path) -> Result<Posted, String> {
 /// parameterized - what a caller holding a script text runs, and
 /// what the tests use to exercise the script seam directly.
 pub fn post_script(world: &World, out_path: &Path, cps: &str) -> Result<Posted, String> {
-    let started = std::time::Instant::now();
+    let started = crate::clock::Instant::now();
     let posted = post_script_body(world, out_path, cps);
     match &posted {
         Ok(p) => tracing::info!(

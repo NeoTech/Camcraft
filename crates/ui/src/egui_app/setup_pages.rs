@@ -134,6 +134,10 @@ fn ownership(ui: &mut Ui, state: &mut State, ctx: Option<&str>, which: Mount) {
     ui.separator();
 }
 
+/// The active-setup radio's words (#866: "furniture" was our in-code
+/// word for a setup's stock, WCS and fixtures - never a user's).
+pub(crate) const ACTIVE_SETUP_LABEL: &str = "Active setup - new operations go into it, and the Stock and Work offset pages edit it";
+
 /// The setup's settings: which setup is active, where its stock comes
 /// from, how the part sits, and the word its WCS posts as.
 fn settings(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
@@ -145,7 +149,7 @@ fn settings(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
         return;
     };
     let is_active = setup::active(&state.world).as_deref() == Some(name);
-    if ui.radio(is_active, "Active setup - new operations and furniture join it").clicked() && !is_active {
+    if ui.radio(is_active, ACTIVE_SETUP_LABEL).clicked() && !is_active {
         state.pending.push_back(CommandKind::ActivateSetup(Some(name.to_owned())));
     }
     ui.separator();
