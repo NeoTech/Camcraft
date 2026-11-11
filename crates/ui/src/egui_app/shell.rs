@@ -1314,10 +1314,10 @@ fn viewport_panel(
         }
         // #709: picked points, violet and never occluded; the hover over them.
         for (a, b) in crate::vertex_pick::picked_point_marks(state, aspect) {
-            ui.painter().line_segment([to_px(a), to_px(b)], egui::Stroke::new(2.0, rgb8(interact::PICK_RGB)));
+            ui.painter().line_segment([to_px(a), to_px(b)], egui::Stroke::new(2.0, rgb8(super::ground_ink::overlay(super::ground_ink::Overlay::Pick))));
         }
         for (a, b) in interact::hover_features(state, aspect) {
-            ui.painter().line_segment([to_px(a), to_px(b)], egui::Stroke::new(1.0, egui::Color32::from_rgb(255, 217, 102)));
+            ui.painter().line_segment([to_px(a), to_px(b)], egui::Stroke::new(1.0, rgb8(super::ground_ink::overlay(super::ground_ink::Overlay::Hover))));
         }
         // The machined mesh's hovered facet (#25): the hover ink's yellow,
         // a veil over the class colour and its outline.
@@ -1399,17 +1399,17 @@ fn viewport_panel(
                         let k = len.min(26.0) / len;
                         ui.painter().line_segment(
                             [c, c + dir * k],
-                            egui::Stroke::new(2.0, egui::Color32::from_gray(225)),
+                            egui::Stroke::new(2.0, super::ground_ink::cube().marker[0]),
                         );
                     }
                 }
                 ui.painter().circle_stroke(
                     c,
                     5.0,
-                    egui::Stroke::new(1.5, egui::Color32::from_gray(240)),
+                    egui::Stroke::new(1.5, super::ground_ink::cube().marker[1]),
                 );
                 ui.painter()
-                    .circle_filled(c, 2.0, egui::Color32::WHITE);
+                    .circle_filled(c, 2.0, super::ground_ink::cube().marker[2]);
             }
         }
         // The G-code viewer's sync cursor: the move that line posts,
@@ -1467,7 +1467,7 @@ fn viewport_panel(
                 egui::Align2::RIGHT_BOTTOM,
                 hint,
                 font.clone(),
-                egui::Color32::from_white_alpha(200),
+                super::ground_ink::cube().hint,
             );
         }
         // The corner furniture paints last of all: opaque over the scene,

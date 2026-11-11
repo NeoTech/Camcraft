@@ -39,6 +39,8 @@ mod stock_info;
 // pub: M13.4's ColorVision layer - the viewport, the traced stock and
 // the overlay lines read the palette; `cvd` is its maths.
 pub mod colorvision;
+pub mod ground_ink;
+pub mod window_chrome;
 mod post_options;
 pub mod cvd;
 mod icons;
@@ -183,6 +185,8 @@ mod thread_hand_tests;
 mod after_op_tests;
 #[cfg(test)]
 mod colorvision_tests;
+#[cfg(test)]
+mod viewport_ground_tests;
 #[cfg(test)]
 mod tree_ink_tests;
 #[cfg(test)]
