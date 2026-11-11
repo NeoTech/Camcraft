@@ -31,6 +31,7 @@ pub mod machined;
 pub mod mcp_host;
 pub mod operations;
 pub mod path_lines;
+pub(crate) mod refusal_ghost;
 pub mod post_file;
 pub mod plane_pick;
 pub mod axis_pick;
@@ -46,6 +47,8 @@ pub mod viewport;
 mod law_tests;
 #[cfg(test)]
 mod refusal_focus_tests;
+#[cfg(test)]
+mod refusal_ghost_tests;
 #[cfg(test)]
 mod helix_view_tests;
 #[cfg(test)]

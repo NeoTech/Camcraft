@@ -816,6 +816,13 @@ pub fn toolpath_lines(state: &State) -> Vec<[f32; 6]> {
             return out;
         }
     }
+    // #261 part 3: and draws the moves it had built as a dashed ghost
+    // (crate::refusal_ghost) - off the refusal, never off the operation.
+    if let Some(g) = state.refusal_ghost()
+        && !crate::refusal_ghost::ghost_lines(&mut out, g, pal, arm)
+    {
+        return out;
+    }
     // #261 part 2: a standing generate refusal marks the spot it names.
     if let Some(at) = state.refusal_focus() {
         crate::path_lines::refusal_mark(&mut out, at, pal, arm);

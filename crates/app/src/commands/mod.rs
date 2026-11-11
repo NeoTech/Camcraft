@@ -126,6 +126,12 @@ pub enum CommandError {
     /// `Machining` does.
     #[error("could not generate the toolpath: {msg}")]
     MachiningAt { msg: String, at: crate::geometry::Point3 },
+    /// A [`Machining`](CommandError::Machining) refusal that handed back
+    /// the moves it had built (#261 part 3), world coordinates, with the
+    /// spot it names if any. Display-only: the moves are never cached,
+    /// so the operation still has no toolpath. Reads as `Machining` does.
+    #[error("could not generate the toolpath: {msg}")]
+    MachiningGhost { msg: String, at: Option<crate::geometry::Point3>, ghost: crate::machining2d::Ghost },
 }
 
 impl CommandError {
@@ -134,6 +140,17 @@ impl CommandError {
     pub fn location(&self) -> Option<crate::geometry::Point3> {
         match self {
             CommandError::MachiningAt { at, .. } => Some(*at),
+            CommandError::MachiningGhost { at, .. } => *at,
+            _ => None,
+        }
+    }
+
+    /// The moves a refused generation had built (#261 part 3), for the
+    /// viewport's diagnostic ghost - never a toolpath.
+    #[must_use]
+    pub fn ghost(&self) -> Option<&crate::machining2d::Ghost> {
+        match self {
+            CommandError::MachiningGhost { ghost, .. } => Some(ghost),
             _ => None,
         }
     }
