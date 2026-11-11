@@ -247,10 +247,10 @@ impl Tokens {
         v.widgets.inactive.fg_stroke = Stroke::new(1.0, text);
         v.widgets.inactive.corner_radius = r;
         v.widgets.hovered.bg_fill = field_hover;
-        // Hover fill: dark's steel-blue accent; light hovers field_hover (the
-        // painted rows' grey) - egui draws title-bar glyphs in this ink with
-        // no fill behind them, so white-on-accent vanished (#698).
-        let hover = if super::ground_ink::light_ground(ink) { field_hover } else { accent };
+        // #698: light hovers field_hover, not the accent (egui's bare title
+        // glyphs took white-on-accent ink), and its title bars wear ink_alt.
+        let light = super::ground_ink::light_ground(ink);
+        let hover = if light { field_hover } else { accent };
         v.widgets.hovered.weak_bg_fill = hover;
         v.widgets.hovered.bg_stroke = Stroke::new(1.0, accent_hover);
         // Glyphs ride the hover fill (M6.1 D): WHITE on steel blue, black on pale.
@@ -268,8 +268,9 @@ impl Tokens {
         v.widgets.active.fg_stroke = Stroke::new(1.0, contrast::on_fill(accent_hover));
         v.widgets.active.corner_radius = r;
         v.widgets.open.bg_fill = field_bg;
-        v.widgets.open.weak_bg_fill = ink_alt; // #698: window title bars (egui's open fill)
-        v.widgets.open.fg_stroke = Stroke::new(1.0, text);
+        if light {
+            (v.widgets.open.weak_bg_fill, v.widgets.open.fg_stroke) = (ink_alt, Stroke::new(1.0, text));
+        }
         v.widgets.open.bg_stroke = stroke_1px;
         v.widgets.open.corner_radius = r;
         for exp in [

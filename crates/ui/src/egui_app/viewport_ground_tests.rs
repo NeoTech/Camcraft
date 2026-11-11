@@ -6,9 +6,9 @@
 
 use egui::Color32;
 
-use super::colorvision::{Semantic, ink, palette_for};
+use super::colorvision::{MIN_DE00, Semantic, ink, palette_for};
 use super::ground_ink::{Overlay, cube_ink, dimmed, light_ground, overlay_ink, wire_ink};
-use super::{contrast, theme::Tokens};
+use super::{contrast, cvd, theme::Tokens};
 use camcraft_app::schema::ColorVision;
 
 const OVERLAYS: [Overlay; 5] = [Overlay::Region, Overlay::Retract, Overlay::Cut, Overlay::Pick, Overlay::Hover];
@@ -141,10 +141,48 @@ fn the_dark_ground_keeps_the_house_inks() {
 }
 
 #[test]
-fn the_light_ground_swaps_only_the_house_palette() {
+fn every_mode_wears_its_light_set_on_a_light_ground() {
     assert_eq!(palette_for(ColorVision::Off, true), &Semantic::OFF_LIGHT_GROUND);
-    // The colour-vision remaps keep their own set on either ground (open
-    // item, see the #698 decision note).
-    assert_eq!(palette_for(ColorVision::Protan, true), &Semantic::RED_GREEN);
-    assert_eq!(palette_for(ColorVision::Tritan, true), &Semantic::TRITAN);
+    assert_eq!(palette_for(ColorVision::Protan, true), &Semantic::RED_GREEN_LIGHT_GROUND);
+    assert_eq!(palette_for(ColorVision::Deutan, true), &Semantic::RED_GREEN_LIGHT_GROUND);
+    assert_eq!(palette_for(ColorVision::Tritan, true), &Semantic::TRITAN_LIGHT_GROUND);
+    for mode in ColorVision::ALL {
+        assert_eq!(palette_for(mode, false), super::colorvision::palette(mode), "{mode:?} dark is unchanged");
+    }
+}
+
+/// The reviewer's case on PR #838: a colour-vision user on the light
+/// theme must not get unreadable lines. Each remap's light set keeps
+/// every must-distinguish pair apart for its own eye(s) (the M13.4
+/// CIEDE2000 floor) and every line ink clears 3:1 on the ground.
+#[test]
+fn the_light_colour_vision_sets_pass_the_cvd_gate_and_clear_3_to_1() {
+    let wide = |c: [f32; 3]| [f64::from(c[0]), f64::from(c[1]), f64::from(c[2])];
+    let ground = Tokens::LIGHT.viewport;
+    for mode in [ColorVision::Protan, ColorVision::Deutan, ColorVision::Tritan] {
+        let p = palette_for(mode, true);
+        for (name, a, b) in p.must_distinguish() {
+            let d = cvd::seen_apart(wide(a), wide(b), mode);
+            assert!(d >= MIN_DE00, "{mode:?} light {name}: CIEDE2000 {d:.1} < {MIN_DE00}");
+        }
+        for (name, c) in [
+            ("feed", p.feed),
+            ("rapid", p.rapid),
+            ("plunge", p.plunge),
+            ("bound include", p.bound_include),
+            ("bound exclude", p.bound_exclude),
+            ("bound open", p.bound_open),
+        ] {
+            let r = contrast::ratio(ink(c), ground);
+            assert!(r >= GRAPHIC, "{mode:?} light {name} reads {r:.2}:1 on the light viewport");
+        }
+    }
+}
+
+#[test]
+fn the_dark_title_bar_keeps_eguis_own_open_fill() {
+    let dark = Tokens::DARK.visuals();
+    let egui_dark = egui::Visuals::dark();
+    assert_eq!(dark.widgets.open.weak_bg_fill, egui_dark.widgets.open.weak_bg_fill);
+    assert_eq!(dark.widgets.open.fg_stroke, egui_dark.widgets.open.fg_stroke);
 }

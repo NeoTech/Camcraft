@@ -35,9 +35,9 @@ pub const fn wire_ink(light: bool) -> [f32; 3] {
 
 impl Semantic {
     /// The house palette on a light viewport: the move kinds and the
-    /// boundary roles darkened until each clears 3:1 on the light ground.
-    /// Verdict and selection inks are unchanged (the stock sheet and the
-    /// selected fill are not text-like graphics on this ground; open).
+    /// boundary roles as tuned on screen (#698). Verdict and selection
+    /// inks are unchanged: they paint the stock and the selected part,
+    /// not lines on the ground.
     pub const OFF_LIGHT_GROUND: Semantic = Semantic {
         feed: [0.08, 0.36, 0.12],
         rapid: [0.01, 0.31, 0.90],
@@ -46,6 +46,33 @@ impl Semantic {
         bound_exclude: [1.00, 0.20, 0.70],
         bound_open: [1.00, 0.65, 0.05],
         ..Semantic::OFF
+    };
+
+    /// Protan/deutan on a light viewport: the same blue-yellow axis as
+    /// `RED_GREEN`, darkened to clear 3:1 - gold feed and exclude against
+    /// the blue rapid and include; plunge and open go near-black, the
+    /// lightness end the dark ground's white open and pale inks held.
+    pub const RED_GREEN_LIGHT_GROUND: Semantic = Semantic {
+        feed: [0.55, 0.42, 0.00],
+        rapid: [0.01, 0.31, 0.90],
+        plunge: [0.22, 0.08, 0.00],
+        bound_include: [0.00, 0.30, 0.85],
+        bound_exclude: [0.55, 0.42, 0.00],
+        bound_open: [0.12, 0.12, 0.12],
+        ..Semantic::RED_GREEN
+    };
+
+    /// Tritan on a light viewport: red-cyan survives - the deep green
+    /// feed, red plunge and exclude, a teal include; rapid and open go
+    /// near-black so lightness parts them from the green.
+    pub const TRITAN_LIGHT_GROUND: Semantic = Semantic {
+        feed: [0.08, 0.36, 0.12],
+        rapid: [0.05, 0.05, 0.12],
+        plunge: [0.90, 0.13, 0.13],
+        bound_include: [0.00, 0.40, 0.45],
+        bound_exclude: [0.80, 0.05, 0.10],
+        bound_open: [0.12, 0.12, 0.12],
+        ..Semantic::TRITAN
     };
 }
 

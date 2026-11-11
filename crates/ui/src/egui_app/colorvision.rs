@@ -233,14 +233,16 @@ pub const fn palette(mode: ColorVision) -> &'static Semantic {
     }
 }
 
-/// The palette for a mode on a ground: the light house set when the
-/// viewport is light. The colour-vision remaps keep their dark-tuned
-/// inks on a light ground (open, see the #698 decision note).
+/// The palette for a mode on a ground: on a light viewport every mode
+/// wears its light-ground set (#698), whose line inks clear 3:1 there
+/// and whose pairs pass the same CIEDE2000 gate as the dark sets.
 #[must_use]
 pub const fn palette_for(mode: ColorVision, light: bool) -> &'static Semantic {
     match (mode, light) {
         (ColorVision::Off, true) => &Semantic::OFF_LIGHT_GROUND,
-        _ => palette(mode),
+        (ColorVision::Protan | ColorVision::Deutan, true) => &Semantic::RED_GREEN_LIGHT_GROUND,
+        (ColorVision::Tritan, true) => &Semantic::TRITAN_LIGHT_GROUND,
+        (_, false) => palette(mode),
     }
 }
 
