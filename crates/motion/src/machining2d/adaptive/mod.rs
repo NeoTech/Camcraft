@@ -191,9 +191,9 @@ struct Planner<'a> {
     laps_from: usize,
     /// ... and where the last lap begins.
     fin_from: usize,
-    /// The growth rings' planning work so far: the length of every
-    /// revolution tried (mm), held to [`budget::WORK_MAX`].
-    work: std::cell::Cell<f64>,
+    /// The growth rings' planning work so far: the length and geometry
+    /// of every revolution tried, held to the [`budget`] laws.
+    work: budget::Work,
     /// Why the plan was refused outright (the pocket hands the area to
     /// the Offset rings by this name), or `None`.
     refused: Option<String>,
@@ -229,7 +229,7 @@ pub(crate) fn plan(reach: &Region, center: &Region, s: &AdaptiveSpec) -> Result<
         worst: (0.0, s.start),
         laps_from: usize::MAX,
         fin_from: usize::MAX,
-        work: std::cell::Cell::new(0.0),
+        work: budget::Work::default(),
         refused: None,
     };
     if s.bore > 0.0 {

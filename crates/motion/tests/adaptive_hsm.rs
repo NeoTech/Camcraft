@@ -385,6 +385,32 @@ fn hsm_on_the_user_bore_enters_once_and_holds_every_law() {
     assert!(bad.is_empty(), "{bad:#?}");
 }
 
+/// Issue #850: the island's growth plan never finishes; it ran about a
+/// minute (release) before the length budget refused it. The geometry
+/// budget refuses it about halfway into its first margin attempt, by
+/// name, and the Offset rings cut it, named - verifier silent. The
+/// count in the note is deterministic: past the 500 k budget by at most
+/// one revolution (~6 k on the island). The wall clock is a loose
+/// backstop only, so a loaded machine cannot fail it.
+#[test]
+fn the_island_is_refused_by_the_geometry_budget_in_seconds() {
+    let (_, reg) = fixtures().swap_remove(3);
+    let t0 = std::time::Instant::now();
+    let Ok(t) = pocket(&reg, &params(PocketStrategy::Adaptive)) else { panic!("pocket") };
+    let secs = t0.elapsed().as_secs_f64();
+    eprintln!("island: {secs:.1} s, {:?}", t.notes);
+    let Some(n) = t.notes.iter().find(|n| n.contains("too detailed") && n.contains("Offset rings cut this pocket instead")) else {
+        panic!("refused by the geometry budget, by name: {:?}", t.notes)
+    };
+    let k = n.split("(~").nth(1).and_then(|s| s.split(" k").next()).and_then(|s| s.parse::<u64>().ok());
+    assert!(k.is_some_and(|k| (500..=520).contains(&k)), "the count past the budget by at most a revolution: {n}");
+    assert!(!t.moves.is_empty() && t.is_chained() && t.all_finite(), "the Offset rings cut it");
+    let w = verified(&t, &reg, D);
+    assert!(w.is_empty(), "{} {:?}", warn_kinds(&w), t.notes);
+    let limit = if cfg!(debug_assertions) { 600.0 } else { 60.0 };
+    assert!(secs < limit, "{secs:.1} s");
+}
+
 /// Issue #5 round 2: the channel the spiral refuses is tried as a
 /// trochoid next (spiral -> trochoid -> rings), and what keeps the
 /// trochoid off - its lifted returns land on loop starts already in cut,
