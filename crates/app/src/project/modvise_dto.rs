@@ -6,7 +6,7 @@
 //! #819 drop-and-log way): kept as raw JSON, parsed on apply, and a key
 //! this build can't read or one that breaks the block law is dropped and
 //! logged - the fixture and its saved steel stay - never a failed load.
-//! (When #830's shared `fixture_keys` reader lands, this moves onto it.)
+//! Its drops reach the user's load notes (#826), like #812's keys.
 //!
 //! Provenance: our own wire shape over `modvise::JawParams`'s serde.
 
@@ -22,18 +22,20 @@ pub fn value(jaw: Option<&JawParams>) -> Option<Value> {
 
 /// The block parameters of fixture `model` from its key, or none (logged).
 #[must_use]
-pub fn params_from(v: Option<&Value>, model: &str) -> Option<JawParams> {
+pub fn params_from(v: Option<&Value>, model: &str, notes: &mut Vec<String>) -> Option<JawParams> {
     let v = v?;
     match serde_json::from_value::<JawParams>(v.clone()) {
         Ok(p) => match p.check() {
             Ok(()) => Some(p),
             Err(why) => {
                 tracing::warn!(model, "mod vise jaw block parameters dropped on load, kept as plain steel: {why}");
+                notes.push(format!("fixture '{model}': mod vise jaw block parameters dropped on load, kept as plain steel: {why}"));
                 None
             }
         },
         Err(why) => {
             tracing::warn!(model, "mod vise jaw block key not understood, dropped on load: {why}");
+            notes.push(format!("fixture '{model}': mod_jaw key not understood, dropped on load, kept as plain steel: {why}"));
             None
         }
     }

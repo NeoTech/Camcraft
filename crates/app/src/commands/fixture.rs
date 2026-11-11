@@ -41,6 +41,8 @@ use crate::model;
 use crate::schema::{FixtureDef, Location};
 use crate::setup;
 
+pub use super::fixture_move::MoveFixture;
+
 /// The placement validation every pose write shares, in the
 /// `SetStock` voice: a unit quaternion (normalized at the chokepoint)
 /// and a finite position, or the command never exists. Shared by every
@@ -61,7 +63,7 @@ pub(crate) fn check_location(location: Location, what: &str) -> Result<Location,
 
 /// The gate every fixture-named command runs first: the table row is
 /// virtual, everything else must name a live entity.
-fn require_writable(world: &World, name: &str) -> Result<Entity, CommandError> {
+pub(super) fn require_writable(world: &World, name: &str) -> Result<Entity, CommandError> {
     if name == MACHINE_TABLE {
         return Err(CommandError::Invalid(
             "the machine table is derived from the machine file - it is not a fixture you can change".into(),
@@ -210,96 +212,6 @@ impl Command for UntagFixture {
             entity.entity_view(world).set(self.prev.clone());
         }
         self.riders.write(world, false);
-    }
-}
-
-/// Move a fixture: the same rigid placement any model receives, named
-/// for the page that offers it. A fixture that is not a tagged model is
-/// refused - the alternative is silently moving a part someone else
-/// calls workholding.
-pub struct MoveFixture {
-    name: String,
-    prev: Location,
-    next: Location,
-    warning: Option<String>,
-    /// #819: the fixtures standing on a moved plate, carried with it.
-    carried: Vec<crate::plate::RiderMove>,
-    /// #819: a fixture placed on a plate and then moved by hand leaves
-    /// its grid location: the marker before and after.
-    unmount: Option<(FixtureDef, FixtureDef)>,
-}
-
-impl MoveFixture {
-    /// A Fixtures-page move. Since #582 it carries a by-name warning when
-    /// the moved fixture would sit in a part or the setup's stock - the
-    /// same sampled check a locate runs, never a refusal.
-    pub fn new(world: &World, name: &str, location: Location) -> Result<Self, CommandError> {
-        let mut command = Self::locating(world, name, location)?;
-        // #819: a moved plate's riders are judged where they land too.
-        let warnings: Vec<String> = std::iter::once(crate::fixture_clash::after_fixture_move(world, name, command.next))
-            .chain(command.carried.iter().map(|m| crate::fixture_clash::after_fixture_move(world, &m.name, m.after)))
-            .flatten()
-            .collect();
-        command.warning = (!warnings.is_empty()).then(|| warnings.join("; "));
-        Ok(command)
-    }
-
-    /// The move a `LocateFixture` makes: no check here, the locate runs
-    /// its own (mate-worded) one.
-    pub fn locating(world: &World, name: &str, location: Location) -> Result<Self, CommandError> {
-        let entity = require_writable(world, name)?;
-        if !model::is_fixture(world, &entity) {
-            return Err(CommandError::Invalid(format!("'{name}' is not a fixture")));
-        }
-        let next = check_location(location, &format!("'{name}'"))?;
-        let prev = model::transform_of(world, &entity).unwrap_or_default();
-        let carried = crate::plate::mount::carry(world, name, crate::plate::mount::delta(prev, next), &[]);
-        let unmount = fixture::def_of(world, &entity).filter(|d| d.plate.mount.is_some()).map(|d| {
-            let mut off = d.clone();
-            off.plate.mount = None;
-            (d, off)
-        });
-        Ok(MoveFixture {
-            name: name.to_string(),
-            prev,
-            next,
-            warning: None,
-            carried,
-            unmount,
-        })
-    }
-
-    /// The interpenetration warning (#582), if any.
-    #[must_use]
-    pub fn warning(&self) -> Option<&str> {
-        self.warning.as_deref()
-    }
-
-    /// The fixtures a moved plate carries with it (#819), by name.
-    pub fn carried(&self) -> impl Iterator<Item = &str> {
-        self.carried.iter().map(|m| m.name.as_str())
-    }
-}
-
-impl Command for MoveFixture {
-    fn apply(&self, world: &World) {
-        if let Some(entity) = model::find_by_name(world, &self.name) {
-            model::set_transform(world, &entity, self.next);
-            if let Some((_, off)) = &self.unmount {
-                entity.entity_view(world).set(off.clone());
-            }
-        }
-        crate::plate::mount::write(world, &self.carried, true);
-    }
-
-    fn invert(&self, world: &World) {
-        if let Some(entity) = model::find_by_name(world, &self.name) {
-            model::set_transform(world, &entity, self.prev);
-            if let Some((on, _)) = &self.unmount {
-                entity.entity_view(world).set(on.clone());
-            }
-        }
-        crate::plate::mount::write(world, &self.carried, false);
     }
 }
 
