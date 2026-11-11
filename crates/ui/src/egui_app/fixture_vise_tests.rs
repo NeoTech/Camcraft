@@ -124,7 +124,8 @@ fn a_vise_row_sets_its_opening_and_opens_to_the_stock() {
     );
     h.run();
     assert!(h.query_by_label("Jaw opening").is_some(), "the row offers the opening");
-    h.state_mut().vise_opening = Some((name.to_owned(), 90.0));
+    let live = opening(h.state(), name).expect("placed");
+    *h.state_mut().vise_opening_draft(name, live) = 90.0;
     h.get_by_label("Set opening").click();
     h.run();
     h.run();
@@ -136,4 +137,69 @@ fn a_vise_row_sets_its_opening_and_opens_to_the_stock() {
     let st = h.state_mut();
     assert!(st.history.undo(&st.world));
     assert_eq!(opening(st, name), Some(90.0), "each edit is one undo");
+    h.run();
+    let shown = h.state().vise_opening.get(name).map(|d| d.value);
+    assert_eq!(shown, Some(90.0), "the field follows the undo, never a stale draft");
+}
+
+/// Review of PR #802: two vise rows on one page each keep their own
+/// jaw-opening draft. A value typed into the first row's field survives
+/// the next frame (the second row no longer resets it), the first
+/// "Set opening" lands it, and the second vise is untouched.
+#[test]
+fn two_vise_rows_keep_their_own_opening_drafts() {
+    let mut state = with_stock();
+    let six = camcraft_app::vise::size("6 in").map(camcraft_app::vise::ViseSize::half_open).expect("6 in");
+    for y in [200.0, 400.0] {
+        state.pending.push_back(CommandKind::InsertBuiltinVise {
+            setup: None,
+            params: six.clone(),
+            fit_stock: false,
+            pos: [0.0, y, 0.0],
+            yaw_deg: 0.0,
+        });
+    }
+    state.drain_actions();
+    let (a, b) = ("Vise 6 in", "Vise 6 in (2)");
+    let before_b = opening(&state, b).expect("the second vise is placed");
+    assert!(opening(&state, a).is_some(), "the first vise is placed");
+
+    let mut h = Harness::builder().with_size(Vec2::new(600.0, 900.0)).build_ui_state(
+        |ui, st: &mut State| {
+            st.drain_actions();
+            super::pages::fixtures_section(ui, st, None);
+        },
+        state,
+    );
+    h.run();
+    let topmost = |h: &Harness<'static, State>, label: &str| {
+        h.query_all_by_label(label).map(|n| n.rect()).min_by(|p, q| p.top().total_cmp(&q.top())).expect(label)
+    };
+    let field_row = topmost(&h, "Jaw opening");
+    let spin = h
+        .query_all_by(|n| n.role() == egui::accesskit::Role::SpinButton)
+        .map(|n| n.rect())
+        .find(|r| (r.center().y - field_row.center().y).abs() < 12.0)
+        .expect("the first row's opening field");
+    h.query_all_by(|n| n.role() == egui::accesskit::Role::SpinButton)
+        .find(|n| n.rect() == spin)
+        .expect("spin")
+        .click();
+    h.run();
+    h.query_all_by(|n| n.role() == egui::accesskit::Role::SpinButton)
+        .find(|n| (n.rect().top() - spin.top()).abs() < 1.0)
+        .expect("editing")
+        .type_text("90");
+    h.run();
+    let set = topmost(&h, "Set opening");
+    h.query_all_by_label("Set opening").find(|n| n.rect() == set).expect("first Set").click();
+    h.run();
+    h.run();
+    assert_eq!(opening(h.state(), a), Some(90.0), "the first Set lands the typed opening");
+    assert_eq!(opening(h.state(), b), Some(before_b), "the second vise is untouched");
+    h.state_mut().pending.push_back(CommandKind::DeleteFixture(a.to_owned()));
+    h.run();
+    h.run();
+    assert!(!h.state().vise_opening.contains_key(a), "a deleted vise's draft retires with it");
+    assert!(h.state().vise_opening.contains_key(b), "the other row keeps its own");
 }

@@ -18,6 +18,9 @@ pub struct ViseSize {
     pub jaw_width: f64,
     pub jaw_height: f64,
     pub jaw_thickness: f64,
+    /// Each jaw's solid body depth (plate included): `BODY_PER_PLATE`
+    /// jaw thicknesses, a conservative default the user edits.
+    pub jaw_body_depth: f64,
     pub max_opening: f64,
     pub length: f64,
     pub width: f64,
@@ -27,6 +30,12 @@ pub struct ViseSize {
 }
 
 const IN: f64 = 25.4;
+
+/// A jaw's body depth (plate plus the steel behind it, along the screw)
+/// as a multiple of its plate thickness. 2x is the default: it fits every
+/// row's length with two such bodies, its max opening and housing
+/// (`docs/decisions/788-builtin-vises.md`). Edit it to the real vise.
+pub const BODY_PER_PLATE: f64 = 2.0;
 
 /// An imperial row, written in inches.
 #[allow(clippy::too_many_arguments)]
@@ -47,6 +56,7 @@ const fn inch(
         jaw_width: jaw_width * IN,
         jaw_height: jaw_height * IN,
         jaw_thickness: jaw_thickness * IN,
+        jaw_body_depth: BODY_PER_PLATE * jaw_thickness * IN,
         max_opening: max_opening * IN,
         length: length * IN,
         width: width * IN,
@@ -75,6 +85,7 @@ const fn mm(
         jaw_width,
         jaw_height,
         jaw_thickness,
+        jaw_body_depth: BODY_PER_PLATE * jaw_thickness,
         max_opening,
         length,
         width,
@@ -117,6 +128,7 @@ impl ViseSize {
             jaw_width: self.jaw_width,
             jaw_height: self.jaw_height,
             jaw_thickness: self.jaw_thickness,
+            jaw_body_depth: self.jaw_body_depth,
             max_opening: self.max_opening,
             length: self.length,
             width: self.width,

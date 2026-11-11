@@ -9,7 +9,9 @@
 //! the screw - the fixed jaw's clamping face at y = 0, its body behind
 //! it toward +y, the moving jaw's face at y = -opening - and z = 0 the
 //! floor the part sits on, the base below. Placing the frame's origin
-//! puts the fixed jaw's face, centred, at the floor.
+//! puts the fixed jaw's face, centred, at the floor. Each jaw is a solid
+//! block `jaw_body_depth` deep (its plate plus the steel behind it) up
+//! to jaw height - at least the real steel there, never less.
 //!
 //! Provenance: our own geometry and parameters; the size table's figures
 //! are typical values from public catalog spec sheets (cited in
@@ -30,8 +32,12 @@ pub struct ViseParams {
     pub size: String,
     pub jaw_width: f64,
     pub jaw_height: f64,
-    /// Each jaw's depth along the screw.
+    /// Each jaw plate's depth along the screw.
     pub jaw_thickness: f64,
+    /// Each jaw's solid body depth along the screw, plate included (at
+    /// least the plate): the fixed jaw's steel behind its face and the
+    /// moving jaw's block behind its face, modelled up to jaw height.
+    pub jaw_body_depth: f64,
     pub max_opening: f64,
     /// Overall length along the screw, housing included.
     pub length: f64,
@@ -53,11 +59,12 @@ const FACE_TOL: f64 = 1e-6;
 
 impl ViseParams {
     /// Every dimension named, as the refusals say it.
-    fn named(&self) -> [(&'static str, f64); 10] {
+    fn named(&self) -> [(&'static str, f64); 11] {
         [
             ("jaw width", self.jaw_width),
             ("jaw height", self.jaw_height),
             ("jaw thickness", self.jaw_thickness),
+            ("jaw body depth", self.jaw_body_depth),
             ("max opening", self.max_opening),
             ("overall length", self.length),
             ("overall width", self.width),
@@ -93,10 +100,16 @@ impl ViseParams {
                 self.width, self.jaw_width
             ));
         }
-        let carry = 2.0 * self.jaw_thickness + self.max_opening + self.housing_length;
+        if self.jaw_body_depth < self.jaw_thickness {
+            return Err(format!(
+                "vise jaw body depth {:.3} mm is less than its jaw thickness {:.3} mm",
+                self.jaw_body_depth, self.jaw_thickness
+            ));
+        }
+        let carry = 2.0 * self.jaw_body_depth + self.max_opening + self.housing_length;
         if self.length <= carry {
             return Err(format!(
-                "vise overall length {:.3} mm must be more than two jaws, the max opening and the housing ({carry:.3} mm)",
+                "vise overall length {:.3} mm must be more than two jaw bodies, the max opening and the housing ({carry:.3} mm)",
                 self.length
             ));
         }

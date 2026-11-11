@@ -18,7 +18,9 @@ use super::ViseParams;
 /// the part sits on, the base below it. `p` is assumed checked.
 #[must_use]
 pub fn profile(p: &ViseParams) -> Vec<(f64, f64)> {
-    let t = p.jaw_thickness;
+    // Each jaw is drawn as its whole body, not just the plate (#802
+    // review): steel behind a plate below jaw height is in the solid.
+    let t = p.jaw_body_depth;
     let o = p.opening;
     let front = t - p.length;
     let housing = front + p.housing_length;

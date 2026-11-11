@@ -104,9 +104,6 @@ fn vise_opening(ui: &mut Ui, state: &mut State, name: &str) {
         return;
     };
     let u = state.units();
-    if state.vise_opening.as_ref().is_none_or(|(n, _)| n != name) {
-        state.vise_opening = Some((name.to_owned(), params.opening));
-    }
     ui.label(format!(
         "Built-in vise {} - opens {} at most",
         params.size,
@@ -114,14 +111,12 @@ fn vise_opening(ui: &mut Ui, state: &mut State, name: &str) {
     ));
     let mut set = None;
     prop_row(ui, "Jaw opening", |ui| {
-        if let Some((_, v)) = state.vise_opening.as_mut() {
-            num(ui, u, v);
-        }
+        num(ui, u, state.vise_opening_draft(name, params.opening));
     });
     ui.horizontal(|ui| {
         ui.add_space(12.0);
         if ui.small_button("Set opening").clicked() {
-            let opening = state.vise_opening.as_ref().map_or(params.opening, |(_, v)| *v);
+            let opening = *state.vise_opening_draft(name, params.opening);
             set = Some((params.with_opening(opening), false));
         }
         if ui

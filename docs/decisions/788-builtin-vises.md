@@ -3,7 +3,7 @@
 **What was decided.**
 
 - **A built-in vise is generated geometry on an ordinary fixture.** The vise
-  (`app::vise`) builds a mesh from ten parameters and is placed by
+  (`app::vise`) builds a mesh from eleven parameters and is placed by
   `InsertVise`, which wraps the fixture library's `InsertFixture`. The result
   is a model wearing `FixtureDef`, judged by the existing mesh and box laws.
   There's no new collision code. The parameters ride the marker
@@ -21,6 +21,23 @@
   the volume is outward and exact). Dropped: separate boxes for the jaws at
   the true jaw width. Touching or overlapping shells aren't one closed
   solid, and extra precision isn't worth a weaker mesh verdict.
+- **Each jaw is modelled as its whole body, not just the plate** (PR #802
+  review). A real fixed jaw has steel behind its plate, and a real moving
+  jaw is a block deeper than its plate. Modelling only `jaw_thickness` left
+  that steel out, so a tool just behind a jaw below jaw height would have
+  met nothing. A separate **jaw body depth** (plate included, at least the
+  plate; refused by name when less) extends each jaw's solid back along
+  the screw, up to jaw height. The default is **2 x the jaw thickness** on
+  every row (`table::BODY_PER_PLATE`): typical fixed-jaw bodies and
+  moving-jaw blocks run about 1.5-2.5 plates deep, and 2x fits every row's
+  overall length with two bodies, the max opening and the housing, with
+  room left (the tightest, 160 mm, keeps 28 mm; 2.5x no longer fits it). It's editable in the dialog
+  and over MCP (`jaw_body_depth`); a user whose vise is deeper raises it.
+  Pinned: a tool crossing behind either plate below jaw height is struck,
+  on every size. A file saved before the field existed reads it as 2 x the
+  jaw thickness. Dropped: a doc-only note that `jaw_thickness` should be
+  the full block depth - the field's name invites the plate figure, and
+  "never less than the real steel" should hold by default.
 - **The vise frame.** x runs across the jaws, centred. y runs along the
   screw: the fixed jaw's clamping face is at y = 0 with its body toward +y,
   and the moving jaw's face is at y = -opening. z = 0 is the floor the part
@@ -40,8 +57,8 @@
   and any dimension.
 - **Refusals by name.** Every dimension must be finite and greater than
   zero, the opening at most the max, the overall width at least the jaw
-  width, and the overall length more than two jaws plus the max opening
-  plus the housing. Each refusal names the dimension. On load, a vise key
+  width, and the jaw body depth at least the jaw thickness, and the overall length
+  more than two jaw bodies plus the max opening plus the housing. Each refusal names the dimension. On load, a vise key
   that breaks the law is dropped and logged, and the facets stay as plain
   steel.
 - **Project file: an optional `vise` key on the fixture marker, no version
@@ -52,11 +69,17 @@
   or from_stock, dimension overrides). Each is one History step.
 - **UI:** "Add built-in vise…" sits on the Fixtures node's menu and on the
   Fixtures page. The dialog shares the fixture library's modal. A placed
-  vise's row shows Jaw opening, Set opening and Open to stock.
+  vise's row shows Jaw opening, Set opening and Open to stock. Each vise
+  row keeps its own opening draft (by vise name; PR #802 review: a single
+  shared slot let two vise rows reset each other's typing), refreshed from
+  the live opening whenever that moves (Set, Open to stock, undo, redo),
+  and retired when the vise is deleted, renamed or no longer a vise.
 
 **The size table** (typical values in our own rounded, generic
 proportions; no vendor's model). In the code, inches are converted at
 25.4 mm.
+
+Jaw body depth is 2 x jaw thick on every row (not a column of its own).
 
 | Size | Jaw width | Jaw height | Jaw thick | Max opening | Length | Width | Base height | Housing L x H |
 |---|---|---|---|---|---|---|---|---|

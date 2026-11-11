@@ -3,13 +3,18 @@
 //! name; a vise fitted to the stock opens to it and follows it; a placed
 //! 6 in vise convicts a pass that crosses its jaws and clears one over
 //! them; placing and editing are one undo unit each; the parameters
-//! survive a save and load.
+//! survive a save and load. Review of PR #802: each jaw's body runs
+//! `jaw_body_depth` back along the screw (steel behind the plate is
+//! struck), undoing `SetVise` restores the old facets, and a nonsense
+//! `vise` key on load is dropped, logged, and the steel kept.
 //!
 //! Gate map (M4.4): covers app::vise, app::commands::builtin_vise,
 //! app::commands::insert_fixture, app::project (fixture vise key),
 //! app::fixture, app::posting.
 
 use std::collections::HashMap;
+use std::io::Write;
+use std::sync::{Arc, Mutex};
 
 use camcraft_app::commands::{
     AddTool, CreateOperation, GenerateOperation, History, ImportModel, InsertVise, SetStock, SetVise, TagFixture,
@@ -75,7 +80,7 @@ fn volume(tris: &[Triangle]) -> f64 {
 /// The profile's area by its parts: base, two jaws, the housing step.
 fn expected_volume(p: &ViseParams) -> f64 {
     let base = p.length * p.base_height;
-    let jaws = 2.0 * p.jaw_thickness * p.jaw_height;
+    let jaws = 2.0 * p.jaw_body_depth * p.jaw_height;
     let housing = p.housing_length * p.housing_height;
     (base + jaws + housing) * p.width
 }
@@ -101,7 +106,7 @@ fn every_table_row_builds_a_closed_shell_of_its_dimensions() {
             let (lo, hi) = bounds(&tris);
             let close = |a: f64, b: f64| (a - b).abs() < 1e-9;
             assert!(close(lo[0], -0.5 * p.width) && close(hi[0], 0.5 * p.width), "{what}: width");
-            assert!(close(hi[1], p.jaw_thickness) && close(lo[1], p.jaw_thickness - p.length), "{what}: length");
+            assert!(close(hi[1], p.jaw_body_depth) && close(lo[1], p.jaw_body_depth - p.length), "{what}: length");
             assert!(close(lo[2], -p.base_height) && close(hi[2], p.jaw_height), "{what}: height");
             assert!(FixtureMesh::build(&tris).is_ok(), "{what}: the mesh law takes it");
         }
@@ -140,6 +145,8 @@ fn nonsense_parameters_are_refused_by_name() {
     refused(ViseParams { base_height: -1.0, ..six.clone() }, "base height");
     refused(ViseParams { width: six.jaw_width - 1.0, ..six.clone() }, "narrower than its jaw width");
     refused(ViseParams { length: 100.0, ..six.clone() }, "overall length");
+    refused(ViseParams { jaw_body_depth: six.jaw_thickness - 1.0, ..six.clone() }, "less than its jaw thickness");
+    refused(ViseParams { jaw_body_depth: f64::NAN, ..six.clone() }, "jaw body depth");
     let world = new_world();
     let at = VisePlacement::At(Location::default());
     assert!(InsertVise::new(&world, &six.with_opening(-3.0), None, at).is_err(), "the command refuses too");
@@ -274,4 +281,100 @@ fn placing_and_editing_are_one_undo_each_and_survive_a_save() {
     history.execute(&world, TagFixture::new(&world, "Plate", None).expect("tag"));
     let e = SetVise::opening(&world, "Plate", 10.0).err().map(|e| e.to_string()).unwrap_or_default();
     assert!(e.contains("not a built-in vise"), "{e}");
+}
+
+/// Review of PR #802: steel behind either jaw plate, below jaw height, is
+/// in the solid - a tool there is struck, never passed as air.
+#[test]
+fn steel_behind_a_jaw_plate_below_jaw_height_is_struck() {
+    for row in vise::SIZES {
+        let p = row.half_open();
+        let m = FixtureMesh::build(&p.mesh().expect("mesh")).expect("the mesh law takes it");
+        let z = 0.5 * p.jaw_height;
+        for (side, y) in [("fixed", 1.5 * p.jaw_thickness), ("moving", -p.opening - 1.5 * p.jaw_thickness)] {
+            let what = format!("{} {side} jaw", row.label);
+            assert!(m.contains(Point3::new(0.0, y, z)), "{what}: solid behind its plate");
+            let (p0, p1) = (Point3::new(-p.width, y, z), Point3::new(p.width, y, z));
+            assert!(m.band_meets(p0, p1, 0.0, 50.0, 2.0, 0.0), "{what}: a 4 mm tool crossing behind it is struck");
+        }
+    }
+}
+
+#[test]
+fn undoing_set_vise_restores_the_old_facets() {
+    let (world, mut history) = face_world(20.0, 19.5);
+    let name = six_fitted(&world, &mut history);
+    let e = model::find_by_name(&world, &name).expect("placed");
+    let before = model::facets_of(&world, &e).expect("facets").to_vec();
+    history.execute(&world, SetVise::opening(&world, &name, 120.0).expect("open"));
+    let opened = model::facets_of(&world, &e).expect("facets").to_vec();
+    assert_ne!(opened, before, "the edit regenerates the mesh");
+    assert!(history.undo(&world));
+    assert_eq!(model::facets_of(&world, &e).expect("facets").to_vec(), before, "undo puts the old facets back");
+    assert!(history.redo(&world));
+    assert_eq!(model::facets_of(&world, &e).expect("facets").to_vec(), opened, "redo the new ones");
+}
+
+#[derive(Clone, Default)]
+struct Captured(Arc<Mutex<Vec<u8>>>);
+
+impl Write for Captured {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        if let Ok(mut v) = self.0.lock() {
+            v.extend_from_slice(buf);
+        }
+        Ok(buf.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for Captured {
+    type Writer = Captured;
+    fn make_writer(&'a self) -> Self::Writer {
+        self.clone()
+    }
+}
+
+/// Every `vise` object in a saved project, its opening set to `v`.
+fn spoil_vise(j: &mut serde_json::Value, v: f64) -> usize {
+    match j {
+        serde_json::Value::Object(o) => {
+            let mut n = 0;
+            if let Some(serde_json::Value::Object(vise)) = o.get_mut("vise") {
+                vise.insert("opening".into(), serde_json::json!(v));
+                n += 1;
+            }
+            n + o.values_mut().map(|c| spoil_vise(c, v)).sum::<usize>()
+        }
+        serde_json::Value::Array(a) => a.iter_mut().map(|c| spoil_vise(c, v)).sum(),
+        _ => 0,
+    }
+}
+
+#[test]
+fn a_nonsense_vise_key_is_dropped_on_load_logged_and_the_steel_kept() {
+    let (world, mut history) = face_world(20.0, 19.5);
+    let name = six_fitted(&world, &mut history);
+    let path = std::env::temp_dir().join(format!("camcraft-vise-spoiled-{}.camproj", std::process::id()));
+    project::save(&world, &path).expect("save");
+    let mut j: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&path).expect("read")).expect("json");
+    assert_eq!(spoil_vise(&mut j, 1.0e6), 1, "one vise key in the file");
+    std::fs::write(&path, j.to_string()).expect("write");
+
+    let back = new_world();
+    let out = Captured::default();
+    let sub = tracing_subscriber::fmt().with_writer(out.clone()).with_ansi(false).finish();
+    let loaded = tracing::subscriber::with_default(sub, || project::load(&back, &path));
+    let _ = std::fs::remove_file(&path);
+    loaded.expect("the file still loads");
+    let log = out.0.lock().map(|v| String::from_utf8_lossy(&v).into_owned()).unwrap_or_default();
+    assert!(log.contains("vise parameters dropped on load") && log.contains("over the max opening"), "logged: {log}");
+    let e = model::find_by_name(&back, &name).expect("the fixture is kept");
+    let def = fixture::def_of(&back, &e).expect("still a fixture");
+    assert!(def.vise.is_none(), "but no longer a built-in vise");
+    assert!(model::facets_of(&back, &e).is_some_and(|f| !f.is_empty()), "its saved steel stays");
+    let refused = SetVise::opening(&back, &name, 80.0).err().map(|e| e.to_string()).unwrap_or_default();
+    assert!(refused.contains("not a built-in vise"), "{refused}");
 }

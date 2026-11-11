@@ -16,6 +16,10 @@ pub struct ViseDto {
     pub jaw_width: f64,
     pub jaw_height: f64,
     pub jaw_thickness: f64,
+    /// Absent in files saved before it existed: read as
+    /// `table::BODY_PER_PLATE` jaw thicknesses.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub jaw_body_depth: Option<f64>,
     pub max_opening: f64,
     pub length: f64,
     pub width: f64,
@@ -33,6 +37,7 @@ impl ViseDto {
             jaw_width: p.jaw_width,
             jaw_height: p.jaw_height,
             jaw_thickness: p.jaw_thickness,
+            jaw_body_depth: Some(p.jaw_body_depth),
             max_opening: p.max_opening,
             length: p.length,
             width: p.width,
@@ -53,6 +58,7 @@ impl ViseDto {
             jaw_width: self.jaw_width,
             jaw_height: self.jaw_height,
             jaw_thickness: self.jaw_thickness,
+            jaw_body_depth: self.jaw_body_depth.unwrap_or(crate::vise::table::BODY_PER_PLATE * self.jaw_thickness),
             max_opening: self.max_opening,
             length: self.length,
             width: self.width,

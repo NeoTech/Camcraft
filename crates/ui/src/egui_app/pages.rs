@@ -859,6 +859,7 @@ pub(super) fn fixtures_section(ui: &mut Ui, state: &mut State, ctx: Option<&str>
     {
         state.fixture_ui = FixtureUi::default();
     }
+    state.retire_vise_opening_drafts();
     ui.label(if fixtures.is_empty() && table.is_none() {
         "No workholding modeled: the collision checks see stock and part only."
     } else {

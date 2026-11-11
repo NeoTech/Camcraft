@@ -23,8 +23,8 @@ pub(super) const TOOLS: &[Tool] = &[
     Tool { name: "set_vise", description: "Change a placed built-in vise: its jaw opening in mm, or from_stock to open the jaws to the setup's stock as the vise stands, and/or dimension overrides in mm. The mesh is regenerated; one undoable step.", schema: s_set, run: set_vise },
 ];
 
-const DIMS: [&str; 9] = [
-    "jaw_width", "jaw_height", "jaw_thickness", "max_opening", "length", "width", "base_height", "housing_length",
+const DIMS: [&str; 10] = [
+    "jaw_width", "jaw_height", "jaw_thickness", "jaw_body_depth", "max_opening", "length", "width", "base_height", "housing_length",
     "housing_height",
 ];
 
@@ -38,6 +38,7 @@ fn with_dims(mut p: ViseParams, a: &Map<String, Value>) -> Result<ViseParams, St
             "jaw_width" => &mut p.jaw_width,
             "jaw_height" => &mut p.jaw_height,
             "jaw_thickness" => &mut p.jaw_thickness,
+            "jaw_body_depth" => &mut p.jaw_body_depth,
             "max_opening" => &mut p.max_opening,
             "length" => &mut p.length,
             "width" => &mut p.width,
@@ -62,6 +63,7 @@ fn params_view(p: &ViseParams) -> Value {
     json!({
         "size": p.size, "opening": fnum(p.opening), "max_opening": fnum(p.max_opening),
         "jaw_width": fnum(p.jaw_width), "jaw_height": fnum(p.jaw_height), "jaw_thickness": fnum(p.jaw_thickness),
+        "jaw_body_depth": fnum(p.jaw_body_depth),
         "length": fnum(p.length), "width": fnum(p.width), "base_height": fnum(p.base_height),
         "housing_length": fnum(p.housing_length), "housing_height": fnum(p.housing_height),
     })

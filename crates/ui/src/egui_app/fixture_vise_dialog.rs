@@ -56,6 +56,7 @@ pub(crate) fn body(ui: &mut Ui, u: Unit, d: &mut ViseDraft) -> Option<ViseAct> {
             ("Jaw width", &mut p.jaw_width),
             ("Jaw height", &mut p.jaw_height),
             ("Jaw thickness", &mut p.jaw_thickness),
+            ("Jaw body depth", &mut p.jaw_body_depth),
             ("Max opening", &mut p.max_opening),
             ("Overall length", &mut p.length),
             ("Overall width", &mut p.width),

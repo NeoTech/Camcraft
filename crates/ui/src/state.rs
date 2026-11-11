@@ -53,7 +53,7 @@ mod fixture_library;
 pub use fixture_library::{FixtureLibDialog, InsertFixtureDraft, LibraryRow, SaveFixtureDraft};
 #[path = "state_vise.rs"]
 mod vise_ui;
-pub use vise_ui::ViseDraft;
+pub use vise_ui::{ViseDraft, ViseOpeningDraft};
 #[path = "state_program_entry.rs"]
 mod program_entry;
 pub use program_entry::EntryVerb;
@@ -1414,9 +1414,10 @@ pub struct State {
     /// The fixture library folder override (tests; `None` = the user
     /// folder, `CAMCRAFT_FIXTURES` first).
     pub fixture_lib_dir: Option<PathBuf>,
-    /// #788: a built-in vise row's jaw-opening draft (vise name, mm) -
-    /// view state; Set lands it through `SetVise`.
-    pub vise_opening: Option<(String, f64)>,
+    /// #788: each built-in vise row's jaw-opening draft, by vise name -
+    /// view state; Set lands it through `SetVise`. See
+    /// [`State::vise_opening_draft`].
+    pub vise_opening: HashMap<String, ViseOpeningDraft>,
     /// The selected op's struck fixtures, per (version, op, path sig).
     pub struck_cache: camcraft_app::fixture_view::StruckCache,
     /// Properties / Tool Library pane drafts (ephemeral; see [`OpUi`]).
@@ -1714,7 +1715,7 @@ impl State {
             fixture_mesh_cache: Default::default(),
             fixture_lib: None,
             fixture_lib_dir: None,
-            vise_opening: None,
+            vise_opening: HashMap::new(),
             struck_cache: Default::default(),
             // The tool draft carries a plausible name from the first
             // frame: an empty Name field made Add look dead (refused

@@ -6,7 +6,9 @@
 //! Provenance: our own dialog state over our own vise commands.
 
 use camcraft_app::commands::{InsertVise, SetVise, VisePlacement};
+use camcraft_app::fixture;
 use camcraft_app::geometry::{Point3, quat_from_euler};
+use camcraft_app::model;
 use camcraft_app::schema::Location;
 use camcraft_app::vise::{self, ViseParams};
 
@@ -48,6 +50,16 @@ impl ViseDraft {
     }
 }
 
+/// One vise row's jaw-opening draft (#788, per vise since the #802
+/// review): `value` is what the field shows and Set sends; `live` is the
+/// vise's opening the draft was taken from. When the live opening moves
+/// (Set, "Open to stock", undo, redo) the draft follows it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ViseOpeningDraft {
+    pub live: f64,
+    pub value: f64,
+}
+
 /// A placeholder the table never reaches (it is never empty); every
 /// figure zero, so the vise law refuses it by name if it ever is.
 fn empty_params() -> ViseParams {
@@ -56,6 +68,7 @@ fn empty_params() -> ViseParams {
         jaw_width: 0.0,
         jaw_height: 0.0,
         jaw_thickness: 0.0,
+        jaw_body_depth: 0.0,
         max_opening: 0.0,
         length: 0.0,
         width: 0.0,
@@ -67,6 +80,32 @@ fn empty_params() -> ViseParams {
 }
 
 impl State {
+    /// Vise `name`'s jaw-opening draft, `live` its opening in the world
+    /// now: kept while the live opening stands still, refreshed from it
+    /// once it moves. Each vise row has its own, so two rows never reset
+    /// each other's typing.
+    pub fn vise_opening_draft(&mut self, name: &str, live: f64) -> &mut f64 {
+        let d = self
+            .vise_opening
+            .entry(name.to_owned())
+            .or_insert(ViseOpeningDraft { live, value: live });
+        if d.live.to_bits() != live.to_bits() {
+            *d = ViseOpeningDraft { live, value: live };
+        }
+        &mut d.value
+    }
+
+    /// Drop the drafts of vises that are gone (deleted, renamed, or no
+    /// longer built-in vises), so a later vise of that name starts fresh.
+    pub fn retire_vise_opening_drafts(&mut self) {
+        let world = &self.world;
+        self.vise_opening.retain(|name, _| {
+            model::find_by_name(world, name)
+                .and_then(|e| fixture::def_of(world, &e))
+                .is_some_and(|d| d.vise.is_some())
+        });
+    }
+
     /// Open the built-in vise dialog over `setup`'s Fixtures node, on the
     /// 6 in size for an inch document and 150 mm otherwise.
     pub fn open_vise_dialog(&mut self, setup: String) {
@@ -124,7 +163,7 @@ impl State {
                 let opening = command.params().map_or(0.0, |p| p.opening);
                 self.history.execute(&self.world, command);
                 self.doc_version += 1;
-                self.vise_opening = None;
+                self.vise_opening.remove(name);
                 let u = self.units();
                 self.status = format!("{name}: jaws open {}", camcraft_app::units::len(opening, u, 3));
             }
