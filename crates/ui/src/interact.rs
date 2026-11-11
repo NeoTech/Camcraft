@@ -854,6 +854,13 @@ pub fn toolpath_lines(state: &State) -> Vec<[f32; 6]> {
             return out;
         }
     }
+    // #261 part 3: and draws the moves it had built as a dashed ghost
+    // (crate::refusal_ghost) - off the refusal, never off the operation.
+    if let Some(g) = state.refusal_ghost()
+        && !crate::refusal_ghost::ghost_lines(&mut out, g, pal, arm)
+    {
+        return out;
+    }
     // #261 part 2: a standing generate refusal marks the spot it names.
     if let Some(at) = state.refusal_focus() {
         crate::path_lines::refusal_mark(&mut out, at, pal, arm);
@@ -935,7 +942,7 @@ pub(crate) fn chevrons(out: &mut Vec<[f32; 6]>, from: Point3, to: Point3, c: [f3
 /// and say so in the log.
 pub(crate) fn capped(mut lines: Vec<[f32; 6]>) -> Vec<[f32; 6]> {
     if lines.len() > MAX_OVERLAY_VERTICES {
-        eprintln!(
+        diag_warn!(
             "overlay: {} vertices exceed the display budget; the rest of this frame's \
              lines are dropped",
             lines.len()

@@ -70,6 +70,16 @@ egui-winit = "=0.36.2"
 egui-wgpu = "=0.36.2"
 egui_dock = "=0.21.1"
 egui_kittest = { version = "=0.36.2", features = ["wgpu", "snapshot"] }
+# wasm32 only (#31): the browser shell. eframe's web runner owns the canvas,
+# the DOM events and the awaited GPU start-up; wasm-bindgen exports the
+# start function and wasm-bindgen-futures runs the awaits on the browser's
+# event loop. All three were already in the lock (eframe through
+# egui_kittest, the other two through wgpu) - no new crate. MIT OR
+# Apache-2.0. eframe rides the egui set's hard pin; wasm-bindgen's version
+# is what web/build-app-wasm.sh installs the matching CLI for.
+eframe = { version = "=0.36.2", default-features = false, features = ["wgpu", "default_fonts"] }
+wasm-bindgen = "0.2.129"
+wasm-bindgen-futures = "0.4"
 # PNG decode for the UI icon set (assets/ui/*.png -> egui_app/icons.rs).
 # Png only: everything else (formats, headers of other codecs) stays off.
 image = { version = "0.25", default-features = false, features = ["png"] }

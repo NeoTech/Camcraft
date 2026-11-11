@@ -95,6 +95,9 @@ pub use camcraft_tools::tools;
 pub use camcraft_tools::orientation;
 // #93: the drawn spun profile of a milling holder.
 pub use camcraft_tools::spun;
+// #93 slice 2: the drawn cutter law, and the tool's stored drawn cutter.
+pub use camcraft_tools::cutter_profile;
+pub mod tool_cutter;
 // #793: the built-in taper holder library.
 pub use camcraft_tools::holder_library;
 // #368: a tool's modelled body and the reads the judging laws take from it.

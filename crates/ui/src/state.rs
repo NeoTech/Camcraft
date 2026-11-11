@@ -75,6 +75,9 @@ mod tool_body_ui;
 pub use tool_body_ui::{BodyDraft, BodyPickMode, ToolBodyUi, ZOOM_MAX, ZOOM_MIN, clamp_zoom};
 #[path = "state_tool_profile.rs"]
 mod tool_profile_ui;
+#[path = "state_tool_cutter.rs"]
+mod tool_cutter_ui;
+pub use tool_cutter_ui::ToolCutterUi;
 #[path = "state_recent.rs"]
 mod recent_ui;
 #[path = "state_view.rs"]
@@ -245,6 +248,13 @@ pub enum CommandKind {
     /// return it to its parametric cylinder (`None`) - the tool editor's
     /// Apply profile, one `SetToolBody::spun`.
     SetToolProfile {
+        name: String,
+        points: Option<Vec<camcraft_app::spun::SpunPoint>>,
+    },
+    /// #93 slice 2: set a milling tool's drawn cutter outline (`Some`)
+    /// or clear it back to the numbers' outline (`None`) - the tool
+    /// editor's Apply cutter, one `SetToolCutter`.
+    SetToolCutter {
         name: String,
         points: Option<Vec<camcraft_app::spun::SpunPoint>>,
     },
@@ -1585,6 +1595,9 @@ pub struct State {
     /// #93: the tool editor's spun-profile draft (Parametric/Custom, the
     /// points). Ephemeral like `tool_body_ui`; Apply profile is the command.
     pub tool_profile_ui: ToolProfileUi,
+    /// #93 slice 2: the tool editor's drawn-cutter draft; Apply cutter
+    /// is the command.
+    pub tool_cutter_ui: ToolCutterUi,
     /// The machine editor window (M3.3 stage C): `None` closed. An
     /// ephemeral draft like [`State::tool_editor`] - the numbers under
     /// edit are a copy of the machine until Apply pushes `LoadMachine`,
@@ -1631,6 +1644,11 @@ pub struct State {
     /// [`State::feedback`]; read only through [`State::refusal_focus`],
     /// which retires it with the refusal it belongs to.
     pub feedback_at: Option<[f64; 3]>,
+    /// #261 part 3: the moves a refused generation had built, beside
+    /// [`State::feedback`]; read only through [`State::refusal_ghost`].
+    /// Display-only and ephemeral: never cached on the operation, freed
+    /// with the refusal it belongs to.
+    pub feedback_ghost: Option<camcraft_app::machining2d::Ghost>,
 }
 
 /// Which page of the Operations pane a refused command's message belongs
@@ -1836,6 +1854,7 @@ impl State {
             tool_editor: None,
             tool_body_ui: ToolBodyUi::default(),
             tool_profile_ui: ToolProfileUi::default(),
+            tool_cutter_ui: ToolCutterUi::default(),
             machine_editor: None,
             machines_pane: Default::default(),
             theme_cache: theme_files::Cache::new(),
@@ -1851,6 +1870,7 @@ impl State {
             feedback: None,
             feedback_ctx: None,
             feedback_at: None,
+            feedback_ghost: None,
         }
     }
 
@@ -1923,6 +1943,7 @@ impl State {
         self.feedback = Some((scope, msg));
         // A new refusal names no spot until its caller says so (#261).
         self.feedback_at = None;
+        self.feedback_ghost = None;
     }
 
     /// Refetch the Setup pane's drafts from the world after any document
@@ -2485,6 +2506,7 @@ impl State {
         self.tool_synced = (String::new(), self.doc_version);
         self.tool_body_ui = ToolBodyUi::default();
         self.tool_profile_ui = ToolProfileUi::default();
+        self.tool_cutter_ui = ToolCutterUi::default();
     }
 
     pub(crate) fn copy_operation(&mut self, name: &str) {
@@ -2624,7 +2646,7 @@ impl State {
             if Instant::now() >= deadline {
                 self.abandon_imports();
                 self.status = String::from("import timed out");
-                eprintln!("settle: queued work did not finish before the deadline");
+                diag_warn!("settle: queued work did not finish before the deadline");
                 return;
             }
             std::thread::sleep(Duration::from_millis(2));
@@ -2637,6 +2659,7 @@ impl State {
         self.feedback = None;
         self.feedback_ctx = None;
         self.feedback_at = None;
+        self.feedback_ghost = None;
         // #107: New, Open and Quit over unsaved changes wait for the
         // prompt's answer instead of discarding the document.
         let Some(action) = self.hold_if_unsaved(action) else {
@@ -2950,6 +2973,7 @@ impl State {
             }
             CommandKind::SetToolBody { name, body } => self.run_set_tool_body(&name, body),
             CommandKind::SetToolProfile { name, points } => self.run_set_tool_profile(&name, points),
+            CommandKind::SetToolCutter { name, points } => self.run_set_tool_cutter(&name, points),
             CommandKind::SetToolHolder { name, entry, gauge, projection } => {
                 self.run_set_tool_holder(&name, &entry, gauge, projection)
             }
@@ -3186,6 +3210,8 @@ impl State {
                         self.refuse(ErrorScope::Operation, format!("generate failed: {err}"));
                         // #261 part 2: where the generator refused, if it said.
                         self.feedback_at = err.location().map(|p| [p.x, p.y, p.z]);
+                        // Part 3: the moves it had built, drawn as a ghost.
+                        self.feedback_ghost = err.ghost().cloned();
                     }
                 }
             }
@@ -3687,14 +3713,14 @@ impl State {
                 // A dropped rx means the document changed or we are closing;
                 // the command is simply never applied.
                 if tx.send(result).is_err() {
-                    eprintln!("import: result discarded, no receiver");
+                    diag_warn!("import: result discarded, no receiver");
                 }
             });
         match spawned {
             Ok(_) => self.import_rx = Some(rx),
             Err(err) => {
                 // Thread exhaustion must not lose the import: run inline.
-                eprintln!("import: worker spawn failed ({err}); running inline");
+                diag_warn!("import: worker spawn failed ({err}); running inline");
                 let result = ImportModel::new(&path);
                 self.finish_import(result);
             }
@@ -3799,7 +3825,7 @@ impl State {
                 self.import_file = None;
                 self.import_started = None;
                 self.status = String::from("import failed: worker lost");
-                eprintln!("import: worker thread exited without a result");
+                diag_warn!("import: worker thread exited without a result");
             }
             None => {}
         }
@@ -3832,7 +3858,7 @@ impl State {
     /// A worker still running finishes in the background and discards itself.
     fn abandon_imports(&mut self) {
         if self.import_rx.take().is_some() {
-            eprintln!("import: document changed; pending import discarded");
+            diag_warn!("import: document changed; pending import discarded");
         }
         self.import_queue.clear();
         self.import_file = None;

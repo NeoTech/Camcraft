@@ -203,10 +203,7 @@ impl Shell {
         // cannot build them fails like one that cannot configure, and the
         // next adapter is tried (the "Intel never renders" path).
         let scale = window.scale_factor().clamp(0.1, 8.0);
-        let (vw, vh) = (
-            (f64::from(self.viewport_points[0]) * scale).max(1.0) as u32,
-            (f64::from(self.viewport_points[1]) * scale).max(1.0) as u32,
-        );
+        let (vw, vh) = super::view_pass::target_extent(self.viewport_points, scale);
         // View3D renders into its OWN texture (Rgba8Unorm, the format
         // egui's native-texture registration demands), decoupled from the
         // surface format - that is the registered-texture plan.
@@ -325,32 +322,9 @@ fn resize_frame_deadline(last: Option<std::time::Instant>) -> std::time::Instant
         .unwrap_or_else(std::time::Instant::now)
 }
 
-/// Idle documents need no redraw. Active egui animation, queued commands,
-/// imports and simulation each name the next useful frame.
-fn redraw_delay(
-    egui_delay: std::time::Duration,
-    pending: bool,
-    importing: bool,
-    sim_playing: bool,
-    field_play_pending: bool,
-) -> Option<std::time::Duration> {
-    use std::time::Duration;
-    let mut delay = egui_delay;
-    if pending {
-        delay = Duration::ZERO;
-    }
-    if importing || field_play_pending {
-        delay = delay.min(Duration::from_millis(50));
-    }
-    if sim_playing {
-        delay = delay.min(Duration::from_millis(16));
-    }
-    (delay != Duration::MAX).then_some(delay)
-}
-
 #[cfg(test)]
 mod redraw_tests {
-    use super::redraw_delay;
+    use super::super::view_pass::redraw_delay;
     use std::time::Duration;
 
     #[test]
