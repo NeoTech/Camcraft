@@ -129,6 +129,9 @@ mod fixture_menu;
 // #339 slice 6: the fixture library's Save / Insert dialogs.
 pub(crate) mod fixture_library_dialog;
 pub(crate) mod fixture_vise_dialog;
+pub(crate) mod fixture_plate_dialog;
+mod fixture_plate_rows;
+mod fixture_modvise_rows;
 pub(crate) mod fixture_accessory_dialog;
 mod fixture_accessory_rows;
 pub(crate) mod shell;
@@ -162,6 +165,10 @@ mod fixture_library_tests;
 mod fixture_vise_tests;
 #[cfg(test)]
 mod fixture_self_centering_tests;
+#[cfg(test)]
+mod fixture_plate_tests;
+#[cfg(test)]
+mod fixture_modvise_tests;
 #[cfg(test)]
 mod fixture_accessory_tests;
 #[cfg(test)]

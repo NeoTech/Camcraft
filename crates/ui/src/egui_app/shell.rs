@@ -1329,6 +1329,16 @@ fn viewport_panel(
                 egui::Stroke::new(1.5, ink),
             ));
         }
+        // #819: fixture plate grids - hole crosses, dowel diamonds, and
+        // the names along row A and column 1.
+        let plates = crate::plate_viz::plate_marks(state, aspect);
+        for (a, b, dowel) in &plates.segs {
+            let ink = if *dowel { egui::Color32::from_rgb(120, 200, 255) } else { egui::Color32::from_rgb(230, 190, 90) };
+            ui.painter().line_segment([to_px(*a), to_px(*b)], egui::Stroke::new(1.5, ink));
+        }
+        for (uv, text) in plates.labels {
+            ui.painter().text(to_px(uv), egui::Align2::LEFT_BOTTOM, text, font.clone(), egui::Color32::from_rgb(230, 190, 90));
+        }
         // The Boundary group's marks (M11.5 UX): role-coloured picked
         // edges, the edge a click would take, chain ends, machined side.
         for m in crate::boundary_viz::boundary_marks(state, aspect) {
