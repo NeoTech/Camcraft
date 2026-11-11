@@ -49,8 +49,9 @@ fn read_column(c: &CarriedField, x: f64, y: f64) -> Result<Option<(f64, f64)>, S
 
 impl CarriedField {
     /// The carried solid as a column body on `lat` (new frame).
-    /// `judged_before` is the incoming body's floor flag; a flip sets it
-    /// (the floor has faced the spindle), as `Body::carry` does.
+    /// `judged_before` is the incoming body's floor flag; a flip anywhere
+    /// in the carry chain sets it (the floor has faced the spindle), as
+    /// `Body::carry` does - a flip already baked into the bricks included.
     ///
     /// # Errors
     /// A non-finite or empty lattice; a column the field cannot read; a
@@ -92,6 +93,6 @@ impl CarriedField {
         let stock_z = top.iter().copied().filter(|v| v.is_finite()).fold(f64::NEG_INFINITY, f64::max);
         let stock_z = if stock_z.is_finite() { stock_z } else { 0.0 };
         let dex = Dexel::from_grid(lat.x0, lat.y0, lat.cell, lat.nx, lat.ny, stock_z, top);
-        Body::from_parts(dex, floor, judged_before || self.turn.flips())
+        Body::from_parts(dex, floor, judged_before || self.flipped())
     }
 }

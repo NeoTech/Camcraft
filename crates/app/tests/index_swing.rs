@@ -8,7 +8,7 @@
 //! microARC 4 / 770MX numbers from Tormach's published spec sheets.
 //!
 //! Gate map (M4.4): covers app::posting (index_swing, verification_gate),
-//! post::machine (nose_to_axis, turns_part).
+//! post::machine (nose_to_axis, turns_part), project (swing_note, #813).
 
 use camcraft_app::commands::{
     AddTool, CreateOperation, GenerateOperation, History, ImportModel, LoadMachine, SelectPost, SetStock,
@@ -105,12 +105,12 @@ fn bar_swept() -> f64 {
 fn the_shipped_microarc_states_its_nose_height_and_a_work_turning_a() {
     let m = shipped(ARC4);
     let a = m.axes.iter().find(|a| a.name == "A").expect("an A");
-    assert!(a.turns_part, "the microARC sits on the bed: its A turns the work");
+    assert_eq!(a.turns_part, Some(true), "the microARC sits on the bed: its A turns the work");
     let nose = a.nose_to_axis.expect("stated");
     assert!((nose - NOSE).abs() < 1e-9, "{nose}");
     // A head tilt carries the spindle: its A turns the tool, not the work.
     let tilt = shipped("Tilt-head 5-axis");
-    assert!(tilt.axes.iter().filter(|a| a.rotary).all(|a| !a.turns_part && a.nose_to_axis.is_none()));
+    assert!(tilt.axes.iter().filter(|a| a.rotary).all(|a| a.turns_part == Some(false) && a.nose_to_axis.is_none()));
 }
 
 #[test]
@@ -174,4 +174,72 @@ fn a_machine_with_no_a_is_unaffected() {
     let len = NOSE - bar_swept() - MARGIN_MM + 2.0;
     let world = doc(shipped("Tormach 770MX"), len, None);
     assert!(swing_lines(&world).is_empty(), "{:?}", verification_gate(&world));
+}
+
+/// #813: the shipped microARC text with its A's `axis` vector struck -
+/// a user's own table-A file that never states the line.
+fn arc4_without_axis_vector() -> Machine {
+    let text = MACHINES.iter().find(|(n, _)| *n == ARC4).map(|(_, t)| *t).expect("shipped");
+    let custom = text.replacen("\"axis\": [1.0, 0.0, 0.0],", "", 1);
+    assert_ne!(custom, text, "the A's axis vector was struck");
+    let m = parse_mch(&custom).expect("a table A with no axis vector still parses");
+    assert!(m.axes.iter().any(|a| a.name == "A" && a.rotary && a.axis.is_none()));
+    m
+}
+
+#[test]
+fn a_custom_table_a_with_no_axis_vector_is_judged_about_x() {
+    // RS-274: A turns about X, so the unstated line is X - judged, not passed.
+    let len = NOSE - bar_swept() - MARGIN_MM + 2.0;
+    let world = doc(arc4_without_axis_vector(), len, Some(90.0));
+    let lines = swing_lines(&world);
+    assert_eq!(lines.len(), 1, "{lines:?}");
+    assert!(lines[0].starts_with("FLAT: the A90.000 index turns the work"), "{}", lines[0]);
+    let out = std::env::temp_dir().join(format!("camcraft_swing_noaxis_{}.nc", std::process::id()));
+    let err = camcraft_app::posting::post_setup(&world, &out).expect_err("never silently posted");
+    assert!(err.contains("FLAT: the A90.000 index"), "{err}");
+    assert!(!out.exists(), "a refused post writes nothing");
+    // The same file with a short tool clears and posts.
+    let world = doc(arc4_without_axis_vector(), 3.0 * IN, Some(90.0));
+    assert!(swing_lines(&world).is_empty(), "{:?}", verification_gate(&world));
+}
+
+#[test]
+fn a_work_turning_rotary_with_no_line_and_no_rs274_letter_is_refused_by_name() {
+    let mut m = arc4_without_axis_vector();
+    for a in m.axes.iter_mut().filter(|a| a.rotary) {
+        a.name = "U".into();
+    }
+    let world = doc(m, 3.0 * IN, None);
+    let lines: Vec<String> =
+        verification_gate(&world).into_iter().filter(|p| p.contains("states no axis vector")).collect();
+    assert_eq!(lines.len(), 1, "{:?}", verification_gate(&world));
+    assert!(lines[0].starts_with("FLAT: Tormach 770MX + microARC 4 turns the work on rotary U"), "{}", lines[0]);
+    let out = std::env::temp_dir().join(format!("camcraft_swing_unlined_{}.nc", std::process::id()));
+    let err = camcraft_app::posting::post_setup(&world, &out).expect_err("never silently posted");
+    assert!(err.contains("rotary U but states no axis vector"), "{err}");
+    assert!(!out.exists(), "a refused post writes nothing");
+}
+
+#[test]
+fn a_project_saved_before_804_names_its_unjudged_table_a_on_load() {
+    let world = doc(shipped(ARC4), 3.0 * IN, Some(90.0));
+    let text = ok(serde_json::to_string_pretty(&camcraft_app::project::collect(&world)), "save");
+    assert!(text.contains("\"turns_part\": true"), "the fresh save states the A's kind");
+    let fresh = ok(camcraft_app::project::open_noted(&camcraft_app::world::new_world(), &text), "opens");
+    assert!(fresh.iter().all(|n| !n.contains("index-swing")), "{fresh:?}");
+    // A pre-#804 save never wrote the key.
+    let old = text.replace("\"turns_part\": true,", "").replace(",\n          \"turns_part\": true", "");
+    assert!(!old.contains("turns_part"), "{old}");
+    let notes = ok(camcraft_app::project::open_noted(&camcraft_app::world::new_world(), &old), "opens");
+    let swing: Vec<&String> = notes.iter().filter(|n| n.contains("index-swing")).collect();
+    assert_eq!(swing.len(), 1, "{notes:?}");
+    let n = swing[0];
+    assert!(n.contains("machine Tormach 770MX + microARC 4") && n.contains("rotary A"), "{n}");
+    assert!(n.contains("reload the machine"), "{n}");
+    // A machine with no rotary is never named.
+    let plain = doc(shipped("Tormach 770MX"), 3.0 * IN, None);
+    let text = ok(serde_json::to_string_pretty(&camcraft_app::project::collect(&plain)), "save");
+    let notes = ok(camcraft_app::project::open_noted(&camcraft_app::world::new_world(), &text), "opens");
+    assert!(notes.iter().all(|n| !n.contains("index-swing")), "{notes:?}");
 }

@@ -141,8 +141,10 @@ fn every_kind_builds_closed_shells_of_its_dimensions() {
         *a.steps_mut().expect("a step block") = steps;
         check_solid(&a, &format!("{steps} steps"));
     }
-    let tall = Accessory::default_of("strap_clamp").expect("clamp").with_dim("stud_diameter", 40.0).expect("dim");
-    check_solid(&tall, "a stud wider than the strap");
+    // #812: a stud wider than the strap is refused, never drawn narrower
+    // than typed (fixture_keys_lenient pins the refusal by name).
+    let wide = Accessory::default_of("strap_clamp").expect("clamp").with_dim("stud_diameter", 40.0).expect("dim");
+    assert!(wide.mesh().is_err_and(|e| e.contains("must be less than the strap width")));
 }
 
 #[test]
