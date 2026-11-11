@@ -27,6 +27,7 @@ use super::laws::{dist2_segs, orient, proper_cross};
 use crate::cl::Move;
 use crate::geo2d::Point2;
 use std::f64::consts::PI;
+use std::ops::Not;
 
 /// What law (b)'s wall reading measures of one move in XY.
 pub(super) enum Trace {
@@ -95,7 +96,8 @@ impl Trace {
     pub(super) fn near(&self, p: Point2, q: Point2, floor: f64) -> bool {
         match self {
             Trace::Seg(a, b) => dist2_segs(*a, *b, p, q) < floor * floor,
-            Trace::Arc(arc) => !(arc.dist_seg(p, q) >= floor), // NaN reads near
+            // A NaN distance reads near: the law fails closed.
+            Trace::Arc(arc) => arc.dist_seg(p, q).ge(&floor).not(),
             Trace::Unread => true,
         }
     }
@@ -177,7 +179,7 @@ impl XyArc {
         let qb = 2.0 * (fx * dx + fy * dy);
         let qc = fx * fx + fy * fy - r * r;
         let disc = qb * qb - 4.0 * qa * qc;
-        if !(disc > 0.0) {
+        if disc.partial_cmp(&0.0) != Some(std::cmp::Ordering::Greater) {
             return false; // a miss or a tangent touch is no crossing
         }
         let s = disc.sqrt();
