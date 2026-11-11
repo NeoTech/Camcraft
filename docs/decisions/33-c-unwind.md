@@ -7,7 +7,12 @@ into stretches at its clear links. A clear link is a point the tool
 reached by a rapid that stands at the path's own clearance, meaning the
 highest Z any move reaches or the largest radius any move reaches. On a
 standing bar's Rotary Contour, that is the point between each ring's
-retract and the next ring's plunge. A stretch whose C span fits the travel is left alone.
+retract and the next ring's plunge. A clearance counts only if it is
+strictly beyond every point the tool cuts: every feed and plunge end,
+and every feed start. A plunge's start is where it leaves the
+clearance. Without this rule, a ring at the path's largest radius would
+have read as its own retract cylinder, and the tool would have orbited
+in the cut. A stretch whose C span fits the travel is left alone.
 A stretch that does not fit is moved by the fewest whole turns that make
 it fit. A stretch no shift can fit is refused by name at generation
 ("... no clear link stands inside it to unwind at"). The first stretch
