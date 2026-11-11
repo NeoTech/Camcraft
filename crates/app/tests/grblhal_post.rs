@@ -84,7 +84,7 @@ fn each_tool_change_lifts_z_then_stands_alone() {
     assert!(!nc.contains("G53"), "no machine-coordinate move without homing\n{nc}");
     // X Y move first after a change, at the safe height; Z comes down after.
     let t4 = lines.iter().position(|l| *l == "T4 M6").expect("T4");
-    assert!(lines[t4 + 1..].iter().any(|l| *l == "G0 X20 Y5"), "{nc}");
+    assert!(lines[t4 + 1..].contains(&"G0 X20 Y5"), "{nc}");
 }
 
 #[test]

@@ -39,6 +39,7 @@ pub const BUILTINS: &[(&str, &str)] = &[
     ("Tormach PathPilot", include_str!("../../../assets/posts/tormach.cps")),
     // #710: grbl-family controllers (hobby and small-shop routers and mills).
     ("grblHAL", include_str!("../../../assets/posts/grblhal.cps")),
+    ("Makera Carvera", include_str!("../../../assets/posts/carvera.cps")),
     ("Fanuc Lathe", include_str!("../../../assets/posts/fanuc-lathe.cps")),
 ];
 
@@ -146,6 +147,19 @@ pub const MACHINES: &[(&str, &str)] = &[
     ("Tormach 1100M+", include_str!("../../../assets/machines/tormach-1100m-plus.mch")),
     // #710: a generic grbl-family router / mill; pairs with the "grblHAL" post.
     ("grblHAL 3-axis", include_str!("../../../assets/machines/grblhal-3axis.mch")),
+    // #620: the PathPilot routers, each from its own manual / spec sheet
+    // (the plain xsTECH from its spec sheet and knowledge base: no manual).
+    ("Tormach 24R", include_str!("../../../assets/machines/tormach-24r.mch")),
+    ("Tormach xsTECH Pro", include_str!("../../../assets/machines/tormach-xstech-pro.mch")),
+    ("Tormach xsTECH", include_str!("../../../assets/machines/tormach-xstech.mch")),
+    // #611: Tormach's lathes, from their operator manuals (UM10753, UM10225).
+    ("Tormach 8L", include_str!("../../../assets/machines/tormach-8l.mch")),
+    ("Tormach 15L Slant-PRO", include_str!("../../../assets/machines/tormach-15l-slant-pro.mch")),
+    // #619: the 15LX (UM10860 §3.1).
+    ("Tormach 15LX Slant-PRO", include_str!("../../../assets/machines/tormach-15lx-slant-pro.mch")),
+    // #707: Makera's desktop mills, from Makera's product spec tables.
+    ("Makera Carvera", include_str!("../../../assets/machines/makera-carvera.mch")),
+    ("Makera Carvera Air", include_str!("../../../assets/machines/makera-carvera-air.mch")),
     // #728: Sienci's AltMill routers (SLB-EXT, grblHAL); pair with the "grblHAL" post.
     ("Sienci AltMill 2x4", include_str!("../../../assets/machines/sienci-altmill-2x4.mch")),
     ("Sienci AltMill 4x4", include_str!("../../../assets/machines/sienci-altmill-4x4.mch")),
@@ -207,11 +221,12 @@ pub fn post_set(world: &World, next: &PostRef) {
     world.set(next.clone());
 }
 
-/// The document's post options (issue #34), from the `PostOptions`
-/// singleton; the default when none was ever set.
+/// The post options the program posts with (issue #34): the active
+/// setup's (#389 - its own, else the document's `PostOptions`
+/// singleton, [`crate::setup_post_options::document`]).
 #[must_use]
 pub fn post_options(world: &World) -> PostOptions {
-    world.try_get::<&PostOptions>(|p| *p).unwrap_or_default()
+    crate::setup_post_options::in_force(world)
 }
 
 /// Write the options singleton. For `SetPostOptions` and the project
@@ -582,6 +597,10 @@ pub fn verification_report(world: &World) -> GateReport {
     problems.extend(suppressed::suppressed_problems(world));
     // The rotated-offset clause (#315): the post carries translation only.
     problems.extend(wcs_rotation::rotated_wcs_problems(world));
+    // #389: the setups' post options must agree on what shapes the whole
+    // program (the Output and the thread output) - never posted half one
+    // way. Judged program-wide, ahead of #388's per-mount split.
+    problems.extend(crate::setup_post_options::program_problems(world));
     // The carried-stock clause (#319): a feed move into carried material
     // outside a setup's declared stock is engagement nothing verified.
     problems.extend(crate::operation::carried_problems(world));
@@ -729,9 +748,12 @@ pub fn op_streams(world: &World) -> Result<Vec<(String, Vec<cnc::Record>)>, Stri
         return Err(msg);
     }
 
-    let skip_stops = post_options(world).skip_stops;
-    // #155: Pause / Home entries fold into the gap they stand in.
-    let afters = crate::program_entry::posted_afters(world, &ops, skip_stops)?;
+    // #155: Pause / Home entries fold into the gap they stand in; #389:
+    // "Skip pauses and homes" is read per op, from its own setup.
+    let afters = crate::program_entry::posted_afters(world, &ops, |e| {
+        model::operation_of(world, e)
+            .is_some_and(|op| crate::setup_post_options::of(world, op.setup.as_deref()).skip_stops)
+    })?;
     let mut streams = Vec::with_capacity(ops.len());
     for (name, e) in &ops {
         let op = model::operation_of(world, e)
