@@ -406,7 +406,7 @@ fn the_island_is_refused_by_the_geometry_budget_in_seconds() {
         panic!("refused by the geometry budget, by name: {:?}", t.notes)
     };
     let k = n.split("both limits passed, ~").nth(1).and_then(|s| s.split(" k").next()).and_then(|s| s.parse::<f64>().ok());
-    assert!(k.is_some_and(|k| k > 600.0 && k <= 620.0), "the count past the budget by at most a revolution: {n}");
+    assert!(k.is_some_and(|k| (600.0..=620.0).contains(&k)), "the count past the budget by at most a revolution: {n}");
     assert!(!t.moves.is_empty() && t.is_chained() && t.all_finite(), "the Offset rings cut it");
     let w = verified(&t, &reg, D);
     assert!(w.is_empty(), "{} {:?}", warn_kinds(&w), t.notes);
