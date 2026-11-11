@@ -113,7 +113,7 @@ pub use edge_break::credit_breaks;
 pub use field::SdfField;
 pub use field_body::Lattice;
 pub use field_carry::{box_signed, CarriedField, Clip, ClipRefusal};
-pub use field_floor::FloorRead;
+pub use field_floor::{ColumnSpan, FloorRead};
 pub use field_batch::CutStats;
 pub use field_blade::{LatheProfile, CROWN_SAG_TOL};
 pub use field_cut::SdfTool;

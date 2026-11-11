@@ -105,6 +105,12 @@ pub struct SdfField {
     /// magnitude wherever no brick was stored (`mag_at`), so a block
     /// builds with no band fill. `None` for every mesh-seeded field.
     pub(crate) analytic: Option<super::field_box::AnalyticBox>,
+    /// #637 E1: a cut by a solid that does not span the verdict world
+    /// above its tip (a truncated taper, a bare ball, a lathe sweep, a
+    /// posed axis) has been subtracted. The floor read's monotone law
+    /// (`field_floor`) holds only for spanning tools; once this is set
+    /// a floor a cut came near is refused by name instead.
+    pub(crate) bounded_cuts: bool,
 }
 
 /// World cell of a point on the origin-locked lattice.
