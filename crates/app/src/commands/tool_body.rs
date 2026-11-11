@@ -65,6 +65,28 @@ pub struct LatheBodySpec {
     pub zone: Option<InsertZone>,
 }
 
+/// #793: a built-in library holder drawn for `tool` (named `name` in
+/// the refusals) as its spun-profile body, judged against it - what
+/// [`SetToolBody::library`] lands on an existing tool and (#828)
+/// `AddTool` lands on a new one, so both doors refuse alike.
+pub(crate) fn library_body(
+    tool: &crate::tools::Tool,
+    name: &str,
+    entry: &str,
+    gauge_len: Option<f64>,
+    projection: Option<f64>,
+) -> Result<ToolBody, CommandError> {
+    let invalid = |e: holder_library::LibraryError| CommandError::Invalid(format!("tool '{name}': holder: {e}"));
+    let e = holder_library::find(entry).map_err(invalid)?;
+    e.fits_shank(tool.shank_d).map_err(invalid)?;
+    let nose = projection.unwrap_or(tool.flute_len + tool.shank_len);
+    let points = e.points(nose, gauge_len.unwrap_or(e.gauge_len)).map_err(invalid)?;
+    let spun = SpunProfile::new(points).map_err(|e| CommandError::Invalid(format!("tool '{name}': holder profile: {e}")))?;
+    let body = tool_body::build_spun(spun);
+    tool_body::fits(tool, &body).map_err(|e| CommandError::Invalid(format!("tool '{name}': {e}")))?;
+    Ok(body)
+}
+
 /// Set (`Some`) or clear (`None`) a tool's body.
 #[derive(Debug)]
 pub struct SetToolBody {
@@ -138,12 +160,8 @@ impl SetToolBody {
         };
         let tool = model::tool_of(world, &entity)
             .ok_or_else(|| CommandError::Invalid(format!("'{name}' is not a tool")))?;
-        let invalid = |e: holder_library::LibraryError| CommandError::Invalid(format!("tool '{name}': holder: {e}"));
-        let e = holder_library::find(entry).map_err(invalid)?;
-        e.fits_shank(tool.shank_d).map_err(invalid)?;
-        let nose = projection.unwrap_or(tool.flute_len + tool.shank_len);
-        let points = e.points(nose, gauge_len.unwrap_or(e.gauge_len)).map_err(invalid)?;
-        Self::spun(world, name, Some(points))
+        let next = Some(library_body(&tool, name, entry, gauge_len, projection)?);
+        Ok(SetToolBody { name: name.to_string(), prev: tool_body::body_of(world, &entity), next })
     }
 
     /// Read a STEP / STL / OBJ through the model importer and place it.

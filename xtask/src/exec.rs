@@ -37,15 +37,23 @@ pub fn cargo() -> String {
 /// builds exactly as before. Release packaging never goes through this (it builds the shipped binary).
 pub fn cache_env(sccache: Option<&str>, wrapper_set: bool, opted_out: bool, size_set: bool) -> Vec<(&'static str, String)> {
     let mut env = Vec::new();
-    if let Some(path) = sccache {
-        if !wrapper_set && !opted_out {
-            env.push(("RUSTC_WRAPPER", path.to_string()));
-            if !size_set {
-                env.push(("SCCACHE_CACHE_SIZE", "20G".to_string()));
-            }
+    if let Some(path) = sccache
+        && !wrapper_set
+        && !opted_out
+    {
+        env.push(("RUSTC_WRAPPER", path.to_string()));
+        if !size_set {
+            env.push(("SCCACHE_CACHE_SIZE", "20G".to_string()));
         }
     }
     env
+}
+
+/// Compiler-wrapper variables the release packaging build must not inherit (#935): the shipped binary never
+/// depends on a compile cache, even when the maintainer sets `RUSTC_WRAPPER` machine-wide. Returns the ones
+/// present (`is_set` asks the environment); the release GATE tier may still use the cache, only packaging clears it.
+pub fn packaging_env_clear(is_set: impl Fn(&str) -> bool) -> Vec<&'static str> {
+    ["RUSTC_WRAPPER", "CARGO_BUILD_RUSTC_WRAPPER"].into_iter().filter(|v| is_set(v)).collect()
 }
 
 /// The first `sccache` (or `sccache.exe`) file on PATH, as a path string.
