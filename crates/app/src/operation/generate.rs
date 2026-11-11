@@ -653,7 +653,10 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             let prior = prior
                 .take()
                 .ok_or_else(|| unreached("re-machining mask"))??;
-            let mask = prior.grid.as_ref();
+            // Read through the stock seam (M7.3 4/6): motion takes the
+            // column reader, never the grid itself.
+            let mask_cols = prior.grid.as_ref().map(crate::stock_sim::Columns::of_grid);
+            let mask = mask_cols.as_ref();
             // The rest pass's verdict rides the path: what the sim
             // still reports after the closing ladder is the closing
             // report's business (the simulation view), not a silent
@@ -1378,7 +1381,8 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             let prior = prior
                 .take()
                 .ok_or_else(|| unreached("re-machining mask"))??;
-            let mask = prior.grid.as_ref();
+            let mask_cols = prior.grid.as_ref().map(crate::stock_sim::Columns::of_grid);
+            let mask = mask_cols.as_ref();
             // Same opt-in law as the twins' arm above: off, the ladder
             // stamps exactly as stage E3 shipped it.
             let shank = (*shank_avoid).then(|| shank_of(&tool));
