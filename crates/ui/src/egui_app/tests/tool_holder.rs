@@ -3,7 +3,9 @@
 //! pick shows the entry's dimensions and gauge length, Apply holder
 //! lands the BT30 ER20 as one undoable command that then edits as a
 //! Custom profile, and a shank the holder cannot take is refused by
-//! name. Provenance: our own page law.
+//! name. #792: the picker lists the standalone ER chucks, and its
+//! projection field rides the same undoable command. Provenance: our
+//! own page law.
 
 use super::*;
 use camcraft_app::holder_library;
@@ -84,4 +86,35 @@ fn a_shank_the_holder_cannot_take_is_refused_by_name() {
     harness.run();
     assert!(drawn(&harness.state().state).is_none(), "nothing lands");
     assert!(harness.query_all_by_label_contains("holder not set").next().is_some(), "Apply refuses by name");
+}
+
+/// #792 (#800 review): the projection - nose face above the tip -
+/// stands beside the gauge length, starts at the tool's stickout (6 mm
+/// end mill: flutes 15 + shank 40), and lands through the same undoable
+/// command; one undo restores the holder before it.
+#[test]
+fn the_projection_lands_through_apply_holder_and_undoes() {
+    let mut harness = profile_tab();
+    harness.state_mut().state.pick_library_holder("ER20 chuck");
+    harness.run();
+    harness.run();
+    assert!(harness.query_all_by_label_contains("projection").next().is_some(), "the projection field stands");
+    assert!(harness.query_all_by_label_contains("straight-shank chuck").next().is_some(), "the pick says what it is");
+    let st = &harness.state().state;
+    assert_eq!((st.tool_profile_ui.gauge, st.tool_profile_ui.projection), (45.0, 55.0), "entry gauge, tool stickout");
+    harness.state_mut().state.tool_profile_ui.projection = 70.0;
+    harness.get_by_label("Apply holder").click();
+    harness.run();
+    harness.run();
+    let want = holder_library::find("ER20 chuck").and_then(|e| e.points(70.0, 45.0)).expect("draws");
+    assert_eq!(
+        drawn(&harness.state().state),
+        Some(want.iter().map(|p| (p.z, p.r)).collect()),
+        "status: {}",
+        harness.state().state.status
+    );
+    harness.state_mut().state.pending.push_back(CommandKind::Undo);
+    harness.run();
+    harness.run();
+    assert!(drawn(&harness.state().state).is_none(), "one undo restores the holder cylinder");
 }

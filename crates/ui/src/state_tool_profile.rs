@@ -14,6 +14,7 @@ use std::sync::Arc;
 
 use camcraft_app::commands::SetToolBody;
 use camcraft_app::holder_library;
+use camcraft_app::model;
 use camcraft_app::geometry::Triangle;
 use camcraft_app::spun::{SpunPoint, SpunProfile};
 use camcraft_app::tools::{Tool, ToolKind};
@@ -51,9 +52,11 @@ pub struct ToolProfileUi {
     /// once the draft moves off it and validates, the refusal retires.
     refused: Option<Vec<SpunPoint>>,
     /// #793: the library holder picked for Apply holder, and the gauge
-    /// length (gauge line to nose face, mm) it would land at.
+    /// length (gauge line to nose face, mm) it would land at; #792: the
+    /// projection (nose face above the tool tip, mm).
     pub library: Option<String>,
     pub gauge: f64,
+    pub projection: f64,
 }
 
 /// Is `kind` a milling tool - one a spun profile describes?
@@ -90,6 +93,7 @@ impl State {
             if self.tool_profile_ui.tool == self.tool_ui.name {
                 d.library = self.tool_profile_ui.library.take();
                 d.gauge = self.tool_profile_ui.gauge;
+                d.projection = self.tool_profile_ui.projection;
             }
             if let Some(spun) = landed.and_then(|b| b.spun) {
                 d.custom = true;
@@ -175,17 +179,27 @@ impl State {
     }
 
     /// #793: pick library holder `entry` for Apply holder; the gauge
-    /// length starts at the entry's own. An unknown name clears the
-    /// pick.
+    /// length starts at the entry's own and (#792) the projection at
+    /// the stored tool's stickout (flute plus shank length), the
+    /// command's own default. An unknown name clears the pick.
     pub(crate) fn pick_library_holder(&mut self, entry: &str) {
+        let stickout = self.editor_stored_tool().map(|t| t.flute_len + t.shank_len);
         let d = &mut self.tool_profile_ui;
         match holder_library::find(entry) {
             Ok(e) => {
                 d.library = Some(e.name());
                 d.gauge = e.gauge_len;
+                d.projection = stickout.unwrap_or(d.projection);
             }
             Err(_) => d.library = None,
         }
+    }
+
+    /// The editor's tool as the document stores it (what Apply holder
+    /// judges), not the unapplied draft.
+    pub(crate) fn editor_stored_tool(&self) -> Option<Tool> {
+        let e = model::find_by_name(&self.world, &self.tool_ui.name)?;
+        model::tool_of(&self.world, &e)
     }
 
     /// "Apply holder": queue the one `SetToolBody::library` for the
@@ -193,15 +207,15 @@ impl State {
     pub(crate) fn queue_apply_tool_holder(&mut self) {
         let d = &self.tool_profile_ui;
         if let Some(entry) = d.library.clone() {
-            let gauge = Some(d.gauge);
-            self.pending.push_back(CommandKind::SetToolHolder { name: self.tool_ui.name.clone(), entry, gauge });
+            let (gauge, projection) = (Some(d.gauge), Some(d.projection));
+            self.pending.push_back(CommandKind::SetToolHolder { name: self.tool_ui.name.clone(), entry, gauge, projection });
         }
     }
 
     /// The command handler: a refusal lands on the Tool pane by name;
     /// a landed holder re-mirrors as a Custom (editable) profile.
-    pub(crate) fn run_set_tool_holder(&mut self, name: &str, entry: &str, gauge: Option<f64>) {
-        match SetToolBody::library(&self.world, name, entry, gauge, None) {
+    pub(crate) fn run_set_tool_holder(&mut self, name: &str, entry: &str, gauge: Option<f64>, projection: Option<f64>) {
+        match SetToolBody::library(&self.world, name, entry, gauge, projection) {
             Ok(command) => {
                 self.history.execute(&self.world, command);
                 self.doc_version += 1;

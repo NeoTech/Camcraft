@@ -4,7 +4,11 @@
 //! fixture laws as the shape it is: the BT30 ER20 flange strikes a wall
 //! the plain holder cylinder misses, a long-gauge Weldon clears where a
 //! short one collides, undo restores the previous holder, and nonsense
-//! picks are refused by name.
+//! picks are refused by name. #792 adds the standalone ER chucks (an
+//! ER32 nut strikes a wall a shank-width cylinder misses, and clears
+//! one beyond its nut) and #800's review envelopes: the flange flare
+//! strikes a wall a straight body would miss, and a Weldon body carries
+//! its clamp screw allowance.
 //!
 //! Gate map (M4.4): covers app::commands, app::tool_body, app::tools.
 
@@ -14,6 +18,7 @@ use camcraft_app::holder_library;
 use camcraft_app::model;
 use camcraft_app::operation::{Height, OpParams, SrcRef};
 use camcraft_app::schema::Location;
+use camcraft_app::spun::SpunPoint;
 use camcraft_app::stock::StockShape;
 use camcraft_app::tool_body;
 use camcraft_app::tools::{catalog, Tool};
@@ -144,7 +149,8 @@ fn the_bt30_er20_flange_strikes_a_wall_the_cylinder_misses() {
 
 /// A wall 15 mm off the axis at 95-105 above the tip: the 60 mm Weldon
 /// puts its Ø46 flange there and collides; a 100 mm one reaches past
-/// it with its Ø25 body and clears.
+/// it with its Ø25 body (drawn Ø27 with the clamp screw allowance) and
+/// clears.
 #[test]
 fn a_long_gauge_weldon_clears_where_a_short_one_collides() {
     let (world, mut history) = face_world();
@@ -188,4 +194,81 @@ fn nonsense_picks_are_refused_by_name() {
     refuse("BT30 ER20", Some(f64::NAN), None, "finite");
     refuse("BT30 ER20", None, Some(5.0), "reaches into the flutes");
     assert!(matches!(SetToolBody::library(&world, "nope", "BT30 ER20", None, None), Err(CommandError::NotFound(_))));
+}
+
+/// #800 review, the flare: a wall 20 mm off the axis, 85-88 above the
+/// tip - beside the BT30 ER20's body (r 17.5) and just under its flange
+/// front (90). A straight body up to the flange misses it; the
+/// 45-degree flare envelope (from 84.5) strikes it.
+#[test]
+fn the_flange_flare_strikes_a_wall_a_straight_body_misses() {
+    let (world, mut history) = face_world();
+    plant_wall(&world, &mut history, 20.0, CUT_Z + 85.0, 3.0);
+    let e = holder_library::find("BT30 ER20").expect("entry");
+    let flared = e.points(NOSE, e.gauge_len).expect("draws");
+    // #800's outline: the body runs straight to the flange front.
+    let straight: Vec<SpunPoint> =
+        flared.iter().map(|p| if (p.z - 84.5).abs() < 1e-9 { SpunPoint::line(90.0, p.r) } else { *p }).collect();
+    history.execute(&world, SetToolBody::spun(&world, TOOL, Some(straight)).expect("straight"));
+    regenerate(&world, &mut history);
+    assert_eq!(holder_hits(&world), 0, "a straight body under the flange misses the wall");
+    history.execute(&world, SetToolBody::library(&world, TOOL, "BT30 ER20", None, None).expect("pick"));
+    regenerate(&world, &mut history);
+    assert!(holder_hits(&world) > 0, "the flare envelope strikes it");
+}
+
+/// #800 review, the clamp screw: the long BT30 Weldon 6 mm body is Ø25
+/// in the catalog, drawn r 13.5 - a wall 13 mm off the axis beside it
+/// is struck, one 14 mm off is clear.
+#[test]
+fn a_weldon_body_strikes_within_its_clamp_screw_allowance() {
+    for (dx, hits) in [(13.0, true), (14.0, false)] {
+        let (world, mut history) = face_world();
+        plant_wall(&world, &mut history, dx, CUT_Z + 95.0, 10.0);
+        history.execute(&world, SetToolBody::library(&world, TOOL, "BT30 Weldon 6 mm", Some(100.0), None).expect("pick"));
+        regenerate(&world, &mut history);
+        assert_eq!(holder_hits(&world) > 0, hits, "a wall {dx} mm off the axis");
+    }
+}
+
+/// #792 acceptance: a wall 15 mm off the axis beside the nose (60-70
+/// above the tip) is missed by a holder cylinder of the shank's
+/// diameter and struck by the ER32 chuck's Ø50 nut; a wall 26 mm off is
+/// clear of the nut.
+#[test]
+fn an_er32_nut_strikes_a_wall_a_shank_cylinder_misses() {
+    let (world, mut history) = face_world();
+    plant_wall(&world, &mut history, 15.0, CUT_Z + 60.0, 10.0);
+    let p = SpunPoint::line;
+    let shank = vec![p(NOSE, 0.0), p(NOSE, 3.0), p(NOSE + 55.0, 3.0), p(NOSE + 55.0, 0.0)];
+    history.execute(&world, SetToolBody::spun(&world, TOOL, Some(shank)).expect("shank cylinder"));
+    regenerate(&world, &mut history);
+    assert_eq!(holder_hits(&world), 0, "a Ø6 holder cylinder misses the wall");
+    history.execute(&world, SetToolBody::library(&world, TOOL, "ER32 chuck", None, None).expect("pick"));
+    regenerate(&world, &mut history);
+    assert!(holder_hits(&world) > 0, "the ER32 nut strikes it");
+
+    let (world, mut history) = face_world();
+    plant_wall(&world, &mut history, 26.0, CUT_Z + 60.0, 10.0);
+    history.execute(&world, SetToolBody::library(&world, TOOL, "ER32 chuck", None, None).expect("pick"));
+    regenerate(&world, &mut history);
+    assert_eq!(holder_hits(&world), 0, "a wall beyond the Ø50 nut is clear");
+}
+
+/// #792: every ER size, standalone, lands through the command at the
+/// table's outline; undo puts the previous holder back.
+#[test]
+fn every_standalone_er_chuck_lands_and_undoes() {
+    let (world, mut history) = face_world();
+    let mut prev = None;
+    for n in ["ER11", "ER16", "ER20", "ER25", "ER32", "ER40"] {
+        let name = format!("{n} chuck");
+        history.execute(&world, SetToolBody::library(&world, TOOL, &name, None, None).expect("pick"));
+        let want = holder_library::find(&name).and_then(|e| e.points(NOSE, e.gauge_len)).expect("draws");
+        assert_eq!(drawn(&world), Some(want.iter().map(|p| (p.z, p.r)).collect()), "{name}");
+        assert!(history.undo(&world));
+        assert_eq!(drawn(&world), prev, "undo of {name}");
+        assert!(history.redo(&world));
+        prev = drawn(&world);
+    }
 }

@@ -1,23 +1,30 @@
-//! The built-in holder library (#793): steep-taper holders - BT30 and
-//! BT40 (JIS B 6339 / MAS 403 BT), CAT40 (ASME B5.50) - in ER collet
+//! The built-in holder library (#793, #792): steep-taper holders - BT30
+//! and BT40 (JIS B 6339 / MAS 403 BT), CAT40 (ASME B5.50) - in ER collet
 //! chuck (ISO 15488 / DIN 6499 collets and nuts) and Weldon side-lock
-//! (DIN 1835 form B / DIN 6359 bores) versions, each drawn as a spun
+//! (DIN 1835 form B / DIN 6359 bores) versions, plus standalone
+//! (straight-shank) ER11-ER40 collet chucks, each drawn as a spun
 //! profile (#93) the tool editor drops into a tool's holder. Specced
 //! from the published standards' dimension tables (the numbers and
-//! their sources are recorded in docs/decisions/793-taper-holders.md);
-//! the outlines are our own typical, conservative bodies, not any
-//! vendor's model.
+//! their sources are recorded in docs/decisions/793-taper-holders.md
+//! and docs/decisions/792-er-collets.md); the outlines are our own
+//! typical, conservative bodies, not any vendor's model.
 //!
 //! The laws here:
 //! - **Never smaller than the steel.** The flange is drawn as a full
 //!   cylinder at its outside diameter (the 60-degree gripper groove and
 //!   the drive slots are enveloped, never cut away), the nut at its
 //!   outside diameter over its whole length, and the chuck body as wide
-//!   as its nut.
+//!   as its nut. The body-to-flange transition many holders flare
+//!   through is enveloped by a 45-degree cone from the body out to the
+//!   flange, ending at the flange's front face ([`FLARE`]); a Weldon
+//!   body is drawn [`WELDON_SCREW`] wider than its catalog diameter for
+//!   the clamp screw's head.
 //! - **The profile stops at the gauge line.** The taper inside the
 //!   spindle is never in reach of the work; the spindle housing the
 //!   stack laws judge rides on the profile's top, which is the gauge
-//!   line - where the spindle face is.
+//!   line - where the spindle face is. A standalone chuck's gauge line
+//!   is its body's back face, where its straight shank goes into the
+//!   spindle or adapter.
 //! - **Refusals by name**: an unknown entry, a gauge length too short
 //!   to hold the nut and flange, a shank the collet or bore cannot
 //!   take, a non-finite or negative number.
@@ -76,10 +83,29 @@ pub struct ErSize {
     pub nut_len: f64,
 }
 
+/// ER11: Ø0.5-7 collets, M14×0.75 nut; the round nut is drawn at the
+/// top of its makers' Ø19-22 range.
+pub const ER11: ErSize = ErSize { name: "ER11", min_bore: 0.5, max_bore: 7.0, nut_d: 22.0, nut_len: 11.5 };
 pub const ER16: ErSize = ErSize { name: "ER16", min_bore: 0.5, max_bore: 10.0, nut_d: 32.0, nut_len: 17.5 };
 pub const ER20: ErSize = ErSize { name: "ER20", min_bore: 1.0, max_bore: 13.0, nut_d: 35.0, nut_len: 19.5 };
 pub const ER25: ErSize = ErSize { name: "ER25", min_bore: 1.0, max_bore: 16.0, nut_d: 42.0, nut_len: 20.0 };
 pub const ER32: ErSize = ErSize { name: "ER32", min_bore: 2.0, max_bore: 20.0, nut_d: 50.0, nut_len: 22.5 };
+/// ER40: Ø3-26 collets, M50×1.5 nut; Ø63 round nut at its longest
+/// common length.
+pub const ER40: ErSize = ErSize { name: "ER40", min_bore: 3.0, max_bore: 26.0, nut_d: 63.0, nut_len: 29.0 };
+
+/// The one ER table every chuck in the library draws from - the
+/// taper-mounted ones and the standalone ones alike.
+pub const ER_SIZES: [ErSize; 6] = [ER11, ER16, ER20, ER25, ER32, ER40];
+
+/// The radius (mm) a Weldon body is drawn wider than its catalog
+/// diameter: the side-lock clamp screw's head can stand proud of the
+/// body (a worn or substitute screw, a shallow counterbore).
+pub const WELDON_SCREW: f64 = 1.0;
+/// The slope of the envelope drawn over the body-to-flange flare: it
+/// rises one radial mm per axial mm (45 degrees), from the body's
+/// radius to the flange's, ending at the flange's front face.
+pub const FLARE: f64 = 1.0;
 
 /// How the holder grips the tool.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -92,11 +118,12 @@ pub enum Clamp {
     Weldon { bore: f64, body_d: f64 },
 }
 
-/// One library entry: a taper, a clamp, a default gauge length (from
-/// the gauge line to the holder's nose face).
+/// One library entry: a taper (`None`: a standalone straight-shank
+/// chuck), a clamp, a default gauge length (from the gauge line to the
+/// holder's nose face).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct HolderEntry {
-    pub taper: Taper,
+    pub taper: Option<Taper>,
     pub clamp: Clamp,
     pub gauge_len: f64,
     /// The bore as the entry's name states it ("6 mm", "1/2 in").
@@ -141,24 +168,45 @@ impl std::error::Error for LibraryError {}
 
 impl HolderEntry {
     /// The name the editor lists and MCP takes: "BT30 ER20",
-    /// "BT40 Weldon 12 mm", "CAT40 Weldon 1/2 in".
+    /// "BT40 Weldon 12 mm", "CAT40 Weldon 1/2 in", "ER20 chuck".
     #[must_use]
     pub fn name(&self) -> String {
-        match self.clamp {
-            Clamp::Er(er) => format!("{} {}", self.taper.name, er.name),
-            Clamp::Weldon { .. } => format!("{} Weldon {}", self.taper.name, self.label),
+        match (self.taper, self.clamp) {
+            (Some(t), Clamp::Er(er)) => format!("{} {}", t.name, er.name),
+            (Some(t), Clamp::Weldon { .. }) => format!("{} Weldon {}", t.name, self.label),
+            (None, Clamp::Er(er)) => format!("{} chuck", er.name),
+            (None, Clamp::Weldon { .. }) => format!("Weldon {}", self.label),
         }
     }
 
+    /// The radius the nose and body are drawn at: the nut's, or the
+    /// Weldon body's plus [`WELDON_SCREW`].
+    #[must_use]
+    pub fn body_r(&self) -> f64 {
+        match self.clamp {
+            Clamp::Er(er) => er.nut_d * 0.5,
+            Clamp::Weldon { body_d, .. } => body_d * 0.5 + WELDON_SCREW,
+        }
+    }
+
+    /// How far (mm, along the axis) below the flange's front face the
+    /// flare envelope starts: the radial rise from body to flange over
+    /// the [`FLARE`] slope (0 without a flange, or a body as wide).
+    #[must_use]
+    pub fn flare_len(&self) -> f64 {
+        self.taper.map_or(0.0, |t| (t.flange_d * 0.5 - self.body_r()).max(0.0) / FLARE)
+    }
+
     /// The shortest gauge length that still holds the flange, the nose
-    /// (nut or body) and [`MIN_BODY`] between them.
+    /// (nut or body), and between them the flare or [`MIN_BODY`] of
+    /// body, whichever is longer.
     #[must_use]
     pub fn min_gauge(&self) -> f64 {
         let nose = match self.clamp {
             Clamp::Er(er) => er.nut_len,
             Clamp::Weldon { .. } => 0.0,
         };
-        self.taper.front_face() + nose + MIN_BODY
+        self.taper.map_or(0.0, |t| t.front_face()) + nose + MIN_BODY.max(self.flare_len())
     }
 
     /// Can the holder take a shank of `shank_d`? An ER chuck takes its
@@ -177,8 +225,10 @@ impl HolderEntry {
     /// The holder's half-outline (tip-up, as the spun profile reads it)
     /// with its nose face `nose` above the tool tip and the gauge line
     /// `gauge_len` above the nose: nose (nut or body), body up to the
-    /// flange, the flange, the standoff, closed to the axis at the
-    /// gauge line.
+    /// flare, the 45-degree flare envelope out to the flange's front
+    /// face, the flange, the standoff, closed to the axis at the gauge
+    /// line. A standalone chuck is its nut and body up to the gauge
+    /// line.
     pub fn points(&self, nose: f64, gauge_len: f64) -> Result<Vec<SpunPoint>, LibraryError> {
         if !(nose.is_finite() && gauge_len.is_finite()) {
             return Err(LibraryError::NonFinite);
@@ -193,23 +243,32 @@ impl HolderEntry {
         if gauge_len > MAX_GAUGE {
             return Err(LibraryError::TooLong);
         }
-        let t = &self.taper;
         let gauge = nose + gauge_len;
-        let front = gauge - t.front_face();
-        let back = gauge - t.standoff;
         let p = SpunPoint::line;
-        let mut pts = vec![p(nose, 0.0)];
-        match self.clamp {
-            Clamp::Er(er) => {
-                let r = er.nut_d * 0.5;
-                // The nut, then the body as wide as the nut: the nut's
-                // top stays a point of its own so it can be edited.
-                pts.extend([p(nose, r), p(nose + er.nut_len, r), p(front, r)]);
-            }
-            Clamp::Weldon { body_d, .. } => pts.extend([p(nose, body_d * 0.5), p(front, body_d * 0.5)]),
+        let r = self.body_r();
+        let mut pts = vec![p(nose, 0.0), p(nose, r)];
+        if let Clamp::Er(er) = self.clamp {
+            // The nut, then the body as wide as the nut: the nut's top
+            // stays a point of its own so it can be edited.
+            pts.push(p(nose + er.nut_len, r));
         }
-        let fr = t.flange_d * 0.5;
-        pts.extend([p(front, fr), p(back, fr), p(back, t.standoff_r()), p(gauge, t.standoff_r()), p(gauge, 0.0)]);
+        match self.taper {
+            None => pts.extend([p(gauge, r), p(gauge, 0.0)]),
+            Some(t) => {
+                let front = gauge - t.front_face();
+                let back = gauge - t.standoff;
+                let fr = t.flange_d * 0.5;
+                pts.extend([
+                    p(front - self.flare_len(), r),
+                    p(front, fr.max(r)),
+                    p(front, fr),
+                    p(back, fr),
+                    p(back, t.standoff_r()),
+                    p(gauge, t.standoff_r()),
+                    p(gauge, 0.0),
+                ]);
+            }
+        }
         // A body as wide as the flange leaves a zero-length step.
         pts.dedup_by(|b, a| (a.z - b.z).hypot(a.r - b.r) < 1e-9);
         Ok(pts)
@@ -233,31 +292,46 @@ const INCH_BORES: [Bore; 5] = [
     ("3/4 in", 19.05, 44.45),
 ];
 
+/// The standalone chucks' default gauge lengths (mm, nose face to the
+/// body's back face), ER11 to ER40: typical straight-shank chuck heads,
+/// rounded up - a longer body draws more steel, never less.
+const STANDALONE_GAUGE: [f64; 6] = [30.0, 40.0, 45.0, 50.0, 55.0, 65.0];
+
 /// Every built-in holder, in the editor's order: by taper, ER chucks
 /// then Weldon holders.
 #[must_use]
 pub fn library() -> Vec<HolderEntry> {
-    let er = |taper: Taper, er: ErSize, gauge_len: f64| HolderEntry { taper, clamp: Clamp::Er(er), gauge_len, label: "" };
-    let weldon = |taper: Taper, b: &Bore, gauge_len: f64| HolderEntry {
+    let er = |taper: Option<Taper>, er: &ErSize, gauge_len: f64| HolderEntry {
         taper,
+        clamp: Clamp::Er(*er),
+        gauge_len,
+        label: "",
+    };
+    let sizes = |from: &str, to: &str| {
+        let at = |n: &str| ER_SIZES.iter().position(|e| e.name == n).unwrap_or(0);
+        ER_SIZES.get(at(from)..=at(to)).unwrap_or(&[]).iter()
+    };
+    let weldon = |taper: Taper, b: &Bore, gauge_len: f64| HolderEntry {
+        taper: Some(taper),
         clamp: Clamp::Weldon { bore: b.1, body_d: b.2 },
         gauge_len,
         label: b.0,
     };
     let mut v = Vec::new();
-    for e in [ER16, ER20, ER25, ER32] {
-        v.push(er(BT30, e, 60.0));
-    }
+    v.extend(sizes("ER16", "ER32").map(|e| er(Some(BT30), e, 60.0)));
     // BT30's 46 mm flange: the 16 mm and 1/2 in bores are the largest a
     // BT30 side-lock body is built for.
     v.extend(METRIC_BORES.iter().filter(|b| b.1 <= 16.0).map(|b| weldon(BT30, b, 60.0)));
     v.extend(INCH_BORES.iter().filter(|b| b.1 <= 12.7).map(|b| weldon(BT30, b, 60.0)));
-    for e in [ER16, ER20, ER25, ER32] {
-        v.push(er(BT40, e, 70.0));
-    }
+    v.extend(sizes("ER16", "ER32").map(|e| er(Some(BT40), e, 70.0)));
+    // ER40's Ø63 nut is the BT40 flange's width: a longer default gauge.
+    v.extend(sizes("ER40", "ER40").map(|e| er(Some(BT40), e, 80.0)));
     v.extend(METRIC_BORES.iter().chain(INCH_BORES.iter()).map(|b| weldon(BT40, b, 63.0)));
-    v.push(er(CAT40, ER32, 70.0));
+    v.extend(sizes("ER32", "ER32").map(|e| er(Some(CAT40), e, 70.0)));
     v.extend(INCH_BORES.iter().chain(METRIC_BORES.iter()).map(|b| weldon(CAT40, b, 63.5)));
+    // #792: the standalone straight-shank chucks, nose face to the
+    // body's back face (where the shank goes into the spindle).
+    v.extend(ER_SIZES.iter().zip(STANDALONE_GAUGE).map(|(e, g)| er(None, e, g)));
     v
 }
 

@@ -231,12 +231,15 @@ pub enum CommandKind {
         points: Option<Vec<camcraft_app::spun::SpunPoint>>,
     },
     /// #793: drop a built-in library holder ("BT30 ER20") into a milling
-    /// tool's holder at a gauge length (`None`: the entry's own) - the
-    /// tool editor's Apply holder, one `SetToolBody::library`.
+    /// tool's holder at a gauge length (`None`: the entry's own) and a
+    /// projection (#792: nose face above the tip; `None`: the tool's
+    /// stickout) - the tool editor's Apply holder, one
+    /// `SetToolBody::library`.
     SetToolHolder {
         name: String,
         entry: String,
         gauge: Option<f64>,
+        projection: Option<f64>,
     },
     /// The document's workpiece material (M13.2); `None` states none.
     SetWorkMaterial(Option<camcraft_app::tools::WorkMaterial>),
@@ -2826,7 +2829,9 @@ impl State {
             }
             CommandKind::SetToolBody { name, body } => self.run_set_tool_body(&name, body),
             CommandKind::SetToolProfile { name, points } => self.run_set_tool_profile(&name, points),
-            CommandKind::SetToolHolder { name, entry, gauge } => self.run_set_tool_holder(&name, &entry, gauge),
+            CommandKind::SetToolHolder { name, entry, gauge, projection } => {
+                self.run_set_tool_holder(&name, &entry, gauge, projection)
+            }
             CommandKind::ChangeTool { name, tool } => {
                 match ChangeTool::new(&self.world, &name, tool) {
                     Ok(command) => {
