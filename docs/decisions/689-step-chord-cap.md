@@ -184,3 +184,19 @@ metre sample into a non-manifold body: its vertex weld tolerance is
 The full fix for large units is to scale the B-rep to mm before
 tessellating. It belongs with #864, where an achieved chord error above
 the cap tightens the verdict.
+
+## Review round 4: law (b) reads the union of both joint sets outside Area mode
+
+Chosen: outside `Mode::Area`, law (b) reads an arc at the union of its
+chord joints at the whole tolerance and at the quarter
+(`sim::verify::section::segments`). The high-tier review (B1) showed the
+two joint sets are not nested: 3 chords at `tol` became 5 at `tol / 4`,
+and a sharp island vertex on an old joint fell between two new ones, so
+a gouge 50 um past the floor that the old reading convicted passed.
+Joints lie on the arc and never read closer than the truth, so the union
+adds no false gouge and keeps every old conviction. Area mode is
+unchanged.
+
+Dropped: splitting each old chord in two (nested, but the 1024-chord
+clamp breaks it on large arcs). A whole-arc reading against wall edges
+would close the remaining point-sampling gap; that is #905, not this PR.

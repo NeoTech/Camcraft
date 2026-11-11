@@ -105,7 +105,7 @@ fn floor() -> f64 {
     R - TOL
 }
 
-/// Island of radius 30 (a 4096-gon: its edges stand within 1e-8 mm of
+/// Island of radius 30 (a 4096-gon: its edges stand up to 8.8 um inside
 /// the circle) inside a 100 mm square pocket - a convex wall.
 fn island_region() -> Region {
     let island = Loop::new(ngon(30.0, 4096)).expect("island");
@@ -231,5 +231,54 @@ fn the_quarter_reading_is_never_coarser_than_the_old_one_at_any_radius() {
         if rad <= 500.0 {
             assert!(sag(TOL * 0.25) <= TOL * 0.25 + 1e-9, "r = {rad}: within its 2.5 um below the clamp");
         }
+    }
+}
+
+/// #689 review B1: outside `Mode::Area` law (b) reads an arc only at its
+/// chord joints, and the joints at the whole tolerance and at the quarter
+/// are not nested (3 chords become 5 here). A sharp island vertex on an
+/// old joint falls between two new joints, so the quarter set alone passed
+/// a gouge the old reading convicted. The law reads the union of both, so
+/// every old conviction stands - and a vertex just outside the floor stays
+/// clean, since points on the arc never read closer than the truth.
+#[test]
+fn boundary_mode_keeps_the_old_joints_so_a_sharp_vertex_on_one_stays_convicted() {
+    // r 200 about the origin sweeping 0.048 rad, 4 mm cutter (floor 3.99).
+    let (rad, sweep) = (200.0, 0.048);
+    let t = arc(p2(0.0, 0.0), rad, 0.0, sweep);
+    let m = &t.moves[0];
+    let (old, new) = (m.chords(TOL), m.chords(TOL * 0.25));
+    assert_eq!((old.len(), new.len()), (3, 5), "the case needs 3 old chords and 5 new ones");
+    // The old joint at 0.016 rad, and no new joint near it.
+    let a = sweep / 3.0;
+    let joint = p2(rad * a.cos(), rad * a.sin());
+    let near = |p: Point2| (p.x - joint.x).hypot(p.y - joint.y) < 1e-6;
+    assert!(old.iter().any(|&(_, b)| near(b)), "an old joint stands at {a} rad");
+    assert!(!new.iter().any(|&(x, y)| near(x) || near(y)), "no new joint stands there");
+    let (ux, uy) = (a.cos(), a.sin()); // outward from the arc at the joint
+    let (tx, ty) = (-uy, ux); // along the arc
+    // A sharp island vertex `d` outside the old joint, its sides opening
+    // away from the arc (half-angle ~14 deg), in a pocket far from the arc.
+    let region_at = |d: f64| {
+        let v = p2(joint.x + ux * d, joint.y + uy * d);
+        let side = |s: f64| p2(v.x + ux * 20.0 + tx * 5.0 * s, v.y + uy * 20.0 + ty * 5.0 * s);
+        let island = Loop::new(vec![v, side(1.0), side(-1.0)]).expect("island");
+        Region::new(vec![rect(150.0, -50.0, 260.0, 60.0), island]).expect("region")
+    };
+    let g = tool();
+    let boundary = |region: &Region| {
+        let mut c = ctx(region, &g);
+        c.mode = Mode::Boundary;
+        verify(&t, &c)
+    };
+    // 50, 40 and 10 um past the floor: convicted, as the old reading did.
+    for d in [3.94, 3.95, 3.98] {
+        assert!(d < floor());
+        assert_eq!(boundary(&region_at(d)), vec![Warning::Gouge { at: 0 }], "clearance {d}");
+    }
+    // Just outside the floor: clean.
+    for d in [3.995, 4.0] {
+        assert!(d >= floor());
+        assert_eq!(boundary(&region_at(d)), Vec::new(), "clearance {d}");
     }
 }

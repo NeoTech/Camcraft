@@ -87,7 +87,7 @@ pub(super) fn tangency(
             continue;
         }
         let section = section.flatten();
-        let chords = segments(m, cx.mode, chord_tol * ARC_READ_SHARE, cx.stock_top_z + cx.z_tol);
+        let chords = segments(m, cx.mode, chord_tol, cx.stock_top_z + cx.z_tol);
         let mut ends = chords.first().map(|c| c.0).into_iter().chain(chords.iter().map(|c| c.1));
         if section.as_ref().is_some_and(|s| ends.any(|p| s.contains(p))) {
             warns.push(Warning::Gouge { at: i });
@@ -197,8 +197,23 @@ fn edges(r: &crate::geo2d::Region) -> impl Iterator<Item = (Point2, Point2)> + '
 /// not standing, so a ramp that crosses the wall line in the air on its
 /// way down into the pocket is not a gouge. A move entirely above
 /// `wall_top` keeps the law points.
+///
+/// Arcs are read at [`ARC_READ_SHARE`] of `chord_tol`. The law points
+/// are the UNION of the joints at both tolerances (#689 review B1): the
+/// two joint sets are not nested (3 chords at `tol` become 5 at
+/// `tol / 4`), so the fine set alone can step over a sharp wall vertex
+/// an old joint stood on. Points on the arc never read closer than the
+/// truth, so the union adds no false gouge and keeps every old one.
 fn segments(m: &Move, mode: Mode, chord_tol: f64, wall_top: f64) -> Vec<(Point2, Point2)> {
-    let points = || law_points(m, chord_tol).into_iter().map(|p| (p, p)).collect();
+    let fine = chord_tol * ARC_READ_SHARE;
+    let points = || {
+        let mut v = law_points(m, fine);
+        if m.arc.is_some() {
+            v.extend(law_points(m, chord_tol));
+        }
+        v.into_iter().map(|p| (p, p)).collect()
+    };
+    let chord_tol = fine;
     if mode != Mode::Area {
         return points();
     }
