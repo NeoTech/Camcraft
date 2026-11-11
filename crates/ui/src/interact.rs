@@ -771,7 +771,13 @@ pub(crate) fn ftoz(v: f64) -> f32 {
 /// Staleness is not a display state here - what is drawn is the cache
 /// itself, and the tree's STALE badge is where a stale path is called
 /// out.
-pub(crate) fn toolpath_lines(state: &State) -> Vec<[f32; 6]> {
+///
+/// Public for the docs-image harness (`crates/ui/tests/docs_images.rs`):
+/// tutorial pictures must carry the app's own path display - same colors,
+/// same chords, same chevrons - never a test-local reconstitution that
+/// can drift from what the viewport actually paints.
+#[must_use]
+pub fn toolpath_lines(state: &State) -> Vec<[f32; 6]> {
     let mut out = Vec::new();
     let arm = chevron_arm(state);
     // M13.4: the move kinds wear the viewer's colour-vision palette
