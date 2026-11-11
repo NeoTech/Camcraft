@@ -23,6 +23,7 @@
 mod arc_biarc;
 mod arc_cross;
 mod arc_proof;
+mod arc_leads;
 mod arcs;
 mod blend;
 mod bore;

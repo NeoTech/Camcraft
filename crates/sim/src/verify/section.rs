@@ -11,6 +11,15 @@ use crate::geo2d::Point2;
 /// operation layer's containment step.
 const SOLID_STEP: f64 = 0.25;
 
+/// The share of the gouge tolerance an arc move is read to by this law
+/// (#689). The law reads an arc by its inscribed chords: at the full
+/// tolerance those stand up to `tol` off the arc the machine cuts -
+/// toward the centre, so a nominal arc round a convex wall read as a
+/// gouge, and away from it, so an arc bowing into a concave wall hid up
+/// to `tol` of real gouge. A quarter keeps the reading's own error to a
+/// quarter of the verdict both ways; the verdict itself is unchanged.
+const ARC_READ_SHARE: f64 = 0.25;
+
 /// Whether laws (b) and (b2) speak in `mode`.
 ///
 /// Mode::Envelope stands this law down by design: a waterline ring
@@ -78,7 +87,7 @@ pub(super) fn tangency(
             continue;
         }
         let section = section.flatten();
-        let chords = segments(m, cx.mode, chord_tol, cx.stock_top_z + cx.z_tol);
+        let chords = segments(m, cx.mode, chord_tol * ARC_READ_SHARE, cx.stock_top_z + cx.z_tol);
         let mut ends = chords.first().map(|c| c.0).into_iter().chain(chords.iter().map(|c| c.1));
         if section.as_ref().is_some_and(|s| ends.any(|p| s.contains(p))) {
             warns.push(Warning::Gouge { at: i });

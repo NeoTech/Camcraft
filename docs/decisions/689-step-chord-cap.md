@@ -29,3 +29,56 @@ stops short of the target.
 fidelity is whatever the file has. A coarse STL can still read a nominal
 finish on a concave wall as a gouge. That would need the verdict to know
 the file's chord error, which isn't recorded anywhere.
+
+## #689 - the arc fit and the arc reading leave the mesh its share
+
+The chord cap alone moved the error elsewhere: five suites running
+contours on Milling-test.step reported 0.010-0.012 mm gouges. Three
+budgets were each allowed the whole gouge verdict (0.01 mm) and summed:
+the mesh's chords, the arc fit's error, and the verifier's reading of an
+arc by its inscribed chords. The coarse mesh had hidden the other two.
+
+**Chosen (orchestrator's option 1, taken unattended):**
+
+1. **Arc fit, vertex share** (`motion::machining2d::arcs`,
+   `ARC_FIT_VERTEX_SHARE = 0.5`): every vertex an arc replaces stands within
+   half of `tol` of the fitted circle. A vertex off the circle is a point the
+   plan verified that the arc passes beside, toward the part as often as
+   away. The chord-hug test (the arc's bow off its own chords) keeps the full
+   `tol`, because it measures the tessellation's own sagitta. On the
+   solid_law contour the R35 arc's centre was 0.027/0.040 mm off the origin
+   at the full budget; at half it is 0.004/0.006, and all ten gouges are gone.
+2. **Closing rings, turning direction from signed area** (same file): a run
+   whose ends meet within `tol` takes the anchor branch, and its direction
+   comes from its shoelace sign, not from the anchor triple. On a regular
+   rim the two quarter-turn anchors tie, the first one found lies before the
+   pivot in travel, and the triple read the ring backwards. Every closed rim
+   therefore ended on a chord. On the Ø25 hole of Milling-test.step that
+   kinked the seam tangent, and the lead-out crossed the ring (nine
+   `Crossing` findings on solid_law once the gouges were gone). A closed
+   rim now fits whole.
+3. **Tangency law reads arcs at a quarter of the verdict**
+   (`sim::verify::section`, `ARC_READ_SHARE = 0.25`): law (b) read an arc
+   move by its inscribed chords at the full gouge tolerance. Those chords
+   stand up to `tol` inside the arc, which pushed a nominal arc round a
+   convex wall over the line (shoulder_adaptive's Offset-ring fallback, four
+   gouges) and hid up to `tol` of real gouge where an arc bows into a
+   concave wall. The verdict, the floor `r - leave - tol` and every other
+   law are unchanged. Only the reading moved closer to the cut arc, and it
+   is stricter on the concave side than before.
+
+**Dropped:**
+- Option 2, giving the program gate the model's chord error as slack. It
+  forgives real gouges up to `extent / 1000` and fails "0.05 mm oversize
+  still refused" on larger parts.
+- Option 3, mesh-only tuning. It is a knife edge both ways.
+- A side-aware fit (deviation only toward the part kept small). It needs
+  every `fit_arcs` caller to know its material side, and pockets and plasma
+  have walls on both sides. The symmetric half share is the bounded form
+  of the same rule.
+- Loosening the solid law's allowance or `GOUGE_TOL`. Never.
+
+**Cost:** more short arcs become lines. This is always safe, because lines
+are the verified polygon. Nine `golden_cl` goldens moved and were
+regenerated in their own commit. The PR lists which goldens moved and why.
+Law (b) reads arcs with about twice as many chords.

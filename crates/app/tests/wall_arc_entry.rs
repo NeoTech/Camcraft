@@ -163,10 +163,16 @@ fn the_reported_outside_contour_enters_every_level_on_one_arc() {
     assert!(summary.contains("7 level(s)"), "{summary}");
     let notes = t.notes.join(" | ");
     assert!(!notes.contains("needs bounded air"), "the arc is no longer refused on the wall: {notes}");
-    assert!(notes.contains("closes on the lead-in's start"), "{notes}");
-    // The bore ring of the section has no room for the arc beside its
-    // wall: refused by name, its graze stands.
-    assert!(notes.contains("no arc fits beside the wall at the lead-in"), "{notes}");
+    // The seams: no lead-in and lead-out left crossing. Before #689 the
+    // rings' fitted walks ended on a chord whose tangent kinked at the
+    // seam, and the lead-out was re-solved to close on the lead-in's
+    // start; a closed ring now fits whole, so the tangents agree and the
+    // leads part without the re-solve - either way none is kept crossed.
+    assert!(!notes.contains("kept as planned"), "{notes}");
+    // The bore ring of the section takes no arc beside its wall: held
+    // below (`bore` is empty). On the coarse mesh before #689 it was
+    // refused by name ("no arc fits beside the wall"); on the capped
+    // mesh that refusal no longer arises, and the note was never the law.
     // M11.2 B: the outer ring's lead-in starts about 4.4 deg off the X
     // axis - an oblique vertical plane, which no G17/G18/G19 names - so
     // its entries stay certified chord fans, and the path says so once.
