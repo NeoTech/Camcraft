@@ -141,7 +141,7 @@ fn stream(path: &Toolpath) -> String {
 #[test]
 fn a_rotary_contour_on_a_stated_c_travel_unwinds_at_its_links_and_posts() {
     // Unstated travel: the rings wind well past one turn, as stamped.
-    let (raw, _) = operation::generate(&world(None), &contour(), "C wrap").expect("the unstated C holds it");
+    let (raw, raw_warns) = operation::generate(&world(None), &contour(), "C wrap").expect("the unstated C holds it");
     let (lo, hi) = c_range(&raw);
     assert!(hi - lo > 720.0, "the bar's rings wind past two turns: {lo}..{hi}");
     // Stated -360..360 (the shipped mill-turn's): every C inside it.
@@ -159,11 +159,33 @@ fn a_rotary_contour_on_a_stated_c_travel_unwinds_at_its_links_and_posts() {
     }
     let worst = path.moves.windows(2).filter_map(|w| Some((w[1].rotary? - w[0].rotary?).abs())).fold(0.0, f64::max);
     assert!(worst < 90.0, "C stays continuous through the rewinds, worst {worst}");
-    // The verifier judged the rewinds as moves: nothing new to report.
-    let (_, raw_warns) = operation::generate(&world(None), &contour(), "C wrap").expect("again");
-    assert_eq!(warns.len(), raw_warns.len(), "{warns:?}");
+    // The verifier judged the rewinds as moves, in the air above the
+    // stock: they add no finding to the stamped path's own (the
+    // kernel's two entry rapids, untouched by this law).
+    assert_eq!(warns.len(), raw_warns.len(), "the rewinds verify clean: {warns:?} vs {raw_warns:?}");
+    let on_orbit = |at: usize| path.moves.get(at).is_some_and(|m| m.from.z >= top - 1e-6 && m.to.z >= top - 1e-6 && m.from != m.to);
+    assert!(
+        !warns.iter().any(|w| matches!(w, camcraft_app::verify::Warning::RapidInStock { at } if on_orbit(*at))),
+        "{warns:?}"
+    );
     let out = engine::run(LATHE_CPS, &post::machine::mirror(&mill_turn(Some(travel))), &stream(&path)).expect("runs");
     assert!(out.warnings.is_empty(), "the lathe post voices the unwound section: {:?}", out.warnings);
+}
+
+/// The rewind is judged, never assumed: with the clearance plane left
+/// inside the box stock (z 25), the orbit chords are rapids through
+/// stock, and the verifier convicts them by index - so the post gate
+/// refuses what it would otherwise rewind blind.
+#[test]
+fn a_rewind_through_stock_is_convicted_by_the_verifier() {
+    let mut op = contour();
+    if let OpParams::RotaryContour { clearance_z, .. } = &mut op.params {
+        *clearance_z = Height::fixed(25.0);
+    }
+    let (path, warns) = operation::generate(&world(Some((-360.0, 360.0))), &op, "C wrap").expect("generates, judged");
+    let orbit_at = |i: usize| path.moves.get(i).is_some_and(|m| m.kind == MoveKind::Rapid && m.from.z >= 25.0 - 1e-6 && m.to.z >= 25.0 - 1e-6 && m.from != m.to);
+    let convicted = warns.iter().filter(|w| matches!(w, camcraft_app::verify::Warning::RapidInStock { at } if orbit_at(*at))).count();
+    assert!(convicted > 0, "the orbit chords in stock are convicted: {warns:?}");
 }
 
 #[test]

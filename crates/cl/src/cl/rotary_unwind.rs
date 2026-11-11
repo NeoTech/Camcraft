@@ -65,11 +65,19 @@ pub fn unwind_c(path: &Toolpath, center: [f64; 2], travel: (f64, f64), tol: f64)
     // The clearance is the path's outermost reach - and counts only
     // where it stands strictly beyond everything the tool cuts (a
     // ring's own radius is never a clearance, however outermost).
-    let ends = |cut: bool| moves.iter().filter(move |m| (m.kind != MoveKind::Rapid) == cut).flat_map(|m| [m.from, m.to]);
-    let zmax = ends(false).map(|p| p.z).fold(f64::NEG_INFINITY, f64::max);
-    let rmax = ends(false).map(radius).fold(f64::NEG_INFINITY, f64::max);
-    let z_cut = ends(true).map(|p| p.z).fold(f64::NEG_INFINITY, f64::max);
-    let r_cut = ends(true).map(radius).fold(f64::NEG_INFINITY, f64::max);
+    // A plunge's start is where it leaves the clearance, not where it
+    // cuts: the cut reach is every non-rapid end plus every feed start.
+    let rapid_ends = || moves.iter().filter(|m| m.kind == MoveKind::Rapid).flat_map(|m| [m.from, m.to]);
+    let cut_ends = || {
+        moves.iter().filter(|m| m.kind != MoveKind::Rapid).flat_map(|m| {
+            let start = (m.kind == MoveKind::Feed).then_some(m.from);
+            std::iter::once(m.to).chain(start)
+        })
+    };
+    let zmax = rapid_ends().map(|p| p.z).fold(f64::NEG_INFINITY, f64::max);
+    let rmax = rapid_ends().map(radius).fold(f64::NEG_INFINITY, f64::max);
+    let z_cut = cut_ends().map(|p| p.z).fold(f64::NEG_INFINITY, f64::max);
+    let r_cut = cut_ends().map(radius).fold(f64::NEG_INFINITY, f64::max);
     let clear = |p: Point3| {
         (zmax > z_cut + CLEAR_EPS && p.z >= zmax - CLEAR_EPS) || (rmax > r_cut + CLEAR_EPS && radius(p) >= rmax - CLEAR_EPS)
     };
@@ -184,7 +192,8 @@ mod tests {
             if let Some(end) = moves.last().map(|m| m.to) {
                 let top = at(0, 5.0);
                 moves.push(Move::new(MoveKind::Rapid, end, top, None).with_axis([1.0, 0.0, 0.0]));
-                moves.push(Move::new(MoveKind::Rapid, top, at(0, z), None).with_axis([1.0, 0.0, 0.0]));
+                // The contour kernel's shape: up by rapid, down by plunge.
+                moves.push(Move::new(MoveKind::Plunge, top, at(0, z), Some(100.0)).with_axis([1.0, 0.0, 0.0]));
             }
             for k in 0..12 {
                 let to = if k == 11 { at(0, z) } else { at(k + 1, z) };
