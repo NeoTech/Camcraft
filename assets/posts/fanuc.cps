@@ -43,6 +43,7 @@ var smoothActive = false;   // #616: this section wrote its smoothing words
 var tcpmOn = false;        // G43.4 armed (stage D RTCP): re-armed at tool change
 var lastA = 0, lastB = 0, lastC = 0; // angle words the last block commanded (deg)
 var tiltRefused = false;   // a refusal the gate counts once, not per line
+var rotAt = { A: null, B: null, C: null }; // #885: the angles the control holds (null: not known) - never reset, a G49 turns nothing
 var compG = "";            // G41/G42/G40 pending for the next straight block (M13.11)
 var compD = "";            // the D word riding the engage block
 var compOn = false;        // compensation is engaged (G41/G42 written, no G40 yet)
@@ -509,15 +510,48 @@ function onRapid() {
   var tw = tilt(properties);
   if (tw === null || inCycle) return;
   block(["G00"].concat(xyz(properties), tw));
+  heldAngles(properties, tw);
+}
+// #885: a feed that turns a rotary under G43.4. Tool centre point
+// control reads F as the tip's speed relative to the work, the rotaries
+// carried along over the same time (FANUC 30i-B operator's manual, tool
+// center point control), so a short tip move with a large turn would
+// drive the rotary at F * |d| / tip length. The prelude's rotaryFeed
+// caps F at every rotary's stated rate (and the tip at the fastest
+// stated feed); unstated rates cap nothing. The F word, or null when
+// refused by name.
+function feedWord(p, arc) {
+  if (!has(p.A)) return fw(p.FeedRate);
+  if (typeof rotaryFeed !== "function") return fw(p.FeedRate);
+  var r = rotaryFeed(p, rotAt, ["A", "B", "C"], "path", arc);
+  if (r.refuse) { rotRefuse(r.refuse); return null; }
+  if (!r.capped) return fw(p.FeedRate);
+  var word = rotaryFeedWord(r.feed);
+  if (!word) { rotRefuse("a feed that turns a rotary over too short a move - the stated rotary rate leaves under 0.1 mm/min"); return null; }
+  return word;
+}
+var rotRefused = {};  // #885: each rate refusal counted once per program, not per line
+function rotRefuse(s) { if (!rotRefused[s]) { rotRefused[s] = true; msg(s); } }
+// The angles the control holds after a block: only the letters the block
+// actually wrote (`tw`, the tilt words) - a word held back as modal
+// leaves the control where the last written one put it.
+function heldAngles(p, tw) {
+  for (var i = 0; i < tw.length; i++) {
+    var L = String(tw[i]).charAt(0);
+    if ((L === "A" || L === "B" || L === "C") && has(p[L])) rotAt[L] = Number(p[L]);
+  }
 }
 function onLinear() {
   startPreamble();
   var tw = tilt(properties);
   if (tw === null || inCycle) return;
+  var fwd = feedWord(properties, false);
+  if (fwd === null) return;
   // The pending comp word rides this straight block (M13.11).
   var cg = compG, cd = compD;
   compG = ""; compD = "";
-  block([compPlaneWord(cg), "G01", cg].concat(xyz(properties), [cd], tw, [fw(properties.FeedRate)]));
+  block([compPlaneWord(cg), "G01", cg].concat(xyz(properties), [cd], tw, [fwd]));
+  heldAngles(properties, tw);
 }
 function onCircular() {
   startPreamble();
@@ -526,11 +560,14 @@ function onCircular() {
   if (tw === null || inCycle) return;
   var p = properties;
   if (compPlaneRefuse(planeOf(p))) return;
+  var fwd = feedWord(p, true);
+  if (fwd === null) return;
   block([
     planeWord(planeOf(p)),
     p.CircularDirection === "CW" ? "G02" : "G03",
     wo("X", p.X, orgX), wo("Y", p.Y, orgY), wo("Z", p.Z, orgZ),
-  ].concat(centerWords(p)).concat(tw, [fw(p.FeedRate)]));
+  ].concat(centerWords(p)).concat(tw, [fwd]));
+  heldAngles(properties, tw);
 }
 
 // ------------------------------------------------------- canned cycles
