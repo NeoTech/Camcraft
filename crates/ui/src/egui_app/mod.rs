@@ -47,6 +47,7 @@ mod load_field;
 // pub(crate) past egui_app: `State::machine_editor` names its draft
 // type (M3.3 stage C), so state.rs has to see through the door.
 pub(crate) mod machine_editor;
+mod machine_grid;
 // pub(crate) for the same reason: `State::post_refusal` names its type.
 pub(crate) mod post_refusal;
 // pub(crate) for the same reason: `State::machines_pane` (#287).
@@ -69,14 +70,19 @@ mod tool_profile_page;
 mod setup_wcs_pick;
 // #343: a setup's own node pages (settings, machine, post, fixtures, tools).
 mod setup_pages;
+mod setup_post_page;
 // #509: one fixture's row on the Fixtures page, sized to the pane.
 mod fixture_rows;
+// #561: the locate-in-fixture mate tools (Fixtures page and Model page).
+mod locate_form;
 // #326: the Setups page's part-alignment control.
 mod setup_align_pick;
 pub(crate) use setup_align_pick::align_text;
 // #330: the Setups page's lay-on-a-plane row.
 mod setup_plane_pick;
 mod setup_axis_pick;
+// #555: the Setups page's lay-on-three-points row.
+mod setup_points_pick;
 // #701: the Setups page's set-WCS-from-features role row.
 mod wcs_pick_row;
 // #316: the setup page's "relative to the previous setup" control.
@@ -89,6 +95,8 @@ mod geo_page;
 mod heights_page;
 mod holes_page;
 mod probe_page;
+// #670: the Plasma Profile's page.
+mod plasma_page;
 mod kind_editors;
 mod mill2d_more_page;
 mod mill2d_page;
@@ -140,6 +148,8 @@ mod fixture_tests;
 #[cfg(test)]
 mod fixture_ux_tests;
 #[cfg(test)]
+mod locate_tests;
+#[cfg(test)]
 mod fixture_library_tests;
 #[cfg(test)]
 mod footer_tests;
@@ -160,6 +170,8 @@ mod pin_tests;
 #[cfg(test)]
 mod ribbon_icon_tests;
 #[cfg(test)]
+mod plasma_ribbon_tests;
+#[cfg(test)]
 mod debug_info_tests;
 #[cfg(test)]
 mod fresh_op_tests;
@@ -175,9 +187,13 @@ mod setup_stock_pick;
 #[cfg(test)]
 mod setup_stock_tests;
 #[cfg(test)]
+mod incoming_view_tests;
+#[cfg(test)]
 mod setup_plane_tests;
 #[cfg(test)]
 mod setup_axis_tests;
+#[cfg(test)]
+mod setup_points_tests;
 #[cfg(test)]
 mod wcs_pick_tests;
 #[cfg(test)]

@@ -31,6 +31,7 @@ pub struct PlanePick {
 /// A paused draft of the same setup resumes with its pick kept (#664).
 pub fn arm(state: &mut State, setup: &str) {
     crate::axis_pick::disarm(state); // #557: one draft collects at a time
+    state.points_pick = None; // #555: one draft collects at a time
     crate::wcs_pick::disarm(state); // #701: one draft collects at a time
     match state.plane_pick.as_mut().filter(|d| d.setup == setup) {
         Some(d) => d.picking = true,
