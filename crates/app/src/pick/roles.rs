@@ -49,9 +49,10 @@ impl Role {
 }
 
 /// What one pick contributes, already placed in the viewer's frame: a
-/// unit direction (axes only), an anchor point (origin, or the point an
-/// axis stands at), and a datum plane ONLY when the pick is a flat face
-/// - a line or a fitted wall is no plane, so it projects nothing.
+/// direction (axes only - a straight edge's is its raw walk, so
+/// `align_roles` normalises it before use), an anchor point (origin, or
+/// the point an axis stands at), and a datum plane ONLY when the pick is
+/// a flat face - a line or a fitted wall is no plane, so it projects nothing.
 struct Datum {
     dir: Option<[f64; 3]>,
     anchor: [f64; 3],
@@ -117,6 +118,15 @@ pub fn align_roles(world: &World, picks: &[(GeoSel, Role)]) -> Result<Alignment,
         }
     }
     let a = d1.dir.ok_or_else(|| format!("{} of '{}' sets no axis - re-pick it", g1.feature, g1.entity))?;
+    // Normalise right after reading: a Chain datum's direction is the
+    // raw edge walk, so it carries the edge's length. Reading it raw left
+    // the frame scaled and `quat_from_axes` returned a silently wrong
+    // rotation for a part tipped off the table.
+    let a_len = norm(a);
+    if !(a_len.is_finite() && a_len > 0.0) {
+        return Err(format!("{} of '{}' has no length - re-pick it", g1.feature, g1.entity));
+    }
+    let a = scale(a, 1.0 / a_len);
     // The projection maths is #187's step for step, so a role table with
     // the old fixed roles agrees with `align_321` to the last digit.
     let tilt = MIN_EDGE_TILT_DEG.to_radians().sin();
