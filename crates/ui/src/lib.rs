@@ -5,6 +5,12 @@
 //! The imgui stack that lived here until M1.4.2 M-g is retired: `egui_app`
 //! is the shell, `interact` and `state` the shared law underneath it.
 
+// #31 rung 2: on wasm32 the native window is cfg'd out and the browser
+// runner that will call `egui_app::shell::shell_layout` is still owed, so
+// the whole shared shell is unreachable there. Native builds keep the
+// dead-code lint; drop this line when the web runner lands.
+#![cfg_attr(target_arch = "wasm32", allow(dead_code))]
+
 pub mod actions;
 mod axis_note;
 mod build_info;
@@ -16,6 +22,7 @@ pub mod edge_pick;
 pub mod feature_click;
 pub mod egui_app;
 pub mod feedback;
+pub mod file_dialog;
 pub mod incoming_view;
 pub mod headless_gpu;
 pub mod interact;
@@ -24,6 +31,7 @@ pub mod machined;
 pub mod mcp_host;
 pub mod operations;
 pub mod path_lines;
+pub(crate) mod refusal_ghost;
 pub mod post_file;
 pub mod plane_pick;
 pub mod axis_pick;
@@ -39,6 +47,8 @@ pub mod viewport;
 mod law_tests;
 #[cfg(test)]
 mod refusal_focus_tests;
+#[cfg(test)]
+mod refusal_ghost_tests;
 #[cfg(test)]
 mod helix_view_tests;
 #[cfg(test)]

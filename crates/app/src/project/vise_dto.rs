@@ -4,11 +4,16 @@
 //! the key and keeps the saved facets, so the file stays readable both
 //! ways. Lengths are millimetres like every length in the file.
 //!
+//! A self-centering vise (#787) adds an optional `self_centering` key
+//! (its clamping range floor and dovetail lip). A build without it reads
+//! such a vise's zero housing as a broken standard vise and keeps the
+//! facets as plain steel - never wrong steel.
+//!
 //! Provenance: our own wire shape over `vise::ViseParams`.
 
 use serde::{Deserialize, Serialize};
 
-use crate::vise::ViseParams;
+use crate::vise::{SelfCentering, ViseParams, ViseStyle};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct ViseDto {
@@ -27,6 +32,19 @@ pub struct ViseDto {
     pub housing_length: f64,
     pub housing_height: f64,
     pub opening: f64,
+    /// Present on a self-centering vise (#787) only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub self_centering: Option<SelfCenteringDto>,
+}
+
+/// A self-centering vise's own figures, millimetres.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
+pub struct SelfCenteringDto {
+    pub min_opening: f64,
+    #[serde(default)]
+    pub lip_height: f64,
+    #[serde(default)]
+    pub lip_depth: f64,
 }
 
 impl ViseDto {
@@ -45,6 +63,14 @@ impl ViseDto {
             housing_length: p.housing_length,
             housing_height: p.housing_height,
             opening: p.opening,
+            self_centering: match &p.style {
+                ViseStyle::Standard => None,
+                ViseStyle::SelfCentering(sc) => Some(SelfCenteringDto {
+                    min_opening: sc.min_opening,
+                    lip_height: sc.lip_height,
+                    lip_depth: sc.lip_depth,
+                }),
+            },
         }
     }
 
@@ -67,6 +93,13 @@ impl ViseDto {
             housing_length: self.housing_length,
             housing_height: self.housing_height,
             opening: self.opening,
+            style: self.self_centering.map_or(ViseStyle::Standard, |d| {
+                ViseStyle::SelfCentering(SelfCentering {
+                    min_opening: d.min_opening,
+                    lip_height: d.lip_height,
+                    lip_depth: d.lip_depth,
+                })
+            }),
         }
     }
 }

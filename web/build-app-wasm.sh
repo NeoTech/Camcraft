@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # build-app-wasm.sh - builds camcraft-app (the domain layer, flecs included)
-# for wasm32-unknown-unknown and links camcraft-cli.wasm (#31, M13.3 rung 1).
+# for wasm32-unknown-unknown and links camcraft-cli.wasm (#31, M13.3 rung 1),
+# then builds and links camcraft-ui.wasm for the same target (rung 2).
 # Provenance: our own build script; the toolchain facts come from the public
 # wasi-sdk release notes and the cc / cargo `--config` documentation.
 #
@@ -98,3 +99,15 @@ cargo build -p camcraft-app --target wasm32-unknown-unknown "${PROFILE_ARGS[@]}"
 OUT="${CARGO_TARGET_DIR:-$ROOT/target}/wasm32-unknown-unknown/$([[ ${#PROFILE_ARGS[@]} -gt 0 ]] && echo release || echo debug)/camcraft-cli.wasm"
 [[ -f "$OUT" ]] || die "build reported success but $OUT is missing"
 echo "build-app-wasm: linked $OUT"
+
+# --- 4. rung 2: the UI links for wasm32 -----------------------------------
+# The shared shell (egui_app::shell, file_dialog, the clock seam) builds; the
+# native window (shell_window, egui-winit, rfd) is cfg'd out, so the linked
+# camcraft-ui.wasm refuses the windowed entry by name. The browser runner
+# that will draw the shell is still owed (#31).
+cargo build -p camcraft-ui --bin camcraft-ui --target wasm32-unknown-unknown "${PROFILE_ARGS[@]}" \
+    --config "patch.crates-io.flecs_ecs.path='$(native_path "$PATCHED/flecs_ecs")'" \
+    --config "patch.crates-io.flecs_ecs_sys.path='$(native_path "$PATCHED/flecs_ecs_sys")'"
+UI_OUT="$(dirname "$OUT")/camcraft-ui.wasm"
+[[ -f "$UI_OUT" ]] || die "build reported success but $UI_OUT is missing"
+echo "build-app-wasm: linked $UI_OUT"
