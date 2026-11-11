@@ -174,6 +174,10 @@ pub struct ProjectFile {
     /// `skip_stops`: an absent key is one combined program.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub per_op_files: bool,
+    /// Per-operation smoothing at post (#616), additive like
+    /// `skip_stops`: an absent key is off - no smoothing words.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub smoothing: bool,
     pub entities: Vec<EntityDto>,
 }
 
@@ -397,6 +401,9 @@ pub enum ToolKindDto {
     /// The touch probe (#108): an additive word in the v50 grammar - no
     /// older file names it, so no rung is needed to read one.
     Probe,
+    /// The plasma torch (#670): additive in the same way - no older
+    /// file names it.
+    Torch,
 }
 
 impl ToolDto {
@@ -415,6 +422,7 @@ impl ToolDto {
                 ToolKind::Form => ToolKindDto::Form,
                 ToolKind::Taper => ToolKindDto::Taper,
                 ToolKind::Probe => ToolKindDto::Probe,
+                ToolKind::Torch => ToolKindDto::Torch,
             },
             diameter: t.diameter,
             corner_r: t.corner_r,
@@ -457,6 +465,7 @@ impl ToolDto {
                 ToolKindDto::Form => ToolKind::Form,
                 ToolKindDto::Taper => ToolKind::Taper,
                 ToolKindDto::Probe => ToolKind::Probe,
+                ToolKindDto::Torch => ToolKind::Torch,
             },
             diameter: self.diameter,
             corner_r: self.corner_r,
