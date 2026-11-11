@@ -197,7 +197,7 @@ impl SetPlate {
         let mut warnings = crate::commands::mod_vise::jaws_after_reseat(world, &moves)?;
         warnings.extend(crate::fixture_clash::after_fixture_shape(world, name, &mesh, at));
         warnings.extend(moves.iter().filter_map(|m| crate::fixture_clash::after_fixture_move(world, &m.name, m.after)));
-        let update = UpdateModel::new(world, name, Mesh::from_facets(mesh))?;
+        let update = UpdateModel::new(world, name, Mesh::from_facets(mesh))?.keeping_plate();
         let mut next = prev.clone();
         next.plate.plate = Some(def);
         Ok(Self { update, swap: Swap { name: name.to_owned(), prev, next, moves }, warning: crate::fixture_clash::join(warnings) })

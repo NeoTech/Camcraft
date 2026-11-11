@@ -202,7 +202,8 @@ impl Accessory {
                 // wider stud would be modelled narrower than typed.
                 if 2.0 * r >= *strap_width {
                     return Err(format!(
-                        "{what} stud diameter {stud_diameter:.3} mm must be less than the strap width {strap_width:.3} mm (the stud passes through the strap)"
+                        "{what} stud diameter {stud_diameter:.3} mm (enclosing {:.3} mm) must be less than the strap width {strap_width:.3} mm (the stud passes through the strap)",
+                        2.0 * r
                     ));
                 }
                 if *heel_length >= *strap_length {

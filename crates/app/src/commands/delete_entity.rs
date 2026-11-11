@@ -24,6 +24,8 @@ pub struct DeleteEntity {
     tool_number: Option<u32>,
     /// #368: a deleted tool's modelled body, restored with it on undo.
     tool_body: Option<crate::schema::ToolBody>,
+    /// #93: a tool's drawn cutter, restored with it.
+    tool_cutter: Option<camcraft_tools::spun::SpunProfile>,
     operation: Option<Operation>,
     operation_meta: Option<OperationMeta>,
     /// A Pause / Home entry of the operation list (#155), with its
@@ -59,6 +61,7 @@ impl DeleteEntity {
             tool: model::tool_of(world, &entity),
             tool_number: model::tool_number_of(world, &entity),
             tool_body: crate::tool_body::body_of(world, &entity),
+            tool_cutter: crate::tool_cutter::cutter_of(world, &entity),
             operation: model::operation_of(world, &entity),
             operation_meta: crate::program_entry::is_sequenced(world, &entity)
                 .then(|| model::operation_meta_of(world, &entity)),
@@ -101,6 +104,7 @@ impl Command for DeleteEntity {
                 .entity_view(world)
                 .set(ToolDef { tool: tool.clone(), number: self.tool_number });
             crate::tool_body::set_body(world, &entity, self.tool_body.as_ref());
+            crate::tool_cutter::set_cutter(world, &entity, self.tool_cutter.as_ref());
         }
         if let Some(operation) = &self.operation {
             entity.entity_view(world).set(operation.clone());

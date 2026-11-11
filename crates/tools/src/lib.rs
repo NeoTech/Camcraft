@@ -20,6 +20,8 @@ pub mod holder_profile;
 pub mod holder_library;
 // #93: a drawn revolved (spun) profile for milling tools and holders.
 pub mod spun;
+// #93 slice 2: a milling tool's own drawn cutter, checked against its numbers.
+pub mod cutter_profile;
 // #369: a lathe-held body as the revolved-stock law reads it.
 pub mod lathe_holder;
 // #396: the insert plate a lathe body's judge leaves out.

@@ -60,6 +60,7 @@ fn all() -> impl Iterator<Item = &'static Tool> {
         .chain(super::model_tools::TOOLS)
         .chain(super::vise_tools::TOOLS)
         .chain(super::accessory_tools::TOOLS)
+        .chain(super::cutter_tools::TOOLS)
         .chain(super::plate_tools::TOOLS)
         .chain(super::modvise_tools::TOOLS)
 }

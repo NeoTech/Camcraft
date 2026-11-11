@@ -3,9 +3,9 @@
 //! ships. A 3/4" round bar in the 4th-axis chuck, axis along world X, the
 //! free end at X0 (G54 X0 at the stock face, Y0 Z0 on the A centerline):
 //! two opposite shallow flats at A-90 and A90 and a shallow cross slot back
-//! at A0, each an indexed A then an ordinary 3-axis cut. (A0 B180 - the face
-//! underneath - is the pose law's letter pair, and the machine check
-//! judges its B against the machine's axes, so the opposite pair is +-90.) The posted program is the
+//! at A0, each an indexed A then an ordinary 3-axis cut. (The face
+//! underneath, the pose law's A0 B180, is A180 on this table since #797 -
+//! `fourth_axis_pose` pins it; the kit keeps its +-90 pair.) The posted program is the
 //! kit's golden; a continuous wrap op on the same bar must be refused by
 //! name (simultaneous 4-axis is unconfirmed on PathPilot, #785).
 //! Provenance: our own test over our own commands, machine file and post.
@@ -238,12 +238,18 @@ fn a_wrapped_op_on_the_test_part_is_refused_by_name() {
     let out = std::env::temp_dir().join(format!("camcraft_microarc_wrap_{}.nc", std::process::id()));
     let err = camcraft_app::posting::post_setup(&world, &out).expect_err("a wrap must not post");
     assert!(!out.exists(), "a refused post writes nothing");
-    // The program gate refuses it first, naming the op: the wrap passes
-    // under the bar, which the pose law writes as A0 B180, and the machine
-    // check reads letters (it does no IK), so B180 has no B axis to hold it.
-    assert!(err.contains("WRAP: move"), "{err}");
-    // The post is the second wall, and the one the follow-up lifts: on the
-    // same stream it refuses the turning A by name.
+    // #797: the machine check reads the wrap's poses through the tool
+    // axis - every one is an angle about X this table reaches (the pass
+    // under the bar, A0 B180, is A180) - so the refusal is the post's,
+    // naming the op: the turning A, the wall the follow-up lifts.
+    assert!(err.contains("simultaneous 4-axis motion in operation WRAP"), "{err}");
+    let check = camcraft_app::machine::check_document(
+        &world,
+        &camcraft_app::machine::of(&world).1.expect("the mounted machine"),
+    )
+    .expect("checks");
+    assert!(check.problems.iter().all(|p| !p.starts_with("WRAP:")), "{:?}", check.problems);
+    // The same refusal, straight from the engine on the same stream.
     let records = camcraft_app::posting::stream_records(&world).expect("the stream");
     let mch = camcraft_app::post::machine::mirror(
         &camcraft_app::machine::parse_mch(
