@@ -812,6 +812,7 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
             entity.entity_view(world).set(FixtureDef {
                 setup: f.setup.clone(),
                 fixed: f.fixed,
+                vise: f.vise.as_ref().and_then(|v| v.to_params(&dto.name)),
             });
         }
     }

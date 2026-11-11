@@ -58,7 +58,9 @@ impl ImportFixture {
         Ok(ImportFixture {
             name,
             landing,
-            next: FixtureDef { setup: setup_name.map(str::to_string), fixed: prev.as_ref().is_some_and(|d| d.fixed) },
+            // A re-import replaces the geometry, so a built-in vise's
+            // parameters no longer describe it: plain steel from here.
+            next: FixtureDef { setup: setup_name.map(str::to_string), fixed: prev.as_ref().is_some_and(|d| d.fixed), vise: None },
             prev,
         })
     }

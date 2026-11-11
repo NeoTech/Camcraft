@@ -881,6 +881,10 @@ pub(super) fn fixtures_section(ui: &mut Ui, state: &mut State, ctx: Option<&str>
         if ui.button("Import fixture…").clicked() {
             state.pending.push_back(CommandKind::ImportFixtureDialog);
         }
+        // #788: a generic parametric vise, placed in one undoable step.
+        if ui.button("Add built-in vise…").clicked() {
+            state.pending.push_back(CommandKind::BuiltinViseDialog(ctx.unwrap_or_default().to_owned()));
+        }
         // The other way in: a model already imported - select its row
         // in the browser and mark it. Offered only for exactly one
         // selected model, so the button never guesses its target.

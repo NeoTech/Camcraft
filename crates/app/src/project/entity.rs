@@ -352,7 +352,7 @@ impl AlignmentDto {
 /// DECLARED binding, same grammar as `OperationDto::setup`: absent
 /// means the first setup by name (the implicit-setup law), so a tagged
 /// model in a setup-free document saves as one key and nothing more.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
 pub struct FixtureDto {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub setup: Option<String>,
@@ -361,6 +361,9 @@ pub struct FixtureDto {
     /// and false saves as no key, so such files round-trip unchanged.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub fixed: bool,
+    /// A built-in vise's parameters (#788); absent - plain steel.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vise: Option<super::vise_dto::ViseDto>,
 }
 
 /// An operation as files hold it: definition, the stamp the last generate
