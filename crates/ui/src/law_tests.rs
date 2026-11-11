@@ -16,7 +16,7 @@ use crate::egui_app::world;
 use crate::interact::{
     CLEARANCE_RGB, CUT_RGB, FEED_RGB, MAX_OVERLAY_VERTICES, PLUNGE_RGB, RAPID_RGB,
     REGION_RGB, RETRACT_RGB, anchor_hit, anchor_points, anchor_reference, capped, chevrons,
-    collect_overlay, ftoz, height_plane_lines, height_planes,
+    collect_overlay, ftoz, ground_grid_lines, height_plane_lines, height_planes,
     gizmo_segments, hover_features, is_axis_label, overlay_labels, plane_corner, plane_rect, project_uv, queue_feature_pick,
     region_lines, selection_feature_lines, shown_regions, toolpath_lines,
 };
@@ -47,6 +47,33 @@ mod gizmo_tests {
             yaw_deg,
         });
         state.drain_actions();
+    }
+
+    /// The Z=0 ground grid: the floor the empty viewport was missing. It is
+    /// world-space overlay geometry on the table plane, spaced in 1-2-5
+    /// decades that follow the zoom, and it obeys the axes switch.
+    #[test]
+    fn the_ground_grid_is_a_round_spaced_floor() {
+        let mut state = State::new();
+        let grid = ground_grid_lines(&state);
+        assert!(!grid.is_empty(), "a fresh document still has a floor");
+        assert!(grid.iter().all(|v| v[2] == 0.0), "the grid lies on Z=0");
+        // dist 80 -> step 10 mm: every line lands on a whole 10 mm.
+        assert!(
+            grid.iter().all(|v| (v[0] / 10.0).fract().abs() < 1e-3
+                || (v[1] / 10.0).fract().abs() < 1e-3),
+            "lines sit on round machine coordinates"
+        );
+        // Ten times the distance, ten times the step.
+        state.cam.dist = 800.0;
+        let coarse = ground_grid_lines(&state);
+        assert!(
+            (coarse[0][1] / 100.0).fract().abs() < 1e-3,
+            "the step follows the zoom: {:?}",
+            coarse[0]
+        );
+        state.show_world_axes = false;
+        assert!(ground_grid_lines(&state).is_empty(), "hiding the axes hides the floor");
     }
 
     #[test]
