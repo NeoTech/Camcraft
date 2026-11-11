@@ -115,7 +115,8 @@ function missingLetter(p) {  // the first turning letter no rotary is named for,
 // dialect writes the stream's A as it comes and never negates it, so on
 // such a table the check's number and the posted one would differ: the
 // pose it passed against the travel is not the word this post writes.
-// Refused by name rather than posted outside the judged travel.
+// Refused by name rather than posted outside the judged travel. A0 is
+// the same word on either sign, so an upright A0 still posts.
 function reversedLoneXRotary() {  // the rotary's name, else ""
   var rs = (typeof machine !== "undefined" && machine.rotaries) || [];
   if (rs.length !== 1) return "";
@@ -142,7 +143,7 @@ function tilt(p) {  // words to append, [] if none, null if refused
     return null;
   }
   var rev = reversedLoneXRotary();
-  if (rev) {
+  if (rev && Math.abs(p.A) > 1e-9) {
     if (!tiltRefused) { tiltRefused = true; msg("tilted move on rotary " + rev + ", stated along -X - this dialect posts the stream's angle unnegated, so it would leave the travel the machine check judged"); }
     return null;
   }

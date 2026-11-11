@@ -308,3 +308,89 @@ fn the_fanuc_dialect_refuses_a_lone_a_stated_along_minus_x() {
     assert!(!plus.warnings.iter().any(|w| w.contains("along -X")), "{:?}", plus.warnings);
     assert!(plus.program.contains("A-45"), "{}", plus.program);
 }
+
+/// Two tilted feeds at `abc`, for the letter-writing dialects.
+fn tilted(abc: [f64; 3]) -> String {
+    let mv = |z: f64| {
+        cnc::Record::Move(cnc::MoveRec {
+            kind: camcraft_app::cl::MoveKind::Feed,
+            x: 0.0,
+            y: 0.0,
+            z,
+            feed: Some(300.0),
+            center: None,
+            ccw: false,
+            plane: Default::default(),
+            abc: Some(abc),
+        })
+    };
+    cnc::serialize(&[
+        cnc::Record::Tool { number: 1, name: "EM".into() },
+        cnc::Record::Section { begin: true },
+        mv(-5.0),
+        mv(-6.0),
+        cnc::Record::Section { begin: false },
+    ])
+}
+
+fn post_file(name: &str) -> String {
+    std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/posts").join(name))
+        .expect("the post")
+}
+
+/// The Doosan post with its A brake declared (M10/M11), as an operator sets it.
+fn run_dnm(m: &Machine, abc: [f64; 3]) -> engine::PostOutput {
+    let opts = serde_json::json!({ "rotaryBrake": true });
+    ok(engine::run_with(&post_file("doosan-dnm.cps"), &mirror::mirror(m), &tilted(abc), &opts), "runs")
+}
+
+fn dnm() -> Machine {
+    let text = MACHINES.iter().find(|(n, _)| *n == "Doosan DNM 5700").map(|(_, t)| *t).expect("shipped");
+    ok(parse_mch(text), "parses")
+}
+
+#[test]
+fn an_upright_a0_still_posts_on_a_minus_x_fanuc_table() {
+    // A0 is the same word on either sign: only a turning A is refused.
+    let mut m = shipped();
+    let a = m.axes.iter_mut().find(|x| x.rotary).expect("the A");
+    a.axis = Some([-1.0, 0.0, 0.0]);
+    let out = ok(engine::run(&post_file("fanuc.cps"), &mirror::mirror(&m), &tilted([0.0, 0.0, 0.0])), "runs");
+    assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+    assert!(out.program.contains("A0"), "{}", out.program);
+}
+
+#[test]
+fn the_doosan_dialect_refuses_a_b_on_its_a_only_table() {
+    // The shipped DNM's A about X leans off Z, so it takes the RTCP path,
+    // which writes letters: the A0 B180 the check passes is refused by
+    // name, never posted as a B word to a machine with no B.
+    assert!(ok(check_document(&build(), &dnm()), "checks").is_ok(), "the check passes A0 B180 as A180");
+    let under = run_dnm(&dnm(), [0.0, 180.0, 0.0]);
+    assert!(
+        under.warnings.iter().any(|w| w.contains("tilted move commands B - the machine states no B rotary")),
+        "{:?}",
+        under.warnings
+    );
+    assert!(!under.program.lines().any(|l| l.contains("B180")), "{}", under.program);
+    let side = run_dnm(&dnm(), [90.0, 0.0, 0.0]);
+    assert!(side.warnings.is_empty(), "{:?}", side.warnings);
+    assert!(side.program.contains("A90"), "{}", side.program);
+}
+
+#[test]
+fn the_doosan_dialect_refuses_a_turning_a_stated_along_minus_x() {
+    let mut m = dnm();
+    let a = m.axes.iter_mut().find(|x| x.rotary).expect("the A");
+    a.axis = Some([-1.0, 0.0, 0.0]);
+    a.travel = Some((0.0, 90.0));
+    let out = run_dnm(&m, [-45.0, 0.0, 0.0]);
+    assert!(
+        out.warnings.iter().any(|w| w.contains("tilted move on rotary A, stated along -X")),
+        "{:?}",
+        out.warnings
+    );
+    assert!(!out.program.lines().any(|l| l.contains("A-45")), "{}", out.program);
+    let upright = run_dnm(&m, [0.0, 0.0, 0.0]);
+    assert!(upright.warnings.is_empty(), "{:?}", upright.warnings);
+}
