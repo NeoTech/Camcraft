@@ -133,3 +133,33 @@ fn a_path_without_the_record_or_with_one_off_its_moves_is_refused() {
     let e = PlasmaProgram::from_toolpath(&t).expect_err("off the moves");
     assert!(e.contains("does not sit on the path's moves"), "{e}");
 }
+
+/// #801: a hole's slug read from the record is a freed area for tip-up.
+/// Two holes (20..40 and 60..80, lead-in from the centre, no lead-out)
+/// cut right, then left, then the outline: each rapid leaves the slug
+/// just freed (not judged), but the outline's runs on over the right
+/// hole's slug - a tip-up naming hole C1.
+#[test]
+fn a_rapid_over_a_freed_hole_slug_is_read_and_warned() {
+    let right: &[(f64, f64)] = &[(70.0, 50.0), (70.0, 40.0), (80.0, 40.0), (80.0, 60.0), (60.0, 60.0), (60.0, 40.0), (70.0, 40.0)];
+    let left: &[(f64, f64)] = &[(30.0, 50.0), (30.0, 40.0), (40.0, 40.0), (40.0, 60.0), (20.0, 60.0), (20.0, 40.0), (30.0, 40.0)];
+    let outline: &[(f64, f64)] = &[(105.0, 50.0), (100.0, 50.0), (100.0, 100.0), (0.0, 100.0), (0.0, 0.0), (100.0, 0.0), (100.0, 50.0)];
+    let mut b = PathBuilder::new(at(70.0, 50.0, UP));
+    let torches = vec![
+        lit(&mut b, 1, ContourRole::Inner, Some(3), right),
+        lit(&mut b, 2, ContourRole::Inner, Some(3), left),
+        lit(&mut b, 3, ContourRole::Outer, None, outline),
+    ];
+    let mut t = b.finish();
+    t.plasma = Some(Record { kerf: 1.5, torches, ..Record::default() });
+    let p = PlasmaProgram::from_toolpath(&t).expect("read");
+    // The rapid into the outline: (30, 40) on the left hole's edge to
+    // (105, 50) - across the material, then over the right hole's slug.
+    assert_eq!(p.rapids[2], Some((Point2::new(30.0, 40.0), Point2::new(105.0, 50.0))));
+    let f = judge(&p);
+    assert!(
+        matches!(f.as_slice(), [PlasmaFinding::TipUp { contour: 3, freed: 1, slug: true, at }] if at.x > 60.0 && at.x < 80.0),
+        "{f:?}"
+    );
+    assert!(f[0].to_string().contains("slug of hole C1"), "{}", f[0]);
+}

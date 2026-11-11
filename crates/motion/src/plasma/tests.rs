@@ -328,3 +328,33 @@ fn a_deep_narrow_wedge_is_refused_not_exempted_as_a_corner_tip() {
         assert!(e.contains("contour C0") && e.contains("bridged"), "{deg}° x {depth} mm wedge: {e:?}");
     }
 }
+
+/// #801: a picked contour with a zero-width slit - out along a line and
+/// straight back, the third #791 review's probe - normalises to the
+/// plain rectangle in `Region::new` (the region keeps area, and the
+/// slit has none). It is refused by name, never cut as the rectangle;
+/// a collinear vertex the region drops stays legal.
+#[test]
+fn a_zero_width_slit_in_a_picked_contour_is_refused_not_dropped() {
+    let q = Point2::new;
+    let slit = Loop::new(vec![q(0.0, 0.0), q(100.0, 0.0), q(100.0, 60.0), q(50.0, 60.0), q(50.0, 40.0), q(50.0, 60.0), q(0.0, 60.0)]).unwrap();
+    let part = Region::new(vec![slit.clone()]).unwrap();
+    let e = plasma_profile(&[slit], &[], &part, &params()).err().map(|e| e.to_string()).unwrap_or_default();
+    assert!(e.contains("picked contour 1") && e.contains("X50.000 Y40.000") && e.contains("open run"), "{e:?}");
+    let collinear = Loop::new(vec![q(0.0, 0.0), q(50.0, 0.0), q(100.0, 0.0), q(100.0, 60.0), q(0.0, 60.0)]).unwrap();
+    let part = Region::new(vec![collinear.clone()]).unwrap();
+    assert!(plasma_profile(&[collinear], &[], &part, &params()).is_ok());
+}
+
+/// #801 (decision 4a said plainly): an ordinary inside V sharper than
+/// about 30° - a 20 mm mouth at 25° - is refused, not cut with its tip
+/// left; the 2 r cap leaves only 2 r of its tip unjudged.
+#[test]
+fn a_normal_sized_v_sharper_than_30_degrees_is_refused() {
+    let q = Point2::new;
+    let depth = 10.0 / (25f64.to_radians() * 0.5).tan();
+    let l = Loop::new(vec![q(0.0, 0.0), q(100.0, 0.0), q(100.0, 60.0), q(60.0, 60.0), q(50.0, 60.0 - depth), q(40.0, 60.0), q(0.0, 60.0)]).unwrap();
+    let part = Region::new(vec![l.clone()]).unwrap();
+    let e = plasma_profile(&[l], &[], &part, &params()).err().map(|e| e.to_string()).unwrap_or_default();
+    assert!(e.contains("contour C0") && e.contains("bridged"), "{e:?}");
+}

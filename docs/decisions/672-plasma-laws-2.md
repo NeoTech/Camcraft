@@ -128,14 +128,23 @@ notch and the 1 mm keyway (90° corners) are refused exactly as before.
 uncapped r (tan(δ/2) − √3) grows without bound as the opening closes, so
 a deep narrow V-slot (2° × 40 mm, 4° × 20 mm, 10° × 5 mm at the 1.5 mm
 kerf) exempted both walls whole and generated silently with the feature
-uncut, and a zero-width slit (a turn of π, tan ≈ 1.6e16 - finite) did the
-same. 2 r is exactly the 30° zone, so the 30°, 45° and 55° notches keep
+uncut, and a near-zero-width slit (a turn just short of π, tan ≈ 1.6e16 -
+finite) did the same. (An exact zero-width slit never reaches the cover
+law: #801 refuses it at the contour door, see `801-plasma-followups.md`.) 2 r is exactly the 30° zone, so the 30°, 45° and 55° notches keep
 theirs; anything sharper keeps 2 r of tip and has the rest of its walls
 judged, so a narrow deep wedge is refused by name. A non-finite tan
 takes the cap. *Considered and dropped:* a cap at the corner's depth or
 a fraction of the wall length (it scales with the feature, so a long
 enough slit still escapes), and refusing every opening under 30° (the
-shallow ones are cut fine). *Consequence accepted:* a V-notch whose
+shallow ones are cut fine). **Said plainly (#801):** the cap means a
+normal-sized inside V sharper than about 30° IS refused - a 20 mm mouth
+at 25° or 20°, a 10 mm mouth at 15° - wherever its walls run on past 2 r
+from the vertex; only a V small enough to lie wholly inside the 2 r tip
+zone still generates with its tip left. That is the safe direction (the
+uncut sliver of a sharp V grows with its depth, so it is refused rather
+than left on the part); the refusal reads as the generic "narrower than
+the kerf" line with no "about X mm" figure, because the V's other wall
+is the neighbouring edge and is excluded from the gap measure. *Consequence accepted:* a V-notch whose
 mouth and walls are both inside 2 r is wholly a corner tip and generates
 with the tip left, like any sharp corner. On a slot's floor (inside
 corners at both ends) the gap the refusal names is the smaller of the

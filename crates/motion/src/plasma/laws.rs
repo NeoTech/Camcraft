@@ -167,7 +167,7 @@ fn uncovered(contour: u32, c: &Contour, i: usize, q: Point2, kerf: f64) -> Strin
 }
 
 /// Distance from `p` to segment a-b.
-fn pt_seg(p: Point2, a: Point2, b: Point2) -> f64 {
+pub(super) fn pt_seg(p: Point2, a: Point2, b: Point2) -> f64 {
     let (dx, dy) = (b.x - a.x, b.y - a.y);
     let l2 = dx * dx + dy * dy;
     let t = if l2 > 0.0 { (((p.x - a.x) * dx + (p.y - a.y) * dy) / l2).clamp(0.0, 1.0) } else { 0.0 };
