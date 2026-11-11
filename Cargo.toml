@@ -104,6 +104,19 @@ truck-polymesh = "=0.6.0"
 truck-meshalgo = { version = "=0.4.0", default-features = false, features = ["tessellation"] }
 ruststep = "=0.4.0"
 
+# #887: ruststep 0.4.0 - the newest crates.io release (Sept 2024) - cannot
+# parse the empty parameter list `()`, which ISO 10303-21 allows, so HOOPS
+# Exchange exports (one `DRAUGHTING_MODEL('',(),...)` entity) are rejected
+# as corrupt. The fix is merged upstream but unreleased (ricosjp/ruststep#256
+# asks for a release), so pin the fix commit via [patch.crates-io]. Upstream
+# still declares version = "0.4.0", so camcraft-app's `=0.4.0` and
+# truck-stepio's `0.4` both resolve to the patched crate unchanged, and
+# ruststep-derive comes from the same tree. This is deliberately the only
+# git dependency in the workspace (policy elsewhere: crates.io pins) and
+# should be dropped once a ruststep release contains the fix.
+[patch.crates-io]
+ruststep = { git = "https://github.com/ricosjp/ruststep", rev = "90fdc9351746f1f1d1e435b88f15371edaaaa14d" }
+
 # Third-party code is optimized even in dev builds: an unoptimized truck
 # tessellation or wgpu pass is 5-20x slower and makes imports feel like
 # freezes. opt-level 1 is as fast as 2 on the compute-heavy suites (motion finish3d: 48.7 s vs 46.7 s;

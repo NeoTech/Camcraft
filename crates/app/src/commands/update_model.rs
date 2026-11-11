@@ -78,7 +78,7 @@ impl UpdateModel {
         };
         if !model::is_model(world, &entity) {
             return Err(CommandError::Invalid(format!(
-                "'{name}' is setup furniture, not a model"
+                "'{name}' is not a model - it is a setup's stock or work offset, a setup, a tool, an operation or other CAM data"
             )));
         }
         // Every copy of this model holds the same local facets, so one
