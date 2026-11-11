@@ -32,3 +32,37 @@ mean gating on `state.hover` in the shell's draw loop and leaving the
 producer untouched. `setup_chip_tests` filters plane chips by `" · "`,
 which never collides with an entity name - re-scope that only if names
 start carrying separators.
+
+## #645 - the names get a persisted switch
+
+**What was decided:** the review on the gizmo-labels PR asked for the
+names to be switchable, so `interact::overlay_labels` emits the name
+rows only while `State.show_gizmo_names` is on - a browser-pane
+checkbox, "Show origin names", right under "Show world origin axes".
+The `X`/`Y`/`Z` letters and every gizmo line and stroke ignore the
+switch: it quiets names and nothing else. The flag is view state like
+the camera (never a command, never on the undo history), but unlike
+the camera it is kept: a per-user `view.json` in the same config
+folder as the recents file (#662's folder resolver), written the
+moment the checkbox flips and read once at startup. Default ON -
+shipping the switch must not change a viewport a user already has.
+
+**Why:** names are what make several triads tell apart, but on a busy
+model they are clutter some users will want gone; the review asked for
+the toggle in view settings, persisted, default on. Persistence rides
+the recents' machinery (same folder, atomic write, corrupt-file
+tolerance) rather than inventing a second way to keep a preference.
+
+**Considered and dropped:** putting the flag in the project file (it
+is how *this user* likes the viewport, not part of the document - the
+camera is not saved either); a ribbon View menu entry (the browser
+pane is where the other viewport furniture already lives). A separate
+`view.json` sibling vs. widening `recent.json`: one file per concern
+keeps each tolerant read simple; if the maintainer prefers one config
+file, folding the `view` section into `recent.json` is a mechanical
+move of the same serde structs.
+
+**Cost to change later:** low. A new view preference is one
+`#[serde(default = ...)]` field on `app::view::ViewPrefs`, one State
+field, one checkbox; the old files keep reading and unknown keys stay
+ignored.

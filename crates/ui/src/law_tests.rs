@@ -268,6 +268,26 @@ mod gizmo_tests {
             "only the bright triad labels remain, no dimmed world letters"
         );
     }
+
+    /// #645: the "Show origin names" switch asks for over #727. Its law:
+    /// it quiets the name rows and nothing else - the axis lines, the
+    /// triad strokes and the big `X`/`Y`/`Z` letters all ignore it.
+    #[test]
+    fn the_name_switch_quiets_names_not_letters_or_lines() {
+        let mut state = State::new();
+        assert_eq!(overlay_labels(&state, 1.0).len(), 4, "default on: the world set plus its name");
+        state.show_gizmo_names = false;
+        let labels = overlay_labels(&state, 1.0);
+        assert_eq!(labels.len(), 3, "the three letters survive");
+        assert!(labels.iter().all(|(_, _, text)| is_axis_label(text)), "no name anywhere: {labels:?}");
+        assert_eq!(collect_overlay(&state).len(), 6, "the axis lines are untouched");
+        assert_eq!(gizmo_segments(&state, 1.0).len(), 3, "and so are the triad strokes");
+        // With an offset out at a G5x, both gizmos shed names together.
+        set_origin(&mut state, [50.0, 0.0, 0.0], 0.0);
+        assert_eq!(overlay_labels(&state, 1.0).len(), 6, "one letter set per gizmo, no names");
+        state.show_gizmo_names = true;
+        assert_eq!(overlay_labels(&state, 1.0).len(), 8, "back on: both names return (#727)");
+    }
 }
 
 #[cfg(test)]

@@ -91,6 +91,8 @@ pub mod tool_body_view;
 pub mod tool_body_lathe;
 pub mod units;
 pub use camcraft_sim::verify;
+// #645: the viewport view preferences (#727's name toggle), per user.
+pub mod view;
 // #261: the moves a cached path's warnings name.
 pub mod warned_moves;
 pub mod world;

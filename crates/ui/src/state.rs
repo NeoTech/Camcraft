@@ -60,6 +60,8 @@ pub use tool_body_ui::{BodyDraft, BodyPickMode, ToolBodyUi, ZOOM_MAX, ZOOM_MIN, 
 mod tool_profile_ui;
 #[path = "state_recent.rs"]
 mod recent_ui;
+#[path = "state_view.rs"]
+mod view_prefs_ui;
 pub use tool_profile_ui::{ToolColumn, ToolProfileUi, is_spun_kind, parametric_points};
 use flecs_ecs::prelude::World;
 
@@ -1247,6 +1249,15 @@ pub struct State {
     /// setup, not decoration. Hiding the world axes is for the moment a
     /// G5x offset sits away from machine zero and two gizmos read as clutter.
     pub show_world_axes: bool,
+    /// Do the origin gizmos wear their names (#727 drew them, #645
+    /// asked for the switch)? View state like the camera - never a
+    /// command, never on the history - but unlike the camera it is a
+    /// kept preference: read at startup from the per-user view file
+    /// and written back when the browser checkbox flips it. Default
+    /// ON, the #727 decision; the `X`/`Y`/`Z` axis letters never
+    /// depend on it - only the names (`World`, each offset's entity
+    /// name) do.
+    pub show_gizmo_names: bool,
     /// Show cached toolpaths beyond the selected operation's: with this on,
     /// every generated path draws (dimmed where unselected) instead of only
     /// the one the tree highlights. View state like the camera - not
@@ -1325,6 +1336,9 @@ pub struct State {
     /// Where the recents are written back; `None` (every headless
     /// State) keeps them in memory only.
     pub recent_store: Option<PathBuf>,
+    /// Where the view preferences (#645) are written back; `None`
+    /// (every headless State) keeps them in memory only.
+    pub view_store: Option<PathBuf>,
     /// The dock's closable panels as of this frame (see [`PanelsOpen`]).
     pub panels_open: PanelsOpen,
     /// The View door's pending dock ask (see [`LayoutRequest`]).
@@ -1634,6 +1648,7 @@ impl State {
             browser_expanded: [true; 3],
             cam: Camera::default(),
             show_world_axes: true,
+            show_gizmo_names: true,
             show_all_paths: false,
             display: DisplayMode::default(),
             sim: None,
@@ -1652,6 +1667,7 @@ impl State {
             ribbon_recent_open: None,
             recent: camcraft_app::recent::RecentFiles::default(),
             recent_store: None,
+            view_store: None,
             panels_open: PanelsOpen { browser: true, properties: true, machines: false },
             layout_request: None,
             tree_menu: None,

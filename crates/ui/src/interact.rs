@@ -901,7 +901,11 @@ pub(crate) fn overlay_labels(state: &State, aspect: f64) -> Vec<([f32; 2], [f32;
         // name leads its gizmo's labels. Bright triad blue for offsets
         // (the same blue #195 lifted for the dark ground); neutral gray
         // dimmed like the world axes it stands for.
-        if let Some(uv) = project_uv(&mvp, gizmo.pos) {
+        // #645: names only while the user's "Show origin names" is on -
+        // the letters below never depend on it, and no line does.
+        if state.show_gizmo_names
+            && let Some(uv) = project_uv(&mvp, gizmo.pos)
+        {
             let c = if gizmo.world_axes {
                 [WORLD_GRAY * WORLD_DIM; 3]
             } else {

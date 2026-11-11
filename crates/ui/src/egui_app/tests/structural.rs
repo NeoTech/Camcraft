@@ -109,7 +109,7 @@ fn assert_shell_skeleton(h: &Harness<'static, ShellUi>) {
         let q = at(&texts, t);
         assert!(q.x > v.x && q.x < p.x, "view cube face {t:?} belongs to the viewport");
     }
-    for label in ["Show world origin axes", "Show all toolpaths", "Shaded", "Wireframe"] {
+    for label in ["Show world origin axes", "Show origin names", "Show all toolpaths", "Shaded", "Wireframe"] {
         assert!(!disabled(h, label), "viewport control {label:?} must be live");
     }
     // Properties: the seed's page, its sections, and the draft law's
