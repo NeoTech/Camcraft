@@ -285,6 +285,9 @@ function smoothOff() {
 function startPreamble() {
   if (sectionOpen) return;
   sectionOpen = true;
+  // #574: a touch probe (a stated speed of 0) states its spindle
+  // stopped before its first move, whatever the tool change did.
+  var probeStop = spindleWait && !(sRpm > 0);
   opNotes();
   modalWait = true;
   if (toolWait) {
@@ -297,6 +300,7 @@ function startPreamble() {
   if (spindleWait && sRpm > 0) {   // a touch probe (#523) states no spindle
     block(["M3"]);
   }
+  if (probeStop) block(["M5"]);
   spindleWait = false;
   coolant = coolantFor(coolantAsk);
   if (coolant) block([coolant]);
