@@ -16,6 +16,7 @@ pub mod mate;
 pub mod plane;
 pub mod points;
 pub mod roles;
+pub mod wall_fit;
 pub mod winding;
 
 pub use align::{Alignment, align_321};
