@@ -125,6 +125,10 @@ pub use boundary_picks::{
 };
 pub use boundary_ctx::op_stamp;
 use boundary_ctx::*;
+// #763: the one machining-frame seam — the composed door for an
+// operation's world reads and CL wrap (part_alignment x Tilt).
+mod frame;
+pub use frame::OpFrame;
 mod job;
 pub use job::*;
 mod generate;

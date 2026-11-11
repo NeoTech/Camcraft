@@ -151,7 +151,12 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
     if let Some(why) = crate::setup_align::generation_problem(world, op) {
         return Err(GenError::Invalid(why));
     }
-    let material = material_of(world, setup, &op.src)?;
+    // #763: the one machining-frame seam. Built before the first read;
+    // the tilt's own refusal keeps its place below (`checked_frame`,
+    // after the heights resolve) exactly where the old head raised it -
+    // the job's error-order law.
+    let opframe = OpFrame::of(op);
+    let material = opframe.material_of(world, &op.src)?;
     let part_solid = part_solid_of(world, setup, &op.src, &material);
     // Setup stock, when it is not the source itself: the swarf column
     // around a smaller model (the head read at `generate` - same call).
@@ -170,23 +175,11 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
     // The height seam, refused by name before anything else (as the old
     // head refused it, `resolve_params` being the first fallible read
     // after the material).
-    let hs = resolve_params(world, setup, Some(&op.src), &op.params).map_err(GenError::Invalid)?;
+    let hs = opframe.resolve_heights(world, Some(&op.src), &op.params).map_err(GenError::Invalid)?;
 
-    // The 3+2 wrap (M5.1 B), same refusals, same order: non-finite
-    // letters first, then the tilted-selection lock.
-    let frame = match op.params.tilt() {
-        None => None,
-        Some(t) => match t.frame() {
-            Some(f) => Some(f),
-            // Only a non-finite letter could get here (the parameter
-            // door refuses it); naming it beats inventing a plane.
-            None => {
-                return Err(GenError::Invalid(
-                    "the 3+2 index commands no direction - its angles are not finite".into(),
-                ));
-            }
-        },
-    };
+    // The 3+2 wrap (M5.1 B), read through the seam: the same refusal,
+    // the same words, at the same statement - one construction site.
+    let frame = opframe.checked_frame()?;
     // The one refusal the wrap owes (M5.1 B): a picked selection is
     // read as world geometry by the selection walk - projecting a pick
     // onto a tilted plane is not implemented, and a shadow of the pick
