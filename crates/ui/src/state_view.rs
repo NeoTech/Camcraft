@@ -20,7 +20,7 @@ impl State {
     /// status line.
     pub(crate) fn load_view(&mut self) {
         let Some(path) = view::store_path() else {
-            eprintln!("view settings: no config folder - they last for this session only");
+            diag_warn!("view settings: no config folder - they last for this session only");
             return;
         };
         self.load_view_from(&path);
