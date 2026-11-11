@@ -45,7 +45,7 @@ pub use moves::{arc_chords, lattice, ArcMove, Move, MoveKind, MAX_ARC_CHORDS};
 pub use path::{PathBuilder, Toolpath};
 pub use plane::ArcPlane;
 pub use thread::{ThreadCycle, ThreadHand};
-pub use torch::{ContourRole, PlasmaCut, TorchSpan};
+pub use torch::{parse_header as parse_plasma_header, parse_off as parse_torch_off, parse_on as parse_torch_on, ContourRole, PlasmaCut, TorchSpan};
 pub use touch::ProbeTouch;
 pub use rotary::{stamp_c, unwrap_near};
 pub use rotary_unwind::unwind_c;

@@ -3,7 +3,8 @@
 // reproduce headlessly) shows up in their log. Provenance: our own design;
 // std::time only.
 
-use std::time::{Duration, Instant};
+use camcraft_app::clock::Instant;
+use std::time::Duration;
 
 /// A frame slower than this is reported (10 fps; vsync frames are 7-17 ms).
 pub const BUDGET: Duration = Duration::from_millis(100);

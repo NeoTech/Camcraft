@@ -44,15 +44,17 @@ const VERTEX_LAYOUT: wgpu::VertexBufferLayout<'static> = wgpu::VertexBufferLayou
 
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
-/// `struct U`: mvp + eye + wire (80 bytes), then six palette vec4s.
-const UNIFORM_SIZE: u64 = 80 + 6 * 16;
+/// `struct U`: mvp + eye + wire (80 bytes), six palette vec4s, then the
+/// wireframe edge ink of the live ground (#698).
+const UNIFORM_SIZE: u64 = 80 + 7 * 16;
 
 const SHADER: &str = "
 // The verdict / selection palette rides the uniform (M13.4's
 // colour-vision remap; Off = the literals these fields replaced).
 struct U { mvp: mat4x4<f32>, eye: vec3<f32>, wire: f32,
            clean: vec4<f32>, rest: vec4<f32>, gouge: vec4<f32>,
-           unjudged: vec4<f32>, hot: vec4<f32>, warm: vec4<f32> };
+           unjudged: vec4<f32>, hot: vec4<f32>, warm: vec4<f32>,
+           wire_ink: vec4<f32> };
 @group(0) @binding(0) var<uniform> u: U;
 
 struct VSOut {
@@ -100,13 +102,14 @@ fn fs_main(in: VSOut) -> @location(0) vec4<f32> {
 }
 
 // Facet edges: dark over the shaded pass, warm when the part is selected.
-// In wireframe mode the same wire runs over the dark background instead of
-// over lit metal, so it brightens to a cool gray (and the selection warm
+// In wireframe mode the same wire runs over the ground instead of over
+// lit metal, so it brightens to a cool gray on the dark ground and darkens
+// to a slate on the light one (#698, `u.wire_ink`; the selection warm
 // lifts to the same hot amber the fills use) - `u.wire` is the mode flag.
 @fragment
 fn fs_edge(in: VSOut) -> @location(0) vec4<f32> {
     let dark = vec3<f32>(0.06, 0.07, 0.09);
-    let gray = vec3<f32>(0.62, 0.66, 0.72);
+    let gray = u.wire_ink.xyz;
     let unlit = mix(dark, gray, u.wire);
     let sel = mix(u.warm.xyz, u.hot.xyz, u.wire);
     return vec4<f32>(mix(unlit, sel, in.sel), 1.0);
@@ -792,6 +795,11 @@ impl View3D {
         stock: Option<&dyn Fn(&mut wgpu::RenderPass<'_>)>,
     ) {
         let wireframe = display == crate::state::DisplayMode::Wireframe;
+        // The live theme's viewport ground (#698): the clear colour and
+        // the wireframe ink follow it, so a light theme gets a light ground.
+        let ground = crate::egui_app::theme::current().viewport;
+        let light = crate::egui_app::ground_ink::light_ground(ground);
+        let wire = crate::egui_app::ground_ink::wire_ink(light);
         let mut data = [0u8; UNIFORM_SIZE as usize];
         let mut o = 0usize;
         for col in mvp {
@@ -813,6 +821,10 @@ impl View3D {
                 o += 4;
             }
         }
+        for v in [wire[0], wire[1], wire[2], 1.0] {
+            data[o..o + 4].copy_from_slice(&v.to_le_bytes());
+            o += 4;
+        }
         queue.write_buffer(&self.uniform, 0, &data);
 
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -822,9 +834,9 @@ impl View3D {
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Clear(wgpu::Color {
-                        r: 0.09,
-                        g: 0.10,
-                        b: 0.12,
+                        r: f64::from(ground.r()) / 255.0,
+                        g: f64::from(ground.g()) / 255.0,
+                        b: f64::from(ground.b()) / 255.0,
                         a: 1.0,
                     }),
                     store: wgpu::StoreOp::Store,
