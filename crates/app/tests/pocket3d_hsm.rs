@@ -91,7 +91,18 @@ fn the_users_bore_roughs_adaptive_level_by_level_and_verifies_clean() {
         let line = path.status_summary("Op1", 0, camcraft_app::units::Unit::Millimeters);
         assert!(line.contains("Offset rings"), "{line}");
     }
+    // Issue #850: the growth planner's budgets never refuse a level of
+    // the bore (its finely tessellated outline is heavy geometry over a
+    // short walk); only the top level, whose plan would cross itself,
+    // goes to the rings - as on main. A budget that cut a level would
+    // change the path silently under the assertions above.
+    assert!(!path.notes.iter().any(|n| n.contains("planning budget") || n.contains("too detailed")), "{:?}", path.notes);
+    assert!(fell.len() == 1 && fell[0].contains("crosses itself") && fell[0].contains("Z 20.000"), "{fell:?}");
+    // The path as main plans it (measured on main bdd29e00 and on #850's
+    // head alike: 5530 moves, 5497 planar feeds, 600 arcs). A change to
+    // the planner that moves these re-measures them and says why.
     println!("moves {} planar {planar} arcs {arcs} notes {:?}", path.moves.len(), path.notes);
+    assert_eq!((path.moves.len(), planar, arcs), (5530, 5497, 600), "the bore's path as main plans it: {:?}", path.notes);
 }
 
 #[test]

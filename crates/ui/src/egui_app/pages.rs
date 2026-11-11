@@ -628,8 +628,9 @@ fn wcs_page(ui: &mut Ui, state: &mut State) {
     }
 
     ui.add_space(6.0);
-    // #342: the setup's one WCS, and the word its post writes - which
-    // word is chosen on the Setups page, never here.
+    // #342: the setup's one WCS, and the work offset its post writes. The
+    // dropdown that picks it is drawn under this page (#343), so the note
+    // names what this page shows, not where the choice lives.
     let wcs_ctx = camcraft_app::setup::active(&state.world);
     let label = camcraft_app::setup::wcs_label(&state.world, wcs_ctx.as_deref());
     let line = match camcraft_app::setup::wcs_entity(&state.world, wcs_ctx.as_deref())
@@ -645,7 +646,7 @@ fn wcs_page(ui: &mut Ui, state: &mut State) {
         None => format!("{label}: not placed (at the origin)"),
     };
     ui.label(line);
-    ui.label("The work offset word is set per setup on the Setups page.");
+    ui.label("Work offset: the G54-G59 slot this setup posts. It does not move the origin.");
 }
 
 fn apply_wcs_drafts(state: &mut State) {
