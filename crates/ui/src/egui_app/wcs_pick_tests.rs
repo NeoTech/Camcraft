@@ -3,7 +3,9 @@
 //! role); picks land in the draft - never in the open operation - and
 //! arming keeps the toolbar's pick mode, because the row takes faces,
 //! edges, corners and walls alike. Apply is live-gated on the app's own
-//! role check (the why rides the disabled button) and queues the one
+//! role check (the why rides the disabled button) and only answers on
+//! the ACTIVE setup's row, because `SetWcs` places the active setup's
+//! WCS. Apply queues the one
 //! undoable `SetWcs` command with the fitted frame.
 //! Provenance: our own page law; no vendor material consulted.
 
@@ -78,8 +80,20 @@ fn frame(ui: &mut egui::Ui, st: &mut State) {
     super::wcs_pick_row::row(ui, st, "Setup1");
 }
 
+/// The same frame drawn for the second setup's page (#701 review round 3:
+/// the row stands on every setup's settings page, active or not).
+fn frame_setup2(ui: &mut egui::Ui, st: &mut State) {
+    super::panes::shortcuts(ui, st);
+    st.drain_actions();
+    super::wcs_pick_row::row(ui, st, "Setup2");
+}
+
 fn wcs(state: &State) -> Option<([f64; 3], [f64; 3])> {
-    let e = camcraft_app::setup::wcs_entity(&state.world, Some("Setup1"))?;
+    wcs_of(state, "Setup1")
+}
+
+fn wcs_of(state: &State, setup: &str) -> Option<([f64; 3], [f64; 3])> {
+    let e = camcraft_app::setup::wcs_entity(&state.world, Some(setup))?;
     let l = model::transform_of(&state.world, &e)?;
     let (r, p, y) = camcraft_app::geometry::quat_to_euler(l.rot);
     Some(([l.pos.x, l.pos.y, l.pos.z], [r, p, y]))
@@ -171,6 +185,55 @@ fn an_incomplete_frame_greys_apply_and_shows_the_apps_why() {
     crate::wcs_pick::take(h.state_mut(), front);
     h.run();
     assert!(!apply_disabled(&h), "Z and X make a frame");
+}
+
+#[test]
+fn the_row_on_an_inactive_setup_cannot_move_another_setups_work_zero() {
+    // Review round 3: `SetWcs` places the ACTIVE setup's WCS, so the row
+    // drawn for an inactive setup must never fire it. This mirrors the
+    // reviewer's repro: Setup1 active, the row on Setup2's page, a whole
+    // frame picked - and Apply stays grey until Setup2 is the active one.
+    let mut state = with_part();
+    run(&mut state, CommandKind::CreateSetup { name: None, datum_from: None });
+    run(&mut state, CommandKind::ActivateSetup(Some("Setup1".into())));
+    let mut h = Harness::builder().with_size(Vec2::new(900.0, 300.0)).build_ui_state(frame_setup2, state);
+    h.run();
+    h.get_by_label("Pick for WCS").click();
+    h.run();
+    let d = h.state().wcs_pick.clone().expect("Setup2's row arms a Setup2 draft");
+    assert_eq!(d.setup, "Setup2", "{d:?}");
+    let top = top_face(h.state());
+    crate::wcs_pick::take(h.state_mut(), top); // the default role is Z
+    h.state_mut().wcs_pick.as_mut().expect("armed").role = Role::X;
+    let front = edge(h.state(), [0.0, 0.0, 10.0], [20.0, 0.0, 10.0]);
+    crate::wcs_pick::take(h.state_mut(), front);
+    h.state_mut().wcs_pick.as_mut().expect("armed").role = Role::Origin;
+    let origin = corner(h.state(), [20.0, 20.0, 10.0]);
+    crate::wcs_pick::take(h.state_mut(), origin);
+    h.run();
+    assert!(apply_disabled(&h), "a whole frame on an inactive setup's row still greys Apply out");
+    assert!(h.state().pending.is_empty(), "the greyed Apply queues nothing");
+    let apply = h.get_by(|n| n.role() == ARole::Button && n.label().as_deref() == Some("Apply"));
+    h.hover_at(apply.rect().center());
+    h.run();
+    assert!(
+        h.query_by_label_contains("Make Setup2 the active setup").is_some(),
+        "the greyed Apply says to make the row's own setup active"
+    );
+    // Make the row's setup active and the same frame places ITS own WCS,
+    // while the setup that was active before never moves.
+    run(h.state_mut(), CommandKind::ActivateSetup(Some("Setup2".into())));
+    h.run();
+    assert!(!apply_disabled(&h), "the active setup's row lights Apply up");
+    apply_button(&h);
+    h.run(); // the click queues SetWcs...
+    h.run(); // ...and the next frame's drain lands it, as the shell does
+    let (pos, _) = wcs_of(h.state(), "Setup2").expect("Setup2's WCS is placed");
+    assert!(
+        pos.iter().zip([20.0, 20.0, 10.0]).all(|(a, b)| (a - b).abs() < 1e-9),
+        "on the picked corner: {pos:?}"
+    );
+    assert!(wcs_of(h.state(), "Setup1").is_none(), "the other setup's work zero did not move");
 }
 
 #[test]
