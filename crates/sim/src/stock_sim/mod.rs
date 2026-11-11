@@ -60,6 +60,7 @@
 
 mod backend;
 mod backend_build;
+mod backend_edit;
 mod carry;
 mod columns;
 mod cut;
@@ -104,6 +105,7 @@ mod tiles;
 mod wall_slack;
 
 pub use backend::{Backend, Stock, FIELD_BAND, FIELD_VERDICT_EPS, LATHE_COLUMN_REFUSAL};
+pub use backend_edit::SET_TOPS_FIELD_REFUSAL;
 pub use carry::{Body, LatticeTurn, CARRY_TURN_REFUSAL};
 pub use columns::Columns;
 pub use cut::{auto_cell, first_posed, simulate, SimOp, POSED_REFUSAL};
