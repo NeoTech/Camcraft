@@ -114,6 +114,8 @@ mod tool_body;
 mod tool_profile;
 // #793: the tool editor's holder library picker.
 mod tool_holder;
+// #93 slice 2: the Profile tab's drawn cutter.
+mod tool_cutter;
 // #441: the Theme ribbon door; the Stock page shows stock only.
 mod theme_door;
 mod recent_door;

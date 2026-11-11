@@ -138,6 +138,15 @@ pub struct ToolBody {
     pub frame: crate::tool_body::BodyFrame,
 }
 
+/// #93 slice 2: a milling tool's own drawn cutter, neck and shank
+/// outline (`SetToolCutter`, `crate::tool_cutter`). Display data: it
+/// agrees with the tool's numbers by law (`cutter_profile::check`) and
+/// no generator or judging law reads it. Absent = drawn from the numbers.
+#[derive(Component, Debug, Clone, PartialEq)]
+pub struct ToolCutter {
+    pub spun: camcraft_tools::spun::SpunProfile,
+}
+
 impl ToolBody {
     /// The revolved envelope of a milling (spindle-frame) body.
     #[must_use]
@@ -523,6 +532,7 @@ pub fn register_schema(world: &World) {
     world.component::<Wcs>();
     world.component::<ToolDef>();
     world.component::<ToolBody>();
+    world.component::<ToolCutter>();
     world.component::<Operation>();
     world.component::<OperationMeta>();
     world.component::<ProgramEntry>();

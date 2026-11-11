@@ -156,6 +156,11 @@ pub(super) fn validate_kind(dto: &EntityDto, kind: EntityKind) -> Result<(), Pro
                 crate::tool_body::fits(&tool.to_tool(), &body)
                     .map_err(|e| corrupt(format!("tool '{}': {e}", dto.name)))?;
             }
+            // #93: a drawn cutter agrees with the tool's numbers, or
+            // the file refuses by name.
+            if let Some(c) = &tool.cutter {
+                super::tool_body_wire::cutter_from_dto(&tool.to_tool(), c, &dto.name).map_err(corrupt)?;
+            }
         }
         EntityKind::Operation => {
             if dto.name.is_empty() {

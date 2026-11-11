@@ -68,6 +68,9 @@ mod tool_body_ui;
 pub use tool_body_ui::{BodyDraft, BodyPickMode, ToolBodyUi, ZOOM_MAX, ZOOM_MIN, clamp_zoom};
 #[path = "state_tool_profile.rs"]
 mod tool_profile_ui;
+#[path = "state_tool_cutter.rs"]
+mod tool_cutter_ui;
+pub use tool_cutter_ui::ToolCutterUi;
 #[path = "state_recent.rs"]
 mod recent_ui;
 pub use tool_profile_ui::{ToolColumn, ToolProfileUi, is_spun_kind, parametric_points};
@@ -236,6 +239,13 @@ pub enum CommandKind {
     /// return it to its parametric cylinder (`None`) - the tool editor's
     /// Apply profile, one `SetToolBody::spun`.
     SetToolProfile {
+        name: String,
+        points: Option<Vec<camcraft_app::spun::SpunPoint>>,
+    },
+    /// #93 slice 2: set a milling tool's drawn cutter outline (`Some`)
+    /// or clear it back to the numbers' outline (`None`) - the tool
+    /// editor's Apply cutter, one `SetToolCutter`.
+    SetToolCutter {
         name: String,
         points: Option<Vec<camcraft_app::spun::SpunPoint>>,
     },
@@ -1524,6 +1534,9 @@ pub struct State {
     /// #93: the tool editor's spun-profile draft (Parametric/Custom, the
     /// points). Ephemeral like `tool_body_ui`; Apply profile is the command.
     pub tool_profile_ui: ToolProfileUi,
+    /// #93 slice 2: the tool editor's drawn-cutter draft; Apply cutter
+    /// is the command.
+    pub tool_cutter_ui: ToolCutterUi,
     /// The machine editor window (M3.3 stage C): `None` closed. An
     /// ephemeral draft like [`State::tool_editor`] - the numbers under
     /// edit are a copy of the machine until Apply pushes `LoadMachine`,
@@ -1770,6 +1783,7 @@ impl State {
             tool_editor: None,
             tool_body_ui: ToolBodyUi::default(),
             tool_profile_ui: ToolProfileUi::default(),
+            tool_cutter_ui: ToolCutterUi::default(),
             machine_editor: None,
             machines_pane: Default::default(),
             theme_cache: theme_files::Cache::new(),
@@ -2419,6 +2433,7 @@ impl State {
         self.tool_synced = (String::new(), self.doc_version);
         self.tool_body_ui = ToolBodyUi::default();
         self.tool_profile_ui = ToolProfileUi::default();
+        self.tool_cutter_ui = ToolCutterUi::default();
     }
 
     pub(crate) fn copy_operation(&mut self, name: &str) {
@@ -2884,6 +2899,7 @@ impl State {
             }
             CommandKind::SetToolBody { name, body } => self.run_set_tool_body(&name, body),
             CommandKind::SetToolProfile { name, points } => self.run_set_tool_profile(&name, points),
+            CommandKind::SetToolCutter { name, points } => self.run_set_tool_cutter(&name, points),
             CommandKind::SetToolHolder { name, entry, gauge, projection } => {
                 self.run_set_tool_holder(&name, &entry, gauge, projection)
             }
