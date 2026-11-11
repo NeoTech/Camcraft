@@ -20,10 +20,11 @@
 //! check) judges it like any other move. Nothing turns that a law has
 //! not seen.
 //!
-//! A link is a rapid whose start stands at the path's own clearance:
-//! the highest Z any move reaches (the axial clearance plane of a
-//! standing bar's rings) or the largest radius (the retract cylinder of
-//! a laid bar's radial links). Between two links the cut runs as
+//! A link is a point between two moves, reached by a rapid, that
+//! stands at the path's own clearance: the highest Z any move reaches
+//! (the axial clearance plane a standing bar's rings retract to before
+//! the next ring's plunge) or the largest radius (the retract cylinder
+//! of a laid bar's radial links). Between two links the cut runs as
 //! stamped; a stretch whose C span no shift by whole turns fits inside
 //! the travel is refused by name - there is no clear point to rewind
 //! at. The first stretch is shifted without an orbit: the section opens
@@ -63,9 +64,10 @@ pub fn unwind_c(path: &Toolpath, center: [f64; 2], travel: (f64, f64), tol: f64)
     let zmax = moves.iter().flat_map(|m| [m.from.z, m.to.z]).fold(f64::NEG_INFINITY, f64::max);
     let rmax = moves.iter().flat_map(|m| [radius(m.from), radius(m.to)]).fold(0.0, f64::max);
     let clear = |p: Point3| p.z >= zmax - CLEAR_EPS || radius(p) >= rmax - CLEAR_EPS;
-    // Stretch starts: 0, then every rapid leaving a clear point.
+    // Stretch starts: 0, then every move leaving a clear point a rapid
+    // brought the tool to (a ring's retract, before its next plunge).
     let mut starts: Vec<usize> = vec![0];
-    starts.extend((1..moves.len()).filter(|&i| moves[i].kind == MoveKind::Rapid && clear(moves[i].from)));
+    starts.extend((1..moves.len()).filter(|&i| moves[i - 1].kind == MoveKind::Rapid && clear(moves[i].from)));
     let mut out: Vec<Move> = Vec::with_capacity(moves.len());
     let mut shift = 0.0;
     for (s, &a) in starts.iter().enumerate() {
