@@ -153,6 +153,7 @@ pub use crate::tools::ToolGeom;
 
 mod air;
 mod arc_bulge;
+mod arc_wall;
 mod c_steel;
 mod contact;
 mod crossing;
