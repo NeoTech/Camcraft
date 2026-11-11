@@ -167,10 +167,10 @@ pub(super) enum Cmd {
     /// The View door: one cell whose list toggles the dock's closable
     /// panels and resets the layout (layout.rs). View state, no command.
     View,
-    /// The Theme door (#441): the document's look - the built-in and
+    /// The Theme door (#441): the user's look - the built-in and
     /// discovered themes plus the colour-vision remap - right of the
-    /// View door. Opening it is view state; a pick queues the same
-    /// `SelectTheme` / `SelectColorVision` commands, so undo holds.
+    /// View door. Opening it is view state; a pick queues `SelectTheme`
+    /// / `SelectColorVision`, kept as a user preference (#877).
     Theme,
 }
 

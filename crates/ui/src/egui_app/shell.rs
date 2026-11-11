@@ -198,6 +198,8 @@ impl Shell {
         let mut state = State::new();
         // #662: the user's recent projects and models, read once.
         state.load_recent();
+        // #877: the user's theme and colour-vision mode, read once.
+        state.load_prefs();
         let dock_state = build_dock();
         Self {
             window: None,

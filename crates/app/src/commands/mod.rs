@@ -39,9 +39,10 @@ pub mod setup_relative;
 // #320: a setup's stock source.
 pub mod setup_stock;
 pub mod set_units;
-// M6.1 C: the document's theme choice, `SelectPost`'s twin.
+// M6.1 C / #877: the theme, a user preference (not undoable, not saved
+// with the project - `app::prefs` keeps it).
 pub mod theme;
-// M13.4: the viewer's colour-vision remap, `SetTheme`'s twin.
+// M13.4 / #877: the viewer's colour-vision remap, the theme's twin.
 pub mod color_vision;
 pub mod set_wcs;
 pub mod tool;
@@ -86,8 +87,8 @@ pub use setup_post_options::SetSetupPostOptions;
 pub use setup_relative::SetSetupRelative;
 pub use setup_stock::SetSetupStockSource;
 pub use set_units::SetUnits;
-pub use theme::{theme_of, theme_set, SetTheme};
-pub use color_vision::{color_vision_of, color_vision_set, SetColorVision};
+pub use theme::{check_theme, theme_of, theme_set};
+pub use color_vision::{color_vision_of, color_vision_set};
 pub use set_wcs::SetWcsOrigin;
 pub use tool::{AddTool, ChangeTool, DeleteTool};
 pub use tool_body::{LatheBodySpec, SetToolBody, ToolBodySpec};

@@ -612,19 +612,8 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
             None => crate::schema::PostRef::Builtin,
         },
     );
-    // Opening lands the theme choice too - including the default, so a
-    // stale singleton from the previous document can never leak in (the
-    // post's law, worn in the theme's clothes). Names and paths land as
-    // written; the shell resolves at draw and a stranger refuses by
-    // name in the status line, never silently wearing `dark`'s ink.
-    crate::commands::theme_set(
-        world,
-        &match file.theme {
-            Some(ThemeDto::Named(name)) => crate::schema::ThemeRef::Named(name),
-            Some(ThemeDto::File(path)) => crate::schema::ThemeRef::File(path),
-            None => crate::schema::ThemeRef::Dark,
-        },
-    );
+    // The theme is not the document's (#877): opening leaves the user's
+    // preference as it is, whatever an older file's `theme` key says.
     // Opening lands the pins too - including the empty default, so a
     // stale singleton from the previous document can never leak in
     // (the theme's law, worn in the pin's clothes).
