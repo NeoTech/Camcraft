@@ -35,7 +35,7 @@ impl Shell {
             self.window_title = title;
         }
         // #866: a modal file dialog's open time is the user's, not ours.
-        self.frame_watch.excuse(crate::file_dialog::take_waited());
+        self.frame_watch.excuse(crate::file_dialog::take_waited(), now());
         self.frame_watch.mark("commands", now());
         let scene = world::collect(&self.state);
 
@@ -156,6 +156,8 @@ impl Shell {
             .into_iter()
             .filter(renderable_paint_job)
             .collect();
+        // Panels open file dialogs while they draw, so collect that wait here too.
+        frame_watch.excuse(crate::file_dialog::take_waited(), now());
         frame_watch.mark("ui", now());
 
         let st = match surface.get_current_texture() {

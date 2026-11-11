@@ -35,9 +35,11 @@ impl FrameWatch {
     /// Take `waited` off the frame (#866): time the UI thread spent in a
     /// modal dialog is the user choosing a file, not the app working, so
     /// it never reads as a slow phase. Call before the `mark` closing the
-    /// phase it happened in.
-    pub fn excuse(&mut self, waited: Duration) {
-        if let (Some(start), Some(last)) = (self.start.checked_add(waited), self.last.checked_add(waited)) {
+    /// phase it happened in (every boundary, since panels open dialogs in
+    /// the "ui" phase). Clamped so neither stamp moves past `now`.
+    pub fn excuse(&mut self, waited: Duration, now: Instant) {
+        let shift = waited.min(now.saturating_duration_since(self.last));
+        if let (Some(start), Some(last)) = (self.start.checked_add(shift), self.last.checked_add(shift)) {
             self.start = start;
             self.last = last;
         }
@@ -117,16 +119,48 @@ mod tests {
         let t0 = Instant::now();
         let mut w = FrameWatch::new(t0);
         w.begin(t0);
-        w.excuse(ms(35_000));
+        w.excuse(ms(35_000), t0 + ms(35_010));
         w.mark("commands", t0 + ms(35_010));
         w.mark("ui", t0 + ms(35_016));
         assert_eq!(w.end(t0 + ms(35_016)), None, "16 ms of work is a fast frame");
         // Work beyond the wait is still caught, and only the work is named.
         w.begin(t0);
-        w.excuse(ms(35_000));
+        w.excuse(ms(35_000), t0 + ms(35_400));
         w.mark("commands", t0 + ms(35_400));
         let line = w.end(t0 + ms(35_400)).expect("400 ms of work is slow");
         assert!(line.contains("slow frame 400 ms") && line.contains("\"commands\" 400 ms"), "{line}");
+    }
+
+    #[test]
+    fn a_wait_inside_the_ui_phase_is_excused_and_the_next_frame_is_clean() {
+        // #866 review: panels open dialogs while drawing, after "commands".
+        let t0 = Instant::now();
+        let mut w = FrameWatch::new(t0);
+        w.begin(t0);
+        w.mark("commands", t0 + ms(2));
+        w.excuse(ms(30_000), t0 + ms(30_010)); // collected at the ui boundary
+        w.mark("ui", t0 + ms(30_010));
+        assert_eq!(w.end(t0 + ms(30_010)), None, "10 ms of work, 30 s of dialog");
+        // The next frame is untouched: nothing carried over to excuse.
+        let t1 = t0 + ms(30_100);
+        w.begin(t1);
+        w.excuse(Duration::ZERO, t1);
+        w.mark("commands", t1 + ms(250));
+        let line = w.end(t1 + ms(250)).expect("real slow work is still reported");
+        assert!(line.contains("\"commands\" 250 ms"), "{line}");
+        // Real slow work in the ui phase beside a wait is still named.
+        let t2 = t1 + ms(60_000);
+        w.begin(t2);
+        w.excuse(ms(30_000), t2 + ms(30_300));
+        w.mark("ui", t2 + ms(30_300));
+        let line = w.end(t2 + ms(30_300)).expect("300 ms of ui work is slow");
+        assert!(line.contains("\"ui\" 300 ms"), "{line}");
+        // A wait longer than the phase never moves a stamp past now.
+        let t3 = t2 + ms(1_000);
+        w.begin(t3);
+        w.excuse(ms(5_000), t3 + ms(10));
+        w.mark("ui", t3 + ms(10));
+        assert_eq!(w.end(t3 + ms(10)), None);
     }
 
     #[test]
