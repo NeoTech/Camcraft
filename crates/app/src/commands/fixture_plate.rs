@@ -6,7 +6,9 @@
 //! - [`SetPlate`]: change a built-in plate's figures; the mesh is
 //!   regenerated through `UpdateModel` and every fixture standing on it
 //!   is re-placed at its named location (refused by name if that
-//!   location is gone or the fixture would hang off).
+//!   location is gone, the fixture would hang off, or a mod vise jaw
+//!   would reach into the stock; a re-placed fixture sitting in a part or
+//!   the stock is a by-name warning, as for `MoveFixture`).
 //! - [`PlaceOnPlate`]: put a fixture at a grid location or on a dowel
 //!   pair of a plate, recording the place on its marker.
 //! - [`SetPlateGrid`]: make an imported fixture a plate by detecting its
@@ -174,11 +176,13 @@ fn reseat(world: &World, plate: &str, def: &PlateDef, mesh: &[crate::geometry::T
 pub struct SetPlate {
     update: UpdateModel,
     swap: Swap,
+    warning: Option<String>,
 }
 
 impl SetPlate {
     /// Refused when `name` is not a built-in plate, `params` break the
-    /// plate law, or a fixture on it loses its location or would hang off.
+    /// plate law, a fixture on it loses its location or would hang off,
+    /// or a mod vise jaw block on it would reach into the stock.
     pub fn new(world: &World, name: &str, params: PlateParams) -> Result<Self, CommandError> {
         let (prev, at) = def_named(world, name)?;
         if prev.plate.plate.as_ref().and_then(|p| p.params.as_ref()).is_none() {
@@ -187,10 +191,24 @@ impl SetPlate {
         let def = params.def().map_err(CommandError::Invalid)?;
         let mesh = params.mesh().map_err(CommandError::Invalid)?;
         let moves = reseat(world, name, &def, &mesh, at)?;
+        // #820 review: the stock stays put while the riders re-seat - a
+        // mod vise jaw pushed into it is refused, and every rider (and the
+        // new slab) is judged where it lands, as `MoveFixture` judges.
+        let mut warnings = crate::commands::mod_vise::jaws_after_reseat(world, &moves)?;
+        warnings.extend(crate::fixture_clash::after_fixture_shape(world, name, &mesh, at));
+        warnings.extend(moves.iter().filter_map(|m| crate::fixture_clash::after_fixture_move(world, &m.name, m.after)));
         let update = UpdateModel::new(world, name, Mesh::from_facets(mesh))?;
         let mut next = prev.clone();
         next.plate.plate = Some(def);
-        Ok(Self { update, swap: Swap { name: name.to_owned(), prev, next, moves } })
+        Ok(Self { update, swap: Swap { name: name.to_owned(), prev, next, moves }, warning: crate::fixture_clash::join(warnings) })
+    }
+
+    /// The by-name warnings of the edit (a rider or the new slab sitting in
+    /// a part or the stock, a mod vise jaw lifted off the stock) - never a
+    /// refusal; `None` when clear.
+    #[must_use]
+    pub fn warning(&self) -> Option<&str> {
+        self.warning.as_deref()
     }
 
     /// The parameters the edit lands.

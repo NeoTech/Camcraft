@@ -3,10 +3,13 @@
 //! three back), deleting it lets go of both (they stay where they
 //! stand); the blocks are judged by the real posting gate; and a pair
 //! survives a save and load, a `mod_jaw` key this build can't read (or
-//! that breaks the block law) dropped and logged, never a failed load.
+//! that breaks the block law) dropped and logged, never a failed load. A
+//! plate edit (`SetPlate`) that would re-seat a block's jaw into the
+//! stock is refused by name with the depth (#820 review).
 //!
 //! Gate map (M4.4): covers app::commands::mod_vise (PlaceModVisePair
-//! with app::commands::fixture MoveFixture/DeleteFixture),
+//! with app::commands::fixture MoveFixture/DeleteFixture,
+//! app::commands::fixture_plate SetPlate), app::modvise::reach,
 //! app::project::modvise_dto, app::posting (verification_gate).
 
 use std::io::Write;
@@ -14,7 +17,7 @@ use std::sync::{Arc, Mutex};
 
 use camcraft_app::commands::{
     AddTool, CreateOperation, DeleteFixture, GenerateOperation, History, InsertPlate, MoveFixture, PlaceModVisePair, PlatePlacement,
-    SetStock,
+    SetPlate, SetStock,
 };
 use camcraft_app::fixture;
 use camcraft_app::geometry::{IDENTITY_Q, Point3};
@@ -80,6 +83,7 @@ fn rig(cut: Option<f64>, tall: Option<f64>) -> (World, History, String, [String;
     let plate = cmd.name().to_owned();
     history.execute(&world, cmd);
     let cmd = PlaceModVisePair::new(&world, &plate, &f, &a, "C14", 0.0).expect("pair");
+    assert_eq!((cmd.fit().fixed_at.as_str(), cmd.fit().adjustable_at.as_str()), ("C14", "I16"), "the reviewer's rig");
     let names = [cmd.names().0.to_owned(), cmd.names().1.to_owned()];
     history.execute(&world, cmd);
     (world, history, plate, names)
@@ -233,4 +237,57 @@ fn a_pair_survives_a_save_and_unreadable_keys_are_dropped() {
     let _ = std::fs::remove_file(&path);
     assert!(log.contains("mod vise jaw block parameters dropped on load") && log.contains("body length"), "{log}");
     assert!(def(&w, &names[0]).mod_jaw.is_none());
+}
+
+/// The rig's plate figures with pitch Y moved by `dy` (mm).
+fn pitched(world: &World, plate: &str, dy: f64) -> plate::PlateParams {
+    let mut p = camcraft_app::commands::fixture_plate::plate_of(world, plate).ok().and_then(|d| d.params).expect("built-in");
+    p.pitch_y += dy;
+    p
+}
+
+fn refused(r: Result<SetPlate, camcraft_app::commands::CommandError>) -> String {
+    r.err().map(|e| e.to_string()).unwrap_or_default()
+}
+
+/// #820 review: a plate edit re-seats each block on its named hole with
+/// its slide kept, but the stock stays put. Rows C and I are 2 and 8
+/// pitches from the grid origin: pitch Y - 2 moves the adjustable block
+/// at I16 16 mm toward the stock (its face 16 mm in); pitch Y + 2 moves
+/// the fixed block at C14 4 mm toward it (its face 4 mm in).
+#[test]
+fn a_plate_edit_that_pushes_a_jaw_into_the_stock_is_refused_by_name() {
+    let (world, _h, plate, [fixed, adjustable]) = rig(None, None);
+    assert!((def(&world, &adjustable).mod_jaw.map_or(0.0, |j| j.slide) - 22.55).abs() < 0.01, "the rig's slide");
+    let e = refused(SetPlate::new(&world, &plate, pitched(&world, &plate, -2.0)));
+    assert!(e.contains(&format!("mod vise '{adjustable}'")) && e.contains("adjustable jaw 16.000 mm into the stock"), "{e}");
+    let e = refused(SetPlate::new(&world, &plate, pitched(&world, &plate, 2.0)));
+    assert!(e.contains(&format!("mod vise '{fixed}'")) && e.contains("fixed jaw 4.000 mm into the stock"), "{e}");
+    assert!(e.contains("re-place the pair"), "{e}");
+}
+
+/// A pitch change across the jaws keeps both faces where they were along
+/// the clamp: accepted, quiet, and undo/redo put every pose back to the bit.
+#[test]
+fn a_plate_edit_that_keeps_the_jaws_clear_is_accepted_and_undoes_exactly() {
+    let (world, mut history, plate, names) = rig(None, None);
+    let mut p = camcraft_app::commands::fixture_plate::plate_of(&world, &plate).ok().and_then(|d| d.params).expect("built-in");
+    p.pitch_x += 0.2;
+    let cmd = SetPlate::new(&world, &plate, p).expect("clear of the stock");
+    assert_eq!(cmd.warning(), None, "no jaw in the stock, none lifted off it");
+    let loc = |n: &str| model::find_by_name(&world, n).and_then(|e| model::transform_of(&world, &e)).expect(n);
+    let before = names.clone().map(|n| loc(&n));
+    history.execute(&world, cmd);
+    let after = names.clone().map(|n| loc(&n));
+    assert_ne!(before, after, "both blocks re-seated on the new grid");
+    for (b, a) in before.iter().zip(&after) {
+        assert!((a.pos.y - b.pos.y).abs() < 1e-9, "nothing moved along the clamp");
+    }
+    assert!(history.undo(&world));
+    assert_eq!(names.clone().map(|n| loc(&n)), before, "undo is exact");
+    assert!(history.redo(&world));
+    assert_eq!(names.clone().map(|n| loc(&n)), after, "redo is exact");
+    // A refused edit leaves nothing behind: the poses are still the redo's.
+    let _ = SetPlate::new(&world, &plate, pitched(&world, &plate, -2.0));
+    assert_eq!(names.map(|n| loc(&n)), after);
 }

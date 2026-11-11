@@ -5,16 +5,18 @@
 //! that was never placed on it; one undo puts plate and places back. A
 //! file naming a plate it does not hold loads with the place dropped. A
 //! moved plate's riders are clash-checked where they land, not only the
-//! plate. The grid law refuses holes closer than a hole apart.
+//! plate - and so are an edited plate's (`SetPlate`, #820 review). The
+//! grid law refuses holes closer than a hole apart.
 //!
 //! Gate map (M4.4): covers app::plate::mount (Unmounts, drop_dangling),
 //! app::plate::grid (Grid::check), app::commands::fixture (DeleteFixture,
-//! UntagFixture, MoveFixture), app::commands::delete_entity,
+//! UntagFixture, MoveFixture), app::commands::fixture_plate (SetPlate
+//! warnings), app::fixture_clash, app::commands::delete_entity,
 //! app::commands::import_fixture, app::project (load).
 
 use camcraft_app::commands::{
     DeleteEntity, DeleteFixture, History, ImportFixture, ImportModel, InsertPlate, MoveFixture, PlaceOnPlate,
-    PlatePlacement, TagFixture, UntagFixture,
+    PlatePlacement, SetPlate, SetStock, TagFixture, UntagFixture,
 };
 use camcraft_app::fixture;
 use camcraft_app::geometry::{IDENTITY_Q, Mesh, Point3};
@@ -22,6 +24,7 @@ use camcraft_app::model;
 use camcraft_app::plate::{self, MountAt, PlateMount};
 use camcraft_app::project;
 use camcraft_app::schema::Location;
+use camcraft_app::stock::StockShape;
 use camcraft_app::world::new_world;
 use flecs_ecs::prelude::World;
 
@@ -180,4 +183,39 @@ fn a_grid_whose_holes_overlap_is_refused() {
     def.holes.pitch_x = 0.08;
     let e = def.check().expect_err("a pitch inside the snap tolerance");
     assert!(e.contains("pitch must be more than 0.10"), "{e}");
+}
+
+/// #820 review: `SetPlate` re-seats a plain rider on its named hole but
+/// the stock stays put - a rider pushed into the stock is warned about by
+/// name, as a `MoveFixture` is; an edit that keeps it clear is quiet; undo
+/// and redo put the poses back to the bit.
+#[test]
+fn an_edited_plates_riders_are_clash_checked_where_they_land() {
+    let world = new_world();
+    let mut history = History::default();
+    let p = insert_plate(&world, &mut history, 0.0);
+    block_on(&world, &mut history, &p);
+    let steel = model::find_by_name(&world, "Block").and_then(|e| model::world_facets(&world, &e)).expect("block");
+    let (x_max, z_min) = steel.iter().flat_map(|t| [t.a, t.b, t.c]).fold((f64::MIN, f64::MAX), |(x, z), q| (x.max(q.x), z.min(q.z)));
+    // A 20 mm stock 1 mm clear of the block's +X side, level with it.
+    let stock_at = at(x_max + 1.0 + 10.0, B2.y, z_min);
+    history.execute(&world, SetStock::new(&world, StockShape::Box { dx: 20.0, dy: 40.0, dz: 20.0 }, stock_at).expect("stock"));
+    let base = plate::preset("300 x 300 mm").map(plate::PlatePreset::params).expect("preset");
+
+    // Pitch X 25 -> 25.4: B2 moves 0.4 mm toward the stock, still clear.
+    let clear = SetPlate::new(&world, &p, plate::PlateParams { pitch_x: 25.4, dowels: None, ..base.clone() }).expect("clear edit");
+    assert_eq!(clear.warning(), None, "an edit that keeps clear is quiet");
+
+    // Pitch X 25 -> 30: B2 moves 5 mm, 4 mm into the stock - warned by name.
+    let into = SetPlate::new(&world, &p, plate::PlateParams { pitch_x: 30.0, dowels: None, ..base }).expect("a warning, not a refusal");
+    let w = into.warning().unwrap_or_default().to_owned();
+    assert!(w.contains("'Block'") && w.contains("stock"), "the re-seated rider is clash-checked: {w}");
+    let before = model::find_by_name(&world, "Block").and_then(|e| model::transform_of(&world, &e)).expect("pose");
+    history.execute(&world, into);
+    let after = model::find_by_name(&world, "Block").and_then(|e| model::transform_of(&world, &e)).expect("pose");
+    assert!(close(after.pos, Point3::new(B2.x + 5.0, B2.y, B2.z)), "{:?}", after.pos);
+    assert!(history.undo(&world));
+    assert_eq!(model::find_by_name(&world, "Block").and_then(|e| model::transform_of(&world, &e)), Some(before), "undo is exact");
+    assert!(history.redo(&world));
+    assert_eq!(model::find_by_name(&world, "Block").and_then(|e| model::transform_of(&world, &e)), Some(after), "redo is exact");
 }

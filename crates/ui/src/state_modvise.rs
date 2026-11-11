@@ -67,9 +67,13 @@ impl State {
                 let fit = command.fit().clone();
                 self.history.execute(&self.world, command);
                 self.doc_version += 1;
+                let u = self.units();
                 self.status = format!(
-                    "mod vise on {plate}: fixed at {}, adjustable at {} slid {:.3} mm to the stock",
-                    fit.fixed_at, fit.adjustable_at, fit.slide
+                    "mod vise on {plate}: fixed at {}, adjustable at {} slid {} {} to the stock",
+                    fit.fixed_at,
+                    fit.adjustable_at,
+                    camcraft_app::units::len(fit.slide, u, 3),
+                    u.suffix()
                 );
             }
             Err(err) => self.refuse(ErrorScope::Setup, format!("mod vise not placed: {err}")),

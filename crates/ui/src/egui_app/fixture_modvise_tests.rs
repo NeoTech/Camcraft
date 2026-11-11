@@ -11,12 +11,13 @@ use egui::Vec2;
 use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
 
-use camcraft_app::commands::SetStock;
+use camcraft_app::commands::{SetStock, SetUnits};
 use camcraft_app::fixture;
 use camcraft_app::model;
 use camcraft_app::plate;
 use camcraft_app::schema::Location;
 use camcraft_app::stock::StockShape;
+use camcraft_app::units::Unit;
 
 use crate::state::{CommandKind, State};
 
@@ -70,6 +71,7 @@ fn a_plate_row_places_a_mod_vise_pair_in_one_undoable_step() {
     h.run();
     let st = h.state();
     assert!(st.status.contains("fixed at C3, adjustable at I5"), "{}", st.status);
+    assert!(st.status.ends_with(" mm to the stock"), "the slide in document units: {}", st.status);
     let mut placed = names(st);
     placed.sort();
     assert_eq!(placed, ["Mod vise adjustable 1 in grid 3/8-16", "Mod vise fixed 1 in grid 3/8-16"]);
@@ -94,4 +96,23 @@ fn a_refused_pair_is_named_in_the_status() {
     h.run();
     assert!(h.state().status.contains("mod vise not placed") && h.state().status.contains("no stock"), "{}", h.state().status);
     assert!(names(h.state()).is_empty());
+}
+
+#[test]
+fn the_placed_status_states_the_slide_in_document_units() {
+    let mut state = plated(true);
+    let cmd = SetUnits::new(&state.world, Unit::Inches).expect("units");
+    state.history.execute(&state.world, cmd);
+    let mut h = page(state);
+    h.run();
+    h.get_by_label("Add mod vise pair…").click();
+    h.run();
+    h.get_by_label("1 in grid 3/8-16").click();
+    h.run();
+    h.get_by_label("Place pair").click();
+    h.run();
+    h.run();
+    let st = h.state();
+    assert!(st.status.contains("fixed at C3, adjustable at I5"), "{}", st.status);
+    assert!(st.status.ends_with(" in to the stock") && !st.status.contains("mm"), "an inch document reads inches: {}", st.status);
 }

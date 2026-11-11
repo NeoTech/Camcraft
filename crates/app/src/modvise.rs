@@ -32,6 +32,7 @@ use crate::geometry::Triangle;
 
 pub mod fit;
 pub mod mesh;
+pub mod reach;
 pub mod table;
 
 pub use fit::{PairFit, fit_pair};

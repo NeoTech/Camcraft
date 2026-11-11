@@ -75,6 +75,33 @@
   (preset, the fixed jaw's row and column, which way its jaw faces, soft
   jaws, Place pair); each jaw block's row says its side, jaws and slide.
 
+- **A plate edit never pushes a jaw into the stock (PR #833 review).**
+  `SetPlate` re-seats each block on its named hole with its slide kept,
+  and the stock does not move, so a pitch or offset change can carry a
+  clamping face into the stock (the review's rig: pitch Y - 2 put the
+  adjustable face 16 mm in, + 2 the fixed face 4 mm in). The edit is
+  refused by name with the block, its side and the depth, when it puts a
+  face in or deeper (`modvise::reach::face_gap`, in the block's frame
+  against the stock's box, the box the fit uses); a face it lifts off the
+  stock is a warning, not a refusal - the part is unclamped, not cut
+  into, and re-fitting the slide is #832. Dropped: re-fitting the slide
+  inside `SetPlate` (that is #832's `SetModJaw`), and refusing a face that
+  was already in the stock before the edit (the edit did not cause it;
+  the clash warning below still names it).
+- **Every re-seated rider is clash-checked (closes a #823 gap).** The
+  same review found `SetPlate` never ran the `MoveFixture` check on the
+  riders it moves: it now judges every re-seated fixture, and the plate's
+  new slab, against the parts and the stock (`fixture_clash`), and
+  carries the by-name warning (MCP `set_fixture_plate` returns it as
+  `warning`). A warning, never a refusal, as for any fixture move.
+- **`body_height` must cover the bolt heads.** The block is drawn as a
+  plain prism (body plus insert); the bolts are data, not drawn. So the
+  presets' figures, and any a user types, assume counterbored bolts whose
+  heads sit below the body top: `body_height` is the steel's highest
+  point. A block whose bolt heads stand proud must have its
+  `body_height` raised to the head tops, or the fixture laws judge the
+  tool against less steel than is there.
+
 **Split off:** the dual-station block, and editing/re-fitting a placed
 pair (`SetModJaw`), are #832.
 

@@ -19,7 +19,7 @@ use crate::fixture_library::FixtureEntry;
 use crate::geometry::{IDENTITY_Q, Point3};
 use crate::model;
 use crate::modvise::{self, JawParams, PairFit};
-use crate::plate::{MountAt, PlateMount};
+use crate::plate::{MountAt, PlateMount, RiderMove};
 use crate::schema::Location;
 
 /// Place a mod-vise pair on a plate.
@@ -103,4 +103,36 @@ impl Command for PlaceModVisePair {
         self.adjustable.invert(world);
         self.fixed.invert(world);
     }
+}
+
+/// A plate edit's re-seated riders (`moves`), judged where they are mod
+/// vise jaw blocks (#820 review): the edit keeps each block on its named
+/// hole with its slide, but the stock stays put. Refused by name when it
+/// puts a block's clamping face into the stock (or deeper in); a face it
+/// lifts off the stock is a warning. Re-fitting a placed pair is #832.
+pub(crate) fn jaws_after_reseat(world: &World, moves: &[RiderMove]) -> Result<Vec<String>, CommandError> {
+    let deep = crate::fixture_clash::PENETRATION_MM;
+    let mut warnings = Vec::new();
+    for m in moves {
+        let Some(def) = model::find_by_name(world, &m.name).and_then(|e| fixture::def_of(world, &e)) else { continue };
+        let Some(jaw) = def.mod_jaw.as_ref() else { continue };
+        let Some(stock) = model::stock_world_aabb_for(world, def.setup.as_deref()) else { continue };
+        let (Some(before), Some(after)) = (modvise::reach::face_gap(jaw, m.before, &stock), modvise::reach::face_gap(jaw, m.after, &stock)) else {
+            continue;
+        };
+        let side = jaw.side.word();
+        if after < -deep && after < before - deep {
+            return Err(CommandError::Invalid(format!(
+                "the plate edit would put mod vise '{}''s {side} jaw {:.3} mm into the stock - re-place the pair after changing the grid",
+                m.name, -after
+            )));
+        }
+        if after > deep && after > before + deep {
+            warnings.push(format!(
+                "the plate edit leaves mod vise '{}''s {side} jaw {:.3} mm off the stock - re-place the pair to clamp it",
+                m.name, after
+            ));
+        }
+    }
+    Ok(warnings)
 }
