@@ -101,6 +101,22 @@ fn a_deep_slot_carries_the_same_on_both_engines() {
 }
 
 #[test]
+fn a_slot_through_the_block_carries_the_same_on_both_engines() {
+    // #637 E1: a slot below the block's floor - cut through on both
+    // engines, its columns empty through every turn, the columns beside
+    // it (within a cell of the wall) whole.
+    agree(-1.0);
+}
+
+#[test]
+fn a_sliver_on_the_floor_carries_the_same_on_both_engines() {
+    // #637 E1: 0.2 of stock left under the slot, thinner than the 0.5
+    // cell and holding no cell centre: the field reads it from the cut
+    // layer's ray entry, the column engine from its lowered top.
+    agree(0.2);
+}
+
+#[test]
 fn an_off_grid_ball_slot_carries_the_same_on_both_engines() {
     // Review of #656: walls off the cell boundaries and a curved floor -
     // both engines read the ball's surface at the same cell centres; the
