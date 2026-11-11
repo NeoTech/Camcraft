@@ -206,6 +206,10 @@ pub fn plan_trochoidal_slot(chain: &[Point2], p: &TrochoidParams) -> Result<Troc
         stock_for(&channel, 1.0, 0.0, p.tool_diameter, &spec)
             .map_err(|e| GenError::Invalid(format!("trochoidal slot: measuring stock: {e}")))
     };
+    let gauge = |path: &Toolpath| -> Result<_, GenError> {
+        measure(path, &mut stock()?, &spec)
+            .map_err(|e| GenError::Invalid(format!("trochoidal slot: measuring stock: {e}")))
+    };
     // One level at Z 0 under a 1 mm block of the channel, measured.
     let level = |lay: &Layout| -> Result<Toolpath, GenError> {
         let mut bld = PathBuilder::new(Point3::new(lay.entry.x, lay.entry.y, 1.0));
@@ -228,11 +232,11 @@ pub fn plan_trochoidal_slot(chain: &[Point2], p: &TrochoidParams) -> Result<Troc
         // the whole level.
         let head = Layout { pieces: lay.pieces.iter().take(TRIAL_LOOPS).cloned().collect(), ..lay.clone() };
         let full = lay.pieces.len() > TRIAL_LOOPS;
-        let mut q = measure(&level(&head)?, &mut stock()?, &spec);
+        let mut q = gauge(&level(&head)?)?;
         let mut trial = None;
         if q.max_deg <= p.max_engagement && full {
             let t = level(&lay)?;
-            q = measure(&t, &mut stock()?, &spec);
+            q = gauge(&t)?;
             trial = Some(t);
         }
         if best.is_none_or(|(d, _, _)| q.max_deg < d) {
