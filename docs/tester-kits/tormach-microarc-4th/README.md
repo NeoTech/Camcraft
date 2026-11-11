@@ -15,7 +15,7 @@
 
 Speeds are 6000 rpm (T1) and 8000 rpm (T2), both in the high belt range (the program says so before each spindle start). Feeds are 15 ipm and 8 ipm, with flood coolant (M8). The program doesn't number your tools for you: set T1 and T2 in the tool table, or edit the `T.. M6` / `G43 H..` lines to your own numbers (for example your T31 1/4" 3-flute).
 
-**The continuous op is not in this program.** A wrapped pass around the diameter turns A during the cut. PathPilot's handling of that (rollover, combined feed) isn't confirmed yet, so CamCraft refuses it, naming the operation, and writes no file. (The PathPilot post refuses it as "simultaneous 4-axis motion ... not confirmed on PathPilot". On this part the program check names it first, because the pass also goes under the bar, #797.) Its test joins this kit with the follow-up, #796.
+**The continuous op is not in this program.** A wrapped pass around the diameter turns A during the cut. PathPilot's handling of that (rollover, combined feed) isn't confirmed yet, so CamCraft refuses it, naming the operation, and writes no file. (The PathPilot post refuses it as "simultaneous 4-axis motion ... not confirmed on PathPilot". The program check passes it: since #797 it reads the pass under the bar, A0 B180, as the A180 this table reaches.) Its test joins this kit with the follow-up, #796.
 
 ## The setup
 - **Stock:** 3/4" bar, at least 2.5" long, in the microARC chuck with **1.5" sticking out** (1.25" minimum: the cuts reach X-0.875).

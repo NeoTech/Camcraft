@@ -95,6 +95,20 @@ function msg(s) {  // counted warning where the host offers message()
 // unstated letters), so the presence of A decides; angle memory
 // resets with the arm, so re-arming always commands all three words.
 // A prismatic record never touches the mode - the tilt stays modal.
+function missingLetter(p) {  // the first turning letter no rotary is named for, else ""
+  var rs = (typeof machine !== "undefined" && machine.rotaries) || [];
+  var ls = ["A", "B", "C"];
+  for (var i = 0; i < ls.length; i++) {
+    var v = p[ls[i]];
+    if (!has(v) || Math.abs(v) <= 1e-9) continue;
+    var named = false;
+    for (var j = 0; j < rs.length; j++) {
+      if (String(rs[j].name || "").toUpperCase() === ls[i]) named = true;
+    }
+    if (!named) return ls[i];
+  }
+  return "";
+}
 function tilt(p) {  // words to append, [] if none, null if refused
   if (!has(p.A)) return [];
   if (typeof machine === "undefined" || machine.rtcp !== true) {
@@ -102,6 +116,15 @@ function tilt(p) {  // words to append, [] if none, null if refused
     return null;
   }
   if (inCycle) { msg("tilted move inside a canned-cycle group"); return null; }
+  // #797: the words go out as the stream's letters, so a letter that
+  // turns needs a rotary of that name. The machine check reads a 4th-axis
+  // table's pose through the tool axis (A0 B180 is its A180), which this
+  // dialect does not re-express - so the refusal by letter lives here too.
+  var lost = missingLetter(p);
+  if (lost) {
+    if (!tiltRefused) { tiltRefused = true; msg("tilted move commands " + lost + " - the machine states no " + lost + " rotary"); }
+    return null;
+  }
   if (!tcpmOn) {
     block(["G43.4", "H" + pad2(tNo)]);
     tcpmOn = true;
