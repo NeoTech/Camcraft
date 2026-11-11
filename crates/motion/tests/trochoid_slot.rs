@@ -55,7 +55,8 @@ fn channel(w: f64) -> Region {
 fn measured(path: &Toolpath, w: f64) -> PathQuality {
     let spec = QualitySpec::new(D);
     let Ok(mut dex) = stock_for(&channel(w), 0.0, BOTTOM, D, &spec) else { panic!("stock") };
-    measure(path, &mut dex, &spec)
+    let Ok(q) = measure(path, &mut dex, &spec) else { panic!("measure") };
+    q
 }
 
 fn verified(path: &Toolpath, w: f64) -> Vec<Warning> {
@@ -148,7 +149,7 @@ fn trochoid_step_is_cut_until_a_tight_limit_holds() {
     let Ok(ch) = Region::sweep(&[short], 0.5 * W) else { panic!("channel") };
     let spec = QualitySpec::new(D);
     let Ok(mut dex) = stock_for(&ch, 0.0, BOTTOM, D, &spec) else { panic!("stock") };
-    let q = measure(&pl.path, &mut dex, &spec);
+    let Ok(q) = measure(&pl.path, &mut dex, &spec) else { panic!("measure") };
     assert!(pl.step < 2.0, "step {}", pl.step);
     assert!(q.max_deg <= 60.0 + 1e-9, "max {:.1} deg at {:?}", q.max_deg, q.max_at);
     assert!(pl.path.notes.iter().any(|n| n.contains("forward step was cut")), "{:?}", pl.path.notes);
@@ -183,7 +184,7 @@ fn trochoid_microlift_returns_land_on_air() {
     let pl = plan(&params());
     let spec = QualitySpec::new(D);
     let Ok(mut dex) = stock_for(&channel(W), 0.0, BOTTOM, D, &spec) else { panic!("stock") };
-    assert_eq!(lifted_cut(&pl.path, &mut dex, 0.5 * D), None);
+    assert!(matches!(lifted_cut(&pl.path, &mut dex, 0.5 * D), Ok(None)));
     let lifted = pl
         .path
         .moves
@@ -197,7 +198,7 @@ fn trochoid_microlift_returns_land_on_air() {
     let mut early = pl.path.clone();
     early.moves.retain(|m| !(m.kind == MoveKind::Feed && m.arc.is_some() && (m.to.z - (-3.0)).abs() < 1e-9));
     let Ok(mut dex) = stock_for(&channel(W), 0.0, BOTTOM, D, &spec) else { panic!("stock") };
-    assert!(lifted_cut(&early, &mut dex, 0.5 * D).is_some(), "a return over uncut stock must be caught");
+    assert!(matches!(lifted_cut(&early, &mut dex, 0.5 * D), Ok(Some(_))), "a return over uncut stock must be caught");
 }
 
 /// A channel no wider than the tool is refused by name, as is a loop
