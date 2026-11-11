@@ -1116,4 +1116,23 @@ impl OpParams {
             }
         }
     }
+
+    /// The trochoidal slot's microlift bound (#774), on resolved heights:
+    /// the lifted return is a feed move, so it may rise at most the
+    /// clearance plane's height above the cut top - never feed above the
+    /// clearance plane. `None` for every other kind and for Retract.
+    /// Asked by the commands' heights door with `clearance` and `top`
+    /// resolved; the motion layer holds the same law as a backstop.
+    #[must_use]
+    pub fn microlift_refusal(&self, clearance: f64, top: f64) -> Option<String> {
+        let OpParams::TrochoidalSlot { ret: crate::machining2d::TrochoidReturn::Microlift { height }, .. } = self else {
+            return None;
+        };
+        let room = clearance - top;
+        (*height > room + 1e-9).then(|| {
+            format!(
+                "a {height:.3} mm microlift would feed the trochoidal slot's return above the clearance plane - at most {room:.3} mm (the clearance above the top) fits; use the Retract return to hop higher"
+            )
+        })
+    }
 }

@@ -14,8 +14,11 @@
 //!
 //! Prime Directive: a channel no wider than the tool, a loop band wider
 //! than the room, a limit no step down the ladder can hold, a loop that
-//! would leave the channel, a crossing the verifier would hold, and a
-//! lifted return that would cut stock are each refused by name.
+//! would leave the channel, a crossing the verifier would hold, a
+//! lifted return that would cut stock, a step so short the slot would
+//! need more than the loop cap, a microlift that would feed above the
+//! clearance plane and a bore helix past the turn cap are each refused
+//! by name (#774).
 
 use crate::cl::{MoveKind, PathBuilder, Toolpath, lattice};
 use crate::geo2d::{Point2, Region};
@@ -25,7 +28,7 @@ use crate::quality::{QualitySpec, measure, stock_for};
 use super::face::GenError;
 use super::levels::cut_levels;
 use super::trochoid_air::lifted_cut;
-use super::trochoid_loops::{Chain, El, Layout, layout};
+use super::trochoid_loops::{Chain, El, Layout, MAX_LOOPS, contained, layout};
 
 /// The forward step is tried at these shares of the user's, longest
 /// first, until the measured engagement holds.
@@ -131,6 +134,16 @@ impl TrochoidParams {
         if self.clearance_z < self.top_z {
             return bad("clearance plane below the first cut level");
         }
+        // A lifted return is a feed move: it never runs above the
+        // clearance plane, even lifted off the stock top (#774).
+        if let TrochoidReturn::Microlift { height } = self.ret
+            && height > self.clearance_z - self.top_z + 1e-9
+        {
+            return Err(GenError::Invalid(format!(
+                "trochoidal slot: a {height:.3} mm microlift would feed the return above the clearance plane - at most {:.3} mm (the clearance above the top) fits; use the Retract return to hop higher",
+                self.clearance_z - self.top_z
+            )));
+        }
         if self.retract_z.is_some_and(|rz| rz < self.top_z) {
             return bad("retract plane sits inside the material");
         }
@@ -194,25 +207,31 @@ pub fn plan_trochoidal_slot(chain: &[Point2], p: &TrochoidParams) -> Result<Troc
             .map_err(|e| GenError::Invalid(format!("trochoidal slot: measuring stock: {e}")))
     };
     // One level at Z 0 under a 1 mm block of the channel, measured.
-    let level = |lay: &Layout| {
+    let level = |lay: &Layout| -> Result<Toolpath, GenError> {
         let mut bld = PathBuilder::new(Point3::new(lay.entry.x, lay.entry.y, 1.0));
-        emit_level(&mut bld, lay, p, 0.0, 1.0, false);
-        bld.finish()
+        emit_level(&mut bld, lay, p, 0.0, 1.0, false)?;
+        Ok(bld.finish())
     };
     let mut best: Option<(f64, Point3, f64)> = None;
+    // The longest step that needed more loops than the cap (every
+    // shorter rung needs more still).
+    let mut capped: Option<f64> = None;
     for f in LADDER {
         let step = p.step * f;
-        let Some(lay) = layout(&ch, b, step, p.smoothing, p.climb) else { continue };
+        let Some(lay) = layout(&ch, b, step, p.smoothing, p.climb) else {
+            capped = capped.or(Some(step));
+            continue;
+        };
         contained(&ch, &lay, room)?;
         // The first loops first (the steady state comes within a few
         // loops; a failing step need not be walked to the end), then
         // the whole level.
         let head = Layout { pieces: lay.pieces.iter().take(TRIAL_LOOPS).cloned().collect(), ..lay.clone() };
         let full = lay.pieces.len() > TRIAL_LOOPS;
-        let mut q = measure(&level(&head), &mut stock()?, &spec);
+        let mut q = measure(&level(&head)?, &mut stock()?, &spec);
         let mut trial = None;
         if q.max_deg <= p.max_engagement && full {
-            let t = level(&lay);
+            let t = level(&lay)?;
             q = measure(&t, &mut stock()?, &spec);
             trial = Some(t);
         }
@@ -223,7 +242,10 @@ pub fn plan_trochoidal_slot(chain: &[Point2], p: &TrochoidParams) -> Result<Troc
             continue;
         }
         // The lifted returns land on air, read inside the disc.
-        let trial = trial.unwrap_or_else(|| level(&lay));
+        let trial = match trial {
+            Some(t) => t,
+            None => level(&lay)?,
+        };
         if let Some(at) = lifted_cut(&trial, &mut stock()?, r) {
             return Err(GenError::Invalid(format!(
                 "trochoidal slot: a lifted return at ({:.3}, {:.3}) would cut stock",
@@ -232,52 +254,28 @@ pub fn plan_trochoidal_slot(chain: &[Point2], p: &TrochoidParams) -> Result<Troc
         }
         return finish(&lay, p, step, q.max_deg, b, room);
     }
-    let (deg, at, step) = best.unwrap_or((f64::INFINITY, Point3::new(0.0, 0.0, 0.0), p.step));
-    Err(GenError::Invalid(format!(
-        "trochoidal slot: no forward step holds the {:.1} deg engagement limit - the least, {:.1} deg at ({:.3}, {:.3}), was read at a {:.4} mm step",
-        p.max_engagement, deg, at.x, at.y, step
-    )))
-}
-
-/// Every loop stays inside the cutter-centre band of the channel (a
-/// chain turning tighter than the loops is refused, never gouged).
-fn contained(ch: &Chain, lay: &Layout, room: f64) -> Result<(), GenError> {
-    let mut from = lay.entry;
-    for pc in &lay.pieces {
-        let mut at = pc.start;
-        for el in &pc.cut {
-            let El::Arc { center, to, ccw } = *el;
-            for q in arc_samples(at, to, center, ccw) {
-                if ch.distance(q) > room + 1e-6 {
-                    return Err(GenError::Invalid(format!(
-                        "trochoidal slot: a loop at ({:.3}, {:.3}) would leave the channel - the centre line turns too tightly for loops this wide",
-                        q.x, q.y
-                    )));
-                }
-            }
-            at = to;
-        }
-        if ch.distance(pc.start) > room + 1e-6 || ch.distance(from) > room + 1e-6 {
-            return Err(GenError::Invalid("trochoidal slot: a wall lead would leave the channel".into()));
-        }
-        from = pc.start;
+    let cap = |s: f64| {
+        format!(
+            "a {s:.4} mm forward step along the {:.3} mm centre line needs more than the {MAX_LOOPS} loop cap",
+            ch.len()
+        )
+    };
+    match (best, capped) {
+        (None, Some(s)) => Err(GenError::Invalid(format!(
+            "trochoidal slot: the forward step is too small - {} (every shorter step down the ladder needs more); raise the forward step",
+            cap(s)
+        ))),
+        (Some((deg, at, step)), capped) => Err(GenError::Invalid(format!(
+            "trochoidal slot: no forward step holds the {:.1} deg engagement limit - the least, {:.1} deg at ({:.3}, {:.3}), was read at a {:.4} mm step{}",
+            p.max_engagement,
+            deg,
+            at.x,
+            at.y,
+            step,
+            capped.map_or(String::new(), |s| format!(" ({}, so no shorter step was tried)", cap(s)))
+        ))),
+        (None, None) => Err(GenError::Invalid("trochoidal slot: no forward step on the ladder could be laid out".into())),
     }
-    Ok(())
-}
-
-/// Points along the arc `a -> b` about `c` (a degree apart at most).
-fn arc_samples(a: Point2, b: Point2, c: Point2, ccw: bool) -> Vec<Point2> {
-    let (a0, a1) = ((a.y - c.y).atan2(a.x - c.x), (b.y - c.y).atan2(b.x - c.x));
-    let tau = std::f64::consts::TAU;
-    let sweep = if ccw { (a1 - a0).rem_euclid(tau) } else { -(a0 - a1).rem_euclid(tau) };
-    let rad = (a.x - c.x).hypot(a.y - c.y);
-    let n = ((sweep.abs().to_degrees()).ceil() as usize).clamp(1, 720);
-    (0..=n)
-        .map(|k| {
-            let t = a0 + sweep * k as f64 / n as f64;
-            Point2::new(c.x + rad * t.cos(), c.y + rad * t.sin())
-        })
-        .collect()
 }
 
 /// The kept plan over every level, said in the notes and held to the
@@ -296,7 +294,7 @@ fn finish(lay: &Layout, p: &TrochoidParams, step: f64, deg: f64, b: f64, room: f
         }
         let from = (above + crate::approach::DEFAULT_PLUNGE_HEIGHT).min(hop).max(above);
         bld.push(MoveKind::Rapid, Point3::new(lay.entry.x, lay.entry.y, from), None);
-        emit_level(&mut bld, lay, p, z, from, true);
+        emit_level(&mut bld, lay, p, z, from, true)?;
         above = z;
     }
     let at = bld.at();
@@ -335,10 +333,27 @@ fn finish(lay: &Layout, p: &TrochoidParams, step: f64, deg: f64, b: f64, room: f
 /// each loop's wall lead and cut, the returns between them. `levels`
 /// says whether a retract return may hop (the planner's single level
 /// lifts in place instead, which reads the same stock).
-fn emit_level(b: &mut PathBuilder, lay: &Layout, p: &TrochoidParams, z: f64, from: f64, levels: bool) {
+fn emit_level(
+    b: &mut PathBuilder,
+    lay: &Layout,
+    p: &TrochoidParams,
+    z: f64,
+    from: f64,
+    levels: bool,
+) -> Result<(), GenError> {
     let p3 = |q: Point2, zz: f64| Point3::new(lattice(q.x), lattice(q.y), lattice(zz));
     let ccw = lay.ccw;
-    let turns = crate::links::helix_turns(from - z, lay.b, 0.0).unwrap_or(1.0).ceil().max(1.0);
+    // Past the turn cap the bore is refused by name, never cut as one
+    // turn standing in for the many the drop needs (#774).
+    let Some(turns) = crate::links::helix_turns(from - z, lay.b, 0.0) else {
+        return Err(GenError::Invalid(format!(
+            "trochoidal slot: the bore helix would need more than {} turns to descend {:.3} mm on a {:.3} mm helix radius (half the loop band) - use a smaller stepdown or a wider loop band",
+            crate::links::MAX_HELIX_TURNS,
+            from - z,
+            lay.b
+        )));
+    };
+    let turns = turns.ceil().max(1.0);
     let halves = (2.0 * turns) as usize;
     for k in 1..=halves {
         let zz = from - (from - z) * k as f64 / halves as f64;
@@ -378,4 +393,5 @@ fn emit_level(b: &mut PathBuilder, lay: &Layout, p: &TrochoidParams, z: f64, fro
             }
         }
     }
+    Ok(())
 }

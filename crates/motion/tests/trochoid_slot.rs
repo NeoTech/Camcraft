@@ -241,3 +241,50 @@ fn trochoid_loops_post_as_arcs() {
     assert!(pl.path.arc_count() > 4 * pl.loops, "{} arcs for {} loops", pl.path.arc_count(), pl.loops);
 }
 
+
+/// #774: a forward step so short that every rung of the ladder needs
+/// more loops than the cap is refused by that cause - the cap and the
+/// step named - not as an engagement reading that was never taken.
+#[test]
+fn trochoid_step_past_the_loop_cap_is_refused_by_that_cause() {
+    let mut p = params();
+    p.step = 0.0001;
+    match trochoidal_slot(&line(), &p) {
+        Err(GenError::Invalid(m)) => assert!(
+            m.contains("forward step is too small") && m.contains("20000 loop cap") && m.contains("0.0001 mm"),
+            "{m}"
+        ),
+        other => panic!("expected the loop-cap refusal, got {other:?}"),
+    }
+}
+
+/// #774: a microlift is a feed move, so it never lifts the return above
+/// the clearance plane - a lift past the clearance above the top is
+/// refused by name; one right at it still cuts.
+#[test]
+fn trochoid_microlift_above_the_clearance_plane_is_refused() {
+    let mut p = params();
+    p.ret = TrochoidReturn::Microlift { height: 100.0 };
+    match trochoidal_slot(&line(), &p) {
+        Err(GenError::Invalid(m)) => assert!(m.contains("microlift") && m.contains("clearance plane"), "{m}"),
+        other => panic!("expected the microlift refusal, got {other:?}"),
+    }
+    let mut p = params();
+    p.ret = TrochoidReturn::Microlift { height: p.clearance_z - p.top_z };
+    assert!(trochoidal_slot(&line(), &p).is_ok(), "a lift up to the clearance plane is allowed");
+}
+
+/// #774: a bore descent needing more helix turns than the cap is refused
+/// by name, never cut as the one turn the old fallback substituted.
+#[test]
+fn trochoid_bore_past_the_helix_turn_cap_is_refused() {
+    let mut p = params();
+    // The full 6 mm band (3 mm helix radius: 6 mm of drop a turn) over
+    // one 6200 mm level wants ~1034 turns, past the 1024 cap.
+    p.bottom_z = -6200.0;
+    p.stepdown = 6200.0;
+    match trochoidal_slot(&line(), &p) {
+        Err(GenError::Invalid(m)) => assert!(m.contains("helix") && m.contains("1024 turns"), "{m}"),
+        other => panic!("expected the helix-turn refusal, got {other:?}"),
+    }
+}

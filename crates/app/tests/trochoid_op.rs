@@ -2,7 +2,8 @@
 //! through the command history (undo / redo), generated against the
 //! stock with the verifier silent on its loops, posted, and filed
 //! through the project round trip; a channel narrower than the tool is
-//! refused by name at generation.
+//! refused by name at generation, a microlift above the clearance plane
+//! at command creation and edit (#774).
 //!
 //! Provenance: our own fixtures (a 6 mm end mill in a 10 mm channel).
 //!
@@ -135,4 +136,30 @@ fn the_trochoidal_slot_round_trips_through_the_project_file() {
     project::load(&world2, &path).expect("load");
     assert_eq!(params(&world2), Some(p));
     let _ = std::fs::remove_file(&path);
+}
+
+/// #774: a microlift taller than the clearance above the top (here 10 mm:
+/// clearance 30, top 20) would feed the return above the clearance
+/// plane, so it is refused by name at creation and at an edit (which
+/// leaves the op as it was); a lift right at the bound is accepted.
+#[test]
+fn a_microlift_above_the_clearance_plane_is_refused_at_the_door() {
+    let (world, mut h) = job(10.0);
+    let tall = |height: f64| {
+        let mut p = trochoid(10.0);
+        if let OpParams::TrochoidalSlot { ret, .. } = &mut p {
+            *ret = TrochoidReturn::Microlift { height };
+        }
+        p
+    };
+    let err = CreateOperation::new(&world, "Troch2", TOOL, SrcRef::Stock, tall(100.0))
+        .map(|_| ())
+        .expect_err("refused at creation")
+        .to_string();
+    assert!(err.contains("microlift") && err.contains("clearance plane") && err.contains("10.000"), "{err}");
+    let err = EditOperationParams::new(&world, "Troch1", tall(10.5)).map(|_| ()).expect_err("refused at edit").to_string();
+    assert!(err.contains("microlift"), "{err}");
+    assert_eq!(params(&world), Some(trochoid(10.0)), "the refused edit leaves the op alone");
+    h.execute(&world, EditOperationParams::new(&world, "Troch1", tall(10.0)).expect("a lift at the bound is fine"));
+    assert_eq!(params(&world), Some(tall(10.0)));
 }
