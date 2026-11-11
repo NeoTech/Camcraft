@@ -79,7 +79,7 @@ impl InsertFixture {
             name: free_name(world, &entry.name),
             facets: entry.facets.clone().into(),
             location,
-            def: FixtureDef { setup: setup_name.map(str::to_owned), fixed: false, vise: None, accessory: None },
+            def: FixtureDef { setup: setup_name.map(str::to_owned), fixed: false, ..FixtureDef::default() },
         })
     }
 
@@ -100,6 +100,29 @@ impl InsertFixture {
     #[must_use]
     pub fn with_vise(mut self, vise: crate::vise::ViseParams) -> Self {
         self.def.vise = Some(vise);
+        self
+    }
+
+    /// Mark the insert as fixture plate `plate` (#819): the marker carries
+    /// its hole grid (and a built-in plate's parameters).
+    #[must_use]
+    pub fn with_plate(mut self, plate: crate::plate::PlateDef) -> Self {
+        self.def.plate.plate = Some(plate);
+        self
+    }
+
+    /// Mark the insert as mod-vise jaw block `jaw` (#820).
+    #[must_use]
+    pub fn with_mod_jaw(mut self, jaw: crate::modvise::JawParams) -> Self {
+        self.def.mod_jaw = Some(jaw);
+        self
+    }
+
+    /// Record the insert's place on a plate (#820: a jaw block lands
+    /// seated on its hole, a rider of the plate from the start).
+    #[must_use]
+    pub fn with_mount(mut self, mount: crate::plate::PlateMount) -> Self {
+        self.def.plate.mount = Some(mount);
         self
     }
 

@@ -300,15 +300,32 @@ fn collect_parts(state: &State) -> Vec<GpuPart> {
     parts
 }
 
-/// #371: the running tool's assembly at the playhead - cutter and shank
-/// revolved from its numbers, then its modelled body, or without one the
-/// holder cylinder from its own numbers (what the collision laws judge),
-/// posed by the frame's tip and axis, world space. Only while the
-/// transport is up and its timeline is this document's (`cached_script`
-/// refreshes it before the next frame), any playhead including 0 and the
-/// end, playing or paused, the op fresh or stale (display reads the
-/// cached path). Lathe insert kinds yield nothing (marker only).
+/// #371, #743: the running tool at the playhead as a revolved body -
+/// the cutter and shank of the judged tool record and, above them, the
+/// very band stack the fixture laws sweep (the holder cylinder, a
+/// modelled body's revolved envelope, a drawn holder's bands), so what
+/// is drawn is what is checked - posed by the frame's tip and axis,
+/// world space. Only while the transport is up and its timeline is this
+/// document's (`cached_script` refreshes it before the next frame), any
+/// playhead including 0 and the end, playing or paused, the op fresh or
+/// stale (display reads the cached path). Lathe insert kinds yield
+/// nothing (marker only); a degenerate or misfitting tool yields nothing
+/// and is logged. The mesh lives in `State::sim_tool_cache` and is
+/// dropped as soon as there is no tool to draw.
 pub(crate) fn sim_tool_tris(state: &State) -> Option<Vec<camcraft_app::geometry::Triangle>> {
+    // A poisoned lock only means a draw panicked mid-update: the cache
+    // is display data, rebuilt from the world, so it is safe to reuse.
+    let mut cache = state.sim_tool_cache.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let Some((op, tip, axis)) = sim_tool_pose(state) else {
+        cache.clear();
+        return None;
+    };
+    cache.posed(&state.world, op, tip, axis)
+}
+
+/// The operation at the playhead with its tool tip and axis, when the
+/// transport is up on this document's timeline.
+fn sim_tool_pose(state: &State) -> Option<(&str, [f64; 3], [f64; 3])> {
     let sim = state.sim?;
     let (version, sc) = state.sim_script_cache.as_ref()?;
     if *version != state.doc_version || sc.is_empty() {
@@ -316,8 +333,7 @@ pub(crate) fn sim_tool_tris(state: &State) -> Option<Vec<camcraft_app::geometry:
     }
     let f = sc.at(sim.t);
     let op = sc.ops.get(f.op?)?;
-    let tris = camcraft_app::tool_body_view::assembly_for_operation(&state.world, op)?;
-    Some(camcraft_app::tool_body_view::posed(&tris, [f.pos.x, f.pos.y, f.pos.z], f.axis))
+    Some((op.as_str(), [f.pos.x, f.pos.y, f.pos.z], f.axis))
 }
 
 /// [`sim_tool_tris`] as a model part (depth-tested, shaded).
