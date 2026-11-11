@@ -693,6 +693,105 @@ pub(crate) fn gizmo_segments(state: &State, aspect: f64) -> Vec<([f32; 2], [f32;
     out
 }
 
+// ------------------------------------------------------ the ground grid
+
+/// The viewport's clear colour (viewport.rs's `LoadOp::Clear`): the grid
+/// fades toward it at its rim, so the floor never ends on a hard edge.
+const VIEWPORT_BG: [f32; 3] = [0.09, 0.10, 0.12];
+
+/// Minor / major ground-grid ink, a step above [`VIEWPORT_BG`] so the floor
+/// reads as a surface without competing with the part or the toolpath.
+const GRID_MINOR: [f32; 3] = [0.16, 0.17, 0.20];
+const GRID_MAJOR: [f32; 3] = [0.23, 0.25, 0.29];
+
+/// Grid lines from the camera target to the rim, per axis. The rim sits
+/// beyond what the default framing shows, so no hard edge is ever on
+/// screen; the outermost rings fade into the ground (issue: an empty
+/// viewport read as a void).
+const GRID_HALF_STEPS: i64 = 24;
+/// Every fifth line is a major one (0.5, 1, 5, 10, 50 ... on a 1-2-5 step).
+const GRID_MAJOR_EVERY: i64 = 5;
+
+/// The Z=0 ground grid: the machine table plane under the part, one line
+/// per 1-2-5 step of `dist / 10`, centred on the camera target and snapped
+/// to round machine coordinates so the spacing reads in whole millimetres
+/// at any zoom. World-space geometry in the overlay buffer, not a
+/// screen-space overlay, so the part occludes it like a real table.
+///
+/// The same switch as the triads (`show_world_axes`): the grid is
+/// reference furniture, and hiding the axes hides it too. It fades toward
+/// the viewport ground at the rim rather than stopping on a rectangle.
+pub(crate) fn ground_grid_lines(state: &State) -> Vec<[f32; 6]> {
+    if !state.show_world_axes {
+        return Vec::new();
+    }
+    let step = nice_step(state.cam.dist / 10.0);
+    let (cx, cy) = (state.cam.target[0], state.cam.target[1]);
+    let reach = step * GRID_HALF_STEPS as f64;
+    let (k0x, k1x) = (
+        ((cx - reach) / step).floor() as i64,
+        ((cx + reach) / step).ceil() as i64,
+    );
+    let (k0y, k1y) = (
+        ((cy - reach) / step).floor() as i64,
+        ((cy + reach) / step).ceil() as i64,
+    );
+    // The line nearest the target is the fade's centre.
+    let (cix, ciy) = ((cx / step).round() as i64, (cy / step).round() as i64);
+    let mut out: Vec<[f32; 6]> = Vec::new();
+    // Lines of constant y run along X, and the other way round.
+    for k in k0y..=k1y {
+        let y = k as f64 * step;
+        let c = grid_ink(k, ciy);
+        push_line(&mut out, Point3::new(cx - reach, y, 0.0), Point3::new(cx + reach, y, 0.0), c);
+    }
+    for k in k0x..=k1x {
+        let x = k as f64 * step;
+        let c = grid_ink(k, cix);
+        push_line(&mut out, Point3::new(x, cy - reach, 0.0), Point3::new(x, cy + reach, 0.0), c);
+    }
+    out
+}
+
+/// The ink of the grid line at index `k` (round machine coordinates, so a
+/// zoomed camera keeps landing on 0, 5, 10 ...), faded toward the viewport
+/// ground for the lines near the rim, `centre` being the target's index.
+fn grid_ink(k: i64, centre: i64) -> [f32; 3] {
+    let base = if k.rem_euclid(GRID_MAJOR_EVERY) == 0 {
+        GRID_MAJOR
+    } else {
+        GRID_MINOR
+    };
+    // Cube the falloff: only the last few rings dim visibly.
+    let d = (k - centre).unsigned_abs() as f32 / GRID_HALF_STEPS as f32;
+    let fade = (1.0 - d * d * d).clamp(0.0, 1.0);
+    [
+        VIEWPORT_BG[0] + (base[0] - VIEWPORT_BG[0]) * fade,
+        VIEWPORT_BG[1] + (base[1] - VIEWPORT_BG[1]) * fade,
+        VIEWPORT_BG[2] + (base[2] - VIEWPORT_BG[2]) * fade,
+    ]
+}
+
+/// The next 1-2-5 decade at or above `v` (0.1, 0.2, 0.5, 1, 2, 5, 10 ...),
+/// so grid spacing is a round machine number at every zoom.
+fn nice_step(v: f64) -> f64 {
+    if !v.is_finite() || v <= 0.0 {
+        return 1.0;
+    }
+    let decade = 10f64.powf(v.log10().floor());
+    let m = v / decade;
+    let m = if m <= 1.0 {
+        1.0
+    } else if m <= 2.0 {
+        2.0
+    } else if m <= 5.0 {
+        5.0
+    } else {
+        10.0
+    };
+    m * decade
+}
+
 /// Is this overlay label an axis letter (drawn larger, #195)?
 pub(crate) fn is_axis_label(text: &str) -> bool {
     AXIS_NAMES.contains(&text)
