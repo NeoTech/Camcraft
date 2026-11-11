@@ -250,7 +250,9 @@ pub fn plan_trochoidal_slot(chain: &[Point2], p: &TrochoidParams) -> Result<Troc
             Some(t) => t,
             None => level(&lay)?,
         };
-        if let Some(at) = lifted_cut(&trial, &mut stock()?, r) {
+        let lifted = lifted_cut(&trial, &mut stock()?, r)
+            .map_err(|e| GenError::Invalid(format!("trochoidal slot: reading the lifted returns: {e}")))?;
+        if let Some(at) = lifted {
             return Err(GenError::Invalid(format!(
                 "trochoidal slot: a lifted return at ({:.3}, {:.3}) would cut stock",
                 at.x, at.y

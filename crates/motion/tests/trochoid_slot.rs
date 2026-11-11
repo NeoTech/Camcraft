@@ -183,7 +183,7 @@ fn trochoid_microlift_returns_land_on_air() {
     let pl = plan(&params());
     let spec = QualitySpec::new(D);
     let Ok(mut dex) = stock_for(&channel(W), 0.0, BOTTOM, D, &spec) else { panic!("stock") };
-    assert_eq!(lifted_cut(&pl.path, &mut dex, 0.5 * D), None);
+    assert!(matches!(lifted_cut(&pl.path, &mut dex, 0.5 * D), Ok(None)));
     let lifted = pl
         .path
         .moves
@@ -197,7 +197,7 @@ fn trochoid_microlift_returns_land_on_air() {
     let mut early = pl.path.clone();
     early.moves.retain(|m| !(m.kind == MoveKind::Feed && m.arc.is_some() && (m.to.z - (-3.0)).abs() < 1e-9));
     let Ok(mut dex) = stock_for(&channel(W), 0.0, BOTTOM, D, &spec) else { panic!("stock") };
-    assert!(lifted_cut(&early, &mut dex, 0.5 * D).is_some(), "a return over uncut stock must be caught");
+    assert!(matches!(lifted_cut(&early, &mut dex, 0.5 * D), Ok(Some(_))), "a return over uncut stock must be caught");
 }
 
 /// A channel no wider than the tool is refused by name, as is a loop
