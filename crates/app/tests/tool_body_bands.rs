@@ -172,3 +172,116 @@ fn a_swing_through_the_part_is_not_hidden_behind_a_stock_shank_hit() {
     assert!(w.contains(&Warning::SweepHit { at: 1, part: true }), "the swing through the island is reported: {w:?}");
     assert!(!w.contains(&Warning::SweepHit { at: 1, part: false }), "a stock sweep on the same move is the same event: {w:?}");
 }
+
+// ---- #903: a leaning band's disc is not the cutter's kerf -----------
+
+/// The stepped body of `tool_body_judged`: an r 6 nose 14..34 above the
+/// tip, an r 20 flange 34..49, on a Ø8 end mill with an r 4 shank.
+fn stepped_body() -> (ToolGeom, Cutter) {
+    let g = ToolGeom { radius: 4.0, nose_radius: 0.0, flute_len: 8.0, shank_radius: 4.0, shank_len: 6.0, holder_radius: 20.0, holder_len: 35.0 };
+    let stack = HolderStack {
+        bands: vec![HolderBand { above: 14.0, len: 20.0, r: 6.0 }, HolderBand { above: 34.0, len: 15.0, r: 20.0 }],
+        top: 49.0,
+    };
+    let body = Cutter::flat(&g).with_body(&g, &stack);
+    assert!(body.body.is_some(), "the stepped stack is carried");
+    (g, body)
+}
+
+/// A plain slim holder, no body: r 6 x 20 over the r 4 shank.
+fn slim_holder() -> ToolGeom {
+    ToolGeom { radius: 4.0, nose_radius: 0.0, flute_len: 8.0, shank_radius: 4.0, shank_len: 6.0, holder_radius: 6.0, holder_len: 20.0 }
+}
+
+fn deg_toward_x(deg: f64) -> [f64; 3] {
+    [deg.to_radians().sin(), 0.0, deg.to_radians().cos()]
+}
+
+/// The review's reproduction: a part island x 40..60 (y 10..90, top z 0)
+/// in a 100 mm plate, tip at (31, 50) - its flutes stay clear of the
+/// wall at every pose used here (x <= 39 leaning 30 degrees toward it).
+fn beside_wall(moves: Vec<Move>, g: &ToolGeom, cutter: Option<Cutter>) -> Vec<Warning> {
+    let region = Region::new(vec![rect(0.0, 0.0, 100.0, 100.0), rect(40.0, 10.0, 60.0, 90.0)]).expect("region");
+    let stock = Region::new(vec![rect(0.0, 0.0, 100.0, 100.0)]).expect("stock");
+    reach_warnings(verify(&Toolpath::new(moves), &cx(&region, &stock, g, cutter)))
+}
+
+/// Law (c): lean 30 degrees toward the wall and plunge to z -9. The shank
+/// 12 mm up the axis stands at x 40.5, z -0.6 - in the part.
+fn leaning_plunge() -> Vec<Move> {
+    let lean = deg_toward_x(30.0);
+    vec![
+        Move::new(MoveKind::Rapid, Point3::new(-20.0, -20.0, 10.0), Point3::new(31.0, 50.0, 10.0), None),
+        Move::new(MoveKind::Feed, Point3::new(31.0, 50.0, 10.0), Point3::new(31.0, 50.0, 5.0), Some(500.0)).with_axis(lean),
+        Move::new(MoveKind::Plunge, Point3::new(31.0, 50.0, 5.0), Point3::new(31.0, 50.0, -9.0), Some(80.0)).with_axis(lean),
+    ]
+}
+
+#[test]
+fn a_leaning_stepped_body_in_the_wall_is_convicted_by_law_c() {
+    let (g, body) = stepped_body();
+    let w = beside_wall(leaning_plunge(), &g, Some(body));
+    assert!(w.contains(&Warning::ShankHit { at: 2, part: true }), "the leaning nose/shank in the part: {w:?}");
+    // The enclosing cylinder convicts it too - the body is never looser here.
+    let w = beside_wall(leaning_plunge(), &g, None);
+    assert!(w.contains(&Warning::ShankHit { at: 2, part: true }), "{w:?}");
+}
+
+#[test]
+fn a_leaning_slim_holder_in_the_wall_is_convicted_by_law_c() {
+    let g = slim_holder();
+    let w = beside_wall(leaning_plunge(), &g, None);
+    assert!(w.contains(&Warning::ShankHit { at: 2, part: true }), "the leaning slim holder in the part: {w:?}");
+}
+
+/// Law (c3): the plunge to z -12 turns from 30 degrees toward the wall
+/// to 30 degrees away. The end pose leans away - law (c) sees no part -
+/// but mid-turn, still leaning toward the wall at z -8.6, the r 6 nose
+/// (or holder) stands in the part. Shallow enough that the stepped
+/// body's r 20 flange stays above the top at every such state, so the
+/// nose alone must be judged.
+fn turning_plunge() -> Vec<Move> {
+    vec![
+        Move::new(MoveKind::Rapid, Point3::new(-20.0, -20.0, 10.0), Point3::new(31.0, 50.0, 10.0), None),
+        Move::new(MoveKind::Feed, Point3::new(31.0, 50.0, 10.0), Point3::new(31.0, 50.0, 5.0), Some(500.0))
+            .with_axis(deg_toward_x(30.0)),
+        Move::new(MoveKind::Plunge, Point3::new(31.0, 50.0, 5.0), Point3::new(31.0, 50.0, -12.0), Some(80.0))
+            .with_axis(deg_toward_x(-30.0)),
+    ]
+}
+
+#[test]
+fn a_leaning_stepped_body_swinging_through_the_wall_is_convicted_by_law_c3() {
+    let (g, body) = stepped_body();
+    let w = beside_wall(turning_plunge(), &g, Some(body));
+    // Leaning away, the r 20 flange's column reaches the plate's own
+    // stock edge at x 0 (stock, not part) - the part is (c3)'s finding.
+    assert!(!w.contains(&Warning::ShankHit { at: 2, part: true }), "the end pose leans away from the part: {w:?}");
+    assert!(w.contains(&Warning::SweepHit { at: 2, part: true }), "the swing through the part: {w:?}");
+}
+
+#[test]
+fn a_leaning_slim_holder_swinging_through_the_wall_is_convicted_by_law_c3() {
+    let g = slim_holder();
+    let w = beside_wall(turning_plunge(), &g, None);
+    assert!(!w.iter().any(|w| matches!(w, Warning::ShankHit { at: 2, .. })), "the end pose leans away: {w:?}");
+    assert!(w.contains(&Warning::SweepHit { at: 2, part: true }), "the swing through the part: {w:?}");
+}
+
+#[test]
+fn upright_verdicts_are_unchanged_by_the_tip_centred_kerf() {
+    // Upright the band's disc and the kerf share the tip: the annulus
+    // law is the one it always was. (gap, tip z) -> verdict.
+    let hit = vec![Warning::ShankHit { at: 1, part: true }];
+    let (g, body) = stepped_body();
+    let slim = slim_holder();
+    for (gap, tip_z, want_body, want_slim) in [
+        (5.0, -20.0, hit.clone(), hit.clone()), // r 6 nose / holder, bottom at -6
+        (7.0, -20.0, Vec::new(), Vec::new()), // clear of r 6; the flange's bottom (14) above the top
+        (5.0, -5.0, Vec::new(), Vec::new()), // the r 6 bottom above the top (z 9)
+        (15.0, -40.0, hit.clone(), Vec::new()), // the flange (r 20, bottom -6) in the wall
+    ] {
+        assert_eq!(plunge_beside_island(gap, tip_z, &g, Some(body)), want_body, "body: gap {gap}, tip {tip_z}");
+        assert_eq!(plunge_beside_island(gap, tip_z, &slim, None), want_slim, "slim: gap {gap}, tip {tip_z}");
+    }
+}

@@ -80,3 +80,41 @@ a blocker, since the cylinder only over-reports.
 **Cost to change later.** Small: `Cutter::with_body` is the one place
 the bands are attached (`operation::generate`); dropping it restores
 the cylinder everywhere.
+
+**A leaning band's kerf stays at the tip (high-tier review, #903).** On a
+tilted move law (c) shifted each band's disc to the band's mid-axis
+point and then excused every sample within the CUTTER radius of that
+shifted centre - a disc that lies under the band, not in the flutes'
+kerf. A shank, holder or body standing in the part there passed (the
+review's reproduction: wall at x 40, tip (31, 50, -9), 30 degrees toward
+the wall - the band stack returned nothing; a plain slim r 6 holder
+returned nothing on main too). Chosen: the general fix, not the
+stopgap. The band's outer disc still stands at the shifted centre; the
+excused kerf is the cutter-radius disc about the unshifted TIP, which is
+what the law's own comment always said it was. The same split is made
+in the hidden-stock backstop (`Rest::hidden_in_annulus` takes the band
+centre and the tip; leaning, its probe rings cover the whole band disc
+since the kerf is off-centre) and in each (c3) sweep state. Upright,
+centre and tip coincide, so every vertical verdict is the one it was
+(the old rings and the old annulus, byte for byte). Considered and
+dropped: excusing the flutes' whole leaning footprint (the stadium from
+tip to flute top) - looser, and a sample under the leaning flute's top
+is not cleared above it, so it could hide steel; and the reviewer's
+stopgap (judge leaning moves by the enclosing cylinder) - it carries the
+same hole for a body-less slim holder (#903), so it fixes neither.
+The direction is stricter, with one exception named: the disc under
+the band is judged now; a sample the old law judged and this one excuses
+lies within the cutter radius of the tip - in the flutes' own kerf, the
+very column the upright law has always excused (a wall there is the
+flutes' own gouge question, not the band's). One existing assertion
+moved with it, and only in kind: `verify::a_swinging_head_sweeps_the_island_wall_mid_turn`'s
+second move ends with its tip at x 6 leaning 18 degrees into the island
+at x 10, the r 7 shank standing in the part - the old law excused that
+end pose as "kerf" and only (c3) caught the move (`SweepHit{2, part}`);
+now (c) convicts it (`ShankHit{2, part}`) and (c3) is not asked twice.
+Same move, same part severity, still blocks the post. Pinned by
+`tool_body_bands::{a_leaning_stepped_body_in_the_wall_is_convicted_by_law_c,
+a_leaning_slim_holder_in_the_wall_is_convicted_by_law_c,
+a_leaning_stepped_body_swinging_through_the_wall_is_convicted_by_law_c3,
+a_leaning_slim_holder_swinging_through_the_wall_is_convicted_by_law_c3,
+upright_verdicts_are_unchanged_by_the_tip_centred_kerf}`.

@@ -144,13 +144,18 @@ pub(super) fn band_reach(
                         continue;
                     }
                     let r2 = (r_band + 1e-9) * (r_band + 1e-9);
+                    let kerf2 = (r + cx.gouge_tol) * (r + cx.gouge_tol);
                     let mut hit = None;
                     'worst: {
                         for p in &pts {
+                            // The band's disc stands at `pc`; the kerf the
+                            // flutes cleared stands at the TIP `p` (#903):
+                            // on a leaning move they part, and the disc
+                            // under the band is steel's, not the cut's.
                             let pc = Point2::new(p.x + offx, p.y + offy);
+                            let tip = Point2::new(p.x, p.y);
                             for q in &samples {
-                                let dd = dist2_seg(*q, pc, pc);
-                                if dd > r2 || dd <= (r + cx.gouge_tol) * (r + cx.gouge_tol) {
+                                if dist2_seg(*q, pc, pc) > r2 || dist2_seg(*q, tip, tip) <= kerf2 {
                                     continue; // outside this band's annulus
                                 }
                                 if !in_stock(*q) {
@@ -172,7 +177,8 @@ pub(super) fn band_reach(
                     if hit.is_none()
                         && pts.iter().any(|p| {
                             let pc = Point2::new(p.x + offx, p.y + offy);
-                            rest.hidden_in_annulus(pc, r + cx.gouge_tol, r_band, h0, i + 1)
+                            let tip = Point2::new(p.x, p.y);
+                            rest.hidden_in_annulus(pc, tip, r + cx.gouge_tol, r_band, h0, i + 1)
                         })
                     {
                         hit = Some(false);
@@ -215,7 +221,7 @@ pub(super) fn band_reach(
                 &in_stock,
                 &|q: Point2| rest.surface_steps(q),
                 &part_at,
-                &|pc, r_in, r_out, h, upto| rest.hidden_in_annulus(pc, r_in, r_out, h, upto),
+                &|pc, tip, r_in, r_out, h, upto| rest.hidden_in_annulus(pc, tip, r_in, r_out, h, upto),
             );
             warns.extend(
                 sweeps
