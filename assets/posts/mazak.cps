@@ -312,6 +312,9 @@ function smoothOff() {
 function startPreamble() {
   if (sectionOpen) return;
   sectionOpen = true;
+  // #574: a touch probe (a stated speed of 0) states its spindle
+  // stopped before its first move, whatever the tool change did.
+  var probeStop = spindleWait && !(sRpm > 0);
   opNotes();
   block(["G17", "G90", wcsWord, "G40", "G49", "G80"]);
   planeG = 17;              // the preamble states the plane
@@ -325,6 +328,7 @@ function startPreamble() {
     block(["MOTON", "S" + ff(sRpm)]);
     spindleWait = false;
   }
+  if (probeStop) block(["MOTOFF"]);
   coolant = coolantFor(coolantAsk);
   if (coolant) block([coolant]);
   smoothOn();

@@ -57,7 +57,7 @@ pub mod library;
 // it shares with the cutting check.
 mod judge;
 mod plasma;
-use judge::{c_letter_problem, move_extremes, say, slowest_axis, tap_gate};
+use judge::{c_letter_problem, move_extremes, pose_problems, say, slowest_axis, tap_gate};
 mod sheet;
 pub mod validate;
 // #383: the machine editor - property grid, draft, user folder and save.
@@ -294,51 +294,10 @@ pub fn check_ops(world: &World, machine: &Machine, program: &[(String, flecs_ecs
             } else if let Some(a) = mv.axis
                 && !crate::cl::is_vertical(&a)
             {
-                if !can_tilt(machine) {
-                    say(
-                        &mut out,
-                        format!(
-                            "{name}: move {i} tilts the tool; {} states no tilting rotary",
-                            machine.model
-                        ),
-                    );
-                }
-                let [da, db, dc] = crate::cl::axis_to_angles(a);
-                for (letter, ang) in [('A', da), ('B', db), ('C', dc)] {
-                    if ang.abs() <= 1e-9 {
-                        continue; // that letter holds nothing to check
-                    }
-                    // The letter names the rotary that must hold the
-                    // angle. A machine whose tilt lives under another
-                    // letter (an A trunnion asked for a B turn) is
-                    // refused by name too - the in-app check is the
-                    // safe floor; the machine's own post knows how to
-                    // re-express a pose, this gate never does IK.
-                    match machine
-                        .axes
-                        .iter()
-                        .find(|x| x.rotary && x.name.eq_ignore_ascii_case(&letter.to_string()))
-                    {
-                        None => say(
-                            &mut out,
-                            format!(
-                                "{name}: move {i} commands {letter} {ang:.3} deg; {} states no {letter} axis",
-                                machine.model
-                            ),
-                        ),
-                        Some(ax) => {
-                            if let Some((lo, hi)) = ax.travel
-                                && (ang < lo - 1e-9 || ang > hi + 1e-9)
-                            {
-                                say(
-                                    &mut out,
-                                    format!(
-                                        "{name}: move {i} commands {letter} {ang:.3} deg, the travel is {lo:.3}..{hi:.3}"
-                                    ),
-                                );
-                            }
-                        }
-                    }
+                // The letters (or, on a 4th-axis table, the angle about
+                // X, #797) name what the rotaries must hold (`judge`).
+                for msg in pose_problems(machine, i, a) {
+                    say(&mut out, format!("{name}: {msg}"));
                 }
             }
             // Feed: only stated feeds check against stated ceilings.

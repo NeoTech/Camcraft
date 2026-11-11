@@ -38,12 +38,13 @@ impl std::fmt::Display for TextError {
 
 impl std::error::Error for TextError {}
 
-const CYCLE_KINDS: [(&str, CycleKind); 7] = [
+const CYCLE_KINDS: [(&str, CycleKind); 8] = [
     ("Spot", CycleKind::Spot),
     ("Drill", CycleKind::Drill),
     ("Peck", CycleKind::Peck),
     ("Deep", CycleKind::Deep),
     ("Tap", CycleKind::Tap),
+    ("FloatingTap", CycleKind::FloatingTap),
     ("Bore", CycleKind::Bore),
     ("BackBore", CycleKind::BackBore),
 ];

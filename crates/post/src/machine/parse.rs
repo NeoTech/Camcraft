@@ -126,7 +126,6 @@ fn count_spindles(parts: Option<&serde_json::Value>) -> usize {
         .sum()
 }
 
-/// First part anywhere in the tree with the given `type`, depth-first.
 /// The spindle's speed ranges (#170): `[{ "min_speed", "max_speed" }]`,
 /// rpm. An entry missing either bound, or with them out of order, is
 /// dropped - a range the file cannot state whole names nothing.
@@ -143,13 +142,18 @@ fn parse_ranges(v: Option<&serde_json::Value>) -> Vec<(f64, f64)> {
         .collect()
 }
 
+/// First part anywhere in the tree with the given `type`, depth-first.
 fn find_type<'a>(parts: &'a serde_json::Value, ty: &str) -> Option<&'a serde_json::Value> {
     let arr = parts.as_array()?;
     for p in arr {
         if p.get("type").and_then(|t| t.as_str()) == Some(ty) {
             return Some(p);
         }
-        if let Some(hit) = find_type(p.get("parts")?, ty) {
+        // #785: a leaf part (no `parts`, e.g. a 4th-axis rotary listed
+        // before the head) is passed over, never the end of the search -
+        // a `?` here lost the head, and every spindle and coolant figure
+        // with it, for any file with a leaf ahead of its head.
+        if let Some(hit) = p.get("parts").and_then(|c| find_type(c, ty)) {
             return Some(hit);
         }
     }
@@ -302,6 +306,7 @@ pub fn parse_mch(text: &str) -> Result<Machine, String> {
                 }
             }
             let direction = axis_direction(name, part, *rotary)?;
+            let nose_to_axis = super::swing::nose_to_axis(name, part, *rotary, f)?;
             if let Some(z) = safe_retract(name, part, *rotary, f)? {
                 m.safe_retract_z = Some(z);
             }
@@ -314,6 +319,8 @@ pub fn parse_mch(text: &str) -> Result<Machine, String> {
                 resolution,
                 axis,
                 direction,
+                turns_part: rotary.then(|| super::swing::turns_part(part, true)),
+                nose_to_axis,
             });
         }
         axes.sort_by_key(|a| ctrl_coord(ctrl, &a.name));
