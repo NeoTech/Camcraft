@@ -207,3 +207,29 @@ fn an_arc_bowing_past_the_floor_into_a_straight_wall_is_convicted_where_the_old_
     assert_eq!(gouges(&w), 1, "{w:?}");
     assert_eq!(w, vec![Warning::Gouge { at: 0 }]);
 }
+
+#[test]
+fn the_quarter_reading_is_never_coarser_than_the_old_one_at_any_radius() {
+    // `MAX_ARC_CHORDS` (1024) clamps an arc's chord count. At the quarter
+    // reading (2.5 um) a near-full circle hits the clamp above r ~ 531 mm,
+    // at the old reading (10 um) above r ~ 2125 mm: past those radii the
+    // chords stand off the arc by more than their tolerance. The quarter
+    // reading then degrades toward the old one - never past it: it takes
+    // at least as many chords, and its worst sagitta is never larger.
+    let sweep = 359f64.to_radians();
+    for rad in [5.0, 50.0, 500.0, 531.0, 600.0, 2000.0, 2125.0, 3000.0] {
+        let m = &arc(p2(0.0, 0.0), rad, 0.0, sweep).moves[0];
+        let sag = |tol: f64| {
+            m.chords(tol)
+                .iter()
+                .map(|&(a, b)| rad - ((a.x + b.x) * 0.5).hypot((a.y + b.y) * 0.5))
+                .fold(0.0f64, f64::max)
+        };
+        let (old, new) = (m.chords(TOL).len(), m.chords(TOL * 0.25).len());
+        assert!(new >= old, "r = {rad}: {new} chords at the quarter reading, {old} at the old one");
+        assert!(sag(TOL * 0.25) <= sag(TOL) + 1e-12, "r = {rad}: the quarter reading is coarser");
+        if rad <= 500.0 {
+            assert!(sag(TOL * 0.25) <= TOL * 0.25 + 1e-9, "r = {rad}: within its 2.5 um below the clamp");
+        }
+    }
+}

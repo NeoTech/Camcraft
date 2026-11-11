@@ -115,6 +115,40 @@ The facet budget bounds a huge model:
 - Any triangulation past the budget is dropped and the last mesh is kept.
 - There are at most 24 passes.
 
-Such a model stops short of the 0.005 mm target and logs "reduced
-fidelity". Its concave walls can then still read a nominal finish as a
-gouge, as STL/OBJ can.
+**An over-budget model, both directions (review round 2).** A model that
+hits the budget stops short of the 0.005 mm target. It keeps a mesh
+coarser than the cap and only logs "reduced fidelity" to stderr. The
+facets are chords inscribed in the true surface, so the error cuts both
+ways:
+- **Concave wall:** the facets stand toward the tool, and a nominal
+  finish can read as a false gouge. This is the safe side.
+- **Convex wall:** the facets sit inside the true surface, so the mesh
+  wall looks farther from the tool than the real wall is. A real gouge,
+  up to the model's actual chord error, can pass. This is the unsafe side.
+
+This PR does not introduce that risk. I verified this in `step.rs`:
+- Before #689 the target was `extent/1000`, and the refinement passes
+  (start `extent/4`, halve, clamp at the target) were the same.
+- The new target is never larger than the old one. Up to the old target
+  the pass sequence is identical, and the budget stop is the same check
+  on the same meshes.
+- So every STEP mesh is now at least as fine as it was before, for every
+  model.
+
+This PR removes the risk for every model that fits the budget. For an
+over-budget model it remains: tracked in #864 (record the achieved chord
+error and tighten the floor by the excess; flag the model visibly and
+gate the post).
+
+**`MAX_ARC_CHORDS` and the quarter reading.** `cl::arc_chords` clamps an
+arc at 1024 chords.
+- At the quarter reading (0.0025 mm), a full circle hits that clamp above
+  r ~ 531 mm. For a sweep θ the radius is about `531 · (2π/θ)²` mm. The
+  old 0.01 mm reading hit it above r ~ 2125 mm.
+- Below the clamp the reading stands within 2.5 µm of the arc.
+- Above it the reading degrades toward the old one, never past it: it
+  takes at least as many chords as the old reading, and its worst
+  sagitta is never larger.
+- Pinned by
+  `verify_arc_reading::the_quarter_reading_is_never_coarser_than_the_old_one_at_any_radius`,
+  over radii from 5 to 3000 mm.
