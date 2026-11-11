@@ -235,6 +235,7 @@ go to `CHANGELOG.md`.
     the label is chosen: `/classify-effort <N>` for one issue,
     `/classify-effort` for every open issue without one,
     `/classify-effort audit` to list labels that look wrong (read-only).
+    It only sets a missing label; it never lowers or replaces one.
   - **Safety floor.** Anything that can change posted G-code, a collision
     or gouge check, stock simulation or geometry is at least
     `effort:high`, however small the diff; every `P0` is at least
