@@ -153,6 +153,8 @@ mod fixture_library_tests;
 #[cfg(test)]
 mod fixture_vise_tests;
 #[cfg(test)]
+mod fixture_self_centering_tests;
+#[cfg(test)]
 mod footer_tests;
 #[cfg(test)]
 mod dialog_tests;
