@@ -151,3 +151,29 @@ fn a_built_in_vise_row_fits_the_default_pane() {
     }
     assert!(h.state().state.pending.is_empty(), "{:?}", h.state().state.pending);
 }
+
+/// #819: the page's "Add fixture plate…" and a plate's row (its grid
+/// line, the place picker on the other fixture) sit inside the default pane.
+#[test]
+fn a_fixture_plate_row_fits_the_default_pane() {
+    let mut h = fixtures_page();
+    assert_inside(&h, pane(&h), "Add fixture plate…");
+    {
+        let st = &mut h.state_mut().state;
+        let p = camcraft_app::plate::preset("12 x 12 in").map(camcraft_app::plate::PlatePreset::params).expect("preset");
+        st.pending.push_back(CommandKind::InsertFixturePlate {
+            setup: Some("Setup1".into()),
+            params: p,
+            on_table: false,
+            pos: [0.0, 400.0, 0.0],
+            yaw_deg: 0.0,
+        });
+        st.drain_actions();
+    }
+    h.run_steps(3);
+    let rect = pane(&h);
+    for label in ["Plate 12 x 12 in", "Fixture plate: rows A-L, columns 1-12", "Place on plate…", "Detect plate grid"] {
+        assert_inside(&h, rect, label);
+    }
+    assert!(h.state().state.pending.is_empty(), "{:?}", h.state().state.pending);
+}

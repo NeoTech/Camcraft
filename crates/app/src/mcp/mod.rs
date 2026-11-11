@@ -31,6 +31,7 @@ mod render;
 mod setup_tools;
 mod tools;
 mod vise_tools;
+mod plate_tools;
 
 // #183: the same tool table served live from inside the GUI, over a
 // loopback socket, against the app's own document and History.

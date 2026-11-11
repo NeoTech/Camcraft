@@ -60,7 +60,14 @@ impl ImportFixture {
             landing,
             // A re-import replaces the geometry, so a built-in vise's
             // parameters no longer describe it: plain steel from here.
-            next: FixtureDef { setup: setup_name.map(str::to_string), fixed: prev.as_ref().is_some_and(|d| d.fixed), vise: None },
+            // A plate's grid goes with its old geometry too (#819); a
+            // place on another plate stays.
+            next: FixtureDef {
+                setup: setup_name.map(str::to_string),
+                fixed: prev.as_ref().is_some_and(|d| d.fixed),
+                vise: None,
+                plate: crate::plate::PlateLink { plate: None, mount: prev.as_ref().and_then(|d| d.plate.mount.clone()) },
+            },
             prev,
         })
     }

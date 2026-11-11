@@ -105,6 +105,8 @@ impl TagFixture {
                 // A re-bind keeps a built-in vise's parameters too: its
                 // geometry is unchanged.
                 vise: prev.as_ref().and_then(|d| d.vise.clone()),
+                // ...and a plate's grid and place (#819).
+                plate: prev.as_ref().map(|d| d.plate.clone()).unwrap_or_default(),
             },
             prev,
         })
@@ -212,6 +214,11 @@ pub struct MoveFixture {
     prev: Location,
     next: Location,
     warning: Option<String>,
+    /// #819: the fixtures standing on a moved plate, carried with it.
+    carried: Vec<crate::plate::RiderMove>,
+    /// #819: a fixture placed on a plate and then moved by hand leaves
+    /// its grid location: the marker before and after.
+    unmount: Option<(FixtureDef, FixtureDef)>,
 }
 
 impl MoveFixture {
@@ -233,11 +240,19 @@ impl MoveFixture {
         }
         let next = check_location(location, &format!("'{name}'"))?;
         let prev = model::transform_of(world, &entity).unwrap_or_default();
+        let carried = crate::plate::mount::carry(world, name, crate::plate::mount::delta(prev, next), &[]);
+        let unmount = fixture::def_of(world, &entity).filter(|d| d.plate.mount.is_some()).map(|d| {
+            let mut off = d.clone();
+            off.plate.mount = None;
+            (d, off)
+        });
         Ok(MoveFixture {
             name: name.to_string(),
             prev,
             next,
             warning: None,
+            carried,
+            unmount,
         })
     }
 
@@ -246,19 +261,32 @@ impl MoveFixture {
     pub fn warning(&self) -> Option<&str> {
         self.warning.as_deref()
     }
+
+    /// The fixtures a moved plate carries with it (#819), by name.
+    pub fn carried(&self) -> impl Iterator<Item = &str> {
+        self.carried.iter().map(|m| m.name.as_str())
+    }
 }
 
 impl Command for MoveFixture {
     fn apply(&self, world: &World) {
         if let Some(entity) = model::find_by_name(world, &self.name) {
             model::set_transform(world, &entity, self.next);
+            if let Some((_, off)) = &self.unmount {
+                entity.entity_view(world).set(off.clone());
+            }
         }
+        crate::plate::mount::write(world, &self.carried, true);
     }
 
     fn invert(&self, world: &World) {
         if let Some(entity) = model::find_by_name(world, &self.name) {
             model::set_transform(world, &entity, self.prev);
+            if let Some((on, _)) = &self.unmount {
+                entity.entity_view(world).set(on.clone());
+            }
         }
+        crate::plate::mount::write(world, &self.carried, false);
     }
 }
 

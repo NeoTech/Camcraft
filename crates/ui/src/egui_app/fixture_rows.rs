@@ -92,6 +92,7 @@ pub(super) fn row(ui: &mut Ui, state: &mut State, name: &str, loc: &Location, fi
         state.pending.push_back(CommandKind::SetFixtureFixed { name: name.to_owned(), fixed: on });
     }
     vise_opening(ui, state, name);
+    super::fixture_plate_rows::plate_rows(ui, state, name);
 }
 
 /// A built-in vise's jaw opening (#788): a draft field, Set (one

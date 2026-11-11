@@ -113,6 +113,7 @@ mod params;
 pub use params::*;
 mod entity;
 mod vise_dto;
+mod plate_dto;
 pub use vise_dto::ViseDto;
 mod thread_dto;
 mod break_dto;

@@ -813,6 +813,7 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
                 setup: f.setup.clone(),
                 fixed: f.fixed,
                 vise: f.vise.as_ref().and_then(|v| v.to_params(&dto.name)),
+                plate: super::plate_dto::link_from(f.plate.as_ref(), f.on_plate.as_ref(), &dto.name),
             });
         }
     }

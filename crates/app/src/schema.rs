@@ -231,6 +231,9 @@ pub struct FixtureDef {
     /// from these, so the jaw opening can be edited and regenerated.
     /// `None` - every imported fixture - is plain steel.
     pub vise: Option<crate::vise::ViseParams>,
+    /// Fixture plates (#819): this fixture IS a plate (its hole grid),
+    /// and/or stands ON one at a named location. Default: neither.
+    pub plate: crate::plate::PlateLink,
 }
 
 /// The document's active setup, stored as a flecs singleton like `Units`:

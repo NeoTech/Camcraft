@@ -61,6 +61,8 @@ pub enum FixtureLibDialog {
     Insert(InsertFixtureDraft),
     /// #788: "Add built-in vise…".
     Vise(super::ViseDraft),
+    /// #819: "Add fixture plate…".
+    Plate(super::PlateDraft),
 }
 
 fn declared(setup: &str) -> Option<&str> {
