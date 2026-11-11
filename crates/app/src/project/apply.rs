@@ -824,6 +824,8 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
     }
     // #819: a place on a plate the file does not hold is dropped, never
     // left for the next plate of that name to pick up.
-    let _ = crate::plate::mount::drop_dangling(world);
+    for name in crate::plate::mount::drop_dangling(world) {
+        notes.push(format!("fixture '{name}': plate location dropped on load: no such plate"));
+    }
     Ok(notes)
 }

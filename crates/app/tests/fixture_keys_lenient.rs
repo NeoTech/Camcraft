@@ -117,7 +117,7 @@ fn a_stud_wider_than_its_strap_is_refused_by_name() {
     let Some(Accessory::StrapClamp { strap_width, .. }) = Accessory::default_of("strap_clamp") else { panic!("clamp") };
     let wide = Accessory::default_of("strap_clamp").expect("clamp").with_dim("stud_diameter", strap_width).expect("dim");
     let e = InsertAccessory::new(&world, &wide, None, AccessoryPlacement::At(at(0.0))).err().map(|e| e.to_string()).unwrap_or_default();
-    assert!(e.contains("stud diameter") && e.contains("must be less than the strap width"), "{e}");
+    assert!(e.contains("stud diameter") && e.contains("enclosing") && e.contains("must be less than the strap width"), "{e}");
 
     let mut history = History::default();
     let clamp = accessory_at(&world, &mut history, "strap_clamp", 0.0);

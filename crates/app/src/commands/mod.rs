@@ -9,6 +9,7 @@ pub mod builtin_vise;
 pub mod cutting_data;
 pub mod delete_entity;
 pub mod fixture;
+pub mod fixture_move;
 pub mod fixture_plate;
 pub mod mod_vise;
 pub mod import_fixture;
