@@ -1,3 +1,116 @@
+# CamCraft 0.17.0 (clean-room implementation)
+
+Not a breaking release: the project file format stays at v58, so files saved
+by 0.16.0 open unchanged and 0.16.0 opens 0.17.0 files. **Posted G-code does
+change for existing machines**, so check the first program you post on each
+machine. Every mill dialect's Face and other clearance-seeded paths now open
+with an approach rapid on the clearance plane (#690, #691). Probe sections
+start no spindle and descend to the safe plane before searching (#523, #570).
+Lathe posts write the tool's control point for its orientation, threads cut
+right-hand toward the chuck by default, and grooving and parting blades post
+their touched-off corner (#629, #630, #632). Per-operation smoothing (#616) is
+opt-in and changes nothing until you switch it on.
+
+A minor release headlined by **plasma cutting** (a plasma machine kind, the
+Tormach 1300PL and a Plasma Profile operation), **one picking rule for the
+whole app**, new ways to align the part (three points, an edge or two
+points, turning about the WCS origin), a fixture library, pocket and slot
+recognition, per-operation smoothing in every mill post, and many new
+machines. Thanks to mkinney, austin62jake, tbrasselle, vilts and JSwetz for
+their contributions.
+
+## New
+- **Plasma** (#669, #670, #672): a `plasma` machine kind (X/Y cut, Z torch
+  lifter, no spindle) and the Tormach 1300PL machine file; a Plasma Profile
+  operation with a plasma torch tool (kerf = diameter): kerf offset computed
+  or by G41/G42, outer contours clockwise and holes counter-clockwise
+  (overridable), arc leads, the small-hole rule, and holes cut before their
+  outer contour. Milling and turning operations are refused by name on a
+  plasma setup.
+- **One picking rule everywhere** (#692): faces, edges and points are picked
+  from one feature graph - whole faces, real feature edges and corner points
+  only, the visible one under the cursor first, never a tessellation edge or
+  a hidden edge through the part.
+- **Part alignment** on the Setups page: lay the part on a plane through three
+  picked points (#555); set the in-plane axes by an edge or two points (#557, #554);
+  alignment turns about the WCS origin and lays the picked face down (#606).
+  The setup page previews the stock it takes over from the previous setup as a
+  translucent body (#406).
+- **Fixtures**: a fixture library to save, insert and delete your own fixtures
+  (#339); moving a part warns when it or its stock would sink into a fixture
+  (#582); a square stock stays square when the part is turned (#571).
+- **Pocket and slot recognition** (#35): recognised pockets and slots turn
+  into operations; an inside-out or open mesh is refused by name (#718).
+- **Posting**: opt-in per-operation smoothing in every mill dialect (G64 P,
+  G5.1, G187, CYCLE832, G62; #616); per-setup post options and a per-setup
+  tool-list export (#389); Tormach programs can end in the operator's units
+  (#596); probe programs report the measured deviation on the control (#575); Haas
+  probing on an inverted X/Y axis (#392); comment text is escaped per dialect (#594).
+- **Machines**: Tormach 8L, 15L and 15LX Slant-PRO lathes (#611, #619), 24R
+  and xsTECH Pro routers (#620), 770M+ and 1100M+ (#618), and the Makera
+  Carvera and Carvera Air with a Carvera post (#707). The Machines pane's
+  "Use for this setup" assigns the selected machine (#384), and the machine overview
+  is a readable two-column grid (#745).
+- **MCP**: the tool table is served live from inside the GUI (#183); idle
+  live-session clients are dropped after a timeout (#567); new `move_model` and
+  `repair_model` tools (#716, #717).
+- **UI**: recent projects and models on Open and Model (#662); a refused generation
+  marks the spot it names, and drilling refusals mark their hole (#261, #677).
+
+## Fixed
+- **Safety and the post gate**: mill paths seeded on the clearance plane always
+  open with an approach rapid (#690, #691, #697); a step too small to ladder is
+  refused by name instead of allocated (#695); MCP `verify` no longer reports
+  a job as clean while an operation's own warnings hold the post (#722); the
+  program sim sweeps a tap at its thread's minor diameter, so a tap-drill-size
+  hole is no longer a false gouge (#266, partial); an edge-break record is
+  credited only within its operation's stated width (#529).
+- **Probing**: a touch probe starts no spindle on any mill post (#523), is not
+  judged against the machine's spindle range (#565), searches a short way past the
+  face and feeds below the safe plane (#570); a probe-only program's stock sim
+  judges the uncut stock (#592).
+- **Turning**: threads cut right-hand toward the chuck by default and state
+  their hand (#629); lathe posts write the tool's control point (#630);
+  grooving and parting blades post their touched-off corner (#632, #641); facing
+  approaches at rapid and lifts off the face before retracting; the lathe
+  stroke and thread travel checks judge the posted radius (#631, #633, #647).
+- **Setup page**: lay-on-plane controls stay on screen so a picked face is
+  turned flat (#330); another setup's WCS triad stays on its spot (#558);
+  setup picks disarm when their page is left and the pick sweep runs every
+  frame (#664, #667); a hidden Properties pane drops the locate draft (#673).
+- **Units**: status lines, refusals and the gate's gouge clause speak the
+  document's units (#578).
+- **Views**: orthographic depth maps into WebGPU's clip volume (#600), and
+  orthographic picking and stock tracing cast parallel rays (#609, #610); view-cube pole
+  clicks keep the roll (#622).
+- **Machines**: the tool-number clash is judged per machine (#438); a saved
+  machine file keeps its key order (#480).
+
+## Changed
+- **Smoothing, picking and alignment** are described above; the stock engine
+  builds a block stock in closed form (faster, same result).
+
+## Process changes
+Contributor and agent process only; no effect on the program.
+- **PROCESS_VERSION 1-4** (#682, #683, #685, #687): process files carry a
+  version and are announced on the pinned issue #681 so forks pick them up;
+  the `/resolve-conflicts` skill and the conflict rule.
+- **5** (#742): MCP issues carry `area:mcp` and P1.
+- **6** (#747): every issue is weighted `effort:low|medium|high|max` and
+  worked by the matching `issue-worker` agent.
+- **7-9** (#750, #751, #753): `cargo xtask gate|release|package` replace the
+  PowerShell/bash scripts on every OS; the scripts are wrappers.
+- **10** (#726): the camcraft-mcp skill's tool signatures match the server.
+
+## Known issues
+- **#738**: setup-page alignment re-applies from the import pose instead of
+  composing on the current one, and picks are hard to see (fix in review,
+  PR #746).
+- **#757**: the Carvera post ignores per-operation smoothing without a note.
+- **#74**: GPU selection can fail on hybrid Intel/NVIDIA laptops.
+
+---
+
 # CamCraft 0.16.0 (clean-room implementation)
 
 BREAKING: the project file format moved from v57 to v58 (PR #381: a tool can

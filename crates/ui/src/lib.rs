@@ -12,8 +12,10 @@ pub mod boundary_draft;
 pub mod boundary_viz;
 pub mod boundary_summary;
 pub mod edge_pick;
+pub mod feature_click;
 pub mod egui_app;
 pub mod feedback;
+pub mod incoming_view;
 pub mod headless_gpu;
 pub mod interact;
 pub mod locate_pick;
@@ -48,6 +50,8 @@ mod play_bench_tests;
 mod vertex_pick_tests;
 #[cfg(test)]
 mod setup_chip_tests;
+#[cfg(test)]
+mod pockets_tests;
 #[cfg(test)]
 mod wcs_gizmo_tests;
 #[cfg(test)]

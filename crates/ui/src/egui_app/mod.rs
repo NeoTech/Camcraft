@@ -47,6 +47,7 @@ mod load_field;
 // pub(crate) past egui_app: `State::machine_editor` names its draft
 // type (M3.3 stage C), so state.rs has to see through the door.
 pub(crate) mod machine_editor;
+mod machine_grid;
 // pub(crate) for the same reason: `State::post_refusal` names its type.
 pub(crate) mod post_refusal;
 // pub(crate) for the same reason: `State::machines_pane` (#287).
@@ -66,6 +67,8 @@ mod tool_body_page;
 // #630: the tool editor's lathe orientation row.
 mod tool_orientation_row;
 mod tool_profile_page;
+// #793: the built-in taper holder picker in the Profile section.
+mod tool_holder_picker;
 mod setup_wcs_pick;
 // #343: a setup's own node pages (settings, machine, post, fixtures, tools).
 mod setup_pages;
@@ -91,7 +94,13 @@ mod fields;
 mod geo_page;
 mod heights_page;
 mod holes_page;
+mod pockets_page;
+#[cfg(test)]
+pub(crate) use pockets_page::row_text as pockets_row_text;
 mod probe_page;
+// #670: the Plasma Profile's page.
+mod plasma_page;
+mod trochoid_page;
 mod kind_editors;
 mod mill2d_more_page;
 mod mill2d_page;
@@ -119,6 +128,9 @@ mod tree_menu;
 mod fixture_menu;
 // #339 slice 6: the fixture library's Save / Insert dialogs.
 pub(crate) mod fixture_library_dialog;
+pub(crate) mod fixture_vise_dialog;
+pub(crate) mod fixture_accessory_dialog;
+mod fixture_accessory_rows;
 pub(crate) mod shell;
 // pub past egui_app from M6.1 C: the switcher's resolution seam
 // (state.rs) installs the live table, the format tests read the
@@ -147,6 +159,10 @@ mod locate_tests;
 #[cfg(test)]
 mod fixture_library_tests;
 #[cfg(test)]
+mod fixture_vise_tests;
+#[cfg(test)]
+mod fixture_accessory_tests;
+#[cfg(test)]
 mod footer_tests;
 #[cfg(test)]
 mod dialog_tests;
@@ -165,6 +181,8 @@ mod pin_tests;
 #[cfg(test)]
 mod ribbon_icon_tests;
 #[cfg(test)]
+mod plasma_ribbon_tests;
+#[cfg(test)]
 mod debug_info_tests;
 #[cfg(test)]
 mod fresh_op_tests;
@@ -179,6 +197,8 @@ mod setup_relative_tests;
 mod setup_stock_pick;
 #[cfg(test)]
 mod setup_stock_tests;
+#[cfg(test)]
+mod incoming_view_tests;
 #[cfg(test)]
 mod setup_plane_tests;
 #[cfg(test)]

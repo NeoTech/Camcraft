@@ -94,6 +94,8 @@ pub fn collect(world: &World) -> ProjectFile {
                 .try_get::<&FixtureDef>(|d| FixtureDto {
                     setup: d.setup.clone(),
                     fixed: d.fixed,
+                    vise: d.vise.as_ref().and_then(super::fixture_keys::vise_value),
+                    accessory: d.accessory.as_ref().and_then(super::fixture_keys::accessory_value),
                 });
             let operation = model::operation_of(world, &entity).map(|op| OperationDto {
                 label: model::operation_meta_of(world, &entity).label,
@@ -227,6 +229,8 @@ pub fn collect(world: &World) -> ProjectFile {
         skip_stops: crate::setup_post_options::document(world).skip_stops,
         // One combined program writes no key (#111).
         per_op_files: crate::setup_post_options::document(world).per_op,
+        // Off writes no key (#616).
+        smoothing: crate::setup_post_options::document(world).smoothing,
         entities,
     }
 }

@@ -41,15 +41,25 @@ mod per_op;
 mod tool_library_io;
 #[path = "state_setup_mount.rs"]
 mod setup_mount;
+#[path = "state_pockets.rs"]
+mod pockets;
+pub use pockets::PocketScan;
 #[path = "state_setup_post_options.rs"]
 mod setup_post_options;
 #[path = "state_fixture.rs"]
 mod fixture_view;
 #[path = "state_locate.rs"]
 mod locate_ui;
+use locate_ui::with_warning;
 #[path = "state_fixture_library.rs"]
 mod fixture_library;
 pub use fixture_library::{FixtureLibDialog, InsertFixtureDraft, LibraryRow, SaveFixtureDraft};
+#[path = "state_vise.rs"]
+mod vise_ui;
+pub use vise_ui::{ViseDraft, ViseOpeningDraft};
+#[path = "state_accessory.rs"]
+mod accessory_ui;
+pub use accessory_ui::{AccessoryDraft, AccessorySizeDraft};
 #[path = "state_program_entry.rs"]
 mod program_entry;
 pub use program_entry::EntryVerb;
@@ -230,6 +240,17 @@ pub enum CommandKind {
     SetToolProfile {
         name: String,
         points: Option<Vec<camcraft_app::spun::SpunPoint>>,
+    },
+    /// #793: drop a built-in library holder ("BT30 ER20") into a milling
+    /// tool's holder at a gauge length (`None`: the entry's own) and a
+    /// projection (#792: nose face above the tip; `None`: the tool's
+    /// stickout) - the tool editor's Apply holder, one
+    /// `SetToolBody::library`.
+    SetToolHolder {
+        name: String,
+        entry: String,
+        gauge: Option<f64>,
+        projection: Option<f64>,
     },
     /// The document's workpiece material (M13.2); `None` states none.
     SetWorkMaterial(Option<camcraft_app::tools::WorkMaterial>),
@@ -429,6 +450,40 @@ pub enum CommandKind {
         setup: Option<String>,
         pos: [f64; 3],
         rpy_deg: [f64; 3],
+    },
+    /// #788: open the "Add built-in vise…" dialog over a setup's
+    /// Fixtures node (`""` - the implicit setup). View state.
+    BuiltinViseDialog(String),
+    /// Place built-in vise `params` into `setup`: fitted to its stock, or
+    /// its frame at `pos` (mm) turned `yaw_deg` - one `InsertVise`.
+    InsertBuiltinVise {
+        setup: Option<String>,
+        params: camcraft_app::vise::ViseParams,
+        fit_stock: bool,
+        pos: [f64; 3],
+        yaw_deg: f64,
+    },
+    /// Change placed vise `name` to `params` (its jaw opening, or the
+    /// opening from the setup's stock) - one `SetVise`.
+    SetVise {
+        name: String,
+        params: camcraft_app::vise::ViseParams,
+        from_stock: bool,
+    },
+    /// #789: open the "Add accessory…" dialog over a setup's Fixtures
+    /// node (`""` - the implicit setup). View state.
+    AccessoryDialog(String),
+    /// Place built-in accessory `params` into `setup` - one
+    /// `InsertAccessory`.
+    InsertAccessory {
+        setup: Option<String>,
+        params: camcraft_app::accessory::Accessory,
+        placement: camcraft_app::commands::AccessoryPlacement,
+    },
+    /// Resize placed accessory `name` to `params` - one `SetAccessory`.
+    SetAccessory {
+        name: String,
+        params: camcraft_app::accessory::Accessory,
     },
     /// Part orientation (M5.2 G): a model's full rigid placement -
     /// position plus yaw-pitch-roll degrees (R = Rz ⊗ Ry ⊗ Rx, the
@@ -884,6 +939,7 @@ impl ToolUi {
                 ToolKind::Form => 9,
                 ToolKind::Taper => 10,
                 ToolKind::Probe => 11,
+                ToolKind::Torch => 12,
             },
             diameter: t.diameter,
             corner_r: t.corner_r,
@@ -922,6 +978,7 @@ impl ToolUi {
             9 => ToolKind::Form,
             10 => ToolKind::Taper,
             11 => ToolKind::Probe,
+            12 => ToolKind::Torch,
             _ => ToolKind::EndMill,
         }
     }
@@ -1387,6 +1444,8 @@ pub struct State {
     pub model_ui: ModelUi,
     /// The Model page's repair draft (M13.11).
     pub repair_ui: RepairUi,
+    /// The Model page's last Detect pockets / slots pass (#511).
+    pub pocket_scan: PocketScan,
     /// The setups-page context (setup binding) the next finished import
     /// gets tagged with - `Some` only between ImportFixtureDialog and the
     /// import's finish; discarded with the import itself.
@@ -1395,6 +1454,9 @@ pub struct State {
     /// implicit first setup. Public so tests run the dialog hand-off
     /// without a modal file picker.
     pub import_as_fixture: Option<Option<String>>,
+    /// #789: each built-in accessory row's size draft, by name - view
+    /// state; Apply lands it through `SetAccessory`.
+    pub accessory_sizes: HashMap<String, AccessorySizeDraft>,
     /// #339 slice 4: each fixture's mesh state, per document version
     /// (view cache - never truth, never saved).
     pub fixture_mesh_cache: camcraft_app::fixture_view::MeshStateCache,
@@ -1403,6 +1465,10 @@ pub struct State {
     /// The fixture library folder override (tests; `None` = the user
     /// folder, `CAMCRAFT_FIXTURES` first).
     pub fixture_lib_dir: Option<PathBuf>,
+    /// #788: each built-in vise row's jaw-opening draft, by vise name -
+    /// view state; Set lands it through `SetVise`. See
+    /// [`State::vise_opening_draft`].
+    pub vise_opening: HashMap<String, ViseOpeningDraft>,
     /// The selected op's struck fixtures, per (version, op, path sig).
     pub struck_cache: camcraft_app::fixture_view::StruckCache,
     /// Properties / Tool Library pane drafts (ephemeral; see [`OpUi`]).
@@ -1441,6 +1507,9 @@ pub struct State {
     /// The Boundary group's view state and caches (M11.5 UX): open this
     /// frame, the draft's machined-area preview, the entries' shapes.
     pub boundary_view: crate::boundary_draft::BoundaryView,
+    /// The incoming stock's viewport sheet (#406), cached per document
+    /// version while a carried setup's settings page is open.
+    pub incoming_view: crate::incoming_view::IncomingView,
     /// The Geometry list row under the pointer this frame, if any: the
     /// pane answers "which one is that?" by lighting the feature in the
     /// viewport, like pointer hover does. Ephemeral view state (the
@@ -1638,6 +1707,7 @@ impl State {
             axis_rows_shown: false,
             setup_pick_rows: Vec::new(),
             boundary_view: Default::default(),
+            incoming_view: Default::default(),
             geo_hover: None,
             op_tab: 0,
             hidden_models: Vec::new(),
@@ -1694,10 +1764,13 @@ impl State {
             fixture_ui: FixtureUi::default(),
             model_ui: ModelUi::default(),
             repair_ui: RepairUi::default(),
+            pocket_scan: PocketScan::default(),
             import_as_fixture: None,
+            accessory_sizes: HashMap::new(),
             fixture_mesh_cache: Default::default(),
             fixture_lib: None,
             fixture_lib_dir: None,
+            vise_opening: HashMap::new(),
             struck_cache: Default::default(),
             // The tool draft carries a plausible name from the first
             // frame: an empty Name field made Add look dead (refused
@@ -2474,6 +2547,8 @@ impl State {
         // A refusal that no longer describes the page retires, with its
         // status-strip mirror (crate::feedback).
         self.retire_stale_feedback();
+        // #406: the incoming stock's sheet follows the open setup page.
+        crate::incoming_view::refresh(self);
         // The editor window's ghost law (M1.4), mirroring `pane_target`:
         // an open editor never keeps pointing at a name the document lost
         // under it - deleted, undone, or swapped by New/Open all land here.
@@ -2825,6 +2900,9 @@ impl State {
             }
             CommandKind::SetToolBody { name, body } => self.run_set_tool_body(&name, body),
             CommandKind::SetToolProfile { name, points } => self.run_set_tool_profile(&name, points),
+            CommandKind::SetToolHolder { name, entry, gauge, projection } => {
+                self.run_set_tool_holder(&name, &entry, gauge, projection)
+            }
             CommandKind::ChangeTool { name, tool } => {
                 match ChangeTool::new(&self.world, &name, tool) {
                     Ok(command) => {
@@ -3323,9 +3401,10 @@ impl State {
                 };
                 match MoveFixture::new(&self.world, &name, location) {
                     Ok(command) => {
+                        let warning = command.warning().map(str::to_owned);
                         self.history.execute(&self.world, command);
                         self.doc_version += 1;
-                        self.status = format!("moved fixture {name}");
+                        self.status = with_warning(format!("moved fixture {name}"), warning);
                     }
                     Err(err) => {
                         self.refuse(ErrorScope::Setup, format!("fixture not moved: {err}"));
@@ -3370,6 +3449,7 @@ impl State {
                 };
                 match MoveModel::new(&self.world, &name, location) {
                     Ok(command) => {
+                        let warning = command.warning().map(str::to_owned);
                         self.history.execute(&self.world, command);
                         self.doc_version += 1;
                         self.model_ui = ModelUi {
@@ -3381,7 +3461,7 @@ impl State {
                             pitch_deg,
                             yaw_deg,
                         };
-                        self.status = format!("moved {name}");
+                        self.status = with_warning(format!("moved {name}"), warning);
                     }
                     Err(err) => self.refuse(ErrorScope::Setup, format!("part not moved: {err}")),
                 }
@@ -3412,6 +3492,16 @@ impl State {
             CommandKind::InsertFixtureFromLibrary { entry, setup, pos, rpy_deg } => {
                 self.insert_fixture_from_library(&entry, setup, pos, rpy_deg);
             }
+            CommandKind::BuiltinViseDialog(setup) => self.open_vise_dialog(setup),
+            CommandKind::AccessoryDialog(setup) => self.open_accessory_dialog(setup),
+            CommandKind::InsertAccessory { setup, params, placement } => {
+                self.insert_accessory(setup, &params, placement);
+            }
+            CommandKind::SetAccessory { name, params } => self.set_accessory(&name, params),
+            CommandKind::InsertBuiltinVise { setup, params, fit_stock, pos, yaw_deg } => {
+                self.insert_builtin_vise(setup, &params, fit_stock, pos, yaw_deg);
+            }
+            CommandKind::SetVise { name, params, from_stock } => self.set_builtin_vise(&name, params, from_stock),
             CommandKind::SetupSheetDialog => {
                 if let Some(path) = save_sheet_dialog() {
                     self.setup_sheet_path(path);

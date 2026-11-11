@@ -24,11 +24,14 @@ mod fixture_tools;
 mod job;
 mod listen;
 mod live;
+mod model_tools;
 mod pick;
 mod pockets;
 mod render;
 mod setup_tools;
 mod tools;
+mod vise_tools;
+mod accessory_tools;
 
 // #183: the same tool table served live from inside the GUI, over a
 // loopback socket, against the app's own document and History.
