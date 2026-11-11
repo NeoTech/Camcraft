@@ -40,6 +40,9 @@ pub struct DeleteEntity {
     /// they belong to (AGENTS.md: deleting frees, undoing must restore
     /// ALL associated resources - in both directions).
     path: Option<Toolpath>,
+    /// #819: a plate deleted from the tree lets go of its riders, the
+    /// way `DeleteFixture` does.
+    riders: crate::plate::mount::Unmounts,
 }
 
 impl DeleteEntity {
@@ -65,6 +68,7 @@ impl DeleteEntity {
             entry: crate::program_entry::entry_of(world, &entity),
             path: model::toolpath_of(world, &entity),
             fixture: crate::fixture::def_of(world, &entity),
+            riders: crate::plate::mount::Unmounts::of(world, name),
         })
     }
 }
@@ -74,9 +78,11 @@ impl Command for DeleteEntity {
         if let Some(entity) = model::find_by_name(world, &self.name) {
             model::remove(world, &entity);
         }
+        self.riders.write(world, true);
     }
 
     fn invert(&self, world: &World) {
+        self.riders.write(world, false);
         if model::find_by_name(world, &self.name).is_some() {
             return; // already restored (idempotent redo path)
         }

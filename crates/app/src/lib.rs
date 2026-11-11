@@ -21,6 +21,8 @@ pub mod fixture_struck;
 pub mod fixture_view;
 pub mod vise;
 pub mod accessory;
+pub mod plate;
+pub mod modvise;
 pub use camcraft_motion::finishing3d;
 pub use camcraft_geometry::geo2d;
 pub mod geometry;
@@ -103,6 +105,8 @@ pub mod tool_body;
 pub mod tool_body_view;
 // #369: lathe-held tool bodies (the turning tool frame).
 pub mod tool_body_lathe;
+// #743: the simulated tool as the collision laws read it, revolved.
+pub mod sim_tool_body;
 pub mod units;
 pub use camcraft_sim::verify;
 // #261: the moves a cached path's warnings name.

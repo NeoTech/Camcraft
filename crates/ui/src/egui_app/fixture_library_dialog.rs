@@ -95,6 +95,12 @@ pub(crate) fn window(ctx: &egui::Context, state: &mut State) {
                     });
                 }
             }
+            FixtureLibDialog::Plate(d) => {
+                act = super::fixture_plate_dialog::body(ui, u, d).map(|a| match a {
+                    ViseAct::Close => Act::Close,
+                    ViseAct::Place(cmd) => Act::Insert(cmd),
+                });
+            }
             FixtureLibDialog::Vise(d) => {
                 act = super::fixture_vise_dialog::body(ui, u, d).map(|a| match a {
                     ViseAct::Close => Act::Close,
