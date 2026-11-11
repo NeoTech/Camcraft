@@ -128,6 +128,7 @@ use boundary_ctx::*;
 mod job;
 pub use job::*;
 mod generate;
+pub mod body_judged;
 mod cross_entry;
 mod cross_sag;
 mod cross_part;
