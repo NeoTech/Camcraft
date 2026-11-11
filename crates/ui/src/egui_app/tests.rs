@@ -94,6 +94,8 @@ mod structural;
 mod plane_face_lay;
 // #554: the plane row's click takes the face, an axis row's the edge.
 mod plane_face_pick;
+// #692: one pick rule on the op page, the setup page and a smooth wall.
+mod one_pick_rule;
 // #664: a left Setups page disarms its picks.
 mod setup_picks_disarm;
 // #555: real clicks pick the three points of the plane.
@@ -110,11 +112,17 @@ mod program_entry;
 mod tool_body;
 // #93: the tool editor's spun-profile (Profile) section.
 mod tool_profile;
+// #793: the tool editor's holder library picker.
+mod tool_holder;
+// #93 slice 2: the Profile tab's drawn cutter.
+mod tool_cutter;
 // #441: the Theme ribbon door; the Stock page shows stock only.
 mod theme_door;
 mod recent_door;
 // #509: the Fixtures page rows fit the pane.
 mod fixture_rows;
+// #709 hand check: both points of a two-point axis stay marked.
+mod two_point_marks;
 
 /// What the per-frame state of `Shell` is, minus the GPU half: the fields
 /// `shell_layout` touches, so the harness exercises the window's real body.
@@ -2685,8 +2693,13 @@ fn tips_match_the_imgui_table() {
             &with_tool.world,
             &camcraft_app::operation::KindInfo::ALL[i],
         );
+        let is_plasma = camcraft_app::operation::KindInfo::ALL[i].family()
+            == camcraft_app::operation::Family::Plasma;
         let want = if is_turn {
             "The document's machine is a mill - turning operations do not drive it; mount a lathe or a mill-turn (Setup > Machine)".to_owned()
+        } else if is_plasma {
+            // #670: the torch's work has no mill-turn to fall back on.
+            "The document's machine is a mill - plasma cutting operations do not drive it; mount a plasma table (Setup > Machine)".to_owned()
         } else if let Some(reason) = tool_law {
             // M10.1 B: the demo's one flat end mill cannot cut every
             // mill kind - those cells say which tool kind is missing.

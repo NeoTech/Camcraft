@@ -340,7 +340,7 @@ fn text_of(c: Cmd, state: &State) -> String {
             Some(k) => k.caption.to_owned(),
             None => {
                 debug_assert!(false, "Create({i}) past the kind table");
-                eprintln!("ribbon: unknown op kind {i}");
+                diag_warn!("ribbon: unknown op kind {i}");
                 "op".to_owned()
             }
         },
@@ -390,12 +390,12 @@ pub(super) fn tip_of(c: Cmd, state: &State) -> String {
                     .get(i)
                     .is_some_and(|k| !k.admits(machine));
                 if dark {
-                    let (fword, mword) = match camcraft_app::operation::KindInfo::ALL[i].family() {
-                        camcraft_app::operation::Family::Mill => ("milling", "mill"),
-                        camcraft_app::operation::Family::Turn => ("turning", "lathe"),
-                    };
+                    let f = camcraft_app::operation::KindInfo::ALL[i].family();
+                    let (fword, mword) = (f.work(), f.machine());
+                    // #670: plasma work has no mill-turn to fall back on.
+                    let or_mt = if f == camcraft_app::operation::Family::Plasma { "" } else { " or a mill-turn" };
                     format!(
-                        "The document's machine is a {} - {fword} operations do not drive it; mount a {mword} or a mill-turn (Setup > Machine)",
+                        "The document's machine is a {} - {fword} operations do not drive it; mount a {mword}{or_mt} (Setup > Machine)",
                         machine.word()
                     )
                 } else if !has_stock(state) {
@@ -489,12 +489,11 @@ fn gate_note(c: Cmd, state: &State) -> Option<String> {
         .filter(|k| !k.admits(machine));
     match dark {
         Some(k) => {
-            let (fword, mword) = match k.family() {
-                camcraft_app::operation::Family::Mill => ("milling", "mill"),
-                camcraft_app::operation::Family::Turn => ("turning", "lathe"),
-            };
+            let f = k.family();
+            let (fword, mword) = (f.work(), f.machine());
+            let or_mt = if f == camcraft_app::operation::Family::Plasma { "" } else { " or a mill-turn" };
             Some(format!(
-                "cannot add a {} operation: {fword} operations do not drive the document's {} - mount a {mword} or a mill-turn (Setup > Machine)",
+                "cannot add a {} operation: {fword} operations do not drive the document's {} - mount a {mword}{or_mt} (Setup > Machine)",
                 k.label,
                 machine.word(),
             ))
@@ -635,7 +634,7 @@ pub(super) fn icon_of(c: Cmd, state: &State) -> Option<Icon> {
             Some(k) => Some(op_icon(k.ty)),
             None => {
                 debug_assert!(false, "Create({i}) past the kind table");
-                eprintln!("ribbon: unknown op kind {i}");
+                diag_warn!("ribbon: unknown op kind {i}");
                 Some(Icon::Generate)
             }
         },
@@ -651,6 +650,9 @@ pub(super) fn icon_of(c: Cmd, state: &State) -> Option<Icon> {
             operation::Section::Drilling => Icon::Drill,
             operation::Section::MultiAxis => Icon::MultiAxisRough,
             operation::Section::Turning => Icon::Face,
+            // #670: the plasma section cuts 2D profiles - the contour's
+            // glyph (the machine door's own choice, no new asset).
+            operation::Section::Plasma => Icon::Contour,
         }),
         // The machine door wears its workspace's glyph (#207), from the
         // existing set: the face mill for Milling, the turned bar for
@@ -659,6 +661,8 @@ pub(super) fn icon_of(c: Cmd, state: &State) -> Option<Icon> {
             camcraft_app::machine::Kind::Lathe => Icon::RotaryContour,
             camcraft_app::machine::Kind::MillTurn => Icon::RotaryParallel,
             camcraft_app::machine::Kind::Mill => Icon::Face,
+            // #669: a plasma table cuts 2D profiles - the contour glyph.
+            camcraft_app::machine::Kind::Plasma => Icon::Contour,
         }),
         Cmd::Undo => Some(Icon::Undo),
         Cmd::Redo => Some(Icon::Redo),
@@ -690,7 +694,7 @@ pub(super) fn op_icon(kind: OpType) -> Icon {
         // names (M2.4 A) - the Pocket3D precedent says: same word,
         // same pixels.
         OpType::Adaptive2D | OpType::Offset2D => Icon::Pocket,
-        OpType::Slot => Icon::Slot,
+        OpType::Slot | OpType::TrochoidalSlot => Icon::Slot,
         OpType::Trace => Icon::Trace,
         // The 2D run's new names keep their family's pixels (M2.4 B,
         // the twins' reuse law): the engrave twin IS Trace's field
@@ -706,6 +710,9 @@ pub(super) fn op_icon(kind: OpType) -> Icon {
         OpType::Circular => Icon::Pocket,
         OpType::Drill => Icon::Drill,
         OpType::Probe => Icon::Probe,
+        // The torch rides a profile: the contour's pixels (#670, the
+        // reuse law).
+        OpType::PlasmaProfile => Icon::Contour,
         OpType::Pocket3D => Icon::Pocket,
         OpType::Finish3D => Icon::Finish3D,
         OpType::Contour5D => Icon::Contour5D,
@@ -838,7 +845,7 @@ fn run_cmd(c: Cmd, state: &mut State) {
 pub(super) fn toggle_pin(state: &mut State, i: usize) {
     let Some(k) = operation::KindInfo::ALL.get(i) else {
         debug_assert!(false, "toggle_pin({i}) past the kind table");
-        eprintln!("ribbon: unknown op kind {i}");
+        diag_warn!("ribbon: unknown op kind {i}");
         return;
     };
     let mut pins = camcraft_app::ribbon::pinned_of(&state.world);
@@ -1142,7 +1149,7 @@ pub fn ribbon(
         match drops.iter().find(|d| d.section == s) {
             None => {
                 debug_assert!(false, "ribbon: open door has no dropdown");
-                eprintln!("ribbon: closing a dropdown whose button is gone");
+                diag_warn!("ribbon: closing a dropdown whose button is gone");
                 state.ribbon_more = None;
             }
             Some(drop) => {
@@ -1260,7 +1267,7 @@ pub fn ribbon(
                 // frame; finding none means that broke - named, not
                 // silent, and the state drops itself.
                 debug_assert!(false, "ribbon: machine door missing from the bar");
-                eprintln!("ribbon: closing a mode list whose button is gone");
+                diag_warn!("ribbon: closing a mode list whose button is gone");
                 state.ribbon_mode_open = false;
             }
             Some(cell) => {
@@ -1342,7 +1349,7 @@ pub fn ribbon(
         match cells.iter().find(|c| c.cmd == Cmd::View) {
             None => {
                 debug_assert!(false, "ribbon: view door missing from the bar");
-                eprintln!("ribbon: closing a view list whose button is gone");
+                diag_warn!("ribbon: closing a view list whose button is gone");
                 state.ribbon_view_open = false;
             }
             Some(cell) => {
@@ -1356,7 +1363,7 @@ pub fn ribbon(
         match cells.iter().find(|c| c.cmd == Cmd::Theme) {
             None => {
                 debug_assert!(false, "ribbon: theme door missing from the bar");
-                eprintln!("ribbon: closing a theme list whose button is gone");
+                diag_warn!("ribbon: closing a theme list whose button is gone");
                 state.ribbon_theme_open = false;
             }
             Some(cell) => {
