@@ -181,7 +181,7 @@ impl TorchSpan {
 }
 
 /// Read a `PLASMA` header's words (after the keyword).
-pub(super) fn parse_header(words: &str) -> Result<PlasmaCut, String> {
+pub fn parse_header(words: &str) -> Result<PlasmaCut, String> {
     let mut p = PlasmaCut::default();
     let mut kerf = None;
     for w in words.split_whitespace() {
@@ -208,7 +208,7 @@ pub(super) fn parse_header(words: &str) -> Result<PlasmaCut, String> {
 
 /// Read a `TORCH ON` line's words (after `ON`); `on` is the index of
 /// the move that follows.
-pub(super) fn parse_on(words: &str, on: usize) -> Result<TorchSpan, String> {
+pub fn parse_on(words: &str, on: usize) -> Result<TorchSpan, String> {
     let mut it = words.split_whitespace();
     let id = it.next().and_then(|w| w.strip_prefix('C')).ok_or("TORCH ON needs C<id>")?;
     let contour = id.parse::<u32>().map_err(|_| format!("contour id {id:?}"))?;
@@ -226,7 +226,7 @@ pub(super) fn parse_on(words: &str, on: usize) -> Result<TorchSpan, String> {
 }
 
 /// Read a `TORCH OFF` line's contour id.
-pub(super) fn parse_off(words: &str) -> Result<u32, String> {
+pub fn parse_off(words: &str) -> Result<u32, String> {
     let id = words.trim().strip_prefix('C').ok_or("TORCH OFF needs C<id>")?;
     id.parse::<u32>().map_err(|_| format!("contour id {id:?}"))
 }

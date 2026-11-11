@@ -96,6 +96,15 @@ pub enum Record {
     /// A probing script that cannot voice it is refused by name - a
     /// plain feed would drive the stylus into an unexpected obstacle.
     Guard(super::probe_rec::GuardRec),
+    /// The plasma header of a section (#671): the kerf and what the
+    /// program states for the torch (`cnc_torch`). It precedes the
+    /// section's `SECTION`, and its properties hold until `ENDSECTION`.
+    Plasma(super::cnc_torch::PlasmaRec),
+    /// A torch event (#671): struck before the next motion record, or
+    /// put out after the previous one. A script without the torch
+    /// hooks is refused by name - a cut posted without its torch is
+    /// a dry run at best, and a mill post's spindle words at worst.
+    Torch(super::cnc_torch::TorchRec),
 }
 
 /// One feed/rapid/plunge/arc record. Coordinates are millimeters
@@ -296,6 +305,8 @@ impl Record {
             ),
             Record::Retreat(r) => format!("probe retreat Δ {}", pos(r.delta[0], r.delta[1], r.delta[2])),
             Record::Guard(g) => format!("probe protected move → {}", pos(g.to[0], g.to[1], g.to[2])),
+            Record::Plasma(p) => p.label(),
+            Record::Torch(t) => t.label(),
             Record::Found(f) => match f.set_wcs {
                 Some(w) => format!("probe result · set G{} · tol {:.3} mm", 54 + u32::from(w), f.tol_mm),
                 None => format!("probe result · confirm · tol {:.3} mm", f.tol_mm),
@@ -445,6 +456,8 @@ pub fn serialize(records: &[Record]) -> String {
             Record::Found(f) => s.push_str(&super::probe_rec::write_found(f)),
             Record::Retreat(r) => s.push_str(&super::probe_rec::write_retreat(r)),
             Record::Guard(g) => s.push_str(&super::probe_rec::write_guard(g)),
+            Record::Plasma(p) => s.push_str(&p.line()),
+            Record::Torch(t) => s.push_str(&t.line()),
         }
     }
     s
@@ -642,6 +655,17 @@ pub fn parse(text: &str) -> Result<Vec<Record>, CncError> {
                 let mut wit = c.split_whitespace().peekable();
                 let r = parse_cycle_rec(&mut wit, move_idx).map_err(fail)?;
                 out.push(Record::Cycle(r));
+                continue;
+            }
+            // The `.cl` v5 plasma records (#670) are the `.cnc` ones
+            // behind a `; ` (#671): one reader, so a plasma golden is
+            // a legal post input like every other.
+            if let Some(w) = t.strip_prefix("PLASMA ") {
+                out.push(Record::Plasma(super::cnc_torch::parse_header(w).map_err(fail)?));
+                continue;
+            }
+            if let Some(w) = t.strip_prefix("TORCH ") {
+                out.push(Record::Torch(super::cnc_torch::parse_torch(w).map_err(fail)?));
                 continue;
             }
             continue; // any other comment is nothing to the post
@@ -965,6 +989,14 @@ pub fn parse(text: &str) -> Result<Vec<Record>, CncError> {
                 out.push(Record::Guard(g));
                 move_idx += 1;
                 in_section = true;
+            }
+            "PLASMA" | "TORCH" => {
+                let words = line.trim_start()[head.len()..].trim_start();
+                out.push(if head == "PLASMA" {
+                    Record::Plasma(super::cnc_torch::parse_header(words).map_err(fail)?)
+                } else {
+                    Record::Torch(super::cnc_torch::parse_torch(words).map_err(fail)?)
+                });
             }
             "FOUND" => {
                 let f = super::probe_rec::parse_found(&mut it).map_err(fail)?;

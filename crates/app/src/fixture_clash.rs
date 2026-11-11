@@ -134,8 +134,17 @@ pub fn after_part_move(world: &World, part: &str, at: Location, stocks: &[(Strin
 #[must_use]
 pub fn after_fixture_move(world: &World, fixture: &str, at: Location) -> Option<String> {
     let fe = model::find_by_name(world, fixture)?;
+    let own = model::facets_of(world, &fe)?;
+    after_fixture_shape(world, fixture, &own, at)
+}
+
+/// The same check for fixture `fixture` with the mesh `facets` (its own
+/// frame - a plate edit judges the plate's NEW slab before it lands).
+#[must_use]
+pub fn after_fixture_shape(world: &World, fixture: &str, facets: &[Triangle], at: Location) -> Option<String> {
+    let fe = model::find_by_name(world, fixture)?;
     let ctx = crate::fixture::def_of(world, &fe).and_then(|d| d.setup);
-    let steel: Vec<Triangle> = model::facets_of(world, &fe)?.iter().map(|t| place(*t, at)).collect();
+    let steel: Vec<Triangle> = facets.iter().map(|t| place(*t, at)).collect();
     let mut warnings = Vec::new();
     for (pname, pe) in model::model_entities(world) {
         if !setup_align::is_part(world, &pe) {
