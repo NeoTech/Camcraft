@@ -23,7 +23,7 @@ impl State {
     /// headless suites never touch the user's file).
     pub(crate) fn load_prefs(&mut self) {
         let Some(path) = prefs::store_path() else {
-            eprintln!("preferences: no config folder - the theme and colour vision last for this session only");
+            diag_warn!("preferences: no config folder - the theme and colour vision last for this session only");
             return;
         };
         self.load_prefs_from(path);
