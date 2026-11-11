@@ -103,9 +103,16 @@ impl StockEye {
     /// Build the eye for the viewport's color `format`. The trace pass
     /// may refuse (the CPU then marches); the composite may not - `Err`
     /// means this device keeps the sheet.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat) -> Result<Self, String> {
-        let composite = Composite::new(device, format)?;
-        let trace = match TracePass::new(device) {
+        pollster::block_on(Self::new_async(device, format))
+    }
+
+    /// `new`, awaiting the device instead of blocking on it (#31): the
+    /// browser shell builds the eye this way, after its first frame.
+    pub async fn new_async(device: &wgpu::Device, format: wgpu::TextureFormat) -> Result<Self, String> {
+        let composite = Composite::new_async(device, format).await?;
+        let trace = match TracePass::new_async(device).await {
             Ok(t) => Some(t),
             Err(e) => {
                 eprintln!("stock eye: {e} - the CPU march stands in");

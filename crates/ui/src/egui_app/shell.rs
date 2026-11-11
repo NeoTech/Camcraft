@@ -33,7 +33,6 @@ use super::panes;
 use super::post_refusal;
 use super::theme;
 use super::viewcube;
-use super::world;
 
 pub(crate) const VIEW3D_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 /// Ribbon strip height: the cell box plus the caption row and the pad
@@ -835,7 +834,9 @@ fn parr(p: egui::Pos2) -> [f32; 2] {
 /// path through set_overlay), and the readback showing a solid footprint of
 /// changed pixels. The second half of the proof is the world itself:
 /// Contour1 carries a non-empty cached toolpath, i.e. seed -> commands ->
-/// generate worked.
+/// generate worked. Native only: it blocks on the adapter and on the
+/// readback, which a browser cannot (#31).
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) mod headless {
     use camcraft_app::model;
 
@@ -844,7 +845,7 @@ pub(crate) mod headless {
 
     use super::VIEW3D_FORMAT;
     use super::wgpu;
-    use super::world;
+    use super::super::world;
 
     pub(crate) fn run() -> Result<(), String> {
         let mut state = State::new();

@@ -12,7 +12,6 @@ chrono = "0.4"
 camcraft-app = { workspace = true }
 flecs_ecs = { workspace = true }
 winit = { workspace = true }
-pollster = { workspace = true }
 image = { workspace = true }
 # The shell stack (M1.4.2): egui + its winit/wgpu adapters + the dock
 # area. egui_wgpu re-exports wgpu - the unified workspace wgpu - so
@@ -31,6 +30,16 @@ serde_json = { workspace = true }
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 egui-winit = { workspace = true }
 rfd = { workspace = true }
+# Blocking on a GPU future is native-only: a browser answers from its
+# event loop, so the wasm32 build awaits (the `*_async` twins) instead.
+pollster = { workspace = true }
+
+# #31: the browser shell (egui_app/shell_web) - eframe's web runner over a
+# canvas, started from JS through wasm-bindgen.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+eframe = { workspace = true }
+wasm-bindgen = { workspace = true }
+wasm-bindgen-futures = { workspace = true }
 
 # #144: the Cmd+Q terminate hook (egui_app/os_quit.rs).
 [target.'cfg(target_os = "macos")'.dependencies]

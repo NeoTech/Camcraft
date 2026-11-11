@@ -130,6 +130,11 @@ pub(crate) mod shell;
 // browser build keeps `shell` (the shared frame) and refuses `run` below.
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) mod shell_window;
+// #31: the browser shell - eframe's web runner over a canvas; wasm32 only.
+#[cfg(target_arch = "wasm32")]
+pub(crate) mod shell_web;
+// #31: the 3D pass and repaint law both shells share.
+pub(crate) mod view_pass;
 // pub past egui_app from M6.1 C: the switcher's resolution seam
 // (state.rs) installs the live table, the format tests read the
 // columns beside their parser, and every draw site already read
@@ -240,19 +245,32 @@ pub fn run(args: &[String]) -> i32 {
         if pick != gpu::GpuPick::Auto || want.is_some() {
             println!("gpu: --headless pins the fallback adapter for determinism; backend and adapter picks ignored");
         }
-        match shell::headless::run() {
-            Ok(()) => {
-                println!("egui shell headless: seeded document, command world, View3D green");
-                0
-            }
-            Err(err) => {
-                eprintln!("egui shell headless FAILED: {err}");
-                1
-            }
-        }
+        run_headless()
     } else {
         run_windowed(pick, want, mcp_port)
     }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn run_headless() -> i32 {
+    match shell::headless::run() {
+        Ok(()) => {
+            println!("egui shell headless: seeded document, command world, View3D green");
+            0
+        }
+        Err(err) => {
+            eprintln!("egui shell headless FAILED: {err}");
+            1
+        }
+    }
+}
+
+/// #31: the headless proof blocks on the adapter and the readback; the
+/// browser build refuses it by name like the windowed entry.
+#[cfg(target_arch = "wasm32")]
+fn run_headless() -> i32 {
+    eprintln!("{WASM_NO_WINDOW}");
+    2
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -272,4 +290,4 @@ fn run_windowed(_pick: gpu::GpuPick, _want: Option<String>, _mcp_port: Option<u1
 /// What the wasm32 build says when asked for a native window (#31).
 #[cfg(target_arch = "wasm32")]
 pub(crate) const WASM_NO_WINDOW: &str =
-    "camcraft-ui: the windowed shell is native-only; the browser shell is not built yet (#31)";
+    "camcraft-ui: the windowed shell and the headless proof are native-only; in a browser the page starts the shell (camcraft_start, #31)";

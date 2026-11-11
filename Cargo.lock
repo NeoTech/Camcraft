@@ -810,6 +810,7 @@ version = "0.17.0"
 dependencies = [
  "camcraft-app",
  "chrono",
+ "eframe",
  "egui",
  "egui-wgpu",
  "egui-winit",
@@ -821,6 +822,8 @@ dependencies = [
  "pollster 0.4.0",
  "rfd",
  "serde_json",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
  "winit",
 ]
 
