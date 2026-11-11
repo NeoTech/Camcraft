@@ -59,6 +59,10 @@ pub struct InsertFixtureDraft {
 pub enum FixtureLibDialog {
     Save(SaveFixtureDraft),
     Insert(InsertFixtureDraft),
+    /// #788: "Add built-in vise…".
+    Vise(super::ViseDraft),
+    /// #789: "Add accessory…".
+    Accessory(super::AccessoryDraft),
 }
 
 fn declared(setup: &str) -> Option<&str> {

@@ -802,6 +802,10 @@ dependencies = [
 [[package]]
 name = "camcraft-tools"
 version = "0.17.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "camcraft-ui"

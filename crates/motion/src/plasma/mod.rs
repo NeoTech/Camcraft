@@ -24,9 +24,12 @@
 //! off per contour, each contour's role and the contour it lies in.
 //! Nothing here guesses: a zero-length or self-crossing contour, a hole
 //! the kerf cannot enter, a lead with no room, a lit move whose kerf
-//! would reach the part - each is refused by name, never trimmed.
+//! would reach the part, an edge the kerf never reaches (a slot or
+//! notch narrower than the kerf, bridged by the offset - `laws`, #672)
+//! - each is refused by name, never trimmed.
 
 mod emit;
+mod laws;
 mod nest;
 mod ring;
 

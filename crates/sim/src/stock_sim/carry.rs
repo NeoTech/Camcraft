@@ -110,6 +110,18 @@ impl LatticeTurn {
         self.m[0][0] == 0
     }
 
+    /// The turn's signed permutation (#637 E2a): `m` on XY, `s` on Z.
+    pub(crate) fn linear(&self) -> ([[i8; 2]; 2], i8) {
+        (self.m, self.s)
+    }
+
+    /// The turn's translation: what is left of it once the signed
+    /// permutation is baked into a field (#637 E2a).
+    #[must_use]
+    pub fn shift(&self) -> Point3 {
+        Point3::new(self.t[0], self.t[1], self.t[2])
+    }
+
     /// Map a point.
     #[must_use]
     pub fn apply(&self, p: Point3) -> Point3 {
