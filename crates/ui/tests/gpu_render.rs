@@ -571,8 +571,10 @@ fn diff_against(committed: &Path, fresh: &RgbaImage) -> Option<Result<(), (u64, 
     if bad == 0 { Some(Ok(())) } else { Some(Err((bad, String::new()))) }
 }
 
-#[test]
-fn docs_images_match_the_rendered_steps() {
+/// The example project opened through the real command, plus the step series
+/// (label, operations whose eyes are off) shared by the structural test and
+/// the pixel snapshot. Returns the picture directory too.
+fn docs_steps() -> (State, Vec<(String, Vec<String>)>, PathBuf) {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     let project = root.join("examples/first-part.camproj");
     assert!(project.is_file(), "the example project is committed at {project:?}");
@@ -602,6 +604,46 @@ fn docs_images_match_the_rendered_steps() {
         );
     }
 
+
+    // Step law: step 0 shows the model and the stock blank; step n reveals
+    // the first n operations' paths, in operation order. Paths appear
+    // through the app's own display state (Show all + per-op eyes), never
+    // by editing geometry.
+    let steps: Vec<(String, Vec<String>)> = (0..=ops.len())
+        .map(|shown| {
+            let label = if shown == 0 { "blank".to_string() } else { ops[shown - 1].clone() };
+            (label, ops[shown..].to_vec())
+        })
+        .collect();
+    (state, steps, out_dir)
+}
+
+/// Non-pixel half of the docs pictures (#854): the example opens, every
+/// operation carries a toolpath, and each step draws its overlay. Runs in
+/// the default suite on every OS; the pixel compare is the snapshot below.
+#[test]
+fn docs_example_steps_through_operations() {
+    let (mut state, steps, _out_dir) = docs_steps();
+    assert!(steps.len() > 1, "the series has the blank plus one step per operation");
+    for (n, (_label, hidden)) in steps.iter().enumerate() {
+        state.show_all_paths = n > 0;
+        state.hidden_paths = hidden.clone();
+        if n > 0 {
+            assert!(
+                !interact::toolpath_lines(&state).is_empty(),
+                "step {n} draws at least one toolpath"
+            );
+        }
+    }
+}
+
+/// Pixel goldens rendered on one OS/GPU drift on another adapter, so this is
+/// release-lane (#255, #854): `#[ignore]`d out of quick/batch, run by the
+/// release tier's `gpu_render` snapshot step (`--ignored snapshot`).
+#[test]
+#[ignore = "pixel goldens: release-tier ui snapshot lane (--test gpu_render --ignored snapshot)"]
+fn docs_images_snapshot_match_the_rendered_steps() {
+    let (mut state, steps, out_dir) = docs_steps();
     // One fixed camera for the whole series: the 100x60x20 mm stock fills
     // most of an 800x600 frame, and the raised target keeps the rapids'
     // clearance height (25 mm over the stock top) inside the picture.
@@ -615,16 +657,6 @@ fn docs_images_match_the_rendered_steps() {
         projection: ProjectionMode::Perspective,
     };
 
-    // Step law: step 0 shows the model and the stock blank; step n reveals
-    // the first n operations' paths, in operation order. Paths appear
-    // through the app's own display state (Show all + per-op eyes), never
-    // by editing geometry.
-    let steps: Vec<(&str, Vec<String>)> = (0..=ops.len())
-        .map(|shown| {
-            let label: &str = if shown == 0 { "blank" } else { &ops[shown - 1] };
-            (label, ops[shown..].to_vec())
-        })
-        .collect();
     let update = std::env::var_os("UPDATE_DOCS_IMAGES").is_some_and(|v| !v.is_empty());
     if update {
         fs::create_dir_all(&out_dir).expect("create docs/images");
@@ -679,7 +711,7 @@ fn docs_images_match_the_rendered_steps() {
     assert!(
         failures.is_empty(),
         "docs pictures drifted from the rendered steps (regenerate with \
-         UPDATE_DOCS_IMAGES=1 cargo test -p camcraft-ui --test gpu_render):\n{}",
+         UPDATE_DOCS_IMAGES=1 cargo test -p camcraft-ui --test gpu_render -- --ignored snapshot):\n{}",
         failures.join("\n")
     );
 }
