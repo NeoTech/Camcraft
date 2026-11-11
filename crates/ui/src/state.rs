@@ -1386,6 +1386,12 @@ pub struct State {
     /// The transport's timeline, built once per `doc_version` (never
     /// per frame: it walks every op's path) - see `shell::cached_script`.
     pub sim_script_cache: Option<(u64, std::sync::Arc<camcraft_app::sim::Script>)>,
+    /// #743: the revolved mesh of the tool at the playhead, as the
+    /// collision laws read it - rebuilt only when its judged outline
+    /// changes, emptied when the tool, its operation or the transport
+    /// is gone. Display-only (a Mutex because the scene is collected
+    /// from `&State`).
+    pub sim_tool_cache: std::sync::Mutex<camcraft_app::sim_tool_body::SimToolCache>,
     /// What `field_view` was walked for: (transport up, Deviate armed,
     /// the document version a playback plan was frozen at). A change
     /// retires the view and the playback - never a stale picture.
@@ -1753,6 +1759,7 @@ impl State {
             field_view: None,
             field_play: None,
             sim_script_cache: None,
+            sim_tool_cache: std::sync::Mutex::default(),
             field_mode: None,
             stock_mesh: camcraft_app::stock_export::MeshCache::default(),
             ribbon_more: None,
