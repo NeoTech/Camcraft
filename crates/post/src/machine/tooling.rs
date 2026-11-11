@@ -1,7 +1,10 @@
 //! `tooling.spindle_mount` and `tooling.default_holder` (#828): the
 //! holder system a machine's spindle takes, and the built-in library
-//! holder (`camcraft_tools::holder_library`) a NEW tool on that machine
-//! starts with. Both optional - a file without them reads as before.
+//! holder a NEW tool on that machine starts with. Both optional - a file
+//! without them reads as before. The holder library is not this crate's:
+//! the caller passes its lookup in ([`HolderLookup`], the app's
+//! `machine::holder_lookup`), so the post crate stays on cl and geometry
+//! (maintainer, PR #880: no crate edge for a couple of items).
 //!
 //! Provenance: our own keys and rules, specced from the issue and the
 //! manufacturers' public pages for which spindle a machine has (the
@@ -11,8 +14,20 @@
 //! key, the Machines pane's validator lists them all, each BY NAME - an
 //! unknown or mismatched holder is never read as "no default".
 
-use camcraft_tools::holder_library::{self, HolderEntry};
 use serde_json::Value;
+
+/// What the mount rule needs to know of a library holder: its own
+/// (canonical) name and the taper it sits in (`None`: a straight-shank
+/// chuck, no spindle mount of its own).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HolderInfo {
+    pub name: String,
+    pub taper: Option<String>,
+}
+
+/// The caller's holder library: a holder by name, or why there is none
+/// (the refusal text, naming the holder).
+pub type HolderLookup<'a> = &'a dyn Fn(&str) -> Result<HolderInfo, String>;
 
 /// The mounts a machine file may state: the holder library's tapers.
 /// `TTS` names the tooling system an R8 spindle takes on a Tormach
@@ -39,35 +54,57 @@ fn mount(w: &str) -> Result<&'static str, String> {
         .ok_or_else(|| format!("\"{w}\" is not a spindle mount the holder library knows ({})", SPINDLE_MOUNTS.join(", ")))
 }
 
-fn holder(w: &str) -> Result<HolderEntry, String> {
-    holder_library::find(w).map_err(|e| e.to_string())
+/// A stated holder as the caller's library reads it; `Unresolved` when
+/// the reader was given no library (a post-only reader that never lands
+/// a holder keeps the word, and no mount rule can judge it).
+enum Holder {
+    Known(HolderInfo),
+    Unresolved(String),
+}
+
+impl Holder {
+    fn name(self) -> String {
+        match self {
+            Self::Known(h) => h.name,
+            Self::Unresolved(w) => w,
+        }
+    }
+}
+
+fn holder(w: &str, lookup: Option<HolderLookup>) -> Result<Holder, String> {
+    match lookup {
+        Some(find) => find(w).map(Holder::Known),
+        None => Ok(Holder::Unresolved(w.to_owned())),
+    }
 }
 
 /// A stated holder must sit in the stated mount: its taper is the
 /// mount, and a straight-shank chuck (no taper of its own) names none.
-fn matches(mount: &str, h: &HolderEntry) -> Result<(), String> {
-    match h.taper {
-        Some(t) if t.name == mount => Ok(()),
-        Some(t) => Err(format!("\"{}\" is a {} holder - it does not fit the stated {mount} spindle mount", h.name(), t.name)),
-        None => Err(format!("\"{}\" is a straight-shank chuck - it names no spindle mount, and the file states {mount}", h.name())),
+fn matches(mount: &str, h: &Holder) -> Result<(), String> {
+    let Holder::Known(h) = h else { return Ok(()) };
+    match h.taper.as_deref() {
+        Some(t) if t == mount => Ok(()),
+        Some(t) => Err(format!("\"{}\" is a {t} holder - it does not fit the stated {mount} spindle mount", h.name)),
+        None => Err(format!("\"{}\" is a straight-shank chuck - it names no spindle mount, and the file states {mount}", h.name)),
     }
 }
 
 /// The file's two keys, each read on its own.
-type Read = (Result<Option<&'static str>, String>, Result<Option<HolderEntry>, String>);
+type Read = (Result<Option<&'static str>, String>, Result<Option<Holder>, String>);
 
-fn read(v: &Value) -> Read {
+fn read(v: &Value, lookup: Option<HolderLookup>) -> Read {
     let t = v.get("tooling");
     let m = word(t.and_then(|t| t.get("spindle_mount"))).and_then(|w| w.map(mount).transpose());
-    let h = word(t.and_then(|t| t.get("default_holder"))).and_then(|w| w.map(holder).transpose());
+    let h = word(t.and_then(|t| t.get("default_holder"))).and_then(|w| w.map(|w| holder(w, lookup)).transpose());
     (m, h)
 }
 
 /// Every refusal the two keys earn, as (key, rule) - the validator's
-/// list; the reader refuses on the first.
+/// list; the reader refuses on the first. `lookup` is the caller's
+/// holder library; `None` judges the words only.
 #[must_use]
-pub fn tooling_refusals(v: &Value) -> Vec<(String, String)> {
-    let (m, h) = read(v);
+pub fn tooling_refusals(v: &Value, lookup: Option<HolderLookup>) -> Vec<(String, String)> {
+    let (m, h) = read(v, lookup);
     let mut out = Vec::new();
     if let Err(rule) = &m {
         out.push((MOUNT_KEY.to_owned(), rule.clone()));
@@ -85,17 +122,17 @@ pub fn tooling_refusals(v: &Value) -> Vec<(String, String)> {
 
 /// The canonical (mount, holder name) a file states, or its first
 /// refusal as `"key: rule"`.
-pub(super) fn parse_tooling(v: &Value) -> Result<(Option<String>, Option<String>), String> {
-    if let Some((key, rule)) = tooling_refusals(v).into_iter().next() {
+pub(super) fn parse_tooling(v: &Value, lookup: Option<HolderLookup>) -> Result<(Option<String>, Option<String>), String> {
+    if let Some((key, rule)) = tooling_refusals(v, lookup).into_iter().next() {
         return Err(format!("{key}: {rule}"));
     }
-    let (m, h) = read(v);
-    Ok((m.ok().flatten().map(str::to_owned), h.ok().flatten().map(|h| h.name())))
+    let (m, h) = read(v, lookup);
+    Ok((m.ok().flatten().map(str::to_owned), h.ok().flatten().map(Holder::name)))
 }
 
-/// Re-judge stored values (a project file's machine, `Machine::is_sane`):
-/// the same rules as a `.mch`'s keys.
-pub fn mount_check(spindle_mount: Option<&str>, default_holder: Option<&str>) -> Result<(), String> {
+/// Re-judge stored values (a project file's machine,
+/// `Machine::tooling_refusal`): the same rules as a `.mch`'s keys.
+pub fn mount_check(spindle_mount: Option<&str>, default_holder: Option<&str>, lookup: Option<HolderLookup>) -> Result<(), String> {
     let mut t = serde_json::Map::new();
     if let Some(m) = spindle_mount {
         t.insert("spindle_mount".into(), Value::String(m.to_owned()));
@@ -104,7 +141,7 @@ pub fn mount_check(spindle_mount: Option<&str>, default_holder: Option<&str>) ->
         t.insert("default_holder".into(), Value::String(h.to_owned()));
     }
     let v = serde_json::json!({ "tooling": Value::Object(t) });
-    match tooling_refusals(&v).into_iter().next() {
+    match tooling_refusals(&v, lookup).into_iter().next() {
         Some((key, rule)) => Err(format!("{key}: {rule}")),
         None => Ok(()),
     }

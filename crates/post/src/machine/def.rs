@@ -227,6 +227,21 @@ impl Machine {
     /// corrupt file, refused, never a checker that fails backwards.
     #[must_use]
     pub fn is_sane(&self) -> bool {
+        self.tooling_refusal(None).is_none() && self.limits_sane()
+    }
+
+    /// #828: why the stored `tooling` keys cannot be meant, as
+    /// `"key: rule"` (a default holder that no longer resolves in
+    /// `lookup`, the caller's holder library; one off the stated mount),
+    /// so a refusal names the key, not "a limit". With no lookup only
+    /// the words are judged ([`Self::is_sane`]); every app door that
+    /// stores a machine passes its library.
+    #[must_use]
+    pub fn tooling_refusal(&self, lookup: Option<super::HolderLookup>) -> Option<String> {
+        super::mount_check(self.spindle_mount.as_deref(), self.default_holder.as_deref(), lookup).err()
+    }
+
+    fn limits_sane(&self) -> bool {
         let rate_ok = |r: Option<f64>| r.is_none_or(|x| x.is_finite() && x > 0.0);
         rate_ok(self.spindle_min)
             && rate_ok(self.spindle_max)
@@ -241,7 +256,6 @@ impl Machine {
                 .is_none_or(|w| Kind::from_word(w).is_some())
             && self.coolants.iter().all(|c| !c.name.is_empty())
             && self.plasma_sane()
-            && super::mount_check(self.spindle_mount.as_deref(), self.default_holder.as_deref()).is_ok()
             && self.axes.iter().all(|a| {
                 rate_ok(a.feed) && rate_ok(a.rapid) && rate_ok(a.resolution) && a.travel.is_none_or(|(lo, hi)| lo.is_finite() && hi.is_finite() && hi > lo)
                     && a.axis.is_none_or(|d| d.iter().all(|x| x.is_finite()))

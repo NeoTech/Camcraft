@@ -163,8 +163,16 @@ fn find_type<'a>(parts: &'a serde_json::Value, ty: &str) -> Option<&'a serde_jso
 /// Parse a `.mch` machine file. Malformed JSON refuses; a well-formed
 /// file that describes nothing answers with an all-`None` Machine -
 /// an empty machine checks nothing, which is the truth rather than a
-/// silently stricter one.
+/// silently stricter one. The holder library is the caller's (#828):
+/// this door judges `tooling.default_holder` as a word only - the app's
+/// reader passes its library through [`parse_mch_with`].
 pub fn parse_mch(text: &str) -> Result<Machine, String> {
+    parse_mch_with(text, None)
+}
+
+/// [`parse_mch`] with the caller's holder library (#828), so an unknown
+/// default holder, or one off the stated mount, is refused by name.
+pub fn parse_mch_with(text: &str, holders: Option<super::HolderLookup>) -> Result<Machine, String> {
     let v: serde_json::Value =
         serde_json::from_str(text).map_err(|e| format!("machine file: {e}"))?;
     if !v.is_object() {
@@ -206,7 +214,7 @@ pub fn parse_mch(text: &str) -> Result<Machine, String> {
     }
 
     // #828: the spindle mount and the default holder, refused by name.
-    let (mount, holder) = super::tooling::parse_tooling(&v).map_err(|e| format!("machine file: {e}"))?;
+    let (mount, holder) = super::tooling::parse_tooling(&v, holders).map_err(|e| format!("machine file: {e}"))?;
     m.spindle_mount = mount;
     m.default_holder = holder;
 

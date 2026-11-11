@@ -56,6 +56,11 @@ impl SetSetupMachine {
     ) -> Result<Self, CommandError> {
         let def = def_of(world, setup)?;
         if let Some((_, Some(m))) = &next
+            && let Some(r) = crate::machine::tooling_refusal(m)
+        {
+            return Err(CommandError::Invalid(format!("machine {r}")));
+        }
+        if let Some((_, Some(m))) = &next
             && !m.is_sane()
         {
             return Err(CommandError::Invalid(

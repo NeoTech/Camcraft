@@ -102,7 +102,11 @@ impl AddTool {
             HolderPick::MachineDefault => {
                 if let Some(entry) = crate::machine::of(world).1.and_then(|m| m.default_holder) {
                     match super::tool_body::library_body(&cmd.tool, name, &entry, None, None) {
-                        Ok(body) => cmd.holder = Some((entry, body)),
+                        Ok(mut body) => {
+                            // Assumed, not picked: judged floored (#828).
+                            body.machine_default = true;
+                            cmd.holder = Some((entry, body));
+                        }
                         Err(e) => cmd.skipped = Some(format!("the machine's default holder {entry} was not applied - {e}")),
                     }
                 }
@@ -122,6 +126,9 @@ impl AddTool {
     #[must_use]
     pub fn note(&self) -> Option<String> {
         match (&self.holder, &self.skipped) {
+            (Some((n, b)), _) if b.machine_default => {
+                Some(format!("holder {n} (machine default - judged no smaller than the tool's holder cylinder)"))
+            }
             (Some((n, _)), _) => Some(format!("holder {n}")),
             (None, Some(why)) => Some(why.clone()),
             (None, None) => None,

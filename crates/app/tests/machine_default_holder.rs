@@ -7,7 +7,10 @@
 //! existing project are never changed; an unknown or mismatched holder
 //! in a machine file is refused by name with the file and the key. And
 //! the default is judged: the new tool's BT30 flange strikes a wall
-//! the bare holder cylinder misses.
+//! the bare holder cylinder misses, and (the maintainer's rule from the
+//! PR #880 review) an ASSUMED default never judges looser than the bare
+//! tool's stand-in cylinder - only a holder picked explicitly is judged
+//! by its real, narrower shape.
 //!
 //! Fixture law (clean-room): our own values in the `.mch` layout of
 //! `assets/machines/AGENTS.md`; the Tormach spindle types from
@@ -91,7 +94,51 @@ fn a_new_tool_on_the_770mx_starts_with_the_bt30_er20() {
 fn a_new_tool_on_the_770m_starts_with_the_tts_er20() {
     let (world, mut history) = mounted(Some("tormach-770m"));
     assert_eq!(add(&world, &mut history, HolderPick::MachineDefault).as_deref(), Some("TTS ER20"));
+    // Assumed, so floored at the catalog's 44 mm stand-in cylinder, wider
+    // than the 38.1 mm collar.
+    assert_eq!(holder_d(&world, TOOL).map(|d| (d * 1e6).round() / 1e6), Some(44.0), "floored at the stand-in cylinder");
+    // Picked explicitly, the same holder is judged by its real collar.
+    let (world, mut history) = mounted(Some("tormach-770m"));
+    assert_eq!(add(&world, &mut history, HolderPick::Named("TTS ER20".into())).as_deref(), Some("TTS ER20"));
     assert_eq!(holder_d(&world, TOOL).map(|d| (d * 1e6).round() / 1e6), Some(38.1), "the TTS collar");
+}
+
+/// Whether a holder was assumed or picked is the document's: it rides
+/// the project file (an older file's holders read as picked) and undo.
+#[test]
+fn an_assumed_holder_stays_assumed_through_the_file() {
+    let (world, mut history) = mounted(Some("tormach-770m"));
+    add(&world, &mut history, HolderPick::MachineDefault);
+    let dir = std::env::temp_dir().join(format!("camcraft_828_assumed_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("dir");
+    let path = dir.join("assumed.ccam");
+    camcraft_app::project::save(&world, &path).expect("save");
+    let text = std::fs::read_to_string(&path).expect("read");
+    assert!(text.contains("\"machine_default\": true"), "the flag is saved");
+    let back = new_world();
+    camcraft_app::project::load(&back, &path).expect("load");
+    assert_eq!(holder_d(&back, TOOL).map(|d| (d * 1e6).round() / 1e6), Some(44.0), "still floored after a reload");
+    // What an older build wrote: no flag - the holder reads as picked.
+    fn strip(v: &mut serde_json::Value) {
+        match v {
+            serde_json::Value::Object(m) => {
+                m.remove("machine_default");
+                m.values_mut().for_each(strip);
+            }
+            serde_json::Value::Array(a) => a.iter_mut().for_each(strip),
+            _ => {}
+        }
+    }
+    let mut v: serde_json::Value = serde_json::from_str(&text).expect("json");
+    strip(&mut v);
+    std::fs::write(&path, serde_json::to_string_pretty(&v).expect("json")).expect("write");
+    let older = new_world();
+    camcraft_app::project::load(&older, &path).expect("an older file loads");
+    assert_eq!(holder_d(&older, TOOL).map(|d| (d * 1e6).round() / 1e6), Some(38.1), "an older file's holder is explicit");
+    // Undo and redo keep the flag: it rides the add's own step.
+    assert!(history.undo(&world) && history.redo(&world));
+    assert_eq!(holder_d(&world, TOOL).map(|d| (d * 1e6).round() / 1e6), Some(44.0), "redo lands it assumed again");
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
@@ -241,7 +288,13 @@ fn the_shipped_tormach_mills_state_their_mount() {
 // ---- the default is judged: the reach pin ----------------------------
 
 fn face_on_770mx(pick: HolderPick) -> (World, History) {
-    let (world, mut history) = mounted(Some("tormach-770mx"));
+    face_on("tormach-770mx", pick, 22.5, 95.0)
+}
+
+/// A face pass with a wall `off` mm beyond the outermost pass, from
+/// `above` to `above + 10` mm over the cut.
+fn face_on(machine: &str, pick: HolderPick, off: f64, above: f64) -> (World, History) {
+    let (world, mut history) = mounted(Some(machine));
     history.execute(
         &world,
         SetStock::new(&world, StockShape::Box { dx: 60.0, dy: 60.0, dz: 20.0 }, Location::default()).expect("stock"),
@@ -270,7 +323,7 @@ fn face_on_770mx(pick: HolderPick) -> (World, History) {
     let xmax = cache.path.moves.iter().flat_map(|m| [m.from.x, m.to.x]).fold(f64::NEG_INFINITY, f64::max);
     let (y0, y1) =
         cache.path.moves.iter().flat_map(|m| [m.from.y, m.to.y]).fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), y| (a.min(y), b.max(y)));
-    let (x, zb, h) = (xmax + 22.5, CUT_Z + 95.0, 10.0);
+    let (x, zb, h) = (xmax + off, CUT_Z + above, 10.0);
     let (a, b, c, d) = (Point3::new(x, y0, zb), Point3::new(x, y1, zb), Point3::new(x, y1, zb + h), Point3::new(x, y0, zb + h));
     let e = model::spawn(&world, "Wall1");
     model::set_facets(&world, &e, vec![Triangle::new(a, b, c), Triangle::new(a, c, d)].into());
@@ -286,12 +339,48 @@ fn holder_hits(world: &World) -> usize {
     cache.warnings.iter().filter(|w| matches!(w, Warning::FixtureHit { fixture_part: FixturePart::Holder, .. })).count()
 }
 
-/// The default makes the check stricter, never looser: the new tool's
-/// BT30 flange strikes the wall the bare holder cylinder misses.
+/// The flange side: the new tool's BT30 flange (taller than the bare
+/// tool's stand-in cylinder) strikes the wall that cylinder misses.
 #[test]
 fn the_default_holder_is_judged_by_the_reach_laws() {
     let (bare, _) = face_on_770mx(HolderPick::Bare);
     assert_eq!(holder_hits(&bare), 0, "the bare holder cylinder misses the wall");
     let (held, _) = face_on_770mx(HolderPick::MachineDefault);
     assert!(holder_hits(&held) > 0, "the default BT30 ER20 flange strikes it");
+}
+
+/// The PR #880 review's band: a wall 20 mm off the axis, 55-65 mm above
+/// the tip - inside the bare tool's 44 mm stand-in cylinder, outside the
+/// ER20 nut and the TTS collar. On a BT30 and a TTS machine the assumed
+/// default convicts at least where the bare tool does; the same holder
+/// picked explicitly is judged by its real shape and passes.
+#[test]
+fn an_assumed_default_never_judges_looser_than_the_bare_tool() {
+    for (m, holder) in [("tormach-770mx", "BT30 ER20"), ("tormach-770m", "TTS ER20")] {
+        let (bare, _) = face_on(m, HolderPick::Bare, 20.0, 55.0);
+        let bare = holder_hits(&bare);
+        assert!(bare > 0, "{m}: the bare tool's cylinder strikes the wall");
+        let (assumed, _) = face_on(m, HolderPick::MachineDefault, 20.0, 55.0);
+        assert!(holder_hits(&assumed) >= bare, "{m}: the default convicts at least where the bare tool does");
+        let (picked, _) = face_on(m, HolderPick::Named(holder.into()), 20.0, 55.0);
+        assert_eq!(holder_hits(&picked), 0, "{m}: the explicit {holder} is judged by its real, narrower nose");
+    }
+}
+
+/// A stored default holder that no longer resolves refuses the file
+/// naming the key (review note 1), not as "a limit that cannot be meant".
+#[test]
+fn a_stored_default_that_no_longer_resolves_is_refused_by_key() {
+    let (world, mut history) = mounted(Some("tormach-770mx"));
+    add(&world, &mut history, HolderPick::Bare);
+    let dir = std::env::temp_dir().join(format!("camcraft_828_stale_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("dir");
+    let path = dir.join("stale.ccam");
+    camcraft_app::project::save(&world, &path).expect("save");
+    let text = std::fs::read_to_string(&path).expect("read").replace("\"BT30 ER20\"", "\"BT30 ER99\"");
+    std::fs::write(&path, &text).expect("write");
+    let e = camcraft_app::project::load(&new_world(), &path).expect_err("refused");
+    let e = format!("{e}");
+    assert!(e.contains("tooling.default_holder") && e.contains("BT30 ER99"), "{e}");
+    let _ = std::fs::remove_dir_all(&dir);
 }

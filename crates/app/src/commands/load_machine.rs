@@ -23,6 +23,9 @@ impl LoadMachine {
     /// `None` clears the setup - the checker then checks nothing, by
     /// the unstated-limit law, and that is stated, not silent.
     pub fn new(world: &World, path: String, machine: Option<Machine>) -> Result<Self, CommandError> {
+        if let Some(r) = machine.as_ref().and_then(machine::tooling_refusal) {
+            return Err(CommandError::Invalid(format!("machine {r}")));
+        }
         if let Some(m) = &machine
             && !m.is_sane()
         {

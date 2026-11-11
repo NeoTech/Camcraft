@@ -3,8 +3,39 @@
 use super::*;
 use serde_json::json;
 
+/// A stand-in holder library (the real one is the caller's): three
+/// entries, names compared case and spacing ignored.
+fn lib(w: &str) -> Result<HolderInfo, String> {
+    let key = |s: &str| s.split_whitespace().collect::<Vec<_>>().join(" ").to_ascii_lowercase();
+    [("BT30 ER20", Some("BT30")), ("TTS ER20", Some("TTS")), ("ER20 chuck", None)]
+        .iter()
+        .find(|(n, _)| key(n) == key(w))
+        .map(|(n, t)| HolderInfo { name: (*n).to_owned(), taper: t.map(str::to_owned) })
+        .ok_or_else(|| format!("there is no holder '{w}' in the holder library"))
+}
+
+const LIB: Option<HolderLookup> = Some(&lib);
+
+fn parse_tooling(v: &Value) -> Result<(Option<String>, Option<String>), String> {
+    super::parse_tooling(v, LIB)
+}
+
 fn keys(v: &Value) -> Vec<String> {
-    tooling_refusals(v).into_iter().map(|(k, _)| k).collect()
+    tooling_refusals(v, LIB).into_iter().map(|(k, _)| k).collect()
+}
+
+fn mount_check(m: Option<&str>, h: Option<&str>) -> Result<(), String> {
+    super::mount_check(m, h, LIB)
+}
+
+/// Without the caller's library the reader judges the words only: the
+/// holder is kept as stated, never refused for a library it was not given.
+#[test]
+fn without_a_library_the_holder_is_kept_as_its_word() {
+    let v = json!({ "tooling": { "spindle_mount": "TTS", "default_holder": " BT30 ER99 " } });
+    assert_eq!(super::parse_tooling(&v, None), Ok((Some("TTS".into()), Some("BT30 ER99".into()))));
+    let v = json!({ "tooling": { "spindle_mount": "R8", "default_holder": 3 } });
+    assert_eq!(tooling_refusals(&v, None).len(), 2);
 }
 
 #[test]

@@ -782,7 +782,6 @@ dependencies = [
  "boa_engine",
  "camcraft-cl",
  "camcraft-geometry",
- "camcraft-tools",
  "getrandom 0.3.4",
  "serde",
  "serde_json",
