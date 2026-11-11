@@ -300,6 +300,7 @@ pub fn parse_mch(text: &str) -> Result<Machine, String> {
                 }
             }
             let direction = axis_direction(name, part, *rotary)?;
+            let nose_to_axis = super::swing::nose_to_axis(name, part, *rotary, f)?;
             if let Some(z) = safe_retract(name, part, *rotary, f)? {
                 m.safe_retract_z = Some(z);
             }
@@ -312,6 +313,8 @@ pub fn parse_mch(text: &str) -> Result<Machine, String> {
                 resolution,
                 axis,
                 direction,
+                turns_part: super::swing::turns_part(part, *rotary),
+                nose_to_axis,
             });
         }
         axes.sort_by_key(|a| ctrl_coord(ctrl, &a.name));

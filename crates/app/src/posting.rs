@@ -383,6 +383,8 @@ mod wcs_slot;
 mod mounts;
 #[path = "posting_nose.rs"]
 pub mod nose;
+#[path = "posting_index_swing.rs"]
+pub mod index_swing;
 pub(crate) use wcs_rotation::{offset_frame, OffsetFrame};
 pub use mounts::{
     machine_checks, machine_value_for, machine_value_of, post_mounts, post_mounts_script, post_of_setup, PostedMount,
@@ -641,6 +643,9 @@ pub fn verification_report(world: &World) -> GateReport {
     // The limit check (M2.3 D), each op against the machine its own
     // setup mounts (#388): one block per machine, the program's order.
     problems.extend(mounts::machine_problems(world));
+    // #804: before a work-turning A indexes, the retracted tool tip
+    // clears what the stock, parts and turning fixtures sweep about it.
+    problems.extend(index_swing::index_swing_problems(world));
 
     // The workholding clause (M3.2 B, live-gate law): the same fixture
     // bands and rapid laws generation reports early, re-run HERE against
