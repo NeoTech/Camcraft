@@ -10,7 +10,7 @@
 
 use camcraft_sim::cl::{Move, MoveKind};
 use camcraft_sim::geometry::{cube, Point3};
-use camcraft_sim::stock_sim::{ColumnSpan, FloorRead, SdfField, Stock, SimOp, FIELD_BAND};
+use camcraft_sim::stock_sim::{ColumnSpan, FloorRead, LatticeTurn, SdfField, Stock, SimOp, FIELD_BAND};
 
 /// A real 20 x 12 x 6 block (z -6..0) as a closed field.
 fn plate() -> SdfField {
@@ -126,4 +126,29 @@ fn a_bounded_tool_keeps_the_refusal_by_name() {
     // A taper cut that stays well above the floor refuses nothing.
     let h = slot(plate(), -2.0, 2.0, Some(1.0));
     assert_eq!(h.floor_at(10.25, 6.25), FloorRead::Floor(-6.0));
+}
+
+/// The plate upside down, baked (#779): y -> -y, z -> -z, no translation.
+fn flipped(f: &SdfField) -> SdfField {
+    let flip = LatticeTurn::from_matrix([[1.0, 0.0, 0.0], [0.0, -1.0, 0.0], [0.0, 0.0, -1.0]], [0.0; 3]).expect("a flip");
+    f.turned(&flip).0
+}
+
+#[test]
+fn a_flipped_bake_with_cuts_refuses_a_floor_a_cut_came_near() {
+    // #779 (E2a)'s interim law, pinned here before #780's up-march
+    // replaces it (review of #784): a flipped bake's cuts came from BELOW
+    // in the new frame, which the monotone floor law does not cover, so
+    // the field marks itself and a floor a cut came within a cell of is
+    // refused by name - never read as the shell's floor. The slot at -2
+    // becomes a cut from below whose solid spans down past the new floor
+    // (0): its columns refuse; a column far from the slot reads exactly.
+    let g = flipped(&cut(plate(), -2.0));
+    assert_eq!(g.column_span(10.25, -6.25), ColumnSpan::CutFromBelow);
+    assert_eq!(g.floor_at(10.25, -6.25), FloorRead::CutFromBelow);
+    assert_eq!(g.column_span(10.25, -0.75), ColumnSpan::Material { top: 6.0, floor: 0.0 });
+    // An upright bake keeps the monotone law.
+    let upright = LatticeTurn::from_matrix([[-1.0, 0.0, 0.0], [0.0, -1.0, 0.0], [0.0, 0.0, 1.0]], [0.0; 3]).expect("a half turn");
+    let h = cut(plate(), -2.0).turned(&upright).0;
+    assert_eq!(h.column_span(-10.25, -6.25), ColumnSpan::Material { top: -2.0, floor: -6.0 });
 }
