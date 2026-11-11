@@ -55,7 +55,7 @@ at a 1.9x vertex margin; the bore is pinned to plan every level as on main.
 
 **The island's bound.** Release, the whole pocket (growth, trochoid
 refusal, Offset rings): 52.6 s on main, about 22 s with this rule (refused
-at ~600 k vertices and ~8 k r, inside its first margin attempt). The stepped
+at ~600 k vertices and ~9 k r after 109 revolutions, inside its first margin attempt). The stepped
 block and the rotary developed levels are refused sooner too, with the same
 outcome as on main.
 
@@ -76,7 +76,7 @@ outcome as on main.
 - *Simplifying the outline to the planner's tolerance before the opening*:
   it would cut the bore's 200 s and the island's time at the root, but it
   changes toolpaths. That is the "cheaper per-trial geometry" change, filed
-  separately.
+  separately as #882.
 
 **Cost to change later.** Two constants in `budget.rs` and their pins:
 `budget_fixtures.rs` and `adaptive::tests` (margins), `adaptive_hsm` (the
