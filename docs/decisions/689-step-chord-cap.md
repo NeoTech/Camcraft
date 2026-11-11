@@ -152,3 +152,35 @@ arc at 1024 chords.
 - Pinned by
   `verify_arc_reading::the_quarter_reading_is_never_coarser_than_the_old_one_at_any_radius`,
   over radii from 5 to 3000 mm.
+
+
+**The chord cap is in millimetres; the mesh is made in the file's unit
+(review round 3).** `step.rs` tessellates each shell in the STEP file's
+own length unit and scales the mesh to mm only afterwards (#306). The
+cap was compared in file units, so a bare 0.005 meant different things
+per unit:
+- **Inch file:** capped at 0.005 in = 0.127 mm, so the `extent/1000`
+  target ruled. The inch copy of Milling-test.step kept 0.022 mm chords
+  on the Ø25 hole, and the #689 bore was still refused with the 20 mm
+  gouge.
+- **Metre file:** capped at 5 m, which never bound. sample_ap214.step
+  stayed at about 0.03 mm chords.
+
+Now the cap is `MAX_CHORD / mm_per_unit` in file units. Every other
+constant in the function was checked:
+- `extent/1000` is relative and needs no conversion.
+- The coarsen bound `extent * 16` is relative.
+- `MIN_TOL` is in file units, because it guards truck.
+- The reduced-fidelity log now prints mm. It fires when the achieved
+  tolerance exceeds the unfloored target.
+
+`MIN_TOL` rose from 1e-6 to 1e-5 file units. At 5e-6 m truck split the
+metre sample into a non-manifold body: its vertex weld tolerance is
+1e-6 model units. As a result:
+- A metre file reaches 0.01 mm, not 0.005 mm. That is better than the
+  ~0.03 mm before, and it is logged as reduced fidelity.
+- Millimetre and inch files are unaffected.
+
+The full fix for large units is to scale the B-rep to mm before
+tessellating. It belongs with #864, where an achieved chord error above
+the cap tightens the verdict.
