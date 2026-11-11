@@ -5,7 +5,8 @@
 //! the tops, the floors and which columns are empty.
 //!
 //! Gate map (#637): covers sim::stock_sim::field_body (CarriedField::
-//! column_body), carry::Body (from_parts) against carry::Body::carry.
+//! column_body), carry::Body (from_parts) against carry::Body::carry,
+//! field_turn (SdfField::turned against the view, #779).
 //! Provenance: our own fixtures.
 
 use camcraft_sim::cl::{Move, MoveKind};
@@ -128,4 +129,57 @@ fn an_off_grid_ball_slot_carries_the_same_on_both_engines() {
         cut_with(Backend::Field { band: FIELD_BAND }, y, z, r, true),
         MARCH_EPS,
     );
+}
+
+/// #637 E2a (#779): a field with the turn baked into its bricks, seen
+/// through the translation alone, is the view. Through all eight turns the
+/// distance at every column centre of the carried lattice, at every cell
+/// centre height, is bit-identical; for the four upright turns the whole
+/// column read-back is too (a flipped bake's floor under a cut is E2b's
+/// up-march - until then it refuses by name, never guesses).
+fn baked_agrees(field: Stock) {
+    let f = field.field().expect("a field").clone();
+    let col = match cut(Backend::Column, 3.0) {
+        Stock::Column(d) => d,
+        Stock::Field(_) => panic!("a column stock"),
+    };
+    let body = Body::on_floor(col, 0.0);
+    for t in turns() {
+        let d = body.carry(&t).unwrap_or_else(|e| panic!("{t:?}: column carry: {e}")).dex;
+        let lat = Lattice { x0: d.x0, y0: d.y0, cell: d.cell, nx: d.nx, ny: d.ny };
+        let (g, shift) = f.turned(&t);
+        let view = CarriedField::new(f.clone(), t);
+        let only = LatticeTurn::from_matrix([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]], [shift.x, shift.y, shift.z])
+            .unwrap_or_else(|e| panic!("a translation: {e}"));
+        let baked = CarriedField::new(g, only);
+        for jy in 0..d.ny {
+            for jx in 0..d.nx {
+                let (x, y) = (d.x0 + (jx as f64 + 0.5) * d.cell, d.y0 + (jy as f64 + 0.5) * d.cell);
+                for k in -4..16 {
+                    let q = Point3::new(x, y, (f64::from(k) + 0.5) * CELL);
+                    assert_eq!(baked.distance(q).to_bits(), view.distance(q).to_bits(), "{t:?} at {q:?}");
+                }
+            }
+        }
+        if t.flips() {
+            continue;
+        }
+        let a = view.column_body(lat, false).unwrap_or_else(|e| panic!("{t:?}: view: {e}"));
+        let b = baked.column_body(lat, false).unwrap_or_else(|e| panic!("{t:?}: baked: {e}"));
+        assert_eq!(a.floor_judged(), b.floor_judged(), "{t:?}");
+        for k in 0..d.nx * d.ny {
+            assert_eq!(a.empty_at(k), b.empty_at(k), "{t:?} column {k}: empty");
+            assert_eq!(a.dex.top_at(k).to_bits(), b.dex.top_at(k).to_bits(), "{t:?} column {k}: top");
+            assert_eq!(a.floor_at(k).to_bits(), b.floor_at(k).to_bits(), "{t:?} column {k}: floor");
+        }
+    }
+}
+
+#[test]
+fn a_baked_turn_reads_what_the_view_reads_through_every_turn() {
+    let field = Backend::Field { band: FIELD_BAND };
+    baked_agrees(cut(field, 3.0));
+    baked_agrees(cut(field, -1.0));
+    baked_agrees(cut(field, 0.2));
+    baked_agrees(cut_with(field, 6.3, 3.2, 1.7, true));
 }

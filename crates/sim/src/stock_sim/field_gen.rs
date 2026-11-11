@@ -148,6 +148,7 @@ impl SdfField {
             bricks: Arc::new(HashMap::new()),
             cuts: HashMap::new(),
             cut_ups: HashMap::new(),
+            cut_downs: HashMap::new(),
             cost: Box::default(),
             analytic: None,
             bounded_cuts: false,
@@ -272,7 +273,7 @@ fn seed_exact(
 
 #[cfg(test)]
 mod tests {
-    use super::super::field::tests::box_facets;
+    use super::super::field_shell::tests::box_facets;
     use super::*;
 
     #[test]
