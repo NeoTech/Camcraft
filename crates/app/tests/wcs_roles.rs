@@ -85,6 +85,19 @@ fn corner(world: &World, entity: &str, at: [f64; 3]) -> GeoSel {
     GeoSel { entity: entity.into(), feature: FeatureSel::Vertex(id) }
 }
 
+/// The 20 x 20 x 10 block tipped `tilt_deg` about X: a part off the
+/// table, so an edge-picked axis no longer sits on a world axis.
+fn tilted_block(tilt_deg: f64) -> World {
+    let world = new_world();
+    let mut h = History::default();
+    h.execute(&world, ImportModel::from_mesh("block", cube(Point3::new(0.0, 0.0, 0.0), Point3::new(20.0, 20.0, 10.0))));
+    if tilt_deg != 0.0 {
+        let loc = Location { pos: Point3::new(0.0, 0.0, 0.0), rot: quat_from_euler(tilt_deg.to_radians(), 0.0, 0.0) };
+        h.execute(&world, MoveModel::new(&world, "block", loc).expect("tip the block"));
+    }
+    world
+}
+
 /// The cylinder's wall: the multi-strip weld whose strips' own normals
 /// all stand out of the bore axis (caps stay single-strip planar faces).
 fn wall_patch(world: &World, name: &str) -> GeoSel {
@@ -225,6 +238,39 @@ fn the_origin_projects_onto_a_z_face_and_anchors_on_its_centroid() {
     assert!(close(no_origin.pos, [10.0, 0.0, 10.0], 1e-9), "front face centroid, on the top plane: {:?}", no_origin.pos);
     assert!(near(no_origin.x, [0.0, -1.0, 0.0]), "X out of the front face: {:?}", no_origin.x);
     assert!(near(no_origin.y, [1.0, 0.0, 0.0]), "{:?}", no_origin.y);
+}
+
+#[test]
+fn an_edge_as_the_first_axis_reads_unit_on_a_part_tipped_off_the_table() {
+    // A 10 mm edge walk carries a length; the frame axis must not ride
+    // on it. Reading the raw walk as the first axis left `Alignment.x/y/z`
+    // scaled, and `quat_from_axes` (Shepperd on a scaled matrix) then
+    // returned a silently wrong rotation: this very fixture read the
+    // 25 degree tip as a 45.56 roll. Pins: unit, pairwise-square axes,
+    // the tip back out of the euler angles, and the origin at the corner
+    // that sided the edge.
+    let w = tilted_block(25.0);
+    let upright = edge(&w, "block", [0.0, 0.0, 0.0], [0.0, 0.0, 10.0]);
+    let side = face(&w, "block", [20.0, 10.0, 5.0]);
+    let c = corner(&w, "block", [0.0, 0.0, 0.0]);
+    let a = align_roles(&w, &[(upright, Role::Z), (side, Role::X), (c, Role::Origin)])
+        .expect("edge sets Z, face sets X, corner is the origin");
+    let len = |v: [f64; 3]| v.iter().map(|x| x * x).sum::<f64>().sqrt();
+    let dot = |u: [f64; 3], v: [f64; 3]| u.iter().zip(v).map(|(a, b)| a * b).sum::<f64>();
+    for axis in [a.x, a.y, a.z] {
+        assert!((len(axis) - 1.0).abs() < 1e-9, "unit axes: {axis:?}");
+    }
+    assert!(dot(a.x, a.y).abs() < 1e-9 && dot(a.x, a.z).abs() < 1e-9 && dot(a.y, a.z).abs() < 1e-9, "square axes:\n{:?}\n{:?}\n{:?}", a.x, a.y, a.z);
+    let q = quat_from_euler(25f64.to_radians(), 0.0, 0.0);
+    let want = |v: Point3| {
+        let r = quat_rotate_point(q, v);
+        [r.x, r.y, r.z]
+    };
+    assert!(close(a.x, want(Point3::new(1.0, 0.0, 0.0)), 1e-9), "X out of the side face: {:?}", a.x);
+    assert!(close(a.z, want(Point3::new(0.0, 0.0, 1.0)), 1e-9), "Z along the tipped edge: {:?}", a.z);
+    assert!(close(a.y, want(Point3::new(0.0, 1.0, 0.0)), 1e-9), "right-handed: {:?}", a.y);
+    assert!((a.roll_deg - 25.0).abs() < 1e-9 && a.pitch_deg.abs() < 1e-9 && a.yaw_deg.abs() < 1e-9, "the tip reads true: {:?}", (a.roll_deg, a.pitch_deg, a.yaw_deg));
+    assert!(close(a.pos, [0.0, 0.0, 0.0], 1e-9), "origin at the corner that sided the edge: {:?}", a.pos);
 }
 
 #[test]
