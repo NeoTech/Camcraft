@@ -97,7 +97,7 @@ pub use set_units::SetUnits;
 pub use theme::{theme_of, theme_set, SetTheme};
 pub use color_vision::{color_vision_of, color_vision_set, SetColorVision};
 pub use set_wcs::SetWcsOrigin;
-pub use tool::{AddTool, ChangeTool, DeleteTool};
+pub use tool::{AddTool, ChangeTool, DeleteTool, HolderPick};
 pub use tool_body::{LatheBodySpec, SetToolBody, ToolBodySpec};
 pub use tool_import::{ImportReport, ImportTools};
 pub use tool_number::SetToolNumber;

@@ -8,6 +8,7 @@ rust-version.workspace = true
 [dependencies]
 camcraft-cl = { workspace = true }
 camcraft-geometry = { workspace = true }
+camcraft-tools = { workspace = true } # #828: the holder library a machine's default holder names
 boa_engine = { workspace = true } # moved from app at M4.1 R3; hard-pinned in the workspace, sandboxed by js.rs
 thiserror = { workspace = true }
 serde = { workspace = true }

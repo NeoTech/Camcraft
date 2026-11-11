@@ -35,10 +35,28 @@ pub(super) fn reserved(world: &World, name: &str) -> Option<CommandError> {
     None
 }
 
-/// Create a tool entity with the given definition.
+/// Which holder a new tool starts with (#828).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum HolderPick {
+    /// The active setup's machine's `tooling.default_holder`, when it
+    /// states one and the holder takes the tool; none otherwise.
+    MachineDefault,
+    /// This built-in library holder, stated by the caller - it wins
+    /// over the machine's default, and a refusal refuses the add.
+    Named(String),
+    /// No holder body (the tool's own holder cylinder), as before #828.
+    Bare,
+}
+
+/// Create a tool entity with the given definition - and (#828) the
+/// holder body it starts with, landed in the same undo step.
 pub struct AddTool {
     name: String,
     tool: Tool,
+    /// The library holder's name and its drawn body.
+    holder: Option<(String, ToolBody)>,
+    /// Why the machine's default holder was not applied, when it was not.
+    skipped: Option<String>,
 }
 
 impl AddTool {
@@ -61,7 +79,53 @@ impl AddTool {
         Ok(AddTool {
             name: name.to_string(),
             tool,
+            holder: None,
+            skipped: None,
         })
+    }
+
+    /// #828: add the tool with the holder `pick` names. A stated
+    /// holder that cannot take the tool refuses the add by name; the
+    /// machine's default that cannot (a shank its collet does not take,
+    /// a lathe-held insert) is left off and said so ([`Self::note`]) -
+    /// the tool lands as it would without the key, never with another
+    /// holder in its place.
+    pub fn with_holder(world: &World, name: &str, tool: Tool, pick: HolderPick) -> Result<Self, CommandError> {
+        let mut cmd = Self::new(world, name, tool)?;
+        match pick {
+            HolderPick::Bare => {}
+            HolderPick::Named(entry) => {
+                let body = super::tool_body::library_body(&cmd.tool, name, &entry, None, None)?;
+                let canonical = camcraft_tools::holder_library::find(&entry).map(|e| e.name()).unwrap_or(entry);
+                cmd.holder = Some((canonical, body));
+            }
+            HolderPick::MachineDefault => {
+                if let Some(entry) = crate::machine::of(world).1.and_then(|m| m.default_holder) {
+                    match super::tool_body::library_body(&cmd.tool, name, &entry, None, None) {
+                        Ok(body) => cmd.holder = Some((entry, body)),
+                        Err(e) => cmd.skipped = Some(format!("the machine's default holder {entry} was not applied - {e}")),
+                    }
+                }
+            }
+        }
+        Ok(cmd)
+    }
+
+    /// The library holder the tool lands with, if any.
+    #[must_use]
+    pub fn holder(&self) -> Option<&str> {
+        self.holder.as_ref().map(|(n, _)| n.as_str())
+    }
+
+    /// The add's holder line for the status bar and MCP: the holder it
+    /// lands with, or why the machine's default was left off.
+    #[must_use]
+    pub fn note(&self) -> Option<String> {
+        match (&self.holder, &self.skipped) {
+            (Some((n, _)), _) => Some(format!("holder {n}")),
+            (None, Some(why)) => Some(why.clone()),
+            (None, None) => None,
+        }
     }
 }
 
@@ -74,6 +138,9 @@ impl Command for AddTool {
         entity
             .entity_view(world)
             .set(ToolDef { tool: self.tool.clone(), number: None });
+        if let Some((_, body)) = &self.holder {
+            crate::tool_body::set_body(world, &entity, Some(body));
+        }
     }
 
     fn invert(&self, world: &World) {

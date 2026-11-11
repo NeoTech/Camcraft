@@ -193,6 +193,16 @@ pub struct Machine {
     /// post that needs it refuses rather than guess where up is.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub safe_retract_z: Option<f64>,
+    /// The holder system the spindle takes (#828): `tooling.spindle_mount`,
+    /// one of [`super::SPINDLE_MOUNTS`]. Unstated reads `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spindle_mount: Option<String>,
+    /// The built-in library holder a NEW tool on this machine starts
+    /// with (#828): `tooling.default_holder`, the library's own name
+    /// ("BT30 ER20"). Never applied to an existing tool; `None` adds a
+    /// tool with no holder body, as before.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_holder: Option<String>,
 }
 
 /// The words a control needs around C-axis live-tool work (issue
@@ -231,6 +241,7 @@ impl Machine {
                 .is_none_or(|w| Kind::from_word(w).is_some())
             && self.coolants.iter().all(|c| !c.name.is_empty())
             && self.plasma_sane()
+            && super::mount_check(self.spindle_mount.as_deref(), self.default_holder.as_deref()).is_ok()
             && self.axes.iter().all(|a| {
                 rate_ok(a.feed) && rate_ok(a.rapid) && rate_ok(a.resolution) && a.travel.is_none_or(|(lo, hi)| lo.is_finite() && hi.is_finite() && hi > lo)
                     && a.axis.is_none_or(|d| d.iter().all(|x| x.is_finite()))

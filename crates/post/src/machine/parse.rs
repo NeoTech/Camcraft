@@ -205,6 +205,11 @@ pub fn parse_mch(text: &str) -> Result<Machine, String> {
         }
     }
 
+    // #828: the spindle mount and the default holder, refused by name.
+    let (mount, holder) = super::tooling::parse_tooling(&v).map_err(|e| format!("machine file: {e}"))?;
+    m.spindle_mount = mount;
+    m.default_holder = holder;
+
     let kine = v.pointer("/kinematics/default/parts");
     let f = mm_factor(v.pointer("/kinematics/default/units")).unwrap_or(1.0);
     // #131: keep the stated unit for the posts (the numbers stay mm).
