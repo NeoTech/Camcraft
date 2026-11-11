@@ -91,7 +91,20 @@ fn the_users_bore_roughs_adaptive_level_by_level_and_verifies_clean() {
         let line = path.status_summary("Op1", 0, camcraft_app::units::Unit::Millimeters);
         assert!(line.contains("Offset rings"), "{line}");
     }
-    println!("moves {} planar {planar} arcs {arcs} notes {:?}", path.moves.len(), path.notes);
+    // Issue #850: the growth planner's budgets never refuse a level of
+    // the bore (its finely tessellated outline is heavy geometry over a
+    // short walk); only the top level, whose plan would cross itself,
+    // goes to the rings - as on main. A budget that cut a level would
+    // change the path silently under the assertions above.
+    assert!(!path.notes.iter().any(|n| n.contains("planning budget") || n.contains("too detailed")), "{:?}", path.notes);
+    assert!(fell.len() == 1 && fell[0].contains("crosses itself") && fell[0].contains("Z 20.000"), "{fell:?}");
+    let digest = {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        format!("{:?}", path.moves).hash(&mut h);
+        h.finish()
+    };
+    println!("moves {} planar {planar} arcs {arcs} digest {digest:016x} notes {:?}", path.moves.len(), path.notes);
 }
 
 #[test]

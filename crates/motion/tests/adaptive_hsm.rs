@@ -389,7 +389,7 @@ fn hsm_on_the_user_bore_enters_once_and_holds_every_law() {
 /// minute (release) before the length budget refused it. The geometry
 /// budget refuses it about halfway into its first margin attempt, by
 /// name, and the Offset rings cut it, named - verifier silent. The
-/// count in the note is deterministic: past the 500 k budget by at most
+/// count in the note is deterministic: past the 600 k budget by at most
 /// one revolution (~6 k on the island). The wall clock is a loose
 /// backstop only, so a loaded machine cannot fail it.
 #[test]
@@ -403,7 +403,7 @@ fn the_island_is_refused_by_the_geometry_budget_in_seconds() {
         panic!("refused by the geometry budget, by name: {:?}", t.notes)
     };
     let k = n.split("(~").nth(1).and_then(|s| s.split(" k").next()).and_then(|s| s.parse::<u64>().ok());
-    assert!(k.is_some_and(|k| (500..=520).contains(&k)), "the count past the budget by at most a revolution: {n}");
+    assert!(k.is_some_and(|k| (600..=620).contains(&k)), "the count past the budget by at most a revolution: {n}");
     assert!(!t.moves.is_empty() && t.is_chained() && t.all_finite(), "the Offset rings cut it");
     let w = verified(&t, &reg, D);
     assert!(w.is_empty(), "{} {:?}", warn_kinds(&w), t.notes);

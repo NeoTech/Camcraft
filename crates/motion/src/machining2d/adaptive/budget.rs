@@ -20,9 +20,15 @@
 //!    margin area. Length does not bound time - an islanded area's rings
 //!    carry the island's outline through every trial, and its plan spent
 //!    ~2 ms a tool radius against ~1 ms in a plain channel, running about a
-//!    minute before law 2 refused it. Past [`GEOM_MAX`] vertices the plan
-//!    is refused the same way. The count is deterministic (never a wall
-//!    clock): the same project plans, or is refused, on every machine.
+//!    minute before law 2 refused it. A plan that has worked past
+//!    [`GEOM_MAX`] vertices AND walked past [`GEOM_LEN`] tool radii of
+//!    revolutions - many revolutions of heavy rings, a plan far from done -
+//!    is refused the same way. A few revolutions round a finely
+//!    tessellated outline (the user's STEP bore: 33 revolutions, 1.1 M
+//!    vertices, 2.6 k r) finish as before: the vertex count alone measures
+//!    outline resolution, not how far the plan is from done. The counts
+//!    are deterministic (never a wall clock): the same project plans, or
+//!    is refused, on every machine.
 //!
 //! The refused area is cut by the Offset rings, named (`pocket_hsm`).
 //! Ours: the bound is plain arithmetic on the ring family's geometry;
@@ -44,11 +50,18 @@ pub(super) const WORK_MAX: f64 = 30_000.0;
 
 /// The growth geometry (polygon vertices the trial steps and the
 /// revolutions' margin areas ran through, every margin attempt) a plan
-/// may spend before it is refused. Calibrated on our fixtures
-/// (`docs/decisions/850-adaptive-geometry-budget.md`): the 60 x 14 slot,
-/// the largest that plans, spends ~252 k; the 60 x 40 pocket round a
-/// 12 x 12 island ~865 k in its first margin attempt alone.
-pub(super) const GEOM_MAX: u64 = 500_000;
+/// may spend past [`GEOM_LEN`] before it is refused. Calibrated on our
+/// fixtures, heavy lanes included
+/// (`docs/decisions/850-adaptive-geometry-budget.md`): of the plans that
+/// walk past `GEOM_LEN` and finish, the heaviest (the r6.2 rotary neck)
+/// spends ~358 k; the 60 x 40 pocket round a 12 x 12 island ~865 k in its
+/// first margin attempt alone.
+pub(super) const GEOM_MAX: u64 = 600_000;
+
+/// The revolution length (tool radii, every margin attempt) past which
+/// the geometry budget applies. The plans that finish within it - the
+/// user's STEP bore, 2.6 k r over 1.1 M vertices - are law 2's alone.
+pub(super) const GEOM_LEN: f64 = 5_000.0;
 
 /// The growth plan's running work: revolution length (mm, law 2) and
 /// polygon vertices (law 3), summed over every margin attempt.
@@ -81,12 +94,14 @@ impl Work {
     }
 
     /// Why the plan is refused after `revs` revolutions, for a tool of
-    /// radius `r`: past [`WORK_MAX`] or [`GEOM_MAX`]; `None` within both.
+    /// radius `r`: past [`WORK_MAX`], or past both [`GEOM_MAX`] and
+    /// [`GEOM_LEN`]; `None` otherwise.
     pub(super) fn over(&self, r: f64, revs: usize) -> Option<String> {
-        if self.len.get() > WORK_MAX * r {
+        let len = self.len.get();
+        if len > WORK_MAX * r {
             Some(over_work(revs))
-        } else if self.verts.get() > GEOM_MAX {
-            Some(over_geometry(revs, self.verts.get()))
+        } else if self.verts.get() > GEOM_MAX && len > GEOM_LEN * r {
+            Some(over_geometry(revs, self.verts.get(), len / r.max(1e-9)))
         } else {
             None
         }
@@ -126,11 +141,13 @@ pub(super) fn over_work(revs: usize) -> String {
     format!("is refused: growing the cleared area ran past its planning budget after {revs} revolutions")
 }
 
-/// The refusal once the growth geometry ran past [`GEOM_MAX`].
-pub(super) fn over_geometry(revs: usize, verts: u64) -> String {
+/// The refusal once the growth geometry ran past [`GEOM_MAX`] over
+/// `len` tool radii of revolutions (past [`GEOM_LEN`]).
+pub(super) fn over_geometry(revs: usize, verts: u64, len: f64) -> String {
     format!(
-        "is refused: growing the cleared area ran past its planning budget after {revs} revolutions - its rings (~{} k outline vertices worked, over {} k) are too detailed to plan in seconds (an island?)",
+        "is refused: growing the cleared area ran past its planning budget after {revs} revolutions - its rings (~{} k outline vertices worked over ~{:.0} k tool radii of revolutions, over {} k) are too detailed to plan in seconds (an island?)",
         verts / 1000,
+        len / 1000.0,
         GEOM_MAX / 1000
     )
 }
@@ -173,10 +190,15 @@ mod tests {
         assert!(w.over(5.0, 3).is_none());
         w.add_len(WORK_MAX * 5.0 + 1.0);
         assert!(w.over(5.0, 3).is_some_and(|m| m.contains("planning budget after 3 revolutions")));
+        // Heavy geometry over a short walk (a finely tessellated outline
+        // nearly done) is law 2's alone; past `GEOM_LEN` it is refused.
         let w = Work::default();
         w.verts.set(GEOM_MAX);
+        w.add_len(GEOM_LEN * 5.0 - 1.0);
         assert!(w.over(5.0, 9).is_none());
         w.add_geometry(&[&reg]);
+        assert!(w.over(5.0, 9).is_none(), "the bore's kind: heavy, short");
+        w.add_len(2.0);
         let Some(m) = w.over(5.0, 9) else { panic!("over the geometry budget") };
         assert!(m.contains("planning budget after 9 revolutions") && m.contains("too detailed"), "{m}");
         w.verts.set(u64::MAX);
