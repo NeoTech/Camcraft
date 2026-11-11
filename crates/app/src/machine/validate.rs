@@ -114,6 +114,8 @@ pub fn validate_text(text: &str) -> Vec<Refusal> {
     {
         out.push(Refusal::new("tooling.number_of_tools", format!("{n} must be a whole number above 0")));
     }
+    // #828: the spindle mount and default holder, each refusal by name.
+    out.extend(super::tooling_refusals(&v).into_iter().map(|(key, rule)| Refusal::new(key, rule)));
     required_by_kind(&v, text, &axes, &mut out);
     // Anything the reader still refuses that no rule above named (it
     // should be none - the reader's refusals are covered by name).

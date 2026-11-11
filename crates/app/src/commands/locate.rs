@@ -140,6 +140,8 @@ impl LocateFixture {
             fixture_locate::interpenetration(world, spec, &plan),
             fixture_locate::stock_interpenetration(world, spec, &plan, &fixture_locate::stock_carried(world, &plan)),
         );
+        // #826: the riders a located plate carries are judged where they land.
+        let warning = crate::fixture_clash::join(warning.into_iter().chain(write.rider_warnings(world)).collect());
         Ok(LocateFixture { write, plan, warning })
     }
 
