@@ -10,6 +10,7 @@ mod axis_note;
 mod build_info;
 pub mod boundary_draft;
 pub mod boundary_viz;
+pub mod plate_viz;
 pub mod boundary_summary;
 pub mod edge_pick;
 pub mod feature_click;
@@ -50,6 +51,8 @@ mod play_bench_tests;
 mod vertex_pick_tests;
 #[cfg(test)]
 mod setup_chip_tests;
+#[cfg(test)]
+mod pockets_tests;
 #[cfg(test)]
 mod wcs_gizmo_tests;
 #[cfg(test)]

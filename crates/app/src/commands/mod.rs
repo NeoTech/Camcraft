@@ -4,9 +4,13 @@
 //! malformed input never enters the history ("validate early").
 
 // M13.2: workpiece material + the feeds-and-speeds suggestion.
+pub mod accessory;
+pub mod builtin_vise;
 pub mod cutting_data;
 pub mod delete_entity;
 pub mod fixture;
+pub mod fixture_plate;
+pub mod mod_vise;
 pub mod import_fixture;
 pub mod import_model;
 // #339 slice 6: a fixture library entry placed into a setup.
@@ -55,11 +59,15 @@ pub mod update_model;
 
 use flecs_ecs::prelude::World;
 
+pub use accessory::{AccessoryPlacement, InsertAccessory, SetAccessory};
+pub use builtin_vise::{InsertVise, SetVise, VisePlacement};
 pub use cutting_data::{ApplyCuttingData, SetWorkMaterial};
 pub use delete_entity::DeleteEntity;
 pub use fixture::{
     AddFixtureModel, DeleteFixture, MoveFixture, SetFixtureFixed, TagFixture, UntagFixture,
 };
+pub use fixture_plate::{InsertPlate, PlaceOnPlate, PlatePlacement, SetPlate, SetPlateGrid};
+pub use mod_vise::PlaceModVisePair;
 pub use import_fixture::ImportFixture;
 pub use import_model::ImportModel;
 pub use insert_fixture::InsertFixture;

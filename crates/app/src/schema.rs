@@ -227,6 +227,19 @@ pub struct FixtureDef {
     /// the default, every pre-M13.8 file - turns with it (a chuck) and
     /// is judged in the path's own frame.
     pub fixed: bool,
+    /// A built-in vise's parameters (#788): its facets were generated
+    /// from these, so the jaw opening can be edited and regenerated.
+    /// `None` - every imported fixture - is plain steel.
+    pub vise: Option<crate::vise::ViseParams>,
+    /// Fixture plates (#819): this fixture IS a plate (its hole grid),
+    /// and/or stands ON one at a named location. Default: neither.
+    pub plate: crate::plate::PlateLink,
+    /// A mod-vise jaw block's parameters (#820): its facets were
+    /// generated from these. `None` - every other fixture.
+    pub mod_jaw: Option<crate::modvise::JawParams>,
+    /// A built-in accessory's parameters (#789: parallels, blocks, a
+    /// strap clamp, a soft jaw); `None` - not one.
+    pub accessory: Option<crate::accessory::Accessory>,
 }
 
 /// The document's active setup, stored as a flecs singleton like `Units`:
