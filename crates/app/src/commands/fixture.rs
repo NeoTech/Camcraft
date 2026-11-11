@@ -102,6 +102,10 @@ impl TagFixture {
             next: FixtureDef {
                 setup: setup_name.map(str::to_string),
                 fixed: prev.as_ref().is_some_and(|d| d.fixed),
+                // A re-bind keeps a built-in vise's parameters too: its
+                // geometry is unchanged.
+                vise: prev.as_ref().and_then(|d| d.vise.clone()),
+                accessory: prev.as_ref().and_then(|d| d.accessory.clone()),
             },
             prev,
         })

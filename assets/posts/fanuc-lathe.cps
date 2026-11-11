@@ -395,6 +395,7 @@ function endPreamble() {
   if (coolant) block(["M9"]);
   coolant = "";
   coolantAsk = "flood";      // the next section states its own ask
+  sCss = 0;                  // and its own spindle mode: no stale G96 (#772)
   if (liveAsk) {
     if (liveOk) {
       block([liveCodes.spindleOff]);
