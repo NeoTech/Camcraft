@@ -204,8 +204,19 @@ fn the_simulation_draws_the_tool_with_its_holder_cylinder_or_its_body() {
     let (lo, hi) = zr(&verts);
     assert!((lo - tip).abs() < 1e-3, "tip at {tip}: {lo}");
     assert!((hi - (tip + top + 30.0)).abs() < 1e-3, "body top at tip + {top} + 30: {hi}");
+    // #743: what is drawn is the outline the laws judge, revolved - the
+    // 24-gon's envelope band all the way round - and its mesh is cached
+    // only while the transport is up.
+    let op = f.op.and_then(|i| sc.ops.get(i)).expect("an op at the playhead");
+    let outline = camcraft_app::sim_tool_body::for_operation(&st.world, op).expect("no refusal").expect("an outline");
+    let band = outline.holder.last().expect("the body's band");
+    assert_eq!(world::sim_tool_tris(st).map(|t| t.len()), Some(outline.mesh().len()), "the scene draws the judged outline's mesh");
+    let local: Vec<[f32; 3]> = verts.iter().map(|p| [p[0] - f.pos.x as f32, p[1] - f.pos.y as f32, p[2]]).collect();
+    assert!((r_at(&local, tip + top + 30.0) - band.r).abs() < 1e-3, "the judged band's radius at the body's top");
+    assert!(!st.sim_tool_cache.lock().unwrap().is_empty(), "the mesh is held while simulating");
     st.sim = None;
     assert_eq!(world::collect(st).parts.len(), parts_no_body - 1, "no transport, no tool drawn");
+    assert!(st.sim_tool_cache.lock().unwrap().is_empty(), "and the mesh is dropped with the transport");
     let _ = std::fs::remove_dir_all(path.parent().unwrap());
 }
 

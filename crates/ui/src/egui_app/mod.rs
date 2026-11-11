@@ -23,8 +23,10 @@
 
 // pub(crate) for its own unit tests and the shell's init path: the M4.2
 // GPU backend pick - parse, honest fallback chain, adapter log line.
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) mod frame_watch;
 pub(crate) mod gpu;
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) mod gpu_init;
 pub(crate) mod gpu_select;
 // pub: the M6.1 D readability golden reads it beside the two built-in
@@ -39,6 +41,8 @@ mod stock_info;
 // pub: M13.4's ColorVision layer - the viewport, the traced stock and
 // the overlay lines read the palette; `cvd` is its maths.
 pub mod colorvision;
+pub mod ground_ink;
+pub mod window_chrome;
 mod post_options;
 pub mod cvd;
 mod icons;
@@ -108,6 +112,7 @@ mod mill3d_page;
 mod multiaxis_page;
 mod op_page;
 // #144: macOS Cmd+Q / app-menu Quit routed through the guarded Quit.
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) mod os_quit;
 mod params_page;
 mod rotary_page;
@@ -129,9 +134,16 @@ mod fixture_menu;
 // #339 slice 6: the fixture library's Save / Insert dialogs.
 pub(crate) mod fixture_library_dialog;
 pub(crate) mod fixture_vise_dialog;
+pub(crate) mod fixture_plate_dialog;
+mod fixture_plate_rows;
+mod fixture_modvise_rows;
 pub(crate) mod fixture_accessory_dialog;
 mod fixture_accessory_rows;
 pub(crate) mod shell;
+// #31: the winit window, loop and per-frame draw - native only; the
+// browser build keeps `shell` (the shared frame) and refuses `run` below.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) mod shell_window;
 // pub past egui_app from M6.1 C: the switcher's resolution seam
 // (state.rs) installs the live table, the format tests read the
 // columns beside their parser, and every draw site already read
@@ -161,6 +173,12 @@ mod fixture_library_tests;
 #[cfg(test)]
 mod fixture_vise_tests;
 #[cfg(test)]
+mod fixture_self_centering_tests;
+#[cfg(test)]
+mod fixture_plate_tests;
+#[cfg(test)]
+mod fixture_modvise_tests;
+#[cfg(test)]
 mod fixture_accessory_tests;
 #[cfg(test)]
 mod footer_tests;
@@ -174,6 +192,8 @@ mod thread_hand_tests;
 mod after_op_tests;
 #[cfg(test)]
 mod colorvision_tests;
+#[cfg(test)]
+mod viewport_ground_tests;
 #[cfg(test)]
 mod tree_ink_tests;
 #[cfg(test)]
@@ -257,6 +277,25 @@ pub fn run(args: &[String]) -> i32 {
             }
         }
     } else {
-        shell::run_windowed(pick, want, mcp_port)
+        run_windowed(pick, want, mcp_port)
     }
 }
+
+#[cfg(not(target_arch = "wasm32"))]
+fn run_windowed(pick: gpu::GpuPick, want: Option<String>, mcp_port: Option<u16>) -> i32 {
+    shell_window::run_windowed(pick, want, mcp_port)
+}
+
+/// #31: the browser build has no winit window to open - its shell is the
+/// web runner still owed on that issue - so the windowed entry refuses by
+/// name instead of pretending.
+#[cfg(target_arch = "wasm32")]
+fn run_windowed(_pick: gpu::GpuPick, _want: Option<String>, _mcp_port: Option<u16>) -> i32 {
+    eprintln!("{WASM_NO_WINDOW}");
+    2
+}
+
+/// What the wasm32 build says when asked for a native window (#31).
+#[cfg(target_arch = "wasm32")]
+pub(crate) const WASM_NO_WINDOW: &str =
+    "camcraft-ui: the windowed shell is native-only; the browser shell is not built yet (#31)";

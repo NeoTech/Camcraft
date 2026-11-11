@@ -30,6 +30,7 @@ use camcraft_app::{model, operation, pick};
 use winit::keyboard::ModifiersState;
 
 use crate::state::{CommandKind, GeoPick, HoverHit, State};
+use crate::egui_app::ground_ink::{Overlay, light_ground, overlay};
 
 /// Keyboard modifiers as the pick law reads them - the winit state or the
 /// egui `Modifiers`, converted at the shell's edge so the law itself names
@@ -347,6 +348,19 @@ pub(crate) struct Gizmo {
     pub name: String,
 }
 
+/// The axis inks on a light viewport (#698): the dark set washes out on
+/// paper (the blue tip sat near 2:1 on the light ground).
+pub(crate) const AXES_LIGHT: [([f32; 3], [f64; 3]); 3] = [
+    ([0.75, 0.12, 0.10], [1.0, 0.0, 0.0]),
+    ([0.10, 0.55, 0.20], [0.0, 1.0, 0.0]),
+    ([0.10, 0.35, 0.85], [0.0, 0.0, 1.0]),
+];
+
+/// The axis set the live viewport ground reads (see [`AXES`], [`AXES_LIGHT`]).
+pub(crate) fn axes() -> [([f32; 3], [f64; 3]); 3] {
+    if light_ground(crate::egui_app::theme::current().viewport) { AXES_LIGHT } else { AXES }
+}
+
 /// Axis colors and tip offsets shared by the line overlay and the labels.
 const AXES: [([f32; 3], [f64; 3]); 3] = [
     ([0.90, 0.25, 0.20], [1.0, 0.0, 0.0]),
@@ -645,9 +659,10 @@ pub(crate) fn overlay_labels(state: &State, aspect: f64) -> Vec<([f32; 2], [f32;
         let base = Point3::new(gizmo.pos[0], gizmo.pos[1], gizmo.pos[2]);
         // #727: the gizmo's own name, at its origin - whose zero this is,
         // readable without a hover. Emitted before the letters so each
-        // name leads its gizmo's labels. Bright triad blue for offsets
-        // (the same blue #195 lifted for the dark ground); neutral gray
-        // dimmed like the world axes it stands for.
+        // name leads its gizmo's labels. The theme's Z-axis blue for
+        // offsets (via `axes()`, so it lifts for the light ground like
+        // the triad does); neutral gray dimmed like the world axes it
+        // stands for.
         // #645: names only while the user's "Show origin names" is on -
         // the letters below never depend on it, and no line does.
         if state.show_gizmo_names
@@ -656,11 +671,11 @@ pub(crate) fn overlay_labels(state: &State, aspect: f64) -> Vec<([f32; 2], [f32;
             let c = if gizmo.world_axes {
                 [WORLD_GRAY * WORLD_DIM; 3]
             } else {
-                AXES[2].0
+                axes()[2].0
             };
             out.push(([uv[0], uv[1] + NAME_DROP_UV], c, gizmo.name.clone()));
         }
-        for (axis, (rgb, dir)) in AXES.iter().enumerate() {
+        for (axis, (rgb, dir)) in axes().iter().enumerate() {
             let p = transform_point(
                 Point3::new(
                     dir[0] * len * 1.08,
@@ -700,7 +715,7 @@ pub(crate) fn gizmo_segments(state: &State, aspect: f64) -> Vec<([f32; 2], [f32;
         let Some(o) = project_uv(&mvp, gizmo.pos) else {
             continue;
         };
-        for (rgb, dir) in &AXES {
+        for (rgb, dir) in &axes() {
             let p = transform_point(Point3::new(dir[0] * len, dir[1] * len, dir[2] * len), base, gizmo.rot);
             let Some(tip) = project_uv(&mvp, [p.x, p.y, p.z]) else {
                 continue;
@@ -728,7 +743,7 @@ pub(crate) fn collect_overlay(state: &State) -> Vec<[f32; 6]> {
     let mut out: Vec<[f32; 6]> = Vec::new();
     for gizmo in gizmos(state) {
         let (px, py, pz) = (ftoz(gizmo.pos[0]), ftoz(gizmo.pos[1]), ftoz(gizmo.pos[2]));
-        for (rgb, dir) in &AXES {
+        for (rgb, dir) in &axes() {
             let p = transform_point(
                 Point3::new(dir[0] * len, dir[1] * len, dir[2] * len),
                 Point3::new(gizmo.pos[0], gizmo.pos[1], gizmo.pos[2]),
@@ -963,7 +978,7 @@ pub(crate) fn region_lines(state: &State) -> Vec<[f32; 6]> {
                 for i in 0..pts.len() {
                     let a = Point3::new(pts[i].x, pts[i].y, z);
                     let q = pts[(i + 1) % pts.len()];
-                    push_line(&mut out, a, Point3::new(q.x, q.y, z), REGION_RGB);
+                    push_line(&mut out, a, Point3::new(q.x, q.y, z), overlay(Overlay::Region));
                 }
             }
         }
@@ -973,7 +988,7 @@ pub(crate) fn region_lines(state: &State) -> Vec<[f32; 6]> {
             for w in run.windows(2) {
                 let a = Point3::new(w[0].x, w[0].y, z);
                 let b = Point3::new(w[1].x, w[1].y, z);
-                push_line(&mut out, a, b, REGION_RGB);
+                push_line(&mut out, a, b, overlay(Overlay::Region));
             }
         }
     }
@@ -1193,7 +1208,7 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
         out.push(HeightPlane {
             z: r.min(c),
             src: hop,
-            rgb: RETRACT_RGB,
+            rgb: overlay(Overlay::Retract),
             name: "Retract",
             corner: 1,
             skip_rect: false,
@@ -1213,7 +1228,7 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
                 out.push(HeightPlane {
                     z: tz,
                     src: t,
-                    rgb: REGION_RGB,
+                    rgb: overlay(Overlay::Region),
                     name: "Top",
                     corner: 1,
                     skip_rect: stands(tz),
@@ -1223,7 +1238,7 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
                 out.push(HeightPlane {
                     z,
                     src: *cut_z,
-                    rgb: CUT_RGB,
+                    rgb: overlay(Overlay::Cut),
                     name: "Cut",
                     corner: 2,
                     // Stands only where no outline is painted AT the cut
@@ -1319,7 +1334,7 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
                 out.push(HeightPlane {
                     z,
                     src: *top_z,
-                    rgb: REGION_RGB,
+                    rgb: overlay(Overlay::Region),
                     name: "Top",
                     corner: 2,
                     skip_rect: stands(z),
@@ -1329,7 +1344,7 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
                 out.push(HeightPlane {
                     z,
                     src: *bottom_z,
-                    rgb: CUT_RGB,
+                    rgb: overlay(Overlay::Cut),
                     name: "Bottom",
                     corner: 3,
                     skip_rect: false,
@@ -1349,7 +1364,7 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
                 out.push(HeightPlane {
                     z,
                     src: *bottom_z,
-                    rgb: CUT_RGB,
+                    rgb: overlay(Overlay::Cut),
                     name: "Parting",
                     corner: 3,
                     skip_rect: false,
@@ -1368,7 +1383,7 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
                 out.push(HeightPlane {
                     z,
                     src: *top_z,
-                    rgb: REGION_RGB,
+                    rgb: overlay(Overlay::Region),
                     name: "Top",
                     corner: 2,
                     skip_rect: stands(z),
@@ -1388,7 +1403,7 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
                 out.push(HeightPlane {
                     z,
                     src: *top_z,
-                    rgb: REGION_RGB,
+                    rgb: overlay(Overlay::Region),
                     name: "R plane",
                     corner: 2,
                     skip_rect: stands(z),
@@ -1400,7 +1415,7 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
                 out.push(HeightPlane {
                     z,
                     src: *b,
-                    rgb: CUT_RGB,
+                    rgb: overlay(Overlay::Cut),
                     name: "Depth",
                     corner: 3,
                     skip_rect: false,
@@ -1541,7 +1556,7 @@ fn feature_lines(state: &State, items: &[GeoSel]) -> Vec<[f32; 6]> {
                 let a = transform_point(Point3::new(pts[i][0], pts[i][1], pts[i][2]), loc.pos, loc.rot);
                 let q = &pts[(i + 1) % n];
                 let b = transform_point(Point3::new(q[0], q[1], q[2]), loc.pos, loc.rot);
-                push_line(out, a, b, PICK_RGB);
+                push_line(out, a, b, overlay(Overlay::Pick));
             }
         };
         match item.feature {
@@ -1593,7 +1608,7 @@ fn feature_lines(state: &State, items: &[GeoSel]) -> Vec<[f32; 6]> {
                 for d in [[arm, 0.0, 0.0], [0.0, arm, 0.0], [0.0, 0.0, arm]] {
                     let a = Point3::new(c.x - d[0], c.y - d[1], c.z - d[2]);
                     let b = Point3::new(c.x + d[0], c.y + d[1], c.z + d[2]);
-                    push_line(&mut out, a, b, PICK_RGB);
+                    push_line(&mut out, a, b, overlay(Overlay::Pick));
                 }
             }
         }

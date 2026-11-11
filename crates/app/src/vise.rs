@@ -21,9 +21,23 @@ use crate::geometry::{Aabb, Point3, Triangle, quat_conjugate, quat_rotate_point}
 use crate::schema::Location;
 
 pub mod mesh;
+pub mod self_centering;
 pub mod table;
 
-pub use table::{SIZES, ViseSize, size};
+pub use self_centering::SelfCentering;
+pub use table::{SIZES, ViseSize, preset, presets, size};
+
+/// Which kind of vise the parameters build (#787).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub enum ViseStyle {
+    /// A fixed jaw and a moving jaw on a screw (#788): the frame's origin
+    /// is the fixed jaw's face.
+    #[default]
+    Standard,
+    /// A 5-axis self-centering vise (#787): both jaws close on the centre,
+    /// the frame's origin is that centre, no screw housing.
+    SelfCentering(SelfCentering),
+}
 
 /// One vise's dimensions (millimetres) and its jaw opening.
 #[derive(Clone, Debug, PartialEq)]
@@ -51,6 +65,9 @@ pub struct ViseParams {
     pub housing_height: f64,
     /// The gap between the jaws' faces.
     pub opening: f64,
+    /// Standard or self-centering (#787); the housing figures are zero on
+    /// a self-centering vise.
+    pub style: ViseStyle,
 }
 
 /// How far a part box may stand into the fixed jaw before "the stock is
@@ -80,6 +97,9 @@ impl ViseParams {
     /// enough to carry both jaws at the max opening plus the housing.
     /// Refusals name the dimension.
     pub fn check(&self) -> Result<(), String> {
+        if let ViseStyle::SelfCentering(sc) = &self.style {
+            return self_centering::check(self, sc);
+        }
         for (what, v) in self.named() {
             if !v.is_finite() {
                 return Err(format!("vise {what} must be a finite length (got {v})"));
@@ -125,7 +145,21 @@ impl ViseParams {
     /// The checked vise's closed shell in its own frame.
     pub fn mesh(&self) -> Result<Vec<Triangle>, String> {
         self.check()?;
-        mesh::solid(self)
+        match &self.style {
+            ViseStyle::Standard => mesh::solid(self),
+            ViseStyle::SelfCentering(sc) => self_centering::solid(self, sc),
+        }
+    }
+
+    /// The opening that clamps stock box `stock` with the vise standing at
+    /// `pose`, by its style: a standard vise's moving jaw against the
+    /// stock's far side, a self-centering vise's jaws closed on a stock
+    /// centred between them. Refused by name.
+    pub fn opening_to_stock(&self, pose: &Location, stock: &Aabb) -> Result<f64, String> {
+        match &self.style {
+            ViseStyle::Standard => opening_from_stock(pose, stock),
+            ViseStyle::SelfCentering(sc) => self_centering::opening_from_stock(self, sc, pose, stock),
+        }
     }
 
     /// The model name a fresh vise lands under (before the free-name
@@ -137,12 +171,16 @@ impl ViseParams {
     }
 }
 
-/// Fit a vise at identity rotation to stock box `stock`: the fixed jaw's
+/// Fit a vise at identity rotation to stock box `stock` (a self-centering
+/// vise: `self_centering::fit_to_stock`): the fixed jaw's
 /// face on the stock's +y side, the jaw width centred on the stock in x,
 /// the floor under the stock, and the opening the stock's y extent.
 /// Returns the vise (opening set) and the pose of its frame. Refused by
 /// name when the stock is wider than the vise opens.
 pub fn fit_to_stock(p: &ViseParams, stock: &Aabb) -> Result<(ViseParams, Location), String> {
+    if let ViseStyle::SelfCentering(sc) = &p.style {
+        return self_centering::fit_to_stock(p, sc, stock);
+    }
     let across = stock.max.y - stock.min.y;
     if !across.is_finite() || across <= 0.0 {
         return Err("the stock has no width to clamp".into());
