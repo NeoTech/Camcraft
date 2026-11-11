@@ -92,7 +92,7 @@ impl CreateSetup {
                 }
                 if n.contains('/') {
                     return Err(CommandError::Invalid(
-                        "a setup name must not contain '/' - that separator belongs to setup furniture".into(),
+                        "a setup name must not contain '/' - names with '/' are reserved for a setup's own stock and work offset".into(),
                     ));
                 }
                 n.to_string()
@@ -106,7 +106,7 @@ impl CreateSetup {
         }
         if STOCK_NAME == name || WCS_SLOTS.contains(&name.as_str()) {
             return Err(CommandError::Invalid(format!(
-                "'{name}' is reserved for setup furniture"
+                "'{name}' is a name reserved for a setup's stock and work offsets"
             )));
         }
         let materializing = setup::names(world).is_empty();
