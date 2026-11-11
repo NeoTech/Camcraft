@@ -34,6 +34,8 @@ impl Shell {
             }
             self.window_title = title;
         }
+        // #866: a modal file dialog's open time is the user's, not ours.
+        self.frame_watch.excuse(crate::file_dialog::take_waited());
         self.frame_watch.mark("commands", now());
         let scene = world::collect(&self.state);
 

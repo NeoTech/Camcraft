@@ -32,6 +32,17 @@ impl FrameWatch {
         self.phases.clear();
     }
 
+    /// Take `waited` off the frame (#866): time the UI thread spent in a
+    /// modal dialog is the user choosing a file, not the app working, so
+    /// it never reads as a slow phase. Call before the `mark` closing the
+    /// phase it happened in.
+    pub fn excuse(&mut self, waited: Duration) {
+        if let (Some(start), Some(last)) = (self.start.checked_add(waited), self.last.checked_add(waited)) {
+            self.start = start;
+            self.last = last;
+        }
+    }
+
     /// Close the phase that ran since the previous mark.
     pub fn mark(&mut self, phase: &'static str, now: Instant) {
         self.phases.push((phase, now.saturating_duration_since(self.last)));
@@ -98,6 +109,24 @@ mod tests {
         assert!(line.contains("1510 ms"), "{line}");
         assert!(line.contains("slowest phase \"acquire\" 1500 ms"), "{line}");
         assert!(line.contains("ui 4 ms"), "{line}");
+    }
+
+    #[test]
+    fn time_in_a_modal_dialog_is_not_a_slow_frame() {
+        // #866: 35 s browsing for a STEP read as a 35 s "commands" freeze.
+        let t0 = Instant::now();
+        let mut w = FrameWatch::new(t0);
+        w.begin(t0);
+        w.excuse(ms(35_000));
+        w.mark("commands", t0 + ms(35_010));
+        w.mark("ui", t0 + ms(35_016));
+        assert_eq!(w.end(t0 + ms(35_016)), None, "16 ms of work is a fast frame");
+        // Work beyond the wait is still caught, and only the work is named.
+        w.begin(t0);
+        w.excuse(ms(35_000));
+        w.mark("commands", t0 + ms(35_400));
+        let line = w.end(t0 + ms(35_400)).expect("400 ms of work is slow");
+        assert!(line.contains("slow frame 400 ms") && line.contains("\"commands\" 400 ms"), "{line}");
     }
 
     #[test]
