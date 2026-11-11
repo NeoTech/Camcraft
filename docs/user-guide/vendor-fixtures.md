@@ -21,12 +21,15 @@ the fixture library. Labels below are the ones the app shows.
 
 The model must sit with its mounting face down, on the machine table.
 
-1. Use the quarter turns on **Setup > Origin**: the **Turn** buttons rotate
-   the model in 90 degree steps about the world axes, and apply at once.
-   The **Level** button on the same page is the other orientation control.
-2. For an angle the quarter turns cannot give, pick three points on the
-   model (a flat face, an edge and a vertex) and use **Align WCS (3-2-1)**.
-   It is greyed out until the three picks are made.
+1. Select the imported model in the browser tree to open its **Model**
+   page. The **Turn X+ / X- / Y+ / Y- / Z+ / Z-** buttons rotate the model
+   a quarter turn about the world axes and apply at once.
+2. For any other angle, type **Tilt about X (roll)**, **Tilt about Y
+   (pitch)** and **Turn about Z (yaw)** in degrees (and **X**, **Y**, **Z**
+   to move it), then press **Apply**. Every change is one undo step.
+   (The turn and **Align WCS (3-2-1)** controls on **Setup > Origin** move
+   the setup's work coordinate system, not the model. Don't use them to
+   stand a fixture up.)
 3. Look at the model from the top before going on: the part should stand
    the way it will sit on the machine.
 
