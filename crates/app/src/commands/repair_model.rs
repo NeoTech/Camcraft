@@ -44,7 +44,7 @@ impl RepairModel {
         };
         if !model::is_model(world, &entity) {
             return Err(CommandError::Invalid(format!(
-                "'{name}' is setup furniture, not a model"
+                "'{name}' is part of a setup (its stock, work offset or fixtures), not a model"
             )));
         }
         let Some(facets) = model::facets_of(world, &entity) else {

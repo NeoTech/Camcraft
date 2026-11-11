@@ -79,7 +79,8 @@ fn bad_parameters_and_bad_targets_refuse_by_name() {
             .expect("stock"),
     );
     let err = RepairModel::new(&world, STOCK_NAME, 0.001, 256).expect_err("furniture");
-    assert!(err.to_string().contains("setup furniture"), "{err}");
+    assert!(err.to_string().contains("part of a setup"), "{err}");
+    assert!(!err.to_string().to_lowercase().contains("furniture"), "{err}");
 }
 
 #[test]

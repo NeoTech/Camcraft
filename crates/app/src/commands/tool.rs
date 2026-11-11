@@ -29,7 +29,7 @@ pub(super) fn reserved(world: &World, name: &str) -> Option<CommandError> {
             });
     if taken {
         return Some(CommandError::Invalid(format!(
-            "'{name}' is reserved for setup furniture"
+            "'{name}' is a name reserved for a setup's stock and work offsets"
         )));
     }
     None
