@@ -67,6 +67,8 @@ mod tool_body_page;
 // #630: the tool editor's lathe orientation row.
 mod tool_orientation_row;
 mod tool_profile_page;
+// #793: the built-in taper holder picker in the Profile section.
+mod tool_holder_picker;
 mod setup_wcs_pick;
 // #343: a setup's own node pages (settings, machine, post, fixtures, tools).
 mod setup_pages;

@@ -10,6 +10,7 @@ use std::path::Path;
 
 use flecs_ecs::prelude::World;
 
+use camcraft_tools::holder_library;
 use camcraft_tools::spun::{SpunPoint, SpunProfile};
 
 use crate::commands::{Command, CommandError};
@@ -114,6 +115,35 @@ impl SetToolBody {
             }
         };
         Ok(SetToolBody { name: name.to_string(), prev: tool_body::body_of(world, &entity), next })
+    }
+
+    /// #793: drop a built-in library holder (`camcraft_tools::
+    /// holder_library`, "BT30 ER20") into tool `name`'s holder as a
+    /// drawn spun profile - one undo step, editable afterwards like any
+    /// drawn profile. `gauge_len` (gauge line to nose face) defaults to
+    /// the entry's; `projection` (nose face above the tip) to the
+    /// tool's flute plus shank length. Refused by name: no such tool or
+    /// entry, a shank the collet or bore cannot take, a gauge length
+    /// too short for the flange and nose, and everything a drawn
+    /// profile refuses.
+    pub fn library(
+        world: &World,
+        name: &str,
+        entry: &str,
+        gauge_len: Option<f64>,
+        projection: Option<f64>,
+    ) -> Result<Self, CommandError> {
+        let Some(entity) = model::find_by_name(world, name) else {
+            return Err(CommandError::NotFound(name.to_string()));
+        };
+        let tool = model::tool_of(world, &entity)
+            .ok_or_else(|| CommandError::Invalid(format!("'{name}' is not a tool")))?;
+        let invalid = |e: holder_library::LibraryError| CommandError::Invalid(format!("tool '{name}': holder: {e}"));
+        let e = holder_library::find(entry).map_err(invalid)?;
+        e.fits_shank(tool.shank_d).map_err(invalid)?;
+        let nose = projection.unwrap_or(tool.flute_len + tool.shank_len);
+        let points = e.points(nose, gauge_len.unwrap_or(e.gauge_len)).map_err(invalid)?;
+        Self::spun(world, name, Some(points))
     }
 
     /// Read a STEP / STL / OBJ through the model importer and place it.
