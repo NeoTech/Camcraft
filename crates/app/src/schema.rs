@@ -136,6 +136,12 @@ pub struct ToolBody {
     pub spun: Option<camcraft_tools::spun::SpunProfile>,
     /// The frame, the placement it landed with, and the derived read.
     pub frame: crate::tool_body::BodyFrame,
+    /// #828: the holder is ASSUMED - a machine's `tooling.default_holder`
+    /// landed on a new tool, not a holder the user picked. Judged no
+    /// smaller than the tool's stand-in holder cylinder anywhere
+    /// (`HolderProfile::floored`, in `tool_body::judged`). `false` for
+    /// every body the user lands, and for every older file's.
+    pub machine_default: bool,
 }
 
 /// #93 slice 2: a milling tool's own drawn cutter, neck and shank

@@ -16,7 +16,7 @@ use camcraft_app::clock::Instant;
 use std::time::Duration;
 
 use camcraft_app::commands::{
-    ActivateSetup, AlignPartToSetup, SetSetupRelative, SetSetupStockSource, SetSetupWorkOffset, AddTool, ApplyCuttingData, ChangeOperationKind, ChangeTool, CommandError, CreateOperation,
+    ActivateSetup, AlignPartToSetup, SetSetupRelative, SetSetupStockSource, SetSetupWorkOffset, AddTool, HolderPick, ApplyCuttingData, ChangeOperationKind, ChangeTool, CommandError, CreateOperation,
     ClearToolpath, CreateSetup, DeleteEntity, DeleteFixture, DeleteOperation, DeleteSetup, DeleteTool,
     EditOperationLinks, EditOperationParams, GenerateOperation, History, ImportModel,
     MoveFixture, MoveModel, PasteOperation, RegenerateAll, RenameOperation, ReorderOperation, RepairModel, SelectEntity, SetOperationGeometry,
@@ -2934,11 +2934,17 @@ impl State {
                     Err(err) => self.refuse(ErrorScope::Setup, format!("WCS not set: {err}")),
                 }
             }
-            CommandKind::AddTool { name, tool } => match AddTool::new(&self.world, &name, tool) {
+            // #828: a new tool starts with the machine's default holder,
+            // named in the status line (or why it was left off).
+            CommandKind::AddTool { name, tool } => match AddTool::with_holder(&self.world, &name, tool, HolderPick::MachineDefault) {
                 Ok(command) => {
+                    let note = command.note();
                     self.history.execute(&self.world, command);
                     self.doc_version += 1;
-                    self.status = format!("tool {name} added");
+                    self.status = match note {
+                        Some(n) => format!("tool {name} added - {n}"),
+                        None => format!("tool {name} added"),
+                    };
                 }
                 Err(err) => self.refuse(ErrorScope::Tool, format!("tool not added: {err}")),
             },

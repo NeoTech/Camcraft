@@ -59,6 +59,13 @@ pub struct ToolBodyDto {
     /// key can only over-report, never under-read.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub spun: Option<Vec<[f64; 3]>>,
+    /// #828, additive (no version step): the holder is a machine's
+    /// default, assumed for a new tool - judged no smaller than the
+    /// tool's holder cylinder. Absent (every older file) = picked by the
+    /// user, judged by its real shape. A reader without the key judges
+    /// the drawn holder as it stands.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub machine_default: bool,
 }
 
 /// The turning-frame placement on file (#369).
@@ -90,6 +97,7 @@ impl ToolBodyDto {
                 insert_zone: None,
                 facets,
                 spun,
+                machine_default: b.machine_default,
             },
             BodyFrame::Lathe { place, zone, .. } => Self {
                 source: b.source.clone(),
@@ -99,6 +107,7 @@ impl ToolBodyDto {
                 insert_zone: zone.map(|z| InsertZoneDto { lo: z.lo, hi: z.hi }),
                 facets,
                 spun: None,
+                machine_default: false,
             },
         }
     }
@@ -106,6 +115,12 @@ impl ToolBodyDto {
     /// The body, its envelope or clearance re-derived; a refusal names
     /// the tool.
     pub fn to_body(&self, tool: &str) -> Result<ToolBody, String> {
+        let mut body = self.to_drawn_body(tool)?;
+        body.machine_default = self.machine_default;
+        Ok(body)
+    }
+
+    fn to_drawn_body(&self, tool: &str) -> Result<ToolBody, String> {
         if let Some(pts) = &self.spun {
             if self.lathe.is_some() || self.insert_zone.is_some() {
                 return Err(format!("tool '{tool}': a drawn holder profile is a spindle body, not a lathe one"));
