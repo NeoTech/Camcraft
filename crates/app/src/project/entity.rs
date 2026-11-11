@@ -370,6 +370,14 @@ pub struct FixtureDto {
     /// note, never a failed load (#812, `fixture_keys`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub vise: Option<serde_json::Value>,
+    /// A fixture plate's grid (#819); absent - not a plate. Kept as raw
+    /// JSON so a key this build can't read is dropped and logged on
+    /// load, never a failed load (#812).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plate: Option<serde_json::Value>,
+    /// Where this fixture stands on a plate (#819); same lenient read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub on_plate: Option<serde_json::Value>,
     /// A built-in accessory's kind and dimensions (#789); absent - not
     /// one. Same lenient read.
     #[serde(default, skip_serializing_if = "Option::is_none")]

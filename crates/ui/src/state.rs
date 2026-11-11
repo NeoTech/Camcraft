@@ -57,6 +57,9 @@ pub use fixture_library::{FixtureLibDialog, InsertFixtureDraft, LibraryRow, Save
 #[path = "state_vise.rs"]
 mod vise_ui;
 pub use vise_ui::{ViseDraft, ViseOpeningDraft};
+#[path = "state_plate.rs"]
+mod plate_ui;
+pub use plate_ui::{PlateDraft, PlatePlaceDraft};
 #[path = "state_accessory.rs"]
 mod accessory_ui;
 pub use accessory_ui::{AccessoryDraft, AccessorySizeDraft};
@@ -468,6 +471,27 @@ pub enum CommandKind {
         params: camcraft_app::vise::ViseParams,
         from_stock: bool,
     },
+    /// #819: open "Add fixture plate…" over a setup's Fixtures node.
+    FixturePlateDialog(String),
+    /// Place built-in plate `params` into `setup`: centred on the machine
+    /// table, or its frame at `pos` (mm) turned `yaw_deg` - one `InsertPlate`.
+    InsertFixturePlate {
+        setup: Option<String>,
+        params: camcraft_app::plate::PlateParams,
+        on_table: bool,
+        pos: [f64; 3],
+        yaw_deg: f64,
+    },
+    /// Put fixture `fixture` on plate `plate` at `at` - one `PlaceOnPlate`.
+    PlaceOnPlate {
+        fixture: String,
+        plate: String,
+        at: camcraft_app::plate::MountAt,
+        yaw_deg: f64,
+    },
+    /// Detect fixture `name`'s plate grid from its holes, or (`clear`)
+    /// stop it being a plate - one `SetPlateGrid`.
+    DetectPlateGrid { name: String, clear: bool },
     /// #789: open the "Add accessory…" dialog over a setup's Fixtures
     /// node (`""` - the implicit setup). View state.
     AccessoryDialog(String),
@@ -1455,6 +1479,8 @@ pub struct State {
     /// view state; Set lands it through `SetVise`. See
     /// [`State::vise_opening_draft`].
     pub vise_opening: HashMap<String, ViseOpeningDraft>,
+    /// #819: each fixture row's "Place on plate" draft, by fixture name.
+    pub plate_place: HashMap<String, PlatePlaceDraft>,
     /// The selected op's struck fixtures, per (version, op, path sig).
     pub struck_cache: camcraft_app::fixture_view::StruckCache,
     /// Properties / Tool Library pane drafts (ephemeral; see [`OpUi`]).
@@ -1755,6 +1781,7 @@ impl State {
             fixture_lib: None,
             fixture_lib_dir: None,
             vise_opening: HashMap::new(),
+            plate_place: HashMap::new(),
             struck_cache: Default::default(),
             // The tool draft carries a plausible name from the first
             // frame: an empty Name field made Add look dead (refused
@@ -3486,6 +3513,12 @@ impl State {
                 self.insert_builtin_vise(setup, &params, fit_stock, pos, yaw_deg);
             }
             CommandKind::SetVise { name, params, from_stock } => self.set_builtin_vise(&name, params, from_stock),
+            CommandKind::FixturePlateDialog(setup) => self.open_plate_dialog(setup),
+            CommandKind::InsertFixturePlate { setup, params, on_table, pos, yaw_deg } => {
+                self.insert_fixture_plate(setup, &params, on_table, pos, yaw_deg);
+            }
+            CommandKind::PlaceOnPlate { fixture, plate, at, yaw_deg } => self.place_fixture_on_plate(&fixture, &plate, at, yaw_deg),
+            CommandKind::DetectPlateGrid { name, clear } => self.detect_plate_grid(&name, clear),
             CommandKind::SetupSheetDialog => {
                 if let Some(path) = save_sheet_dialog() {
                     self.setup_sheet_path(path);

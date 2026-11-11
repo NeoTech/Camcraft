@@ -96,6 +96,8 @@ pub fn collect(world: &World) -> ProjectFile {
                     fixed: d.fixed,
                     vise: d.vise.as_ref().and_then(super::fixture_keys::vise_value),
                     accessory: d.accessory.as_ref().and_then(super::fixture_keys::accessory_value),
+                    plate: super::plate_dto::plate_value(&d.plate),
+                    on_plate: super::plate_dto::on_plate_value(&d.plate),
                 });
             let operation = model::operation_of(world, &entity).map(|op| OperationDto {
                 label: model::operation_meta_of(world, &entity).label,

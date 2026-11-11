@@ -860,6 +860,7 @@ pub(super) fn fixtures_section(ui: &mut Ui, state: &mut State, ctx: Option<&str>
         state.fixture_ui = FixtureUi::default();
     }
     state.retire_vise_opening_drafts();
+    state.retire_plate_place_drafts();
     state.retire_accessory_size_drafts();
     ui.label(if fixtures.is_empty() && table.is_none() {
         "No workholding modeled: the collision checks see stock and part only."
@@ -890,6 +891,10 @@ pub(super) fn fixtures_section(ui: &mut Ui, state: &mut State, ctx: Option<&str>
         // #789: parallels, blocks, strap clamps, soft jaws.
         if ui.button("Add accessory…").clicked() {
             state.pending.push_back(CommandKind::AccessoryDialog(ctx.unwrap_or_default().to_owned()));
+        }
+        // #819: a parametric grid plate, fixtures placed on its holes.
+        if ui.button("Add fixture plate…").clicked() {
+            state.pending.push_back(CommandKind::FixturePlateDialog(ctx.unwrap_or_default().to_owned()));
         }
         // The other way in: a model already imported - select its row
         // in the browser and mark it. Offered only for exactly one
