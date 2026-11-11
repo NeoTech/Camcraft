@@ -179,10 +179,10 @@ mod tests {
             let t = stamp_spindle_c(helix(), spindle(), (Some(&wide), false), 0.01, kind);
             assert!(t.is_ok_and(|t| t.moves.iter().all(|m| m.rotary.is_some_and(|c| (-720.0..=0.0).contains(&c)))), "{kind}");
         }
-        // The contour, asked to unwind, has no clear link in a bare helix:
-        // the unwind law's own refusal, not this one.
-        let e = stamp_spindle_c(helix(), spindle(), (Some(&m), true), 0.01, "Rotary Contour").err().map(|e| e.to_string()).unwrap_or_default();
-        assert!(e.contains("no clear link stands inside it"), "{e}");
+        // The contour unwinds: its 540 deg opening stretch is shifted a
+        // whole turn into the travel (the section opens there).
+        let t = stamp_spindle_c(helix(), spindle(), (Some(&m), true), 0.01, "Rotary Contour");
+        assert!(t.is_ok_and(|t| t.moves.iter().all(|m| m.rotary.is_some_and(|c| (-360.0..=360.0).contains(&c)))));
     }
 
     #[test]

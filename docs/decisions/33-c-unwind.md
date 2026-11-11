@@ -51,3 +51,46 @@ each link.
 **Cost to change.** Local. `unwind_c` is one function in
 `crates/cl/src/cl/rotary_unwind.rs`, and the policy (which links, how
 many turns) is two small blocks in it.
+
+## #33 - C unwind review round: Parallel/Offset scope, the C feed cap
+
+**Decided (orchestrating session).** Rotary Parallel and Rotary Offset
+needed either an end-to-end test like the contour's or a refusal by
+name. They took the refusal: neither unwinds. On a machine that states a
+C travel, each posts only a path whose stamped C already fits that
+travel, which is what the machine check passed before slice 2. Where C
+would need a rewind, generation refuses by name ("... unwinding C at
+links is proven for Rotary Contour only"). This is pinned by
+`rotary_gate::tests::parallel_and_offset_are_refused_by_name_where_c_would_need_a_rewind`.
+Why the refusal and not the tests: Rotary Parallel on the spindle's C
+needs a bar that leans between 1 and 2.6 degrees off Z. It refuses a
+standing bar, and the C gate refuses anything leaning further, so no
+honest fixture exists. Rotary Offset's end-to-end run is a heavy-lane
+fixture (center_cut_multiaxis is one of the slow suites). Neither fit
+the time box. Dropped: refusing these two kinds on every C-travel
+machine, even when the path fits. That would remove behaviour that
+already worked before this PR.
+
+**Decided (requested by the review).** The rewind stays as coordinated
+G01 moves. A G00 with C is not coordinated on most controls, so the tool
+would leave the verified chord. fanuc-lathe.cps caps the composite F of
+every C block, not only rewinds, so that neither the X/Z part nor the C
+part outruns the machine file. Under a composite F, the control drives
+X/Z at `F * lin / lcmd` and C at `F * |dC| / lcmd`. F is therefore the
+smallest of three values: the composite value, `feedRateMax * lcmd /
+lin`, and `C rate * lcmd / |dC|`. The C rate is the C's stated normal
+speed, or its rapid speed if only that is stated. The script's rotary
+inventory now carries each rotary's own `speeds` (deg/min) for this. The
+rates still stay out of every mm/min field.
+
+**Stated limit of the data.** A machine file that states no C rate
+leaves C uncapped. The rotary rate is then unbounded by data, and only
+the linear part is held to the stated feed. Inventing a rate was
+rejected.
+
+**What moved.** On the shipped-rate bench (C 6000 deg/min), the rewind
+orbit now posts F6000 where it posted F22954. The retract stays F4000,
+which is exactly the stated linear feed. The slice-1 golden
+(`c_axis_helix.nc`) does not move: its machine states no C rate, and
+the linear cap never binds below the composite value, because a block's
+radial and axial change is never longer than its part-frame chord.
