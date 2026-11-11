@@ -1004,6 +1004,10 @@ pub enum ParamsDto {
     Probe(ProbeDto),
     /// The plasma profile (#670): additive - no older file names it.
     PlasmaProfile(PlasmaDto),
+    /// The trochoidal slot (#220): an appended variant in the v58 grammar,
+    /// like the probe - no format rung (a file holding one cannot have
+    /// been written by a build without it).
+    TrochoidalSlot(TrochoidDto),
 }
 
 /// The angle an absent `ramp_angle` means: 45°, the ground the

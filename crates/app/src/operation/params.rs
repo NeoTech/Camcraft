@@ -860,6 +860,47 @@ impl OpParams {
                 });
                 wt(h, *tilt);
             }
+            OpParams::TrochoidalSlot {
+                a,
+                b,
+                width,
+                loop_width,
+                step,
+                max_engagement,
+                ret,
+                smoothing,
+                stock_to_leave,
+                clearance_z,
+                retract_z,
+                top_z,
+                bottom_z,
+                stepdown,
+                feed,
+                return_feed,
+                plunge_feed,
+                climb,
+            } => {
+                wp2(h, *a);
+                wp2(h, *b);
+                for v in [*width, loop_width.unwrap_or(-1.0), *step, *max_engagement, *smoothing, *stock_to_leave] {
+                    w(h, v);
+                }
+                match ret {
+                    crate::machining2d::TrochoidReturn::Microlift { height } => {
+                        h.write_u8(0);
+                        w(h, *height);
+                    }
+                    crate::machining2d::TrochoidReturn::Retract => h.write_u8(1),
+                }
+                wh(h, *clearance_z);
+                wh_opt(h, *retract_z);
+                wh(h, *top_z);
+                wh(h, *bottom_z);
+                for v in [*stepdown, *feed, *return_feed, *plunge_feed] {
+                    w(h, v);
+                }
+                h.write_u8(u8::from(*climb));
+            }
             OpParams::Trace {
                 clearance_z,
                 retract_z,

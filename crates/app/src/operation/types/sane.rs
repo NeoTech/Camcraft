@@ -691,6 +691,50 @@ impl OpParams {
                     && pos(*feed)
                     && pos(*plunge_feed)
             }
+            OpParams::TrochoidalSlot {
+                a,
+                b,
+                width,
+                loop_width,
+                step,
+                max_engagement,
+                ret,
+                smoothing,
+                stock_to_leave,
+                clearance_z,
+                retract_z,
+                top_z,
+                bottom_z,
+                stepdown,
+                feed,
+                return_feed,
+                plunge_feed,
+                ..
+            } => {
+                a.x.is_finite()
+                    && a.y.is_finite()
+                    && b.x.is_finite()
+                    && b.y.is_finite()
+                    && pos(*width)
+                    && loop_width.is_none_or(pos)
+                    && pos(*step)
+                    && pos(*max_engagement)
+                    && *max_engagement <= 180.0
+                    && match ret {
+                        crate::machining2d::TrochoidReturn::Microlift { height } => pos(*height),
+                        crate::machining2d::TrochoidReturn::Retract => true,
+                    }
+                    && nneg(*smoothing)
+                    && nneg(*stock_to_leave)
+                    && clearance_z.is_sane()
+                    && retract_z.is_none_or(|r| r.is_sane())
+                    && top_z.is_sane()
+                    && bottom_z.is_sane()
+                    && pos(*stepdown)
+                    && pos(*feed)
+                    && pos(*return_feed)
+                    && pos(*plunge_feed)
+            }
             OpParams::Trace {
                 clearance_z,
                 retract_z,
