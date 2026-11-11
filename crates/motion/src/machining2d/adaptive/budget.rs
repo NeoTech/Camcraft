@@ -165,8 +165,8 @@ pub(super) fn over_work(revs: usize) -> String {
 /// revolutions over its limit.
 pub(super) fn over_geometry(revs: usize, (verts, verts_max): (u64, u64), (len, len_max): (f64, f64)) -> String {
     format!(
-        "is refused: growing the cleared area ran past its planning budget after {revs} revolutions - its outline is too detailed and its path too long to plan in seconds (an island?): both limits passed, ~{} k outline vertices processed (limit {} k) and ~{:.1} k tool radii of path (limit {:.1} k)",
-        verts / 1000,
+        "is refused: growing the cleared area ran past its planning budget after {revs} revolutions - its outline is too detailed and its path too long to plan in seconds (an island?): both limits passed, ~{:.1} k outline vertices processed (limit {} k) and ~{:.1} k tool radii of path (limit {:.1} k)",
+        verts as f64 / 1000.0,
         verts_max / 1000,
         len / 1000.0,
         len_max / 1000.0
