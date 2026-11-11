@@ -88,7 +88,7 @@ impl TagFixture {
         let entity = require_writable(world, name)?;
         if !model::is_model(world, &entity) {
             return Err(CommandError::Invalid(format!(
-                "'{name}' is setup furniture or CAM data, not a model to mark"
+                "'{name}' is the setup's stock, work offset or CAM data, not a model to mark"
             )));
         }
         if let Some(s) = setup_name

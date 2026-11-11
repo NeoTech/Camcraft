@@ -8,6 +8,33 @@
 //! Provenance: our own seam; rfd's builder API from its public docs.
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
+
+use camcraft_app::clock::Instant;
+
+/// Microseconds the UI thread spent waiting on a native dialog since the
+/// last [`take_waited`] (#866): the dialogs are modal and synchronous, so
+/// the user's time browsing for a file would otherwise read as a frozen
+/// "commands" phase in the frame watch.
+static WAITED_US: AtomicU64 = AtomicU64::new(0);
+
+/// Run one modal dialog, adding its open time to [`WAITED_US`].
+fn timed<T>(open: impl FnOnce() -> T) -> T {
+    let start = Instant::now();
+    let out = open();
+    let us = u64::try_from(start.elapsed().as_micros()).unwrap_or(u64::MAX);
+    // Drained every frame: u64 microseconds wrap only after ~584k years.
+    WAITED_US.fetch_add(us.min(u64::MAX / 2), Ordering::Relaxed);
+    out
+}
+
+/// The time spent in modal dialogs since the last call, and reset it.
+/// The frame watch takes it off the frame it happened in (#866).
+#[must_use]
+pub fn take_waited() -> Duration {
+    Duration::from_micros(WAITED_US.swap(0, Ordering::Relaxed))
+}
 
 /// The picker's settings, kept on every target so the call sites (and
 /// the tests) see one shape whatever the platform does with it.
@@ -53,19 +80,19 @@ impl FileDialog {
     /// Open one existing file; `None` when cancelled (or no dialog exists).
     #[must_use]
     pub fn pick_file(self) -> Option<PathBuf> {
-        imp::pick_file(self)
+        timed(|| imp::pick_file(self))
     }
 
     /// Choose a file to write; `None` when cancelled (or no dialog exists).
     #[must_use]
     pub fn save_file(self) -> Option<PathBuf> {
-        imp::save_file(self)
+        timed(|| imp::save_file(self))
     }
 
     /// Choose a folder; `None` when cancelled (or no dialog exists).
     #[must_use]
     pub fn pick_folder(self) -> Option<PathBuf> {
-        imp::pick_folder(self)
+        timed(|| imp::pick_folder(self))
     }
 }
 

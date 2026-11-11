@@ -791,7 +791,7 @@ fn setups_page(ui: &mut Ui, state: &mut State) {
     ui.separator();
     tool_list_section(ui, state, active.as_deref());
     sheet_footer(ui, state);
-    ui.label("The Stock and Work-offset pages edit the active setup's furniture.");
+    ui.label("The Stock and Work offset pages edit the active setup's stock and work offset.");
 }
 
 /// The tool list of one setup context (M3.2 stage C): what goes into
