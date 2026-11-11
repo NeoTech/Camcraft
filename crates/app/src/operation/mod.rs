@@ -92,6 +92,8 @@ pub use footprint::machined_footprint;
 mod probe;
 // #108: the Probe operation's generation and protected-move law.
 pub mod probe_op;
+// #670: the Plasma Profile's seed and generation glue.
+pub mod plasma_op;
 // #171: the Probe op seeded from one picked face, edge, vertex or round wall.
 mod probe_pick;
 mod probe_pick_round;
@@ -126,6 +128,8 @@ use boundary_ctx::*;
 mod job;
 pub use job::*;
 mod generate;
+/// #339 slice 5: links routed over the setup's fixtures.
+pub mod fixture_route;
 mod cross_entry;
 mod cross_sag;
 mod cross_part;
