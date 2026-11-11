@@ -4,8 +4,8 @@
 //! lands the BT30 ER20 as one undoable command that then edits as a
 //! Custom profile, and a shank the holder cannot take is refused by
 //! name. #792: the picker lists the standalone ER chucks, and its
-//! projection field rides the same undoable command. Provenance: our
-//! own page law.
+//! projection field rides the same undoable command. #794: the list
+//! carries the Tormach TTS holders. Provenance: our own page law.
 
 use super::*;
 use camcraft_app::holder_library;
@@ -117,4 +117,25 @@ fn the_projection_lands_through_apply_holder_and_undoes() {
     harness.run();
     harness.run();
     assert!(drawn(&harness.state().state).is_none(), "one undo restores the holder cylinder");
+}
+
+/// #794: the Library holder list carries the Tormach TTS holders, and a
+/// pick names its collar and lands at its published installed height
+/// (TTS ER20: 52 mm) as the gauge length.
+#[test]
+fn the_picker_lists_the_tts_holders_and_names_the_collar() {
+    let mut harness = profile_tab();
+    harness.get_by_label("Library holder").click();
+    harness.run();
+    harness.run();
+    for n in ["TTS ER20", "TTS ER16", "TTS Weldon 3/8 in", "TTS Weldon 1/2 in", "TTS Weldon 6 mm"] {
+        assert!(harness.query_by_label(n).is_some(), "{n} is in the list");
+    }
+    harness.state_mut().state.pick_library_holder("TTS ER20");
+    harness.run();
+    harness.run();
+    let st = &harness.state().state;
+    assert_eq!((st.tool_profile_ui.library.as_deref(), st.tool_profile_ui.gauge), (Some("TTS ER20"), 52.0));
+    assert!(harness.query_all_by_label_contains("TTS collar Ø38.1").next().is_some(), "the pick names its collar");
+    assert!(harness.query_all_by_label_contains("ER20 nut Ø35").next().is_some(), "and its nut");
 }
