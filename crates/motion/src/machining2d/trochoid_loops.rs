@@ -23,6 +23,8 @@
 
 use crate::geo2d::Point2;
 
+use super::face::GenError;
+
 /// The angle (degrees) a front arc meets the band's wall at.
 pub(super) const END_DEG: f64 = 10.0;
 
@@ -248,6 +250,47 @@ pub(super) fn layout(chain: &Chain, b: f64, step: f64, fillet: f64, climb: bool)
         }
     }
     Some(Layout { c0, b, entry: f0.at(0.0, -b), opposite: f0.at(0.0, b), ccw, pieces, loops: n, rho, spacing })
+}
+
+/// Every loop stays inside the cutter-centre band of the channel (a
+/// chain turning tighter than the loops is refused, never gouged).
+pub(super) fn contained(ch: &Chain, lay: &Layout, room: f64) -> Result<(), GenError> {
+    let mut from = lay.entry;
+    for pc in &lay.pieces {
+        let mut at = pc.start;
+        for el in &pc.cut {
+            let El::Arc { center, to, ccw } = *el;
+            for q in arc_samples(at, to, center, ccw) {
+                if ch.distance(q) > room + 1e-6 {
+                    return Err(GenError::Invalid(format!(
+                        "trochoidal slot: a loop at ({:.3}, {:.3}) would leave the channel - the centre line turns too tightly for loops this wide",
+                        q.x, q.y
+                    )));
+                }
+            }
+            at = to;
+        }
+        if ch.distance(pc.start) > room + 1e-6 || ch.distance(from) > room + 1e-6 {
+            return Err(GenError::Invalid("trochoidal slot: a wall lead would leave the channel".into()));
+        }
+        from = pc.start;
+    }
+    Ok(())
+}
+
+/// Points along the arc `a -> b` about `c` (a degree apart at most).
+fn arc_samples(a: Point2, b: Point2, c: Point2, ccw: bool) -> Vec<Point2> {
+    let (a0, a1) = ((a.y - c.y).atan2(a.x - c.x), (b.y - c.y).atan2(b.x - c.x));
+    let tau = std::f64::consts::TAU;
+    let sweep = if ccw { (a1 - a0).rem_euclid(tau) } else { -(a0 - a1).rem_euclid(tau) };
+    let rad = (a.x - c.x).hypot(a.y - c.y);
+    let n = ((sweep.abs().to_degrees()).ceil() as usize).clamp(1, 720);
+    (0..=n)
+        .map(|k| {
+            let t = a0 + sweep * k as f64 / n as f64;
+            Point2::new(c.x + rad * t.cos(), c.y + rad * t.sin())
+        })
+        .collect()
 }
 
 #[cfg(test)]
