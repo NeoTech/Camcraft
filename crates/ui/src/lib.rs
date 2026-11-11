@@ -26,6 +26,8 @@ pub mod path_lines;
 pub mod post_file;
 pub mod plane_pick;
 pub mod axis_pick;
+pub mod cylinder_pick;
+pub mod origin_pick;
 pub mod points_pick;
 pub mod state;
 pub mod theme_dir;

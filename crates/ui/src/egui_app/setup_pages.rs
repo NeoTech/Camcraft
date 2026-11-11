@@ -158,11 +158,8 @@ fn settings(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
         }
         ui.label(line);
     }
-    super::setup_align_pick::picker(ui, state, name);
+    super::setup_orient_pick::section(ui, state, name);
     super::setup_relative_pick::picker(ui, state, name);
-    super::setup_plane_pick::row(ui, state, name);
-    super::setup_points_pick::row(ui, state, name);
-    super::setup_axis_pick::rows(ui, state, name);
     super::setup_wcs_pick::picker(ui, state, name);
     ui.separator();
     if ui.button(format!("Delete {name}")).clicked() {

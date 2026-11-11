@@ -108,6 +108,8 @@ fn mode_of(by: AxisBy) -> GeoPick {
 /// Vertex mode for two points. The lay-on-a-plane draft stops.
 pub fn arm(state: &mut State, setup: &str, axis: InPlaneAxis) {
     state.plane_pick = None;
+    state.cylinder_pick = None; // #771
+    state.origin_pick = None; // #771
     state.points_pick = None; // #555: one draft collects at a time
     let d = draft_for(state, setup);
     d.picking = Some(axis);
@@ -144,6 +146,14 @@ pub fn disarm_hidden(state: &mut State) {
     // #555's three-points draft keeps the same law (merge with #664).
     if state.points_pick.as_ref().is_some_and(|d| !shown.contains(&d.setup)) {
         crate::points_pick::disarm(state);
+    }
+    // #771's cylinder and origin drafts keep the same law: a draft
+    // whose rows are off screen must not eat a viewport click.
+    if state.cylinder_pick.as_ref().is_some_and(|d| !shown.contains(&d.setup)) {
+        crate::cylinder_pick::pause(state);
+    }
+    if state.origin_pick.as_ref().is_some_and(|d| !shown.contains(&d.setup)) {
+        crate::origin_pick::pause(state);
     }
 }
 

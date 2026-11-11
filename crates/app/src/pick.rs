@@ -6,6 +6,7 @@
 
 pub mod align;
 pub mod axis;
+pub mod cylinder;
 pub mod face;
 pub mod feature_arc;
 pub mod feature_graph;
@@ -19,6 +20,7 @@ pub mod winding;
 
 pub use align::{Alignment, align_321};
 pub use axis::{AxisPick, InPlaneAxes, InPlaneAxis, align_from_axes, in_plane_turn_deg, pick_coords, turn_in_plane};
+pub use cylinder::{TargetAxis, align_from_cylinder};
 pub use plane::{PlaneLay, lay_on_plane, plane_label, plane_side};
 pub use points::{PointsLay, lay_on_points, points_side};
 pub use face::{FaceOrigin, face_origin, facets_centroid};

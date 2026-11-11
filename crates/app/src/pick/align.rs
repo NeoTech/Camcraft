@@ -188,7 +188,8 @@ fn curved_center(world: &World, g: &GeoSel) -> Result<[f64; 3], String> {
         .map_err(|why| format!("{} of '{}': {why}", g.feature, g.entity))
 }
 
-fn vertex(world: &World, g: &GeoSel) -> Result<[f64; 3], String> {
+/// A picked vertex's world position (#771: the setup's origin point).
+pub(crate) fn vertex(world: &World, g: &GeoSel) -> Result<[f64; 3], String> {
     let FeatureSel::Vertex(id) = g.feature else { return Err(gone(g)) };
     let e = model::find_by_name(world, &g.entity).ok_or_else(|| gone(g))?;
     let features = model::features_of(world, &e).ok_or_else(|| gone(g))?;

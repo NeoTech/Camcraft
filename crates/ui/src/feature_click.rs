@@ -83,8 +83,11 @@ pub(crate) fn ask(state: &State, mods: Mods) -> Ask {
         // picked in another mode still reaches `points_pick::take`,
         // which refuses it by name.
         mode
-    } else if crate::plane_pick::collecting(state) {
+    } else if crate::plane_pick::collecting(state) || crate::cylinder_pick::collecting(state) {
         PickKinds::FACES
+    } else if crate::origin_pick::collecting(state) {
+        // #771: the origin point is a vertex.
+        PickKinds::POINTS
     } else if let Some(by) = state.axis_pick.as_ref().and_then(|d| d.picking.map(|a| d.by(a))) {
         match by {
             AxisBy::Edge => PickKinds::EDGES,
@@ -170,6 +173,14 @@ pub(crate) fn click(state: &mut State, p: [f32; 2], mods: Mods) {
     }
     if crate::plane_pick::collecting(state) {
         crate::plane_pick::take(state, pick); // #330 / #554
+        return;
+    }
+    if crate::cylinder_pick::collecting(state) {
+        crate::cylinder_pick::take(state, pick); // #771
+        return;
+    }
+    if crate::origin_pick::collecting(state) {
+        crate::origin_pick::take(state, pick); // #771
         return;
     }
     if crate::axis_pick::hint_stray(state) {

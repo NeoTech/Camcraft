@@ -238,10 +238,13 @@ fn tool_editor_structure() {
     );
 }
 
-/// #557 / #554 / #555: a setup's own page carries the part-alignment rows in
-/// the properties leaf - the plane row (a face), the three-points row (#555) and the axes-in-the-plane
-/// rows (an edge or two points), each saying which pick it takes, with nothing armed and Apply hidden until
-/// an axis is picked, and every option of the plane rows on screen (#330).
+/// #771: a setup's own page carries the orientation section - two
+/// dropdowns ("Plane orientation" and "Orientation point"), each
+/// expanding its method's controls below it. The default method is
+/// Axes (#769's rows); the face (#330), points (#555) and manual
+/// (#326) rows stay behind their dropdown entries, each still drawn
+/// verbatim by its own row function (their content is pinned by the
+/// row-direct suites). The origin side shows the model box reading.
 #[test]
 fn setup_page_alignment_rows_structure() {
     let _g = snapshot_guard();
@@ -255,30 +258,38 @@ fn setup_page_alignment_rows_structure() {
         crate::actions::target(st, UiTarget::SetupNode("Setup1".into(), crate::state::SetupPage::Settings));
     }
     h.run_steps(3);
-    // #554: each row says which pick it takes - a face for the plane.
-    let plane = h.query_by_label_contains("Lay on a plane - pick a face").expect("the plane row shows").rect();
-    assert!(h.query_by_label("Pick a face").is_some_and(|n| !n.accesskit_node().is_disabled()), "the plane row picks a face");
-    assert!(h.query_by_label("Pick face or edges").is_none(), "#554: the plane row offers no edge pick");
-    let axes = h.query_by_label_contains("Axes in the plane - pick an edge or two points").expect("the axes rows show");
-    assert!(plane.min.y < axes.rect().min.y, "the axes rows follow the plane row");
+    // #771: the two dropdowns head the section, the plane one on
+    // Axes by default.
+    let plane_combo = h
+        .get_by(|n| n.role() == egui::accesskit::Role::ComboBox && n.value().as_deref() == Some("Axes"))
+        .rect();
+    let point_combo = h
+        .get_by(|n| n.role() == egui::accesskit::Role::ComboBox && n.value().as_deref() == Some("From model box"))
+        .rect();
+    assert!(plane_combo.min.y < point_combo.min.y, "the plane dropdown heads the section, the point dropdown follows");
+    // The axes rows (#769) are the default expansion: every option on
+    // screen, nothing armed, Apply hidden until an axis is picked.
+    let axes = h.query_by_label_contains("Part axes - pick an edge or two points").expect("the axes rows show");
+    assert!(plane_combo.max.y < axes.rect().min.y, "the axes rows expand under the dropdown");
     for label in ["+Y by Edge", "+Y by Two points", "Pick +Y edge", "Flip +Y", "+X by Edge", "+X by Two points", "Pick +X edge", "Flip +X"] {
         assert!(h.query_by_label(label).is_some(), "the axes rows must show {label:?}");
         assert!(!disabled(&h, label), "{label:?} is live");
     }
     assert!(h.query_by_label("Apply axes").is_none(), "Apply waits for an axis pick");
     assert!(h.state().state.axis_pick.is_none(), "nothing is armed by drawing the page");
-    // #555: the three-points row sits right under the face row, says it
-    // takes points, and shows no prompts or Apply until it is armed.
-    let points = h.query_by_label_contains("Lay on a plane - pick three points").expect("the points row shows").rect();
-    assert!(plane.min.y < points.min.y && points.min.y < axes.rect().min.y, "face row, points row, then the axes rows");
-    for label in ["Pick three points", "Points down", "Point 1 to plane level", "3-2-1 frame"] {
-        assert!(h.query_by_label(label).is_some(), "the points row must show {label:?}");
-        assert!(!disabled(&h, label), "{label:?} is live");
-    }
-    for label in ["Apply points", "Remove last", "Clear points"] {
-        assert!(h.query_by_label(label).is_none(), "{label:?} waits for the row to be armed");
-    }
-    assert!(h.query_by_label_contains("Point 1:").is_none(), "no prompts until armed");
+    // The other methods stay behind their dropdown entries: the face
+    // row (#330), the points row (#555) and the manual picker's turn
+    // (#326/#606) are not drawn while Axes is selected.
+    assert!(h.query_by_label_contains("Lay on a plane - pick a face").is_none(), "the face row waits behind the dropdown");
+    assert!(h.query_by_label_contains("Lay on a plane - pick three points").is_none(), "the points row waits behind the dropdown");
+    assert!(h.query_by_label_contains("Turn").is_none(), "the manual picker waits behind the dropdown");
+    // The origin side shows the model box reading: the box point combo
+    // and Place origin, with the box readout beside it.
+    assert!(point_combo.max.y < h.get_by_label("Place origin").rect().min.y, "the origin controls expand under the dropdown");
+    assert!(h.query_by_label_contains("there is no model to read a box from").is_some(), "the box readout says when there is no model yet");
+    let corner = h
+        .get_by(|n| n.role() == egui::accesskit::Role::ComboBox && n.value().as_deref() == Some("corner"))
+        .rect();
     // #330 (reopened), #606: short lines, so every option lies inside the
     // narrow properties pane - not merely on screen: one long row ran
     // Flip, the level box and the pick buttons past the pane's right edge,
@@ -292,21 +303,11 @@ fn setup_page_alignment_rows_structure() {
         .map(|(_, l)| l.viewport)
         .expect("the properties leaf");
     assert!(pane.width() > 100.0 && pane.width() < 640.0, "the pane is the narrow right leaf: {pane:?}");
-    for label in ["Pick a face", "Face down", "Face to plane level", "Pick three points", "Points down", "Point 1 to plane level", "3-2-1 frame", "+Y by Two points", "Pick +Y edge", "Flip +Y", "+X by Two points", "Pick +X edge", "Flip +X"] {
+    for label in ["+Y by Two points", "Pick +Y edge", "Flip +Y", "+X by Two points", "Pick +X edge", "Flip +X", "Place origin"] {
         let r = h.get_by_label(label).rect();
         assert!(pane.contains_rect(r), "{label:?} lies inside the properties pane {pane:?}: {r:?}");
     }
-    // #606: the Part alignment row's turn - its angles, its pivot (WCS
-    // origin by default, named on the row) and its Apply - too.
-    let pivot = h
-        .get_by(|n| n.role() == egui::accesskit::Role::ComboBox && n.value().as_deref() == Some("WCS origin"))
-        .rect();
-    assert!(pane.contains_rect(pivot), "the turn's pivot lies inside the pane: {pivot:?}");
-    let turn = h.query_by_label_contains("Turn").expect("the turn row").rect();
-    let applies: Vec<egui::Rect> = h.get_all_by_label("Apply").map(|n| n.rect()).collect();
-    assert!(applies.iter().any(|r| r.min.y > turn.min.y), "the turn's Apply shows under its angles");
-    for r in applies {
-        assert!(pane.contains_rect(r), "Apply lies inside the pane: {r:?}");
-    }
+    assert!(pane.contains_rect(corner), "the box point combo lies inside the pane: {corner:?}");
     assert!(h.state().state.points_pick.is_none(), "nothing is armed by drawing the page");
+    assert!(h.state().state.cylinder_pick.is_none() && h.state().state.origin_pick.is_none(), "no #771 draft is armed by drawing the page");
 }

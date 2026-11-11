@@ -244,6 +244,40 @@ impl AlignPartToSetup {
         Self::new(world, setup, Some(at))
     }
 
+    /// Align the part from a picked cylinder (#771): one curved-wall
+    /// pick names a bore's or cylinder's axis; it lands on `target`,
+    /// turned `angle_deg` about it, read by
+    /// [`crate::pick::align_from_cylinder`] through the setup's
+    /// current alignment. Refused by name before any write.
+    pub fn align_from_cylinder(
+        world: &World,
+        setup: &str,
+        pick: &crate::operation::GeoSel,
+        target: crate::pick::TargetAxis,
+        angle_deg: f64,
+        flip: bool,
+    ) -> Result<Self, CommandError> {
+        let at = crate::pick::align_from_cylinder(world, setup, pick, target, angle_deg, flip)
+            .map_err(CommandError::Invalid)?;
+        Self::new(world, setup, Some(at))
+    }
+
+    /// Would [`Self::align_from_cylinder`] be accepted? The same
+    /// refusals, by name, without building the command (the Setups
+    /// page's Apply).
+    pub fn check_cylinder(
+        world: &World,
+        setup: &str,
+        pick: &crate::operation::GeoSel,
+        target: crate::pick::TargetAxis,
+        angle_deg: f64,
+        flip: bool,
+    ) -> Result<(), CommandError> {
+        let at = crate::pick::align_from_cylinder(world, setup, pick, target, angle_deg, flip)
+            .map_err(CommandError::Invalid)?;
+        change_of(world, setup, Some(at)).map(|_| ())
+    }
+
     /// One of the Setups page's quick choices.
     pub fn preset(world: &World, setup: &str, preset: AlignPreset) -> Result<Self, CommandError> {
         Self::angles(world, setup, preset.angles())

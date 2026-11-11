@@ -32,6 +32,8 @@ pub struct PlanePick {
 pub fn arm(state: &mut State, setup: &str) {
     crate::axis_pick::disarm(state); // #557: one draft collects at a time
     state.points_pick = None; // #555
+    state.cylinder_pick = None; // #771
+    state.origin_pick = None; // #771
     match state.plane_pick.as_mut().filter(|d| d.setup == setup) {
         Some(d) => d.picking = true,
         None => state.plane_pick = Some(PlanePick { setup: setup.to_owned(), picks: Vec::new(), picking: true }),
