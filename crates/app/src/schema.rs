@@ -234,6 +234,9 @@ pub struct FixtureDef {
     /// Fixture plates (#819): this fixture IS a plate (its hole grid),
     /// and/or stands ON one at a named location. Default: neither.
     pub plate: crate::plate::PlateLink,
+    /// A mod-vise jaw block's parameters (#820): its facets were
+    /// generated from these. `None` - every other fixture.
+    pub mod_jaw: Option<crate::modvise::JawParams>,
 }
 
 /// The document's active setup, stored as a flecs singleton like `Units`:

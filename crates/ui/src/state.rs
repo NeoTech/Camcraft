@@ -57,6 +57,9 @@ pub use vise_ui::{ViseDraft, ViseOpeningDraft};
 #[path = "state_plate.rs"]
 mod plate_ui;
 pub use plate_ui::{PlateDraft, PlatePlaceDraft};
+#[path = "state_modvise.rs"]
+mod modvise_ui;
+pub use modvise_ui::ModViseDraft;
 #[path = "state_program_entry.rs"]
 mod program_entry;
 pub use program_entry::EntryVerb;
@@ -475,6 +478,15 @@ pub enum CommandKind {
     /// Detect fixture `name`'s plate grid from its holes, or (`clear`)
     /// stop it being a plate - one `SetPlateGrid`.
     DetectPlateGrid { name: String, clear: bool },
+    /// #820: a mod vise pair on plate `plate`, the fixed block at hole
+    /// `at` turned `yaw_deg`, fitted to the stock - one `PlaceModVisePair`.
+    PlaceModVisePair {
+        plate: String,
+        fixed: camcraft_app::modvise::JawParams,
+        adjustable: camcraft_app::modvise::JawParams,
+        at: String,
+        yaw_deg: f64,
+    },
     /// Part orientation (M5.2 G): a model's full rigid placement -
     /// position plus yaw-pitch-roll degrees (R = Rz ⊗ Ry ⊗ Rx, the
     /// `SetWcs` voice). The world stores a unit quaternion; the
@@ -1444,6 +1456,8 @@ pub struct State {
     pub vise_opening: HashMap<String, ViseOpeningDraft>,
     /// #819: each fixture row's "Place on plate" draft, by fixture name.
     pub plate_place: HashMap<String, PlatePlaceDraft>,
+    /// #820: each plate row's "Add mod vise pair" draft, by plate name.
+    pub mod_vise: HashMap<String, ModViseDraft>,
     /// The selected op's struck fixtures, per (version, op, path sig).
     pub struck_cache: camcraft_app::fixture_view::StruckCache,
     /// Properties / Tool Library pane drafts (ephemeral; see [`OpUi`]).
@@ -1743,6 +1757,7 @@ impl State {
             fixture_lib_dir: None,
             vise_opening: HashMap::new(),
             plate_place: HashMap::new(),
+            mod_vise: HashMap::new(),
             struck_cache: Default::default(),
             // The tool draft carries a plausible name from the first
             // frame: an empty Name field made Add look dead (refused
@@ -3472,6 +3487,9 @@ impl State {
             }
             CommandKind::PlaceOnPlate { fixture, plate, at, yaw_deg } => self.place_fixture_on_plate(&fixture, &plate, at, yaw_deg),
             CommandKind::DetectPlateGrid { name, clear } => self.detect_plate_grid(&name, clear),
+            CommandKind::PlaceModVisePair { plate, fixed, adjustable, at, yaw_deg } => {
+                self.place_mod_vise_pair(&plate, &fixed, &adjustable, &at, yaw_deg);
+            }
             CommandKind::SetupSheetDialog => {
                 if let Some(path) = save_sheet_dialog() {
                     self.setup_sheet_path(path);

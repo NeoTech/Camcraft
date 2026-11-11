@@ -111,6 +111,21 @@ impl InsertFixture {
         self
     }
 
+    /// Mark the insert as mod-vise jaw block `jaw` (#820).
+    #[must_use]
+    pub fn with_mod_jaw(mut self, jaw: crate::modvise::JawParams) -> Self {
+        self.def.mod_jaw = Some(jaw);
+        self
+    }
+
+    /// Record the insert's place on a plate (#820: a jaw block lands
+    /// seated on its hole, a rider of the plate from the start).
+    #[must_use]
+    pub fn with_mount(mut self, mount: crate::plate::PlateMount) -> Self {
+        self.def.plate.mount = Some(mount);
+        self
+    }
+
     /// The marker the insert writes.
     #[must_use]
     pub fn def(&self) -> &FixtureDef {

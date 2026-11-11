@@ -130,7 +130,7 @@ fn facets(world: &World, name: &str) -> Vec<crate::geometry::Triangle> {
 
 /// Fixture `rider` placed at `m` on plate `plate` (its grid `def`, its
 /// mesh `plate_mesh`, its pose `at`): the rider's pose, or why not.
-fn seat(def: &PlateDef, plate_mesh: &[crate::geometry::Triangle], at: Location, rider: &str, rider_mesh: &[crate::geometry::Triangle], m: &PlateMount) -> Result<Location, CommandError> {
+pub(crate) fn seat(def: &PlateDef, plate_mesh: &[crate::geometry::Triangle], at: Location, rider: &str, rider_mesh: &[crate::geometry::Triangle], m: &PlateMount) -> Result<Location, CommandError> {
     let local = def.local_pose(&m.at, m.yaw_deg).map_err(|e| CommandError::Invalid(format!("plate '{}': {e}", m.plate)))?;
     let local = mount::stand(local, rider_mesh);
     mount::on_the_plate(plate_mesh, rider_mesh, local)

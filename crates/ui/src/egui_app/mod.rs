@@ -125,6 +125,7 @@ pub(crate) mod fixture_library_dialog;
 pub(crate) mod fixture_vise_dialog;
 pub(crate) mod fixture_plate_dialog;
 mod fixture_plate_rows;
+mod fixture_modvise_rows;
 pub(crate) mod shell;
 // pub past egui_app from M6.1 C: the switcher's resolution seam
 // (state.rs) installs the live table, the format tests read the
@@ -156,6 +157,8 @@ mod fixture_library_tests;
 mod fixture_vise_tests;
 #[cfg(test)]
 mod fixture_plate_tests;
+#[cfg(test)]
+mod fixture_modvise_tests;
 #[cfg(test)]
 mod footer_tests;
 #[cfg(test)]

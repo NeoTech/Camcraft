@@ -74,6 +74,7 @@ impl ImportFixture {
                 setup: setup_name.map(str::to_string),
                 fixed: prev.as_ref().is_some_and(|d| d.fixed),
                 vise: None,
+                mod_jaw: None,
                 plate: crate::plate::PlateLink { plate: None, mount: prev.as_ref().and_then(|d| d.plate.mount.clone()) },
             },
             riders,

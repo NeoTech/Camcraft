@@ -372,6 +372,9 @@ pub struct FixtureDto {
     /// Where this fixture stands on a plate (#819); same lenient read.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub on_plate: Option<serde_json::Value>,
+    /// A mod-vise jaw block's parameters (#820); same lenient read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mod_jaw: Option<serde_json::Value>,
 }
 
 /// An operation as files hold it: definition, the stamp the last generate

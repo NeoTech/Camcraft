@@ -43,10 +43,12 @@ pub(super) fn plate_rows(ui: &mut Ui, state: &mut State, name: &str) {
         if !on.is_empty() {
             ui.label(format!("Carries: {}", on.join(", ")));
         }
+        super::fixture_modvise_rows::pair_rows(ui, state, name, p);
         if p.params.is_none() && ui.small_button("Not a plate").on_hover_text("Forget the detected grid").clicked() {
             state.pending.push_back(CommandKind::DetectPlateGrid { name: name.to_owned(), clear: true });
         }
     } else if def.vise.is_none()
+        && def.mod_jaw.is_none()
         && ui
             .small_button("Detect plate grid")
             .on_hover_text("Use this fixture as a grid plate: its holes (on its own Z) must form a regular grid")
@@ -54,6 +56,7 @@ pub(super) fn plate_rows(ui: &mut Ui, state: &mut State, name: &str) {
     {
         state.pending.push_back(CommandKind::DetectPlateGrid { name: name.to_owned(), clear: false });
     }
+    super::fixture_modvise_rows::block_line(ui, state, name);
     if let Some(m) = &def.plate.mount {
         ui.label(format!("On plate {} at {}", m.plate, m.at.label()));
     }
