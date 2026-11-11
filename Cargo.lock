@@ -732,6 +732,7 @@ dependencies = [
  "truck-polymesh",
  "truck-stepio",
  "truck-topology",
+ "web-time",
 ]
 
 [[package]]
@@ -802,6 +803,10 @@ dependencies = [
 [[package]]
 name = "camcraft-tools"
 version = "0.17.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "camcraft-ui"
@@ -809,6 +814,7 @@ version = "0.17.0"
 dependencies = [
  "camcraft-app",
  "chrono",
+ "eframe",
  "egui",
  "egui-wgpu",
  "egui-winit",
@@ -820,6 +826,8 @@ dependencies = [
  "pollster 0.4.0",
  "rfd",
  "serde_json",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
  "winit",
 ]
 

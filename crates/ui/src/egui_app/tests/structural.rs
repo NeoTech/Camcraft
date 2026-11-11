@@ -15,7 +15,7 @@ use egui_kittest::kittest::NodeT;
 use super::*;
 
 /// Every painted text of the last frame with its top-left, in paint order.
-fn painted(h: &Harness<'static, ShellUi>) -> Vec<(String, egui::Pos2)> {
+pub(super) fn painted(h: &Harness<'static, ShellUi>) -> Vec<(String, egui::Pos2)> {
     fn walk(shape: &egui::Shape, out: &mut Vec<(String, egui::Pos2)>) {
         match shape {
             egui::Shape::Text(t) => out.push((t.galley.text().to_owned(), t.pos)),

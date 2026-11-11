@@ -61,6 +61,8 @@ pub fn collect(world: &World) -> ProjectFile {
                 number: model::tool_number_of(world, &entity),
                 body: crate::tool_body::body_of(world, &entity)
                     .map(|b| super::tool_body_wire::ToolBodyDto::from_body(&b)),
+                cutter: crate::tool_cutter::cutter_of(world, &entity)
+                    .map(|c| super::tool_body_wire::spun_to_dto(&c)),
                 ..ToolDto::from_tool(&t)
             });
             // The setup payload only ever rides a setup row (the kind test
@@ -94,6 +96,11 @@ pub fn collect(world: &World) -> ProjectFile {
                 .try_get::<&FixtureDef>(|d| FixtureDto {
                     setup: d.setup.clone(),
                     fixed: d.fixed,
+                    vise: d.vise.as_ref().and_then(super::fixture_keys::vise_value),
+                    accessory: d.accessory.as_ref().and_then(super::fixture_keys::accessory_value),
+                    plate: super::plate_dto::plate_value(&d.plate),
+                    on_plate: super::plate_dto::on_plate_value(&d.plate),
+                    mod_jaw: super::modvise_dto::value(d.mod_jaw.as_ref()),
                 });
             let operation = model::operation_of(world, &entity).map(|op| OperationDto {
                 label: model::operation_meta_of(world, &entity).label,

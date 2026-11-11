@@ -373,6 +373,7 @@ pub(crate) fn open_tool_editor(state: &mut State, name: &str) {
     // #371: a fresh body draft per opening; it mirrors the tool's body.
     state.tool_body_ui = crate::state::ToolBodyUi::default();
     state.tool_profile_ui = crate::state::ToolProfileUi::default();
+    state.tool_cutter_ui = crate::state::ToolCutterUi::default();
 }
 
 /// Quick-add an operation of `kind` (index into the registry the ribbon's

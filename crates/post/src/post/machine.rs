@@ -174,6 +174,13 @@ pub fn mirror(m: &crate::machine::Machine) -> Value {
     {
         o.insert("safeRetractZ".to_owned(), json!(z));
     }
+    // #671: a declared plasma table says so, for the plasma post's
+    // machine check; every other mirror is unchanged.
+    if crate::machine::kind(Some(m)) == crate::machine::Kind::Plasma
+        && let Some(o) = out.as_object_mut()
+    {
+        o.insert("kind".to_owned(), json!("plasma"));
+    }
     let inverted = m.inverted_axes();
     if !inverted.is_empty()
         && let Some(o) = out.as_object_mut()
@@ -328,6 +335,13 @@ pub fn script_props(m: &Value) -> Value {
         // `name`, or a raw file's `general.model`), for the posts that
         // judge an unstated retract by whose machine it is.
         "safeRetractZ": safe_retract_z(m).map_or(Value::Null, |z| json!(z)),
+        // #671: the declared kind's canonical word (`plasma`, `lathe`,
+        // ...) through either door, "" when the file declares none.
+        "kind": get(m, &["kind"])
+            .or_else(|| get(m, &["general", "kind"]))
+            .and_then(Value::as_str)
+            .and_then(crate::machine::Kind::from_word)
+            .map_or("", crate::machine::Kind::word),
         "model": get(m, &["name"])
             .and_then(Value::as_str)
             .filter(|n| !n.is_empty())
