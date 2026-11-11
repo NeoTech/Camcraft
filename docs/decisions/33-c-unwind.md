@@ -94,3 +94,26 @@ which is exactly the stated linear feed. The slice-1 golden
 (`c_axis_helix.nc`) does not move: its machine states no C rate, and
 the linear cap never binds below the composite value, because a block's
 radial and axial change is never longer than its part-frame chord.
+
+## #33 - C unwind review round 2: the radial link is opt-in, off for every shipped kind
+
+**Decided.** `unwind_c` takes a `radial` flag. The retract cylinder (a
+rapid at a radius strictly beyond every cut) counts as a clear link only
+when the caller asks for it. Rotary Contour, the one kind that unwinds,
+does not ask: its links are the axial clearance plane. A contour stretch
+whose only clear point is radial is refused by name ("... radial links
+are not taken for this kind"). The radial branch keeps its own unit
+tests (unwinds at the cylinder radius, not at or inside the cut radius)
+for the day Rotary Parallel or Rotary Offset is proven end to end and
+admits it.
+
+**Why.** The review found the radial branch live for Rotary Contour and
+untested end to end. Which link a contour gets is decided by its
+kernel, not by any op parameter. The waterline ladder links every ring
+over the clearance plane (`clearance_z`, or `retract_z` when set), and
+its rapids stand at the rings' own radii. So no honest radial-link
+contour fixture exists: a radial link would only come from a rapid that
+happens to sit outside the cut radius, a case no shipped op is built to
+produce. Leaving that branch reachable and unproven was rejected.
+Removing it outright was also dropped: Rotary Parallel and Rotary
+Offset link radially by construction and will need it.

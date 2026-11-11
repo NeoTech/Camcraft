@@ -105,7 +105,7 @@ pub(super) fn stamp_spindle_c(
         return Ok(stamped);
     };
     if unwinds {
-        return crate::cl::unwind_c(&stamped, center, (lo, hi), tol).map_err(|e| GenError::Invalid(format!("{kind}: {e}")));
+        return crate::cl::unwind_c(&stamped, center, (lo, hi), tol, false).map_err(|e| GenError::Invalid(format!("{kind}: {e}")));
     }
     // A kind whose links the unwind law has not been proven on end to
     // end posts only what fits the travel as stamped - exactly what the
@@ -183,6 +183,41 @@ mod tests {
         // whole turn into the travel (the section opens there).
         let t = stamp_spindle_c(helix(), spindle(), (Some(&m), true), 0.01, "Rotary Contour");
         assert!(t.is_ok_and(|t| t.moves.iter().all(|m| m.rotary.is_some_and(|c| (-360.0..=360.0).contains(&c)))));
+    }
+
+    /// Rotary Contour unwinds over the axial plane only: a path whose
+    /// only clearance is a retract cylinder is refused by name through
+    /// the gate, never rewound at a radius no shipped kind has proven.
+    #[test]
+    fn the_contour_takes_no_radial_link() {
+        use crate::cl::{Move, MoveKind};
+        use crate::geometry::Point3;
+        let at = |k: usize, z: f64| {
+            let th = (k as f64 * 30.0).to_radians();
+            Point3::new(10.0 * th.cos(), 10.0 * th.sin(), z)
+        };
+        let radial = |p: Point3| {
+            let r = p.x.hypot(p.y);
+            [p.x / r, p.y / r, 0.0]
+        };
+        let mut moves: Vec<Move> = Vec::new();
+        for ring in 0..3 {
+            let z = -(ring as f64);
+            if let Some(end) = moves.last().map(|m| m.to) {
+                let (a, b) = (Point3::new(20.0, 0.0, end.z), Point3::new(20.0, 0.0, z));
+                for (p, q) in [(end, a), (a, b), (b, at(0, z))] {
+                    moves.push(Move::new(MoveKind::Rapid, p, q, None).with_axis(radial(q)));
+                }
+            }
+            for k in 0..12 {
+                let to = if k == 11 { at(0, z) } else { at(k + 1, z) };
+                moves.push(Move::new(MoveKind::Feed, at(k, z), to, Some(400.0)).with_axis(radial(to)));
+            }
+        }
+        let m = c_travel_machine(-360.0, 360.0);
+        let path = crate::cl::Toolpath::new(moves);
+        let e = stamp_spindle_c(path, spindle(), (Some(&m), true), 0.01, "Rotary Contour").err().map(|e| e.to_string()).unwrap_or_default();
+        assert!(e.contains("Rotary Contour") && e.contains("radial links are not taken for this kind"), "{e}");
     }
 
     #[test]

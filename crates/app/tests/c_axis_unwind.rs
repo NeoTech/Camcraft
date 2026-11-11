@@ -269,7 +269,7 @@ fn two_rings() -> Toolpath {
 fn two_rings_unwound_post_to_their_golden() {
     let stamped = stamp_c(&two_rings(), [0.0, 0.0], 0.05).expect("stamps");
     assert!(c_range(&stamped).0 < -700.0, "two rings read -720 at the end");
-    let path = unwind_c(&stamped, [0.0, 0.0], (-360.0, 360.0), 0.05).expect("unwinds");
+    let path = unwind_c(&stamped, [0.0, 0.0], (-360.0, 360.0), 0.05, false).expect("unwinds");
     let (lo, hi) = c_range(&path);
     assert!(lo >= -360.0 && hi <= 360.0, "{lo}..{hi}");
     let out = engine::run(LATHE_CPS, &post::machine::mirror(&mill_turn(Some((-360.0, 360.0)))), &stream(&path)).expect("runs");
@@ -283,7 +283,7 @@ fn two_rings_unwound_post_to_their_golden() {
 #[test]
 fn a_lower_stated_rate_posts_a_lower_feed() {
     let stamped = stamp_c(&two_rings(), [0.0, 0.0], 0.05).expect("stamps");
-    let path = unwind_c(&stamped, [0.0, 0.0], (-360.0, 360.0), 0.05).expect("unwinds");
+    let path = unwind_c(&stamped, [0.0, 0.0], (-360.0, 360.0), 0.05, false).expect("unwinds");
     let max_f = |m: &Machine| {
         let out = engine::run(LATHE_CPS, &post::machine::mirror(m), &stream(&path)).expect("runs");
         assert!(out.warnings.is_empty(), "{:?}", out.warnings);
