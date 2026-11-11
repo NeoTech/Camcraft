@@ -137,13 +137,21 @@ pub(super) fn rings_cross(a: &[Point2], b: &[Point2]) -> Option<Point2> {
 /// that midpoint. `None` when every piece is on the ring or outside it -
 /// a rapid leaving from the ring's own edge outward is not a crossing,
 /// but one that then runs over the area is (#791 review: a rapid in or
-/// out through a corner is never a proper edge crossing).
+/// out through a corner is never a proper edge crossing). `departing`:
+/// the rapid leaves the hole just cut, whose lead-out ends on its own
+/// slug - when it starts strictly inside the ring, its first piece is
+/// that departure and is not judged; a later piece back over the slug is
+/// (#801). A rapid starting ON the ring is judged in full: a hole with no
+/// lead-out (small holes, `lead_out = 0`) ends on its wall, and a piece
+/// from there is either outward (never inside, so clear) or over the slug
+/// (#814 review).
 #[must_use]
-pub(super) fn crosses_area(a: Point2, b: Point2, ring: &[Point2]) -> Option<Point2> {
+pub(super) fn crosses_area(a: Point2, b: Point2, ring: &[Point2], departing: bool) -> Option<Point2> {
     if ring.len() < 3 {
         return None;
     }
-    piece_midpoints(a, b, ring).into_iter().find(|mid| inside(*mid, ring))
+    let skip = usize::from(departing && inside(a, ring));
+    piece_midpoints(a, b, ring).into_iter().skip(skip).find(|mid| inside(*mid, ring))
 }
 
 /// The midpoints of the pieces a-b falls into when split at every

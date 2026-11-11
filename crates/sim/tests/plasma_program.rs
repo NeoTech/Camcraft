@@ -33,11 +33,14 @@ fn lit(b: &mut PathBuilder, contour: u32, role: ContourRole, parent: Option<u32>
     TorchSpan { contour, role, parent, on, off: b.moves_len() - 1, small: None }
 }
 
-/// The square hole (40..60) with a lead-in from the centre, and the
-/// outline (0..100) with a lead-in and lead-out on the outside.
+/// The square hole (40..60) with a lead-in from the centre and no
+/// lead-out (it ends on its own wall at (50, 40)), and the outline
+/// (0..100) with a lead-in and lead-out on the outside, pierced below the
+/// hole's end so the rapid between them runs straight outward from the
+/// hole's wall - never back over its slug (#814 review).
 const HOLE: &[(f64, f64)] = &[(50.0, 50.0), (50.0, 40.0), (60.0, 40.0), (60.0, 60.0), (40.0, 60.0), (40.0, 40.0), (50.0, 40.0)];
 const OUTLINE: &[(f64, f64)] =
-    &[(-5.0, 50.0), (0.0, 50.0), (0.0, 0.0), (100.0, 0.0), (100.0, 100.0), (0.0, 100.0), (0.0, 50.0), (-5.0, 55.0)];
+    &[(50.0, -5.0), (50.0, 0.0), (100.0, 0.0), (100.0, 100.0), (0.0, 100.0), (0.0, 0.0), (50.0, 0.0), (45.0, -5.0)];
 
 fn plate(hole_first: bool) -> Toolpath {
     let mut b = PathBuilder::new(at(50.0, 50.0, UP));
@@ -69,7 +72,7 @@ fn the_spans_become_cuts_and_the_travel_between_them_the_rapids() {
     // The ring between the two visits of the start (mid-edge, so five points).
     assert_eq!(p.cuts[0].ring().map(<[Point2]>::len), Some(5));
     assert_eq!(p.cuts[1].ring().map(<[Point2]>::len), Some(5));
-    assert_eq!(p.rapids, vec![None, Some((Point2::new(50.0, 40.0), Point2::new(-5.0, 50.0)))]);
+    assert_eq!(p.rapids, vec![None, Some((Point2::new(50.0, 40.0), Point2::new(50.0, -5.0)))]);
     assert_eq!(judge(&p), vec![], "hole first, outline after: clean");
 }
 
@@ -132,4 +135,42 @@ fn a_path_without_the_record_or_with_one_off_its_moves_is_refused() {
     t.plasma = Some(off);
     let e = PlasmaProgram::from_toolpath(&t).expect_err("off the moves");
     assert!(e.contains("does not sit on the path's moves"), "{e}");
+}
+
+/// #801: a hole's slug read from the record is a freed area for tip-up.
+/// Two holes (20..40 and 60..80, lead-in from the centre, no lead-out)
+/// cut right, then left, then the outline. With no lead-out each hole
+/// ends ON its bottom wall, and a rapid from there is judged in full
+/// (#814 review): the rapid to the left hole runs back over the right
+/// slug, and the outline's crosses the left slug it leaves and then the
+/// right one - three tip-ups, each naming its hole.
+#[test]
+fn a_rapid_over_a_freed_hole_slug_is_read_and_warned() {
+    let right: &[(f64, f64)] = &[(70.0, 50.0), (70.0, 40.0), (80.0, 40.0), (80.0, 60.0), (60.0, 60.0), (60.0, 40.0), (70.0, 40.0)];
+    let left: &[(f64, f64)] = &[(30.0, 50.0), (30.0, 40.0), (40.0, 40.0), (40.0, 60.0), (20.0, 60.0), (20.0, 40.0), (30.0, 40.0)];
+    let outline: &[(f64, f64)] = &[(105.0, 50.0), (100.0, 50.0), (100.0, 100.0), (0.0, 100.0), (0.0, 0.0), (100.0, 0.0), (100.0, 50.0)];
+    let mut b = PathBuilder::new(at(70.0, 50.0, UP));
+    let torches = vec![
+        lit(&mut b, 1, ContourRole::Inner, Some(3), right),
+        lit(&mut b, 2, ContourRole::Inner, Some(3), left),
+        lit(&mut b, 3, ContourRole::Outer, None, outline),
+    ];
+    let mut t = b.finish();
+    t.plasma = Some(Record { kerf: 1.5, torches, ..Record::default() });
+    let p = PlasmaProgram::from_toolpath(&t).expect("read");
+    // The rapid into the outline: (30, 40) on the left hole's edge to
+    // (105, 50) - across the material, then over the right hole's slug.
+    assert_eq!(p.rapids[2], Some((Point2::new(30.0, 40.0), Point2::new(105.0, 50.0))));
+    let f = judge(&p);
+    assert!(
+        matches!(f.as_slice(), [
+            PlasmaFinding::TipUp { contour: 2, freed: 1, slug: true, at: a },
+            PlasmaFinding::TipUp { contour: 3, freed: 1, slug: true, at: b },
+            PlasmaFinding::TipUp { contour: 3, freed: 2, slug: true, at: c },
+        ] if a.x > 60.0 && a.x < 80.0 && b.x > 60.0 && b.x < 80.0 && c.x > 20.0 && c.x < 40.0),
+        "{f:?}"
+    );
+    assert!(f.iter().all(|x| !x.refuses()), "warnings, as the part's tip-up is");
+    assert!(f[1].to_string().contains("slug of hole C1"), "{}", f[1]);
+    assert!(f[2].to_string().contains("slug of hole C2"), "{}", f[2]);
 }
