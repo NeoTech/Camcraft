@@ -203,11 +203,13 @@ go to `CHANGELOG.md`.
   `gh issue edit N --add-label claimed --add-assignee @me` plus a comment
   `gh issue comment N --body "claimed: <session or agent name> · <UTC time> ·
   worktree/branch <name> · plan: <one line>"`. Never work an issue that
-  carries `claimed` unless its last claim comment is an agent's and older
-  than 4 hours with no newer comment from the claimant - then it is stale:
-  comment "reclaimed from <old claimant> (stale)" and take it. A
-  contributor's claim goes stale differently: after 48 hours with nothing
-  behind it ("A claim comment is a claim", below).
+  carries `claimed`, with two exceptions. One: its last claim comment is
+  one of the owner account's own agents' and older than 4 hours with no
+  newer comment from the claimant - then it is stale: comment "reclaimed
+  from <old claimant> (stale)" and take it. Two: the claim behind the
+  label is a contributor's and it is withdrawn, released or stale (48
+  hours with nothing behind it - "A claim comment is a claim", below) -
+  then release it as that rule says, and the issue is free.
 - **Agent-opened issues say so** (user, 2026-11-07: "All Issues opened by
   an Agent should have the tag source:agent"). Every issue an agent opens
   carries the `source:agent` label alongside its `P*`, `effort:*` and `area:*` labels -
@@ -268,7 +270,9 @@ go to `CHANGELOG.md`.
   suffice ... if we come across a claimed issue thru comment we should
   just label it as such - and vice versa if they remove their comment,
   remove their claim label for em as part of maintenance.. Otherwise the
-  comment stands as claimed."). Only collaborators can set labels, so
+  comment stands as claimed." - that last sentence is superseded since
+  2026-11-11: a claim stands only while it is live, below). Only
+  collaborators can set labels, so
   anyone else claims an issue by commenting on it with a line starting
   `claimed:` (or `/claim`). The comment is the claim; the label only
   mirrors it.
@@ -277,36 +281,42 @@ go to `CHANGELOG.md`.
     anyone other than the owner account (agents post as the owner) means
     the issue is taken: do not work it, even if it has no `claimed` label -
     unless the claim is withdrawn, released or stale (below).
-  - **Mirror it.** An issue found with such a comment, still live (next
-    point), but without the
+  - **Mirror it.** An issue with a live claim comment (next point) but no
     label gets `claimed` and the claimant as assignee (if GitHub refuses
     the assignee, the label alone), plus one reply: "Claim recorded for
     @<login> - label and assignee set (only collaborators can set labels;
-    your comment is the claim)."
+    your comment is the claim)." Only a LIVE earlier claim by someone else
+    holds an issue against a new claimant; a stale or ended one does not.
   - **A claim must be live - an old one cannot stall an issue** (user,
     2026-11-11, on eight issues a contributor's agents had claimed days
     earlier and left: "unclaim those 8 old ones and let someone pick em up
     and fix em they can't stall"). A contributor's claim is live while at
-    least one of these holds: an open PR for the issue; a commit on the
-    claimant's branch for it in the last 48 hours; or a comment by the
-    claimant on the issue in the last 48 hours (the claim itself, progress,
-    findings). Research claims have no branch, so the comment is what
-    keeps them live. With none of the three, the claim is **stale**: do
-    not mirror it; if it carries `claimed`, remove the label and the
-    assignment and comment "claim by @<login> released (stale: no open PR,
-    branch commit or comment from the claimant for 48 h) - issue is free
-    again; claim it again with a new comment if you are working on it".
-    The 4 h rule above stays the rule for the owner account's own agents.
+    least one of these holds: an open PR by the claimant for the issue; a
+    commit on the claimant's branch for it in the last 48 hours; or a
+    comment by the claimant on the issue in the last 48 hours (the claim
+    itself, progress, findings - any comment of theirs counts; the rule is
+    kept simple on purpose). Research claims have no branch, so the
+    comment is what keeps them live. With none of the three, the claim is
+    **stale**: do not mirror it; if it carries `claimed`, remove the label
+    and the assignment and comment "claim by @<login> released (stale: no
+    open PR, branch commit or comment from the claimant for 48 h) - issue
+    is free again; claim it again with a new comment if you are working on
+    it". That comment ENDS the claim (next point): a later comment by the
+    claimant does not revive it, only a new claim line does. The 4 h rule
+    above stays the rule for the owner account's own agents. A `P?` issue
+    is never relabelled by an agent, stale claim or not: report it to the
+    maintainer instead.
   - **Withdrawn or released.** A claim also ends when its comment is
     deleted; when the claimant's later comment withdraws it (`unclaim`,
     `/unclaim`, "claim withdrawn", "releasing this claim", "the issue is
-    free" - read the claimant's LAST comment, not only the claim line); or
-    when the maintainer releases it ("released by the maintainer"). Then:
-    remove `claimed` and their assignment, and comment "claim by @<login>
-    withdrawn - issue is free again" (not needed where the maintainer's
-    release comment already says so). Only a NEW `claimed:` / `/claim`
-    comment after that is a claim again; an ended claim is never mirrored
-    back from its old comment.
+    free" - read the claimant's LAST comment, not only the claim line);
+    when the maintainer releases it (a comment saying the claim is
+    released by the maintainer); or when an agent has released it as stale
+    (the comment above). Then: remove `claimed` and their assignment, and
+    comment "claim by @<login> withdrawn - issue is free again" (not needed
+    where a release comment already says so). Only a NEW `claimed:` /
+    `/claim` comment posted after that is a claim again; an ended claim is
+    never mirrored back from its old comment.
   - **Maintenance.** Every `/review-prs` run (step 4) and every issue pick
     does this sweep for the issues it touches: label the live
     comment-only claims, and drop the label where the claim behind it is

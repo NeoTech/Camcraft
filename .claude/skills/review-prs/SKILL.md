@@ -211,30 +211,39 @@ gh api "repos/NeoTech/Camcraft/issues/comments?since=$since&per_page=100" --pagi
 ```
 
 For each line `<N> <login> <time>`:
-- **withdrawn** - `<login>` commented `unclaim` (or `/unclaim`) after
-  `<time>`: skip silently. A withdrawn claim's old comment is never
-  mirrored again (without this the Withdraw pass and this one would flip
-  the label every run);
+- **ended** - after `<time>`, `<login>` withdrew the claim in a later
+  comment (`unclaim`, `/unclaim`, "claim withdrawn", "releasing this
+  claim", "the issue is free"), or a comment says the claim was "released
+  by the maintainer" or "released (stale ...)": skip silently. An ended
+  claim's old comment is never mirrored again, whatever the claimant
+  comments afterwards - only a NEW `claimed:` / `/claim` line is a claim
+  (without this the Withdraw pass and this one would flip the label every
+  run);
 - **paused issue** (labelled `P?` - AGENTS.md "`P?` is paused"): do not
   mirror; reply once (only if no later comment mentions `@<login>`)
   `This issue is paused by the maintainer (P?) - it isn't open for work yet; the claim isn't recorded. It will be once the maintainer sets a priority.`;
 - **closed issue**, or **already mirrored** (`claimed` set and `<login>`
   assigned, or `claimed` set and a "Claim recorded for @<login>" reply
   exists): skip silently;
-- **held by someone else** - an earlier claim comment by another
-  contributor still exists, or a fresh agent claim (4 h rule): do not
+- **held by someone else** - an earlier claim by another contributor is
+  still LIVE (not ended, and it passes the liveness test below), or one of
+  the owner account's agents holds a fresh claim (4 h rule): do not
   mirror; reply once (only if no later comment mentions `@<login>`) naming
-  the current claimant;
-- **stale or ended** (AGENTS.md "A claim must be live", "Withdrawn or
-  released"): the claim is not live - no open PR for the issue, no commit
-  on the claimant's branch for it in the last 48 hours, and no comment by
-  the claimant on the issue in the last 48 hours - or a later comment
-  ended it (the claimant's `unclaim` / "releasing this claim" / "claim
-  withdrawn", or a "released by the maintainer" comment). Do not mirror;
-  skip silently. Check liveness with
-  `gh pr list --state open --search "<N> in:title,body" --json number,headRefName`,
-  the issue's comment dates, and, for a branch the claim names,
-  `gh api "repos/<owner>/Camcraft/commits?sha=<branch>&per_page=1" --jq '.[0].commit.committer.date'`;
+  the current claimant. A stale or ended earlier claim holds nothing:
+  release it in the Withdraw pass and treat this claim on its own merits;
+- **stale** (AGENTS.md "A claim must be live"): the claim is not live -
+  no open PR by the claimant for the issue, no commit on the claimant's
+  branch for it in the last 48 hours, and no comment by the claimant on
+  the issue in the last 48 hours. Do not mirror; skip silently. Check
+  liveness with
+  `gh pr list --state open --author "<login>" --search "<N> in:title,body" --json number,headRefName`
+  (then confirm the PR really is for this issue: its body or branch names
+  `<N>`), the dates of `<login>`'s comments on the issue, and, for a
+  branch the claim names,
+  `gh api "repos/<login>/Camcraft/commits?sha=<branch>&per_page=1" --jq '.[0].commit.committer.date'`
+  (the branch lives in the claimant's fork, so the owner in the path is
+  the claimant's login; if the call errors - no such fork or branch -
+  count it as no recent commit);
 - **otherwise**: `gh issue edit N --add-label claimed --add-assignee <login>`
   (if GitHub refuses the assignee, add the label alone) and reply
   `Claim recorded for @<login> - label and assignee set (only collaborators can set labels; your comment is the claim).`
@@ -254,8 +263,10 @@ an open PR for the issue, a commit on the claimant's branch in the last
 48 hours, a comment by the claimant on the issue in the last 48 hours),
 remove the label and assignment the same way and comment
 `claim by @<login> released (stale: no open PR, branch commit or comment from the claimant for 48 h) - issue is free again; claim it again with a new comment if you are working on it`.
-An issue that carries a "released by the maintainer" comment after its
-claim comment is free: never mirror that old claim again.
+An issue that carries a "released by the maintainer" or "released
+(stale ...)" comment after its claim comment is free: never mirror that
+old claim again. Never change the labels of a `P?` issue in this pass,
+stale claim or not - list it in the report for the maintainer instead.
 A label with no findable claim of any kind and no "Claim recorded" reply
 was set by a collaborator by hand: leave it.
 
