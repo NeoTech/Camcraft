@@ -1,6 +1,6 @@
 //! The tool editor's holder library picker (#793, #792): choose a
-//! built-in holder (BT30 / BT40 / CAT40, ER chuck or Weldon, or a
-//! standalone ER chuck), set its gauge length and projection, and Apply
+//! built-in holder (BT30 / BT40 / CAT40 or Tormach TTS, ER chuck or
+//! Weldon, or a standalone ER chuck), set its gauge length and projection, and Apply
 //! holder - which queues the one undoable
 //! `SetToolBody::library`. The holder lands as a drawn profile, so the
 //! Profile table above edits it like any other. Provenance: our own
@@ -80,7 +80,7 @@ fn describe(e: &HolderEntry, u: Unit) -> String {
         Clamp::Weldon { bore, body_d } => format!("Weldon bore Ø{}, body Ø{}", l(bore), l(body_d)),
     };
     match e.taper {
-        Some(t) => format!("{} flange Ø{} × {} {}; {nose}", t.name, l(t.flange_d), l(t.flange_t), u.suffix()),
+        Some(t) => format!("{} {} Ø{} × {} {}; {nose}", t.name, t.ring, l(t.flange_d), l(t.flange_t), u.suffix()),
         None => format!("straight-shank chuck {}; {nose}", u.suffix()),
     }
 }

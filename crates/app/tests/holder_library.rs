@@ -8,7 +8,9 @@
 //! ER32 nut strikes a wall a shank-width cylinder misses, and clears
 //! one beyond its nut) and #800's review envelopes: the flange flare
 //! strikes a wall a straight body would miss, and a Weldon body carries
-//! its clamp screw allowance.
+//! its clamp screw allowance. #794 adds the Tormach TTS holders: the
+//! collar face is the gauge line (tip to collar = the TTS tool length),
+//! and the TTS ER20's collar strikes a wall its nut would miss.
 //!
 //! Gate map (M4.4): covers app::commands, app::tool_body, app::tools.
 
@@ -271,4 +273,45 @@ fn every_standalone_er_chuck_lands_and_undoes() {
         assert!(history.redo(&world));
         prev = drawn(&world);
     }
+}
+
+/// #794, gauge-length semantics: a TTS holder's profile tops out at its
+/// collar face, so tip to gauge line - projection plus gauge length -
+/// is the collar-to-tip length the tool setter measures for the H
+/// offset (stickout 52 + the ER20's published 52 mm installed height).
+#[test]
+fn a_tts_holder_tops_out_at_the_collar_the_setter_measures_from() {
+    let (world, mut history) = face_world();
+    history.execute(&world, SetToolBody::library(&world, TOOL, "TTS ER20", None, None).expect("pick"));
+    let pts = drawn(&world).expect("drawn");
+    assert_eq!(pts.iter().rev().take(2).copied().collect::<Vec<_>>(), [(104.0, 0.0), (104.0, 19.05)], "the collar face");
+    assert!(pts.iter().all(|p| p.0 <= 104.0), "nothing above the gauge line");
+    let (judged, _) = tool_body::judged(&world, &model::find_by_name(&world, TOOL).expect("tool"), catalog_tool(TOOL)).expect("judged");
+    assert!((judged.holder_len - 52.0).abs() < 1e-6, "nose face to collar face: {}", judged.holder_len);
+    assert!((judged.holder_d - 38.1).abs() < 1e-6, "the collar is the widest steel: Ø{}", judged.holder_d);
+    // A measured holder: 70 mm installed, 30 mm stickout - tool length 100.
+    history.execute(&world, SetToolBody::library(&world, TOOL, "TTS ER20", Some(70.0), Some(30.0)).expect("set"));
+    assert_eq!(drawn(&world).and_then(|p| p.last().map(|q| q.0)), Some(100.0));
+}
+
+/// #794: a wall 18.5 mm off the axis, 95-100 above the tip, stands
+/// beside the TTS ER20's Ø38.1 collar (91.3-104) and outside its Ø35
+/// nut and body. The collar strikes it; a straight ER20 body of the
+/// same length misses it; a wall 20 mm off is clear of the collar.
+#[test]
+fn the_tts_er20_collar_strikes_a_wall_its_nut_misses() {
+    let (world, mut history) = face_world();
+    plant_wall(&world, &mut history, 18.5, CUT_Z + 95.0, 5.0);
+    history.execute(&world, SetToolBody::library(&world, TOOL, "ER20 chuck", Some(52.0), None).expect("straight"));
+    regenerate(&world, &mut history);
+    assert_eq!(holder_hits(&world), 0, "a straight Ø35 body misses the wall");
+    history.execute(&world, SetToolBody::library(&world, TOOL, "TTS ER20", None, None).expect("tts"));
+    regenerate(&world, &mut history);
+    assert!(holder_hits(&world) > 0, "the TTS collar strikes it");
+
+    let (world, mut history) = face_world();
+    plant_wall(&world, &mut history, 20.0, CUT_Z + 95.0, 5.0);
+    history.execute(&world, SetToolBody::library(&world, TOOL, "TTS ER20", None, None).expect("tts"));
+    regenerate(&world, &mut history);
+    assert_eq!(holder_hits(&world), 0, "a wall beyond the collar is clear");
 }
