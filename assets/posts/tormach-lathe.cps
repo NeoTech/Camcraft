@@ -405,6 +405,7 @@ function endPreamble() {
   coolantAsk = "flood";
   block(["M5"]);
   spinRev = false;           // the next section states its own
+  sCss = 0;                  // and its own spindle mode: no stale G96 (#772)
   afterOp();
 }
 
