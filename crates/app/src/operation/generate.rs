@@ -90,6 +90,8 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         machine_rotaries,
         spindle,
         fixtures,
+        fixture_names,
+        z_ceiling,
         workholding,
         fixture_meshes,
         rotary_axis,
@@ -125,8 +127,8 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
     // a mill's cutter. A lathe's insert, blade or gauge keeps the box
     // verdict (its body is not that stack).
     use crate::tools::ToolKind as K;
-    let mesh_steel: &[crate::fixture::MeshedFixture] =
-        if is_mill && !matches!(tool.kind, K::Turning | K::Groove | K::Thread | K::Form) { &fixture_meshes } else { &[] };
+    let lathe_tool = matches!(tool.kind, K::Turning | K::Groove | K::Thread | K::Form);
+    let mesh_steel: &[crate::fixture::MeshedFixture] = if is_mill && !lathe_tool { &fixture_meshes } else { &[] };
     // Tool: the diameter drives the path, the body drives the reach law.
     let d = tool.diameter;
 
@@ -2557,6 +2559,23 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
     // #368: what the fixture laws sweep above the shank.
     let holder = crate::tool_body::stack(&geom, body.as_ref());
     let fixture_boxes = fixtures;
+    // #339 slice 5: an upright mill's links are planned over the steel -
+    // a struck link rises over it, an unclearable one refuses by name.
+    // Posed and rotary paths keep the report-only verdict below.
+    let path = if frame.is_none() && rotary_axis.is_none() && is_mill && !lathe_tool {
+        let named: Vec<_> = fixture_names.into_iter().zip(fixture_boxes.iter().copied()).collect();
+        let stack = verify::steel_stack(&geom, &holder, spindle);
+        let steel = super::fixture_route::LinkSteel { boxes: &named, stack: &stack, ceiling: z_ceiling };
+        // The re-judge is the post gate's own per-op law over the same
+        // per-setup inputs (#482's `fixture_struck`), so a routed link
+        // posts exactly when the gate would pass it.
+        let wh = verify::Workholding { turning: &workholding.0, fixed: &workholding.1, axis: rotary_axis };
+        super::fixture_route::plan_links(path, &steel, |p| {
+            !crate::fixture_struck::path_hits(p, (&geom, &holder), &wh, spindle, mesh_steel).is_empty()
+        })?
+    } else {
+        path
+    };
     let stl = match &params {
         OpParams::Face { .. }
         | OpParams::Probe { .. }
@@ -3121,14 +3140,8 @@ fn workholding_warnings(
         return Vec::new();
     }
     let wh = verify::Workholding { turning, fixed, axis };
-    let stack = verify::steel_stack(geom, holder, spindle);
-    let steel = verify::MeshSteel { fixtures: meshes, stack: &stack, chord_tol: GOUGE_TOL };
-    let mut warns = verify::mesh_refined(path, &wh, &steel, false, |w| {
-        verify::bands_vs_workholding_held(path, geom, holder, w, spindle, GOUGE_TOL)
-    });
-    warns.extend(verify::mesh_refined(path, &wh, &steel, true, |w| {
-        verify::rapids_vs_workholding_held(path, geom, holder, w, spindle)
-    }));
+    // The post gate's own per-op law (#339 slice 5): one law, one verdict.
+    let warns = crate::fixture_struck::path_hits(path, (geom, holder), &wh, spindle, meshes);
     crate::fixture::log_mesh_refusals(meshes);
     warns
 }

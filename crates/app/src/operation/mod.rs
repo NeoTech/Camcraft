@@ -128,6 +128,8 @@ use boundary_ctx::*;
 mod job;
 pub use job::*;
 mod generate;
+/// #339 slice 5: links routed over the setup's fixtures.
+pub mod fixture_route;
 mod cross_entry;
 mod cross_sag;
 mod cross_part;
