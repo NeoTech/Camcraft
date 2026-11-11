@@ -292,11 +292,21 @@ impl Planner<'_> {
         if good.is_some() {
             return Ok((good, false));
         }
-        let least = tries.iter().map(|t| t.1).fold(f64::INFINITY, f64::min);
-        match tries.iter().find(|t| t.1 <= least * 1.02 + 1e-9) {
-            Some(&(g, _)) => Ok((trial(self, g, f64::INFINITY)?, true)),
-            None => Ok((None, false)),
+        // The least overload by each step's WHOLE revolution: the tries
+        // above stop at the first reading past the bound, which comes
+        // before the front wherever the overload does not grow with the
+        // step - every step then reads the same, and the largest would
+        // win the tie and be walked whole far past it.
+        let mut least: Option<GrowTrial> = None;
+        for &(g, _) in &tries {
+            if let Some(t) = trial(self, g, f64::INFINITY)?
+                && least.as_ref().is_none_or(|b| t.5.0 < b.5.0)
+            {
+                least = Some(t);
+            }
         }
+        let over = least.is_some();
+        Ok((least, over))
     }
 
     /// Name the corner scallop the last lap's rounding (`rho`) leaves:
