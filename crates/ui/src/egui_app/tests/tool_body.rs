@@ -325,3 +325,89 @@ fn the_preview_zoom_clamps_and_fit_resets_it() {
     assert_eq!((d.zoom, d.pan, d.yaw, d.pitch), (0.0, [0.0; 2], 0.0, 0.0), "Fit restores the default view");
     let _ = std::fs::remove_dir_all(path.parent().unwrap());
 }
+
+#[test]
+fn import_tool_body_from_step_auto_aligns_in_editor() {
+    let mut harness = editor();
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../testdata/models/tool_csys_box_iso13399.step");
+    harness.state_mut().state.import_tool_body_from(&path);
+    harness.run();
+    let st = &harness.state().state;
+    assert_eq!(st.tool_body_ui.axis, [0.0, 0.0, 1.0]);
+    assert!((st.tool_body_ui.offset - 75.0).abs() < 1e-6);
+    assert_eq!(
+        st.tool_body_ui.align_note.as_deref(),
+        Some("aligned by ISO 13399 coordinate systems")
+    );
+    assert!(st.status.contains("aligned by ISO 13399 coordinate systems"));
+}
+
+#[test]
+fn import_tool_body_from_step_without_csys_falls_back_by_name_in_editor() {
+    let mut harness = editor();
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../testdata/models/box.step");
+    harness.state_mut().state.import_tool_body_from(&path);
+    harness.run();
+    let st = &harness.state().state;
+    assert_eq!(st.tool_body_ui.axis, [0.0, 0.0, 1.0]);
+    assert_eq!(st.tool_body_ui.offset, 0.0);
+    assert!(
+        st.tool_body_ui
+            .align_note
+            .as_ref()
+            .unwrap()
+            .contains("the file names no coordinate systems")
+    );
+    assert!(st.status.contains("the file names no coordinate systems"));
+}
+
+#[test]
+fn manual_axis_edit_clears_align_note() {
+    let mut harness = editor();
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../testdata/models/tool_csys_box_iso13399.step");
+    harness.state_mut().state.import_tool_body_from(&path);
+    harness.run();
+    assert_eq!(
+        harness.state().state.tool_body_ui.align_note.as_deref(),
+        Some("aligned by ISO 13399 coordinate systems")
+    );
+    assert!(harness.query_by_label("aligned by ISO 13399 coordinate systems").is_some());
+    harness
+        .get_by(|n| n.role() == egui::accesskit::Role::ComboBox && n.value().as_deref() == Some("+Z"))
+        .click();
+    harness.run();
+    harness.get_by_label("+X").click();
+    harness.run();
+    assert_eq!(harness.state().state.tool_body_ui.axis, [1.0, 0.0, 0.0]);
+    assert_eq!(harness.state().state.tool_body_ui.align_note, None);
+    assert!(harness.query_by_label("aligned by ISO 13399 coordinate systems").is_none());
+}
+
+#[test]
+fn pick_tip_sets_manual_placement_note() {
+    let mut harness = editor();
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../testdata/models/tool_csys_box_iso13399.step");
+    harness.state_mut().state.import_tool_body_from(&path);
+    harness.run();
+    assert_eq!(
+        harness.state().state.tool_body_ui.align_note.as_deref(),
+        Some("aligned by ISO 13399 coordinate systems")
+    );
+    harness.state_mut().state.tool_body_ui.pick = crate::state::BodyPickMode::Tip;
+    harness.state_mut().state.apply_body_pick(camcraft_app::tool_body_view::BodyPick {
+        facet: 0,
+        hit: [10.0, 20.0, 30.0],
+        vertex: [10.0, 20.0, 30.0],
+        normal: None,
+    });
+    harness.run();
+    assert_eq!(
+        harness.state().state.tool_body_ui.align_note.as_deref(),
+        Some("manual placement")
+    );
+    assert!(harness.query_by_label("manual placement").is_some());
+}

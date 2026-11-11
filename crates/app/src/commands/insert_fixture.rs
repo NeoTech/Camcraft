@@ -79,7 +79,7 @@ impl InsertFixture {
             name: free_name(world, &entry.name),
             facets: entry.facets.clone().into(),
             location,
-            def: FixtureDef { setup: setup_name.map(str::to_owned), fixed: false },
+            def: FixtureDef { setup: setup_name.map(str::to_owned), fixed: false, vise: None, accessory: None },
         })
     }
 
@@ -93,6 +93,27 @@ impl InsertFixture {
     #[must_use]
     pub fn location(&self) -> Location {
         self.location
+    }
+
+    /// Mark the insert as built-in vise `vise` (#788): the marker carries
+    /// the parameters its facets were generated from.
+    #[must_use]
+    pub fn with_vise(mut self, vise: crate::vise::ViseParams) -> Self {
+        self.def.vise = Some(vise);
+        self
+    }
+
+    /// Mark the insert as built-in accessory `accessory` (#789).
+    #[must_use]
+    pub fn with_accessory(mut self, accessory: crate::accessory::Accessory) -> Self {
+        self.def.accessory = Some(accessory);
+        self
+    }
+
+    /// The marker the insert writes.
+    #[must_use]
+    pub fn def(&self) -> &FixtureDef {
+        &self.def
     }
 }
 

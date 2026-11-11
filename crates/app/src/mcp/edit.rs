@@ -11,7 +11,7 @@ use crate::commands::{
     AddTool, CommandError, CreateOperation, DeleteOperation, EditOperationLinks, EditOperationParams, SetStock,
 };
 use crate::model;
-use crate::operation::{self, Height, HeightReference, KindInfo, OpParams, SrcRef};
+use crate::operation::{self, KindInfo, OpParams, SrcRef};
 use crate::project;
 use crate::script::{inventory, Env};
 use crate::stock::StockShape;
@@ -22,25 +22,11 @@ fn cmd_err(e: CommandError) -> String {
     e.to_string()
 }
 
-/// The draft every new operation is seeded from: a facing pass in
-/// references (25 above the stock top, skimming the top), carried into
-/// the kind through the registry's retype law - the same seed shape the
-/// app's quick-add uses, so an agent's new op and a clicked one agree.
+/// The draft every new operation is seeded from - the app's shared seed
+/// (`operation::seed_params`, #511), so an agent's new op and a clicked
+/// one agree.
 pub(super) fn seed(kind: usize) -> OpParams {
-    let base = OpParams::Face {
-        holes: Default::default(),
-        tilt: None,
-        stepover: 3.0,
-        clearance_z: Height::of(HeightReference::TopOfStock, 25.0),
-        cut_z: Height::of(HeightReference::TopOfStock, 0.0),
-        top_z: None,
-        stepdown: None,
-        feed: 1200.0,
-        plunge_feed: 300.0,
-        climb: true,
-        blend_turns: false,
-    };
-    operation::retype_params(&base, kind)
+    operation::seed_params(kind)
 }
 
 /// A kind by its label ("Pocket", any case) or its file key ("pocket").

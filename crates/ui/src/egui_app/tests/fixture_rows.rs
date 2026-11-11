@@ -125,3 +125,54 @@ fn the_locate_tools_sit_on_the_fixtures_page_and_the_model_page() {
     let rect = pane(&h);
     assert_inside(&h, rect, "Stop locating");
 }
+
+/// #788: the page's "Add built-in vise…" and a placed vise's opening row
+/// (Jaw opening, Set opening, Open to stock) sit inside the default pane.
+#[test]
+fn a_built_in_vise_row_fits_the_default_pane() {
+    let mut h = fixtures_page();
+    assert_inside(&h, pane(&h), "Add built-in vise…");
+    {
+        let st = &mut h.state_mut().state;
+        let six = camcraft_app::vise::size("6 in").map(camcraft_app::vise::ViseSize::half_open).expect("6 in");
+        st.pending.push_back(CommandKind::InsertBuiltinVise {
+            setup: Some("Setup1".into()),
+            params: six,
+            fit_stock: false,
+            pos: [0.0, 200.0, 0.0],
+            yaw_deg: 0.0,
+        });
+        st.drain_actions();
+    }
+    h.run_steps(3);
+    let rect = pane(&h);
+    for label in ["Vise 6 in", "Built-in vise 6 in", "Jaw opening", "Set opening", "Open to stock"] {
+        assert_inside(&h, rect, label);
+    }
+    assert!(h.state().state.pending.is_empty(), "{:?}", h.state().state.pending);
+}
+
+/// #789: the page's "Add accessory…" and a placed strap clamp's sizes
+/// row (its figures and Apply sizes) sit inside the default pane.
+#[test]
+fn a_built_in_accessory_row_fits_the_default_pane() {
+    let mut h = fixtures_page();
+    assert_inside(&h, pane(&h), "Add accessory…");
+    {
+        let st = &mut h.state_mut().state;
+        let clamp = camcraft_app::accessory::Accessory::default_of("strap_clamp").expect("clamp");
+        let at = camcraft_app::schema::Location { pos: camcraft_app::geometry::Point3::new(0.0, 200.0, 0.0), ..Default::default() };
+        st.pending.push_back(CommandKind::InsertAccessory {
+            setup: Some("Setup1".into()),
+            params: clamp,
+            placement: camcraft_app::commands::AccessoryPlacement::At(at),
+        });
+        st.drain_actions();
+    }
+    h.run_steps(3);
+    let rect = pane(&h);
+    for label in ["Strap clamp", "Built-in strap clamp", "Stud above the strap", "Clamp height", "Apply sizes"] {
+        assert_inside(&h, rect, label);
+    }
+    assert!(h.state().state.pending.is_empty(), "{:?}", h.state().state.pending);
+}

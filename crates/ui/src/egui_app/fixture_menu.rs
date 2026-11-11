@@ -51,6 +51,10 @@ pub(crate) fn menu_rows(state: &State, target: &TreeMenuTarget) -> Vec<(String, 
             // #339 slice 6: the user fixture library.
             ("Save fixture to library…".to_owned(), Some(CommandKind::FixtureLibrarySaveDialog(s.clone()))),
             ("Insert from library…".to_owned(), Some(CommandKind::FixtureLibraryInsertDialog(s.clone()))),
+            // #788: a generated, parametric vise.
+            ("Add built-in vise…".to_owned(), Some(CommandKind::BuiltinViseDialog(s.clone()))),
+            // #789: parallels, blocks, strap clamps, soft jaws.
+            ("Add accessory…".to_owned(), Some(CommandKind::AccessoryDialog(s.clone()))),
         ],
         TreeMenuTarget::Operation(_) | TreeMenuTarget::Operations | TreeMenuTarget::Entry(_) => Vec::new(),
     }

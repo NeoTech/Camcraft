@@ -19,7 +19,7 @@ use super::ring::{along, centroid, dist, kerf_ring, longest_mid, nearest, unit, 
 use super::{header, PlasmaParams, KERF_TOL, SMALL_HOLE_THICKNESS};
 
 /// The arc fit's budget on the kerf ring (mm): inside [`KERF_TOL`].
-const FIT_TOL: f64 = 0.005;
+pub(super) const FIT_TOL: f64 = 0.005;
 /// How many times a lead that finds no room is halved before refusing.
 const LEAD_TRIES: u32 = 4;
 
@@ -206,29 +206,6 @@ fn push_piece(b: &mut PathBuilder, q: Piece, z: f64, feed: Option<f64>) {
     }
 }
 
-/// Every lit move of every closed contour keeps its kerf off the part.
-fn kerf_law(path: &Toolpath, spans: &[TorchSpan], forbidden: &Region) -> Result<(), GenError> {
-    for sp in spans.iter().filter(|s| s.role != ContourRole::Open) {
-        for i in sp.on..=sp.off {
-            let Some(m) = path.moves.get(i) else { continue };
-            for (a, b) in m.chords(FIT_TOL) {
-                let k = (dist(a, b) / 0.25).ceil().clamp(1.0, 4096.0) as u32;
-                for j in 0..=k {
-                    let f = f64::from(j) / f64::from(k);
-                    let q = Point2::new(a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f);
-                    if forbidden.contains(q) {
-                        return Err(invalid(format!(
-                            "contour C{}: move {i} would carry the kerf into the part near X{:.3} Y{:.3} - refused",
-                            sp.contour, q.x, q.y
-                        )));
-                    }
-                }
-            }
-        }
-    }
-    Ok(())
-}
-
 /// Lay the contours down in `order` and certify the result.
 pub(super) fn cut(cs: &[Contour], order: &[usize], part: &Region, p: &PlasmaParams) -> Result<Toolpath, GenError> {
     let r = p.kerf * 0.5;
@@ -299,8 +276,11 @@ pub(super) fn cut(cs: &[Contour], order: &[usize], part: &Region, p: &PlasmaPara
     }
     b.push(MoveKind::Rapid, Point3::new(b.at().x, b.at().y, p.clearance_z), None);
     let mut path = b.finish();
+    // #672: no edge may stand beyond the kerf's reach - a slot narrower
+    // than the kerf that the offset bridged is refused, not left uncut.
+    super::laws::cover_law(&path, &rec.torches, cs, order, p.kerf)?;
     if let Some(f) = &forbidden {
-        kerf_law(&path, &rec.torches, f)?;
+        super::laws::kerf_law(&path, &rec.torches, f)?;
     } else {
         notes.push("plasma: no part silhouette to judge - roles read by nesting, the kerf law not run".into());
     }
