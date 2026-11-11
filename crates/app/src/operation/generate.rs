@@ -90,6 +90,8 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         machine_rotaries,
         spindle,
         fixtures,
+        fixture_names,
+        z_ceiling,
         workholding,
         fixture_meshes,
         rotary_axis,
@@ -126,8 +128,8 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
     // a mill's cutter. A lathe's insert, blade or gauge keeps the box
     // verdict (its body is not that stack).
     use crate::tools::ToolKind as K;
-    let mesh_steel: &[crate::fixture::MeshedFixture] =
-        if is_mill && !matches!(tool.kind, K::Turning | K::Groove | K::Thread | K::Form) { &fixture_meshes } else { &[] };
+    let lathe_tool = matches!(tool.kind, K::Turning | K::Groove | K::Thread | K::Form);
+    let mesh_steel: &[crate::fixture::MeshedFixture] = if is_mill && !lathe_tool { &fixture_meshes } else { &[] };
     // Tool: the diameter drives the path, the body drives the reach law.
     let d = tool.diameter;
 
@@ -654,7 +656,10 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             let prior = prior
                 .take()
                 .ok_or_else(|| unreached("re-machining mask"))??;
-            let mask = prior.grid.as_ref();
+            // Read through the stock seam (M7.3 4/6): motion takes the
+            // column reader, never the grid itself.
+            let mask_cols = prior.grid.as_ref().map(crate::stock_sim::Columns::of_grid);
+            let mask = mask_cols.as_ref();
             // The rest pass's verdict rides the path: what the sim
             // still reports after the closing ladder is the closing
             // report's business (the simulation view), not a silent
@@ -1379,7 +1384,8 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             let prior = prior
                 .take()
                 .ok_or_else(|| unreached("re-machining mask"))??;
-            let mask = prior.grid.as_ref();
+            let mask_cols = prior.grid.as_ref().map(crate::stock_sim::Columns::of_grid);
+            let mask = mask_cols.as_ref();
             // Same opt-in law as the twins' arm above: off, the ladder
             // stamps exactly as stage E3 shipped it.
             let shank = (*shank_avoid).then(|| shank_of(&tool));
@@ -1596,6 +1602,26 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     climb: *climb,
                 },
             )?;
+            let region = region_for_job(
+                    &mut picked_region,
+                    &mut section_z,
+                    &src,
+                    &params,
+                m_gen,
+                frame.as_ref(),
+            )?;
+            (region, path)
+        }
+        OpParams::TrochoidalSlot { a, b, .. } => {
+            let tp = super::trochoid_op::trochoid_params(
+                &params,
+                d,
+                hl.clearance,
+                hl.retract,
+                req_z(hl.top, "Top of Part Z")?,
+                req_z(hl.bottom, "Bottom of Part Z")?,
+            )?;
+            let path = machining2d::trochoidal_slot(&[*a, *b], &tp)?;
             let region = region_for_job(
                     &mut picked_region,
                     &mut section_z,
@@ -2558,6 +2584,23 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
     // #368: what the fixture laws sweep above the shank.
     let holder = crate::tool_body::stack(&geom, body.as_ref());
     let fixture_boxes = fixtures;
+    // #339 slice 5: an upright mill's links are planned over the steel -
+    // a struck link rises over it, an unclearable one refuses by name.
+    // Posed and rotary paths keep the report-only verdict below.
+    let path = if frame.is_none() && rotary_axis.is_none() && is_mill && !lathe_tool {
+        let named: Vec<_> = fixture_names.into_iter().zip(fixture_boxes.iter().copied()).collect();
+        let stack = verify::steel_stack(&geom, &holder, spindle);
+        let steel = super::fixture_route::LinkSteel { boxes: &named, stack: &stack, ceiling: z_ceiling };
+        // The re-judge is the post gate's own per-op law over the same
+        // per-setup inputs (#482's `fixture_struck`), so a routed link
+        // posts exactly when the gate would pass it.
+        let wh = verify::Workholding { turning: &workholding.0, fixed: &workholding.1, axis: rotary_axis };
+        super::fixture_route::plan_links(path, &steel, |p| {
+            !crate::fixture_struck::path_hits(p, (&geom, &holder), &wh, spindle, mesh_steel).is_empty()
+        })?
+    } else {
+        path
+    };
     let stl = match &params {
         OpParams::Face { .. }
         | OpParams::Probe { .. }
@@ -2636,6 +2679,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         | OpParams::Adaptive2D { stock_to_leave, .. }
         | OpParams::Offset2D { stock_to_leave, .. }
         | OpParams::Slot { stock_to_leave, .. }
+        | OpParams::TrochoidalSlot { stock_to_leave, .. }
         // The circular ladder leaves the pocket's shelf, ring 0 eroded
         // off the wall by it (M2.4 B).
         | OpParams::Circular { stock_to_leave, .. }
@@ -3122,14 +3166,8 @@ fn workholding_warnings(
         return Vec::new();
     }
     let wh = verify::Workholding { turning, fixed, axis };
-    let stack = verify::steel_stack(geom, holder, spindle);
-    let steel = verify::MeshSteel { fixtures: meshes, stack: &stack, chord_tol: GOUGE_TOL };
-    let mut warns = verify::mesh_refined(path, &wh, &steel, false, |w| {
-        verify::bands_vs_workholding_held(path, geom, holder, w, spindle, GOUGE_TOL)
-    });
-    warns.extend(verify::mesh_refined(path, &wh, &steel, true, |w| {
-        verify::rapids_vs_workholding_held(path, geom, holder, w, spindle)
-    }));
+    // The post gate's own per-op law (#339 slice 5): one law, one verdict.
+    let warns = crate::fixture_struck::path_hits(path, (geom, holder), &wh, spindle, meshes);
     crate::fixture::log_mesh_refusals(meshes);
     warns
 }
