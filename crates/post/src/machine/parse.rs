@@ -126,7 +126,6 @@ fn count_spindles(parts: Option<&serde_json::Value>) -> usize {
         .sum()
 }
 
-/// First part anywhere in the tree with the given `type`, depth-first.
 /// The spindle's speed ranges (#170): `[{ "min_speed", "max_speed" }]`,
 /// rpm. An entry missing either bound, or with them out of order, is
 /// dropped - a range the file cannot state whole names nothing.
@@ -143,6 +142,7 @@ fn parse_ranges(v: Option<&serde_json::Value>) -> Vec<(f64, f64)> {
         .collect()
 }
 
+/// First part anywhere in the tree with the given `type`, depth-first.
 fn find_type<'a>(parts: &'a serde_json::Value, ty: &str) -> Option<&'a serde_json::Value> {
     let arr = parts.as_array()?;
     for p in arr {

@@ -29,17 +29,19 @@ Speeds are 6000 rpm (T1) and 8000 rpm (T2), both in the high belt range (the pro
 ## Safety first
 1. **Check the A direction before anything else.** In MDI, with the tool well clear, run `G0 A90` from A0. The side of the bar that faced you (the front) must come to the **top**. If the back comes up instead, **stop**: the direction sense is reversed for this post, so tell us on the issue and don't run the program.
 2. **Check the collet nut clears the chuck.** At X-0.875 (the inner end of the flats) the ER20 nut must clear the chuck jaws with the tool at Z0.36. Keep at least 1" of tool stick-out from the nut.
-3. **Air-cut first.** Shift G54 Z up 1" (so Z0 sits 1" above the centerline), and run at 25% feed and rapid override with single-block on. Watch every `G0 A..` line: Z must already be at the top (`G53 G0 Z0` on the line before), and A must turn only on its own line.
-4. Only then cut, aluminium or brass, with a hand on feed hold and E-stop. This is a test program, not a production part.
+3. **Check the swept radius at the safe Z.** Before every `G0 A..` the program lifts Z to the top of travel (`G53 G0 Z0`), and that is the only clearance it gives: nothing in CamCraft checks the part, the chuck and its jaws against the tool while A turns. Before the first A move, jog Z to the top (`G53 G0 Z0`) and confirm the tool tip (and the collet nut) clears the radius the part, chuck and jaws sweep as A turns a full revolution. On this 3/4" bar it does with room to spare; a bigger part, a bigger chuck or a long tool may not. If it doesn't clear, don't run the program.
+4. **Know your G30 position's A.** Every tool change starts with `G30`, and the program ends with one. A `G30` with no axis words takes **every** axis to the stored G30 position, A included, so A may turn there, together with X and Y (Z is already at the top of travel when it starts). The program never trusts A after a `G30`: every operation states its own `G0 A..` again after its `T.. M6`. Check the A your G30 position holds (set it with A0 if you can), and make sure the tool clears the part there too.
+5. **Air-cut first.** Shift G54 Z up 1" (so Z0 sits 1" above the centerline), and run at 25% feed and rapid override with single-block on. Watch every `G0 A..` line: Z must already be at the top (`G53 G0 Z0` on the line before), and A must turn only on its own line.
+6. Only then cut, aluminium or brass, with a hand on feed hold and E-stop. This is a test program, not a production part.
 
 ## Checklist
 1. The program loads in PathPilot with no error. If it doesn't, send the line and the message.
 2. Before the first index there are two comments (WCS on the A centerline, no clamp code), and then `G53 G0 Z0`, `G0 A-90`.
-3. Every `G0 A..` line is preceded by `G53 G0 Z0`, and A turns with Z at the top.
+3. Every `G0 A..` line is preceded by `G53 G0 Z0`, and A turns with Z at the top. Every operation has its own `G0 A..` after its `T.. M6`, even when the A is the same as the last one (after the `G30`, A is wherever the G30 position put it).
 4. **FLAT A-90:** the flat is cut on the side that faced the back, about 0.21" wide and 3/4" long, from 1/8" to 7/8" in from the end.
 5. **FLAT A90:** the second flat is exactly opposite the first. Measure across the flats: 0.720" (0.750 - 2 x 0.015).
 6. **CROSS SLOT A0:** the groove crosses your A0 line 1/2" from the end, 1/8" wide and 0.020" deep, square to the bar.
-7. The program ends with Z up, G30 and M30. A is left at 0.
+7. The program ends with Z up, G30 and M30. The last operation runs at A0, but the final `G30` then takes A to your stored G30 position's A: A is left there, which is 0 only if your G30 position holds A0. Note where A ended.
 8. Total run time is a few minutes.
 
 Send back the PathPilot version, the result of each step, the across-flats measurement, and a photo of the part.

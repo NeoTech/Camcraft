@@ -82,3 +82,21 @@ the three answers in full.
   spindle range, belt ranges, rigid tapping and coolant, silently.
 - **Fix:** the search now passes leaves over. It is pinned by
   `the_microarc_machine_states_an_a_about_x`.
+
+**A is restated after every G30 and at every section (review of PR #798).**
+- **Decided:** the post forgets the A it holds (`aNow = null`) when it
+  writes `G30`, and again at every section end. Every section therefore
+  opens with `G53 G0 Z<safe>` / `G0 A..`, even on the same face as the
+  section before, with or without a tool change between.
+- **Why:** a `G30` with no axis words moves every axis to the stored G30
+  position (LinuxCNC, params 5181-5189), A included, and the app re-issues
+  the tool (so `G30 / T.. M6`) before every operation. Two operations on
+  the same face posted the second with no `G0 A..`, cutting wherever G30
+  left the table. The same-tool continuation (no G30) moves nothing in A,
+  but a section boundary is where an operator may stop (M0/M1, a probe
+  check) and jog, so the cheaper rule - keep A across same-tool sections -
+  was dropped: one extra Z lift is the whole cost.
+- **Dropped:** changing the `G30` itself so it leaves A alone (axis words
+  on a G30 add an intermediate-point move and change PathPilot's own
+  tool-change convention for every Tormach program), and a swept-radius check before an index (filed as a
+  follow-up; the kit README now asks the operator to confirm it).
