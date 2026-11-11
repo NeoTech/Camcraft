@@ -11,8 +11,9 @@ G-code viewer.
 
 ## Post processors
 
-The post is chosen per setup, on the setup's **Post** page. CamCraft ships
-posts for Fanuc, Haas, Mazak, Sinumerik, Heidenhain, Tormach PathPilot and
+The post is chosen on the **Post** page: a setup can pick its own, and a
+setup that picks none uses the document's. CamCraft ships posts for Fanuc,
+Haas, Siemens 840D, Heidenhain, Mazak, Tormach PathPilot, Makera Carvera and
 Fanuc Lathe. A post is a `.cps` script, so you can load your own with
 **Load post (.cps)**.
 
