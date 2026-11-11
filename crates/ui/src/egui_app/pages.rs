@@ -791,7 +791,7 @@ fn setups_page(ui: &mut Ui, state: &mut State) {
     ui.separator();
     tool_list_section(ui, state, active.as_deref());
     sheet_footer(ui, state);
-    ui.label("The Stock and Work-offset pages edit the active setup's furniture.");
+    ui.label("The Stock and Work offset pages edit the active setup's stock and work offset.");
 }
 
 /// The tool list of one setup context (M3.2 stage C): what goes into
@@ -859,6 +859,10 @@ pub(super) fn fixtures_section(ui: &mut Ui, state: &mut State, ctx: Option<&str>
     {
         state.fixture_ui = FixtureUi::default();
     }
+    state.retire_vise_opening_drafts();
+    state.retire_plate_place_drafts();
+    state.retire_mod_vise_drafts();
+    state.retire_accessory_size_drafts();
     ui.label(if fixtures.is_empty() && table.is_none() {
         "No workholding modeled: the collision checks see stock and part only."
     } else {
@@ -880,6 +884,18 @@ pub(super) fn fixtures_section(ui: &mut Ui, state: &mut State, ctx: Option<&str>
     ui.horizontal_wrapped(|ui| {
         if ui.button("Import fixture…").clicked() {
             state.pending.push_back(CommandKind::ImportFixtureDialog);
+        }
+        // #788: a generic parametric vise, placed in one undoable step.
+        if ui.button("Add built-in vise…").clicked() {
+            state.pending.push_back(CommandKind::BuiltinViseDialog(ctx.unwrap_or_default().to_owned()));
+        }
+        // #789: parallels, blocks, strap clamps, soft jaws.
+        if ui.button("Add accessory…").clicked() {
+            state.pending.push_back(CommandKind::AccessoryDialog(ctx.unwrap_or_default().to_owned()));
+        }
+        // #819: a parametric grid plate, fixtures placed on its holes.
+        if ui.button("Add fixture plate…").clicked() {
+            state.pending.push_back(CommandKind::FixturePlateDialog(ctx.unwrap_or_default().to_owned()));
         }
         // The other way in: a model already imported - select its row
         // in the browser and mark it. Offered only for exactly one
@@ -1723,6 +1739,8 @@ fn model_page(ui: &mut Ui, state: &mut State, name: String) {
             apply_model_draft(state);
         }
     });
+    // Pockets and slots (#511): recognition on a click, Create per row.
+    super::pockets_page::section(ui, state, &name);
     // #561: the part into a fixture (or a fixture onto the part) by mates.
     super::locate_form::model_row(ui, state, &name);
     // Mesh repair (M13.11): weld and fill on the user's say-so, never on

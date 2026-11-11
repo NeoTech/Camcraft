@@ -38,7 +38,9 @@ use super::kernel::{StockError, part_surface};
 use crate::geometry::{Point3, Triangle};
 
 /// The refusal for a turn the lattice cannot carry exactly.
-pub const CARRY_TURN_REFUSAL: &str = "the program sim carries the machined body only through flips over X or Y and quarter turns about Z (the turns that keep the tool axis vertical); this turn would re-sample the body at the grid pitch";
+/// Plain words (#866): what the simulation can carry, and why this turn
+/// is not one of those - the caller says which turn and what to do.
+pub const CARRY_TURN_REFUSAL: &str = "the stock simulation can carry machined stock only through a flip over X or Y or a quarter turn about Z (turns that keep the tool axis vertical) - any other turn would have to re-sample the stock and lose its detail";
 
 /// How close a rotation entry must sit to -1, 0 or 1 to be read as one.
 const UNIT_EPS: f64 = 1e-9;
@@ -108,6 +110,18 @@ impl LatticeTurn {
     #[must_use]
     pub fn swaps_xy(&self) -> bool {
         self.m[0][0] == 0
+    }
+
+    /// The turn's signed permutation (#637 E2a): `m` on XY, `s` on Z.
+    pub(crate) fn linear(&self) -> ([[i8; 2]; 2], i8) {
+        (self.m, self.s)
+    }
+
+    /// The turn's translation: what is left of it once the signed
+    /// permutation is baked into a field (#637 E2a).
+    #[must_use]
+    pub fn shift(&self) -> Point3 {
+        Point3::new(self.t[0], self.t[1], self.t[2])
     }
 
     /// Map a point.

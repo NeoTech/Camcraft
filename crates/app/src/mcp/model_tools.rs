@@ -33,7 +33,7 @@ pub(super) const TOOLS: &[Tool] = &[
     },
     Tool {
         name: "repair_model",
-        description: "Repair an imported model's mesh, as the Model page's Repair button does: weld vertices within weld_tol mm (default 0.001), drop collapsed or duplicate triangles, and fill every open boundary loop of at most max_hole_edges edges (default 256). Returns the counts before and after. One undo step that restores the exact previous facets. Refused by name: an unknown name, setup furniture, a negative tolerance, a budget under 3 edges, a mesh the repair can't close (non-manifold, over budget), and a mesh with nothing to repair.",
+        description: "Repair an imported model's mesh, as the Model page's Repair button does: weld vertices within weld_tol mm (default 0.001), drop collapsed or duplicate triangles, and fill every open boundary loop of at most max_hole_edges edges (default 256). Returns the counts before and after. One undo step that restores the exact previous facets. Refused by name: an unknown name, the setup's stock or work offsets, a negative tolerance, a budget under 3 edges, a mesh the repair can't close (non-manifold, over budget), and a mesh with nothing to repair.",
         schema: s_repair_model,
         run: repair_model,
     },

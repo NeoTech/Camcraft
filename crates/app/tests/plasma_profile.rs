@@ -170,8 +170,8 @@ fn a_holed_plate_cuts_its_hole_first_by_the_small_hole_rule() {
     let (_, m) = machine::of_setup(&world, None);
     let c = check_document(&world, &m.expect("the 1300PL")).expect("checks");
     assert!(c.problems.is_empty(), "{:?}", c.problems);
-    // No post serves a plasma table yet (#671): the CL is the hand-off.
-    assert!(posting::PLASMA_POSTS.is_empty());
+    // The PathPilot plasma post serves the table (#671, plasma_post.rs).
+    assert_eq!(posting::PLASMA_POSTS, &["Tormach PathPilot Plasma"]);
 }
 
 #[test]

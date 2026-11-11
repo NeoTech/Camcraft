@@ -199,14 +199,14 @@ fn run(reg: &Region, strategy: PocketStrategy, cell: f64) -> (Toolpath, PathQual
     // The stock stands one stepdown above Top: the ladder's first level
     // (at Top) is a real cut, not the zero-depth skin.
     let Ok(mut dex) = stock_for(reg, 5.0, BOTTOM, 1.0, &spec) else { panic!("stock") };
-    let q = measure(&path, &mut dex, &spec);
+    let q = measure(&path, &mut dex, &spec).unwrap();
     if let Ok(dir) = std::env::var("HSM_DUMP") {
         dump(&dir, reg, &path, &q, strategy);
     }
     // Rest inside what a D10 can reach, a grid cell and a half in.
     let reach = reg.offset(-(D * 0.5)).and_then(|c| c.offset(D * 0.5 - 2.0 * cell));
     let Ok(reach) = reach else { panic!("reach") };
-    (path, q, rest_area(&dex, &reach, BOTTOM))
+    (path, q, rest_area(&dex, &reach, BOTTOM).unwrap())
 }
 
 /// Debug aid (opt-in by `HSM_DUMP=<dir>`): the region's loops and every

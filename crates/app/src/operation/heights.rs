@@ -133,6 +133,7 @@ pub fn region_z(
         | OpParams::Chamfer2D { top_z, .. }
         | OpParams::Circular { top_z, .. }
         | OpParams::Slot { top_z, .. }
+        | OpParams::TrochoidalSlot { top_z, .. }
         | OpParams::Trace { top_z, .. }
         | OpParams::Drill { top_z, .. }
         | OpParams::Pocket3D { top_z, .. }
@@ -244,6 +245,7 @@ pub fn resolve_params(
         | OpParams::Engrave { clearance_z, retract_z, top_z, bottom_z, .. }
         | OpParams::Circular { clearance_z, retract_z, top_z, bottom_z, .. }
         | OpParams::Slot { clearance_z, retract_z, top_z, bottom_z, .. }
+        | OpParams::TrochoidalSlot { clearance_z, retract_z, top_z, bottom_z, .. }
         | OpParams::Trace { clearance_z, retract_z, top_z, bottom_z, .. }
         | OpParams::Pocket3D { clearance_z, retract_z, top_z, bottom_z, .. }
         | OpParams::Finish3D { clearance_z, retract_z, top_z, bottom_z, .. }
