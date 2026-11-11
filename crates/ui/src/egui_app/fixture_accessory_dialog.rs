@@ -30,8 +30,18 @@ pub(crate) fn place_command(d: &AccessoryDraft) -> CommandKind {
     }
 }
 
-/// The figure fields of `a` (and a step block's step count).
-pub(crate) fn dims_grid(ui: &mut Ui, u: Unit, id: &str, a: &mut Accessory) {
+/// The label parallels' height takes while a vise fit sets it (#812).
+pub(crate) const FIT_HEIGHT_LABEL: &str = "Height (set by the fit)";
+
+/// What the fit does to the vise, said before Place (#812): the stock
+/// stays put and the vise drops under it.
+pub(crate) const FIT_SINKS_HINT: &str = "The fit keeps the stock where it is and drops the vise by the parallels' height: \
+     with the stock resting on the vise floor, the vise ends below the table. Raise the stock first if the vise must stay on the table.";
+
+/// The figure fields of `a` (and a step block's step count). With
+/// `fitting`, parallels' height is the fit's: shown, labelled so and
+/// not editable (#812).
+pub(crate) fn dims_grid(ui: &mut Ui, u: Unit, id: &str, a: &mut Accessory, fitting: bool) {
     egui::Grid::new(id).num_columns(2).show(ui, |ui| {
         if let Some(steps) = a.steps_mut() {
             ui.label("Steps");
@@ -39,8 +49,13 @@ pub(crate) fn dims_grid(ui: &mut Ui, u: Unit, id: &str, a: &mut Accessory) {
             ui.end_row();
         }
         for d in a.dims_mut() {
-            ui.label(d.label);
-            num(ui, u, d.value);
+            if fitting && d.key == "height" {
+                ui.add_enabled(false, egui::Label::new(FIT_HEIGHT_LABEL));
+                ui.add_enabled_ui(false, |ui| num(ui, u, d.value));
+            } else {
+                ui.label(d.label);
+                num(ui, u, d.value);
+            }
             ui.end_row();
         }
     });
@@ -84,9 +99,10 @@ pub(crate) fn body(ui: &mut Ui, u: Unit, d: &mut AccessoryDraft) -> Option<Acces
             });
         }
     }
-    dims_grid(ui, u, "accessory-dims", &mut d.params);
+    dims_grid(ui, u, "accessory-dims", &mut d.params, fitting);
     if fitting {
         ui.label(RichText::new("The height is set to fit; the vise drops to suit.").small());
+        ui.label(RichText::new(FIT_SINKS_HINT).small());
     } else {
         egui::Grid::new("accessory-place").num_columns(2).show(ui, |ui| {
             for (k, axis) in ["Origin X", "Origin Y", "Origin Z"].iter().enumerate() {

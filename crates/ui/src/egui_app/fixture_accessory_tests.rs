@@ -10,7 +10,7 @@
 
 use egui::Vec2;
 use egui_kittest::Harness;
-use egui_kittest::kittest::Queryable;
+use egui_kittest::kittest::{NodeT, Queryable};
 
 use camcraft_app::accessory::Accessory;
 use camcraft_app::commands::{AccessoryPlacement, SetStock};
@@ -111,6 +111,30 @@ fn parallels_fit_under_the_stock_in_a_vise_from_the_dialog() {
     h.run();
     let Some(Accessory::Parallels { height, .. }) = params(h.state(), "Parallels") else { panic!("placed") };
     assert!((height - (1.75 * 25.4 + 6.35 - 20.0)).abs() < 1e-9, "{height}");
+}
+
+#[test]
+fn the_fit_says_it_sinks_the_vise_and_holds_the_height() {
+    // #812: in fit mode the height is the fit's - labelled so, not
+    // editable - and the dialog says the vise drops under the stock.
+    let mut state = with_stock();
+    let six = camcraft_app::vise::size("6 in").map(camcraft_app::vise::ViseSize::half_open).expect("6 in");
+    state.pending.push_back(CommandKind::InsertBuiltinVise { setup: None, params: six, fit_stock: true, pos: [0.0; 3], yaw_deg: 0.0 });
+    state.pending.push_back(CommandKind::AccessoryDialog(String::new()));
+    let mut h = dialog(state);
+    h.run();
+    let label = h.get_by_label(super::fixture_accessory_dialog::FIT_HEIGHT_LABEL);
+    assert!(label.accesskit_node().is_disabled(), "the fit's height is not editable");
+    assert!(h.query_by_label("Height").is_none(), "no plain, editable Height row while fitting");
+    assert!(h.query_by_label_contains("the vise ends below the table").is_some(), "the sink is said before Place");
+    // Out of fit mode the height is the user's again, and the hint goes.
+    if let Some(FixtureLibDialog::Accessory(d)) = h.state_mut().fixture_lib.as_mut() {
+        d.in_vise = None;
+    }
+    h.run();
+    assert!(h.query_by_label("Height").is_some(), "the plain Height row is back");
+    assert!(h.query_by_label(super::fixture_accessory_dialog::FIT_HEIGHT_LABEL).is_none());
+    assert!(h.query_by_label_contains("the vise ends below the table").is_none());
 }
 
 #[test]
