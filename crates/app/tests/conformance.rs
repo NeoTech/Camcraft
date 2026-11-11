@@ -372,8 +372,8 @@ const EXTENSIONS: &[(&str, &str)] = &[
     ("doosan-dnm", "nc"),
     ("carvera", "nc"),
     ("fanuc-lathe", "nc"),
-    ("tormach-plasma", "nc"),
     ("tormach-lathe", "nc"),
+    ("tormach-plasma", "nc"),
 ];
 
 /// The top-level `extension = "..."` manifest line's value.

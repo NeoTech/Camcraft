@@ -40,10 +40,10 @@ pub const BUILTINS: &[(&str, &str)] = &[
     ("Doosan DNM", include_str!("../../../assets/posts/doosan-dnm.cps")),
     ("Makera Carvera", include_str!("../../../assets/posts/carvera.cps")),
     ("Fanuc Lathe", include_str!("../../../assets/posts/fanuc-lathe.cps")),
+    ("Tormach PathPilot Lathe", include_str!("../../../assets/posts/tormach-lathe.cps")),
     // #671: the plasma dialect, from UM10720 §6-7 and the PathPilot
     // post guidelines; it serves plasma tables only (`PLASMA_POSTS`).
     ("Tormach PathPilot Plasma", include_str!("../../../assets/posts/tormach-plasma.cps")),
-    ("Tormach PathPilot Lathe", include_str!("../../../assets/posts/tormach-lathe.cps")),
 ];
 
 /// The registry entries that speak TURNING (M13.5): X as a diameter
