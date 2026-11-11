@@ -19,7 +19,7 @@ use std::f64::consts::PI;
 
 use camcraft_kernel::solidcore_impl::SolidcoreKernel;
 use camcraft_kernel::solidcore_import::{
-    HEAL_GAP_LIMIT, import_smb, read_smb, vertex_gaps, write_smb,
+    HEAL_GAP_LIMIT, VertexGaps, import_smb, read_smb, vertex_gaps, write_smb,
 };
 use camcraft_kernel::truck_impl::TruckKernel;
 use camcraft_kernel::{Blend, Kernel, KernelError, Measure};
@@ -135,7 +135,10 @@ fn native_round_trip_matches_closed_form() {
             let mut k = SolidcoreKernel::default();
             let s = fixture(&mut k, name)?;
             let bytes = write_smb(&k, &s)?;
-            import_smb(&mut k, &bytes).and_then(|mut b| k.measure(&mut b))
+            let imp = import_smb(&mut k, &bytes)?;
+            assert!(imp.notes.is_empty(), "{name}: notes {:?}", imp.notes);
+            let mut b = imp.brep;
+            k.measure(&mut b)
         });
         fails.extend(check(&w, "solidcore .smb", m));
     }
@@ -171,7 +174,10 @@ fn vertex_gap_is_closed_by_the_importer() {
                 .as_ref()
                 .map_err(Clone::clone)
                 .and_then(|h| vertex_gaps(&k, h));
-            let imp = import_smb(&mut k, text.as_bytes()).and_then(|mut b| k.measure(&mut b));
+            let imp = import_smb(&mut k, text.as_bytes()).and_then(|i| {
+                let mut b = i.brep;
+                k.measure(&mut b)
+            });
             Ok::<_, KernelError>((raw, gaps, imp))
         });
         let Ok((raw, gaps, imported)) = r else {
@@ -184,7 +190,11 @@ fn vertex_gap_is_closed_by_the_importer() {
         // within the limit: the healed vertex tolerance covers the gap
         if gap <= HEAL_GAP_LIMIT {
             match &gaps {
-                Ok((g, tol)) if *tol >= *g * (1.0 - 1e-9) && *g <= HEAL_GAP_LIMIT => {}
+                Ok(VertexGaps {
+                    gap: g,
+                    max_vertex_tolerance: tol,
+                    unjudged_edges: 0,
+                }) if *tol >= *g * (1.0 - 1e-9) && *g <= HEAL_GAP_LIMIT => {}
                 other => fails.push(format!("gap {gap:e}: healed gaps {other:?}")),
             }
             let tol = gap * 600.0 + REL_FLOOR * 1000.0;
