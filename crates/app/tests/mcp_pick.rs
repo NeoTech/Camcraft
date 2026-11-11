@@ -364,12 +364,28 @@ fn locate_part_refuses_a_mate_point_no_click_could_pick() {
     let part = c.ok("import_model", json!({ "path": boss.display().to_string() }))["model"].as_str().expect("name").to_owned();
     let steel = c.ok("import_model", json!({ "path": vise.display().to_string() }))["model"].as_str().expect("name").to_owned();
     c.ok("add_fixture", json!({ "model": steel }));
-    let face = c.ok("list_features", json!({ "model": steel, "kinds": ["faces"] }))["faces"][0]["id"]
-        .as_str()
-        .map(str::to_owned)
-        .expect("a fixture face");
-    let point = format!("vertex:{rim:#018x}");
-    let e = c.refused("locate_part", json!({ "part": part, "fixture": steel, "mates": [{ "part": point, "fixture": face }] }));
+    let top = flat_face(&mut c, &steel, 20.0);
+    let mate = |part_id: &str| json!({ "part": part, "fixture": steel, "mates": [{ "part": part_id, "fixture": top }] });
+    let before = c.ok("get_job", json!({}));
+    let e = c.refused("locate_part", mate(&format!("vertex:{rim:#018x}")));
     assert!(e.contains("not a feature point"), "{e}");
+    // Refused at the door: placements, undo/redo state, all as they were.
+    assert_eq!(c.ok("get_job", json!({})), before, "a refused locate changes nothing");
+    // The check refuses no click-pickable mate: the boss's flat bottom seats on the vise top.
+    let bottom = flat_face(&mut c, &part, 0.0);
+    c.ok("locate_part", mate(&bottom));
+    let job = c.ok("get_job", json!({}));
+    let boss = job["models"].as_array().and_then(|m| m.iter().find(|m| m["name"] == json!(part))).expect("the boss");
+    assert!(boss["bounds"]["min"][2].as_f64().is_some_and(|z| (z - 20.0).abs() < 1e-6), "seated on the top at Z 20: {boss}");
+    // One undo step back: the refusal added none, so this undoes the locate.
+    c.ok("undo", json!({}));
+    assert_eq!(c.ok("get_job", json!({}))["models"], before["models"], "undo restores the placements");
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The id of `model`'s flat face lying at world Z `z` ("facing" is winding-free).
+fn flat_face(c: &mut Client, model: &str, z: f64) -> String {
+    let f = c.ok("list_features", json!({ "model": model, "kinds": ["faces"] }));
+    let at = |fa: &&Value| [fa["bounds"]["min"][2].as_f64(), fa["bounds"]["max"][2].as_f64()] == [Some(z); 2];
+    f["faces"].as_array().and_then(|fs| fs.iter().find(at)).and_then(|fa| fa["id"].as_str()).map(str::to_owned).unwrap_or_else(|| panic!("{model}: no face at Z {z}: {f}"))
 }
