@@ -12,7 +12,8 @@
 use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, TryRecvError};
-use std::time::{Duration, Instant};
+use camcraft_app::clock::Instant;
+use std::time::Duration;
 
 use camcraft_app::commands::{
     ActivateSetup, AlignPartToSetup, SetSetupRelative, SetSetupStockSource, SetSetupWorkOffset, AddTool, ApplyCuttingData, ChangeOperationKind, ChangeTool, CommandError, CreateOperation,
@@ -57,6 +58,12 @@ pub use fixture_library::{FixtureLibDialog, InsertFixtureDraft, LibraryRow, Save
 #[path = "state_vise.rs"]
 mod vise_ui;
 pub use vise_ui::{ViseDraft, ViseOpeningDraft};
+#[path = "state_plate.rs"]
+mod plate_ui;
+pub use plate_ui::{PlateDraft, PlatePlaceDraft};
+#[path = "state_modvise.rs"]
+mod modvise_ui;
+pub use modvise_ui::ModViseDraft;
 #[path = "state_accessory.rs"]
 mod accessory_ui;
 pub use accessory_ui::{AccessoryDraft, AccessorySizeDraft};
@@ -68,6 +75,9 @@ mod tool_body_ui;
 pub use tool_body_ui::{BodyDraft, BodyPickMode, ToolBodyUi, ZOOM_MAX, ZOOM_MIN, clamp_zoom};
 #[path = "state_tool_profile.rs"]
 mod tool_profile_ui;
+#[path = "state_tool_cutter.rs"]
+mod tool_cutter_ui;
+pub use tool_cutter_ui::ToolCutterUi;
 #[path = "state_recent.rs"]
 mod recent_ui;
 pub use tool_profile_ui::{ToolColumn, ToolProfileUi, is_spun_kind, parametric_points};
@@ -236,6 +246,13 @@ pub enum CommandKind {
     /// return it to its parametric cylinder (`None`) - the tool editor's
     /// Apply profile, one `SetToolBody::spun`.
     SetToolProfile {
+        name: String,
+        points: Option<Vec<camcraft_app::spun::SpunPoint>>,
+    },
+    /// #93 slice 2: set a milling tool's drawn cutter outline (`Some`)
+    /// or clear it back to the numbers' outline (`None`) - the tool
+    /// editor's Apply cutter, one `SetToolCutter`.
+    SetToolCutter {
         name: String,
         points: Option<Vec<camcraft_app::spun::SpunPoint>>,
     },
@@ -467,6 +484,36 @@ pub enum CommandKind {
         name: String,
         params: camcraft_app::vise::ViseParams,
         from_stock: bool,
+    },
+    /// #819: open "Add fixture plate…" over a setup's Fixtures node.
+    FixturePlateDialog(String),
+    /// Place built-in plate `params` into `setup`: centred on the machine
+    /// table, or its frame at `pos` (mm) turned `yaw_deg` - one `InsertPlate`.
+    InsertFixturePlate {
+        setup: Option<String>,
+        params: camcraft_app::plate::PlateParams,
+        on_table: bool,
+        pos: [f64; 3],
+        yaw_deg: f64,
+    },
+    /// Put fixture `fixture` on plate `plate` at `at` - one `PlaceOnPlate`.
+    PlaceOnPlate {
+        fixture: String,
+        plate: String,
+        at: camcraft_app::plate::MountAt,
+        yaw_deg: f64,
+    },
+    /// Detect fixture `name`'s plate grid from its holes, or (`clear`)
+    /// stop it being a plate - one `SetPlateGrid`.
+    DetectPlateGrid { name: String, clear: bool },
+    /// #820: a mod vise pair on plate `plate`, the fixed block at hole
+    /// `at` turned `yaw_deg`, fitted to the stock - one `PlaceModVisePair`.
+    PlaceModVisePair {
+        plate: String,
+        fixed: camcraft_app::modvise::JawParams,
+        adjustable: camcraft_app::modvise::JawParams,
+        at: String,
+        yaw_deg: f64,
     },
     /// #789: open the "Add accessory…" dialog over a setup's Fixtures
     /// node (`""` - the implicit setup). View state.
@@ -1461,6 +1508,10 @@ pub struct State {
     /// view state; Set lands it through `SetVise`. See
     /// [`State::vise_opening_draft`].
     pub vise_opening: HashMap<String, ViseOpeningDraft>,
+    /// #819: each fixture row's "Place on plate" draft, by fixture name.
+    pub plate_place: HashMap<String, PlatePlaceDraft>,
+    /// #820: each plate row's "Add mod vise pair" draft, by plate name.
+    pub mod_vise: HashMap<String, ModViseDraft>,
     /// The selected op's struck fixtures, per (version, op, path sig).
     pub struck_cache: camcraft_app::fixture_view::StruckCache,
     /// Properties / Tool Library pane drafts (ephemeral; see [`OpUi`]).
@@ -1530,6 +1581,9 @@ pub struct State {
     /// #93: the tool editor's spun-profile draft (Parametric/Custom, the
     /// points). Ephemeral like `tool_body_ui`; Apply profile is the command.
     pub tool_profile_ui: ToolProfileUi,
+    /// #93 slice 2: the tool editor's drawn-cutter draft; Apply cutter
+    /// is the command.
+    pub tool_cutter_ui: ToolCutterUi,
     /// The machine editor window (M3.3 stage C): `None` closed. An
     /// ephemeral draft like [`State::tool_editor`] - the numbers under
     /// edit are a copy of the machine until Apply pushes `LoadMachine`,
@@ -1576,6 +1630,11 @@ pub struct State {
     /// [`State::feedback`]; read only through [`State::refusal_focus`],
     /// which retires it with the refusal it belongs to.
     pub feedback_at: Option<[f64; 3]>,
+    /// #261 part 3: the moves a refused generation had built, beside
+    /// [`State::feedback`]; read only through [`State::refusal_ghost`].
+    /// Display-only and ephemeral: never cached on the operation, freed
+    /// with the refusal it belongs to.
+    pub feedback_ghost: Option<camcraft_app::machining2d::Ghost>,
 }
 
 /// Which page of the Operations pane a refused command's message belongs
@@ -1762,6 +1821,8 @@ impl State {
             fixture_lib: None,
             fixture_lib_dir: None,
             vise_opening: HashMap::new(),
+            plate_place: HashMap::new(),
+            mod_vise: HashMap::new(),
             struck_cache: Default::default(),
             // The tool draft carries a plausible name from the first
             // frame: an empty Name field made Add look dead (refused
@@ -1777,6 +1838,7 @@ impl State {
             tool_editor: None,
             tool_body_ui: ToolBodyUi::default(),
             tool_profile_ui: ToolProfileUi::default(),
+            tool_cutter_ui: ToolCutterUi::default(),
             machine_editor: None,
             machines_pane: Default::default(),
             theme_cache: theme_files::Cache::new(),
@@ -1792,6 +1854,7 @@ impl State {
             feedback: None,
             feedback_ctx: None,
             feedback_at: None,
+            feedback_ghost: None,
         }
     }
 
@@ -1864,6 +1927,7 @@ impl State {
         self.feedback = Some((scope, msg));
         // A new refusal names no spot until its caller says so (#261).
         self.feedback_at = None;
+        self.feedback_ghost = None;
     }
 
     /// Refetch the Setup pane's drafts from the world after any document
@@ -2426,6 +2490,7 @@ impl State {
         self.tool_synced = (String::new(), self.doc_version);
         self.tool_body_ui = ToolBodyUi::default();
         self.tool_profile_ui = ToolProfileUi::default();
+        self.tool_cutter_ui = ToolCutterUi::default();
     }
 
     pub(crate) fn copy_operation(&mut self, name: &str) {
@@ -2565,7 +2630,7 @@ impl State {
             if Instant::now() >= deadline {
                 self.abandon_imports();
                 self.status = String::from("import timed out");
-                eprintln!("settle: queued work did not finish before the deadline");
+                diag_warn!("settle: queued work did not finish before the deadline");
                 return;
             }
             std::thread::sleep(Duration::from_millis(2));
@@ -2578,6 +2643,7 @@ impl State {
         self.feedback = None;
         self.feedback_ctx = None;
         self.feedback_at = None;
+        self.feedback_ghost = None;
         // #107: New, Open and Quit over unsaved changes wait for the
         // prompt's answer instead of discarding the document.
         let Some(action) = self.hold_if_unsaved(action) else {
@@ -2891,6 +2957,7 @@ impl State {
             }
             CommandKind::SetToolBody { name, body } => self.run_set_tool_body(&name, body),
             CommandKind::SetToolProfile { name, points } => self.run_set_tool_profile(&name, points),
+            CommandKind::SetToolCutter { name, points } => self.run_set_tool_cutter(&name, points),
             CommandKind::SetToolHolder { name, entry, gauge, projection } => {
                 self.run_set_tool_holder(&name, &entry, gauge, projection)
             }
@@ -3127,6 +3194,8 @@ impl State {
                         self.refuse(ErrorScope::Operation, format!("generate failed: {err}"));
                         // #261 part 2: where the generator refused, if it said.
                         self.feedback_at = err.location().map(|p| [p.x, p.y, p.z]);
+                        // Part 3: the moves it had built, drawn as a ghost.
+                        self.feedback_ghost = err.ghost().cloned();
                     }
                 }
             }
@@ -3493,6 +3562,15 @@ impl State {
                 self.insert_builtin_vise(setup, &params, fit_stock, pos, yaw_deg);
             }
             CommandKind::SetVise { name, params, from_stock } => self.set_builtin_vise(&name, params, from_stock),
+            CommandKind::FixturePlateDialog(setup) => self.open_plate_dialog(setup),
+            CommandKind::InsertFixturePlate { setup, params, on_table, pos, yaw_deg } => {
+                self.insert_fixture_plate(setup, &params, on_table, pos, yaw_deg);
+            }
+            CommandKind::PlaceOnPlate { fixture, plate, at, yaw_deg } => self.place_fixture_on_plate(&fixture, &plate, at, yaw_deg),
+            CommandKind::DetectPlateGrid { name, clear } => self.detect_plate_grid(&name, clear),
+            CommandKind::PlaceModVisePair { plate, fixed, adjustable, at, yaw_deg } => {
+                self.place_mod_vise_pair(&plate, &fixed, &adjustable, &at, yaw_deg);
+            }
             CommandKind::SetupSheetDialog => {
                 if let Some(path) = save_sheet_dialog() {
                     self.setup_sheet_path(path);
@@ -3619,14 +3697,14 @@ impl State {
                 // A dropped rx means the document changed or we are closing;
                 // the command is simply never applied.
                 if tx.send(result).is_err() {
-                    eprintln!("import: result discarded, no receiver");
+                    diag_warn!("import: result discarded, no receiver");
                 }
             });
         match spawned {
             Ok(_) => self.import_rx = Some(rx),
             Err(err) => {
                 // Thread exhaustion must not lose the import: run inline.
-                eprintln!("import: worker spawn failed ({err}); running inline");
+                diag_warn!("import: worker spawn failed ({err}); running inline");
                 let result = ImportModel::new(&path);
                 self.finish_import(result);
             }
@@ -3731,7 +3809,7 @@ impl State {
                 self.import_file = None;
                 self.import_started = None;
                 self.status = String::from("import failed: worker lost");
-                eprintln!("import: worker thread exited without a result");
+                diag_warn!("import: worker thread exited without a result");
             }
             None => {}
         }
@@ -3764,7 +3842,7 @@ impl State {
     /// A worker still running finishes in the background and discards itself.
     fn abandon_imports(&mut self) {
         if self.import_rx.take().is_some() {
-            eprintln!("import: document changed; pending import discarded");
+            diag_warn!("import: document changed; pending import discarded");
         }
         self.import_queue.clear();
         self.import_file = None;
@@ -4109,13 +4187,13 @@ impl Default for State {
 
 fn pick_mesh_file() -> Option<PathBuf> {
     // STEP arrives tessellated through truck (mesh, not B-rep).
-    rfd::FileDialog::new()
+    crate::file_dialog::FileDialog::new()
         .add_filter("Mesh", &["stl", "obj", "step", "stp"])
         .pick_file()
 }
 
 fn pick_project_file() -> Option<PathBuf> {
-    rfd::FileDialog::new()
+    crate::file_dialog::FileDialog::new()
         .add_filter("CamCraft Project", &["camproj"])
         .pick_file()
 }
@@ -4123,7 +4201,7 @@ fn pick_project_file() -> Option<PathBuf> {
 fn pick_machine_file() -> Option<PathBuf> {
     // The `.mch` layout is the machine-definition JSON format we reuse
     // by user instruction (M2.3 C); the filter just names it.
-    rfd::FileDialog::new()
+    crate::file_dialog::FileDialog::new()
         .add_filter("Machine Definition", &["mch"])
         .pick_file()
 }
@@ -4131,7 +4209,7 @@ fn pick_machine_file() -> Option<PathBuf> {
 fn pick_post_file() -> Option<PathBuf> {
     // The `.cps` script format is the one we reuse by user instruction
     // (M3.3 A) - plain JavaScript, the user's own; the filter names it.
-    rfd::FileDialog::new()
+    crate::file_dialog::FileDialog::new()
         .add_filter("Post Script", &["cps"])
         .pick_file()
 }
@@ -4162,7 +4240,7 @@ fn pick_theme_file() -> Option<PathBuf> {
     // filter names it; the selection-time parse decides it. The dialog
     // opens on the discovered folder (`theme_dir`, M13.3) when there is
     // one; `State::new` already said so on the status line when not.
-    let mut dialog = rfd::FileDialog::new().add_filter("CamCraft Theme", &["json"]);
+    let mut dialog = crate::file_dialog::FileDialog::new().add_filter("CamCraft Theme", &["json"]);
     if let Ok(dir) = crate::theme_dir::from_process() {
         dialog = dialog.set_directory(dir);
     }
@@ -4170,7 +4248,7 @@ fn pick_theme_file() -> Option<PathBuf> {
 }
 
 pub(crate) fn save_project_dialog(current: Option<&Path>) -> Option<PathBuf> {
-    let mut dialog = rfd::FileDialog::new().add_filter("CamCraft Project", &["camproj"]);
+    let mut dialog = crate::file_dialog::FileDialog::new().add_filter("CamCraft Project", &["camproj"]);
     if let Some(parent) = current.and_then(Path::parent) {
         dialog = dialog.set_directory(parent);
     }
@@ -4186,7 +4264,7 @@ pub(crate) fn save_project_dialog(current: Option<&Path>) -> Option<PathBuf> {
 fn post_program_dialog(target: &crate::post_file::PostTarget) -> Option<PathBuf> {
     // The extension law lives with the script (fanuc.cps's `extension`
     // is "nc"); the dialog just offers it.
-    let mut dialog = rfd::FileDialog::new().add_filter("NC Program", &["nc"]);
+    let mut dialog = crate::file_dialog::FileDialog::new().add_filter("NC Program", &["nc"]);
     if let Some(dir) = &target.dir {
         dialog = dialog.set_directory(dir);
     }
@@ -4194,7 +4272,7 @@ fn post_program_dialog(target: &crate::post_file::PostTarget) -> Option<PathBuf>
 }
 
 fn save_stl_dialog() -> Option<PathBuf> {
-    rfd::FileDialog::new()
+    crate::file_dialog::FileDialog::new()
         .add_filter("STL", &["stl"])
         .set_file_name("machined-stock.stl")
         .save_file()
@@ -4203,7 +4281,7 @@ fn save_stl_dialog() -> Option<PathBuf> {
 fn save_sheet_dialog() -> Option<PathBuf> {
     // Plain text on purpose: the sheet is meant to be read on paper
     // next to the machine, so the format is whatever Notepad opens.
-    rfd::FileDialog::new()
+    crate::file_dialog::FileDialog::new()
         .add_filter("Text", &["txt"])
         .set_file_name("setup-sheets.txt")
         .save_file()

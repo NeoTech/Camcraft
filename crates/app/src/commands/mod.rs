@@ -9,6 +9,9 @@ pub mod builtin_vise;
 pub mod cutting_data;
 pub mod delete_entity;
 pub mod fixture;
+pub mod fixture_move;
+pub mod fixture_plate;
+pub mod mod_vise;
 pub mod import_fixture;
 pub mod import_model;
 // #339 slice 6: a fixture library entry placed into a setup.
@@ -49,6 +52,8 @@ pub mod set_wcs;
 pub mod tool;
 // #368: a tool's modelled body.
 pub mod tool_body;
+// #93 slice 2: a milling tool's drawn cutter outline.
+pub mod tool_cutter;
 // #300: a tool library file imported as one undo unit.
 pub mod tool_import;
 // #221: a tool's controller number.
@@ -64,6 +69,8 @@ pub use delete_entity::DeleteEntity;
 pub use fixture::{
     AddFixtureModel, DeleteFixture, MoveFixture, SetFixtureFixed, TagFixture, UntagFixture,
 };
+pub use fixture_plate::{InsertPlate, PlaceOnPlate, PlatePlacement, SetPlate, SetPlateGrid};
+pub use mod_vise::PlaceModVisePair;
 pub use import_fixture::ImportFixture;
 pub use import_model::ImportModel;
 pub use insert_fixture::InsertFixture;
@@ -95,6 +102,7 @@ pub use color_vision::{color_vision_of, color_vision_set, SetColorVision};
 pub use set_wcs::SetWcsOrigin;
 pub use tool::{AddTool, ChangeTool, DeleteTool};
 pub use tool_body::{LatheBodySpec, SetToolBody, ToolBodySpec};
+pub use tool_cutter::SetToolCutter;
 pub use tool_import::{ImportReport, ImportTools};
 pub use tool_number::SetToolNumber;
 pub use update_model::UpdateModel;
@@ -118,6 +126,12 @@ pub enum CommandError {
     /// `Machining` does.
     #[error("could not generate the toolpath: {msg}")]
     MachiningAt { msg: String, at: crate::geometry::Point3 },
+    /// A [`Machining`](CommandError::Machining) refusal that handed back
+    /// the moves it had built (#261 part 3), world coordinates, with the
+    /// spot it names if any. Display-only: the moves are never cached,
+    /// so the operation still has no toolpath. Reads as `Machining` does.
+    #[error("could not generate the toolpath: {msg}")]
+    MachiningGhost { msg: String, at: Option<crate::geometry::Point3>, ghost: crate::machining2d::Ghost },
 }
 
 impl CommandError {
@@ -126,6 +140,17 @@ impl CommandError {
     pub fn location(&self) -> Option<crate::geometry::Point3> {
         match self {
             CommandError::MachiningAt { at, .. } => Some(*at),
+            CommandError::MachiningGhost { at, .. } => *at,
+            _ => None,
+        }
+    }
+
+    /// The moves a refused generation had built (#261 part 3), for the
+    /// viewport's diagnostic ghost - never a toolpath.
+    #[must_use]
+    pub fn ghost(&self) -> Option<&crate::machining2d::Ghost> {
+        match self {
+            CommandError::MachiningGhost { ghost, .. } => Some(ghost),
             _ => None,
         }
     }

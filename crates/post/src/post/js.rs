@@ -147,6 +147,10 @@ pub const HOOKS: &[&str] = &[
     "onProbeRetreat",
     "onProbeGuard",
     "onProbeResult",
+    // #671: the plasma header and the torch spans.
+    "onPlasma",
+    "onTorchOn",
+    "onTorchOff",
     "onComment",
     "onClose",
 ];

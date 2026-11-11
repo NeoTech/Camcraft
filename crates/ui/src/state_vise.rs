@@ -20,12 +20,13 @@ use super::{ErrorScope, FixtureLibDialog, State};
 pub struct ViseDraft {
     /// The Fixtures node's setup (`""` - the implicit setup).
     pub setup: String,
-    /// Index into `vise::SIZES`.
+    /// Index into `vise::presets()` (standard rows, then self-centering).
     pub size: usize,
     pub params: ViseParams,
     /// Against the setup's stock, jaws opened to it (the default).
     pub fit_stock: bool,
-    /// The vise frame's origin (fixed jaw face, centred, at the floor), mm.
+    /// The vise frame's origin (fixed jaw face, centred, at the floor; a
+    /// self-centering vise's centre between the jaws), mm.
     pub pos: [f64; 3],
     pub yaw_deg: f64,
     pub error: Option<String>,
@@ -35,14 +36,14 @@ impl ViseDraft {
     /// A fresh draft on size row `size`, half open.
     #[must_use]
     pub fn new(setup: String, size: usize) -> Self {
-        let size = size.min(vise::SIZES.len().saturating_sub(1));
-        let params = vise::SIZES.get(size).map_or_else(empty_params, vise::ViseSize::half_open);
+        let size = size.min(vise::presets().count().saturating_sub(1));
+        let params = vise::preset(size).map_or_else(empty_params, vise::ViseSize::half_open);
         Self { setup, size, params, fit_stock: true, pos: [0.0; 3], yaw_deg: 0.0, error: None }
     }
 
     /// Pick size row `size`: its figures replace the draft's.
     pub fn pick(&mut self, size: usize) {
-        if let Some(row) = vise::SIZES.get(size) {
+        if let Some(row) = vise::preset(size) {
             self.size = size;
             self.params = row.half_open();
             self.error = None;
@@ -76,6 +77,7 @@ fn empty_params() -> ViseParams {
         housing_length: 0.0,
         housing_height: 0.0,
         opening: 0.0,
+        style: vise::ViseStyle::Standard,
     }
 }
 
@@ -110,7 +112,7 @@ impl State {
     /// 6 in size for an inch document and 150 mm otherwise.
     pub fn open_vise_dialog(&mut self, setup: String) {
         let want = if self.units() == camcraft_app::units::Unit::Inches { "6 in" } else { "150 mm" };
-        let size = vise::SIZES.iter().position(|s| s.label == want).unwrap_or(0);
+        let size = vise::presets().position(|s| s.label == want).unwrap_or(0);
         self.fixture_lib = Some(FixtureLibDialog::Vise(ViseDraft::new(setup, size)));
     }
 

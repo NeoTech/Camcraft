@@ -45,13 +45,17 @@ fn lawful<T>(t: Option<T>, check: impl Fn(&T) -> Result<(), String>, model: &str
 /// The `vise` key of `p`.
 #[must_use]
 pub fn vise_value(p: &ViseParams) -> Option<Value> {
-    serde_json::to_value(ViseDto::from_params(p)).ok()
+    serde_json::to_value(ViseDto::from_params(p))
+        .inspect_err(|why| tracing::warn!("vise key not saved, it would read back as plain steel: {why}"))
+        .ok()
 }
 
 /// The `accessory` key of `a`.
 #[must_use]
 pub fn accessory_value(a: &Accessory) -> Option<Value> {
-    serde_json::to_value(a).ok()
+    serde_json::to_value(a)
+        .inspect_err(|why| tracing::warn!("accessory key not saved, it would read back as plain steel: {why}"))
+        .ok()
 }
 
 /// The fixture marker of model `model` from its file form; every key
@@ -61,5 +65,9 @@ pub fn fixture_def(f: &FixtureDto, model: &str, notes: &mut Vec<String>) -> Fixt
     let vise = read::<ViseDto>(f.vise.as_ref(), model, "vise", notes)
         .and_then(|d| lawful(Some(d.to_params()), |p| p.check(), model, "vise", notes));
     let accessory = lawful(read::<Accessory>(f.accessory.as_ref(), model, "accessory", notes), Accessory::check, model, "accessory", notes);
-    FixtureDef { setup: f.setup.clone(), fixed: f.fixed, vise, accessory }
+    // #819: the plate keys keep their own drop-and-log lenient read.
+    let plate = super::plate_dto::link_from(f.plate.as_ref(), f.on_plate.as_ref(), model, notes);
+    // #820: the mod-vise jaw key keeps its own drop-and-log read.
+    let mod_jaw = super::modvise_dto::params_from(f.mod_jaw.as_ref(), model, notes);
+    FixtureDef { setup: f.setup.clone(), fixed: f.fixed, vise, plate, mod_jaw, accessory }
 }
