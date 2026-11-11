@@ -1,0 +1,208 @@
+//! Continuous C-axis live tooling, slice 2 (issue #33): a C-stamped
+//! path on a machine that STATES its C travel is unwound by whole turns
+//! at its clear links (`cl::unwind_c`), the rewinds written as orbit
+//! rapids the verifier and the post both see; a cut whose own C span no
+//! rewind can fit inside the travel is refused by name at generation.
+//! A machine stating no C travel keeps the path exactly as stamped.
+//!
+//! Regenerate the golden after an intentional change:
+//! `WRITE_GOLDEN=1 cargo test -p camcraft-app --test c_axis_unwind`
+//!
+//! Gate map (M4.4): covers camcraft_app::operation (rotary_gate's C
+//! stamp and unwind), camcraft_app::cl (unwind_c), camcraft_app::post
+//! (fanuc-lathe.cps voicing the orbit).
+//! Lane shape (M4.4): all tests here run in seconds.
+
+mod common;
+
+use flecs_ecs::prelude::World;
+
+use camcraft_app::cl::{stamp_c, unwind_c, Move, MoveKind, Toolpath};
+use camcraft_app::commands::{AddTool, History, ImportModel, LoadMachine, SetStock};
+use camcraft_app::geometry::{Mesh, Point3, Triangle};
+use camcraft_app::machine::{AxisLimits, Coolant, LiveToolCodes, Machine};
+use camcraft_app::operation::{self, Height, OpParams, SrcRef};
+use camcraft_app::post::{self, cnc, engine};
+use camcraft_app::schema::{Location, Operation};
+use camcraft_app::stock::StockShape;
+use camcraft_app::tools::catalog;
+
+const TAU: f64 = std::f64::consts::TAU;
+const LATHE_CPS: &str = include_str!("../../../assets/posts/fanuc-lathe.cps");
+
+/// Test-bench words - placeholders, not any builder's codes.
+fn codes() -> LiveToolCodes {
+    LiveToolCodes {
+        c_axis_on: "M1001".into(),
+        c_axis_off: "M1002".into(),
+        spindle_on: "M1003".into(),
+        spindle_off: "M1004".into(),
+    }
+}
+
+/// A mill-turn whose C states `travel` (None: unstated).
+fn mill_turn(travel: Option<(f64, f64)>) -> Machine {
+    Machine {
+        model: "TestBench mill-turn".into(),
+        kind: Some("mill-turn".into()),
+        spindle_max: Some(6000.0),
+        coolants: vec![Coolant { name: "Flood".into(), m_code: "M8".into() }],
+        axes: vec![
+            AxisLimits { name: "X".into(), feed: Some(4000.0), ..Default::default() },
+            AxisLimits { name: "Y".into(), feed: Some(4000.0), ..Default::default() },
+            AxisLimits { name: "Z".into(), feed: Some(4000.0), ..Default::default() },
+            AxisLimits { name: "C".into(), rotary: true, axis: Some([0.0, 0.0, 1.0]), travel, ..Default::default() },
+        ],
+        live_tool: Some(codes()),
+        ..Default::default()
+    }
+}
+
+/// The turned bar standing on the spindle: wall r6, shoulder, neck r5
+/// (the c_axis_live fixture).
+fn bar() -> Vec<Triangle> {
+    const MERIDIAN: [(f64, f64); 6] = [(0.0, -16.0), (6.0, -16.0), (6.0, -2.0), (5.0, 2.0), (5.0, 16.0), (0.0, 16.0)];
+    let pt = |rho: f64, s: f64, j: usize| {
+        let th = TAU * j as f64 / 16.0;
+        Point3::new(rho * th.cos(), rho * th.sin(), s)
+    };
+    let mut f = Vec::new();
+    for w in MERIDIAN.windows(2) {
+        let ((ra, za), (rb, zb)) = (w[0], w[1]);
+        for j in 0..16 {
+            let k = (j + 1) % 16;
+            let (a1, a2, b1, b2) = (pt(ra, za, j), pt(ra, za, k), pt(rb, zb, j), pt(rb, zb, k));
+            if ra <= 1e-12 {
+                f.push(Triangle::new(a1, b2, b1));
+            } else if rb <= 1e-12 {
+                f.push(Triangle::new(a1, a2, b2));
+            } else {
+                f.push(Triangle::new(a1, a2, b2));
+                f.push(Triangle::new(a1, b2, b1));
+            }
+        }
+    }
+    f
+}
+
+fn world(travel: Option<(f64, f64)>) -> World {
+    let world = camcraft_app::world::new_world();
+    let mut h = History::default();
+    let tool = catalog().into_iter().find(|(n, _)| *n == "BN-0600").map(|(_, t)| t).expect("catalog ball");
+    h.execute(&world, AddTool::new(&world, "BN-0600", tool).expect("tool"));
+    let stock = SetStock::new(&world, StockShape::Box { dx: 14.0, dy: 14.0, dz: 34.0 }, Location::default());
+    h.execute(&world, stock.expect("stock"));
+    h.execute(&world, ImportModel::from_mesh("bar", Mesh::from_facets(bar())));
+    let cmd = LoadMachine::new(&world, "millturn.mch".into(), Some(mill_turn(travel)));
+    h.execute(&world, cmd.expect("machine"));
+    world
+}
+
+fn contour() -> Operation {
+    Operation {
+        tool: "BN-0600".into(),
+        src: SrcRef::Entity("bar".into()),
+        params: OpParams::RotaryContour {
+            tolerance: 0.05,
+            clearance_z: Height::fixed(25.0),
+            retract_z: None,
+            top_z: Height::fixed(6.0),
+            bottom_z: Height::fixed(-8.0),
+            feed: 500.0,
+            plunge_feed: 100.0,
+            climb: true,
+            lead_deg: 0.0,
+            lag_deg: 0.0,
+            max_tilt_deg: 60.0,
+        },
+        stamp: None,
+        setup: None,
+        area: Default::default(),
+        coolant: Default::default(),
+        after: Default::default(),
+        suppressed: false,
+    }
+}
+
+fn c_range(t: &Toolpath) -> (f64, f64) {
+    t.moves
+        .iter()
+        .filter_map(|m| m.rotary)
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |(l, h), c| (l.min(c), h.max(c)))
+}
+
+/// The stream a path posts as, with the context the lathe post reads.
+fn stream(path: &Toolpath) -> String {
+    let d = post::Dump { op_name: "C unwind", tool_number: 1, tool_name: "BN-0600", tool_diameter: 6.0, rpm: 3000.0, ..Default::default() };
+    cnc::serialize(&post::dump(path, &d))
+}
+
+#[test]
+fn a_rotary_contour_on_a_stated_c_travel_unwinds_at_its_links_and_posts() {
+    // Unstated travel: the rings wind well past one turn, as stamped.
+    let (raw, _) = operation::generate(&world(None), &contour(), "C wrap").expect("the unstated C holds it");
+    let (lo, hi) = c_range(&raw);
+    assert!(hi - lo > 720.0, "the bar's rings wind past two turns: {lo}..{hi}");
+    // Stated -360..360 (the shipped mill-turn's): every C inside it.
+    let travel = (-360.0, 360.0);
+    let (path, warns) = operation::generate(&world(Some(travel)), &contour(), "C wrap").expect("unwound at its links");
+    let (lo, hi) = c_range(&path);
+    assert!(lo >= travel.0 - 1e-9 && hi <= travel.1 + 1e-9, "C {lo}..{hi} inside the travel");
+    assert!(path.moves.len() > raw.moves.len(), "the rewinds are moves of the path");
+    // Every rewind chord is a rapid at the clearance plane, out of the work.
+    let orbit: Vec<&Move> = path.moves.iter().filter(|m| m.from.z >= 25.0 - 1e-6 && m.to.z >= 25.0 - 1e-6).collect();
+    assert!(!orbit.is_empty() && orbit.iter().all(|m| m.kind == MoveKind::Rapid), "rewinds ride as clearance rapids");
+    for w in path.moves.windows(2) {
+        assert_eq!(w[0].to, w[1].from, "the chain holds through the rewinds");
+    }
+    let worst = path.moves.windows(2).filter_map(|w| Some((w[1].rotary? - w[0].rotary?).abs())).fold(0.0, f64::max);
+    assert!(worst < 90.0, "C stays continuous through the rewinds, worst {worst}");
+    // The verifier judged the rewinds as moves: nothing new to report.
+    let (_, raw_warns) = operation::generate(&world(None), &contour(), "C wrap").expect("again");
+    assert_eq!(warns.len(), raw_warns.len(), "{warns:?}");
+    let out = engine::run(LATHE_CPS, &post::machine::mirror(&mill_turn(Some(travel))), &stream(&path)).expect("runs");
+    assert!(out.warnings.is_empty(), "the lathe post voices the unwound section: {:?}", out.warnings);
+}
+
+#[test]
+fn a_ring_wider_than_the_stated_travel_refuses_by_name() {
+    let e = operation::generate(&world(Some((-90.0, 90.0))), &contour(), "C wrap").err();
+    let e = e.map(|e| e.to_string()).unwrap_or_default();
+    assert!(e.contains("Rotary Contour") && e.contains("no clear link stands inside it"), "{e}");
+}
+
+/// Two rings at r 10, linked over a rise to z 5.
+fn two_rings() -> Toolpath {
+    let at = |k: usize, z: f64| {
+        let th = (k as f64 * 45.0).to_radians();
+        Point3::new(10.0 * th.cos(), 10.0 * th.sin(), z)
+    };
+    let mut moves: Vec<Move> = vec![Move::new(MoveKind::Rapid, Point3::new(20.0, 0.0, 5.0), at(0, 5.0), None).with_axis([1.0, 0.0, 0.0])];
+    for ring in 0..2 {
+        let z = -(ring as f64);
+        let top = at(0, 5.0);
+        if let Some(end) = moves.last().map(|m| m.to).filter(|_| ring > 0) {
+            moves.push(Move::new(MoveKind::Rapid, end, top, None).with_axis([1.0, 0.0, 0.0]));
+        }
+        moves.push(Move::new(MoveKind::Rapid, top, at(0, z), None).with_axis([1.0, 0.0, 0.0]));
+        for k in 0..8 {
+            let to = if k == 7 { at(0, z) } else { at(k + 1, z) };
+            moves.push(Move::new(MoveKind::Feed, at(k, z), to, Some(400.0)).with_axis([to.x / 10.0, to.y / 10.0, 0.0]));
+        }
+    }
+    let end = moves.last().map_or(at(0, -1.0), |m| m.to);
+    moves.push(Move::new(MoveKind::Rapid, end, at(0, 5.0), None).with_axis([1.0, 0.0, 0.0]));
+    Toolpath::new(moves)
+}
+
+#[test]
+fn two_rings_unwound_post_to_their_golden() {
+    let stamped = stamp_c(&two_rings(), [0.0, 0.0], 0.05).expect("stamps");
+    assert!(c_range(&stamped).0 < -700.0, "two rings read -720 at the end");
+    let path = unwind_c(&stamped, [0.0, 0.0], (-360.0, 360.0), 0.05).expect("unwinds");
+    let (lo, hi) = c_range(&path);
+    assert!(lo >= -360.0 && hi <= 360.0, "{lo}..{hi}");
+    let out = engine::run(LATHE_CPS, &post::machine::mirror(&mill_turn(Some((-360.0, 360.0)))), &stream(&path)).expect("runs");
+    assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+    common::write_golden("nc/fanuc-lathe/c_axis_unwind.nc", &out.program);
+}

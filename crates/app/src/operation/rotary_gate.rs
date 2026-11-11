@@ -69,9 +69,16 @@ pub(super) fn rotary_letter(
 /// must stand along world Z - C turns about Z - and the stamp is split
 /// to `tol` (the op's verify budget), refused by name where the law
 /// cannot hold (`cl::stamp_c`).
+///
+/// A machine stating a C travel (`machine`'s rotary named C - the
+/// one the machine check judges) gets the stamped path unwound by
+/// whole turns at its clear links (`cl::unwind_c`, slice 2): the
+/// rewinds ride as orbit rapids every later law judges, and a cut
+/// that no rewind can fit is refused here by name.
 pub(super) fn stamp_spindle_c(
     path: crate::cl::Toolpath,
     c_axis: Option<crate::multiaxis::axis::Axis>,
+    machine: Option<&(String, Vec<AxisLimits>)>,
     tol: f64,
     kind: &str,
 ) -> Result<crate::cl::Toolpath, GenError> {
@@ -91,7 +98,17 @@ pub(super) fn stamp_spindle_c(
     let t = -ax.origin.z / d.z;
     let center = [ax.origin.x + d.x * t, ax.origin.y + d.y * t];
     let tol = if tol.is_finite() && tol > 0.0 { tol } else { crate::machining2d::ARC_FIT_TOL };
-    crate::cl::stamp_c(&path, center, tol).map_err(|e| GenError::Invalid(format!("{kind}: {e}")))
+    let stamped = crate::cl::stamp_c(&path, center, tol).map_err(|e| GenError::Invalid(format!("{kind}: {e}")))?;
+    let Some(travel) = c_travel(machine) else {
+        return Ok(stamped);
+    };
+    crate::cl::unwind_c(&stamped, center, travel, tol).map_err(|e| GenError::Invalid(format!("{kind}: {e}")))
+}
+
+/// The C travel the mounted machine states for its rotary named C
+/// (the same axis `machine::check`'s C letter gate reads), or None.
+fn c_travel(machine: Option<&(String, Vec<AxisLimits>)>) -> Option<(f64, f64)> {
+    machine?.1.iter().find(|a| a.rotary && a.name.eq_ignore_ascii_case("C"))?.travel
 }
 
 #[cfg(test)]

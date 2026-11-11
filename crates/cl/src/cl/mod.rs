@@ -31,6 +31,7 @@ mod path;
 mod plane;
 mod pose;
 mod rotary;
+mod rotary_unwind;
 pub mod text;
 mod thread;
 mod torch;
@@ -47,6 +48,7 @@ pub use thread::{ThreadCycle, ThreadHand};
 pub use torch::{ContourRole, PlasmaCut, TorchSpan};
 pub use touch::ProbeTouch;
 pub use rotary::{stamp_c, unwrap_near};
+pub use rotary_unwind::unwind_c;
 pub use pose::{angles_to_axis, axis_to_angles, is_vertical, normalize_axis};
 
 #[cfg(test)]
