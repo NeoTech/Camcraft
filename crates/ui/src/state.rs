@@ -54,6 +54,9 @@ use locate_ui::with_warning;
 #[path = "state_fixture_library.rs"]
 mod fixture_library;
 pub use fixture_library::{FixtureLibDialog, InsertFixtureDraft, LibraryRow, SaveFixtureDraft};
+#[path = "state_vise.rs"]
+mod vise_ui;
+pub use vise_ui::{ViseDraft, ViseOpeningDraft};
 #[path = "state_program_entry.rs"]
 mod program_entry;
 pub use program_entry::EntryVerb;
@@ -439,6 +442,25 @@ pub enum CommandKind {
         setup: Option<String>,
         pos: [f64; 3],
         rpy_deg: [f64; 3],
+    },
+    /// #788: open the "Add built-in vise…" dialog over a setup's
+    /// Fixtures node (`""` - the implicit setup). View state.
+    BuiltinViseDialog(String),
+    /// Place built-in vise `params` into `setup`: fitted to its stock, or
+    /// its frame at `pos` (mm) turned `yaw_deg` - one `InsertVise`.
+    InsertBuiltinVise {
+        setup: Option<String>,
+        params: camcraft_app::vise::ViseParams,
+        fit_stock: bool,
+        pos: [f64; 3],
+        yaw_deg: f64,
+    },
+    /// Change placed vise `name` to `params` (its jaw opening, or the
+    /// opening from the setup's stock) - one `SetVise`.
+    SetVise {
+        name: String,
+        params: camcraft_app::vise::ViseParams,
+        from_stock: bool,
     },
     /// Part orientation (M5.2 G): a model's full rigid placement -
     /// position plus yaw-pitch-roll degrees (R = Rz ⊗ Ry ⊗ Rx, the
@@ -1405,6 +1427,10 @@ pub struct State {
     /// The fixture library folder override (tests; `None` = the user
     /// folder, `CAMCRAFT_FIXTURES` first).
     pub fixture_lib_dir: Option<PathBuf>,
+    /// #788: each built-in vise row's jaw-opening draft, by vise name -
+    /// view state; Set lands it through `SetVise`. See
+    /// [`State::vise_opening_draft`].
+    pub vise_opening: HashMap<String, ViseOpeningDraft>,
     /// The selected op's struck fixtures, per (version, op, path sig).
     pub struck_cache: camcraft_app::fixture_view::StruckCache,
     /// Properties / Tool Library pane drafts (ephemeral; see [`OpUi`]).
@@ -1703,6 +1729,7 @@ impl State {
             fixture_mesh_cache: Default::default(),
             fixture_lib: None,
             fixture_lib_dir: None,
+            vise_opening: HashMap::new(),
             struck_cache: Default::default(),
             // The tool draft carries a plausible name from the first
             // frame: an empty Name field made Add look dead (refused
@@ -3422,6 +3449,11 @@ impl State {
             CommandKind::InsertFixtureFromLibrary { entry, setup, pos, rpy_deg } => {
                 self.insert_fixture_from_library(&entry, setup, pos, rpy_deg);
             }
+            CommandKind::BuiltinViseDialog(setup) => self.open_vise_dialog(setup),
+            CommandKind::InsertBuiltinVise { setup, params, fit_stock, pos, yaw_deg } => {
+                self.insert_builtin_vise(setup, &params, fit_stock, pos, yaw_deg);
+            }
+            CommandKind::SetVise { name, params, from_stock } => self.set_builtin_vise(&name, params, from_stock),
             CommandKind::SetupSheetDialog => {
                 if let Some(path) = save_sheet_dialog() {
                     self.setup_sheet_path(path);
