@@ -55,7 +55,8 @@ fn channel(w: f64) -> Region {
 fn measured(path: &Toolpath, w: f64) -> PathQuality {
     let spec = QualitySpec::new(D);
     let Ok(mut dex) = stock_for(&channel(w), 0.0, BOTTOM, D, &spec) else { panic!("stock") };
-    measure(path, &mut dex, &spec)
+    let Ok(q) = measure(path, &mut dex, &spec) else { panic!("measure") };
+    q
 }
 
 fn verified(path: &Toolpath, w: f64) -> Vec<Warning> {
@@ -148,7 +149,7 @@ fn trochoid_step_is_cut_until_a_tight_limit_holds() {
     let Ok(ch) = Region::sweep(&[short], 0.5 * W) else { panic!("channel") };
     let spec = QualitySpec::new(D);
     let Ok(mut dex) = stock_for(&ch, 0.0, BOTTOM, D, &spec) else { panic!("stock") };
-    let q = measure(&pl.path, &mut dex, &spec);
+    let Ok(q) = measure(&pl.path, &mut dex, &spec) else { panic!("measure") };
     assert!(pl.step < 2.0, "step {}", pl.step);
     assert!(q.max_deg <= 60.0 + 1e-9, "max {:.1} deg at {:?}", q.max_deg, q.max_at);
     assert!(pl.path.notes.iter().any(|n| n.contains("forward step was cut")), "{:?}", pl.path.notes);
