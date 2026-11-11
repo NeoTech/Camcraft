@@ -212,6 +212,9 @@ fn spindle(sp: Option<&Value>, out: &mut Vec<Refusal>) {
             positive(&format!("spindle {k}"), x, out);
         }
     }
+    if let Some(x) = sp.get("rigid_tapping").filter(|x| !x.is_null() && !x.is_boolean()) {
+        out.push(Refusal::new("spindle.rigid_tapping", format!("{x} must be true or false")));
+    }
     let lo = sp.get("min_speed").and_then(Value::as_f64);
     let hi = sp.get("max_speed").and_then(Value::as_f64);
     if let (Some(lo), Some(hi)) = (lo, hi)
