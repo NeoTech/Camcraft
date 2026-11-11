@@ -6,11 +6,11 @@
 //! is the shell, `interact` and `state` the shared law underneath it.
 
 // #31: on wasm32 the browser shell (`egui_app::shell_web`) draws the shared
-// frame, but 18 helpers only the native window, the adapter-by-adapter
+// frame, but 17 helpers only the native window, the adapter-by-adapter
 // bring-up and the headless proof reach (gpu_select, gpu's backend mask,
-// world::seed, the recent-files read, trace's readback decode) are left
-// without a caller there. Native builds keep the dead-code lint; gating
-// those helpers one by one is owed on #31, after which this line goes.
+// world::seed, the recent-files read) are left without a caller there.
+// Native builds keep the dead-code lint; gating those helpers one by one
+// is owed on #31, after which this line goes.
 #![cfg_attr(target_arch = "wasm32", allow(dead_code))]
 
 pub mod actions;

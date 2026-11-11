@@ -112,5 +112,6 @@
   `file_dialog` (nothing can be opened or saved in the browser yet); an
   inline playback path where the worker cannot spawn; the in-browser CI
   job; the Pages deployment (#688); splitting the viewport panel out of
-  `shell.rs` (still 923 lines, untouched here); the wasm32
-  `allow(dead_code)` in `lib.rs`.
+  `shell.rs` (still 923 lines; only an import and a `cfg` changed here);
+  a WebGPU run; and the wasm32 `allow(dead_code)` in `lib.rs`, which now
+  covers 17 native-only helpers that need gating one by one.
