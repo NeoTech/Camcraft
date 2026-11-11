@@ -39,7 +39,7 @@ pub fn run_job(mut job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
     // carried out through the same frame the path would have been.
     let frame = job.frame;
     let _span = tracing::info_span!("generate", op = %job.op_name).entered();
-    let started = std::time::Instant::now();
+    let started = crate::clock::Instant::now();
     tracing::debug!(kind = %kind, "generation started");
     let (mut path, warns) = run_job_arms(job)
         .map_err(|e| e.map_location(|p| frame.map_or(p, |f| f.to_world(p))))
