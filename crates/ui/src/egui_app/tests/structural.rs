@@ -336,8 +336,8 @@ fn origin_names_paint_on_and_quiet_off_letters_and_lines_always() {
     // and the shared projection law agrees.
     h.run_steps(2);
     let texts = painted(&h);
-    let v = at(&texts, "viewport").x;
-    let p = at(&texts, "properties").x;
+    let v = at(&texts, "Viewport").x;
+    let p = at(&texts, "Properties").x;
     let in_viewport = |(t, q): &(String, egui::Pos2)| t == "G54" && q.x > v && q.x < p;
     let letters = |labels: &[([f32; 2], [f32; 3], String)]| -> Vec<String> {
         labels
