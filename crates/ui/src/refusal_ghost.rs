@@ -41,7 +41,7 @@ pub(crate) fn ghost_lines(out: &mut Vec<[f32; 6]>, ghost: &Ghost, pal: &Semantic
         let segs = if m.arc.is_some() { arc_segments(m) } else { vec![(m.from, m.to)] };
         for (a, b) in segs {
             if !dashed(out, a, b, period, c) {
-                eprintln!(
+                diag_warn!(
                     "overlay: the refusal's ghost outgrew the {MAX_OVERLAY_VERTICES}-vertex display budget; \
                      the rest is not drawn (a ghost is never a toolpath either way)"
                 );
