@@ -250,6 +250,16 @@ function invertedNotes() {
   }
 }
 
+// #901: the unit this post writes - millimetres - stated in a block of
+// its own before any motion, so a control left in inch by power-on or
+// the last program never reads mm numbers as inches (RS-274 / ISO 6983:
+// G20 inch, G21 mm; the family's published operator manual: G21 also
+// checks the control's unit setting and alarms on a mismatch). Where the
+// program's unit is chosen, and inch output, is #902.
+function unitBlock() {
+  block(["G21"]);
+}
+
 function onOpen() {
   var nm = (typeof machine !== "undefined" && machine.name) || "CAMCRAFT";
   writeln("%");
@@ -257,6 +267,7 @@ function onOpen() {
   // comment text, so `Tormach 770MX (ML)` never nests.
   block([oWord(), "(" + (progComment() || clean(nm) || "CAMCRAFT") + ")"]);
   invertedNotes();
+  unitBlock();
 }
 
 // Cutter radius compensation in the control (#39; RS-274 / ISO 6983

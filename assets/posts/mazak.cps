@@ -235,12 +235,23 @@ function toolNote() {  // just before the tool change it describes
   toolKind = ""; toolCr = 0;
 }
 
+// #901: the unit this post writes - millimetres - stated in a block of
+// its own before any motion, so a control left in inch by power-on or
+// the last program never reads mm numbers as inches (RS-274 / ISO 6983:
+// G20 inch, G21 mm; the family's EIA/ISO conventions follow the Fanuc
+// words, G21 in a block of its own at the program's start). Where the
+// program's unit is chosen, and inch output, is #902.
+function unitBlock() {
+  block(["G21"]);
+}
+
 function onOpen() {
   var nm = (typeof machine !== "undefined" && machine.name) || "CAMCRAFT";
   writeln("%");
   // #594: the machine name is user text - cleaned like every other
   // comment text, so `Tormach 770MX (ML)` never nests.
   block([oWord(), "(" + (progComment() || clean(nm) || "CAMCRAFT") + ")"]);
+  unitBlock();
 }
 
 // Cutter radius compensation in the control (#39; RS-274 / ISO 6983
