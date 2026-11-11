@@ -54,6 +54,10 @@ pub struct UpdateModel {
     /// model at construction (`Some`) - the propagation law's side of the
     /// snapshot, so undo trades model and material back together.
     prev_stock: Option<std::sync::Arc<[crate::geometry::Triangle]>>,
+    /// The fidelity of the new mesh and of the one it replaces (#864): the
+    /// flag describes the facets, so it is traded with them, both ways.
+    coarse_mm: Option<f64>,
+    prev_coarse_mm: Option<f64>,
 }
 
 impl UpdateModel {
@@ -86,7 +90,26 @@ impl UpdateModel {
             prev_facets: model::facets_of(world, &entity),
             prev_rev: model::rev_of(world, &entity),
             prev_stock,
+            coarse_mm: None,
+            prev_coarse_mm: crate::model_fidelity::chord_of(world, &entity),
         })
+    }
+
+    /// State the fidelity the new mesh was imported at (#864). Unstated,
+    /// the update lands at full fidelity - a generated or STL mesh.
+    #[must_use]
+    pub fn with_fidelity(mut self, coarse_mm: Option<f64>) -> Self {
+        self.coarse_mm = coarse_mm;
+        self
+    }
+
+    /// Keep the fidelity the model already carries (#864): for an update
+    /// that reshapes the same facets (a repair), which makes them no
+    /// truer to the surface they were imported from.
+    #[must_use]
+    pub fn keeping_fidelity(mut self) -> Self {
+        self.coarse_mm = self.prev_coarse_mm;
+        self
     }
 
     /// What moved between the two revisions this command trades. Computed
@@ -110,6 +133,7 @@ impl Command for UpdateModel {
             .unwrap_or_else(|| model::spawn(world, &self.name));
         model::set_facets(world, &entity, self.mesh.facets.clone());
         model::set_rev(world, &entity, self.prev_rev + 1);
+        crate::model_fidelity::set(world, &entity, self.coarse_mm);
         // Propagation (M3.1 B): the derived stock's copy is local-frame
         // facets - the very mesh above (SetStock's copy law) - and the
         // stock's own placement is never touched: re-importing a model
@@ -134,6 +158,7 @@ impl Command for UpdateModel {
                 }
             }
             model::set_rev(world, &entity, self.prev_rev);
+            crate::model_fidelity::set(world, &entity, self.prev_coarse_mm);
         }
         if let Some(tris) = &self.prev_stock {
             for stock in stock_copies(world, &self.name) {

@@ -68,6 +68,7 @@ fn ctx<'a>(region: &'a Region, tool: &'a ToolGeom) -> VerifyContext<'a> {
         finish_tol: None,
         fixtures: &[],
         spindle: None,
+        ..Default::default()
     }
 }
 

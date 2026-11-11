@@ -38,6 +38,8 @@ pub mod machine;
 pub mod machined_classes;
 pub mod mcp;
 pub mod model;
+// #864: models imported coarser than the importer promises.
+pub mod model_fidelity;
 pub mod operation;
 pub mod pick;
 pub use camcraft_post::post;

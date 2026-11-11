@@ -78,6 +78,18 @@ pub struct GeoSig {
     pub sig: u64,
 }
 
+/// A model whose mesh stands for its curved surfaces more coarsely than
+/// the STEP importer promises (#864): `chord_mm` is the chord error the
+/// import actually kept, always above `step::CHORD_CAP`. Present ONLY on
+/// such a model - one that met the promise, an STL or OBJ mesh, and
+/// every model of a project saved before this existed carry no component
+/// and read as full fidelity. Written by the import and update commands
+/// and the project loader, through `model_fidelity::set`.
+#[derive(Component, Debug, Clone, Copy, PartialEq)]
+pub struct ReducedFidelity {
+    pub chord_mm: f64,
+}
+
 /// Selection marker (tag). Only `SelectEntity` writes it (AGENTS.md: changes
 /// go through commands); the tree and viewport read it to highlight.
 #[derive(Component, Debug)]
@@ -524,6 +536,7 @@ pub fn register_schema(world: &World) {
     world.component::<Facets>();
     world.component::<Revision>();
     world.component::<GeoSig>();
+    world.component::<ReducedFidelity>();
     world.component::<Selected>();
     world.component::<StockDef>();
     world.component::<Wcs>();

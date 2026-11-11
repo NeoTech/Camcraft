@@ -184,6 +184,7 @@ fn law_verify(t: &Toolpath, region: &Region, f: &[Triangle], mode: Mode, top: f6
             finish_tol: None,
             fixtures: &[],
             spindle: None,
+            ..Default::default()
         },
     )
 }

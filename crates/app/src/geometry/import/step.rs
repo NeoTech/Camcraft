@@ -43,6 +43,15 @@ const MAX_CHORD: f64 = crate::stock_sim::DEV_TOL * 0.5;
 /// tessellated coarser than this is "reduced fidelity" (#864).
 pub const CHORD_CAP: f64 = MAX_CHORD;
 
+/// The chord error of a kept mesh when it is coarser than the importer
+/// promises, else `None` (#864). A nanometre of slack: an inch or metre
+/// file's cap is divided into the file's unit and multiplied back, and
+/// that round trip must not flag a mesh that met the promise.
+#[must_use]
+pub fn coarse(chord_mm: f64) -> Option<f64> {
+    (chord_mm.is_finite() && chord_mm > CHORD_CAP + 1e-9).then_some(chord_mm)
+}
+
 thread_local! {
     /// Test-only override of the facet budget (#864's pins force a small
     /// STEP fixture over budget instead of committing a huge model).

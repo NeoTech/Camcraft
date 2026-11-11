@@ -136,6 +136,7 @@ fn ctx<'a>(
         finish_tol: None,
         fixtures,
         spindle,
+        ..Default::default()
     }
 }
 

@@ -660,6 +660,9 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
                 // not the file's whole history. Staleness never reads
                 // it; the stamp's signature does the work.
                 model::set_rev(world, &entity, dto.rev);
+                // #864: the flag lands with the facets it describes; an
+                // absent key, or a value that is no coarse chord, is none.
+                crate::model_fidelity::set(world, &entity, dto.coarse_mm);
             }
             EntityKind::Stock => {
                 // validate_kind already refused these; Result, never unwrap.

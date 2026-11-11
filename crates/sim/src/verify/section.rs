@@ -97,7 +97,10 @@ pub(super) fn tangency(
         // deliberate overcut) - b2's own allowance. A positive leave
         // never licenses cutting into the finished wall: the old
         // `r - leave` let a 0.5 mm leave sink 0.5 mm unconvicted.
-        let floor = (r - (-cx.stock_to_leave).max(0.0) - cx.gouge_tol).max(0.0);
+        // #864: a model coarser than the importer promises gives its
+        // excess chord error back out of the tolerance - the true wall
+        // of a convex feature stands that far outside these loops.
+        let floor = (r - (-cx.stock_to_leave).max(0.0) - cx.tightened(cx.gouge_tol)).max(0.0);
         let mut loops = cx.region.loops().iter().chain(section.iter().flat_map(|s| s.loops().iter()));
         let gouged = loops.any(|l| {
             let pts = l.points();
@@ -260,7 +263,8 @@ pub(super) fn solid(
     if let Some(f) = cx.model {
         let law = super::SolidLaw {
             step: SOLID_STEP,
-            allow: cx.gouge_tol + (-cx.stock_to_leave).max(0.0),
+            // #864: tightened by a coarse model's excess, as (b) is.
+            allow: cx.tightened(cx.gouge_tol) + (-cx.stock_to_leave).max(0.0),
             hole_walls: false,
         };
         for w in super::solid_hits(path, f, cutter, &law) {

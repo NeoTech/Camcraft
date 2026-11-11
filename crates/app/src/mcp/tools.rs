@@ -23,8 +23,8 @@ pub(super) struct Tool {
 const TOOLS: &[Tool] = &[
     Tool { name: "open_project", description: "Open a .camproj project file, replacing the current document and clearing undo history.", schema: s_path, run: open_project },
     Tool { name: "save_project", description: "Save the document as a .camproj file. Without a path, saves over the file last opened or saved.", schema: s_opt_path, run: save_project },
-    Tool { name: "import_model", description: "Import a mesh model (STL, STEP or OBJ) through the app's importers. A name already used by a model updates that model.", schema: s_import, run: import_model },
-    Tool { name: "get_job", description: "The whole document as JSON: setups, stock, work offsets, models, tools, and operations with their parameters and status.", schema: s_empty, run: job::get_job },
+    Tool { name: "import_model", description: "Import a mesh model (STL, STEP or OBJ) through the app's importers. A name already used by a model updates that model. A STEP model too large to import at full detail answers with reduced_fidelity: how closely its surfaces are approximated, in mm - gouge checks against it are stricter, and its operations are refused at the post when it is too coarse to check.", schema: s_import, run: import_model },
+    Tool { name: "get_job", description: "The whole document as JSON: setups, stock, work offsets, models (one imported at reduced fidelity carries reduced_fidelity), tools, and operations with their parameters and status.", schema: s_empty, run: job::get_job },
     Tool { name: "list_operation_types", description: "Every operation kind with its parameter fields, JSON types and default values, and the tool kinds it accepts.", schema: s_empty, run: job::list_operation_types },
     Tool { name: "list_tool_catalog", description: "The built-in tool catalog: names and definitions add_tool can copy into the document.", schema: s_empty, run: job::list_tool_catalog },
     Tool { name: "add_tool", description: "Add a tool to the document, from the catalog by name or from a full definition (the shape get_job shows).", schema: s_add_tool, run: edit::add_tool },
