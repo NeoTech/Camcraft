@@ -180,7 +180,7 @@ pub fn parse_torch(words: &str) -> Result<TorchRec, String> {
     if let Some(rest) = w.strip_prefix("ON ") {
         let t = crate::cl::parse_torch_on(rest, 0)?;
         if t.small.is_some_and(|f| !(f.is_finite() && f > 0.0 && f <= 1.0)) {
-            return Err("TORCH SMALL must be a feed factor in (0, 1000]".into());
+            return Err("TORCH SMALL must be a feed factor in (0, 1] (the SMALL word is that factor x 1000)".into());
         }
         return Ok(TorchRec::on(&t));
     }

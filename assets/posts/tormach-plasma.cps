@@ -203,8 +203,17 @@ function onTorchOn() {
 // M205 puts the torch out and returns Z to the G30 height (§7.2); G30
 // follows it, as the issue's per-contour block and the manual's own
 // program end (§6.2.1) write it.
+// A compensation word never outlives its torch span: an engage still
+// pending here (COMP read, no lit straight G1 carried it) breaks the
+// stream's law - the engage rides inside the span, ahead of its lead -
+// so it is refused by name, and dropped either way so it can never land
+// on the next contour's first G1 (a small hole the computer already
+// offset would take the kerf twice).
 function onTorchOff() {
+  var engage = compWord !== "" && compWord !== "G40";
+  compWord = "";
   if (!plasmaOk()) { lit = false; return; }
+  if (engage) refuse("comp-pending" + opName, who() + "the torch goes out with a G41/G42 engage no lit straight move carried - the kerf compensation would land on the next contour");
   if (compOn) refuse("comp-open" + opName, who() + "the torch goes out under G41/G42 - the compensation was never cancelled");
   block(["M205"]);
   block(["G30"]);

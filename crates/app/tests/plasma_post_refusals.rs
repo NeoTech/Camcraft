@@ -1,7 +1,9 @@
 //! #671: what the PathPilot plasma post refuses by name - a non-plasma
 //! op, a Plasma Profile path with no plasma record, a spindle rpm, a
 //! rotary, a coolant ask, a Z cutting move, a canned cycle, a machine
-//! that is not a plasma table - and what the engine refuses for any
+//! that is not a plasma table, a feed with the torch off, a lit move with
+//! no feed, an arc outside XY, G41/G42 left open at TORCH OFF, engaged on
+//! an arc or still pending, wear compensation - and what the engine refuses for any
 //! post (a torch with no header, an ON while lit, a torch never put
 //! out, a rapid while lit, a mill post handed torch records); and the
 //! registry: offered for the 1300PL, never for a mill, and the mills'
@@ -59,6 +61,7 @@ fn section(extra: &str, header: &str, cut: &str) -> String {
 
 const CUT: &str = "Feed X 10000 Y 0 Z 6000 F 2500000\nFeed X 10000 Y 10000 Z 6000 F 2500000\n";
 const HEAD: &str = "PLASMA KERF1500\n";
+const CONTROL: &str = "PLASMA KERF1500 CONTROL\n";
 
 #[test]
 fn a_clean_section_posts_and_every_mill_golden_is_refused_by_name() {
@@ -85,6 +88,37 @@ fn the_post_refuses_what_a_plasma_table_cannot_say() {
     refused(&section("", HEAD, &format!("{CUT}CYCLE DRILL X 0 Y 0 Z -1000 R 2000\n")), "a canned cycle");
     // A G41/G42 span under a computer offset.
     refused(&section("", HEAD, &format!("COMP LEFT 750\n{CUT}COMP OFF\n")), "the stream disagrees with its own plasma header");
+    // A feed outside any TORCH span: the engine's law does not see it,
+    // the script is the only guard against cutting with the torch off.
+    refused(
+        &section("", HEAD, CUT).replace("TORCH OFF C0\n", "TORCH OFF C0\nFeed X 0 Y 0 Z 6000 F 2500000\n"),
+        "a cutting move with the torch off",
+    );
+    // A lit move with no feed while the op states one (no AUTOFEED).
+    refused(&section("", HEAD, "Feed X 10000 Y 0 Z 6000\n"), "a lit move states no feed while the op states one");
+    // An arc outside XY (I K names the XZ plane).
+    refused(
+        &section("", HEAD, "Arc CCW X 10000 Y 0 Z 6000 F 2500000 I 5000 K 6000\n"),
+        "a plasma cut is flat",
+    );
+    // Under control compensation: the torch put out with G41/G42 still
+    // in force, an engage on an arc, and wear compensation.
+    refused(
+        &section("", CONTROL, &format!("COMP LEFT 750\n{CUT}")),
+        "the torch goes out under G41/G42 - the compensation was never cancelled",
+    );
+    refused(
+        &section(
+            "",
+            CONTROL,
+            &format!("COMP LEFT 750\nArc CCW X 10000 Y 0 Z 6000 F 2500000 I 5000 J 0\n{CUT}COMP OFF\nFeed X 9000 Y 10000 Z 6000 F 2500000\n"),
+        ),
+        "G41/G42 engages or cancels on an arc",
+    );
+    refused(
+        &section("", CONTROL, &format!("COMP LEFT 750 WEAR\n{CUT}COMP OFF\nFeed X 9000 Y 10000 Z 6000 F 2500000\n")),
+        "wear compensation is not a plasma mode",
+    );
     // The machine: a mill, or a plasma table that grew a rotary.
     let vmc: Value = serde_json::from_str(&read("assets/machines/3axis-vmc.mch")).expect("json");
     let w = warnings(script(PLASMA), &vmc, &section("", HEAD, CUT));
@@ -108,6 +142,37 @@ fn the_engine_refuses_a_torch_stream_that_cannot_mean_what_it_says() {
     refused(&section("", HEAD, &format!("{CUT}Rapid X 0 Y 0 Z 6000\n")), "a rapid move while C0 is lit");
     // A second header in one section.
     refused(&section("", "PLASMA KERF1500\nPLASMA KERF1500\n", CUT), "a second PLASMA header");
+}
+
+#[test]
+fn a_pending_kerf_engage_never_outlives_its_torch_span() {
+    // COMP LEFT read after the last lit straight move: no G1 carried
+    // the G41.1, so it is refused by name at TORCH OFF - and dropped, so
+    // the next contour's first G1 never takes it.
+    let stream = section("", CONTROL, &format!("{CUT}COMP LEFT 750\n")).replace(
+        "ENDSECTION\n",
+        "TORCH ON C1 OUTER\nFeed X 20000 Y 0 Z 6000 F 2500000\nFeed X 20000 Y 10000 Z 6000 F 2500000\nTORCH OFF C1\nENDSECTION\n",
+    );
+    let out = engine::run(script(PLASMA), &pl1300(), &stream).expect("the engine runs; the post refuses");
+    assert!(
+        out.warnings.iter().any(|m| m.contains("a G41/G42 engage no lit straight move carried")),
+        "{:?}",
+        out.warnings
+    );
+    assert!(!out.program.contains("G41.1"), "the pending engage leaked onto C1:\n{}", out.program);
+    // A cancel with its lead-out posts clean, and the engage is written.
+    let clean = section("", CONTROL, &format!("COMP LEFT 750\n{CUT}COMP OFF\nFeed X 9000 Y 10000 Z 6000 F 2500000\n"));
+    let out = engine::run(script(PLASMA), &pl1300(), &clean).expect("runs");
+    assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+    assert!(out.program.contains("G41.1 D"), "{}", out.program);
+}
+
+#[test]
+fn a_small_hole_factor_out_of_range_names_the_factor_range() {
+    let e = engine::run(script(PLASMA), &pl1300(), &section("", HEAD, CUT).replace("TORCH ON C0 OUTER", "TORCH ON C0 OUTER SMALL1500"))
+        .map(|o| o.warnings.join("; "))
+        .unwrap_or_else(|e| e.to_string());
+    assert!(e.contains("a feed factor in (0, 1]"), "{e}");
 }
 
 #[test]
