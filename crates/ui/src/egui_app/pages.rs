@@ -861,6 +861,7 @@ pub(super) fn fixtures_section(ui: &mut Ui, state: &mut State, ctx: Option<&str>
     }
     state.retire_vise_opening_drafts();
     state.retire_plate_place_drafts();
+    state.retire_accessory_size_drafts();
     ui.label(if fixtures.is_empty() && table.is_none() {
         "No workholding modeled: the collision checks see stock and part only."
     } else {
@@ -886,6 +887,10 @@ pub(super) fn fixtures_section(ui: &mut Ui, state: &mut State, ctx: Option<&str>
         // #788: a generic parametric vise, placed in one undoable step.
         if ui.button("Add built-in vise…").clicked() {
             state.pending.push_back(CommandKind::BuiltinViseDialog(ctx.unwrap_or_default().to_owned()));
+        }
+        // #789: parallels, blocks, strap clamps, soft jaws.
+        if ui.button("Add accessory…").clicked() {
+            state.pending.push_back(CommandKind::AccessoryDialog(ctx.unwrap_or_default().to_owned()));
         }
         // #819: a parametric grid plate, fixtures placed on its holes.
         if ui.button("Add fixture plate…").clicked() {
@@ -1733,6 +1738,8 @@ fn model_page(ui: &mut Ui, state: &mut State, name: String) {
             apply_model_draft(state);
         }
     });
+    // Pockets and slots (#511): recognition on a click, Create per row.
+    super::pockets_page::section(ui, state, &name);
     // #561: the part into a fixture (or a fixture onto the part) by mates.
     super::locate_form::model_row(ui, state, &name);
     // Mesh repair (M13.11): weld and fill on the user's say-so, never on

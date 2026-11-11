@@ -107,6 +107,7 @@ impl TagFixture {
                 vise: prev.as_ref().and_then(|d| d.vise.clone()),
                 // ...and a plate's grid and place (#819).
                 plate: prev.as_ref().map(|d| d.plate.clone()).unwrap_or_default(),
+                accessory: prev.as_ref().and_then(|d| d.accessory.clone()),
             },
             prev,
         })

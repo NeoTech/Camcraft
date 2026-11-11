@@ -41,6 +41,9 @@ mod per_op;
 mod tool_library_io;
 #[path = "state_setup_mount.rs"]
 mod setup_mount;
+#[path = "state_pockets.rs"]
+mod pockets;
+pub use pockets::PocketScan;
 #[path = "state_setup_post_options.rs"]
 mod setup_post_options;
 #[path = "state_fixture.rs"]
@@ -57,6 +60,9 @@ pub use vise_ui::{ViseDraft, ViseOpeningDraft};
 #[path = "state_plate.rs"]
 mod plate_ui;
 pub use plate_ui::{PlateDraft, PlatePlaceDraft};
+#[path = "state_accessory.rs"]
+mod accessory_ui;
+pub use accessory_ui::{AccessoryDraft, AccessorySizeDraft};
 #[path = "state_program_entry.rs"]
 mod program_entry;
 pub use program_entry::EntryVerb;
@@ -235,6 +241,17 @@ pub enum CommandKind {
     SetToolProfile {
         name: String,
         points: Option<Vec<camcraft_app::spun::SpunPoint>>,
+    },
+    /// #793: drop a built-in library holder ("BT30 ER20") into a milling
+    /// tool's holder at a gauge length (`None`: the entry's own) and a
+    /// projection (#792: nose face above the tip; `None`: the tool's
+    /// stickout) - the tool editor's Apply holder, one
+    /// `SetToolBody::library`.
+    SetToolHolder {
+        name: String,
+        entry: String,
+        gauge: Option<f64>,
+        projection: Option<f64>,
     },
     /// The document's workpiece material (M13.2); `None` states none.
     SetWorkMaterial(Option<camcraft_app::tools::WorkMaterial>),
@@ -475,6 +492,21 @@ pub enum CommandKind {
     /// Detect fixture `name`'s plate grid from its holes, or (`clear`)
     /// stop it being a plate - one `SetPlateGrid`.
     DetectPlateGrid { name: String, clear: bool },
+    /// #789: open the "Add accessory…" dialog over a setup's Fixtures
+    /// node (`""` - the implicit setup). View state.
+    AccessoryDialog(String),
+    /// Place built-in accessory `params` into `setup` - one
+    /// `InsertAccessory`.
+    InsertAccessory {
+        setup: Option<String>,
+        params: camcraft_app::accessory::Accessory,
+        placement: camcraft_app::commands::AccessoryPlacement,
+    },
+    /// Resize placed accessory `name` to `params` - one `SetAccessory`.
+    SetAccessory {
+        name: String,
+        params: camcraft_app::accessory::Accessory,
+    },
     /// Part orientation (M5.2 G): a model's full rigid placement -
     /// position plus yaw-pitch-roll degrees (R = Rz ⊗ Ry ⊗ Rx, the
     /// `SetWcs` voice). The world stores a unit quaternion; the
@@ -1422,6 +1454,8 @@ pub struct State {
     pub model_ui: ModelUi,
     /// The Model page's repair draft (M13.11).
     pub repair_ui: RepairUi,
+    /// The Model page's last Detect pockets / slots pass (#511).
+    pub pocket_scan: PocketScan,
     /// The setups-page context (setup binding) the next finished import
     /// gets tagged with - `Some` only between ImportFixtureDialog and the
     /// import's finish; discarded with the import itself.
@@ -1430,6 +1464,9 @@ pub struct State {
     /// implicit first setup. Public so tests run the dialog hand-off
     /// without a modal file picker.
     pub import_as_fixture: Option<Option<String>>,
+    /// #789: each built-in accessory row's size draft, by name - view
+    /// state; Apply lands it through `SetAccessory`.
+    pub accessory_sizes: HashMap<String, AccessorySizeDraft>,
     /// #339 slice 4: each fixture's mesh state, per document version
     /// (view cache - never truth, never saved).
     pub fixture_mesh_cache: camcraft_app::fixture_view::MeshStateCache,
@@ -1737,7 +1774,9 @@ impl State {
             fixture_ui: FixtureUi::default(),
             model_ui: ModelUi::default(),
             repair_ui: RepairUi::default(),
+            pocket_scan: PocketScan::default(),
             import_as_fixture: None,
+            accessory_sizes: HashMap::new(),
             fixture_mesh_cache: Default::default(),
             fixture_lib: None,
             fixture_lib_dir: None,
@@ -2872,6 +2911,9 @@ impl State {
             }
             CommandKind::SetToolBody { name, body } => self.run_set_tool_body(&name, body),
             CommandKind::SetToolProfile { name, points } => self.run_set_tool_profile(&name, points),
+            CommandKind::SetToolHolder { name, entry, gauge, projection } => {
+                self.run_set_tool_holder(&name, &entry, gauge, projection)
+            }
             CommandKind::ChangeTool { name, tool } => {
                 match ChangeTool::new(&self.world, &name, tool) {
                     Ok(command) => {
@@ -3462,6 +3504,11 @@ impl State {
                 self.insert_fixture_from_library(&entry, setup, pos, rpy_deg);
             }
             CommandKind::BuiltinViseDialog(setup) => self.open_vise_dialog(setup),
+            CommandKind::AccessoryDialog(setup) => self.open_accessory_dialog(setup),
+            CommandKind::InsertAccessory { setup, params, placement } => {
+                self.insert_accessory(setup, &params, placement);
+            }
+            CommandKind::SetAccessory { name, params } => self.set_accessory(&name, params),
             CommandKind::InsertBuiltinVise { setup, params, fit_stock, pos, yaw_deg } => {
                 self.insert_builtin_vise(setup, &params, fit_stock, pos, yaw_deg);
             }

@@ -5,19 +5,18 @@
 //! can hold the two engines to the same answer.
 //!
 //! Under a lattice turn a vertical column of the new frame is a vertical
-//! column of the field's own (Z kept on +-Z), so each read is one march:
-//! the top by the field's down-march (`march`), the floor by the exact
-//! shell floor (`floor_at`, step B). A flip swaps them: the new top is
-//! the old floor. A floor a cut reached is refused by name (step B's
-//! law) - never a guess.
+//! column of the field's own (Z kept on +-Z), so each read is one column
+//! span (`column_span`, #637 E1): the top by the field's down-march, the
+//! floor exactly - the shell's own plane, or under a cut by the monotone
+//! law. A flip swaps them: the new top is the old floor. A floor a
+//! bounded tool's cut reached is refused by name - never a guess.
 //!
-//! Provenance: our own design (#637 research comment, steps A-D).
+//! Provenance: our own design (#637 research comment, steps A-E).
 
 use super::carry::Body;
 use super::dexel::Dexel;
 use super::field_carry::{CarriedField, Clip};
-use super::field_floor::FloorRead;
-use super::march::{march, world, Read};
+use super::field_floor::ColumnSpan;
 use crate::geometry::Point3;
 
 /// The lattice a carried field is read back onto (new frame).
@@ -32,33 +31,27 @@ pub struct Lattice {
 
 /// One column's (top, floor) in the field's own frame; `None`: no material.
 fn read_column(c: &CarriedField, x: f64, y: f64) -> Result<Option<(f64, f64)>, String> {
-    let f = &c.field;
-    let (z_hi, z_lo) = world(f);
-    let top = match march(f, &f.shell_crossings(x, y), x, y, z_hi, z_lo, true) {
-        Read::Top(z) => z,
-        Read::NoMaterial => return Ok(None),
-        Read::Unreadable => return Err(format!("the carried field cannot read its column at ({x:.4}, {y:.4})")),
-    };
-    match f.floor_at(x, y) {
+    match c.field.column_span(x, y) {
         // A NaN or infinite read is no verdict: refused, never an empty
         // column (review of #656 - an empty column is material the
         // verdict never sees).
-        FloorRead::Floor(z) if !(top.is_finite() && z.is_finite()) => {
+        ColumnSpan::Material { top, floor } if !(top.is_finite() && floor.is_finite()) => {
             Err(format!("the carried stock read a non-finite top or floor at ({x:.4}, {y:.4}) - refused rather than guessed"))
         }
-        FloorRead::Floor(z) => Ok(Some((top, z))),
-        FloorRead::NoMaterial => Ok(None),
-        FloorRead::CutFromBelow => Err(format!(
-            "a cut reached the floor of the carried stock at ({x:.4}, {y:.4}) - an upward read there is not exact yet, refused rather than guessed"
+        ColumnSpan::Material { top, floor } => Ok(Some((top, floor))),
+        ColumnSpan::Empty => Ok(None),
+        ColumnSpan::CutFromBelow => Err(format!(
+            "a bounded tool's cut reached the floor of the carried stock at ({x:.4}, {y:.4}) - an upward read there is not exact, refused rather than guessed"
         )),
-        FloorRead::Unreadable => Err(format!("the carried stock's shell cannot be read at ({x:.4}, {y:.4})")),
+        ColumnSpan::Unreadable => Err(format!("the carried field cannot read its column at ({x:.4}, {y:.4})")),
     }
 }
 
 impl CarriedField {
     /// The carried solid as a column body on `lat` (new frame).
-    /// `judged_before` is the incoming body's floor flag; a flip sets it
-    /// (the floor has faced the spindle), as `Body::carry` does.
+    /// `judged_before` is the incoming body's floor flag; a flip anywhere
+    /// in the carry chain sets it (the floor has faced the spindle), as
+    /// `Body::carry` does - a flip already baked into the bricks included.
     ///
     /// # Errors
     /// A non-finite or empty lattice; a column the field cannot read; a
@@ -100,6 +93,6 @@ impl CarriedField {
         let stock_z = top.iter().copied().filter(|v| v.is_finite()).fold(f64::NEG_INFINITY, f64::max);
         let stock_z = if stock_z.is_finite() { stock_z } else { 0.0 };
         let dex = Dexel::from_grid(lat.x0, lat.y0, lat.cell, lat.nx, lat.ny, stock_z, top);
-        Body::from_parts(dex, floor, judged_before || self.turn.flips())
+        Body::from_parts(dex, floor, judged_before || self.flipped())
     }
 }

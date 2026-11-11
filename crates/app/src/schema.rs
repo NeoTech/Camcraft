@@ -234,6 +234,9 @@ pub struct FixtureDef {
     /// Fixture plates (#819): this fixture IS a plate (its hole grid),
     /// and/or stands ON one at a named location. Default: neither.
     pub plate: crate::plate::PlateLink,
+    /// A built-in accessory's parameters (#789: parallels, blocks, a
+    /// strap clamp, a soft jaw); `None` - not one.
+    pub accessory: Option<crate::accessory::Accessory>,
 }
 
 /// The document's active setup, stored as a flecs singleton like `Units`:
