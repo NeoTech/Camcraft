@@ -149,7 +149,11 @@ fn find_type<'a>(parts: &'a serde_json::Value, ty: &str) -> Option<&'a serde_jso
         if p.get("type").and_then(|t| t.as_str()) == Some(ty) {
             return Some(p);
         }
-        if let Some(hit) = find_type(p.get("parts")?, ty) {
+        // #785: a leaf part (no `parts`, e.g. a 4th-axis rotary listed
+        // before the head) is passed over, never the end of the search -
+        // a `?` here lost the head, and every spindle and coolant figure
+        // with it, for any file with a leaf ahead of its head.
+        if let Some(hit) = p.get("parts").and_then(|c| find_type(c, ty)) {
             return Some(hit);
         }
     }
