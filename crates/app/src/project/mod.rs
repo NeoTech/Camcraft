@@ -112,6 +112,11 @@ pub use file::*;
 mod params;
 pub use params::*;
 mod entity;
+mod vise_dto;
+mod fixture_keys;
+mod plate_dto;
+mod modvise_dto;
+pub use vise_dto::ViseDto;
 mod thread_dto;
 mod break_dto;
 pub use break_dto::EdgeBreakDto;
@@ -122,6 +127,11 @@ mod params_impl;
 // #108: the Probe operation's file mirror.
 mod probe_dto;
 pub use probe_dto::*;
+// #670: the plasma profile's file mirror and its path record.
+mod plasma_dto;
+pub use plasma_dto::*;
+mod trochoid_dto;
+pub use trochoid_dto::*;
 mod approach;
 pub use approach::*;
 mod links;
@@ -133,6 +143,8 @@ mod json;
 pub use json::*;
 mod apply;
 use apply::*;
+// #813: the load note for a machine embedded before #804.
+mod swing_note;
 mod validate;
 use validate::*;
 mod wcs_migrate;
