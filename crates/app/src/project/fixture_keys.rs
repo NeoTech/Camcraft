@@ -63,5 +63,7 @@ pub fn fixture_def(f: &FixtureDto, model: &str, notes: &mut Vec<String>) -> Fixt
     let accessory = lawful(read::<Accessory>(f.accessory.as_ref(), model, "accessory", notes), Accessory::check, model, "accessory", notes);
     // #819: the plate keys keep their own drop-and-log lenient read.
     let plate = super::plate_dto::link_from(f.plate.as_ref(), f.on_plate.as_ref(), model);
-    FixtureDef { setup: f.setup.clone(), fixed: f.fixed, vise, plate, accessory }
+    // #820: the mod-vise jaw key keeps its own drop-and-log read.
+    let mod_jaw = super::modvise_dto::params_from(f.mod_jaw.as_ref(), model);
+    FixtureDef { setup: f.setup.clone(), fixed: f.fixed, vise, plate, mod_jaw, accessory }
 }

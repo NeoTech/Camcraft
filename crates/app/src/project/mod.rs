@@ -115,6 +115,7 @@ mod entity;
 mod vise_dto;
 mod fixture_keys;
 mod plate_dto;
+mod modvise_dto;
 pub use vise_dto::ViseDto;
 mod thread_dto;
 mod break_dto;

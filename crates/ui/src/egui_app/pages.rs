@@ -861,6 +861,7 @@ pub(super) fn fixtures_section(ui: &mut Ui, state: &mut State, ctx: Option<&str>
     }
     state.retire_vise_opening_drafts();
     state.retire_plate_place_drafts();
+    state.retire_mod_vise_drafts();
     state.retire_accessory_size_drafts();
     ui.label(if fixtures.is_empty() && table.is_none() {
         "No workholding modeled: the collision checks see stock and part only."
