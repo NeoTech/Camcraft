@@ -28,6 +28,12 @@ pub struct CarriedField {
     /// intersected with it - `max(d_body, d_block)`, the field's form of
     /// the column body's `lower` clip. `None`: unclipped.
     pub clip: Option<Clip>,
+    /// Has any turn of the carry chain put the part upside down? Sticky,
+    /// as `Body::carry`'s `floor_judged || flips` is: two flips compose
+    /// into an upright turn, and a flip baked into the bricks
+    /// (`simulate`, #637 E2c) leaves only a translation as the view, yet
+    /// the floor has faced the spindle either way.
+    flipped: bool,
 }
 
 /// A clip region: a block, or nothing at all once two clips miss each
@@ -73,7 +79,7 @@ impl CarriedField {
     /// Carry `field` through `turn` (no data moves: the turn is the view).
     #[must_use]
     pub fn new(field: SdfField, turn: LatticeTurn) -> Self {
-        CarriedField { field, turn, clip: None }
+        CarriedField { field, turn, clip: None, flipped: turn.flips() }
     }
 
     /// Clip to the next setup's block (new frame). A second clip
@@ -119,7 +125,13 @@ impl CarriedField {
                 )
             }
         });
-        CarriedField { field: self.field, turn: self.turn.then(next), clip }
+        CarriedField { field: self.field, turn: self.turn.then(next), clip, flipped: self.flipped || next.flips() }
+    }
+
+    /// Has any turn of the chain flipped the part (see the field)?
+    #[must_use]
+    pub fn flipped(&self) -> bool {
+        self.flipped
     }
 
     /// The carried solid's signed distance at a point of the new frame -

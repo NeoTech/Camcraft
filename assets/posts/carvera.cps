@@ -30,6 +30,8 @@ var coolant = "";          // the M-code this section started, if any
 var sectionOpen = false;   // preamble written (a legacy .cl carries no SECTION)
 var orgX = 0, orgY = 0, orgZ = 0; // the WCS slot origin (OriginX/Y/Z PARAMs)
 var pendingDwell = null;   // a drilling dwell owed at its hole's bottom
+var smoothTol = 0;          // #616: the section's PARAM Smoothing, mm (0: none asked)
+var smoothMode = "";        // #616: "finish" or "rough"
 
 // ------------------------------------------------------------ helpers
 // The firmware is millimetres only (its G20 "will halt the machine"), so
@@ -164,6 +166,8 @@ function onRadiusCompensation() {
 }
 
 function onParameter(name, value) {
+  if (name === "Smoothing") { smoothTol = Number(value) || 0; return; }
+  if (name === "SmoothingMode") { smoothMode = String(value || ""); return; }
   commentParam(name, value);
   if (name === "WorkOffset" && value) wcsWord = String(value);
   else if (name === "OriginX" && has(value)) orgX = Number(value);
@@ -192,6 +196,21 @@ function onToolChange(number, name) {
   }
 }
 
+// #616 / #757: per-operation smoothing. The firmware's supported-codes
+// tables list no path-blending or smoothing word (no G64, G61, G5.1 or
+// similar), so the ask is named once and nothing is written - never a
+// guessed word.
+var smoothNamed = false;
+function smoothOn() {
+  if (!(smoothTol > 0) || smoothNamed) return;
+  note("SMOOTHING NOT WRITTEN - NO CARVERA FORM STATED");
+  smoothNamed = true;
+}
+function smoothOff() {
+  smoothTol = 0;
+  smoothMode = "";
+}
+
 // The preamble closes over everything a raw motion line needs: the work
 // offset, the tool, the spindle, the air. M6 Tn is the firmware's auto
 // tool change (the Air's quick changer prompts the operator through the
@@ -213,6 +232,7 @@ function startPreamble() {
   spindleWait = false;
   coolant = coolantCode();
   if (coolant) block([coolant]);
+  smoothOn();
 }
 
 function endPreamble() {
@@ -220,6 +240,7 @@ function endPreamble() {
   owedDwell();
   restorePlane();
   sectionOpen = false;
+  smoothOff();
   if (coolant) block(["M9"]);
   block(["M5"]);
 }

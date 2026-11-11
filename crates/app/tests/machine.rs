@@ -729,6 +729,8 @@ fn every_shipped_machine_mounts_and_speaks_its_declaration() {
         ("Lathe", Kind::Lathe),
         ("Tormach 770MX", Kind::Mill),
         ("Tormach 770MX (ML)", Kind::Mill),
+        // #785: an A about X leans the tool - still a mill, never a mill-turn.
+        ("Tormach 770MX + microARC 4", Kind::Mill),
         ("Tormach 770M", Kind::Mill),
         ("Tormach 1100MX", Kind::Mill),
         ("Tormach 1500MX", Kind::Mill),
@@ -744,11 +746,13 @@ fn every_shipped_machine_mounts_and_speaks_its_declaration() {
         ("Tormach 24R", Kind::Mill),
         ("Tormach xsTECH Pro", Kind::Mill),
         ("Tormach xsTECH", Kind::Mill),
+        ("Tormach 1300PL", Kind::Plasma),
         ("Tormach 8L", Kind::Lathe),
         ("Tormach 15L Slant-PRO", Kind::Lathe),
         ("Tormach 15LX Slant-PRO", Kind::Lathe),
         ("Makera Carvera", Kind::Mill),
         ("Makera Carvera Air", Kind::Mill),
+        ("Doosan DNM 5700", Kind::Mill),
     ];
     assert_eq!(MACHINES.len(), expectations.len(), "the pane offers what the tests pin");
     for ((name, text), (want_name, want_kind)) in MACHINES.iter().zip(expectations) {
@@ -758,7 +762,9 @@ fn every_shipped_machine_mounts_and_speaks_its_declaration() {
         assert_eq!(kind(Some(&m)), want_kind, "{name} declared");
         let mut inferred = m.clone();
         inferred.kind = None;
-        assert_eq!(kind(Some(&inferred)), want_kind, "{name}'s axes agree with its word");
+        // #669: plasma is declared, never inferred - its X/Y/Z reads mill.
+        let axes_say = if want_kind == Kind::Plasma { Kind::Mill } else { want_kind };
+        assert_eq!(kind(Some(&inferred)), axes_say, "{name}'s axes agree with its word");
     }
 }
 
