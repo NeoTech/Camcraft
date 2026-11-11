@@ -366,6 +366,9 @@ pub struct Posted {
 
 #[path = "posting_sim.rs"]
 mod sim_clause_impl;
+#[path = "posting_plasma.rs"]
+mod plasma_clause_impl;
+pub use plasma_clause_impl::{plasma_clause, PlasmaClause, PLASMA_VERDICT};
 #[path = "posting_per_op.rs"]
 mod per_op;
 #[path = "posting_suppressed.rs"]
@@ -612,6 +615,12 @@ pub fn verification_report(world: &World) -> GateReport {
 
     let sim = sim_clause(world);
     problems.extend(sim.problem);
+    // The plasma clause (#672): the 3D stock sim carves nothing for a
+    // torch, so a plasma op's verdict is the 2D through-cut laws, run
+    // here - a refusal blocks, and the not-judged line says the sim did
+    // not run for it, never a silent skip.
+    let plasma = plasma_clause(world);
+    problems.extend(plasma.problems);
 
     // The suppression clause (#110 review B1): an op generated against
     // a suppressed op's cut refuses by name - the cut it assumed is not
@@ -652,7 +661,12 @@ pub fn verification_report(world: &World) -> GateReport {
     // what came after it). The law and lines live in
     // `operation::probe_problems`.
     problems.extend(crate::operation::probe_problems(world));
-    GateReport { problems, not_judged: sim.not_judged }
+    let not_judged = match (sim.not_judged, plasma.line) {
+        (Some(s), Some(p)) => Some(format!("{s}; {p}")),
+        (None, Some(p)) => Some(format!("{NOT_JUDGED}: {p}")),
+        (s, None) => s,
+    };
+    GateReport { problems, not_judged }
 }
 
 /// The gate's fixture walk: one problem string per operation with a
