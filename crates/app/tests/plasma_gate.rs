@@ -7,8 +7,8 @@
 //! Provenance: our own fixtures (the #670 suite's holed plate); the laws
 //! cite UM10720 and the LinuxCNC Plasma Primer in `sim::verify::plasma`.
 //!
-//! Gate map (#672): covers app::posting (plasma clause), app::operation
-//! (plasma_op), sim::verify::plasma.
+//! Gate map (#672): covers app::posting, app::posting_plasma,
+//! app::machine::plasma, app::operation (plasma_op), sim::verify::plasma.
 
 use flecs_ecs::prelude::World;
 
