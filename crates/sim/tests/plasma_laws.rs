@@ -140,3 +140,97 @@ fn small_holes_and_open_paths() {
     let over = Some((p(-10.0, 25.0), p(120.0, 0.0)));
     assert_eq!(judge(&PlasmaProgram { kerf: 1.5, cuts: vec![slit, next], rapids: vec![None, over] }), vec![]);
 }
+
+// ---- #672 step 2: the review's notes and the laws the CL reader allows ----
+
+/// Review of #675: `small` is the small-hole rule, and only a hole is
+/// centre-pierced - a small OUTER (or OPEN) contour is refused by name.
+#[test]
+fn a_small_mark_on_anything_but_a_hole_is_refused() {
+    let mut dot = cut(2, Outer, None, vec![p(50.0, 50.0)]);
+    dot.small = true;
+    let outline = cut(1, Outer, None, square(0.0, 0.0, 100.0));
+    let f = judge(&PlasmaProgram { kerf: 1.5, cuts: vec![dot, outline], rapids: vec![None, None] });
+    assert!(matches!(f.as_slice(), [PlasmaFinding::Malformed(m)] if m.contains("small hole") && m.contains("OUTER")), "{f:?}");
+}
+
+/// Review of #675: a one-point cut that is not a small hole has no path.
+#[test]
+fn a_one_point_cut_without_the_small_mark_is_refused() {
+    let dot = cut(2, Inner, Some(1), vec![p(50.0, 50.0)]);
+    let outline = cut(1, Outer, None, square(0.0, 0.0, 100.0));
+    let f = judge(&PlasmaProgram { kerf: 1.5, cuts: vec![dot, outline], rapids: vec![None, None] });
+    assert!(matches!(f.as_slice(), [PlasmaFinding::Malformed(m)] if m.contains("contour 2 has no cut path")), "{f:?}");
+}
+
+/// Review of #675: an open run encloses nothing, so a contour naming one
+/// as its parent is malformed.
+#[test]
+fn an_open_parent_is_malformed() {
+    let slit = cut(1, Open, None, vec![p(0.0, 0.0), p(50.0, 0.0)]);
+    let hole = cut(2, Inner, Some(1), square(10.0, 10.0, 5.0));
+    let f = judge(&PlasmaProgram { kerf: 1.5, cuts: vec![hole, slit], rapids: vec![None, None] });
+    assert!(matches!(f.as_slice(), [PlasmaFinding::Malformed(m)] if m.contains("open run")), "{f:?}");
+}
+
+/// A closed contour's cut must return to its start; a polyline that
+/// never closes under an OUTER or INNER role is refused by name.
+#[test]
+fn a_closed_contour_whose_cut_never_closes_is_refused() {
+    let open = cut(1, Outer, None, vec![p(0.0, 0.0), p(100.0, 0.0), p(100.0, 100.0), p(0.0, 100.0)]);
+    let f = judge(&PlasmaProgram { kerf: 1.5, cuts: vec![open], rapids: vec![None] });
+    assert!(matches!(f.as_slice(), [PlasmaFinding::Malformed(m)] if m.contains("never returns to its start")), "{f:?}");
+}
+
+/// Review of #675: enclosure is recomputed from the rings, and a PARENT
+/// the geometry disagrees with is refused by name - each way round.
+#[test]
+fn a_stated_parent_the_rings_disagree_with_is_refused() {
+    let mal = |p: PlasmaProgram, word: &str| {
+        let f = judge(&p);
+        assert!(matches!(f.as_slice(), [PlasmaFinding::Malformed(m)] if m.contains(word) && m.contains("disagree")), "{word}: {f:?}");
+    };
+    let outline = cut(1, Outer, None, square(0.0, 0.0, 100.0));
+    // A "hole" placed outside the outline it names.
+    let away = cut(2, Inner, Some(1), square(200.0, 200.0, 20.0));
+    mal(PlasmaProgram { kerf: 1.5, cuts: vec![away, outline.clone()], rapids: vec![None; 2] }, "no cut encloses it");
+    // An outer contour inside the outline that names no parent.
+    let unsaid = cut(3, Outer, None, square(40.0, 40.0, 20.0));
+    mal(PlasmaProgram { kerf: 1.5, cuts: vec![unsaid, outline.clone()], rapids: vec![None; 2] }, "names no parent but");
+    // An island naming the outline instead of the hole it sits in.
+    let hole = cut(2, Inner, Some(1), square(30.0, 30.0, 40.0));
+    let island = cut(3, Outer, Some(1), square(45.0, 45.0, 10.0));
+    mal(
+        PlasmaProgram { kerf: 1.5, cuts: vec![island, hole, outline], rapids: vec![None; 3] },
+        "lies inside contour 2",
+    );
+}
+
+/// The 2D gouge: a ring cutting through an earlier ring is refused;
+/// two parts clear of each other pass.
+#[test]
+fn a_ring_crossing_an_earlier_ring_is_refused() {
+    let a = cut(1, Outer, None, square(0.0, 0.0, 50.0));
+    let b = cut(2, Outer, None, square(40.0, 10.0, 50.0));
+    let f = judge(&PlasmaProgram { kerf: 1.5, cuts: vec![a.clone(), b], rapids: vec![None, None] });
+    assert!(matches!(f.as_slice(), [PlasmaFinding::CutCrossing { contour: 2, earlier: 1, .. }]), "{f:?}");
+    assert!(f[0].refuses(), "a refusal");
+    assert!(f[0].to_string().contains("near X"), "{}", f[0]);
+    let clear = cut(2, Outer, None, square(60.0, 10.0, 50.0));
+    assert_eq!(judge(&PlasmaProgram { kerf: 1.5, cuts: vec![a, clear], rapids: vec![None, None] }), vec![]);
+}
+
+/// A rapid that leaves from the edge of the part just freed (a cut with
+/// no lead-out ends on its ring) is not a tip-up; one that starts inside
+/// the freed part is.
+#[test]
+fn a_rapid_leaving_a_freed_parts_edge_is_not_a_tip_up() {
+    let a = cut(1, Outer, None, square(0.0, 0.0, 50.0));
+    let b = cut(3, Outer, None, square(120.0, 0.0, 30.0));
+    let from_edge = Some((p(50.0, 25.0), p(120.0, 0.0)));
+    let f = judge(&PlasmaProgram { kerf: 1.5, cuts: vec![a.clone(), b.clone()], rapids: vec![None, from_edge] });
+    assert_eq!(f, vec![]);
+    let from_inside = Some((p(49.0, 25.0), p(120.0, 0.0)));
+    let f = judge(&PlasmaProgram { kerf: 1.5, cuts: vec![a, b], rapids: vec![None, from_inside] });
+    assert!(matches!(f.as_slice(), [PlasmaFinding::TipUp { contour: 3, freed: 1, .. }]), "{f:?}");
+}

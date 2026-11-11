@@ -247,3 +247,38 @@ fn the_torch_records_round_trip_through_the_cl_text() {
     let cut = s.replace("; TORCH OFF C2\n", "");
     assert!(text::from_text(&cut).is_err());
 }
+
+/// #672 (#676 decision 12): a slot or notch narrower than the kerf is
+/// bridged by the offset ring - one loop, so the ring law accepts it -
+/// and the cover law refuses it by name instead of leaving the feature
+/// uncut; the same notch twice the kerf wide cuts, and a keyway under
+/// the kerf on a hole is refused the same way.
+#[test]
+fn a_slot_narrower_than_the_kerf_is_refused_not_bridged() {
+    let err = |r: Result<Toolpath, crate::machining2d::GenError>| r.err().map(|e| e.to_string()).unwrap_or_default();
+    let q = Point2::new;
+    // A 100 x 60 plate with a notch `w` wide and 10 deep in its top edge.
+    let notched = |w: f64| {
+        let (l, r) = (50.0 - w * 0.5, 50.0 + w * 0.5);
+        Loop::new(vec![q(0.0, 0.0), q(100.0, 0.0), q(100.0, 60.0), q(r, 60.0), q(r, 50.0), q(l, 50.0), q(l, 60.0), q(0.0, 60.0)]).unwrap()
+    };
+    let narrow = notched(1.0);
+    let part = Region::new(vec![narrow.clone()]).unwrap();
+    let e = err(plasma_profile(&[narrow], &[], &part, &params()));
+    assert!(e.contains("contour C0") && e.contains("bridged") && e.contains("narrower than the kerf"), "{e}");
+    assert!(e.contains("Y5") || e.contains("Y6"), "located in the notch: {e}");
+    // 3 mm wide (twice the 1.5 kerf): the torch enters it and every edge is reached.
+    let wide = notched(3.0);
+    let part = Region::new(vec![wide.clone()]).unwrap();
+    let path = cut_plate(&[wide], &part, &params());
+    assert!(path.plasma.is_some_and(|r| r.torches.len() == 1));
+    // A 20 x 20 hole with a 1 x 5 keyway: the inward offset drops the
+    // keyway, the cover law refuses the hole by name.
+    let keyed = Loop::new(vec![
+        q(30.0, 20.0), q(50.0, 20.0), q(50.0, 40.0), q(40.5, 40.0), q(40.5, 45.0), q(39.5, 45.0), q(39.5, 40.0), q(30.0, 40.0),
+    ]).unwrap();
+    let loops = vec![rect(0.0, 0.0, 100.0, 60.0), keyed];
+    let part = Region::new(loops.clone()).unwrap();
+    let e = err(plasma_profile(&loops, &[], &part, &params()));
+    assert!(e.contains("contour C0") && e.contains("bridged"), "{e}");
+}
