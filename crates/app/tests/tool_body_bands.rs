@@ -285,3 +285,48 @@ fn upright_verdicts_are_unchanged_by_the_tip_centred_kerf() {
         assert_eq!(plunge_beside_island(gap, tip_z, &slim, None), want_slim, "slim: gap {gap}, tip {tip_z}");
     }
 }
+
+// ---- #903 re-review: a shank no wider than the cutter, leaning -------
+
+/// A long-reach Ø8 end mill, no body: shank r `shank_r` from 8 to 38
+/// above the tip, holder r 20 from 38 to 58.
+fn long_reach(shank_r: f64) -> ToolGeom {
+    ToolGeom { radius: 4.0, nose_radius: 0.0, flute_len: 8.0, shank_radius: shank_r, shank_len: 30.0, holder_radius: 20.0, holder_len: 20.0 }
+}
+
+#[test]
+fn a_leaning_shank_no_wider_than_the_cutter_is_convicted_by_law_c() {
+    // 30 degrees toward the wall at x 40, tip (31, 50, -9): the shank 12
+    // mm up the axis stands at x ~40.5, z ~-0.6 - in the island. The
+    // holder's bottom stays above the top: only the shank can tell.
+    for shank_r in [4.0, 3.5] {
+        let w = beside_wall(leaning_plunge(), &long_reach(shank_r), None);
+        assert!(w.contains(&Warning::ShankHit { at: 2, part: true }), "shank r {shank_r}: {w:?}");
+    }
+}
+
+#[test]
+fn a_leaning_shank_no_wider_than_the_cutter_swinging_through_the_wall_is_convicted_by_law_c3() {
+    for shank_r in [4.0, 3.5] {
+        let w = beside_wall(turning_plunge(), &long_reach(shank_r), None);
+        assert!(!w.contains(&Warning::ShankHit { at: 2, part: true }), "the end pose leans away: shank r {shank_r}: {w:?}");
+        assert!(w.contains(&Warning::SweepHit { at: 2, part: true }), "the swing through the part: shank r {shank_r}: {w:?}");
+    }
+}
+
+#[test]
+fn an_upright_shank_no_wider_than_the_cutter_reads_unchanged() {
+    // Upright, a shank within the cutter's radius stands in the flutes'
+    // kerf and is not judged; only the r 20 holder can convict.
+    let hit = vec![Warning::ShankHit { at: 1, part: true }];
+    for shank_r in [4.0, 3.5] {
+        let g = long_reach(shank_r);
+        for (gap, tip_z, want) in [
+            (5.0, -20.0, Vec::new()), // holder bottom at 18: above the top
+            (5.0, -36.0, Vec::new()), // holder bottom at 2: above the top
+            (15.0, -40.0, hit.clone()), // holder (r 20, bottom -2) in the wall
+        ] {
+            assert_eq!(plunge_beside_island(gap, tip_z, &g, None), want, "shank r {shank_r}: gap {gap}, tip {tip_z}");
+        }
+    }
+}

@@ -118,3 +118,21 @@ a_leaning_slim_holder_in_the_wall_is_convicted_by_law_c,
 a_leaning_stepped_body_swinging_through_the_wall_is_convicted_by_law_c3,
 a_leaning_slim_holder_swinging_through_the_wall_is_convicted_by_law_c3,
 upright_verdicts_are_unchanged_by_the_tip_centred_kerf}`.
+
+**A leaning band no wider than the cutter is judged (re-review, #903).**
+Laws (c) and (c3) skipped every band with `band_r <= r` - "it stands in
+the flutes' kerf" - which is true only upright. Leaning, a plain shank
+(r == cutter r) or a necked one (r < cutter r) stands off the tip's
+column like any other band; the re-review's long-reach Ø8 mill (shank
+r 4 from 8 to 38, tilted 30 degrees into the wall) passed with its shank
+in the part, and so did an r 3.5 neck. Chosen: keep the skip only for an
+upright band (no lean in (c), a vertical state in (c3)); a leaning band
+of any positive radius is judged, the tip-centred kerf excusing just
+the flutes' cut. Upright verdicts are unchanged. Dropped: keeping this
+PR's scope and reopening #903 for the shank - the fix is two conditions
+on the kerf logic already here. Known cost: the lean enclosure is
+conservative (`h0 = lower end - band_r`), so a slim shank tilted close
+beside a wall can be over-reported - over-report a graze, never hide a
+gouge. Pinned by `tool_body_bands::{a_leaning_shank_no_wider_than_the_cutter_is_convicted_by_law_c,
+a_leaning_shank_no_wider_than_the_cutter_swinging_through_the_wall_is_convicted_by_law_c3,
+an_upright_shank_no_wider_than_the_cutter_reads_unchanged}`.

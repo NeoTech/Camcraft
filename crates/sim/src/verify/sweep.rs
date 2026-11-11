@@ -167,20 +167,22 @@ fn swing_hit(
                 from_abc[1] + (to_abc[1] - from_abc[1]) * g,
                 from_abc[2] + (to_abc[2] - from_abc[2]) * g,
             ];
-            let a = angles_to_axis(abc);
+            let lean = angles_to_axis(abc).filter(|a| !is_vertical(a));
             for &(above, band_r, band_len) in bands {
-                if band_r <= r || band_len <= 0.0 {
+                // Law (c)'s skip, read the same way: a band within the
+                // cutter's radius is the flutes' kerf only upright (#903).
+                if band_len <= 0.0 || band_r <= 0.0 || (lean.is_none() && band_r <= r) {
                     continue;
                 }
-                let (offx, offy, r_band, h0) = match a {
-                    Some(a) if !is_vertical(&a) => {
+                let (offx, offy, r_band, h0) = match lean {
+                    Some(a) => {
                         let mid = above + band_len * 0.5;
                         let spread = (band_len * 0.5) * (a[0] * a[0] + a[1] * a[1]).sqrt();
                         let za = p.z + above * a[2];
                         let zb = p.z + (above + band_len) * a[2];
                         (mid * a[0], mid * a[1], band_r + spread, za.min(zb) - band_r)
                     }
-                    _ => (0.0, 0.0, band_r, p.z + above),
+                    None => (0.0, 0.0, band_r, p.z + above),
                 };
                 let pc = Point2::new(p.x + offx, p.y + offy);
                 let tip = Point2::new(p.x, p.y);
@@ -194,7 +196,7 @@ fn swing_hit(
         }
     }
     if states.is_empty() {
-        return None; // every band is the tool's own radius: nothing to sweep
+        return None; // every band upright within the tool's radius: nothing to sweep
     }
     let near: Vec<Point2> = samples
         .iter()

@@ -115,7 +115,12 @@ pub(super) fn band_reach(
                     if convicted == Some(true) {
                         break; // the worst offender is already named
                     }
-                    if band_r <= r || band_len <= 0.0 {
+                    // A band within the cutter's radius stands in the
+                    // flutes' own kerf - upright only. Leaning, it stands
+                    // off the tip's column like any other band and is
+                    // judged, the tip-centred kerf below excusing just
+                    // the flutes' cut (#903: a plain or necked shank).
+                    if band_len <= 0.0 || band_r <= 0.0 || (lean.is_none() && band_r <= r) {
                         continue;
                     }
                     let (offx, offy, r_band, h0) = match lean {
