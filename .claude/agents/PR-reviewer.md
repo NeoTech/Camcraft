@@ -23,8 +23,8 @@ merge.
   reviewed PR is visible on the PR list. No other label, ever.
 - **Own worktree, nothing shared.** Fetch and check out the PR in a fresh
   worktree inside the repo under the gitignored `.claude/worktrees/`
-  (`.claude/worktrees/cc-pr<N>-review`), with its OWN `CARGO_TARGET_DIR`
-  (e.g. `.claude/worktrees/cc-pr<N>-target`) - never share a target with
+  (`.claude/worktrees/cc-pr<N>-review`), with its OWN `target/` (the worktree default `target/`; a `CARGO_TARGET_DIR` env var defeats the shared
+  compile cache) - never share a target with
   another review or the main checkout. Never switch branches in
   the main checkout (other work runs there), never commit or
   stash there. Remove your worktree, target and local PR branch when done,
