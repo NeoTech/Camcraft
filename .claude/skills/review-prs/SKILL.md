@@ -229,12 +229,18 @@ For each line `<N> <login> <time>`:
   still LIVE (not ended, and it passes the liveness test below), or one of
   the owner account's agents holds a fresh claim (4 h rule): do not
   mirror; reply once (only if no later comment mentions `@<login>`) naming
-  the current claimant. A stale or ended earlier claim holds nothing:
-  release it in the Withdraw pass and treat this claim on its own merits;
+  the current claimant. A stale or ended earlier claim holds nothing: if
+  the earlier one is stale and not yet released, release it NOW (remove
+  that claimant's assignment and post the stale-release comment from the
+  Withdraw pass - it ends that claim), then judge this claim on its own
+  merits. The label and the assignee always follow the newest live claim,
+  and the Withdraw pass judges the claim of the current assignee;
 - **stale** (AGENTS.md "A claim must be live"): the claim is not live -
   no open PR by the claimant for the issue, no commit on the claimant's
   branch for it in the last 48 hours, and no comment by the claimant on
-  the issue in the last 48 hours. Do not mirror; skip silently. Check
+  the issue in the last 48 hours (a comment that withdraws or releases
+  the claim is not activity: ended beats live). Do not mirror; skip
+  silently. Check
   liveness with
   `gh pr list --state open --author "<login>" --search "<N> in:title,body" --json number,headRefName`
   (then confirm the PR really is for this issue: its body or branch names

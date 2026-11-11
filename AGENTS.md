@@ -207,9 +207,10 @@ go to `CHANGELOG.md`.
   one of the owner account's own agents' and older than 4 hours with no
   newer comment from the claimant - then it is stale: comment "reclaimed
   from <old claimant> (stale)" and take it. Two: the claim behind the
-  label is a contributor's and it is withdrawn, released or stale (48
-  hours with nothing behind it - "A claim comment is a claim", below) -
-  then release it as that rule says, and the issue is free.
+  label is a contributor's and it is withdrawn, released or stale by the
+  rule "A claim comment is a claim", below - then release it as that rule
+  says, and the issue is free. Never on a `P?` issue: no agent relabels or
+  works one.
 - **Agent-opened issues say so** (user, 2026-11-07: "All Issues opened by
   an Agent should have the tag source:agent"). Every issue an agent opens
   carries the `source:agent` label alongside its `P*`, `effort:*` and `area:*` labels -
@@ -287,6 +288,10 @@ go to `CHANGELOG.md`.
     @<login> - label and assignee set (only collaborators can set labels;
     your comment is the claim)." Only a LIVE earlier claim by someone else
     holds an issue against a new claimant; a stale or ended one does not.
+    When a new claimant comes over a stale earlier claim, release the
+    stale one first (its release comment ends it, next point), then mirror
+    the new claim: the label and the assignee always follow the newest
+    live claim.
   - **A claim must be live - an old one cannot stall an issue** (user,
     2026-11-11, on eight issues a contributor's agents had claimed days
     earlier and left: "unclaim those 8 old ones and let someone pick em up
@@ -302,7 +307,9 @@ go to `CHANGELOG.md`.
     open PR, branch commit or comment from the claimant for 48 h) - issue
     is free again; claim it again with a new comment if you are working on
     it". That comment ENDS the claim (next point): a later comment by the
-    claimant does not revive it, only a new claim line does. The 4 h rule
+    claimant does not revive it, only a new claim line does. Ended beats
+    live: a comment that withdraws or releases a claim is not activity
+    that keeps it live, and an ended claim is never live again. The 4 h rule
     above stays the rule for the owner account's own agents. A `P?` issue
     is never relabelled by an agent, stale claim or not: report it to the
     maintainer instead.
