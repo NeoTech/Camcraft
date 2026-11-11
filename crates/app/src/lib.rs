@@ -55,6 +55,8 @@ pub mod project;
 pub mod recognize;
 // #182: the CPU rasteriser behind the MCP stock render.
 pub mod raster;
+// #877: the theme and colour-vision mode, kept per user (not per project).
+pub mod prefs;
 pub mod recent;
 pub mod rest;
 pub mod ribbon;

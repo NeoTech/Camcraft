@@ -196,6 +196,9 @@ pub fn groups(raw: &Value) -> Vec<FieldGroup> {
 
     let mut g = Grid::new(raw, "Tool changer and stations");
     g.add(s("Tools"), s("tooling.number_of_tools"), s("/tooling/number_of_tools"), N, &[s("tooling.number_of_tools")]);
+    // #828: the mount and the holder a new tool starts with.
+    g.add(s("Spindle mount"), s("tooling.spindle_mount"), s("/tooling/spindle_mount"), T, &[s("tooling.spindle_mount")]);
+    g.add(s("Default holder"), s("tooling.default_holder"), s("/tooling/default_holder"), T, &[s("tooling.default_holder")]);
     if let Some(h) = &head {
         for (label, k) in [("Max tool length", "max_tool_length"), ("Max tool diameter", "max_tool_diameter")] {
             g.add(s(label), format!("tool_station.{k}"), format!("{h}/tool_station/{k}"), N, &[]);

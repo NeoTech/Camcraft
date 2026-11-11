@@ -218,13 +218,6 @@ pub fn collect(world: &World) -> ProjectFile {
             crate::schema::PostRef::Named(name) => Some(PostDto::Named(name)),
             crate::schema::PostRef::File(path) => Some(PostDto::File(path)),
         },
-        // The default theme matches every pre-v41 document, so it
-        // writes no key (the post's law, worn in the theme's clothes).
-        theme: match crate::commands::theme_of(world) {
-            crate::schema::ThemeRef::Dark => None,
-            crate::schema::ThemeRef::Named(name) => Some(ThemeDto::Named(name)),
-            crate::schema::ThemeRef::File(path) => Some(ThemeDto::File(path)),
-        },
         // An unpinned ribbon writes no key (the theme's law, worn in
         // the pin's clothes - and the default is what every pre-M6.2
         // document is).
