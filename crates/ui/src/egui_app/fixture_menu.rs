@@ -53,10 +53,10 @@ pub(crate) fn menu_rows(state: &State, target: &TreeMenuTarget) -> Vec<(String, 
             ("Insert from library…".to_owned(), Some(CommandKind::FixtureLibraryInsertDialog(s.clone()))),
             // #788: a generated, parametric vise.
             ("Add built-in vise…".to_owned(), Some(CommandKind::BuiltinViseDialog(s.clone()))),
-            // #819: a parametric grid plate.
-            ("Add fixture plate…".to_owned(), Some(CommandKind::FixturePlateDialog(s.clone()))),
             // #789: parallels, blocks, strap clamps, soft jaws.
             ("Add accessory…".to_owned(), Some(CommandKind::AccessoryDialog(s.clone()))),
+            // #819: a parametric grid plate.
+            ("Add fixture plate…".to_owned(), Some(CommandKind::FixturePlateDialog(s.clone()))),
         ],
         TreeMenuTarget::Operation(_) | TreeMenuTarget::Operations | TreeMenuTarget::Entry(_) => Vec::new(),
     }
