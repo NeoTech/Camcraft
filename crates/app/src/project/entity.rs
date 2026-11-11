@@ -207,8 +207,10 @@ pub enum CycleKindDto {
     Peck,
     Deep,
     Tap,
+
     Bore,
     BackBore,
+    FloatingTap,
 }
 
 impl CycleDto {
@@ -220,6 +222,7 @@ impl CycleDto {
                 CycleKind::Peck => CycleKindDto::Peck,
                 CycleKind::Deep => CycleKindDto::Deep,
                 CycleKind::Tap => CycleKindDto::Tap,
+                CycleKind::FloatingTap => CycleKindDto::FloatingTap,
                 CycleKind::Bore => CycleKindDto::Bore,
                 CycleKind::BackBore => CycleKindDto::BackBore,
             },
@@ -241,6 +244,7 @@ impl CycleDto {
                 CycleKindDto::Peck => CycleKind::Peck,
                 CycleKindDto::Deep => CycleKind::Deep,
                 CycleKindDto::Tap => CycleKind::Tap,
+                CycleKindDto::FloatingTap => CycleKind::FloatingTap,
                 CycleKindDto::Bore => CycleKind::Bore,
                 CycleKindDto::BackBore => CycleKind::BackBore,
             },
