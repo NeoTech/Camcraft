@@ -190,10 +190,18 @@ fn the_reported_outside_contour_enters_every_level_on_one_arc() {
     // The bore ring is BLIND (floor Z 0): it is walked at 20..0 and
     // never below - the old ladder walked it at -5 and -7 too, an
     // annulus cut into the solid under the floor that the flat-region
-    // verifier could not see. Its five 5 mm drops leave no arc room in
-    // the bore's air: they graze by name (noted).
+    // verifier could not see. On the coarse mesh its five 5 mm drops
+    // found no arc room in the bore's air and grazed by name; on the
+    // capped mesh (#689), with the ring fitted whole, a proved arc fits
+    // beside the bore wall. Either way an entry there lands on one of the
+    // bore's own levels, never below its floor, and the verifier above
+    // holds every one of them silent.
     let bore: Vec<_> = all.iter().filter(|&&(s, _)| !outer(&t.moves[s])).collect();
-    assert!(bore.is_empty(), "{bore:?}");
+    assert!(bore.len() <= 5, "at most one bore entry per bore level: {bore:?}");
+    for &&(_, e) in &bore {
+        let z = t.moves[e - 1].to.z;
+        assert!([20.0, 15.0, 10.0, 5.0, 0.0].contains(&z), "a bore entry lands on a bore level, got {z}");
+    }
     let ring_levels = |keep: &dyn Fn(f64) -> bool| -> Vec<f64> {
         let mut v: Vec<f64> = t
             .moves
@@ -236,9 +244,11 @@ fn the_reported_outside_contour_enters_every_level_on_one_arc() {
         assert_eq!(seq, want, "entry {k}'s approach");
     }
     // Plunges left: the outer ring's deeper approaches to the arc top
-    // (5) and the bore ring's five named grazes.
+    // (5, every level past the second), the bore ring's the same way
+    // for its arc entries, and one graze per bore level that took no
+    // arc (all five grazed on the coarse mesh before #689).
     let plunges = t.moves.iter().filter(|m| m.kind == MoveKind::Plunge).count();
-    assert_eq!(plunges, 5 + 5);
+    assert_eq!(plunges, 5 + bore.len().saturating_sub(2) + (5 - bore.len()));
 }
 
 fn disc() -> Region {
