@@ -31,9 +31,10 @@ pub fn from_json(text: &str) -> Result<Value, serde_json::Error> {
 /// roof, where the sim's timeline reads the pace an angle travels
 /// at - and the unit law stands exactly as stage C set it: a rotary
 /// rate crosses into no mm/min field, no ceiling sum, no script
-/// property (the post's rotary inventory still carries name,
-/// direction, and travel only; a script cannot feed off a number it
-/// cannot unit-check).
+/// property. Issue #33 let the post's rotary inventory carry those
+/// rates too, under each rotary's own `speeds` (deg/min, named as
+/// such): a C-axis post caps its composite feed by them, and still
+/// never adds them to an mm/min number.
 #[must_use]
 pub fn mirror(m: &crate::machine::Machine) -> Value {
     let mut axes: Vec<Value> = Vec::new();
@@ -245,10 +246,15 @@ pub fn script_props(m: &Value) -> Value {
     let mut rotaries: Vec<Value> = Vec::new();
     if let Some(rs) = get(m, &["kinematics", "static", "rotaries"]).and_then(Value::as_array) {
         for r in rs {
+            // Issue #33: the rotary's own deg/min rates ride under its
+            // own `speeds` key (null when unstated) so a C-axis post can
+            // cap a composite feed by the C rate the file states. They
+            // stay out of every mm/min field (stage C's unit law).
             rotaries.push(json!({
                 "name": get(r, &["letter"]).and_then(Value::as_str).unwrap_or(""),
                 "direction": get(r, &["direction"]).cloned().unwrap_or(Value::Null),
                 "travel": get(r, &["travel"]).cloned().unwrap_or(Value::Null),
+                "speeds": get(r, &["speeds"]).filter(|s| s.is_object()).cloned().unwrap_or(Value::Null),
             }));
         }
     }

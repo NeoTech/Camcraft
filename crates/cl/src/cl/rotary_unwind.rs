@@ -39,6 +39,9 @@ use super::{Move, MoveKind, Toolpath};
 /// How close (mm) a point must stand to the path's clearance height or
 /// radius to count as clear.
 const CLEAR_EPS: f64 = 1e-6;
+/// How far (mm) a move may start from where the one before it ended
+/// and still count as a chain (the 1 um lattice).
+const CHAIN_TOL: f64 = 1e-6;
 /// Slack on the travel bounds (deg), the machine check's own.
 const TRAVEL_EPS: f64 = 1e-9;
 /// Orbit chords per unwind, at most: a rewind needing more is a
@@ -60,6 +63,18 @@ pub fn unwind_c(path: &Toolpath, center: [f64; 2], travel: (f64, f64), tol: f64)
     let moves = &path.moves;
     if !moves.iter().all(|m| m.rotary.is_some_and(f64::is_finite)) {
         return Err("C unwind: a move states no finite C - only a C-stamped path unwinds".into());
+    }
+    let finite = |p: Point3| p.x.is_finite() && p.y.is_finite() && p.z.is_finite();
+    if let Some(i) = moves.iter().position(|m| !(finite(m.from) && finite(m.to))) {
+        return Err(format!("C unwind: move {i} has a non-finite point - refused"));
+    }
+    // The link test reads a move's start as the point the move before
+    // it reached: checked, never assumed.
+    if let Some(i) = (1..moves.len()).find(|&i| {
+        let (a, b) = (moves[i - 1].to, moves[i].from);
+        (a.x - b.x).hypot(a.y - b.y).hypot(a.z - b.z) > CHAIN_TOL
+    }) {
+        return Err(format!("C unwind: move {i} does not start where move {} ended - the path is not a chain", i - 1));
     }
     let radius = |p: Point3| (p.x - center[0]).hypot(p.y - center[1]);
     // The clearance is the path's outermost reach - and counts only
@@ -242,5 +257,25 @@ mod tests {
         assert!(e.contains("no clear link stands inside it"), "{e}");
         let e = unwind_c(&rings(1), [0.0, 0.0], (10.0, -10.0), 0.01).err().unwrap_or_default();
         assert!(e.contains("is not a range"), "{e}");
+    }
+
+    #[test]
+    fn a_non_finite_point_refuses_by_name() {
+        let mut t = rings(2);
+        if let Some(m) = t.moves.get_mut(3) {
+            m.to.y = f64::NAN;
+        }
+        let e = unwind_c(&t, [0.0, 0.0], (-360.0, 360.0), 0.01).err().unwrap_or_default();
+        assert!(e.contains("move 3 has a non-finite point"), "{e}");
+    }
+
+    #[test]
+    fn a_broken_chain_refuses_by_name() {
+        let mut t = rings(2);
+        if let Some(m) = t.moves.get_mut(5) {
+            m.from.z += 0.5;
+        }
+        let e = unwind_c(&t, [0.0, 0.0], (-360.0, 360.0), 0.01).err().unwrap_or_default();
+        assert!(e.contains("move 5 does not start where move 4 ended"), "{e}");
     }
 }

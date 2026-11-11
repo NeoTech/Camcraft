@@ -40,22 +40,67 @@ fn codes() -> LiveToolCodes {
     }
 }
 
-/// A mill-turn whose C states `travel` (None: unstated).
+/// A mill-turn whose C states `travel` (None: unstated), with the
+/// shipped millturn.mch's rates: 4000 mm/min on X/Y/Z, C 6000 deg/min
+/// normal and 12000 rapid.
 fn mill_turn(travel: Option<(f64, f64)>) -> Machine {
+    rated(travel, 4000.0, 6000.0)
+}
+
+/// The same bench with its own linear feed and C rate (deg/min).
+fn rated(travel: Option<(f64, f64)>, feed: f64, c_rate: f64) -> Machine {
     Machine {
         model: "TestBench mill-turn".into(),
         kind: Some("mill-turn".into()),
         spindle_max: Some(6000.0),
         coolants: vec![Coolant { name: "Flood".into(), m_code: "M8".into() }],
         axes: vec![
-            AxisLimits { name: "X".into(), feed: Some(4000.0), ..Default::default() },
-            AxisLimits { name: "Y".into(), feed: Some(4000.0), ..Default::default() },
-            AxisLimits { name: "Z".into(), feed: Some(4000.0), ..Default::default() },
-            AxisLimits { name: "C".into(), rotary: true, axis: Some([0.0, 0.0, 1.0]), travel, ..Default::default() },
+            AxisLimits { name: "X".into(), feed: Some(feed), ..Default::default() },
+            AxisLimits { name: "Y".into(), feed: Some(feed), ..Default::default() },
+            AxisLimits { name: "Z".into(), feed: Some(feed), ..Default::default() },
+            AxisLimits {
+                name: "C".into(),
+                rotary: true,
+                axis: Some([0.0, 0.0, 1.0]),
+                travel,
+                feed: Some(c_rate),
+                rapid: Some(c_rate * 2.0),
+                ..Default::default()
+            },
         ],
         live_tool: Some(codes()),
         ..Default::default()
     }
+}
+
+/// Every C block's axis rates under its composite F, read back from
+/// the posted text: X (diameter) and Z drive at F * lin / lcmd, C at
+/// F * |dC| / lcmd - none may pass what the machine states.
+fn assert_feeds_within(program: &str, feed: f64, c_rate: f64) {
+    let word = |l: &str, k: char| l.split(' ').find_map(|w| w.strip_prefix(k).and_then(|v| v.parse::<f64>().ok()));
+    let mut at: Option<(f64, f64, f64)> = None;
+    let mut blocks = 0;
+    for l in program.lines() {
+        let (x, z, c) = (word(l, 'X'), word(l, 'Z'), word(l, 'C'));
+        if l.starts_with("G01")
+            && let (Some(x), Some(z), Some(c), Some(f), Some((r0, z0, c0))) = (x, z, c, word(l, 'F'), at)
+        {
+            let (dr, dz, dc) = (x / 2.0 - r0, z - z0, c - c0);
+            let lcmd = (dr * dr + dz * dz + dc * dc).sqrt();
+            if lcmd > 1e-9 {
+                let lin = (dr * dr + dz * dz).sqrt();
+                // One decimal of F and three of each word: a hair of slack.
+                assert!(f * lin / lcmd <= feed * 1.001 + 0.1, "linear rate past {feed}: {l}");
+                assert!(f * dc.abs() / lcmd <= c_rate * 1.001 + 0.1, "C rate past {c_rate}: {l}");
+                blocks += 1;
+            }
+        }
+        let prev = at.unwrap_or((0.0, 0.0, 0.0));
+        if x.is_some() || z.is_some() || c.is_some() {
+            at = Some((x.map_or(prev.0, |x| x / 2.0), z.unwrap_or(prev.1), c.unwrap_or(prev.2)));
+        }
+    }
+    assert!(blocks > 0, "the program carries C blocks to judge");
 }
 
 /// The turned bar standing on the spindle: wall r6, shoulder, neck r5
@@ -170,6 +215,7 @@ fn a_rotary_contour_on_a_stated_c_travel_unwinds_at_its_links_and_posts() {
     );
     let out = engine::run(LATHE_CPS, &post::machine::mirror(&mill_turn(Some(travel))), &stream(&path)).expect("runs");
     assert!(out.warnings.is_empty(), "the lathe post voices the unwound section: {:?}", out.warnings);
+    assert_feeds_within(&out.program, 4000.0, 6000.0);
 }
 
 /// The rewind is judged, never assumed: with the clearance plane left
@@ -228,5 +274,25 @@ fn two_rings_unwound_post_to_their_golden() {
     assert!(lo >= -360.0 && hi <= 360.0, "{lo}..{hi}");
     let out = engine::run(LATHE_CPS, &post::machine::mirror(&mill_turn(Some((-360.0, 360.0)))), &stream(&path)).expect("runs");
     assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+    assert_feeds_within(&out.program, 4000.0, 6000.0);
     common::write_golden("nc/fanuc-lathe/c_axis_unwind.nc", &out.program);
+}
+
+/// The feed cap follows the machine file: a slower stated C rate and
+/// linear feed post slower F words, every block within them.
+#[test]
+fn a_lower_stated_rate_posts_a_lower_feed() {
+    let stamped = stamp_c(&two_rings(), [0.0, 0.0], 0.05).expect("stamps");
+    let path = unwind_c(&stamped, [0.0, 0.0], (-360.0, 360.0), 0.05).expect("unwinds");
+    let max_f = |m: &Machine| {
+        let out = engine::run(LATHE_CPS, &post::machine::mirror(m), &stream(&path)).expect("runs");
+        assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+        let f = out.program.lines().filter_map(|l| l.split(' ').find_map(|w| w.strip_prefix('F')?.parse::<f64>().ok())).fold(0.0, f64::max);
+        (f, out.program)
+    };
+    let (fast, _) = max_f(&mill_turn(Some((-360.0, 360.0))));
+    let (slow, text) = max_f(&rated(Some((-360.0, 360.0)), 1000.0, 500.0));
+    assert_feeds_within(&text, 1000.0, 500.0);
+    assert!(slow < fast, "a slower machine posts slower: {slow} vs {fast}");
+    assert!(slow <= 1000.0 + 0.05, "no F past the slower machine's own limits: {slow}");
 }
