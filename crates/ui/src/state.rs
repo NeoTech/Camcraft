@@ -57,6 +57,9 @@ pub use fixture_library::{FixtureLibDialog, InsertFixtureDraft, LibraryRow, Save
 #[path = "state_vise.rs"]
 mod vise_ui;
 pub use vise_ui::{ViseDraft, ViseOpeningDraft};
+#[path = "state_accessory.rs"]
+mod accessory_ui;
+pub use accessory_ui::{AccessoryDraft, AccessorySizeDraft};
 #[path = "state_program_entry.rs"]
 mod program_entry;
 pub use program_entry::EntryVerb;
@@ -464,6 +467,21 @@ pub enum CommandKind {
         name: String,
         params: camcraft_app::vise::ViseParams,
         from_stock: bool,
+    },
+    /// #789: open the "Add accessory…" dialog over a setup's Fixtures
+    /// node (`""` - the implicit setup). View state.
+    AccessoryDialog(String),
+    /// Place built-in accessory `params` into `setup` - one
+    /// `InsertAccessory`.
+    InsertAccessory {
+        setup: Option<String>,
+        params: camcraft_app::accessory::Accessory,
+        placement: camcraft_app::commands::AccessoryPlacement,
+    },
+    /// Resize placed accessory `name` to `params` - one `SetAccessory`.
+    SetAccessory {
+        name: String,
+        params: camcraft_app::accessory::Accessory,
     },
     /// Part orientation (M5.2 G): a model's full rigid placement -
     /// position plus yaw-pitch-roll degrees (R = Rz ⊗ Ry ⊗ Rx, the
@@ -1422,6 +1440,9 @@ pub struct State {
     /// implicit first setup. Public so tests run the dialog hand-off
     /// without a modal file picker.
     pub import_as_fixture: Option<Option<String>>,
+    /// #789: each built-in accessory row's size draft, by name - view
+    /// state; Apply lands it through `SetAccessory`.
+    pub accessory_sizes: HashMap<String, AccessorySizeDraft>,
     /// #339 slice 4: each fixture's mesh state, per document version
     /// (view cache - never truth, never saved).
     pub fixture_mesh_cache: camcraft_app::fixture_view::MeshStateCache,
@@ -1729,6 +1750,7 @@ impl State {
             repair_ui: RepairUi::default(),
             pocket_scan: PocketScan::default(),
             import_as_fixture: None,
+            accessory_sizes: HashMap::new(),
             fixture_mesh_cache: Default::default(),
             fixture_lib: None,
             fixture_lib_dir: None,
@@ -3455,6 +3477,11 @@ impl State {
                 self.insert_fixture_from_library(&entry, setup, pos, rpy_deg);
             }
             CommandKind::BuiltinViseDialog(setup) => self.open_vise_dialog(setup),
+            CommandKind::AccessoryDialog(setup) => self.open_accessory_dialog(setup),
+            CommandKind::InsertAccessory { setup, params, placement } => {
+                self.insert_accessory(setup, &params, placement);
+            }
+            CommandKind::SetAccessory { name, params } => self.set_accessory(&name, params),
             CommandKind::InsertBuiltinVise { setup, params, fit_stock, pos, yaw_deg } => {
                 self.insert_builtin_vise(setup, &params, fit_stock, pos, yaw_deg);
             }

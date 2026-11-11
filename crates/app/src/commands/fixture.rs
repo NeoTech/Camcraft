@@ -105,6 +105,7 @@ impl TagFixture {
                 // A re-bind keeps a built-in vise's parameters too: its
                 // geometry is unchanged.
                 vise: prev.as_ref().and_then(|d| d.vise.clone()),
+                accessory: prev.as_ref().and_then(|d| d.accessory.clone()),
             },
             prev,
         })

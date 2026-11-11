@@ -813,6 +813,7 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
                 setup: f.setup.clone(),
                 fixed: f.fixed,
                 vise: f.vise.as_ref().and_then(|v| v.to_params(&dto.name)),
+                accessory: f.accessory.as_ref().and_then(|a| crate::accessory::checked_on_load(a, &dto.name)),
             });
         }
     }

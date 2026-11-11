@@ -368,6 +368,9 @@ pub struct FixtureDto {
     /// A built-in vise's parameters (#788); absent - plain steel.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub vise: Option<super::vise_dto::ViseDto>,
+    /// A built-in accessory's kind and dimensions (#789); absent - not one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accessory: Option<crate::accessory::Accessory>,
 }
 
 /// An operation as files hold it: definition, the stamp the last generate

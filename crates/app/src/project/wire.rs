@@ -95,6 +95,7 @@ pub fn collect(world: &World) -> ProjectFile {
                     setup: d.setup.clone(),
                     fixed: d.fixed,
                     vise: d.vise.as_ref().map(super::ViseDto::from_params),
+                    accessory: d.accessory.clone(),
                 });
             let operation = model::operation_of(world, &entity).map(|op| OperationDto {
                 label: model::operation_meta_of(world, &entity).label,
