@@ -598,7 +598,7 @@ worktrees. `cargo xtask gate` sets `RUSTC_WRAPPER=sccache` and
 `SCCACHE_CACHE_SIZE=20G` for its cargo calls when `sccache` is on PATH (an
 existing `RUSTC_WRAPPER`, or `CAMCRAFT_NO_SCCACHE=1`, wins); a machine without
 it builds as before, and release packaging never uses it. For plain `cargo`
-set `RUSTC_WRAPPER=sccache` in the shell. The cache lives in the sccache
+set `RUSTC_WRAPPER=sccache` only when `sccache` is on PATH (cargo fails if the wrapper is missing), and never export `CARGO_TARGET_DIR`; `cargo xtask release` clears any wrapper for the packaging build. The cache lives in the sccache
 default dir (Windows `%LOCALAPPDATA%\Mozilla\sccache\cache`, Linux
 `~/.cache/sccache`; `SCCACHE_DIR` moves it). Hits need each worktree's default
 `target/`: sccache hashes `CARGO_*` env vars, so a `CARGO_TARGET_DIR` env var

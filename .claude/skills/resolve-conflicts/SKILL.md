@@ -29,6 +29,7 @@ fork, `upstream` is NeoTech/Camcraft and `origin` is the fork).
   the hashes reviews and comments refer to).
 - Never build in the main checkout. Work in a worktree under
   `.claude/worktrees/` with its own `target/` (the worktree default, no `CARGO_TARGET_DIR` env var - it defeats the shared compile cache); remove both when done.
+- Build cache: Prefer `cargo xtask gate ...` (it turns the compile cache on); for a direct cargo call set `RUSTC_WRAPPER=sccache` only when `sccache` is on PATH (cargo fails if the wrapper is missing), and never export `CARGO_TARGET_DIR`.
 - A PR flagged ready and labelled `merge-ready` takes no pushes (AGENTS.md
   "Every PR opens as a draft"). A conflicting PR has already lost
   `merge-ready` (the label is `conflicts`), so pushing a merge to it is
