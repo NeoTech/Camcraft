@@ -96,6 +96,8 @@ pub mod tool_body;
 pub mod tool_body_view;
 // #369: lathe-held tool bodies (the turning tool frame).
 pub mod tool_body_lathe;
+// #743: the simulated tool as the collision laws read it, revolved.
+pub mod sim_tool_body;
 pub mod units;
 pub use camcraft_sim::verify;
 // #261: the moves a cached path's warnings name.
