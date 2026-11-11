@@ -55,6 +55,17 @@ impl SdfField {
         }
     }
 
+    /// `up_at`'s mirror (#637 E2b): the distance from the cell's CENTER
+    /// DOWN to the first point the vertical ray is proven inside a
+    /// swept solid below - a flipped bake's `cut_ups` records moved
+    /// whole (`field_turn`), read by `march_up`. NaN where none.
+    pub(crate) fn down_at(&self, key: [i32; 3]) -> f64 {
+        match self.cut_downs.get(&super::field::brick_of(key)) {
+            Some(b) => b[super::field::in_brick(key)],
+            None => f64::NAN,
+        }
+    }
+
     /// Record one proven entry, keeping the LOWEST (the union law).
     pub(crate) fn up_record(&mut self, key: [i32; 3], u: f64) {
         let slot = &mut self

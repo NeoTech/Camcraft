@@ -24,10 +24,16 @@
 //!   column, then reads the surface from there: at the ray-entry
 //!   distance the cut layer proves (`field_ray` - a conservative
 //!   lower bound, so flanks and grooves answer at their own tilted
-//!   geometry), or, where no solid ever meets the ray, at the cell
-//!   boundary where the stored sign flipped (the mesh's planes,
-//!   exact). The residue is sub-cell solver error, stated as the
-//!   parity suite's tolerances, never as a silent agreement.
+//!   geometry), or at the shell's own crossing inside that cell (the
+//!   cached parity column, exact to rounding for ANY plane, aligned
+//!   with the lattice or not - #637 E2b; until then the cell boundary
+//!   stood in, exact only for a lattice-aligned plane), the lower of
+//!   the two where both bind. The residue is sub-cell solver error,
+//!   stated as the parity suite's tolerances, never as a silent
+//!   agreement. A sign flip with neither a crossing nor a record is
+//!   a surface the field cannot place: `Unreadable`, never the
+//!   boundary as a guess (a flipped bounded tool's bottom face).
+//!   `march_up` is this descent's mirror, reading the floor.
 //! - **A march that cannot finish says so.** The step budget and the
 //!   stall floor turn into `Unreadable`, whose verdict is NaN - the
 //!   no-verdict value the column engine already uses for air, never a
@@ -57,17 +63,17 @@ pub(crate) enum Read {
 
 /// Descent budget: from the world ceiling, cap-sized steps finish a
 /// sane column in dozens; 4096 says the field cannot answer.
-const MAX_MARCH_STEPS: u32 = 4096;
+pub(crate) const MAX_MARCH_STEPS: u32 = 4096;
 
 /// Stall floor, in cells: below it the probe already stands at the
 /// surface's own threshold, so the step keeps its size and the
 /// bracket walk takes the verdict from there.
-const STEP_MIN: f64 = 1.0 / 64.0;
+pub(crate) const STEP_MIN: f64 = 1.0 / 64.0;
 
 /// Bracket-walk budget: a column's centers, plus slack: the walk
 /// ends at the first adjacent material/air pair, so this only bounds
 /// pathological non-monotone columns.
-const BRACKET_WALK: u32 = 8192;
+pub(crate) const BRACKET_WALK: u32 = 8192;
 
 /// The world the march runs in: one band above and below the shell,
 /// so every probe's magnitude is answerable from inside it.
@@ -119,7 +125,7 @@ pub(crate) fn lattice_of(f: &SdfField) -> Result<Lattice, StockError> {
 /// the column's crossings cached - the sign exact, the magnitude only
 /// a bound (the laws above). `cuts` false walks the stock BEFORE any
 /// cut, which is how a report says what the program removed.
-fn probe(f: &SdfField, cx: &Option<Vec<f64>>, x: f64, y: f64, z: f64, cuts: bool) -> f64 {
+pub(crate) fn probe(f: &SdfField, cx: &Option<Vec<f64>>, x: f64, y: f64, z: f64, cuts: bool) -> f64 {
     let cell = f.cell();
     let key = [cell_of(x, cell), cell_of(y, cell), cell_of(z, cell)];
     let mesh = signed(f.mag_at(key), SdfField::parity_of(cx, z));
@@ -130,64 +136,81 @@ fn probe(f: &SdfField, cx: &Option<Vec<f64>>, x: f64, y: f64, z: f64, cuts: bool
     }
 }
 
+/// The shell's surface inside a bracket: the cached column's crossings
+/// in `(lo, hi]` - the highest for a top read (`top`), the lowest for a
+/// floor read - `None` where the parity never flips there. Exact to
+/// rounding for any plane, lattice-aligned or not (#637 E2b).
+pub(crate) fn shell_in(cx: &Option<Vec<f64>>, lo: f64, hi: f64, top: bool) -> Option<f64> {
+    let it = cx.as_ref()?.iter().copied().filter(|z| z.is_finite() && *z > lo && *z <= hi);
+    if top { it.reduce(f64::max) } else { it.reduce(f64::min) }
+}
+
+/// The surface between a material center `cm` and the air center
+/// beside it, from the cut layer's entry (`cm + entry` when the ray
+/// meets a solid inside this cell: `cut_ups` for a top read, `cut_downs`
+/// for a floor read) and the shell's crossing in the bracket: the
+/// material's own end is the nearer of the two to `cm` (`min` for a
+/// top, `max` for a floor). Neither on record: `None` - the field
+/// cannot place that surface, and it never guesses the boundary.
+pub(crate) fn face(entry: Option<f64>, shell: Option<f64>, top: bool) -> Option<f64> {
+    match (entry, shell) {
+        (Some(e), Some(s)) => Some(if top { e.min(s) } else { e.max(s) }),
+        (Some(v), None) | (None, Some(v)) => Some(v),
+        (None, None) => None,
+    }
+}
+
 /// The bracket's surface, from a material point below an air one:
 /// `mat`'s own cell center certifies material (a probe's sign IS its
 /// center's - the values are per cell), and the walk climbs to the
-/// TOPMOST material center. Its height is read two ways:
+/// TOPMOST material center. Its height is read two ways, the lower
+/// binding where both do (`face`):
 ///
 /// - where the cut layer's ray-entry companion proves the vertical
-///   ray MEETS a swept solid inside this cell, that entry IS the
+///   ray MEETS a swept solid inside this cell, that entry is the
 ///   surface (conservative to below - `field_ray`'s direction), and
 ///   tilted flanks and curved grooves answer at their own geometry,
 ///   not at the lattice's convenience;
-/// - otherwise the surface is the cell boundary where the stored
-///   sign flipped - the mesh's own surface, exact for every plane
-///   the lattice straddles: floors, rims, the stock's top.
+/// - where the shell crosses the bracket, that crossing is the mesh's
+///   own surface, exact for every plane (#637 E2b).
 ///
 /// A column never reports above its air center, so the estimate sits
 /// inside the proven bracket; the residue is sub-cell solver error
 /// (golden section and bisection floors), stated as the parity
-/// suite's small tolerances, never as a silent agreement.
-fn refine(f: &SdfField, cx: &Option<Vec<f64>>, x: f64, y: f64, mat: f64, air: f64, cuts: bool) -> f64 {
+/// suite's small tolerances, never as a silent agreement. `None`: the
+/// sign flipped with neither a crossing nor a record - no verdict.
+fn refine(f: &SdfField, cx: &Option<Vec<f64>>, x: f64, y: f64, mat: f64, air: f64, cuts: bool) -> Option<f64> {
     let cell = f.cell();
     let (ix, iy) = (cell_of(x, cell), cell_of(y, cell));
     for j in (cell_of(mat, cell)..).take(BRACKET_WALK as usize) {
         let cm = center_of(j, cell);
         let pm = probe(f, cx, x, y, cm, cuts);
         if !pm.is_finite() || pm >= 0.0 {
-            return air; // the probe's promise broke: no verdict, not a film
+            return Some(air); // the probe's promise broke: no verdict, not a film
         }
-        let ca = center_of(j + 1, cell);
+        let ca = center_of(j.saturating_add(1), cell);
         let pa = probe(f, cx, x, y, ca, cuts);
         if pa.is_nan() {
-            return air;
+            return Some(air);
         }
         if pa >= 0.0 {
             // The uncut walk (mesh only) has no ray to enter; the cut
             // walk answers at the entry when this cell's ray met a
-            // solid inside it, at the boundary otherwise.
-            let mut lift = 0.5 * cell;
-            if cuts {
+            // solid inside it. An entry ABOVE the mesh's own crossing
+            // (M13.1: a curved tool bottom grazing the stock top from
+            // above) is air already: the crossing binds, as the
+            // column's `min(top, cut)` does.
+            let entry = if cuts {
                 let u = f.up_at([ix, iy, j]);
-                if u.is_finite() && u < cell {
-                    lift = u.max(0.0);
-                    // An entry ABOVE the mesh's own flip (M13.1: a
-                    // curved tool bottom grazing the stock top from
-                    // above) is air already - when the uncut stock
-                    // itself says air at the next center, its
-                    // boundary binds, as the column's `min(top, cut)`
-                    // does. Where the mesh is still material above,
-                    // only the cut opened the column: the entry stands.
-                    if u > 0.5 * cell && probe(f, cx, x, y, ca, false) >= 0.0 {
-                        lift = 0.5 * cell;
-                    }
-                }
-            }
-            return cm + lift;
+                (u.is_finite() && u >= 0.0 && u < cell).then_some(cm + u)
+            } else {
+                None
+            };
+            return face(entry, shell_in(cx, cm, ca, true), true);
         }
         // else: the surface stands above this cell's center - climb.
     }
-    air
+    Some(air)
 }
 
 /// Sphere-trace down `(x, y)` from `z_hi` until the steel's top (or a
@@ -213,7 +236,7 @@ pub(crate) fn march(
             return Read::Unreadable; // a field that cannot say how far
         }
         if phi < 0.0 {
-            return Read::Top(refine(f, cx, x, y, z, air, cuts));
+            return refine(f, cx, x, y, z, air, cuts).map_or(Read::Unreadable, Read::Top);
         }
         if phi == 0.0 {
             return Read::Top(z); // the probe landed ON the surface
@@ -223,7 +246,7 @@ pub(crate) fn march(
             // has no steel to offer and the march has no world left.
             let p = probe(f, cx, x, y, z_lo, cuts);
             return if p < 0.0 {
-                Read::Top(refine(f, cx, x, y, z_lo, air.max(z), cuts))
+                refine(f, cx, x, y, z_lo, air.max(z), cuts).map_or(Read::Unreadable, Read::Top)
             } else if p == 0.0 {
                 Read::Top(z_lo)
             } else {

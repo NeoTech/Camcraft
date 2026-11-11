@@ -92,6 +92,7 @@ mod gouge;
 mod hermite;
 mod kernel;
 mod march;
+mod march_up;
 mod march_verdicts;
 mod qef;
 pub mod iso;
