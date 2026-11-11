@@ -55,6 +55,17 @@ pub(super) fn contours(loops: &[Loop], chains: &[Vec<Point2>], part: &Region) ->
                 "picked contour {n} has no area (a zero-length or collinear ring) - there is nothing to cut around"
             )));
         };
+        // #801: the region keeps the picked contour's AREA, so a
+        // zero-width spike or slit (out along a line and straight back)
+        // falls out of it silently. A plasma contour is a cut path, not
+        // only an area: a picked vertex the ring no longer reaches is
+        // refused by name, never cut as the plain outline.
+        if let Some(q) = dropped_vertex(l.points(), ring.points()) {
+            return Err(invalid(format!(
+                "picked contour {n} has a picked point the contour no longer reaches, X{:.3} Y{:.3} - a zero-width slit or spike encloses no area, so its kerf would never cut it; pick it as an open run",
+                q.x, q.y
+            )));
+        }
         let area = ring.area().abs();
         if !(area.is_finite() && area > MIN_AREA) {
             return Err(invalid(format!(
@@ -115,6 +126,18 @@ pub(super) fn contours(loops: &[Loop], chains: &[Vec<Point2>], part: &Region) ->
         out[k].role = if inner { ContourRole::Inner } else { ContourRole::Outer };
     }
     Ok(out)
+}
+
+/// How far (mm) a picked vertex may stand from the normalised ring and
+/// still be on it: the region's 1 µm lattice, with room to spare.
+const ON_RING: f64 = 1e-3;
+
+/// The first picked vertex farther than [`ON_RING`] from every edge of
+/// the ring the region kept, or `None` when the ring still reaches them
+/// all (a dropped collinear vertex lies on an edge and is no loss).
+fn dropped_vertex(picked: &[Point2], ring: &[Point2]) -> Option<Point2> {
+    let n = ring.len();
+    picked.iter().copied().find(|q| (0..n).all(|k| super::laws::pt_seg(*q, ring[k], ring[(k + 1) % n]) > ON_RING))
 }
 
 /// An open run, deduplicated and checked: at least one segment of real

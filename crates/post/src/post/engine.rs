@@ -254,7 +254,20 @@ pub fn run_numbered_with(
                 pos = (m.x, m.y, m.z);
             }
             Record::Cycle(c) => {
-                s.set_properties(&merged(&base, &c.props(), pos))?;
+                if c.kind == crate::cl::CycleKind::FloatingTap && !s.voices_floating_tapping() {
+                    let op = base.get("OperationName").and_then(Value::as_str).unwrap_or("");
+                    warnings.push(format!("operation {op}: floating-holder tapping is not supported by this post (floatingTapping is not declared)"));
+                }
+                let chain: Vec<_> = records[i + 1..].iter()
+                    .take_while(|r| !matches!(r, Record::Cycle(_) | Record::Section { begin: false }))
+                    .filter_map(|r| match r {
+                        Record::Move(m) if m.kind != MoveKind::Rapid => Some(m),
+                        _ => None,
+                    }).collect();
+                let mut props = c.props();
+                props.insert("ChainFeedRate".into(), json!(chain.first().and_then(|m| m.feed)));
+                props.insert("ChainBottomZ".into(), json!(chain.iter().map(|m| m.z).reduce(f64::min)));
+                s.set_properties(&merged(&base, &props, pos))?;
                 s.set_current(pos.0, pos.1, pos.2)?;
                 if is_false(&s.call("onCommand", &json!("Drilling").to_string())?) {
                     swallowed += 1;

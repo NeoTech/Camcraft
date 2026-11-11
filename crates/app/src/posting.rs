@@ -37,18 +37,20 @@ pub const BUILTINS: &[(&str, &str)] = &[
     ("Heidenhain", include_str!("../../../assets/posts/heidenhain.cps")),
     ("Mazak", include_str!("../../../assets/posts/mazak.cps")),
     ("Tormach PathPilot", include_str!("../../../assets/posts/tormach.cps")),
+    ("Doosan DNM", include_str!("../../../assets/posts/doosan-dnm.cps")),
     ("Makera Carvera", include_str!("../../../assets/posts/carvera.cps")),
     ("Fanuc Lathe", include_str!("../../../assets/posts/fanuc-lathe.cps")),
     // #671: the plasma dialect, from UM10720 §6-7 and the PathPilot
     // post guidelines; it serves plasma tables only (`PLASMA_POSTS`).
     ("Tormach PathPilot Plasma", include_str!("../../../assets/posts/tormach-plasma.cps")),
+    ("Tormach PathPilot Lathe", include_str!("../../../assets/posts/tormach-lathe.cps")),
 ];
 
 /// The registry entries that speak TURNING (M13.5): X as a diameter
 /// on one meridian, G18, G99, the face cycles. Everything else in
 /// `BUILTINS` is a milling dialect. The picker filters by the mounted
 /// machine's kind through [`post_serves`]; a mill-turn lists both.
-pub const LATHE_POSTS: &[&str] = &["Fanuc Lathe"];
+pub const LATHE_POSTS: &[&str] = &["Fanuc Lathe", "Tormach PathPilot Lathe"];
 
 /// The registry entries that speak PLASMA (#669): the torch words, no
 /// spindle and no Z depth. #671 ships the PathPilot plasma post for the
@@ -154,6 +156,8 @@ pub const MACHINES: &[(&str, &str)] = &[
     ("Tormach 770MX", include_str!("../../../assets/machines/tormach-770mx.mch")),
     // #170: the other Tormach mills, each from its own operator's manual.
     ("Tormach 770MX (ML)", include_str!("../../../assets/machines/tormach-770mx-ml.mch")),
+    // #785: the 770MX with Tormach's microARC 4 (TD10749) as an A about X.
+    ("Tormach 770MX + microARC 4", include_str!("../../../assets/machines/tormach-770mx-microarc4.mch")),
     ("Tormach 770M", include_str!("../../../assets/machines/tormach-770m.mch")),
     ("Tormach 1100MX", include_str!("../../../assets/machines/tormach-1100mx.mch")),
     ("Tormach 1500MX", include_str!("../../../assets/machines/tormach-1500mx.mch")),
@@ -183,6 +187,8 @@ pub const MACHINES: &[(&str, &str)] = &[
     // #707: Makera's desktop mills, from Makera's product spec tables.
     ("Makera Carvera", include_str!("../../../assets/machines/makera-carvera.mch")),
     ("Makera Carvera Air", include_str!("../../../assets/machines/makera-carvera-air.mch")),
+    // #614: Doosan DNM 5700 VMC (Fanuc 0i-MF).
+    ("Doosan DNM 5700", include_str!("../../../assets/machines/doosan-dnm.mch")),
 ];
 
 /// The mount path a built-in library entry records (stage C): the
@@ -370,6 +376,9 @@ pub struct Posted {
 
 #[path = "posting_sim.rs"]
 mod sim_clause_impl;
+#[path = "posting_plasma.rs"]
+mod plasma_clause_impl;
+pub use plasma_clause_impl::{plasma_clause, PlasmaClause, PLASMA_VERDICT};
 #[path = "posting_per_op.rs"]
 mod per_op;
 #[path = "posting_suppressed.rs"]
@@ -382,6 +391,8 @@ mod wcs_slot;
 mod mounts;
 #[path = "posting_nose.rs"]
 pub mod nose;
+#[path = "posting_index_swing.rs"]
+pub mod index_swing;
 pub(crate) use wcs_rotation::{offset_frame, OffsetFrame};
 pub use mounts::{
     machine_checks, machine_value_for, machine_value_of, post_mounts, post_mounts_script, post_of_setup, PostedMount,
@@ -616,6 +627,12 @@ pub fn verification_report(world: &World) -> GateReport {
 
     let sim = sim_clause(world);
     problems.extend(sim.problem);
+    // The plasma clause (#672): the 3D stock sim carves nothing for a
+    // torch, so a plasma op's verdict is the 2D through-cut laws, run
+    // here - a refusal blocks, and the not-judged line says the sim did
+    // not run for it, never a silent skip.
+    let plasma = plasma_clause(world);
+    problems.extend(plasma.problems);
 
     // The suppression clause (#110 review B1): an op generated against
     // a suppressed op's cut refuses by name - the cut it assumed is not
@@ -634,6 +651,9 @@ pub fn verification_report(world: &World) -> GateReport {
     // The limit check (M2.3 D), each op against the machine its own
     // setup mounts (#388): one block per machine, the program's order.
     problems.extend(mounts::machine_problems(world));
+    // #804: before a work-turning A indexes, the retracted tool tip
+    // clears what the stock, parts and turning fixtures sweep about it.
+    problems.extend(index_swing::index_swing_problems(world));
 
     // The workholding clause (M3.2 B, live-gate law): the same fixture
     // bands and rapid laws generation reports early, re-run HERE against
@@ -656,7 +676,12 @@ pub fn verification_report(world: &World) -> GateReport {
     // what came after it). The law and lines live in
     // `operation::probe_problems`.
     problems.extend(crate::operation::probe_problems(world));
-    GateReport { problems, not_judged: sim.not_judged }
+    let not_judged = match (sim.not_judged, plasma.line) {
+        (Some(s), Some(p)) => Some(format!("{s}; {p}")),
+        (None, Some(p)) => Some(format!("{NOT_JUDGED}: {p}")),
+        (s, None) => s,
+    };
+    GateReport { problems, not_judged }
 }
 
 /// The gate's fixture walk: one problem string per operation with a
@@ -972,6 +997,13 @@ impl HeightRefs for OpParams {
                 ..
             }
             | OpParams::Slot {
+                clearance_z,
+                retract_z,
+                top_z,
+                bottom_z,
+                ..
+            }
+            | OpParams::TrochoidalSlot {
                 clearance_z,
                 retract_z,
                 top_z,
