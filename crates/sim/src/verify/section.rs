@@ -11,6 +11,15 @@ use crate::geo2d::Point2;
 /// operation layer's containment step.
 const SOLID_STEP: f64 = 0.25;
 
+/// The share of the gouge tolerance an arc move is read to by this law
+/// (#689). The law reads an arc by its inscribed chords: at the full
+/// tolerance those stand up to `tol` off the arc the machine cuts -
+/// toward the centre, so a nominal arc round a convex wall read as a
+/// gouge, and away from it, so an arc bowing into a concave wall hid up
+/// to `tol` of real gouge. A quarter keeps the reading's own error to a
+/// quarter of the verdict both ways; the verdict itself is unchanged.
+const ARC_READ_SHARE: f64 = 0.25;
+
 /// Whether laws (b) and (b2) speak in `mode`.
 ///
 /// Mode::Envelope stands this law down by design: a waterline ring
@@ -188,8 +197,23 @@ fn edges(r: &crate::geo2d::Region) -> impl Iterator<Item = (Point2, Point2)> + '
 /// not standing, so a ramp that crosses the wall line in the air on its
 /// way down into the pocket is not a gouge. A move entirely above
 /// `wall_top` keeps the law points.
+///
+/// Arcs are read at [`ARC_READ_SHARE`] of `chord_tol`. The law points
+/// are the UNION of the joints at both tolerances (#689 review B1): the
+/// two joint sets are not nested (3 chords at `tol` become 5 at
+/// `tol / 4`), so the fine set alone can step over a sharp wall vertex
+/// an old joint stood on. Points on the arc never read closer than the
+/// truth, so the union adds no false gouge and keeps every old one.
 fn segments(m: &Move, mode: Mode, chord_tol: f64, wall_top: f64) -> Vec<(Point2, Point2)> {
-    let points = || law_points(m, chord_tol).into_iter().map(|p| (p, p)).collect();
+    let fine = chord_tol * ARC_READ_SHARE;
+    let points = || {
+        let mut v = law_points(m, fine);
+        if m.arc.is_some() {
+            v.extend(law_points(m, chord_tol));
+        }
+        v.into_iter().map(|p| (p, p)).collect()
+    };
+    let chord_tol = fine;
     if mode != Mode::Area {
         return points();
     }
