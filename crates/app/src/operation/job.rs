@@ -109,6 +109,10 @@ pub struct GenJob {
     /// the path once it exists (`carried_stock::Overhang::note`) - the post
     /// gate refuses when a feed move reaches it.
     pub(super) carried_overhang: Option<super::carried_stock::Overhang>,
+    /// #740: the document's display unit, read off the world here where
+    /// it can be. The drill-reach refusals run on worker threads with
+    /// no World to read, so they spell their depths through this lens.
+    pub(super) unit: crate::units::Unit,
 }
 
 /// The tripwire phrase for a stored precompute whose arm never collected
@@ -347,6 +351,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         wcs_origin,
         spindle_note,
         carried_overhang,
+        unit: crate::units::of(world),
     })
 }
 

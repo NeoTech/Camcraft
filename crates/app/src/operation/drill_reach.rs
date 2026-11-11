@@ -36,6 +36,7 @@ use crate::geo2d::Point2;
 use crate::geometry::{Point3, Triangle};
 use crate::machining2d::GenError;
 use crate::tools::Tool;
+use crate::units::{self, Unit};
 
 #[path = "drill_station.rs"]
 mod station;
@@ -67,11 +68,17 @@ fn holder(tool: &Tool, name: &str) -> Result<Option<(f64, f64)>, GenError> {
 }
 
 /// `at` is the hole's mouth, the spot the refusal marks (#677).
-fn too_deep(what: &str, at: Point3, depth: f64, name: &str, flute: f64, fix: &str) -> GenError {
+/// `unit` spells the depths in the document's unit (#740); the refusal
+/// runs on a worker thread with no World to read.
+fn too_deep(what: &str, at: Point3, depth: f64, name: &str, flute: f64, fix: &str, unit: Unit) -> GenError {
     GenError::invalid_at(
         format!(
-            "{what} is {depth:.3} mm deep from the stock surface; tool {name}'s flute reaches {flute:.3} mm - \
-             past it the shank feeds into uncut stock (a collision); {fix}"
+            "{what} is {} {} deep from the stock surface; tool {name}'s flute reaches {} {} - \
+             past it the shank feeds into uncut stock (a collision); {fix}",
+            units::len(depth, unit, 3),
+            unit.suffix(),
+            units::len(flute, unit, 3),
+            unit.suffix()
         ),
         at,
     )
@@ -91,6 +98,7 @@ pub(super) fn cross_reach(
     cycle: CycleChoice,
     tool: &Tool,
     name: &str,
+    unit: Unit,
 ) -> Result<(), GenError> {
     let flute = finite_or_zero(tool.flute_len);
     for (i, (h, w)) in local.iter().zip(world).enumerate() {
@@ -100,12 +108,18 @@ pub(super) fn cross_reach(
         if depth.is_nan() || depth > flute + TOL {
             let o = w.origin;
             return Err(too_deep(
-                &format!("cross hole {i} at ({:.3}, {:.3}, {:.3})", o.x, o.y, o.z),
+                &format!(
+                    "cross hole {i} at ({}, {}, {})",
+                    units::len(o.x, unit, 3),
+                    units::len(o.y, unit, 3),
+                    units::len(o.z, unit, 3)
+                ),
                 o,
                 depth,
                 name,
                 flute,
                 "drill it with a longer drill, or turn the bar to size first",
+                unit,
             ));
         }
     }
@@ -133,6 +147,7 @@ fn seg_dist(p: (f64, f64), q: (f64, f64)) -> f64 {
 /// higher than its highest covered cell ([`prior_surface`]); `None`,
 /// or a disk it cannot read, is the raw stock; a lathe's axial hole
 /// reads it revolved about the axis ([`super::drill_prior::PriorRead`]).
+#[allow(clippy::too_many_arguments)] // the law's inputs + the document's unit lens (#740)
 pub(super) fn axial_reach(
     t: &Toolpath,
     holes: &[Hole],
@@ -141,6 +156,7 @@ pub(super) fn axial_reach(
     prior: Option<super::drill_prior::PriorRead<'_>>,
     tool: &Tool,
     name: &str,
+    unit: Unit,
 ) -> Result<(), GenError> {
     // No stock (or the stock is the source): the part alone is the
     // material - every law below reads the part too (#91 review).
@@ -157,15 +173,16 @@ pub(super) fn axial_reach(
         let top = top_over(part, stock, xy.x, xy.y, body, pb).unwrap_or(entry).max(entry.min(r_z));
         let depth = top - bottom_z;
         if matches!(c.kind, CycleKind::Tap | CycleKind::Bore | CycleKind::BackBore) {
-            shank_fits(c, holes, top, depth, flute, tool, name)?;
+            shank_fits(c, holes, top, depth, flute, tool, name, unit)?;
         } else if depth.is_nan() || depth > flute + TOL {
             return Err(too_deep(
-                &format!("hole at ({:.3}, {:.3})", xy.x, xy.y),
+                &format!("hole at ({}, {})", units::len(xy.x, unit, 3), units::len(xy.y, unit, 3)),
                 Point3::new(xy.x, xy.y, top),
                 depth,
                 name,
                 flute,
                 "drill it with a longer drill, or in stages from both sides",
+                unit,
             ));
         }
         if let Some((reach, hr)) = holder(tool, name)? {
@@ -173,12 +190,16 @@ pub(super) fn axial_reach(
             if let Some(ht) = top_over(part, stock, xy.x, xy.y, hr, prior_at(hr)).filter(|&z| face < z - TOL) {
                 return Err(GenError::invalid_at(
                     format!(
-                        "tool {name}'s holder (dia. {:.3}, {reach:.3} mm above the tip) sinks to Z {face:.3} at the \
-                         hole at ({:.3}, {:.3}), below the material top {ht:.3} around it - the holder feeds into \
+                        "tool {name}'s holder (dia. {}, {} {} above the tip) sinks to Z {} at the \
+                         hole at ({}, {}), below the material top {} around it - the holder feeds into \
                          the stock (a collision); use a longer tool or a slimmer holder",
-                        2.0 * hr,
-                        xy.x,
-                        xy.y
+                        units::len(2.0 * hr, unit, 3),
+                        units::len(reach, unit, 3),
+                        unit.suffix(),
+                        units::len(face, unit, 3),
+                        units::len(xy.x, unit, 3),
+                        units::len(xy.y, unit, 3),
+                        units::len(ht, unit, 3)
                     ),
                     Point3::new(xy.x, xy.y, top),
                 ));
@@ -192,7 +213,17 @@ pub(super) fn axial_reach(
 /// only the cutting end is in the hole; past it the shank (the only
 /// body between flutes and holder) must fit the hole's diameter, or it
 /// is refused by name.
-fn shank_fits(c: &Cycle, holes: &[Hole], top: f64, depth: f64, flute: f64, tool: &Tool, name: &str) -> Result<(), GenError> {
+#[allow(clippy::too_many_arguments)] // the law's inputs + the document's unit lens (#740)
+fn shank_fits(
+    c: &Cycle,
+    holes: &[Hole],
+    top: f64,
+    depth: f64,
+    flute: f64,
+    tool: &Tool,
+    name: &str,
+    unit: Unit,
+) -> Result<(), GenError> {
     if depth.is_finite() && depth <= flute + TOL {
         return Ok(());
     }
@@ -203,13 +234,18 @@ fn shank_fits(c: &Cycle, holes: &[Hole], top: f64, depth: f64, flute: f64, tool:
         Some(hd) if depth.is_finite() && shank_d.is_finite() && shank_d <= hd + TOL => Ok(()),
         _ => Err(GenError::invalid_at(
             format!(
-                "{:?} cycle at ({:.3}, {:.3}) is {depth:.3} mm deep from the stock surface, past tool {name}'s \
-                 {flute:.3} mm flute, and its shank dia. {shank_d:.3} does not fit the dia. {} hole - the shank \
+                "{:?} cycle at ({}, {}) is {} {} deep from the stock surface, past tool {name}'s \
+                 {} {} flute, and its shank dia. {} does not fit the dia. {} hole - the shank \
                  feeds into the wall (a collision); use a tool with a longer flute or a slimmer shank",
                 c.kind,
-                c.xy.x,
-                c.xy.y,
-                hole_d.map_or_else(|| "(unknown)".to_string(), |d| format!("{d:.3}"))
+                units::len(c.xy.x, unit, 3),
+                units::len(c.xy.y, unit, 3),
+                units::len(depth, unit, 3),
+                unit.suffix(),
+                units::len(flute, unit, 3),
+                unit.suffix(),
+                units::len(shank_d, unit, 3),
+                hole_d.map_or_else(|| "(unknown)".to_string(), |d| units::len(d, unit, 3))
             ),
             Point3::new(c.xy.x, c.xy.y, top),
         )),
@@ -269,6 +305,7 @@ pub(super) fn cross_holder(
     origin: (f64, f64),
     tool: &Tool,
     name: &str,
+    unit: Unit,
 ) -> Result<(), GenError> {
     let Some((reach, hr)) = holder(tool, name)? else { return Ok(()) };
     let hl = finite_or_zero(tool.holder_len);
@@ -290,11 +327,19 @@ pub(super) fn cross_holder(
             if face.is_nan() || need.is_nan() || face < need - TOL {
                 let (zl, zh) = (tube.line.z - tube.hz, tube.line.z + tube.hz);
                 return Err(GenError::Invalid(format!(
-                    "cross-drill move {i}: tool {name}'s holder (dia. {:.3}, {reach:.3} mm behind the tip) stands \
-                     {face:.3} mm out along its hole's line, inside material {need:.3} mm out on that line at Z \
-                     {zl:.3} to {zh:.3} - the holder feeds into the stock or part (a collision); use a tool with a \
+                    "cross-drill move {i}: tool {name}'s holder (dia. {}, {} {} behind the tip) stands \
+                     {} {} out along its hole's line, inside material {} {} out on that line at Z \
+                     {} to {} - the holder feeds into the stock or part (a collision); use a tool with a \
                      longer reach, or turn or face the material back first",
-                    2.0 * hr
+                    units::len(2.0 * hr, unit, 3),
+                    units::len(reach, unit, 3),
+                    unit.suffix(),
+                    units::len(face, unit, 3),
+                    unit.suffix(),
+                    units::len(need, unit, 3),
+                    unit.suffix(),
+                    units::len(zl, unit, 3),
+                    units::len(zh, unit, 3)
                 )));
             }
             continue;
@@ -304,11 +349,18 @@ pub(super) fn cross_holder(
         let got = holder_approach(m.from, m.to, axis, reach, hl, hr);
         if got.is_nan() || got < wide - TOL {
             return Err(GenError::Invalid(format!(
-                "cross-drill move {i}: tool {name}'s holder (dia. {:.3}, {reach:.3} mm behind the tip) passes \
-                 {got:.3} mm from the spindle, inside the stock's radius {wide:.3} at Z {z0:.3} to {z1:.3} - \
+                "cross-drill move {i}: tool {name}'s holder (dia. {}, {} {} behind the tip) passes \
+                 {} {} from the spindle, inside the stock's radius {} at Z {} to {} - \
                  the holder sweeps the stock (a collision); use a longer tool, raise the clearance above the \
                  end face, or turn the bar to size first",
-                2.0 * hr
+                units::len(2.0 * hr, unit, 3),
+                units::len(reach, unit, 3),
+                unit.suffix(),
+                units::len(got, unit, 3),
+                unit.suffix(),
+                units::len(wide, unit, 3),
+                units::len(z0, unit, 3),
+                units::len(z1, unit, 3)
             )));
         }
     }
