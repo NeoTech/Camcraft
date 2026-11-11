@@ -320,6 +320,8 @@ fn setup_page_alignment_rows_structure() {
 /// checkbox through State and the view file; this pins what the shell
 /// paints. The properties pane's WCS row also reads "G54", so the
 /// painted probe stays inside the viewport, as the view-cube check does.
+/// The re-review also pins the checkbox's AccessKit checked state, in
+/// both states: `toggled()` is AccessKit 0.24's name for it.
 #[test]
 fn origin_names_paint_on_and_quiet_off_letters_and_lines_always() {
     let _g = snapshot_guard();
@@ -350,6 +352,11 @@ fn origin_names_paint_on_and_quiet_off_letters_and_lines_always() {
     let (segs_on, letters_on) = {
         let st = &h.state().state;
         assert!(st.show_gizmo_names, "the #727 default is on");
+        assert_eq!(
+            h.get_by_label("Show origin names").accesskit_node().toggled(),
+            Some(egui::accesskit::Toggled::True),
+            "the checkbox reads checked in the default state"
+        );
         let labels = interact::overlay_labels(st, 1.0);
         assert!(
             labels.iter().any(|(_, _, t)| t == "G54"),
@@ -373,6 +380,11 @@ fn origin_names_paint_on_and_quiet_off_letters_and_lines_always() {
     {
         let st = &h.state().state;
         assert!(!st.show_gizmo_names, "the click flipped the flag");
+        assert_eq!(
+            h.get_by_label("Show origin names").accesskit_node().toggled(),
+            Some(egui::accesskit::Toggled::False),
+            "the checkbox reads unchecked after the click"
+        );
         let labels = interact::overlay_labels(st, 1.0);
         assert!(
             labels.iter().all(|(_, _, t)| t != "G54"),
