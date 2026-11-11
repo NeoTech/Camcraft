@@ -729,6 +729,8 @@ fn every_shipped_machine_mounts_and_speaks_its_declaration() {
         ("Lathe", Kind::Lathe),
         ("Tormach 770MX", Kind::Mill),
         ("Tormach 770MX (ML)", Kind::Mill),
+        // #785: an A about X leans the tool - still a mill, never a mill-turn.
+        ("Tormach 770MX + microARC 4", Kind::Mill),
         ("Tormach 770M", Kind::Mill),
         ("Tormach 1100MX", Kind::Mill),
         ("Tormach 1500MX", Kind::Mill),
