@@ -14,6 +14,9 @@ extension = "nc";
 setCodePage = "utf-8";
 capabilities = 1; // reference contract: integer feature mask (bit 1 = milling)
 coolantModes = true; // reads PARAM Coolant (#112/#150): the engine refuses non-Flood ops for a post without it
+afterModes = true; // reads PARAM AfterOperation (#110): the engine refuses a stop or home ask for a post without it
+axisInversion = true; // verified on the engine's mirrored stream for an inverted X/Y (#374): goldens + equivalence test
+probeAxisInversion = true; // probing blocks verified on the mirrored stream (#392): macro interpreter on a simulated inverted machine
 
 // Determinism law: no timestamps, no randomness - the same stream
 // always posts to the same text (golden files depend on it).
@@ -29,8 +32,17 @@ var cycleSig = "";         // g|Z|R|Q of the open group (modal X Y holes)
 var retractSet = false;    // G98 written once per program
 var coolant = "";          // the M-code this program started, if any
 var coolantAsk = "flood";  // the section's PARAM Coolant (#112), flood when unstated
+var afterAsk = "";         // the section's PARAM AfterOperation (#110), none when unstated
+var homedAt = -1;          // linesWritten() just after a trip home (#504): onClose skips its own home when nothing followed
 var coolantOp = "";        // the section's OperationName, for refusals (#150)
 var sectionOpen = false;   // preamble written (a legacy .cl carries no SECTION)
+var smoothTol = 0;          // #616: the section's PARAM Smoothing, mm (0: none asked)
+var smoothMode = "";        // #616: "finish" or "rough"
+var smoothActive = false;   // #616: this section wrote its smoothing words
+var compG = "";            // G41/G42/G40 pending for the next straight block (#39)
+var compD = "";            // the D word riding the engage block ("" when the tool call selects it)
+var compOn = false;        // compensation is engaged (G41/G42 written, no G40 yet)
+var compNoted = false;     // the section's operator note was written
 var orgX = 0, orgY = 0, orgZ = 0; // the WCS slot origin (OriginX/Y/Z PARAMs)
 
 // ------------------------------------------------------------ helpers
@@ -134,6 +146,16 @@ function planeWord(g) {  // "" while modal; the word (and the new state) on chan
   return "G" + g;
 }
 function restorePlane() { var pw = planeWord(17); if (pw) block([pw]); }
+// #391: a control offsets the cutter in the ACTIVE plane, and every mill
+// generator compensates in XY - so the block that writes G41/G42/G40
+// states G17 when an XZ/YZ arc left G18/G19 modal, and no arc leaves
+// G17 while compensation is engaged (refused by name, see onCircular).
+function compPlaneWord(cg) { return cg ? planeWord(17) : ""; }
+function compPlaneRefuse(g) {
+  if (!compOn || g === 17) return false;
+  msg("an " + (g === 18 ? "XZ (G18)" : "YZ (G19)") + " arc while cutter compensation is engaged - the control would compensate in that plane; cancel compensation (G40) first");
+  return true;
+}
 // The center words of the arc's plane - I J (XY), I K (XZ), J K (YZ) -
 // as increments from the start point: a shared translation cancels in
 // an increment, so the origin must NOT enter them.
@@ -146,22 +168,118 @@ function centerWords(p) {
   ];
 }
 
+// ------------------------------------------------------------ comments
+// Program commentary (#257): the setup, the operation and the tool, for
+// the operator reading the program - never a word the control moves on.
+// The stream's PARAMs OperationName / OperationKind / SetupName /
+// ToolDiameter / ToolKind / ToolCornerRadius and the TOOL record's name
+// feed it; a stream without them (a legacy .cl) writes none. User text
+// is cleaned for this dialect: a parenthesis would end the comment
+// early, % is the tape's end mark and ; opens a comment on some
+// controls, so all three become spaces; printable ASCII only, capped at
+// 40 characters.
+var setupName = "", setupSaid = "", opName = "", opKind = "";
+var toolName = "", toolKind = "", toolDia = 0, toolCr = 0;
+function clean(s) {
+  var t = String(s === null || s === undefined ? "" : s);
+  t = t.replace(/[()%;]/g, " ").replace(/[^\x20-\x7E]/g, "?").replace(/\s+/g, " ").trim();
+  return t.length > 40 ? t.substring(0, 40).trim() : t;
+}
+function joinDash(parts) {  // the non-empty parts, " - " between
+  var a = [];
+  for (var i = 0; i < parts.length; i++) if (parts[i]) a.push(parts[i]);
+  return a.join(" - ");
+}
+function note(s) { block(["(" + s + ")"]); }
+function commentParam(name, value) {
+  if (name === "SetupName") setupName = clean(value);
+  else if (name === "OperationName") opName = clean(value);
+  else if (name === "OperationKind") opKind = clean(value).toUpperCase();
+  else if (name === "ToolKind") toolKind = clean(value).toUpperCase();
+  else if (name === "ToolDiameter" && has(value)) toolDia = Number(value);
+  else if (name === "ToolCornerRadius" && has(value)) toolCr = Number(value);
+}
+function opNotes() {  // at the section's preamble: the setup once, the op each time
+  if (setupName && setupName !== setupSaid) { note("SETUP: " + setupName); setupSaid = setupName; }
+  if (opName) note("OPERATION: " + joinDash([opName, opKind, wcsWord]));
+  opName = ""; opKind = "";
+}
+function toolNote() {  // just before the tool change it describes
+  var desc = [];
+  if (toolKind) desc.push(toolKind);
+  if (toolDia > 0) desc.push("D" + fu(toolDia));
+  if (toolCr > 0) desc.push("R" + fu(toolCr));
+  note(joinDash(["T" + ni(tNo) + (toolName ? " " + toolName : ""), desc.join(" ")]));
+  toolKind = ""; toolCr = 0;
+}
+
+// The machine's inverted linear axes (#375): the engine has mirrored the
+// stream into the controller's frame, and the header says so in the
+// operator's words, one comment per axis. A standard machine lists none.
+function invertedNotes() {
+  var a = (typeof machine !== "undefined" && machine.invertedAxes) || [];
+  var where = { X: "LEFT", Y: "TOWARD THE FRONT", Z: "DOWN" };
+  for (var i = 0; i < a.length; i++) {
+    var l = String(a[i]);
+    block(["(MACHINE " + l + "+ MOVES " + (where[l] || "THE OTHER WAY") + " - INVERTED AXIS)"]);
+  }
+}
+
 function onOpen() {
   var nm = (typeof machine !== "undefined" && machine.name) || "CAMCRAFT";
   writeln("%");
-  block(["(" + nm + ")"]);
+  // #594: the name is user text from the machine file - cleaned like
+  // every other comment text, so `Tormach 770MX (ML)` never nests.
+  block(["(" + (clean(nm) || "CAMCRAFT") + ")"]);
+  invertedNotes();
 }
 
-// Cutter compensation in the control (M13.11): this dialect does not
-// state it yet - refused by name, never a centre path under a
-// Control op (the stream's contour is the PART contour).
-function onRadiusCompensation() {
-  msg("control cutter compensation (G41/G42) is not supported by this post - choose In computer, or the Fanuc post");
+// Cutter radius compensation in the control (#39; RS-274 / ISO 6983
+// G41 left / G42 right / G40 cancel, and the family's published
+// operator manual: the D word names the tool-offset row whose radius
+// (geometry plus wear) the control offsets by). The stream's COMP
+// record says which side; the NEXT motion record is the engage (or
+// cancel) block - the generator's law makes it a straight lead at least
+// a radius long, so the control builds (or withdraws) the offset over
+// it. D = the tool number, the row the H word reads. A comp word that
+// would land on a rapid or an arc is refused by name (counted,
+// gate-blocked) - never written where the control would misread it.
+// The control's cutter-comp style setting (Fanuc or Yasnac) changes
+// only how outside corners are joined, on the air side; engage and
+// cancel read the same. Under wear (CompensationType "wear", the
+// centre path) the row must hold only the wear delta: the section says
+// so once, in a comment the operator reads.
+function onRadiusCompensation(side) {
+  var s = String(side || properties.Compensation || "off");
+  if (s === "off") {
+    compG = compOn ? "G40" : "";
+    compD = "";
+    compOn = false;
+    return;
+  }
+  if (inCycle) { msg("cutter compensation inside a canned-cycle group"); return; }
+  compG = (s === "left") ? "G41" : "G42";
+  compD = "D" + ni(tNo);
+  compOn = true;
+  if (properties.CompensationType === "wear" && !compNoted) {
+    block(["(WEAR COMP - " + compD + " HOLDS THE WEAR DELTA ONLY, NOT THE TOOL RADIUS)"]);
+    compNoted = true;
+  }
+}
+function compRefuse(what) {
+  if (compG) {
+    msg("cutter compensation must engage or cancel on a straight G1 move, not " + what);
+    compG = ""; compD = ""; compOn = false;
+  }
 }
 
 function onParameter(name, value) {
+  if (name === "Smoothing") { smoothTol = Number(value) || 0; return; }
+  if (name === "SmoothingMode") { smoothMode = String(value || ""); return; }
+  commentParam(name, value);
   if (name === "OperationName") coolantOp = String(value || "");
   if (name === "Coolant") { coolantAsk = String(value || "flood"); return; }
+  if (name === "AfterOperation") { afterAsk = String(value || ""); return; }
   if (name === "WorkOffset" && value) wcsWord = String(value);
   else if (name === "OriginX" && has(value)) orgX = Number(value);
   else if (name === "OriginY" && has(value)) orgY = Number(value);
@@ -177,40 +295,91 @@ function onSpindleSpeed() {
 }
 
 function onToolChange(number, name) {
+  toolName = clean(name);
   tNo = number;
   toolWait = true;
 }
 
 // The preamble closes over everything a raw motion line needs to be a
 // legal program: plane, offsets, tool, spindle, coolant.
+// #616: per-operation smoothing, only when the document turned it on
+// (the stream then carries PARAM Smoothing / SmoothingMode). Haas G187: P1 rough / P3 finish, E the corner deviation in program units.
+// Written after the preamble, undone at the section's end so no
+// tolerance leaks into the next operation.
+function smoothOn() {
+  if (!(smoothTol > 0)) return;
+  block(["G187", smoothMode === "finish" ? "P3" : "P1", "E" + fu(smoothTol)]);
+  smoothActive = true;
+}
+function smoothOff() {
+  if (smoothActive) block(["G187"]);  // the control's default smoothing again
+  smoothActive = false;
+  smoothTol = 0;
+  smoothMode = "";
+}
+
 function startPreamble() {
   if (sectionOpen) return;
   sectionOpen = true;
+  // #574: a touch probe (a stated speed of 0) states its spindle
+  // stopped before its first move, whatever the tool change did.
+  var probeStop = spindleWait && !(sRpm > 0);
+  opNotes();
   block(["G17", "G90", wcsWord, "G40", "G49", "G80"]);
   planeG = 17;              // the preamble states the plane
   if (toolWait) {
+    toolNote();
     block(["T" + ni(tNo), "M6"]);
     block(["G43", "H" + ni(tNo)]);
     toolWait = false;
   }
-  if (spindleWait) {
+  if (spindleWait && sRpm > 0) {   // a touch probe (#173) states no spindle
     block(["S" + ff(sRpm), "M3"]);
     spindleWait = false;
   }
+  if (probeStop) block(["M5"]);
   coolant = coolantFor(coolantAsk);
   if (coolant) block([coolant]);
+  smoothOn();
+}
+
+// The op's after-action (#110), written once its spindle has stopped:
+// the stream says nothing to carry on, or PARAM AfterOperation
+// optional-stop / stop / home. The ask resets here, so the next
+// section states its own.
+function afterOp() {
+  var ask = afterAsk;
+  afterAsk = "";
+  if (!ask) return;
+  if (ask === "optional-stop") { block(["M1"]); return; }
+  if (ask === "stop") { block(["M0"]); return; }
+  if (ask === "home") {
+    block(["G91", "G28", "Z0"]);  // straight up to the reference point first
+    block(["G28", "X0", "Y0"]);
+    block(["G90"]);               // absolute again before the next section
+    homedAt = linesWritten();
+    return;
+  }
+  msg(coolantWho() + "unknown after-operation ask " + ask);
 }
 
 function endPreamble() {
   if (!sectionOpen) return;
   restorePlane();            // M11.2 A: the plane never leaks past its section
   sectionOpen = false;
+  smoothOff();
   if (inCycle) block(["G80"]);
   inCycle = false;
+  if (compOn || compG) {
+    msg("cutter compensation still engaged at section end - no cancel block");
+    compG = ""; compD = ""; compOn = false;
+  }
+  compNoted = false;
   if (coolant) block(["M9"]);
   coolant = "";
   coolantAsk = "flood";      // the next section states its own ask
   block(["M5"]);
+  afterOp();
 }
 
 function onSection() { startPreamble(); }
@@ -222,18 +391,24 @@ function onSectionEnd() { endPreamble(); }
 // not a second copy of output.
 function onRapid() {
   startPreamble();
+  compRefuse("a rapid");
   if (!tiltOk(properties) || inCycle) return;
   block(["G0"].concat(xyz(properties)));
 }
 function onLinear() {
   startPreamble();
   if (!tiltOk(properties) || inCycle) return;
-  block(["G1"].concat(xyz(properties), [fw(properties.FeedRate)]));
+  // The pending comp word rides this straight block (#39).
+  var cg = compG, cd = compD;
+  compG = ""; compD = "";
+  block([compPlaneWord(cg), "G1", cg].concat(xyz(properties), [cd, fw(properties.FeedRate)]));
 }
 function onCircular() {
   startPreamble();
+  compRefuse("an arc");
   if (!tiltOk(properties) || inCycle) return;
   var p = properties;
+  if (compPlaneRefuse(planeOf(p))) return;
   block([
     planeWord(planeOf(p)),
     p.CircularDirection === "CW" ? "G2" : "G3",
@@ -279,11 +454,118 @@ function onCycle() {
   inCycle = true;
 }
 
+// ------------------------------------------------------------ probing
+// #173. Words from the Haas Mill Operator's Manual (public, haascnc.com):
+// G31 Feed Until Skip, the macro system variables #5061-#5063 (skip
+// signal position X Y Z, work coordinates), #3000 (programmable alarm
+// with message), #3006 (programmable stop with message), #5221 + 20 x
+// slot + axis (the G54..G59 work offsets) and G10 L2 P1..P6 (set a work
+// offset). A G31 that never trips ends at its target, so that is checked
+// at once and alarms - a probe that never touched must not back off and
+// measure air. A measured trip k is kept in #(100+3k)..#(102+3k); the
+// back-off after a trip is incremental (G91), so a part nearer than the
+// model is never driven into. Arming the probe (its M-code output) is
+// the machine's own, stated by no stream record: the operator arms it.
+// On an inverted X / Y (#392) the engine hands these hooks the stream
+// already mirrored (target, trip, back-off delta and expected values
+// negated on that axis): every word below then reads in the controller's
+// own frame, where the offset register holds the datum negated too, so
+// the written correction is the physical one. Nothing here is
+// inversion-aware; inverted_probe runs it on a simulated inverted machine.
+var probeBase = 100;
+function axisIx(a) { return a === "X" ? 0 : (a === "Y" ? 1 : 2); }
+function travelAxis(p) {  // where the target and the nominal trip differ most
+  var d = [Math.abs(p.X - p.ExpectX), Math.abs(p.Y - p.ExpectY), Math.abs(p.Z - p.ExpectZ)];
+  return d[0] >= d[1] && d[0] >= d[2] ? 0 : (d[1] >= d[2] ? 1 : 2);
+}
+function minusU(expr, v) {  // expr - v, the sign folded into the operator
+  var s = fu(v);
+  if (s === "0") return expr;
+  return s.charAt(0) === "-" ? expr + "+" + s.substring(1) : expr + "-" + s;
+}
+function onProbeMove() {
+  startPreamble();
+  compRefuse("a probing move");
+  var p = properties;
+  block(["G31", wo("X", p.X, orgX), wo("Y", p.Y, orgY), wo("Z", p.Z, orgZ), fw(p.Feed)]);
+  var ai = travelAxis(p);
+  var tgt = [p.X - orgX, p.Y - orgY, p.Z - orgZ][ai];
+  block(["IF[ABS[" + minusU("#" + (5061 + ai), tgt) + "]LT0.001]THEN#3000=2(PROBE NO CONTACT)"]);
+  if (has(p.Measure) && p.Measure >= 0) {
+    var b = probeBase + 3 * p.Measure;
+    block(["#" + b + "=#5061"]);
+    block(["#" + (b + 1) + "=#5062"]);
+    block(["#" + (b + 2) + "=#5063"]);
+  }
+}
+function onProbeRetreat() {
+  var p = properties;
+  block(["G91", "G1", w("X", p.DeltaX), w("Y", p.DeltaY), w("Z", p.DeltaZ), fw(p.Feed)]);
+  block(["G90"]);
+}
+// #174. A protected positioning move (the descent to a touch's start,
+// the travel between touches, the rise) is the same G31 Feed Until
+// Skip, read the other way round (Haas Mill Operator's Manual, as
+// above): with no skip signal the block ends at its target and
+// #5061-#5063 hold that end point; a trip on the way stops it short, so
+// any moving axis whose skip position is not the target alarms (#3000=3,
+// distinct from no-contact's 2) - an obstacle where the model has none
+// stops the program instead of the stylus being driven into it.
+function onProbeGuard() {
+  startPreamble();
+  compRefuse("a protected probe move");
+  var p = properties;
+  block(["G31", wo("X", p.X, orgX), wo("Y", p.Y, orgY), wo("Z", p.Z, orgZ), fw(p.Feed)]);
+  var to = [p.X, p.Y, p.Z], from = [p.StartX, p.StartY, p.StartZ], org = [orgX, orgY, orgZ];
+  for (var ai = 0; ai < 3; ai++) {
+    if (has(from[ai]) && Math.abs(to[ai] - from[ai]) < 1e-6) continue;  // an axis that holds still
+    block(["IF[ABS[" + minusU("#" + (5061 + ai), to[ai] - org[ai]) + "]GT0.001]THEN#3000=3(PROBE HIT ON POSITIONING)"]);
+  }
+}
+function slotOf(word) {  // "G55" -> 1
+  var n = Number(String(word).replace(/[^0-9]/g, "")) - 54;
+  return n >= 0 && n <= 5 ? n : 0;
+}
+function onProbeResult() {
+  var p = properties;
+  var org = [orgX, orgY, orgZ];
+  var axes = p.Axes || [];
+  var dev = 190;  // #190.. hold each axis's deviation, found - expected
+  for (var i = 0; i < axes.length; i++) {
+    var a = axes[i];
+    var ai = axisIx(a.Axis);
+    var sum = [];
+    for (var k = 0; k < a.Measures.length; k++) sum.push("#" + (probeBase + 3 * a.Measures[k] + ai));
+    var mean = a.Measures.length > 1 ? "[[" + sum.join("+") + "]/" + a.Measures.length + "]" : sum[0];
+    // The sign is folded into the operator so a negative expected value
+    // (edge, outside corner) never writes a doubled sign like `--`.
+    var ex = a.Expected - org[ai];
+    var op = ex < 0 ? "+" : "-";
+    block(["#" + (dev + i) + "=" + mean + op + fu(Math.abs(ex))]);
+    block(["IF[ABS[#" + (dev + i) + "]GT" + fu(p.Tolerance) + "]THEN#3000=1(PROBE " + a.Axis + " OUT OF TOLERANCE)"]);
+  }
+  if (has(p.SetWorkOffset) && p.SetWorkOffset >= 0) {
+    var act = 5221 + 20 * slotOf(wcsWord);
+    var words = ["G10", "L2", "P" + (Number(p.SetWorkOffset) + 1)];
+    for (var j = 0; j < axes.length; j++) {
+      var aj = axisIx(axes[j].Axis);
+      words.push(axes[j].Axis + "[#" + (act + aj) + "+#" + (dev + j) + "]");
+    }
+    block(words);
+  } else {
+    block(["#3006=1(CHECK PROBE RESULT #" + dev + "..)"]);
+  }
+}
+
 // ------------------------------------------------------------ footer
 function onClose() {
   endPreamble();
-  block(["G91", "G28", "Z0"]);
-  block(["G28", "X0", "Y0"]);
+  // #504: a trip home with nothing written after it (a trailing Go
+  // home) already is the program-end home - written once, not twice.
+  if (linesWritten() !== homedAt) {
+    block(["G91", "G28", "Z0"]);
+    block(["G28", "X0", "Y0"]);
+  }
   block(["M30"]);
   writeln("%");
 }

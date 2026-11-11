@@ -894,6 +894,12 @@ pub enum ParamsDto {
         infeed: f64,
         feed: f64,
         plunge_feed: f64,
+        /// #629: the thread's hand, always written. Absent (every file
+        /// before the key) reads right-hand - the hand the drawing
+        /// meant; those files posted left-hand by the old bug, and
+        /// load as the right-hand thread they modeled.
+        #[serde(default)]
+        hand: ThreadHandDto,
     },
     /// Declared at v37 with the contour kinds (M5.2 stage E): the
     /// ride trio of heights and the kind's own promise-numbers -
@@ -996,6 +1002,12 @@ pub enum ParamsDto {
     },
     /// The probe (#108): an additive variant in the v50 grammar.
     Probe(ProbeDto),
+    /// The plasma profile (#670): additive - no older file names it.
+    PlasmaProfile(PlasmaDto),
+    /// The trochoidal slot (#220): an appended variant in the v58 grammar,
+    /// like the probe - no format rung (a file holding one cannot have
+    /// been written by a build without it).
+    TrochoidalSlot(TrochoidDto),
 }
 
 /// The angle an absent `ramp_angle` means: 45°, the ground the
@@ -1312,12 +1324,18 @@ pub enum CycleChoiceDto {
     Drill,
     Peck,
     Tap,
+
     Bore,
     BackBore,
+    FloatingTap,
 }
 
 /// The reference part of a stored height. Serialized as a plain string;
-/// `work_offset` carries its slot number.
+/// `work_offset` is a one-key object. Before v52 it carried its own
+/// `slot`; since #329 the slot is the setup's, so a v52 writer writes
+/// `{"work_offset": {}}` and the loader lifts an older file's slots onto
+/// their setups (`wcs_migrate`) or refuses by name - the key is read
+/// only by that migration, never by the domain conversion below.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum HeightRefDto {
@@ -1326,7 +1344,10 @@ pub enum HeightRefDto {
     BottomOfStock,
     TopOfModel,
     BottomOfModel,
-    WorkOffset { slot: usize },
+    WorkOffset {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        slot: Option<usize>,
+    },
     /// The selection references (M11.3 A). Appended words: no earlier
     /// file can hold them and every earlier word reads as before, so
     /// the format version does not move (the EntryDto::Arc law).
@@ -1405,7 +1426,7 @@ impl From<crate::operation::HeightReference> for HeightRefDto {
             R::BottomOfStock => HeightRefDto::BottomOfStock,
             R::TopOfModel => HeightRefDto::TopOfModel,
             R::BottomOfModel => HeightRefDto::BottomOfModel,
-            R::WorkOffset(slot) => HeightRefDto::WorkOffset { slot },
+            R::WorkOffset => HeightRefDto::WorkOffset { slot: None },
             R::TopOfSelection => HeightRefDto::TopOfSelection,
             R::BottomOfSelection => HeightRefDto::BottomOfSelection,
         }
@@ -1421,7 +1442,7 @@ impl From<HeightRefDto> for crate::operation::HeightReference {
             HeightRefDto::BottomOfStock => R::BottomOfStock,
             HeightRefDto::TopOfModel => R::TopOfModel,
             HeightRefDto::BottomOfModel => R::BottomOfModel,
-            HeightRefDto::WorkOffset { slot } => R::WorkOffset(slot),
+            HeightRefDto::WorkOffset { .. } => R::WorkOffset,
             HeightRefDto::TopOfSelection => R::TopOfSelection,
             HeightRefDto::BottomOfSelection => R::BottomOfSelection,
         }

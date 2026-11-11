@@ -12,7 +12,7 @@ use crate::geometry::Triangle;
 use crate::machining2d::{
     cut_levels, GenError,
 };
-use crate::stock_sim::{self, Dexel, StockReport};
+use crate::stock_sim::{Columns, StockReport};
 /// The per-level cutter plan and its walk, level after level - the 3-D
 /// sibling of `machining2d::pocket`'s run, with the passes recomputed
 /// from the model at every z (that is the whole difference: 2-D knows
@@ -34,7 +34,7 @@ pub fn pocket3d_prev(
     facets: &[Triangle],
     footprint: &Region,
     p: &Pocket3DParams,
-    mask: Option<&Dexel>,
+    mask: Option<&Columns<'_>>,
 ) -> Result<Toolpath, GenError> {
     run_plain(facets, footprint, p, false, mask)
 }
@@ -73,7 +73,7 @@ pub fn pocket3d_offset_prev(
     facets: &[Triangle],
     footprint: &Region,
     p: &Pocket3DParams,
-    mask: Option<&Dexel>,
+    mask: Option<&Columns<'_>>,
 ) -> Result<Toolpath, GenError> {
     run_plain(facets, footprint, p, true, mask)
 }
@@ -83,10 +83,10 @@ fn run_plain(
     footprint: &Region,
     p: &Pocket3DParams,
     shell: bool,
-    mask: Option<&Dexel>,
+    mask: Option<&Columns<'_>>,
 ) -> Result<Toolpath, GenError> {
     guard_input(facets, footprint, p)?;
-    let zs = cut_levels(p.top_z, p.bottom_z, p.stepdown);
+    let zs = cut_levels(p.top_z, p.bottom_z, p.stepdown)?;
     ladder(facets, footprint, p, &zs, None, mask, home(p), shell, None)
 }
 
@@ -120,8 +120,8 @@ pub fn pocket3d_air_split(
         Some(Seam { lo: lo.x, hi: hi.x, period, reach })
     };
     let (sm_air, sm_cut) = (seam_of(air_footprint), seam_of(footprint));
-    let zs = cut_levels(p.top_z, p.bottom_z, p.stepdown);
-    let k = zs.iter().take_while(|z| **z > air_above).count();
+    let zs = cut_levels(p.top_z, p.bottom_z, p.stepdown)?;
+    let k = air_levels(&zs, air_above);
     if k == 0 || air_footprint.is_empty() {
         return ladder(facets, footprint, p, &zs, None, None, home(p), false, sm_cut.as_ref());
     }
@@ -149,11 +149,23 @@ pub fn pocket3d_air_split(
         comps: Vec::new(),
         threads: Vec::new(),
         probes: Vec::new(),
+        breaks: Vec::new(),
+        plasma: None,
     };
     if !path.all_finite() {
         return Err(GenError::Invalid("path left the finite horizon".into()));
     }
     Ok(path)
+}
+
+/// How many of the ladder's planes `zs` (top down) stand above
+/// `air_above` (issue #55): a plane within [`EPS`] of it touches the
+/// part's leave envelope, so it is a material plane, not an air one.
+/// The bare `>` sorted the plane AT the envelope by the last bit of the
+/// wrap's own radius arithmetic (6.500000000000001 against 6.5 on the
+/// r7 bar), so the same work could sweep one lap or two by float noise.
+pub(super) fn air_levels(zs: &[f64], air_above: f64) -> usize {
+    zs.iter().take_while(|z| **z > air_above + EPS).count()
 }
 
 /// The rest-material sibling (M2.1b): the same level ladder, then a
@@ -192,7 +204,7 @@ pub fn pocket3d_offset_with_rest_prev(
     facets: &[Triangle],
     footprint: &Region,
     p: &Pocket3DParams,
-    mask: Option<&Dexel>,
+    mask: Option<&Columns<'_>>,
 ) -> Result<(Toolpath, StockReport), GenError> {
     run_rest(facets, footprint, p, true, mask)
 }
@@ -206,7 +218,7 @@ pub fn pocket3d_with_rest_prev(
     facets: &[Triangle],
     footprint: &Region,
     p: &Pocket3DParams,
-    mask: Option<&Dexel>,
+    mask: Option<&Columns<'_>>,
 ) -> Result<(Toolpath, StockReport), GenError> {
     run_rest(facets, footprint, p, false, mask)
 }
@@ -216,11 +228,11 @@ fn run_rest(
     footprint: &Region,
     p: &Pocket3DParams,
     shell: bool,
-    mask: Option<&Dexel>,
+    mask: Option<&Columns<'_>>,
 ) -> Result<(Toolpath, StockReport), GenError> {
     guard_input(facets, footprint, p)?;
     let r = p.tool_diameter * 0.5;
-    let zs = cut_levels(p.top_z, p.bottom_z, p.stepdown);
+    let zs = cut_levels(p.top_z, p.bottom_z, p.stepdown)?;
     let coarse = ladder(facets, footprint, p, &zs, None, mask, home(p), shell, None)?;
 
     // What the coarse ladder leaves standing, column by column: the
@@ -229,7 +241,7 @@ fn run_rest(
     // history (one grid, one story; M3.1 D).
     let dex = match mask {
         Some(prev) => {
-            let mut d = prev.clone();
+            let mut d = prev.to_stock();
             subtract_upright(&mut d, &coarse.moves, r)?;
             d
         }
@@ -239,16 +251,17 @@ fn run_rest(
             d
         }
     };
+    let rest = dex.columns()?;
 
     // The rest ladder: same laws, half the step, rest-shaped targets.
-    let zs_r = cut_levels(p.top_z, p.bottom_z, p.stepdown * 0.5);
+    let zs_r = cut_levels(p.top_z, p.bottom_z, p.stepdown * 0.5)?;
     let start = coarse.moves.last().map_or_else(|| home(p), |m| m.to);
     let mut moves = coarse.moves;
     // The coarse leg's notes join the rest leg's below, in program
     // order (M8.1): the status line reads the substitutions as the
     // machine lived them.
     let mut notes = coarse.notes;
-    match ladder(facets, footprint, p, &zs_r, Some(&dex), None, start, shell, None) {
+    match ladder(facets, footprint, p, &zs_r, Some(&rest), None, start, shell, None) {
         Ok(rp) => {
             moves.extend(rp.moves);
             notes.extend(rp.notes);
@@ -265,6 +278,8 @@ fn run_rest(
         comps: Vec::new(),
         threads: Vec::new(),
         probes: Vec::new(),
+        breaks: Vec::new(),
+        plasma: None,
     };
     if !path.all_finite() {
         return Err(GenError::Invalid("path left the finite horizon".into()));
@@ -275,10 +290,11 @@ fn run_rest(
     // - over the combined path, so the report describes the machining,
     // not one of its legs.
     let mut dex = match mask {
-        Some(prev) => prev.clone(),
+        Some(prev) => prev.to_stock(),
         None => sim_of(facets, footprint, p)?.0,
     };
-    let part = stock_sim::part_surface(facets, dex.x0, dex.y0, dex.cell, dex.nx, dex.ny);
     subtract_upright(&mut dex, &path.moves, r)?;
-    Ok((path, stock_sim::measure(&dex, &part, footprint, EPS)))
+    // `Stock::measure` samples the model on the stock's own lattice -
+    // the part surface this verdict always measured against.
+    Ok((path, dex.measure(facets, footprint, EPS)))
 }

@@ -16,7 +16,7 @@
 //! `None` checks nothing and a zero is not a ceiling.
 
 use egui::{ComboBox, DragValue, TextEdit, Ui, Window};
-use camcraft_app::machine::{self, Coolant, Kind, Machine};
+use camcraft_app::machine::{self, AxisDirection, Coolant, Kind, Machine};
 use camcraft_app::units::Unit;
 
 use super::pages;
@@ -30,7 +30,7 @@ pub struct MachineEditor {
     pub machine: Machine,
 }
 
-const KIND_WORDS: [&str; 4] = ["auto (axis inventory)", "mill", "lathe", "mill-turn"];
+const KIND_WORDS: [&str; 5] = ["auto (axis inventory)", "mill", "lathe", "mill-turn", "plasma"];
 
 pub(crate) fn window(ctx: &egui::Context, state: &mut State) {
     // Take the draft out for the frame: the draw wants `&mut` on it
@@ -63,6 +63,7 @@ pub(crate) fn window(ctx: &egui::Context, state: &mut State) {
             draw_tooling(ui, u, &mut ed.machine);
             draw_coolants(ui, &mut ed.machine);
             ui.separator();
+            super::machine_grid::machine_grid(ui, "machine_editor_overview", &ed.machine, u, &[]);
             ui.horizontal(|ui| {
                 if ui.button("Apply").clicked() {
                     apply = true;
@@ -70,8 +71,6 @@ pub(crate) fn window(ctx: &egui::Context, state: &mut State) {
                 if ui.button("Revert to mounted").clicked() {
                     revert = true;
                 }
-                ui.label(machine::kind(Some(&ed.machine)).label());
-                ui.label(ed.machine.summary());
             });
         });
     if apply {
@@ -95,7 +94,7 @@ pub(crate) fn window(ctx: &egui::Context, state: &mut State) {
 
 fn draw_kind(ui: &mut Ui, m: &mut Machine) {
     pages::field(ui, "Kind");
-    // The `_ => 0` is load-bearing honesty: an unreadable word was
+    // The `None => 0` is load-bearing honesty: an unreadable word was
     // refused at load and cannot exist on a mounted machine, but if a
     // draft somehow carries one, the combo says "auto" and the
     // summary below still reports what the axes say - never a lie
@@ -104,11 +103,12 @@ fn draw_kind(ui: &mut Ui, m: &mut Machine) {
         Some(Kind::Mill) => 1,
         Some(Kind::Lathe) => 2,
         Some(Kind::MillTurn) => 3,
-        _ => 0,
+        Some(Kind::Plasma) => 4,
+        None => 0,
     };
     let before = idx;
     ComboBox::from_id_salt("machine_kind")
-        .selected_text(KIND_WORDS[idx.min(3)])
+        .selected_text(KIND_WORDS[idx.min(KIND_WORDS.len() - 1)])
         .show_ui(ui, |ui| {
             for (i, w) in KIND_WORDS.iter().enumerate() {
                 ui.selectable_value(&mut idx, i, *w);
@@ -117,7 +117,7 @@ fn draw_kind(ui: &mut Ui, m: &mut Machine) {
     if idx != before {
         m.kind = match idx {
             0 => None,
-            i => Kind::from_word(KIND_WORDS[i.min(3)])
+            i => Kind::from_word(KIND_WORDS[i.min(KIND_WORDS.len() - 1)])
                 .map(|k| k.word().to_owned())
                 .or_else(|| Some(String::new())),
         };
@@ -125,7 +125,7 @@ fn draw_kind(ui: &mut Ui, m: &mut Machine) {
     if idx == 0 && m.kind.is_some() {
         m.kind = None;
     }
-    ui.label("auto follows the axes below: X/Y/Z is a mill, X/Z is a lathe, Y plus a rotary is a mill-turn");
+    ui.label("auto follows the axes below: X/Y/Z is a mill, X/Z is a lathe, Y plus a rotary is a mill-turn; a plasma table must say plasma");
 }
 
 fn draw_spindle(ui: &mut Ui, u: Unit, m: &mut Machine) {
@@ -174,6 +174,9 @@ fn draw_axes(ui: &mut Ui, u: Unit, m: &mut Machine) {
             }
             ui.label("res");
             opt(ui, |ui, v| pages::num(ui, u, v), &mut a.resolution);
+            if !a.rotary {
+                draw_direction(ui, i, a);
+            }
             if ui.button("✖").clicked() {
                 remove = Some(i);
             }
@@ -187,6 +190,43 @@ fn draw_axes(ui: &mut Ui, u: Unit, m: &mut Machine) {
             name: "U".to_owned(),
             ..Default::default()
         });
+    }
+}
+
+/// The per-axis direction (#373) as a plain choice: which way the
+/// tool moves against the work for a + command. The words read the
+/// ISO 841 program frame (X+ right, Y+ away from the operator, Z+ up);
+/// the other word states a machine whose slide moves the other way.
+/// A draft edit like every field - Apply's command is the undo step.
+fn draw_direction(ui: &mut Ui, i: usize, a: &mut machine::AxisLimits) {
+    let (std_word, inv_word) = direction_words(&a.name);
+    ui.label(format!("{}+ moves", a.name.trim()));
+    let shown = if a.direction.is_standard() { std_word } else { inv_word };
+    ComboBox::from_id_salt(("axis-direction", i))
+        .selected_text(shown)
+        .width(70.0)
+        .show_ui(ui, |ui| {
+            ui.selectable_value(&mut a.direction, AxisDirection::Standard, std_word);
+            ui.selectable_value(&mut a.direction, AxisDirection::Inverted, inv_word);
+        });
+    if !a.direction.is_standard() {
+        // #374: the post mirrors an inverted X / Y; anything else refuses.
+        let note = if matches!(a.name.trim(), "X" | "Y") {
+            "(posted mirrored: Fanuc / Haas posts only)"
+        } else {
+            "(posting refused for this axis)"
+        };
+        ui.label(note);
+    }
+}
+
+/// The two words of an axis's direction choice: standard first.
+fn direction_words(name: &str) -> (&'static str, &'static str) {
+    match name.trim().to_ascii_uppercase().as_str() {
+        "X" => ("right", "left"),
+        "Y" => ("away", "toward you"),
+        "Z" => ("up", "down"),
+        _ => ("standard", "reversed"),
     }
 }
 

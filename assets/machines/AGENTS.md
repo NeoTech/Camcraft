@@ -30,7 +30,7 @@ unstated capability into existence.
       "tooling":    { "number_of_tools": N }
     }
 
-- `general.kind` ∈ `mill` | `lathe` | `mill-turn`. The DECLARATION
+- `general.kind` ∈ `mill` | `lathe` | `mill-turn` | `plasma`. The DECLARATION
   outranks the axis inventory (`kind()` checks the word first; an
   unknown word REFUSES the file at the door — never a silent demotion
   to inference). The inference, when no kind is stated: Y + a TURNING
@@ -40,6 +40,20 @@ unstated capability into existence.
   — the same tilt test the RTCP judgment and `can_tilt` read, one law
   at three sites): an XYZ machine with A/B trunnions or a tilt head is
   a MILL whose axes can lean, not a mill-turn.
+- `plasma` (#669) is DECLARED only, never inferred (its X/Y/Z reads as
+  a mill), and the word carries rules both doors refuse BY NAME
+  (`post::machine::plasma_refusals` - the reader the first, the
+  Machines pane's validator all): no `spindle` on any head (each stated
+  key named: `spindle.max_speed`, `spindle.power`, ...), no
+  `live_tool`, no coolant list (station or tooling root), no rotary
+  axis. X, Y and Z are required; Z is the TORCH LIFTER - the control
+  owns pierce height, cut height and THC - so the machine check judges
+  only X/Y travel and feed, and skips Z depth and rpm with a named note
+  (`MachineCheck.notes`). The torch is Tool 1 (`tooling.number_of_tools:
+  1`); its KERF is the torch tool's diameter, not a machine number
+  (docs/decisions/669-plasma-kind.md). A plasma table states no
+  `safe_retract` (its post retracts with G30). `tormach-1300pl.mch` is
+  the shipped one.
 - `kinematics.default.units`: `"length": "mm"` (or `"inch"`/`"inches"`
   — the factor multiplies EVERY distance and distance-per-minute at
   load; the checker stays mm-only), `"angle": "degrees"`.
@@ -54,12 +68,61 @@ unstated capability into existence.
     coordinates, absolute world, not joint-local (the checker's
     traverse bands and collision sweep read these directly). Linear:
     mm (unit-scaled); rotary: DEGREES, never unit-scaled. Must be
-    finite with `max > min` or the field is dropped.
+    finite with `max > min` or the field is dropped. The file cannot
+    know the work offset, so a linear slide of stroke L is written
+    `-L..L` - the FULL stroke each way, never the machine-frame band
+    (`-500..0` for a 500 mm column refuses every retract above the
+    work origin, #457; the Tormach files follow the same rule).
+  - linear only: `direction` `1` | `-1` (#373) - which way the slide
+    moves for a + command; absent or null is `1`, and anything else
+    refuses the file NAMING the axis. The program frame stays standard
+    (ISO 841); the stated `travel` is the machine's own stroke, so an
+    inverted axis is judged as `-v` against it. The post (#374) writes
+    an inverted X / Y mirrored (sign, I/J/K, G2/G3, G41/G42) through a
+    script that declares `axisInversion = true` (probing too only when it
+    also declares `probeAxisInversion = true`, #392); an inverted Z or any
+    other letter refuses posting by name. A rotary part's numeric `-1` refuses (a reversed
+    rotary is not supported).
+  - linear Z only: `safe_retract` (#495) - the Z, in MACHINE
+    coordinates (the file's length unit, scaled like travel), a post
+    rapids to with `G53 G0 Z..` before a tool change and at program
+    end. Zero is a statement here, not "unstated": `0.0` says machine
+    Z0 is the top of travel (every shipped Tormach file, `vmc.mch`,
+    `tilthead.mch`; the mirror-form default `3axis-vmc.mch` states
+    `"safeRetractZ": 0.0`). Absent or null is unstated, and the
+    Tormach post refuses a non-Tormach machine that states none (the
+    Siemens 840D post, #503, any machine that states none); a
+    non-number, or the key on any other axis, refuses the file naming
+    the axis. The mirror carries it as `safeRetractZ` (mm).
   - rotary only: `axis` `[x,y,z]` — the rotation direction; three
     finite numbers or the file refuses NAMING the axis (a garbled
     tilt vector must never read as "no tilt": the RTCP judgment rides
-    on it). A stated zero vector refuses too. `resolution` is the
+    on it). A stated zero vector refuses too. The vector's SIGN is the
+    rotary's direction sense (#785): a 4th axis about X states
+    `[1, 0, 0]` when a + A turns the tool right-handed about +X relative
+    to the part (RS-274 / ISO 841 - the table turns the part the other
+    way), `[-1, 0, 0]` when it turns the other way; the Tormach post
+    negates its A words for the second. `tormach-770mx-microarc4.mch` is
+    the shipped 4th-axis mill (an A about X, travel -360..360 degrees,
+    rates unstated: TD10749 states none). `resolution` is the
     positioning step (same scaling law as travel).
+  - rotary that turns the WORK only (#804): `nose_to_axis` - how far
+    the spindle nose sits above the rotary's centerline with Z at
+    `safe_retract` (the file's length unit, scaled like travel). A
+    rotary turns the work when no `head` part hangs below it (a table
+    bolted to the bed); one that carries the head tilts the tool and
+    may not state it. With WCS Y0 Z0 on the centerline, the program
+    gate puts the retracted tool tip at `nose_to_axis` minus the tool
+    length and refuses an op on a work-turning A about X whose tip
+    there is inside the stock / part / turning fixtures' swept radius
+    plus 5 mm - or whose machine states no `nose_to_axis` at all. A
+    work-turning rotary with no `axis` vector takes its RS-274 letter's
+    line (an A is about X and is judged, #813); one whose name is no
+    RS-274 rotary letter refuses every op by name - state its `axis`.
+    The
+    microARC 4 file states 10.6 in: the 770MX's 13.75 in spindle nose
+    to table (Tormach 770MX spec page) less the microARC 4's 3.15 in
+    table to centerline (4th-axis comparison sheet 02/24).
   - `type: "head"` parts carry the spindle and station, first match
     wins: `spindle { min_speed, max_speed }` rpm, `power` kW (stated,
     not judged — the sheet renders it, no model consumes it),
@@ -71,6 +134,14 @@ unstated capability into existence.
     second station on a one-spindle machine is a named refusal at the
     program gate). A file stating no spindle keeps `None`: the
     unstated-limit law again, never a guessed `Some(1)`.
+  - `live_tool` (issue #33), on the tool station: `{ "c_axis_on",
+    "c_axis_off", "spindle_on", "spindle_off" }` - the builder's words
+    that engage the spindle as a positioned C axis, release it, start
+    the live tool (the post appends `S<rpm>`) and stop it. No public
+    standard fixes them, so a post never guesses: all four non-empty,
+    or the machine states none and a C-axis live-tool section is
+    refused by name. The mirror carries them as
+    `head.liveTool { cAxisOn, cAxisOff, spindleOn, spindleOff }`.
   - `coolants`: entries are `{ "name": "Flood", "mCode": "M8" }` (the
     M-code is the machine's own word — string `"M8"` or bare number
     `8`, both normalized to `M8`; `mcode` spelling reads too) or a
@@ -137,7 +208,9 @@ record is refused instead.
    mirror) and asserts declared kind == inferred kind, so a
    half-registered or self-contradictory definition fails the suite,
    not the shop.
-4. Gate: `cargo test -p camcraft-app --test machine --test posting`,
+4. Gate: `cargo test -p camcraft-app --test machine --test posting
+   --test machine_library` (the last runs the Machines pane's validator,
+   `app::machine::validate`, over every library entry - #287),
    plus a CLI smoke — `post.exe --machine <name>.mch <post>.cps
    <file>.cnc out.nc` over a committed golden stream (a 5-axis
    definition should drive the refusal path in fanuc.cps's `tilt()`

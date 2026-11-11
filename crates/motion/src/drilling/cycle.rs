@@ -26,7 +26,7 @@ pub fn drill(p: &CycleParams) -> Result<Toolpath, GenError> {
         return Err(GenError::Empty("no holes to drill".into()));
     }
     let tap_feed = p.tool.rpm * p.tool.pitch;
-    let taps = matches!(p.cycle, CycleChoice::Tap)
+    let taps = matches!(p.cycle, CycleChoice::Tap | CycleChoice::FloatingTap)
         || (matches!(p.cycle, CycleChoice::Auto) && p.tool.kind == ToolKind::Tap);
     if taps && !(tap_feed.is_finite() && tap_feed > 0.0) {
         return Err(GenError::Invalid("a tap cycle needs a positive pitch x rpm feed".into()));
@@ -67,17 +67,19 @@ pub fn drill(p: &CycleParams) -> Result<Toolpath, GenError> {
             None if matches!(p.cycle, CycleChoice::Spot) => (h.entry_z - SPOT_DEPTH).max(h.floor_z),
             None => floor_bottom,
         };
+        // #261 part 2: every refusal about this hole points at its mouth.
+        let mouth = Point3::new(h.xy.x, h.xy.y, h.entry_z);
         if bottom >= p.r_z {
-            return Err(GenError::Invalid(format!(
-                "hole at ({}, {}) bottoms at {bottom}, not below the R plane {}",
-                h.xy.x, h.xy.y, p.r_z
-            )));
+            return Err(GenError::invalid_at(
+                format!("hole at ({}, {}) bottoms at {bottom}, not below the R plane {}", h.xy.x, h.xy.y, p.r_z),
+                mouth,
+            ));
         }
         let kind = match p.cycle {
             CycleChoice::Auto => auto_kind(p.tool.kind, p.r_z - bottom, d),
             _ => resolve_choice(p),
         };
-        refuse_solid_cycle(p.tool, kind, h.xy.x, h.xy.y)?;
+        refuse_solid_cycle(p.tool, kind, mouth)?;
         // The bore door (M8.3): the slide's whole cutting diameter
         // travels inside the hole's wall, so a tool wider than the
         // wall's radius is a wall-cutting plunge. And a stepped hole
@@ -86,19 +88,27 @@ pub fn drill(p: &CycleParams) -> Result<Toolpath, GenError> {
         // verifier's generic gouge after the fact.
         if matches!(kind, CycleKind::Bore | CycleKind::BackBore) {
             if h.stepped {
-                return Err(GenError::Invalid(format!(
-                    "bore cycle at ({}, {}): that hole is a counterbore - the cycle would bore \
-                     the narrow dia. {} through and miss the ring",
-                    h.xy.x, h.xy.y, 2.0 * h.radius
-                )));
+                return Err(GenError::invalid_at(
+                    format!(
+                        "bore cycle at ({}, {}): that hole is a counterbore - the cycle would bore \
+                         the narrow dia. {} through and miss the ring",
+                        h.xy.x,
+                        h.xy.y,
+                        2.0 * h.radius
+                    ),
+                    mouth,
+                ));
             }
             if 0.5 * d > h.radius + FIT_TOL {
-                return Err(GenError::Invalid(format!(
-                    "bore tool dia. {d} will not enter the dia. {} hole at ({}, {})",
-                    2.0 * h.radius,
-                    h.xy.x,
-                    h.xy.y
-                )));
+                return Err(GenError::invalid_at(
+                    format!(
+                        "bore tool dia. {d} will not enter the dia. {} hole at ({}, {})",
+                        2.0 * h.radius,
+                        h.xy.x,
+                        h.xy.y
+                    ),
+                    mouth,
+                ));
             }
         }
         let fm = b.moves_len();
@@ -136,7 +146,7 @@ pub fn drill(p: &CycleParams) -> Result<Toolpath, GenError> {
                     b.push(MoveKind::Rapid, Point3::new(h.xy.x, h.xy.y, p.r_z), None);
                 }
             }
-            CycleKind::Tap => {
+            CycleKind::Tap | CycleKind::FloatingTap => {
                 b.push(MoveKind::Feed, Point3::new(h.xy.x, h.xy.y, bottom), Some(tap_feed));
                 b.push(MoveKind::Feed, Point3::new(h.xy.x, h.xy.y, p.r_z), Some(tap_feed));
             }
@@ -150,7 +160,7 @@ pub fn drill(p: &CycleParams) -> Result<Toolpath, GenError> {
             }
         }
         let dwell = match kind {
-            CycleKind::Spot | CycleKind::Drill | CycleKind::Deep | CycleKind::Bore => p.dwell,
+            CycleKind::Spot | CycleKind::Drill | CycleKind::Deep | CycleKind::Bore | CycleKind::FloatingTap => p.dwell,
             _ => 0.0,
         };
         b.push_cycle(Cycle {
@@ -182,15 +192,21 @@ pub fn drill(p: &CycleParams) -> Result<Toolpath, GenError> {
 /// that is not centre-cutting is refused there by definition. Tap, bore
 /// and back-bore cycles open a hole that is already drilled - the cycle
 /// itself says so - and pass.
-pub(super) fn refuse_solid_cycle(tool: &crate::tools::Tool, kind: CycleKind, x: f64, y: f64) -> Result<(), GenError> {
-    if tool.center_cutting || matches!(kind, CycleKind::Tap | CycleKind::Bore | CycleKind::BackBore) {
+/// `at` is the hole's mouth: the sentence names its X and Y, the
+/// refusal points at it (#261 part 2).
+pub(super) fn refuse_solid_cycle(tool: &crate::tools::Tool, kind: CycleKind, at: Point3) -> Result<(), GenError> {
+    if tool.center_cutting || matches!(kind, CycleKind::Tap | CycleKind::FloatingTap | CycleKind::Bore | CycleKind::BackBore) {
         return Ok(());
     }
-    Err(GenError::Invalid(format!(
-        "{} - a {kind:?} cycle at ({x}, {y}) plunges into solid; drill the hole with a centre-cutting tool \
-         (a tap or bore cycle reads it as pre-drilled)",
-        crate::approach::CENTER_CUT_REFUSAL
-    )))
+    let (x, y) = (at.x, at.y);
+    Err(GenError::invalid_at(
+        format!(
+            "{} - a {kind:?} cycle at ({x}, {y}) plunges into solid; drill the hole with a centre-cutting tool \
+             (a tap or bore cycle reads it as pre-drilled)",
+            crate::approach::CENTER_CUT_REFUSAL
+        ),
+        at,
+    ))
 }
 
 pub(super) fn resolve_choice(p: &CycleParams) -> CycleKind {
@@ -200,6 +216,7 @@ pub(super) fn resolve_choice(p: &CycleParams) -> CycleKind {
         CycleChoice::Drill => CycleKind::Drill,
         CycleChoice::Peck => CycleKind::Peck,
         CycleChoice::Tap => CycleKind::Tap,
+        CycleChoice::FloatingTap => CycleKind::FloatingTap,
         CycleChoice::Bore => CycleKind::Bore,
         CycleChoice::BackBore => CycleKind::BackBore,
     }

@@ -16,9 +16,9 @@
 //! so the posted numbers are the machined ones.
 
 use crate::model;
-use crate::operation::{self, Height, HeightReference, OpStatus, OpParams};
+use crate::operation::{self, Height, OpStatus, OpParams};
 use crate::post::{self, cnc, engine, Dump};
-use crate::schema::{PostOptions, PostRef, ThreadingOutput, WCS_SLOTS};
+use crate::schema::{EndUnits, PostOptions, PostRef, ThreadingOutput, WCS_SLOTS};
 use flecs_ecs::prelude::*;
 use serde_json::Value;
 use std::path::Path;
@@ -37,14 +37,23 @@ pub const BUILTINS: &[(&str, &str)] = &[
     ("Heidenhain", include_str!("../../../assets/posts/heidenhain.cps")),
     ("Mazak", include_str!("../../../assets/posts/mazak.cps")),
     ("Tormach PathPilot", include_str!("../../../assets/posts/tormach.cps")),
+    ("Doosan DNM", include_str!("../../../assets/posts/doosan-dnm.cps")),
+    ("Makera Carvera", include_str!("../../../assets/posts/carvera.cps")),
     ("Fanuc Lathe", include_str!("../../../assets/posts/fanuc-lathe.cps")),
+    ("Tormach PathPilot Lathe", include_str!("../../../assets/posts/tormach-lathe.cps")),
 ];
 
 /// The registry entries that speak TURNING (M13.5): X as a diameter
 /// on one meridian, G18, G99, the face cycles. Everything else in
 /// `BUILTINS` is a milling dialect. The picker filters by the mounted
 /// machine's kind through [`post_serves`]; a mill-turn lists both.
-pub const LATHE_POSTS: &[&str] = &["Fanuc Lathe"];
+pub const LATHE_POSTS: &[&str] = &["Fanuc Lathe", "Tormach PathPilot Lathe"];
+
+/// The registry entries that speak PLASMA (#669): the torch words, no
+/// spindle and no Z depth. None ships yet - the PathPilot plasma post
+/// is #671 - so a plasma machine lists no post and nothing posts on it
+/// (its machine check refuses every op by name, `machine::plasma`).
+pub const PLASMA_POSTS: &[&str] = &[];
 
 /// Whether a registry entry can post programs for a machine of this
 /// kind: a lathe post serves lathes and mill-turns, a mill post serves
@@ -55,10 +64,13 @@ pub const LATHE_POSTS: &[&str] = &["Fanuc Lathe"];
 pub fn post_serves(name: &str, kind: crate::machine::Kind) -> bool {
     use crate::machine::Kind;
     let lathe_post = LATHE_POSTS.contains(&name);
+    let plasma_post = PLASMA_POSTS.contains(&name);
     match kind {
-        Kind::Mill => !lathe_post,
+        Kind::Mill => !lathe_post && !plasma_post,
         Kind::Lathe => lathe_post,
-        Kind::MillTurn => true,
+        Kind::MillTurn => !plasma_post,
+        // #669: a cutting post would write spindle words a torch has not.
+        Kind::Plasma => plasma_post,
     }
 }
 
@@ -71,6 +83,11 @@ pub fn post_serves(name: &str, kind: crate::machine::Kind) -> bool {
 pub fn default_post_for(kind: crate::machine::Kind) -> PostRef {
     match kind {
         crate::machine::Kind::Lathe => LATHE_POSTS
+            .first()
+            .map_or(PostRef::Builtin, |n| PostRef::Named((*n).to_owned())),
+        // #669: until a plasma post ships (#671) there is none to name;
+        // the entry-0 answer is then refused by `post_offer`'s own check.
+        crate::machine::Kind::Plasma => PLASMA_POSTS
             .first()
             .map_or(PostRef::Builtin, |n| PostRef::Named((*n).to_owned())),
         _ => PostRef::Builtin,
@@ -104,7 +121,10 @@ pub fn post_offer(world: &World) -> Option<(&'static str, PostRef)> {
         return None;
     }
     let serves = if LATHE_POSTS.contains(&name) { "lathe" } else { "mill" };
-    Some((serves, default_post_for(kind)))
+    // #669: an offer that would not serve the mount either (a plasma
+    // table before any plasma post ships) is no offer.
+    let offer = default_post_for(kind);
+    post_name(&offer).is_some_and(|n| post_serves(n, kind)).then_some((serves, offer))
 }
 
 /// The default machine as text: a plain 3-axis VMC with flood coolant.
@@ -128,10 +148,39 @@ pub const MACHINES: &[(&str, &str)] = &[
     ("Tormach 770MX", include_str!("../../../assets/machines/tormach-770mx.mch")),
     // #170: the other Tormach mills, each from its own operator's manual.
     ("Tormach 770MX (ML)", include_str!("../../../assets/machines/tormach-770mx-ml.mch")),
+    // #785: the 770MX with Tormach's microARC 4 (TD10749) as an A about X.
+    ("Tormach 770MX + microARC 4", include_str!("../../../assets/machines/tormach-770mx-microarc4.mch")),
     ("Tormach 770M", include_str!("../../../assets/machines/tormach-770m.mch")),
     ("Tormach 1100MX", include_str!("../../../assets/machines/tormach-1100mx.mch")),
     ("Tormach 1500MX", include_str!("../../../assets/machines/tormach-1500mx.mch")),
     ("Tormach PCNC 440", include_str!("../../../assets/machines/tormach-pcnc440.mch")),
+    ("Tormach 1100M", include_str!("../../../assets/machines/tormach-1100m.mch")),
+    // #170: the Mach3-era R8 mills, each from its own operator's manual.
+    ("Tormach PCNC 770", include_str!("../../../assets/machines/tormach-pcnc770.mch")),
+    ("Tormach PCNC 770 (Series 3)", include_str!("../../../assets/machines/tormach-pcnc770-s3.mch")),
+    ("Tormach PCNC 1100 (Series I)", include_str!("../../../assets/machines/tormach-pcnc1100-s1.mch")),
+    ("Tormach PCNC 1100 (Series II)", include_str!("../../../assets/machines/tormach-pcnc1100-s2.mch")),
+    ("Tormach PCNC 1100 (Series 3)", include_str!("../../../assets/machines/tormach-pcnc1100-s3.mch")),
+    // #618: the M+ upgrade kits - the M's figures with the MX's axis speeds.
+    ("Tormach 770M+", include_str!("../../../assets/machines/tormach-770m-plus.mch")),
+    ("Tormach 1100M+", include_str!("../../../assets/machines/tormach-1100m-plus.mch")),
+    // #620: the PathPilot routers, each from its own manual / spec sheet
+    // (the plain xsTECH from its spec sheet and knowledge base: no manual).
+    ("Tormach 24R", include_str!("../../../assets/machines/tormach-24r.mch")),
+    ("Tormach xsTECH Pro", include_str!("../../../assets/machines/tormach-xstech-pro.mch")),
+    ("Tormach xsTECH", include_str!("../../../assets/machines/tormach-xstech.mch")),
+    // #669: the plasma table, from UM10720 §2 and the 03/24 spec sheet.
+    ("Tormach 1300PL", include_str!("../../../assets/machines/tormach-1300pl.mch")),
+    // #611: Tormach's lathes, from their operator manuals (UM10753, UM10225).
+    ("Tormach 8L", include_str!("../../../assets/machines/tormach-8l.mch")),
+    ("Tormach 15L Slant-PRO", include_str!("../../../assets/machines/tormach-15l-slant-pro.mch")),
+    // #619: the 15LX (UM10860 §3.1).
+    ("Tormach 15LX Slant-PRO", include_str!("../../../assets/machines/tormach-15lx-slant-pro.mch")),
+    // #707: Makera's desktop mills, from Makera's product spec tables.
+    ("Makera Carvera", include_str!("../../../assets/machines/makera-carvera.mch")),
+    ("Makera Carvera Air", include_str!("../../../assets/machines/makera-carvera-air.mch")),
+    // #614: Doosan DNM 5700 VMC (Fanuc 0i-MF).
+    ("Doosan DNM 5700", include_str!("../../../assets/machines/doosan-dnm.mch")),
 ];
 
 /// The mount path a built-in library entry records (stage C): the
@@ -155,18 +204,33 @@ pub fn default_machine() -> Value {
 /// clock - post, gate and timeline cannot disagree about the machine.
 #[must_use]
 pub fn machine_value(world: &World) -> Value {
-    match crate::machine::of(world).1 {
-        Some(m) => post::machine::mirror(&m),
-        None => default_machine(),
-    }
+    machine_value_for(&crate::machine::of(world))
 }
 
-/// The post this document runs, from the `PostRef` singleton. Setup
-/// furniture moved through commands or a document load, never ad hoc
-/// - the `machine::set` law wearing the post's own clothes.
+/// The post the program runs: the active setup's (#343 - its own, else
+/// the document's `PostRef` singleton). Setup furniture moved through
+/// commands or a document load, never ad hoc - the `machine::set` law
+/// wearing the post's own clothes.
 #[must_use]
 pub fn post_of(world: &World) -> PostRef {
-    world.try_get::<&PostRef>(|p| p.clone()).unwrap_or_default()
+    post_of_setup(world, crate::setup::active(world).as_deref())
+}
+
+/// The document's post as stored - what every setup that owns no post
+/// follows (#343). For `SelectPost`, the save and the document section.
+#[must_use]
+pub fn document_post_of(world: &World) -> PostRef {
+    crate::setup_mount::document_post(world)
+}
+
+/// The spindle speed a program commands for `tool`, rpm (#565): a touch
+/// probe is never spun (0 - its catalog `rpm` is never posted, and the
+/// posts start no spindle for it, #523); every cutter runs its own. The
+/// one answer the post and the machine's spindle-range check both read.
+#[must_use]
+pub fn posted_rpm(tool: &crate::tools::Tool) -> f64 {
+    // A torch states rpm 0 by law (#670): no spindle word, like a probe.
+    if matches!(tool.kind, crate::tools::ToolKind::Probe | crate::tools::ToolKind::Torch) { 0.0 } else { tool.rpm }
 }
 
 /// Write the singleton. For the `SelectPost` command and the project
@@ -175,11 +239,12 @@ pub fn post_set(world: &World, next: &PostRef) {
     world.set(next.clone());
 }
 
-/// The document's post options (issue #34), from the `PostOptions`
-/// singleton; the default when none was ever set.
+/// The post options the program posts with (issue #34): the active
+/// setup's (#389 - its own, else the document's `PostOptions`
+/// singleton, [`crate::setup_post_options::document`]).
 #[must_use]
 pub fn post_options(world: &World) -> PostOptions {
-    world.try_get::<&PostOptions>(|p| *p).unwrap_or_default()
+    crate::setup_post_options::in_force(world)
 }
 
 /// Write the options singleton. For `SetPostOptions` and the project
@@ -189,14 +254,31 @@ pub fn post_options_set(world: &World, next: PostOptions) {
 }
 
 /// The options as the script's `postOptions` object: the words a
-/// script compares against (`Threading`: `"G32"` or `"G76"`).
+/// script compares against (`Threading`: `"G32"` or `"G76"`;
+/// `EndUnits`: `"inch"` or `"mm"`, absent when the program's unit is
+/// left modal, #596).
 #[must_use]
 pub fn options_value(o: PostOptions) -> Value {
     let threading = match o.threading {
         ThreadingOutput::G32Passes => "G32",
         ThreadingOutput::G76Cycle => "G76",
     };
-    serde_json::json!({ "Threading": threading })
+    let mut v = serde_json::json!({ "Threading": threading });
+    // #616: stated only when on - off, the object a script sees is
+    // byte-identical to before (the posts read the per-op PARAMs; this
+    // word is for a script that wants the document-wide switch).
+    if o.smoothing {
+        v["Smoothing"] = serde_json::json!(true);
+    }
+    let end = match o.end_units {
+        EndUnits::Leave => None,
+        EndUnits::Inch => Some("inch"),
+        EndUnits::Millimeters => Some("mm"),
+    };
+    if let (Some(end), Some(map)) = (end, v.as_object_mut()) {
+        map.insert("EndUnits".to_owned(), Value::from(end));
+    }
+    v
 }
 
 /// The document's post for display: built-in name, or the file path
@@ -205,7 +287,13 @@ pub fn options_value(o: PostOptions) -> Value {
 /// read two ways.
 #[must_use]
 pub fn post_label(world: &World) -> String {
-    match post_of(world) {
+    post_ref_label(&post_of(world))
+}
+
+/// [`post_label`] for any post reference (#343: a setup's own post).
+#[must_use]
+pub fn post_ref_label(post: &PostRef) -> String {
+    match post.clone() {
         PostRef::Builtin => match BUILTINS.first() {
             Some((name, _)) => format!("{name} (built-in)"),
             None => "built-in".to_owned(),
@@ -228,7 +316,12 @@ pub fn post_label(world: &World) -> String {
 /// the silent wrong answer this whole codebase exists to prevent; the
 /// Prime Directive).
 pub fn script_source(world: &World) -> Result<(String, String), String> {
-    match post_of(world) {
+    script_of(&post_of(world))
+}
+
+/// [`script_source`] for any post reference (#388: a mount's own).
+pub fn script_of(post: &PostRef) -> Result<(String, String), String> {
+    match post.clone() {
         PostRef::Builtin => BUILTINS
             .first()
             .map(|(name, cps)| (format!("{name} (built-in)"), (*cps).to_owned()))
@@ -275,6 +368,28 @@ pub struct Posted {
 
 #[path = "posting_sim.rs"]
 mod sim_clause_impl;
+#[path = "posting_plasma.rs"]
+mod plasma_clause_impl;
+pub use plasma_clause_impl::{plasma_clause, PlasmaClause, PLASMA_VERDICT};
+#[path = "posting_per_op.rs"]
+mod per_op;
+#[path = "posting_suppressed.rs"]
+mod suppressed;
+#[path = "posting_wcs_rotation.rs"]
+mod wcs_rotation;
+#[path = "posting_wcs_slot.rs"]
+mod wcs_slot;
+#[path = "posting_mounts.rs"]
+mod mounts;
+#[path = "posting_nose.rs"]
+pub mod nose;
+#[path = "posting_index_swing.rs"]
+pub mod index_swing;
+pub(crate) use wcs_rotation::{offset_frame, OffsetFrame};
+pub use mounts::{
+    machine_checks, machine_value_for, machine_value_of, post_mounts, post_mounts_script, post_of_setup, PostedMount,
+};
+pub use per_op::{file_stem, post_per_op, post_per_op_script, PostedFile};
 pub use sim_clause_impl::{sim_clause, SimClause, NOT_JUDGED};
 
 /// The verification gate's whole answer: the blocking problems, and
@@ -289,8 +404,13 @@ pub struct GateReport {
 /// file. Every refusal names its reason; nothing partial is ever
 /// written. Cached generation warnings ride the stream as `WARN`
 /// records, so the engine's own warning count is the gate.
+///
+/// One file holds one post for one machine: the program's own mount
+/// (#388 - its setups', not the active one's). A program over several
+/// mounts is refused here by name; [`post_mounts`] writes it as one
+/// file per mount.
 pub fn post_setup(world: &World, out_path: &Path) -> Result<Posted, String> {
-    let (_label, cps) = script_source(world)?;
+    let (_label, cps) = script_of(&mounts::single(world, true)?.post)?;
     post_script(world, out_path, &cps)
 }
 
@@ -299,18 +419,40 @@ pub fn post_setup(world: &World, out_path: &Path) -> Result<Posted, String> {
 /// parameterized - what a caller holding a script text runs, and
 /// what the tests use to exercise the script seam directly.
 pub fn post_script(world: &World, out_path: &Path, cps: &str) -> Result<Posted, String> {
+    let started = std::time::Instant::now();
+    let posted = post_script_body(world, out_path, cps);
+    match &posted {
+        Ok(p) => tracing::info!(
+            file = %crate::logging::file_name(out_path),
+            bytes = p.program.len(),
+            ops = p.ops,
+            lines = p.lines,
+            ms = crate::logging::elapsed_ms(started),
+            "NC program written"
+        ),
+        Err(why) => tracing::warn!(file = %crate::logging::file_name(out_path), "NC program not written: {why}"),
+    }
+    posted
+}
+
+fn post_script_body(world: &World, out_path: &Path, cps: &str) -> Result<Posted, String> {
+    // #388: the program's one machine (a program over several refuses).
+    let machine = mounts::single(world, false)?.machine;
     let records = stream_records(world)?;
     // The verification gate (M2.3 D): the same two program-level
     // judgments the Deviate cell shows, made binding. Evidence is
     // computed here and now - never a cached verdict carried in from
     // the viewer (the PostView law: a verdict about an older world
     // must not release this one's metal).
-    let report = verification_report(world);
+    let mut report = verification_report(world);
+    // One file, one register per word (#196): two setups posting the same
+    // word from different placements refuse here - per-op files are exempt.
+    report.problems.extend(wcs_slot::shared_word_problems(world));
     if !report.problems.is_empty() {
         return Err(format!("post blocked - {}", report.problems.join("; ")));
     }
     let stream = cnc::serialize(&records);
-    let out = engine::run_with(cps, &machine_value(world), &stream, &options_value(post_options(world)))
+    let out = engine::run_with(cps, &machine_value_for(&machine), &stream, &options_value(post_options(world)))
         .map_err(|e| format!("post engine: {e}"))?;
     if !out.warnings.is_empty() {
         return Err(format!(
@@ -352,9 +494,11 @@ fn viewer_map(records: &[cnc::Record], out: &engine::PostOutput) -> Vec<Option<[
         .iter()
         .filter_map(|r| match r {
             cnc::Record::Move(m) => Some([m.x, m.y, m.z]),
-            // Probing (#108): each touch and retreat stands for one move.
+            // Probing (#108): each touch, retreat and protected move (#174)
+            // stands for one move.
             cnc::Record::Touch(t) => Some(t.expect),
             cnc::Record::Retreat(t) => Some(t.expect),
+            cnc::Record::Guard(g) => Some(g.to),
             _ => None,
         })
         .collect();
@@ -367,6 +511,7 @@ fn viewer_map(records: &[cnc::Record], out: &engine::PostOutput) -> Vec<Option<[
             cnc::Record::Move(m) => Some([m.x, m.y, m.z]),
             cnc::Record::Touch(t) => Some(t.expect),
             cnc::Record::Retreat(t) => Some(t.expect),
+            cnc::Record::Guard(g) => Some(g.to),
             cnc::Record::Cycle(c) => moves.get(c.first_move).copied(),
             _ => None,
         };
@@ -386,9 +531,20 @@ fn viewer_map(records: &[cnc::Record], out: &engine::PostOutput) -> Vec<Option<[
 pub fn program_ops(world: &World) -> Result<Vec<(String, Entity)>, String> {
     // THE order law by call (M3.2 A): setup rank, then operation position - the same
     // walk re-machining, the sim and the machine-limit check make.
-    let ops: Vec<(String, Entity)> = crate::setup::operation_order(world);
-    if ops.is_empty() {
+    // A suppressed op (#110) is not in the program: skipped before the
+    // freshness law, so a stale op the user left out never holds the
+    // post - and the program sim walks this same list, so what it
+    // judges is still exactly what posts.
+    let all: Vec<(String, Entity)> = crate::setup::operation_order(world);
+    if all.is_empty() {
         return Err("no operations to post".into());
+    }
+    let ops: Vec<(String, Entity)> = all
+        .into_iter()
+        .filter(|(_, e)| !model::operation_of(world, e).is_some_and(|op| op.suppressed))
+        .collect();
+    if ops.is_empty() {
+        return Err("no operations to post: every operation is suppressed".into());
     }
 
     // Validate early: every operation must be generated and fresh
@@ -463,24 +619,33 @@ pub fn verification_report(world: &World) -> GateReport {
 
     let sim = sim_clause(world);
     problems.extend(sim.problem);
+    // The plasma clause (#672): the 3D stock sim carves nothing for a
+    // torch, so a plasma op's verdict is the 2D through-cut laws, run
+    // here - a refusal blocks, and the not-judged line says the sim did
+    // not run for it, never a silent skip.
+    let plasma = plasma_clause(world);
+    problems.extend(plasma.problems);
 
-    if let Some(m) = crate::machine::of(world).1 {
-        match crate::machine::check_document(world, &m) {
-            Ok(c) if !c.is_ok() => {
-                let more = if c.more > 0 { format!(" (+{} more)", c.more) } else { String::new() };
-                problems.push(format!(
-                    "machine {}: {} limit problem(s): {}{more}",
-                    m.model,
-                    c.problems.len(),
-                    c.problems.join("; ")
-                ));
-            }
-            Ok(_) => {}
-            // Unreachable in one thread - program_ops just walked the
-            // same ops - but silence is the forbidden arm, not this one.
-            Err(err) => problems.push(format!("machine: {err}")),
-        }
-    }
+    // The suppression clause (#110 review B1): an op generated against
+    // a suppressed op's cut refuses by name - the cut it assumed is not
+    // in the program.
+    problems.extend(suppressed::suppressed_problems(world));
+    // The rotated-offset clause (#315): the post carries translation only.
+    problems.extend(wcs_rotation::rotated_wcs_problems(world));
+    // #389: the setups' post options must agree on what shapes the whole
+    // program (the Output and the thread output) - never posted half one
+    // way. Judged program-wide, ahead of #388's per-mount split.
+    problems.extend(crate::setup_post_options::program_problems(world));
+    // The carried-stock clause (#319): a feed move into carried material
+    // outside a setup's declared stock is engagement nothing verified.
+    problems.extend(crate::operation::carried_problems(world));
+
+    // The limit check (M2.3 D), each op against the machine its own
+    // setup mounts (#388): one block per machine, the program's order.
+    problems.extend(mounts::machine_problems(world));
+    // #804: before a work-turning A indexes, the retracted tool tip
+    // clears what the stock, parts and turning fixtures sweep about it.
+    problems.extend(index_swing::index_swing_problems(world));
 
     // The workholding clause (M3.2 B, live-gate law): the same fixture
     // bands and rapid laws generation reports early, re-run HERE against
@@ -491,6 +656,9 @@ pub fn verification_report(world: &World) -> GateReport {
     // precedent: what the room is made of is verified now, never baked
     // into a digest).
     problems.extend(fixture_problems(world));
+    // #321: a carried setup's fixtures against the body it is entered
+    // with - workholding modelled into material the program carries in.
+    problems.extend(crate::fixture_carried::carried_fixture_problems(world));
 
     // The in-process measurement ask (M5.3 D): a Part op's probe
     // budget is a claim about the FINISHED part, and the finished
@@ -500,7 +668,12 @@ pub fn verification_report(world: &World) -> GateReport {
     // what came after it). The law and lines live in
     // `operation::probe_problems`.
     problems.extend(crate::operation::probe_problems(world));
-    GateReport { problems, not_judged: sim.not_judged }
+    let not_judged = match (sim.not_judged, plasma.line) {
+        (Some(s), Some(p)) => Some(format!("{s}; {p}")),
+        (None, Some(p)) => Some(format!("{NOT_JUDGED}: {p}")),
+        (s, None) => s,
+    };
+    GateReport { problems, not_judged }
 }
 
 /// The gate's fixture walk: one problem string per operation with a
@@ -509,14 +682,32 @@ pub fn verification_report(world: &World) -> GateReport {
 /// `stream_records` refuses those by name before this ever releases
 /// metal; the gate's job is the steel, not the bookkeeping.
 fn fixture_problems(world: &World) -> Vec<String> {
-    let mut out = Vec::new();
-    let Ok(ops) = program_ops(world) else {
-        return out;
+    let Ok(f) = fixture_findings(world) else {
+        return Vec::new();
     };
-    let spindle = crate::machine::of(world)
-        .1
-        .and_then(|m| m.spindle_d.zip(m.spindle_len))
-        .map(|(d, l)| (d * 0.5, l));
+    let hits = f.hits.into_iter().map(|(name, hit)| format!("{name}: {hit}"));
+    f.unjudged.into_iter().chain(hits).collect()
+}
+
+/// The fixture walk's verdict as data (#181), read by both the gate's
+/// strings and the MCP `get_fixture_findings` tool.
+#[derive(Debug, Default)]
+pub struct FixtureFindings {
+    /// `(operation key, warning)` per live collision, in program order.
+    pub hits: Vec<(String, crate::verify::Warning)>,
+    /// Operations the walk could not judge, by name and reason (#368: a
+    /// modelled tool body that no longer fits its tool) - each a problem
+    /// in its own right, never read as clear.
+    pub unjudged: Vec<String>,
+}
+
+/// The fixture walk (#181). `Err` is the program-order refusal (a stale
+/// op): no verdict, never "clear".
+pub fn fixture_findings(world: &World) -> Result<FixtureFindings, String> {
+    let mut out = FixtureFindings::default();
+    let ops = program_ops(world)?;
+    let mut mesh_cache: std::collections::HashMap<Option<String>, Vec<crate::fixture::MeshedFixture>> =
+        std::collections::HashMap::new();
     for (name, e) in ops {
         let Some(op) = model::operation_of(world, &e) else {
             continue;
@@ -524,41 +715,28 @@ fn fixture_problems(world: &World) -> Vec<String> {
         let Some(cache) = model::toolpath_of(world, &e) else {
             continue;
         };
-        let Some(tool) = model::find_by_name(world, &op.tool)
-            .and_then(|t| model::tool_of(world, &t))
-        else {
-            continue;
-        };
-        // `boxes_for` already folds in the machine-derived table, so an
-        // empty list means no steel this op could strike at all (the
-        // spindle band is tested against that list, never on its own).
         // Split by whether the steel turns with the part (M13.8 (2)):
         // fixed boxes are judged in the machine frame where the op's
         // rotary axis is known, in the path frame otherwise.
         let (turning, fixed) = crate::fixture::workholding_for(world, op.setup.as_deref());
-        if turning.is_empty() && fixed.is_empty() {
-            continue;
-        }
-        let wh = crate::verify::Workholding {
-            turning: &turning,
-            fixed: &fixed,
-            axis: crate::fixture::rotary_axis_of(world, &op),
-        };
-        let geom = tool.geom();
-        let mut hits = crate::verify::bands_vs_workholding(
-            &cache.path,
-            &geom,
-            &wh,
-            spindle,
-            operation::GOUGE_TOL,
-        );
-        // The spindle housing rides posed rapids too (M13.8 (1)).
-        hits.extend(crate::verify::rapids_vs_workholding(&cache.path, &geom, &wh, spindle));
-        for hit in hits {
-            out.push(format!("{name}: {hit}"));
+        // #339: the tagged models' meshes, indexed once per setup and
+        // shared by every op in it.
+        let meshes = mesh_cache
+            .entry(crate::setup::effective(world, op.setup.as_deref()))
+            .or_insert_with(|| crate::fixture::meshes_for(world, op.setup.as_deref()));
+        // The one per-op law, shared with the viewport's struck-fixture
+        // view (#339 slice 4) so the two can never disagree. Its `Err`
+        // is #368's tool body that no longer fits its tool: unjudged,
+        // by name, never read as clear.
+        match crate::fixture_struck::op_hits(world, &op, &cache.path, &turning, &fixed, meshes) {
+            Ok(hits) => out.hits.extend(hits.into_iter().map(|hit| (name.clone(), hit))),
+            Err(why) => out.unjudged.push(format!("{name}: {why}")),
         }
     }
-    out
+    for meshes in mesh_cache.values() {
+        crate::fixture::log_mesh_refusals(meshes);
+    }
+    Ok(out)
 }
 
 /// The stream we would feed the engine: every operation's records,
@@ -569,22 +747,57 @@ fn fixture_problems(world: &World) -> Vec<String> {
 /// through one script without the verification gate, which the
 /// posting suites lock separately - the golden locks the translation.
 pub fn stream_records(world: &World) -> Result<Vec<cnc::Record>, String> {
+    Ok(join_streams(op_streams(world)?))
+}
+
+/// Join per-op streams into one program's records, cycle anchors made
+/// stream-global - [`stream_records`]' join, and one mount's file's
+/// (#388) over its own ops.
+pub(crate) fn join_streams(streams: Vec<(String, Vec<cnc::Record>)>) -> Vec<cnc::Record> {
+    let mut records: Vec<cnc::Record> = Vec::new();
+    let mut moved = 0usize; // cycle AT anchors are stream-global
+    for (_name, mut recs) in streams {
+        if moved > 0 {
+            for r in &mut recs {
+                if let cnc::Record::Cycle(c) = r {
+                    c.first_move += moved;
+                }
+            }
+        }
+        // The emitted motion records, not the path's moves: a
+        // control-compensated span (M13.11) writes its programmed
+        // contour in place of its centre moves.
+        moved += recs
+            .iter()
+            .filter(|r| matches!(r, cnc::Record::Move(_) | cnc::Record::Touch(_) | cnc::Record::Retreat(_) | cnc::Record::Guard(_)))
+            .count();
+        records.extend(recs);
+    }
+    records
+}
+
+/// Each program operation's own records (op entity name, records), in
+/// program order, cycle anchors local to the op - the unit one file per
+/// operation (#111) posts on its own, and [`stream_records`] joins.
+pub fn op_streams(world: &World) -> Result<Vec<(String, Vec<cnc::Record>)>, String> {
     let ops = program_ops(world)?;
 
     // The T../H.. law (#221): a tool's own number when it has one, else
     // its 1-based position among the named tools in document order - and
-    // two tools of one program posting the same number refuse by name.
+    // two tools of one machine posting the same number refuse by name.
     let tool_numbers = crate::tool_numbers::numbers(world);
-    let used: Vec<String> = ops
-        .iter()
-        .filter_map(|(_, e)| model::operation_of(world, e).map(|op| op.tool))
-        .collect();
-    if let Some(msg) = crate::tool_numbers::clash(world, &used) {
+    // Judged per machine (#438): two machines are two tool tables.
+    if let Some(msg) = crate::tool_numbers::clash_per_machine(world, &ops) {
         return Err(msg);
     }
 
-    let mut records: Vec<cnc::Record> = Vec::new();
-    let mut moved = 0usize; // cycle AT anchors are stream-global
+    // #155: Pause / Home entries fold into the gap they stand in; #389:
+    // "Skip pauses and homes" is read per op, from its own setup.
+    let afters = crate::program_entry::posted_afters(world, &ops, |e| {
+        model::operation_of(world, e)
+            .is_some_and(|op| crate::setup_post_options::of(world, op.setup.as_deref()).skip_stops)
+    })?;
+    let mut streams = Vec::with_capacity(ops.len());
     for (name, e) in &ops {
         let op = model::operation_of(world, e)
             .ok_or_else(|| format!("{name}: lost its operation"))?;
@@ -600,7 +813,7 @@ pub fn stream_records(world: &World) -> Result<Vec<cnc::Record>, String> {
             .iter()
             .find(|(n, _)| *n == op.tool)
             .map_or(0, |(_, t)| *t);
-        let (wcs, origin) = wcs_context(world, setup, &op.params);
+        let (wcs, origin) = wcs_context(world, setup);
         // The stock box is THIS operation's setup context (M3.2 A): a
         // later setup's block is where and how tall its own stock says.
         let boxz = model::stock_world_aabb_for(world, setup);
@@ -644,15 +857,43 @@ pub fn stream_records(world: &World) -> Result<Vec<cnc::Record>, String> {
             }),
             _ => None,
         };
-        let rpm = if tool.kind == crate::tools::ToolKind::Probe { 0.0 } else { tool.rpm };
+        let rpm = posted_rpm(&tool);
+        // Commentary for the program (#257): kinds by their panel
+        // labels, the setup by the resolution law (implicit members
+        // name the first setup, as the setup sheet does).
+        let op_kind = op.params.kind().to_string();
+        let tool_kind = tool.kind.to_string();
+        let setup_name = crate::setup::effective(world, setup).unwrap_or_default();
+        // #630: a nose-centre turning path posts as the tool's control
+        // point for its orientation (or is refused by name when the
+        // orientation cannot cut it); the cache stays the nose truth.
+        let (posted, tool_orientation) = nose::posted_path(&op.params, &op.tool, &tool, &cache.path, origin)
+            .map_err(|e| format!("{display_name}: {e}"))?;
         let d = Dump {
+            op_kind: &op_kind,
+            setup_name: &setup_name,
+            tool_kind: &tool_kind,
+            tool_corner_r: tool.corner_r,
+            tool_orientation,
             probe_result,
             op_name: &display_name,
             part_load,
             part_unload,
             part_transfer,
             probe_tol,
+            // #616: the op's smoothing ask, only when its OWN setup's
+            // post options turn smoothing on (off: byte-identical output) -
+            // read per op like "Skip pauses and homes" (#389), never from
+            // whichever setup happens to be active.
+            smoothing: if crate::setup_post_options::of(world, op.setup.as_deref()).smoothing {
+                crate::smoothing::of(&op.params)
+            } else {
+                None
+            },
             coolant: op.coolant,
+            // "Skip pauses and homes" (#110) mutes every after-action
+            // at post; the ops keep their choices. Entries ride it (#155).
+            after: afters.get(name).copied().unwrap_or_default(),
             tool_number,
             tool_name: &op.tool,
             tool_diameter: tool.diameter,
@@ -674,51 +915,24 @@ pub fn stream_records(world: &World) -> Result<Vec<cnc::Record>, String> {
                 .map(|w| format!("{name}: {w}"))
                 .collect(),
         };
-        let mut recs = post::dump(&cache.path, &d);
-        if moved > 0 {
-            for r in &mut recs {
-                if let cnc::Record::Cycle(c) = r {
-                    c.first_move += moved;
-                }
-            }
-        }
-        // The emitted motion records, not the path's moves: a
-        // control-compensated span (M13.11) writes its programmed
-        // contour in place of its centre moves.
-        moved += recs
-            .iter()
-            .filter(|r| matches!(r, cnc::Record::Move(_) | cnc::Record::Touch(_) | cnc::Record::Retreat(_)))
-            .count();
-        records.extend(recs);
+        streams.push((name.clone(), post::dump(&posted, &d)));
     }
-    Ok(records)
+    Ok(streams)
 }
 
-/// The work offset this operation posts to: the first WCS slot its
-/// height grammar references, else the default `G54` - and that
-/// slot's origin as the machine would measure it. `pub(crate)` so the
+/// The work offset an operation of the `setup` context posts to: the
+/// setup's word (#196, #342: its label, else `G54`) and the setup's one
+/// WCS origin as the machine would measure it. `pub(crate)` so the
 /// machine-limit travel check (M2.3 C) reads program coordinates by
 /// exactly this law, not by a second copy of it.
 ///
 /// The G-code WORD is always `WCS_SLOTS[slot]` - the machine's register
 /// names do not take setup suffixes. The ENTITY the origin is measured
-/// from follows the setup (M3.2 A): `Setup2/G54` is the same machine
-/// offset word, re-placed for that setup's clamping.
-pub(crate) fn wcs_context<'a>(
-    world: &World,
-    setup: Option<&str>,
-    params: &'a OpParams,
-) -> (&'a str, [f64; 3]) {
-    let slot = params
-        .heights()
-        .into_iter()
-        .find_map(|h| match h.reference {
-            HeightReference::WorkOffset(i) if i < WCS_SLOTS.len() => Some(i),
-            _ => None,
-        })
-        .unwrap_or(0);
+/// from is the setup's WCS (M3.2 A, #342), whatever word it is labelled.
+pub(crate) fn wcs_context(world: &World, setup: Option<&str>) -> (&'static str, [f64; 3]) {
+    let slot = wcs_slot::wcs_slot(world, setup);
     let name = WCS_SLOTS[slot];
-    let origin = crate::setup::wcs_entity(world, setup, slot)
+    let origin = crate::setup::wcs_entity(world, setup)
         .and_then(|e| model::transform_of(world, &e))
         .map_or([0.0; 3], |t| [t.pos.x, t.pos.y, t.pos.z]);
     (name, origin)
@@ -734,6 +948,7 @@ impl HeightRefs for OpParams {
     fn heights(&self) -> Vec<&Height> {
         match self {
             OpParams::Probe { clearance_z, .. } => vec![clearance_z],
+            OpParams::PlasmaProfile(p) => vec![&p.clearance_z, &p.top_z, &p.bottom_z],
             OpParams::Face {
                 clearance_z,
                 cut_z,
@@ -774,6 +989,13 @@ impl HeightRefs for OpParams {
                 ..
             }
             | OpParams::Slot {
+                clearance_z,
+                retract_z,
+                top_z,
+                bottom_z,
+                ..
+            }
+            | OpParams::TrochoidalSlot {
                 clearance_z,
                 retract_z,
                 top_z,

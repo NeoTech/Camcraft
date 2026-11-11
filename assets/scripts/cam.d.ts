@@ -29,10 +29,14 @@ interface DocumentInfo {
 }
 
 interface VerifyReport {
+  /** The post's whole verdict: every op in scope fresh, the gate passed,
+   *  and no op in scope holding the post with its own warnings. */
   ok: boolean;
   operations: OperationInfo[];
   /** The program-level gate; skipped (with reason) while anything is stale. */
   gate: { ok: boolean; problems: string[]; skipped?: string };
+  /** Ops in scope whose own cached warnings refuse the post (#722). */
+  held_by: string[];
 }
 
 interface PostOptions {
@@ -48,6 +52,19 @@ interface PostOptions {
 
 interface PostResult {
   path: string;
+  ops: number;
+  lines: number;
+  program?: string;
+  /** Setups on different machines or posts: every file written, one per mount. */
+  files?: string[];
+  mounts?: PostedMountInfo[];
+}
+
+interface PostedMountInfo {
+  path: string;
+  setups: string[];
+  machine: string;
+  post: string;
   ops: number;
   lines: number;
   program?: string;
@@ -76,6 +93,8 @@ interface CamApi {
   load(path: string): DocumentInfo;  // arity 1
   save(path?: string): { path: string };  // variadic
   import(path: string, name?: string): { model: string; facets: number };  // variadic
+  exportTools(path: string): { path: string; tools: number };  // arity 1
+  importTools(path: string): { path: string; added: string[]; renamed: { from: string; to: string }[]; skipped: string[]; summary: string };  // arity 1
   operations(): OperationInfo[];  // arity 0
   generate(...names: string[]): OperationInfo[];  // variadic
   verify(...names: string[]): VerifyReport;  // variadic

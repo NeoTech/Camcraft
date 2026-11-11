@@ -20,7 +20,6 @@
 //! Provenance: our own code, from our own imgui app (M1-era, specced from
 //! public CAM conventions; see app.rs's history and ROADMAP).
 
-use camcraft_app::cl::MoveKind;
 use camcraft_app::geometry::feature;
 use camcraft_app::geometry::{Aabb, Point3, transform_point};
 use camcraft_app::geo2d::Region;
@@ -56,10 +55,6 @@ impl From<ModifiersState> for Mods {
 /// not the law; the shells' must agree).
 pub(crate) const CLICK_TRAVEL_PX: f32 = 4.0;
 
-/// How close a feature edge must draw to the cursor to be pickable, in
-/// logical px - the same tolerance the anchor markers use.
-pub(crate) const PICK_EDGE_PX: f32 = 12.0;
-
 // ------------------------------------------------------------ gestures
 
 /// Is the point inside the published viewport image rect? Clicks start
@@ -72,7 +67,7 @@ pub(crate) fn inside_viewport(state: &State, p: [f32; 2]) -> bool {
 
 /// Camera ray through a logical-px viewport point; None outside a
 /// laid-out image or behind the camera. Shared by picking and hover.
-fn ray_at(state: &State, p: [f32; 2]) -> Option<([f64; 3], [f64; 3])> {
+pub(crate) fn ray_at(state: &State, p: [f32; 2]) -> Option<([f64; 3], [f64; 3])> {
     let ([x0, y0], [x1, y1]) = state.viewport_rect;
     let (w, h) = (x1 - x0, y1 - y0);
     if w <= 1.0 || h <= 1.0 {
@@ -95,12 +90,8 @@ pub(crate) fn pick_at(state: &mut State, p: [f32; 2], mods: Mods) {
     if state.wcs_ui.pick_anchor
         && let Some((k, pos)) = anchor_hit(state, p, 12.0)
     {
-        let slot = *WCS_SLOTS
-            .get(state.wcs_ui.slot.min(WCS_SLOTS.len() - 1))
-            .unwrap_or(&WCS_SLOTS[0]);
         state.wcs_ui.anchor_xy = k;
         state.pending.push_back(CommandKind::SetWcs {
-            slot: slot.to_string(),
             pos,
             roll_deg: state.wcs_ui.roll_deg,
             pitch_deg: state.wcs_ui.pitch_deg,
@@ -110,9 +101,8 @@ pub(crate) fn pick_at(state: &mut State, p: [f32; 2], mods: Mods) {
     }
     match state.geo_pick {
         GeoPick::Model => pick_model(state, p),
-        GeoPick::Face => pick_face(state, p, mods),
-        GeoPick::Edge => pick_edge(state, p, mods),
-        GeoPick::Vertex => crate::vertex_pick::pick_vertex(state, p, mods),
+        // #692: every feature click resolves through the one pick rule.
+        GeoPick::Face | GeoPick::Edge | GeoPick::Vertex => crate::feature_click::click(state, p, mods),
     }
 }
 
@@ -131,7 +121,8 @@ fn pick_model(state: &mut State, p: [f32; 2]) {
     let hit = pick::first_hit_f(&state.world, origin, dir, |name| {
         state.hidden_in_view(name)
     });
-    let hit = crate::machined::filter_hit(state, origin, dir, hit);
+    let (hit, facet) = crate::machined::filter_hit_facet(state, origin, dir, hit);
+    state.hover_mesh = facet;
     // The click also tells us the exact facet under the pointer;
     // keeping it alive so the highlight matches the selection.
     state.hover = hit
@@ -149,24 +140,6 @@ fn pick_model(state: &mut State, p: [f32; 2]) {
         None => String::from("no model under the cursor"),
     };
     state.pending.push_back(CommandKind::Select(hit));
-}
-
-/// Face pick: the raycast facet's feature face becomes a geometry pick
-/// for the open operation. Queues ONLY SetOperationGeometry - a feature
-/// click never touches entity selection, so Ctrl+Z walks the pick list,
-/// not the tree highlight. A miss is a status line, nothing else.
-fn pick_face(state: &mut State, p: [f32; 2], mods: Mods) {
-    let Some((entity, sel)) = hover_feature_at(state, p) else {
-        state.status = String::from("no face under the cursor");
-        return;
-    };
-    let pick = GeoSel { entity, feature: sel };
-    if state.boundary_pick.is_some() {
-        queue_boundary_pick(state, pick, mods);
-        return;
-    }
-    let append = mods.ctrl || mods.shift;
-    queue_feature_pick(state, pick, append);
 }
 
 /// A Face/Edge pick while the Boundary group collects (M11.5 UX): Ctrl
@@ -187,140 +160,43 @@ pub fn queue_boundary_pick(state: &mut State, pick: GeoSel, mods: Mods) {
     crate::boundary_draft::take_pick(state, target, pick, m);
 }
 
-/// Edge pick: the nearest visible feature edge in screen space names a
-/// chain (its tangent run), or just that segment under Alt. With no
-/// edge near the cursor the click falls through to the face rule -
-/// faces own the pixels between edges.
-fn pick_edge(state: &mut State, p: [f32; 2], mods: Mods) {
-    let Some((entity, edge)) = edge_nearest(state, p, PICK_EDGE_PX) else {
-        pick_face(state, p, mods);
-        return;
-    };
-    let Some(found) = model::find_by_name(&state.world, &entity) else {
-        return;
-    };
-    let Some(features) = model::features_of(&state.world, &found) else {
-        return;
-    };
-    let sel = if mods.alt {
-        feature::singleton_chain_id(&features, edge).map(FeatureSel::Chain)
-    } else if state.boundary_pick.is_some() {
-        // A boundary takes ONE edge per click (M11.5 UX): the run - one
-        // straight stretch or one arc - never the whole tangent loop a
-        // filleted rim chains into.
-        feature::run_containing(&features, edge).map(|r| FeatureSel::Chain(r.id))
-    } else {
-        feature::chains(&features)
-            .iter()
-            .find(|c| c.edges.contains(&edge))
-            .map(|c| FeatureSel::Chain(c.id))
-    };
-    let Some(sel) = sel else {
-        pick_face(state, p, mods);
-        return;
-    };
-    // Mirror the pick in the hover so highlight and click agree even
-    // when the cursor sits on the silhouette, where the ray misses.
-    let facet = ray_at(state, p)
-        .and_then(|(origin, dir)| {
-            pick::first_hit_f(&state.world, origin, dir, |name| {
-                state.hidden_in_view(name)
-            })
-        })
-        .map_or(usize::MAX, |(_, facet, _)| facet);
-    state.hover = Some(HoverHit {
-        entity: entity.clone(),
-        facet,
-        feature: Some(sel),
-    });
-    if state.boundary_pick.is_some() {
-        queue_boundary_pick(state, GeoSel { entity, feature: sel }, mods);
-        return;
-    }
-    crate::edge_pick::queue_edge_pick(state, GeoSel { entity, feature: sel }, mods);
-}
-
-/// Shared hover/raycast for the Face pick: sets state.hover with the
-/// face feature resolved and returns (entity, feature). None (with the
-/// hover reflecting the raw hit) on a miss or a facetless mesh.
-fn hover_feature_at(state: &mut State, p: [f32; 2]) -> Option<(String, FeatureSel)> {
-    let (origin, dir) = ray_at(state, p)?;
-    let (entity, facet, _) = pick::first_hit_f(&state.world, origin, dir, |name| {
-        state.hidden_in_view(name)
-    })?;
-    let sel = feature_of_facet(state, &entity, facet);
-    state.hover = Some(HoverHit {
-        entity: entity.clone(),
-        facet,
-        feature: sel,
-    });
-    Some((entity, sel?))
-}
-
-/// Refresh the hover highlight from the cursor: a filtered raycast (plus
-/// the screen-space edge pass in Edge mode), only while the pointer is
+/// Refresh the hover highlight from the cursor: a filtered raycast (the
+/// one pick rule in the feature modes, #692), only while the pointer is
 /// over the live viewport image with no button held and no menu or popup
 /// on top of it. Anywhere else the highlight clears - it must never
-/// linger where the cursor isn't. In Face/Edge mode the hover carries
-/// the feature it resolves to, so the highlight draws the same loops or
-/// chain the click would pick; the rule and the projection are shared,
-/// so they cannot disagree. Ephemeral view state; never a command
+/// linger where the cursor isn't. In a feature mode the hover carries
+/// the feature it resolves to, so the highlight draws the same face,
+/// chain or point the click would pick; the rule is shared, so they
+/// cannot disagree. Ephemeral view state; never a command
 /// (AGENTS.md). `held` stands in for the shell's own left-press book-
 /// keeping (the app keeps `left_press` OUTSIDE State, across frames).
 pub(crate) fn update_hover(state: &mut State, p: [f32; 2], held: bool) {
+    state.hover_mesh = None; // re-earned below by a mesh hit, or gone
     let idle_over_viewport =
         state.drag.is_none() && !held && state.viewport_hot && inside_viewport(state, p);
     if !idle_over_viewport {
         state.hover = None;
         return;
     }
-    // Vertex mode is screen-space only: a corner or nothing (M13.4).
-    if state.geo_pick == GeoPick::Vertex {
-        crate::vertex_pick::hover_vertex(state, p);
-        return;
-    }
-    // Edge mode leads with the screen-space pass: the silhouette of a
-    // chain is exactly where a ray misses but an edge pick belongs.
-    if state.geo_pick == GeoPick::Edge
-        && let Some((entity, edge)) = edge_nearest(state, p, PICK_EDGE_PX)
-        && let Some(found) = model::find_by_name(&state.world, &entity)
-        && let Some(features) = model::features_of(&state.world, &found)
-        && let Some(c) = if state.boundary_pick.is_some() {
-            // The run a boundary click takes, not the tangent loop.
-            feature::run_containing(&features, edge)
-        } else {
-            feature::chains(&features).into_iter().find(|c| c.edges.contains(&edge))
-        }
-    {
-        state.hover = Some(HoverHit {
-            entity,
-            facet: usize::MAX, // no facet drives this highlight
-            feature: Some(FeatureSel::Chain(c.id)),
-        });
+    // #692: a feature mode hovers exactly what its click would take - the
+    // one pick rule, the armed tool's kinds.
+    if state.geo_pick != GeoPick::Model {
+        crate::feature_click::hover(state, p);
         return;
     }
     let Some((origin, dir)) = ray_at(state, p) else {
         state.hover = None;
         return;
     };
-    let mode = state.geo_pick;
     let hit = pick::first_hit_f(&state.world, origin, dir, |name| {
         state.hidden_in_view(name)
     });
     // The machined mesh, when drawn, is what a stock hover reports
-    // (M13.1 owed) - never the uncut box the ray crossed.
-    let hit = crate::machined::filter_hit(state, origin, dir, hit);
-    state.hover = hit.map(|(entity, facet, _)| {
-        let feature = match mode {
-            // The triangle highlight is exactly what the feature modes
-            // replace - Model mode keeps hover free of features. In
-            // Edge mode a facet's face is the fallback, matching the
-            // click rule (faces own the pixels between edges).
-            GeoPick::Model | GeoPick::Vertex => None,
-            GeoPick::Face | GeoPick::Edge => feature_of_facet(state, &entity, facet),
-        };
-        HoverHit { entity, facet, feature }
-    });
+    // (M13.1 owed) - never the uncut box the ray crossed. Model mode keeps
+    // hover free of features: the triangle highlight is its answer.
+    let (hit, facet) = crate::machined::filter_hit_facet(state, origin, dir, hit);
+    state.hover_mesh = facet;
+    state.hover = hit.map(|(entity, facet, _)| HoverHit { entity, facet, feature: None });
 }
 
 /// Fold one feature pick into the open operation's geometry list and
@@ -364,99 +240,6 @@ pub fn queue_feature_pick(state: &mut State, pick: GeoSel, append: bool) {
     state.pending.push_back(CommandKind::SetOperationGeometry { name, items });
 }
 
-/// The feature edge nearest a logical-px point, within `radius` px:
-/// (entity, edge index). Screen-space by design - the raycast Face pick
-/// cannot see the silhouette, the edge the user actually aims at. Every
-/// visible model's feature edges are projected through the camera and
-/// measured against the point; hidden models drop out, stock is included
-/// (its top edges are pickable geometry like any model's). Iteration runs
-/// in name order (`model_entities` sorts), so the nearest wins
-/// deterministically and a tie goes to the earlier name.
-pub(crate) fn edge_nearest(state: &State, p: [f32; 2], radius: f32) -> Option<(String, u32)> {
-    let ([x0, y0], [x1, y1]) = state.viewport_rect;
-    let (w, h) = (x1 - x0, y1 - y0);
-    if w <= 1.0 || h <= 1.0 {
-        return None; // no laid-out image: nothing to project into
-    }
-    let mvp = state.cam.mvp(f64::from(w / h));
-    let mut entities: Vec<(String, flecs_ecs::prelude::Entity)> = model::model_entities(&state.world)
-        .into_iter()
-        .filter(|(name, _)| !state.hidden_models.iter().any(|hid| hid == name))
-        .collect();
-    // The stock that stands in the viewport is the ACTIVE setup's - the
-    // pick law follows the one-order law's context, not a global name.
-    let stock_name = camcraft_app::setup::stock_entity_name(
-        &state.world,
-        camcraft_app::setup::active(&state.world).as_deref(),
-    );
-    if !state.active_stock_hidden()
-        && let Some(stock) = model::find_by_name(&state.world, &stock_name)
-    {
-        entities.push((stock_name, stock));
-    }
-    let to_px = |uv: [f32; 2]| [x0 + uv[0] * w, y0 + uv[1] * h];
-    let mut best: Option<(f32, String, u32)> = None;
-    for (name, entity) in entities {
-        let Some(features) = model::features_of(&state.world, &entity) else {
-            continue;
-        };
-        let loc = model::transform_of(&state.world, &entity).unwrap_or_default();
-        for (i, e) in features.edges.iter().enumerate() {
-            let (Some(a), Some(b)) = (features.verts.get(e.a as usize), features.verts.get(e.b as usize)) else {
-                continue;
-            };
-            let proj = |v: &[f64; 3]| {
-                let w = transform_point(Point3::new(v[0], v[1], v[2]), loc.pos, loc.rot);
-                project_uv(&mvp, [w.x, w.y, w.z]).map(to_px)
-            };
-            let (Some(a), Some(b)) = (proj(a), proj(b)) else {
-                continue; // behind the camera: not what is on screen
-            };
-            let d = point_seg_dist_px(p, a, b);
-            if d <= radius && best.as_ref().is_none_or(|&(bd, _, _)| d < bd) {
-                best = Some((d, name.clone(), i as u32));
-            }
-        }
-    }
-    best.map(|(_, name, edge)| (name, edge))
-}
-
-/// Distance from a point to a segment, px. Clamped-parameter form: no
-/// division, no NaN through a zero-length segment (a weld-degenerate edge
-/// then reads as the distance to its one endpoint).
-fn point_seg_dist_px(p: [f32; 2], a: [f32; 2], b: [f32; 2]) -> f32 {
-    let (abx, aby) = (b[0] - a[0], b[1] - a[1]);
-    let len2 = abx * abx + aby * aby;
-    let t = if len2 > 0.0 {
-        ((( p[0] - a[0]) * abx + (p[1] - a[1]) * aby) / len2).clamp(0.0, 1.0)
-    } else {
-        0.0
-    };
-    let (qx, qy) = (a[0] + t * abx - p[0], a[1] + t * aby - p[1]);
-    (qx * qx + qy * qy).sqrt()
-}
-
-/// The face feature a raycast facet belongs to, through the model's
-/// facet-to-face map. A strip of a welded wall promotes to its patch:
-/// the wall tessellates into strips only because it curves, and the
-/// user who picks "the wall" must get the wall, not the one strip under
-/// the cursor (M1.5.2 issue: "selects a facet - we need welded faces").
-/// Flat faces are their own logical unit and stay a plain Face - the
-/// promotion cannot re-key what was never split. None when the entity
-/// or its features are gone.
-pub(crate) fn feature_of_facet(state: &State, entity: &str, facet: usize) -> Option<FeatureSel> {
-    let found = model::find_by_name(&state.world, entity)?;
-    let features = model::features_of(&state.world, &found)?;
-    let fi = *features.facet_face.get(facet)?;
-    let fid = features.faces.get(fi as usize)?.id;
-    Some(
-        feature::patches(&features)
-            .into_iter()
-            .find(|p| p.faces.contains(&fid))
-            .map_or(FeatureSel::Face(fid), |p| FeatureSel::Patch(p.id)),
-    )
-}
-
 // ------------------------------------------------- gizmos and anchors
 
 /// Compass names for the 3x3 XY anchor grid, row-major north-to-south,
@@ -468,9 +251,19 @@ const COMPASS: [&str; 9] = ["NW", "N", "NE", "W", "C", "E", "SW", "S", "SE"];
 /// (feedback: "a dropdown under WCS that states if the origin is on stock
 /// or on model"), falling back honestly to the other when the chosen one
 /// doesn't exist. Returns the box and which one it is, for the pane note.
+///
+/// #326: the model bounds are read in the ACTIVE setup's frame - the
+/// setup whose offsets the pane places (`SetWcs` lands in the active
+/// setup) and the frame the viewport draws the part in. An aligned
+/// (flipped or turned) part's corners are its corners on the table, so
+/// G54 lands on the corner the operator touches off. The stock is that
+/// setup's own (setup furniture, already placed in its frame).
 pub(crate) fn anchor_reference(state: &State) -> Option<(Aabb, &'static str)> {
-    let stock = || model::stock_world_aabb(&state.world).map(|b| (b, "stock box"));
-    let solid = || model::solid_world_aabb(&state.world).map(|b| (b, "model bounds"));
+    let active = camcraft_app::setup::active(&state.world);
+    let stock = || model::stock_world_aabb_for(&state.world, active.as_deref()).map(|b| (b, "stock box"));
+    let solid = || {
+        camcraft_app::setup_align::solid_aabb_in(&state.world, active.as_deref()).map(|b| (b, "model bounds"))
+    };
     if state.wcs_ui.anchor_source == 1 {
         solid().or_else(stock)
     } else {
@@ -593,14 +386,22 @@ fn gizmo_len(state: &State) -> f64 {
 /// has the axes hidden: two gizmos around a moved G5x read as clutter, and
 /// the world axes are context furniture, not setup. The triads stay: they
 /// are the work offsets themselves.
-fn gizmos(state: &State) -> Vec<Gizmo> {
+pub(crate) fn gizmos(state: &State) -> Vec<Gizmo> {
     let mut out: Vec<Gizmo> = Vec::new();
     for (name, entity) in model::named_entities(&state.world) {
         if state.hidden_offsets.contains(&name) || !model::is_wcs(&state.world, &entity) {
             continue;
         }
-        let Some(loc) = model::transform_of(&state.world, &entity) else {
+        let Some(stored) = model::transform_of(&state.world, &entity) else {
             continue;
+        };
+        // #558: another setup's WCS is a point on the part in ITS setup's
+        // frame; the viewport shows the active setup's, so it rides the
+        // part's transform between the two. A refused transform hides
+        // the triad - never drawn at a place that is not on the part.
+        let loc = match camcraft_app::setup_relative::wcs_view_pose(&state.world, &name, stored) {
+            Ok(mapped) => mapped.unwrap_or(stored),
+            Err(_) => continue, // app logs why (setup_relative::wcs_view_pose)
         };
         out.push(Gizmo {
             pos: [loc.pos.x, loc.pos.y, loc.pos.z],
@@ -678,7 +479,7 @@ pub(crate) fn feature_segments(
     let Some(features) = model::features_of(&state.world, &found) else {
         return;
     };
-    let loc = model::transform_of(&state.world, &found).unwrap_or_default();
+    let loc = camcraft_app::setup_align::view_pose(&state.world, &found).unwrap_or_default(); // #326
     let mvp = state.cam.mvp(aspect);
     match sel {
         FeatureSel::Face(fid) => {
@@ -790,12 +591,25 @@ pub(crate) fn overlay_labels(state: &State, aspect: f64) -> Vec<([f32; 2], [f32;
                 let chip = if p.src.is_fixed() {
                     format!("{} · {} {}", state.op_ui.name, p.name, units::len(p.z, u, 2))
                 } else {
+                    // A work-offset plane names the setup's WCS and its
+                    // word (#329, #342) - the setup context
+                    // `height_planes` resolved it in.
+                    let source = match p.src.reference {
+                        camcraft_app::operation::HeightReference::WorkOffset => format!(
+                            "WCS {}",
+                            WCS_SLOTS
+                                .get(camcraft_app::setup::wcs_slot(&state.world, shown_setup(state).as_deref()))
+                                .copied()
+                                .unwrap_or("G54")
+                        ),
+                        r => r.to_string(),
+                    };
                     format!(
                         "{} · {} {} ({} {})",
                         state.op_ui.name,
                         p.name,
                         units::len(p.z, u, 2),
-                        p.src.reference,
+                        source,
                         units::len_signed(p.src.offset, u, 2),
                     )
                 };
@@ -803,6 +617,10 @@ pub(crate) fn overlay_labels(state: &State, aspect: f64) -> Vec<([f32; 2], [f32;
             }
         }
     }
+    // #375: an inverted machine axis is noted once, on the first triad
+    // (the setup's own offset before the world axes) - the arrow is the
+    // program frame and is never flipped.
+    let mut notes = crate::axis_note::triad_notes(state);
     for gizmo in gizmos(state) {
         let base = Point3::new(gizmo.pos[0], gizmo.pos[1], gizmo.pos[2]);
         for (axis, (rgb, dir)) in AXES.iter().enumerate() {
@@ -824,6 +642,9 @@ pub(crate) fn overlay_labels(state: &State, aspect: f64) -> Vec<([f32; 2], [f32;
                 *rgb
             };
             out.push((uv, c, AXIS_NAMES[axis].to_string()));
+            if let Some(note) = notes.get_mut(axis).and_then(Option::take) {
+                out.push(([uv[0], uv[1] + crate::axis_note::NOTE_DROP_UV], c, note));
+            }
         }
     }
     out
@@ -933,7 +754,7 @@ pub(crate) const MAX_OVERLAY_VERTICES: usize = 1 << 20;
 const DISPLAY_CHORD_TOL: f64 = 0.02;
 
 /// One overlay line: two `[x, y, z, r, g, b]` vertices.
-fn push_line(out: &mut Vec<[f32; 6]>, a: Point3, b: Point3, c: [f32; 3]) {
+pub(crate) fn push_line(out: &mut Vec<[f32; 6]>, a: Point3, b: Point3, c: [f32; 3]) {
     out.push([ftoz(a.x), ftoz(a.y), ftoz(a.z), c[0], c[1], c[2]]);
     out.push([ftoz(b.x), ftoz(b.y), ftoz(b.z), c[0], c[1], c[2]]);
 }
@@ -970,45 +791,14 @@ pub(crate) fn toolpath_lines(state: &State) -> Vec<[f32; 6]> {
             continue;
         }
         let dim = if selected { 1.0 } else { OTHERS_DIM };
-        for m in &cache.path.moves {
-            let base = match m.kind {
-                MoveKind::Rapid => pal.rapid,
-                MoveKind::Feed => pal.feed,
-                MoveKind::Plunge => pal.plunge,
-            };
-            let c = [base[0] * dim, base[1] * dim, base[2] * dim];
-            if m.arc.is_some() {
-                // Arcs draw as chords (one law, one tolerance story) and
-                // take no chevrons: the curve itself reads as direction.
-                let cs = arc_segments(m);
-                if out.len() + 2 * cs.len() + 2 > MAX_OVERLAY_VERTICES {
-                    eprintln!(
-                        "overlay: the cached paths outgrew the {MAX_OVERLAY_VERTICES}-vertex \
-                         display budget; the rest is truncated (the full path still posts)"
-                    );
-                    out.truncate(out.len() & !1);
-                    return out;
-                }
-                for (a, b) in cs {
-                    push_line(&mut out, a, b, c);
-                }
-                continue;
-            }
-            if out.len() + 10 > MAX_OVERLAY_VERTICES {
-                // A pathological cache (millions of file-loaded moves)
-                // must not allocate millions of segments either.
-                eprintln!(
-                    "overlay: the cached paths outgrew the {MAX_OVERLAY_VERTICES}-vertex \
-                     display budget; the rest is truncated (the full path still posts)"
-                );
-                out.truncate(out.len() & !1);
-                return out;
-            }
-            push_line(&mut out, m.from, m.to, c);
-            if m.kind == MoveKind::Feed {
-                chevrons(&mut out, m.from, m.to, c, arm);
-            }
+        // #261: warned moves wear the gouge colour (crate::path_lines).
+        if !crate::path_lines::cache_lines(&mut out, &cache, pal, dim, arm) {
+            return out;
         }
+    }
+    // #261 part 2: a standing generate refusal marks the spot it names.
+    if let Some(at) = state.refusal_focus() {
+        crate::path_lines::refusal_mark(&mut out, at, pal, arm);
     }
     out
 }
@@ -1213,6 +1003,19 @@ pub(crate) struct HeightPlane {
     pub skip_rect: bool,
 }
 
+/// The setup context the viewport's height planes and their work-offset
+/// chip resolve in (#329): the shown operation's own declared setup; with
+/// no such operation (a draft name), the ACTIVE setup - what
+/// CreateOperation would declare - never a locally chosen default.
+pub(crate) fn shown_setup(state: &State) -> Option<String> {
+    match model::find_by_name(&state.world, &state.op_ui.name)
+        .and_then(|e| model::operation_of(&state.world, &e))
+    {
+        Some(op) => op.setup,
+        None => camcraft_app::setup::active(&state.world),
+    }
+}
+
 /// The open operation's height planes, read from the draft parameters -
 /// what the spinboxes point at right now, not what was last applied, so
 /// spinning Clearance visibly walks the plane before Apply commits it.
@@ -1237,12 +1040,15 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
     // an unavailable source drops its plane (never a rectangle at a
     // guessed z) - the panel says why, and generation refuses by name.
     let world = &state.world;
+    // A work-offset height measures from the shown op's OWN setup (#329).
+    let ctx = shown_setup(state);
+    let setup = ctx.as_deref();
     // A From: Selection height reads the open op's own source (M11.3 A).
     let src_owned = state.op_ui.src();
     let src = Some(&src_owned);
     let mut out = Vec::new();
     let clr = draft.clearance();
-    if let Some(z) = clr.z_in(world, None, src) {
+    if let Some(z) = clr.z_in(world, setup, src) {
         out.push(HeightPlane {
             z,
             src: clr,
@@ -1280,6 +1086,7 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
         | operation::OpParams::Flow5D { retract_z, .. }
         | operation::OpParams::MultiAxisContour { retract_z, .. }
         | operation::OpParams::Slot { retract_z, .. }
+        | operation::OpParams::TrochoidalSlot { retract_z, .. }
         // The engrave twin hops where trace hops, the circular ladder
         // where the pocket hops, and the chamfer ride between its
         // chains the trace's way (M2.4 B) - all the store-either shape.
@@ -1332,11 +1139,13 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
         // the clearance plane by the kernel's own word - no hop
         // height exists to author or draw (M2.5 E B).
         | operation::OpParams::Deburr { .. }
-        // The probe travels at its clearance plane only (#108).
-        | operation::OpParams::Probe { .. } => None,
+        // The probe travels at its clearance plane only (#108), and
+        // so does the torch between contours (#670).
+        | operation::OpParams::Probe { .. }
+        | operation::OpParams::PlasmaProfile(_) => None,
     };
     if let Some(hop) = hop
-        && let (Some(r), Some(c)) = (hop.z_in(world, None, src), draft.clearance().z_in(world, None, src))
+        && let (Some(r), Some(c)) = (hop.z_in(world, setup, src), draft.clearance().z_in(world, setup, src))
     {
         out.push(HeightPlane {
             z: r.min(c),
@@ -1353,9 +1162,9 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
         // stages: then its Top is the first level, drawn like the depth
         // kinds' Top, with the finished Cut below it.
         operation::OpParams::Face { top_z, cut_z, .. } => {
-            let cut = cut_z.z_in(world, None, src);
+            let cut = cut_z.z_in(world, setup, src);
             if let (Some(t), Some(c)) = ((*top_z).to_owned(), cut)
-                && let Some(tz) = t.z_in(world, None, src)
+                && let Some(tz) = t.z_in(world, setup, src)
                 && tz != c
             {
                 out.push(HeightPlane {
@@ -1422,6 +1231,7 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
         | operation::OpParams::Flow5D { top_z, bottom_z, .. }
         | operation::OpParams::MultiAxisContour { top_z, bottom_z, .. }
         | operation::OpParams::Slot { top_z, bottom_z, .. }
+        | operation::OpParams::TrochoidalSlot { top_z, bottom_z, .. }
         // The engrave twin draws the trace's ladder - first level up
         // top, floor below - and the circular ladder its rings' two
         // rungs: vault or flat, the dome law's stations live between
@@ -1458,8 +1268,11 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
         // planes the tip rides between - the ceiling and floor its
         // loci are clipped by (M2.5 E B).
         | operation::OpParams::BoringTurning { top_z, bottom_z, .. }
+        // The plate the torch cuts through: its top (the cut plane) and
+        // bottom (#670).
+        | operation::OpParams::PlasmaProfile(operation::PlasmaOp { top_z, bottom_z, .. })
         | operation::OpParams::Deburr { top_z, bottom_z, .. } => {
-            if let Some(z) = top_z.z_in(world, None, src) {
+            if let Some(z) = top_z.z_in(world, setup, src) {
                 out.push(HeightPlane {
                     z,
                     src: *top_z,
@@ -1469,7 +1282,7 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
                     skip_rect: stands(z),
                 });
             }
-            if let Some(z) = bottom_z.z_in(world, None, src) {
+            if let Some(z) = bottom_z.z_in(world, setup, src) {
                 out.push(HeightPlane {
                     z,
                     src: *bottom_z,
@@ -1489,7 +1302,7 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
         // blade severs comes from the model, so painting a Top the
         // path never walks to would advertise a window it cuts past.
         operation::OpParams::Part { bottom_z, .. } => {
-            if let Some(z) = bottom_z.z_in(world, None, src) {
+            if let Some(z) = bottom_z.z_in(world, setup, src) {
                 out.push(HeightPlane {
                     z,
                     src: *bottom_z,
@@ -1508,7 +1321,7 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
         // measured against is not. The corner Z rides the pane's read
         // of the same two numbers.
         operation::OpParams::Chamfer2D { top_z, .. } => {
-            if let Some(z) = top_z.z_in(world, None, src) {
+            if let Some(z) = top_z.z_in(world, setup, src) {
                 out.push(HeightPlane {
                     z,
                     src: *top_z,
@@ -1528,7 +1341,7 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
         operation::OpParams::Drill { top_z, bottom_z, .. }
         | operation::OpParams::Bore { top_z, bottom_z, .. }
         | operation::OpParams::Thread { top_z, bottom_z, .. } => {
-            if let Some(z) = top_z.z_in(world, None, src) {
+            if let Some(z) = top_z.z_in(world, setup, src) {
                 out.push(HeightPlane {
                     z,
                     src: *top_z,
@@ -1539,7 +1352,7 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
                 });
             }
             if let Some(b) = bottom_z
-                && let Some(z) = b.z_in(world, None, src)
+                && let Some(z) = b.z_in(world, setup, src)
             {
                 out.push(HeightPlane {
                     z,
@@ -1626,18 +1439,43 @@ pub(crate) fn height_plane_lines(state: &State) -> Vec<[f32; 6]> {
 /// place while orbiting. A vanished pick - hidden model, deleted entity,
 /// stale id - draws nothing rather than a ghost, the hover rule again.
 pub(crate) fn selection_feature_lines(state: &State) -> Vec<[f32; 6]> {
-    const PICK_RGB: [f32; 3] = [0.72, 0.44, 0.86];
+    feature_lines(state, &shown_picks(state))
+}
+
+/// The picks shown: the collecting Setups page draft, else the open operation's.
+pub(crate) fn shown_picks(state: &State) -> Vec<GeoSel> {
+    // #330: while the Setups page collects a lay-on-a-plane pick, its
+    // draft picks are the ones drawn.
+    // #561: the locate draft's mates and its waiting half.
+    if let Some(d) = &state.locate_pick {
+        return d.mates.iter().flat_map(|m| [m.part.clone(), m.fixture.clone()]).chain(d.half.clone()).collect();
+    }
+    if let Some(draft) = state.plane_pick.as_ref().filter(|d| d.picking) {
+        return draft.picks.clone();
+    }
+    // #555: the three-points draft's picks.
+    if let Some(d) = &state.points_pick {
+        return d.picks.clone();
+    }
+    // #557: the axes-in-the-plane draft's picks, while it collects.
+    if let Some(d) = state.axis_pick.as_ref().filter(|d| d.picking.is_some()) {
+        return [&d.axes.y, &d.axes.x].into_iter().flatten().flat_map(|p| p.picks.clone()).collect();
+    }
     if state.op_ui.name.is_empty() || state.hidden_paths.contains(&state.op_ui.name) {
         return Vec::new(); // nothing open: nothing picked to pin down
     }
-    let Some(op) = model::find_by_name(&state.world, &state.op_ui.name)
-        .and_then(|e| model::operation_of(&state.world, &e))
-    else {
-        return Vec::new();
-    };
-    let operation::SrcRef::Selection(items) = &op.src else {
-        return Vec::new();
-    };
+    let op = model::find_by_name(&state.world, &state.op_ui.name).and_then(|e| model::operation_of(&state.world, &e));
+    match op.map(|o| o.src) {
+        Some(operation::SrcRef::Selection(items)) => items,
+        _ => Vec::new(),
+    }
+}
+
+/// The pick violet: the 3D outlines and the picked points' screen marks.
+pub(crate) const PICK_RGB: [f32; 3] = [0.72, 0.44, 0.86];
+
+/// The picks' outlines in 3D, violet (see [`selection_feature_lines`]).
+fn feature_lines(state: &State, items: &[GeoSel]) -> Vec<[f32; 6]> {
     let mut out = Vec::new();
     for item in items {
         if state.hidden_in_view(&item.entity) {
@@ -1649,7 +1487,7 @@ pub(crate) fn selection_feature_lines(state: &State) -> Vec<[f32; 6]> {
         let Some(features) = model::features_of(&state.world, &entity) else {
             continue;
         };
-        let loc = model::transform_of(&state.world, &entity).unwrap_or_default();
+        let loc = camcraft_app::setup_align::view_pose(&state.world, &entity).unwrap_or_default(); // #326
         let draw = |out: &mut Vec<[f32; 6]>, pts: &[[f64; 3]], closed: bool| {
             let n = pts.len();
             if n < 2 || (closed && n < 3) {

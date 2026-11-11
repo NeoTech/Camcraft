@@ -46,7 +46,7 @@ pub(crate) fn adaptive_passes(center: &Region, p: &PocketParams, what: &str, tro
     // crossing law, asked of the plan first); one refused past its
     // planning budget (issue #13) has no passes to judge.
     let cross = if refused.is_some() { None } else { first_crossing(&passes) };
-    let levels = super::levels::cut_levels(p.top_z, p.bottom_z, p.stepdown).len();
+    let levels = super::levels::cut_levels(p.top_z, p.bottom_z, p.stepdown)?.len();
     let budget = refused.or_else(|| over_budget(&travel, levels));
     if rest <= HSM_REST_MAX && cross.is_none() && budget.is_none() {
         return Ok((passes, notes, PocketStrategy::Adaptive, room, joins));
@@ -171,7 +171,7 @@ pub(super) fn triangle_about(c: Point2, inr: f64) -> Result<Region, GenError> {
 /// least geodesic eccentricity (round 3: where the growth rings finish
 /// soonest);
 /// the helix narrowed to fit. `None` leaves the ladder's own choice.
-fn choose_entry(center: &Region, p: &PocketParams, notes: &mut Vec<String>) -> Result<Option<EntryRoom>, GenError> {
+pub(crate) fn choose_entry(center: &Region, p: &PocketParams, notes: &mut Vec<String>) -> Result<Option<EntryRoom>, GenError> {
     let helix = p.entry == Entry3D::Helix;
     if !(helix || p.entry == Entry3D::Plunge) {
         return Ok(None);

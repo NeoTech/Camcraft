@@ -51,16 +51,17 @@ Otherwise list open PRs that are ready for review (non-draft) with their head SH
 ```bash
 gh pr list --repo NeoTech/Camcraft --state open --limit 100 \
   --json number,isDraft,author,headRepositoryOwner,headRefOid,reviews,comments \
-  --jq '.[] | select((.isDraft|not) and .headRepositoryOwner.login != "NeoTech")
+  --jq '.[] | select(.isDraft|not)
         | .headRefOid as $s
         | select([.reviews[].body, .comments[].body] | map(select(contains("<!-- pr-reviewer: " + $s))) | length == 0)
         | "\(.number) \(.author.login) \($s)"'
 ```
 
 Every line printed is a PR that needs a review:
-- it comes from a fork - our own issue PRs are reviewed in the release cut by
-  the main session (AGENTS.md "A cut goes PR review"), not here, unless the
-  user named one;
+- it is ready for review - a fork PR or one of our own (user, 2026-11-08:
+  "All PR*s made by owner should be reviewd and tagged"); our own PRs are
+  flagged ready by a quick pass (AGENTS.md "Every PR opens as a draft") and
+  get their full review here;
 - no review or comment carries the marker for its current head SHA (a new push
   after our last review means the contributor answered - review again).
 
@@ -91,12 +92,33 @@ we can find em"):
 | `merge-ready` | green | review clean AND merges cleanly with main - the owner can merge now |
 | `needs-rework` | red | the review found blocking items |
 | `conflicts` | orange | conflicts with main - needs a branch refresh (`git merge origin/main`) |
+| `needs-maintainer` | yellow | reviewed, no blockers, but the owner must decide first: a new dependency, or a `build.rs` / scripts / `.github` change the reviewer reads and does not build ("Not built - needs a maintainer look") |
+
+`needs-maintainer` (user, 2026-11-09: "that needs-maintainer needs to
+into the skill right?") gives the "Not built - needs a maintainer look"
+verdict a label. Without it such a PR carried none and looked unreviewed
+on the PR list. The owner removes it after deciding: on a yes it becomes
+`merge-ready`, or is built and reviewed in full first; on a no it is
+closed or gets `needs-rework`.
 
 After posting the review, read `gh pr view <N> --json mergeable`
 (re-read once if it says `UNKNOWN`):
-- clean review + `MERGEABLE` -> add `merge-ready`, remove `needs-rework` and `conflicts`;
-- clean review + `CONFLICTING` -> add `conflicts`, remove `merge-ready` (never green while it conflicts);
-- blocking review -> add `needs-rework`, remove `merge-ready`; also add `conflicts` if it conflicts.
+- clean review + `MERGEABLE` -> add `merge-ready`, remove `needs-rework`, `conflicts` and `needs-maintainer`;
+- clean review + `CONFLICTING` -> add `conflicts`, remove `merge-ready` and `needs-maintainer` (never green while it conflicts);
+- blocking review -> add `needs-rework`, remove `merge-ready` and `needs-maintainer`; also add `conflicts` if it conflicts;
+- "Not built - needs a maintainer look" with no blockers -> add `needs-maintainer`, remove `merge-ready` and `needs-rework`; also add `conflicts` if it conflicts. With blockers it is `needs-rework` as above, and the comment still names the owner's decision.
+
+A PR that changes `crates/ui/tests/snapshots/*.png` is a blocking review
+(`needs-rework`): the pixel goldens are release-lane and are regenerated
+only at the cut (AGENTS.md "Pixel snapshots are release-lane", #255). The
+fix is to drop the PNG changes and update the structural assertions
+instead.
+
+A red or orange verdict also turns the PR back into a draft
+(`gh pr ready <N> --undo`): the author fixes it there, pushes, and flags it
+ready again for a fresh review (AGENTS.md "Every PR opens as a draft").
+That applies to our own PRs; a fork contributor's PR is left as they set
+it, and the review comment says what to fix.
 
 Whoever refreshes a branch re-reads `mergeable` after the push: once it is
 `MERGEABLE`, drop `conflicts` and restore `merge-ready` if the last review
@@ -104,51 +126,123 @@ was clean. Merging a PR can turn others `CONFLICTING`, so each run also
 re-checks every open PR labelled `merge-ready` and swaps any that now
 conflict to `conflicts`.
 
+## 2c. Token cost comment - when a PR turns merge-ready
+
+When a review ends with the PR labelled `merge-ready` (step 2b), the
+dispatcher (this skill's caller, not the reviewer - only the caller sees
+the agent's usage) posts one more PR comment with the estimated token
+cost of getting that PR to merge-ready (user, 2026-11-10: "an average
+token cost should be added as comment to each review based when its
+merge ready").
+
+- **What counts:** every agent run on this PR that the caller dispatched,
+  plus the merge-ready review itself - each review and re-review
+  (`PR-reviewer`), conflict-resolution or replacement-branch agents, and
+  the fix agent for our own issue PRs. Take each run's token total from
+  its completion notification (`subagent_tokens`) and its model. The
+  caller's own main-session turns aren't attributable per PR and are not
+  counted - say so.
+- **Rate:** usage reports one total, not an input/output split, so
+  estimate it as 90 % input and 10 % output at list price - a blended
+  upper estimate (cache reads, billed at about a tenth of input, make the
+  real cost lower). Blended per million tokens: Opus 5.5 about $5.60,
+  Sonnet 5.5 about $2.80, Haiku 5.5 about $0.14. When list prices change,
+  update these numbers from the `claude-api` skill's model table.
+- **Comment shape** (one comment, first line is the marker so it's never
+  posted twice for the same head):
+
+  ```
+  <!-- review-cost: <head sha> -->
+  **Estimated agent cost to merge-ready:** ~$X.XX (N tokens)
+  | Run | Model | Tokens | Est. cost |
+  |---|---|---|---|
+  | review | Sonnet 5.5 | 71k | ~$0.20 |
+  | conflict fix (replacement #M) | Opus 5.5 | 64k | ~$0.36 |
+  Blended upper estimate (90 % input / 10 % output at list price; cache
+  reads make the real cost lower). Main-session coordination isn't
+  counted.
+  ```
+- **Effort** (AGENTS.md "Every issue is weighted by effort"): under the
+  total, add `Effort: <label of the issue the PR fixes>` and, if the issue
+  escalated on the way, `(escalated from <label>)` - the data the effort
+  table is recalibrated from. A Fable run is priced from the `claude-api`
+  skill's model table.
+- A run whose token total isn't known (e.g. a review from another
+  session) is listed as "not known" and left out of the sum.
+- No cost comment for `needs-rework`, `conflicts` or `needs-maintainer`
+  verdicts; the next review that ends `merge-ready` sums every run on
+  the PR so far (earlier rounds included).
+
+## 2d. Process PRs - version bump and announcement
+
+A PR that changes a process file (`AGENTS.md`, `.claude/agents/`,
+`.claude/skills/`, `xtask/`, `.cargo/config.toml`, `scripts/gate.ps1`,
+`scripts/gate.sh`, `scripts/release.ps1`, `scripts/collect-decisions.ps1`,
+`scripts/collect-decisions.sh`) must increment
+the integer in `.claude/PROCESS_VERSION` (AGENTS.md "Process changes bump
+`PROCESS_VERSION`"). The reviewer checks this; a missing bump is a
+requested change (`needs-rework`). When such a PR merges, whoever merges
+it comments on the pinned issue #681 (Process changes):
+`PROCESS_VERSION <n>` · PR #M · what changed · what a fork must do (usually
+"pull the process files", the command in the issue body). That comment is
+how fork maintainers subscribed to #681 hear about it.
+
 ## 3. Report
 
 One short line per PR: number, author, verdict, link to the posted review.
-If a review could not be posted, say why. Do not merge, approve, label, or
+If a review could not be posted, say why. Do not merge or approve, and set no labels beyond step 2b's review labels; do not
 close anything; do not reply on the contributor's behalf.
 
-## 4. Apply outside contributors' claims
+## 4. Mirror claim comments - add and withdraw
 
-Contributors without Triage rights cannot add the `claimed` label or
-assign themselves, and collaborators often claim by comment alone too, so
-every claim comment from anyone but the owner account (agents post as the
-owner) is checked; its claim is a comment (AGENTS.md "Outside
-contributors' claims count"). On every run, after the PR steps, find
-fresh claim comments that have not been applied yet:
+A claim comment is a claim (AGENTS.md "A claim comment is a claim"): only
+collaborators can set labels, so anyone else claims by commenting a line
+that starts `claimed:` or `/claim`. The label only mirrors the comment. On
+every run, after the PR steps, sync the two both ways.
+
+**Add.** Find claim comments by anyone but the owner account (agents post
+as the owner):
 
 ```bash
-since=$(date -u -d '-4 hours' +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -v-4H +%Y-%m-%dT%H:%M:%SZ)
+since=$(date -u -d '-7 days' +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -v-7d +%Y-%m-%dT%H:%M:%SZ)
 gh api "repos/NeoTech/Camcraft/issues/comments?since=$since&per_page=100" --paginate \
-  --jq '.[] | select((.body|test("^ *claimed:"; "i")) and (.user.login != "NeoTech"))
+  --jq '.[] | select((.body|test("(^|\n) *(claimed:|/claim)"; "i")) and (.user.login != "NeoTech"))
         | "\(.issue_url|split("/")|last) \(.user.login) \(.created_at)"'
 ```
 
-For each line `<N> <login> <time>` (the window only finds claims made since
-a recent tick; a claim applied earlier keeps its label and assignee and is
-judged stale by AGENTS.md's rule - 4 h with no newer comment from the
-claimant - not by this window; on the first run of a session, or after the loop was
-off, widen it to `-7 days` so a claim kept fresh by later comments is not
-missed - its freshness is then checked as in "held" below):
-- **already applied** - the issue carries `claimed` and `<login>` is an
-  assignee: skip silently (this keeps each 10-minute tick from replying
-  again);
-- **closed issue**: skip;
-- **held by someone else** - it carries `claimed` and either the latest
-  claim comment by another claimant (an agent's `claimed:` comment counts)
-  or that claimant's newest comment is younger than 4 h, or no claim
-  comment can be found at all (be conservative: a label without a findable
-  claim is held): do not take it. Reply once - only if no comment after
-  `<time>` already mentions `@<login>` - that it is in progress, naming
-  the claimant and branch or PR;
+For each line `<N> <login> <time>`:
+- **withdrawn** - `<login>` commented `unclaim` (or `/unclaim`) after
+  `<time>`: skip silently. A withdrawn claim's old comment is never
+  mirrored again (without this the Withdraw pass and this one would flip
+  the label every run);
+- **paused issue** (labelled `P?` - AGENTS.md "`P?` is paused"): do not
+  mirror; reply once (only if no later comment mentions `@<login>`)
+  `This issue is paused by the maintainer (P?) - it isn't open for work yet; the claim isn't recorded. It will be once the maintainer sets a priority.`;
+- **closed issue**, or **already mirrored** (`claimed` set and `<login>`
+  assigned, or `claimed` set and a "Claim recorded for @<login>" reply
+  exists): skip silently;
+- **held by someone else** - an earlier claim comment by another
+  contributor still exists, or a fresh agent claim (4 h rule): do not
+  mirror; reply once (only if no later comment mentions `@<login>`) naming
+  the current claimant;
 - **otherwise**: `gh issue edit N --add-label claimed --add-assignee <login>`
-  (if GitHub refuses the assignee, still add the label) and reply
-  `gh issue comment N --body "Claim recorded for @<login> - label and assignee set (contributors without triage rights claim by comment). It goes stale after 4 h with no update from you."`
-  If the old claim was stale, say "reclaimed from <old claimant> (stale)".
+  (if GitHub refuses the assignee, add the label alone) and reply
+  `Claim recorded for @<login> - label and assignee set (only collaborators can set labels; your comment is the claim).`
+  A contributor's claim does not go stale on a timer; it stands while the
+  comment exists.
 
-Report one line per applied claim; nothing found stays silent.
+**Withdraw.** For every open issue carrying `claimed`
+(`gh issue list --state open --label claimed --limit 200`), look for the
+claim behind it: a claim comment by a non-owner (or an agent's `claimed:`
+comment, which follows the 4 h rule instead). If the only claim behind the
+label was a contributor's comment that is now deleted, or that contributor
+later commented `unclaim`, remove the label and their assignment
+(`gh issue edit N --remove-label claimed --remove-assignee <login>`) and
+comment `claim by @<login> withdrawn (comment removed) - issue is free again`.
+A label with no findable claim of any kind and no "Claim recorded" reply
+was set by a collaborator by hand: leave it.
+
+Report one line per mirrored or withdrawn claim; nothing found stays silent.
 
 ## Periodic run
 

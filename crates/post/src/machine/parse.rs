@@ -5,7 +5,8 @@
 //! Provenance: our own parser, specced from the observable shape of a
 //! machine file and RS-274/ISO 6983 axis-lettering convention.
 
-use super::def::{AxisLimits, Coolant, Kind, Machine};
+use super::def::{AxisLimits, Coolant, Kind, LiveToolCodes, Machine};
+use super::direction::AxisDirection;
 
 /// The number a machine field reads as, with the unstated-limit law:
 /// absent, null, non-numeric, or exactly zero reads `None`; a
@@ -62,6 +63,25 @@ fn collect_axes(
 /// takes: bare name strings (a named option, no code - posts
 /// nothing), or `{name, mCode}` objects. The code may itself be a
 /// string ("M8") or a bare number (8), normalized to the word form.
+/// `tool_station.live_tool` (issue #33): the four builder words, all
+/// non-empty strings, or None (a partial set states nothing usable).
+fn parse_live_tool(v: Option<&serde_json::Value>) -> Option<LiveToolCodes> {
+    let v = v?;
+    let word = |k: &str| {
+        v.get(k)
+            .and_then(|w| w.as_str())
+            .map(str::trim)
+            .filter(|w| !w.is_empty())
+            .map(str::to_owned)
+    };
+    Some(LiveToolCodes {
+        c_axis_on: word("c_axis_on")?,
+        c_axis_off: word("c_axis_off")?,
+        spindle_on: word("spindle_on")?,
+        spindle_off: word("spindle_off")?,
+    })
+}
+
 fn parse_coolants(v: Option<&serde_json::Value>) -> Vec<Coolant> {
     let Some(arr) = v.and_then(|a| a.as_array()) else {
         return Vec::new();
@@ -106,7 +126,6 @@ fn count_spindles(parts: Option<&serde_json::Value>) -> usize {
         .sum()
 }
 
-/// First part anywhere in the tree with the given `type`, depth-first.
 /// The spindle's speed ranges (#170): `[{ "min_speed", "max_speed" }]`,
 /// rpm. An entry missing either bound, or with them out of order, is
 /// dropped - a range the file cannot state whole names nothing.
@@ -123,13 +142,18 @@ fn parse_ranges(v: Option<&serde_json::Value>) -> Vec<(f64, f64)> {
         .collect()
 }
 
+/// First part anywhere in the tree with the given `type`, depth-first.
 fn find_type<'a>(parts: &'a serde_json::Value, ty: &str) -> Option<&'a serde_json::Value> {
     let arr = parts.as_array()?;
     for p in arr {
         if p.get("type").and_then(|t| t.as_str()) == Some(ty) {
             return Some(p);
         }
-        if let Some(hit) = find_type(p.get("parts")?, ty) {
+        // #785: a leaf part (no `parts`, e.g. a 4th-axis rotary listed
+        // before the head) is passed over, never the end of the search -
+        // a `?` here lost the head, and every spindle and coolant figure
+        // with it, for any file with a leaf ahead of its head.
+        if let Some(hit) = p.get("parts").and_then(|c| find_type(c, ty)) {
             return Some(hit);
         }
     }
@@ -162,10 +186,17 @@ pub fn parse_mch(text: &str) -> Result<Machine, String> {
         None | Some(serde_json::Value::Null) => {}
         Some(serde_json::Value::String(w)) if w.is_empty() => {}
         Some(serde_json::Value::String(w)) => {
-            if Kind::from_word(w).is_none() {
+            let Some(k) = Kind::from_word(w) else {
                 return Err(format!(
-                    "machine file: kind {w:?} is not mill, lathe or mill-turn"
+                    "machine file: kind {w:?} is not mill, lathe, mill-turn or plasma"
                 ));
+            };
+            // #669: a declared plasma table keeps the plasma rules at
+            // the door - the first one broken names its key.
+            if k == Kind::Plasma
+                && let Some((key, rule)) = super::plasma::plasma_refusals(&v).into_iter().next()
+            {
+                return Err(format!("machine file: {key}: {rule}"));
             }
             m.kind = Some(w.clone());
         }
@@ -196,6 +227,7 @@ pub fn parse_mch(text: &str) -> Result<Machine, String> {
             m.spindle_d = scale(rate(sp.and_then(|s| s.get("body_diameter"))), f);
             m.spindle_len = scale(rate(sp.and_then(|s| s.get("body_length"))), f);
             m.coolants = parse_coolants(ts.and_then(|t| t.get("coolants")));
+            m.live_tool = parse_live_tool(ts.and_then(|t| t.get("live_tool")));
         }
         if m.coolants.is_empty() {
             // Some files keep the option list at the tooling root
@@ -267,6 +299,11 @@ pub fn parse_mch(text: &str) -> Result<Machine, String> {
                     }
                 }
             }
+            let direction = axis_direction(name, part, *rotary)?;
+            let nose_to_axis = super::swing::nose_to_axis(name, part, *rotary, f)?;
+            if let Some(z) = safe_retract(name, part, *rotary, f)? {
+                m.safe_retract_z = Some(z);
+            }
             axes.push(AxisLimits {
                 name: name.clone(),
                 rotary: *rotary,
@@ -275,12 +312,60 @@ pub fn parse_mch(text: &str) -> Result<Machine, String> {
                 travel,
                 resolution,
                 axis,
+                direction,
+                turns_part: rotary.then(|| super::swing::turns_part(part, true)),
+                nose_to_axis,
             });
         }
         axes.sort_by_key(|a| ctrl_coord(ctrl, &a.name));
         m.axes = axes;
     }
     Ok(m)
+}
+
+/// A part's `"direction"` (#373). Linear: absent or null is standard,
+/// exactly `1` / `-1` states it, anything else refuses naming the axis -
+/// a garbled sign must never read as "standard". Rotary: a numeric `-1`
+/// refuses (a reversed rotary is not supported); any other value is the
+/// rotary's own business (`axis` states its geometry) and is not read.
+fn axis_direction(name: &str, part: &serde_json::Value, rotary: bool) -> Result<AxisDirection, String> {
+    let v = match part.get("direction") {
+        None | Some(serde_json::Value::Null) => return Ok(AxisDirection::Standard),
+        Some(v) => v,
+    };
+    let sign = v.as_f64().and_then(AxisDirection::from_sign);
+    if rotary {
+        return match sign {
+            Some(AxisDirection::Inverted) => Err(format!(
+                "machine file: rotary axis {name} states direction -1; a reversed rotary is not supported"
+            )),
+            _ => Ok(AxisDirection::Standard),
+        };
+    }
+    sign.ok_or_else(|| format!("machine file: axis {name} direction must be +1 or -1, not {v}"))
+}
+
+/// A part's `"safe_retract"` (#495): the machine-coordinate Z a post
+/// retracts to (`G53 G0 Z..`), in the file's length unit. Absent or
+/// null is unstated; a finite number on the linear Z states it (zero
+/// included - it is a position, not a limit); anything else, or the
+/// key on any other axis, refuses naming the axis, because a garbled
+/// retract height must never read as "unstated" and fall back to a
+/// guess about which way is up.
+fn safe_retract(name: &str, part: &serde_json::Value, rotary: bool, f: f64) -> Result<Option<f64>, String> {
+    let v = match part.get("safe_retract") {
+        None | Some(serde_json::Value::Null) => return Ok(None),
+        Some(v) => v,
+    };
+    if rotary || name != "Z" {
+        return Err(format!(
+            "machine file: axis {name} states safe_retract - only the linear Z axis states one"
+        ));
+    }
+    match v.as_f64() {
+        Some(z) if z.is_finite() => Ok(Some(z * f)),
+        _ => Err(format!("machine file: axis Z safe_retract must be a number, not {v}")),
+    }
 }
 
 fn text_of(v: Option<&serde_json::Value>) -> String {

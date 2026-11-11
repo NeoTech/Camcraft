@@ -149,71 +149,7 @@ impl Stock {
     pub fn simulate(&mut self, ops: &[SimOp]) -> Result<(), StockError> {
         match self {
             Stock::Column(d) => super::cut::simulate(d, ops),
-            Stock::Field(f) => {
-                check_ops(ops)?;
-                let chord_tol = (f.cell() * 0.25).max(1e-9);
-                let flank = spanning_flank(f);
-                for (i, op) in ops.iter().enumerate() {
-                    let tool = if op.ball {
-                        SdfTool::Shanked { r: op.radius, shank: flank }
-                    } else if let Some(cot) = op.cone {
-                        SdfTool::Taper { r: op.radius, cot }
-                    } else if let Some(corner) = op.corner {
-                        SdfTool::BullNose { r: op.radius, corner, flank }
-                    } else {
-                        SdfTool::Flat { r: op.radius, flank }
-                    };
-                    for chunk in op.moves.chunks(super::field_batch::BATCH_MOVES) {
-                        f.subtract_batch(chunk, &tool, chord_tol).map_err(|e| named_op(i, e))?;
-                    }
-                }
-                Ok(())
-            }
-        }
-    }
-
-    /// A turning program (M13.1 owed, the annular-sector sweep):
-    /// `moves` are the insert's nose-CENTER path (the M5.2 E
-    /// convention) on a lathe whose spindle axis is +Z through the
-    /// origin, `nose` its nose radius; each move removes the solid
-    /// of revolution of its half-plane stadium (`SdfTool::Lathe`).
-    /// The field arm cuts it in closed form; the column arm has no
-    /// revolved reading - a Z height field reads a parting kerf as a
-    /// plunge - and refuses by name (`LATHE_COLUMN_REFUSAL`), the
-    /// honest answer the document verdict gives today.
-    pub fn simulate_lathe(&mut self, moves: &[crate::cl::Move], nose: f64) -> Result<(), StockError> {
-        self.simulate_lathe_about(moves, nose, &super::LatheAxis::Z)
-    }
-
-    /// `simulate_lathe` about a stated spindle line (#19): the
-    /// document's turning kernels write their moves in the plane of
-    /// the part's fitted axis, wherever it stands.
-    pub fn simulate_lathe_about(
-        &mut self,
-        moves: &[crate::cl::Move],
-        nose: f64,
-        axis: &super::LatheAxis,
-    ) -> Result<(), StockError> {
-        match self {
-            Stock::Column(_) => Err(StockError::Invalid(LATHE_COLUMN_REFUSAL.into())),
-            Stock::Field(f) => {
-                if !moves.iter().all(|m| m.is_finite()) {
-                    return Err(StockError::Invalid(
-                        "lathe program carries a non-finite move - the sim refuses instead of cutting nothing silently".into(),
-                    ));
-                }
-                // Every straight chord's meridian checked up front, so
-                // a skewed one refuses before any batch writes a cell.
-                for m in moves.iter().filter(|m| m.arc.is_none()) {
-                    axis.chord_in_meridian(m.from, m.to)?;
-                }
-                let chord_tol = (f.cell() * 0.25).max(1e-9);
-                let tool = SdfTool::Lathe { nose, axis: *axis };
-                for chunk in moves.chunks(super::field_batch::BATCH_MOVES) {
-                    f.subtract_batch(chunk, &tool, chord_tol)?;
-                }
-                Ok(())
-            }
+            Stock::Field(f) => simulate_field(f, ops),
         }
     }
 
@@ -297,6 +233,31 @@ pub(crate) fn spanning_flank(f: &SdfField) -> f64 {
     let b = f.bounds();
     let (dx, dy, dz) = (b.max.x - b.min.x, b.max.y - b.min.y, b.max.z - b.min.z);
     (dx * dx + dy * dy + dz * dz).sqrt() + 2.0 * f.cap() + 4.0 * f.cell()
+}
+
+/// The field arm of [`Stock::simulate`], stated once so a carried field
+/// (`CarriedField::simulate`, #637 E2c) cuts through the very same tool
+/// construction: `check_ops` first, then each op's moves batched per brick
+/// against the solid `spanning_flank` gives the column's reach.
+pub(crate) fn simulate_field(f: &mut SdfField, ops: &[SimOp]) -> Result<(), StockError> {
+    check_ops(ops)?;
+    let chord_tol = (f.cell() * 0.25).max(1e-9);
+    let flank = spanning_flank(f);
+    for (i, op) in ops.iter().enumerate() {
+        let tool = if op.ball {
+            SdfTool::Shanked { r: op.radius, shank: flank }
+        } else if let Some(cot) = op.cone {
+            SdfTool::Taper { r: op.radius, cot }
+        } else if let Some(corner) = op.corner {
+            SdfTool::BullNose { r: op.radius, corner, flank }
+        } else {
+            SdfTool::Flat { r: op.radius, flank }
+        };
+        for chunk in op.moves.chunks(super::field_batch::BATCH_MOVES) {
+            f.subtract_batch(chunk, &tool, chord_tol).map_err(|e| named_op(i, e))?;
+        }
+    }
+    Ok(())
 }
 
 /// A field refusal, said with the op that caused it: the column

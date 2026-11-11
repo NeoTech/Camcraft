@@ -1,4 +1,4 @@
-//! Project save/load: `.camproj`, JSON, version 50.
+//! Project save/load: `.camproj`, JSON, version 57 (see `PROJECT_VERSION`).
 //!
 //! Serialization goes through plain DTO structs (deliberately not flecs
 //! reflection): the file format is our public persistence contract and must
@@ -112,14 +112,24 @@ pub use file::*;
 mod params;
 pub use params::*;
 mod entity;
+mod vise_dto;
+mod fixture_keys;
+pub use vise_dto::ViseDto;
 mod thread_dto;
-pub use thread_dto::ThreadCycleDto;
+mod break_dto;
+pub use break_dto::EdgeBreakDto;
+pub use thread_dto::{ThreadCycleDto, ThreadHandDto};
 mod touch_dto;
 pub use touch_dto::ProbeTouchDto;
 mod params_impl;
 // #108: the Probe operation's file mirror.
 mod probe_dto;
 pub use probe_dto::*;
+// #670: the plasma profile's file mirror and its path record.
+mod plasma_dto;
+pub use plasma_dto::*;
+mod trochoid_dto;
+pub use trochoid_dto::*;
 mod approach;
 pub use approach::*;
 mod links;
@@ -131,5 +141,24 @@ mod json;
 pub use json::*;
 mod apply;
 use apply::*;
+// #813: the load note for a machine embedded before #804.
+mod swing_note;
 mod validate;
 use validate::*;
+mod wcs_migrate;
+// #342: the v53 -> v54 one-WCS-per-setup rung.
+mod wcs_one;
+// #343: a setup's own machine and post (v55).
+mod mount_dto;
+pub use mount_dto::{SetupMachineDto, SetupPostDto};
+// #389: a setup's own post options (additive).
+mod setup_options_dto;
+pub use setup_options_dto::SetupPostOptionsDto;
+// #316: setup links (v56), checked before any world write.
+mod setup_links;
+// #368: a tool's modelled body on file (v57).
+mod tool_body_wire;
+pub use tool_body_wire::ToolBodyDto;
+// #155: Pause / Home entries of the operation list.
+mod program_entry_dto;
+pub use program_entry_dto::ProgramEntryDto;

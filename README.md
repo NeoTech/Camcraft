@@ -15,12 +15,29 @@ text, assets or post processors were used.
 > cannot be proven safe is refused by name. Still, check every program in
 > your machine's own simulation and dry-run it before cutting metal.
 
+> **Experimental work in progress - use with caution.** CamCraft is under
+> heavy, fast-moving development. Features land daily, some are half-built
+> on purpose, and a release can change behaviour you relied on yesterday.
+> Treat every posted program as a first draft: simulate it, dry-run it with
+> the spindle off and the Z raised, and keep a hand on the feed hold. Our
+> unofficial testing philosophy, borrowed from a certain tiny lord with a
+> very large castle:
+>
+> *"Some of you may die, but it's a sacrifice I am willing to make."*
+>
+> Please don't let that be your spindle, your vise or your fingers. Report
+> anything odd as an issue - a crash, a toolpath that looks wrong, or a
+> refusal you think is mistaken - so the next person doesn't find it the
+> hard way.
+
 ## What it does
 
 - **Import** STL, OBJ and STEP models; repair meshes (weld vertices, fill
   holes).
 - **Set up** stock, work offsets (G54–G59), fixtures and machines (mill,
-  5-axis, lathe, mill-turn).
+  5-axis, lathe, mill-turn, and the Tormach 770MX, 770MX (ML), 770M,
+  1100M, 1100MX, 1500MX, PCNC 440, PCNC 770 (earlier and Series 3) and
+  PCNC 1100 (Series I, II and 3) mills).
 - **2D milling:** face, contour (with G41/G42 compensation), pocket,
   adaptive clearing, slot, trace, engrave, chamfer, circular, bore and
   thread milling.
@@ -37,9 +54,11 @@ text, assets or post processors were used.
   has an area.
 - **Verify and simulate:** a solid-law verifier (gouge, rest, rapid and
   fixture checks), stock simulation with playback, and a deviation view.
-- **Post:** Fanuc, Haas, Mazak, Sinumerik, Heidenhain and Fanuc Lathe,
-  written as scriptable `.cps` post processors. The setup sheet and tool
-  list print alongside.
+- **Post:** Fanuc, Haas, Mazak, Sinumerik, Heidenhain, Tormach PathPilot
+  and Fanuc Lathe, written as scriptable `.cps` post processors.
+- **Setup sheets:** the Setups page lists each setup's tools in change
+  order with cut and rapid lengths and estimated time, and **Export setup
+  sheets…** writes one text page per setup. Posting does not write them.
 
 ## Download
 
@@ -82,12 +101,26 @@ makepkg -si
 ```
 
 The recipe installs the desktop app, command-line tools, and assets together.
-Publishing the recipe to the AUR is a separate step after its Arch build is
-validated.
+The release workflow builds and checks the Arch package after its Linux job
+and attaches the package to tagged releases. Publishing the recipe to the
+AUR is a separate step after its Arch build is validated.
 
-Windows, Linux, and macOS desktop releases are built on GitHub. The core
-crates also build and test on macOS, and the post engine compiles for
-`wasm32-unknown-unknown`.
+### FreeBSD package
+
+On FreeBSD amd64, build the desktop app and command-line tools, then package
+them with their assets:
+
+```sh
+cargo build --locked --release -p camcraft-ui -p camcraft-app -p camcraft-post
+scripts/package-freebsd.sh
+```
+
+The release workflow runs this in a FreeBSD VM. Manual workflow runs upload
+the `freebsd-amd64.tar.gz` archive as an artifact; tagged runs attach it to
+the release.
+
+Windows, Linux, macOS, and FreeBSD desktop releases are built on GitHub.
+The core crates also build and test on macOS.
 
 ## Workspace layout
 
@@ -116,16 +149,19 @@ cargo test --release -p camcraft-app -p camcraft-motion -- --ignored   # slow ve
 ```
 
 Golden toolpath and G-code outputs live under each crate's `tests/golden/`.
-Gates run locally through `scripts/gate.ps1` (see Contributing). GitHub
+Gates run locally through `cargo xtask gate` (see Contributing). GitHub
 Actions runs only on a pushed release tag; the CI and nightly workflows in
 `.github/workflows/` are manual.
 
 ## Project documents
 
-- `ROADMAP.md`: the frozen milestone archive, kept for history and design
-  context. Work is tracked as GitHub issues.
+- The roadmap is the repo's open GitHub issues. The old milestone archive,
+  `ROADMAP.md`, was retired; read it from git history
+  (`git show v0.14.0:ROADMAP.md`).
 - `RECOMMENDED.md`: the decision ledger, with what was chosen, why, and
   what was dropped.
+- [Machine onboarding](docs/MACHINE-ONBOARDING.md): source facts, registration,
+  software-test seams, and current limitations for machine definitions/posts.
 - `AGENTS.md`: engineering rules (clean-room protocol, the never-crash /
   never-gouge directive, layering, testing).
 - `RELEASE_NOTES.md`, `TESTING.md`: the current release.
@@ -157,18 +193,18 @@ version.
   (generated, never committed or hand-edited). Agents query it before
   grepping (`graphify query "<question>"`) and refresh it after code changes
   (`graphify update`).
-- **`scripts/gate.ps1`** runs the test gates: `-Tier quick` per change,
-  `-Tier batch` before a batch of commits, `-Tier release` at a release cut,
-  and `-Test <name>` for a single test.
-- **`scripts/gate.sh`** is its bash twin for macOS and Linux (works with
-  the bash 3.2 macOS ships): `scripts/gate.sh quick [base]`,
-  `scripts/gate.sh batch`, `scripts/gate.sh release` and
-  `scripts/gate.sh test <name> [crate] [--exact] [--ignored]`. Its quick
-  tier is coarser than the PowerShell one: it runs every suite of each
-  crate the diff touches (slow suites included), rather than only the
-  changed test functions. For the finer quick tier on macOS or Linux,
-  `gate.ps1` also runs under PowerShell 7: `pwsh scripts/gate.ps1 -Tier
-  quick` (`brew install --cask powershell` on macOS).
+- **`cargo xtask gate`** runs the test gates, the same on Windows, macOS
+  and Linux (the `xtask/` crate; nothing to install beyond cargo):
+  `cargo xtask gate quick` per change (only the test functions and suites
+  the diff touches), `cargo xtask gate batch` before a batch of commits,
+  `cargo xtask gate release` at a release cut, and
+  `cargo xtask gate test <name> [--crate c] [--exact]` for a single test.
+  `--dry-run` prints the plan without running it. `cargo xtask decisions
+  --version X.Y.Z` gathers the decision files at a cut.
+- **`scripts/gate.ps1`** (`-Tier quick`, `-Test <name>`, ...) and
+  **`scripts/gate.sh`** (`quick [base]`, `test <name> [crate] [--exact]`,
+  ...) are thin wrappers over `cargo xtask gate`, kept so the old commands
+  still work.
 - Project agents and skills for Claude Code live in `.claude/agents/` and
   `.claude/skills/` (gate runner, graph updater, PR reviewer).
 
@@ -178,6 +214,21 @@ Work is the open GitHub issues, picked by priority: `P0` (wrong output,
 gouge, crash, data loss), then `P1` (wrong behaviour a user hits), then `P2`
 (owed polish), oldest first. Each issue carries one `P*` label and one or
 more `area:*` labels. Issues opened by an agent also carry `source:agent`.
+
+**`P?` means paused.** The maintainer puts `P?` on an issue (in place of
+`P0`/`P1`/`P2`) to hold it: nobody picks it up, claims it or changes its
+priority until the maintainer swaps `P?` for a real priority or closes it.
+Comments with relevant facts (a duplicate, a related fix) are still
+welcome.
+
+**`needs-research` issues are not work items yet.** The label marks a large
+idea with open questions (a new machine type, a documentation site, a new
+kernel): research and decisions come first, and the outcome is a set of
+smaller, concrete issues, each with its own `P*`, `area:*` and a "Done means"
+line. Nobody claims a `needs-research` issue to write code. Its work is
+answering the open questions in comments and filing the sub-issues; once
+every sub-issue is filed and linked from it, it is closed, and the
+sub-issues are picked up like any other issue.
 
 1. **Claim before you code.** Comment
    `claimed: <name> · <UTC time> · branch <name> · plan: <one line>`. The
@@ -202,13 +253,58 @@ more `area:*` labels. Issues opened by an agent also carry `source:agent`.
   (or `none` for docs and tests). It ends with `Fixes #N`, or `Refs #N` for
   partial work. Do not edit `CHANGELOG.md` in the PR; rows are written at
   release time.
-- Gate it locally before asking for review:
-  `powershell -File scripts/gate.ps1 -Tier quick` on Windows, or
-  `scripts/gate.sh quick` on macOS and Linux.
+- Gate it locally before asking for review: `cargo xtask gate quick` (any
+  OS; `scripts/gate.ps1 -Tier quick` and `scripts/gate.sh quick` forward to
+  it).
 - Follow the engineering rules in `AGENTS.md`: the clean-room protocol, never
   crash and never gouge (no `unwrap`, `expect` or `panic!` outside tests;
   refuse bad input by name), every UI change as an undoable command, files
   under about 400 lines, and a provenance line on new modules.
+
+### Draft first, then ready for review: the gates
+
+Every pull request opens as a **draft** (`gh pr create --draft`) and stays a
+draft while work, testing and fixes land on it. A draft is never reviewed
+and never merged. It is flagged **ready for review** (`gh pr ready <N>`)
+only when one of these holds:
+
+1. **The maintainer says so**, or
+2. **Its own gates pass:**
+   - **Mergeable** - it merges cleanly with current `main` (merge `main`
+     in and re-test if not);
+   - **Tested** - the quick gate is green on its final commit
+     (`cargo xtask gate quick`), with the
+     pinning tests named in the description;
+   - **Complete description** - what changed, how it was tested, what was
+     *not* exercised, a `Changelog:` line, and `Fixes #N` / `Refs #N` when
+     it works an issue (a docs or process PR the maintainer asked for
+     directly has none);
+   - **Laws** - the `AGENTS.md` rules above (clean-room, no panics,
+     commands for UI changes, ~400-line files; post scripts
+     `assets/posts/*.cps` are exempt from the line limit).
+
+   A quick pass over these points is enough to flag a PR ready: it reads
+   the PR, its stated test results and its mergeability, and does not
+   rebuild (the author ran the quick gate). The full independent review
+   comes after, on the ready PR.
+
+**Once ready, the branch takes no more pushes.** A late fix, a needed merge
+of `main` or any other change first turns it back into a draft
+(`gh pr ready <N> --undo`), says why in a PR comment, is pushed and
+re-tested, and only then is flagged ready again.
+
+**Review labels.** The review of a ready PR sets one colour:
+
+| Label | Meaning | What happens |
+|---|---|---|
+| `merge-ready` (green) | clean review and mergeable | waits for the maintainer's merge |
+| `needs-rework` (red) | review found blockers | a maintainer PR goes back to draft; fix, push, flag ready again (a fork PR stays as its contributor set it; the review comment says what to fix) |
+| `conflicts` (orange) | no longer merges with `main` | a maintainer PR goes back to draft; merge `main`, re-test, flag ready again (a fork PR: the contributor merges `main`) |
+| `needs-maintainer` (yellow) | reviewed with no blockers, but it adds a dependency or changes `build.rs`, scripts or `.github`, so it was read, not built | waits for the maintainer's decision |
+
+When a PR comes back from draft with a new head, that head gets a fresh
+review; the marker `<!-- pr-reviewer: <head sha> -->` in the review comment
+ties each verdict to the commit it judged.
 
 ### Review and merge: a manual gate
 
@@ -223,9 +319,11 @@ be resolved; only merge commits are allowed.
   gets a fresh review. A PR that touches build scripts, CI workflows,
   scripts or dependencies is not built by the reviewer; it is flagged for
   the maintainer instead.
-- **Review of the maintainers' own PRs.** Issue PRs are reviewed at the
-  release cut by a subagent that did not write them; findings are fixed on
-  the branch before it merges.
+- **Review of the maintainers' own PRs.** Once flagged ready, an owner PR
+  is reviewed by a subagent that did not write it (the same `PR-reviewer`,
+  one review at a time) and labelled as above; findings are fixed on the
+  branch (back to draft first) before it merges - a `fix` once clean, a
+  `feat` at the release cut.
 - **Approval is manual.** GitHub requires 0 approvals (the agents and the
   maintainer share one account, which cannot approve its own PR), so the
   gate is the maintainer's manual merge: the maintainer reads the review and
@@ -243,7 +341,27 @@ be resolved; only merge commits are allowed.
   comment when its release is published. Only `vX.Y.0` tags (and manual
   runs) build the release artifact on GitHub.
 
+## Supporting the project
+
+The best way to support CamCraft is to point your coding agent at it. Pick an
+open issue, or a pull request that needs work or a review, and let your agent
+take it through the process described under [Contributing](#contributing).
+Every fixed issue and every reviewed PR moves the project forward.
+
+If you'd rather support it another way, you can
+[chip in here](https://buy.stripe.com/8x2dR93Up10S6eP0FO4c800) or use the
+**Sponsor** button at the top of the repository page. Contributions go
+toward more agent subscriptions, which means more agents working through the
+issue list.
+
 ## License
 
-MIT. See [`LICENSE`](LICENSE). Third-party notices are in
-`assets/ui/LICENSES.md`.
+Apache License 2.0. See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE).
+
+The copyright belongs to the CamCraft contributors, each holding the
+rights to their own contributions, and not to any one person. By opening a
+pull request you license your contribution under Apache-2.0 (section 5 of
+the license). Code contributed while CamCraft was MIT-licensed is
+redistributed under Apache-2.0, which MIT permits.
+
+Third-party notices are in `assets/ui/LICENSES.md`.

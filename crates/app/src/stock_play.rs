@@ -94,7 +94,7 @@ impl PlaySeed {
     /// `texels` cells (see `FieldPlay::new` for `judged`).
     pub fn gather(world: &flecs_ecs::prelude::World, judged: bool, texels: f64) -> Result<Self, String> {
         let (stock_facets, planned, cell) = display_inputs(world, texels)?;
-        let part = judged.then(|| crate::stock_sim::part_facets(world));
+        let part = if judged { Some(crate::stock_sim::part_facets(world)?) } else { None };
         Ok(PlaySeed { stock_facets, planned, cell, part })
     }
 
@@ -344,7 +344,7 @@ impl FieldPlay {
             // A rotary slice is chorded about the fitted axis, turning
             // from the pose the program held before it (M13.1).
             let cut = match (&op.rotary, &op.lathe) {
-                (_, Some(l)) => self.cur.simulate_lathe_about(moves, l.nose, &l.axis),
+                (_, Some(l)) => self.cur.simulate_lathe_profile(moves, &l.profile, &l.axis),
                 (Some(ax), None) => {
                     let tol = crate::stock_sim::rotary_pose_tol(self.cur.cell());
                     crate::stock_sim::simulate_rotary_slice(&mut self.cur, &sim, &op.moves, a - op.start, ax, tol).map(|_| ())

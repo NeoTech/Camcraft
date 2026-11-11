@@ -78,6 +78,7 @@ pub fn engagement(p: &OpParams, d: f64) -> Option<(f64, f64)> {
         OpParams::Pocket { stepdown, .. }
         | OpParams::Offset2D { stepdown, .. }
         | OpParams::Slot { stepdown, .. }
+        | OpParams::TrochoidalSlot { stepdown, .. }
         | OpParams::Pocket3D { stepdown, .. }
         | OpParams::MultiAxisRough { stepdown, .. } => Some((*stepdown, d)),
         OpParams::Face { stepdown: Some(ap), top_z: Some(_), stepover, .. } => {
@@ -155,7 +156,7 @@ pub fn suggest(world: &World, name: &str) -> Result<Suggestion, String> {
         .tool_material
         .ok_or_else(|| format!("tool {} states no tool material (HSS or carbide)", op.tool))?;
     let z = tool.flutes.ok_or_else(|| format!("tool {} states no flute count", op.tool))?;
-    Ok(compute(&op.tool, &tool, z, tm, material, adaptive_load(&op.params), crate::machine::of(world).1.as_ref()))
+    Ok(compute(&op.tool, &tool, z, tm, material, adaptive_load(&op.params), crate::machine::of_setup(world, op.setup.as_deref()).1.as_ref()))
 }
 
 /// The arithmetic, pure: n = Vc*1000/(pi*D), fz scaled by diameter and
@@ -229,6 +230,7 @@ pub fn feed_mut(p: &mut OpParams) -> Option<&mut f64> {
         | OpParams::Chamfer2D { feed, .. }
         | OpParams::Circular { feed, .. }
         | OpParams::Slot { feed, .. }
+        | OpParams::TrochoidalSlot { feed, .. }
         | OpParams::Trace { feed, .. }
         | OpParams::Pocket3D { feed, .. }
         | OpParams::Finish3D { feed, .. }

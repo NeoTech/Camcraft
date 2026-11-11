@@ -45,8 +45,8 @@ impl Height {
 /// `setup` is the declared setup of the asking operation (`None` = the
 /// first setup, which in a document without setups is the old global
 /// lookup exactly - the implicit-setup law of [`crate::setup`]). The
-/// model bounds are document-wide: the part is the part whatever setup
-/// holds it; only the stock box and the offset planes follow the setup.
+/// model bounds are the parts as the setup holds them (#326's part
+/// alignment; as modelled, they are the document bounds).
 /// `src` is the asking operation's own source, which the Selection
 /// references read ([`selection_z_range`], M11.3 A); None = no op in
 /// hand, and a Selection reference is then unresolved, never guessed.
@@ -61,10 +61,14 @@ pub fn resolve_height(
         HeightReference::Fixed => return (h.offset.is_finite()).then_some(h.offset),
         HeightReference::TopOfStock => model::stock_world_aabb_for(world, setup)?.max.z,
         HeightReference::BottomOfStock => model::stock_world_aabb_for(world, setup)?.min.z,
-        HeightReference::TopOfModel => model::solid_world_aabb(world)?.max.z,
-        HeightReference::BottomOfModel => model::solid_world_aabb(world)?.min.z,
-        HeightReference::WorkOffset(i) => {
-            let entity = crate::setup::wcs_entity(world, setup, i)?;
+        // #326: the model bounds in the setup's frame - a flipped part's
+        // top is its former bottom (identical to the document bounds
+        // when the setup holds the part as modelled).
+        HeightReference::TopOfModel => crate::setup_align::solid_aabb_in(world, setup)?.max.z,
+        HeightReference::BottomOfModel => crate::setup_align::solid_aabb_in(world, setup)?.min.z,
+        HeightReference::WorkOffset => {
+            // #329, #342: the setup's one WCS, never the height's own.
+            let entity = crate::setup::wcs_entity(world, setup)?;
             model::transform_of(world, &entity).unwrap_or_default().pos.z
         }
         HeightReference::TopOfSelection | HeightReference::BottomOfSelection => {
@@ -97,12 +101,9 @@ pub fn missing_source(
         HeightReference::TopOfModel | HeightReference::BottomOfModel => {
             model::solid_world_aabb(world).is_none().then_some("no model loaded")
         }
-        HeightReference::WorkOffset(i) => match crate::setup::wcs_entity_name(world, setup, i) {
-            None => Some("work offset slot out of range (G54..G59)"),
-            Some(name) => model::find_by_name(world, &name)
-                .is_none()
-                .then_some("that work offset has no origin yet - place it in Setup"),
-        },
+        HeightReference::WorkOffset => crate::setup::wcs_entity(world, setup)
+            .is_none()
+            .then_some("the setup's WCS has no origin yet - place it in Setup"),
     }
 }
 
@@ -132,6 +133,7 @@ pub fn region_z(
         | OpParams::Chamfer2D { top_z, .. }
         | OpParams::Circular { top_z, .. }
         | OpParams::Slot { top_z, .. }
+        | OpParams::TrochoidalSlot { top_z, .. }
         | OpParams::Trace { top_z, .. }
         | OpParams::Drill { top_z, .. }
         | OpParams::Pocket3D { top_z, .. }
@@ -169,6 +171,8 @@ pub fn region_z(
         | OpParams::Deburr { top_z, .. } => resolve_height(world, setup, src, *top_z),
         // The probe's station is its expected contact (#108).
         OpParams::Probe { target, .. } => Some(target[2]),
+        // The plasma cut rides the plate's top (#670).
+        OpParams::PlasmaProfile(p) => resolve_height(world, setup, src, p.top_z),
     }
 }
 
@@ -241,6 +245,7 @@ pub fn resolve_params(
         | OpParams::Engrave { clearance_z, retract_z, top_z, bottom_z, .. }
         | OpParams::Circular { clearance_z, retract_z, top_z, bottom_z, .. }
         | OpParams::Slot { clearance_z, retract_z, top_z, bottom_z, .. }
+        | OpParams::TrochoidalSlot { clearance_z, retract_z, top_z, bottom_z, .. }
         | OpParams::Trace { clearance_z, retract_z, top_z, bottom_z, .. }
         | OpParams::Pocket3D { clearance_z, retract_z, top_z, bottom_z, .. }
         | OpParams::Finish3D { clearance_z, retract_z, top_z, bottom_z, .. }
@@ -376,6 +381,15 @@ pub fn resolve_params(
         // The probe states one height: the safe plane it travels at
         // between touches (#108); the touches ride the target.
         OpParams::Probe { clearance_z, .. } => (req("Clearance Z", *clearance_z)?, None, None, None, None),
+        // The plasma cut (#670): the torch-off plane, the plate's top
+        // (the cut plane) and bottom (its thickness) - no hop plane.
+        OpParams::PlasmaProfile(p) => (
+            req("Clearance Z", p.clearance_z)?,
+            Some(req("Top of Plate Z", p.top_z)?),
+            Some(req("Bottom of Plate Z", p.bottom_z)?),
+            None,
+            None,
+        ),
     };
     Ok(ResolvedHeights { clearance, top, bottom, face_top, retract })
 }

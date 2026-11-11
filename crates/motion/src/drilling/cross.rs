@@ -133,15 +133,16 @@ pub fn cross_drill(p: &CrossParams) -> Result<Toolpath, GenError> {
         return Err(GenError::Invalid("malformed cross hole list".into()));
     }
     for h in p.holes {
+        let at = |msg: String| GenError::invalid_at(msg, h.origin); // #677: marks the mouth
         match plunge_axis(h.dir) {
             None => {
-                return Err(GenError::Invalid(format!(
+                return Err(at(format!(
                     "cross hole at ({}, {}, {}) plunges along ({}, {}, {}): only axis-aligned live tooling (M5.2 v1)",
                     h.origin.x, h.origin.y, h.origin.z, h.dir.x, h.dir.y, h.dir.z
                 )));
             }
             Some(2) => {
-                return Err(GenError::Invalid(format!(
+                return Err(at(format!(
                     "cross hole at ({}, {}, {}) plunges along Z: this cycle plunges radially - the mill-side drill owns Z",
                     h.origin.x, h.origin.y, h.origin.z
                 )));
@@ -155,7 +156,7 @@ pub fn cross_drill(p: &CrossParams) -> Result<Toolpath, GenError> {
     if p.stock_z_max.is_some_and(|z| !z.is_finite()) {
         return Err(GenError::Invalid("cross-drill stock Z top not usable".into()));
     }
-    if matches!(p.cycle, CycleChoice::Tap | CycleChoice::Bore | CycleChoice::BackBore) {
+    if matches!(p.cycle, CycleChoice::Tap | CycleChoice::FloatingTap | CycleChoice::Bore | CycleChoice::BackBore) {
         return Err(GenError::Invalid(
             "radial tapping and boring are not this cycle's word (M5.2 v1)".into(),
         ));
@@ -225,10 +226,10 @@ pub fn cross_drill(p: &CrossParams) -> Result<Toolpath, GenError> {
             None => floor_bottom,
         };
         if bottom >= 0.0 {
-            return Err(GenError::Invalid(format!(
-                "cross hole at ({}, {}, {}) bottoms at {bottom}, above its entry",
-                h.origin.x, h.origin.y, h.origin.z
-            )));
+            return Err(GenError::invalid_at(
+                format!("cross hole at ({}, {}, {}) bottoms at {bottom}, above its entry", h.origin.x, h.origin.y, h.origin.z),
+                h.origin,
+            ));
         }
         let depth = p.r_d - bottom;
         let kind = match p.cycle {
@@ -238,13 +239,13 @@ pub fn cross_drill(p: &CrossParams) -> Result<Toolpath, GenError> {
             CycleChoice::Peck => CycleKind::Peck,
             _ => unreachable!("rejected by the v1 cycle door above"),
         };
-        if matches!(kind, CycleKind::Tap | CycleKind::Bore | CycleKind::BackBore) {
+        if matches!(kind, CycleKind::Tap | CycleKind::FloatingTap | CycleKind::Bore | CycleKind::BackBore) {
             return Err(GenError::Invalid(format!(
                 "a {:?} cycle is not radial-capable (M5.2 v1)",
                 kind
             )));
         }
-        super::cycle::refuse_solid_cycle(p.tool, kind, h.origin.x, h.origin.y)?;
+        super::cycle::refuse_solid_cycle(p.tool, kind, h.origin)?;
         match kind {
             CycleKind::Spot | CycleKind::Drill => {
                 b.push(MoveKind::Plunge, along(h, bottom), Some(p.plunge_feed));

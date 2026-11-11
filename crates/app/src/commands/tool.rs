@@ -9,10 +9,10 @@ use flecs_ecs::prelude::World;
 
 use crate::commands::{Command, CommandError};
 use crate::model;
-use crate::schema::{Location, STOCK_NAME, WCS_SLOTS, ToolDef};
+use crate::schema::{Location, STOCK_NAME, WCS_SLOTS, ToolBody, ToolDef};
 use crate::tools::Tool;
 
-fn reserved(world: &World, name: &str) -> Option<CommandError> {
+pub(super) fn reserved(world: &World, name: &str) -> Option<CommandError> {
     if name.is_empty() {
         return Some(CommandError::Invalid("tool name must not be empty".into()));
     }
@@ -25,9 +25,7 @@ fn reserved(world: &World, name: &str) -> Option<CommandError> {
         || crate::setup::is_furniture_shape(name)
         || crate::setup::names(world).iter().any(|s| {
                 crate::setup::stock_entity_name(world, Some(s)) == name
-                    || (0..WCS_SLOTS.len()).any(|i| {
-                        crate::setup::wcs_entity_name(world, Some(s), i).is_some_and(|n| n == name)
-                    })
+                    || crate::setup::wcs_entity_name(world, Some(s)) == name
             });
     if taken {
         return Some(CommandError::Invalid(format!(
@@ -47,6 +45,10 @@ impl AddTool {
     pub fn new(world: &World, name: &str, tool: Tool) -> Result<Self, CommandError> {
         if let Some(err) = reserved(world, name) {
             return Err(err);
+        }
+        // #670: a torch stating a spindle speed is refused by name.
+        if let Some(why) = tool.torch_refusal() {
+            return Err(CommandError::Invalid(format!("tool '{name}': {why}")));
         }
         if !tool.is_sane() {
             return Err(CommandError::Invalid(format!(
@@ -92,6 +94,9 @@ pub struct ChangeTool {
 
 impl ChangeTool {
     pub fn new(world: &World, name: &str, next: Tool) -> Result<Self, CommandError> {
+        if let Some(why) = next.torch_refusal() {
+            return Err(CommandError::Invalid(format!("tool '{name}': {why}")));
+        }
         if !next.is_sane() {
             return Err(CommandError::Invalid(format!(
                 "tool parameters must be finite and positive: {next:?}"
@@ -108,6 +113,12 @@ impl ChangeTool {
             crate::operation::tool_gate::retype_refusal(world, name, prev.kind, next.kind)
         {
             return Err(CommandError::Invalid(msg));
+        }
+        // #368: an edit that would stand the tool's body over its flutes
+        // (or retype it to a lathe insert) is refused by name.
+        if let Some(body) = crate::tool_body::body_of(world, &entity) {
+            crate::tool_body::fits(&next, &body)
+                .map_err(|e| CommandError::Invalid(format!("tool '{name}': {e}")))?;
         }
         Ok(ChangeTool {
             name: name.to_string(),
@@ -146,6 +157,8 @@ pub struct DeleteTool {
     tool: Tool,
     /// #221: the tool's number, restored with it on undo.
     number: Option<u32>,
+    /// #368: its modelled body, restored with it on undo.
+    body: Option<ToolBody>,
     location: Location,
 }
 
@@ -160,6 +173,7 @@ impl DeleteTool {
             name: name.to_string(),
             tool,
             number: model::tool_number_of(world, &entity),
+            body: crate::tool_body::body_of(world, &entity),
             location: model::transform_of(world, &entity).unwrap_or_default(),
         })
     }
@@ -181,5 +195,6 @@ impl Command for DeleteTool {
         entity
             .entity_view(world)
             .set(ToolDef { tool: self.tool.clone(), number: self.number });
+        crate::tool_body::set_body(world, &entity, self.body.as_ref());
     }
 }

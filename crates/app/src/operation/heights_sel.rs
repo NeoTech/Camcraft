@@ -51,11 +51,12 @@ pub fn selection_z_range(
         SrcRef::Entity(name) => {
             let e = model::find_by_name(world, name)
                 .ok_or("the operation's source entity is gone")?;
-            model::entity_world_aabb(world, &e)
+            // #326: the source as its setup holds it.
+            crate::setup_align::entity_aabb_in(world, &e, setup)
                 .map(|b| (b.min.z, b.max.z))
                 .ok_or("the operation's source entity carries no geometry")?
         }
-        SrcRef::Selection(items) => picks_z_range(world, items)?,
+        SrcRef::Selection(items) => picks_z_range(world, setup, items)?,
     };
     let (lo, hi) = span;
     if lo.is_finite() && hi.is_finite() && lo <= hi {
@@ -66,7 +67,7 @@ pub fn selection_z_range(
 }
 
 /// The picks' half of [`selection_z_range`].
-fn picks_z_range(world: &World, items: &[GeoSel]) -> Result<(f64, f64), &'static str> {
+fn picks_z_range(world: &World, setup: Option<&str>, items: &[GeoSel]) -> Result<(f64, f64), &'static str> {
     if items.is_empty() {
         return Err(SELECTION_EMPTY);
     }
@@ -77,7 +78,7 @@ fn picks_z_range(world: &World, items: &[GeoSel]) -> Result<(f64, f64), &'static
             .ok_or("a picked entity is gone - re-pick the selection")?;
         let features = model::features_of(world, &entity)
             .ok_or("a picked entity carries no geometry - re-pick the selection")?;
-        let loc = model::transform_of(world, &entity).unwrap_or_default();
+        let loc = crate::setup_align::pose_in(world, &entity, setup).unwrap_or_default(); // #326
         let mut take = |vi: u32| {
             if let Some(p) = features.verts.get(vi as usize) {
                 let w = transform_point(Point3::new(p[0], p[1], p[2]), loc.pos, loc.rot);
@@ -177,6 +178,21 @@ pub fn depth_sane(
             _ => true,
         },
     }
+}
+
+/// The microlift door (#774): a trochoidal slot's lifted return must
+/// not rise above the clearance plane, read on the resolved heights
+/// ([`OpParams::microlift_refusal`] holds the rule). An unresolved
+/// height is refused elsewhere, by name.
+#[must_use]
+pub fn microlift_sane(
+    world: &World,
+    setup: Option<&str>,
+    src: Option<&SrcRef>,
+    params: &OpParams,
+) -> Option<String> {
+    let r = resolve_params(world, setup, src, params).ok()?;
+    params.microlift_refusal(r.clearance, r.top?)
 }
 
 #[cfg(test)]

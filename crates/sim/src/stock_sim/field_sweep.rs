@@ -4,6 +4,7 @@
 //! `field_cut`; solid evaluation and window bounds moved unchanged.
 
 use super::field::cell_of;
+use super::field_arc::ArcPiece;
 use super::field_bull::{bull_closed, bull_dist, bull_tie};
 use super::field_lathe::LatheSweep;
 use super::field_solid::{add, dist_pt_para, dot, flat_tie, pose_dist, scale, sub, upright_flat_foot, RevKind};
@@ -36,6 +37,9 @@ pub(crate) enum Sweep {
     Shanked { c0: Point3, c1: Point3, up: [f64; 3], r: f64 },
     /// The Minkowski sum of a tip path and a revolved profile.
     Revolve { a: Point3, b: Point3, kind: RevKind },
+    /// One piece of an upright tool's XY arc, swept on the true circle
+    /// (#413, `field_arc`).
+    Arc(ArcPiece),
 }
 
 impl Sweep {
@@ -45,7 +49,7 @@ impl Sweep {
     /// inflated into every axis, which would refuse payables.
     fn extent(&self) -> f64 {
         match self {
-            Sweep::Lathe(l) => l.nose(),
+            Sweep::Lathe(l) => l.bound(),
             Sweep::Ball { r, .. } => *r,
             Sweep::Shanked { r, up, .. } => r + dot(*up, *up).sqrt(),
             Sweep::Revolve { kind, .. } => match kind {
@@ -53,6 +57,7 @@ impl Sweep {
                 RevKind::Taper { r, cot } => r.hypot(r * cot),
                 RevKind::Bull { r, flank, .. } => r.hypot(*flank),
             },
+            Sweep::Arc(_) => 0.0, // its stadium is its own (`ArcPiece::stadium`)
         }
     }
 
@@ -66,7 +71,7 @@ impl Sweep {
         match self {
             // The revolved solid's reach is its own window (`window_of`
             // reads the annulus directly); the nose is its dilation.
-            Sweep::Lathe(l) => (l.nose(), 0.0),
+            Sweep::Lathe(l) => (l.bound(), 0.0),
             Sweep::Ball { r, .. } => (*r, 0.0),
             Sweep::Shanked { r, up, .. } => (*r, dot(*up, *up).sqrt()),
             Sweep::Revolve { kind, .. } => match kind {
@@ -74,6 +79,7 @@ impl Sweep {
                 RevKind::Taper { r, cot } => (*r, r * cot),
                 RevKind::Bull { r, flank, .. } => (*r, *flank),
             },
+            Sweep::Arc(p) => p.reach(),
         }
     }
 
@@ -87,12 +93,34 @@ impl Sweep {
             // solid, never its extent (the window and the stadium
             // test read the revolved solid, not this).
             Sweep::Lathe(l) => l.path(),
+            Sweep::Arc(p) => p.path(),
         }
     }
 
     /// The lattice window this sweep can reach (`window_of`).
     pub(crate) fn window(&self, cell: f64, cap: f64, ax: [f64; 3]) -> [(i32, i32); 3] {
         window_of(self, cell, cap, ax)
+    }
+
+    /// Does the solid span the world above its tip - hold every point
+    /// above any point it holds, up to height `z`? The monotone law
+    /// `field_floor` reads a cut floor by (#637 E1): true only for an
+    /// upright axis and a flank or shank that reaches `z` from the
+    /// lowest anchor. The truncated taper, the bare ball and the
+    /// lathe's revolved sweep are bounded.
+    pub(crate) fn spans_above(&self, ax: [f64; 3], z: f64) -> bool {
+        if ax != [0.0, 0.0, 1.0] {
+            return false;
+        }
+        match self {
+            Sweep::Lathe(_) | Sweep::Ball { .. } => false,
+            Sweep::Shanked { c0, c1, up, .. } => c0.z.min(c1.z) + up[2] >= z,
+            Sweep::Revolve { a, b, kind } => match kind {
+                RevKind::Flat { flank, .. } | RevKind::Bull { flank, .. } => a.z.min(b.z) + flank >= z,
+                RevKind::Taper { .. } => false,
+            },
+            Sweep::Arc(p) => p.spans_above(z),
+        }
     }
 
     /// How far `dist` may sit ABOVE the true distance: the golden
@@ -106,6 +134,7 @@ impl Sweep {
                 let d = sub(*b, *a);
                 dot(d, d).sqrt() * GS_RESIDUAL
             }
+            Sweep::Arc(p) => p.residual(),
         }
     }
 
@@ -114,6 +143,9 @@ impl Sweep {
     pub(crate) fn stadium(&self, q: Point3) -> f64 {
         if let Sweep::Lathe(l) = self {
             return l.dist(q); // closed form already: its own bound
+        }
+        if let Sweep::Arc(p) = self {
+            return p.stadium(q);
         }
         let (p0, p1) = self.path();
         dist_pt_seg3(q.x, q.y, q.z, p0, p1) - self.extent()
@@ -131,6 +163,8 @@ impl Sweep {
             // revolved from its mirror too, so both signs of rho are
             // read and the nearer wins - exact, no sampling.
             Sweep::Lathe(l) => l.dist(q),
+            // Upright only (`field_cut` builds no other): the axis is +Z.
+            Sweep::Arc(p) => p.dist(q),
             Sweep::Ball { c0, c1, r } => dist_pt_seg3(q.x, q.y, q.z, *c0, *c1) - r,
             Sweep::Shanked { c0, c1, up, r } => dist_pt_para(q, *c0, sub(*c1, *c0), *up) - r,
             Sweep::Revolve { a, b, kind } => {

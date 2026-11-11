@@ -23,9 +23,13 @@ use crate::state::{CommandKind, ErrorScope, State};
 
 use super::colorvision::text_inks;
 use super::fields::combo_owned;
-use super::layout::{Action, ActionKind, BarInks, action_bar, group, prop_grid, status_banner};
+use super::layout::{Action, ActionKind, BarInks, action_bar, group, prop_grid, status_banner_located};
 use super::op_tabs::{SEC_FEEDS, SEC_GEO, SEC_MACHINE, SEC_PASSES};
 use super::theme::Tokens;
+
+/// The hover text of a refusal line that names its spot (#261 part 2);
+/// the structural test finds the link by it.
+pub(crate) const REFUSAL_LINK_HINT: &str = "show where the operation was refused in the viewport";
 
 /// Room the action bar (and the line above it) keeps under the scroll.
 const BAR_RESERVE: f32 = 120.0;
@@ -272,6 +276,9 @@ pub(super) fn status_text(state: &State, target: &str) -> (String, super::layout
     let st = ent.as_ref().map(|e| operation::status_of(&state.world, e));
     let mut details: Vec<String> = fold_warnings(&warnings);
     details.extend(super::approach_page::entry_status_lines(&notes));
+    // #339 slice 4: who the fixture warnings strike, or that no single
+    // fixture reproduces them - said, never guessed.
+    details.extend(state.struck_lines(target));
     let n = details.len();
     let tail = match n {
         0 => String::new(),
@@ -294,9 +301,16 @@ pub(super) fn status_text(state: &State, target: &str) -> (String, super::layout
     (line, tone, details)
 }
 
-fn status(ui: &mut Ui, state: &State, target: &str, pal: &Tokens) {
+fn status(ui: &mut Ui, state: &mut State, target: &str, pal: &Tokens) {
     use super::layout::Tone;
     let (line, tone, details) = status_text(state, target);
+    // #261: a warning line that names a move frames it on click (the
+    // fold lines lead `details`, aligned with `warning_focus`).
+    let focus: Vec<Option<[f64; 3]>> = model::find_by_name(&state.world, target)
+        .and_then(|e| model::toolpath_of(&state.world, &e))
+        .map(|tp| crate::path_lines::warning_focus(&tp))
+        .unwrap_or_default();
+    let links: Vec<bool> = focus.iter().map(Option::is_some).collect();
     let inks = text_inks(ui, &state.world);
     let ink = match tone {
         Tone::Ok => pal.accent,
@@ -304,7 +318,12 @@ fn status(ui: &mut Ui, state: &State, target: &str, pal: &Tokens) {
         Tone::Error => inks.error,
         Tone::Quiet => pal.text_dim,
     };
-    status_banner(ui, "op_status", &line, ink, &details);
+    if let Some(p) = status_banner_located(ui, "op_status", &line, ink, &details, &links)
+        .and_then(|i| focus.get(i).copied().flatten())
+    {
+        // View state, like every camera move: no command (AGENTS.md).
+        crate::actions::frame_at(state, p);
+    }
 }
 
 /// The fixed bottom bar, with the one refusal line above it.
@@ -317,7 +336,20 @@ fn actions(ui: &mut Ui, state: &mut State, target: &str, live: Option<&Operation
         exists && model::find_by_name(&state.world, target).and_then(|e| model::toolpath_of(&state.world, &e)).is_some();
     let inks = text_inks(ui, &state.world);
     if let Some(msg) = state.error_for(ErrorScope::Operation).map(str::to_owned) {
-        ui.colored_label(inks.error, msg);
+        // #261 part 2: a refusal that names its spot is a link that
+        // frames it (view state, like every camera move - no command).
+        match state.refusal_focus() {
+            Some(p) => {
+                let text = egui::RichText::new(msg).color(inks.error).underline();
+                let r = ui.add(egui::Label::new(text).sense(egui::Sense::click()).wrap());
+                if r.on_hover_text(REFUSAL_LINK_HINT).clicked() {
+                    crate::actions::frame_at(state, p);
+                }
+            }
+            None => {
+                ui.colored_label(inks.error, msg);
+            }
+        }
     } else if !unchanged && let Some(why) = &apply_hint {
         // Enabled, but the door will refuse: a safety line, not help.
         ui.colored_label(inks.warn, why);

@@ -29,7 +29,9 @@ impl OpParams {
                 HeightReference::BottomOfStock => (2, 0),
                 HeightReference::TopOfModel => (3, 0),
                 HeightReference::BottomOfModel => (4, 0),
-                HeightReference::WorkOffset(i) => (5, i.min(255) as u8),
+                // #329: the slot is the setup's; digesting the resolved
+                // one keeps every migrated stamp exactly as it was.
+                HeightReference::WorkOffset => (5, u8::try_from(crate::setup::wcs_slot(world, setup)).unwrap_or(u8::MAX)),
                 HeightReference::TopOfSelection => (6, 0),
                 HeightReference::BottomOfSelection => (7, 0),
             };
@@ -858,6 +860,47 @@ impl OpParams {
                 });
                 wt(h, *tilt);
             }
+            OpParams::TrochoidalSlot {
+                a,
+                b,
+                width,
+                loop_width,
+                step,
+                max_engagement,
+                ret,
+                smoothing,
+                stock_to_leave,
+                clearance_z,
+                retract_z,
+                top_z,
+                bottom_z,
+                stepdown,
+                feed,
+                return_feed,
+                plunge_feed,
+                climb,
+            } => {
+                wp2(h, *a);
+                wp2(h, *b);
+                for v in [*width, loop_width.unwrap_or(-1.0), *step, *max_engagement, *smoothing, *stock_to_leave] {
+                    w(h, v);
+                }
+                match ret {
+                    crate::machining2d::TrochoidReturn::Microlift { height } => {
+                        h.write_u8(0);
+                        w(h, *height);
+                    }
+                    crate::machining2d::TrochoidReturn::Retract => h.write_u8(1),
+                }
+                wh(h, *clearance_z);
+                wh_opt(h, *retract_z);
+                wh(h, *top_z);
+                wh(h, *bottom_z);
+                for v in [*stepdown, *feed, *return_feed, *plunge_feed] {
+                    w(h, v);
+                }
+                h.write_u8(u8::from(*climb));
+            }
             OpParams::Trace {
                 clearance_z,
                 retract_z,
@@ -1002,6 +1045,7 @@ impl OpParams {
                     CycleChoice::Drill => 2,
                     CycleChoice::Peck => 3,
                     CycleChoice::Tap => 4,
+                    CycleChoice::FloatingTap => 7,
                     CycleChoice::Bore => 5,
                     CycleChoice::BackBore => 6,
                 });
@@ -1190,6 +1234,7 @@ impl OpParams {
                 infeed,
                 feed,
                 plunge_feed,
+                hand,
             } => {
                 w(h, *tolerance);
                 wh(h, *clearance_z);
@@ -1198,6 +1243,14 @@ impl OpParams {
                 for v in [*pitch, *depth, *infeed, *feed, *plunge_feed] {
                     w(h, v);
                 }
+                // #629: the hand sets the helix's sense, and the passes
+                // now run toward the chuck - written for BOTH hands, so
+                // every thread cached before the fix goes stale once and
+                // regenerates the new way, saying so.
+                h.write_u8(match hand {
+                    crate::cl::ThreadHand::Right => 0xA1,
+                    crate::cl::ThreadHand::Left => 0xA2,
+                });
             }
             // The contour rides (M5.2 stage E, tags 25-27): each
             // promise-number MOVES the verdict's window or the ride
@@ -1375,6 +1428,27 @@ impl OpParams {
                     w(h, v);
                 }
                 h.write_u8(set_wcs.unwrap_or(0xff));
+            }
+            // The plasma profile (#670): every stored number, the
+            // optional ones with a presence byte.
+            OpParams::PlasmaProfile(p) => {
+                wh(h, p.clearance_z);
+                wh(h, p.top_z);
+                wh(h, p.bottom_z);
+                h.write_u8(u8::from(p.comp == super::PlasmaComp::Control));
+                h.write_u8(u8::from(p.reversed));
+                for v in [p.lead_in, p.lead_out, p.small_hole_dia, p.small_hole_feed, p.overburn] {
+                    w(h, v);
+                }
+                for v in [p.kerf, p.feed, p.pierce_height, p.cut_height, p.pierce_delay] {
+                    match v {
+                        Some(x) => {
+                            h.write_u8(1);
+                            w(h, x);
+                        }
+                        None => h.write_u8(0),
+                    }
+                }
             }
             OpParams::Thread {
                 clearance_z,

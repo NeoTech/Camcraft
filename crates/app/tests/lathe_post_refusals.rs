@@ -6,6 +6,8 @@
 //! back-bore, an XY arc that is no thread half-turn, a feed with no
 //! spindle to pace G99 against. The one XY shape it DOES speak - the
 //! threading kernel's half-turn helix - posts as G32 with F = lead.
+//! A section stating no surface speed after one that did posts its
+//! own G97, never the stale G96 (#772).
 //! The turning documents' goldens live in `lathe_post.rs`.
 //!
 //! Gate map (M4.4): covers app::post (engine, cnc on the lathe
@@ -103,14 +105,16 @@ fn a_cycle_off_the_axis_and_a_back_bore_are_refused_by_name() {
 #[test]
 fn a_thread_helix_posts_as_g32_and_a_stray_xy_arc_refuses() {
     // The threading kernel's spelling: a plunge on the meridian, then
-    // XY half-turns about the axis rising half a pitch each - one
-    // lead of Z under G32 with F = lead, the X word modal.
-    let arc = |x: f64, y: f64, z: f64| {
+    // XY half-turns about the axis falling half a pitch each - one
+    // lead of Z under G32 with F = lead, the X word modal. Clockwise
+    // seen from +Z falling toward the chuck: right-hand under M03 (#629).
+    let arc_ccw = |x: f64, y: f64, z: f64, ccw: bool| {
         cnc::Record::Move(cnc::MoveRec {
-            kind: MoveKind::Feed, x, y, z, feed: Some(100.0), center: Some((0.0, 0.0)), ccw: true,
+            kind: MoveKind::Feed, x, y, z, feed: Some(100.0), center: Some((0.0, 0.0)), ccw,
             plane: Default::default(), abc: None,
         })
     };
+    let arc = |x: f64, y: f64, z: f64| arc_ccw(x, y, z, false);
     let mut r = preface();
     r.push(mv(MoveKind::Rapid, 0.0, 4.0, 10.0, None));
     r.push(mv(MoveKind::Plunge, 0.0, 2.5, 10.0, Some(100.0)));
@@ -122,6 +126,20 @@ fn a_thread_helix_posts_as_g32_and_a_stray_xy_arc_refuses() {
     assert!(out.warnings.is_empty(), "{:?}", out.warnings);
     assert!(out.program.contains("G01 X5 Z10 F0.1"), "the plunge in diameter and per-rev: {}", out.program);
     assert!(out.program.contains("G32 Z9 F2\nG32 Z8 F2\n"), "two half-turns, one lead: {}", out.program);
+    assert!(out.program.contains("M03") && !out.program.contains("M04"), "{}", out.program);
+
+    // #629: the same passes turning counter-clockwise under the M03 the
+    // stream left standing would cut the other hand - refused by name,
+    // never posted (every pre-#629 stream turned this way).
+    let mut r = preface();
+    r.push(mv(MoveKind::Rapid, 0.0, 4.0, 10.0, None));
+    r.push(mv(MoveKind::Plunge, 0.0, 2.5, 10.0, Some(100.0)));
+    r.push(arc_ccw(0.0, -2.5, 9.0, true));
+    r.push(arc_ccw(0.0, 2.5, 8.0, true));
+    r.push(cnc::Record::Section { begin: false });
+    let out = run(r);
+    assert!(out.warnings.iter().any(|w| w.contains("would cut the other hand")), "{:?}", out.warnings);
+    assert!(!out.program.contains("G32"), "{}", out.program);
 
     // An XY arc that is not a half-turn about the axis is no thread.
     let mut r = preface();
@@ -146,4 +164,32 @@ fn a_feed_without_a_spindle_speed_is_refused_by_name() {
     ];
     let out = run(r);
     assert!(out.warnings.iter().any(|w| w.contains("needs a spindle speed")), "{:?}", out.warnings);
+}
+
+#[test]
+fn a_section_without_surface_speed_posts_g97_after_one_with_it() {
+    // #772: a CSS turning section, then an axial drill that states no
+    // SurfaceSpeed. The drill must run at its own rpm (G97), never at
+    // the stale G96 - on centre that is the G50 clamp, the machine max.
+    let mut r = vec![cnc::Record::Param { name: "SurfaceSpeed".into(), value: json!(200.0) }];
+    r.extend(preface());
+    r.push(mv(MoveKind::Rapid, 0.0, 6.0, 10.0, None));
+    r.push(mv(MoveKind::Feed, 0.0, 6.0, 0.0, Some(100.0)));
+    r.push(cnc::Record::Section { begin: false });
+    r.push(cnc::Record::Param { name: "SpindleSpeed".into(), value: json!(500.0) });
+    r.push(cnc::Record::Tool { number: 2, name: "DRILL-6".into() });
+    r.push(cnc::Record::Section { begin: true });
+    r.push(cnc::Record::Cycle(cnc::CycleRec {
+        kind: CycleKind::Drill, x: 0.0, y: 0.0, r_z: 22.0, bottom_z: 10.0, entry_z: 20.0, peck: 0.0,
+        dwell: 0.0, first_move: 0, feed: Some(100.0),
+    }));
+    r.push(mv(MoveKind::Rapid, 0.0, 0.0, 22.0, None));
+    r.push(cnc::Record::Section { begin: false });
+    let out = run(r);
+    assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+    let p = &out.program;
+    assert_eq!(p.matches("G96").count(), 1, "only the turning section is CSS: {p}");
+    assert!(p.contains("G96 S200 M03\n"), "{p}");
+    let drill = &p[p.find("T0202").expect("the drill's tool change")..];
+    assert!(drill.contains("G97 S500 M03\n"), "the drill states its own rpm: {drill}");
 }

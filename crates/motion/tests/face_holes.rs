@@ -138,12 +138,25 @@ fn a_strip_narrower_than_the_tool_between_two_holes_is_refused_by_name() {
     // the strip would stay unfaced - refused, never faced short.
     let region = plate(&[(-7.0, 0.0), (7.0, 0.0)]);
     let err = face(&region, &p(FaceHoles::Lift)).expect_err("refused").to_string();
-    assert!(err.contains("4.00 mm apart") && err.contains("narrower than the 6.000 mm tool"), "{err}");
+    assert!(err.contains("4.00 mm apart") && err.contains("no wider than the 6.000 mm tool"), "{err}");
     // Far enough apart, both are bridged and the strip between is faced.
     let ok = face(&plate(&[(-12.0, 0.0), (12.0, 0.0)]), &p(FaceHoles::Lift)).expect("two holes bridged");
     assert!(plunges(&ok) > 1);
     // The legacy law never refuses: it never looked at the holes.
     assert!(face(&region, &p(FaceHoles::Through)).is_ok());
+}
+
+#[test]
+fn the_narrow_strip_refusal_points_at_the_strip() {
+    // #261 part 2: the refusal names its spot - the middle of the 4 mm
+    // strip (x = 0, between the holes' walls at -2 and 2), on the row
+    // its sentence quotes, at the cut height.
+    let err = face(&plate(&[(-7.0, 0.0), (7.0, 0.0)]), &p(FaceHoles::Lift)).expect_err("refused");
+    let at = err.location().expect("a located refusal");
+    assert!(at.x.abs() < 1e-9, "the strip's middle: {at:?}");
+    assert_eq!(at.z, -2.0, "the cut height");
+    assert!(at.y.abs() <= 5.0, "a row within the holes' band (its edge included): {at:?}");
+    assert!(err.to_string().contains(&format!("on the row at Y={:.2}", at.y)), "the row the sentence names: {err}");
 }
 
 #[test]
