@@ -260,3 +260,51 @@ fn the_fanuc_dialect_refuses_a_b_on_an_a_only_table() {
     assert!(!side.warnings.iter().any(|w| w.contains("states no")), "{:?}", side.warnings);
     assert!(side.program.contains("A90"), "{}", side.program);
 }
+
+#[test]
+fn the_fanuc_dialect_refuses_a_lone_a_stated_along_minus_x() {
+    // The check judges a [-1,0,0] table by the negated angle (A -45
+    // against 0..90 passes as +45); fanuc.cps writes the letter unnegated,
+    // so A-45 would post outside the judged travel. It refuses by name.
+    let mut m = shipped();
+    let a = m.axes.iter_mut().find(|x| x.rotary).expect("the A");
+    a.axis = Some([-1.0, 0.0, 0.0]);
+    a.travel = Some((0.0, 90.0));
+    let mch = mirror::mirror(&m);
+    let cps = std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/posts/fanuc.cps"))
+        .expect("the post");
+    let mv = |z: f64| {
+        cnc::Record::Move(cnc::MoveRec {
+            kind: camcraft_app::cl::MoveKind::Feed,
+            x: 0.0,
+            y: 0.0,
+            z,
+            feed: Some(300.0),
+            center: None,
+            ccw: false,
+            plane: Default::default(),
+            abc: Some([-45.0, 0.0, 0.0]),
+        })
+    };
+    let stream = cnc::serialize(&[
+        cnc::Record::Tool { number: 1, name: "EM".into() },
+        cnc::Record::Section { begin: true },
+        mv(-5.0),
+        mv(-6.0),
+        cnc::Record::Section { begin: false },
+    ]);
+    let out = ok(engine::run(&cps, &mch, &stream), "runs");
+    assert!(
+        out.warnings.iter().any(|w| w.contains("tilted move on rotary A, stated along -X")),
+        "{:?}",
+        out.warnings
+    );
+    assert!(!out.program.lines().any(|l| l.contains("A-45")), "{}", out.program);
+    // The same table stated along +X posts the letter as before.
+    let a = m.axes.iter_mut().find(|x| x.rotary).expect("the A");
+    a.axis = Some([1.0, 0.0, 0.0]);
+    a.travel = Some((-90.0, 90.0));
+    let plus = ok(engine::run(&cps, &mirror::mirror(&m), &stream), "runs");
+    assert!(!plus.warnings.iter().any(|w| w.contains("along -X")), "{:?}", plus.warnings);
+    assert!(plus.program.contains("A-45"), "{}", plus.program);
+}

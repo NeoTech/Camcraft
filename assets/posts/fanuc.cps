@@ -109,6 +109,22 @@ function missingLetter(p) {  // the first turning letter no rotary is named for,
   }
   return "";
 }
+// #797 review: the machine check judges a lone rotary about X by the
+// angle the table must hold, signed by its stated direction - a [-1,0,0]
+// table holds the negated angle (`judge.rs` `x_rotary_problem`). This
+// dialect writes the stream's A as it comes and never negates it, so on
+// such a table the check's number and the posted one would differ: the
+// pose it passed against the travel is not the word this post writes.
+// Refused by name rather than posted outside the judged travel.
+function reversedLoneXRotary() {  // the rotary's name, else ""
+  var rs = (typeof machine !== "undefined" && machine.rotaries) || [];
+  if (rs.length !== 1) return "";
+  var d = rs[0].direction;
+  if (!d || d.length !== 3 || !has(d[0]) || !has(d[1]) || !has(d[2])) return "";
+  var n2 = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
+  if (!(n2 > 0) || d[0] * d[0] < 0.998 * n2 || d[0] > 0) return "";
+  return String(rs[0].name || "A").toUpperCase();
+}
 function tilt(p) {  // words to append, [] if none, null if refused
   if (!has(p.A)) return [];
   if (typeof machine === "undefined" || machine.rtcp !== true) {
@@ -123,6 +139,11 @@ function tilt(p) {  // words to append, [] if none, null if refused
   var lost = missingLetter(p);
   if (lost) {
     if (!tiltRefused) { tiltRefused = true; msg("tilted move commands " + lost + " - the machine states no " + lost + " rotary"); }
+    return null;
+  }
+  var rev = reversedLoneXRotary();
+  if (rev) {
+    if (!tiltRefused) { tiltRefused = true; msg("tilted move on rotary " + rev + ", stated along -X - this dialect posts the stream's angle unnegated, so it would leave the travel the machine check judged"); }
     return null;
   }
   if (!tcpmOn) {

@@ -124,8 +124,9 @@ fn only_x_rotary(machine: &Machine) -> Option<&AxisLimits> {
 /// exactly (0, -sin t, cos t), the axes with no X component - so the face
 /// underneath, canonical A0 B180, is t = 180. Read from the letters, the
 /// way the PathPilot post reads its stream (`tormach.cps` `toolAngle`),
-/// with the same tolerances, so the check and the post agree on every
-/// pose: what one accepts the other posts, what one refuses both do.
+/// with the same tolerances, so the check and that post agree on every
+/// pose. The Fanuc dialect (`fanuc.cps`) writes letters, not the axis:
+/// it refuses the B of A0 B180 and a lone rotary stated along -X by name.
 fn x_tool_angle([a, b, c]: [f64; 3]) -> Option<f64> {
     if !(a.is_finite() && b.is_finite() && c.is_finite()) || c.abs() > 1e-6 {
         return None;
