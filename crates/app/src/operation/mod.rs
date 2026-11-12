@@ -79,6 +79,7 @@ pub mod tool_gate;
 mod params;
 mod trochoid_op;
 mod stamp;
+mod stamp_tool;
 pub use stamp::*;
 mod stamp_stock;
 pub use stamp_stock::reads_setup_stock;
@@ -97,6 +98,7 @@ mod probe;
 pub mod probe_op;
 // #670: the Plasma Profile's seed and generation glue.
 pub mod plasma_op;
+pub mod wire_op;
 // #171: the Probe op seeded from one picked face, edge, vertex or round wall.
 mod probe_pick;
 mod probe_pick_round;

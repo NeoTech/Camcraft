@@ -85,6 +85,14 @@ impl KindInfo {
     pub fn accepts(&self, kind: ToolKind) -> bool {
         self.tool_kinds.contains(&kind)
     }
+
+    /// Whether this kind cuts with a tool from the library at all. A
+    /// wire EDM kind does not (#532, [`NO_TOOL`]): its operation names
+    /// no tool, and every tool door reads this word first.
+    #[must_use]
+    pub fn mounts_tool(&self) -> bool {
+        !self.tool_kinds.is_empty()
+    }
 }
 
 /// The touch probe (#108): the Probe operation mounts nothing else, and
@@ -94,6 +102,12 @@ pub const PROBE: &[ToolKind] = &[ToolKind::Probe];
 /// The plasma torch (#670): the plasma operations mount nothing else,
 /// and no cutting kind mounts a torch.
 pub const TORCH: &[ToolKind] = &[ToolKind::Torch];
+
+/// No library tool (#532): a wire EDM kind mounts none - the wire's
+/// diameter and spark gap are the machine's condition (#531), and a
+/// tool beside it would be a second source for the same number. The
+/// one empty set; [`KindInfo::mounts_tool`] is how the doors ask.
+pub const NO_TOOL: &[ToolKind] = &[];
 
 /// The radius a mill tool removes with certainty (#266): half its
 /// diameter, except a Tap-kind tool (tap or thread mill), whose sure

@@ -828,7 +828,8 @@ pub fn op_streams(world: &World) -> Result<Vec<(String, Vec<cnc::Record>)>, Stri
         return Err(msg);
     }
 
-    // #530: the family door again, at post (`posting_family`).
+    // #530: the family door again, at post (`posting_family`), and
+    // #532's refusal of a kind whose post is not built yet.
     crate::posting_family::family_at_post(world, &ops)?;
 
     // #155: Pause / Home entries fold into the gap they stand in; #389:
@@ -993,6 +994,7 @@ impl HeightRefs for OpParams {
         match self {
             OpParams::Probe { clearance_z, .. } => vec![clearance_z],
             OpParams::PlasmaProfile(p) => vec![&p.clearance_z, &p.top_z, &p.bottom_z],
+            OpParams::WireContour(p) => vec![&p.top_z, &p.bottom_z],
             OpParams::Face {
                 clearance_z,
                 cut_z,
