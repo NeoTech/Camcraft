@@ -32,8 +32,14 @@ pub mod carry;
 pub mod held;
 #[path = "stock_sim_breaks.rs"]
 pub mod breaks;
-pub use carry::{CARRY_MACHINE_CHANGE_REFUSAL, CARRY_MACHINE_REFUSAL, incoming_body};
-pub use held::{CARRY_ENGINE_ENV, FIELD_CARRY_SHAPE_REFUSAL, engine as carry_engine, with_engine as with_carry_engine};
+// The wire clause (#1110): a wire cut stays out of the plan, by name.
+#[path = "stock_sim_wire.rs"]
+pub mod wire;
+pub use carry::{
+    CARRY_MACHINE_CHANGE_REFUSAL, CARRY_MACHINE_REFUSAL, carry_machine_refusal, incoming_body, machine_kind_name,
+};
+pub use held::{CARRY_ENGINE_ENV, CARRY_ENGINE_SWITCH_HONOURED, FIELD_CARRY_SHAPE_REFUSAL, engine as carry_engine};
+pub use held::{engine_from_switch as carry_engine_from_switch, engine_note as carry_engine_note, with_engine as with_carry_engine};
 
 use crate::geometry::Triangle;
 
@@ -138,6 +144,7 @@ pub fn simulate_document(
     world: &flecs_ecs::prelude::World,
 ) -> Result<ProgramSim, String> {
     let planned = plan_program(world)?;
+    wire::refuse_wire_cuts(world)?;
     refuse_unjudged(&planned)?;
     // #864: a part imported coarser than promised tightens the verdict by
     // its excess; one too coarse for that is refused by name, not judged.
@@ -277,6 +284,9 @@ pub(crate) fn plan_program(world: &flecs_ecs::prelude::World) -> Result<Vec<Plan
     for (name, e) in &ops {
         let op = model::operation_of(world, e)
             .ok_or_else(|| format!("{name}: lost its operation"))?;
+        if wire::skips(&op) {
+            continue;
+        }
         // The rotary clause (M13.1): between two stations a rotary
         // move turns the WORK, so the tool sweeps an annular sector
         // about the fitted axis - a torus-family solid no stock engine

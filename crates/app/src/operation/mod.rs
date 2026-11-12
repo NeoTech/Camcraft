@@ -91,6 +91,8 @@ pub(crate) use material_region::selection_drives_region;
 mod circle_fit;
 pub use circle_fit::{CIRCLE_FIT_TOL, circle_of_region, circular_fit_of};
 mod material_source;
+// #1071: the thread mill's major-circle rims and solid-law bores.
+mod thread_rims;
 mod footprint;
 pub use footprint::machined_footprint;
 mod probe;
@@ -156,12 +158,15 @@ mod air_law;
 pub(crate) mod fidelity_law;
 mod top_stock;
 mod stock_top_law;
+// #266: a tap judged at its thread's core.
+mod tap_core;
 pub use top_stock::TOP_STOCK_WARNING;
 mod turning_credit;
 mod turning_feeds;
 mod turning_holder;
 pub(crate) use turning_holder::body_axes as lathe_body_axes;
 mod turning_holder_scene;
+mod turning_holder_side;
 mod turning_outline;
 mod turning_rapids;
 mod turning_stock;

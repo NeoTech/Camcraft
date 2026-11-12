@@ -317,8 +317,10 @@ fn a_lathe_post_is_held_to_the_chuck_whatever_machine_is_mounted() {
                 why.contains("D1: turns the work at 8000 rpm (G97)") && why.contains("workholding maximum of 2000 rpm"),
                 "{what}, {dialect}: the drill at 8000 under a 2000 chuck is refused by name: {why}"
             );
-            let at = post_through(&drilled(m.clone(), CHUCK), cps);
-            assert!(at.is_ok(), "{what}, {dialect}: exactly at the limit posts: {:?}", at.err());
+            // #1232: and a lathe post does not serve a mill (nor the
+            // default VMC of no machine) - refused by kind at any rpm.
+            let at = post_through(&drilled(m.clone(), CHUCK), cps).err().unwrap_or_default();
+            assert!(at.contains("does not serve") && at.contains("a milling machine"), "{what}, {dialect}: {at}");
         }
     }
 }

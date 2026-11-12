@@ -137,6 +137,7 @@ fn lathe_world_with(bar: Mesh) -> (World, History) {
     );
     let cmd = LoadMachine::new(&world, "lathe.mch".into(), Some(machine("lathe")));
     history.execute(&world, cmd.expect("lathe"));
+    history.execute(&world, camcraft_app::commands::SelectPost::new(&world, camcraft_app::schema::PostRef::Named("Fanuc Lathe".into())).expect("lathe post"));
     add_tool(&world, &mut history, "DR-0400");
     add_tool(&world, &mut history, "EM-0400-2FL");
     history.execute(&world, ImportModel::from_mesh("bar", bar));
