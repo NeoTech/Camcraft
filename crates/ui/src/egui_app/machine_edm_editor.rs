@@ -15,7 +15,10 @@
 
 use egui::{CollapsingHeader, ComboBox, TextEdit, Ui};
 
-use camcraft_app::machine::{Condition, Edm, Kind, Machine, OrbitWord, CONDITION_ROLES, ORBIT_KINDS, SINKER_CODES};
+use camcraft_app::machine::{
+    condition_id_key, condition_refusal, Condition, Edm, Kind, Machine, OrbitWord, CONDITION_ROLES, ORBIT_KINDS,
+    SINKER_CODES,
+};
 use camcraft_app::units::Unit;
 
 use super::pages;
@@ -45,6 +48,11 @@ pub(super) fn draw(ui: &mut Ui, u: Unit, m: &mut Machine) {
 
 /// A stated / "not stated" number: the unstated-limits law as a
 /// checkbox. Toggling on seeds `seed` (a value the field's law accepts).
+/// What ticking a condition's gap seeds, mm: a value the loader accepts.
+const GAP_SEED_MM: f64 = 0.01;
+/// What ticking a condition's undersize seeds, mm (within (0, 1] mm).
+const UNDERSIZE_SEED_MM: f64 = 0.1;
+
 fn stated_num(ui: &mut Ui, label: &str, v: &mut Option<f64>, seed: f64, show: impl FnOnce(&mut Ui, &mut f64)) {
     ui.horizontal(|ui| {
         let mut on = v.is_some();
@@ -121,8 +129,11 @@ fn conditions(ui: &mut Ui, u: Unit, e: &mut Edm) {
             ui.add(TextEdit::singleline(&mut c.id).desired_width(50.0)).labelled_by(l.id);
             let l = ui.label(format!("Condition {n} name"));
             ui.add(TextEdit::singleline(&mut c.name).desired_width(90.0)).labelled_by(l.id);
-            stated_num(ui, &format!("Condition {n} gap"), &mut c.gap, 0.0, |ui, v| pages::num(ui, u, v));
-            stated_num(ui, &format!("Condition {n} undersize"), &mut c.undersize, 0.0, |ui, v| pages::num(ui, u, v));
+            // Seeds the condition law accepts (#560: a gap > 0, an
+            // undersize in (0, 1] mm); the user types the manual's.
+            stated_num(ui, &format!("Condition {n} gap"), &mut c.gap, GAP_SEED_MM, |ui, v| pages::num(ui, u, v));
+            let us = format!("Condition {n} undersize");
+            stated_num(ui, &us, &mut c.undersize, UNDERSIZE_SEED_MM, |ui, v| pages::num(ui, u, v));
             let mut r = CONDITION_ROLES.iter().position(|w| *w == c.role).map_or(0, |p| p + 1);
             let shown = if r == 0 { "role not stated" } else { CONDITION_ROLES[r - 1] };
             ComboBox::from_id_salt(("edm-cond-role", i)).selected_text(shown).width(110.0).show_ui(ui, |ui| {
@@ -145,7 +156,7 @@ fn conditions(ui: &mut Ui, u: Unit, e: &mut Edm) {
     }
     if ui.button("Add condition").clicked() {
         let mut n = e.conditions.len() + 1;
-        while e.conditions.iter().any(|c| c.id == format!("C{n}")) {
+        while e.conditions.iter().any(|c| condition_id_key(&c.id) == condition_id_key(&format!("C{n}"))) {
             n += 1;
         }
         e.conditions.push(Condition { id: format!("C{n}"), ..Condition::default() });
@@ -183,7 +194,11 @@ fn codes(ui: &mut Ui, e: &mut Edm) {
 }
 
 /// Why `LoadMachine` would refuse this section, in words - the same
-/// laws as `Edm::is_sane` / the file loader, stated one by one.
+/// laws as `Edm::is_sane` / the file loader, stated one by one. Each
+/// condition is judged by the loader's own `condition_refusal` (id
+/// spelling, a gap > 0, an undersize in (0, 1] mm), its ids compared as
+/// the loader compares them (case and leading zeros ignored), and a
+/// wire-only field on this sinker is named as the loader names it.
 pub(super) fn problems(e: &Edm) -> Vec<String> {
     let mut out = Vec::new();
     if e.max_orbit_radius.is_some_and(|r| !(r.is_finite() && r > 0.0)) {
@@ -198,14 +213,20 @@ pub(super) fn problems(e: &Edm) -> Vec<String> {
         let n = i + 1;
         if c.id.trim().is_empty() {
             out.push(format!("condition {n} states no id"));
-        } else if e.conditions.iter().skip(i + 1).any(|d| d.id == c.id) {
-            out.push(format!("condition id {:?} is stated twice", c.id));
+        } else if let Some(r) = condition_refusal(c, &e.wire_diameters) {
+            out.push(format!("condition {n} {r}"));
         }
-        if c.gap.is_some_and(|g| !(g.is_finite() && g >= 0.0)) {
-            out.push(format!("condition {n} gap must not be negative"));
+        if c.wire_diameter.is_some() {
+            out.push(format!("condition {n} states a wire diameter - a wire field; this is a sinker machine"));
         }
-        if c.undersize.is_some_and(|g| !(g.is_finite() && g >= 0.0)) {
-            out.push(format!("condition {n} undersize must not be negative"));
+        if !c.id.trim().is_empty()
+            && let Some(d) = e.conditions.iter().skip(n).find(|d| condition_id_key(&d.id) == condition_id_key(&c.id))
+        {
+            if d.id == c.id {
+                out.push(format!("condition id {:?} is stated twice", c.id));
+            } else {
+                out.push(format!("condition ids {:?} and {:?} are one selector (case and leading zeros are ignored)", c.id, d.id));
+            }
         }
     }
     for (role, t) in &e.codes {

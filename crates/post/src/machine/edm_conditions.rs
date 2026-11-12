@@ -124,7 +124,7 @@ impl Edm {
 /// as its number (`"01"` and `1` are one selector). A control that
 /// tells them apart is not one CamCraft can post to unambiguously.
 #[must_use]
-pub(super) fn id_key(id: &str) -> String {
+pub fn id_key(id: &str) -> String {
     if !id.is_empty() && id.bytes().all(|b| b.is_ascii_digit()) {
         let t = id.trim_start_matches('0');
         return if t.is_empty() { "0".to_owned() } else { t.to_owned() };
@@ -136,7 +136,10 @@ pub(super) fn id_key(id: &str) -> String {
 /// law for both doors: the reader calls it on each parsed entry, the
 /// project gate on each stored one. `wires` is the machine's
 /// `edm.wire_diameters` (empty: not stated, any wire in range passes).
-pub(super) fn condition_refusal(c: &Condition, wires: &[f64]) -> Option<String> {
+/// Public so the Machine window's EDM section (#548) names the same
+/// rule its Apply would hit, word for word.
+#[must_use]
+pub fn condition_refusal(c: &Condition, wires: &[f64]) -> Option<String> {
     if c.id.is_empty() || c.id.trim() != c.id {
         return Some("id: must be a word with no surrounding spaces".to_owned());
     }

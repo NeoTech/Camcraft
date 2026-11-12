@@ -119,6 +119,9 @@ fn a_draft_the_loader_refuses_is_named_and_refused_at_apply() {
     assert!(h.state().status.contains("machine edit refused"), "{:?}", h.state().status);
 }
 
+/// One edit that breaks a condition rule.
+type EdmEdit = fn(&mut camcraft_app::machine::Edm);
+
 #[test]
 fn problems_name_each_law_the_loader_keeps() {
     let mut e = sinker().edm.expect("edm");
@@ -129,6 +132,46 @@ fn problems_name_each_law_the_loader_keeps() {
     let p = super::machine_edm_editor::problems(&e).join(" | ");
     assert!(p.contains("stated twice") && p.contains("\"depth\" is blank") && p.contains("pickup is blank"), "{p}");
     assert!(!e.is_sane(), "the loader's own law agrees");
+    // #560's condition rules: the page names each one the loader keeps,
+    // and the loader agrees on every case (one law, two doors).
+    let cases: [(&str, EdmEdit); 7] = [
+        ("gap", |e| e.conditions[0].gap = Some(0.0)),
+        ("undersize", |e| e.conditions[0].undersize = Some(0.0)),
+        ("undersize", |e| e.conditions[0].undersize = Some(1.5)),
+        ("one selector", |e| {
+            let mut d = e.conditions[0].clone();
+            d.id = "s1".into();
+            e.conditions.push(d);
+        }),
+        ("one selector", |e| {
+            e.conditions[0].id = "01".into();
+            let mut d = e.conditions[0].clone();
+            d.id = "1".into();
+            e.conditions.push(d);
+        }),
+        ("no surrounding spaces", |e| e.conditions[0].id = " S1".into()),
+        ("states no id", |e| e.conditions[0].id = String::new()),
+    ];
+    for (word, edit) in cases {
+        let mut bad = sinker().edm.expect("edm");
+        edit(&mut bad);
+        let p = super::machine_edm_editor::problems(&bad).join(" | ");
+        assert!(p.contains(word), "the page names {word:?}: {p}");
+        assert!(!bad.is_sane(), "the loader refuses what the page names ({word}): {p}");
+    }
+    // A wire-only field on a sinker: the page names it, the machine law refuses it.
+    let mut wire_field = sinker();
+    if let Some(e) = wire_field.edm.as_mut() {
+        e.conditions[0].wire_diameter = Some(0.25);
+        let p = super::machine_edm_editor::problems(e).join(" | ");
+        assert!(p.contains("wire field"), "{p}");
+    }
+    assert!(!wire_field.edm_sane(), "a sinker condition with a wire diameter is refused");
+    // The seeds the page ticks in are ones the loader accepts.
+    let mut seeded = sinker().edm.expect("edm");
+    seeded.conditions[0].gap = Some(0.01);
+    seeded.conditions[0].undersize = Some(0.1);
+    assert!(super::machine_edm_editor::problems(&seeded).is_empty() && seeded.is_sane());
     let mut only_pickup = sinker().edm.expect("edm");
     only_pickup.pickup = Some(" ".into());
     assert!(!only_pickup.is_sane(), "a blank pickup is refused at Apply as the file loader refuses it");
