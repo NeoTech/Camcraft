@@ -25,13 +25,11 @@ manual. If the problem count passes the report cap, the rest is counted.
 
 ## Tilt tolerance
 
-The reach laws decide whether a tool is upright with an exact comparison. A
-move tilted only by float noise (about 1e-10 degrees, as a rotated setup can
-produce) takes the tilted-tool path, and a holder wider than the cutter can
-then raise a false collision that blocks a good program. Issue #938 tracks
-this, and PR #973 fixes it with a stated tolerance of 1e-9 radians; it is
-**not merged yet**, so today `main` still has the exact comparison. If you
-meet such a block on a rotated setup, report it on #938.
+The reach laws treat a tool as upright when its tilt off +Z is within 1e-9
+radians (`UPRIGHT_TILT_RAD`), so a move tilted only by float noise (about
+1e-10 degrees, as a rotated setup can produce) is judged as upright and does
+not raise a false holder collision (issue #938). A real tilt larger than that
+takes the tilted-tool path.
 
 ## Shank, holder and fixture collision
 
