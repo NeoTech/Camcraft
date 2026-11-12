@@ -254,9 +254,10 @@ mod tests {
         let (Some(end), Some(start)) = (path.last().map(|m| m.to), more.first().map(|m| m.from)) else {
             panic!("the helix has moves")
         };
-        let (up, over) = (Point3::new(end.x, end.y, 5.0), Point3::new(start.x, start.y, 5.0));
-        for (p, q) in [(end, up), (up, over), (over, start)] {
-            path.push(Move::new(MoveKind::Rapid, p, q, None).with_axis([q.x / 10.0, q.y / 10.0, 0.0]));
+        // Up, round the spindle line through (0, 15) - never across it - and down.
+        let (up, via, over) = (Point3::new(end.x, end.y, 5.0), Point3::new(0.0, 15.0, 5.0), Point3::new(start.x, start.y, 5.0));
+        for (p, q) in [(end, up), (up, via), (via, over), (over, start)] {
+            path.push(Move::new(MoveKind::Rapid, p, q, None).with_axis([q.x / q.x.hypot(q.y), q.y / q.x.hypot(q.y), 0.0]));
         }
         path.extend(more);
         let path = crate::cl::Toolpath::new(path);
