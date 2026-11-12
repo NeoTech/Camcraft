@@ -34,6 +34,19 @@ The reviewer's open point from PR #1003 (does a rings level clear its stock
 as fully as the HSM plan?) is moot for this part: no level of the bore
 falls back now.
 
+**The heavy pin per platform (review round on PR #1032).** The planner's
+output differs slightly between platforms: on macOS Apple silicon the same
+head plans the bore as 16160 / 15432 / 1571 against Windows x86_64's
+16197 / 15458 / 1581 (the old pin had the same split, issue #1010, which
+owns making the planner bit-stable). The `(moves, planar, arcs)` triple is
+therefore exact per measured platform (`cfg`: Windows x86_64, macOS
+aarch64), so a real change still trips it on the release platform; any
+unmeasured target gets a band covering both (moves 16100..=16260, planar
+15380..=15520, arcs 1560..=1600) and a comment asking for its exact
+triple. Every platform-independent assertion stays exact: no warnings, no
+level falls back, no budget note. Dropped: one band for all platforms
+(fork PR #1014's form) - a +-55 band on Windows hides small changes.
+
 **Considered and dropped.**
 - Cleaning the level outline before planning (merge near-duplicate
   vertices): the outline was not the cause; it would have changed every
