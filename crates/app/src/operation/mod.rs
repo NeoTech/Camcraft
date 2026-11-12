@@ -91,6 +91,8 @@ pub(crate) use material_region::selection_drives_region;
 mod circle_fit;
 pub use circle_fit::{CIRCLE_FIT_TOL, circle_of_region, circular_fit_of};
 mod material_source;
+// #1071: the thread mill's major-circle rims and solid-law bores.
+mod thread_rims;
 mod footprint;
 pub use footprint::machined_footprint;
 mod probe;
