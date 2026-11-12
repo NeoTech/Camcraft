@@ -229,8 +229,7 @@ pub(crate) fn walk(
         }
         // #541: a sinker electrode burns its box atom.
         if let Some([hx, hy, gap]) = p.electrode {
-            crate::stock_sim::simulate_box(held.dex_mut(), &p.moves, hx, hy, gap)
-                .map_err(|e| format!("{}: {e}", p.name))?;
+            held.simulate_box(&p.moves, hx, hy, gap).map_err(|e| format!("{}: {e}", p.name))?;
             continue;
         }
         let sim_ops = [SimOp { moves: &p.moves, radius: p.radius, ball: p.ball, cone: p.cone, corner: p.corner }];
