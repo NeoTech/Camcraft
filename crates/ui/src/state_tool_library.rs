@@ -15,7 +15,7 @@ use super::{ErrorScope, State};
 impl State {
     /// "Export library…": ask where, then write every document tool.
     pub(crate) fn export_tool_library_dialog(&mut self) {
-        let Some(path) = rfd::FileDialog::new()
+        let Some(path) = crate::file_dialog::FileDialog::new()
             .add_filter("CamCraft Tool Library", &[EXTENSION])
             .set_file_name(format!("tools.{EXTENSION}"))
             .save_file()
@@ -27,7 +27,7 @@ impl State {
 
     /// "Import library…": pick a file, then import it.
     pub(crate) fn import_tool_library_dialog(&mut self) {
-        let picked: Option<PathBuf> = rfd::FileDialog::new()
+        let picked: Option<PathBuf> = crate::file_dialog::FileDialog::new()
             .add_filter("CamCraft Tool Library", &[EXTENSION, "json"])
             .pick_file();
         if let Some(path) = picked {
@@ -48,7 +48,7 @@ impl State {
         let planned = std::fs::read_to_string(path)
             .map_err(|e| e.to_string())
             .and_then(|text| tool_library::parse_tool_library(&text))
-            .and_then(|lib| ImportTools::new(&self.world, lib).map_err(|e| e.to_string()));
+            .and_then(|lib| ImportTools::with_mode(&self.world, lib, self.tool_import_mode).map_err(|e| e.to_string()));
         match planned {
             Ok(command) => {
                 let summary = command.report().summary();

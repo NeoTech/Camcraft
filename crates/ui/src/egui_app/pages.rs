@@ -78,7 +78,7 @@ use super::theme::Tokens;
 pub(crate) use super::fields::{combo, combo_owned, field, num, num_feed, num_plain};
 
 /// Tool kind labels, same order as `ToolKind` (mirrors the tool page).
-const TOOL_KINDS: [&str; 11] = [
+const TOOL_KINDS: [&str; 13] = [
     "End mill",
     "Ball nose",
     "Bull nose",
@@ -90,6 +90,9 @@ const TOOL_KINDS: [&str; 11] = [
     "Threading insert",
     "Form gauge",
     "Chamfer mill",
+    "Touch probe",
+    // #670: the kerf is its diameter; it turns no spindle.
+    "Plasma torch",
 ];
 
 /// The note gray the model page's notes use ([0.62,0.66,0.72]).
@@ -174,7 +177,7 @@ pub fn properties(ui: &mut Ui, state: &mut State, pal: &Tokens) {
 
 fn setup_error(ui: &mut Ui, state: &State) {
     if let Some(msg) = state.error_for(ErrorScope::Setup).map(str::to_owned) {
-        ui.colored_label(super::colorvision::text_inks(ui, &state.world).error, msg);
+        super::error_text::error_text(ui, super::colorvision::text_inks(ui, &state.world).error, &msg);
     }
 }
 // --------------------------------------------------------------- stock page
@@ -239,6 +242,7 @@ fn stock_page(ui: &mut Ui, state: &mut State) {
                 state.stock_ui.source = models[idx.min(models.len() - 1)].clone();
             }
         }
+        super::raw_stock_row::raw_stock_row(ui, state);
     } else {
         field(ui, "Length (X)");
         num(ui, u, &mut state.stock_ui.dx);
@@ -405,6 +409,7 @@ pub(super) fn post_section(ui: &mut Ui, state: &mut State) {
         state.pending.push_back(CommandKind::SetPerOpOutput(pick));
     }
     super::post_options::threading_picker(ui, state);
+    super::post_options::smoothing_switch(ui, state);
     super::post_options::end_units_picker(ui, state);
 }
 
@@ -444,8 +449,8 @@ fn post_offer_banner(ui: &mut Ui, state: &mut State) {
 
 /// The document's machine (M2.3 C, group completed by M3.3 stage C):
 /// setup furniture read live off the world singleton - no mirror to go
-/// stale. The summary is exactly what the file stated; a blank is a
-/// `?`, never an invented ceiling. The library combo picks a shipped
+/// stale. The overview grid is exactly what the file stated; a blank is
+/// "not stated", never an invented ceiling. The library combo picks a shipped
 /// machine BY NAME, "Load other" reaches any `.mch` through the file
 /// law, and "Edit" opens the draft editor; all three land on the
 /// same `LoadMachine` command, so every change here is undoable
@@ -454,9 +459,9 @@ fn post_offer_banner(ui: &mut Ui, state: &mut State) {
 pub(super) fn machine_section(ui: &mut Ui, state: &mut State) {
     let (path, m) = machine::of(&state.world);
     ui.label("Machine");
+    let names: Vec<&str> = posting::MACHINES.iter().map(|(n, _)| *n).collect();
     ui.horizontal(|ui| {
         ui.label("Library");
-        let names: Vec<&str> = posting::MACHINES.iter().map(|(n, _)| *n).collect();
         let sel: Option<usize> = names.iter().position(|n| path == posting::builtin_path(n));
         let text = match sel {
             Some(i) => names[i].to_owned(),
@@ -480,11 +485,15 @@ pub(super) fn machine_section(ui: &mut Ui, state: &mut State) {
     });
     match &m {
         Some(m) => {
-            ui.label(m.summary());
-            ui.label(format!("{} workspace", machine::kind(Some(m)).label()));
-            if !path.is_empty() {
-                ui.label(format!("loaded from {path}"));
-            }
+            let source = if path.is_empty() {
+                "not stated".to_owned()
+            } else {
+                match names.iter().find(|n| path == posting::builtin_path(n)) {
+                    Some(n) => format!("Built-in: {n}"),
+                    None => path.clone(),
+                }
+            };
+            super::machine_grid::machine_grid(ui, "machine_overview", m, state.units(), &[("Source", source)]);
             ui.horizontal(|ui| {
                 if ui.button("Load other").clicked() {
                     state.pending.push_back(CommandKind::LoadMachineDialog);
@@ -620,8 +629,9 @@ fn wcs_page(ui: &mut Ui, state: &mut State) {
     }
 
     ui.add_space(6.0);
-    // #342: the setup's one WCS, and the word its post writes - which
-    // word is chosen on the Setups page, never here.
+    // #342: the setup's one WCS, and the work offset its post writes. The
+    // dropdown that picks it is drawn under this page (#343), so the note
+    // names what this page shows, not where the choice lives.
     let wcs_ctx = camcraft_app::setup::active(&state.world);
     let label = camcraft_app::setup::wcs_label(&state.world, wcs_ctx.as_deref());
     let line = match camcraft_app::setup::wcs_entity(&state.world, wcs_ctx.as_deref())
@@ -637,7 +647,7 @@ fn wcs_page(ui: &mut Ui, state: &mut State) {
         None => format!("{label}: not placed (at the origin)"),
     };
     ui.label(line);
-    ui.label("The work offset word is set per setup on the Setups page.");
+    ui.label("Work offset: the G54-G59 slot this setup posts. It does not move the origin.");
 }
 
 fn apply_wcs_drafts(state: &mut State) {
@@ -742,6 +752,17 @@ fn setups_page(ui: &mut Ui, state: &mut State) {
                         .pending
                         .push_back(CommandKind::DeleteSetup(name.clone()));
                 }
+                // Alignment, work offset, workholding and tools live on
+                // the setup's own page: one click from here (#1104).
+                if ui.small_button("Open page").clicked() {
+                    // Activate it too, as the browser's Stock row does: the
+                    // fixture and tool pages edit only the active setup.
+                    super::browser_pane::focus(state, name);
+                    actions::target(
+                        state,
+                        UiTarget::SetupNode(name.clone(), crate::state::SetupPage::Settings),
+                    );
+                }
             });
         });
         if let Some(def) = camcraft_app::setup::def_of(&state.world, name) {
@@ -755,10 +776,6 @@ fn setups_page(ui: &mut Ui, state: &mut State) {
                 line.push_str(&format!(", datum from {}", def.datum_from));
             }
             ui.label(line);
-            super::setup_align_pick::picker(ui, state, name);
-            super::setup_plane_pick::row(ui, state, name);
-            super::setup_axis_pick::rows(ui, state, name);
-            super::setup_wcs_pick::picker(ui, state, name);
         }
     }
     ui.separator();
@@ -778,11 +795,10 @@ fn setups_page(ui: &mut Ui, state: &mut State) {
         }
     });
     ui.separator();
-    fixtures_section(ui, state, active.as_deref());
-    ui.separator();
-    tool_list_section(ui, state, active.as_deref());
     sheet_footer(ui, state);
-    ui.label("The Stock and Work-offset pages edit the active setup's furniture.");
+    ui.label(
+        "Each setup's alignment, work offset, fixtures and tool list are on its own          Setup page in the browser (Open page).",
+    );
 }
 
 /// The tool list of one setup context (M3.2 stage C): what goes into
@@ -850,6 +866,10 @@ pub(super) fn fixtures_section(ui: &mut Ui, state: &mut State, ctx: Option<&str>
     {
         state.fixture_ui = FixtureUi::default();
     }
+    state.retire_vise_opening_drafts();
+    state.retire_plate_place_drafts();
+    state.retire_mod_vise_drafts();
+    state.retire_accessory_size_drafts();
     ui.label(if fixtures.is_empty() && table.is_none() {
         "No workholding modeled: the collision checks see stock and part only."
     } else {
@@ -871,6 +891,18 @@ pub(super) fn fixtures_section(ui: &mut Ui, state: &mut State, ctx: Option<&str>
     ui.horizontal_wrapped(|ui| {
         if ui.button("Import fixture…").clicked() {
             state.pending.push_back(CommandKind::ImportFixtureDialog);
+        }
+        // #788: a generic parametric vise, placed in one undoable step.
+        if ui.button("Add built-in vise…").clicked() {
+            state.pending.push_back(CommandKind::BuiltinViseDialog(ctx.unwrap_or_default().to_owned()));
+        }
+        // #789: parallels, blocks, strap clamps, soft jaws.
+        if ui.button("Add accessory…").clicked() {
+            state.pending.push_back(CommandKind::AccessoryDialog(ctx.unwrap_or_default().to_owned()));
+        }
+        // #819: a parametric grid plate, fixtures placed on its holes.
+        if ui.button("Add fixture plate…").clicked() {
+            state.pending.push_back(CommandKind::FixturePlateDialog(ctx.unwrap_or_default().to_owned()));
         }
         // The other way in: a model already imported - select its row
         // in the browser and mark it. Offered only for exactly one
@@ -961,8 +993,9 @@ fn tool_page(ui: &mut Ui, state: &mut State, name: &str) {
                 .clicked();
             let import = ui
                 .button("Import library…")
-                .on_hover_text("add the tools of a CamCraft tool library file (one undo step; taken names are never overwritten)")
+                .on_hover_text("import the tools of a CamCraft tool library file (one undo step; the mode beside it says what happens to a name the document has)")
                 .clicked();
+            tool_import_mode_combo(ui, &mut state.tool_import_mode);
             (new, export, import)
         })
         .inner;
@@ -976,7 +1009,7 @@ fn tool_page(ui: &mut Ui, state: &mut State, name: &str) {
         state.import_tool_library_dialog();
     }
     if let Some(msg) = state.error_for(ErrorScope::Tool).map(str::to_owned) {
-        ui.colored_label(super::colorvision::text_inks(ui, &state.world).error, msg);
+        super::error_text::error_text(ui, super::colorvision::text_inks(ui, &state.world).error, &msg);
     }
     ui.separator();
     ui.heading("Catalog");
@@ -1190,14 +1223,17 @@ fn gcode_listing(
                 })
                 .flatten();
             let width = ui.available_width();
+            let spans = super::gcode_highlight::spans_for(ui.ctx(), program);
             for (i, ln) in program.lines().enumerate() {
-                let label = format!("{:>4}  {}", i + 1, ln);
-                let mut rt = egui::RichText::new(label).monospace();
-                if let Some((a, b)) = want
-                    && !(i >= a && i < b.max(a + 1))
-                {
-                    rt = rt.weak();
-                }
+                let dim = want.is_some_and(|(a, b)| !(i >= a && i < b.max(a + 1)));
+                let empty = Vec::new();
+                let rt = super::gcode_highlight::row_job(
+                    ui,
+                    i + 1,
+                    ln,
+                    spans.get(i).unwrap_or(&empty),
+                    dim,
+                );
                 // Every row is a left-to-right box exactly `width` by
                 // `row_h`, so the text starts at the left edge (#256:
                 // `add_sized` centred it) and the cursor arithmetic
@@ -1343,9 +1379,26 @@ pub(crate) fn tool_editor_window(ctx: &egui::Context, state: &mut State) {
                         {
                             state.tool_ui.tip_angle = 90.0;
                         }
+                        // The torch (#670): no spindle, no corner - a
+                        // kerf. Leaving it, a spinning kind needs an rpm.
+                        if state.tool_ui.tool_kind() == tools::ToolKind::Torch {
+                            state.tool_ui.rpm = 0.0;
+                            state.tool_ui.corner_r = 0.0;
+                        } else if before == 12 && (state.tool_ui.rpm.is_nan() || state.tool_ui.rpm <= 0.0) {
+                            state.tool_ui.rpm = 10000.0;
+                        }
                     }
-                    field(ui, "Diameter");
-                    num(ui, u, &mut state.tool_ui.diameter);
+                    let torch = state.tool_ui.tool_kind() == tools::ToolKind::Torch;
+                    if torch {
+                        // The kerf width IS the torch's diameter (#669 /
+                        // #670): every offset reads radius = kerf / 2.
+                        field(ui, "Kerf width");
+                        num(ui, u, &mut state.tool_ui.diameter);
+                        ui.label("the cut's width - about 1.5x the nozzle orifice; confirm it with a test cut");
+                    } else {
+                        field(ui, "Diameter");
+                        num(ui, u, &mut state.tool_ui.diameter);
+                    }
                     // Kind-read fields (the inert-unless-the-kind-reads-them
                     // law): a point angle means nothing on an end mill, a
                     // pitch means nothing on a drill - show each only where
@@ -1405,7 +1458,7 @@ pub(crate) fn tool_editor_window(ctx: &egui::Context, state: &mut State) {
                         field(ui, "Corner radius");
                         ui.label(format!("{} {}", units::len(state.tool_ui.diameter * 0.5, u, 3), u.suffix()));
                         ui.label("half the diameter - a ball nose's whole tip is its ball");
-                    } else if state.tool_ui.tool_kind() != tools::ToolKind::Tap {
+                    } else if !matches!(state.tool_ui.tool_kind(), tools::ToolKind::Tap | tools::ToolKind::Torch) {
                         field(ui, "Corner radius");
                         num(ui, u, &mut state.tool_ui.corner_r);
                     }
@@ -1424,8 +1477,10 @@ pub(crate) fn tool_editor_window(ctx: &egui::Context, state: &mut State) {
                         TextEdit::singleline(&mut state.tool_ui.material_group)
                             .desired_width(140.0),
                     );
-                    field(ui, "Spindle rpm");
-                    num_plain(ui, &mut state.tool_ui.rpm);
+                    if !torch {
+                        field(ui, "Spindle rpm");
+                        num_plain(ui, &mut state.tool_ui.rpm);
+                    }
                     field(ui, &format!("Feed ({})", u.feed_suffix()));
                     num_feed(ui, u, &mut state.tool_ui.feed);
                     // M11.3: an entry may plunge into solid only with a
@@ -1479,7 +1534,7 @@ pub(crate) fn tool_editor_window(ctx: &egui::Context, state: &mut State) {
                 }
             }
             if let Some(msg) = state.error_for(ErrorScope::Tool).map(str::to_owned) {
-                ui.colored_label(super::colorvision::text_inks(ui, &state.world).error, msg);
+                super::error_text::error_text(ui, super::colorvision::text_inks(ui, &state.world).error, &msg);
             }
             close_clicked = ui.button("Close").clicked();
         });
@@ -1632,6 +1687,17 @@ fn model_page(ui: &mut Ui, state: &mut State, name: String) {
     };
     let tris = model::facets_of(&state.world, &entity).map_or(0, |f| f.len());
     ui.label(format!("{tris} triangle(s)"));
+    // #864: a model imported coarser than the importer promises says so,
+    // with the error it carries and what that does to the checks.
+    if let Some(chord) = camcraft_app::model_fidelity::chord_of(&state.world, &entity) {
+        ui.label(camcraft_app::model_fidelity::summary(&state.world, chord));
+        hint(
+            ui,
+            "This model was too large to import at full detail. Gouge checks against it are \
+             stricter to make up for that; when it is too coarse to check at all, its operations \
+             are refused at the post. Re-import with a larger budget to clear this.",
+        );
+    }
     if let Some(a) = model::entity_world_aabb(&state.world, &entity) {
         ui.label(format!(
             "{} x {} x {} {}",
@@ -1695,6 +1761,10 @@ fn model_page(ui: &mut Ui, state: &mut State, name: String) {
             apply_model_draft(state);
         }
     });
+    // Pockets and slots (#511): recognition on a click, Create per row.
+    super::pockets_page::section(ui, state, &name);
+    // #561: the part into a fixture (or a fixture onto the part) by mates.
+    super::locate_form::model_row(ui, state, &name);
     // Mesh repair (M13.11): weld and fill on the user's say-so, never on
     // import. The button queues `RepairModel`; the report lands in the
     // status line and stays here while this model is on the page.
@@ -1743,6 +1813,25 @@ fn model_page(ui: &mut Ui, state: &mut State, name: String) {
         ui.label("It is also the stock solid (Setup > Stock).");
     }
     ui.label("Selected now: Del removes it (undo restores).");
+}
+
+/// #899: the Import library mode picker (view state; the import is the command).
+fn tool_import_mode_combo(ui: &mut egui::Ui, mode: &mut camcraft_app::commands::ImportMode) {
+    use camcraft_app::commands::ImportMode;
+    egui::ComboBox::from_id_salt("tool_import_mode")
+        .selected_text(match mode {
+            ImportMode::Add => "Add (rename duplicates)",
+            ImportMode::Update => "Update same-named",
+            ImportMode::Replace => "Replace library",
+        })
+        .show_ui(ui, |ui| {
+            ui.selectable_value(mode, ImportMode::Add, "Add (rename duplicates)")
+                .on_hover_text("an identical tool is skipped, a different tool of a taken name comes in as \"Name (2)\"");
+            ui.selectable_value(mode, ImportMode::Update, "Update same-named")
+                .on_hover_text("a same-named tool takes the file's definition in place (number kept; operations using it go Stale); new names are added");
+            ui.selectable_value(mode, ImportMode::Replace, "Replace library")
+                .on_hover_text("update, and tools the file lacks are removed - refused if an operation uses one");
+        });
 }
 
 #[cfg(test)]
