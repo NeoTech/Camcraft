@@ -9,3 +9,5 @@ This guide follows a job from start to finish: install the app, import a
 model, set up stock, work offset and tools, add operations, check them, and
 post the program. The last page explains what to do when CamCraft refuses a
 post.
+
+Stuck on a message? See [Troubleshooting](@/guide/troubleshooting.md).
