@@ -38,10 +38,12 @@ mod tests {
 
     #[test]
     fn the_draft_carries_the_facts_both_ways() {
-        let mut d = ToolUi::default();
-        d.part_number = "  P-1 ".into();
-        d.helix_deg = "38".into();
-        d.notes = "  ".into();
+        let mut d = ToolUi {
+            part_number: "  P-1 ".into(),
+            helix_deg: "38".into(),
+            notes: "  ".into(),
+            ..ToolUi::default()
+        };
         let c = d.to_tool().catalog;
         assert_eq!(c.part_number.as_deref(), Some("P-1"));
         assert_eq!(c.helix_deg, Some(38.0));
