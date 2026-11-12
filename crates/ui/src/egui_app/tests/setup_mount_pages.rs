@@ -160,4 +160,24 @@ fn each_setup_picks_its_own_machine_and_post_and_posts_one_file_per_mount() {
     assert_eq!(setup1.mount.post, camcraft_app::schema::PostRef::Builtin, "Setup1 follows the document's post");
     assert_ne!(setup1.mount.machine.0, setup2.mount.machine.0, "different machines");
     assert_ne!(setup1.posted.program, setup2.posted.program, "each file is its own post's program");
+
+    // #1224: the shell's own Post command writes the same two files, each
+    // in its own dialect for its own machine, with its own setup's work.
+    let path = std::env::temp_dir().join(format!("camcraft-1224-ui-{}.nc", std::process::id()));
+    h.state_mut().state.pending.push_back(CommandKind::PostProgramFile(path.clone()));
+    h.run_steps(2);
+    let stem = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+    let read = |k: &str| {
+        let p = path.with_file_name(format!("{stem}_{k}.nc"));
+        let text = std::fs::read_to_string(&p);
+        let _ = std::fs::remove_file(&p);
+        text.unwrap_or_else(|e| panic!("{p:?}: {e} (status: {})", h.state().state.status))
+    };
+    let (a, b) = (read("01_Setup1"), read("02_Setup2"));
+    assert_eq!(a, setup1.posted.program, "the shell posts what the app posts");
+    assert_eq!(b, setup2.posted.program);
+    assert!(a.starts_with("%\nO0001 (VMC 3-AXIS)") && a.contains("Face1 - FACE - G54"), "Fanuc on the VMC:\n{a}");
+    assert!(!a.contains("Face2") && !a.contains("TILT-HEAD"), "nothing of Setup2:\n{a}");
+    assert!(b.starts_with("%\n(TILT-HEAD 5-AXIS)") && !b.contains("O0001"), "Haas on the tilt head:\n{b}");
+    assert!(b.contains("Face2 - FACE") && !b.contains("Face1") && !b.contains("VMC"), "nothing of Setup1:\n{b}");
 }
