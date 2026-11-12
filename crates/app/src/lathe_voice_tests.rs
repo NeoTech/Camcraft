@@ -131,7 +131,8 @@ fn want(ty: OpType) -> Want {
         | OpType::PlasmaProfile
         | OpType::TrochoidalSlot
         // #541: a sinker burn is an EDM op; a lathe never runs it with the work turning.
-        | OpType::SinkerBurn => Want::Refused,
+        | OpType::SinkerBurn
+        | OpType::SinkerSideBurn => Want::Refused,
     }
 }
 
