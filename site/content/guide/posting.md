@@ -52,6 +52,6 @@ spindle off and Z raised before cutting material.
 ## Headless posting
 
 The command-line tool `camcraft-cli` can drive CamCraft without the window,
-including as an MCP server for AI agents. The standalone `post` tool runs a
+including as an MCP server for AI agents (see [AI agents (MCP)](@/guide/mcp.md)). The standalone `post` tool runs a
 `.cps` script over a cutter-location file; it does not run the document
 checks above, so its output is not verified.

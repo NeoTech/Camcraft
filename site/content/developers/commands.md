@@ -42,10 +42,9 @@ history, and `apply` / `invert` are plain writes that cannot fail halfway.
 ## Commands ship with an MCP tool
 
 `camcraft-cli mcp` runs a Model Context Protocol server that lets an AI
-agent drive CamCraft headlessly: import models, set stock, add tools and
-operations, generate, verify and post. Its tools (in
-`crates/app/src/mcp/`) call the same undoable commands the GUI uses, so
-the history and every check hold the same way. A pull request that adds a
+agent drive CamCraft; its tools (in `crates/app/src/mcp/`) call the same
+undoable commands the GUI uses. How to run and use it is in the
+[AI agents (MCP) guide](@/guide/mcp.md). A pull request that adds a
 user-facing command also adds its MCP tool, or files a follow-up issue for
 it.
 
