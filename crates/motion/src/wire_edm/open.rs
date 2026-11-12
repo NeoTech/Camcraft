@@ -248,18 +248,17 @@ fn offset(run: &[Point2], s: f64, z: f64) -> Result<Vec<Point2>, GenError> {
     let mut out = Vec::with_capacity(n);
     let n0 = normal(0);
     out.push(Point2::new(run[0].x + s * n0.x, run[0].y + s * n0.y));
-    for i in 1..n - 1 {
+    for (i, &q) in run.iter().enumerate().take(n - 1).skip(1) {
         let (a, b) = (normal(i - 1), normal(i));
         let c = 1.0 + a.x * b.x + a.y * b.y;
         if !(c.is_finite() && c > 1e-3) {
-            let q = run[i];
             return Err(at(
                 format!("the open run doubles back on itself at X{:.3} Y{:.3} - the wire cannot turn back along its own kerf", q.x, q.y),
                 q,
                 z,
             ));
         }
-        out.push(Point2::new(run[i].x + s * (a.x + b.x) / c, run[i].y + s * (a.y + b.y) / c));
+        out.push(Point2::new(q.x + s * (a.x + b.x) / c, q.y + s * (a.y + b.y) / c));
     }
     let nl = normal(n - 2);
     out.push(Point2::new(run[n - 1].x + s * nl.x, run[n - 1].y + s * nl.y));
