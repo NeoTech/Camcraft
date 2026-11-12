@@ -128,29 +128,44 @@ fn door_refusal(params: &OpParams, err: GenError) -> Option<String> {
 /// agree by construction (M1.5.1: a run-out strip is clipped to this).
 /// A model with height sweeps to a silhouette with its through-holes
 /// intact; a zero-thickness sheet has no Z span to section, so its
-/// facets' planar union is its footprint instead.
+/// facets' planar union is its footprint instead - and so is a mesh the
+/// slicer refuses as open (#241: an imported part with dangling chord
+/// ends still has a shadow).
+///
+/// The facet union is a pure union ([`Region::union_all`]): every facet
+/// shadow is material, whichever way its facet faces. Reading it with
+/// [`Region::new`]'s nesting parity made a bottom-face facet whose shadow
+/// fell inside a top-face facet's shadow a HOLE, punching triangles of
+/// "air" into solid webs (#241) - a Face region clipped by that
+/// silhouette then refused on gaps that were not there.
 pub(super) fn silhouette(facets: &[Triangle]) -> Option<Region> {
     if let Ok(r) = slice::project(facets, FOOTPRINT_SAMPLES)
         && !r.is_empty()
     {
         return Some(r);
     }
+    facet_shadow(facets)
+}
+
+/// The planar union of every facet's XY shadow, each one material
+/// (oriented CCW for [`Region::union_all`]); `None` when nothing casts
+/// one. Shared by [`silhouette`]'s fallback and pinned on its own.
+pub(super) fn facet_shadow(facets: &[Triangle]) -> Option<Region> {
     let loops: Vec<Loop> = facets
         .iter()
         .filter_map(|t| {
-            Loop::new(vec![
-                Point2::new(t.a.x, t.a.y),
-                Point2::new(t.b.x, t.b.y),
-                Point2::new(t.c.x, t.c.y),
-            ])
-            .ok()
-            .filter(|l| l.area().abs() > DEGENERATE_AREA)
+            let (a, b, c) = (Point2::new(t.a.x, t.a.y), Point2::new(t.b.x, t.b.y), Point2::new(t.c.x, t.c.y));
+            let l = Loop::new(vec![a, b, c]).ok()?;
+            if l.area().abs() <= DEGENERATE_AREA {
+                return None;
+            }
+            if l.is_ccw() { Some(l) } else { Loop::new(vec![a, c, b]).ok() }
         })
         .collect();
     if loops.is_empty() {
         return None;
     }
-    Region::new(loops)
+    Region::union_all(loops)
         .ok()
         .filter(|r| !r.is_empty())
 }
