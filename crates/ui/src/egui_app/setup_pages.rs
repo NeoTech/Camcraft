@@ -195,7 +195,10 @@ fn tool_table(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
         for (tool, ops) in &used {
             let number = tool_numbers::number_of(&state.world, tool).map_or_else(|| "?".to_owned(), |n| n.to_string());
             ui.label(number);
-            ui.label(tool);
+            ui.horizontal(|ui| {
+                super::tool_icons::named_glyph(ui, &state.world, tool);
+                ui.label(tool);
+            });
             let size = model::find_by_name(&state.world, tool)
                 .and_then(|e| model::tool_of(&state.world, &e))
                 .map_or_else(|| "missing".to_owned(), |t| format!("Ø{} {}", t.diameter, kind_name(t.kind)));
