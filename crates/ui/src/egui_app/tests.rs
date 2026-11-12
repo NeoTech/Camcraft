@@ -82,6 +82,7 @@ mod face_origin;
 mod spindle_row;
 mod stock_size;
 mod stock_fit_sides;
+mod raw_stock_row;
 mod layout;
 mod machines_pane;
 mod machines_edit;
@@ -90,6 +91,8 @@ mod post_refusal;
 mod gcode_viewer;
 mod first_setup;
 mod structural;
+// #661: every operation kind wears its own SVG-mastered glyph.
+mod op_icon_table;
 // #330: a clicked tilted face is turned flat onto the plane.
 mod plane_face_lay;
 // #554: the plane row's click takes the face, an axis row's the edge.
@@ -116,6 +119,8 @@ mod tool_profile;
 mod tool_holder;
 // #93 slice 2: the Profile tab's drawn cutter.
 mod tool_cutter;
+// #93 slice 3: the drawn cutter edited by its parameters.
+mod tool_cutter_params;
 // #441: the Theme ribbon door; the Stock page shows stock only.
 mod theme_door;
 mod recent_door;

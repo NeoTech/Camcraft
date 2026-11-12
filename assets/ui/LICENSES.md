@@ -138,14 +138,33 @@ reproduced in full in the solidcore section below; it applies to these
 crates as well. Retained as a license condition, same posture as the
 clipper2-rust notice.
 
-## solidcore (B-rep kernel on trial, crates/kernel - M12.1 stage 1)
+## solidcore (B-rep kernel on trial, crates/kernel - M12.1 stages 1-4)
 
-solidcore 1.0.1 (https://github.com/tangency-labs/solidcore), a Rust port of
+solidcore (https://github.com/tangency-labs/solidcore), a Rust port of
 the SMLib and SM_API components of NVIDIA's USD BRep, Apache-2.0. Linked as a
-crates.io dependency of camcraft-kernel only; no source copied into this
-repo. Apache-2.0 section 4 asks that redistributions carry the License and
-the NOTICE file's attribution text: both follow, verbatim from the
-published crate.
+dependency of camcraft-kernel only; no source copied into this repo. Since
+#916 it is taken as a git dependency at one commit of the owner's fork,
+https://github.com/NeoTech/solidcore, rev
+55d0e7638b9e1ebbf91ab8c10657e595c114ecda (the fork's tag
+camcraft-pin-2026-11-11); before that it was the crates.io release 1.0.1.
+
+The same commit supplies the other crates of that workspace camcraft-kernel
+links: `solidcore-step` (the STEP reader, written from ISO 10303-21 and
+ISO 10303-42), `solidcore-record`, `solidcore-convert` and `solidcore-ops`,
+and, for crates/kernel's own tests only, `solidcore-tess`. Each is
+Apache-2.0 per its Cargo.toml (`license.workspace = true`, the workspace's
+`license = "Apache-2.0"`) and is covered by the workspace's one LICENSE and
+NOTICE file. `solidcore-step` and the Part 21 parser in `solidcore-record`
+say in their sources that they came from the SolidCraft project (MIT OR
+Apache-2.0) with their history, and `solidcore-tess` that its mesher was
+moved from SolidCraft; all are taken here under Apache-2.0, as the
+workspace licenses them.
+
+Apache-2.0 section 4 asks that redistributions carry the License and
+the NOTICE file's attribution text: both follow, verbatim. The NOTICE and
+LICENSE files at the pinned commit are byte-identical to those of the
+published 1.0.1 crate (checked with `git diff solidcore-v1.0.1 55d0e763 --
+NOTICE LICENSE`: no difference).
 
 NOTICE (verbatim):
 
