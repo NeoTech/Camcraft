@@ -954,6 +954,14 @@ pub struct ToolUi {
     /// #630: the lathe tool orientation (LinuxCNC 1-9), None = the
     /// kind's default - carried so an Apply never rewrites it.
     pub orientation: Option<u8>,
+    /// #898 catalog facts as typed: blank = not stated. The helix is
+    /// text so a half-typed number is refused by name at Apply, not
+    /// silently dropped.
+    pub part_number: String,
+    pub vendor: String,
+    pub coating: String,
+    pub helix_deg: String,
+    pub notes: String,
 }
 
 impl Default for ToolUi {
@@ -1005,6 +1013,11 @@ impl ToolUi {
             flutes: t.flutes,
             center_cutting: t.center_cutting,
             orientation: t.orientation,
+            part_number: t.catalog.part_number.clone().unwrap_or_default(),
+            vendor: t.catalog.vendor.clone().unwrap_or_default(),
+            coating: t.catalog.coating.clone().unwrap_or_default(),
+            helix_deg: t.catalog.helix_deg.map(|h| h.to_string()).unwrap_or_default(),
+            notes: t.catalog.notes.clone().unwrap_or_default(),
         }
     }
 
@@ -1027,6 +1040,23 @@ impl ToolUi {
             12 => ToolKind::Torch,
             _ => ToolKind::EndMill,
         }
+    }
+
+    /// The catalog facts the draft states: trimmed, blank = not stated.
+    /// A helix that is not a number reads as NaN, which the tool
+    /// commands refuse by name.
+    #[must_use]
+    pub fn catalog(&self) -> camcraft_app::catalog_fields::ToolCatalog {
+        let some = |s: &str| Some(s.to_owned());
+        let helix = self.helix_deg.trim();
+        camcraft_app::catalog_fields::ToolCatalog {
+            part_number: some(&self.part_number),
+            vendor: some(&self.vendor),
+            coating: some(&self.coating),
+            helix_deg: (!helix.is_empty()).then(|| helix.parse::<f64>().unwrap_or(f64::NAN)),
+            notes: some(&self.notes),
+        }
+        .normalized()
     }
 
     /// The tool this draft states. A ball's corner is saved as its ball
@@ -1055,6 +1085,7 @@ impl ToolUi {
             flutes: self.flutes,
             center_cutting: self.center_cutting,
             orientation: self.orientation,
+            catalog: self.catalog(),
         };
         tool.corner_r = tool.tip_corner_r();
         tool

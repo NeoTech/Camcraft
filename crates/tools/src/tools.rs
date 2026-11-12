@@ -200,6 +200,9 @@ pub struct Tool {
     /// names the touched-off corner of the tip edge (#641,
     /// [`crate::orientation::blade_corner`]); inert on every other kind.
     pub orientation: Option<u8>,
+    /// Part number, vendor, coating, helix and notes (#898): catalog
+    /// facts no generator or law reads.
+    pub catalog: crate::catalog_fields::ToolCatalog,
 }
 
 impl Tool {
@@ -251,6 +254,7 @@ impl Tool {
             && self.feed > 0.0
             && self.flutes.is_none_or(|z| (1..=32).contains(&z))
             && self.orientation.is_none_or(crate::orientation::is_valid)
+            && self.catalog.refusal().is_none()
             && match self.kind {
                 // A point that cannot self-center is not a drill, and a
                 // tap with no thread pitch has no feed the cycle could
@@ -513,6 +517,7 @@ pub fn probe_tool(ball_d: f64, stylus_len: f64) -> Tool {
         flutes: None,
         center_cutting: false,
         orientation: None,
+        catalog: crate::catalog_fields::ToolCatalog::default(),
     }
 }
 
@@ -542,6 +547,7 @@ pub fn torch_tool(kerf: f64) -> Tool {
         flutes: None,
         center_cutting: false,
         orientation: None,
+        catalog: crate::catalog_fields::ToolCatalog::default(),
     }
 }
 
