@@ -11,18 +11,25 @@ use crate::state::ToolUi;
 
 use super::fields::field;
 
-/// The rows, in the editor's single column.
+/// The rows, in the editor's single column, under one collapsed header
+/// (open when the tool states any fact) so the editor keeps its height.
 pub(super) fn catalog_rows(ui: &mut Ui, t: &mut ToolUi) {
-    field(ui, "Part number");
-    ui.add(TextEdit::singleline(&mut t.part_number).id_salt("tool_part_number").desired_width(140.0));
-    field(ui, "Vendor");
-    ui.add(TextEdit::singleline(&mut t.vendor).id_salt("tool_vendor").desired_width(140.0));
-    field(ui, "Coating");
-    ui.add(TextEdit::singleline(&mut t.coating).id_salt("tool_coating").desired_width(140.0));
-    field(ui, "Helix angle (deg)");
-    ui.add(TextEdit::singleline(&mut t.helix_deg).id_salt("tool_helix").desired_width(60.0).hint_text("0-90"));
-    field(ui, "Notes");
-    ui.add(TextEdit::multiline(&mut t.notes).id_salt("tool_notes").desired_width(140.0).desired_rows(2));
+    let any = [&t.part_number, &t.vendor, &t.coating, &t.helix_deg, &t.notes].iter().any(|s| !s.trim().is_empty());
+    egui::CollapsingHeader::new("Catalog")
+        .id_salt("tool_catalog_header")
+        .default_open(any)
+        .show(ui, |ui| {
+            field(ui, "Part number");
+            ui.add(TextEdit::singleline(&mut t.part_number).id_salt("tool_part_number").desired_width(140.0));
+            field(ui, "Vendor");
+            ui.add(TextEdit::singleline(&mut t.vendor).id_salt("tool_vendor").desired_width(140.0));
+            field(ui, "Coating");
+            ui.add(TextEdit::singleline(&mut t.coating).id_salt("tool_coating").desired_width(140.0));
+            field(ui, "Helix angle (deg)");
+            ui.add(TextEdit::singleline(&mut t.helix_deg).id_salt("tool_helix").desired_width(60.0).hint_text("0-90"));
+            field(ui, "Notes");
+            ui.add(TextEdit::multiline(&mut t.notes).id_salt("tool_notes").desired_width(140.0).desired_rows(2));
+        });
 }
 
 #[cfg(test)]

@@ -21,13 +21,13 @@
   0..=90 or not finite. `Tool::is_sane` carries the same check, so a hand-edited
   library or project file refuses by tool name too; the DTO trims on read so
   mere padding in a file loads.
-- **Editor.** Five rows after "Material group" (new module
+- **Editor.** A collapsed "Catalog" header after "Material group" (open when any fact is stated, so the editor keeps its height) (new module
   `tool_catalog_rows.rs`; the Body column is untouched, for #1043). Draft text
   fields; the helix is text so a half-typed number is refused by name at Apply
   instead of silently dropped.
 - **MCP.** `add_tool`'s `definition` takes the five keys (same DTO) and
   `get_job` shows them. There is no MCP tool that edits an existing tool at
-  all, so editing is filed as `MCP: edit_tool` rather than invented here.
+  all, so editing is filed as `MCP: edit_tool` rather than invented here (#1062).
 
 **Not done, on purpose.**
 - #1060's Update/Replace still match by name. Matching on part number first
@@ -35,8 +35,8 @@
   in-place update of a differently named tool); that is a behaviour choice for
   the maintainer, not a safe side effect of a data field. The seam is still the
   match in `ImportTools::with_mode`.
-- The setup sheet's tool list does not show the fields yet (filed as a
-  follow-up) - the sheet is a post/printing surface of its own.
+- The setup sheet's tool list does not show the fields yet (#1063); the sheet is a
+  post/printing surface of its own.
 
 **Considered, dropped.** A separate `SetToolCatalog` command and a component
 beside `ToolDef.number` (one more undo step per edit, a second Apply path);
