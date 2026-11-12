@@ -307,11 +307,18 @@ const REFUSED_HEADER: &str = "refused program, posted for syntax conformance";
 /// its kind's post runs, so a new one is either judged or named here.
 /// The slot, trochoid, trace and plasma goldens are judged since #1000
 /// (`posted_gates`).
-const UNJUDGED: &[(&str, &str)] = &[(
-    "arc_planes",
-    "a hand-built posting fixture (arc_planes.rs): no operation kind, part, region or tool record makes it, \
-     so no gate a user's post runs can judge it - #1093",
-)];
+const UNJUDGED: &[(&str, &str)] = &[
+    (
+        "arc_planes",
+        "a hand-built posting fixture (arc_planes.rs): no operation kind, part, region or tool record makes it, \
+         so no gate a user's post runs can judge it - #1093",
+    ),
+    (
+        "wire_contour_punch",
+        "the wire ISO post's golden (wire_post.rs, #533): a tool-less wire cut, and wire verification \
+         (the wire's sweep, start hole, slug) is not built yet - #534",
+    ),
+];
 
 #[test]
 fn the_slot_trace_and_plasma_goldens_pass_their_gates() {
