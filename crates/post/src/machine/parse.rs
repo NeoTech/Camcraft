@@ -314,6 +314,7 @@ pub fn parse_mch_with(text: &str, holders: Option<super::HolderLookup>) -> Resul
             }
             let direction = axis_direction(name, part, *rotary)?;
             let nose_to_axis = super::swing::nose_to_axis(name, part, *rotary, f)?;
+            let axis_to_table = super::swing::work_length("axis_to_table", name, part, *rotary, f)?;
             if let Some(z) = safe_retract(name, part, *rotary, f)? {
                 m.safe_retract_z = Some(z);
             }
@@ -328,6 +329,7 @@ pub fn parse_mch_with(text: &str, holders: Option<super::HolderLookup>) -> Resul
                 direction,
                 turns_part: rotary.then(|| super::swing::turns_part(part, true)),
                 nose_to_axis,
+                axis_to_table,
             });
         }
         axes.sort_by_key(|a| ctrl_coord(ctrl, &a.name));

@@ -75,6 +75,14 @@ pub struct AxisLimits {
     /// by name rather than guessed clear.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub nose_to_axis: Option<f64>,
+    /// How far this work-turning rotary's centerline stands above the
+    /// face it is bolted to, mm (#1107): the file's `"axis_to_table"`
+    /// (its centre height). The index-swing clause judges the swept work
+    /// against it - the table, plate or subplate the rotary stands on is
+    /// this far under the line, whatever stack lifts the rotary. `None`
+    /// = unstated: the work-vs-table swing is named not judged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub axis_to_table: Option<f64>,
 }
 
 fn is_false(b: &bool) -> bool {
@@ -260,6 +268,7 @@ impl Machine {
                 rate_ok(a.feed) && rate_ok(a.rapid) && rate_ok(a.resolution) && a.travel.is_none_or(|(lo, hi)| lo.is_finite() && hi.is_finite() && hi > lo)
                     && a.axis.is_none_or(|d| d.iter().all(|x| x.is_finite()))
                     && rate_ok(a.nose_to_axis)
+                    && rate_ok(a.axis_to_table)
             })
             && match (self.spindle_min, self.spindle_max) {
                 (Some(lo), Some(hi)) => hi >= lo,

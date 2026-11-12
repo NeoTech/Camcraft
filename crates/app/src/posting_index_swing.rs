@@ -29,6 +29,9 @@
 //!   turn. Over the whole X range: the tool's X at the index is the G30
 //!   position, which the program does not know.
 //! - **The margin.** [`MARGIN_MM`] between the tip and the swept radius.
+//! - **What stands still** (#1107): the same swept work against the
+//!   face the rotary stands on and the fixed fixtures is the sibling
+//!   clause `posting_swing_standing.rs`.
 
 use crate::{fixture, model, setup, setup_align};
 use flecs_ecs::prelude::World;
@@ -69,7 +72,7 @@ pub fn rotary_line(a: &crate::machine::AxisLimits) -> RotaryLine {
 }
 
 /// What the clause makes of a machine's work-turning rotaries.
-enum WorkA {
+pub(super) enum WorkA {
     /// A rotary turning the work about X: its letter and stated
     /// `nose_to_axis` (None = unstated).
     Judged(String, Option<f64>),
@@ -81,7 +84,7 @@ enum WorkA {
 /// The machine's work-turning rotary the clause judges; an unknown
 /// line wins (it refuses), then the first about X. None when there is
 /// none.
-fn work_a(m: &crate::machine::Machine) -> Option<WorkA> {
+pub(super) fn work_a(m: &crate::machine::Machine) -> Option<WorkA> {
     let turning = || m.axes.iter().filter(|a| a.rotary && a.turns_part == Some(true));
     turning()
         .find(|a| rotary_line(a) == RotaryLine::Unknown)
@@ -95,16 +98,28 @@ fn work_a(m: &crate::machine::Machine) -> Option<WorkA> {
 
 /// The A an op indexes to: the first leaning move's tool axis read as a
 /// turn about X (the post's own reading, a = atan2(-y, z)), else 0.
-fn index_angle(path: &crate::cl::Toolpath) -> f64 {
+pub(super) fn index_angle(path: &crate::cl::Toolpath) -> f64 {
     path.moves
         .iter()
         .find_map(|mv| mv.axis.filter(|a| !crate::cl::is_vertical(a)))
         .map_or(0.0, |a| (-a[1]).atan2(a[2]).to_degrees())
 }
 
+/// What the setup's turning bodies sweep about the A line (#1107: the
+/// X span too, so standing steel beside the work is told from steel
+/// under it).
+#[derive(Clone, Copy, Debug)]
+pub(super) struct Swept {
+    /// The farthest point from the A line through the WCS origin, mm
+    /// (0 with nothing stated).
+    pub r: f64,
+    /// The turning bodies' X span (None with nothing stated).
+    pub x: Option<(f64, f64)>,
+}
+
 /// The farthest point of the setup's turning bodies from the A line
-/// through `origin` along X, mm (0 with nothing stated).
-fn swept_radius(world: &World, declared: Option<&str>, origin: [f64; 3]) -> f64 {
+/// through `origin` along X, mm, and their X span.
+pub(super) fn swept(world: &World, declared: Option<&str>, origin: [f64; 3]) -> Swept {
     let mut bodies: Vec<flecs_ecs::prelude::Entity> = Vec::new();
     bodies.extend(setup::stock_entity(world, declared));
     bodies.extend(
@@ -119,18 +134,19 @@ fn swept_radius(world: &World, declared: Option<&str>, origin: [f64; 3]) -> f64 
             .filter(|(_, e)| !fixture::def_of(world, e).is_some_and(|d| d.fixed))
             .map(|(_, e)| e),
     );
-    let mut r = 0.0_f64;
+    let mut out = Swept { r: 0.0, x: None };
     for e in bodies {
         for t in setup_align::facets_in(world, &e, declared).unwrap_or_default() {
             for p in [t.a, t.b, t.c] {
                 let d = (p.y - origin[1]).hypot(p.z - origin[2]);
-                if d.is_finite() {
-                    r = r.max(d);
+                if d.is_finite() && p.x.is_finite() {
+                    out.r = out.r.max(d);
+                    out.x = Some(out.x.map_or((p.x, p.x), |(lo, hi)| (lo.min(p.x), hi.max(p.x))));
                 }
             }
         }
     }
-    r
+    out
 }
 
 /// The clause: one problem per op whose index pose cannot be shown to
@@ -177,7 +193,7 @@ pub(super) fn index_swing_problems(world: &World) -> Vec<String> {
         };
         let len = tool.flute_len + tool.shank_len + tool.holder_len;
         let (_, origin) = super::wcs_context(world, op.setup.as_deref());
-        let swept = swept_radius(world, op.setup.as_deref(), origin);
+        let swept = swept(world, op.setup.as_deref(), origin).r;
         let tip = nose - len;
         let clearance = tip - swept;
         if !(clearance.is_finite() && clearance >= MARGIN_MM) {
