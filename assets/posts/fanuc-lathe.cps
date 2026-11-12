@@ -79,7 +79,11 @@ threadHands = true;  // reads PARAM SpindleDirection (#629): the engine refuses 
 //  - Face cycles: G83 (Q peck in whole microns, the 0i-T word; P dwell
 //    in ms), G84 tap, G85 bore, cancelled by G80. A cycle off the
 //    spindle axis and a back-bore are refused - a 2-axis lathe has no
-//    such cycle.
+//    such cycle. The cycle replaces only the chain on its hole (on
+//    centre, at or below R); the first rapid leaving it - the exit to
+//    clearance - ends the group with G80 and posts as the stream says
+//    (#1011, the hop law of #994), so the tool leaves the hole at the
+//    verified exit level, never at R.
 //  - M03 unless the stream states PARAM SpindleDirection reverse (#629,
 //    a thread whose hand needs it): then M04, with a note for the
 //    operator that the threading insert must be mounted for reverse
@@ -116,6 +120,7 @@ var spindleWait = false;
 var toolWait = false;
 var tNo = 0;
 var inCycle = false;       // a cycle group is open; its chain is suppressed
+var cycX = 0, cycY = 0, cycR = 0; // the open group's hole XY and R level (world, #1011)
 var sectionOpen = false;
 var coolant = "";
 var coolantAsk = "flood";  // the section's PARAM Coolant (#112), flood when unstated
@@ -526,11 +531,33 @@ function onSectionEnd() { endPreamble(); }
 function onComment(s) { writeComment(s); }
 
 // ------------------------------------------------------------- motions
+// While a face-cycle group is open, its expanded chain (plunge, pecks,
+// retract to R) is the cycle block's business only. The chain stays on
+// its hole: the hole's XY, at or below its R level. #1011: a rapid that
+// leaves it (the exit up to clearance) ends the group - G80, then the
+// rapid posted as the stream says - so the tool leaves the hole at the
+// level the path was verified at, never at R. A cut leaving the hole is
+// no chain a cycle replaces: refused by name.
+function onHole(p) {
+  return Math.abs(p.X - cycX) <= EPS && Math.abs(p.Y - cycY) <= EPS && p.Z <= cycR + EPS;
+}
+function chainRapid(p) {  // true: the open group's own move, swallowed
+  if (!inCycle) return false;
+  if (onHole(p)) return true;
+  block(["G80"]);
+  inCycle = false;
+  return false;
+}
+function chainCut(p) {  // true: the cut is the cycle's (or refused)
+  if (!inCycle) return false;
+  if (!onHole(p)) refuse("a cutting move leaves its hole inside a face-cycle group");
+  return true;
+}
 function onRapid() {
   startPreamble();
   var p = properties;
   if (liveAsk) { liveMove(p, true); return; }
-  if (posed(p) || inCycle || inThread) return;
+  if (posed(p) || inThread || chainRapid(p)) return;
   var r = radiusOf(p.X, p.Y, "rapid");
   if (r === null) return;
   block(["G00", xWord(r), zWord(p.Z)]);
@@ -539,7 +566,7 @@ function onLinear() {
   startPreamble();
   var p = properties;
   if (liveAsk) { liveMove(p, false); return; }
-  if (posed(p) || inCycle || inThread) return;
+  if (posed(p) || inThread || chainCut(p)) return;
   var r = radiusOf(p.X, p.Y, "feed move");
   if (r === null) return;
   block(["G01", xWord(r), zWord(p.Z), feedWord(p.FeedRate)]);
@@ -598,7 +625,7 @@ function onCircular() {
   startPreamble();
   var p = properties;
   if (liveAsk) { refuse("an arc in a C-axis section - only straight moves ride a C turn"); return; }
-  if (posed(p) || inCycle || inThread) return;
+  if (posed(p) || inThread || chainCut(p)) return;
   if (p.CircularPlane === "XZ" || p.CircularPlane === "YZ") meridianArc(p);
   else threadHalfTurn(p);
 }
@@ -665,7 +692,8 @@ function onThreadCycleEnd() { inThread = false; threadSeen = false; }
 // ------------------------------------------------------- canned cycles
 // One positioning rapid to the hole's retract plane, then the face
 // cycle whose initial level that is (the 0i-T cycle returns there).
-// The group's expanded chain is suppressed while the cycle is open.
+// The group's expanded chain on its hole is suppressed while the cycle
+// is open; the rapid leaving the hole closes it (#1011, above).
 function onCycle() {
   startPreamble();
   var p = properties;
@@ -694,6 +722,8 @@ function onCycle() {
   if (ms > 0 && g !== "G84") words.push("P" + ms);
   words.push(feedWord(p.FeedRate));
   block(words);
+  // A legacy record with no R word keeps the whole on-axis chain.
+  cycX = p.X; cycY = p.Y; cycR = has(p.R) ? Number(p.R) : Infinity;
   inCycle = true;
 }
 
