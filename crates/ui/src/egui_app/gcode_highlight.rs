@@ -129,7 +129,7 @@ pub(crate) fn ink(dark: bool, kind: Kind) -> Option<Color32> {
 /// Cached tokenization of a whole program: one span list per line.
 pub(crate) type Spans = Arc<Vec<Vec<(Range<usize>, Kind)>>>;
 
-fn program_key(program: &str) -> u64 {
+pub(crate) fn program_key(program: &str) -> u64 {
     // Length plus a bounded sample of both ends: O(1) per frame. A
     // collision can only mis-colour a listing, never change its text.
     let mut h = DefaultHasher::new();
@@ -155,11 +155,17 @@ pub(crate) fn spans_for(ctx: &egui::Context, program: &str) -> Spans {
     s
 }
 
-/// The listing row: gutter line number, two spaces, then the coloured
-/// line. `dim` rests everything weak (trace pane outside its block).
+/// The gutter text of a listing row: the right-aligned line number and
+/// two spaces. Its own non-selectable label (#1089), so selecting and
+/// copying the program takes the G-code only, never the numbers.
+pub(crate) fn gutter_text(number: usize) -> String {
+    format!("{number:>4}  ")
+}
+
+/// The listing row's code: the coloured line, byte-for-byte as posted.
+/// `dim` rests everything weak (trace pane outside its block).
 pub(crate) fn row_job(
     ui: &Ui,
-    number: usize,
     line: &str,
     spans: &[(Range<usize>, Kind)],
     dim: bool,
@@ -173,7 +179,6 @@ pub(crate) fn row_job(
     };
     let fmt = |c: Color32| TextFormat::simple(font.clone(), c);
     let mut job = LayoutJob::default();
-    job.append(&format!("{number:>4}  "), 0.0, fmt(ui.visuals().weak_text_color()));
     let mut at = 0;
     for (r, k) in spans {
         // Spans are built from this very line; guard anyway.

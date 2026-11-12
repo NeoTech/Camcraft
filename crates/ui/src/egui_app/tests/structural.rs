@@ -235,6 +235,34 @@ fn tool_editor_structure() {
     );
 }
 
+/// #93 slice 3: the Draw cutter view's parameters stand in the editor's
+/// third column, right of the fields and the profile, in the order the
+/// tool is drawn (cutter, flutes, shank, neck), above Apply cutter.
+#[test]
+fn tool_cutter_params_structure() {
+    let mut harness = shell_harness();
+    harness.run();
+    crate::actions::open_tool_editor(&mut harness.state_mut().state, "EM-0600-4FL");
+    harness.run_steps(2);
+    harness.get_by_label("Profile").click();
+    harness.run();
+    harness.get_by_label("Draw cutter").click();
+    harness.run_steps(2);
+    let win = harness
+        .query_all_by_role(egui::accesskit::Role::Window)
+        .find(|n| n.accesskit_node().label().as_deref() == Some("Tool: EM-0600-4FL"))
+        .expect("the editor window");
+    let fields_right = win.get_by_label("Shank diameter").rect().max.x;
+    let mut last_y = f32::MIN;
+    for label in ["cutter Ø", "flutes", "shank Ø", "Neck", "Apply cutter"] {
+        let r = win.get_by_label(label).rect();
+        assert!(r.center().y > last_y, "{label:?} must follow the row above it");
+        assert!(r.min.x > fields_right, "{label:?} sits in the third column");
+        last_y = r.center().y;
+    }
+    assert!(win.get_by_label("shank length").rect().min.x > win.get_by_label("shank Ø").rect().max.x, "shank length beside shank Ø");
+}
+
 /// #557 / #554 / #555: a setup's own page carries the part-alignment rows in
 /// the properties leaf - the plane row (a face), the three-points row (#555) and the axes-in-the-plane
 /// rows (an edge or two points), each saying which pick it takes, with nothing armed and Apply hidden until
