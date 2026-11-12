@@ -110,20 +110,20 @@ fn the_users_bore_roughs_adaptive_level_by_level_and_verifies_clean() {
     // are knife edges a 16 nm change of the rings flips (#882, #982), so
     // last-place float differences between platforms (most likely libm's
     // sin, cos, atan2, hypot under the STEP tessellation and the planner)
-    // pick a different plan (#1010). What holds everywhere is pinned: the top level's
-    // plan crosses itself and goes to the rings, by name; a rings level
-    // is only ever for a crossing (never a budget, never a rest share);
-    // at least three of the five levels keep the HSM plan and post arcs;
-    // and the path's size stays in a band about every measured path
-    // (docs/decisions/984-bore-heavy-pins.md).
-    let levels: Vec<&str> = fell.iter().filter_map(|n| n.split("at Z ").nth(1)?.split(' ').next()).collect();
-    assert!(levels.contains(&"20.000"), "the top level's plan crosses itself and goes to the rings: {fell:?}");
+    // shift the move count by a few chords (#1010). Since #689 both
+    // measured platforms agree on the plan: Z 20 and Z 10 go to the rings
+    // for a crossing, 222 arcs, and the move count differs by 3. So the
+    // fallback set and the arcs are pinned exactly, and moves / planar in
+    // a narrow band about both measures (docs/decisions/984-bore-heavy-pins.md).
+    // A change that moves them re-measures and says why.
+    let mut levels: Vec<&str> = fell.iter().filter_map(|n| n.split("at Z ").nth(1)?.split(' ').next()).collect();
+    levels.sort_unstable();
+    assert_eq!(levels, ["10.000", "20.000"], "Z 20 and Z 10 go to the rings (Z 10 back to HSM is Refs #980): {fell:?}");
     assert!(fell.iter().all(|n| n.contains("crosses itself")), "a rings level only for a crossing: {fell:?}");
-    assert!(fell.len() <= 2, "at least three of the five levels keep the HSM plan: {fell:?}");
-    assert!(arcs > 0, "the HSM levels post their arcs: {:?}", path.notes);
-    let (moves, lo, hi) = (path.moves.len(), 5_000, 8_000);
-    assert!((lo..=hi).contains(&moves), "the bore's path stays in {lo}..={hi} moves (measured 5530 to 6503): {:?}", path.notes);
-    assert!(planar * 100 >= moves * 98, "the ladder is planar feeds but for its links: {planar} of {moves}");
+    assert_eq!(arcs, 222, "the HSM levels' fitted arcs: {:?}", path.notes);
+    let moves = path.moves.len();
+    assert!((6_450..=6_560).contains(&moves), "moves {moves} (measured 6500 and 6503): {:?}", path.notes);
+    assert!((6_414..=6_524).contains(&planar), "planar feeds {planar} (measured 6464 and 6467)");
 }
 
 #[test]

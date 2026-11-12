@@ -5,11 +5,13 @@ keeps every safety assertion (no verifier warning, no budget refusal, every
 rings level named by Z in the notes and the status line) and replaces two
 exact pins with platform-robust ones:
 
-- "exactly one rings level, Z 20.000" becomes: Z 20.000 is among the rings
-  levels, every rings level is there for a crossing ("crosses itself"), and
-  at most two of the five levels go to the rings (three keep the HSM plan);
-- "5530 moves / 5497 planar / 600 arcs" becomes: 5000..=8000 moves, at least
-  98 % of them planar feeds, and arcs posted.
+- "exactly one rings level, Z 20.000" becomes: exactly Z 20.000 and Z 10.000
+  go to the rings, each for a crossing ("crosses itself");
+- the exact counts become: arcs == 222, moves 6450..=6560 and planar feeds
+  6414..=6524, a narrow band about both measures since #689 (macOS 6503 /
+  6467 / 222; main's 2c97351b re-measure 6500 / 6464 / 222). The review of
+  PR #1014 asked for this tighter band instead of a wide one, because since
+  #689 the platforms agree on the plan and differ only by 3 moves.
 
 **Why.** Two separate causes, both measured on macOS (Apple silicon, release):
 
@@ -44,6 +46,8 @@ work (effort:max), not a narrow change.
 - *Pin the macOS numbers*: makes it red on Windows instead.
 - *Drop the counts entirely*: the band still catches a runaway plan or a
   level silently lost; kept.
+- *A wide band (5000..=8000, at most two rings levels)*: the first cut of
+  this PR. Dropped in review: too loose to catch a real plan change.
 
 **Cost to change later.** If the planner is made float-robust (deterministic
 libm or exact predicates, #1010), the exact counts can be
