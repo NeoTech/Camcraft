@@ -11,7 +11,7 @@ in CamCraft, what it is measured in and from where.
 ## Document unit and program unit
 
 Inside CamCraft every length is millimetres, always. The **document unit**
-(millimetres or inches, chosen in the document's settings) is only a lens:
+(millimetres or inches, chosen with the **Units** setting on the Setup > Stock page) is only a lens:
 it changes how lengths and feeds are shown and typed, and how messages
 quote them. A value typed in inches is converted to millimetres when it is
 entered, and the stored geometry and parameters do not change when you
