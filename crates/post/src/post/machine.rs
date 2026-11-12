@@ -182,6 +182,17 @@ pub fn mirror(m: &crate::machine::Machine) -> Value {
     {
         o.insert("kind".to_owned(), json!("plasma"));
     }
+    // #533: a wire or sinker EDM says its kind and its `edm` words (the
+    // control's codes, D5, and whether it threads by itself) for the
+    // EDM posts' machine check; every other mirror is unchanged.
+    let k = crate::machine::kind(Some(m));
+    if matches!(k, crate::machine::Kind::WireEdm | crate::machine::Kind::SinkerEdm)
+        && let Some(o) = out.as_object_mut()
+    {
+        o.insert("kind".to_owned(), json!(k.word()));
+        let awt = m.edm.as_ref().and_then(|e| e.awt);
+        o.insert("edm".to_owned(), json!({ "codes": m.edm_codes, "awt": awt }));
+    }
     let inverted = m.inverted_axes();
     if !inverted.is_empty()
         && let Some(o) = out.as_object_mut()
@@ -356,6 +367,9 @@ pub fn script_props(m: &Value) -> Value {
         // #375: the inverted linear axes, for the header comment a post
         // that translates them writes ([] for every standard machine). A
         // statement the reader refuses was refused before the script ran.
+        // #533: the EDM section's codes and AWT flag through either
+        // door (the mirror's or a raw file's `edm`), null when unstated.
+        "edm": get(m, &["edm"]).filter(|e| e.is_object()).cloned().unwrap_or(Value::Null),
         "invertedAxes": super::invert::stated(m).map(|(_, l)| l).unwrap_or_default(),
     })
 }
