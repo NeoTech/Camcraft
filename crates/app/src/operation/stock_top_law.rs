@@ -12,7 +12,9 @@ use super::material::Z_TOL;
 /// column law judged (`material_source::judged_stock`), and `part`, the
 /// op's own material. With no judged stock the column law read the op's
 /// region in its place - no solid bounds that reading, so every
-/// conviction stands. `excess` is the op's model excess (#864/#904):
+/// conviction stands. The caller passes no stock either when the stock's
+/// chord is unknown (#1091 review, #1056: a from-model copy whose source
+/// is gone - `model_fidelity::stock_fidelity_known`). `excess` is the op's model excess (#864/#904):
 /// the material may stand that much outside its facets. Only removes
 /// convictions (see the sim's module).
 pub(super) fn acquit(

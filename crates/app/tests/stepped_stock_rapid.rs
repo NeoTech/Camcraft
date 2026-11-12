@@ -8,6 +8,9 @@
 //! the same dive with the boss under it - or the boss reaching into the
 //! tool's footprint by less than its radius - is still convicted and
 //! still blocks the post. Both a part-sourced and a stock-sourced Bore.
+//! The casting stays in the tree, marked raw stock only (#1094); a
+//! coarse casting's excess is read, and one whose source is deleted - its
+//! chord unknown (#1056) - is never acquitted.
 //!
 //! Provenance: our own fixtures (`ladder_entry_height.rs`'s blind hole
 //! under a stepped casting), specced from the Prime Directive and the
@@ -19,7 +22,9 @@
 //! Lane shape: all tests here run in seconds.
 
 use camcraft_app::cl::MoveKind;
-use camcraft_app::commands::{AddTool, CreateOperation, DeleteEntity, GenerateOperation, History, ImportModel, SetStock};
+use camcraft_app::commands::{
+    AddTool, CreateOperation, DeleteEntity, GenerateOperation, History, ImportModel, SetStock, SetStockSourceOnly,
+};
 use camcraft_app::drilling::Hole;
 use camcraft_app::geo2d::Point2;
 use camcraft_app::geometry::{Mesh, Point3, Triangle, cube};
@@ -113,33 +118,52 @@ fn bore() -> OpParams {
 enum Src {
     /// The Bore reads the part; the casting is only the stock.
     Part,
-    /// The Bore reads the stock itself (no part model at all).
+    /// The Bore reads the stock itself (the part stands beside it).
     Stock,
 }
 
 /// The Bore from `src` under the casting with its boss over `boss`: the
 /// first vertical rapid down (index, XY, end Z), the warnings, the post.
 fn run(src: Src, boss: [f64; 4]) -> ((usize, Point2, f64), Vec<Warning>, Result<(), String>) {
-    run_on(src, boss, false)
+    run_on(src, boss, Casting::default())
 }
 
-fn run_on(src: Src, boss: [f64; 4], open: bool) -> ((usize, Point2, f64), Vec<Warning>, Result<(), String>) {
+/// How the casting stands in the document.
+#[derive(Clone, Copy, Default)]
+struct Casting {
+    /// The boss's top facets left out (PR #1098 review).
+    open: bool,
+    /// Imported at this chord error, mm (a reduced-fidelity import, #864).
+    coarse: Option<f64>,
+    /// Deleted from the tree after the stock copies it (the stock's
+    /// chord is then unknown, #1056); otherwise kept and marked raw
+    /// stock only (#1094) so the verdict does not read it as a part.
+    deleted: bool,
+}
+
+fn run_on(src: Src, boss: [f64; 4], c: Casting) -> ((usize, Point2, f64), Vec<Warning>, Result<(), String>) {
     let world = new_world();
     let mut h = History::default();
     let [x0, x1, y0, y1] = boss;
-    h.execute(&world, ImportModel::from_mesh("casting", casting(x0, x1, y0, y1, open)));
+    h.execute(&world, ImportModel::from_mesh("casting", casting(x0, x1, y0, y1, c.open)));
+    if c.coarse.is_some() {
+        let e = model::find_by_name(&world, "casting").expect("casting");
+        camcraft_app::model_fidelity::set(&world, &e, c.coarse);
+    }
+    // The finished part stands in the tree either way: the verdict judges
+    // it, and a raw-stock-only casting needs a part beside it (#1094).
+    h.execute(&world, ImportModel::from_mesh("part", part()));
     let source = match src {
-        Src::Part => {
-            h.execute(&world, ImportModel::from_mesh("part", part()));
-            SrcRef::Entity("part".into())
-        }
+        Src::Part => SrcRef::Entity("part".into()),
         Src::Stock => SrcRef::Stock,
     };
     let shape = StockShape::FromModel { source: "casting".into() };
     h.execute(&world, SetStock::new(&world, shape, Location::default()).expect("stock"));
-    // Stock only: the stock keeps its copy of the casting, and the casting
-    // leaves the tree so the program verdict does not read it as a part.
-    h.execute(&world, DeleteEntity::new(&world, "casting").expect("delete casting"));
+    if c.deleted {
+        h.execute(&world, DeleteEntity::new(&world, "casting").expect("delete casting"));
+    } else {
+        h.execute(&world, SetStockSourceOnly::new(&world, true).expect("raw stock only"));
+    }
     let tool = catalog().into_iter().find(|(n, _)| *n == TOOL).map(|(_, t)| t).expect("catalog");
     h.execute(&world, AddTool::new(&world, TOOL, tool).expect("tool"));
     h.execute(&world, CreateOperation::new(&world, "Op1", TOOL, source, bore()).expect("create op"));
@@ -215,12 +239,49 @@ fn an_open_stock_mesh_proves_nothing_and_the_dive_stays_convicted() {
     // facet stands over the dive, yet the boss's walls do - the re-reading
     // must not take a hole in the shell for air.
     for src in [Src::Part, Src::Stock] {
-        let ((at, _, z), warns, posted) = run_on(src, [-12.0, 12.0, -12.0, 12.0], true);
+        let open = Casting { open: true, ..Casting::default() };
+        let ((at, _, z), warns, posted) = run_on(src, [-12.0, 12.0, -12.0, 12.0], open);
         assert!(z < BOSS, "{src:?}: the fixture must dive under the boss's walls, not to Z {z}");
         assert!(warns.contains(&Warning::RapidInStock { at }), "{src:?}: the dive into the open boss went unnamed: {warns:?}");
         match posted {
             Ok(()) => panic!("{src:?}: a program diving into the open boss posted"),
             Err(e) => assert!(e.contains("post blocked"), "{src:?}: {e}"),
         }
+    }
+}
+
+#[test]
+fn a_coarse_stock_whose_source_is_gone_is_never_acquitted() {
+    // PR #1098 third review: a casting imported at chord 2.5 mm, then
+    // deleted - the stock copy no longer knows its chord (#1056). The dive
+    // ends 2 mm over the mesh, and the real surface may stand 2.5 mm above
+    // it: the flat cap's conviction stands, and the post is blocked by it.
+    for src in [Src::Part, Src::Stock] {
+        let gone = Casting { coarse: Some(2.5), deleted: true, ..Casting::default() };
+        let ((at, _, z), warns, posted) = run_on(src, FAR, gone);
+        assert!(z > MOUTH && z < BOSS, "{src:?}: Z {z}");
+        assert!(warns.contains(&Warning::RapidInStock { at }), "{src:?}: acquitted on an unknown chord: {warns:?}");
+        match posted {
+            Ok(()) => panic!("{src:?}: a dive into a coarse stock of unknown chord posted"),
+            Err(e) => assert!(e.contains(&format!("rapid move {at} ")), "{src:?}: not blocked by the rapid law: {e}"),
+        }
+        // The same casting exact and deleted is unknown too: kept.
+        let exact_gone = Casting { deleted: true, ..Casting::default() };
+        let ((at, _, _), warns, _) = run_on(src, FAR, exact_gone);
+        assert!(warns.contains(&Warning::RapidInStock { at }), "{src:?}: {warns:?}");
+    }
+}
+
+#[test]
+fn a_coarse_stock_whose_source_stands_reads_its_excess() {
+    // Source kept: the chord is known. 2.5 mm of chord against 2 mm of
+    // clearance - convicted; 1 mm of chord - clear (the fidelity gate
+    // may still refuse the post on its own grounds).
+    for src in [Src::Part, Src::Stock] {
+        let ((at, _, _), warns, posted) = run_on(src, FAR, Casting { coarse: Some(2.5), ..Casting::default() });
+        assert!(warns.contains(&Warning::RapidInStock { at }), "{src:?}: {warns:?}");
+        assert!(posted.is_err(), "{src:?}: posted");
+        let (_, warns, _) = run_on(src, FAR, Casting { coarse: Some(1.0), ..Casting::default() });
+        assert!(!warns.iter().any(|w| matches!(w, Warning::RapidInStock { .. })), "{src:?}: {warns:?}");
     }
 }

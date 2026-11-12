@@ -84,6 +84,26 @@ pub fn excess_of(world: &World, name: &str) -> f64 {
     coarse_source(world, name).map_or(0.0, |(_, c)| excess(c))
 }
 
+/// Whether the excess of `setup`'s stock is known (#1091 review): a box
+/// or cylinder has no mesh to be coarse; a from-model copy is known only
+/// while its source model stands, since its chord is read through the
+/// source (`coarse_source`) and reads 0 once the source is gone. A model
+/// with no `ReducedFidelity` record is known exact - the importer writes
+/// the record for every coarse import. No stock entity: nothing to know.
+/// #1056: once a from-model stock carries its own chord (#1127), read it
+/// here instead of requiring the source.
+#[must_use]
+pub fn stock_fidelity_known(world: &World, setup: Option<&str>) -> bool {
+    let Some(stock) = model::find_by_name(world, &crate::setup::stock_entity_name(world, setup)) else {
+        return true;
+    };
+    match model::stock_def_of(world, &stock) {
+        // #1056: the chord lives on the source only - gone source, unknown chord.
+        Some(StockShape::FromModel { source }) => model::find_by_name(world, &source).is_some(),
+        _ => true,
+    }
+}
+
 /// A coarse chord error's excess over the importer's promise.
 #[must_use]
 pub fn excess(chord_mm: f64) -> f64 {

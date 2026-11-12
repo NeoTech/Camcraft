@@ -86,7 +86,36 @@
      own model excess, applied to the stock and part solids alike. A
      stock mesh coarser than its source has no excess of its own here,
      and the column law has none either.
-6. **The solids are `judged_stock` (the stock the column law judged,
+6. **Which stocks can be acquitted (third review, #1056).** A
+   from-model stock's chord is read only through its source model
+   (`model_fidelity::coarse_source`, by name). Once the source is
+   deleted, its excess reads 0, and a coarse casting's dive cleared the
+   mesh by less than the real surface may stand above it, then posted.
+   The rule, `model_fidelity::stock_fidelity_known(setup)`, decides
+   which stock is passed to the re-reading:
+   - **Box or cylinder stock, or no stock entity:** acquittable. There
+     is no mesh to be coarse.
+   - **From-model stock whose source model is in the tree:**
+     acquittable. Its `ReducedFidelity` record gives the chord, and no
+     record means an exact import, because the importer writes the
+     record for every coarse import.
+   - **From-model stock whose source is gone:** never acquitted. Both
+     sites pass no stock, so every conviction stands.
+   - **Carried stock:** `carried_stock::judged` always judges a box (the
+     declared box, or the box enclosing the carried body), and that box
+     reads no lower than the flat cap. The flag is still read from the
+     setup's declared stock, so a carried case over a declared
+     from-model stock with a lost source is refused too.
+   - **Part models:** they are in the tree whenever they are the source.
+     A missing record means known exact, so they need no guard.
+
+   When #1127 (#1056) merges, a from-model stock carries its own chord.
+   The guard (`// #1056` in `model_fidelity.rs`) can then read that
+   chord instead of requiring the source. The pinning fixtures now keep
+   the casting in the tree, marked raw stock only (#1094 / PR #1097,
+   `SetStockSourceOnly`), with the part beside it, instead of deleting
+   the casting.
+7. **The solids are `judged_stock` (the stock the column law judged,
    #1066: the setup's or carried stock, or the stock itself for a
    stock-sourced Bore/Thread) and the op's own material.** Both are
    read in the path's frame: world at the upright site, and the
@@ -94,7 +123,7 @@
    vertical rapid, so it is re-read the same way.
    `acquit_by_prior` still runs afterwards, for stock the program ahead
    removed.
-7. **Pinned by** `crates/app/tests/stepped_stock_rapid.rs` (the dive
+8. **Pinned by** `crates/app/tests/stepped_stock_rapid.rs` (the dive
    over the low part passes and posts. With the boss over the hole, or
    with its edge 1.5 mm beside the dive's centre under the 4 mm rim, the
    dive is convicted and the post is blocked by the rapid law. Each
@@ -108,7 +137,15 @@
    radial/revolved/rotary exclusions. A dive 0.3 mm over the meshed
    step, or with its rim 0.3 mm short of the boss's wall, is acquitted
    at full fidelity and stays convicted with 0.5 mm of excess
-   (`a_coarse_models_excess_is_read_up_and_sideways`). The `ladder_entry_height` pins and the #96 pins are
+   (`a_coarse_models_excess_is_read_up_and_sideways`). End to end:
+   - a coarse casting (chord 2.5) whose source is deleted, and an exact
+     one whose source is deleted, both stay convicted, and the post is
+     blocked by the rapid law
+     (`a_coarse_stock_whose_source_is_gone_is_never_acquitted`, which
+     fails with the guard off);
+   - with the source kept, chord 2.5 is convicted and chord 1.0 is
+     cleared (`a_coarse_stock_whose_source_stands_reads_its_excess`);
+   - box stocks are pinned unchanged by `ladder_entry_height`. The `ladder_entry_height` pins and the #96 pins are
    unchanged.
 
 **Why**
