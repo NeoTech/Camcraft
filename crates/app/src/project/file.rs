@@ -341,6 +341,12 @@ pub struct ToolDto {
     /// tool sanity law (`validate`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub orientation: Option<u8>,
+    /// #891 addition, additive (no version step): the turning cutting
+    /// data (surface speed m/min, feed mm/rev, max-rpm clamp). Absent
+    /// from every older file and written only when stated; absent
+    /// reads as unstated - the turning ops post the tool's rpm (G97).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub turning: Option<camcraft_tools::turning_data::TurningData>,
 }
 
 #[allow(clippy::trivially_copy_pass_by_ref)]
@@ -456,6 +462,7 @@ impl ToolDto {
             body: None,
             cutter: None,
             orientation: t.orientation,
+            turning: t.turning,
         }
     }
 
@@ -500,6 +507,7 @@ impl ToolDto {
             flutes: self.flutes,
             center_cutting: self.center_cutting,
             orientation: self.orientation,
+            turning: self.turning,
         }
     }
 }

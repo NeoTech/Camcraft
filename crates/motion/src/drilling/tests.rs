@@ -71,6 +71,7 @@ pub(super) fn drill_tool(d: f64) -> Tool {
         flutes: None,
         orientation: None,
         pitch_min: 0.0,
+        turning: None,
     }
 }
 

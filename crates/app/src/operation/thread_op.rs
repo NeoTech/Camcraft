@@ -22,7 +22,8 @@ use crate::drilling::Hole;
 use crate::geo2d::Region;
 use crate::machining2d::{self, GenError, ThreadHole, ThreadParams};
 use crate::tools::Tool;
-use crate::verify::{Cutter, Warning};
+use crate::geometry::Triangle;
+use crate::verify::{self, Cutter, Warning};
 
 use super::heights::ResolvedHeights;
 use super::material_source::{disk_loop, rim_is};
@@ -161,17 +162,38 @@ pub(super) fn crest_region(region: Region, holes: &[Hole], depth: f64) -> Result
     Ok(Region::new(loops)?)
 }
 
+/// Whether every threaded hole of `plan` is a round wall in the part
+/// (#894 x #1205): its wall facets the crests can reach (to the major
+/// circle, plus [`verify::WALL_SAG`]) over the thread's span read as a
+/// tessellated circle about the hole's axis, by the solid law's own
+/// sagitta test. Only then do the two readings below apply; a thread
+/// through a polygon's flats keeps its region's own rim and the full
+/// tooth radius, so cutting into a flat is a gouge.
+#[must_use]
+pub(super) fn walls_round(facets: &[Triangle], plan: &ThreadParams) -> bool {
+    let depth = plan.depth();
+    plan.holes.iter().all(|h| {
+        let (lo, hi) = (h.floor_z.min(h.top_z) - plan.tool_diameter, h.floor_z.max(h.top_z));
+        verify::hole_is_round(facets, [h.xy.x, h.xy.y], h.radius + depth + verify::WALL_SAG, lo, hi)
+    })
+}
+
 /// The root law's cutter: `cutter` narrowed by the thread depth for a
 /// Thread operation, so the solid law holds the body under the teeth
 /// out of the part - radially at the minor wall (a boss's drawn major
 /// wall, by the external depth, #985), and at the tip with no allowance
 /// at all. Every other operation, and a tool whose pitch does not
-/// resolve (refused before any path exists), keeps its cutter.
+/// resolve (refused before any path exists), keeps its cutter, and so
+/// does a thread whose holes are not all round walls (`round` false,
+/// [`walls_round`]): its teeth are judged at full radius.
 #[must_use]
-pub(super) fn root_cutter(cutter: Cutter, tool: &Tool, params: &OpParams) -> Cutter {
+pub(super) fn root_cutter(cutter: Cutter, tool: &Tool, params: &OpParams, round: bool) -> Cutter {
     let OpParams::Thread { pitch, external, .. } = params else {
         return cutter;
     };
+    if !round {
+        return cutter;
+    }
     match form::resolve_pitch(tool, *pitch) {
         Ok(p) if cutter.radius > depth_of(p, *external) => Cutter { radius: cutter.radius - depth_of(p, *external), ..cutter },
         _ => cutter,
@@ -268,12 +290,14 @@ mod tests {
     fn the_root_cutter_narrows_a_thread_mill_by_the_thread_depth_and_nothing_else() {
         let tool = form::thread_mill(6.0, 1.5, 0.0, 12.0);
         let cutter = Cutter::of(&tool);
-        let root = root_cutter(cutter, &tool, &thread(None));
+        let root = root_cutter(cutter, &tool, &thread(None), true);
         assert!((root.radius - (3.0 - 0.5413 * 1.5)).abs() < 1e-12);
         assert_eq!(root.flute_len, cutter.flute_len);
         // An unresolvable pitch (refused before a path exists) keeps the full cutter.
-        assert_eq!(root_cutter(cutter, &tool, &thread(Some(1.0))).radius, 3.0);
-        assert_eq!(root_cutter(cutter, &tool, &other_kind()).radius, 3.0);
+        assert_eq!(root_cutter(cutter, &tool, &thread(Some(1.0)), true).radius, 3.0);
+        assert_eq!(root_cutter(cutter, &tool, &other_kind(), true).radius, 3.0);
+        // A hole that is no round wall (#1205): the teeth at full radius.
+        assert_eq!(root_cutter(cutter, &tool, &thread(None), false).radius, 3.0);
     }
 
     #[test]
@@ -284,7 +308,7 @@ mod tests {
             *external = true;
         }
         let root = 3.0 - 0.6134 * 1.5;
-        assert!((root_cutter(Cutter::of(&tool), &tool, &boss).radius - root).abs() < 1e-12);
+        assert!((root_cutter(Cutter::of(&tool), &tool, &boss, true).radius - root).abs() < 1e-12);
         assert!((sim_radius(&tool, &boss).expect("root") - root).abs() < 1e-12);
         // An internal thread keeps the tool's own certain removal.
         assert!((sim_radius(&tool, &thread(None)).expect("core") - (3.0 - 0.5413 * 1.5)).abs() < 1e-12);
