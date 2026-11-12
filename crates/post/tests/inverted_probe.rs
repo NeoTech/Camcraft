@@ -15,17 +15,19 @@
 //! P1..P6) - the same words with the same meaning, so one reader runs
 //! both; touch-probe practice. Fixture values are our own.
 //!
+//! The probe cycles are recorded (#926): `recorded/inputs/inverted_probe_*`,
+//! written and guarded by app's `recorded_post_streams` from
+//! `motion::probing::probe_cycle`, dumped on G54 at `ORIGIN`, setting G55.
+//!
 //! Gate map (M4.4): covers post::invert (probing), post::js (manifest
-//! flags), assets/posts fanuc.cps + haas.cps (probing hooks),
-//! motion::probing.
+//! flags), assets/posts fanuc.cps + haas.cps (probing hooks).
 
 mod inverted_support;
 mod macro_b;
+mod recorded;
 
-use camcraft_app::geometry::Point3;
-use camcraft_app::post::cnc::{self, Record};
-use camcraft_app::post::{self, engine, invert, probe_rec};
-use camcraft_app::probing::{probe_cycle, ProbeDir, ProbeMode, ProbeParams};
+use camcraft_post::post::cnc::{self, Record};
+use camcraft_post::post::{engine, invert};
 use inverted_support::{cps, machine};
 use macro_b::{Pt, Run, Stop};
 
@@ -73,94 +75,70 @@ impl Shape {
 
 struct Case {
     name: &'static str,
-    params: ProbeParams,
+    /// The first touch's travel direction (a unit vector).
+    dir: Pt,
+    /// The recorded stream under `recorded/inputs/`.
+    input: &'static str,
     shape: Shape,
     /// The axes the probing finds (0 X, 1 Y, 2 Z).
     found: &'static [usize],
 }
 
-fn params(mode: ProbeMode, dir: ProbeDir, dir_y: ProbeDir, t: Pt, radius: f64) -> ProbeParams {
-    ProbeParams {
-        mode,
-        dir,
-        dir_y,
-        target: Point3::new(t[0], t[1], t[2]),
-        radius,
-        ball_diameter: 2.0 * R,
-        approach: 5.0,
-        overtravel: 5.0,
-        backoff: 1.0,
-        fast_feed: 300.0,
-        slow_feed: 30.0,
-        depth: 3.0,
-        inset: 5.0,
-        clearance_z: 50.0,
-    }
-}
-
-fn wall(t: Pt, d: ProbeDir) -> (Pt, Pt) {
-    let u = d.unit();
-    (t, [-u.x, -u.y, -u.z])
+/// A wall the stylus meets travelling `d`: its surface point and its
+/// outward normal (against the travel).
+fn wall(t: Pt, d: Pt) -> (Pt, Pt) {
+    (t, [-d[0], -d[1], -d[2]])
 }
 
 fn cases() -> Vec<Case> {
-    use ProbeDir::{XNeg, XPos, YNeg, YPos, ZNeg};
-    use ProbeMode::{Boss, Bore, Corner, Edge, Face};
+    let (xn, xp, yn, yp, zn) = ([-1.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, -1.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, -1.0]);
     let up = |t: Pt| (t, [0.0, 0.0, 1.0]);
     let (tz, tx, te) = ([10.0, 5.0, 20.0], [40.0, 5.0, 15.0], [20.0, 40.0, 20.0]);
     let (tc, tn, tb) = ([0.0, 0.0, 20.0], [80.0, 60.0, 20.0], [30.0, 30.0, 20.0]);
     vec![
         Case {
             name: "face -Z",
-            params: params(Face, ZNeg, YPos, tz, 0.0),
+            dir: zn,
+            input: "inverted_probe_face_zneg.cnc",
             shape: Shape::Solid(vec![up(tz)]),
             found: &[2],
         },
         Case {
             name: "face -X",
-            params: params(Face, XNeg, YPos, tx, 0.0),
-            shape: Shape::Solid(vec![wall(tx, XNeg)]),
+            dir: xn,
+            input: "inverted_probe_face_xneg.cnc",
+            shape: Shape::Solid(vec![wall(tx, xn)]),
             found: &[0],
         },
         Case {
             name: "edge -Y",
-            params: params(Edge, YNeg, YPos, te, 0.0),
-            shape: Shape::Solid(vec![wall(te, YNeg), up(te)]),
+            dir: yn,
+            input: "inverted_probe_edge_yneg.cnc",
+            shape: Shape::Solid(vec![wall(te, yn), up(te)]),
             found: &[1],
         },
         Case {
             name: "corner +X+Y",
-            params: params(Corner, XPos, YPos, tc, 0.0),
-            shape: Shape::Solid(vec![wall(tc, XPos), wall(tc, YPos), up(tc)]),
+            dir: xp,
+            input: "inverted_probe_corner_pos.cnc",
+            shape: Shape::Solid(vec![wall(tc, xp), wall(tc, yp), up(tc)]),
             found: &[0, 1],
         },
         Case {
             name: "corner -X-Y",
-            params: params(Corner, XNeg, YNeg, tn, 0.0),
-            shape: Shape::Solid(vec![wall(tn, XNeg), wall(tn, YNeg), up(tn)]),
+            dir: xn,
+            input: "inverted_probe_corner_neg.cnc",
+            shape: Shape::Solid(vec![wall(tn, xn), wall(tn, yn), up(tn)]),
             found: &[0, 1],
         },
-        Case { name: "bore", params: params(Bore, ZNeg, YPos, tb, 10.0), shape: Shape::Bore(tb, 10.0), found: &[0, 1] },
-        Case { name: "boss", params: params(Boss, ZNeg, YPos, tb, 8.0), shape: Shape::Boss(tb, 8.0), found: &[0, 1] },
+        Case { name: "bore", dir: zn, input: "inverted_probe_bore.cnc", shape: Shape::Bore(tb, 10.0), found: &[0, 1] },
+        Case { name: "boss", dir: zn, input: "inverted_probe_boss.cnc", shape: Shape::Boss(tb, 8.0), found: &[0, 1] },
     ]
 }
 
 /// The case's probing records: set G55 from the trips, tolerance 0.5.
 fn records(c: &Case) -> Vec<Record> {
-    let t = probe_cycle(&c.params).unwrap_or_else(|e| panic!("{}: {e:?}", c.name));
-    let d = post::Dump {
-        op_name: "Probe1",
-        tool_number: 7,
-        tool_name: "PROBE-4",
-        tool_diameter: 2.0 * R,
-        clearance_z: 50.0,
-        retract_z: 50.0,
-        wcs: "G54",
-        origin: ORIGIN,
-        probe_result: Some(probe_rec::ProbeResult { set_wcs: Some(1), tol_mm: 0.5 }),
-        ..post::Dump::default()
-    };
-    post::dump(&t, &d)
+    recorded::input_records(c.input)
 }
 
 fn post_for(post: &str, records: &[Record], letters: &[&str]) -> String {
@@ -298,8 +276,8 @@ fn the_standard_program_on_an_inverted_machine_does_not_find_the_part() {
 /// offset for a part within reach, and alarm "no contact" (writing
 /// nothing) for one 7 mm past the first touch's overtravel.
 fn behaves(program: &str, c: &Case, flip: [bool; 3]) -> bool {
-    let u = c.params.dir.unit();
-    let away = [7.0 * u.x, 7.0 * u.y, 7.0 * u.z];
+    let u = c.dir;
+    let away = [7.0 * u[0], 7.0 * u[1], 7.0 * u[2]];
     let far = simulate(program, flip, &c.shape, away);
     correct(&simulate(program, flip, &c.shape, SHIFT), c, flip, SHIFT)
         && far.stop == Stop::Alarm(2, "PROBE NO CONTACT".into())

@@ -2,23 +2,30 @@
 //! along X enters each level on one XZ (G18) arc, one along Y on one YZ
 //! (G19) arc - tangent to the cut at the bottom, never split (the arc
 //! ends at its circle's bottom, the Z extremum `push_arc_in` splits
-//! at) - and the G-word posts state the plane; Heidenhain rides it as
-//! chords and never switches plane. An oblique first cut has no
-//! standard plane: it keeps the certified chord fan and the path says
-//! so once. Every path verifies silent against its part.
+//! at). An oblique first cut has no standard plane: it keeps the
+//! certified chord fan and the path says so once. Every path verifies
+//! silent against its part.
+//!
+//! The posting half (the G-word posts state the plane; Heidenhain rides
+//! it as chords) is post's `vertical_arc_entry`, which reads these paths
+//! as recorded `.cl` files (#926); each test here also guards its path's
+//! recording (`crates/post/tests/recorded/inputs/vertical_arc_*.cl`), so a
+//! generator change cannot leave the post suite posting a stale path.
+//! Regenerate after an intentional change, then re-run the post suite:
+//! `WRITE_GOLDEN=1 cargo test -p camcraft-motion --test vertical_arc_entry`
+//!
 //! Provenance: RS-274/NGC and ISO 6983 G17/G18/G19 plane selection and
-//! G2/G3 sense (public standards); our own generators and posts.
+//! G2/G3 sense (public standards); our own generators.
 //!
 //! Gate map (M11.2): covers motion::machining2d (contour arc entry,
-//! motion::entry_arc), cl::cl, post::post, sim::verify.
+//! motion::entry_arc), cl::cl, cl::text, sim::verify.
 
-use camcraft_app::cl::{ArcPlane, Move, MoveKind, Toolpath};
-use camcraft_app::geo2d::{Loop, Point2, Region};
-use camcraft_app::machining2d::{contour, ContourParams, Lead, Side};
-use camcraft_app::machining3d::Entry3D;
-use camcraft_app::post::{cnc, dump, engine, Dump};
-use camcraft_app::verify::{verify, Mode, ToolGeom, VerifyContext};
-use std::path::{Path, PathBuf};
+use camcraft_motion::cl::{ArcPlane, Move, MoveKind, Toolpath};
+use camcraft_motion::geo2d::{Loop, Point2, Region};
+use camcraft_motion::machining2d::{contour, ContourParams, Lead, Side};
+use camcraft_motion::machining3d::Entry3D;
+use camcraft_motion::verify::{verify, Mode, ToolGeom, VerifyContext};
+use std::path::Path;
 
 const OBLIQUE: &str = "entry: oblique vertical arc posted as chords - no standard plane";
 
@@ -53,7 +60,7 @@ fn params(lead: Lead) -> ContourParams {
         entry: Entry3D::Arc,
         helix_radius: 1.0,
         blend_turns: false,
-        links: camcraft_app::links::Links::PLANAR,
+        links: camcraft_motion::links::Links::PLANAR,
     }
 }
 
@@ -124,7 +131,7 @@ fn assert_true_entries(t: &Toolpath, plane: ArcPlane) {
     }
 }
 
-fn verify_bore(t: &Toolpath, region: &Region) -> Vec<camcraft_app::verify::Warning> {
+fn verify_bore(t: &Toolpath, region: &Region) -> Vec<camcraft_motion::verify::Warning> {
     let tool = ToolGeom {
         radius: 4.0,
         nose_radius: 0.0,
@@ -154,59 +161,23 @@ fn verify_bore(t: &Toolpath, region: &Region) -> Vec<camcraft_app::verify::Warni
     verify(t, &cx)
 }
 
-fn repo(rel: &str) -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../").join(rel)
-}
-
-fn read(rel: &str) -> String {
-    std::fs::read_to_string(repo(rel)).unwrap_or_else(|e| panic!("{rel}: {e}")).replace("\r\n", "\n")
-}
-
-fn post(stem: &str, t: &Toolpath) -> String {
-    let d = Dump {
-        op_name: "Arc entry",
-        tool_number: 1,
-        tool_name: "8MM FLAT",
-        tool_diameter: 8.0,
-        rpm: 10000.0,
-        clearance_z: 5.0,
-        retract_z: 8.0,
-        top_z: 0.0,
-        ..Dump::default()
-    };
-    let s = cnc::serialize(&dump(t, &d));
-    let mch: serde_json::Value = serde_json::from_str(&read("assets/machines/3axis-vmc.mch")).expect("machine");
-    let cps = read(&format!("assets/posts/{stem}.cps"));
-    let out = engine::run(&cps, &mch, &s).unwrap_or_else(|e| panic!("{stem}: must post: {e}"));
-    assert!(out.warnings.is_empty(), "{stem}: {:?}", out.warnings);
-    out.program
-}
-
-/// The G-word posts: the plane word is stated, the other vertical one
-/// never, and exactly three arc blocks carry the plane's center words
-/// (`I`/`K` for G18, `J`/`K` for G19) - one per level. Heidenhain
-/// switches no plane.
-fn assert_posts(t: &Toolpath, plane: ArcPlane) {
-    let (word, other, centers) = match plane {
-        ArcPlane::Xz => ("G18", "G19", ('I', 'K')),
-        _ => ("G19", "G18", ('J', 'K')),
-    };
-    for stem in ["fanuc", "haas", "sinumerik", "mazak"] {
-        let out = post(stem, t);
-        let has = |l: &str, w: &str| l.split(' ').any(|x| x == w);
-        assert!(out.lines().any(|l| has(l, word)), "{stem} states {word}:\n{out}");
-        assert!(!out.lines().any(|l| has(l, other)), "{stem} never {other}:\n{out}");
-        let blocks = out
-            .lines()
-            .filter(|l| {
-                let w = |k: char| l.split(' ').any(|x| x.starts_with(k) && x.len() > 1 && x[1..].parse::<f64>().is_ok());
-                w(centers.0) && w(centers.1)
-            })
-            .count();
-        assert_eq!(blocks, 3, "{stem}: one {word} arc block per level:\n{out}");
+/// Compare `t` (as `cl::text`) with its recording, or write it with
+/// WRITE_GOLDEN set: the post suite's input stays what this generator
+/// writes today.
+fn guard_recording(name: &str, t: &Toolpath) {
+    let text = camcraft_motion::cl::text::to_text(t).unwrap_or_else(|e| panic!("{name}: {e}"));
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../post/tests/recorded/inputs").join(name);
+    if std::env::var_os("WRITE_GOLDEN").is_some() {
+        std::fs::write(&path, &text).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+        return;
     }
-    let hh = post("heidenhain", t);
-    assert!(!hh.contains("G18") && !hh.contains("G19"), "Heidenhain switches no plane:\n{hh}");
+    let want = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+    assert_eq!(
+        want.replace("\r\n", "\n"),
+        text,
+        "recorded path {} is stale: regenerate with WRITE_GOLDEN=1, then re-run post's vertical_arc_entry",
+        path.display()
+    );
 }
 
 #[test]
@@ -217,7 +188,7 @@ fn an_x_aligned_first_cut_enters_on_one_g18_arc_per_level() {
     let t = contour(&r, &params(Lead::Linear { length: 3.0 })).expect("contour");
     assert_true_entries(&t, ArcPlane::Xz);
     assert_eq!(verify_bore(&t, &r), Vec::new(), "the true arc verifies silent");
-    assert_posts(&t, ArcPlane::Xz);
+    guard_recording("vertical_arc_x.cl", &t);
 }
 
 #[test]
@@ -228,7 +199,7 @@ fn a_y_aligned_first_cut_enters_on_one_g19_arc_per_level() {
     let t = contour(&r, &params(Lead::Arc { radius: 3.0 })).expect("contour");
     assert_true_entries(&t, ArcPlane::Yz);
     assert_eq!(verify_bore(&t, &r), Vec::new(), "the true arc verifies silent");
-    assert_posts(&t, ArcPlane::Yz);
+    guard_recording("vertical_arc_y.cl", &t);
 }
 
 #[test]
@@ -242,8 +213,5 @@ fn an_oblique_first_cut_stays_chords_and_says_so_once() {
     assert!(chords(&t) >= 3 * 3, "each level still descends on a chord fan");
     assert_eq!(t.notes.iter().filter(|n| *n == OBLIQUE).count(), 1, "said once: {:?}", t.notes);
     assert_eq!(verify_bore(&t, &r), Vec::new(), "the fan verifies silent");
-    for stem in ["fanuc", "haas", "sinumerik", "mazak", "heidenhain"] {
-        let out = post(stem, &t);
-        assert!(!out.contains("G18") && !out.contains("G19"), "{stem}: no vertical plane:\n{out}");
-    }
+    guard_recording("vertical_arc_oblique.cl", &t);
 }

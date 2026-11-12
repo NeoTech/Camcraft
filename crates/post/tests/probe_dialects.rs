@@ -13,15 +13,16 @@
 //! posts as a protected move that alarms on an unexpected trip, with an
 //! alarm distinct from the no-contact one.
 //!
+//! The streams are recorded (#926): `recorded/inputs/probe_t7_*`, written
+//! and guarded by app's `recorded_post_streams` from
+//! `motion::probing::probe_cycle` (the dump of tests/probe_op.rs's bore).
+//!
 //! Gate map (M4.4): covers assets/posts (haas, mazak, sinumerik,
-//! heidenhain probing; onProbeGuard), post::probe_rec (GUARD),
-//! motion::probing.
+//! heidenhain probing; onProbeGuard), post::probe_rec (GUARD).
 
-mod common;
+mod recorded;
 
-use camcraft_app::geometry::Point3;
-use camcraft_app::post::{self, cnc, engine};
-use camcraft_app::probing::{probe_cycle, ProbeDir, ProbeMode, ProbeParams};
+use camcraft_post::post::engine;
 
 const HAAS: &str = include_str!("../../../assets/posts/haas.cps");
 const MAZAK: &str = include_str!("../../../assets/posts/mazak.cps");
@@ -29,50 +30,21 @@ const SINUMERIK: &str = include_str!("../../../assets/posts/sinumerik.cps");
 const HEIDENHAIN: &str = include_str!("../../../assets/posts/heidenhain.cps");
 
 /// The bore centre of tests/probe_op.rs: a 20 mm bore at (30, 30),
-/// rim Z 20, four touches (seek + measure each).
-fn bore_stream(set_wcs: Option<u8>, wcs: &str) -> String {
-    probe_stream(ProbeMode::Bore, ProbeDir::ZNeg, Point3::new(30.0, 30.0, 20.0), 10.0, set_wcs, wcs)
+/// rim Z 20, four touches (seek + measure each), on G54; the result sets
+/// `set_wcs` (1 = G55, 5 = G59, none = measure only).
+fn bore_stream(set_wcs: Option<u8>) -> String {
+    recorded::input(match set_wcs {
+        Some(1) => "probe_t7_bore_g55.cnc",
+        Some(5) => "probe_t7_bore_g59.cnc",
+        None => "probe_t7_bore_none.cnc",
+        Some(n) => panic!("no recorded bore setting offset {n}"),
+    })
 }
 
 /// An edge +X touch at the part edge X 0: the 4 mm ball trips at X -2,
 /// so the expected value is negative.
 fn edge_stream() -> String {
-    probe_stream(ProbeMode::Edge, ProbeDir::XPos, Point3::new(0.0, 5.0, 20.0), 0.0, Some(1), "G54")
-}
-
-fn probe_stream(mode: ProbeMode, dir: ProbeDir, target: Point3, radius: f64, set_wcs: Option<u8>, wcs: &str) -> String {
-    let p = ProbeParams {
-        mode,
-        dir,
-        dir_y: ProbeDir::YPos,
-        target,
-        radius,
-        ball_diameter: 4.0,
-        approach: 5.0,
-        overtravel: 5.0,
-        backoff: 1.0,
-        fast_feed: 300.0,
-        slow_feed: 30.0,
-        depth: 3.0,
-        inset: 5.0,
-        clearance_z: 50.0,
-    };
-    let t = probe_cycle(&p).expect("probe cycle");
-    let d = post::Dump {
-        op_name: "Probe1",
-        tool_number: 7,
-        tool_name: "PROBE-4",
-        tool_diameter: 4.0,
-        rpm: 0.0,
-        clearance_z: 50.0,
-        retract_z: 50.0,
-        wcs,
-        probe_result: Some(post::probe_rec::ProbeResult { set_wcs, tol_mm: 0.5 }),
-        ..post::Dump::default()
-    };
-    let recs = post::dump(&t, &d);
-    assert!(!recs.iter().any(|r| matches!(r, cnc::Record::Warn { .. })), "a sane probe path carries no WARN");
-    cnc::serialize(&recs)
+    recorded::input("probe_t7_edge_g55.cnc")
 }
 
 fn post_ok(cps: &str, stream: &str) -> String {
@@ -88,7 +60,7 @@ fn post_ok(cps: &str, stream: &str) -> String {
 
 #[test]
 fn haas_bore_centre_posts_g31_skips() {
-    let stream = bore_stream(Some(1), "G54");
+    let stream = bore_stream(Some(1));
     let prog = post_ok(HAAS, &stream);
     let n = 8 + guard_count(&stream);
     assert_eq!(prog.lines().filter(|l| l.starts_with("G31 ")).count(), n, "four touches (seek + measure) + guards");
@@ -96,19 +68,19 @@ fn haas_bore_centre_posts_g31_skips() {
     assert!(prog.contains("#100=#5061"), "the measured trip is kept");
     assert!(prog.contains("G91 G1 X-1 Y0 Z0 F300"), "the back-off is incremental");
     assert!(prog.contains("G10 L2 P2 X[#5221+#190] Y[#5222+#191]"), "the result sets G55 from G54: {prog}");
-    common::write_golden("nc/haas/probe_bore_centre.nc", &prog);
+    recorded::app_golden("nc/haas/probe_bore_centre.nc", &prog);
 }
 
 #[test]
 fn haas_without_an_offset_to_set_stops_for_the_operator() {
-    let prog = post_ok(HAAS, &bore_stream(None, "G54"));
+    let prog = post_ok(HAAS, &bore_stream(None));
     assert!(!prog.contains("G10"), "nothing is set");
     assert!(prog.contains("#3006=1(CHECK PROBE RESULT #190..)"), "{prog}");
 }
 
 #[test]
 fn mazak_bore_centre_posts_g31_skips_with_goto_tests() {
-    let stream = bore_stream(Some(1), "G54");
+    let stream = bore_stream(Some(1));
     let prog = post_ok(MAZAK, &stream);
     let n = 8 + guard_count(&stream);
     assert_eq!(prog.lines().filter(|l| l.starts_with("G31 ")).count(), n, "four touches (seek + measure) + guards");
@@ -125,19 +97,19 @@ fn mazak_bore_centre_posts_g31_skips_with_goto_tests() {
     uniq.sort_unstable();
     uniq.dedup();
     assert_eq!(labels.len(), uniq.len(), "unique labels: {labels:?}");
-    common::write_golden("nc/mazak/probe_bore_centre.nc", &prog);
+    recorded::app_golden("nc/mazak/probe_bore_centre.nc", &prog);
 }
 
 #[test]
 fn mazak_without_an_offset_to_set_stops_for_the_operator() {
-    let prog = post_ok(MAZAK, &bore_stream(None, "G54"));
+    let prog = post_ok(MAZAK, &bore_stream(None));
     assert!(!prog.contains("G10"), "nothing is set");
     assert!(prog.contains("(CHECK PROBE RESULT #190..)\nM00\n"), "{prog}");
 }
 
 #[test]
 fn sinumerik_bore_centre_posts_meas_blocks() {
-    let stream = bore_stream(Some(1), "G54");
+    let stream = bore_stream(Some(1));
     let prog = post_ok(SINUMERIK, &stream);
     let n = 8 + guard_count(&stream);
     assert_eq!(prog.lines().filter(|l| l.contains(" MEAS=1 G1 ")).count(), n, "four touches (seek + measure) + guards");
@@ -147,7 +119,7 @@ fn sinumerik_bore_centre_posts_meas_blocks() {
     assert!(prog.contains(" G91 G1 X-1 Y0 Z0 F300\n"), "the back-off is incremental");
     assert!(prog.contains(" $P_UIFR[2,X,TR]=$P_UIFR[1,X,TR]+R90\n"), "the result sets G55 from G54: {prog}");
     assert!(prog.contains(" $P_UIFR[2,X,FI]=$P_UIFR[1,X,FI]\n"), "the fine part follows the active frame");
-    common::write_golden("nc/sinumerik/probe_bore_centre.nc", &prog);
+    recorded::app_golden("nc/sinumerik/probe_bore_centre.nc", &prog);
 }
 
 /// #934: the sixth work offset is the settable frame G506 on an 840D
@@ -155,7 +127,7 @@ fn sinumerik_bore_centre_posts_meas_blocks() {
 /// probe asked to set it writes frame 6 and re-selects G506.
 #[test]
 fn sinumerik_sets_the_sixth_offset_as_frame_g506() {
-    let prog = post_ok(SINUMERIK, &bore_stream(Some(5), "G54"));
+    let prog = post_ok(SINUMERIK, &bore_stream(Some(5)));
     assert!(prog.contains(" $P_UIFR[6,X,TR]=$P_UIFR[1,X,TR]+R90\n"), "sets frame 6 (G506) from G54: {prog}");
     assert!(!prog.lines().any(|l| l.split_whitespace().any(|w| w == "G58" || w == "G59")), "{prog}");
 }
@@ -166,7 +138,7 @@ fn sinumerik_sets_the_sixth_offset_as_frame_g506() {
 /// counted warning, which blocks the post (posting::post_script).
 #[test]
 fn heidenhain_refuses_a_probe_by_name() {
-    let out = engine::run(HEIDENHAIN, &serde_json::Value::Null, &bore_stream(Some(1), "G54")).expect("engine runs");
+    let out = engine::run(HEIDENHAIN, &serde_json::Value::Null, &bore_stream(Some(1))).expect("engine runs");
     for hook in ["onProbeMove", "onProbeRetreat", "onProbeResult"] {
         assert!(out.warnings.iter().any(|w| w.contains(hook)), "refused by {hook}: {:?}", out.warnings);
     }
@@ -209,7 +181,7 @@ fn guard_count(stream: &str) -> usize {
 /// axis, alarming #3000=3 - not the no-contact alarm 2.
 #[test]
 fn haas_guards_positioning_moves_with_a_hit_alarm() {
-    let stream = bore_stream(Some(1), "G54");
+    let stream = bore_stream(Some(1));
     let guards = guard_count(&stream);
     assert!(guards > 0, "the bore has protected moves:\n{stream}");
     let prog = post_ok(HAAS, &stream);
@@ -226,7 +198,7 @@ fn haas_guards_positioning_moves_with_a_hit_alarm() {
 /// #3000=3 alarm only when the move reached its target.
 #[test]
 fn mazak_guards_positioning_moves_with_a_hit_alarm() {
-    let stream = bore_stream(Some(1), "G54");
+    let stream = bore_stream(Some(1));
     let guards = guard_count(&stream);
     let prog = post_ok(MAZAK, &stream);
     assert!(!prog.contains("THEN"), "IF..GOTO, not IF..THEN");
@@ -246,7 +218,7 @@ fn mazak_guards_positioning_moves_with_a_hit_alarm() {
 /// test that alarms SETAL(65002) - not the no-contact 65000 - and stops.
 #[test]
 fn sinumerik_guards_positioning_moves_with_a_hit_alarm() {
-    let stream = bore_stream(Some(1), "G54");
+    let stream = bore_stream(Some(1));
     let guards = guard_count(&stream);
     let prog = post_ok(SINUMERIK, &stream);
     assert_eq!(prog.lines().filter(|l| l.contains(" MEAS=1 G1 ")).count(), 8 + guards, "touches + guards");

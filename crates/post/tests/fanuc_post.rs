@@ -4,14 +4,16 @@
 //! either changes meaning, this test says so, and the diff is the
 //! review (UPDATE workflow per tests/golden/CLAUDE.md).
 //!
-//! Gate map (M4.4): covers post::post, motion::probing (probe result
-//! arithmetic, #377).
+//! The probe streams are recorded (#926): `recorded/inputs/probe_t7_*`,
+//! written and guarded by app's `recorded_post_streams` from
+//! `motion::probing::probe_cycle`.
+//!
+//! Gate map (M4.4): covers post::post, post::probe_rec (probe result
+//! arithmetic, #377), assets/posts/fanuc.cps.
 
-mod common;
+mod recorded;
 
-use camcraft_app::geometry::Point3;
-use camcraft_app::post::{self, cnc, engine};
-use camcraft_app::probing::{probe_cycle, ProbeDir, ProbeMode, ProbeParams};
+use camcraft_post::post::{self, cnc, engine};
 use std::path::{Path, PathBuf};
 
 fn repo(rel: &str) -> PathBuf {
@@ -77,9 +79,9 @@ fn a_dumped_lean_posts_the_same_program_as_a_tilted_stream() {
     // stream's keyed letters must reach the script through ONE door -
     // the record's canonical ABC. If the two ever disagree, the dump
     // is inventing poses or losing them, and this says so.
-    use camcraft_app::cl::{Move, MoveKind, Toolpath};
-    use camcraft_app::geometry::Point3;
-    use camcraft_app::post::Dump;
+    use camcraft_post::cl::{Move, MoveKind, Toolpath};
+    use camcraft_post::geometry::Point3;
+    use camcraft_post::post::Dump;
     let cps = read("assets/posts/fanuc.cps");
     let mch = serde_json::json!({
         "name": "TILTHEAD",
@@ -118,7 +120,7 @@ fn a_dumped_lean_posts_the_same_program_as_a_tilted_stream() {
         after: Default::default(),
         ..Default::default()
     };
-    let stream = cnc::serialize(&camcraft_app::post::dump(&path, &d));
+    let stream = cnc::serialize(&camcraft_post::post::dump(&path, &d));
     // The seam wrote the letters onto the stream it dumped - the
     // same keyed words stage D's hand-written streams carry.
     assert!(stream.contains(" A 0 B 20000 C 0"), "{stream}");
@@ -139,7 +141,7 @@ fn a_dumped_lean_posts_the_same_program_as_a_tilted_stream() {
     let plain = engine::run(
         &cps,
         &mch,
-        &cnc::serialize(&camcraft_app::post::dump(&flat, &d)),
+        &cnc::serialize(&camcraft_post::post::dump(&flat, &d)),
     )
     .expect("prismatic posts");
     assert!(plain.warnings.is_empty());
@@ -210,7 +212,7 @@ ENDSECTION
 fn an_absent_rotary_takes_no_angle_word() {
     let cps = read("assets/posts/fanuc.cps");
     let text = read("assets/machines/tilthead.mch");
-    let mch = post::machine::mirror(&camcraft_app::machine::parse_mch(&text).expect("tilthead parses"));
+    let mch = post::machine::mirror(&camcraft_post::machine::parse_mch(&text).expect("tilthead parses"));
     let stream = |c: &str| {
         format!("TOOL 1 T1\nSECTION\nRapid X 0 Y 0 Z 20000 A 30000 B 0 C {c}\nFeed X 20000 Y 0 Z 0 F 300000 A 0 B 30000 C {c}\nENDSECTION\n")
     };
@@ -307,40 +309,11 @@ fn non_rtcp_dialects_refuse_a_tilted_stream() {
 // (`#190=#100+15`), the arithmetic form Fanuc's published custom macro B
 // documentation gives (`#i=#j+#k`, `#i=#j-#k`).
 
-fn probe(mode: ProbeMode, target: Point3) -> ProbeParams {
-    ProbeParams {
-        mode,
-        dir: ProbeDir::XPos,
-        dir_y: ProbeDir::YPos,
-        target,
-        radius: 0.0,
-        ball_diameter: 4.0,
-        approach: 5.0,
-        overtravel: 5.0,
-        backoff: 1.0,
-        fast_feed: 300.0,
-        slow_feed: 30.0,
-        depth: 3.0,
-        inset: 5.0,
-        clearance_z: 50.0,
-    }
-}
-
-/// Posts a probe cycle through the whole seam (dump -> stream -> fanuc.cps)
-/// setting G54, and refuses any doubled sign on any line.
-fn post_probe(p: &ProbeParams) -> String {
-    let t = probe_cycle(p).expect("probe cycle");
-    let d = post::Dump {
-        op_name: "Probe1",
-        tool_number: 7,
-        tool_name: "PROBE-4",
-        tool_diameter: 4.0,
-        clearance_z: 50.0,
-        retract_z: 50.0,
-        probe_result: Some(post::probe_rec::ProbeResult { set_wcs: Some(0), tol_mm: 0.5 }),
-        ..post::Dump::default()
-    };
-    let stream = cnc::serialize(&post::dump(&t, &d));
+/// Posts a recorded probe cycle (an edge or corner touch toward +X/+Y,
+/// tool 7, setting G54) through fanuc.cps, and refuses any doubled sign
+/// on any line.
+fn post_probe(input: &str) -> String {
+    let stream = recorded::input(input);
     let out = engine::run(&read("assets/posts/fanuc.cps"), &serde_json::Value::Null, &stream).expect("post");
     assert!(out.warnings.is_empty(), "{:?}", out.warnings);
     for l in out.program.lines() {
@@ -351,28 +324,29 @@ fn post_probe(p: &ProbeParams) -> String {
 
 #[test]
 fn edge_probe_at_negative_x_folds_the_sign() {
-    let nc = post_probe(&probe(ProbeMode::Edge, Point3::new(-15.0, 5.0, 20.0)));
+    let nc = post_probe("probe_t7_edge_neg_x_g54.cnc");
     // The nominal trip is the ball centre, a radius short of the edge: -17.
     assert!(nc.lines().any(|l| l == "#190=#100+17"), "{nc}");
     assert!(nc.contains("IF[ABS[#5061+12]"), "the no-contact check folds a negative target too: {nc}");
-    common::write_golden("nc/fanuc/probe_edge_negative_x.nc", &nc);
+    recorded::app_golden("nc/fanuc/probe_edge_negative_x.nc", &nc);
 }
 
 #[test]
 fn corner_probe_at_negative_xy_folds_both_signs() {
-    let nc = post_probe(&probe(ProbeMode::Corner, Point3::new(-15.0, -10.0, 20.0)));
+    let nc = post_probe("probe_t7_corner_neg_g54.cnc");
     assert!(nc.lines().any(|l| l == "#190=#100+17"), "{nc}");
     assert!(nc.lines().any(|l| l == "#191=#104+12"), "{nc}");
-    common::write_golden("nc/fanuc/probe_corner_negative.nc", &nc);
+    recorded::app_golden("nc/fanuc/probe_corner_negative.nc", &nc);
 }
 
 #[test]
 fn edge_probe_at_zero_writes_the_bare_mean() {
     // An edge at X 2 trips the 4 mm ball's centre at X 0: expected 0 adds
     // no `-0` / `+0` term, just the measured value. A hair under it
-    // (formats to -0) does the same.
-    let nc = post_probe(&probe(ProbeMode::Edge, Point3::new(2.0, 5.0, 20.0)));
+    // (formats to -0) does the same - the recorded stream is in microns,
+    // so its record already reads as the zero edge's.
+    let nc = post_probe("probe_t7_edge_zero_g54.cnc");
     assert!(nc.lines().any(|l| l == "#190=#100"), "{nc}");
-    let nc = post_probe(&probe(ProbeMode::Edge, Point3::new(2.0 - 1e-7, 5.0, 20.0)));
+    let nc = post_probe("probe_t7_edge_hair_g54.cnc");
     assert!(nc.lines().any(|l| l == "#190=#100"), "{nc}");
 }

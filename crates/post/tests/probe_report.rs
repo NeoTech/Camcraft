@@ -12,67 +12,45 @@
 //! DEBUG shows like MSG and substitutes #n), Fanuc's published custom
 //! macro B documentation (#3000 / #3006); our own fixtures.
 //!
+//! The streams are recorded (#926): `recorded/inputs/probe_t99_*`,
+//! written and guarded by app's `recorded_post_streams` from
+//! `motion::probing::probe_cycle` (PathPilot's probe tool 99).
+//!
 //! Gate map (M4.4): covers assets/posts (tormach + fanuc probe result),
-//! post::probe_rec, motion::probing.
+//! post::probe_rec.
 
-use camcraft_app::geometry::Point3;
-use camcraft_app::machine::parse_mch;
-use camcraft_app::post::{self, cnc, engine, machine};
-use camcraft_app::probing::{probe_cycle, ProbeDir, ProbeMode, ProbeParams};
+mod recorded;
+
+use camcraft_post::machine::parse_mch;
+use camcraft_post::post::{engine, machine};
 
 const TORMACH: &str = include_str!("../../../assets/posts/tormach.cps");
 const FANUC: &str = include_str!("../../../assets/posts/fanuc.cps");
 const MX770: &str = include_str!("../../../assets/machines/tormach-770mx.mch");
 
-fn cycle(mode: ProbeMode, dir: ProbeDir, target: Point3, radius: f64) -> ProbeParams {
-    ProbeParams {
-        mode,
-        dir,
-        dir_y: ProbeDir::YPos,
-        target,
-        radius,
-        ball_diameter: 4.0,
-        approach: 5.0,
-        overtravel: 5.0,
-        backoff: 1.0,
-        fast_feed: 300.0,
-        slow_feed: 30.0,
-        depth: 3.0,
-        inset: 5.0,
-        clearance_z: 50.0,
-    }
-}
-
-fn face() -> ProbeParams {
-    cycle(ProbeMode::Face, ProbeDir::ZNeg, Point3::new(10.0, 5.0, 20.0), 0.0)
-}
-fn corner() -> ProbeParams {
-    cycle(ProbeMode::Corner, ProbeDir::XPos, Point3::new(0.0, 0.0, 20.0), 0.0)
-}
-
-fn stream(p: &ProbeParams, set_wcs: Option<u8>) -> String {
-    let t = probe_cycle(p).expect("probe cycle");
-    let d = post::Dump {
-        op_name: "Probe1",
-        tool_number: 99,
-        tool_name: "PROBE-4",
-        tool_diameter: 4.0,
-        rpm: 0.0,
-        clearance_z: 50.0,
-        retract_z: 50.0,
-        probe_result: Some(post::probe_rec::ProbeResult { set_wcs, tol_mm: 0.5 }),
-        ..post::Dump::default()
+/// A recorded probe stream: the face -Z at (10, 5, 20) or the corner +X+Y
+/// at the origin, on tool 99, setting `set_wcs` (0 = G54, 1 = G55, none =
+/// measure only).
+fn stream(mode: &str, set_wcs: Option<u8>) -> String {
+    let set = match set_wcs {
+        Some(0) => "g54",
+        Some(1) => "g55",
+        None => "none",
+        Some(n) => panic!("no recorded {mode} setting offset {n}"),
     };
-    cnc::serialize(&post::dump(&t, &d))
+    recorded::input(&format!("probe_t99_{mode}_{set}.cnc"))
 }
 
-fn tormach(p: &ProbeParams, set_wcs: Option<u8>) -> String {
+const FACE: &str = "face";
+const CORNER: &str = "corner";
+
+fn tormach(p: &str, set_wcs: Option<u8>) -> String {
     let m = machine::mirror(&parse_mch(MX770).expect("770MX parses"));
     engine::run(TORMACH, &m, &stream(p, set_wcs)).expect("post").program
 }
 
 /// A machine with no machine file posts in mm (G21).
-fn tormach_mm(p: &ProbeParams, set_wcs: Option<u8>) -> String {
+fn tormach_mm(p: &str, set_wcs: Option<u8>) -> String {
     engine::run(TORMACH, &serde_json::Value::Null, &stream(p, set_wcs)).expect("post").program
 }
 
@@ -86,7 +64,7 @@ fn line_starting(prog: &str, prefix: &str) -> usize {
 
 #[test]
 fn tormach_face_reports_z_after_its_tolerance_test_and_before_g10() {
-    let prog = tormach(&face(), Some(1));
+    let prog = tormach(FACE, Some(1));
     assert!(prog.starts_with("(Tormach 770MX)\nG20 "), "the 770MX is an inch machine:\n{prog}");
     let report = line_of(&prog, "(DEBUG, PROBE Z ERROR #190 IN)");
     assert_eq!(prog.matches("(DEBUG,").count(), 1, "one report per probed axis:\n{prog}");
@@ -98,18 +76,18 @@ fn tormach_face_reports_z_after_its_tolerance_test_and_before_g10() {
 /// operator never reads a mm deviation as inches (or the other way round).
 #[test]
 fn tormach_mm_program_reports_in_mm() {
-    let prog = tormach_mm(&face(), Some(1));
+    let prog = tormach_mm(FACE, Some(1));
     assert!(prog.contains("\nG21 "), "a metric program:\n{prog}");
     assert!(prog.contains("o901 endif\n(DEBUG, PROBE Z ERROR #190 MM)\nG10 L20 P2 Z[#5422-#190]\n"), "{prog}");
     assert!(!prog.contains(" IN)"), "no inch word in a G21 program:\n{prog}");
-    let both = tormach_mm(&corner(), Some(0));
+    let both = tormach_mm(CORNER, Some(0));
     assert!(both.contains("(DEBUG, PROBE X ERROR #190 MM)\n"), "{both}");
     assert!(both.contains("(DEBUG, PROBE Y ERROR #191 MM)\n"), "{both}");
 }
 
 #[test]
 fn tormach_corner_reports_each_axis_before_g10() {
-    let prog = tormach(&corner(), Some(0));
+    let prog = tormach(CORNER, Some(0));
     let g10 = line_starting(&prog, "G10 L20 ");
     let x = line_of(&prog, "(DEBUG, PROBE X ERROR #190 IN)");
     let y = line_of(&prog, "(DEBUG, PROBE Y ERROR #191 IN)");
@@ -120,14 +98,14 @@ fn tormach_corner_reports_each_axis_before_g10() {
 
 #[test]
 fn tormach_measure_only_reports_before_its_stop() {
-    let prog = tormach(&face(), None);
+    let prog = tormach(FACE, None);
     assert!(!prog.contains("G10"), "nothing is set:\n{prog}");
     assert!(prog.contains("(DEBUG, PROBE Z ERROR #190 IN)\n(MSG, CHECK PROBE RESULT #190..)\nM0\n"), "{prog}");
 }
 
 #[test]
 fn fanuc_has_no_non_stopping_message_so_writes_no_report() {
-    let out = engine::run(FANUC, &serde_json::Value::Null, &stream(&corner(), Some(0))).expect("post");
+    let out = engine::run(FANUC, &serde_json::Value::Null, &stream(CORNER, Some(0))).expect("post");
     let prog = out.program;
     let g10 = line_starting(&prog, "G10 L2 ");
     let y_test = line_starting(&prog, "IF[ABS[#191]GT");
