@@ -275,7 +275,7 @@ fn bad_feature_picks_are_refused_by_name_and_place_nothing() {
     let go = |c: &mut Client, args: Value| c.refused("set_wcs_from_features", args);
     let cases: Vec<(Value, &str)> = vec![
         (json!({}), "\"picks\" is required"),
-        (json!({ "picks": [pick("block", &top, "z")] }), "at least two picks"),
+        (json!({ "picks": [pick("block", &top, "z")] }), "two axes, plus an optional origin"),
         (json!({ "picks": [pick("block", &top, "z"), pick("block", &side, "z")] }), "only one pick may set Z"),
         (json!({ "picks": [pick("block", &top, "z"), pick("block", &corner, "origin")] }), "two axes"),
         (json!({ "picks": [pick("block", &top, "z"), pick("block", &corner, "x")] }), "sets no axis"),
@@ -295,5 +295,5 @@ fn bad_feature_picks_are_refused_by_name_and_place_nothing() {
     assert_eq!(c.wcs()["placed"], json!(false), "no refusal placed the WCS");
     // An empty pick list is too few, not a malformed request.
     let msg = go(&mut c, json!({ "picks": [] }));
-    assert!(msg.contains("at least two picks"), "{msg}");
+    assert!(msg.contains("two axes, plus an optional origin"), "{msg}");
 }
