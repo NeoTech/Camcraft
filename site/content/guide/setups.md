@@ -22,7 +22,7 @@ Each setup appears in the browser with its own pages:
 - **Post:** the post processor the setup writes with: a built-in post, or
   **Load post (.cps)** for a script of your own.
 - **Fixtures:** vises, clamps and other workholding, imported or placed
-  from the fixture library.
+  from the fixture library. See [Workholding and fixtures](@/guide/workholding.md).
 - **Tools:** the tools this setup's operations use, in change order.
 
 Below the pages, **Operations** lists the setup's operations.
