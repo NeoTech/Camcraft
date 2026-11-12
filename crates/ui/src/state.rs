@@ -128,6 +128,9 @@ pub enum CommandKind {
         pos: [f64; 3],
         yaw_deg: f64,
     },
+    /// #1094: the stock page's "raw stock only" checkbox for a from-model
+    /// stock's source model, one undo unit (`SetStockSourceOnly`).
+    SetRawStockOnly(bool),
     /// Stock that wraps every model's world AABB plus `margin` mm, shaped
     /// like the pane's radio selection at click time (0 box, 1 cylinder).
     StockFit {
@@ -2782,6 +2785,20 @@ impl State {
                         self.status = String::from("stock set");
                     }
                     Err(err) => self.refuse(ErrorScope::Setup, format!("stock not set: {err}")),
+                }
+            }
+            CommandKind::SetRawStockOnly(on) => {
+                match camcraft_app::commands::SetStockSourceOnly::new(&self.world, on) {
+                    Ok(command) => {
+                        self.history.execute(&self.world, command);
+                        self.doc_version += 1;
+                        self.status = String::from(if on {
+                            "the stock's source model is raw stock only"
+                        } else {
+                            "the stock's source model is judged as the part"
+                        });
+                    }
+                    Err(err) => self.refuse(ErrorScope::Setup, format!("not changed: {err}")),
                 }
             }
             CommandKind::SetUnits(next) => match SetUnits::new(&self.world, next) {

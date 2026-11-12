@@ -571,6 +571,11 @@ pub struct EntityDto {
     /// Stock parameters; present exactly when `kind == Some(Stock)`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stock: Option<StockDto>,
+    /// #1094: a from-model stock's source model is raw stock only, not
+    /// judged as the part. Absent is false - every older file judges it,
+    /// and an older reader that drops the key judges more, never less.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub raw_stock_only: bool,
     /// Tool definition; present exactly when `kind == Some(Tool)`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool: Option<ToolDto>,

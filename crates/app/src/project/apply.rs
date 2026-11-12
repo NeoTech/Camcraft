@@ -680,6 +680,11 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
                 entity.entity_view(world).set(StockDef {
                     shape: shape.clone(),
                 });
+                // #1094: the mark lands only on a from-model stock, naming
+                // its source; anywhere else it means nothing and is dropped.
+                if let (true, StockShape::FromModel { source }) = (dto.raw_stock_only, &shape) {
+                    entity.entity_view(world).set(crate::schema::StockSourceOnly { source: source.clone() });
+                }
             }
             EntityKind::Wcs => {
                 entity.entity_view(world).add(Wcs);

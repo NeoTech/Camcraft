@@ -104,6 +104,17 @@ pub struct StockDef {
     pub shape: StockShape,
 }
 
+/// #1094: the user said the from-model stock's source model is raw stock
+/// only - a casting or blank, not the finished part - so the program
+/// verdict does not judge it. Rides the stock entity; `source` is the
+/// model it was said of, honoured only while the stock is still a copy of
+/// that model. Absent (the default, every older file) judges it. Only
+/// `SetStockSourceOnly` and the project loader write it.
+#[derive(Component, Debug, Clone, PartialEq)]
+pub struct StockSourceOnly {
+    pub source: String,
+}
+
 /// Unit tag marking an entity as a work coordinate system origin: a
 /// setup's one WCS (#342), named by `SetupDef::wcs` (`G54` for a document
 /// without setups), its `Location` the transform; there is no payload to
@@ -552,6 +563,7 @@ pub fn register_schema(world: &World) {
     world.component::<ReducedFidelity>();
     world.component::<Selected>();
     world.component::<StockDef>();
+    world.component::<StockSourceOnly>();
     world.component::<Wcs>();
     world.component::<ToolDef>();
     world.component::<ToolBody>();

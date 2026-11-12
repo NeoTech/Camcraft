@@ -49,6 +49,11 @@ pub struct SimClause {
 /// Run the program sim and read its outcome for the gate.
 #[must_use]
 pub fn sim_clause(world: &World) -> SimClause {
+    // #1094: a stock source marked raw stock only, with no other model,
+    // leaves nothing judged as the part - refused by name, never passed.
+    if let Some(why) = crate::stock_source::nothing_judged(world) {
+        return SimClause { problem: Some(why), not_judged: None };
+    }
     match crate::stock_sim::simulate_document(world) {
         Ok(sim) if sim.dev.gouge_cells > 0 => {
             let u = crate::units::of(world);
@@ -65,10 +70,11 @@ pub fn sim_clause(world: &World) -> SimClause {
             );
             SimClause {
                 problem: Some(format!(
-                    "gouge: program cuts below the model in {} cell(s), worst {} {}{at}",
+                    "gouge: program cuts below the model in {} cell(s), worst {} {}{at}{}",
                     sim.dev.gouge_cells,
                     crate::units::len(sim.dev.max_gouge, u, 2),
-                    u.suffix()
+                    u.suffix(),
+                    crate::stock_source::gouge_hint(world).unwrap_or_default() // #1094
                 )),
                 not_judged: None,
             }

@@ -1,32 +1,39 @@
-//! #1094: a casting imported to be copied into a "from model" stock and
-//! left in the tree is stock, not the part. The program verdict used to
-//! read every non-fixture model as the finished part, so every cut into
-//! the casting - every cut - was a gouge and the post was blocked. These
-//! tests pin the rule (`stock_source::stock_only_model`): the casting is
-//! left out only while it is the source of every program setup's stock,
-//! no operation names it, and an operation names a separate part; the
-//! separate part stays judged (a real gouge into it still blocks), and
-//! every other shape of document keeps today's verdict.
+//! #1094: a casting copied into a "from model" stock and left in the tree
+//! is judged as the part unless the user ticks "The source model is raw
+//! stock only" (`SetStockSourceOnly`, default off). These tests pin the
+//! explicit rule: off (every older document) judges every model exactly
+//! as before - the review's two reproductions of the dropped inference
+//! (a stock made from the part with an unrelated second model, live or
+//! suppressed) must refuse; on, the casting leaves the verdict and a legal
+//! program over a separate part posts; an op that names the marked model
+//! (source or boundary pick) puts it back; a mark that leaves nothing to
+//! judge refuses by name; a gouge on the stock's source says how to mark
+//! it; undo/redo, a new stock source, the project file and an older file.
 //!
 //! Provenance: our own fixtures (`ladder_entry_height.rs`'s blind hole
 //! under a casting), specced from the Prime Directive; no vendor material.
 //!
-//! Gate map (#1094): covers app::stock_source, app::stock_sim (the part
-//! set), app::setup_align (parts_facets_in), app::posting (the gate).
+//! Gate map (#1094): covers app::stock_source, app::commands
+//! (stock_source_only), app::stock_sim (the part set), app::setup_align
+//! (parts_facets_in), app::posting_sim (the clause and hint),
+//! app::project (raw_stock_only).
 //! Lane shape: all tests here run in seconds.
 
 use flecs_ecs::prelude::World;
 
-use camcraft_app::commands::{AddTool, CreateOperation, GenerateOperation, History, ImportModel, SetStock};
+use camcraft_app::commands::{
+    AddTool, CreateOperation, EditOperationParams, GenerateOperation, History, ImportModel, SetStock,
+    SetStockSourceOnly,
+};
 use camcraft_app::drilling::Hole;
 use camcraft_app::geo2d::Point2;
 use camcraft_app::geometry::{Mesh, Point3, Triangle, cube};
 use camcraft_app::model;
-use camcraft_app::operation::{Height, OpParams, SrcRef};
+use camcraft_app::operation::{BoundaryMode, BoundaryShape, ExtraBoundary, FeatureSel, GeoSel, Height, OpParams, SrcRef};
 use camcraft_app::posting;
 use camcraft_app::schema::Location;
 use camcraft_app::stock::StockShape;
-use camcraft_app::stock_source::stock_only_model;
+use camcraft_app::stock_source::{RAW_STOCK_ONLY, stock_only_model};
 use camcraft_app::tools::catalog;
 use camcraft_app::world::new_world;
 
@@ -87,24 +94,47 @@ fn bore(floor: f64) -> OpParams {
     }
 }
 
-/// The casting left in the tree as the stock's source; with `with_part`
-/// a separate part, and the Bore (to `floor`) reads it, else the stock.
-fn job(with_part: bool, floor: f64) -> (World, History) {
+fn add_tool(world: &World, h: &mut History) {
+    let tool = catalog().into_iter().find(|(n, _)| *n == TOOL).map(|(_, t)| t).expect("catalog");
+    h.execute(world, AddTool::new(world, TOOL, tool).expect("tool"));
+}
+
+fn op(world: &World, h: &mut History, name: &str, src: SrcRef, floor: f64) {
+    h.execute(world, CreateOperation::new(world, name, TOOL, src, bore(floor)).expect("create op"));
+    h.execute(world, GenerateOperation::new(world, name).expect("generate op"));
+}
+
+fn mark(world: &World, h: &mut History, on: bool) {
+    h.execute(world, SetStockSourceOnly::new(world, on).expect("mark"));
+}
+
+/// The issue's job: the casting left in the tree as the stock's source,
+/// a separate part, and a Bore (to `floor`) on the part.
+fn casting_job(floor: f64) -> (World, History) {
     let world = new_world();
     let mut h = History::default();
     h.execute(&world, ImportModel::from_mesh("casting", casting()));
-    let src = if with_part {
-        h.execute(&world, ImportModel::from_mesh("part", part()));
-        SrcRef::Entity("part".into())
-    } else {
-        SrcRef::Stock
-    };
+    h.execute(&world, ImportModel::from_mesh("part", part()));
     let shape = StockShape::FromModel { source: "casting".into() };
     h.execute(&world, SetStock::new(&world, shape, Location::default()).expect("stock"));
-    let tool = catalog().into_iter().find(|(n, _)| *n == TOOL).map(|(_, t)| t).expect("catalog");
-    h.execute(&world, AddTool::new(&world, TOOL, tool).expect("tool"));
-    h.execute(&world, CreateOperation::new(&world, "Op1", TOOL, src, bore(floor)).expect("create op"));
-    h.execute(&world, GenerateOperation::new(&world, "Op1").expect("generate op"));
+    add_tool(&world, &mut h);
+    op(&world, &mut h, "Op1", SrcRef::Entity("part".into()), floor);
+    (world, h)
+}
+
+/// The review's reproduction: the stock IS the part, a block "other"
+/// well beside it, Op1 on the stock bores 5 mm under the part's floor.
+fn part_stock_job() -> (World, History) {
+    let world = new_world();
+    let mut h = History::default();
+    h.execute(&world, ImportModel::from_mesh("part", part()));
+    let other = cube(Point3::new(80.0, -10.0, 0.0), Point3::new(100.0, 10.0, 20.0));
+    h.execute(&world, ImportModel::from_mesh("other", other));
+    let shape = StockShape::FromModel { source: "part".into() };
+    h.execute(&world, SetStock::new(&world, shape, Location::default()).expect("stock"));
+    add_tool(&world, &mut h);
+    op(&world, &mut h, "Op1", SrcRef::Stock, FLOOR - 5.0);
+    op(&world, &mut h, "Op2", SrcRef::Entity("other".into()), FLOOR);
     (world, h)
 }
 
@@ -117,87 +147,169 @@ fn post(world: &World, tag: &str) -> Result<(), String> {
 }
 
 fn gouge_line(world: &World) -> Option<String> {
-    posting::verification_gate(world).into_iter().find(|l| l.contains("gouge"))
+    posting::verification_gate(world).into_iter().find(|l| l.starts_with("gouge"))
 }
 
-fn casting_entity(world: &World) -> flecs_ecs::prelude::Entity {
-    model::find_by_name(world, "casting").expect("casting")
+fn entity(world: &World, name: &str) -> flecs_ecs::prelude::Entity {
+    model::find_by_name(world, name).expect("entity")
 }
 
 #[test]
-fn a_casting_left_in_the_tree_as_stock_source_is_not_judged_and_the_program_posts() {
-    let (world, _) = job(true, FLOOR);
-    assert_eq!(stock_only_model(&world), Some(casting_entity(&world)), "the casting is only the stock");
-    assert_eq!(gouge_line(&world), None, "the cut into the casting read as a gouge");
-    let posted = post(&world, "legal");
+fn unmarked_the_casting_is_judged_and_the_refusal_says_how_to_mark_it() {
+    let (world, _) = casting_job(FLOOR);
+    assert_eq!(stock_only_model(&world), None, "off is the default");
+    let line = gouge_line(&world).expect("the cut into the judged casting is a gouge, as before");
+    assert!(line.contains("'casting'") && line.contains(RAW_STOCK_ONLY), "no hint: {line}");
+    assert!(post(&world, "unmarked").is_err());
+}
+
+#[test]
+fn marked_raw_stock_only_the_casting_leaves_the_verdict_and_the_program_posts() {
+    let (world, mut h) = casting_job(FLOOR);
+    mark(&world, &mut h, true);
+    assert_eq!(stock_only_model(&world), Some(entity(&world, "casting")));
+    assert_eq!(gouge_line(&world), None);
+    let posted = post(&world, "marked");
     assert!(posted.is_ok(), "a legal program over a separate part was refused: {posted:?}");
 }
 
 #[test]
-fn the_separate_part_stays_judged_a_cut_below_its_floor_still_blocks() {
-    // The same job, the Bore 5 mm below the modelled hole's floor: the
-    // part is still the part, so the post is refused.
-    let (world, _) = job(true, FLOOR - 5.0);
-    assert_eq!(stock_only_model(&world), Some(casting_entity(&world)));
-    let posted = post(&world, "deep");
-    let why = posted.expect_err("a bore 5 mm into the part's floor posted");
+fn marked_the_separate_part_stays_judged_a_cut_below_its_floor_blocks() {
+    let (world, mut h) = casting_job(FLOOR - 5.0);
+    mark(&world, &mut h, true);
+    let why = post(&world, "deep").expect_err("a bore 5 mm into the part's floor posted");
     assert!(why.contains("gouge"), "refused, but not as a gouge: {why}");
 }
 
 #[test]
-fn without_a_separate_part_the_casting_keeps_todays_verdict() {
-    // Every op on the stock and no other model: nothing else to judge, so
-    // the casting stays the part (the stock made from the part itself).
-    let (world, _) = job(false, FLOOR);
+fn a_stock_made_from_the_part_with_an_unrelated_model_beside_it_refuses_the_gouge() {
+    let (world, _) = part_stock_job();
     assert_eq!(stock_only_model(&world), None);
-    assert!(gouge_line(&world).is_some(), "the casting left the verdict with no part to replace it");
+    assert!(gouge_line(&world).is_some(), "the 5 mm gouge into the part went unjudged");
+    assert!(post(&world, "repro1").is_err(), "the review's reproduction posted");
 }
 
 #[test]
-fn picking_the_casting_for_an_op_takes_it_back_into_the_verdict_and_undo_lets_it_go() {
-    let (world, mut h) = job(true, FLOOR);
-    // A second op (never generated: the rule reads sources, not paths)
-    // names the casting - it is a part again.
-    let op2 = CreateOperation::new(&world, "Op2", TOOL, SrcRef::Entity("casting".into()), bore(FLOOR)).expect("op2");
-    h.execute(&world, op2);
-    assert_eq!(stock_only_model(&world), None, "a casting an op machines must stay judged");
-    h.undo(&world);
-    assert_eq!(stock_only_model(&world), Some(casting_entity(&world)), "undo of the op lets it go again");
-    h.redo(&world);
-    assert_eq!(stock_only_model(&world), None, "redo takes it back");
+fn the_same_with_the_unrelated_op_suppressed_still_refuses() {
+    let (world, mut h) = part_stock_job();
+    h.execute(&world, EditOperationParams::with_suppressed(&world, "Op2", true).expect("suppress"));
+    assert_eq!(stock_only_model(&world), None);
+    assert!(gouge_line(&world).is_some(), "the 5 mm gouge into the part went unjudged");
+    assert!(post(&world, "repro2").is_err(), "the review's suppressed reproduction posted");
 }
 
 #[test]
-fn undo_of_set_stock_takes_the_casting_back_into_the_verdict() {
+fn marked_an_op_naming_the_model_puts_it_back_in_the_verdict() {
+    let (world, mut h) = part_stock_job();
+    mark(&world, &mut h, true);
+    assert_eq!(stock_only_model(&world), Some(entity(&world, "part")), "the user's word, no op names it");
+    // Any op naming the part as its source - suppressed too - makes it the part again.
+    let op3 = CreateOperation::new(&world, "Op3", TOOL, SrcRef::Entity("part".into()), bore(FLOOR)).expect("op3");
+    h.execute(&world, op3);
+    h.execute(&world, EditOperationParams::with_suppressed(&world, "Op3", true).expect("suppress"));
+    assert_eq!(stock_only_model(&world), None);
+    let line = gouge_line(&world).expect("the part is judged again");
+    assert!(line.contains("an operation machines it"), "the hint says why the mark did not hold: {line}");
+    assert!(post(&world, "named").is_err());
+}
+
+#[test]
+fn marked_a_boundary_pick_on_the_model_puts_it_back_in_the_verdict() {
+    let (world, mut h) = part_stock_job();
+    mark(&world, &mut h, true);
+    // Op1 machines the stock, but its boundary is picked on the part.
+    let e = entity(&world, "Op1");
+    let mut o = model::operation_of(&world, &e).expect("op");
+    let pick = GeoSel { entity: "part".into(), feature: FeatureSel::Face(1) };
+    o.area.extra.push(ExtraBoundary { mode: BoundaryMode::Include, shape: BoundaryShape::Picks(vec![pick]) });
+    e.entity_view(&world).set(o);
+    assert_eq!(stock_only_model(&world), None, "a boundary pick on the part names it");
+}
+
+#[test]
+fn a_mark_that_leaves_nothing_to_judge_refuses_by_name() {
     let world = new_world();
     let mut h = History::default();
     h.execute(&world, ImportModel::from_mesh("casting", casting()));
-    h.execute(&world, ImportModel::from_mesh("part", part()));
-    let tool = catalog().into_iter().find(|(n, _)| *n == TOOL).map(|(_, t)| t).expect("catalog");
-    h.execute(&world, AddTool::new(&world, TOOL, tool).expect("tool"));
-    let shape = StockShape::Box { dx: 60.0, dy: 60.0, dz: 30.0 };
-    h.execute(&world, SetStock::new(&world, shape, Location::default()).expect("box stock"));
-    h.execute(&world, CreateOperation::new(&world, "Op1", TOOL, SrcRef::Entity("part".into()), bore(FLOOR)).expect("op"));
-    assert_eq!(stock_only_model(&world), None, "a box stock has no source model");
     let shape = StockShape::FromModel { source: "casting".into() };
-    h.execute(&world, SetStock::new(&world, shape, Location::default()).expect("model stock"));
-    assert_eq!(stock_only_model(&world), Some(casting_entity(&world)));
-    h.undo(&world);
-    assert_eq!(stock_only_model(&world), None, "undo of SetStock: the casting is a model again");
-    h.redo(&world);
-    assert_eq!(stock_only_model(&world), Some(casting_entity(&world)), "redo");
+    h.execute(&world, SetStock::new(&world, shape, Location::default()).expect("stock"));
+    add_tool(&world, &mut h);
+    op(&world, &mut h, "Op1", SrcRef::Stock, FLOOR);
+    mark(&world, &mut h, true);
+    let gate = posting::verification_gate(&world);
+    assert!(
+        gate.iter().any(|l| l.starts_with("nothing is judged as the part") && l.contains("'casting'")),
+        "a program judged against nothing passed: {gate:?}"
+    );
+    assert!(post(&world, "nothing").is_err());
 }
 
 #[test]
-fn a_part_that_is_both_the_stock_source_and_the_ops_source_stays_judged() {
-    // `edge_break_gate.rs`'s brick: the stock IS the part, the op on it.
+fn the_mark_undoes_redoes_and_a_new_stock_source_drops_its_hold() {
+    let (world, mut h) = casting_job(FLOOR);
+    let casting_e = entity(&world, "casting");
+    mark(&world, &mut h, true);
+    assert_eq!(stock_only_model(&world), Some(casting_e));
+    h.undo(&world);
+    assert_eq!(stock_only_model(&world), None, "undo of the mark");
+    h.redo(&world);
+    assert_eq!(stock_only_model(&world), Some(casting_e), "redo of the mark");
+    // A stock copied from another model: the mark was said of the casting.
+    h.execute(&world, ImportModel::from_mesh("blank", casting()));
+    let shape = StockShape::FromModel { source: "blank".into() };
+    h.execute(&world, SetStock::new(&world, shape, Location::default()).expect("restock"));
+    assert_eq!(stock_only_model(&world), None, "the mark does not follow a new source");
+    h.undo(&world);
+    assert_eq!(stock_only_model(&world), Some(casting_e), "undo of SetStock restores the casting's mark");
+    mark(&world, &mut h, false);
+    assert_eq!(stock_only_model(&world), None, "unticked");
+}
+
+#[test]
+fn the_mark_is_refused_on_a_stock_not_made_from_a_model() {
     let world = new_world();
     let mut h = History::default();
-    h.execute(&world, ImportModel::from_mesh("part", part()));
-    let shape = StockShape::FromModel { source: "part".into() };
-    h.execute(&world, SetStock::new(&world, shape, Location::default()).expect("stock"));
-    let tool = catalog().into_iter().find(|(n, _)| *n == TOOL).map(|(_, t)| t).expect("catalog");
-    h.execute(&world, AddTool::new(&world, TOOL, tool).expect("tool"));
-    h.execute(&world, CreateOperation::new(&world, "Op1", TOOL, SrcRef::Entity("part".into()), bore(FLOOR)).expect("op"));
-    assert_eq!(stock_only_model(&world), None);
+    let shape = StockShape::Box { dx: 60.0, dy: 60.0, dz: 30.0 };
+    h.execute(&world, SetStock::new(&world, shape, Location::default()).expect("box"));
+    let why = SetStockSourceOnly::new(&world, true).err().map(|e| e.to_string()).unwrap_or_default();
+    assert!(why.contains("not made from a model"), "{why}");
 }
+
+#[test]
+fn the_mark_round_trips_the_project_file_and_an_older_file_judges_as_before() {
+    let (world, mut h) = casting_job(FLOOR);
+    mark(&world, &mut h, true);
+    let dir = std::env::temp_dir().join(format!("camcraft-1094-proj-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("dir");
+    let path = dir.join("marked.camproj");
+    camcraft_app::project::save(&world, &path).expect("save");
+    let text = std::fs::read_to_string(&path).expect("read");
+    assert!(text.contains("raw_stock_only"), "the key is written");
+
+    let loaded = new_world();
+    camcraft_app::project::load(&loaded, &path).expect("load");
+    assert_eq!(stock_only_model(&loaded), Some(entity(&loaded, "casting")), "the mark survives the round trip");
+
+    // The same file as an older build wrote it: no key - judged as before.
+    let mut doc: serde_json::Value = serde_json::from_str(&text).expect("json");
+    let rows = doc["entities"].as_array_mut().expect("entities");
+    for row in rows.iter_mut() {
+        if let Some(obj) = row.as_object_mut() {
+            obj.remove("raw_stock_only");
+        }
+    }
+    let old = dir.join("older.camproj");
+    std::fs::write(&old, serde_json::to_string(&doc).expect("json")).expect("write");
+    let older = new_world();
+    camcraft_app::project::load(&older, &old).expect("load older");
+    assert_eq!(stock_only_model(&older), None, "an older file judges the casting");
+    assert!(gouge_line(&older).is_some(), "and refuses exactly as it did");
+
+    // An unmarked document writes no key at all.
+    mark(&world, &mut h, false);
+    camcraft_app::project::save(&world, &path).expect("save unmarked");
+    let text = std::fs::read_to_string(&path).expect("read");
+    assert!(!text.contains("raw_stock_only"), "an unmarked document saves as before");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+

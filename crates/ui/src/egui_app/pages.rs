@@ -242,6 +242,7 @@ fn stock_page(ui: &mut Ui, state: &mut State) {
                 state.stock_ui.source = models[idx.min(models.len() - 1)].clone();
             }
         }
+        super::raw_stock_row::raw_stock_row(ui, state);
     } else {
         field(ui, "Length (X)");
         num(ui, u, &mut state.stock_ui.dx);
