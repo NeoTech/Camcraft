@@ -12,10 +12,13 @@
 //!   Tormach `G96 D`), becomes the lower of the tool's own and the
 //!   workholding's ([`css_of`]); the posts take the lower of that and
 //!   the machine's, so the clamp is min(machine, tool, workholding).
-//! - **Constant rpm (G97).** An operation that turns the work at an rpm
-//!   over its setup's limit is refused by name at the program gate
+//! - **Constant rpm (G97).** An operation whose section the lathe post
+//!   opens on the work spindle (any kind, #1174) at an rpm over its
+//!   setup's limit is refused by name at the program gate
 //!   ([`program_problems`]), never silently capped: the cut was planned
 //!   at that rpm, so the fix is the user's to choose.
+//! - **C-axis live tooling.** The section's S is the live tool's; the
+//!   work turns only on C, judged by the machine's C rate (#1174).
 //!
 //! Provenance: our own design (#1031); the hazard (jaw grip force falls
 //! with speed, so chucks carry a rated maximum rpm) is general machining
@@ -65,44 +68,38 @@ pub fn css_of(world: &World, declared: Option<&str>, css: Option<Css>) -> Option
     Some(c)
 }
 
-/// Which spindle an operation's stated speed drives, so what the
-/// workholding limit judges in its section (#1174). Read from what the
-/// lathe post does with the section, not from the kind's name:
-/// `fanuc-lathe.cps` opens a plain section with `G97 S<rpm> M03` (or
-/// `G96`) - the WORK spindle - and a `PARAM LiveTool` section (a path
-/// stating C angles) with the machine's live-spindle word and `S<rpm>`
-/// while the work spindle is put in C mode and fed as an axis.
+/// What the workholding limit judges in an operation's section (#1174),
+/// read from what the lathe post will do with it - the one derivation
+/// the stream itself takes (`post::section_spindle`), never a list of
+/// operation kinds: on a lathe or mill-turn a section with no C and no
+/// lean is opened `G97 S<rpm> M03` (or `G96`) on the WORK spindle,
+/// whatever its kind; a C section gives S to the live spindle while the
+/// work is fed on C; a leaning (A/B) section is refused by the lathe
+/// posts. A mill's spindle turns the tool, never the work.
 enum WorkSpeed {
-    /// The work turns at the section's stated speed: the turning family
-    /// and the lathe's axial (on-centre) drill.
+    /// The work turns at the section's stated speed.
     Stated,
     /// A C-axis live-tool section: the stated rpm is the driven tool's;
     /// the work turns only on C, at most at the machine's C rate.
     OnC,
-    /// Nothing the limit judges: a cross (radial) drill - a driven tool
-    /// plunging toward a work held still (its moves state no C, its
-    /// pose is fixed) - or a kind that does not turn the work.
+    /// Nothing the limit judges: no path yet (the post refuses an
+    /// ungenerated op), a posed section the lathe posts refuse (the
+    /// cross drill's radial plunges), or a machine whose spindle turns
+    /// the tool.
     Not,
 }
 
-fn work_speed(world: &World, declared: Option<&str>, op: &crate::schema::Operation, e: &flecs_ecs::prelude::Entity) -> WorkSpeed {
+fn work_speed(world: &World, declared: Option<&str>, e: &flecs_ecs::prelude::Entity) -> WorkSpeed {
+    use crate::post::section_spindle::{self, SectionSpindle};
     use flecs_ecs::prelude::*;
-    // The post's own test: any move stating a C angle makes the section
-    // live-tool work (the stream's PARAM LiveTool, `post::post`).
-    let on_c = e
-        .entity_view(world)
-        .try_get::<&crate::schema::Toolpath>(|t| t.path.moves.iter().any(|m| m.rotary.is_some()))
-        .unwrap_or(false);
-    if on_c {
-        return WorkSpeed::OnC;
-    }
-    if matches!(&op.params, crate::operation::OpParams::Drill { cross, .. } if !cross.is_empty()) {
+    use crate::machine::Kind;
+    if !matches!(crate::machine::kind_of_setup(world, declared), Kind::Lathe | Kind::MillTurn) {
         return WorkSpeed::Not;
     }
-    if crate::operation::spindle_law::turns(world, declared, &op.params) {
-        WorkSpeed::Stated
-    } else {
-        WorkSpeed::Not
+    match e.entity_view(world).try_get::<&crate::schema::Toolpath>(|t| section_spindle::of(&t.path)) {
+        Some(SectionSpindle::Work) => WorkSpeed::Stated,
+        Some(SectionSpindle::LiveTool) => WorkSpeed::OnC,
+        Some(SectionSpindle::Posed) | None => WorkSpeed::Not,
     }
 }
 
@@ -135,7 +132,7 @@ pub fn program_problems(world: &World) -> Vec<String> {
             continue;
         };
         let setup_name = || setup::effective(world, declared).unwrap_or_default();
-        match work_speed(world, declared, &op, &e) {
+        match work_speed(world, declared, &e) {
             WorkSpeed::Not => {}
             WorkSpeed::OnC => {
                 let label = model::operation_label(world, &name, &e);

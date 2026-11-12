@@ -38,6 +38,7 @@ pub mod machine;
 pub mod nose_tip;
 pub mod probe_rec;
 mod program;
+pub mod section_spindle;
 
 pub use after_op::AfterOperation;
 pub use coolant::CoolantMode;
@@ -258,7 +259,7 @@ pub fn dump(t: &Toolpath, d: &Dump) -> Vec<Record> {
     // a C turn: the section says so before it opens, so a script can
     // engage C and the live spindle in its preamble - and the engine
     // refuses, by name, a script that does not declare `liveTooling`.
-    if t.moves.iter().any(|m| m.rotary.is_some()) {
+    if section_spindle::of(t) == section_spindle::SectionSpindle::LiveTool {
         out.push(Record::Param { name: "LiveTool".into(), value: json!("radial") });
     }
     // A thread whose passes need the spindle reversed (#629): the
@@ -442,7 +443,7 @@ pub fn dump(t: &Toolpath, d: &Dump) -> Vec<Record> {
                 tilted = false;
                 Some([0.0, 0.0, c])
             }
-            (None, Some(a)) if !crate::cl::is_vertical(&a) => {
+            (None, Some(a)) if section_spindle::leans(m) => {
                 tilted = true;
                 Some(crate::cl::axis_to_angles(a))
             }
