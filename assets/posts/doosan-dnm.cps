@@ -546,6 +546,11 @@ function startPreamble() {
     block(["S" + ff(sRpm), "M3"]);
     spindleWait = false;
   }
+  // #574 / #1035: a touch probe (a stated speed of 0, which leaves
+  // spindleWait set) states its spindle stopped before its first move,
+  // whatever the tool change did - a same-tool continuation keeps it
+  // turning.
+  if (spindleWait && !(sRpm > 0)) block(["M5"]);
 
   // Chip conveyor start if requested
   var wantConveyor = false;
