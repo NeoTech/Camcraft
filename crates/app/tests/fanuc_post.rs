@@ -4,7 +4,7 @@
 //! either changes meaning, this test says so, and the diff is the
 //! review (UPDATE workflow per tests/golden/CLAUDE.md).
 //!
-//! Gate map (M4.4): covers app::post, motion::probing (probe result
+//! Gate map (M4.4): covers post::post, motion::probing (probe result
 //! arithmetic, #377).
 
 mod common;
