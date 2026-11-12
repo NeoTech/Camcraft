@@ -43,8 +43,8 @@ fn skip_lead(s: &str) -> usize {
         let rest = &s[i..];
         let t = rest.trim_start();
         i += rest.len() - t.len();
-        if t.starts_with("/*") {
-            match t[2..].find("*/") {
+        if let Some(body) = t.strip_prefix("/*") {
+            match body.find("*/") {
                 Some(e) => i += e + 4,
                 None => return s.len(),
             }
