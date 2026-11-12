@@ -82,6 +82,7 @@ mod face_origin;
 mod spindle_row;
 mod stock_size;
 mod stock_fit_sides;
+mod raw_stock_row;
 mod layout;
 mod machines_pane;
 mod machines_edit;
@@ -116,6 +117,8 @@ mod tool_profile;
 mod tool_holder;
 // #93 slice 2: the Profile tab's drawn cutter.
 mod tool_cutter;
+// #93 slice 3: the drawn cutter edited by its parameters.
+mod tool_cutter_params;
 // #441: the Theme ribbon door; the Stock page shows stock only.
 mod theme_door;
 mod recent_door;

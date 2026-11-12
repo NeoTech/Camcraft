@@ -23,10 +23,13 @@ mod cutter_tools;
 mod edit;
 mod features;
 mod fixture_tools;
+mod holders;
 mod job;
 mod listen;
 mod live;
 mod model_tools;
+// #45: an operation's display name and its place in its setup.
+mod order_tools;
 mod pick;
 // #979: the box pick, the viewport's Ctrl+drag box select headless.
 mod box_pick;
