@@ -91,6 +91,8 @@ mod post_refusal;
 mod gcode_viewer;
 mod first_setup;
 mod structural;
+// #661: every operation kind wears its own SVG-mastered glyph.
+mod op_icon_table;
 // #330: a clicked tilted face is turned flat onto the plane.
 mod plane_face_lay;
 // #554: the plane row's click takes the face, an axis row's the edge.
@@ -129,6 +131,8 @@ mod prefs_door;
 mod fixture_rows;
 // #864: a reduced-fidelity model says so on its page.
 mod model_fidelity;
+// #1054: the STEP facet budget on the model page.
+mod step_budget;
 // #709 hand check: both points of a two-point axis stay marked.
 mod two_point_marks;
 // #1104: the Setups page lists setups only.

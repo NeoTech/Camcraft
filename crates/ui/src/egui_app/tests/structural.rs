@@ -336,6 +336,46 @@ fn setup_page_alignment_rows_structure() {
     assert!(h.state().state.points_pick.is_none(), "nothing is armed by drawing the page");
 }
 
+/// #1031: a lathe setup's Settings page carries the "Workholding max rpm"
+/// row (a value, Apply, and Clear once a limit is stated); Apply lands one
+/// undoable `SetSetupWorkholdingRpm`. A mill setup shows no row.
+#[test]
+fn setup_page_workholding_rpm_row_structure() {
+    let _g = snapshot_guard();
+    let mut h = Harness::builder()
+        .with_size(Vec2::new(1280.0, 1600.0)) // the row sits at the page's foot
+        .build_ui_state(frame, ShellUi::blank());
+    {
+        let st = &mut h.state_mut().state;
+        st.pending.push_back(CommandKind::CreateSetup { name: None, datum_from: None });
+        st.drain_actions();
+        crate::actions::target(st, UiTarget::SetupNode("Setup1".into(), crate::state::SetupPage::Settings));
+    }
+    h.run_steps(3);
+    let row = crate::egui_app::setup_workholding_row::ROW_LABEL.trim();
+    assert!(h.query_by_label_contains(row).is_none(), "a mill setup has no chuck rating row");
+    {
+        let st = &mut h.state_mut().state;
+        let lathe = camcraft_app::machine::Machine { kind: Some("lathe".into()), ..Default::default() };
+        let load = camcraft_app::commands::LoadMachine::new(&st.world, "lathe.mch".into(), Some(lathe));
+        st.history.execute(&st.world, load.expect("a lathe"));
+    }
+    h.run_steps(3);
+    assert!(h.query_by_label_contains(row).is_some(), "a lathe setup shows the row");
+    assert!(h.query_by_label_contains("No workholding limit stated").is_some());
+    assert!(h.query_by_label("Clear rpm").is_none(), "nothing to clear yet");
+    assert!(!disabled(&h, "Apply rpm"), "Apply is live");
+    h.get_by_label("Apply rpm").click();
+    h.run_steps(3);
+    let world = &h.state().state.world;
+    assert_eq!(camcraft_app::setup_workholding::of(world, Some("Setup1")), Some(2000.0), "the row's default, applied: {}", h.state().state.status);
+    assert!(h.query_by_label_contains("Stated: 2000 rpm").is_some());
+    assert!(h.query_by_label("Clear rpm").is_some_and(|n| !n.accesskit_node().is_disabled()), "Clear shows once stated");
+    let st = &mut h.state_mut().state;
+    assert!(st.history.undo(&st.world), "one undo step");
+    assert_eq!(camcraft_app::setup_workholding::of(&st.world, Some("Setup1")), None);
+}
+
 /// #948: at the default 1280 px window every ribbon button reads whole
 /// (no elided galley, the "Milli..." clash gone: the four section doors
 /// say four different things), and the group captions are painted again
