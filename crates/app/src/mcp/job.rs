@@ -60,6 +60,9 @@ fn setups_view(env: &Env) -> Vec<Value> {
                 "stock": stock.as_ref().map(project::stock_to_json),
                 "stock_bounds": model::stock_world_aabb_for(w, d).as_ref().map(aabb),
                 "wcs": wcs,
+                // #1233: the setup's own post (null: follows the document's) and what it posts with.
+                "post": crate::setup_mount::own_post(w, d).as_ref().map(crate::posting::post_ref_label),
+                "posts_with": crate::posting::post_ref_label(&crate::setup_mount::post_of(w, d)),
                 // #1031: the chuck's or collet's rated maximum rpm.
                 "workholding_max_rpm": s.as_deref().and_then(|n| crate::setup_workholding::of(w, Some(n))).map(fnum),
             })
