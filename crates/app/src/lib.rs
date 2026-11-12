@@ -21,6 +21,7 @@ pub mod fixture_locate;
 pub mod fixture_struck;
 pub mod fixture_view;
 pub mod vise;
+pub mod vise_fit;
 pub mod accessory;
 pub mod plate;
 pub mod modvise;
@@ -83,6 +84,10 @@ pub use camcraft_sim::solid_rest;
 pub use camcraft_sim::sim;
 pub use camcraft_geometry::geometry::stock;
 pub mod stock_sim;
+// #1094: the model that is only the stock's source is not the part.
+pub mod stock_source;
+// #1094: the geometry fingerprint a raw-stock-only mark is checked by.
+pub mod stock_print;
 pub mod stock_export;
 // #561: a square stock keeps its allowance round a located part.
 pub mod stock_follow;
@@ -101,6 +106,8 @@ pub use camcraft_tools::orientation;
 pub use camcraft_tools::spun;
 // #93 slice 2: the drawn cutter law, and the tool's stored drawn cutter.
 pub use camcraft_tools::cutter_profile;
+// #93 slice 3: the drawn cutter carried onto new numbers, and its neck.
+pub use camcraft_tools::cutter_fit;
 pub mod tool_cutter;
 // #793: the built-in taper holder library.
 pub use camcraft_tools::holder_library;
@@ -117,6 +124,8 @@ pub mod tool_body_file;
 pub mod tool_body_lathe_view;
 // #743: the simulated tool as the collision laws read it, revolved.
 pub mod sim_tool_body;
+// #1038: a lathe-held body drawn as modelled in the holder law's frame.
+pub mod sim_lathe_body;
 pub mod units;
 pub use camcraft_sim::verify;
 // #261: the moves a cached path's warnings name.
