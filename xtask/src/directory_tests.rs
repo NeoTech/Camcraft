@@ -8,6 +8,9 @@ use crate::plan::{Plan, Step};
 use crate::quick::{self, Diff, Quick};
 use crate::{scan, single};
 
+#[path = "directory_edges_tests.rs"]
+mod edges;
+
 struct Fixture(PathBuf);
 impl Fixture {
     fn write(&self, path: &str, text: &str) {
@@ -61,10 +64,12 @@ fn quick(f: &Fixture, file: &str, hunk: &str, new: bool, heavy: bool) -> Plan {
     let changed = vec![file.to_string()];
     let untracked = if new { changed.clone() } else { Vec::new() };
     let hunks = |_: &str| vec![hunk.to_string()];
+    let before = |file: &str| std::fs::read_to_string(f.0.join(file)).ok();
     let diff = Diff {
         changed: &changed,
         untracked: &untracked,
         hunks: &hunks,
+        before: &before,
     };
     match quick::plan(&f.0, &diff, heavy).expect("quick plan") {
         Quick::Plan(p) => p,
@@ -247,12 +252,22 @@ fn named_directory_binary_filters_and_exact_paths_are_preserved() {
     assert!(p.steps[1].args.iter().any(|a| a == "--lib"));
 }
 
-fn run_step(root: &Path, step: &Step, count: usize) {
-    // Same private lane, a separate fixture target below its assigned target root. No new deps.
-    let target = std::env::var_os("CARGO_TARGET_DIR")
+fn fixture_target(root: &Path) -> PathBuf {
+    // Cargo fingerprints can share a binary for identical package/target names. Isolate each input.
+    std::env::var_os("CARGO_TARGET_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|| root.join("target"))
-        .join("issue927-fixture");
+        .join("issue927-fixture")
+        .join(root.file_name().expect("unique fixture identity"))
+}
+
+fn run_step(root: &Path, step: &Step, count: usize) {
+    let target = fixture_target(root);
+    eprintln!(
+        "fixture root={} target={}",
+        root.display(),
+        target.display()
+    );
     let mut command = std::process::Command::new(env!("CARGO"));
     // The fixture is noninteractive; do not allocate a Windows console for child Cargo.
     #[cfg(windows)]

@@ -1,25 +1,37 @@
 //! `cargo xtask`: the workspace's process tooling, one implementation for Windows, macOS and Linux -
-//! the gate tiers (`gate quick|batch|release|test`), the decision collection (`decisions`), the
-//! Windows portable zip (`package`) and the release cut (`release`).
+//! the gate tiers (`gate quick|batch|release|test`), the decision collection (`decisions`), the icon
+//! rasteriser (`icons`, #661), the Windows portable zip (`package`) and the release cut (`release`).
 //! Provenance: our own build and process law (AGENTS.md "Three gate tiers", "Test the change",
 //! release step 2), replacing the scripts/gate.*, collect-decisions.* and release.ps1 twins (#748, #749).
 
+#[cfg(test)]
+mod asset_tests;
+mod assets;
 mod braces;
+mod checkout;
+#[cfg(test)]
+mod checkout_tests;
 mod decisions;
+#[cfg(test)]
+mod directory_tests;
 mod exec;
+#[cfg(test)]
+mod gate_maps_tests;
+mod icon_font;
+mod icons;
+#[cfg(test)]
+mod icons_tests;
 mod package;
 mod plan;
 mod quick;
 mod release;
 mod release_bump;
 mod release_pack;
+#[cfg(test)]
+mod release_tests;
 mod scan;
 mod single;
 mod suites;
-#[cfg(test)]
-mod directory_tests;
-#[cfg(test)]
-mod release_tests;
 #[cfg(test)]
 mod tests;
 
@@ -33,6 +45,9 @@ usage:
   cargo xtask gate release                         everything, plus the --ignored heavy lanes and the ui snapshot lane
   cargo xtask gate test <filter> [--crate c] [--binary b] [--exact]   exactly the matching test(s)
       any gate: --dry-run (or --plan) prints the plan without running it. Logs: gate-logs/<tier>-<timestamp>/.
+  cargo xtask icons [--check | --sheet <out.png> [--px N] [--zoom N]]
+                                                   rasterise assets/ui/svg/*.svg to the 32 px PNGs (#661), check
+                                                   them against their masters, or draw a 16 px contact sheet
   cargo xtask decisions --version X.Y.Z            gather docs/decisions/*.md into RECOMMENDED.md
   cargo xtask release --version X.Y.Z --no-tag [--title T] [--skip-gate] [--skip-build] [--installer] [--dry-run]
                                                    the release cut on release/vX.Y.Z (scripts/release.ps1's phases)
@@ -75,10 +90,15 @@ pub struct GateArgs {
 }
 
 pub fn parse_gate(args: &[String]) -> Result<GateArgs, String> {
-    let mut g = GateArgs { base: "main".into(), ..GateArgs::default() };
+    let mut g = GateArgs {
+        base: "main".into(),
+        ..GateArgs::default()
+    };
     let mut it = args.iter();
     let value = |flag: &str, it: &mut std::slice::Iter<String>| {
-        it.next().cloned().ok_or_else(|| format!("{flag} needs a value"))
+        it.next()
+            .cloned()
+            .ok_or_else(|| format!("{flag} needs a value"))
     };
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -100,11 +120,21 @@ pub fn parse_gate(args: &[String]) -> Result<GateArgs, String> {
     match g.tier.as_str() {
         "quick" | "batch" | "release" => Ok(g),
         "test" => match &g.filter {
-            Some(f) if f.split("::").all(|p| !p.is_empty() && p.chars().all(|c| c.is_alphanumeric() || c == '_')) => Ok(g),
-            Some(f) => Err(format!("test filter must be a fn name or module::fn path (letters, digits, _): '{f}'")),
+            Some(f)
+                if f.split("::").all(|p| {
+                    !p.is_empty() && p.chars().all(|c| c.is_alphanumeric() || c == '_')
+                }) =>
+            {
+                Ok(g)
+            }
+            Some(f) => Err(format!(
+                "test filter must be a fn name or module::fn path (letters, digits, _): '{f}'"
+            )),
             None => Err(format!("gate test needs a filter\n{USAGE}")),
         },
-        t => Err(format!("unknown tier '{t}' (quick | batch | release | test)\n{USAGE}")),
+        t => Err(format!(
+            "unknown tier '{t}' (quick | batch | release | test)\n{USAGE}"
+        )),
     }
 }
 
@@ -120,6 +150,7 @@ fn run(args: &[String]) -> Result<i32, String> {
             println!("{}", decisions::collect(&root(), &version)?);
             Ok(0)
         }
+        Some("icons") => icons::run(&root(), &args[1..]),
         Some("package") => {
             let a = package::parse(&args[1..]).map_err(|e| format!("{e}\n{USAGE}"))?;
             Ok(package::run(&root(), &a))
@@ -139,7 +170,12 @@ fn run(args: &[String]) -> Result<i32, String> {
 fn gate(root: &Path, g: &GateArgs) -> Result<i32, String> {
     let mut run = exec::Run::new(root, &g.tier, g.dry)?;
     if let Some(name) = &g.filter {
-        let f = single::Filter { name, krate: g.krate.as_deref(), binary: g.binary.as_deref(), exact: g.exact };
+        let f = single::Filter {
+            name,
+            krate: g.krate.as_deref(),
+            binary: g.binary.as_deref(),
+            exact: g.exact,
+        };
         match single::plan(root, &f) {
             Ok(p) => run.plan(&p)?,
             Err(e) => {
@@ -157,20 +193,41 @@ fn gate(root: &Path, g: &GateArgs) -> Result<i32, String> {
                 .filter(|s| !s.is_empty())
                 .ok_or_else(|| format!("no merge base with '{}'", g.base))?;
             let lines = |s: String| -> Vec<String> {
-                s.lines().filter(|l| !l.is_empty()).map(|l| l.replace('\\', "/")).collect()
+                s.lines()
+                    .filter(|l| !l.is_empty())
+                    .map(|l| l.replace('\\', "/"))
+                    .collect()
             };
-            let untracked = lines(exec::git(root, &["ls-files", "--others", "--exclude-standard"])?);
+            let untracked = lines(exec::git(
+                root,
+                &["ls-files", "--others", "--exclude-standard"],
+            )?);
             let mut changed = lines(exec::git(root, &["diff", "--name-only", &mb])?);
             changed.extend(untracked.iter().cloned());
             let changed = plan::ps_sorted(changed);
             let short: String = mb.chars().take(7).collect();
-            println!("changed since {} ({short}): {} file(s)", g.base, changed.len());
+            println!(
+                "changed since {} ({short}): {} file(s)",
+                g.base,
+                changed.len()
+            );
             let hunks = |f: &str| -> Vec<String> {
                 exec::git(root, &["diff", "-U0", &mb, "--", f])
-                    .map(|s| s.lines().filter(|l| l.starts_with("@@ ")).map(String::from).collect())
+                    .map(|s| {
+                        s.lines()
+                            .filter(|l| l.starts_with("@@ "))
+                            .map(String::from)
+                            .collect()
+                    })
                     .unwrap_or_default()
             };
-            let diff = quick::Diff { changed: &changed, untracked: &untracked, hunks: &hunks };
+            let before = |f: &str| exec::git(root, &["show", &format!("{mb}:{f}")]).ok();
+            let diff = quick::Diff {
+                changed: &changed,
+                untracked: &untracked,
+                hunks: &hunks,
+                before: &before,
+            };
             match quick::plan(root, &diff, g.heavy)? {
                 quick::Quick::Plan(p) => p,
                 quick::Quick::Batch(f) => {

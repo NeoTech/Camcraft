@@ -65,7 +65,11 @@ pub fn rs_files(dir: &Path) -> Vec<PathBuf> {
 pub fn rs_files_recursive(dir: &Path) -> Vec<PathBuf> {
     let mut out = rs_files(dir);
     let mut subs: Vec<PathBuf> = match std::fs::read_dir(dir) {
-        Ok(rd) => rd.filter_map(Result::ok).map(|e| e.path()).filter(|p| p.is_dir()).collect(),
+        Ok(rd) => rd
+            .filter_map(Result::ok)
+            .map(|e| e.path())
+            .filter(|p| p.is_dir())
+            .collect(),
         Err(_) => Vec::new(),
     };
     subs.sort_by(|a, b| ps_cmp(&a.to_string_lossy(), &b.to_string_lossy()));
@@ -77,9 +81,10 @@ pub fn rs_files_recursive(dir: &Path) -> Vec<PathBuf> {
 
 /// The `#[test]` fns of a source text.
 pub fn test_fns(text: &str) -> Result<Vec<TestFn>, String> {
-    let test_attr = re(r"(?i)^\s*#\[test\]")?;
+    let test_attr = re(r"(?i)^\s*(?:#\[[^\]]*\]\s*)*#\[test\]")?;
+    let ignore_attr = re(r"(?i)^\s*(?:#\[[^\]]*\]\s*)*#\[ignore(?:\s*=|\s*\])")?;
     let lead = re(r"(?i)^\s*(///|#\[)")?;
-    let fn_re = re(r"(?i)^\s*(pub\s+)?(async\s+)?fn\s+(\w+)")?;
+    let fn_re = re(r"(?i)^\s*(?:#\[[^\]]*\]\s*)*(pub\s+)?(async\s+)?fn\s+(\w+)")?;
     let lines: Vec<&str> = text.lines().collect();
     let n = lines.len();
     let mut out = Vec::new();
@@ -94,15 +99,15 @@ pub fn test_fns(text: &str) -> Result<Vec<TestFn>, String> {
             s -= 1;
         }
         let mut ignored = false;
-        let mut k = i;
+        let mut k = s;
         let mut name = None;
         while k < n {
+            if ignore_attr.is_match(lines[k]) {
+                ignored = true;
+            }
             if let Some(c) = fn_re.captures(lines[k]) {
                 name = c.get(3).map(|m| m.as_str().to_string());
                 break;
-            }
-            if lines[k].to_ascii_lowercase().contains("#[ignore") {
-                ignored = true;
             }
             k += 1;
         }
@@ -118,7 +123,12 @@ pub fn test_fns(text: &str) -> Result<Vec<TestFn>, String> {
             }
             e += 1;
         }
-        out.push(TestFn { name, start: s + 1, end: e + 1, ignored });
+        out.push(TestFn {
+            name,
+            start: s + 1,
+            end: e + 1,
+            ignored,
+        });
         i = e + 1;
     }
     Ok(out)

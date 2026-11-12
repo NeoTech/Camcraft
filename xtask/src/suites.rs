@@ -56,7 +56,11 @@ fn modules(text: &str) -> Result<(Vec<String>, Vec<Module>), String> {
                     stack.push((name, depth + 1));
                     path = None;
                 }
-            } else if !line.trim().is_empty() && !line.trim_start().starts_with('#') {
+            } else if !line.trim().is_empty()
+                && !line.trim_start().starts_with('#')
+                && !line.trim_start().starts_with("//")
+                && !line.trim_start().starts_with("/*")
+            {
                 path = None;
             }
         }
@@ -94,10 +98,11 @@ fn visit(
     let (_, modules) = modules(&text)?;
     // Do not guess target/features for cfg-gated modules or functions. Quick can run
     // the suite whole; named selection refuses an ambiguous exact path.
+    let cfg = re(r"#\s*!?\s*\[\s*cfg[^\]]*\]")?;
     let precise = inherited_precision
-        && !text.lines().any(|l| {
-            (l.trim_start().starts_with("#[cfg") || l.trim_start().starts_with("#![cfg"))
-                && !["#[cfg(test)]", "#![cfg(test)]"].contains(&l.trim())
+        && cfg.find_iter(&text).all(|m| {
+            let attribute: String = m.as_str().split_whitespace().collect();
+            ["#[cfg(test)]", "#![cfg(test)]"].contains(&attribute.as_str())
         });
     out.push(Source {
         path: file.to_path_buf(),
