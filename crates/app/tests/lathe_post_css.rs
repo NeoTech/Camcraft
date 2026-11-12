@@ -5,7 +5,10 @@
 //! to the table's (pinned on a Fanuc-lathe golden). A G96 with no clamp
 //! stated anywhere is refused by name, a tool's own max-rpm clamp rides
 //! the program (G50 / D), threading keeps its constant rpm, and a tool
-//! that states no turning data posts exactly as before (G97).
+//! that states no turning data posts exactly as before (G97). Across
+//! sections a lower tool clamp is lifted back to the machine's before a
+//! G97, a higher one posts the machine's, and an inch Tormach program
+//! states Vc in ft/min with D in rpm.
 //!
 //! Regenerate after an intentional change:
 //! `WRITE_GOLDEN=1 cargo test -p camcraft-app --test lathe_post_css`
@@ -86,12 +89,17 @@ fn revolve(meridian: &[(f64, f64)], segs: usize) -> Mesh {
 /// The bar in its own-size cylinder stock on the lathe, a carbide
 /// insert on the rack (as `tool`), mild steel stated, a facing op F1.
 fn faced(tool: Tool, spindle_max: Option<f64>) -> (World, History) {
+    faced_on(tool, lathe(spindle_max))
+}
+
+/// [`faced`] on this machine (an inch one, say).
+fn faced_on(tool: Tool, machine: Machine) -> (World, History) {
     let world = new_world();
     let mut h = History::default();
     let at = Location { pos: Point3::new(0.0, 0.0, -16.0), ..Location::default() };
     let stock = SetStock::new(&world, camcraft_app::stock::StockShape::Cylinder { diameter: 12.0, height: 32.0 }, at);
     h.execute(&world, stock.expect("bar stock"));
-    h.execute(&world, LoadMachine::new(&world, "lathe.mch".into(), Some(lathe(spindle_max))).expect("lathe"));
+    h.execute(&world, LoadMachine::new(&world, "lathe.mch".into(), Some(machine)).expect("lathe"));
     h.execute(&world, AddTool::new(&world, "TN", tool).expect("insert"));
     h.execute(&world, ImportModel::from_mesh("bar", revolve(&BAR, 16)));
     h.execute(&world, SetWorkMaterial::new(&world, Some(WorkMaterial::MildSteel)).expect("material"));
@@ -111,6 +119,42 @@ fn faced(tool: Tool, spindle_max: Option<f64>) -> (World, History) {
 
 fn generate(world: &World, h: &mut History) {
     h.execute(world, GenerateOperation::new(world, "F1").expect("generate"));
+}
+
+/// A second facing section F2 after F1, on a tool TP that states no
+/// turning data (so it posts G97); both ops generated.
+fn then_constant_rpm(world: &World, h: &mut History) {
+    h.execute(world, AddTool::new(world, "TP", insert()).expect("plain insert"));
+    let params = OpParams::Facing {
+        tolerance: 0.05,
+        clearance_z: Height::fixed(25.0),
+        top_z: Height::fixed(16.0),
+        bottom_z: Height::fixed(14.0),
+        stepdown: 0.5,
+        feed: 150.0,
+        plunge_feed: 80.0,
+    };
+    let op = CreateOperation::new(world, "F2", "TP", SrcRef::Entity("bar".into()), params);
+    h.execute(world, op.expect("create F2"));
+    generate(world, h);
+    h.execute(world, GenerateOperation::new(world, "F2").expect("generate F2"));
+}
+
+/// The byte offsets of each needle in turn, each searched after the
+/// last; `None` when one is missing or out of order.
+fn in_order(p: &str, needles: &[&str]) -> Option<Vec<usize>> {
+    let mut at = 0;
+    let mut out = Vec::new();
+    for n in needles {
+        let i = at + p.get(at..)?.find(n)?;
+        out.push(i);
+        at = i + n.len();
+    }
+    Some(out)
+}
+
+fn css(max_rpm: Option<f64>) -> Tool {
+    Tool { turning: Some(TurningData { vc: 170.0, feed_per_rev: 0.2, max_rpm }), ..insert() }
 }
 
 fn tool(world: &World) -> Tool {
@@ -268,4 +312,62 @@ fn turning_data_is_additive_in_the_project_file_and_sanity_checked() {
     assert!(ChangeTool::new(&world, "TC", over).is_err(), "rpm over the tool's max is refused");
     let zero = Tool { turning: Some(TurningData { vc: 0.0, feed_per_rev: 0.2, max_rpm: None }), ..insert() };
     assert!(AddTool::new(&world, "TZ", zero).is_err(), "a zero surface speed is refused");
+}
+
+#[test]
+fn a_lower_tool_clamp_is_lifted_back_to_the_machines_before_a_later_g97() {
+    let (world, mut h) = faced(css(Some(3000.0)), Some(12000.0));
+    then_constant_rpm(&world, &mut h);
+    let f = post(FANUC, &world);
+    assert!(f.warnings.is_empty(), "{:?}", f.warnings);
+    let order = ["G50 S12000\n", "G50 S3000\nG96 S170 M03\n", "G50 S12000\nG97 S"];
+    assert!(in_order(&f.program, &order).is_some(), "tool clamp, G96, machine clamp, G97: {}", f.program);
+    assert_eq!(f.program.matches("G50").count(), 3, "{}", f.program);
+    let t = post(TORMACH, &world);
+    assert!(t.warnings.is_empty(), "{:?}", t.warnings);
+    assert!(in_order(&t.program, &["G96 D3000 S170 M3\n", "G97 S"]).is_some(), "{}", t.program);
+    assert_eq!(t.program.matches("G96").count(), 1, "the G97 section runs no CSS: {}", t.program);
+}
+
+#[test]
+fn a_tool_clamp_over_the_machines_posts_the_machines() {
+    let (world, mut h) = faced(css(Some(20000.0)), Some(12000.0));
+    then_constant_rpm(&world, &mut h);
+    let f = post(FANUC, &world);
+    assert!(f.warnings.is_empty(), "{:?}", f.warnings);
+    assert!(f.program.contains("G50 S12000\n") && !f.program.contains("S20000"), "{}", f.program);
+    assert_eq!(f.program.matches("G50").count(), 1, "the machine's clamp already holds: {}", f.program);
+    assert!(in_order(&f.program, &["G50 S12000\n", "G96 S170 M03\n", "G97 S"]).is_some(), "{}", f.program);
+    let t = post(TORMACH, &world);
+    assert!(t.warnings.is_empty(), "{:?}", t.warnings);
+    assert!(in_order(&t.program, &["G96 D12000 S170 M3\n", "G97 S"]).is_some(), "{}", t.program);
+}
+
+/// With no machine maximum there is nothing to lift back to, so the
+/// tool's G50 stays in force into a later G97 section - deliberately:
+/// on Fanuc G50 S governs only G96 (see fanuc-lathe.cps, #891).
+#[test]
+fn with_no_machine_max_the_tools_g50_carries_into_a_later_g97() {
+    let (world, mut h) = faced(css(Some(3000.0)), None);
+    then_constant_rpm(&world, &mut h);
+    let f = post(FANUC, &world);
+    assert!(f.warnings.is_empty(), "{:?}", f.warnings);
+    assert!(in_order(&f.program, &["G50 S3000\nG96 S170 M03\n", "G97 S"]).is_some(), "{}", f.program);
+    assert_eq!(f.program.matches("G50").count(), 1, "no lift with no machine clamp to lift to: {}", f.program);
+    let t = post(TORMACH, &world);
+    assert!(t.warnings.is_empty(), "{:?}", t.warnings);
+    assert!(in_order(&t.program, &["G96 D3000 S170 M3\n", "G97 S"]).is_some(), "{}", t.program);
+}
+
+#[test]
+fn an_inch_tormach_posts_vc_in_ft_per_min_and_d_in_rpm() {
+    let inch = Machine { units: Some("inch".into()), ..lathe(Some(12000.0)) };
+    let (world, mut h) = faced_on(css(Some(3000.0)), inch);
+    generate(&world, &mut h);
+    let t = post(TORMACH, &world);
+    assert!(t.warnings.is_empty(), "{:?}", t.warnings);
+    assert!(t.program.contains("G20"), "an inch program: {}", t.program);
+    // 170 m/min / 0.3048 = 557.7 ft/min -> S558; D stays the rpm clamp.
+    assert!(t.program.contains("G96 D3000 S558 M3\n"), "Vc in ft/min, D in rpm: {}", t.program);
+    assert!(!t.program.contains("S170"), "no metric Vc under G20: {}", t.program);
 }

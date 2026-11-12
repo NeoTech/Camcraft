@@ -63,3 +63,16 @@ stated by the suggestion or the tool editor.
 The blade and bar factors are two constants. Moving to post-side
 per-rev feeds would mean a project-file step and regenerating the
 turning goldens.
+
+**Review fix, 2026-11-12: the tool's G50 carries into a later G97
+when the machine states no maximum.** The Fanuc post lifts a tool's
+lower G50 clamp back to the machine's before a constant-rpm section.
+When the machine states no spindle maximum there is nothing to lift
+back to, so the tool's `G50 S<tool>` stays in force into the G97
+section. This is kept on purpose: on a Fanuc lathe `G50 S` caps the
+spindle only under G96, so the G97 section's rpm is posted as stated.
+The post says so in a comment, and
+`with_no_machine_max_the_tools_g50_carries_into_a_later_g97` pins it.
+Dropped: posting a `G50` with an invented high value to "clear" the
+clamp, since the post never invents a spindle limit; and refusing the
+G97 section, since it is correct as written.

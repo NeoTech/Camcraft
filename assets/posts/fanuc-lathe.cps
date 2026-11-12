@@ -392,6 +392,10 @@ function startPreamble() {
     } else {
       // A tool's lower clamp is lifted back to the machine's before a
       // constant-rpm section, so the program's S means what it says.
+      // With no machine maximum there is nothing to lift back to, and
+      // the tool's G50 stays in force into the G97 section - harmless,
+      // since G50 S caps the spindle only under G96 (#891, pinned by
+      // lathe_post_css's no-machine-max carry-over test).
       if (clampS > 0 && typeof machine !== "undefined" && machine.spindleMax > 0 && clampS !== machine.spindleMax) {
         block(["G50", "S" + ff(machine.spindleMax)]);
         clampS = machine.spindleMax;
