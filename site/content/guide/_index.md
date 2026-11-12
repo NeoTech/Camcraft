@@ -9,3 +9,7 @@ This guide follows a job from start to finish: install the app, import a
 model, set up stock, work offset and tools, add operations, check them, and
 post the program. The last page explains what to do when CamCraft refuses a
 post.
+
+The [CAM fundamentals](@/guide/fundamentals/_index.md) section explains the
+machining principles behind these steps: feeds and speeds, tools, strategy,
+rigidity, chips, finish, proving out and posts.
