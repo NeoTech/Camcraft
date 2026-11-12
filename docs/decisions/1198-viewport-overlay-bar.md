@@ -3,7 +3,7 @@
 **What was decided.** The five view buttons (Frame, Iso, Shaded/Wireframe,
 Toolpaths, World axes) that stacked under the view cube move into a
 horizontal, rounded, translucent grey ribbon floating over the bottom edge
-of the 3D pane, centred. The view cube stays top-right. The ribbon and its
+of the 3D pane, against its left corner. The view cube stays top-right. The ribbon and its
 glyph painting live in the new `crates/ui/src/egui_app/viewport_bar.rs`, so
 `viewcube.rs` (already over 400 lines) shrinks rather than grows. The
 buttons keep their effects exactly (Frame is the queued `frame_all`
@@ -36,6 +36,40 @@ ribbon is the one place the buttons can be reached.
 
 **Not exercised.** Nothing was looked at on screen: the ribbon colour and
 its contrast against light and dark grounds are unverified. The structural
-test pins geometry (centred, bottom edge, buttons inside, no overlap with the
-cube), not the look. The control hint at the bottom-right is not moved; the
-centred ribbon will sit clear of it on normal pane widths.
+test pins geometry (left corner, bottom edge, buttons inside, no overlap with the
+cube), not the look. The control legend at the bottom-right is not moved (it was never on the
+ribbon's row: see below).
+
+## Fix round: the ribbon moves to the bottom-left, not the centre
+
+**Why.** The review found the centred ribbon (158 x 38 px, 10 px above the
+bottom) sat on the control legend at the bottom-right: the legend is about
+300 px wide at the Small text style, so any pane narrower than about 780 px
+had them overlapping, and the legend is painted after the view furniture
+only in the sense that the ribbon covered it. My first note's sentence
+"will sit clear of it on normal pane widths" was wrong.
+
+**What was decided.** The ribbon moves to the bottom-left corner (10 px in
+from the pane's left edge, 10 px above the bottom). The legend keeps the
+bottom-right corner, unchanged. Chosen over lifting the legend above the
+ribbon, because lifting puts the hovered legend on top of the empty-document
+line ("No model yet ...", 2-3 px above the ribbon's old row) on every pane.
+Moving the ribbon is one function (`bar_rect`) and changes no other row.
+
+**Where they still meet.** The two share the bottom strip only when the pane
+is narrower than the ribbon plus the legend plus the margins, about 490 px
+at the Small text style (the legend's width is font-measured, not fixed).
+Below that the ribbon covers the legend's left end while the pointer is over
+the viewport. Not fixed in this round: the next step, if wanted, is to lift
+the legend above the ribbon only when the two would meet, which then sits
+over the empty-document line on hover on those narrow panes.
+
+**Pinned by.** `viewport_bar::tests::legend_clears_the_ribbon` (legend rect
+from the shell's anchor and the Small text style, against the ribbon rect,
+on a 700 x 600 and a 1600 x 900 pane) and the updated
+`law_tests::the_hud_is_laid_out_from_the_pane_alone` (ribbon on the left
+corner, on the bottom edge, buttons inside it).
+
+**Empty-document line.** Unchanged, not made worse: the line is centred
+at the pane's middle, 2-3 px above the ribbon's top at the bottom edge,
+which is the same clearance as before since the ribbon's row did not move.

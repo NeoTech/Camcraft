@@ -731,11 +731,11 @@ fn viewport_panel(
         let hint = match state.drag {
             Some(DragMode::Orbit) => "orbit",
             Some(DragMode::Pan) => "pan",
-            None => "LMB pick / drag-orbit · MMB orbit · RMB pan · wheel · F frame",
+            None => super::viewport_bar::LEGEND,
         };
         if hot || state.drag.is_some() {
             ui.painter().text(
-                resp.rect.max - egui::vec2(12.0, 12.0),
+                super::viewport_bar::legend_anchor(resp.rect),
                 egui::Align2::RIGHT_BOTTOM,
                 hint,
                 font.clone(),
