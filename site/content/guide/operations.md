@@ -53,6 +53,9 @@ tabs it has settings for:
 Edits on a page are pending until you click **Apply** or **Generate**.
 Both are undoable with Ctrl+Z (Cmd+Z on macOS).
 
+Each turning kind has its own section, with its settings, defaults and
+common refusals, in [Turning operations](@/guide/operations-turning.md).
+
 ## What a click picks
 
 Every page that takes a pick from the viewport (operation geometry,
