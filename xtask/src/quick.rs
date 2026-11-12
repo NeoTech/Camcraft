@@ -10,6 +10,7 @@ use regex::escape;
 
 use crate::plan::{ALL_CRATES, J, Plan, SHARED, Step, T, pkg, ps_cmp, ps_sorted};
 use crate::scan::{self, re};
+use crate::suites;
 
 /// What quick does with a diff.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -47,7 +48,7 @@ pub fn plan(root: &Path, diff: &Diff, heavy: bool) -> Result<Quick, String> {
     let mut p = Picks::default();
     let mut plan = Plan::default();
     let in_crate = re(r"(?i)^crates/([^/]+)/(.+)$")?;
-    let suite_file = re(r"(?i)^tests/([^/]+)\.rs$")?;
+    let suite_file = re(r"(?i)^tests/([^/]+?)(?:\.rs$|/)")?;
     let src_file = re(r"(?i)^src/([^/]+?)(\.rs)?(/([^/]+?)(\.rs)?(/.*)?)?$")?;
     let hunk_re = re(r"^@@ -\S+ \+(\d+)(?:,(\d+))? @@")?;
     let xtask = diff.changed.iter().any(|f| f.starts_with("xtask/"));
@@ -58,9 +59,14 @@ pub fn plan(root: &Path, diff: &Diff, heavy: bool) -> Result<Quick, String> {
             continue;
         }
         let abs = root.join(f);
-        if let Some(t) = suite_file.captures(&rest) {
+        if rest.starts_with("tests/") && rest.ends_with(".rs") && rest.matches('/').count() == 1 && !abs.is_file() {
+            continue; // deleted flat suite: Cargo no longer has this target
+        }
+        if let Some(t) = suite_file.captures(&rest).filter(|t| suites::entry(root, &d, &t[1]).is_file()) {
             let key = format!("{d}:{}", &t[1]);
             if !abs.is_file() {
+                p.whole.insert(key.clone());
+                p.why.insert(key, "suite module deleted".into());
                 continue;
             }
             if diff.untracked.iter().any(|u| u.eq_ignore_ascii_case(f)) {
@@ -68,8 +74,13 @@ pub fn plan(root: &Path, diff: &Diff, heavy: bool) -> Result<Quick, String> {
                 p.why.insert(key, "new suite".into());
                 continue;
             }
-            let all = scan::test_fns(&scan::read(&abs))?;
-            let mut outside = false;
+            let sources = suites::sources(&suites::entry(root, &d, &t[1]))?;
+            let source = sources.iter().find(|s| s.path == abs);
+            let all = match source {
+                Some(s) if s.precise => suites::test_fns(s)?,
+                _ => Vec::new(),
+            };
+            let mut outside = source.is_none_or(|s| !s.precise);
             for hk in (diff.hunks)(f) {
                 let Some(h) = hunk_re.captures(&hk) else { continue };
                 let s: usize = h[1].parse().unwrap_or(0);
@@ -131,8 +142,11 @@ fn map_modules(root: &Path, p: &mut Picks, notes: &mut Vec<String>) -> Result<()
     let mut maps: Vec<(String, String, String)> = Vec::new();
     for d in ALL_CRATES {
         for b in scan::binaries(root, d) {
-            let file = root.join("crates").join(d).join("tests").join(format!("{b}.rs"));
-            let gm = scan::gate_map(&scan::read(&file))?;
+            let mut gm = String::new();
+            for source in suites::sources(&suites::entry(root, d, &b))? {
+                gm.push_str(&scan::gate_map(&scan::read(&source.path))?);
+                gm.push(' ');
+            }
             if !gm.is_empty() {
                 maps.push(((*d).to_string(), b, gm));
             }

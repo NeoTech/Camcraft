@@ -15,6 +15,9 @@ mod release_bump;
 mod release_pack;
 mod scan;
 mod single;
+mod suites;
+#[cfg(test)]
+mod directory_tests;
 #[cfg(test)]
 mod release_tests;
 #[cfg(test)]
@@ -97,8 +100,8 @@ pub fn parse_gate(args: &[String]) -> Result<GateArgs, String> {
     match g.tier.as_str() {
         "quick" | "batch" | "release" => Ok(g),
         "test" => match &g.filter {
-            Some(f) if !f.is_empty() && f.chars().all(|c| c.is_alphanumeric() || c == '_') => Ok(g),
-            Some(f) => Err(format!("test filter must be a fn name (letters, digits, _): '{f}'")),
+            Some(f) if f.split("::").all(|p| !p.is_empty() && p.chars().all(|c| c.is_alphanumeric() || c == '_')) => Ok(g),
+            Some(f) => Err(format!("test filter must be a fn name or module::fn path (letters, digits, _): '{f}'")),
             None => Err(format!("gate test needs a filter\n{USAGE}")),
         },
         t => Err(format!("unknown tier '{t}' (quick | batch | release | test)\n{USAGE}")),

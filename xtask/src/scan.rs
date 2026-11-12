@@ -28,13 +28,22 @@ pub fn read(path: &Path) -> String {
     std::fs::read_to_string(path).unwrap_or_default()
 }
 
-/// The integration-test suites of `crates/<dir>/tests/*.rs`, by name, in gate order.
+/// The integration-test suites of `tests/*.rs` and `tests/<suite>/main.rs`, by name, in gate order.
 pub fn binaries(root: &Path, dir: &str) -> Vec<String> {
     let mut out: Vec<String> = rs_files(&root.join("crates").join(dir).join("tests"))
         .iter()
         .filter_map(|p| p.file_stem().map(|s| s.to_string_lossy().into_owned()))
         .collect();
+    let tests = root.join("crates").join(dir).join("tests");
+    if let Ok(entries) = std::fs::read_dir(&tests) {
+        for entry in entries.flatten() {
+            if entry.path().is_dir() && entry.path().join("main.rs").is_file() {
+                out.push(entry.file_name().to_string_lossy().into_owned());
+            }
+        }
+    }
     out.sort_by(|a, b| ps_cmp(a, b));
+    out.dedup();
     out
 }
 
