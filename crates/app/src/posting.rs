@@ -399,6 +399,8 @@ mod mounts;
 pub mod nose;
 #[path = "posting_index_swing.rs"]
 pub mod index_swing;
+#[path = "posting_swing_standing.rs"]
+pub mod swing_standing;
 pub(crate) use wcs_rotation::{offset_frame, OffsetFrame};
 pub use mounts::{
     machine_checks, machine_value_for, machine_value_of, post_mounts, post_mounts_script, post_of_setup, PostedMount,
@@ -683,6 +685,10 @@ pub fn verification_report_by(world: &World, voice: &dyn Fn(Option<&str>) -> pos
     // #804: before a work-turning A indexes, the retracted tool tip
     // clears what the stock, parts and turning fixtures sweep about it.
     problems.extend(index_swing::index_swing_problems(world));
+    // #1107: ... and the work it sweeps clears the face the rotary
+    // stands on and the fixed fixtures over its length.
+    let standing = swing_standing::standing_problems(world);
+    problems.extend(standing.problems);
 
     // The workholding clause (M3.2 B, live-gate law): the same fixture
     // bands and rapid laws generation reports early, re-run HERE against
@@ -709,6 +715,13 @@ pub fn verification_report_by(world: &World, voice: &dyn Fn(Option<&str>) -> pos
         (Some(s), Some(p)) => Some(format!("{s}; {p}")),
         (None, Some(p)) => Some(format!("{NOT_JUDGED}: {p}")),
         (s, None) => s,
+    };
+    // #1107: standing steel the swing clause could not read, named.
+    let swing = (!standing.not_judged.is_empty())
+        .then(|| format!("{}: {}", swing_standing::SWING_NOT_JUDGED, standing.not_judged.join("; ")));
+    let not_judged = match (not_judged, swing) {
+        (Some(s), Some(w)) => Some(format!("{s}; {w}")),
+        (s, w) => s.or(w),
     };
     GateReport { problems, not_judged }
 }
