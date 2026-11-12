@@ -751,6 +751,17 @@ fn setups_page(ui: &mut Ui, state: &mut State) {
                         .pending
                         .push_back(CommandKind::DeleteSetup(name.clone()));
                 }
+                // Alignment, work offset, workholding and tools live on
+                // the setup's own page: one click from here (#1104).
+                if ui.small_button("Open page").clicked() {
+                    // Activate it too, as the browser's Stock row does: the
+                    // fixture and tool pages edit only the active setup.
+                    super::browser_pane::focus(state, name);
+                    actions::target(
+                        state,
+                        UiTarget::SetupNode(name.clone(), crate::state::SetupPage::Settings),
+                    );
+                }
             });
         });
         if let Some(def) = camcraft_app::setup::def_of(&state.world, name) {
@@ -764,11 +775,6 @@ fn setups_page(ui: &mut Ui, state: &mut State) {
                 line.push_str(&format!(", datum from {}", def.datum_from));
             }
             ui.label(line);
-            super::setup_align_pick::picker(ui, state, name);
-            super::setup_plane_pick::row(ui, state, name);
-            super::setup_points_pick::row(ui, state, name);
-            super::setup_axis_pick::rows(ui, state, name);
-            super::setup_wcs_pick::picker(ui, state, name);
         }
     }
     ui.separator();
@@ -788,11 +794,10 @@ fn setups_page(ui: &mut Ui, state: &mut State) {
         }
     });
     ui.separator();
-    fixtures_section(ui, state, active.as_deref());
-    ui.separator();
-    tool_list_section(ui, state, active.as_deref());
     sheet_footer(ui, state);
-    ui.label("The Stock and Work offset pages edit the active setup's stock and work offset.");
+    ui.label(
+        "Each setup's alignment, work offset, fixtures and tool list are on its own          Setup page in the browser (Open page).",
+    );
 }
 
 /// The tool list of one setup context (M3.2 stage C): what goes into
