@@ -66,6 +66,7 @@ fn ctx<'a>(region: &'a Region, stock: Option<&'a Region>, tool: &'a ToolGeom, mo
         finish_tol: None,
         fixtures: &[],
         spindle: None,
+        ..Default::default()
     }
 }
 

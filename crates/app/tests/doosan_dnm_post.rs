@@ -146,7 +146,10 @@ fn doosan_dnm_high_speed_smoothing_aicc() {
     let cps = dnm_post();
     let mch = dnm_machine();
 
-    let stream = r#"; HSMW-CL v1 scale=0.001mm moves=5
+    // #994: the hole carries its chain (plunge, retract to R) and the
+    // stream leaves it by a rapid; a cut leaving the hole inside the
+    // cycle group is refused by name, never swallowed.
+    let stream = r#"; HSMW-CL v1 scale=0.001mm moves=8
 PARAM WorkOffset G54
 TOOL 1 "10mm Ball Endmill"
 PARAM SpindleSpeed 8000
@@ -154,7 +157,11 @@ SECTION 3DFinish
 Rapid 0 0 10000
 Feed 10000 10000 -2000 F800000
 Feed 20000 10000 -2000 F800000
+Rapid 20000 10000 2000
 CYCLE DRILL X20000 Y10000 Z-5000 R2000 F200000
+Plunge 20000 10000 -5000 F200000
+Rapid 20000 10000 2000
+Rapid 30000 10000 2000
 Feed 30000 10000 -2000 F800000
 SECTION END
 "#;

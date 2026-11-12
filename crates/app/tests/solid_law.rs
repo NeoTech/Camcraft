@@ -288,6 +288,7 @@ fn the_solid_law_on_the_users_part_is_silent_and_cheap() {
             finish_tol: None,
             fixtures: &[],
             spindle: None,
+            ..Default::default()
         },
     );
     let whole = t1.elapsed();
