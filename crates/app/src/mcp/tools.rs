@@ -7,6 +7,7 @@
 //! script verbs; schemas are JSON Schema as the MCP spec carries them.
 
 use super::{area, edit, features, holders, job, pick, pockets, render};
+use crate::commands::ImportMode;
 use crate::script::{api, Env};
 
 use serde_json::{json, Map, Value};
@@ -31,7 +32,7 @@ const TOOLS: &[Tool] = &[
     Tool { name: "set_tool_holder", description: "Set a document tool's holder: from the holder library by name (optional gauge_len and projection, mm), from a drawn spun profile (points), or back to the holder cylinder (clear). One undo step; an unknown entry, a shank the holder cannot take or a bad profile is refused by name.", schema: holders::s_set_tool_holder, run: holders::set_tool_holder },
     Tool { name: "add_tool", description: "Add a tool to the document, from the catalog by name or from a full definition (the shape get_job shows). It starts with the machine's default holder unless \"holder\" says otherwise; one undo removes the tool and its holder.", schema: s_add_tool, run: edit::add_tool },
     Tool { name: "export_tool_library", description: "Write the document's tools to a tool library file (.camtools), the same format the Tool library page's Export writes. Refuses a document with no tools or a path that cannot be written.", schema: s_library, run: export_tool_library },
-    Tool { name: "import_tool_library", description: "Import a tool library file into the document as one undo step, through the same command as the Tool library page's Import. mode add (default): an identical tool is skipped, a clashing name arrives as \"Name (2)\"; update: a same-named tool takes the file's definition in place (number kept, operations go Stale); replace: update, and tools the file lacks are removed unless an operation uses one (refused by name). A malformed or insane file is refused naming the tool.", schema: s_import_library, run: import_tool_library },
+    Tool { name: "import_tool_library", description: "Import a tool library file into the document as one undo step, through the same command as the Tool library page's Import. mode add (default): an identical tool is skipped, a clashing name arrives as \"Name (2)\"; update: a same-named tool takes the file's definition in place (number kept, operations go Stale); replace: update, and tools the file lacks are removed unless an operation uses one (refused by name). holders (default true) takes each tool's holder body from the file - in update/replace a changed body is a change like any other (gated, operations go Stale); false lands new tools with their holder cylinder only and leaves existing tools' bodies as they are. A malformed or insane file (or a tool body that does not fit its tool) is refused naming the tool. The reply counts holders taken and left out.", schema: s_import_library, run: import_tool_library },
     Tool { name: "set_stock", description: "Set the active setup's stock: a box, a cylinder, or a copy of a model.", schema: s_stock, run: edit::set_stock },
     Tool { name: "add_operation", description: "Add an operation of a kind (see list_operation_types) with a tool, on the stock or a model, seeded with the kind's defaults and an optional params patch. Not generated until generate runs.", schema: s_add_op, run: edit::add_operation },
     Tool { name: "edit_operation", description: "Patch an operation's parameters: the given fields replace the current ones (JSON merge patch over the kind's fields; null clears an optional field). One undo step.", schema: s_edit_op, run: edit::edit_operation },
@@ -137,11 +138,17 @@ fn export_tool_library(env: &mut Env, a: &Map<String, Value>) -> Result<Value, S
 }
 
 fn import_tool_library(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
-    let mut args = vec![json!(req_str(a, "path")?)];
-    if let Some(m) = opt_str(a, "mode")? {
-        args.push(json!(m));
-    }
-    api::v_import_tools(env, args)
+    let path = std::path::PathBuf::from(req_str(a, "path")?);
+    let mode = match opt_str(a, "mode")? {
+        None => ImportMode::Add,
+        Some(m) => ImportMode::parse(m)?,
+    };
+    let holders = match a.get("holders") {
+        None | Some(Value::Null) => true,
+        Some(Value::Bool(b)) => *b,
+        Some(other) => return Err(format!("\"holders\" must be true or false, got {other}")),
+    };
+    api::import_tools(env, &path, mode, holders)
 }
 
 fn generate(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
@@ -191,7 +198,8 @@ fn s_import_library() -> Value {
     obj(
         json!({
             "path": { "type": "string", "description": "A tool library file (.camtools)." },
-            "mode": { "type": "string", "enum": ["add", "update", "replace"], "description": "What to do with a tool whose name the document has; default add." }
+            "mode": { "type": "string", "enum": ["add", "update", "replace"], "description": "What to do with a tool whose name the document has; default add." },
+            "holders": { "type": "boolean", "description": "Take each tool's holder body from the file (default true); false keeps only the holder cylinder for new tools and leaves existing tools' bodies as they are." }
         }),
         &["path"],
     )
