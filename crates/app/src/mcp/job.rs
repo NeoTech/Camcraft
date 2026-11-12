@@ -104,7 +104,7 @@ pub(super) fn get_job(env: &mut Env, _a: &Map<String, Value>) -> Result<Value, S
         .collect();
     let tools: Vec<Value> = model::named_entities(w)
         .iter()
-        .filter_map(|(n, e)| model::tool_of(w, e).map(|t| json!({ "name": n, "definition": project::tool_to_json(&t) })))
+        .filter_map(|(n, e)| model::tool_of(w, e).map(|t| json!({ "name": n, "definition": project::tool_to_json(&t), "holder": super::holders::holder_view(w, n) })))
         .collect();
     let ops: Vec<Value> = inventory(env).iter().map(|(k, e, s)| op_full(env, k, e, *s)).collect();
     Ok(json!({

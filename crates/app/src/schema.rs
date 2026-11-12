@@ -104,6 +104,42 @@ pub struct StockDef {
     pub shape: StockShape,
 }
 
+/// #1094: the user said the from-model stock's source model is raw stock
+/// only - a casting or blank, not the finished part - so the program
+/// verdict does not judge it. Rides the stock entity; `source` is the
+/// model it was said of, honoured only while the stock is still a copy of
+/// that model AND while the model's geometry still carries `print`, the
+/// fingerprint taken when the mark was set (third review: the mark is
+/// self-validating where it takes effect). Absent (the default, every
+/// older file) judges it. Only `SetStockSourceOnly` and the project
+/// loader write it.
+#[derive(Component, Debug, Clone, PartialEq)]
+pub struct StockSourceOnly {
+    pub source: String,
+    pub print: GeomPrint,
+}
+
+/// A model's geometry as the program verdict reads it (#1094,
+/// `stock_print`): its facet count and two independent 64-bit hashes over
+/// every vertex coordinate's bits (local frame) and its placement's bits.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GeomPrint {
+    pub facets: u64,
+    pub hash: [u64; 2],
+}
+
+/// The memo of a model's facet hashes (`stock_print`), valid while `rev`,
+/// `ptr` and `len` still describe the mounted facets - a 200k-facet model
+/// is hashed once per revision, not once per verdict. Derived, never
+/// serialized; dies with its entity.
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GeomPrintMemo {
+    pub rev: u64,
+    pub ptr: usize,
+    pub len: usize,
+    pub hash: [u64; 2],
+}
+
 /// Unit tag marking an entity as a work coordinate system origin: a
 /// setup's one WCS (#342), named by `SetupDef::wcs` (`G54` for a document
 /// without setups), its `Location` the transform; there is no payload to
@@ -157,9 +193,11 @@ pub struct ToolBody {
 }
 
 /// #93 slice 2: a milling tool's own drawn cutter, neck and shank
-/// outline (`SetToolCutter`, `crate::tool_cutter`). Display data: it
-/// agrees with the tool's numbers by law (`cutter_profile::check`) and
-/// no generator or judging law reads it. Absent = drawn from the numbers.
+/// outline (`SetToolCutter`, `crate::tool_cutter`). It agrees with the
+/// tool's numbers by law (`cutter_profile::check`); no generator reads
+/// it, and the stack laws and simulation read only its neck where it is
+/// narrower than the stated shank (#852, `tool_cutter::neck_of`).
+/// Absent = drawn from the numbers.
 #[derive(Component, Debug, Clone, PartialEq)]
 pub struct ToolCutter {
     pub spun: camcraft_tools::spun::SpunProfile,
@@ -553,6 +591,8 @@ pub fn register_schema(world: &World) {
     world.component::<ReducedFidelity>();
     world.component::<Selected>();
     world.component::<StockDef>();
+    world.component::<StockSourceOnly>();
+    world.component::<GeomPrintMemo>();
     world.component::<Wcs>();
     world.component::<ToolDef>();
     world.component::<ToolBody>();
