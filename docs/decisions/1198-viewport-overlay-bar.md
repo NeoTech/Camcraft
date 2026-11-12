@@ -3,7 +3,7 @@
 **What was decided.** The view buttons (Frame, Iso, Shaded/Wireframe,
 Toolpaths, World axes) that stacked under the view cube move into a
 horizontal, rounded, translucent grey ribbon floating over the bottom edge
-of the 3D pane, against its left corner. The view cube stays top-right. The ribbon and its
+of the 3D pane, centred. The view cube stays top-right. The ribbon and its
 glyph painting live in the new `crates/ui/src/egui_app/viewport_bar.rs`, so
 `viewcube.rs` (already over 400 lines) shrinks rather than grows. The
 buttons keep their effects exactly (Frame is the queued `frame_all`
@@ -36,7 +36,7 @@ ribbon is the one place the buttons can be reached.
 
 **Not exercised.** Nothing was looked at on screen: the ribbon colour and
 its contrast against light and dark grounds are unverified. The structural
-test pins geometry (left corner, bottom edge, buttons inside, no overlap with the
+test pins geometry (centred, bottom edge, buttons inside, no overlap with the
 cube), not the look. The control legend at the bottom-right is not moved (it was never on the
 ribbon's row: see below).
 
@@ -99,3 +99,47 @@ used by `Hud::new` and by the law test, so the test does not repeat the sum.
 are unchanged and find the button through `hud(...).nav_rect(...)`, which is
 now the bottom bar. The layout tests count the buttons from `NAVS`, check
 the last button is the last in the list, and check it sits inside the bar.
+
+## Maintainer review, 2026-11-12: bottom-centre, the legend gives way
+
+**The maintainer's words** (PR #1203 review, 2026-11-12): "No it should not be
+bottom-left . it should have been bottom-center floating ontop of the 3D
+viewer".
+
+**Dropped.** The bottom-left placement from the previous fix round is
+withdrawn. The ribbon is back at the bottom-centre of the pane, floating over
+the 3D view, at the same margin above the bottom edge, with all six buttons.
+
+**Layout rule (`viewport_layout::place`, pure on the pane, the cube and the
+measured sizes; the shell and the tests read the same rects).**
+1. The ribbon is centred on the bottom edge and has priority.
+2. The control legend stays at the bottom-right while it clears the ribbon by
+   a gap of 8 px; where it would meet the ribbon it sits on its own line
+   directly above the ribbon, right-aligned.
+3. The empty-document line ("No model yet ...") is centred at its base height.
+   If it meets the ribbon it lifts above the ribbon; if the legend is drawn and
+   it then meets the legend it lifts above the legend too, so it moves up by
+   the legend's lift.
+4. A piece that would meet the view cube, or leave the pane, is not drawn (the
+   legend is a hover hint; the empty-document line is a hint too).
+
+**Widths.** With the Small text style, the legend measures 242.75 px on one
+line. The legend lifts above the ribbon below a pane width of about 714 px:
+the legend's left edge is w - 254.75 and the ribbon's right edge is w/2 + 94,
+so it lifts when w - 254.75 < w/2 + 94 + 8, i.e. w < 713.5. It wraps onto more lines below about 267 px (the legend's
+width plus the 12 px inset on each side); the hud's minimum width is about
+208 px, where the legend wraps and lifts. The empty-document line wraps by
+the same rule, against its own measured width.
+
+**Tests.** `viewport_layout::tests::legend_clears_the_ribbon` runs the rule on
+three panes (1600 x 900, 700 x 600, and the hud minimum `viewcube::min_width()`
+x 260), with and without a model, and asserts no pair of {ribbon, legend,
+empty-document line, view cube} shares pixels and every piece is inside the
+pane. At the wide pane the legend stays on the bottom line; at the minimum the
+legend sits one gap above the ribbon. `viewport_bar::tests::bar_fits_its_buttons`
+and `law_tests::view_cube_tests::the_hud_is_laid_out_from_the_pane_alone` pin
+the centred ribbon and count the buttons from the list.
+
+**Not exercised.** Nothing was looked at on screen. The rule is pinned by
+rects measured with the frame's fonts, not by pixels; the wrapped multi-line
+legend at the minimum width is not seen.

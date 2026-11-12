@@ -2103,14 +2103,14 @@ mod view_cube_tests {
     #[test]
     fn the_hud_is_laid_out_from_the_pane_alone() {
         // Cube top-right (the legend owns bottom-right); the control ribbon
-        // rests on the bottom edge, against the LEFT corner, holding every
+        // rests on the bottom edge, centred, holding every
         // view button (#1198 slice a, fix round); and no room, no furniture.
         let pane = egui::Rect::from_min_max(egui::pos2(300.0, 100.0), egui::pos2(1200.0, 700.0));
         let h = Hud::new(pane).expect("900 x 600 has room");
         assert!((h.cube.max.x - (1200.0 - 10.0)).abs() < 1e-6);
         assert!((h.cube.min.y - 110.0).abs() < 1e-6, "the cube hugs the top");
         let bar = crate::egui_app::viewport_bar::bar_rect(pane);
-        assert!((bar.min.x - (pane.min.x + 10.0)).abs() < 1e-3, "the ribbon hugs the left corner");
+        assert!((bar.center().x - pane.center().x).abs() < 1e-3, "the ribbon is centred");
         assert!((bar.max.y - (700.0 - 10.0)).abs() < 1e-3, "the ribbon rests on the bottom edge");
         assert!(!h.cube.intersects(bar), "the cube and the ribbon never overlap");
         for kind in crate::egui_app::viewport_bar::NAVS {

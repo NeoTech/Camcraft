@@ -62,24 +62,12 @@ pub(crate) fn pick_through_label(on: bool) -> &'static str {
     if on { "Pick through: on" } else { "Pick through: off" }
 }
 
-/// The control legend the shell paints at the pane's bottom-right while the
-/// pointer is over the viewport (or a drag runs). Its text lives here so the
-/// clearance test measures the same string the shell draws.
-pub(crate) const LEGEND: &str = "LMB pick / drag-orbit · MMB orbit · RMB pan · wheel · F frame";
-const LEGEND_INSET: f32 = 12.0;
-
-/// Where the legend's bottom-right anchor sits: inset from the pane's corner.
-#[must_use]
-pub(crate) fn legend_anchor(pane: egui::Rect) -> egui::Pos2 {
-    pane.max - egui::vec2(LEGEND_INSET, LEGEND_INSET)
-}
-
-/// The ribbon: resting on the pane's bottom edge, against its LEFT corner
-/// (#1198 fix round). The legend keeps the bottom-right corner, so the two
-/// only share the bottom strip on a pane narrower than ribbon + legend.
+/// The ribbon: centred on the pane's width, resting on its bottom edge at
+/// the same margin as before. Floats over the 3D view (#1198, maintainer:
+/// "bottom-center floating ontop of the 3D viewer").
 #[must_use]
 pub(crate) fn bar_rect(pane: egui::Rect) -> egui::Rect {
-    let min = egui::pos2(pane.min.x + BOTTOM_MARGIN, pane.max.y - BOTTOM_MARGIN - BAR_H);
+    let min = egui::pos2(pane.center().x - BAR_W * 0.5, pane.max.y - BOTTOM_MARGIN - BAR_H);
     egui::Rect::from_min_size(min, egui::vec2(BAR_W, BAR_H))
 }
 
@@ -262,47 +250,29 @@ mod tests {
         let count = NAVS.len() as f32;
         let width = count * NAV_PX + (count - 1.0) * NAV_GAP + 2.0 * PAD;
         assert!((BAR_W - width).abs() < 1e-6, "the ribbon is as wide as its buttons");
-        let bar = bar_rect(egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(900.0, 600.0)));
+        let pane = egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(900.0, 600.0));
+        let bar = bar_rect(pane);
         assert!((bar.width() - BAR_W).abs() < 1e-6);
+        assert!(
+            (bar.center().x - pane.center().x).abs() < 1e-3,
+            "the ribbon is centred on the bottom edge"
+        );
+        assert!(
+            (bar.max.y - (pane.max.y - BOTTOM_MARGIN)).abs() < 1e-3,
+            "it rests on the bottom edge"
+        );
         let kids = buttons(bar);
         assert_eq!(kids.len(), NAVS.len());
         assert!(kids.iter().all(|(_, r)| bar.contains(r.min) && bar.contains(r.max)));
         let last = kids.last().map(|(k, r)| (*k, *r));
-        assert_eq!(last.map(|(k, _)| k), NAVS.last().copied(), "the last button is the last in the list");
-        assert!(last.is_some_and(|(_, r)| bar.contains(r.max)), "the last button sits inside the ribbon");
-    }
-
-    /// The legend's painted rect: the shell's text style (Small) measured
-    /// on the same string, right-aligned to the shell's anchor.
-    fn legend_rect(pane: egui::Rect) -> egui::Rect {
-        let ctx = egui::Context::default();
-        let mut out = ctx.run_ui(egui::RawInput::default(), |_| {});
-        // epaint asserts on drop of unapplied texture uploads; a test has none to apply.
-        out.textures_delta.clear();
-        let font = egui::Style::default()
-            .text_styles
-            .get(&egui::TextStyle::Small)
-            .cloned()
-            .unwrap_or_else(|| egui::FontId::proportional(11.0));
-        let size = ctx.fonts_mut(|f| {
-            f.layout_no_wrap(LEGEND.to_owned(), font, egui::Color32::WHITE).size()
-        });
-        let a = legend_anchor(pane);
-        egui::Rect::from_min_max(egui::pos2(a.x - size.x, a.y - size.y), a)
-    }
-
-    #[test]
-    fn legend_clears_the_ribbon() {
-        // The legend keeps the bottom-right, the ribbon the bottom-left;
-        // they must not share pixels on an ordinary pane nor a wide one.
-        for (w, h) in [(700.0_f32, 600.0_f32), (1600.0, 900.0)] {
-            let pane = egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(w, h));
-            let legend = legend_rect(pane);
-            let bar = bar_rect(pane);
-            assert!(
-                !legend.intersects(bar),
-                "legend {legend:?} overlaps the ribbon {bar:?} on a {w} x {h} pane"
-            );
-        }
+        assert_eq!(
+            last.map(|(k, _)| k),
+            NAVS.last().copied(),
+            "the last button is the last in the list"
+        );
+        assert!(
+            last.is_some_and(|(_, r)| bar.contains(r.max)),
+            "the last button sits inside the ribbon"
+        );
     }
 }

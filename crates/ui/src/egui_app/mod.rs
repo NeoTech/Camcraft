@@ -179,6 +179,7 @@ pub mod theme_files;
 // the view cube's pick law straight.
 pub(crate) mod viewcube;
 pub(crate) mod viewport_bar;
+pub(crate) mod viewport_layout;
 pub(crate) mod world;
 
 #[cfg(test)]
