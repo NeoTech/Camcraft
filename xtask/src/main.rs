@@ -9,6 +9,7 @@ mod braces;
 mod decisions;
 mod exec;
 mod package;
+mod path_mods;
 mod plan;
 mod quick;
 mod release;

@@ -124,3 +124,19 @@ fn moved_suites_live_in_their_owner_crate_and_not_in_app() {
         }
     }
 }
+
+/// #1021: a file a parent module pulls in with `#[path = "posting_index_swing.rs"] pub mod
+/// index_swing;` is `app::posting::index_swing`, so the suites whose map names
+/// `app::posting (index_swing)` run for it - not none, as when the file's own name was taken for
+/// a top-level module `app::posting_index_swing` that no map names.
+#[test]
+fn a_path_included_file_selects_its_parents_submodule_suites() {
+    let got = selected("crates/app/src/posting_index_swing.rs", "app");
+    assert!(got.iter().any(|b| b == "index_swing"), "index_swing missing from {got:?}");
+    // Narrowed to the submodule: not every suite that names app::posting.
+    assert!(got.len() < count("crates/app/src/posting.rs", "app"), "{got:?}");
+    // The other #[path] siblings of posting.rs resolve the same way and still select suites.
+    for f in ["posting_mounts.rs", "posting_per_op.rs", "posting_nose.rs", "posting_sim.rs"] {
+        assert!(count(&format!("crates/app/src/{f}"), "app") > 0, "{f} selects nothing");
+    }
+}
