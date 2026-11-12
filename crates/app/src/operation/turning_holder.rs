@@ -45,6 +45,7 @@ use crate::verify::Warning;
 use super::drill_prior::PriorCell;
 use super::kinds::Section;
 use super::turning_credit::{pilots, Pilot};
+use super::turning_holder_side::holder_side;
 use super::turning_holder_scene::{material, pilot_removed, standing, Annuli, Kerf, Table, PITCH};
 use super::turning_outline::Revolved;
 use super::turning_rapids::{faced_end, kerf_of, Meridian, SignedMeridian};
@@ -76,14 +77,17 @@ pub(super) fn noted(mut path: Toolpath, params: &OpParams, tool: &Tool, has_body
 }
 
 /// The world directions a lathe body's tool frame stands in on `path`
-/// (#1038): +x the path's signed radial, +z the spindle - the very
-/// frame [`judge`] reads a body point (x, y, z) in, fitted from the same
-/// part, so the drawn holder is the judged one. Refuses by name when no
-/// spindle fits the part.
+/// (#1038): +x the radial on the holder's side of the axis (#1102), +z
+/// the spindle - the very frame [`judge`] reads a body point (x, y, z)
+/// in, fitted from the same part, so the drawn holder is the judged one.
+/// Refuses by name when no spindle fits the part, or the path cannot
+/// tell the holder's side.
 pub(crate) fn body_axes(part: &[crate::geometry::Triangle], path: &Toolpath) -> Result<([f64; 3], [f64; 3]), String> {
     let frame = Frame::about(part).map_err(|e| format!("no spindle fits the part ({e})"))?;
-    let (dir, radial) = SignedMeridian::of(&frame, path).axes();
-    Ok(([radial.x, radial.y, radial.z], [dir.x, dir.y, dir.z]))
+    let sm = SignedMeridian::of(&frame, path);
+    let side = holder_side(&sm, path)?;
+    let (dir, r) = sm.axes();
+    Ok(([r.x * side, r.y * side, r.z * side], [dir.x, dir.y, dir.z]))
 }
 
 /// The holder law (#369) on `path`, for a tool whose lathe body is
@@ -113,6 +117,7 @@ pub(super) fn judge(
         None => None,
     };
     let sm = SignedMeridian::of(&frame, path);
+    let side = holder_side(&sm, path).map_err(&unjudged)?;
     let mut pieces = Vec::with_capacity(path.moves.len());
     for (i, m) in path.moves.iter().enumerate() {
         pieces.push(pieces_of(m, &sm, cx.z_tol).ok_or_else(|| unjudged(format!("move {i} leaves the turning plane")))?);
@@ -140,7 +145,7 @@ pub(super) fn judge(
     vertices.extend(part.knots());
     vertices.extend(stock.iter().flat_map(Revolved::knots));
     let table = Table::new(&part, stock.as_ref(), lo, hi, &vertices).ok_or_else(|| unjudged("the path's stations are not finite".into()))?;
-    let scene = Scene { table, buckets: Buckets::new(&kerfs, lo, hi), kerfs, pilots: pilots(cx.drills, &sm), spans: body.spans(), profile, margin };
+    let scene = Scene { table, buckets: Buckets::new(&kerfs, lo, hi), kerfs, pilots: pilots(cx.drills, &sm), spans: body.spans(), profile, margin, side };
     let mut cap: Option<Option<f64>> = None; // the faced end, read once
     for (i, piece) in pieces.iter().enumerate() {
         let verdict = match scene.judge_move(i, piece, None) {
@@ -241,6 +246,9 @@ struct Scene<'a> {
     spans: Vec<(f64, f64, camcraft_tools::lathe_holder::Reach)>,
     profile: LatheProfile,
     margin: f64,
+    /// The holder's side of the signed radial (#1102), +1 or -1: a tip
+    /// at signed X stands at `side * X` along the holder's own +x.
+    side: f64,
 }
 
 impl Scene<'_> {
@@ -279,7 +287,7 @@ impl Scene<'_> {
         // worst reading is at one of them.
         for &(z0, z1, reach) in &self.spans {
             let (a, b) = (st + z0, st + z1);
-            let radii = reach.radii(x);
+            let radii = reach.radii(if self.side < 0.0 { -x } else { x });
             let inner = (self.table.first_at(a)..self.table.first_at(b)).filter(|&k| self.table.station(k) > a);
             let points = std::iter::once((a, self.table.annuli_at(a)))
                 .chain(inner.map(|k| (self.table.station(k), self.table.annuli(k))))
