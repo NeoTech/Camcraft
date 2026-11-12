@@ -8,6 +8,17 @@
 //! place this module infers anything is the refusal's hint, which changes
 //! no verdict.
 //!
+//! **The mark is self-validating here, where it takes effect** (third
+//! review). It names its source by name, so a later model could wear that
+//! name; it therefore also carries the geometry fingerprint taken when it
+//! was set (`stock_print`), and holds ONLY while a model of that name
+//! exists, is still the from-model stock's source, and prints the same.
+//! Any mismatch voids it: the model is judged as the part, and
+//! [`void_note`] says so by name on the gate's visible line. The commands
+//! that drop the mark with its model (`MarkDrops`: `DeleteEntity`,
+//! `DeleteFixture`, `UpdateModel`, `SetStock`) only keep the checkbox
+//! honest - safety does not depend on any command remembering to.
+//!
 //! Provenance: our own design notes (a stock is a copy of its source
 //! model, M3.1 B; a CAM choice is a user parameter with a safe default);
 //! see `docs/decisions/1094-stock-source-not-part.md`.
@@ -66,17 +77,64 @@ fn program_stocks(world: &World, ops: &[Operation]) -> Vec<Entity> {
         .collect()
 }
 
-/// The source model of a from-model stock, and whether the user marked
-/// it raw stock only (the mark honoured only while it names that source).
-fn source_of(world: &World, stock: &Entity) -> Option<(String, bool)> {
+/// A stock's raw-stock-only mark against the model it names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Mark {
+    /// Not ticked (or ticked for another source).
+    None,
+    /// Ticked, and the source model prints as it did then.
+    Holds,
+    /// Ticked, but the model is gone or its geometry or placement changed.
+    Void,
+}
+
+fn mark_of(world: &World, stock: &Entity) -> Option<(String, Mark)> {
     let Some(StockShape::FromModel { source }) = model::stock_def_of(world, stock) else {
         return None;
     };
-    let marked = stock
-        .entity_view(world)
-        .try_get::<&StockSourceOnly>(|f| f.source == source)
-        .unwrap_or(false);
-    Some((source, marked))
+    let Some(mark) = stock.entity_view(world).try_get::<&StockSourceOnly>(|f| f.clone()) else {
+        return Some((source, Mark::None));
+    };
+    if mark.source != source {
+        return Some((source, Mark::None));
+    }
+    let now = model::find_by_name(world, &source).and_then(|m| crate::stock_print::print_of(world, &m));
+    let state = if now == Some(mark.print) { Mark::Holds } else { Mark::Void };
+    Some((source, state))
+}
+
+/// The source model of a from-model stock, and whether the user's mark
+/// holds on it (ticked for this source, and the geometry unchanged).
+fn source_of(world: &World, stock: &Entity) -> Option<(String, bool)> {
+    mark_of(world, stock).map(|(s, m)| (s, m == Mark::Holds))
+}
+
+/// The named, non-blocking note for a void mark on a stock the program
+/// starts from: the model is judged as the part, and the user re-ticks if
+/// it is still raw stock. Never silent, never an error.
+#[must_use]
+pub fn void_note(world: &World) -> Option<String> {
+    let ops = all_ops(world);
+    program_stocks(world, &ops).iter().find_map(|stock| match mark_of(world, stock) {
+        Some((source, Mark::Void)) => Some(void_text(&source)),
+        _ => None,
+    })
+}
+
+fn void_text(source: &str) -> String {
+    format!(
+        "the raw-stock-only mark on '{source}' no longer matches the model (it was removed, or its geometry or placement changed) and was ignored - '{source}' is judged as the part; tick \"{RAW_STOCK_ONLY}\" again if it is still raw stock"
+    )
+}
+
+/// The void note for setup context `setup`'s stock (the stock page).
+#[must_use]
+pub fn void_note_of(world: &World, setup: Option<&str>) -> Option<String> {
+    let stock = model::find_by_name(world, &crate::setup::stock_entity_name(world, setup))?;
+    match mark_of(world, &stock)? {
+        (source, Mark::Void) => Some(void_text(&source)),
+        _ => None,
+    }
 }
 
 /// The model the program verdict leaves out, if any: the source of a

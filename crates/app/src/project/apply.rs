@@ -688,11 +688,16 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
                 });
                 // #1094: the mark lands only on a from-model stock, naming
                 // its source; anywhere else it means nothing and is dropped.
+                // The print is the mark's check (third review): no print,
+                // no mark - read as unmarked with a note, never trusted.
                 if let (true, StockShape::FromModel { source }) = (dto.raw_stock_only, &shape) {
-                    if model_names.contains(source) {
-                        entity.entity_view(world).set(crate::schema::StockSourceOnly { source: source.clone() });
-                    } else {
-                        notes.push(format!("'{}' was marked raw stock only, but its source model '{source}' is not in the file - read as unmarked", dto.name));
+                    let print = dto.raw_stock_print.as_deref().and_then(crate::stock_print::from_text);
+                    match print {
+                        Some(print) if model_names.contains(source) => {
+                            entity.entity_view(world).set(crate::schema::StockSourceOnly { source: source.clone(), print });
+                        }
+                        Some(_) => notes.push(format!("'{}' was marked raw stock only, but its source model '{source}' is not in the file - read as unmarked", dto.name)),
+                        None => notes.push(format!("'{}' was marked raw stock only without the fingerprint of '{source}' it was set on - read as unmarked; tick \"{}\" again if it is raw stock", dto.name, crate::stock_source::RAW_STOCK_ONLY)),
                     }
                 }
             }

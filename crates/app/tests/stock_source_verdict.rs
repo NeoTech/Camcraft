@@ -19,12 +19,13 @@
 //! app::project (raw_stock_only).
 //! Lane shape: all tests here run in seconds.
 
-use flecs_ecs::prelude::World;
+use flecs_ecs::prelude::*;
 
 use camcraft_app::commands::{
-    AddTool, CreateOperation, DeleteEntity, EditOperationParams, GenerateOperation, History, ImportModel, SetStock,
-    SetStockSourceOnly, UpdateModel,
+    AddTool, CreateOperation, DeleteEntity, DeleteFixture, EditOperationParams, GenerateOperation, History, ImportModel,
+    MoveModel, SetStock, SetStockSourceOnly, TagFixture, UpdateModel,
 };
+use camcraft_app::schema::StockSourceOnly;
 use camcraft_app::stock_source::raw_stock_only_of;
 use camcraft_app::drilling::Hole;
 use camcraft_app::geo2d::Point2;
@@ -420,5 +421,125 @@ fn a_file_whose_mark_names_a_missing_source_loads_unmarked_with_a_note() {
     let mut h2 = History::default();
     h2.execute(&loaded, ImportModel::from_mesh("casting", part()));
     assert_eq!(stock_only_model(&loaded), None);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The program gate's visible, non-blocking line (a void mark's note).
+fn visible_line(world: &World) -> String {
+    posting::verification_report(world).not_judged.unwrap_or_default()
+}
+
+/// The stock's mark as stored (test-side read).
+fn stored_mark(world: &World) -> Option<StockSourceOnly> {
+    let stock = model::find_by_name(world, &camcraft_app::setup::stock_entity_name(world, None))?;
+    stock.entity_view(world).try_get::<&StockSourceOnly>(|f| f.clone())
+}
+
+/// The casting + "other" job with the casting marked; `swap` then puts
+/// some geometry under the name "casting", and the program bores 5 mm
+/// under that geometry's floor from the stock (plus an op on "other").
+fn swapped(swap: impl Fn(&World, &mut History)) -> World {
+    let world = new_world();
+    let mut h = History::default();
+    h.execute(&world, ImportModel::from_mesh("casting", casting()));
+    let other = cube(Point3::new(80.0, -10.0, 0.0), Point3::new(100.0, 10.0, 20.0));
+    h.execute(&world, ImportModel::from_mesh("other", other));
+    let shape = StockShape::FromModel { source: "casting".into() };
+    h.execute(&world, SetStock::new(&world, shape, Location::default()).expect("stock"));
+    mark(&world, &mut h, true);
+    swap(&world, &mut h);
+    add_tool(&world, &mut h);
+    op(&world, &mut h, "Op2", SrcRef::Entity("other".into()), FLOOR);
+    op(&world, &mut h, "Op1", SrcRef::Stock, FLOOR - 5.0);
+    world
+}
+
+#[test]
+fn delete_fixture_then_a_part_under_the_old_name_refuses_the_gouge() {
+    // The third review's reproduction.
+    let world = swapped(|w, h| {
+        h.execute(w, TagFixture::new(w, "casting", None).expect("tag"));
+        h.execute(w, DeleteFixture::new(w, "casting").expect("delete fixture"));
+        h.execute(w, ImportModel::from_mesh("casting", part()));
+    });
+    assert_eq!(stock_only_model(&world), None);
+    assert!(gouge_line(&world).is_some(), "the 5 mm gouge went unjudged");
+    assert!(post(&world, "fixture").is_err(), "the DeleteFixture reproduction posted");
+}
+
+#[test]
+fn the_print_alone_voids_a_mark_left_on_other_geometry_by_a_path_with_no_drop() {
+    // Bypass every command's drop on purpose: remove the casting straight
+    // off the world, land the finished part under its name, and put the
+    // old mark back by hand. Only the print check stands in the way.
+    let world = swapped(|w, h| {
+        let old = stored_mark(w).expect("marked");
+        let e = model::find_by_name(w, "casting").expect("casting");
+        model::remove(w, &e);
+        h.execute(w, ImportModel::from_mesh("casting", part()));
+        let stock = model::find_by_name(w, &camcraft_app::setup::stock_entity_name(w, None)).expect("stock");
+        stock.entity_view(w).set(old);
+    });
+    assert!(stored_mark(&world).is_some(), "the fixture must leave the stale mark in place");
+    assert_eq!(stock_only_model(&world), None, "a mark on other geometry is void");
+    assert!(gouge_line(&world).is_some(), "the gouge is judged");
+    assert!(visible_line(&world).contains("no longer matches the model"), "the void is named: {}", visible_line(&world));
+    assert!(post(&world, "bypass").is_err());
+}
+
+#[test]
+fn an_identical_re_import_under_the_same_name_keeps_the_mark() {
+    // The same casting, removed and imported again (no drop): same print.
+    let (world, mut h) = casting_job(FLOOR);
+    mark(&world, &mut h, true);
+    let old = stored_mark(&world).expect("marked");
+    let e = model::find_by_name(&world, "casting").expect("casting");
+    model::remove(&world, &e);
+    h.execute(&world, ImportModel::from_mesh("casting", casting()));
+    assert_eq!(stored_mark(&world), Some(old));
+    assert_eq!(stock_only_model(&world), Some(entity(&world, "casting")), "the same casting stays raw stock");
+    assert_eq!(visible_line(&world), "");
+}
+
+#[test]
+fn a_moved_or_edited_marked_model_voids_the_mark_with_a_note() {
+    let (world, mut h) = casting_job(FLOOR);
+    mark(&world, &mut h, true);
+    // Moved (MoveModel carries no drop): placement is part of the print.
+    let to = Location { pos: Point3::new(5.0, 0.0, 0.0), ..Location::default() };
+    h.execute(&world, MoveModel::new(&world, "casting", to).expect("move"));
+    assert_eq!(stock_only_model(&world), None, "a moved casting is not what was marked");
+    assert!(visible_line(&world).contains("'casting'"), "named: {}", visible_line(&world));
+    h.undo(&world);
+    assert_eq!(stock_only_model(&world), Some(entity(&world, "casting")), "undo: it prints the same again");
+    // Edited in place with no command at all: new facets, same name.
+    let e = entity(&world, "casting");
+    let edited = cube(Point3::new(-30.0, -30.0, -10.0), Point3::new(30.0, 30.0, 25.0)).facets;
+    model::set_facets(&world, &e, edited);
+    assert_eq!(stock_only_model(&world), None);
+    assert!(visible_line(&world).contains("no longer matches the model"));
+}
+
+#[test]
+fn a_file_with_the_flag_but_no_print_loads_unmarked_with_a_note() {
+    let (world, mut h) = casting_job(FLOOR);
+    mark(&world, &mut h, true);
+    let dir = std::env::temp_dir().join(format!("camcraft-1094-noprint-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("dir");
+    let path = dir.join("p.camproj");
+    camcraft_app::project::save(&world, &path).expect("save");
+    let text = std::fs::read_to_string(&path).expect("read");
+    assert!(text.contains("raw_stock_print"), "the print is saved beside the flag");
+    let mut doc: serde_json::Value = serde_json::from_str(&text).expect("json");
+    for row in doc["entities"].as_array_mut().expect("entities") {
+        if let Some(obj) = row.as_object_mut() {
+            obj.remove("raw_stock_print");
+        }
+    }
+    std::fs::write(&path, serde_json::to_string(&doc).expect("json")).expect("write");
+    let loaded = new_world();
+    let notes = camcraft_app::project::load_noted(&loaded, &path).expect("loads, never refused");
+    assert_eq!(stock_only_model(&loaded), None, "a flag without its print is not trusted");
+    assert!(notes.iter().any(|n| n.contains("without the fingerprint")), "{notes:?}");
     let _ = std::fs::remove_dir_all(&dir);
 }

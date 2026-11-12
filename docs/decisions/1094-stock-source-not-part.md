@@ -9,13 +9,46 @@ model is judged exactly as before. The mark is one undoable command
 command, a component on the stock entity (`schema::StockSourceOnly { source }`)
 and an optional project-file key (`raw_stock_only`, absent = false).
 
-**The mark dies with the model it was given to (second review).** The mark
+**The mark is self-validating where it takes effect (third review; the
+orchestrator's direction, taken unattended).** A third command (`DeleteFixture`)
+was found removing a model without dropping its mark - command-by-command drops
+will be missed again by the next model-removing command someone adds. So the
+mark carries a fingerprint of the marked model's geometry as the verdict reads
+it (`stock_print`: facet count, then every vertex coordinate of the local facets
+as `f64` bits in facet order, then the `Location` position and rotation bits;
+two independent 64-bit hashes - FNV-1a over the bytes and a splitmix64 fold over
+the words - so 128 bits, never a 32-bit hash). `stock_source` honours the mark
+ONLY while a model of that name exists, is still the from-model stock's source,
+and prints the same now. Any mismatch voids it: the model is judged as the part
+and a named note ("the raw-stock-only mark on 'X' no longer matches the model
+... and was ignored") rides the gate's visible, non-blocking line (status line,
+NC header, script/MCP `not_judged`) and the stock page - never silent, never a
+load error. The facet hashes are memoised per revision on the model
+(`GeomPrintMemo`: revision, the facets' `Arc` pointer and length), so a
+200k-facet model is hashed once per revision, not once per post.
+- The same mesh at the same place prints the same across save/load (f64
+  round-trips exactly in the file) and undo/redo; an identical re-import of the
+  casting under its name keeps the mark - it is the same casting. Moving the
+  model, or editing/repairing it without a dropping command, voids the mark with
+  the note; the user re-ticks.
+- Project file: `raw_stock_print` is saved beside `raw_stock_only`. A file with
+  the flag but no print (written by head 56e30159, or by hand) loads unmarked
+  with a load note, never as marked-without-check. A build from before this PR
+  ignores both keys and judges the model (the safe direction); the print does not
+  need to survive any older reader, because no released build reads the flag.
+- Dropped: patching each model-removing command (it is what failed three times);
+  binding to the entity id (undo of a delete respawns a new entity, and a load
+  renumbers everything); reusing `model::geometry_signature` (a 64-bit digest of
+  derived features, not of the raw vertices and placement the verdict reads).
+
+**The per-command drops stay as tidiness (second review).** The mark
 names its source by name, so a model imported later under a deleted casting's
 name must never find it waiting. Chosen mechanism: every command that ends the
 model or the stock the mark was given to drops the mark *inside its own undo
 step* (`commands::stock_source_only::MarkDrops`, snapshotted at construction):
-- `DeleteEntity` of the source model (or of the stock) drops it; undo of the
-  delete restores the model AND the mark, redo drops it again;
+- `DeleteEntity` / `DeleteFixture` of the source model (or `DeleteEntity` of
+  the stock) drops it; undo of the delete restores the model AND the mark,
+  redo drops it again;
 - `UpdateModel` (re-import in place, and `RepairModel` through it) drops it -
   new geometry was never said to be raw stock; undo restores both;
 - `SetStock` - any new stock, another shape or the same model again - drops it;

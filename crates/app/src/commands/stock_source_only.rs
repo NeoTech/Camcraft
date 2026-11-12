@@ -37,7 +37,17 @@ impl SetStockSourceOnly {
             .try_get::<&StockSourceOnly>(|f| f.clone());
         let next = if on {
             match model::stock_def_of(world, &entity) {
-                Some(StockShape::FromModel { source }) => Some(StockSourceOnly { source }),
+                Some(StockShape::FromModel { source }) => {
+                    // The mark carries the geometry it was said of (#1094,
+                    // third review): `stock_source` honours it only while
+                    // the model still prints the same.
+                    let print = model::find_by_name(world, &source)
+                        .and_then(|m| crate::stock_print::print_of(world, &m))
+                        .ok_or_else(|| CommandError::Invalid(format!(
+                            "the stock's source model '{source}' is not in the document or has no geometry"
+                        )))?;
+                    Some(StockSourceOnly { source, print })
+                }
                 _ => {
                     return Err(CommandError::Invalid(format!(
                         "'{stock_name}' is not made from a model - only a from-model stock's source can be raw stock only"
