@@ -940,6 +940,7 @@ impl OpParams {
                 infeed,
                 feed,
                 plunge_feed,
+                infeed_plan,
                 hand: _,
             } => {
                 pos(*tolerance)
@@ -951,6 +952,11 @@ impl OpParams {
                     && pos(*infeed)
                     && pos(*feed)
                     && pos(*plunge_feed)
+                    // The plan's tool-free numbers (#416); whether the
+                    // flank angle fits the insert is the tool's
+                    // question, asked by name at the threading gate.
+                    && infeed_plan.is_sane()
+                    && infeed_plan.refusal(*depth, *infeed, 180.0).is_none()
             }
             // The contour doors (M5.2 stage E): the twins' heights and
             // feeds, plus each kind's own promise-number, finite.

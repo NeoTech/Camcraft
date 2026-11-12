@@ -1234,6 +1234,7 @@ impl OpParams {
                 infeed,
                 feed,
                 plunge_feed,
+                infeed_plan,
                 hand,
             } => {
                 w(h, *tolerance);
@@ -1242,6 +1243,31 @@ impl OpParams {
                 wh(h, *bottom_z);
                 for v in [*pitch, *depth, *infeed, *feed, *plunge_feed] {
                     w(h, v);
+                }
+                // The infeed plan (#416) moves every pass - bytes only
+                // when it differs from the default, so every earlier
+                // thread keeps its digest (the approach precedent).
+                if *infeed_plan != crate::turning::ThreadInfeed::default() {
+                    h.write_u8(0xD4);
+                    h.write_u8(infeed_plan.method as u8);
+                    h.write_u8(infeed_plan.schedule as u8);
+                    h.write_u32(infeed_plan.spring_passes);
+                    // #418: a byte only when set, so a #416 plan's
+                    // digest is unchanged.
+                    if infeed_plan.repeat_each_depth {
+                        h.write_u8(0xD5);
+                    }
+                    // #419: the dips' bytes only when they lay any, so
+                    // every earlier plan's digest is unchanged.
+                    if infeed_plan.dips.is_on() {
+                        h.write_u8(0xD6);
+                        for v in [infeed_plan.dips.interval, infeed_plan.dips.height, infeed_plan.dips.length] {
+                            w(h, v);
+                        }
+                    }
+                    for v in [infeed_plan.flank_angle, infeed_plan.min_depth, infeed_plan.finish_allowance] {
+                        w(h, v);
+                    }
                 }
                 // #629: the hand sets the helix's sense, and the passes
                 // now run toward the chuck - written for BOTH hands, so

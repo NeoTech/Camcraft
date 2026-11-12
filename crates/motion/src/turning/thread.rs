@@ -30,7 +30,7 @@
 //! states it - profile-representation practice, the same law the
 //! turned profile rides.
 //!
-//! Beside the passes the path carries one [`ThreadCycle`] record
+//! Beside the passes the path carries one [`crate::cl::ThreadCycle`] record
 //! (issue #34): the same thread as a lathe control's threading cycle
 //! states it, for a post that writes the cycle instead of the passes.
 //!
@@ -47,14 +47,17 @@
 //! valley-run phase law are our own, on the same silhouette the
 //! blade kinds ride. No vendor strategy consulted.
 
-use crate::cl::{MoveKind, PathBuilder, ThreadCycle, ThreadHand, Toolpath};
+use crate::cl::{MoveKind, PathBuilder, ThreadHand, Toolpath};
 use crate::geo2d::Point2;
 use crate::geometry::Triangle;
 use crate::machining2d::GenError;
 
 use super::blade;
+use super::infeed::{InfeedMethod, ThreadInfeed};
 use super::revolve;
 use super::stock::StockEnv;
+use super::thread_cycle;
+use super::thread_dips;
 
 /// The lean an XY-circle helix can live with: the circles must stand
 /// in planes square to the axis, or the pass stops being one turn
@@ -97,6 +100,19 @@ pub fn thread(facets: &[Triangle], p: &ThreadParams) -> Result<Toolpath, GenErro
 /// [`thread`] inside a setup stock (#130): every rapid clears the
 /// bar's OD, not only the part's.
 pub fn thread_in(facets: &[Triangle], p: &ThreadParams, stock: Option<StockEnv>) -> Result<Toolpath, GenError> {
+    thread_planned_in(facets, p, &ThreadInfeed::default(), stock)
+}
+
+/// [`thread_in`] with an infeed plan (issue #416): the passes enter
+/// radially, along one flank or alternating flanks, ladder by constant
+/// depth or constant area, leave a finish allowance and repeat at full
+/// depth as the plan says. The default plan is [`thread_in`]'s ladder.
+pub fn thread_planned_in(
+    facets: &[Triangle],
+    p: &ThreadParams,
+    plan: &ThreadInfeed,
+    stock: Option<StockEnv>,
+) -> Result<Toolpath, GenError> {
     if p.pitch <= 0.0 {
         return Err(GenError::Invalid("threading needs a positive pitch".into()));
     }
@@ -119,6 +135,9 @@ pub fn thread_in(facets: &[Triangle], p: &ThreadParams, stock: Option<StockEnv>)
              wants the flanks' included angle, between 0 and 180",
             p.form_angle
         )));
+    }
+    if let Some(why) = plan.refusal(p.depth, p.infeed, p.form_angle) {
+        return Err(GenError::Invalid(why));
     }
     let (f, pts, sg, win, _dom, rho_clear) = blade::setup(
         facets,
@@ -233,7 +252,10 @@ pub fn thread_in(facets: &[Triangle], p: &ThreadParams, stock: Option<StockEnv>)
     let c_first = c0 + k_lo * p.pitch;
     let c_last = c0 + k_hi * p.pitch;
     let n = ((k_hi - k_lo) * 2.0) as usize;
-    let tips = blade::rungs(root, ref_top, p.infeed, 0.0)?;
+    let passes = plan.passes(ref_top, root, p.infeed)?;
+    // The radius at each half-turn end (issue #419): the tip, lifted
+    // where a chip-break dip stands. Dips off - the tip, bit for bit.
+    let radii = thread_dips::radii(&plan.dips, &passes, ref_top, root, p.pitch, n)?;
     let s_out = f.station_of(p.clearance_z);
     let ax = f.axis_point(c_first);
     let center = Point2::new(ax.x, ax.y);
@@ -243,11 +265,26 @@ pub fn thread_in(facets: &[Triangle], p: &ThreadParams, stock: Option<StockEnv>)
     let ccw = p.hand.ccw_for(true);
     let mut b = PathBuilder::new(f.point(rho_clear, s_out));
     let first = b.moves_len();
-    for &t in &tips {
-        b.push(MoveKind::Rapid, f.point(rho_clear, c_last), None);
-        b.push(MoveKind::Feed, f.point(t, c_last), Some(p.plunge_feed));
+    // A pass's `shift` runs along its travel (#416), and every pass
+    // travels -Z here (#629): a shift `behind` the pass stands toward
+    // the free end, so the station offset is its negation.
+    // A flank plan's cycle starts where a pass at the crest would: the
+    // station the flank line meets the crest on (issue #416/#417).
+    if plan.method == InfeedMethod::Flank {
+        let back = (ref_top - root) * plan.flank_angle.to_radians().tan();
+        b.push(MoveKind::Rapid, f.point(rho_clear, c_last + back), None);
+    }
+    for (k, pass) in passes.iter().enumerate() {
+        let (t, off) = (pass.tip, -pass.shift);
+        let s0 = c_last + off;
+        b.push(MoveKind::Rapid, f.point(rho_clear, s0), None);
+        b.push(MoveKind::Feed, f.point(t, s0), Some(p.plunge_feed));
+        let row = radii.get(k);
         for i in 1..=n {
-            let s = c_last - (i as f64) * (p.pitch * 0.5);
+            let s = s0 - (i as f64) * (p.pitch * 0.5);
+            // Half-turn `i` counts along the travel (-Z, #629), so a
+            // dip's place in the row is measured from the entry end.
+            let t = row.and_then(|r| r.get(i)).copied().unwrap_or(t);
             let to = if i % 2 == 0 {
                 f.point(t, s)
             } else {
@@ -255,57 +292,12 @@ pub fn thread_in(facets: &[Triangle], p: &ThreadParams, stock: Option<StockEnv>)
             };
             b.push_arc(MoveKind::Feed, to, Some(p.feed), center, ccw);
         }
-        b.push(MoveKind::Rapid, f.point(rho_clear, c_first), None);
+        b.push(MoveKind::Rapid, f.point(rho_clear, c_first + off), None);
     }
     let last = b.moves_len().saturating_sub(1);
     b.push(MoveKind::Rapid, f.point(rho_clear, s_out), None);
     let mut path = b.finish();
-    let first_depth = tips.first().map_or(p.depth, |&t| ref_top - t);
-    attach_cycle(&mut path, first, last, ref_top, root, p, first_depth);
+    thread_cycle::attach_cycle(&mut path, first, last, ref_top, root, p, plan, &passes);
+    thread_dips::require_record(&plan.dips, &path)?;
     Ok(path)
-}
-
-/// The thread-cycle record over the passes just laid (issue #34): the
-/// numbers a control's threading cycle needs, read off the built path
-/// so its points are the lattice the moves keep. This ladder plunges
-/// radially (infeed angle 0) in equal rungs of `infeed` to the root -
-/// first depth and minimum depth both the rung, no finish allowance,
-/// no spring pass, a square retract. A span the builder did not lay
-/// as planned gets no record and says so; the passes still post.
-fn attach_cycle(
-    path: &mut Toolpath,
-    first: usize,
-    last: usize,
-    ref_top: f64,
-    root: f64,
-    p: &ThreadParams,
-    first_depth: f64,
-) {
-    let (Some(m0), Some(end)) = (path.moves.get(first), last.checked_sub(1).and_then(|i| path.moves.get(i)))
-    else {
-        path.notes.push("threading: the passes did not lay as planned - no thread cycle record".into());
-        return;
-    };
-    let rec = ThreadCycle {
-        start: m0.to,
-        end: end.to,
-        major_diameter: 2.0 * ref_top,
-        minor_diameter: 2.0 * root,
-        lead: p.pitch,
-        height: ref_top - root,
-        first_depth,
-        min_depth: p.infeed.min(ref_top - root),
-        finish_allowance: 0.0,
-        infeed_angle: 0.0,
-        spring_passes: 0,
-        pull_out: 0.0,
-        first,
-        last,
-        hand: p.hand,
-    };
-    if m0.kind == MoveKind::Rapid && rec.is_sane(&path.moves) {
-        path.threads.push(rec);
-    } else {
-        path.notes.push("threading: the passes did not lay as planned - no thread cycle record".into());
-    }
 }

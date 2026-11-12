@@ -169,6 +169,7 @@ fn thread_params() -> OpParams {
         infeed: 0.4,
         feed: 120.0,
         plunge_feed: 40.0,
+        infeed_plan: Default::default(),
         hand: camcraft_app::cl::ThreadHand::Right,
     }
 }
@@ -404,6 +405,7 @@ fn an_upward_window_refuses_at_the_create_door() {
         infeed: 0.4,
         feed: 120.0,
         plunge_feed: 40.0,
+        infeed_plan: Default::default(),
         hand: camcraft_app::cl::ThreadHand::Right,
     };
     let Err(err) =

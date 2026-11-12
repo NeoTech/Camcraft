@@ -19,7 +19,7 @@ the property table there is the vocabulary, this file is the grammar.
 
 Manifest: top-level assignments only — `description`, `vendor`, `legal`,
 `certificationLevel`, `minimumRevision`, `extension`, `setCodePage`,
-`capabilities`, `coolantModes`, `liveTooling`, `afterModes`, `axisInversion`, `probeAxisInversion`, `threadHands`. All but the last six are
+`capabilities`, `coolantModes`, `liveTooling`, `afterModes`, `axisInversion`, `probeAxisInversion`, `threadHands`, `continuousThreading`. All but the last seven are
 text the engine reads none of; `threadHands = true` (#629) says the script
 reads `PARAM SpindleDirection` and states a thread's hand (M04 when the
 helix needs the spindle reversed) - without it the engine refuses a
@@ -44,7 +44,14 @@ true` (#392) says the script's probing blocks on that mirrored stream
 (negated touch target and trip, back-off delta, found expected values)
 are verified by the macro-B interpreter on a simulated inverted machine
 (`crates/app/tests/inverted_probe.rs`) - without it probing on an
-inverted axis is refused by name. Fanuc and Haas set it. The file-viewer's about box reads
+inverted axis is refused by name. Fanuc and Haas set it. `continuousThreading = true`
+(#419) says the script posts a thread pass's chip-break dips (`PARAM
+ChipBreakDips`: half-turns whose radius changes) as segments of one
+unbroken synchronized chain, on a control whose own manual states that
+consecutive threading blocks keep spindle sync with no new index wait -
+cite that manual section in the script's header before setting it.
+Without it the engine refuses the section by name. Only fanuc-lathe sets
+it (FANUC B-64304EN-1 §3.2 / §3.4). The file-viewer's about box reads
 the text ones, and every shipped post carries them.
 New files: `vendor = "Camcraft"` (the M4.3 naming law — the shipped
 five still carry the old label; do not copy that line's value).

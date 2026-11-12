@@ -179,6 +179,10 @@ pub fn run_numbered_with(
                         "{who}cuts a thread that needs the spindle reversed (M04) for its hand, but this post script does not declare threadHands - it would cut the other hand; use a lathe post that states the thread's hand"
                     ));
                 }
+                if name == "ChipBreakDips" && !s.voices_continuous_threading() {
+                    let op = base.get("OperationName").and_then(Value::as_str).unwrap_or("");
+                    warnings.push(super::cnc_thread::dips_unvoiced(op));
+                }
                 s.set_properties(&merged(&base, &BTreeMap::new(), pos))?;
                 s.call("onParameter", &format!("{}, {}", json!(name), value))?;
                 if name == "SpindleSpeed" {

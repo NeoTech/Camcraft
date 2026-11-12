@@ -10,7 +10,7 @@ use crate::model;
 use crate::operation::{self, OpParams, SrcRef};
 use crate::schema::Operation;
 
-use super::gates::{area_gate, check_tool, family_gate, heights_gate, tool_gate, valid_src};
+use super::gates::{area_gate, check_tool, family_gate, heights_gate, thread_gate, tool_gate, valid_src};
 
 /// Replace an operation's parameters. The cache is left alone and the
 /// stamp is dropped, so the operation reads Stale immediately: the old
@@ -108,6 +108,7 @@ impl EditOperationParams {
                 prev.params.kind()
             )));
         }
+        thread_gate(world, &params, &prev.tool)?;
         if !params.is_sane() {
             return Err(CommandError::Invalid(format!(
                 "operation parameters are not usable for a {} operation",
@@ -192,6 +193,7 @@ impl ChangeOperationKind {
             )));
         }
         family_gate(world, prev.setup.as_deref(), &params)?;
+        thread_gate(world, &params, &prev.tool)?;
         if !params.is_sane() {
             return Err(CommandError::Invalid(format!(
                 "operation parameters are not usable for a {} operation",

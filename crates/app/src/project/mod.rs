@@ -120,6 +120,9 @@ pub use vise_dto::ViseDto;
 mod thread_dto;
 mod break_dto;
 pub use break_dto::EdgeBreakDto;
+// #416: the threading infeed plan's file mirror.
+mod thread_infeed_dto;
+pub use thread_infeed_dto::{DepthScheduleDto, InfeedMethodDto, ThreadInfeedDto};
 pub use thread_dto::{ThreadCycleDto, ThreadHandDto};
 mod touch_dto;
 pub use touch_dto::ProbeTouchDto;

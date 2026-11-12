@@ -17,7 +17,8 @@
 //! pair. Stage C adds the blade: [`revolve`]'s meridian verdict of
 //! what a banded cut leaves, and [`blade`]'s grooving, groove-
 //! finish and parting sweeps built on the same silhouette. Stage D
-//! added [`thread`]'s helical ladder; stage E adds [`contour`]'s
+//! added [`thread`]'s helical ladder (its passes laid by
+//! [`infeed`]'s plan since #416); stage E adds [`contour`]'s
 //! promised-face rides - chamfer, taper, multi-pass - and stage E2
 //! [`form`]'s crown gauges. Stage F adds [`bore`]: the profile
 //! ride's inside twin, the nose walking a hole's inner wall. The
@@ -36,6 +37,7 @@ pub mod bore;
 pub mod contour;
 pub mod face;
 pub mod form;
+pub mod infeed;
 pub mod offset;
 pub mod parting;
 pub mod prof;
@@ -43,6 +45,8 @@ pub mod profile;
 pub mod revolve;
 pub mod stock;
 pub mod thread;
+mod thread_cycle;
+mod thread_dips;
 pub mod thread_law;
 
 pub use blade::{
@@ -64,5 +68,7 @@ pub use profile::{profile_of, silhouette, Profile};
 pub use blade_law::{blade_program_warnings, blade_program_warnings_excess, blade_warnings, blade_warnings_excess, BladeLeg};
 pub use revolve::{gouge_tol_on, BandMove, Floor};
 pub use stock::StockEnv;
-pub use thread::{thread, thread_in, ThreadParams};
+pub use infeed::{DepthSchedule, InfeedMethod, ThreadInfeed};
+pub use thread_dips::{ThreadDips, MIN_DIP_HEIGHT};
+pub use thread::{thread, thread_in, thread_planned_in, ThreadParams};
 pub use thread_law::{thread_hand_warnings, thread_warnings, thread_warnings_excess};

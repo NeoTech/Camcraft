@@ -121,6 +121,7 @@ fn thread_world_hand(hand: ThreadHand) -> (World, History) {
         infeed: 0.4,
         feed: 120.0,
         plunge_feed: 40.0,
+        infeed_plan: Default::default(),
         hand,
     };
     let cmd = CreateOperation::new(&world, "TH1", "TD-1732-60", SrcRef::Entity("bar".into()), params);
@@ -183,9 +184,12 @@ fn a_g76_thread_posts_to_the_lathe_golden() {
     // Root Ø9.6 at Z8, from the start point at the clearance radius on
     // the TOP centre (Z14) - #629: a right-hand thread cut toward the
     // chuck under M03; one finishing pass, square pull-out, radial
-    // infeed; 1.2 high in 0.4 rungs; lead 2.
+    // infeed; 1.2 high in 0.4 rungs; lead 2. R is the finishing pass's
+    // own 0.4 (#417): the control roughs 0.4, 0.8 and finishes at 1.2 -
+    // the three passes verified. R0 had it rough to 1.2 and cut the
+    // root once more.
     assert!(text.contains("M03\n") && !text.contains("M04"), "{text}");
-    assert!(text.contains("G00 X12.1 Z14\nG76 P010000 Q400 R0\n"), "{text}");
+    assert!(text.contains("G00 X12.1 Z14\nG76 P010000 Q400 R0.4\n"), "{text}");
     assert!(text.contains("G76 X9.6 Z8 P1200 Q400 F2\n"), "{text}");
     assert_eq!(text.matches("G76").count(), 2, "one two-block cycle: {text}");
     assert!(!text.contains("G32"), "the passes are the control's now: {text}");

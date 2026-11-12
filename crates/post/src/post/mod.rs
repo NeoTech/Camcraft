@@ -268,6 +268,12 @@ pub fn dump(t: &Toolpath, d: &Dump) -> Vec<Record> {
     if t.threads.iter().any(|c| c.is_sane(&t.moves) && c.reverse_spindle()) {
         out.push(Record::Param { name: "SpindleDirection".into(), value: json!("reverse") });
     }
+    // Chip-break dips (issue #419) are posted only by a script that
+    // declares `continuousThreading`: the section says so, and the
+    // engine refuses it by name everywhere else.
+    if t.threads.iter().any(|r| r.chip_break_dips) {
+        out.push(Record::Param { name: "ChipBreakDips".into(), value: json!(1.0) });
+    }
     // #891: the CSS ask, only a finite positive one (a script never sees
     // a speed it would have to guess about).
     if let Some(c) = d.css.filter(|c| c.vc.is_finite() && c.vc > 0.0) {
