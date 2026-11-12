@@ -264,8 +264,8 @@ fn nonsense_widths_are_refused_by_name() {
 /// #1196 review: Flow honours the lids. Its seeds and march ground
 /// every column on the same ball support as Parallel (`plunge_support`
 /// over every facet it is given) and its flanks ride the waterline
-/// rings, so on the land drive it never descends into a lidded pocket
-/// - unlike Pencil/Corner, whose crease walk the app refuses with the
+/// rings, so on the land drive it never descends into a lidded pocket,
+/// unlike Pencil/Corner, whose crease walk the app refuses with the
 /// fill on. Off, the same pass reaches the pocket floor. The pocket is
 /// 8 mm square (floor z 4), wide enough for flow's lines to land on
 /// its floor; the 10 mm width lids it.
