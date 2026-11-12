@@ -27,6 +27,10 @@
 #      version is installed from crates.io under the tools dir (never into
 #      ~/.cargo), after saying so. CAMCRAFT_WASM_NO_INSTALL=1 turns that
 #      install into a refusal that names the version to provide.
+# Cargo.lock: the flecs patch above makes cargo rewrite the workspace lock. The
+# script saves the tracked lock to <target>/wasm-tools/Cargo.lock.keep first
+# and restores it in an EXIT trap (success, failure, Ctrl-C), so a run leaves
+# `git status` as it found it. Only a SIGKILL skips the trap.
 # Output: <target>/web/ holds index.html, wasi_shim.js, camcraft-ui.js and
 # camcraft-ui_bg.wasm - serve that folder over http to run the shell.
 #
@@ -51,6 +55,20 @@ die() { echo "build-app-wasm: $*" >&2; exit 1; }
 
 TOOLS="$ROOT/target/wasm-tools"
 mkdir -p "$TOOLS"
+
+# The --config patch makes cargo rewrite the flecs entries of the workspace
+# Cargo.lock (path source, no checksum). The tracked lock is saved here before
+# any cargo call and put back by this EXIT trap on success, on failure and on
+# Ctrl-C / TERM (bash runs EXIT traps on signal exits), so the checkout is left
+# as it was found. Only SIGKILL escapes it; after a killed run, restore with
+# `git checkout -- Cargo.lock`.
+LOCK_KEEP="$TOOLS/Cargo.lock.keep"
+cp "$ROOT/Cargo.lock" "$LOCK_KEEP"
+restore_lock() {
+    cp "$LOCK_KEEP" "$ROOT/Cargo.lock" \
+        || echo "build-app-wasm: could not restore Cargo.lock from $LOCK_KEEP" >&2
+}
+trap restore_lock EXIT
 
 # --- 1. the pinned wasi sysroot ------------------------------------------
 SYSROOT="$TOOLS/$WASI_SYSROOT"
@@ -97,10 +115,6 @@ NSYS="$(native_path "$SYSROOT")"
 export CFLAGS_wasm32_unknown_unknown="-isystem $NSYS/include/wasm32-wasip1 -D__wasi__ -D__COSMOCC__"
 export CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUSTFLAGS="-C link-arg=-L$NSYS/lib/wasm32-wasip1 -C link-arg=-lc"
 cd "$ROOT"
-# The --config patch rewrites Cargo.lock's flecs entries (path source, no
-# checksum); the tracked lock is put back whatever happens.
-cp Cargo.lock "$TOOLS/Cargo.lock.keep"
-trap 'cp "$TOOLS/Cargo.lock.keep" "$ROOT/Cargo.lock"' EXIT
 cargo build -p camcraft-app --target wasm32-unknown-unknown "${PROFILE_ARGS[@]}" \
     --config "patch.crates-io.flecs_ecs.path='$(native_path "$PATCHED/flecs_ecs")'" \
     --config "patch.crates-io.flecs_ecs_sys.path='$(native_path "$PATCHED/flecs_ecs_sys")'"
@@ -125,7 +139,7 @@ echo "build-app-wasm: linked $UI_OUT"
 # --- 5. rung 3: the page a browser loads ----------------------------------
 # wasm-bindgen writes the JS glue (camcraft-ui.js) and the module it loads;
 # the page and the WASI shim are copied beside them.
-BINDGEN_VER="$(grep -A1 '^name = "wasm-bindgen"$' "$TOOLS/Cargo.lock.keep" | sed -n 's/^version = "\(.*\)"$/\1/p')"
+BINDGEN_VER="$(grep -A1 '^name = "wasm-bindgen"$' "$LOCK_KEEP"| sed -n 's/^version = "\(.*\)"$/\1/p')"
 [[ -n "$BINDGEN_VER" ]] || die "Cargo.lock names no wasm-bindgen version"
 BINDGEN="$(command -v wasm-bindgen || true)"
 if [[ -z "$BINDGEN" || "$("$BINDGEN" --version 2>/dev/null)" != "wasm-bindgen $BINDGEN_VER" ]]; then
