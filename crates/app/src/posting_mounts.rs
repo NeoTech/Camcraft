@@ -210,7 +210,7 @@ fn post_each(world: &World, out_path: &Path, cps: Option<&str>, mounts: Vec<Moun
             .map(|(name, _)| name.as_str())
             .filter(|name| model::find_by_name(world, name).is_some_and(|e| member(world, &e, &m.setups)))
             .collect();
-        crate::lathe_voice::at_post(world, own.iter().copied(), cps)?;
+        crate::lathe_voice::at_post(world, own.iter().copied(), cps, label.as_deref())?;
         unserved.extend(super::serves::refusal(world, &m.setups, &own, &m.machine, cps, label.as_deref())?);
     }
     // #1174: an explicit script is the dialect every op posts through;

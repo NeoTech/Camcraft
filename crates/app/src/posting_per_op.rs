@@ -129,7 +129,7 @@ fn post_per_op_with(
             .and_then(|op| op.setup);
         let effective = crate::setup::effective(world, setup.as_deref()).unwrap_or_default();
         let (label, cps) = script(&effective).ok_or_else(|| format!("{name}: no post resolved for its setup"))?;
-        crate::lathe_voice::at_post(world, [name.as_str()], &cps)?;
+        crate::lathe_voice::at_post(world, [name.as_str()], &cps, label.as_deref())?;
         match by_setup.iter_mut().find(|(s, ..)| *s == effective) {
             Some((_, ops, ..)) => ops.push(name.as_str()),
             None => by_setup.push((effective, vec![name.as_str()], label, cps.clone())),
