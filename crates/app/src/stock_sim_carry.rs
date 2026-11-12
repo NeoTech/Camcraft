@@ -59,16 +59,23 @@ pub const CARRY_MACHINE_REFUSAL: &str = "a part flip or sub-spindle hand-off is 
 /// "sinker EDM", ...) so the reader sees what the setup really is.
 #[must_use]
 pub fn carry_machine_refusal(kind: crate::machine::Kind) -> String {
+    format!("{CARRY_MACHINE_REFUSAL} {} machine", machine_kind_name(kind))
+}
+
+/// The name a refusal gives a machine kind ("lathe", "sinker EDM", ...) -
+/// the one table every machine-kind refusal reads (#1230 reuses it for the
+/// part-alignment refusal in `setup_align`).
+#[must_use]
+pub fn machine_kind_name(kind: crate::machine::Kind) -> &'static str {
     use crate::machine::Kind;
-    let name = match kind {
+    match kind {
         Kind::Mill => "mill",
         Kind::Lathe => "lathe",
         Kind::MillTurn => "mill-turn",
         Kind::Plasma => "plasma",
         Kind::WireEdm => "wire EDM",
         Kind::SinkerEdm => "sinker EDM",
-    };
-    format!("{CARRY_MACHINE_REFUSAL} {name} machine")
+    }
 }
 
 /// How the program enters a setup from the setup before it.
