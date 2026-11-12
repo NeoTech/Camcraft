@@ -85,12 +85,19 @@ impl GenError {
     /// finite to show, and any other kind of refusal, pass untouched.
     #[must_use]
     pub fn with_ghost(self, path: &crate::cl::Toolpath) -> Self {
+        self.with_ghost_moves(&path.moves)
+    }
+
+    /// [`GenError::with_ghost`] over a bare move list: for a refusal
+    /// raised part-way, with only a builder's moves in hand (#871).
+    #[must_use]
+    pub fn with_ghost_moves(self, moves: &[crate::cl::Move]) -> Self {
         let (msg, at) = match self {
             GenError::Invalid(msg) => (msg, None),
             GenError::At { msg, at } => (msg, Some(at)),
             other => return other,
         };
-        match Ghost::of(path) {
+        match Ghost::of_moves(moves) {
             Some(ghost) => GenError::Ghosted { msg, at, ghost },
             None => match at {
                 Some(at) => GenError::At { msg, at },
