@@ -103,7 +103,7 @@ pub use color_vision::{color_vision_of, color_vision_set};
 pub use set_wcs::SetWcsOrigin;
 pub use tool::{AddTool, ChangeTool, DeleteTool, HolderPick};
 pub use tool_body::{LatheBodySpec, SetToolBody, ToolBodySpec};
-pub use tool_cutter::SetToolCutter;
+pub use tool_cutter::{ReshapeTool, SetToolCutter};
 pub use tool_import::{ImportReport, ImportTools};
 pub use tool_number::SetToolNumber;
 pub use update_model::UpdateModel;
