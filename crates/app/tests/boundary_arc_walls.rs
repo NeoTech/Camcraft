@@ -5,7 +5,7 @@
 //! depends on where the joints land. Area mode reads its chords whole and
 //! is unchanged.
 //!
-//! Gate map: covers app::verify (sim::verify::section, sim::verify::arc_wall, law (b)).
+//! Gate map: covers sim::verify (sim::verify::section, sim::verify::arc_wall, law (b)).
 //!
 //! Provenance: point-to-circle distance along the radius, from elementary
 //! plane geometry; the tangency law is our own (sim::verify::section).

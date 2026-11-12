@@ -10,7 +10,7 @@
 //! RS-274's A as a rotation about X, and our `cl::pose` law.
 //!
 //! Gate map (M4.4): covers app::machine (judge: the pose gate),
-//! app::posting (post_setup), app::post (tormach.cps, fanuc.cps).
+//! app::posting (post_setup), post::post (tormach.cps, fanuc.cps).
 
 use camcraft_app::commands::{
     AddTool, CreateOperation, GenerateOperation, History, ImportModel, LoadMachine, SelectPost,

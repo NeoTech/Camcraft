@@ -12,7 +12,7 @@
 //! retracts at (-32, 28) from 19.5 to 25 (holder 71.5..112).
 //!
 //! Gate map (M4.4): covers app::fixture, app::operation, app::posting,
-//! app::verify.
+//! sim::verify.
 //! Provenance: our own fixtures; the law is the Prime Directive's.
 
 use camcraft_app::commands::{AddTool, CreateOperation, GenerateOperation, History, SetStock, TagFixture};

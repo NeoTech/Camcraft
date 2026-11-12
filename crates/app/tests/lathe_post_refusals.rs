@@ -10,7 +10,7 @@
 //! own G97, never the stale G96 (#772).
 //! The turning documents' goldens live in `lathe_post.rs`.
 //!
-//! Gate map (M4.4): covers app::post (engine, cnc on the lathe
+//! Gate map (M4.4): covers post::post (engine, cnc on the lathe
 //! dialect), app::machine (the mirror the script reads).
 //! Lane shape (M4.4): all tests here run in milliseconds.
 

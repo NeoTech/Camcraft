@@ -14,9 +14,9 @@
 //! (ISO 724's thread depth 0.5413 x pitch; the ring fit is the
 //! pocket family's chord tolerance law on one circle).
 //!
-//! Gate map (M4.4): covers app::commands, app::geometry, app::machining2d,
-//! app::model, app::operation, app::project, app::schema, app::stock,
-//! app::tools, app::world.
+//! Gate map (M4.4): covers app::commands, app::geometry, motion::machining2d,
+//! app::model, app::operation, app::project, app::schema, geometry::stock,
+//! tools::tools, app::world.
 
 use flecs_ecs::prelude::World;
 

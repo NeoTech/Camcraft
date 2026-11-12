@@ -134,3 +134,22 @@ pub fn gate_map(text: &str) -> Result<String, String> {
     }
     Ok(acc.join(" "))
 }
+
+/// The modules `crates/app/src/lib.rs` re-exports from a sibling crate (`pub use camcraft_post::post;`,
+/// `pub use camcraft_post::machine::*;`) as `(owner crate, name as app spells it)`. A Gate map that
+/// still says `app::<name>` for one of them means the owner crate's module (#922).
+pub fn app_reexports(root: &Path) -> Result<Vec<(String, String)>, String> {
+    let text = read(&root.join("crates/app/src/lib.rs"));
+    let one = re(r"^\s*pub\s+use\s+camcraft_(\w+)::(?:\w+::)*(\w+)\s*;")?;
+    let glob = re(r"^\s*pub\s+use\s+camcraft_(\w+)::(\w+)::\*\s*;")?;
+    let mut out: Vec<(String, String)> = Vec::new();
+    for l in text.lines() {
+        let hit = glob.captures(l).or_else(|| one.captures(l));
+        if let Some(c) = hit {
+            out.push((c[1].to_string(), c[2].to_string()));
+        }
+    }
+    out.sort();
+    out.dedup();
+    Ok(out)
+}

@@ -4,7 +4,7 @@
 //! headless proof is `headless_cli_exit_code_is_zero` below, which runs the
 //! real app through `run()`, and tests/egui_app.rs covers the same entry.
 //!
-//! Gate map (M4.4): covers ui::run, ui::state, app::geometry, app::model, app::schema, app::stock.
+//! Gate map (M4.4): covers ui::run, ui::state, app::geometry, app::model, app::schema, geometry::stock.
 
 
 #[test]

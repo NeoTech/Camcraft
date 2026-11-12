@@ -14,7 +14,7 @@
 //! below, and a fifth GPU process racing device creation across process
 //! boundaries is what made full-suite runs flake.
 //!
-//! Gate map (M4.4): covers ui::state, ui::viewport, app::stock.
+//! Gate map (M4.4): covers ui::state, ui::viewport, geometry::stock.
 
 use std::collections::HashSet;
 use std::fs;

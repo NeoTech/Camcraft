@@ -7,7 +7,7 @@
 //! jaws into the pass blocks the post.
 //!
 //! Gate map (M4.4): covers app::vise::self_centering, app::fixture,
-//! app::fixture_struck, app::posting, app::verify.
+//! app::fixture_struck, app::posting, sim::verify.
 
 use camcraft_app::cl::{Move, MoveKind, Toolpath, is_vertical};
 use camcraft_app::commands::{AddTool, CreateOperation, GenerateOperation, History, InsertVise, SetStock, SetVise, VisePlacement};

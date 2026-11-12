@@ -5,7 +5,7 @@
 //! law around them, and the sentence shape the bar prints.
 //! Provenance: our own tests, specced from the panes' contract.
 //!
-//! Gate map (M4.4): covers ui::actions, ui::state, app::machine, app::operation, app::stock, app::tools.
+//! Gate map (M4.4): covers ui::actions, ui::state, app::machine, app::operation, geometry::stock, tools::tools.
 
 use std::path::PathBuf;
 

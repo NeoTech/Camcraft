@@ -7,7 +7,7 @@
 //! a path whose links clear is left byte for byte.
 //!
 //! Gate map (M4.4): covers app::fixture, app::operation (fixture_route,
-//! generate, job), app::posting, app::verify.
+//! generate, job), app::posting, sim::verify.
 
 use camcraft_app::cl::{Move, MoveKind, Toolpath};
 use camcraft_app::commands::{

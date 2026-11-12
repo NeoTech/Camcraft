@@ -9,7 +9,7 @@
 //! `WRITE_GOLDEN=1 cargo test -p camcraft-app --test c_axis_unwind`
 //!
 //! Gate map (M4.4): covers camcraft_app::operation (rotary_gate's C
-//! stamp and unwind), camcraft_app::cl (unwind_c), camcraft_app::post
+//! stamp and unwind), cl::cl (unwind_c), post::post
 //! (fanuc-lathe.cps voicing the orbit).
 //! Lane shape (M4.4): all tests here run in seconds.
 

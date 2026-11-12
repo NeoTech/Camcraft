@@ -138,10 +138,18 @@ fn map_modules(root: &Path, p: &mut Picks, notes: &mut Vec<String>) -> Result<()
             }
         }
     }
+    let reexports = scan::app_reexports(root)?;
     for (md, m, sub) in p.mods.clone() {
         let (mm, ms) = (escape(&m), escape(&sub));
         let own = re(&format!(r"(?i)::{mm}\b|\{{[^}}]*\b{mm}\b"))?;
-        let other = re(&format!(r"(?i)\b(camcraft_)?{md}::{mm}\b"))?;
+        // A map written before M4.1 moved the module says `app::<mod>`: still this module, so it is
+        // picked too (the quick gate selects more, never less; #922).
+        let legacy = if reexports.iter().any(|(c, n)| *c == md && *n == m) {
+            format!(r"|\b(camcraft_)?app::{mm}\b")
+        } else {
+            String::new()
+        };
+        let other = re(&format!(r"(?i)\b(camcraft_)?{md}::{mm}\b{legacy}"))?;
         let by_sub_re = re(&format!(r"(?i)(::|\{{[^}}]*\b){mm}(::{ms}\b|\s*\([^)]*\b{ms}\b)"))?;
         let (mut by_sub, mut by_mod) = (Vec::new(), Vec::new());
         for (d, b, gm) in &maps {

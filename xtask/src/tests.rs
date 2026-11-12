@@ -43,6 +43,13 @@ fn fixture() -> Fixture {
     w("crates/app/tests/center_cut_multiaxis.rs", "//! Gate map: covers app::multiaxis.\n");
     w("crates/app/src/operation/area.rs", "pub fn a() {}\n#[cfg(test)]\nmod tests {\n    #[test]\n    fn area_unit() {}\n}\n");
     w("crates/app/src/commands.rs", "pub fn c() {}\n");
+    w("crates/app/src/lib.rs", "pub use camcraft_post::post;\npub use camcraft_post::machine::*;\npub use camcraft_sim::verify;\npub use camcraft_motion::machining2d;\npub mod commands;\n");
+    w("crates/app/tests/dialect.rs", "//! Gate map (M4.4): covers app::post, app::project.\n");
+    w("crates/app/tests/envelope.rs", "//! Gate map: covers app::verify, app::machining2d (pocket).\n");
+    w("crates/app/tests/renamed.rs", "//! Gate map: covers post::post (engine), motion::machining2d, sim::verify.\n");
+    w("crates/post/src/post/cnc.rs", "pub fn e() {}\n");
+    w("crates/sim/src/verify/gouge.rs", "pub fn g() {}\n");
+    w("crates/motion/src/machining2d/zigzag.rs", "pub fn p() {}\n");
     w("crates/motion/tests/finish3d.rs", "//! Gate map: covers motion::finish3d.\n#[test]\nfn f3d() {}\n");
     w("crates/motion/tests/waterline.rs", "//! Gate map: covers motion::waterline.\n");
     w("crates/ui/src/egui_app/tests/structural.rs", "#[test]\nfn op_area_label() {}\n");
@@ -168,7 +175,7 @@ fn nothing_in_crates_plans_nothing_and_xtask_runs_its_own_tests() {
 fn batch_skips_slow_binaries_and_release_runs_everything() {
     let fx = fixture();
     let b: Vec<String> = plan::batch(&fx.0).steps.iter().map(line).collect();
-    assert!(b.contains(&"app suites (slow, release tier: center_cut_multiaxis) | test -j 6 -p camcraft-app --no-fail-fast --lib --test cmds --test ops -- --test-threads=6".to_string()), "{b:#?}");
+    assert!(b.contains(&"app suites (slow, release tier: center_cut_multiaxis) | test -j 6 -p camcraft-app --no-fail-fast --lib --test cmds --test dialect --test envelope --test ops --test renamed -- --test-threads=6".to_string()), "{b:#?}");
     assert!(b.contains(&"motion suites (slow, release tier: finish3d) | test -j 6 -p camcraft-motion --no-fail-fast --lib --test waterline -- --test-threads=6".to_string()));
     assert_eq!(b[b.len() - 2], "[ui] ui suites (cwd crates/ui) | test -j 6 -p camcraft-ui --no-fail-fast -- --test-threads=6");
     assert!(b[b.len() - 1].starts_with("clippy -D warnings | clippy -j 6 -p camcraft-geometry -p camcraft-cl"));
@@ -300,4 +307,69 @@ fn packaging_build_clears_compiler_wrappers() {
     // Only the one that is set is named; none set, nothing to clear.
     assert_eq!(exec::packaging_env_clear(|v| v == "CARGO_BUILD_RUSTC_WRAPPER"), ["CARGO_BUILD_RUSTC_WRAPPER"]);
     assert!(exec::packaging_env_clear(|_| false).is_empty());
+}
+
+fn picked(fx: &Fixture, f: &str) -> String {
+    steps(quick_plan(&fx.0, &[f], &[], &[], false)).iter().map(line).collect::<Vec<_>>().join(" ; ")
+}
+
+#[test]
+fn a_post_module_change_selects_the_dialect_suites_by_new_and_old_map() {
+    let fx = fixture();
+    let got = picked(&fx, "crates/post/src/post/cnc.rs");
+    // `renamed` spells post::post, `dialect` still says app::post (pre-M4.1): both run.
+    assert!(got.contains("--test dialect") && got.contains("--test renamed"), "{got}");
+    assert!(!got.contains("--test ops"), "{got}");
+}
+
+#[test]
+fn a_sim_module_change_selects_the_suites_naming_verify() {
+    let fx = fixture();
+    let got = picked(&fx, "crates/sim/src/verify/gouge.rs");
+    assert!(got.contains("--test envelope") && got.contains("--test renamed"), "{got}");
+    assert!(!got.contains("--test dialect"), "{got}");
+}
+
+#[test]
+fn a_motion_module_change_selects_the_suites_naming_machining2d() {
+    let fx = fixture();
+    let got = picked(&fx, "crates/motion/src/machining2d/zigzag.rs");
+    assert!(got.contains("--test envelope") && got.contains("--test renamed"), "{got}");
+    // A new-style map is not widened by the alias: finish3d's suite is not named.
+    assert!(!got.contains("--test finish3d"), "{got}");
+}
+
+#[test]
+fn app_reexports_lists_owner_crate_and_name() {
+    let fx = fixture();
+    let got = scan::app_reexports(&fx.0).expect("reexports");
+    let want = [("motion", "machining2d"), ("post", "machine"), ("post", "post"), ("sim", "verify")];
+    assert_eq!(got, want.iter().map(|(c, n)| (c.to_string(), n.to_string())).collect::<Vec<_>>());
+}
+
+/// The real tree: no suite names a module that app re-exports as `app::<module>` (#922), and the
+/// TNC cycle suite has a map. Own-crate modules (`app::machine`, which is both) are exempt.
+#[test]
+fn no_suite_names_a_moved_module_as_app_and_heidenhain_has_a_map() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    let moved = scan::app_reexports(&root).expect("reexports");
+    assert!(moved.iter().any(|(c, n)| c == "post" && n == "post"), "lib.rs scan found {moved:?}");
+    let mut bad = Vec::new();
+    for d in plan::ALL_CRATES {
+        for b in scan::binaries(&root, d) {
+            let file = root.join("crates").join(d).join("tests").join(format!("{b}.rs"));
+            let gm = scan::gate_map(&scan::read(&file)).expect("gate map");
+            for (_, n) in moved.iter().filter(|(_, n)| !root.join("crates/app/src").join(n).exists()
+                && !root.join("crates/app/src").join(format!("{n}.rs")).exists())
+            {
+                let hit = scan::re(&format!(r"\bapp::{}\b", regex::escape(n))).expect("re");
+                if hit.is_match(&gm) {
+                    bad.push(format!("{d}/{b}: app::{n}"));
+                }
+            }
+        }
+    }
+    assert!(bad.is_empty(), "stale Gate maps: {bad:?}");
+    let hc = scan::read(&root.join("crates/app/tests/heidenhain_cycles.rs"));
+    assert!(!scan::gate_map(&hc).expect("gate map").is_empty(), "heidenhain_cycles has no Gate map");
 }
