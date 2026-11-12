@@ -16,7 +16,7 @@
 //! writes nothing: never a folder with ops 1 and 3 but not 2.
 
 use super::{
-    machine_value_of, op_streams, options_value, post_options, script_of, script_source, verification_report, viewer_map,
+    machine_value_of, op_streams, options_value, post_options, script_of, script_source, viewer_map,
     Posted,
 };
 use crate::post::{cnc, engine};
@@ -124,7 +124,16 @@ fn post_per_op_with(
         crate::lathe_voice::at_post(world, [name.as_str()], &cps)?;
         resolved.push((setup, cps));
     }
-    let report = verification_report(world);
+    // #1174: the workholding clause reads each op's own script's dialect
+    // (keyed by effective setup name, as `script` is); unreadable reads
+    // as undeclared - the stricter reading.
+    let voice = |declared: Option<&str>| {
+        let setup = crate::setup::effective(world, declared).unwrap_or_default();
+        script(&setup).map_or(crate::post::dialect::WorkVoice::Undeclared, |c| {
+            crate::post::dialect::work_voice(&c).unwrap_or(crate::post::dialect::WorkVoice::Undeclared)
+        })
+    };
+    let report = crate::posting::verification_report_by(world, &voice);
     if !report.problems.is_empty() {
         return Err(format!("post blocked - {}", report.problems.join("; ")));
     }
