@@ -152,6 +152,7 @@ pub use crate::tools::ToolGeom;
 
 
 mod air;
+mod axis_door;
 mod arc_bulge;
 mod arc_wall;
 mod arc_wall_plane;
