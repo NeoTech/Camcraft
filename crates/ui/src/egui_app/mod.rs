@@ -48,6 +48,7 @@ pub mod window_chrome;
 mod post_options;
 pub mod cvd;
 mod icons;
+mod op_icons;
 mod layout;
 mod load_field;
 // pub(crate) past egui_app: `State::machine_editor` names its draft
@@ -70,12 +71,14 @@ mod op_tabs;
 mod painted;
 mod tree_glyphs;
 mod pages;
+mod step_budget_row;
 // #1094: the stock page's raw-stock-only checkbox.
 mod raw_stock_row;
 // #371: the tool editor's Body section and its picking preview.
 mod tool_body_page;
 // #630: the tool editor's lathe orientation row.
 mod tool_orientation_row;
+mod tool_turning_row;
 mod tool_profile_page;
 // #793: the built-in taper holder picker in the Profile section.
 mod tool_holder_picker;
@@ -101,6 +104,7 @@ mod setup_axis_pick;
 mod setup_points_pick;
 // #316: the setup page's "relative to the previous setup" control.
 mod setup_relative_pick;
+mod setup_workholding_row;
 // The operation dialog, split out of `pages` with the property grid
 // (user review 2026-11-06): the frame, the Geometry pick block, the
 // params dispatcher and its kind-family pages, the shared widgets.

@@ -169,6 +169,7 @@ fn settings(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
     super::setup_points_pick::row(ui, state, name);
     super::setup_axis_pick::rows(ui, state, name);
     super::setup_wcs_pick::picker(ui, state, name);
+    super::setup_workholding_row::row(ui, state, name);
     ui.separator();
     if ui.button(format!("Delete {name}")).clicked() {
         state.pending.push_back(CommandKind::DeleteSetup(name.to_owned()));

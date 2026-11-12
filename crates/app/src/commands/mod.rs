@@ -44,6 +44,7 @@ pub mod setup_mount;
 pub mod setup_post_options;
 // #821: a setup's stated nose-to-rotary figure (a raised rotary).
 pub mod setup_nose;
+pub mod setup_workholding;
 // #316: a setup placed relative to another (flip / turn presets).
 pub mod setup_relative;
 // #320: a setup's stock source.
@@ -103,6 +104,7 @@ pub use setup_wcs::SetSetupWorkOffset;
 pub use setup_mount::{SetSetupMachine, SetSetupPost};
 pub use setup_post_options::SetSetupPostOptions;
 pub use setup_nose::SetSetupNoseToAxis;
+pub use setup_workholding::SetSetupWorkholdingRpm;
 pub use setup_relative::SetSetupRelative;
 pub use setup_stock::SetSetupStockSource;
 pub use set_units::SetUnits;

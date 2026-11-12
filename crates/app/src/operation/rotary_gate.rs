@@ -87,6 +87,19 @@ pub(super) fn stamp_spindle_c(
     let Some(ax) = c_axis else {
         return Ok(path);
     };
+    // #1015: the kernel's world path is in hand at every refusal below.
+    stamp_c_about(&path, ax, machine, unwinds, tol, kind).map_err(|e| e.with_ghost(&path))
+}
+
+/// [`stamp_spindle_c`]'s body, over the path it may refuse.
+fn stamp_c_about(
+    path: &crate::cl::Toolpath,
+    ax: crate::multiaxis::axis::Axis,
+    machine: Option<&(String, Vec<AxisLimits>)>,
+    unwinds: bool,
+    tol: f64,
+    kind: &str,
+) -> Result<crate::cl::Toolpath, GenError> {
     let d = ax.dir;
     let len = (d.x * d.x + d.y * d.y + d.z * d.z).sqrt();
     if !(len > 1e-12 && (d.z / len).abs() >= SAME_LINE) {
@@ -100,7 +113,7 @@ pub(super) fn stamp_spindle_c(
     let t = -ax.origin.z / d.z;
     let center = [ax.origin.x + d.x * t, ax.origin.y + d.y * t];
     let tol = if tol.is_finite() && tol > 0.0 { tol } else { crate::machining2d::ARC_FIT_TOL };
-    let stamped = crate::cl::stamp_c(&path, center, tol).map_err(|e| GenError::Invalid(format!("{kind}: {e}")))?;
+    let stamped = crate::cl::stamp_c(path, center, tol).map_err(|e| GenError::Invalid(format!("{kind}: {e}")))?;
     let Some((lo, hi)) = c_travel(machine) else {
         return Ok(stamped);
     };
@@ -201,6 +214,20 @@ mod tests {
         // whole turn into the travel (the section opens there).
         let t = stamp_spindle_c(helix(), spindle(), (Some(&m), true), 0.01, "Rotary Contour");
         assert!(t.is_ok_and(|t| t.moves.iter().all(|m| m.rotary.is_some_and(|c| (-360.0..=360.0).contains(&c)))));
+    }
+
+    #[test]
+    fn a_gate_refusal_hands_back_the_world_path_it_judged() {
+        // #1015: the rotary kernel's path is world (the frame the post
+        // reads), so the refused path rides as the ghost, move for move.
+        let m = c_travel_machine(-360.0, 360.0);
+        let e = stamp_spindle_c(helix(), spindle(), (Some(&m), false), 0.01, "Rotary Parallel").err();
+        let ghost = e.as_ref().and_then(|e| e.ghost()).map(|g| g.moves().to_vec());
+        assert_eq!(ghost, Some(helix().moves), "{e:?}");
+        // A tilted line refused before any stamp: the same path rides.
+        let leaning = crate::multiaxis::axis::Axis { dir: crate::geometry::Point3::new(1.0, 0.0, 0.0), ..spindle().expect("axis") };
+        let e = stamp_spindle_c(helix(), Some(leaning), (Some(&m), false), 0.01, "Rotary Offset").err();
+        assert_eq!(e.as_ref().and_then(|e| e.ghost()).map(|g| g.len()), Some(helix().moves.len()), "{e:?}");
     }
 
     /// Rotary Contour unwinds over the axial plane only: a path whose

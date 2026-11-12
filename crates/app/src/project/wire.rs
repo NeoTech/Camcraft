@@ -85,6 +85,7 @@ pub fn collect(world: &World) -> ProjectFile {
                         stock_source: d.stock_source.map(|s| s.word().to_string()),
                         post_options: d.post_options.as_ref().map(SetupPostOptionsDto::from_options),
                         nose_to_axis: d.nose_to_axis.filter(|v| v.is_finite()),
+                        workholding_max_rpm: d.workholding_max_rpm,
                     })
             } else {
                 None
@@ -169,6 +170,7 @@ pub fn collect(world: &World) -> ProjectFile {
                 // landing); everywhere else it reads 0 and omits itself.
                 rev: model::rev_of(world, &entity),
                 coarse_mm: crate::model_fidelity::chord_of(world, &entity),
+                facet_budget: crate::model_fidelity::budget_of(world, &entity),
                 kind,
                 raw_stock_only: mark.is_some(),
                 raw_stock_print: mark.as_ref().map(crate::stock_print::to_text),

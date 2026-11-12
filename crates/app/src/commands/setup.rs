@@ -128,6 +128,7 @@ impl CreateSetup {
                 stock_source: None,
                 post_options: None,
                 nose_to_axis: None,
+                workholding_max_rpm: None,
             }
         } else {
             SetupDef {
@@ -156,6 +157,9 @@ impl CreateSetup {
                 // #821: the stated nose figure rides the machine (#343's
                 // transfer: the same clamping system).
                 nose_to_axis: datum_from.and_then(|f| setup::def_of(world, f)).and_then(|d| d.nose_to_axis),
+                // #1031: the same clamping system keeps its chuck's rating -
+                // dropping a limit would silently lift a safety ceiling.
+                workholding_max_rpm: datum_from.and_then(|f| setup::def_of(world, f)).and_then(|d| d.workholding_max_rpm),
             }
         };
         let mut stock = None;
