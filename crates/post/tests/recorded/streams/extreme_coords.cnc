@@ -5,7 +5,7 @@ PARAM StartZ 10.000000
 PARAM OperationName Extremes
 PARAM ToolDiameter 6.000000
 PARAM SpindleSpeed 8000.000000
-PARAM WorkOffset G54
+PARAM WorkOffset 1.000000
 PARAM OriginX 0.000000
 PARAM OriginY 0.000000
 PARAM OriginZ 0.000000
