@@ -50,8 +50,7 @@
 //! (our code) and the egui vendored sources; no HSMWorks material involved.
 
 use egui::{
-    Align, Align2, Color32, ComboBox, DragValue, FontId, Id, Label, Layout, Pos2, RichText,
-    ScrollArea,
+    Align2, Color32, DragValue, FontId, Id, Pos2, RichText, ScrollArea,
     Sense, Shape, Stroke, TextEdit, Ui, Vec2, Window,
 };
 
@@ -66,10 +65,7 @@ use camcraft_app::tools;
 use camcraft_app::units::{self, Unit};
 
 use crate::actions;
-use crate::interact;
-use crate::state::{
-    CommandKind, ErrorScope, FixtureUi, ModelUi, PostView, State, UiTarget, quat_yaw_deg,
-};
+use crate::state::{CommandKind, ErrorScope, FixtureUi, ModelUi, State, UiTarget};
 
 use super::layout::hint;
 use super::panes::kind_name;
