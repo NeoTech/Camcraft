@@ -99,14 +99,14 @@ threadHands = true;  // reads PARAM SpindleDirection (#629): the engine refuses 
 //    planned mm/min along the part-frame chord - capped so the X/Z part
 //    of the move stays within the machine's stated feed and the C part
 //    within the C rate it states (machine.rotaries[].speeds, deg/min;
-//    unstated, C is not capped). A machine that states a C travel - so
-//    its path may carry rewind orbits (#33) - but no C rate has nothing
-//    to cap a C-turning rapid by: that rapid is refused by name, never
-//    posted at an uncapped feed (#906). A rapid is a G01 at the
-//    machine's stated maximum feed, never a G00: a G00 with C runs each
-//    axis on its own and follows no verified path. Arcs and cycles in a
-//    C section are refused; the first move must be a rapid (C stands
-//    there before X and Z move).
+//    unstated, C is not capped). A machine that states no C rate has
+//    nothing to cap a C-turning rapid by - whether it states a C travel
+//    (so its path may carry rewind orbits, #33) or not: that rapid is
+//    refused by name, never posted at an uncapped feed (#906, #966).
+//    A rapid is a G01 at the machine's stated maximum feed, never a
+//    G00: a G00 with C runs each axis on its own and follows no
+//    verified path. Arcs and cycles in a C section are refused; the
+//    first move must be a rapid (C stands there before X and Z move).
 
 // ---------------------------------------------------------------- state
 var wcsWord = "G54";
@@ -495,11 +495,12 @@ function liveMove(p, rapid) {
       return;
     }
     if (!(ltrue > EPS)) { refuse("a C move that turns the part with the tip on the spindle line"); return; }
-    // #906: a rapid's F is the machine's maximum linear feed, which a
-    // turn of C would multiply past anything the file states. With a
-    // C travel stated (rewinds may ride here) and no C rate, refuse.
-    if (rapid && liveCTravel && !(liveCRate > 0) && Math.abs(dc) > 1e-9) {
-      refuse("a C-axis rapid that turns C, but the machine file states a C travel but no C rate - its feed would be uncapped; state the C axis's speeds");
+    // #906, #966: a rapid's F is the machine's maximum linear feed,
+    // which a turn of C would multiply past anything the file states.
+    // No C rate stated - with a C travel (rewinds may ride here) or
+    // without one (link rapids still turn C) - refuse by name.
+    if (rapid && !(liveCRate > 0) && Math.abs(dc) > 1e-9) {
+      refuse("a C-axis rapid that turns C, but the machine file states " + (liveCTravel ? "a C travel but no C rate" : "no C rate") + " - its feed would be uncapped; state the C axis's speeds");
       return;
     }
     // Under a composite F the control drives X/Z at F * lin / lcmd and
