@@ -8,10 +8,20 @@
 //! against the program ahead: it only removes a conviction, and only
 //! where the solids prove the whole tool stack ends above all material.
 //!
+//! Issue #1095: an upright LATERAL rapid (a link, a traverse under the
+//! clearance plane) is re-read the same way, each band over the capsule
+//! it sweeps along the move rather than the disc of a dive, and the tip
+//! taken at the rapid's lowest end for the whole move - a climbing or
+//! falling traverse is judged as if it ran level at its low end, which
+//! can only over-report. It takes the dive's rules whole: the bands of
+//! [`bands`], grown and lifted by the excess. Upright only by
+//! construction - a posed rapid keeps its conviction.
+//!
 //! The bound: for a closed mesh, the material over any plan point p
 //! stands no higher than the highest vertex of a facet whose plan
 //! (triangle, or the segment of a vertical facet) comes within the disc
-//! around the dive - the topmost surface over p is on a facet covering p.
+//! around the dive, or the capsule along the rapid - the topmost surface
+//! over p is on a facet covering p.
 //! A facet that only grazes the disc still lends its highest vertex, so
 //! a slope reads high (an over-report, never a hide). Each band of the
 //! stack is judged at its own disc and its own height over the tip: the
@@ -33,7 +43,7 @@
 //! whose radius or offset is not a finite non-negative number, or a
 //! flute disc that meets no facet at all leaves the conviction standing.
 
-use super::laws::dist2_seg;
+use super::laws::{dist2_seg, dist2_segs};
 use super::stock_top_shell::closed_shell;
 use super::types::{Mode, Warning};
 
@@ -42,13 +52,14 @@ use crate::geo2d::Point2;
 use crate::geometry::Triangle;
 use crate::tools::ToolGeom;
 
-/// `warns` without the convictions of upright vertical rapids DOWN whose
-/// whole tool stack ends above every facet of `solids` within reach
-/// (see the module doc). `solids` are the closed meshes that bound the
-/// material the op can meet - the stock and the part - in the path's
-/// own frame. Lateral rapids, posed dives, and every other warning keep
-/// their verdict; so does every dive of a mode whose rapids are not
-/// judged by the vertical column (radial, revolved, rotary).
+/// `warns` without the convictions of upright rapids - vertical dives
+/// DOWN, and lateral rapids (#1095) - whose whole tool stack ends above
+/// every facet of `solids` within reach (see the module doc). `solids`
+/// are the closed meshes that bound the material the op can meet - the
+/// stock and the part - in the path's own frame. Posed rapids, vertical
+/// retracts, and every other warning keep their verdict; so does every
+/// rapid of a mode whose rapids are not judged by the vertical column
+/// (radial, revolved, rotary).
 pub fn acquit_by_stock_top(
     path: &Toolpath,
     mode: Mode,
@@ -73,13 +84,24 @@ pub fn acquit_by_stock_top(
         let Some(m) = path.moves.get(at) else { return true };
         let (dx, dy) = (m.to.x - m.from.x, m.to.y - m.from.y);
         let upright = m.axis.is_none_or(|a| a[0].abs() <= 1e-12 && a[1].abs() <= 1e-12 && a[2] > 0.0);
-        let vertical_down =
-            m.kind == MoveKind::Rapid && upright && dx * dx + dy * dy <= z_tol * z_tol && m.to.z < m.from.z;
-        if !vertical_down || !m.to.z.is_finite() {
+        if m.kind != MoveKind::Rapid || !upright {
+            return true;
+        }
+        if dx * dx + dy * dy > z_tol * z_tol {
+            // #1095: a lateral rapid, over its whole trace at its low end.
+            let low = m.from.z.min(m.to.z);
+            if !(low.is_finite() && m.from.is_finite() && m.to.is_finite()) {
+                return true;
+            }
+            let (a, b) = (Point2::new(m.from.x, m.from.y), Point2::new(m.to.x, m.to.y));
+            // The excess lifts every top by `e`, as for a dive.
+            return !clear_of(solids, (a, b), low - e, &bands, z_tol);
+        }
+        if !(m.to.z.is_finite() && m.from.z.is_finite()) || m.to.z >= m.from.z {
             return true;
         }
         let c = Point2::new(m.to.x, m.to.y);
-        !clear_of(solids, c, m.to.z - e, &bands, z_tol)
+        !clear_of(solids, (c, c), m.to.z - e, &bands, z_tol)
     });
 }
 
@@ -99,27 +121,44 @@ fn bands(t: &ToolGeom, e: f64) -> Option<[(f64, f64); 3]> {
     b.iter().all(|&(r, h)| r.is_finite() && r >= 0.0 && h.is_finite() && h >= 0.0).then_some(b)
 }
 
-/// Whether every band of the stack, its tip at (c, `tip`), stands above
-/// the highest facet within its disc (less `z_tol`). The flute's disc
-/// must meet some facet - an empty reading is no proof.
-fn clear_of(solids: &[&[Triangle]], c: Point2, tip: f64, bands: &[(f64, f64); 3], z_tol: f64) -> bool {
-    bands.iter().enumerate().all(|(k, &(r, h))| match top_within(solids, c, r) {
+/// Whether every band of the stack, its tip at `tip` along the plan
+/// segment `trace` (one point for a dive), stands above the highest
+/// facet within its reach of it (less `z_tol`). The flute's reach must
+/// meet some facet - an empty reading is no proof.
+fn clear_of(solids: &[&[Triangle]], trace: (Point2, Point2), tip: f64, bands: &[(f64, f64); 3], z_tol: f64) -> bool {
+    bands.iter().enumerate().all(|(k, &(r, h))| match top_within(solids, trace, r) {
         Some(top) => tip + h >= top - z_tol,
         None => k > 0, // nothing under a stack band is air; under the flute it is unknown
     })
 }
 
-/// The highest vertex of any facet whose plan comes within `r` of `c`.
-fn top_within(solids: &[&[Triangle]], c: Point2, r: f64) -> Option<f64> {
+/// The highest vertex of any facet whose plan comes within `r` of the
+/// plan segment `trace` (a disc about a point, a capsule along a move).
+fn top_within(solids: &[&[Triangle]], (a, b): (Point2, Point2), r: f64) -> Option<f64> {
     let r2 = r * r;
     let mut top: Option<f64> = None;
     for t in solids.iter().flat_map(|s| s.iter()) {
-        if dist2_tri(c, t) <= r2 {
+        if dist2_seg_tri(a, b, t) <= r2 {
             let z = t.a.z.max(t.b.z).max(t.c.z);
             top = Some(top.map_or(z, |m| m.max(z)));
         }
     }
     top
+}
+
+/// The squared plan distance from segment `a`-`b` to triangle `t`: 0 when
+/// they meet, else the least of the ends' distances to the triangle and
+/// the segment's to its edges (a segment that does not meet a triangle
+/// comes nearest it at one of its ends or at an edge). A point segment
+/// reads exactly [`dist2_tri`] of the point: its distance to an edge is
+/// that edge's term of `dist2_tri` already.
+fn dist2_seg_tri(a: Point2, b: Point2, t: &Triangle) -> f64 {
+    let ends = dist2_tri(a, t).min(dist2_tri(b, t));
+    if a == b || ends == 0.0 {
+        return ends;
+    }
+    let (p, q, r) = (Point2::new(t.a.x, t.a.y), Point2::new(t.b.x, t.b.y), Point2::new(t.c.x, t.c.y));
+    ends.min(dist2_segs(a, b, p, q)).min(dist2_segs(a, b, q, r)).min(dist2_segs(a, b, r, p))
 }
 
 /// The squared plan distance from `p` to triangle `t` (0 inside it). A
