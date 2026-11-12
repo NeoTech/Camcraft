@@ -215,7 +215,11 @@ fn assert_hop_law(stream: &str, tag: &str) {
 
 fn drill_retract() -> String {
     let p = recorded::stream_path("drill_retract");
-    std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display()))
+    // A Windows checkout with core.autocrlf=true reads the stream with CRLF;
+    // normalise, as the recorded runner does, so the anchors below match.
+    std::fs::read_to_string(&p)
+        .unwrap_or_else(|e| panic!("{}: {e}", p.display()))
+        .replace("\r\n", "\n")
 }
 
 #[test]
