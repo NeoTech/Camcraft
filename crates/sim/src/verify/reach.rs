@@ -39,8 +39,11 @@ pub(super) fn band_reach(
     // draws, never the cylinder enclosing it. Each group convicts a
     // move once, the worst offender over its bands, so a body's many
     // bands report as the one holder they stand for.
-    let shank = [(cx.tool.flute_len, cx.tool.shank_radius, cx.tool.shank_len)];
-    let holder = super::Cutter::judged(cx.tool, cx.cutter).holder_bands();
+    // #852: a necked tool's shank is its drawn neck's bands, never
+    // wider than the stated cylinder; no neck reads that cylinder.
+    let judged = super::Cutter::judged(cx.tool, cx.cutter);
+    let shank = judged.shank_bands();
+    let holder = judged.holder_bands();
     let groups: [&[(f64, f64, f64)]; 2] = [&shank, &holder];
     let bands: Vec<(f64, f64, f64)> = groups.concat();
 

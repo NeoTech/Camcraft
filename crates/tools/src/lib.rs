@@ -24,6 +24,8 @@ pub mod spun;
 pub mod cutter_profile;
 // #93 slice 3: the drawn cutter edited by its parameters (refit, neck).
 pub mod cutter_fit;
+// #852: a necked tool's drawn shank, as the stack laws judge it.
+pub mod neck;
 // #369: a lathe-held body as the revolved-stock law reads it.
 pub mod lathe_holder;
 // #396: the insert plate a lathe body's judge leaves out.
