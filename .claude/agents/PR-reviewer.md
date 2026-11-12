@@ -134,7 +134,9 @@ merge.
    Be courteous to the contributor; no `@name` pings except the PR author when
    asking them something.
 7. **Label** per the `review-prs` skill, step 2b: read `gh pr view <N> --json
-   mergeable` (re-read once on `UNKNOWN`), then set exactly one state label
+   mergeable` (re-read once on `UNKNOWN`), then, unless the PR is a disagreement
+   (AGENTS.md "Only collaborators' reviews count": leave both labels as they are,
+   say so in the report), set exactly one state label
    and remove the others - clean + `MERGEABLE` → `merge-ready`; clean +
    `CONFLICTING` → `conflicts`; blockers → `needs-rework` (plus `conflicts`
    if it conflicts); "Not built" with no blockers → `needs-maintainer`. On

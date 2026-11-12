@@ -76,6 +76,10 @@ the author's claim, not a review. Such a PR is reported ("#N: merge-ready was
 set by a non-collaborator, no review from us for this head") and left out.
 A collaborator's own PR counts like any other, provided an agent that did not
 write it did the review.
+A PR whose current head carries a collaborator review that requests changes
+and also a `merge-ready` label (or `merge-ready` beside `needs-rework`) is a
+disagreement (AGENTS.md "Only collaborators' reviews count"): report it,
+leave it out, and change neither label.
 
 Drop a PR from the list, with a one-line note to the user, when:
 - it is a **draft** (a ready one is required for merging);

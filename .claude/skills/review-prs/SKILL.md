@@ -149,6 +149,11 @@ Merging a PR can turn others `CONFLICTING`, so each run also re-checks
 every open PR labelled `merge-ready` and swaps any that now conflict to
 `conflicts`.
 
+A requested change that is still open on the current head, or `merge-ready`
+beside a collaborator review that requests changes, is a disagreement
+(AGENTS.md "Only collaborators' reviews count"): no agent removes either
+label.
+
 Only collaborators set the review labels and the markers that count
 (AGENTS.md "Only collaborators' reviews count"; the collaborator list is
 `$COLLABS` above). A `merge-ready` label with no collaborator-authored

@@ -106,6 +106,15 @@ afterwards - the work must not bother them.
   review is done by an agent that did not write the change. A marker or label
   from an account that is not a collaborator does not count: a
   contributor's pre-check is a plain comment without the marker.
+  A review that requests changes on a head stays open until it is addressed:
+  by a new head that a collaborator's review then clears, or by the reviewer
+  who asked withdrawing the request in a comment. A `merge-ready` label or a
+  "ready" review from another collaborator on the same head does not
+  override it. A PR whose current head carries both a collaborator review
+  requesting changes and a `merge-ready` label (or `merge-ready` beside
+  `needs-rework`) is a disagreement: `/merge-ready` reports it and does not
+  offer it; no agent removes either label; the two collaborators settle it
+  on the PR.
   `/review-prs`, `/resolve-conflicts check`, `/merge-ready` and the
   PR-reviewer agent all filter on the collaborator list. (Superseded since
   2026-11-12, later the same day: issue #1207's "only the owner's reviews
