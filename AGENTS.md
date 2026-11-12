@@ -202,7 +202,8 @@ go to `CHANGELOG.md`.
     `.cargo/config.toml` (its `cargo xtask` alias), and the wrappers that
     forward to it - `scripts/gate.ps1`, `scripts/gate.sh`,
     `scripts/release.ps1`, `scripts/collect-decisions.ps1`,
-    `scripts/collect-decisions.sh` - changes between releases, and a fork's
+    `scripts/collect-decisions.sh`, and `crates/ui/AGENTS.md` (the UI
+    steering document, #1121) - changes between releases, and a fork's
     agents must follow the current rules.
     At the start of every session in a fork, before claiming work,
     compare `git show upstream/main:.claude/PROCESS_VERSION` with the
@@ -210,7 +211,7 @@ go to `CHANGELOG.md`.
     those files: `git checkout upstream/main -- AGENTS.md .claude/agents
     .claude/skills .claude/PROCESS_VERSION xtask .cargo/config.toml
     scripts/gate.ps1 scripts/gate.sh scripts/release.ps1
-    scripts/collect-decisions.ps1 scripts/collect-decisions.sh`, commit as `chore(process): sync
+    scripts/collect-decisions.ps1 scripts/collect-decisions.sh crates/ui/AGENTS.md`, commit as `chore(process): sync
     process files to upstream PROCESS_VERSION <n>` on a `process-sync`
     branch, and merge
     it into the fork's `main` (or open a PR there if the fork protects
@@ -545,6 +546,8 @@ optimization (M5.3-era), not a current requirement; if a type ever adopts
 must carry a delete hook that frees everything it owns.
 
 ## Assets
+
+UI work also follows `crates/ui/AGENTS.md` (the UI steering document; it restates the laws here, nothing more).
 
 `assets/ui/` holds PNGs for toolbar and tree icons; `assets/ui/fonts/` holds
 the fonts. The UI must render them — loading the files alone isn't enough;
