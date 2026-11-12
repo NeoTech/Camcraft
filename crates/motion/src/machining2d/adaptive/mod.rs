@@ -38,6 +38,7 @@
 //! too much is left). Every loop is capped; the plan cannot hang.
 
 mod budget;
+mod conform;
 mod front;
 mod grow;
 mod guard;
