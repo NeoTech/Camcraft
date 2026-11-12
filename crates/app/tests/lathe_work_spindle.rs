@@ -206,8 +206,12 @@ fn a_drill_on_centre_posts_on_the_work_spindle_as_a_lathe_drills() {
     assert!(at("G97 S10000 M03") < at("G00 X0 Z20"), "{}", posted.program);
     assert!(lines.iter().any(|l| l.starts_with("G83 Z10 ")), "{}", posted.program);
     assert!(!posted.program.contains("M1003"), "no live-tool word in a work-spindle section");
-    // The same hole through a mill post is the mill's own drilling.
-    posting::post_script(&world, &dir.join("m.nc"), FANUC_MILL).expect("a mill post drills it as a mill does");
+    // #1232 (maintainer, 2026-11-12): on a mill-turn the on-centre
+    // drill turns the work, so a mill post - which would write it for
+    // the tool spindle - refuses it by name, nothing written.
+    let why = posting::post_script(&world, &dir.join("m.nc"), FANUC_MILL).expect_err("a mill post refuses it");
+    assert!(why.contains("D1") && why.contains("is not a turning post"), "{why}");
+    assert!(!dir.join("m.nc").exists(), "nothing written");
     let _ = std::fs::remove_dir_all(&dir);
 }
 

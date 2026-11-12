@@ -22,7 +22,7 @@ Each setup appears in the browser with its own pages:
 - **Post:** the post processor the setup writes with: a built-in post, or
   **Load post (.cps)** for a script of your own.
 - **Fixtures:** vises, clamps and other workholding, imported or placed
-  from the fixture library.
+  from the fixture library. See [Workholding and fixtures](@/guide/workholding.md).
 - **Tools:** the tools this setup's operations use, in change order.
 
 Below the pages, **Operations** lists the setup's operations.
@@ -71,3 +71,6 @@ checked against its own machine.
 The Setups page lists each setup's tools in change order, with cut and
 rapid lengths and the estimated time. **Export setup sheets…** writes one
 text page per setup. Posting does not write them.
+
+For which unit and zero every number uses, see
+[Units and coordinates](@/guide/units-and-coordinates.md).
