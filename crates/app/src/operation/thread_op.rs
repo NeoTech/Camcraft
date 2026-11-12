@@ -42,7 +42,7 @@ fn depth_of(pitch: f64, external: bool) -> f64 {
 /// is not stated yet (the generator names that one).
 #[must_use]
 pub fn door(tool: &Tool, params: &OpParams) -> Option<String> {
-    let OpParams::Thread { pitch, infeed, holes, external, bottom_z, passes, .. } = params else {
+    let OpParams::Thread { pitch, infeed, holes, external, bottom_z, passes, top_z, .. } = params else {
         return None;
     };
     if !form::is_thread_mill(tool.kind) {
@@ -75,7 +75,12 @@ pub fn door(tool: &Tool, params: &OpParams) -> Option<String> {
         // operation starts that way, and the generator refuses it by
         // name until the pitch is stated. Everything that needs no
         // pitch is still judged here.
-        Err(_) if pitch.is_none() => return passes.refusal(None, *infeed).or_else(|| no_air(None)),
+        Err(_) if pitch.is_none() => {
+            return passes
+                .refusal(None, *infeed)
+                .or_else(|| no_air(None))
+                .or_else(|| super::thread_r_plane::door(*top_z, holes, *external));
+        }
         Err(why) => return Some(why),
     };
     let h = depth_of(pitch, *external);
@@ -94,7 +99,7 @@ pub fn door(tool: &Tool, params: &OpParams) -> Option<String> {
     if let Some(why) = passes.refusal(Some(h), *infeed) {
         return Some(why);
     }
-    no_air(Some(h))
+    no_air(Some(h)).or_else(|| super::thread_r_plane::door(*top_z, holes, *external))
 }
 
 /// The kernel's parameters for this operation and tool, heights
@@ -145,6 +150,9 @@ pub(super) fn kernel_params(tool: &Tool, params: &OpParams, hl: &ResolvedHeights
         climb: *climb,
         passes: *passes,
         clearance_z: hl.clearance,
+        // #1212: the stated R plane is where every rapid stops and the
+        // feed begins; the kernel refuses it under a feature's top.
+        r_z: hl.top,
         retract_z: hl.retract,
         feed: *feed,
         plunge_feed: *plunge_feed,

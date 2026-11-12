@@ -50,6 +50,7 @@ fn ride() -> Toolpath {
         climb: true,
         passes: crate::machining2d::ThreadPasses::default(),
         clearance_z: 30.0,
+        r_z: None,
         retract_z: None,
         feed: 300.0,
         plunge_feed: 150.0,

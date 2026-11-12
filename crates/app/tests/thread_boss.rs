@@ -253,8 +253,10 @@ fn impossible_bosses_are_refused_when_the_operation_is_made() {
     assert!(refusal(MULTI, deep).contains("more than the"));
     // A stated bottom is resolved at generate, which asks the reach again.
     let mut low = external(vec![Hole { entry_z: SHOULDER + 15.0, ..boss(4.0) }], None, ThreadHand::Right, true);
-    if let OpParams::Thread { bottom_z, .. } = &mut low {
+    if let OpParams::Thread { bottom_z, top_z, .. } = &mut low {
         *bottom_z = Some(Height::fixed(SHOULDER + 1.0));
+        // #1212: the R plane on the taller boss's top, so the door's R law stands aside for the reach.
+        *top_z = Height::fixed(SHOULDER + 15.0);
     }
     let msg = try_thread(&world, &mut history, MULTI, low);
     assert!(msg.contains("is 14 mm long") && msg.contains("reaches only 12.5 mm"), "{msg}");

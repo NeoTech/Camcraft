@@ -100,6 +100,7 @@ pub mod plasma_op;
 // #894: the thread-milling operation's door, kernel plan and its two verdict readings.
 pub mod thread_op;
 mod thread_entry;
+mod thread_r_plane;
 // #985: external threads - the boss door, the crest region, the neighbour law.
 mod thread_boss;
 // #171: the Probe op seeded from one picked face, edge, vertex or round wall.

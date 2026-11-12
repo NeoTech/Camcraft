@@ -516,7 +516,8 @@ fn thread_milling_over_the_tools() {
     multi.as_object_mut().expect("an object").remove("pitch_min");
     c.ok("add_tool", json!({ "name": "TM-P100", "definition": multi }));
 
-    let hole = json!({ "xy": [30.0, 30.0], "radius": 3.45875, "entry_z": 20.0, "floor_z": 8.0, "through": false });
+    // #1212: the mouth on the block's 15 mm top, where the default R plane (top of model) stands.
+    let hole = json!({ "xy": [30.0, 30.0], "radius": 3.45875, "entry_z": 15.0, "floor_z": 8.0, "through": false });
     // A tap is not a thread mill; a single-form mill's pitch must sit inside its range.
     let msg = c.refused("add_operation", json!({ "kind": "Thread", "tool": "TAP-M6" }));
     assert!(msg.contains("thread mill"), "{msg}");
@@ -557,7 +558,8 @@ fn external_thread_milling_over_the_tools() {
     c.ok("import_model", json!({ "path": stl.display().to_string() }));
     c.ok("set_stock", json!({ "box": { "dx": 60.0, "dy": 60.0, "dz": 20.0 } }));
     c.ok("add_tool", json!({ "catalog": "TM-0600-P125" }));
-    let boss = json!({ "xy": [30.0, 30.0], "radius": 4.0, "entry_z": 20.0, "floor_z": 10.0, "through": false });
+    // #1212: the top on the block's 15 mm top, where the default R plane (top of model) stands.
+    let boss = json!({ "xy": [30.0, 30.0], "radius": 4.0, "entry_z": 15.0, "floor_z": 10.0, "through": false });
     // A pin thinner than the thread is deep is refused when the operation is made.
     let pin = json!({ "xy": [30.0, 30.0], "radius": 0.7, "entry_z": 20.0, "floor_z": 10.0, "through": false });
     let msg = c.refused("add_operation", json!({ "kind": "Thread", "tool": "TM-0600-P125", "params": { "external": true, "holes": [pin] } }));
