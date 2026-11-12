@@ -168,6 +168,7 @@ fn settings(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
     super::setup_points_pick::row(ui, state, name);
     super::setup_axis_pick::rows(ui, state, name);
     super::setup_wcs_pick::picker(ui, state, name);
+    super::setup_workholding_row::row(ui, state, name);
     ui.separator();
     if ui.button(format!("Delete {name}")).clicked() {
         state.pending.push_back(CommandKind::DeleteSetup(name.to_owned()));
@@ -194,7 +195,10 @@ fn tool_table(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
         for (tool, ops) in &used {
             let number = tool_numbers::number_of(&state.world, tool).map_or_else(|| "?".to_owned(), |n| n.to_string());
             ui.label(number);
-            ui.label(tool);
+            ui.horizontal(|ui| {
+                super::tool_icons::named_glyph(ui, &state.world, tool);
+                ui.label(tool);
+            });
             let size = model::find_by_name(&state.world, tool)
                 .and_then(|e| model::tool_of(&state.world, &e))
                 .map_or_else(|| "missing".to_owned(), |t| format!("Ø{} {}", t.diameter, kind_name(t.kind)));

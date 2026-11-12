@@ -262,20 +262,27 @@ function disableSmoothing() {
 // that name, and a non-zero A on a table stated along -X. Both are
 // refused by name here, as fanuc.cps does. (A [-1,0,0] rotary leans off
 // Z, so the mirror sets machine.rtcp and the indexing path never sees it.)
-function missingLetter(p) {  // the first turning letter no rotary is named for, else ""
+function statesRotary(letter) {  // does the machine state a rotary of this name?
   var rs = (typeof machine !== "undefined" && machine.rotaries) || [];
+  for (var j = 0; j < rs.length; j++) {
+    if (String(rs[j].name || "").toUpperCase() === letter) return true;
+  }
+  return false;
+}
+function missingLetter(p) {  // the first turning letter no rotary is named for, else ""
   var ls = ["A", "B", "C"];
   for (var i = 0; i < ls.length; i++) {
     var v = p[ls[i]];
     if (!has(v) || Math.abs(v) <= 1e-9) continue;
-    var named = false;
-    for (var j = 0; j < rs.length; j++) {
-      if (String(rs[j].name || "").toUpperCase() === ls[i]) named = true;
-    }
-    if (!named) return ls[i];
+    if (!statesRotary(ls[i])) return ls[i];
   }
   return "";
 }
+// #997: the angle words name only the rotaries the machine states. The
+// stream zeros an unstated letter, and missingLetter has refused one
+// that turns, so a letter with no rotary here is a stated zero - a word
+// for it (C0 on an A/B head) is an address the control has no axis for.
+function angleWord(letter, v) { return statesRotary(letter) ? w(letter, v) : ""; }
 function reversedLoneXRotary() {  // the rotary's name, else ""
   var rs = (typeof machine !== "undefined" && machine.rotaries) || [];
   if (rs.length !== 1) return "";
@@ -300,10 +307,23 @@ function tilt(p) {  // words to append, [] if none, null if refused
       if (!tiltRefused) { tiltRefused = true; msg("tilted move on a machine without a tilting rotary"); }
       return null;
     }
+    // #1155: the index names only a rotary the machine states, as the
+    // RTCP path does - a turning letter with no rotary of that name is
+    // refused by name, never posted as an address the control lacks; a
+    // stated C that turns is refused too, as this path writes only A.
+    var lostIx = missingLetter(p);
+    if (lostIx) {
+      if (!tiltRefused) { tiltRefused = true; msg("indexed move commands " + lostIx + " - the machine states no " + lostIx + " rotary"); }
+      return null;
+    }
+    if (has(p.C) && Math.abs(p.C) > 1e-9) {
+      if (!tiltRefused) { tiltRefused = true; msg("indexed move commands C - this dialect's indexing path writes only an A rotary"); }
+      return null;
+    }
     var rotWords = [];
     var aChanged = !has(lastA) || p.A !== lastA;
     if (aChanged) {
-      rotWords.push("A" + fu(p.A));
+      rotWords.push(angleWord("A", p.A));
     }
     return rotWords;
   }
@@ -322,12 +342,12 @@ function tilt(p) {  // words to append, [] if none, null if refused
     block(["G43.4", "H" + pad2(tNo)]);
     tcpmOn = true;
     lastA = p.A; lastB = p.B; lastC = p.C;
-    return [w("A", p.A), w("B", p.B), w("C", p.C)];
+    return [angleWord("A", p.A), angleWord("B", p.B), angleWord("C", p.C)];
   }
   var words = [];
-  if (p.A !== lastA) { words.push("A" + fu(p.A)); lastA = p.A; }
-  if (p.B !== lastB) { words.push("B" + fu(p.B)); lastB = p.B; }
-  if (p.C !== lastC) { words.push("C" + fu(p.C)); lastC = p.C; }
+  if (p.A !== lastA) { words.push(angleWord("A", p.A)); lastA = p.A; }
+  if (p.B !== lastB) { words.push(angleWord("B", p.B)); lastB = p.B; }
+  if (p.C !== lastC) { words.push(angleWord("C", p.C)); lastC = p.C; }
   return words;
 }
 
@@ -549,6 +569,11 @@ function startPreamble() {
     block(["S" + ff(sRpm), "M3"]);
     spindleWait = false;
   }
+  // #574 / #1035: a touch probe (a stated speed of 0, which leaves
+  // spindleWait set) states its spindle stopped before its first move,
+  // whatever the tool change did - a same-tool continuation keeps it
+  // turning.
+  if (spindleWait && !(sRpm > 0)) block(["M5"]);
 
   // Chip conveyor start if requested
   var wantConveyor = false;

@@ -89,6 +89,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         stock_facets,
         stock_aabb,
         analytic_stock,
+        stock_fidelity_known,
         mut section_z,
         mut picked_region,
         mut contour_sel,
@@ -463,7 +464,9 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                         )));
                     }
                     for run in &runs {
-                        path = stitch(path, machining2d::contour_along_chain(run, &cp)?);
+                        // #1015: a run refused shows the rings and runs before it.
+                        let next = machining2d::contour_along_chain(run, &cp).map_err(|e| e.after_moves(&path.moves))?;
+                        path = stitch(path, next);
                     }
                     (region, path)
                 }
@@ -2849,6 +2852,8 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 // (M13.11); empty for one body.
                 &material.bodies,
             );
+            // #1091: a dive convicted against the stock's highest point is re-read under the tool.
+            super::stock_top_law::acquit(&path, mode, judged_stock.filter(|_| stock_fidelity_known), &material.facets, &geom, material.excess, &mut warns);
             // The program ahead cut too (#96 review): a dive the column
             // convicted against the raw block is re-read against what
             // the setup's earlier operations left standing.
@@ -3075,9 +3080,10 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     st_local = st_local.max(f.z_local(p));
                 }
             }
-            let stock_region_local = judged_stock
-                .map(|t| f.local_facets(t))
-                .and_then(|t| slice::project(&t, FOOTPRINT_SAMPLES).ok())
+            let stock_local = judged_stock.map(|t| f.local_facets(t));
+            let stock_region_local = stock_local
+                .as_deref()
+                .and_then(|t| slice::project(t, FOOTPRINT_SAMPLES).ok())
                 .filter(|r| !r.is_empty());
             let mut warns = verify::verify_bodies(
                 &path,
@@ -3105,6 +3111,8 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 },
                 &m_gen.bodies,
             );
+            // #1091: the dive re-read under the tool, in the plane's frame.
+            super::stock_top_law::acquit(&path, mode, stock_local.as_deref().filter(|_| stock_fidelity_known), &m_gen.facets, &geom, m_gen.excess, &mut warns);
             // The containment kinds' solid law (their verify runs without
             // the model - exact rims): the tool's own tip and stack swept
             // along every move against the part solid. The Section kinds

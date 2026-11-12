@@ -23,7 +23,7 @@ mod recorded;
 use camcraft_post::cl::{ArcPlane, MoveKind, PathBuilder, ThreadCycle, ThreadHand, Toolpath};
 use camcraft_post::geo2d::Point2;
 use camcraft_post::geometry::Point3;
-use camcraft_post::post::{self, cnc, Dump};
+use camcraft_post::post::{self, cnc, Css, Dump};
 
 fn p(x: f64, y: f64, z: f64) -> Point3 {
     Point3::new(x, y, z)
@@ -171,6 +171,37 @@ fn extreme_coords() -> String {
     stream(&[(&t, ctx("Extremes", 1, "FLAT-6", 8000.0))])
 }
 
+/// #1173: a constant-surface-speed facing pass (200 m/min, the tool's own
+/// 3000 rpm clamp), then a C-axis live-tool section at 3000 rpm - a
+/// radial plunge at C0 and one at C-90 (the tip on +Y turned onto the
+/// station). The live tool's S must be read as rpm: on the lathe post
+/// the CSS section ends in G97 before the live branch starts.
+fn css_then_live() -> String {
+    let mut b = PathBuilder::new(p(12.0, 0.0, 16.0));
+    b.push(MoveKind::Rapid, p(12.0, 0.0, 15.0), None);
+    b.push(MoveKind::Feed, p(0.0, 0.0, 15.0), Some(150.0));
+    b.push(MoveKind::Rapid, p(12.0, 0.0, 16.0), None);
+    let face = b.finish();
+    let mut turn = ctx("Face CSS", 1, "FACE-12", 1200.0);
+    turn.tool_diameter = 0.0;
+    turn.css = Some(Css { vc: 200.0, max_rpm: Some(3000.0) });
+
+    let mut b = PathBuilder::new(p(12.0, 0.0, 16.0));
+    b.push(MoveKind::Rapid, p(12.0, 0.0, 5.0), None);
+    b.push(MoveKind::Feed, p(8.0, 0.0, 5.0), Some(200.0));
+    b.push(MoveKind::Rapid, p(12.0, 0.0, 5.0), None);
+    b.push(MoveKind::Rapid, p(0.0, 12.0, 5.0), None);
+    b.push(MoveKind::Feed, p(0.0, 8.0, 5.0), Some(200.0));
+    b.push(MoveKind::Rapid, p(0.0, 12.0, 5.0), None);
+    let mut live = b.finish();
+    // The spindle angle each move states: C0 for the tip on +X, C-90 for
+    // the tip on +Y (Rz(-90) turns +Y onto the +X station).
+    for m in &mut live.moves {
+        m.rotary = Some(if m.to.y.abs() > 1e-9 { -90.0 } else { 0.0 });
+    }
+    stream(&[(&face, turn), (&live, ctx("Cross mill", 2, "EM-6", 3000.0))])
+}
+
 /// Compare a built stream with its recorded file (or record it).
 fn guard(case: &str, text: &str) {
     let path = recorded::stream_path(case);
@@ -215,6 +246,11 @@ fn empty_section_stream_is_current() {
 #[test]
 fn extreme_coords_stream_is_current() {
     guard("extreme_coords", &extreme_coords());
+}
+
+#[test]
+fn css_then_live_stream_is_current() {
+    guard("css_then_live", &css_then_live());
 }
 
 /// The hand-written stream: no generator writes it, so its guard is that
