@@ -113,13 +113,16 @@ fn pocket_family(params: &OpParams) -> bool {
 }
 
 fn door_refusal(params: &OpParams, err: GenError) -> Option<String> {
-    match err {
-        GenError::Invalid(msg) if pocket_family(params) && msg.contains(LINE_FROM_ABOVE) => Some(msg),
-        GenError::Invalid(msg)
-            if matches!(params, OpParams::Face { .. })
-                && msg.contains("is not horizontal - a facing pass needs a floor") => Some(msg),
-        _ => None,
-    }
+    // #871: a door refusal that carried a ghost is the same sentence -
+    // the pick shows the words alone, so its ghost (and the spot it
+    // names) are dropped here, exactly as a plain refusal has none.
+    let msg = match err {
+        GenError::Invalid(msg) | GenError::Ghosted { msg, .. } => msg,
+        _ => return None,
+    };
+    let door = (pocket_family(params) && msg.contains(LINE_FROM_ABOVE))
+        || (matches!(params, OpParams::Face { .. }) && msg.contains("is not horizontal - a facing pass needs a floor"));
+    door.then_some(msg)
 }
 
 /// The footprint a piece of material projects to, XY: the same
@@ -246,4 +249,50 @@ pub(super) fn boundary_path(
     }
     out.push(to.1);
     Some(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cl::{Move, MoveKind, Toolpath};
+
+    fn seeded(ty: OpType) -> OpParams {
+        let c = Carried {
+            feed: 500.0,
+            plunge: 100.0,
+            climb: true,
+            clearance: Height::fixed(10.0),
+            stepover: 3.0,
+            stepdown: 2.0,
+            top: Height::fixed(0.0),
+            bottom: Height::fixed(-5.0),
+            retract: Height::fixed(5.0),
+            tilt: None,
+        };
+        let row = KindInfo::ALL.iter().find(|r| r.ty == ty).expect("a catalog row");
+        (row.seed)(&c)
+    }
+
+    #[test]
+    fn a_ghosted_door_refusal_is_read_like_the_plain_one() {
+        // #871: the pick reads the door's words; a ghost-carrying refusal
+        // with the same words is the same door, its ghost and spot dropped.
+        let built = Toolpath {
+            moves: vec![Move::new(MoveKind::Feed, Point3::new(0.0, 0.0, 0.0), Point3::new(5.0, 0.0, 0.0), Some(500.0))],
+            ..Toolpath::default()
+        };
+        let msg = format!("the pick {LINE_FROM_ABOVE}");
+        let pocket = seeded(OpType::Pocket);
+        let plain = door_refusal(&pocket, GenError::Invalid(msg.clone()));
+        assert_eq!(plain.as_deref(), Some(msg.as_str()));
+        let ghosted = GenError::invalid_at(msg.clone(), Point3::new(1.0, 2.0, 3.0)).with_ghost(&built);
+        assert!(ghosted.ghost().is_some());
+        assert_eq!(door_refusal(&pocket, ghosted), plain);
+        // Not a door's words, or not the door's kind: still no door.
+        assert_eq!(door_refusal(&pocket, GenError::Invalid("other".into()).with_ghost(&built)), None);
+        let face = seeded(OpType::Face);
+        let floor = "face 3 is not horizontal - a facing pass needs a floor".to_string();
+        assert_eq!(door_refusal(&face, GenError::Invalid(floor.clone()).with_ghost(&built)), Some(floor));
+        assert_eq!(door_refusal(&face, GenError::Invalid(msg).with_ghost(&built)), None);
+    }
 }
