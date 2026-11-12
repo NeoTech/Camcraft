@@ -31,14 +31,13 @@ of a deep hole.
   tap and bore cycles, with a peck depth, and a dwell at the bottom.
 - **Stepdown** limits depth per level in pockets and slots.
 - **Coolant** is a per-operation choice: **Off**, **Flood** (the default),
-  **Mist** or **Through tool**. The post switches the machine's own code
-  on for the operation. A choice the machine states no code for, such as
-  through-tool coolant on a machine without it, blocks the post by name,
-  rather than being written as a guess. Coolant modes are declared by the machine
-  file; see Machine types.
+  **Mist**, **Air** or **Through tool**. The post switches the machine's own
+  code on for the operation. **Air** is an air blast that clears chips
+  without a fluid. A choice the machine states no code for, such as air on a
+  machine with no air entry, or through-tool coolant on a machine without
+  it, blocks the post by name, rather than being written as a guess. Coolant
+  modes are declared by the machine file; see Machine types. A machine whose
+  only coolant is air starts new operations on **Air**.
 
-CamCraft has no separate "air blast" mode: the four choices above are
-the whole list. If you run air blast, set the operation to **Off** and
-turn it on at the machine, or add the code by hand after posting. CamCraft
-does not model chips, so it cannot tell you that a slot will pack. Read the
+CamCraft does not model chips, so it cannot tell you that a slot will pack. Read the
 first cut.
