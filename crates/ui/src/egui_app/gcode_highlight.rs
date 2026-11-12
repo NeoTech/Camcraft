@@ -129,7 +129,7 @@ pub(crate) fn ink(dark: bool, kind: Kind) -> Option<Color32> {
 /// Cached tokenization of a whole program: one span list per line.
 pub(crate) type Spans = Arc<Vec<Vec<(Range<usize>, Kind)>>>;
 
-fn program_key(program: &str) -> u64 {
+pub(crate) fn program_key(program: &str) -> u64 {
     // Length plus a bounded sample of both ends: O(1) per frame. A
     // collision can only mis-colour a listing, never change its text.
     let mut h = DefaultHasher::new();

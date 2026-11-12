@@ -23,7 +23,13 @@ pub(crate) fn gcode_window(ctx: &egui::Context, state: &mut State) {
         return;
     };
     if !view.open {
-        return; // closed by ✖ or a document switch: allocate nothing
+        // Closed by ✖ or a document switch: allocate nothing, and drop
+        // any click pin or queued click so a reopen starts clean.
+        ctx.data_mut(|d| {
+            d.remove_temp::<(u64, usize, usize)>(Id::new(PIN_ID));
+            d.remove_temp::<usize>(Id::new(PENDING_ID));
+        });
+        return;
     }
     let stem = view
         .path
@@ -32,7 +38,9 @@ pub(crate) fn gcode_window(ctx: &egui::Context, state: &mut State) {
         .unwrap_or("program")
         .to_owned();
     let mut open = view.open;
-    let warn_ink = super::colorvision::palette_of(&state.world).text_on(super::theme::current().ink).warn;
+    let warn_ink = super::colorvision::palette_of(&state.world)
+        .text_on(super::theme::current().ink)
+        .warn;
     // Disjoint field borrows: the closure writes `line` and reads
     // `program` at once, and `open` is a copy resolved after the pass.
     let PostView {
@@ -67,11 +75,8 @@ pub(crate) fn gcode_window(ctx: &egui::Context, state: &mut State) {
                 // untouched. Hover shows the whole reason.
                 if let Some(line) = not_judged.as_deref() {
                     ui.add(
-                        Label::new(
-                            egui::RichText::new(format!("WARNING: {line}"))
-                                .color(warn_ink),
-                        )
-                        .truncate(),
+                        Label::new(egui::RichText::new(format!("WARNING: {line}")).color(warn_ink))
+                            .truncate(),
                     )
                     .on_hover_text(line);
                 }
@@ -104,17 +109,15 @@ pub(crate) fn gcode_window(ctx: &egui::Context, state: &mut State) {
                         .show(ui, |ui| {
                             for (i, b) in blocks.iter().enumerate() {
                                 let txt = format!("{:>4}  {}", b.first + 1, b.label);
-                                let rt = egui::RichText::new(txt)
-                                    .monospace()
-                                    .size(11.0)
-                                    .color(if sel == Some(i) {
+                                let rt = egui::RichText::new(txt).monospace().size(11.0).color(
+                                    if sel == Some(i) {
                                         ui.visuals().strong_text_color()
                                     } else {
                                         ui.visuals().text_color()
-                                    });
-                                let r = ui.add(
-                                    Label::new(rt).selectable(false).sense(Sense::click()),
+                                    },
                                 );
+                                let r =
+                                    ui.add(Label::new(rt).selectable(false).sense(Sense::click()));
                                 if r.clicked() {
                                     jump.set(Some(b.first));
                                 }
@@ -167,115 +170,120 @@ fn gcode_listing(
     let pending = ui.ctx().data_mut(|d| d.remove_temp::<usize>(pend_id));
     let n_rows = program.lines().count();
     let row_h0 = ui.text_style_height(&egui::TextStyle::Monospace);
-    let mut area = ScrollArea::vertical().id_salt("gcode-scroll").auto_shrink([false, false]);
+    let mut area = ScrollArea::vertical()
+        .id_salt("gcode-scroll")
+        .auto_shrink([false, false]);
     if let Some(r) = pending {
-        let y = r.min(n_rows.saturating_sub(1)) as f32 * row_h0 + row_h0 * 0.5 - ui.available_height() * 0.5;
+        let y = r.min(n_rows.saturating_sub(1)) as f32 * row_h0 + row_h0 * 0.5
+            - ui.available_height() * 0.5;
         area = area.vertical_scroll_offset(y.max(0.0));
     }
     area.show(ui, |ui| {
-            // The scroll offset is read, not stored: egui lays the
-            // inner ui out at `-offset`, so the clip rect's center
-            // against the content top names the middle row - that row
-            // is the sync cursor. Uniform rows (one monospace label
-            // per line, spacing fixed) are what make the division
-            // exact.
-            let n = program.lines().count();
-            let row_h = ui.text_style_height(&egui::TextStyle::Monospace);
-            ui.spacing_mut().item_spacing.y = 0.0;
-            let top = ui.min_rect().min.y;
-            let vis = ui.clip_rect();
-            let mid = (((vis.center().y - top) / row_h).max(0.0) as usize).min(n.saturating_sub(1));
-            // The cursor is the middle row, except while a click's pin
-            // holds: the pin is (clicked row, the middle row the scroll
-            // settled on), so the first and last half page - where the
-            // clicked row cannot reach the middle - still show the
-            // clicked row. Any scroll that changes the middle row
-            // releases the pin and the middle row rules again.
-            let pin = match pending {
-                Some(r) => Some((r.min(n.saturating_sub(1)), UNSETTLED)),
-                None => ui.ctx().data(|d| d.get_temp::<(usize, usize)>(pin_id)),
-            };
-            // The click's own frame may still lay out against the old
-            // content height (the offset is clamped a frame late), so
-            // the middle row is recorded on the frame AFTER it.
-            let pin = match pin {
-                Some((r, UNSETTLED)) if pending.is_none() => Some((r, mid)),
-                p => p,
-            };
-            *line = match pin {
-                Some((r, UNSETTLED)) => r,
-                Some((r, m)) if m == mid => r,
-                _ => mid,
-            };
-            ui.ctx().data_mut(|d| match pin {
-                Some((r, m)) if m == mid || m == UNSETTLED => {
-                    d.insert_temp(pin_id, (r, m));
-                }
-                _ => {
-                    d.remove_temp::<(usize, usize)>(pin_id);
-                }
-            });
-            let want = trace_on
-                .then(|| {
-                    blocks
-                        .iter()
-                        .position(|b| *line >= b.first && *line < b.last.max(b.first + 1))
-                        .map(|bi| (blocks[bi].first, blocks[bi].last))
-                })
-                .flatten();
-            let width = ui.available_width();
-            let spans = super::gcode_highlight::spans_for(ui.ctx(), program);
-            for (i, ln) in program.lines().enumerate() {
-                let dim = want.is_some_and(|(a, b)| !(i >= a && i < b.max(a + 1)));
-                let empty = Vec::new();
-                let rt = super::gcode_highlight::row_job(
-                    ui,
-                    ln,
-                    spans.get(i).unwrap_or(&empty),
-                    dim,
-                );
-                // Every row is a left-to-right box exactly `width` by
-                // `row_h`, so the text starts at the left edge (#256:
-                // `add_sized` centred it) and the cursor arithmetic
-                // above stays exact over a long program instead of
-                // drifting a row. `truncate` keeps a line wider than
-                // the window on its one row (egui shows the whole line
-                // on hover) rather than wrapping it onto a second.
-                // #1089: the gutter is its own non-selectable label and
-                // the code is selectable (drag, Ctrl+C), so a copy is
-                // the program without its numbers; a click anywhere on
-                // the row moves the cursor there.
-                let at_cursor = i == *line;
-                let resp = ui
-                    .allocate_ui_with_layout(
-                        Vec2::new(width, row_h),
-                        Layout::left_to_right(Align::Center),
-                        |ui| {
-                            ui.set_min_size(Vec2::new(width, row_h));
-                            let rect = ui.max_rect();
-                            let bg = ui.interact(rect, ui.id().with(("row", i)), Sense::click());
-                            if at_cursor {
-                                ui.painter().rect_filled(rect, 0.0, cursor_fill(ui));
-                            }
-                            ui.add(
-                                Label::new(super::gcode_highlight::gutter_text(i + 1))
-                                    .selectable(false),
-                            );
-                            let code = ui.add(
-                                Label::new(rt)
-                                    .selectable(true)
-                                    .sense(Sense::click())
-                                    .truncate(),
-                            );
-                            bg.clicked() || code.clicked()
-                        },
-                    );
-                let clicked = resp.inner;
-                if clicked {
-                    jump.set(Some(i));
-                }
-                            }
+        // The scroll offset is read, not stored: egui lays the
+        // inner ui out at `-offset`, so the clip rect's center
+        // against the content top names the middle row - that row
+        // is the sync cursor. Uniform rows (one monospace label
+        // per line, spacing fixed) are what make the division
+        // exact.
+        let n = program.lines().count();
+        let row_h = ui.text_style_height(&egui::TextStyle::Monospace);
+        ui.spacing_mut().item_spacing.y = 0.0;
+        let top = ui.min_rect().min.y;
+        let vis = ui.clip_rect();
+        let mid = (((vis.center().y - top) / row_h).max(0.0) as usize).min(n.saturating_sub(1));
+        // The cursor is the middle row, except while a click's pin
+        // holds: the pin is (clicked row, the middle row the scroll
+        // settled on), so the first and last half page - where the
+        // clicked row cannot reach the middle - still show the
+        // clicked row. Any scroll that changes the middle row
+        // releases the pin and the middle row rules again.
+        // The pin belongs to the listing it was made on: a new post,
+        // another program or a reopened viewer drops it, and its row
+        // is clamped on every read so it can never index past the end.
+        let key = super::gcode_highlight::program_key(program);
+        let last = n.saturating_sub(1);
+        let pin = match pending {
+            Some(r) => Some((r.min(last), UNSETTLED)),
+            None => ui
+                .ctx()
+                .data(|d| d.get_temp::<(u64, usize, usize)>(pin_id))
+                .filter(|(k, _, _)| *k == key)
+                .map(|(_, r, m)| (r.min(last), m)),
+        };
+        // The click's own frame may still lay out against the old
+        // content height (the offset is clamped a frame late), so
+        // the middle row is recorded on the frame AFTER it.
+        let pin = match pin {
+            Some((r, UNSETTLED)) if pending.is_none() => Some((r, mid)),
+            p => p,
+        };
+        *line = match pin {
+            Some((r, UNSETTLED)) => r,
+            Some((r, m)) if m == mid => r,
+            _ => mid,
+        };
+        ui.ctx().data_mut(|d| match pin {
+            Some((r, m)) if m == mid || m == UNSETTLED => {
+                d.insert_temp(pin_id, (key, r, m));
+            }
+            _ => {
+                d.remove_temp::<(u64, usize, usize)>(pin_id);
+            }
         });
+        let want = trace_on
+            .then(|| {
+                blocks
+                    .iter()
+                    .position(|b| *line >= b.first && *line < b.last.max(b.first + 1))
+                    .map(|bi| (blocks[bi].first, blocks[bi].last))
+            })
+            .flatten();
+        let width = ui.available_width();
+        let spans = super::gcode_highlight::spans_for(ui.ctx(), program);
+        for (i, ln) in program.lines().enumerate() {
+            let dim = want.is_some_and(|(a, b)| !(i >= a && i < b.max(a + 1)));
+            let empty = Vec::new();
+            let rt = super::gcode_highlight::row_job(ui, ln, spans.get(i).unwrap_or(&empty), dim);
+            // Every row is a left-to-right box exactly `width` by
+            // `row_h`, so the text starts at the left edge (#256:
+            // `add_sized` centred it) and the cursor arithmetic
+            // above stays exact over a long program instead of
+            // drifting a row. `truncate` keeps a line wider than
+            // the window on its one row (egui shows the whole line
+            // on hover) rather than wrapping it onto a second.
+            // #1089: the gutter is its own non-selectable label and
+            // the code is selectable (drag, Ctrl+C), so a copy is
+            // the program without its numbers; a click anywhere on
+            // the row moves the cursor there.
+            let at_cursor = i == *line;
+            let resp = ui.allocate_ui_with_layout(
+                Vec2::new(width, row_h),
+                Layout::left_to_right(Align::Center),
+                |ui| {
+                    ui.set_min_size(Vec2::new(width, row_h));
+                    let rect = ui.max_rect();
+                    let bg = ui.interact(rect, ui.id().with(("row", i)), Sense::click());
+                    if at_cursor {
+                        ui.painter().rect_filled(rect, 0.0, cursor_fill(ui));
+                    }
+                    ui.add(
+                        Label::new(super::gcode_highlight::gutter_text(i + 1)).selectable(false),
+                    );
+                    let code = ui.add(
+                        Label::new(rt)
+                            .selectable(true)
+                            .sense(Sense::click())
+                            .truncate(),
+                    );
+                    bg.clicked() || code.clicked()
+                },
+            );
+            let clicked = resp.inner;
+            if clicked {
+                jump.set(Some(i));
+            }
+        }
+    });
 }
 
 /// The cursor row's background: the theme's selection fill, softened so

@@ -266,3 +266,75 @@ fn dragging_across_lines_and_copying_takes_the_code_not_the_numbers() {
     assert!(text.contains("M30"), "and so is the next: {copied:?}");
     assert!(!text.contains("   2  "), "without the gutter number: {copied:?}");
 }
+
+/// How many highlight bands the last frame painted.
+fn band_count(h: &Harness<'static, ShellUi>) -> usize {
+    let fill = h.ctx.global_style().visuals.selection.bg_fill.linear_multiply(0.45);
+    fn count(shape: &egui::Shape, fill: egui::Color32) -> usize {
+        match shape {
+            egui::Shape::Rect(r) if r.fill == fill => 1,
+            egui::Shape::Vec(v) => v.iter().map(|s| count(s, fill)).sum(),
+            _ => 0,
+        }
+    }
+    h.output().shapes.iter().map(|c| count(&c.shape, fill)).sum()
+}
+
+fn set_program(h: &mut Harness<'static, ShellUi>, lines: usize) {
+    if let Some(v) = h.state_mut().state.post_view.as_mut() {
+        v.program = (0..lines).map(|i| format!("G01 X{i}.5 Y1. F100.")).collect::<Vec<_>>().join("
+");
+        v.line_pos = (0..lines).map(|i| Some([i as f64, 0.0, 0.0])).collect();
+    }
+}
+
+#[test]
+fn a_click_pin_does_not_outlive_its_listing() {
+    // Click a late row, then a shorter program replaces the listing: the
+    // stale pin must not index past the new end or hide the band.
+    let mut harness = long_viewer(300);
+    for target in [299usize, 5] {
+        harness.get_by_label(&format!("G01 X{target}.5 Y0. F200.")).scroll_to_me();
+        harness.run_steps(10);
+        harness.get_by_label(&format!("G01 X{target}.5 Y0. F200.")).click();
+        harness.run_steps(30);
+        assert_eq!(cursor(&harness), target);
+        for lines in [20usize, 1, 0] {
+            set_program(&mut harness, lines);
+            harness.run_steps(10);
+            let c = cursor(&harness);
+            assert!(c < lines.max(1), "cursor {c} is a row of the {lines}-line listing");
+            if lines > 0 {
+                assert_eq!(band_count(&harness), 1, "a row is highlighted in the {lines}-line listing");
+            }
+        }
+        // Back to the long program for the second round.
+        set_program(&mut harness, 300);
+        if let Some(v) = harness.state_mut().state.post_view.as_mut() {
+            v.program = (0..300).map(|i| format!("G01 X{i}.5 Y0. F200.")).collect::<Vec<_>>().join("
+");
+        }
+        harness.run_steps(10);
+    }
+}
+
+#[test]
+fn a_wheel_scroll_after_a_click_releases_the_pin() {
+    let mut harness = long_viewer(300);
+    harness.get_by_label("G01 X150.5 Y0. F200.").scroll_to_me();
+    harness.run_steps(10);
+    let target = cursor(&harness) + 3;
+    harness.get_by_label(&format!("G01 X{target}.5 Y0. F200.")).click();
+    harness.run_steps(30);
+    assert_eq!(cursor(&harness), target);
+    let at = harness.get_by_label(&format!("G01 X{target}.5 Y0. F200.")).rect().center();
+    harness.hover_at(at);
+    harness.event(egui::Event::MouseWheel {
+        unit: egui::MouseWheelUnit::Line,
+        delta: egui::vec2(0.0, -10.0),
+        phase: egui::TouchPhase::Move,
+        modifiers: egui::Modifiers::NONE,
+    });
+    harness.run_steps(30);
+    assert!(cursor(&harness) > target + 3, "the cursor followed the wheel: {}", cursor(&harness));
+}
