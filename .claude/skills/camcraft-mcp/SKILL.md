@@ -144,11 +144,11 @@ The following capabilities exist in the GUI or app command layer but do not yet 
 4. **STEP Vendor Tool Body Attachment (`SetToolBody`, #368, #370):**
    - Attaching and aligning vendor STEP models to tool holders is supported in the tool editor GUI, but lacks an MCP command wrapper.
 
-*Note:* Several remaining gaps above are tracked under dedicated milestone and feature issues (e.g. #258 program headers, #370 tool body alignment, #511 the UI's pocket recognition entry point). Per `AGENTS.md`, any future command PR that does not bundle an MCP tool must file a corresponding `source:agent` issue titled `MCP: <command>`, labelled `P1` and `area:mcp`.
+*Note:* Several remaining gaps above are tracked under dedicated milestone and feature issues (e.g. #258 program headers, #370 tool body alignment, #511 the UI's pocket recognition entry point). Per `AGENTS.md`, any future command PR that does not bundle an MCP tool must file a corresponding `source:agent` issue titled `MCP: <command>`, labelled `P5` and `area:mcp`.
 
 ---
 
 ## Rule for Contributors
 
 Per `AGENTS.md` ("Everything Is a Command"):
-> A PR that adds a user-facing command also adds its MCP tool (and script verb where it fits) in `crates/app/src/mcp/`, or files a `source:agent` follow-up issue `MCP: <command>` (labels `P1`, `area:mcp`) and names it in the PR body.
+> A PR that adds a user-facing command also adds its MCP tool (and script verb where it fits) in `crates/app/src/mcp/`, or files a `source:agent` follow-up issue `MCP: <command>` (labels `P5`, `area:mcp`) and names it in the PR body.
