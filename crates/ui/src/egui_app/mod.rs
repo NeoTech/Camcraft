@@ -225,6 +225,8 @@ mod ribbon_icon_tests;
 #[cfg(test)]
 mod plasma_ribbon_tests;
 #[cfg(test)]
+mod machine_mode_tests;
+#[cfg(test)]
 mod debug_info_tests;
 #[cfg(test)]
 mod fresh_op_tests;
