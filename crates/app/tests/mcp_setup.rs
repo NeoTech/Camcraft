@@ -97,7 +97,7 @@ fn g54_off_the_stock_corner_a_machine_and_fixture_findings_as_data() {
         .as_array()
         .map(|t| t.iter().filter_map(|t| t["name"].as_str().map(str::to_owned)).collect())
         .unwrap_or_default();
-    for want in ["add_setup", "activate_setup", "set_wcs", "set_work_offset", "load_machine", "add_fixture", "remove_fixture", "move_fixture", "get_fixture_findings"] {
+    for want in ["add_setup", "activate_setup", "set_wcs", "set_work_offset", "set_setup_post", "load_machine", "add_fixture", "remove_fixture", "move_fixture", "get_fixture_findings"] {
         assert!(names.iter().any(|n| n == want), "missing tool {want}: {names:?}");
     }
 
@@ -448,4 +448,44 @@ fn set_raw_stock_only_marks_the_stock_source_through_the_command() {
     let off = c.ok("set_raw_stock_only", json!({ "on": false }));
     assert_eq!(off["judged_out"], Value::Null, "undo walked the mark back: {off}");
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// #1233: a setup's own post through the undoable command: set, read
+/// back in get_job, undo/redo, clear, and the refusals by name.
+#[test]
+fn set_setup_post_sets_clears_undoes_and_refuses() {
+    let mut c = Client::new();
+    c.ok("set_stock", json!({ "box": { "dx": 50.0, "dy": 40.0, "dz": 10.0 } }));
+    let e = c.refused("set_setup_post", json!({ "post": "Haas" }));
+    assert!(e.contains("add_setup"), "{e}");
+    c.ok("add_setup", json!({}));
+    c.ok("add_setup", json!({}));
+    let own = |c: &mut Client, i: usize| c.ok("get_job", json!({}))["setups"][i]["post"].clone();
+    assert_eq!(own(&mut c, 0), Value::Null);
+
+    let r = c.ok("set_setup_post", json!({ "setup": "Setup1", "post": "Haas" }));
+    assert_eq!(r["own_post"], json!(true), "{r}");
+    assert!(r["post"].as_str().unwrap_or_default().contains("Haas"), "{r}");
+    assert!(own(&mut c, 0).as_str().unwrap_or_default().contains("Haas"));
+    assert_eq!(own(&mut c, 1), Value::Null, "the other setup is untouched");
+
+    c.ok("undo", json!({}));
+    assert_eq!(own(&mut c, 0), Value::Null);
+    c.ok("redo", json!({}));
+    assert!(own(&mut c, 0).as_str().unwrap_or_default().contains("Haas"));
+
+    let cleared = c.ok("set_setup_post", json!({ "setup": "Setup1", "post": null }));
+    assert_eq!(cleared["own_post"], json!(false), "{cleared}");
+    assert_eq!(own(&mut c, 0), Value::Null);
+    c.ok("undo", json!({}));
+    assert!(own(&mut c, 0).as_str().unwrap_or_default().contains("Haas"), "undo restores the cleared post");
+
+    let e = c.refused("set_setup_post", json!({ "setup": "Setup1", "post": "No Such Post" }));
+    assert!(e.contains("No Such Post"), "{e}");
+    let e = c.refused("set_setup_post", json!({ "setup": "Nope", "post": "Haas" }));
+    assert!(e.contains("Nope"), "{e}");
+    let e = c.refused("set_setup_post", json!({ "setup": "Setup1" }));
+    assert!(e.contains("post"), "{e}");
+    let e = c.refused("set_setup_post", json!({ "setup": "Setup1", "post": 3 }));
+    assert!(e.contains("string or null"), "{e}");
 }

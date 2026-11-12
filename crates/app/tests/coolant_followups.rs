@@ -152,7 +152,7 @@ fn machine_coolant_names_read_through_spelling_variants() {
     }
     assert_eq!(
         camcraft_app::machine::COOLANT_KINDS,
-        ["Flood", "Mist", "Through-spindle", "Through-tool"],
+        ["Flood", "Mist", "Air", "Through-spindle", "Through-tool"],
         "the editor's pick list is the posts' vocabulary"
     );
 }
