@@ -30,6 +30,8 @@ text, assets or post processors were used.
 > refusal you think is mistaken - so the next person doesn't find it the
 > hard way.
 
+![CamCraft main window: the model browser on the left, a 3D viewport in the middle showing a block with a round hole on a vise, and the WCS (G54) properties panel on the right.](screenshot.png)
+
 ## What it does
 
 - **Import** STL, OBJ and STEP models; repair meshes (weld vertices, fill
