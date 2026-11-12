@@ -49,6 +49,10 @@ pub(super) struct Material {
     /// so two models butted face to face are one solid, not a
     /// non-manifold refusal. Empty for one body - the plain read.
     pub(super) bodies: Vec<std::ops::Range<usize>>,
+    /// How much coarser than the importer's promise the source mesh is,
+    /// mm (#864, `model_fidelity`): the worst of the entities read. 0 for
+    /// every model that met it - the gouge laws then read as always.
+    pub(super) excess: f64,
 }
 
 /// The world facets an operation's generator stands in - exactly
@@ -78,6 +82,7 @@ pub(super) fn material_of(
             let mut top = f64::NEG_INFINITY;
             let mut seen: Vec<&str> = Vec::new();
             let mut bodies = Vec::new();
+            let mut excess = 0.0f64;
             for g in items {
                 if seen.contains(&g.entity.as_str()) {
                     continue;
@@ -89,6 +94,7 @@ pub(super) fn material_of(
                     &g.entity,
                     &format!("the selection names '{}', which is gone", g.entity),
                 )?;
+                excess = excess.max(m.excess);
                 let start = facets.len();
                 facets.extend(m.facets);
                 if facets.len() > start {
@@ -97,6 +103,7 @@ pub(super) fn material_of(
                 top = top.max(m.top);
             }
             let mut m = usable(facets, top, "the selection")?;
+            m.excess = excess;
             // Two or more bodies: each is read as its own solid and the
             // planes are united; one body keeps the plain read.
             if bodies.len() > 1 {
@@ -188,7 +195,9 @@ pub(super) fn named_material(world: &World, setup: Option<&str>, name: &str, gon
     let top = crate::setup_align::entity_aabb_in(world, &entity, setup)
         .map(|b| b.max.z)
         .unwrap_or(f64::NAN);
-    usable(facets, top, name)
+    let mut m = usable(facets, top, name)?;
+    m.excess = crate::model_fidelity::excess_of(world, name);
+    Ok(m)
 }
 
 /// The shared sanity gate: every vertex finite, a real top.
@@ -202,7 +211,7 @@ pub(super) fn usable(facets: Vec<Triangle>, top: f64, label: &str) -> Result<Mat
             "'{label}' has no usable geometry to machine"
         )));
     }
-    Ok(Material { facets, top, bodies: Vec::new() })
+    Ok(Material { facets, top, bodies: Vec::new(), excess: 0.0 })
 }
 
 pub(super) fn from_slice(e: SliceError) -> GenError {

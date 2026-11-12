@@ -1,8 +1,0 @@
-# #905: law (b) reads a Boundary-mode arc on its true circle against the walls
-
-- **Chosen:** in `Mode::Boundary`, an XY arc move (a helix included) joins the whole-move wall reading that straight moves have had since #43. It uses the exact least distance from each wall edge to the arc (`sim::verify::arc_wall`), not the chord joints. The edges are classified as before (section edges are walls; with a model, the probe picks the walls; without one, a move that crosses a region edge is over an open rim). The verdict no longer depends on where the joints land.
-  - Why: the issue's case (4 mm cutter, r 200 arc, 0.048 rad, a sharp corner midway between joints) passed a 90 um gouge on main. The joint reading only shrinks that gap. An exact distance closes it.
-- **Chosen:** the distance is read against a radius band, `[min(|Ca|,|Cb|), max(|Ca|,|Cb|)]` widened by `ARC_PAD` (1 um), not a single radius. The arc centre sits on the 1 um lattice while the endpoints are exact, so the cut circle can stand that far off either endpoint radius. The band keeps the reading from ever being farther than the truth. The cost is up to about 1 um of over-report.
-- **Chosen:** an arc whose centre or radius is not a number fails closed (a gouge). A zero-radius or zero-sweep arc is read as its straight chord, as `cl::arc_chords` cuts it.
-- **Left as is:** XZ and YZ arcs keep the joint reading (their XY trace is not a circle). Area mode is untouched: it already reads every chord along its whole length. The joint reading (#689's union of both joint sets) stays as well, since it also judges the section's containment and the non-wall edges.
-- **Dropped:** a finer joint reading (more chords). It still samples and only shrinks the gap, and the 1024-chord cap stops it on long arcs.
