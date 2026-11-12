@@ -27,6 +27,7 @@
 use super::midpose;
 use super::probe::{Cutter, Frame};
 use super::solid_index::SolidIndex;
+use super::thread_bore::ThreadBore;
 use super::types::Warning;
 use crate::cl::{MoveKind, Toolpath, is_vertical, normalize_axis};
 use crate::geometry::{Point3, Triangle};
@@ -81,6 +82,19 @@ fn pieces(m: &crate::cl::Move, step: f64) -> Vec<(Point3, Point3, f64)> {
 /// mesh or tool that cannot be read honestly fails closed: a Gouge at
 /// the first cutting move, never a pass.
 pub fn solid_hits(path: &Toolpath, facets: &[Triangle], cutter: &Cutter, law: &SolidLaw) -> Vec<Warning> {
+    solid_hits_threaded(path, facets, cutter, law, &[])
+}
+
+/// [`solid_hits`] for a thread mill: `bores` are the holes it threads,
+/// whose minor walls the helix cuts into by design
+/// ([`super::thread_bore`], #1071).
+pub fn solid_hits_threaded(
+    path: &Toolpath,
+    facets: &[Triangle],
+    cutter: &Cutter,
+    law: &SolidLaw,
+    bores: &[ThreadBore],
+) -> Vec<Warning> {
     let first_cut = path.moves.iter().position(|m| m.kind != MoveKind::Rapid);
     if facets.is_empty() {
         return Vec::new();
@@ -118,7 +132,7 @@ pub fn solid_hits(path: &Toolpath, facets: &[Triangle], cutter: &Cutter, law: &S
             !set.is_empty()
                 && (pieces(m, law.step).into_iter().any(|(a, b, grow)| {
                     let fr = Frame::new(a, axis);
-                    index.hits(&fr, fr.local(b), set, allow, grow, law.hole_walls)
+                    index.hits(&fr, fr.local(b), set, allow, grow, law.hole_walls, bores)
                 }) || mid.iter().any(|iv| {
                     // The interval's tip travel swept exactly under the
                     // pose held at its midpoint: the pose's own turn
@@ -126,7 +140,7 @@ pub fn solid_hits(path: &Toolpath, facets: &[Triangle], cutter: &Cutter, law: &S
                     // (STEP of far-end travel), the same as the fixture
                     // laws' posed sweep.
                     let fr = Frame::new(iv.p0, normalize_axis(iv.am).filter(|a| !is_vertical(a)));
-                    index.hits(&fr, fr.local(iv.p1), set, allow, grow_mid, law.hole_walls)
+                    index.hits(&fr, fr.local(iv.p1), set, allow, grow_mid, law.hole_walls, bores)
                 }))
         };
         if m.kind == MoveKind::Rapid {

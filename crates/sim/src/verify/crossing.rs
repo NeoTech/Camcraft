@@ -9,7 +9,7 @@
 //! reports is the all-pairs law's exactly ([`crossed_pairs_all`], kept
 //! as the reference the equivalence tests hold it to).
 
-use super::laws::proper_cross;
+use super::laws::{orient, proper_cross};
 use super::types::{Mode, VerifyContext, Warning};
 
 use crate::cl::{MoveKind, Toolpath};
@@ -96,7 +96,27 @@ fn crosses(a: &Chord, b: &Chord) -> bool {
     } else {
         za0.max(za1).min(zb0.max(zb1)) - za0.min(za1).max(zb0.min(zb1)) > 0.0
     };
-    z_hit && proper_cross(a0, a1, b0, b1)
+    z_hit && proper_cross(a0, a1, b0, b1) && !touching(a0, a1, b0, b1)
+}
+
+/// How near an endpoint may stand to the other chord's line and still
+/// be read as ON it, mm: past float dust on any coordinate this kernel
+/// writes (the CL lattice is 1 um), far inside any real crossing.
+const TOUCH: f64 = 1e-9;
+
+/// Whether the chords only touch (#1071): an endpoint of either on the
+/// other's line, to within [`TOUCH`]. `proper_cross` reads a touch as no
+/// crossing only when an orientation is exactly zero, so a path that
+/// runs back over its own trace - the thread mill's retract, the ride
+/// reversed at feed - put each joint a last bit off its twin and read
+/// the touch, or the collinear overlap, as a crossing. A real crossing
+/// keeps every endpoint off the other line.
+fn touching(a0: Point2, a1: Point2, b0: Point2, b1: Point2) -> bool {
+    let off = |p: Point2, q0: Point2, q1: Point2| {
+        let len = (q1.x - q0.x).hypot(q1.y - q0.y);
+        len <= f64::EPSILON || orient(q0, q1, p).abs() <= TOUCH * len
+    };
+    off(a0, b0, b1) || off(a1, b0, b1) || off(b0, a0, a1) || off(b1, a0, a1)
 }
 
 /// The crossing move pairs, ascending and deduped, testing all chord

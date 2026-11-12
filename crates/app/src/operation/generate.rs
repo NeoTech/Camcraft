@@ -2049,6 +2049,13 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 m_gen,
                 frame.as_ref(),
             )?;
+            // #1071: the gouge law reads the thread's major circle, the
+            // wall the helix is cut to, not the declared minor rim.
+            let region = super::material_source::major_rims(
+                region,
+                holes,
+                machining2d::THREAD_DEPTH_PER_PITCH * tool.pitch,
+            )?;
             let path = machining2d::thread_mill(&machining2d::ThreadParams {
                 holes: holes
                     .iter()
@@ -2968,7 +2975,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // along every move against the part solid. The Section kinds
             // answer the same law inside `verify` (b2), real tip (M13.7).
             if depth_law == DepthLaw::Contain {
-                contain_into(&mut warns, &path, &material.facets, &cutter, depth_law, stl, material.excess);
+                contain_into(&mut warns, &path, &material.facets, &cutter, depth_law, stl, material.excess, &super::material_source::thread_bores(&params, tool.pitch));
             }
             // The rotary kinds' bands and rapids (M13): `Mode::Rotary`
             // stood the vertical-column laws down; the radial field
@@ -3081,7 +3088,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // along every move against the part solid. The Section kinds
             // answer the same law inside `verify` (b2), real tip (M13.7).
             if depth_law == DepthLaw::Contain {
-                contain_into(&mut warns, &path, &m_gen.facets, &cutter, depth_law, stl, material.excess);
+                contain_into(&mut warns, &path, &m_gen.facets, &cutter, depth_law, stl, material.excess, &super::material_source::thread_bores(&params, tool.pitch));
             }
             warns.extend(workholding_warnings(
                 &path_world,
@@ -3206,7 +3213,8 @@ const CONTAIN_STEP: f64 = 0.25;
 /// Append the solid law's warnings that the region laws did not
 /// already report, keeping the list's move order: the tool's own tip
 /// and stack against the part solid at every sampled position, the
-/// containment kinds' tessellated hole rims excused (`SolidLaw`).
+/// containment kinds' tessellated hole rims excused (`SolidLaw`), and a
+/// thread mill's `bores` their threads (#1071).
 fn contain_into(
     warns: &mut Vec<Warning>,
     path: &Toolpath,
@@ -3215,6 +3223,7 @@ fn contain_into(
     law: DepthLaw,
     stl: f64,
     excess: f64,
+    bores: &[verify::ThreadBore],
 ) {
     let law = verify::SolidLaw {
         step: CONTAIN_STEP,
@@ -3222,7 +3231,7 @@ fn contain_into(
         allow: verify::excess_floor(GOUGE_TOL, excess).unwrap_or(GOUGE_TOL) + (-stl).max(0.0),
         hole_walls: law == DepthLaw::Contain,
     };
-    for w in verify::solid_hits(path, facets, cutter, &law) {
+    for w in verify::solid_hits_threaded(path, facets, cutter, &law, bores) {
         if !warns.contains(&w) {
             warns.push(w);
         }

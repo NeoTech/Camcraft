@@ -184,6 +184,7 @@ mod solid_index;
 mod stack_span;
 mod sweep;
 mod swept;
+mod thread_bore;
 mod types;
 mod workholding;
 
@@ -191,6 +192,7 @@ pub use types::{excess_floor, FixturePart, Mode, VerifyContext, Warning};
 #[doc(hidden)]
 pub use crossing::{crossed_pairs, crossed_pairs_all};
 pub use engine::{verify, verify_bodies};
+pub use thread_bore::ThreadBore;
 pub use air::cuts_no_material;
 pub use prior::{acquit_by_prior, prior_surface};
 pub use laws::{
@@ -204,7 +206,7 @@ pub use workholding::{
 pub use body_bands::{BodyBands, BODY_BANDS_CAP};
 pub use probe::Cutter;
 pub use rotary::{rotary_hits, RotaryAxis, RotaryLaw};
-pub use solid::{SolidLaw, solid_hits};
+pub use solid::{SolidLaw, solid_hits, solid_hits_threaded};
 pub use mesh_steel::{mesh_refined, steel_stack, MeshSteel, SteelBand};
 #[doc(hidden)]
 pub use contact::posed_contact;
