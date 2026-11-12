@@ -329,19 +329,51 @@ fn conditional_modules_do_not_claim_an_empty_exact_run() {
 #[test]
 fn inline_path_in_non_mod_rs_uses_the_containing_module_directory() {
     let f = fixture();
-    f.write("crates/app/tests/group/cases.rs", "mod inline {\n    #[path = \"other.rs\"]\n    mod inner;\n}\n");
-    f.write("crates/app/tests/group/cases/inline/other.rs", "//! Gate map: covers app::operation.\n#[test]\nfn aliased() {}\n");
+    f.write(
+        "crates/app/tests/group/cases.rs",
+        "mod inline {\n    #[path = \"other.rs\"]\n    mod inner;\n}\n",
+    );
+    f.write(
+        "crates/app/tests/group/cases/inline/other.rs",
+        "//! Gate map: covers app::operation.\n#[test]\nfn aliased() {}\n",
+    );
     let p = single(&f, "aliased", Some("group"), true);
-    assert_eq!(args(&p), ["test -j 6 -p camcraft-app --test group -- --test-threads=6 --exact cases::inline::inner::aliased"]);
+    assert_eq!(
+        args(&p),
+        [
+            "test -j 6 -p camcraft-app --test group -- --test-threads=6 --exact cases::inline::inner::aliased"
+        ]
+    );
     run_step(&f.0, &p.steps[0], 1);
 }
 
 #[test]
 fn inner_file_cfg_does_not_claim_an_empty_exact_run() {
     let f = fixture();
-    f.write("crates/app/tests/group/cases.rs", &format!("#![cfg(any())]\n{CASES}"));
-    let p = quick(&f, "crates/app/tests/group/cases.rs", "@@ -6 +6 @@", false, false);
-    assert_eq!(args(&p), ["test -j 6 -p camcraft-app --no-fail-fast --test group -- --test-threads=6"]);
-    let filter = single::Filter { name: "changed", krate: Some("app"), binary: Some("group"), exact: true };
-    assert!(single::plan(&f.0, &filter).expect_err("inner cfg precision must refuse").contains("conditional"));
+    f.write(
+        "crates/app/tests/group/cases.rs",
+        &format!("#![cfg(any())]\n{CASES}"),
+    );
+    let p = quick(
+        &f,
+        "crates/app/tests/group/cases.rs",
+        "@@ -6 +6 @@",
+        false,
+        false,
+    );
+    assert_eq!(
+        args(&p),
+        ["test -j 6 -p camcraft-app --no-fail-fast --test group -- --test-threads=6"]
+    );
+    let filter = single::Filter {
+        name: "changed",
+        krate: Some("app"),
+        binary: Some("group"),
+        exact: true,
+    };
+    assert!(
+        single::plan(&f.0, &filter)
+            .expect_err("inner cfg precision must refuse")
+            .contains("conditional")
+    );
 }

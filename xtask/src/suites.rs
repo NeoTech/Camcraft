@@ -95,10 +95,10 @@ fn visit(
     // Do not guess target/features for cfg-gated modules or functions. Quick can run
     // the suite whole; named selection refuses an ambiguous exact path.
     let precise = inherited_precision
-        && !text
-            .lines()
-            .any(|l| (l.trim_start().starts_with("#[cfg") || l.trim_start().starts_with("#![cfg"))
-            && !["#[cfg(test)]", "#![cfg(test)]"].contains(&l.trim()));
+        && !text.lines().any(|l| {
+            (l.trim_start().starts_with("#[cfg") || l.trim_start().starts_with("#![cfg"))
+                && !["#[cfg(test)]", "#![cfg(test)]"].contains(&l.trim())
+        });
     out.push(Source {
         path: file.to_path_buf(),
         module: prefix.to_string(),
@@ -120,7 +120,11 @@ fn visit(
         let child = match m.path {
             Some(p) => {
                 // In a non-mod.rs module, #[path] is relative to its containing directory.
-                let mut relative = if m.parents.is_empty() { parent.to_path_buf() } else { base.clone() };
+                let mut relative = if m.parents.is_empty() {
+                    parent.to_path_buf()
+                } else {
+                    base.clone()
+                };
                 for p in &m.parents {
                     relative.push(p);
                 }
