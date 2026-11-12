@@ -27,7 +27,7 @@ unstated capability into existence.
       "general":    { "model": "...", "vendor": "Camcraft", "kind": "mill" },
       "kinematics": { "default": { "units": {...}, "parts": [ ... ] } },
       "controller": { "synced_configuration": { "parts": { "X": {...} } } },
-      "tooling":    { "number_of_tools": N }
+      "tooling":    { "number_of_tools": N, "spindle_mount": "BT30", "default_holder": "BT30 ER20" }
     }
 
 - `general.kind` ∈ `mill` | `lathe` | `mill-turn` | `plasma`. The DECLARATION
@@ -167,6 +167,19 @@ unstated capability into existence.
 - `tooling.number_of_tools`: DISTINCT tool positions the program may
   call (a double-tier of the same 40 stations is 40, not 80); a
   program asking for a tool number above it is a checker refusal.
+- `tooling.spindle_mount` / `tooling.default_holder` (#828, both
+  optional): the holder system the spindle takes (`BT30`, `BT40`,
+  `CAT40` or `TTS` - the R8 spindle of a Tormach PCNC/M mill takes TTS
+  holders) and the built-in holder-library entry a NEW tool on the
+  machine starts with (`"BT30 ER20"`, the tool editor's own name). Both
+  refuse BY NAME at the reader and in the Machines pane: an unknown
+  mount or holder, a non-word, and a holder whose taper is not the
+  stated mount (a straight-shank chuck names no mount). The default is
+  applied only when a tool is added (GUI, MCP `add_tool`), in the add's
+  own undo step and named in its status/reply; existing tools never
+  change, and a holder that cannot take the tool's shank is left off
+  with a named note. `tooling.mount_source` is free text the reader
+  never reads: the public page the mount was taken from.
 
 ## What the script sees
 

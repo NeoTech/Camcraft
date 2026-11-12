@@ -1,105 +1,113 @@
-//! View preferences (issue #645, the toggle asked on top of #727):
-//! the per-user `view.json` round-trips a flipped flag through a
-//! restart, a missing file is a quiet default start, a corrupt or
-//! foreign-format file starts at the defaults with a reason - never a
-//! crash - and unknown keys stay ignored so newer builds keep working.
-//! The default is names ON: shipping the switch must not change a
-//! viewport a user already has.
+//! View preferences (issue #877): the theme and the colour-vision mode
+//! are kept per user, survive a restart through the per-user file, and a
+//! missing, corrupt or half-known file starts at the defaults with a
+//! reason - never a crash. A pick is checked by name before it is set,
+//! and the project file never carries either preference.
 //!
-//! Provenance: our own tests, specced from #645's review ask.
+//! Provenance: our own tests, specced from the issue's "Done means".
 //!
-//! Gate map (M4.4): covers app::view.
+//! Gate map (M4.4): covers app::prefs, app::commands (theme, color_vision).
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
-use camcraft_app::recent;
-use camcraft_app::view::{self, ViewPrefs, FILE_NAME, FORMAT};
+use camcraft_app::commands::{check_theme, color_vision_of, color_vision_set, theme_of};
+use camcraft_app::prefs::{self, FILE_NAME, FORMAT, ViewPrefs};
+use camcraft_app::schema::{ColorVision, ThemeRef};
+use camcraft_app::world::new_world as world;
 
 /// A fresh, empty folder for one test.
 fn dir(tag: &str) -> PathBuf {
-    let d = std::env::temp_dir().join(format!("camcraft_view_{tag}_{}", std::process::id()));
+    let d = std::env::temp_dir().join(format!("camcraft_prefs_{tag}_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&d);
     std::fs::create_dir_all(&d).expect("make the test folder");
-    // Canonical, so comparisons hold where temp is a symlink (macOS /var).
-    std::fs::canonicalize(&d).expect("canonical test folder")
-}
-
-/// `dir/tag`'s view file, folder created, file not necessarily present.
-fn file_in(d: &Path) -> PathBuf {
-    d.join(FILE_NAME)
+    d
 }
 
 #[test]
-fn a_flipped_choice_round_trips_through_the_file() {
-    let d = dir("roundtrip");
-    let file = file_in(&d);
-    assert_eq!(view::load(&file), (ViewPrefs::default(), None), "no file yet: quiet defaults");
-    view::save(&file, &ViewPrefs { show_gizmo_names: false }).expect("save creates the file");
-    let (prefs, note) = view::load(&file);
-    assert!(!prefs.show_gizmo_names, "the restart reads the choice back");
-    assert_eq!(note, None, "a good file says nothing");
-    view::save(&file, &ViewPrefs { show_gizmo_names: true }).expect("flip back");
-    assert!(view::load(&file).0.show_gizmo_names, "and back on survives too");
+fn the_preferences_survive_a_restart() {
+    let path = dir("restart").join(FILE_NAME);
+    let chosen = ViewPrefs { theme: ThemeRef::Named("light".into()), color_vision: ColorVision::Tritan };
+    prefs::save(&path, &chosen).expect("save");
+    let (back, note) = prefs::load(&path);
+    assert_eq!(back, chosen);
+    assert_eq!(note, None);
+    // A theme file rides its path; Dark and Off write no key.
+    let file = ViewPrefs { theme: ThemeRef::File("C:/themes/mine.json".into()), color_vision: ColorVision::Off };
+    prefs::save(&path, &file).expect("save");
+    assert_eq!(prefs::load(&path).0, file);
+    prefs::save(&path, &ViewPrefs::default()).expect("save");
+    let text = std::fs::read_to_string(&path).expect("written");
+    assert!(text.contains(FORMAT) && !text.contains("theme") && !text.contains("colorVision"), "{text}");
+}
+
+#[test]
+fn no_file_is_a_quiet_default_start() {
+    let (p, note) = prefs::load(&dir("none").join(FILE_NAME));
+    assert_eq!(p, ViewPrefs::default());
+    assert_eq!(note, None, "a first run says nothing");
 }
 
 #[test]
 fn a_corrupt_or_foreign_file_starts_at_the_defaults_and_says_why() {
     let d = dir("corrupt");
-    let file = file_in(&d);
-    for (text, wants) in [
-        ("{ not json", "not a view file"),
-        (r#"{"format":"camcraft-recent/1","view":{"show_gizmo_names":false}}"#, FORMAT),
+    for (name, text, why) in [
+        ("broken.json", "{ not json", "not a preferences file"),
+        ("foreign.json", r#"{"format": "camcraft-recent/1"}"#, "is not camcraft-prefs/1"),
     ] {
-        std::fs::write(&file, text).expect("write the bad file");
-        let (prefs, note) = view::load(&file);
-        assert_eq!(prefs, ViewPrefs::default(), "a bad file starts at the defaults: {text}");
-        let note = note.expect("and says so");
-        assert!(note.contains(wants), "the reason names the trouble ({wants}): {note}");
+        let path = d.join(name);
+        std::fs::write(&path, text).expect("write fixture");
+        let (p, note) = prefs::load(&path);
+        assert_eq!(p, ViewPrefs::default(), "{name}");
+        let note = note.expect("a reason");
+        assert!(note.contains(why) && note.contains("using the defaults"), "{note}");
     }
 }
 
 #[test]
-fn unknown_keys_and_missing_sections_still_read() {
-    let d = dir("tolerant");
-    let file = file_in(&d);
-    // A newer build's extra key must not break this one's read.
+fn an_unknown_value_falls_back_alone_and_is_named() {
+    let path = dir("unknown").join(FILE_NAME);
     std::fs::write(
-        &file,
-        r#"{"format":"camcraft-view/1","view":{"show_gizmo_names":false,"sound_off":true}}"#,
+        &path,
+        r#"{"format": "camcraft-prefs/1", "theme": {"named": "solarpunk"}, "colorVision": "tritan", "later": 1}"#,
     )
-    .expect("write the newer file");
-    assert!(!view::load(&file).0.show_gizmo_names, "the key it knows still reads");
-    // A whole missing `view` section is the all-defaults view, quietly.
-    std::fs::write(&file, format!(r#"{{"format":"{FORMAT}"}}"#)).expect("write the thin file");
-    let (prefs, note) = view::load(&file);
-    assert_eq!(prefs, ViewPrefs::default(), "missing sections default");
-    assert_eq!(note, None, "and that is not a complaint");
+    .expect("write fixture");
+    let (p, note) = prefs::load(&path);
+    assert_eq!(p, ViewPrefs { theme: ThemeRef::Dark, color_vision: ColorVision::Tritan }, "the rest survives");
+    assert!(note.expect("named").contains("theme 'solarpunk' is not a built-in"));
+    std::fs::write(&path, r#"{"format": "camcraft-prefs/1", "colorVision": "sepia"}"#).expect("write fixture");
+    let (p, note) = prefs::load(&path);
+    assert_eq!(p.color_vision, ColorVision::Off);
+    assert!(note.expect("named").contains("colour-vision mode 'sepia' is not known"));
 }
 
 #[test]
-fn defaults_wear_the_seventy_twenty_seven_decision() {
-    // #727 drew the names for everyone; #645's switch ships ON so no
-    // existing viewport changes on the update.
-    assert!(ViewPrefs::default().show_gizmo_names);
-    let d = dir("defaults");
-    assert!(view::load(&file_in(&d)).0.show_gizmo_names);
+fn a_pick_is_checked_by_name() {
+    assert!(check_theme(&ThemeRef::Dark).is_ok());
+    assert!(check_theme(&ThemeRef::Named("light".into())).is_ok());
+    let stranger = check_theme(&ThemeRef::Named("solarpunk".into())).expect_err("not a built-in");
+    assert!(stranger.contains("solarpunk"), "{stranger}");
+    let gone = std::env::temp_dir().join(format!("camcraft-gone-{}.json", std::process::id()));
+    let _ = std::fs::remove_file(&gone);
+    let missing = check_theme(&ThemeRef::File(gone.display().to_string())).expect_err("no such file");
+    assert!(missing.contains("camcraft-gone"), "{missing}");
+    // Existence is all the app seam checks; the parse is the shell's.
+    let real = dir("pick").join("t.json");
+    std::fs::write(&real, "{}").expect("temp theme file");
+    assert!(check_theme(&ThemeRef::File(real.display().to_string())).is_ok());
 }
 
 #[test]
-fn the_config_dir_override_houses_the_view_file() {
-    // The re-review's note: the persistence claim names CAMCRAFT_CONFIG_DIR,
-    // so the override gets its own gate. The folder resolver is the
-    // recents' (#662) and view.rs hangs FILE_NAME on it (`store_path`),
-    // so an absolute override must be the folder the choice round-trips
-    // through. Fake getter, as `recent_files`' resolver test does -
-    // edition 2024 keeps process env writes out of tests.
-    let d = dir("override");
-    let over =
-        |k: &str| (k == recent::ENV_VAR).then(|| std::ffi::OsString::from(d.as_os_str()));
-    let folder = recent::config_dir_for(std::env::consts::OS, over)
-        .expect("the override names a folder on every platform");
-    assert_eq!(folder, d, "the absolute override wins over any home folder");
-    let file = file_in(&folder);
-    view::save(&file, &ViewPrefs { show_gizmo_names: false }).expect("save under the override");
-    assert!(!view::load(&file).0.show_gizmo_names, "the restart reads it back from there");
+fn the_project_file_never_carries_the_colour_vision_mode() {
+    let w = world();
+    color_vision_set(&w, ColorVision::Tritan);
+    let path = dir("cvd").join("doc.camproj");
+    camcraft_app::project::save(&w, &path).expect("save");
+    let text = std::fs::read_to_string(&path).expect("read back");
+    assert!(!text.to_lowercase().contains("vision"), "the project file never carries it");
+    let elsewhere = world();
+    camcraft_app::project::load(&elsewhere, &path).expect("open elsewhere");
+    assert_eq!(color_vision_of(&elsewhere), ColorVision::Off, "a colleague's screen is not remapped");
+    camcraft_app::project::load(&w, &path).expect("re-open here");
+    assert_eq!(color_vision_of(&w), ColorVision::Tritan, "the viewer's mode outlives the document");
+    assert_eq!(theme_of(&w), ThemeRef::Dark);
 }

@@ -121,6 +121,7 @@ mod theme_door;
 mod recent_door;
 // #645: the browser's "Show origin names" switch and the per-user view file.
 mod view_names;
+mod prefs_door;
 // #509: the Fixtures page rows fit the pane.
 mod fixture_rows;
 // #709 hand check: both points of a two-point axis stay marked.
