@@ -326,3 +326,16 @@ pub(super) fn rim_is(l: &Loop, h: Hole) -> bool {
     pts.iter()
         .all(|p| ((p.x - h.xy.x).hypot(p.y - h.xy.y) - h.radius).abs() <= tol)
 }
+
+/// The declared circles `(centre, radius)` [`region_for`]'s rim loops
+/// draw for a containment kind (#1057): a Z drill's, a bore's or a
+/// thread mill's holes. The verify reads a loop tracing one at the
+/// untightened gouge tolerance (`VerifyContext::rims`). Empty for every
+/// other kind, and for a radial drill (its region has no rims).
+pub(super) fn rims_of(params: &OpParams) -> Vec<(Point2, f64)> {
+    match params {
+        OpParams::Drill { holes, cross, .. } if cross.is_empty() => holes.iter().map(|h| (h.xy, h.radius)).collect(),
+        OpParams::Bore { holes, .. } | OpParams::Thread { holes, .. } => holes.iter().map(|h| (h.xy, h.radius)).collect(),
+        _ => Vec::new(),
+    }
+}
