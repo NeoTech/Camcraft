@@ -202,8 +202,10 @@ STEP facet budget, 30 million triangles by default. A model too large for
 the budget is imported reduced, and CamCraft says how closely its surfaces
 are approximated: checks against it are stricter, and operations on a model
 that is too coarse to check are refused at the post. Import it again with a
-larger budget (from a script, `cam.import(path, name, facetBudget)`, accepting
-1 000 to 60 000 000) to clear that.
+larger budget to clear that: set **STEP facet budget (next import)** on the
+model page before importing, or pass it from a script,
+`cam.import(path, name, facetBudget)`. Either way it accepts 1 000 to
+60 000 000.
 
 ## Machines and posts
 
