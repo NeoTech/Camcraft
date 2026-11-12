@@ -75,6 +75,8 @@ pub mod setup;
 pub mod setup_align;
 // #343: each setup's own machine and post, and the one-mount law.
 pub mod setup_mount;
+// #870: the WCS origin said in words ("top of stock, front-left corner").
+pub mod setup_origin;
 // #316: transforms between setups and the setup-relative link.
 pub mod setup_relative;
 pub mod setup_post_options;

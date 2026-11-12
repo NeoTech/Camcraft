@@ -118,6 +118,7 @@ pub fn properties(ui: &mut Ui, state: &mut State, pal: &Tokens) {
         super::op_page::operation_page(ui, state, n.as_str(), pal);
         return;
     }
+    let t_footer = t.clone();
     let has_close = matches!(&t, UiTarget::Tool(_) | UiTarget::Stock | UiTarget::Wcs | UiTarget::Model(_) | UiTarget::SetupNode(..));
     let content_height = (ui.available_height() - if has_close { 40.0 } else { 0.0 }).max(80.0);
     ScrollArea::vertical()
@@ -139,6 +140,8 @@ pub fn properties(ui: &mut Ui, state: &mut State, pal: &Tokens) {
                 // #342: one WCS per setup; the word is its post label.
                 let active = camcraft_app::setup::active(&state.world);
                 ui.heading(camcraft_app::setup::wcs_label(&state.world, active.as_deref()));
+                // #870: where the origin is, in words, before any field.
+                super::wcs_footer::origin_line(ui, state);
                 ui.separator();
                 wcs_page(ui, state);
                 // #343: the WCS node's dialog names its post word too.
@@ -169,7 +172,13 @@ pub fn properties(ui: &mut Ui, state: &mut State, pal: &Tokens) {
         });
     if has_close {
         ui.separator();
-        if ui.button("Close").clicked() {
+        // #870: the WCS page's footer carries Set origin beside Close.
+        let close = if matches!(t_footer, UiTarget::Wcs) {
+            super::wcs_footer::footer(ui, state)
+        } else {
+            ui.button("Close").clicked()
+        };
+        if close {
             state.close_property_editor();
         }
     }
@@ -557,10 +566,8 @@ fn wcs_page(ui: &mut Ui, state: &mut State) {
             state.wcs_ui.yaw_deg = 0.0;
             apply_wcs_drafts(state);
         }
-        if ui.button("Set Origin").clicked() {
-            apply_wcs_drafts(state);
-        }
     });
+    // #870: typed values apply from the footer's Set origin (wcs_footer).
 
     ui.add_space(6.0);
     // Box-point anchoring (feedback 5, revised): the reference box is an
@@ -650,7 +657,7 @@ fn wcs_page(ui: &mut Ui, state: &mut State) {
     ui.label("Work offset: the G54-G59 slot this setup posts. It does not move the origin.");
 }
 
-fn apply_wcs_drafts(state: &mut State) {
+pub(super) fn apply_wcs_drafts(state: &mut State) {
     state.pending.push_back(CommandKind::SetWcs {
         pos: [state.wcs_ui.x, state.wcs_ui.y, state.wcs_ui.z],
         roll_deg: state.wcs_ui.roll_deg,
