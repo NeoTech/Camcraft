@@ -11,7 +11,7 @@
 //! Provenance: our own tests over our own post and machine file; the
 //! dialect facts from TinyG's public wiki ("Gcode Support").
 //!
-//! Gate map: covers app::post (tinyg.cps), post::machine (safeRetractZ,
+//! Gate map: covers camcraft_post::post (tinyg.cps), camcraft_post::machine (safeRetractZ,
 //! units), app::posting (registry, machine library).
 
 use camcraft_app::machine::parse_mch;

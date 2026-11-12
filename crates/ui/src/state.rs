@@ -1036,6 +1036,7 @@ impl ToolUi {
                 ToolKind::Taper => 10,
                 ToolKind::Probe => 11,
                 ToolKind::Torch => 12,
+                ToolKind::Electrode => 13,
             },
             diameter: t.diameter,
             corner_r: t.corner_r,
@@ -1076,6 +1077,7 @@ impl ToolUi {
             10 => ToolKind::Taper,
             11 => ToolKind::Probe,
             12 => ToolKind::Torch,
+            13 => ToolKind::Electrode,
             _ => ToolKind::EndMill,
         }
     }

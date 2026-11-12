@@ -128,6 +128,8 @@ mod probe_page;
 // #670: the Plasma Profile's page.
 mod plasma_page;
 mod wire_page;
+// #541: the Sinker Burn's fields.
+mod sinker_page;
 mod trochoid_page;
 mod kind_editors;
 mod mill2d_more_page;

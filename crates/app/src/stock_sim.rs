@@ -245,7 +245,15 @@ pub(crate) struct Planned {
     /// The edge breaks the op was asked to cut (#303); empty for every
     /// kind but the chamfer and the deburr.
     pub breaks: Vec<crate::cl::EdgeBreak>,
+    /// A sinker electrode's box atom (#541): `[hx, hy, gap]` - the face's
+    /// half sizes and the condition's spark gap. The column verdict cuts
+    /// it (`simulate_box`); the field eye has no box atom and refuses the
+    /// program by name. `None` for every other tool.
+    pub electrode: Option<[f64; 3]>,
 }
+
+/// The field eye's refusal of a sinker electrode (#541), said once.
+pub const ELECTRODE_FIELD_REFUSAL: &str = "the stock view has no sinker electrode atom yet - the program verdict (the column engine's box atom) judges the burn";
 
 /// The corner radius a tool's atom carries (M13.1): Some only for a
 /// bull nose with a real corner, clamped to the tool radius (the
@@ -343,9 +351,22 @@ pub(crate) fn plan_program(world: &flecs_ecs::prelude::World) -> Result<Vec<Plan
         // half its band - `LathePlan::feature`): the display cell law
         // (`auto_cell`) reads it, not the IC. Every other tool sweeps
         // its cutting radius - a tap its thread's core (#266).
-        let radius = match lathe {
-            Some(plan) => plan.feature(),
-            None => crate::operation::tool_law::cutting_radius(&tool).map_err(|e| format!("{name}: {e}"))?,
+        // A sinker electrode (#541) sweeps its rectangular face grown by
+        // the condition's spark gap - the box atom; its radius is the
+        // inscribed half size, which only the cell law reads.
+        let electrode = match &op.params {
+            crate::operation::OpParams::SinkerBurn(sb) if tool.kind == crate::tools::ToolKind::Electrode => {
+                let (hx, hy) = camcraft_tools::electrode::half_sizes(&tool);
+                let gap = crate::operation::sinker_op::condition_gap(world, op.setup.as_deref(), sb)
+                    .map_err(|e| format!("{name}: {e}"))?;
+                Some([hx, hy, gap])
+            }
+            _ => None,
+        };
+        let radius = match (lathe, electrode) {
+            (Some(plan), _) => plan.feature(),
+            (None, Some([hx, hy, _])) => hx.min(hy),
+            (None, None) => crate::operation::tool_law::cutting_radius(&tool).map_err(|e| format!("{name}: {e}"))?,
         };
         planned.push(Planned {
             name: name.clone(),
@@ -359,6 +380,7 @@ pub(crate) fn plan_program(world: &flecs_ecs::prelude::World) -> Result<Vec<Plan
             setup: op.setup,
             rotary,
             lathe,
+            electrode,
         });
     }
     Ok(planned)

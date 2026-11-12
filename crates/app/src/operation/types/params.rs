@@ -1176,6 +1176,10 @@ pub enum OpParams {
     /// punch / die side, from a stated start hole (see
     /// [`crate::wire_edm`]). The wire EDM's first kind (#290 D1).
     WireContour(super::wire_edm::WireContourOp),
+    /// Sinker EDM burn to depth (#541): one electrode fed down Z to a
+    /// depth from a stated datum (see [`crate::sinker`]). The sinker
+    /// EDM's first kind.
+    SinkerBurn(super::sinker::SinkerBurnOp),
 }
 
 impl OpParams {
@@ -1223,6 +1227,7 @@ impl OpParams {
             OpParams::Probe { .. } => OpType::Probe,
             OpParams::PlasmaProfile(_) => OpType::PlasmaProfile,
             OpParams::WireContour(_) => OpType::WireContour,
+            OpParams::SinkerBurn(_) => OpType::SinkerBurn,
             OpParams::TrochoidalSlot { .. } => OpType::TrochoidalSlot,
         }
     }
@@ -1253,6 +1258,8 @@ impl OpParams {
             // The wire stands vertical (#532): a taper is a pose per
             // move (#290 D2, #536), never a 3+2 index.
             OpParams::WireContour(_) => None,
+            // The electrode burns straight down Z (#541).
+            OpParams::SinkerBurn(_) => None,
             // The 5-axis kinds (M5.1 C) are the third answer, not the
             // second: the PART stands still and the TOOL AXIS moves -
             // a 3+2 index inside them would command the machine to
@@ -1326,6 +1333,7 @@ impl OpParams {
             // A wire has no rapids plane (#532): it never lifts out of
             // the work; its travel plane is the workpiece's top.
             OpParams::WireContour(p) => p.top_z,
+            OpParams::SinkerBurn(p) => p.clearance_z,
             OpParams::Face { clearance_z, .. }
             | OpParams::Contour { clearance_z, .. }
             | OpParams::Pocket { clearance_z, .. }
@@ -1383,6 +1391,8 @@ impl OpParams {
             OpParams::PlasmaProfile(p) => p.top_z,
             // The wire's profile is drawn on the workpiece's top (#532).
             OpParams::WireContour(p) => p.top_z,
+            // The electrode enters at the work top (#541).
+            OpParams::SinkerBurn(p) => p.top_z,
             OpParams::Face { top_z, cut_z, .. } => top_z.unwrap_or(*cut_z),
             OpParams::Contour { top_z, .. }
             | OpParams::Pocket { top_z, .. }
@@ -1461,6 +1471,11 @@ impl OpParams {
             OpParams::WireContour(p) => {
                 f(p.top_z);
                 f(p.bottom_z);
+            }
+            OpParams::SinkerBurn(p) => {
+                f(p.clearance_z);
+                f(p.top_z);
+                f(p.floor_z);
             }
             OpParams::Face { clearance_z, cut_z, top_z, .. } => {
                 f(*clearance_z);
