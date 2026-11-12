@@ -87,7 +87,7 @@ The server exposes tools across three modules in `crates/app/src/mcp/` (see `cra
 - `list_tool_catalog {}`: List built-in tool definitions.
 - `add_tool { "catalog"?: string, "definition"?: object, "name"?: string }`: Add a tool: a copy of a `list_tool_catalog` entry, or a full definition (`get_job`'s tool shape); `name` defaults to the catalog name.
 - `set_tool { "operation": string, "tool": string }`: Assign a document tool to an operation.
-- `import_tool_library { "path": string }`: Import tools from a `.camtools` library file.
+- `import_tool_library { "path": string, "holders"?: bool }`: Import tools from a `.camtools` library file as one undo step. `holders` (default true, #889) takes each tool's holder body from the file (a tool's `definition.body`, the `.camproj` tool body shape); false lands every tool with its holder cylinder only. A body that is malformed or no longer fits its tool refuses the file naming the tool. The reply adds `holders` (bodies landed) and `holders_left_out`.
 - `export_tool_library { "path": string }`: Export document tools to a `.camtools` library file.
 
 ### 5. Operations & Geometric Features (`tools.rs`, `pick.rs`, `area.rs`, `features.rs`, #180, #312)

@@ -91,9 +91,16 @@ pub(crate) fn v_export_tools(env: &mut Env, args: Vec<Value>) -> Result<Value, S
 /// and the import is one undo step.
 pub(crate) fn v_import_tools(env: &mut Env, args: Vec<Value>) -> Result<Value, String> {
     let path = PathBuf::from(arg_str(&args, 0, "a tool library path")?);
-    let text = std::fs::read_to_string(&path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
+    import_tools(env, &path, true)
+}
+
+/// The import behind `cam.importTools` and MCP's `import_tool_library`
+/// (#889: `holders` takes the file's tool bodies, or lands every tool
+/// with its holder cylinder only).
+pub(crate) fn import_tools(env: &mut Env, path: &std::path::Path, holders: bool) -> Result<Value, String> {
+    let text = std::fs::read_to_string(path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
     let library = crate::tool_library::parse_tool_library(&text)?;
-    let cmd = ImportTools::new(&env.world, library).map_err(|e| e.to_string())?;
+    let cmd = ImportTools::with_holders(&env.world, library, holders).map_err(|e| e.to_string())?;
     let report = cmd.report().clone();
     env.history.execute(&env.world, cmd);
     let renamed: Vec<Value> = report.renamed.iter().map(|(from, to)| json!({ "from": from, "to": to })).collect();
@@ -102,6 +109,8 @@ pub(crate) fn v_import_tools(env: &mut Env, args: Vec<Value>) -> Result<Value, S
         "added": report.added,
         "renamed": renamed,
         "skipped": report.skipped,
+        "holders": report.holders,
+        "holders_left_out": report.holders_left_out,
         "summary": report.summary(),
     }))
 }
