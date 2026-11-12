@@ -18,6 +18,7 @@
 pub mod diag;
 
 pub mod actions;
+pub(crate) mod machine_modes;
 mod axis_note;
 mod build_info;
 pub mod boundary_draft;

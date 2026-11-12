@@ -126,6 +126,8 @@ mod tool_cutter_params;
 // #441: the Theme ribbon door; the Stock page shows stock only.
 mod theme_door;
 mod recent_door;
+// #645: the browser's "Show origin names" switch and the per-user view file.
+mod view_names;
 mod prefs_door;
 // #509: the Fixtures page rows fit the pane.
 mod fixture_rows;
@@ -2576,8 +2578,8 @@ fn the_machine_door_switches_workspaces_and_rides_undo() {
         .find(|c| c.cmd == Cmd::Machine)
         .expect("the machine door stands on the bar")
         .rect;
-    let rows = panes::machine_rows(button, theme::current().row_height);
-    assert_eq!(rows.len(), 3, "Milling, Turning, Mill-turning");
+    let rows = panes::machine_rows(button, theme::current().row_height, 200.0);
+    assert_eq!(rows.len(), 4, "Milling, Turning, Mill-turning, Plasma cutting");
     // Open the door.
     let at = button.center();
     set_pos(&mut harness, at);
@@ -2676,7 +2678,7 @@ fn tips_match_the_imgui_table() {
         (Cmd::Tools, "Tool library"),
         (
             Cmd::Machine,
-            "Switch the workspace: Milling, Turning or Mill-turning (mounts the kind's built-in machine, undoable)",
+            "Switch the workspace: Milling, Turning, Mill-turning or Plasma cutting (mounts the kind's built-in machine, undoable)",
         ),
         (Cmd::Undo, "Undo\tCtrl+Z"),
         (Cmd::Redo, "Redo\tCtrl+Y"),
@@ -4509,7 +4511,7 @@ fn stock_eye_hides_the_viewport_stock_without_removing_it_from_the_document() {
     let stock_name = camcraft_app::setup::stock_entity_name(&harness.state().state.world, None);
     let (_, leaves) = panes::browser_rows(&harness.state().state);
     let row = leaves.iter().position(|leaf| matches!(leaf, panes::Leaf::Stock(_))).expect("stock row");
-    let eye = egui::pos2(216.0, 200.0 + (row as f32 + 0.5) * theme::current().row_height);
+    let eye = egui::pos2(216.0, 221.0 + (row as f32 + 0.5) * theme::current().row_height);
     assert!(world::collect(&harness.state().state).parts.iter().any(|part| part.stock));
 
     set_pos(&mut harness, eye);
@@ -4707,8 +4709,8 @@ fn dragging_an_operation_row_reorders_within_global_setup() {
     // 1280x720 shell. The row indices come from the current flat browser,
     // so the drag follows the rows after setup nesting was removed.
     let row_h = theme::current().row_height;
-    let from = egui::pos2(120.0, 200.0 + (second as f32 + 0.5) * row_h);
-    let to = egui::pos2(120.0, 200.0 + (first as f32 + 0.25) * row_h);
+    let from = egui::pos2(120.0, 221.0 + (second as f32 + 0.5) * row_h);
+    let to = egui::pos2(120.0, 221.0 + (first as f32 + 0.25) * row_h);
     set_pos(&mut harness, from);
     button_at(&mut harness, egui::PointerButton::Primary, from, true);
     set_pos(&mut harness, to);
@@ -4850,14 +4852,14 @@ fn operations_heading_menu_pastes_the_copied_operation() {
         panes::Leaf::SetupOps(_)))
         .expect("Operations heading");
     let row_height = theme::current().row_height;
-    let heading = egui::pos2(90.0, 200.0 + (row as f32 + 0.5) * row_height);
+    let heading = egui::pos2(90.0, 221.0 + (row as f32 + 0.5) * row_height);
     set_pos(&mut harness, heading);
     button_at(&mut harness, egui::PointerButton::Secondary, heading, true);
     button_at(&mut harness, egui::PointerButton::Secondary, heading, false);
     assert_eq!(harness.state().state.tree_menu, Some(TreeMenuTarget::Operations));
 
     let paste = egui::pos2(90.0,
-        200.0 + (row as f32 + 1.0) * row_height + panes::DROP_GAP + 1.5 * row_height);
+        221.0 + (row as f32 + 1.0) * row_height + panes::DROP_GAP + 1.5 * row_height);
     set_pos(&mut harness, paste);
     button_at(&mut harness, egui::PointerButton::Primary, paste, true);
     button_at(&mut harness, egui::PointerButton::Primary, paste, false);
@@ -4874,7 +4876,7 @@ fn operation_type_menu_requires_confirmation() {
         panes::Leaf::Op(name) if name == "Contour1"))
         .expect("operation row");
     let row_height = theme::current().row_height;
-    let operation = egui::pos2(90.0, 200.0 + (row as f32 + 0.5) * row_height);
+    let operation = egui::pos2(90.0, 221.0 + (row as f32 + 0.5) * row_height);
     set_pos(&mut harness, operation);
     button_at(&mut harness, egui::PointerButton::Secondary, operation, true);
     button_at(&mut harness, egui::PointerButton::Secondary, operation, false);
@@ -4884,7 +4886,7 @@ fn operation_type_menu_requires_confirmation() {
     // Operation, Rename, Copy, Paste, Clear, Delete, Suppress, After
     // (#110), add pause / home / optional stop (#155), section header, Face.
     let face = egui::pos2(90.0,
-        200.0 + (row as f32 + 1.0) * row_height + panes::DROP_GAP + 12.5 * row_height);
+        221.0 + (row as f32 + 1.0) * row_height + panes::DROP_GAP + 12.5 * row_height);
     set_pos(&mut harness, face);
     button_at(&mut harness, egui::PointerButton::Primary, face, true);
     button_at(&mut harness, egui::PointerButton::Primary, face, false);
@@ -4913,14 +4915,14 @@ fn operation_menu_suppresses_and_sets_the_after_action() {
         panes::Leaf::Op(name) if name == "Contour1"))
         .expect("operation row");
     let row_height = theme::current().row_height;
-    let operation = egui::pos2(90.0, 200.0 + (row as f32 + 0.5) * row_height);
+    let operation = egui::pos2(90.0, 221.0 + (row as f32 + 0.5) * row_height);
     let open_menu = |harness: &mut Harness<'static, ShellUi>| {
         set_pos(harness, operation);
         button_at(harness, egui::PointerButton::Secondary, operation, true);
         button_at(harness, egui::PointerButton::Secondary, operation, false);
     };
     let click_row = |harness: &mut Harness<'static, ShellUi>, k: f32| {
-        let at = egui::pos2(90.0, 200.0 + (row as f32 + 1.0) * row_height + panes::DROP_GAP + k * row_height);
+        let at = egui::pos2(90.0, 221.0 + (row as f32 + 1.0) * row_height + panes::DROP_GAP + k * row_height);
         set_pos(harness, at);
         button_at(harness, egui::PointerButton::Primary, at, true);
         button_at(harness, egui::PointerButton::Primary, at, false);
