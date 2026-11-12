@@ -58,7 +58,11 @@ can't leave the harness judging a different shape.
   at clearance, so a stock box changes nothing here.
 - Trace tool: a D3 end mill (`CENTERLINE` allows end mills). The golden
   records no tool. `Mode::Engrave` stands the gouge law down, so the
-  radius barely matters.
+  radius barely matters. Engrave mode also skips the region (boundary) law,
+  so a trace that strays off its own boundary would not be convicted by this
+  check. That is the same gate the app runs for a Trace operation. The guard
+  proves the golden passes the user's gate, not that the gate is complete for
+  Trace (review of PR #1096).
 - Giving `arc_planes` a refused-program header. It isn't refused; it just
   has no gate.
 

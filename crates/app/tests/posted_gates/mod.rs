@@ -80,6 +80,7 @@ fn region_law(t: &Toolpath, region: &Region, tool: &ToolGeom, mode: Mode, top: f
             clearance_z: clear,
             stock_to_leave: leave,
             gouge_tol: 0.01,
+            model_excess: 0.0,
             z_tol: 1e-6,
             finish_tol: None,
             fixtures: &[],
