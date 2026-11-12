@@ -2667,13 +2667,23 @@ fn tips_match_the_imgui_table() {
     let empty = State::new();
     use camcraft_app::operation::Section;
     let pin = "\tRight-click to pin/unpin";
+    // The command keys are the platform's: Cmd on macOS, Ctrl elsewhere.
+    use crate::shortcut_keys::chord;
+    let new_doc = format!("New document\t{}", chord("N"));
+    let model_open = format!("Open a mesh model\t{}", chord("O"));
+    let project_open = format!("Open a project\t{}", chord("Shift+O"));
+    let save = format!("Save the project\t{}", chord("S"));
+    let save_as = format!("Save the project under a new name\t{}", chord("Shift+S"));
+    let post = format!("Post NC program (validation gate), then review it\t{}", chord("P"));
+    let undo = format!("Undo\t{}", chord("Z"));
+    let redo = format!("Redo\t{}", chord("Y"));
     let rows: &[(Cmd, &str)] = &[
-        (Cmd::New, "New document\tCtrl+N"),
-        (Cmd::Model, "Open a mesh model\tCtrl+O"),
-        (Cmd::Project, "Open a project\tCtrl+Shift+O"),
-        (Cmd::Save, "Save the project\tCtrl+S"),
-        (Cmd::SaveAs, "Save the project under a new name\tCtrl+Shift+S"),
-        (Cmd::Post, "Post NC program (validation gate), then review it\tCtrl+P"),
+        (Cmd::New, new_doc.as_str()),
+        (Cmd::Model, model_open.as_str()),
+        (Cmd::Project, project_open.as_str()),
+        (Cmd::Save, save.as_str()),
+        (Cmd::SaveAs, save_as.as_str()),
+        (Cmd::Post, post.as_str()),
         (Cmd::Setups, "Setups: create, activate and delete the document's setups"),
         (Cmd::Stock, "Stock definition"),
         (Cmd::Origin, "Work offset (WCS)"),
@@ -2682,8 +2692,8 @@ fn tips_match_the_imgui_table() {
             Cmd::Machine,
             "Switch the workspace: Milling, Turning, Mill-turning or Plasma cutting (mounts the kind's built-in machine, undoable)",
         ),
-        (Cmd::Undo, "Undo\tCtrl+Z"),
-        (Cmd::Redo, "Redo\tCtrl+Y"),
+        (Cmd::Undo, undo.as_str()),
+        (Cmd::Redo, redo.as_str()),
         (Cmd::Run, "Generate the selected operation"),
         (Cmd::Delete, "Delete the selection\tDel"),
         (Cmd::Frame, "Frame all\tF"),
