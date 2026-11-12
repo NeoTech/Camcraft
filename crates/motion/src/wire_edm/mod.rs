@@ -28,11 +28,15 @@
 //!
 //! Seams left for the family (built by none of this): the wire post
 //! (#533) reads the feed moves between the threading point's visits;
-//! verification (#534), taper as a pose per move (#536), skims as
-//! further offsets (#538) and tabs (#539) stand on this path.
+//! verification (#534), taper as a pose per move (#536) and tabs
+//! (#539) stand on this path; skims (#538, `skims.rs`) are further
+//! passes of it, each at its own condition's offset.
 
 mod laws;
 mod ring;
+mod skims;
+
+pub use skims::{check_passes, wire_passes, WirePass};
 
 use crate::cl::{MoveKind, PathBuilder, Toolpath};
 use crate::geo2d::{Loop, Point2, Region};
@@ -146,6 +150,12 @@ impl WireParams {
 /// # Errors
 /// Every refusal the module head lists, by name; none is a panic.
 pub fn wire_contour(loops: &[Loop], chains: &[Vec<Point2>], p: &WireParams) -> Result<Toolpath, GenError> {
+    cut_pass(loops, chains, p, false)
+}
+
+/// One pass round the profile at `p`'s offset, every law judged at
+/// that offset; `reverse` walks it clockwise (a skim's reversal, #538).
+pub(super) fn cut_pass(loops: &[Loop], chains: &[Vec<Point2>], p: &WireParams, reverse: bool) -> Result<Toolpath, GenError> {
     p.door()?;
     let (given, profile) = ring::profile(loops, chains)?;
     let k = p.kerf_offset();
@@ -177,7 +187,11 @@ pub fn wire_contour(loops: &[Loop], chains: &[Vec<Point2>], p: &WireParams) -> R
     start_side(&profile, &path_ring, start, p)?;
     let z = p.plane_z;
     let mut b = PathBuilder::new(Point3::new(start.x, start.y, z));
-    for q in ring::walk_from(&path_ring, seg, foot) {
+    let mut walk = ring::walk_from(&path_ring, seg, foot);
+    if reverse {
+        walk.reverse();
+    }
+    for q in walk {
         b.push(MoveKind::Feed, Point3::new(q.x, q.y, z), None);
     }
     b.push(MoveKind::Feed, Point3::new(start.x, start.y, z), None);
@@ -187,7 +201,7 @@ pub fn wire_contour(loops: &[Loop], chains: &[Vec<Point2>], p: &WireParams) -> R
     }
     // The certificate: no move brings the kerf into the product.
     laws::kerf(&path, &given, k, p.plane_z)?;
-    path.notes.extend(notes(p, start, lead));
+    path.notes.extend(notes(p, start, lead, reverse));
     Ok(path)
 }
 
@@ -220,7 +234,7 @@ fn start_side(profile: &Region, path_ring: &[Point2], start: Point2, p: &WirePar
 
 /// What the path says of itself: the side, the offset and its two
 /// terms, the kerf, the threading point and the leads.
-fn notes(p: &WireParams, start: Point2, lead: f64) -> Vec<String> {
+fn notes(p: &WireParams, start: Point2, lead: f64, reverse: bool) -> Vec<String> {
     let cond = if p.condition.is_empty() { String::new() } else { format!(", condition {}", p.condition) };
     vec![
         format!(
@@ -236,8 +250,10 @@ fn notes(p: &WireParams, start: Point2, lead: f64) -> Vec<String> {
             p.kerf_width()
         ),
         format!(
-            "wire EDM: threaded at X{:.3} Y{:.3}; straight lead-in of {lead:.3} mm to the path's nearest point, the profile cut counter-clockwise, the lead-out back along the lead-in to the threading point",
-            start.x, start.y
+            "wire EDM: threaded at X{:.3} Y{:.3}; straight lead-in of {lead:.3} mm to the path's nearest point, the profile cut {}, the lead-out back along the lead-in to the threading point",
+            start.x,
+            start.y,
+            if reverse { "clockwise" } else { "counter-clockwise" }
         ),
         "wire EDM: a vertical cut - the moves state no pose (XY only) and no feed (the control's generator sets the rate); not verified here (no wire sweep against the part yet)".into(),
     ]

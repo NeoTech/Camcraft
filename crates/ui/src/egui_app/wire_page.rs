@@ -22,7 +22,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
     let OpParams::WireContour(p) = params else {
         return;
     };
-    let WireContourOp { top_z, bottom_z, condition, side, start } = p;
+    let WireContourOp { top_z, bottom_z, condition, side, start, .. } = p;
     if tab == SEC_GEO {
         let mut si = usize::from(*side == WireSide::Punch);
         prop_row(ui, "Side", |ui| combo(ui, "wire.side", &mut si, &SIDES));

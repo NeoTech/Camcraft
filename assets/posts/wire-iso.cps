@@ -6,7 +6,8 @@
 // compensation cancel, automatic wire threading and cutting, wire-tip
 // disposal - is the machine's own text from its `.mch` `edm.codes`
 // (D5): no vendor dialect, manual table or post was read or copied,
-// and nothing here invents an EDM code. Behaviour only, per this repo's
+// and nothing here invents an EDM code. Skim passes (#538) select
+// their own condition mid-section, the wire left threaded. Behaviour only, per this repo's
 // Clean-Room Protocol. The decision record is
 // docs/decisions/533-wire-iso-post.md; the goldens lock this file.
 description = "Generic ISO wire EDM (RS-274 motion; every EDM code from the machine's edm.codes)";
@@ -42,6 +43,8 @@ var condition = "", side = "", afterOp = "";
 var inSection = false;     // between onSection and onSectionEnd
 var threaded = false;      // the wire is threaded through the work
 var cutZ = null;           // the section's one programmed plane (2-axis)
+var skim = 0;             // skim passes begun in this section (#538)
+var skimPending = false;   // a skim's condition arrived; select it at its first move
 var awt = false;
 var codesOk = false;
 var refused = {};
@@ -136,7 +139,12 @@ function onParameter(name, value) {
   else if (name === "OperationName") opName = clean(value);
   else if (name === "OperationKind") opKind = clean(value);
   else if (name === "SetupName") setupName = clean(value);
-  else if (name === "EdmCondition") condition = String(value === null || value === undefined ? "" : value);
+  else if (name === "EdmCondition") {
+    // With the wire threaded, a condition is the next skim's (#538):
+    // selected at that pass's first move, the wire left threaded.
+    condition = String(value === null || value === undefined ? "" : value);
+    if (threaded) skimPending = true;
+  }
   else if (name === "WireSide") side = clean(value);
   else if (name === "AfterOperation") afterOp = String(value);
   else if (name === "SpindleSpeed" && has(value) && Number(value) > 0) {
@@ -152,6 +160,8 @@ function onToolChange(number, name) {
 function onSection() {
   inSection = true;
   threaded = false;
+  skim = 0;
+  skimPending = false;
   cutZ = null;
   if (condition === "") {
     refuse("op" + opName, who() + "is not wire EDM work (no EDM condition) - the wire post posts Wire Contour operations only");
@@ -169,7 +179,7 @@ function onSection() {
 // The first motion of a section: go to the start hole with the wire
 // cut, thread there, select the condition, cancel compensation.
 function startCut(p) {
-  if (threaded) return true;
+  if (threaded) return skimPending ? startSkim() : true;
   if (!codesOk || condition === "") return false;
   if (!has(p.StartX) || !has(p.StartY)) {
     refuse("start" + opName, who() + "the path states no threading point - regenerate it");
@@ -185,6 +195,22 @@ function startCut(p) {
   block([code("comp_off")]);
   threaded = true;
   cutZ = has(p.StartZ) ? p.StartZ : null;
+  return true;
+}
+
+// A skim pass (#538): the previous pass ended back at the threading
+// point; select the skim's condition and cancel compensation again
+// before its first move. Its offset is in the path, as the rough's.
+function startSkim() {
+  skimPending = false;
+  if (condition === "" || !/^[A-Za-z0-9._-]+$/.test(condition)) {
+    refuse("skim" + opName, who() + "skim condition id " + JSON.stringify(condition) + " is not one word the control can read");
+    return false;
+  }
+  skim++;
+  note("SKIM " + skim);
+  block([code("condition").split("{id}").join(condition)]);
+  block([code("comp_off")]);
   return true;
 }
 
@@ -264,6 +290,8 @@ function onSectionEnd() {
   }
   inSection = false;
   threaded = false;
+  skim = 0;
+  skimPending = false;
   condition = "";
   side = "";
   afterOp = "";

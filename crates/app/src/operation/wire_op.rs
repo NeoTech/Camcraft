@@ -16,7 +16,7 @@ use crate::geo2d::{Loop, Point2, Region};
 use crate::machine::{ConditionField, Kind};
 use crate::machining2d::GenError;
 use crate::verify::Warning;
-use crate::wire_edm::{wire_contour, WireParams};
+use crate::wire_edm::{check_passes, wire_passes, WirePass, WireParams};
 
 use super::kinds::Carried;
 use super::types::{OpParams, WireContourOp, WireSide};
@@ -32,6 +32,7 @@ pub(super) fn seed_wire_contour(c: &Carried) -> OpParams {
         condition: String::new(),
         side: WireSide::Die,
         start: None,
+        skims: Vec::new(),
     })
 }
 
@@ -43,6 +44,9 @@ pub struct WireCondition {
     pub wire_diameter: f64,
     /// The spark gap per side, mm.
     pub gap: f64,
+    /// The skim passes after this (the rough) pass, each resolved from
+    /// its own condition (#538); empty is the rough pass alone.
+    pub skims: Vec<WirePass>,
 }
 
 /// The condition door (#531, #532): the op's condition on the machine
@@ -61,30 +65,56 @@ pub fn condition_of(world: &World, setup: Option<&str>, op: &WireContourOp) -> R
             "a Wire Contour needs a wire EDM machine mounted on its setup - the machine's EDM conditions state the wire diameter and the spark gap".into(),
         );
     };
+    let (id, wire_diameter, gap) = one_condition(&machine, &op.condition, "a Wire Contour")?;
+    let mut skims = Vec::with_capacity(op.skims.len());
+    for (i, s) in op.skims.iter().enumerate() {
+        let who = format!("skim {} of the Wire Contour", i + 1);
+        let (condition, wire_diameter, gap) =
+            one_condition(&machine, &s.condition, &who).map_err(|e| if e.starts_with(&who) { e } else { format!("{who}: {e}") })?;
+        skims.push(WirePass { condition, wire_diameter, gap, reverse: s.reverse });
+    }
+    let c = WireCondition { id, wire_diameter, gap, skims };
+    // The passes' offset laws (#538) are the machine's numbers alone,
+    // so they stand at the door too, not first in the generator.
+    let rough = WireParams {
+        wire_diameter: c.wire_diameter,
+        gap: c.gap,
+        condition: c.id.clone(),
+        side: op.side,
+        start: None,
+        plane_z: 0.0,
+    };
+    check_passes(&rough, &c.skims).map_err(|e| match e {
+        GenError::Invalid(why) => why,
+        e => e.to_string(),
+    })?;
+    Ok(c)
+}
+
+/// One condition `id` on `machine`, with its gap and wire diameter
+/// both stated - or the refusal naming what is missing; `who` is the
+/// pass that names it.
+fn one_condition(machine: &crate::machine::Machine, id: &str, who: &str) -> Result<(String, f64, f64), String> {
     let stated = || match machine.edm.as_ref().map(|e| e.conditions.as_slice()) {
         None | Some([]) => "it states none - add edm.conditions to the machine file".to_owned(),
         Some(cs) => format!("it states {}", cs.iter().map(|c| c.id.as_str()).collect::<Vec<_>>().join(", ")),
     };
-    if op.condition.trim().is_empty() {
-        return Err(format!(
-            "a Wire Contour names no EDM condition - choose one of machine {}'s conditions ({})",
-            machine.model,
-            stated()
-        ));
+    if id.trim().is_empty() {
+        return Err(format!("{who} names no EDM condition - choose one of machine {}'s conditions ({})", machine.model, stated()));
     }
     let Some(edm) = machine.edm.as_ref() else {
-        return Err(format!("machine {} states no EDM condition {:?} ({})", machine.model, op.condition, stated()));
+        return Err(format!("machine {} states no EDM condition {id:?} ({})", machine.model, stated()));
     };
-    let known = edm.conditions.iter().any(|c| c.id == op.condition);
+    let known = edm.conditions.iter().any(|c| c.id == id);
     let c = edm
-        .condition(&machine.model, &op.condition, &[ConditionField::Gap, ConditionField::WireDiameter])
+        .condition(&machine.model, id, &[ConditionField::Gap, ConditionField::WireDiameter])
         .map_err(|e| if known { e } else { format!("{e} ({})", stated()) })?;
     // The door above promised both; a `None` here is its law broken,
     // named rather than read as zero.
     let (Some(gap), Some(wire_diameter)) = (c.gap, c.wire_diameter) else {
         return Err(format!("machine {}: EDM condition {:?} states no gap or no wire diameter", machine.model, c.id));
     };
-    Ok(WireCondition { id: c.id.clone(), wire_diameter, gap })
+    Ok((c.id.clone(), wire_diameter, gap))
 }
 
 /// The condition a wire EDM kind's generation cuts with, read where
@@ -122,6 +152,17 @@ pub(super) fn stamp_condition(world: &World, setup: Option<&str>, op: &WireConto
             h.write_u8(0xff);
             h.write(&c.wire_diameter.to_bits().to_le_bytes());
             h.write(&c.gap.to_bits().to_le_bytes());
+            // #538: each skim's condition as the machine states it now.
+            // Nothing is written for no skims, so a rough-only cut's
+            // stamp is the one it always was.
+            for s in &c.skims {
+                h.write(b"skim");
+                h.write(s.condition.as_bytes());
+                h.write_u8(0xff);
+                h.write(&s.wire_diameter.to_bits().to_le_bytes());
+                h.write(&s.gap.to_bits().to_le_bytes());
+                h.write_u8(u8::from(s.reverse));
+            }
         }
         Err(_) => h.write_u8(0),
     }
@@ -177,11 +218,12 @@ pub(super) fn generate_wire(
     picks: Option<(Vec<Loop>, Vec<Vec<Point2>>)>,
     base: impl FnOnce() -> Result<Region, GenError>,
 ) -> Result<(Toolpath, Vec<Warning>), GenError> {
-    let p = wire_params(op, &cond?, hs)?;
+    let cond = cond?;
+    let p = wire_params(op, &cond, hs)?;
     let (loops, chains) = match picks {
         Some(geom) => geom,
         None => (base()?.loops().to_vec(), Vec::new()),
     };
-    let path = wire_contour(&loops, &chains, &p)?;
+    let path = wire_passes(&loops, &chains, &p, &cond.skims)?;
     Ok((path, Vec::new()))
 }

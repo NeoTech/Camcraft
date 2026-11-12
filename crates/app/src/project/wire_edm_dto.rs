@@ -1,6 +1,6 @@
 //! The wire contour's file mirror (#532): the op's parameters as plain
 //! keys - the two workpiece planes, the machine condition's id, the
-//! side and the start hole. `side` has no default on purpose: a file
+//! side, the start hole and the skim passes (#538). `side` has no default on purpose: a file
 //! (or an MCP patch) that leaves it out is refused, never read as a
 //! die - the side is stated, not inferred (#290 D8). The wire and the
 //! gap are not here: they are the machine's condition table's.
@@ -8,7 +8,7 @@
 
 use super::*;
 
-use crate::operation::{WireContourOp, WireSide};
+use crate::operation::{WireContourOp, WireSide, WireSkim};
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -29,6 +29,19 @@ pub struct WireContourDto {
     /// stated.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub start: Option<[f64; 2]>,
+    /// The skim passes after the rough cut (#538), in cut order; absent
+    /// is the rough pass alone, so a file without skims reads as before.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub skims: Vec<WireSkimDto>,
+}
+
+/// One skim: its condition id (stated - no default) and whether it
+/// walks the profile the other way round (absent is not reversed).
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct WireSkimDto {
+    pub condition: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub reverse: bool,
 }
 
 impl WireContourDto {
@@ -42,6 +55,7 @@ impl WireContourDto {
                 WireSide::Punch => WireSideDto::Punch,
             },
             start: p.start,
+            skims: p.skims.iter().map(|s| WireSkimDto { condition: s.condition.clone(), reverse: s.reverse }).collect(),
         }
     }
 
@@ -55,6 +69,7 @@ impl WireContourDto {
                 WireSideDto::Punch => WireSide::Punch,
             },
             start: self.start,
+            skims: self.skims.iter().map(|s| WireSkim { condition: s.condition.clone(), reverse: s.reverse }).collect(),
         })
     }
 }
