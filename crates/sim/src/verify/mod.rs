@@ -182,6 +182,7 @@ mod section;
 mod solid;
 mod solid_index;
 mod stack_span;
+mod stock_top;
 mod sweep;
 mod swept;
 mod types;
@@ -193,6 +194,7 @@ pub use crossing::{crossed_pairs, crossed_pairs_all};
 pub use engine::{verify, verify_bodies};
 pub use air::cuts_no_material;
 pub use prior::{acquit_by_prior, prior_surface};
+pub use stock_top::acquit_by_stock_top;
 pub use laws::{
     bands_vs_fixtures, bands_vs_fixtures_held, rapids_vs_fixtures, rapids_vs_fixtures_held,
     rapids_vs_fixtures_spindle,
