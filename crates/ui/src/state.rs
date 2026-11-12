@@ -260,6 +260,15 @@ pub enum CommandKind {
         name: String,
         points: Option<Vec<camcraft_app::spun::SpunPoint>>,
     },
+    /// #93 slice 3: a milling tool's numbers and its drawn cutter landed
+    /// together (`Some`: the outline carried onto the numbers; `None`:
+    /// the numbers' own) - the outline editor's parameter edits, one
+    /// `ReshapeTool`.
+    ReshapeTool {
+        name: String,
+        tool: Tool,
+        points: Option<Vec<camcraft_app::spun::SpunPoint>>,
+    },
     /// #793: drop a built-in library holder ("BT30 ER20") into a milling
     /// tool's holder at a gauge length (`None`: the entry's own) and a
     /// projection (#792: nose face above the tip; `None`: the tool's
@@ -3000,6 +3009,7 @@ impl State {
             CommandKind::SetToolBody { name, body } => self.run_set_tool_body(&name, body),
             CommandKind::SetToolProfile { name, points } => self.run_set_tool_profile(&name, points),
             CommandKind::SetToolCutter { name, points } => self.run_set_tool_cutter(&name, points),
+            CommandKind::ReshapeTool { name, tool, points } => self.run_reshape_tool(&name, tool, points),
             CommandKind::SetToolHolder { name, entry, gauge, projection } => {
                 self.run_set_tool_holder(&name, &entry, gauge, projection)
             }
