@@ -42,7 +42,7 @@ new: it is `with_ghost` over a builder's moves, so no generator had to
 - *Boundary turn mid-rotation* (`boundary_turn.rs`). The moves are half
   rotated when it refuses, so the ghost would draw in neither frame.
 
-**Owed (needs a frame map or a merge, not a one-liner; follow-up issue).**
+**Owed (needs a frame map or a merge, not a one-liner; follow-up issue #1015).**
 - *The finishing kinds that Rotary contour and parallel also run*
   (`finishing3d` raster, rings, swarf). Rotary calls them on frame-local
   facets, and no tilt frame maps those out. Adopting a ghost there first
