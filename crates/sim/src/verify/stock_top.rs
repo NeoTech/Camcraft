@@ -46,6 +46,7 @@
 use super::laws::{dist2_seg, dist2_segs};
 use super::stock_top_shell::closed_shell;
 use super::types::{Mode, Warning};
+use super::upright::is_upright;
 
 use crate::cl::{MoveKind, Toolpath};
 use crate::geo2d::Point2;
@@ -83,7 +84,7 @@ pub fn acquit_by_stock_top(
         let Warning::RapidInStock { at } = *w else { return true };
         let Some(m) = path.moves.get(at) else { return true };
         let (dx, dy) = (m.to.x - m.from.x, m.to.y - m.from.y);
-        let upright = m.axis.is_none_or(|a| a[0].abs() <= 1e-12 && a[1].abs() <= 1e-12 && a[2] > 0.0);
+        let upright = m.axis.is_none_or(|a| is_upright(&a));
         if m.kind != MoveKind::Rapid || !upright {
             return true;
         }

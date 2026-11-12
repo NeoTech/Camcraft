@@ -120,6 +120,10 @@ pub struct GenJob {
     /// #532: the machine condition a wire EDM kind cuts with (its wire
     /// and gap); `None` for every kind that mounts a library tool.
     pub(super) wire: Option<super::wire_op::WireCondition>,
+    /// #740: the document's display unit, read off the world here where
+    /// it can be. The drill-reach refusals run on worker threads with
+    /// no World to read, so they spell their depths through this lens.
+    pub(super) unit: crate::units::Unit,
 }
 
 /// The tripwire phrase for a stored precompute whose arm never collected
@@ -359,6 +363,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         spindle_note,
         carried_overhang,
         wire,
+        unit: crate::units::of(world),
     })
 }
 

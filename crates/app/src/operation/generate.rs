@@ -111,6 +111,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         part_solid,
         area,
         wcs_origin,
+        unit,
         spindle_note: _,
         carried_overhang: _,
         op_name: _,
@@ -1849,7 +1850,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // rim, round floor or holed face hands its own centre and
             // radius; the typed ones rule only without a selection.
             let (center, radius) = match &src {
-                SrcRef::Selection(s) if !s.is_empty() => circle_of_region(&region)?,
+                SrcRef::Selection(s) if !s.is_empty() => circle_of_region(&region, unit)?,
                 _ => (*center, *radius),
             };
             let path = machining2d::circular(
@@ -1954,7 +1955,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     tool: &tool,
                     holes: cross,
                 };
-                super::cross_spindle::cross_drill(radial, &material.facets, stock_facets.as_deref(), wcs_origin, &cutter, &tool_name)?
+                super::cross_spindle::cross_drill(radial, &material.facets, stock_facets.as_deref(), wcs_origin, &cutter, &tool_name, unit)?
             } else {
                 // M13.5 A: on a plain lathe the Drill kind is the
                 // turret's axial hole - the doors refuse by name a
@@ -1990,6 +1991,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                             prior,
                             (&tool, cutter.body.as_ref()),
                             &tool_name,
+                            unit,
                         )
                     };
                     if let Err(raw) = reach(None) {
@@ -2759,103 +2761,100 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
     let depth_law = depth_law_of(&params, &src, part_solid);
     match &frame {
         None => {
-            let mut warns = verify::verify_bodies(
-                &path,
-                &VerifyContext {
-                    region: &region,
-                    stock: stock_region.as_ref(),
-                    // Only the mesh-driven kinds' laws are depth-dependent;
-                    // every other op verifies against its static region,
-                    // untouched.
-                    model: matches!(
-                        &params,
-                        OpParams::Pocket3D { .. }
-                            | OpParams::Finish3D { .. }
-                            // The deburr loci ARE the model's welded
-                            // edges: its boundary law reads the mesh
-                            // at the tip's plane, never the flat
-                            // footprint's silhouette wall (M2.5 E B).
-                            | OpParams::Deburr { .. }
-                            | OpParams::Contour5D { .. }
-                            | OpParams::Parallel5D { .. }
-                            | OpParams::Swarf { .. }
-                            | OpParams::AdvancedSwarf { .. }
-                            | OpParams::RotaryContour { .. }
-                            | OpParams::RotaryParallel { .. }
-                            | OpParams::RotaryOffset { .. }
-                            | OpParams::MultiAxisRough { .. }
-                            | OpParams::Flow5D { .. }
-                            // The chain rides the model: the scan
-                            // measures the rest against these facets,
-                            // the same depth-dependent law (M5.1 J).
-                            | OpParams::MultiAxisContour { .. }
-                            // Facing rides the fitted axis and its
-                            // stations stop at the profile's own
-                            // radius: the rest is what the facets
-                            // say, measured of revolution (M5.2 A).
-                            | OpParams::Facing { .. }
-                            // The profile rungs and the ride read
-                            // the same revolution's rest - the
-                            // silhouette IS the model's own envelope
-                            // (M5.2 B).
-                            | OpParams::ProfileRough { .. }
-                            | OpParams::ProfileFinish { .. }
-                            // The blades judge against the same
-                            // facets - the meridian scan reads this
-                            // very silhouette as E(s), the finished
-                            // part's own chord polyline (M5.2 C).
-                            | OpParams::GrooveRough { .. }
-                            | OpParams::GrooveFinish { .. }
-                            | OpParams::Part { .. }
-                            // The wave rides the same facets: the
-                            // modeled thread's silhouette IS what the
-                            // lattice must land in (M5.2 D). The
-                            // contour rides promise the very skin
-                            // this scan measures - door and verdict
-                            // read the same polyline (M5.2 E).
-                            | OpParams::Threading { .. }
-                            | OpParams::Chamfering { .. }
-                            | OpParams::TaperTurning { .. }
-                            | OpParams::MultiPassTurning { .. }
-                            // The crown sinks on the same silhouette:
-                            // the modeled formed surface IS what the
-                            // plunge must land in (M5.2 E2). The
-                            // boring bar rides the same facets from
-                            // the inside: the wall's own envelope,
-                            // rolled about the centers, IS what the
-                            // ride must stand on (M5.2 F).
-                            | OpParams::FormTurning { .. }
-                            | OpParams::BoringTurning { .. }
-                    )
-                    .then_some(&material.facets[..])
-                    .or((depth_law == DepthLaw::Section).then_some(&material.facets[..])),
-                    tool: &geom,
-                    // The op's real tip for the solid law (M13.7).
-                    cutter: Some(cutter),
-                    mode,
-                    stock_top_z,
-                    clearance_z: hl.clearance,
-                    stock_to_leave: stl,
-                    gouge_tol: GOUGE_TOL,
-                    z_tol: Z_TOL,
-                    // The finish op's envelope budget is its own tolerance;
-                    // no other kind runs the envelope law - and the
-                    // 5-axis kinds ARE the envelope law with a leaning
-                    // shank, so they carry their tolerance the same way
-                    // (the ball's path is identical; the envelope scan
-                    // never sees the difference).
-                    finish_tol: super::fidelity_law::finish_tol_of(&params),
-                    // Steel runs against the path below, under the
-                    // post gate's workholding laws (M13.8 owed).
-                    fixtures: &[],
-                    spindle: None,
-                    // #864: a source imported coarser than promised.
-                    model_excess: material.excess,
-                },
-                // The picks' touching bodies, read as their union
-                // (M13.11); empty for one body.
-                &material.bodies,
-            );
+            let ctx = VerifyContext {
+                region: &region,
+                stock: stock_region.as_ref(),
+                // Only the mesh-driven kinds' laws are depth-dependent;
+                // every other op verifies against its static region,
+                // untouched.
+                model: matches!(
+                    &params,
+                    OpParams::Pocket3D { .. }
+                        | OpParams::Finish3D { .. }
+                        // The deburr loci ARE the model's welded
+                        // edges: its boundary law reads the mesh
+                        // at the tip's plane, never the flat
+                        // footprint's silhouette wall (M2.5 E B).
+                        | OpParams::Deburr { .. }
+                        | OpParams::Contour5D { .. }
+                        | OpParams::Parallel5D { .. }
+                        | OpParams::Swarf { .. }
+                        | OpParams::AdvancedSwarf { .. }
+                        | OpParams::RotaryContour { .. }
+                        | OpParams::RotaryParallel { .. }
+                        | OpParams::RotaryOffset { .. }
+                        | OpParams::MultiAxisRough { .. }
+                        | OpParams::Flow5D { .. }
+                        // The chain rides the model: the scan
+                        // measures the rest against these facets,
+                        // the same depth-dependent law (M5.1 J).
+                        | OpParams::MultiAxisContour { .. }
+                        // Facing rides the fitted axis and its
+                        // stations stop at the profile's own
+                        // radius: the rest is what the facets
+                        // say, measured of revolution (M5.2 A).
+                        | OpParams::Facing { .. }
+                        // The profile rungs and the ride read
+                        // the same revolution's rest - the
+                        // silhouette IS the model's own envelope
+                        // (M5.2 B).
+                        | OpParams::ProfileRough { .. }
+                        | OpParams::ProfileFinish { .. }
+                        // The blades judge against the same
+                        // facets - the meridian scan reads this
+                        // very silhouette as E(s), the finished
+                        // part's own chord polyline (M5.2 C).
+                        | OpParams::GrooveRough { .. }
+                        | OpParams::GrooveFinish { .. }
+                        | OpParams::Part { .. }
+                        // The wave rides the same facets: the
+                        // modeled thread's silhouette IS what the
+                        // lattice must land in (M5.2 D). The
+                        // contour rides promise the very skin
+                        // this scan measures - door and verdict
+                        // read the same polyline (M5.2 E).
+                        | OpParams::Threading { .. }
+                        | OpParams::Chamfering { .. }
+                        | OpParams::TaperTurning { .. }
+                        | OpParams::MultiPassTurning { .. }
+                        // The crown sinks on the same silhouette:
+                        // the modeled formed surface IS what the
+                        // plunge must land in (M5.2 E2). The
+                        // boring bar rides the same facets from
+                        // the inside: the wall's own envelope,
+                        // rolled about the centers, IS what the
+                        // ride must stand on (M5.2 F).
+                        | OpParams::FormTurning { .. }
+                        | OpParams::BoringTurning { .. }
+                )
+                .then_some(&material.facets[..])
+                .or((depth_law == DepthLaw::Section).then_some(&material.facets[..])),
+                tool: &geom,
+                // The op's real tip for the solid law (M13.7).
+                cutter: Some(cutter),
+                mode,
+                stock_top_z,
+                clearance_z: hl.clearance,
+                stock_to_leave: stl,
+                gouge_tol: GOUGE_TOL,
+                z_tol: Z_TOL,
+                // The finish op's envelope budget is its own tolerance;
+                // no other kind runs the envelope law - and the
+                // 5-axis kinds ARE the envelope law with a leaning
+                // shank, so they carry their tolerance the same way
+                // (the ball's path is identical; the envelope scan
+                // never sees the difference).
+                finish_tol: super::fidelity_law::finish_tol_of(&params),
+                // Steel runs against the path below, under the
+                // post gate's workholding laws (M13.8 owed).
+                fixtures: &[],
+                spindle: None,
+                // #864: a source imported coarser than promised.
+                model_excess: material.excess,
+            };
+            // The picks' touching bodies, read as their union
+            // (M13.11); empty for one body.
+            let mut warns = verify::verify_bodies(&path, &ctx, &material.bodies);
             // #1091: a dive convicted against the stock's highest point is re-read under the tool.
             super::stock_top_law::acquit(&path, mode, judged_stock.filter(|_| stock_fidelity_known), &material.facets, &geom, material.excess, &mut warns);
             // The program ahead cut too (#96 review): a dive the column
@@ -3009,6 +3008,16 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             if depth_law == DepthLaw::Contain {
                 contain_into(&mut warns, &path, &material.facets, &cutter, depth_law, stl, material.excess, &params);
             }
+            // #266: a tap's cutting moves re-read at its thread's core.
+            super::tap_core::acquit(&mut warns, &tool, &params, |core| {
+                let g = core.geom();
+                let c = verify::Cutter::of(core).with_body(&g, &crate::tool_body::stack(&g, body.as_ref()).with_neck(holder.neck.clone()));
+                let mut w = verify::verify_bodies(&path, &VerifyContext { tool: &g, cutter: Some(c), ..ctx.clone() }, &material.bodies);
+                if depth_law == DepthLaw::Contain {
+                    contain_into(&mut w, &path, &material.facets, &c, depth_law, stl, material.excess, &params);
+                }
+                w
+            });
             // The rotary kinds' bands and rapids (M13): `Mode::Rotary`
             // stood the vertical-column laws down; the radial field
             // reads rest material in the frame the work turns in.

@@ -115,6 +115,9 @@ pub(crate) fn toggle_deviate(state: &mut State) {
             if let Some(vote) = machine_vote(&state.world) {
                 state.status += &vote;
             }
+            if let Some(note) = camcraft_app::stock_sim::carry_engine_note() {
+                state.status += &format!(" - {note}"); // #1168: never silent
+            }
             state.program_sim = Some(sim);
             state.doc_version += 1; // the sheet is a new GPU part
         }
