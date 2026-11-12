@@ -103,6 +103,12 @@ impl CreateOperation {
         tool_gate(world, &params, tool)?;
         area_gate(world, setup.as_deref(), &src, &params)?;
         let (reordered, order) = append_position(world, setup.as_deref())?;
+        // #869: a new op starts on its machine's default coolant - Air on
+        // a machine whose only coolant is an air blast, Flood elsewhere -
+        // so its first post never asks for a fluid the machine lacks.
+        let coolant = crate::setup_mount::machine_of(world, setup.as_deref())
+            .1
+            .map_or_else(Default::default, |m| crate::operation::CoolantMode::machine_default(&m.coolants));
         Ok(CreateOperation {
             name: name.to_string(),
             meta: OperationMeta { label: None, order: Some(order) },
@@ -114,7 +120,7 @@ impl CreateOperation {
                 stamp: None,
                 setup,
                 area: Default::default(),
-                coolant: Default::default(),
+                coolant,
                 after: Default::default(),
                 suppressed: false,
             },

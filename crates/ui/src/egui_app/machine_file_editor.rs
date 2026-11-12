@@ -51,6 +51,9 @@ pub struct MachineFileEditor {
     pub save_as_name: String,
     /// The new coolant's name being typed.
     pub new_coolant: String,
+    /// The new coolant's M code being typed (#869): added with its name,
+    /// never codeless.
+    pub new_coolant_code: String,
     pub prompt: Option<Prompt>,
     /// The last save's outcome: (it worked, the words).
     pub status: Option<(bool, String)>,
@@ -69,7 +72,15 @@ impl MachineFileEditor {
     #[must_use]
     pub fn new(draft: MachineDraft) -> Self {
         let save_as_name = draft.suggested_name();
-        Self { draft, buffers: HashMap::new(), save_as_name, new_coolant: String::new(), prompt: None, status: None }
+        Self {
+            draft,
+            buffers: HashMap::new(),
+            save_as_name,
+            new_coolant: String::new(),
+            new_coolant_code: String::new(),
+            prompt: None,
+            status: None,
+        }
     }
 }
 
@@ -220,6 +231,7 @@ pub(crate) fn draw(ui: &mut Ui, ed: &mut MachineFileEditor, dir: Option<&Path>, 
 
     let mut edits: Vec<(String, fields::FieldKind, String)> = Vec::new();
     let mut add_coolant = false;
+    let mut remove_coolant: Option<String> = None;
     for g in &groups {
         group_open(ui, &g.title, None, true, |ui| {
             if g.fields.is_empty() {
@@ -246,13 +258,30 @@ pub(crate) fn draw(ui: &mut Ui, ed: &mut MachineFileEditor, dir: Option<&Path>, 
                 }
             });
             if g.title == "Coolant codes" {
-                ui.horizontal(|ui| {
-                    let l = ui.label("New coolant");
-                    ui.add(TextEdit::singleline(&mut ed.new_coolant).desired_width(100.0)).labelled_by(l.id);
-                    if ui.button("Add coolant").on_hover_text("Add a named coolant to the tool station").clicked() {
-                        add_coolant = true;
+                // One remove per coolant (#869), the seeded Flood included;
+                // wrapped so a narrow pane never clips a button.
+                ui.horizontal_wrapped(|ui| {
+                    for f in &g.fields {
+                        let words = format!("Remove {}", f.label.trim_end_matches(" code"));
+                        if ui.button(words).on_hover_text("Remove this coolant from the machine").clicked() {
+                            remove_coolant = Some(f.pointer.clone());
+                        }
                     }
                 });
+                // A new coolant is added with its code, never without.
+                prop_grid(ui, "machine-edit-new-coolant", |ui| {
+                    let l = ui.label("New coolant");
+                    ui.add(TextEdit::singleline(&mut ed.new_coolant).desired_width(100.0).hint_text("Air"))
+                        .labelled_by(l.id);
+                    ui.end_row();
+                    let c = ui.label("New coolant code");
+                    ui.add(TextEdit::singleline(&mut ed.new_coolant_code).desired_width(100.0).hint_text("M7"))
+                        .labelled_by(c.id);
+                    ui.end_row();
+                });
+                if ui.button("Add coolant").on_hover_text("Add a coolant and its M code to the tool station").clicked() {
+                    add_coolant = true;
+                }
             }
         });
     }
@@ -262,9 +291,20 @@ pub(crate) fn draw(ui: &mut Ui, ed: &mut MachineFileEditor, dir: Option<&Path>, 
         }
     }
     if add_coolant {
-        let name = std::mem::take(&mut ed.new_coolant);
-        if let Err(e) = ed.draft.add_coolant(&name) {
-            ed.status = Some((false, e));
+        // Kept as typed on a refusal, so a missing code is the only fix.
+        match ed.draft.add_coolant(&ed.new_coolant, &ed.new_coolant_code) {
+            Ok(()) => {
+                ed.new_coolant.clear();
+                ed.new_coolant_code.clear();
+            }
+            Err(e) => ed.status = Some((false, e)),
+        }
+    }
+    if let Some(pointer) = remove_coolant {
+        match ed.draft.remove_coolant(&pointer) {
+            // The list's indices shifted: re-seed every buffer from the file.
+            Ok(()) => ed.buffers.clear(),
+            Err(e) => ed.status = Some((false, e)),
         }
     }
     out
