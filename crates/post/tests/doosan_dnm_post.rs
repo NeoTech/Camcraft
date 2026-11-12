@@ -358,3 +358,19 @@ SECTION END
         out_cc.warnings
     );
 }
+
+/// #997: the RTCP path names only the rotaries the machine states - the
+/// A+B tilthead's arm writes A and B, never C0 for the C it has none of.
+#[test]
+fn doosan_dnm_absent_rotary_takes_no_angle_word() {
+    let cps = dnm_post();
+    let mch = machine::mirror(&parse_mch(&read("assets/machines/tilthead.mch")).expect("tilthead parses"));
+    let stream = "TOOL 1 T1\nSECTION\nRapid X 0 Y 0 Z 20000 A 30000 B 0 C 0\nFeed X 20000 Y 0 Z 0 F 300000 A 0 B 30000 C 0\nENDSECTION\n";
+    let options = serde_json::json!({ "rotaryBrake": true });
+    let out = engine::run_with(&cps, &mch, stream, &options).expect("post");
+    assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+    assert!(out.program.contains("G43.4"), "{}", out.program);
+    assert!(out.program.lines().any(|l| l.contains("X0 Y0 Z20 A30 B0") && !l.contains(" C")), "{}", out.program);
+    let c_word = |l: &str| l.split(' ').any(|w| w.len() > 1 && w.starts_with('C') && w[1..].parse::<f64>().is_ok());
+    assert!(!out.program.lines().any(c_word), "no C word on a machine with no C: {}", out.program);
+}
