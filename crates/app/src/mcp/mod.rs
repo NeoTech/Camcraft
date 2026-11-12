@@ -23,6 +23,7 @@ mod cutter_tools;
 mod edit;
 mod features;
 mod fixture_tools;
+mod holders;
 mod job;
 mod listen;
 mod live;
