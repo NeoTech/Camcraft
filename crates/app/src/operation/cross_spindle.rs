@@ -108,11 +108,14 @@ pub(super) fn cross_drill(
         ..p
     })
     .map_err(|e| in_world(e, &local, p.holes))?;
-    super::cross_stock::rapids_clear(&t, &st, p.tool)?;
-    super::drill_reach::cross_holder(&t, facets, stock, (ox, oy), p.tool, cutter.body.as_ref(), tool_name)?;
+    // #1015: these laws judge the chain in the spindle frame; their
+    // refusals carry it back to the world by the same shift (`back`).
+    super::cross_stock::rapids_clear(&t, &st, p.tool).map_err(|e| shifted_ghost(e, &t, ox, oy))?;
+    super::drill_reach::cross_holder(&t, facets, stock, (ox, oy), p.tool, cutter.body.as_ref(), tool_name)
+        .map_err(|e| shifted_ghost(e, &t, ox, oy))?;
     if on_origin {
         // Issue #117: what the chain leaves is judged against the part.
-        super::cross_part::part_clear(&t, facets, p.tool, cutter, p.holes)?;
+        super::cross_part::part_clear(&t, facets, p.tool, cutter, p.holes).map_err(|e| e.with_ghost(&t))?;
         return Ok(t);
     }
     // The kernel's chain is straight, cycle-free and computer-
@@ -134,8 +137,29 @@ pub(super) fn cross_drill(
     if !t.is_chained() || !t.all_finite() {
         return Err(GenError::Invalid("cross-drill chain self-check failed after the spindle shift".into()));
     }
-    super::cross_part::part_clear(&t, facets, p.tool, cutter, p.holes)?;
+    super::cross_part::part_clear(&t, facets, p.tool, cutter, p.holes).map_err(|e| e.with_ghost(&t))?;
     Ok(t)
+}
+
+/// #1015: a refusal of the spindle-frame chain `t` with that chain,
+/// carried to the world by the XY shift (`ox`, `oy`), as its ghost. A
+/// chain holding an arc (the XY carry would have to re-centre it) has
+/// no ghost - never one drawn in the spindle frame.
+fn shifted_ghost(e: GenError, t: &Toolpath, ox: f64, oy: f64) -> GenError {
+    if t.has_arcs() {
+        return e;
+    }
+    let moves: Vec<crate::cl::Move> = t
+        .moves
+        .iter()
+        .map(|m| {
+            let mut m = *m;
+            m.from = Point3::new(m.from.x + ox, m.from.y + oy, m.from.z);
+            m.to = Point3::new(m.to.x + ox, m.to.y + oy, m.to.z);
+            m
+        })
+        .collect();
+    e.with_ghost_moves(&moves)
 }
 
 /// Every hole must plunge TOWARD the spindle line: the kernel stands a
@@ -250,6 +274,28 @@ mod tests {
         // No hole to read the shift from: the spot is dropped, never shown in the wrong frame.
         let lone = in_world(GenError::invalid_at("x", Point3::new(1.0, 2.0, 3.0)), &[], &[]);
         assert_eq!(lone, GenError::Invalid("x".into()));
+    }
+
+    #[test]
+    fn an_app_side_law_refusal_carries_the_chain_to_the_world() {
+        // #1015: the rapids and holder laws judge the chain where the
+        // kernel ran it (10 mm left of the world here); the ghost is
+        // that chain moved back - the very shift the posted chain takes.
+        use crate::cl::{Move, MoveKind};
+        let local = Toolpath::new(vec![
+            Move::new(MoveKind::Rapid, Point3::new(40.0, 0.0, 5.0), Point3::new(22.0, 0.0, 5.0), None),
+            Move::new(MoveKind::Feed, Point3::new(22.0, 0.0, 5.0), Point3::new(14.0, 0.0, 5.0), Some(100.0)),
+        ]);
+        let e = shifted_ghost(GenError::Invalid("cross-drill rapid 0 stops".into()), &local, 10.0, -3.0);
+        let g = e.ghost().expect("the chain rides");
+        assert_eq!(g.moves()[0].from, Point3::new(50.0, -3.0, 5.0));
+        assert_eq!(g.moves()[1].to, Point3::new(24.0, -3.0, 5.0));
+        assert_eq!(e.to_string(), "invalid machining parameters: cross-drill rapid 0 stops");
+        // An arc the XY carry would re-centre: no ghost, words kept.
+        let mut arced = local.clone();
+        arced.moves[1].arc = Some(crate::cl::ArcMove { center: crate::geo2d::Point2::new(18.0, 0.0), ccw: true, plane: Default::default() });
+        let e = shifted_ghost(GenError::Invalid("w".into()), &arced, 10.0, 0.0);
+        assert_eq!(e, GenError::Invalid("w".into()));
     }
 
     #[test]
