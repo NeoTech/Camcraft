@@ -93,16 +93,35 @@ fn the_users_bore_roughs_adaptive_level_by_level_and_verifies_clean() {
     }
     // Issue #850: the growth planner's budgets never refuse a level of
     // the bore (its finely tessellated outline is heavy geometry over a
-    // short walk); only the top level, whose plan would cross itself,
-    // goes to the rings - as on main. A budget that cut a level would
-    // change the path silently under the assertions above.
+    // short walk). A budget that cut a level would change the path
+    // silently under the assertions above.
     assert!(!path.notes.iter().any(|n| n.contains("planning budget") || n.contains("too detailed")), "{:?}", path.notes);
-    assert!(fell.len() == 1 && fell[0].contains("crosses itself") && fell[0].contains("Z 20.000"), "{fell:?}");
-    // The path as main plans it (measured on main bdd29e00 and on #850's
-    // head alike: 5530 moves, 5497 planar feeds, 600 arcs). A change to
-    // the planner that moves these re-measures them and says why.
     println!("moves {} planar {planar} arcs {arcs} notes {:?}", path.moves.len(), path.notes);
-    assert_eq!((path.moves.len(), planar, arcs), (5530, 5497, 600), "the bore's path as main plans it: {:?}", path.notes);
+    // Issue #984: which levels go to the rings, and the exact move
+    // counts, are not the same on every platform, and #689 (the STEP
+    // chord cap and the arc fit) changed the bore's mesh and its arcs
+    // after the counts were pinned. Measured on the same commit ecb54b7f:
+    // Windows (the #850 measure) Z 20.000 alone, 5530 moves / 5497
+    // planar / 600 arcs; macOS (Apple silicon) Z 20.000 alone, 5786 /
+    // 5753 / 651. On f490458a (after #689), macOS: Z 20.000 and Z 10.000,
+    // 6503 / 6467 / 222. The planner's crossing and acceptance decisions
+    // are knife edges a 16 nm change of the rings flips (#882, #982), so
+    // last-place float differences between platforms (most likely libm's
+    // sin, cos, atan2, hypot under the STEP tessellation and the planner)
+    // pick a different plan (#1010). What holds everywhere is pinned: the top level's
+    // plan crosses itself and goes to the rings, by name; a rings level
+    // is only ever for a crossing (never a budget, never a rest share);
+    // at least three of the five levels keep the HSM plan and post arcs;
+    // and the path's size stays in a band about every measured path
+    // (docs/decisions/984-bore-heavy-pins.md).
+    let levels: Vec<&str> = fell.iter().filter_map(|n| n.split("at Z ").nth(1)?.split(' ').next()).collect();
+    assert!(levels.contains(&"20.000"), "the top level's plan crosses itself and goes to the rings: {fell:?}");
+    assert!(fell.iter().all(|n| n.contains("crosses itself")), "a rings level only for a crossing: {fell:?}");
+    assert!(fell.len() <= 2, "at least three of the five levels keep the HSM plan: {fell:?}");
+    assert!(arcs > 0, "the HSM levels post their arcs: {:?}", path.notes);
+    let (moves, lo, hi) = (path.moves.len(), 5_000, 8_000);
+    assert!((lo..=hi).contains(&moves), "the bore's path stays in {lo}..={hi} moves (measured 5530 to 6503): {:?}", path.notes);
+    assert!(planar * 100 >= moves * 98, "the ladder is planar feeds but for its links: {planar} of {moves}");
 }
 
 #[test]
