@@ -94,6 +94,7 @@ fn judge_in(p: &Toolpath, tool: &ToolGeom, region: &Region) -> Vec<Warning> {
         finish_tol: None,
         fixtures: &[],
         spindle: None,
+        ..Default::default()
     };
     verify(p, &cx)
 }
