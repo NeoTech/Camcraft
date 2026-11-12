@@ -107,7 +107,17 @@ are real overloads the strict law is there to refuse.
 
 **Goldens.** No golden file moves (`tests/golden/` holds no HSM plan).
 Posted programs of lifted plans change (more pieces on their own
-chords); the suites that pin them pin laws, not digests.
+chords); the suites that pin them pin laws, not digests. The one count
+pin on an HSM plan, the app's STEP bore
+(`pocket3d_hsm::the_users_bore_roughs_adaptive_level_by_level_and_verifies_clean`,
+moves / planar feeds / arcs), does not move: on Linux it reads
+6490 / 6454 / 222 with and without this change (the 6500 / 6464 / 222
+on main was measured on another platform, so that pin is red on Linux
+either way), and on PR #1032's tree, which re-pins it per platform,
+16196 / 15457 / 1570 with and without.
+
+**Stacked on PR #1007** (#983): it gives the rotary level reader the
+ladder's step, on the same line of the r6.2 pin this change rewrites.
 
 **Considered and dropped.**
 - *One- or two-sample tolerance* (the issue's proposal; the first
