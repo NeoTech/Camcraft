@@ -99,7 +99,10 @@ threadHands = true;  // reads PARAM SpindleDirection (#629): the engine refuses 
 //    planned mm/min along the part-frame chord - capped so the X/Z part
 //    of the move stays within the machine's stated feed and the C part
 //    within the C rate it states (machine.rotaries[].speeds, deg/min;
-//    unstated, C is not capped). A rapid is a G01 at the
+//    unstated, C is not capped). A machine that states a C travel - so
+//    its path may carry rewind orbits (#33) - but no C rate has nothing
+//    to cap a C-turning rapid by: that rapid is refused by name, never
+//    posted at an uncapped feed (#906). A rapid is a G01 at the
 //    machine's stated maximum feed, never a G00: a G00 with C runs each
 //    axis on its own and follows no verified path. Arcs and cycles in a
 //    C section are refused; the first move must be a rapid (C stands
@@ -132,6 +135,7 @@ var liveCodes = null;      // the machine's live_tool words for the open section
 var lastC = null;          // the C a C section last commanded
 var lastR = 0, lastZ = 0;  // ... and the station radius / Z it stood at
 var liveCRate = 0;         // the machine's stated C rate (deg/min), 0 = unstated
+var liveCTravel = false;   // the machine states a C travel (#906)
 var C_TOL = 0.005;         // mm a C-turned tip may stand off the station (lattice + milli-degree words)
 
 // ------------------------------------------------------------ helpers
@@ -429,6 +433,7 @@ function liveStart() {
   var rs = m.rotaries || [];
   var hasC = false;
   liveCRate = 0;
+  liveCTravel = false;
   for (var i = 0; i < rs.length; i++) {
     if (String(rs[i].name || "").toUpperCase() !== "C") continue;
     hasC = true;
@@ -437,6 +442,7 @@ function liveStart() {
     var sp = rs[i].speeds || {};
     var cr = Number(sp.normal) > 0 ? Number(sp.normal) : Number(sp.rapid);
     if (cr > 0) liveCRate = cr;
+    if (rs[i].travel !== null && rs[i].travel !== undefined) liveCTravel = true;
   }
   if (rs.length > 0 && !hasC) {
     refuse(coolantWho() + "C-axis live-tool work, but the machine states no C axis among its rotaries");
@@ -489,6 +495,13 @@ function liveMove(p, rapid) {
       return;
     }
     if (!(ltrue > EPS)) { refuse("a C move that turns the part with the tip on the spindle line"); return; }
+    // #906: a rapid's F is the machine's maximum linear feed, which a
+    // turn of C would multiply past anything the file states. With a
+    // C travel stated (rewinds may ride here) and no C rate, refuse.
+    if (rapid && liveCTravel && !(liveCRate > 0) && Math.abs(dc) > 1e-9) {
+      refuse("a C-axis rapid that turns C, but the machine file states a C travel but no C rate - its feed would be uncapped; state the C axis's speeds");
+      return;
+    }
     // Under a composite F the control drives X/Z at F * lin / lcmd and
     // C at F * |dc| / lcmd: F is capped so neither outruns what the
     // machine states - the linear part by its fastest stated feed, C
