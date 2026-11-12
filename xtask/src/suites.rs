@@ -97,7 +97,8 @@ fn visit(
     let precise = inherited_precision
         && !text
             .lines()
-            .any(|l| l.trim_start().starts_with("#[cfg") && l.trim() != "#[cfg(test)]");
+            .any(|l| (l.trim_start().starts_with("#[cfg") || l.trim_start().starts_with("#![cfg"))
+            && !["#[cfg(test)]", "#![cfg(test)]"].contains(&l.trim()));
     out.push(Source {
         path: file.to_path_buf(),
         module: prefix.to_string(),
@@ -119,7 +120,7 @@ fn visit(
         let child = match m.path {
             Some(p) => {
                 // In a non-mod.rs module, #[path] is relative to its containing directory.
-                let mut relative = parent.to_path_buf();
+                let mut relative = if m.parents.is_empty() { parent.to_path_buf() } else { base.clone() };
                 for p in &m.parents {
                     relative.push(p);
                 }
