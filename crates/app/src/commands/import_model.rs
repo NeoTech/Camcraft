@@ -12,6 +12,9 @@ use crate::model;
 pub struct ImportModel {
     pub name: String,
     pub mesh: Mesh,
+    /// The chord error of a mesh imported coarser than the STEP importer
+    /// promises (#864); `None` at full fidelity. It lands with the mesh.
+    pub coarse_mm: Option<f64>,
 }
 
 impl ImportModel {
@@ -27,20 +30,34 @@ impl ImportModel {
             }
             _ => {}
         }
-        let mesh = import::load_model(path)?;
+        let graded = import::load_model_graded(path)?;
         let name = path
             .file_stem()
             .and_then(|s| s.to_str())
             .unwrap_or("model")
             .to_string();
-        Ok(Self::from_mesh(&name, mesh))
+        Ok(Self::from_mesh(&name, graded.mesh).with_fidelity(graded.coarse_mm))
     }
 
     pub fn from_mesh(name: &str, mesh: Mesh) -> Self {
         ImportModel {
             name: name.to_string(),
             mesh,
+            coarse_mm: None,
         }
+    }
+
+    /// The same import under another name - mesh and fidelity together.
+    #[must_use]
+    pub fn renamed(self, name: &str) -> Self {
+        ImportModel { name: name.to_string(), ..self }
+    }
+
+    /// State the fidelity the mesh was imported at (#864).
+    #[must_use]
+    pub fn with_fidelity(mut self, coarse_mm: Option<f64>) -> Self {
+        self.coarse_mm = coarse_mm;
+        self
     }
 }
 
@@ -59,6 +76,7 @@ impl Command for ImportModel {
         // counts from there. ImportModel only ever spawns - a same-named
         // re-import is routed to UpdateModel by the caller, never here.
         model::set_rev(world, &entity, 1);
+        crate::model_fidelity::set(world, &entity, self.coarse_mm);
     }
 
     fn invert(&self, world: &World) {
