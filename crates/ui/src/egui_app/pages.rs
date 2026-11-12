@@ -1685,9 +1685,11 @@ fn model_page(ui: &mut Ui, state: &mut State, name: String) {
             ui,
             "This model was too large to import at full detail. Gouge checks against it are \
              stricter to make up for that; when it is too coarse to check at all, its operations \
-             are refused at the post. Re-import with a larger budget to clear this.",
+             are refused at the post. Raise the STEP facet budget below and import the file \
+             again to clear this.",
         );
     }
+    super::step_budget_row::row(ui, state, &entity);
     if let Some(a) = model::entity_world_aabb(&state.world, &entity) {
         ui.label(format!(
             "{} x {} x {} {}",

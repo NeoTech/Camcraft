@@ -92,7 +92,7 @@ interface JobReport {
 interface CamApi {
   load(path: string): DocumentInfo;  // arity 1
   save(path?: string): { path: string };  // variadic
-  import(path: string, name?: string): { model: string; facets: number };  // variadic
+  import(path: string, name?: string | null, facetBudget?: number): { model: string; facets: number; facet_budget?: number };  // variadic
   exportTools(path: string): { path: string; tools: number };  // arity 1
   importTools(path: string): { path: string; added: string[]; renamed: { from: string; to: string }[]; skipped: string[]; summary: string };  // arity 1
   operations(): OperationInfo[];  // arity 0

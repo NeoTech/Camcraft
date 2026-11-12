@@ -82,6 +82,9 @@ pub use tool_cutter_ui::ToolCutterUi;
 mod recent_ui;
 #[path = "state_prefs.rs"]
 mod prefs_ui;
+#[path = "state_step_budget.rs"]
+mod step_budget_ui;
+pub use step_budget_ui::StepBudgetUi;
 pub use tool_profile_ui::{ToolColumn, ToolProfileUi, is_spun_kind, parametric_points};
 use flecs_ecs::prelude::World;
 
@@ -1497,6 +1500,9 @@ pub struct State {
     /// implicit first setup. Public so tests run the dialog hand-off
     /// without a modal file picker.
     pub import_as_fixture: Option<Option<String>>,
+    /// #1054: the STEP facet budget the next import runs under (an import
+    /// setting, not on the history; the import that uses it is).
+    pub step_budget: StepBudgetUi,
     /// #789: each built-in accessory row's size draft, by name - view
     /// state; Apply lands it through `SetAccessory`.
     pub accessory_sizes: HashMap<String, AccessorySizeDraft>,
@@ -1821,6 +1827,7 @@ impl State {
             repair_ui: RepairUi::default(),
             pocket_scan: PocketScan::default(),
             import_as_fixture: None,
+            step_budget: StepBudgetUi::default(),
             accessory_sizes: HashMap::new(),
             fixture_mesh_cache: Default::default(),
             fixture_lib: None,
@@ -3699,11 +3706,12 @@ impl State {
         self.import_started = Some(Instant::now());
         let (tx, rx) = mpsc::channel();
         let worker_path = path.clone();
+        let budget = self.step_budget_for(&path);
         let spawned = std::thread::Builder::new()
             .name("camcraft-import".to_string())
             .spawn(move || {
                 // No World here: pure file + geometry work, Send across.
-                let result = ImportModel::new(&worker_path);
+                let result = ImportModel::within(&worker_path, budget);
                 // A dropped rx means the document changed or we are closing;
                 // the command is simply never applied.
                 if tx.send(result).is_err() {
@@ -3715,7 +3723,7 @@ impl State {
             Err(err) => {
                 // Thread exhaustion must not lose the import: run inline.
                 diag_warn!("import: worker spawn failed ({err}); running inline");
-                let result = ImportModel::new(&path);
+                let result = ImportModel::within(&path, budget);
                 self.finish_import(result);
             }
         }
@@ -3769,8 +3777,8 @@ impl State {
                     return;
                 }
                 if model::find_by_name(&self.world, &name).is_some() {
-                    let coarse = command.coarse_mm;
-                    match UpdateModel::new(&self.world, &name, command.mesh).map(|u| u.with_fidelity(coarse)) {
+                    let (coarse, budget) = (command.coarse_mm, command.facet_budget);
+                    match UpdateModel::new(&self.world, &name, command.mesh).map(|u| u.with_fidelity(coarse).with_budget(budget)) {
                         Ok(upd) => {
                             let summary = upd.changes().describe();
                             self.history.execute(&self.world, upd);

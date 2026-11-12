@@ -124,6 +124,8 @@ mod prefs_door;
 mod fixture_rows;
 // #864: a reduced-fidelity model says so on its page.
 mod model_fidelity;
+// #1054: the STEP facet budget on the model page.
+mod step_budget;
 // #709 hand check: both points of a two-point axis stay marked.
 mod two_point_marks;
 

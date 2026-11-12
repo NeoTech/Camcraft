@@ -66,6 +66,7 @@ mod op_tabs;
 mod painted;
 mod tree_glyphs;
 mod pages;
+mod step_budget_row;
 // #371: the tool editor's Body section and its picking preview.
 mod tool_body_page;
 // #630: the tool editor's lathe orientation row.

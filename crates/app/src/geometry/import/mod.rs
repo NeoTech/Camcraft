@@ -7,6 +7,7 @@
 
 pub mod obj;
 pub mod step;
+pub mod step_budget;
 pub mod step_csys;
 mod step_refine;
 mod step_units;
@@ -83,6 +84,12 @@ pub struct Graded {
 
 /// [`load_model`], with the fidelity the import achieved.
 pub fn load_model_graded(path: &Path) -> Result<Graded, ImportError> {
+    load_model_graded_within(path, MAX_FACETS)
+}
+
+/// [`load_model_graded`] with a STEP model tessellated inside `budget`
+/// facets (#1054; STL and OBJ are the mesh itself and ignore it).
+pub fn load_model_graded_within(path: &Path, budget: usize) -> Result<Graded, ImportError> {
     let format = format_from_path(path)?;
     let meta = std::fs::metadata(path)?;
     if meta.len() > MAX_FILE_BYTES {
@@ -92,16 +99,20 @@ pub fn load_model_graded(path: &Path) -> Result<Graded, ImportError> {
         return Ok(Graded { mesh: gate(stl::parse_file(path)?)?, coarse_mm: None });
     }
     let data = std::fs::read(path)?;
-    parse_model_graded(&data, format)
+    parse_model_graded_within(&data, format, budget)
 }
 
 /// [`parse_model`], with the fidelity the import achieved.
 pub fn parse_model_graded(data: &[u8], format: Format) -> Result<Graded, ImportError> {
+    parse_model_graded_within(data, format, MAX_FACETS)
+}
+
+fn parse_model_graded_within(data: &[u8], format: Format, budget: usize) -> Result<Graded, ImportError> {
     let (mesh, coarse_mm) = match format {
         Format::Stl => (stl::parse(data)?, None),
         Format::Obj => (obj::parse(data)?, None),
         Format::Step => {
-            let (mesh, chord) = step::parse_with_chord(data)?;
+            let (mesh, chord) = step::parse_with_chord_budget(data, budget)?;
             (mesh, step::coarse(chord))
         }
     };
@@ -117,7 +128,7 @@ fn gate(mesh: Mesh) -> Result<Mesh, ImportError> {
     Ok(mesh)
 }
 
-fn format_from_path(path: &Path) -> Result<Format, ImportError> {
+pub fn format_from_path(path: &Path) -> Result<Format, ImportError> {
     let ext = path
         .extension()
         .and_then(|e| e.to_str())

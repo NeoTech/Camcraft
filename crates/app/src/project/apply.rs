@@ -655,6 +655,8 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
                 // #864: the flag lands with the facets it describes; an
                 // absent key, or a value that is no coarse chord, is none.
                 crate::model_fidelity::set(world, &entity, dto.coarse_mm);
+                // #1054: validate_kind refused a budget out of bounds.
+                crate::model_fidelity::set_budget(world, &entity, dto.facet_budget);
             }
             EntityKind::Stock => {
                 // validate_kind already refused these; Result, never unwrap.

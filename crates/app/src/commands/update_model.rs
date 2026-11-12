@@ -58,6 +58,10 @@ pub struct UpdateModel {
     /// flag describes the facets, so it is traded with them, both ways.
     coarse_mm: Option<f64>,
     prev_coarse_mm: Option<f64>,
+    /// The STEP facet budget each mesh was made under (#1054), traded
+    /// with the facets the same way; `None` is the default.
+    facet_budget: Option<u64>,
+    prev_facet_budget: Option<u64>,
     /// #826: a fixture plate's marker, when the model is one. Its grid was
     /// measured on the old mesh, so it goes with it and the riders leave
     /// the plate (the safe reading: the user re-detects), in this same
@@ -97,6 +101,8 @@ impl UpdateModel {
             prev_stock,
             coarse_mm: None,
             prev_coarse_mm: crate::model_fidelity::chord_of(world, &entity),
+            facet_budget: None,
+            prev_facet_budget: crate::model_fidelity::budget_of(world, &entity),
             plate: crate::fixture::def_of(world, &entity)
                 .filter(|d| d.plate.plate.is_some())
                 .map(|d| Box::new((d, crate::plate::mount::Unmounts::of(world, name)))),
@@ -117,6 +123,15 @@ impl UpdateModel {
     #[must_use]
     pub fn keeping_fidelity(mut self) -> Self {
         self.coarse_mm = self.prev_coarse_mm;
+        self.facet_budget = self.prev_facet_budget;
+        self
+    }
+
+    /// State the STEP facet budget the new mesh was imported under
+    /// (#1054); unstated, the update records the default.
+    #[must_use]
+    pub fn with_budget(mut self, facet_budget: Option<u64>) -> Self {
+        self.facet_budget = facet_budget;
         self
     }
 
@@ -151,6 +166,7 @@ impl Command for UpdateModel {
         model::set_facets(world, &entity, self.mesh.facets.clone());
         model::set_rev(world, &entity, self.prev_rev + 1);
         crate::model_fidelity::set(world, &entity, self.coarse_mm);
+        crate::model_fidelity::set_budget(world, &entity, self.facet_budget);
         // Propagation (M3.1 B): the derived stock's copy is local-frame
         // facets - the very mesh above (SetStock's copy law) - and the
         // stock's own placement is never touched: re-importing a model
@@ -182,6 +198,7 @@ impl Command for UpdateModel {
             }
             model::set_rev(world, &entity, self.prev_rev);
             crate::model_fidelity::set(world, &entity, self.prev_coarse_mm);
+            crate::model_fidelity::set_budget(world, &entity, self.prev_facet_budget);
             if let Some(p) = &self.plate {
                 entity.entity_view(world).set(p.0.clone());
                 p.1.write(world, false);

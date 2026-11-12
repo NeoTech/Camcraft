@@ -565,6 +565,13 @@ pub struct EntityDto {
     /// and loads as full fidelity.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub coarse_mm: Option<f64>,
+    /// The STEP facet budget a model was imported under when it is not the
+    /// default (#1054, `schema::StepBudget`). Absent everywhere else, so a
+    /// file from before the key existed - and every default import - reads
+    /// as `step_budget::DEFAULT` and saves byte for byte as it did. An old
+    /// reader dropping it loses only the record: the facets are stored.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub facet_budget: Option<u64>,
     /// Absent means Model; only non-model entities carry the tag.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kind: Option<EntityKind>,

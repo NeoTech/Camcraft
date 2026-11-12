@@ -17,6 +17,8 @@ pub struct DeleteEntity {
     /// #864: a reduced-fidelity model comes back flagged - an undo that
     /// dropped the flag would loosen every verdict against it.
     coarse_mm: Option<f64>,
+    /// #1054: the STEP facet budget it was imported under comes back too.
+    facet_budget: Option<u64>,
     /// Non-`None` restores the `StockDef` component; `wcs` restores the
     /// `Wcs` tag. Together with the CAM components below they keep every
     /// kind of named entity undoable with its kind intact.
@@ -60,6 +62,7 @@ impl DeleteEntity {
             location: model::transform_of(world, &entity).unwrap_or_default(),
             facets: model::facets_of(world, &entity),
             coarse_mm: crate::model_fidelity::chord_of(world, &entity),
+            facet_budget: crate::model_fidelity::budget_of(world, &entity),
             stock: model::stock_def_of(world, &entity),
             wcs: model::is_wcs(world, &entity),
             tool: model::tool_of(world, &entity),
@@ -96,6 +99,7 @@ impl Command for DeleteEntity {
             model::set_facets(world, &entity, tris.clone());
         }
         crate::model_fidelity::set(world, &entity, self.coarse_mm);
+        crate::model_fidelity::set_budget(world, &entity, self.facet_budget);
         if let Some(shape) = &self.stock {
             entity
                 .entity_view(world)

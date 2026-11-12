@@ -161,6 +161,7 @@ pub fn collect(world: &World) -> ProjectFile {
                 // landing); everywhere else it reads 0 and omits itself.
                 rev: model::rev_of(world, &entity),
                 coarse_mm: crate::model_fidelity::chord_of(world, &entity),
+                facet_budget: crate::model_fidelity::budget_of(world, &entity),
                 kind,
                 stock,
                 tool,
