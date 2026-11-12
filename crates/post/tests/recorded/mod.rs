@@ -42,10 +42,7 @@ pub const CASES: [&str; 11] = [
 /// (no crash, no hang) but compares nothing and has no golden; the fix
 /// removes its line and records the golden (`WRITE_GOLDEN=1`), read first.
 /// `recorded_streams.rs` holds that no listed case has a golden.
-pub const KNOWN_BUGS: [(&str, &str, u32); 1] = [
-    // Flood coolant (M8) in a probing section.
-    ("doosan-dnm.cps", "probe", 995),
-];
+pub const KNOWN_BUGS: [(&str, &str, u32); 0] = [];
 
 pub fn known_bug(script: &str, case: &str) -> Option<u32> {
     KNOWN_BUGS.iter().find(|(s, c, _)| *s == script && *c == case).map(|(_, _, n)| *n)
