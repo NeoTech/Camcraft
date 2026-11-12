@@ -1446,6 +1446,12 @@ impl OpParams {
                     }
                     None => h.write_u8(0),
                 }
+                // #536: only a stated taper is digested, so every
+                // vertical cut's stamp stays what it was.
+                if p.taper_deg != 0.0 {
+                    h.write(b"taper");
+                    w(h, p.taper_deg);
+                }
             }
             // The plasma profile (#670): every stored number, the
             // optional ones with a presence byte.

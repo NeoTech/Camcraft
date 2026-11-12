@@ -16,7 +16,7 @@ use crate::geo2d::{Loop, Point2, Region};
 use crate::machine::{ConditionField, Kind};
 use crate::machining2d::GenError;
 use crate::verify::Warning;
-use crate::wire_edm::{wire_contour, WireParams};
+use crate::wire_edm::{wire_contour_tapered, WireParams, WireTaper};
 
 use super::kinds::Carried;
 use super::types::{OpParams, WireContourOp, WireSide};
@@ -32,6 +32,7 @@ pub(super) fn seed_wire_contour(c: &Carried) -> OpParams {
         condition: String::new(),
         side: WireSide::Die,
         start: None,
+        taper_deg: 0.0,
     })
 }
 
@@ -43,6 +44,10 @@ pub struct WireCondition {
     pub wire_diameter: f64,
     /// The spark gap per side, mm.
     pub gap: f64,
+    /// The machine's name and its stated maximum taper (#536), for the
+    /// taper's door.
+    pub machine: String,
+    pub max_taper_deg: Option<f64>,
 }
 
 /// The condition door (#531, #532): the op's condition on the machine
@@ -84,7 +89,7 @@ pub fn condition_of(world: &World, setup: Option<&str>, op: &WireContourOp) -> R
     let (Some(gap), Some(wire_diameter)) = (c.gap, c.wire_diameter) else {
         return Err(format!("machine {}: EDM condition {:?} states no gap or no wire diameter", machine.model, c.id));
     };
-    Ok(WireCondition { id: c.id.clone(), wire_diameter, gap })
+    Ok(WireCondition { id: c.id.clone(), wire_diameter, gap, machine: machine.model.clone(), max_taper_deg: edm.max_taper_deg })
 }
 
 /// The condition a wire EDM kind's generation cuts with, read where
@@ -122,6 +127,11 @@ pub(super) fn stamp_condition(world: &World, setup: Option<&str>, op: &WireConto
             h.write_u8(0xff);
             h.write(&c.wire_diameter.to_bits().to_le_bytes());
             h.write(&c.gap.to_bits().to_le_bytes());
+            // #536: a taper also reads the machine's maximum; a vertical
+            // cut's stamp stays what it was.
+            if op.taper_deg != 0.0 {
+                h.write(&c.max_taper_deg.map_or(u64::MAX, f64::to_bits).to_le_bytes());
+            }
         }
         Err(_) => h.write_u8(0),
     }
@@ -177,11 +187,18 @@ pub(super) fn generate_wire(
     picks: Option<(Vec<Loop>, Vec<Vec<Point2>>)>,
     base: impl FnOnce() -> Result<Region, GenError>,
 ) -> Result<(Toolpath, Vec<Warning>), GenError> {
-    let p = wire_params(op, &cond?, hs)?;
+    let cond = cond?;
+    let p = wire_params(op, &cond, hs)?;
+    let taper = WireTaper {
+        angle_deg: op.taper_deg,
+        top_z: hs.top.unwrap_or(p.plane_z),
+        max_deg: cond.max_taper_deg,
+        machine: cond.machine.clone(),
+    };
     let (loops, chains) = match picks {
         Some(geom) => geom,
         None => (base()?.loops().to_vec(), Vec::new()),
     };
-    let path = wire_contour(&loops, &chains, &p)?;
+    let path = wire_contour_tapered(&loops, &chains, &p, &taper)?;
     Ok((path, Vec::new()))
 }

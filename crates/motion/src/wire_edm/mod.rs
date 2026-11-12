@@ -33,6 +33,9 @@
 
 mod laws;
 mod ring;
+mod taper;
+
+pub use taper::{wire_contour_tapered, WireTaper};
 
 use crate::cl::{MoveKind, PathBuilder, Toolpath};
 use crate::geo2d::{Loop, Point2, Region};

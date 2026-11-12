@@ -133,6 +133,13 @@ pub(super) fn stream(
         ..Dump::default()
     };
     let mut records = post::dump(&cache.path, &d);
+    if p.taper_deg != 0.0 {
+        let machine = crate::machine::of_setup(world, setup)
+            .1
+            .ok_or_else(|| format!("{name}: a tapered wire cut needs its wire EDM machine mounted"))?;
+        let guides = crate::machine::wire_edm::guide_planes(&machine, origin[2]).map_err(|e| format!("{name}: {e}"))?;
+        records = guided(records, guides).map_err(|e| format!("{name}: {e}"))?;
+    }
     // The wire words ride before the section opens, like every PARAM.
     let at = records
         .iter()
@@ -141,7 +148,39 @@ pub(super) fn stream(
     let wire = [
         cnc::Record::Param { name: "EdmCondition".into(), value: json!(p.condition) },
         cnc::Record::Param { name: "WireSide".into(), value: json!(p.side.word()) },
+        cnc::Record::Param { name: "WireTaper".into(), value: json!(p.taper_deg) },
     ];
-    records.splice(at..at, wire);
+    let wire = if p.taper_deg == 0.0 { &wire[..2] } else { &wire[..] };
+    records.splice(at..at, wire.iter().cloned());
     Ok(records)
+}
+
+/// A tapered section's moves as the guides take them (#536, #290 D2):
+/// each leaning move's X Y become the lower guide's, and the params
+/// before it state the upper guide's offset from the lower
+/// (U V, as `PARAM WireU` and `WireV`) - computed here from the pose and the machine's guide planes,
+/// so the post writes what the wire laws judged and invents nothing.
+fn guided(records: Vec<cnc::Record>, guides: (f64, f64)) -> Result<Vec<cnc::Record>, String> {
+    let mut out = Vec::with_capacity(records.len() * 2);
+    for r in records {
+        let cnc::Record::Move(mut m) = r else {
+            out.push(r);
+            continue;
+        };
+        if let Some(abc) = m.abc.take() {
+            if m.center.is_some() {
+                return Err("a tapered arc - the wire post writes straight tapered moves only".into());
+            }
+            let axis = crate::cl::angles_to_axis(abc).ok_or("a move's pose is not a direction")?;
+            let at = crate::geometry::Point3::new(m.x, m.y, m.z);
+            let (lower, uv) = crate::machine::wire_edm::guide_points(at, axis, guides).map_err(|e| format!("a move {e}"))?;
+            m.x = lower[0];
+            m.y = lower[1];
+            // Two numbers, as the stream text carries a PARAM.
+            out.push(cnc::Record::Param { name: "WireU".into(), value: json!(uv[0]) });
+            out.push(cnc::Record::Param { name: "WireV".into(), value: json!(uv[1]) });
+        }
+        out.push(cnc::Record::Move(m));
+    }
+    Ok(out)
 }

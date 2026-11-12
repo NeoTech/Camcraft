@@ -29,6 +29,15 @@ pub struct WireContourDto {
     /// stated.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub start: Option<[f64; 2]>,
+    /// The constant taper, degrees (#536); absent is a vertical cut, so
+    /// every file written before it reads unchanged.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub taper_deg: f64,
+}
+
+#[allow(clippy::trivially_copy_pass_by_ref)]
+fn is_zero(v: &f64) -> bool {
+    *v == 0.0
 }
 
 impl WireContourDto {
@@ -42,6 +51,7 @@ impl WireContourDto {
                 WireSide::Punch => WireSideDto::Punch,
             },
             start: p.start,
+            taper_deg: p.taper_deg,
         }
     }
 
@@ -55,6 +65,7 @@ impl WireContourDto {
                 WireSideDto::Punch => WireSide::Punch,
             },
             start: self.start,
+            taper_deg: self.taper_deg,
         })
     }
 }

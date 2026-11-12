@@ -35,6 +35,11 @@ pub struct WireContourOp {
     /// The start hole / threading point, world XY mm; `None` is not
     /// stated, and a closed profile is refused at generation without it.
     pub start: Option<[f64; 2]>,
+    /// The constant taper (#536), degrees from vertical: 0 is a
+    /// vertical cut; positive widens the profile downward from the top
+    /// plane (a die's relief, a drafted punch's base), negative narrows
+    /// it. The machine's `edm.max_taper_deg` bounds it at generation.
+    pub taper_deg: f64,
 }
 
 impl WireContourOp {
@@ -47,6 +52,8 @@ impl WireContourOp {
         self.top_z.is_sane()
             && self.bottom_z.is_sane()
             && self.start.is_none_or(|s| s.iter().all(|v| v.is_finite() && v.abs() < 1e9))
+            && self.taper_deg.is_finite()
+            && self.taper_deg.abs() < 90.0
             && self.condition.len() <= CONDITION_ID_MAX
             && !self.condition.chars().any(char::is_control)
     }

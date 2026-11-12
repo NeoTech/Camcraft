@@ -83,6 +83,7 @@ fn punch_doc(machine_text: &str) -> World {
         condition: "C110".into(),
         side: WireSide::Punch,
         start: Some([-30.0, 0.0]),
+        taper_deg: 0.0,
     };
     let c = CreateOperation::new(&world, "Punch1", "", SrcRef::Entity("slug".into()), OpParams::WireContour(op)).expect("op");
     h.execute(&world, c);
@@ -106,6 +107,7 @@ fn gouging_die() -> World {
         condition: "C110".into(),
         side: WireSide::Die,
         start: Some([0.0, 0.0]),
+        taper_deg: 0.0,
     };
     let c = CreateOperation::new(&world, "Die1", "", SrcRef::Entity("opening".into()), OpParams::WireContour(op)).expect("op");
     h.execute(&world, c);

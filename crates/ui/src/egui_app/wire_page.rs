@@ -1,6 +1,7 @@
 //! The operation page: the Wire Contour's fields (#532) - the side and
 //! the start hole on Geometry, the two workpiece planes on Heights, the
-//! machine's condition on Passes. Every value edits the page draft;
+//! machine's condition on Passes, and the taper angle (#536) on
+//! Geometry. Every value edits the page draft;
 //! Apply rides the command history (EditOperationParams, undoable),
 //! whose door refuses a condition the machine does not state. No Feeds
 //! tab: a wire cut states no feed - the control's generator sets it.
@@ -22,7 +23,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
     let OpParams::WireContour(p) = params else {
         return;
     };
-    let WireContourOp { top_z, bottom_z, condition, side, start } = p;
+    let WireContourOp { top_z, bottom_z, condition, side, start, taper_deg } = p;
     if tab == SEC_GEO {
         let mut si = usize::from(*side == WireSide::Punch);
         prop_row(ui, "Side", |ui| combo(ui, "wire.side", &mut si, &SIDES));
@@ -38,6 +39,11 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             (false, _) => *start = None,
         }
         hint(ui, "pick the one closed profile to cut; the wire is threaded at the start hole - inside the profile for a die, outside it for a punch");
+        // #536: a constant taper, degrees from vertical.
+        prop_row(ui, "Taper angle", |ui| {
+            ui.add(DragValue::new(taper_deg).speed(0.1).range(-45.0..=45.0).suffix("°"));
+        });
+        hint(ui, "0 cuts vertical; a positive taper widens the profile downward from the top plane (a die's relief), a negative one narrows it - the machine's edm.max_taper_deg bounds it");
     }
     if tab == SEC_HEIGHTS {
         height_editor(ui, "Top of workpiece", world, op_ctx.as_deref(), top_z, "wire.top");

@@ -61,7 +61,7 @@ pub mod library;
 // it shares with the cutting check.
 mod judge;
 mod plasma;
-mod wire_edm;
+pub mod wire_edm;
 use judge::{c_letter_problem, move_extremes, pose_problems, say, slowest_axis};
 mod sheet;
 pub mod validate;
