@@ -34,6 +34,7 @@ pub mod incoming_view;
 pub mod headless_gpu;
 pub mod interact;
 pub mod locate_pick;
+pub mod move_drag;
 pub mod machined;
 pub mod mcp_host;
 pub mod operations;
@@ -74,6 +75,8 @@ mod setup_chip_tests;
 mod pockets_tests;
 #[cfg(test)]
 mod wcs_gizmo_tests;
+#[cfg(test)]
+mod move_drag_tests;
 #[cfg(test)]
 mod axis_note_tests;
 

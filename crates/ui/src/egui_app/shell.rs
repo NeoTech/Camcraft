@@ -462,7 +462,9 @@ fn viewport_panel(
             if right_press {
                 state.drag = Some(DragMode::Pan);
             }
-            if left_pressed {
+            // #1198 b: a press on a move ball starts the body drag and is
+            // never remembered as a pick/orbit press - the ball wins.
+            if left_pressed && !crate::move_drag::press(state, parr(p)) {
                 *left_press = Some(parr(p));
             }
         }
@@ -476,9 +478,17 @@ fn viewport_panel(
         }
     }
 
+    // #1198 b: Escape drops a body drag in flight - nothing reaches history.
+    if state.body_drag.is_some() && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+        crate::move_drag::cancel(state);
+    }
     // Releases. A short press released inside the pane is a pick; a same-
     // frame press+release (fast click) is handled here, not at the press.
-    if left_released {
+    // A body drag's release is its one command, never a pick.
+    if left_released && state.body_drag.is_some() {
+        left_press.take();
+        crate::move_drag::release(state);
+    } else if left_released {
         let press = left_press.take();
         if state.drag == Some(DragMode::Orbit) {
             state.drag = None;
@@ -498,7 +508,11 @@ fn viewport_panel(
     // button promotes to orbit past the travel threshold. Hover recomputes
     // every frame (imgui checks inside draw, so a parked cursor keeps its
     // feature outline); interact gates it on drag/hot/inside itself.
-    if motion != egui::Vec2::ZERO {
+    if motion != egui::Vec2::ZERO && state.body_drag.is_some() {
+        if let Some(p) = pos {
+            crate::move_drag::motion(state, parr(p));
+        }
+    } else if motion != egui::Vec2::ZERO {
         match state.drag {
             Some(DragMode::Orbit) => state.cam.orbit(motion.x, motion.y),
             Some(DragMode::Pan) => state.cam.pan(motion.x, motion.y),
@@ -513,7 +527,7 @@ fn viewport_panel(
         }
     }
     if let Some(p) = pos {
-        interact::update_hover(state, parr(p), left_press.is_some());
+        interact::update_hover(state, parr(p), left_press.is_some() || state.body_drag.is_some());
     }
 
     // Screen-space overlays on the image: axis/anchor/gizmo labels and the
@@ -545,6 +559,7 @@ fn viewport_panel(
         for (a, b, rgb) in &segs {
             ui.painter().line_segment([to_px(*a), to_px(*b)], egui::Stroke::new(interact::GIZMO_STROKE_PX, rgb8(*rgb)));
         }
+        super::move_handles::draw(ui, state, pos.map(parr), resp.rect, &font);
         let axis_font = egui::FontId::proportional((font.size * 1.4).max(14.0));
         for (uv, rgb, text) in interact::overlay_labels(state, aspect) {
             let at = to_px(uv);

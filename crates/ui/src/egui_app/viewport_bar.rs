@@ -1,7 +1,8 @@
 //! The viewport's bottom control bar (#1198 slice a): a rounded grey
 //! ribbon floating over the bottom edge of the 3D pane, carrying the view
 //! buttons that used to stack under the view cube - frame, iso,
-//! shaded/wireframe, toolpaths and world axes.
+//! shaded/wireframe, toolpaths and world axes - and since slice b the Move
+//! mode that puts drag handles on the selected part (`crate::move_drag`).
 //!
 //! Provenance: the floating button ribbon of interactive 3D CAD viewports,
 //! written from published CAD practice - no vendor material.
@@ -21,9 +22,9 @@ pub(crate) const NAV_PX: f32 = 26.0;
 const NAV_GAP: f32 = 4.0;
 const PAD: f32 = 6.0;
 const BOTTOM_MARGIN: f32 = 10.0;
-/// Six buttons in a row: the ribbon's width and height, so the layout gate
+/// Seven buttons in a row: the ribbon's width and height, so the layout gate
 /// can ask the pane for room (pinned by `bar_fits_its_buttons`).
-pub(crate) const BAR_W: f32 = 6.0 * NAV_PX + 5.0 * NAV_GAP + 2.0 * PAD;
+pub(crate) const BAR_W: f32 = 7.0 * NAV_PX + 6.0 * NAV_GAP + 2.0 * PAD;
 const BAR_H: f32 = NAV_PX + 2.0 * PAD;
 const BAR_RADIUS: f32 = 8.0;
 
@@ -42,11 +43,14 @@ pub(crate) enum Nav {
     /// Viewport picks may reach the far side of the part (#692). Off by
     /// default; when on, a click sends `through: true`.
     PickThrough,
+    /// Move mode (#1198 b): the selected part wears axis handles whose
+    /// balls drag it. Off by default.
+    Move,
 }
 
 /// The buttons in bar order. `NAV_COUNT` sizes the ribbon, and a test checks
 /// the two agree.
-pub(crate) const NAV_COUNT: usize = 6;
+pub(crate) const NAV_COUNT: usize = 7;
 pub(crate) const NAVS: [Nav; NAV_COUNT] = [
     Nav::Frame,
     Nav::Iso,
@@ -54,12 +58,19 @@ pub(crate) const NAVS: [Nav; NAV_COUNT] = [
     Nav::Paths,
     Nav::Axes,
     Nav::PickThrough,
+    Nav::Move,
 ];
 
 /// The plain-English state line of the pick-through button (#692).
 #[must_use]
 pub(crate) fn pick_through_label(on: bool) -> &'static str {
     if on { "Pick through: on" } else { "Pick through: off" }
+}
+
+/// The plain-English state line of the Move button (#1198 b).
+#[must_use]
+pub(crate) fn move_label(on: bool) -> &'static str {
+    if on { "Move: drag a ball on the selected part" } else { "Move: off" }
 }
 
 /// The ribbon: centred on the pane's width, resting on its bottom edge at
@@ -105,6 +116,12 @@ pub(crate) fn act(state: &mut State, kind: Nav) {
             state.pick_through = !state.pick_through;
             state.status = pick_through_label(state.pick_through).to_string();
         }
+        Nav::Move => {
+            state.move_handles = !state.move_handles;
+            // Leaving Move mode drops a drag in flight - nothing queued.
+            crate::move_drag::cancel(state);
+            state.status = move_label(state.move_handles).to_string();
+        }
     }
 }
 
@@ -131,6 +148,7 @@ pub(crate) fn draw(
             Nav::Paths => state.show_all_paths,
             Nav::Axes => state.show_world_axes,
             Nav::PickThrough => state.pick_through,
+            Nav::Move => state.move_handles,
         };
         let hov = hover.is_some_and(|p| r.contains(p));
         let fill = if hov { ink.button.saturating_add(28) } else { ink.button };
@@ -233,6 +251,16 @@ pub(crate) fn draw(
                 let half = r.width() * 0.5 - m;
                 ui.painter().line_segment([c - egui::vec2(half, 0.0), c + egui::vec2(half, 0.0)], s);
                 ui.painter().line_segment([c - egui::vec2(m * 0.4, m), c + egui::vec2(m * 0.4, m)], s);
+            }
+            Nav::Move => {
+                // The move cross: four arms, each ending in a small ball -
+                // the handles the mode puts on the part.
+                let c = r.center();
+                let arm = r.width() * 0.5 - m * 0.9;
+                for d in [egui::vec2(1.0, 0.0), egui::vec2(-1.0, 0.0), egui::vec2(0.0, 1.0), egui::vec2(0.0, -1.0)] {
+                    ui.painter().line_segment([c, c + d * arm], s);
+                    ui.painter().circle_filled(c + d * arm, 1.8, s.color);
+                }
             }
         }
     }
