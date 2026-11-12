@@ -270,6 +270,12 @@ impl ToolBody {
 /// `post_options` (#389) is the setup's own post options; `None`, the
 /// default and every earlier file, follows the document's `PostOptions`.
 /// Written only by `SetSetupPostOptions` and the project loader.
+/// `nose_to_axis` (#821) is the setup's stated spindle-nose-to-rotary-
+/// centerline figure, mm, for a rotary raised by a stack (a subplate on a
+/// fixture plate): it wins over the machine file's, less any stack
+/// (`crate::rotary_stack`). `None`, the default and every earlier file,
+/// states none. Written only by `SetSetupNoseToAxis`, the datum transfer
+/// and the project loader.
 /// `workholding_max_rpm` (#1031) is the rated maximum rpm of the chuck
 /// or collet the setup holds the work in; `None`, the default and every
 /// earlier file, states none. Read through [`crate::setup_workholding`];
@@ -286,6 +292,7 @@ pub struct SetupDef {
     pub relative_to: Option<String>,
     pub stock_source: Option<crate::setup_stock::StockSource>,
     pub post_options: Option<PostOptions>,
+    pub nose_to_axis: Option<f64>,
     pub workholding_max_rpm: Option<f64>,
 }
 

@@ -286,6 +286,10 @@ pub enum OpType {
     /// side - the wire EDM's family (see [`crate::wire_edm`]).
     /// Appended: stored kind ids never move.
     WireContour,
+    /// Sinker EDM burn to depth (#541): one electrode fed down Z to a
+    /// depth read from a stated datum (see [`crate::sinker`]). Appended:
+    /// stored kind ids never move.
+    SinkerBurn,
 }
 
 impl core::fmt::Display for OpType {
