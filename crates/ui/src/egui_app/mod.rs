@@ -113,6 +113,10 @@ mod setup_workholding_row;
 // params dispatcher and its kind-family pages, the shared widgets.
 mod fields;
 mod geo_page;
+#[cfg(test)]
+pub(crate) use boundary::hints as boundary_hints;
+#[cfg(test)]
+pub(crate) use geo_page::{click_selects_hint, edge_hint};
 mod heights_page;
 mod holes_page;
 mod pockets_page;
