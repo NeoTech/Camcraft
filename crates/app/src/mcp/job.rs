@@ -78,6 +78,7 @@ fn op_full(env: &Env, key: &str, e: &flecs_ecs::prelude::Entity, status: operati
         "setup": op.as_ref().and_then(|o| o.setup.clone()),
         "tool": op.as_ref().map(|o| o.tool.clone()),
         "source": op.as_ref().map(|o| src_view(&o.src)),
+        "coolant": op.as_ref().and_then(|o| serde_json::to_value(o.coolant).ok()),
         "status": api::st_str(status),
         "warnings": warnings,
         "params": op.as_ref().map(|o| project::params_to_json(&o.params)),
