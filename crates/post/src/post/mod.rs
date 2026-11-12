@@ -191,6 +191,21 @@ impl<'a> Default for Dump<'a> {
     }
 }
 
+/// Ask for a reverse (M04) spindle on one operation's records (#988: a
+/// left-hand-cut thread mill): the `MillSpindle reverse` PARAM goes in
+/// before the section opens, once. A post script that does not declare
+/// `millSpindleReverse` then refuses the section by name instead of
+/// turning the cutter backwards under M03. (The lathe's
+/// `SpindleDirection` states a turned thread's hand and is not this.)
+pub fn ask_reverse_spindle(records: &mut Vec<Record>) {
+    let said = records.iter().any(|r| matches!(r, Record::Param { name, .. } if name == "MillSpindle"));
+    if said {
+        return;
+    }
+    let at = records.iter().position(|r| matches!(r, Record::Section { begin: true })).unwrap_or(records.len());
+    records.insert(at, Record::Param { name: "MillSpindle".into(), value: json!("reverse") });
+}
+
 /// The generator side: a toolpath plus its resolved context, as
 /// records in driver order. Cycles are interleaved before their
 /// group's first move, so the stream reads in program order whether

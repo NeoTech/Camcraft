@@ -33,6 +33,7 @@ fn external(bosses: Vec<Hole>) -> OpParams {
         pitch: None,
         hand: ThreadHand::Right,
         external: true,
+        passes: crate::machining2d::ThreadPasses::default(),
     }
 }
 
@@ -47,6 +48,7 @@ fn ride() -> Toolpath {
         external: true,
         hand: ThreadHand::Right,
         climb: true,
+        passes: crate::machining2d::ThreadPasses::default(),
         clearance_z: 30.0,
         retract_z: None,
         feed: 300.0,

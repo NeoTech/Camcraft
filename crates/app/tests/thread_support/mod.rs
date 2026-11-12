@@ -100,6 +100,7 @@ pub fn thread(radius: f64, pitch: Option<f64>, hand: ThreadHand, climb: bool) ->
         pitch,
         hand,
         external: false,
+        passes: camcraft_app::machining2d::ThreadPasses::default(),
     }
 }
 

@@ -18,6 +18,7 @@ coolantModes = true; // reads PARAM Coolant (#112/#150): the engine refuses non-
 afterModes = true; // reads PARAM AfterOperation (#110): the engine refuses a stop or home ask for a post without it
 axisInversion = true; // verified on the engine's mirrored stream for an inverted X/Y (#374): goldens + equivalence test
 probeAxisInversion = true; // probing blocks verified on the mirrored stream (#392): macro interpreter on a simulated inverted machine
+millSpindleReverse = true; // reads PARAM MillSpindle (#988): M4 for a left-hand-cut mill; the engine refuses a reverse mill spindle for a post without it
 
 // Determinism law: no timestamps, no randomness - the same stream
 // always posts to the same text (golden files depend on it).
@@ -26,6 +27,7 @@ probeAxisInversion = true; // probing blocks verified on the mirrored stream (#3
 var wcsWord = "G54";       // from the WorkOffset PARAM
 var sRpm = 0;              // S/M3 waits for the section: the stream
 var spindleWait = false;   // order is PARAMs, TOOL, SECTION
+var spinRev = false;       // PARAM MillSpindle reverse (#988): this section's spindle runs M4
 var toolWait = false;      // T../M6 and G43 wait the same way
 var tNo = 0;
 var inCycle = false;       // a cycle group is open; its chain is suppressed
@@ -377,7 +379,8 @@ function onParameter(name, value) {
   if (name === "Smoothing") { smoothTol = Number(value) || 0; return; }
   if (name === "SmoothingMode") { smoothMode = String(value || ""); return; }
   commentParam(name, value);
-  if (name === "OperationName") coolantOp = String(value || "");
+  if (name === "OperationName") { coolantOp = String(value || ""); spinRev = false; }
+  if (name === "MillSpindle") { spinRev = String(value || "") === "reverse"; return; }
   if (name === "Coolant") { coolantAsk = String(value || "flood"); return; }
   if (name === "AfterOperation") { afterAsk = String(value || ""); return; }
   if (name === "WorkOffset" && value) wcsWord = String(value);
@@ -439,7 +442,7 @@ function startPreamble() {
     toolWait = false;
   }
   if (spindleWait && sRpm > 0) {   // a touch probe (#108) states no spindle
-    block(["S" + ff(sRpm), "M3"]);
+    block(["S" + ff(sRpm), spinRev ? "M4" : "M3"]);
     spindleWait = false;
   }
   if (probeStop) block(["M5"]);

@@ -188,6 +188,10 @@ pub struct Script {
     /// Without it a thread that needs the spindle reversed is refused
     /// by name - the script would cut it the other hand under M03.
     thread_hands: bool,
+    /// The `millSpindleReverse = true` manifest flag (#988): the script
+    /// reads `PARAM MillSpindle reverse` and starts the spindle M04 for
+    /// a left-hand-cut mill. Without it such a section is refused.
+    mill_spindle_reverse: bool,
 }
 
 impl Script {
@@ -209,6 +213,7 @@ impl Script {
             axis_inversion: false,
             probe_axis_inversion: false,
             thread_hands: false,
+            mill_spindle_reverse: false,
         };
         let mut present = Vec::new();
         for h in HOOKS {
@@ -233,6 +238,10 @@ impl Script {
             .unwrap_or(false);
         s.floating_tapping = s
             .eval("typeof floatingTapping !== \"undefined\" && floatingTapping === true")
+            .map(|v| is_true(&v))
+            .unwrap_or(false);
+        s.mill_spindle_reverse = s
+            .eval("typeof millSpindleReverse !== \"undefined\" && millSpindleReverse === true")
             .map(|v| is_true(&v))
             .unwrap_or(false);
         s.thread_hands = s
@@ -332,6 +341,11 @@ impl Script {
     /// `PARAM SpindleDirection` and voices a thread's hand (#629).
     pub fn voices_thread_hands(&self) -> bool {
         self.thread_hands
+    }
+
+    /// True when the script declares `millSpindleReverse = true` (#988).
+    pub fn voices_mill_spindle_reverse(&self) -> bool {
+        self.mill_spindle_reverse
     }
 
     /// True when the script declares `liveTooling = true` - it voices

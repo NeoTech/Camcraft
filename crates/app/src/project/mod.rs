@@ -120,7 +120,7 @@ pub use vise_dto::ViseDto;
 mod thread_dto;
 mod break_dto;
 pub use break_dto::EdgeBreakDto;
-pub use thread_dto::{ThreadCycleDto, ThreadHandDto};
+pub use thread_dto::{PassScheduleDto, ThreadCycleDto, ThreadHandDto, ThreadPassesDto};
 mod touch_dto;
 pub use touch_dto::ProbeTouchDto;
 mod params_impl;

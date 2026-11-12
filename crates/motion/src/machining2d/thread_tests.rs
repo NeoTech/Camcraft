@@ -22,6 +22,7 @@ fn params(rows: u32, external: bool, hand: ThreadHand, climb: bool) -> ThreadPar
         external,
         hand,
         climb,
+        passes: super::ThreadPasses::default(),
         clearance_z: 10.0,
         retract_z: None,
         feed: 400.0,
