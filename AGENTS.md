@@ -92,14 +92,24 @@ afterwards - the work must not bother them.
   the merging session itself (MECHANICAL). Only a conflict resolved by hand
   gets a delta review of its remerge-diff (DELTA), and new commits get a
   review of those commits (NEW CODE).
-- **Only the owner's reviews count** (issue #1207, 2026-11-12: "No, only
-  ours count"). A `<!-- pr-reviewer: ... -->` or `<!-- review-cost: ... -->`
-  marker counts only in a review or comment whose author is the repository
-  owner's account (`gh repo view <base repo> --json owner`, the repository
-  the PR targets: `NeoTech/Camcraft`, also in a fork). `merge-ready` counts only
-  when that account set it. A contributor's pre-check is a plain comment
-  without the marker. `/review-prs`, `/resolve-conflicts check` and the
-  PR-reviewer agent all filter on the author.
+- **Only collaborators' reviews count** (issue #1320, 2026-11-12, decided in
+  the question dialog: "Any collaborator review counts"; the maintainer in
+  chat: "everyone counts. everyone needs to get merged, mkinney and i are
+  coolaboration across the world on the same code base"). A
+  `<!-- pr-reviewer: ... -->` or `<!-- review-cost: ... -->` marker counts
+  only in a review or comment made by a collaborator of the repository the
+  PR targets (`NeoTech/Camcraft`, also in a fork): an account with write
+  access, `gh api repos/NeoTech/Camcraft/collaborators --jq '.[] |
+  select(.permissions.push) | .login'`. `merge-ready` counts only when a
+  collaborator set it. This holds for a collaborator's own PRs as well as
+  others'; the independence that still applies is the one above, that the
+  review is done by an agent that did not write the change. A marker or label
+  from an account that is not a collaborator does not count: a
+  contributor's pre-check is a plain comment without the marker.
+  `/review-prs`, `/resolve-conflicts check`, `/merge-ready` and the
+  PR-reviewer agent all filter on the collaborator list. (Superseded since
+  2026-11-12, later the same day: issue #1207's "only the owner's reviews
+  count", "No, only ours count", which counted the owner's account alone.)
 - **Side work rides subagents.** All testing, documentation, and knowledge
   graphing (the graphify updates) are done by subagents dispatched as
   subtasks, never inline: their completion notification is what triggers
@@ -941,10 +951,16 @@ run on demand (`/review-prs`, or `/review-prs <N>` for one PR) and on a loop
 (`/loop 10m /review-prs`, every 10 minutes). The agent trial-merges the PR with current main in
 its own worktree, builds, runs the suites it touches and clippy, checks this
 file's laws, and posts a plain review **comment** whose first line is
-`<!-- pr-reviewer: <head sha> -->` (counted only when its author is the owner's account, see "Only the owner's reviews count"; the marker that stops a second review of
+`<!-- pr-reviewer: <head sha> -->` (counted only when its author is a collaborator, see "Only collaborators' reviews count"; the marker that stops a second review of
 the same push), and sets the review label (below). It never approves, requests changes, merges or pushes:
 the user approves and merges an outside PR by hand ("make sure u leave a
-comment and allow us to approve it manually"). **Never two PR reviews at
+comment and allow us to approve it manually") - that stays for the PRs of
+accounts that are not collaborators; a collaborator's PR is handled like our
+own: reviewed here, then merged by any collaborator's session through
+`/merge-ready` (maintainer, 2026-11-12, "Both collaborators" may merge; cuts
+and tags stay with the maintainer). A merge batch is run with `/merge-ready`
+(`.claude/skills/merge-ready/`), which plans the order with `cargo xtask
+merge-plan`. **Never two PR reviews at
 once** ("make sure we are not running concurrent PR reviews"): one PR per
 `/review-prs` run, guarded by the lock `.claude/pr-review.lock` (`<N> <sha>
 <UTC>`) - a run that finds a lock younger than 90 min stops; an older one is

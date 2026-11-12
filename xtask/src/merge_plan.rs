@@ -5,7 +5,8 @@
 //! (plan_merge_order.py, #1221), the same steps in the same order.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::fmt::Write as _;
+
+pub use crate::merge_plan_out::{render, to_json};
 
 /// A conflict confined to these paths (or to PNG snapshots) is settled by rule, without judgement.
 const MECHANICAL: &[&str] = &[".claude/PROCESS_VERSION", "CHANGELOG.md", "RECOMMENDED.md", "Cargo.lock"];
@@ -155,6 +156,8 @@ pub struct Plan {
     pub wave1: Vec<u32>,
     pub wave2: Vec<Refresh>,
     pub titles: BTreeMap<u32, String>,
+    /// The head commit each PR was planned against (with `base_sha`, what two runs are compared by).
+    pub heads: BTreeMap<u32, String>,
     pub stacked: BTreeMap<u32, Vec<u32>>,
     /// PRs GitHub had not yet computed `mergeable` for: wave 1 may be wrong until they are read again.
     pub unknown: Vec<u32>,
@@ -177,13 +180,42 @@ fn paths_len(by: &BTreeMap<u32, &Pr>, n: u32) -> usize {
     by.get(&n).map_or(0, |p| p.paths.len())
 }
 
-fn refs(nums: &[u32]) -> String {
+pub fn refs(nums: &[u32]) -> String {
     nums.iter().map(|a| format!("#{a}")).collect::<Vec<_>>().join(", ")
+}
+
+// Determinism (#1320): the same base and the same PR heads give the same plan, whatever order the PRs arrive in.
+// Every choice below is a `min_by_key` / `sort_by_key` whose key ends in the PR number (a total order), and every
+// collection that is walked is a BTreeMap/BTreeSet (ascending PR number). The keys are named so each is pinned.
+
+/// Wave-1 candidate: fewest live rivals, then fewest changed paths, then the lowest number.
+pub(crate) fn wave1_pick_key(rivals: usize, paths: usize, n: u32) -> (usize, usize, u32) {
+    (rivals, paths, n)
+}
+
+/// Merge order inside wave 1 among PRs whose parents are in: docs first, then fewest hot files, then fewest paths,
+/// then the lowest number.
+pub(crate) fn order_key(docs: bool, hot: usize, paths: usize, n: u32) -> (bool, usize, usize, u32) {
+    (!docs, hot, paths, n)
+}
+
+/// Wave-2 order: fewest unmerged parents among the deferred, then fewest conflicted files, then the lowest number.
+pub(crate) fn wave2_key(entangled: usize, files: usize, n: u32) -> (usize, usize, u32) {
+    (entangled, files, n)
+}
+
+/// Of two PRs sharing unmerged history the one with fewer own commits goes first; a tie goes to the lower number
+/// (`a < b`).
+pub(crate) fn shared_first(a: u32, b: u32, own_a: usize, own_b: usize) -> (u32, u32) {
+    if own_a <= own_b { (a, b) } else { (b, a) }
 }
 
 /// Orders the PRs. `trial` answers each merge question; the order and the wave split follow the reference planner.
 pub fn plan(facts: &Facts, trial: &mut Trial<'_>) -> Result<Plan, String> {
-    let by: BTreeMap<u32, &Pr> = facts.prs.iter().map(|p| (p.number, p)).collect();
+    // Sorted by (number, head) before the map is built, so a repeated number resolves the same way every time.
+    let mut listed: Vec<&Pr> = facts.prs.iter().collect();
+    listed.sort_by(|a, b| (a.number, &a.head).cmp(&(b.number, &b.head)));
+    let by: BTreeMap<u32, &Pr> = listed.into_iter().map(|p| (p.number, p)).collect();
     let nums: Vec<u32> = by.keys().copied().collect();
     let mut before = facts.before.clone();
     for n in &nums {
@@ -196,8 +228,10 @@ pub fn plan(facts: &Facts, trial: &mut Trial<'_>) -> Result<Plan, String> {
             if ordered(&before, a, b) {
                 continue;
             }
-            let Some(&(own_a, own_b)) = facts.shared.get(&(a, b)) else { continue };
-            let (first, second) = if own_a <= own_b { (a, b) } else { (b, a) };
+            // The pair is keyed (low, high); a caller that keyed it the other way round is read as (high's, low's).
+            let own = facts.shared.get(&(a, b)).copied().or_else(|| facts.shared.get(&(b, a)).map(|&(x, y)| (y, x)));
+            let Some((own_a, own_b)) = own else { continue };
+            let (first, second) = shared_first(a, b, own_a, own_b);
             before.entry(second).or_default().insert(first);
         }
     }
@@ -252,7 +286,7 @@ pub fn plan(facts: &Facts, trial: &mut Trial<'_>) -> Result<Plan, String> {
     loop {
         let pick = pool.iter().copied().min_by_key(|x| {
             let rivals = clash.get(x).map_or(0, |m| m.keys().filter(|c| pool.contains(c)).count());
-            (rivals, paths_len(&by, *x), *x)
+            wave1_pick_key(rivals, paths_len(&by, *x), *x)
         });
         let Some(n) = pick else { break };
         pool.remove(&n);
@@ -290,7 +324,7 @@ pub fn plan(facts: &Facts, trial: &mut Trial<'_>) -> Result<Plan, String> {
         let candidates: Vec<u32> = if ready.is_empty() { left.iter().copied().collect() } else { ready };
         let pick = candidates.into_iter().min_by_key(|x| {
             let p = by.get(x);
-            (!p.is_some_and(|p| p.docs()), p.map_or(0, |p| p.hot()), paths_len(&by, *x), *x)
+            order_key(p.is_some_and(|p| p.docs()), p.map_or(0, |p| p.hot()), paths_len(&by, *x), *x)
         });
         let Some(n) = pick else { break };
         left.remove(&n);
@@ -318,7 +352,7 @@ pub fn plan(facts: &Facts, trial: &mut Trial<'_>) -> Result<Plan, String> {
     let in_deferred: BTreeSet<u32> = keys.iter().copied().collect();
     keys.sort_by_key(|x| {
         let entangled = parents_of(&before, *x).iter().filter(|a| in_deferred.contains(a)).count();
-        (entangled, deferred.get(x).map_or(0, |d| d.files.len()), *x)
+        wave2_key(entangled, deferred.get(x).map_or(0, |d| d.files.len()), *x)
     });
     let mut wave2: Vec<Refresh> = Vec::new();
     for n in keys {
@@ -343,6 +377,7 @@ pub fn plan(facts: &Facts, trial: &mut Trial<'_>) -> Result<Plan, String> {
     }
 
     let titles = by.iter().map(|(n, p)| (*n, p.title.clone())).collect();
+    let heads = by.iter().map(|(n, p)| (*n, p.head.clone())).collect();
     let stacked = nums
         .iter()
         .filter_map(|n| {
@@ -351,39 +386,6 @@ pub fn plan(facts: &Facts, trial: &mut Trial<'_>) -> Result<Plan, String> {
         })
         .collect();
     let unknown = nums.iter().copied().filter(|n| by.get(n).is_some_and(|p| p.mergeable == Mergeable::Unknown)).collect();
-    Ok(Plan { base_sha: facts.base_sha.clone(), wave1, wave2, titles, stacked, unknown })
+    Ok(Plan { base_sha: facts.base_sha.clone(), wave1, wave2, titles, heads, stacked, unknown })
 }
 
-/// The plan as the text the skill reads.
-pub fn render(p: &Plan) -> String {
-    let mut s = format!("base {}\n", short(&p.base_sha));
-    if !p.unknown.is_empty() {
-        let names: Vec<String> = p.unknown.iter().map(|n| format!("#{n}")).collect();
-        let _ = writeln!(s, "WARNING: GitHub has not computed mergeability yet for {} - run again before trusting wave 1", names.join(", "));
-    }
-    let _ = writeln!(s, "\nWAVE 1 - merge in this order; no head moves, so no refresh and no delta review ({}):", p.wave1.len());
-    for n in &p.wave1 {
-        let dep = p.stacked.get(n).map(|a| format!("  (after {})", refs(a))).unwrap_or_default();
-        let _ = writeln!(s, "  #{n}  {}{dep}", title(p, *n));
-    }
-    if !p.wave2.is_empty() {
-        let _ = writeln!(
-            s,
-            "\nWAVE 2 - one at a time: refresh against the main of that moment, check, merge, THEN the next ({}):",
-            p.wave2.len()
-        );
-        for w in &p.wave2 {
-            let mut files = w.files.iter().take(6).cloned().collect::<Vec<_>>().join(", ");
-            if w.files.len() > 6 {
-                files.push_str(" ...");
-            }
-            let files = if files.is_empty() { files } else { format!(": {files}") };
-            let _ = writeln!(s, "  #{}  [{}] {}{files}\n         {}", w.number, w.kind.label(), w.why, title(p, w.number));
-        }
-    }
-    s
-}
-
-fn title(p: &Plan, n: u32) -> String {
-    p.titles.get(&n).map(|t| t.chars().take(80).collect()).unwrap_or_default()
-}
