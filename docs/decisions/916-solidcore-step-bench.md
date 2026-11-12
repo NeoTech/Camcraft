@@ -10,10 +10,13 @@ crate gained a dependency.
 `camcraft-pin-2026-11-11`, upstream main of 2026-11-11 19:30 UTC), as the
 maintainer decided on the issue. `solidcore-ops` and `solidcore-record` come
 with them (path dependencies of `solidcore-step`); `solidcore-tess` at the
-same rev is a dev-dependency for the mesh bench. `Cargo.lock`: five git
-packages in place of the one crates.io `solidcore` (552 -> 556 packages),
-no new crates.io package (`serde`, `serde_json`, `spade`, `rayon` were
-already locked). The starting pin was kept: every kernel suite is green on
+same rev is a dev-dependency for the mesh bench. `Cargo.lock`: six git
+packages (`solidcore`, `-convert`, `-ops`, `-record`, `-step`, `-tess`) in
+place of the one crates.io `solidcore` (552 -> 557 packages), no new
+crates.io package (`serde`, `serde_json`, `spade`, `rayon` were already
+locked). An earlier wording of this entry, of the commit message and of the
+PR said five and 556: that count was taken before the mesh bench's
+dev-dependency was added. The starting pin was kept: every kernel suite is green on
 it, so no nearer commit was needed.
 
 Moving the pin (the maintainer's procedure): `gh repo sync
