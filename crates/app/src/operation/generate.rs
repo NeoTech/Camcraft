@@ -2853,7 +2853,9 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 } else {
                     0.0
                 },
-                margin: GOUGE_TOL,
+                // #904: tightened by a coarse model's excess, like the
+                // gouge laws - every reading the margin excuses shrinks.
+                margin: super::fidelity_law::tightened(GOUGE_TOL, material.excess),
                 z_tol: Z_TOL,
                 drills: &drills_ahead,
                 ahead: &turned_ahead,
@@ -2902,12 +2904,15 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 | OpParams::Part { tolerance, .. } => Some(*tolerance),
                 _ => None,
             } {
-                warns.extend(crate::turning::blade_warnings(
+                warns.extend(crate::turning::blade_warnings_excess(
                     &material.facets,
                     &path,
                     tool.width,
                     tol,
                     stl,
+                    // #904: the gouge clause gives a coarse model's
+                    // excess back, as `verify`'s laws do (#864).
+                    material.excess,
                 ));
             }
             // The inspection ask (M5.3 D) is NOT judged here: it
@@ -2929,12 +2934,13 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // the turns. The insert's crest width and included
             // angle ride from the tool, the blade's law again.
             if let OpParams::Threading { tolerance, hand, .. } = &params {
-                warns.extend(crate::turning::thread_warnings(
+                warns.extend(crate::turning::thread_warnings_excess(
                     &material.facets,
                     &path,
                     tool.width,
                     tool.tip_angle,
                     *tolerance,
+                    material.excess,
                 ));
                 // The hand verdict (#629): every half-turn winds the
                 // way the operation asked, or the post is refused.
@@ -2947,12 +2953,13 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // thread already keeps: what a crown floor stands above
             // the blank belongs to the shell, not to this cut.
             if let OpParams::FormTurning { tolerance, .. } = &params {
-                warns.extend(crate::turning::form_warnings(
+                warns.extend(crate::turning::form_warnings_excess(
                     &material.facets,
                     &path,
                     tool.width,
                     tool.nose_radius,
                     *tolerance,
+                    material.excess,
                 ));
             }
             // The axial-hole verdict (M13.5 A): `Mode::Revolve` stood
@@ -2961,7 +2968,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // own recognized bore - width, floor and existence, by
             // name at the cycle's first move.
             if lathe_axial {
-                let tol = verify::excess_floor(GOUGE_TOL, material.excess).unwrap_or(GOUGE_TOL);
+                let tol = super::fidelity_law::tightened(GOUGE_TOL, material.excess);
                 warns.extend(drilling::axial_warnings(&material.facets, &path, d, tol));
             }
             // The containment kinds' solid law (their verify runs without
@@ -2981,7 +2988,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     &material.facets,
                     stock_facets.as_deref(),
                     &cutter,
-                    tol,
+                    (tol, material.excess),
                 );
             }
             // The all-air verdict (M13.8): a finish that provably cuts
