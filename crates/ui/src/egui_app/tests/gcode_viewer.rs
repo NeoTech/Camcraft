@@ -338,3 +338,22 @@ fn a_wheel_scroll_after_a_click_releases_the_pin() {
     harness.run_steps(30);
     assert!(cursor(&harness) > target + 3, "the cursor followed the wheel: {}", cursor(&harness));
 }
+
+#[test]
+fn a_same_length_new_listing_does_not_inherit_the_pin() {
+    // The case the key exists for: the new listing has the SAME middle
+    // row as the pin recorded, so only the listing key tells the stale
+    // pin from a live one. Row 299 cannot reach the middle (pinned
+    // middle ~289); the replacement must read its own middle row.
+    let mut harness = long_viewer(300);
+    harness.get_by_label("G01 X299.5 Y0. F200.").scroll_to_me();
+    harness.run_steps(10);
+    harness.get_by_label("G01 X299.5 Y0. F200.").click();
+    harness.run_steps(30);
+    assert_eq!(cursor(&harness), 299, "the last row is pinned");
+    set_program(&mut harness, 300);
+    harness.run_steps(10);
+    let c = cursor(&harness);
+    assert!(c < 299, "the new listing reads its own middle row, not the stale pin: {c}");
+    assert_eq!(band_count(&harness), 1, "and highlights it");
+}
