@@ -2102,23 +2102,25 @@ mod view_cube_tests {
 
     #[test]
     fn the_hud_is_laid_out_from_the_pane_alone() {
-        // Cube top-right (the hint owns bottom-right), five buttons
-        // below it, right-aligned; and no room, no furniture.
+        // Cube top-right (the hint owns bottom-right); the control ribbon
+        // rests on the bottom edge, centred, holding the five buttons
+        // (#1198 slice a); and no room, no furniture.
         let pane = egui::Rect::from_min_max(egui::pos2(300.0, 100.0), egui::pos2(1200.0, 700.0));
         let h = Hud::new(pane).expect("900 x 600 has room");
         assert!((h.cube.max.x - (1200.0 - 10.0)).abs() < 1e-6);
         assert!((h.cube.min.y - 110.0).abs() < 1e-6, "the cube hugs the top");
-        let bottom = h.nav_rect(viewcube::Nav::Axes);
-        assert!(
-            bottom.max.x <= h.cube.max.x + 1e-6 && bottom.min.x >= pane.min.x,
-            "the nav column stays in the pane"
-        );
-        assert!(bottom.max.y < pane.max.y, "the column ends inside the pane");
-        let top_button = h.nav_rect(viewcube::Nav::Frame);
-        assert!(top_button.min.y > h.cube.max.y, "buttons start under the cube");
+        let bar = crate::egui_app::viewport_bar::bar_rect(pane);
+        assert!((bar.center().x - pane.center().x).abs() < 1e-3, "the ribbon is centred");
+        assert!((bar.max.y - (700.0 - 10.0)).abs() < 1e-3, "the ribbon rests on the bottom edge");
+        assert!(!h.cube.intersects(bar), "the cube and the ribbon never overlap");
+        for kind in crate::egui_app::viewport_bar::NAVS {
+            let r = h.nav_rect(kind);
+            assert!(bar.contains(r.min) && bar.contains(r.max), "{kind:?} sits in the ribbon");
+        }
         assert!(Hud::new(egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(120.0, 800.0))).is_none());
         assert!(Hud::new(egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(800.0, 250.0))).is_none());
-        assert!(Hud::new(egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(130.0, 260.0))).is_some());
+        assert!(Hud::new(egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(180.0, 260.0))).is_some());
+        assert!(Hud::new(egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(170.0, 260.0))).is_none(), "the ribbon needs its width");
     }
 }
 
