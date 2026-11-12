@@ -6,10 +6,10 @@
 //! not controller execution or ISO syntax verification.
 //!
 //! Gate map (#922): covers post::post (engine, cnc, probe_rec), post::machine,
-//! app::posting.
+//! (post::machine).
 
-use camcraft_app::cl::{CompSide, CycleKind, MoveKind};
-use camcraft_app::post::{cnc::{self, CycleRec, MoveRec, Record}, engine, probe_rec::TouchRec};
+use camcraft_post::cl::{CompSide, CycleKind, MoveKind};
+use camcraft_post::post::{cnc::{self, CycleRec, MoveRec, Record}, engine, probe_rec::TouchRec};
 use serde_json::{json, Value};
 use std::path::Path;
 
@@ -252,7 +252,7 @@ fn rigid_and_floating_taps_keep_their_separate_pitch_contracts_and_refusals() {
     finish(&mut rigid);
     let rigid_machine = machine(Some(false));
     assert_eq!(
-        camcraft_app::post::machine::script_props(&rigid_machine)["rigidTapping"],
+        camcraft_post::post::machine::script_props(&rigid_machine)["rigidTapping"],
         json!(false),
         "the fixture must set the capability key mapped into the engine's machine global",
     );

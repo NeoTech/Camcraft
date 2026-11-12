@@ -8,13 +8,13 @@
 //! Provenance: our own fixtures, specced from the Prime Directive and
 //! the handbook side view of a ball-nose end mill; no vendor material.
 //!
-//! Gate map (M13.7): covers camcraft_sim::verify (engine b + b2, probe
+//! Gate map (M13.7): covers sim::verify (engine b + b2, probe
 //! Cutter::judged / tip_height, VerifyContext::cutter).
 
-use camcraft_motion::cl::{MoveKind, PathBuilder, Toolpath};
-use camcraft_motion::geo2d::{Loop, Point2, Region};
-use camcraft_motion::geometry::{Point3, Triangle};
-use camcraft_motion::verify::{Cutter, Mode, ToolGeom, VerifyContext, Warning, verify};
+use camcraft_sim::cl::{MoveKind, PathBuilder, Toolpath};
+use camcraft_sim::geo2d::{Loop, Point2, Region};
+use camcraft_sim::geometry::{Point3, Triangle};
+use camcraft_sim::verify::{Cutter, Mode, ToolGeom, VerifyContext, Warning, verify};
 
 const R: f64 = 3.0;
 

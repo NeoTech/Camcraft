@@ -11,8 +11,8 @@
 //!
 //! Gate map (M4.4): covers post::post (assets/posts/heidenhain.cps).
 
-use camcraft_app::cl::{CycleKind, MoveKind};
-use camcraft_app::post::{cnc, engine};
+use camcraft_post::cl::{CycleKind, MoveKind};
+use camcraft_post::post::{cnc, engine};
 use serde_json::json;
 use std::path::Path;
 

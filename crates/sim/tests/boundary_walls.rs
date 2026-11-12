@@ -12,10 +12,10 @@
 //!
 //! Gate map (#43): covers sim::verify (section law b, Boundary walls).
 
-use camcraft_app::cl::{Move, MoveKind, Toolpath};
-use camcraft_app::geo2d::{Loop, Point2, Region};
-use camcraft_app::geometry::{Point3, Triangle, cube};
-use camcraft_app::verify::{Mode, ToolGeom, VerifyContext, Warning, verify};
+use camcraft_sim::cl::{Move, MoveKind, Toolpath};
+use camcraft_sim::geo2d::{Loop, Point2, Region};
+use camcraft_sim::geometry::{Point3, Triangle, cube};
+use camcraft_sim::verify::{Mode, ToolGeom, VerifyContext, Warning, verify};
 
 const R: f64 = 4.0;
 const Z: f64 = -5.0;

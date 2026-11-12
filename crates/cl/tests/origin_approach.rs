@@ -2,14 +2,14 @@
 //! even when its start is exactly the seed (X0 Y0), where the generator's
 //! own rapid to the start is a zero-length move the builder drops.
 //!
-//! Gate map: covers cl::path (PathBuilder::approached) and every motion
+//! Gate map: covers cl::cl (PathBuilder::approached) and every motion
 //! generator seeded at (0, 0, clearance).
 //!
 //! Provenance: #690's posted-program law (the first motion after the tool
 //! call is a rapid on the clearance plane); our own builder design.
 
-use camcraft_motion::cl::{MoveKind, PathBuilder};
-use camcraft_motion::geometry::Point3;
+use camcraft_cl::cl::{MoveKind, PathBuilder};
+use camcraft_cl::geometry::Point3;
 
 const CLEAR: f64 = 5.0;
 
@@ -30,7 +30,7 @@ fn a_start_at_the_seed_still_opens_with_a_rapid() {
 fn an_arc_first_move_is_approached_too() {
     let seed = Point3::new(0.0, 0.0, CLEAR);
     let mut b = PathBuilder::approached(seed);
-    b.push_arc(MoveKind::Feed, Point3::new(2.0, 2.0, CLEAR), Some(100.0), camcraft_motion::geo2d::Point2::new(2.0, 0.0), true);
+    b.push_arc(MoveKind::Feed, Point3::new(2.0, 2.0, CLEAR), Some(100.0), camcraft_cl::geo2d::Point2::new(2.0, 0.0), true);
     let t = b.finish();
     assert_eq!(t.moves[0].kind, MoveKind::Rapid);
     assert_eq!(t.moves[1].kind, MoveKind::Feed);
@@ -84,6 +84,6 @@ fn no_generator_seeds_the_clearance_plane_without_the_approach_law() {
         }
     }
     let mut found = Vec::new();
-    walk(&std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src"), &mut found);
+    walk(&std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../motion/src"), &mut found);
     assert!(found.is_empty(), "seed on clearance with PathBuilder::approached:\n{}", found.join("\n"));
 }

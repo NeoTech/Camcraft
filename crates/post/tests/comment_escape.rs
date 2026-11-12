@@ -12,10 +12,10 @@
 //! header and comment helpers, the PRELUDE's writeComment default).
 //! Lane shape (M4.4): all tests here run in milliseconds.
 
-use camcraft_app::cl::{Move, MoveKind, Toolpath};
-use camcraft_app::geometry::Point3;
-use camcraft_app::machine::{parse_mch, Coolant, Machine};
-use camcraft_app::post::{cnc, dump, engine, machine, Dump};
+use camcraft_post::cl::{Move, MoveKind, Toolpath};
+use camcraft_post::geometry::Point3;
+use camcraft_post::machine::{parse_mch, Coolant, Machine};
+use camcraft_post::post::{cnc, dump, engine, machine, Dump};
 use serde_json::json;
 use std::path::Path;
 

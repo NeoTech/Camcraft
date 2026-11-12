@@ -3,12 +3,12 @@
 //! arc moves, chords stay inside the sagitta law's word, and paths with
 //! arcs still chain and stay finite.
 //!
-//! Gate map (M4.4): covers cl::cl, geometry::geo2d, app::geometry, motion::machining2d.
+//! Gate map (M4.4): covers motion::machining2d (contour, fit_arcs).
 
-use camcraft_app::cl::{Move, MoveKind};
-use camcraft_app::geo2d::{Loop, Point2, Region};
-use camcraft_app::geometry::Point3;
-use camcraft_app::machining2d::{ContourParams, Lead, Seg, Side, contour, fit_arcs};
+use camcraft_motion::cl::{Move, MoveKind};
+use camcraft_motion::geo2d::{Loop, Point2, Region};
+use camcraft_motion::geometry::Point3;
+use camcraft_motion::machining2d::{ContourParams, Lead, Seg, Side, contour, fit_arcs};
 
 fn p2(x: f64, y: f64) -> Point2 {
     Point2::new(x, y)
@@ -54,10 +54,10 @@ fn contour_params(lead: Lead) -> ContourParams {
         tab_count: 0,
         tab_width: 0.0,
         tab_height: 0.0,
-        entry: camcraft_app::machining3d::Entry3D::Plunge,
+        entry: camcraft_motion::machining3d::Entry3D::Plunge,
         helix_radius: 1.0,
         blend_turns: false,
-        links: camcraft_app::links::Links::PLANAR,
+        links: camcraft_motion::links::Links::PLANAR,
     }
 }
 

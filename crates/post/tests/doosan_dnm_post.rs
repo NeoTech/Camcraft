@@ -7,10 +7,10 @@
 //! - Chip conveyor start/stop (M31/M33)
 //! - Probing: standard Fanuc G31 skip and Renishaw Inspection Plus macros (G65 P9832 / P9833)
 //!
-//! Gate map: covers post::post (doosan-dnm.cps), app::posting.
+//! Gate map: covers post::post (doosan-dnm.cps), post::machine.
 
-use camcraft_app::machine::parse_mch;
-use camcraft_app::post::{engine, machine};
+use camcraft_post::machine::parse_mch;
+use camcraft_post::post::{engine, machine};
 use std::path::{Path, PathBuf};
 
 fn repo(rel: &str) -> PathBuf {

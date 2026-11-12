@@ -32,8 +32,13 @@ fn count(file: &str, krate: &str) -> usize {
 #[test]
 fn post_change_selects_the_post_dialect_suites() {
     let got = selected("crates/post/src/post/mod.rs", "app");
-    for must in ["heidenhain_cycles", "heidenhain_block_form", "fanuc_post", "conformance"] {
+    for must in ["fanuc_post", "conformance"] {
         assert!(got.iter().any(|b| b == must), "{must} missing from {got:?}");
+    }
+    // #921: the heidenhain suites moved into camcraft-post, so a post change selects them there.
+    let own = selected("crates/post/src/post/mod.rs", "post");
+    for must in ["heidenhain_cycles", "heidenhain_block_form", "doosan_dnm_post"] {
+        assert!(own.iter().any(|b| b == must), "{must} missing from {own:?}");
     }
     assert!(count("crates/post/src/post/mod.rs", "app") >= 20, "post change selects too few app suites");
 }
@@ -42,8 +47,9 @@ fn post_change_selects_the_post_dialect_suites() {
 #[test]
 fn post_submodule_change_narrows_but_still_selects() {
     let got = selected("crates/post/src/post/engine.rs", "app");
-    assert!(got.iter().any(|b| b == "heidenhain_cycles"), "{got:?}");
     assert!(!got.is_empty());
+    let own = selected("crates/post/src/post/engine.rs", "post");
+    assert!(own.iter().any(|b| b == "heidenhain_cycles"), "{own:?}");
 }
 
 #[test]
@@ -89,4 +95,32 @@ fn no_gate_map_names_a_moved_module_as_app() {
     }
     assert!(stale.is_empty(), "Gate maps naming moved modules as app::<module>: {stale:?}");
     assert!(unmapped.is_empty(), "suites without a Gate map: {unmapped:?}");
+}
+
+/// #921: the tests that need nothing from `app` live in the crate that owns the behaviour, so batch
+/// runs them there and quick selects them for a change in that crate (own-crate Gate maps).
+#[test]
+fn moved_suites_live_in_their_owner_crate_and_not_in_app() {
+    let owners: [(&str, &[&str]); 5] = [
+        ("post", &["heidenhain_arc_centre", "heidenhain_block_form", "heidenhain_cycles", "probe_spindle",
+            "probe_spindle_stop", "comment_escape", "lathe_post_refusals", "doosan_dnm_post"]),
+        ("sim", &["boundary_walls", "real_tip"]),
+        ("motion", &["arcs"]),
+        ("cl", &["origin_approach"]),
+        ("app", &[]),
+    ];
+    let app = scan::binaries(&root(), "app");
+    let motion = scan::binaries(&root(), "motion");
+    for (krate, names) in owners {
+        let have = scan::binaries(&root(), krate);
+        for n in names {
+            assert!(have.iter().any(|b| b == n), "{n} missing from crates/{krate}/tests");
+            assert!(!app.iter().any(|b| b == n), "{n} still in crates/app/tests");
+            if krate != "motion" {
+                assert!(!motion.iter().any(|b| b == n), "{n} still in crates/motion/tests");
+            }
+            let src = scan::read(&root().join(format!("crates/{krate}/tests/{n}.rs")));
+            assert!(!src.contains("camcraft_app"), "{n} imports camcraft_app");
+        }
+    }
 }

@@ -11,18 +11,18 @@
 //! The turning documents' goldens live in `lathe_post.rs`.
 //!
 //! Gate map (M4.4): covers post::post (engine, cnc on the lathe
-//! dialect), app::machine, post::machine (the mirror the script reads).
+//! dialect), post::machine (the mirror the script reads).
 //! Lane shape (M4.4): all tests here run in milliseconds.
 
-use camcraft_app::cl::{CycleKind, MoveKind};
-use camcraft_app::machine::{Coolant, Machine};
-use camcraft_app::post::{cnc, engine};
+use camcraft_post::cl::{CycleKind, MoveKind};
+use camcraft_post::machine::{Coolant, Machine};
+use camcraft_post::post::{cnc, engine};
 use serde_json::json;
 
 const LATHE_CPS: &str = include_str!("../../../assets/posts/fanuc-lathe.cps");
 
 fn lathe_mch() -> serde_json::Value {
-    camcraft_app::post::machine::mirror(&Machine {
+    camcraft_post::post::machine::mirror(&Machine {
         model: "TestBench lathe".into(),
         kind: Some("lathe".into()),
         spindle_max: Some(12000.0),
