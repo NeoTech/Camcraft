@@ -21,7 +21,8 @@
 //! through a Z window that is the union (a superset) of the two
 //! endpoints' windows. This law names what meets steel in between.
 
-use crate::cl::{Move, MoveKind, Toolpath, angles_to_axis, axis_to_angles, is_vertical, normalize_axis};
+use super::upright::is_upright;
+use crate::cl::{Move, MoveKind, Toolpath, angles_to_axis, axis_to_angles, normalize_axis};
 use crate::geo2d::Point2;
 use crate::geometry::Point3;
 
@@ -67,12 +68,14 @@ const POSE_FRACS: [f64; 5] = [0.0, 0.25, 0.5, 0.75, 1.0];
 /// answer. The memo cannot move a verdict: it is the same float, the
 /// same bool, and the max-severity rule (part outranks stock outranks
 /// clean) does not care what order the pairs are seen in.
+/// `gouge_tol` is the kerf slack about the tip and `grow` the band
+/// growth, both as law (c) reads them on a coarse model (#904).
 #[allow(clippy::too_many_arguments)]
 pub(super) fn mid_turn_sweeps(
     path: &Toolpath,
     bands: &[(f64, f64, f64)],
     r: f64,
-    gouge_tol: f64,
+    (gouge_tol, grow): (f64, f64),
     chord_tol: f64,
     shanked: &[usize],
     samples: &[Point2],
@@ -106,7 +109,7 @@ pub(super) fn mid_turn_sweeps(
             && held != next
             && !shanked.contains(&i)
             && let Some(part) = swing_hit(
-                m, i + 1, held, next, bands, r, gouge_tol, chord_tol, samples, &mut reach, in_stock, surface, part_at, hidden,
+                m, i + 1, held, next, bands, r, (gouge_tol, grow), chord_tol, samples, &mut reach, in_stock, surface, part_at, hidden,
             )
         {
             warns.push(Warning::SweepHit { at: i, part });
@@ -139,7 +142,7 @@ fn swing_hit(
     to_abc: [f64; 3],
     bands: &[(f64, f64, f64)],
     r: f64,
-    gouge_tol: f64,
+    (gouge_tol, grow): (f64, f64),
     chord_tol: f64,
     samples: &[Point2],
     reach: &mut std::collections::HashMap<(u64, u64), (bool, Steps, bool)>,
@@ -167,7 +170,7 @@ fn swing_hit(
                 from_abc[1] + (to_abc[1] - from_abc[1]) * g,
                 from_abc[2] + (to_abc[2] - from_abc[2]) * g,
             ];
-            let lean = angles_to_axis(abc).filter(|a| !is_vertical(a));
+            let lean = angles_to_axis(abc).filter(|a| !is_upright(a));
             for &(above, band_r, band_len) in bands {
                 // Law (c)'s skip, read the same way: a band within the
                 // cutter's radius is the flutes' kerf only upright (#903).
@@ -186,6 +189,9 @@ fn swing_hit(
                 };
                 let pc = Point2::new(p.x + offx, p.y + offy);
                 let tip = Point2::new(p.x, p.y);
+                // #904: law (c)'s growth on a coarse model, read the
+                // same way - the band reaches `grow` further.
+                let r_band = r_band + grow;
                 states.push((pc, tip, (r_band + 1e-9) * (r_band + 1e-9), h0));
                 bands_at.push((pc, tip, r_band, h0));
                 x0 = x0.min(pc.x - r_band);

@@ -173,6 +173,8 @@ pub fn region_z(
         OpParams::Probe { target, .. } => Some(target[2]),
         // The plasma cut rides the plate's top (#670).
         OpParams::PlasmaProfile(p) => resolve_height(world, setup, src, p.top_z),
+        // The wire's profile is read on the workpiece's top (#532).
+        OpParams::WireContour(p) => resolve_height(world, setup, src, p.top_z),
     }
 }
 
@@ -390,6 +392,13 @@ pub fn resolve_params(
             None,
             None,
         ),
+        // The wire cut (#532): the workpiece's top and bottom - the two
+        // programmed planes. A wire never lifts out of the work, so no
+        // rapids plane is stated; the slot reads the top.
+        OpParams::WireContour(p) => {
+            let top = req("Top of Workpiece Z", p.top_z)?;
+            (top, Some(top), Some(req("Bottom of Workpiece Z", p.bottom_z)?), None, None)
+        }
     };
     Ok(ResolvedHeights { clearance, top, bottom, face_top, retract })
 }
