@@ -77,6 +77,26 @@ const LATHE_POSTS: &[(&str, &str)] = &[("Fanuc Lathe", "fanuc-lathe"), ("Tormach
 /// refuse by name (`plasma_post_refusals.rs`).
 const PLASMA_POSTS: &[(&str, &str)] = &[("Tormach PathPilot Plasma", "tormach-plasma")];
 
+/// The SINKER EDM dialects (#542): their golden is the sinker burn's
+/// own (`crates/post/tests/sinker_post.rs`, `nc/sinker-iso/`); on a mill
+/// golden over a mill machine the engine's serves law refuses them by
+/// name before the script runs.
+const SINKER_POSTS: &[(&str, &str)] = &[("Sinker EDM (ISO)", "sinker-iso")];
+
+#[test]
+fn every_sinker_post_refuses_every_mill_golden_by_name() {
+    let mch: serde_json::Value =
+        serde_json::from_str(&read("assets/machines/3axis-vmc.mch")).expect("machine json");
+    for (name, cps_stem) in SINKER_POSTS {
+        let cps = read(&format!("assets/posts/{cps_stem}.cps"));
+        for g in GOLDENS {
+            let stream = read(&format!("crates/app/tests/golden/{g}.cl"));
+            let err = engine::run(&cps, &mch, &stream).expect_err("a sinker post on a mill");
+            assert!(err.to_string().contains("serves sinker_edm machines only"), "{name} on {g}: {err}");
+        }
+    }
+}
+
 #[test]
 fn every_lathe_post_refuses_every_mill_golden_by_name() {
     let mch: serde_json::Value =
@@ -346,7 +366,11 @@ fn every_builtin_registry_entry_compiles() {
     let mut want: Vec<&str> = POSTS.iter().map(|(n, _, _)| *n).collect();
     want.extend(LATHE_POSTS.iter().map(|(n, _)| *n));
     want.extend(PLASMA_POSTS.iter().map(|(n, _)| *n));
+    want.extend(SINKER_POSTS.iter().map(|(n, _)| *n));
     assert_eq!(names, want, "the picker lists what the registry ships");
+    for (n, _) in SINKER_POSTS {
+        assert!(camcraft_app::posting::SINKER_POSTS.contains(n), "{n} is a sinker dialect in the registry's own table");
+    }
     for (n, _) in PLASMA_POSTS {
         assert!(camcraft_app::posting::PLASMA_POSTS.contains(n), "{n} is a plasma dialect in the registry's own table");
     }
@@ -374,6 +398,7 @@ const EXTENSIONS: &[(&str, &str)] = &[
     ("fanuc-lathe", "nc"),
     ("tormach-lathe", "nc"),
     ("tormach-plasma", "nc"),
+    ("sinker-iso", "nc"),
 ];
 
 /// The top-level `extension = "..."` manifest line's value.
@@ -388,6 +413,7 @@ fn every_builtin_declares_its_controls_file_extension() {
     let mut stems: Vec<&str> = POSTS.iter().map(|(_, s, _)| *s).collect();
     stems.extend(LATHE_POSTS.iter().map(|(_, s)| *s));
     stems.extend(PLASMA_POSTS.iter().map(|(_, s)| *s));
+    stems.extend(SINKER_POSTS.iter().map(|(_, s)| *s));
     let pinned: Vec<&str> = EXTENSIONS.iter().map(|(s, _)| *s).collect();
     assert_eq!(pinned, stems, "every shipped post has its extension pinned");
     for (stem, want) in EXTENSIONS {

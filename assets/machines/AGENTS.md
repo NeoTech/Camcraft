@@ -55,16 +55,29 @@ unstated capability into existence.
         "awt": true,                                   // wire, automatic threading
         "orbits": [ { "kind": "circular", "word": "..." } ],  // sinker: circular|vector|planetary + the control's word
         "max_orbit_radius": 2.0,                       // sinker, length unit
-        "pickup": "..."                                // sinker, the holder system's name
+        "pickup": "...",                               // sinker, the holder system's name
+        "codes": { "condition": "...{id}...", ... }   // the control's EDM words (#542)
       }
+
+  `edm.codes` (#542, #290 D5) holds the control's EDM words as
+  templates, role -> text, filled by the post: a sinker's `metric` /
+  `inch` (the unit word), `pickup` (`{tool}`), `reference`
+  (`{offset}`, the electrode's pickup offset), `condition` (`{id}`),
+  `depth` (the servo burn, `{z}` and optionally `{f}`) and `end`; an
+  orbit's word (`edm.orbits[].word`) may hold `{radius}`. Each value is
+  a non-empty string or the file is refused; a code the post needs and
+  the file does not state refuses the post by name. No vendor codes
+  ship - fill them from the control's manual.
 
   Every key is optional and absent means NOT STATED (an op that needs
   it refuses by name). A garbled value refuses the file. No vendor
   values are shipped. No EDM machine is in the built-in library yet:
-  every library machine must have a post (`machine_library`), so the
-  empty wire / sinker templates join it with their kind's first post
-  (#533 / #542). Until then they are test fixtures
-  (`crates/app/tests/edm/`).
+  every library machine must have a post (`machine_library`). The
+  sinker's first post shipped with #542 (`sinker-iso.cps`); the empty
+  sinker template joining the library is #1135, and the wire
+  template waits for #533. Until then they are test fixtures
+  (`crates/app/tests/edm/`, with `sinker-iso-dialect.mch` the synthetic
+  codes the sinker post's goldens are posted against).
 
 - `plasma` (#669) is DECLARED only, never inferred (its X/Y/Z reads as
   a mill), and the word carries rules both doors refuse BY NAME

@@ -55,7 +55,9 @@ const ROUGH: Option<Smoothing> = Some(Smoothing { tol_mm: 0.1, finish: false });
 
 #[test]
 fn off_is_byte_identical_and_writes_no_smoothing_word() {
-    for (name, _) in BUILTINS.iter().filter(|(n, _)| *n != "Fanuc Lathe") {
+    // #542: a sinker post serves sinker EDMs only (no smoothing words).
+    let sinker = camcraft_app::posting::SINKER_POSTS;
+    for (name, _) in BUILTINS.iter().filter(|(n, _)| *n != "Fanuc Lathe" && !sinker.contains(n)) {
         let off = program(name, None);
         for w in ["G5.1", "G187", "CYCLE832", "G62 ", "SMOOTHING"] {
             assert!(!off.contains(w), "{name} wrote {w} with smoothing off:\n{off}");

@@ -7,7 +7,8 @@
 //! axes. Every number is optional by the unstated-limits law - absent is
 //! "not stated", never zero - and the condition table, codes and
 //! generator codes are separate sub-issues (#533, #542); the condition
-//! table (#531) holds only the geometry a toolpath needs.
+//! table (#531) holds only the geometry a toolpath needs, and the
+//! control's words live in `edm.codes` (#542, `edm_codes`).
 //!
 //! Provenance: the umbrella's design notes (#290, D1-D10) over public
 //! EDM terminology (machine builders' published tutorials and the
@@ -114,6 +115,11 @@ pub struct Edm {
     /// stated, and every EDM op refuses by name.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub conditions: Vec<Condition>,
+    /// The control's EDM words by role (#542, #290 D5): templates a
+    /// post fills (`super::edm_codes`). Empty = none stated, and a post
+    /// needing one refuses by name.
+    #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub codes: std::collections::BTreeMap<String, String>,
 }
 
 impl Edm {
@@ -135,6 +141,7 @@ impl Edm {
             && self.orbits.iter().all(|o| ORBIT_KINDS.contains(&o.kind.as_str()) && !o.word.trim().is_empty())
             && self.conditions.iter().all(condition_ok)
             && unique_ids(&self.conditions)
+            && super::edm_codes::codes_sane(&self.codes)
     }
 
     /// The condition `id` with every field in `need` stated, or the
@@ -267,6 +274,7 @@ pub(super) fn parse_edm(v: Option<&serde_json::Value>, f: f64) -> Result<Option<
         Some(x) => return Err(format!("machine file: edm.orbits must be a list, not {x}")),
     }
     e.conditions = parse_conditions(v.get("conditions"), f)?;
+    e.codes = super::edm_codes::parse_codes(v.get("codes"))?;
     Ok(Some(e))
 }
 

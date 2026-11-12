@@ -182,6 +182,8 @@ pub fn mirror(m: &crate::machine::Machine) -> Value {
     {
         o.insert("kind".to_owned(), json!("plasma"));
     }
+    // #542: a wire or sinker EDM states its kind and its `edm` section.
+    super::machine_edm::mirror_edm(m, &mut out);
     let inverted = m.inverted_axes();
     if !inverted.is_empty()
         && let Some(o) = out.as_object_mut()
@@ -357,6 +359,8 @@ pub fn script_props(m: &Value) -> Value {
         // that translates them writes ([] for every standard machine). A
         // statement the reader refuses was refused before the script ran.
         "invertedAxes": super::invert::stated(m).map(|(_, l)| l).unwrap_or_default(),
+        // #542: the EDM section (codes, orbits, pickup, conditions), or null.
+        "edm": super::machine_edm::edm_prop(m),
     })
 }
 

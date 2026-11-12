@@ -9,7 +9,9 @@
 //! Gate map (#541): covers app::operation (sinker_op, kinds, params,
 //! stamp), app::commands::operation (family gate), app::stock_sim
 //! (plan_program, carry walk), app::project (sinker DTO), motion::sinker,
-//! sim::stock_sim (dexel_box), tools::electrode.
+//! sim::stock_sim (dexel_box), tools::electrode, and (#542) app::posting
+//! (SINKER_POSTS, post_serves, the sinker stream PARAMs) with the
+//! generic sinker post over the synthetic fixture dialect.
 //! Provenance: our own SYNTHETIC fixtures - the sinker template of #530
 //! with an invented condition (no machine's manual), and a hand-built
 //! block with a rectangular cavity. Not exercised on a real EDM control.
@@ -99,12 +101,17 @@ fn burn(datum: SinkerDatum, depth: f64, floor: f64) -> OpParams {
 /// electrode plus the gap), a matching block of stock, the sinker
 /// machine, the electrode.
 fn sinker_doc(cavity_depth: f64) -> (World, History) {
+    sinker_doc_on(&sinker_machine(), cavity_depth)
+}
+
+/// [`sinker_doc`] on a given machine file's text.
+fn sinker_doc_on(mch: &str, cavity_depth: f64) -> (World, History) {
     let world = new_world();
     let mut h = History::default();
     h.execute(&world, ImportModel::from_mesh("part", block_with_cavity(5.0 + GAP, 3.0 + GAP, cavity_depth)));
     let stock = SetStock::new(&world, StockShape::Box { dx: 60.0, dy: 60.0, dz: 20.0 }, Default::default());
     h.execute(&world, stock.expect("stock"));
-    let m = parse_mch(&sinker_machine()).expect("sinker parses");
+    let m = parse_mch(mch).expect("sinker parses");
     h.execute(&world, LoadMachine::new(&world, "sinker.mch".into(), Some(m)).expect("mount"));
     h.execute(&world, AddTool::new(&world, ELECTRODE, electrode()).expect("an electrode is a tool"));
     (world, h)
@@ -282,4 +289,68 @@ fn the_sinker_burn_is_driven_over_mcp_with_the_gui_commands() {
     assert!(text.contains("past the cavity floor datum"), "{text}");
     call(&mut s, &mut id, "undo", json!({}));
     call(&mut s, &mut id, "generate", json!({ "name": "Burn1" }));
+}
+
+// ---------------------------------------------------------------- #542
+// The generic ISO-style sinker post through the real op: every EDM code
+// from the synthetic fixture dialect's `edm.codes` (#290 D5). Not
+// exercised on a real EDM control.
+
+const DIALECT: &str = include_str!("edm/sinker-iso-dialect.mch");
+const SINKER_POST: &str = "Sinker EDM (ISO)";
+
+/// The burn of `a_rectangular_electrode_burns_its_cavity_to_the_stated_depth`
+/// on the fixture dialect, posted with `post`: the program, or the refusal.
+fn post_burn(mch: &str, post: &str) -> Result<String, String> {
+    use camcraft_app::commands::SelectPost;
+    use camcraft_app::schema::PostRef;
+    let (world, mut h) = sinker_doc_on(mch, 6.0);
+    h.execute(&world, CreateOperation::new(&world, "Burn1", ELECTRODE, SrcRef::Stock, burn(SinkerDatum::WorkTop, 6.0, 14.0)).expect("create"));
+    h.execute(&world, GenerateOperation::new(&world, "Burn1").expect("generates"));
+    h.execute(&world, SelectPost::new(&world, PostRef::Named(post.into())).expect("a registry post"));
+    let out = std::env::temp_dir().join(format!("camcraft-542-{}-{post}.nc", std::process::id()));
+    let posted = camcraft_app::posting::post_setup(&world, &out);
+    let _ = std::fs::remove_file(&out);
+    posted.map(|p| p.program)
+}
+
+#[test]
+fn the_sinker_burn_posts_through_the_generic_sinker_post_to_its_golden() {
+    let program = post_burn(DIALECT, SINKER_POST).expect("the sinker post writes the burn");
+    let rel = "tests/golden/nc/sinker-iso/sinker_burn_program.nc";
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(rel);
+    if std::env::var_os("WRITE_GOLDEN").is_some() {
+        std::fs::write(&path, &program).expect("write golden");
+    }
+    assert_eq!(program, std::fs::read_to_string(&path).expect("golden"), "the sinker program moved a byte");
+    // The condition the op names and the electrode's 15 mm pickup offset
+    // ride the stream; the tip stops one gap above the 14 mm floor.
+    for line in ["ES1", "M100 H15.", "M101 Z14.05"] {
+        assert!(program.lines().any(|l| l == line), "{line} in\n{program}");
+    }
+}
+
+#[test]
+fn a_missing_sinker_code_refuses_the_post_by_name() {
+    let mut v: serde_json::Value = serde_json::from_str(DIALECT).expect("fixture");
+    v["edm"]["codes"].as_object_mut().expect("codes").remove("condition");
+    let err = post_burn(&v.to_string(), SINKER_POST).expect_err("no condition code, no program");
+    assert!(err.contains("states no edm.codes.condition"), "{err}");
+}
+
+#[test]
+fn a_mill_post_on_a_sinker_machine_is_still_refused() {
+    use camcraft_app::machine::Kind;
+    use camcraft_app::posting;
+    for post in ["Fanuc", "Haas", "Tormach PathPilot Plasma"] {
+        let err = post_burn(DIALECT, post).expect_err("a non-EDM post on a sinker");
+        assert!(err.contains("sinker EDM machine") && err.contains("does not declare"), "{post}: {err}");
+        assert!(!posting::post_serves(post, Kind::SinkerEdm), "{post}");
+    }
+    assert_eq!(posting::SINKER_POSTS, &[SINKER_POST]);
+    assert!(posting::post_serves(SINKER_POST, Kind::SinkerEdm));
+    for k in [Kind::Mill, Kind::Lathe, Kind::MillTurn, Kind::Plasma, Kind::WireEdm] {
+        assert!(!posting::post_serves(SINKER_POST, k), "{k:?}");
+    }
+    assert_eq!(posting::default_post_for(Kind::SinkerEdm), camcraft_app::schema::PostRef::Named(SINKER_POST.into()));
 }

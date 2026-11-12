@@ -44,6 +44,9 @@ pub const BUILTINS: &[(&str, &str)] = &[
     // #671: the plasma dialect, from UM10720 §6-7 and the PathPilot
     // post guidelines; it serves plasma tables only (`PLASMA_POSTS`).
     ("Tormach PathPilot Plasma", include_str!("../../../assets/posts/tormach-plasma.cps")),
+    // #542: the generic ISO-style sinker post; every EDM code is the
+    // machine's `edm.codes` (#290 D5). It serves sinker EDMs only.
+    ("Sinker EDM (ISO)", include_str!("../../../assets/posts/sinker-iso.cps")),
 ];
 
 /// The registry entries that speak TURNING (M13.5): X as a diameter
@@ -58,6 +61,12 @@ pub const LATHE_POSTS: &[&str] = &["Fanuc Lathe", "Tormach PathPilot Lathe"];
 /// serves one (a torch has no spindle for their S/M3).
 pub const PLASMA_POSTS: &[&str] = &["Tormach PathPilot Plasma"];
 
+/// The registry entries that speak SINKER EDM (#542): each declares
+/// `serves = "sinker_edm"`, and the engine posts it for a sinker only
+/// (and posts nothing else for one). No milling, turning or plasma
+/// dialect serves an EDM.
+pub const SINKER_POSTS: &[&str] = &["Sinker EDM (ISO)"];
+
 /// Whether a registry entry can post programs for a machine of this
 /// kind: a lathe post serves lathes and mill-turns, a mill post serves
 /// mills and mill-turns. A mismatched choice is not refused here (a
@@ -68,15 +77,18 @@ pub fn post_serves(name: &str, kind: crate::machine::Kind) -> bool {
     use crate::machine::Kind;
     let lathe_post = LATHE_POSTS.contains(&name);
     let plasma_post = PLASMA_POSTS.contains(&name);
+    let sinker_post = SINKER_POSTS.contains(&name);
     match kind {
-        Kind::Mill => !lathe_post && !plasma_post,
+        Kind::Mill => !lathe_post && !plasma_post && !sinker_post,
         Kind::Lathe => lathe_post,
-        Kind::MillTurn => !plasma_post,
+        Kind::MillTurn => !plasma_post && !sinker_post,
         // #669: a cutting post would write spindle words a torch has not.
         Kind::Plasma => plasma_post,
-        // #530: no EDM post ships yet (#533, #542); no milling or
-        // turning dialect speaks to an EDM control.
-        Kind::WireEdm | Kind::SinkerEdm => false,
+        // #542: the sinker posts serve sinkers; no wire post ships yet
+        // (#533), and no milling or turning dialect speaks to an EDM
+        // control (the engine's serves law refuses it at post too).
+        Kind::SinkerEdm => sinker_post,
+        Kind::WireEdm => false,
     }
 }
 
@@ -93,6 +105,10 @@ pub fn default_post_for(kind: crate::machine::Kind) -> PostRef {
             .map_or(PostRef::Builtin, |n| PostRef::Named((*n).to_owned())),
         // #669/#671: the first plasma post (PathPilot's, for the 1300PL).
         crate::machine::Kind::Plasma => PLASMA_POSTS
+            .first()
+            .map_or(PostRef::Builtin, |n| PostRef::Named((*n).to_owned())),
+        // #542: the generic sinker post.
+        crate::machine::Kind::SinkerEdm => SINKER_POSTS
             .first()
             .map_or(PostRef::Builtin, |n| PostRef::Named((*n).to_owned())),
         _ => PostRef::Builtin,
@@ -129,6 +145,8 @@ pub fn post_offer(world: &World) -> Option<(&'static str, PostRef)> {
         "lathe"
     } else if PLASMA_POSTS.contains(&name) {
         "plasma"
+    } else if SINKER_POSTS.contains(&name) {
+        "sinker EDM"
     } else {
         "mill"
     };
@@ -392,6 +410,8 @@ mod wcs_rotation;
 mod wcs_slot;
 #[path = "posting_mounts.rs"]
 mod mounts;
+#[path = "posting_edm.rs"]
+mod edm_params;
 #[path = "posting_nose.rs"]
 pub mod nose;
 #[path = "posting_index_swing.rs"]
@@ -949,7 +969,10 @@ pub fn op_streams(world: &World) -> Result<Vec<(String, Vec<cnc::Record>)>, Stri
                 .map(|w| format!("{name}: {w}"))
                 .collect(),
         };
-        streams.push((name.clone(), post::dump(&posted, &d)));
+        let mut records = post::dump(&posted, &d);
+        // #542: a sinker burn's condition and pickup ride the section.
+        edm_params::insert(&op.params, &tool, &mut records);
+        streams.push((name.clone(), records));
     }
     Ok(streams)
 }

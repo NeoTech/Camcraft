@@ -19,8 +19,12 @@ the property table there is the vocabulary, this file is the grammar.
 
 Manifest: top-level assignments only — `description`, `vendor`, `legal`,
 `certificationLevel`, `minimumRevision`, `extension`, `setCodePage`,
-`capabilities`, `coolantModes`, `liveTooling`, `afterModes`, `axisInversion`, `probeAxisInversion`, `threadHands`. All but the last six are
-text the engine reads none of; `threadHands = true` (#629) says the script
+`capabilities`, `coolantModes`, `liveTooling`, `afterModes`, `axisInversion`, `probeAxisInversion`, `threadHands`, `serves`. All but the last seven are
+text the engine reads none of; `serves = "sinker_edm"` (#542; comma
+separated kind words) says which machine kinds the script posts for -
+the engine refuses it by name on any other machine, and refuses on a
+wire or sinker EDM every script that does not declare that kind (a
+milling, turning or plasma dialect never speaks to an EDM control); `threadHands = true` (#629) says the script
 reads `PARAM SpindleDirection` and states a thread's hand (M04 when the
 helix needs the spindle reversed) - without it the engine refuses a
 reverse-spindle thread section by name (fanuc-lathe.cps and tormach-lathe.cps set it); `liveTooling = true` (issue #33) says the
@@ -164,6 +168,23 @@ no `PLASMA` header, any rpm, coolant, rotary, cycle or Z cutting move,
 and any machine not declared `kind: plasma` (`machine.kind`). Its
 goldens ride under `nc/tormach-plasma/` (`plasma_post.rs`), not the
 milling matrix.
+
+## The sinker post
+
+`sinker-iso.cps` (#542, "Sinker EDM (ISO)") is the one
+`posting::SINKER_POSTS` entry, `serves = "sinker_edm"`. It writes the
+RS-274 words itself (G0, G90, the work offset, `( )` comments) and
+EVERY EDM code from the machine's `edm.codes` / `edm.orbits` (#290 D5;
+the roles are in `assets/machines/AGENTS.md`): a code it needs and the
+machine does not state is a `message()` refusal naming the role, and a
+template naming a placeholder it does not fill is refused the same
+way. A burn is a rapid approach, one feed straight down Z (the
+`depth` code) and a rapid retract; a feed with X/Y travel, a feed up,
+an arc, a cycle, compensation, an rpm or a coolant ask is refused by
+name. Its goldens ride under `nc/sinker-iso/`, posted against the
+synthetic fixture dialect (`crates/post/tests/sinker_post.rs` from the
+recorded CL, `crates/app/tests/sinker_burn.rs` through the real op).
+Not exercised on a real EDM control.
 
 ## Adding a post to the app
 

@@ -119,6 +119,7 @@ behavior only):
 | `ChainBottomZ` | optional-valued engine property: lowest Z among subsequent non-rapid cycle-chain moves, mm; `null` when no cutting move follows; a native-cycle post validates its bottom against this value when present |
 | `LinearMovementIncludeOpts` | `{L:[1]}` on plunges (the skip-the-rapid convention) |
 | `PlasmaKerf` `PlasmaCompensation` `PierceHeight` `CutHeight` `PierceDelay` `PlasmaFeed` `PlasmaReversed` | the `PLASMA` header (#671), for the section: kerf mm; `control` (G41/G42 spans follow) / `computer`; pierce and cut height mm and pierce delay s - each ABSENT when unstated (the controller's AutoFS decides); `auto` (the lit moves carry no feed) / `stated`; the reversed cut direction. Cleared at `ENDSECTION` |
+| `EdmCondition` `ElectrodePickup` `EdmOrbit` `EdmOrbitRadius` | a sinker burn (#542), before its section: the machine condition id the op names (absent when it names none), the electrode's pickup offset mm (the tool's `shank_len`), and - once an orbit is generated (#544) - the orbit geometry (`circular` / `vector` / `planetary`) and its radius mm. The sinker post writes them through the machine's `edm.codes` / `edm.orbits` (#290 D5); every other script ignores them |
 | `Contour` `ContourRole` `ParentContour` `SmallHole` | a `TORCH` record (#671): the contour id; on `onTorchOn` also `outer` / `inner` / `open`, the enclosing contour's id (absent = none) and the small-hole feed factor (absent = not small) |
 
 ## The hook contract

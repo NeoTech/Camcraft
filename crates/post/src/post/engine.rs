@@ -99,7 +99,11 @@ pub fn run_numbered_with(
     // #374: an inverted machine axis - the one place the stream is
     // mirrored into the controller's frame, or refused by name.
     let records = super::invert::apply(records, mch, &s)?;
-    s.set_machine(&machine::script_props(mch))?;
+    let props = machine::script_props(mch);
+    // #542: the serves law - an EDM machine takes only a post declaring
+    // its kind, and a post declaring kinds posts for those only.
+    super::machine_edm::serves_gate(s.string_global("serves")?.as_deref(), &props)?;
+    s.set_machine(&props)?;
     s.set_program_number(program)?;
     if options.is_object() {
         s.set_options(options)?;
