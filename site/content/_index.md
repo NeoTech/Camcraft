@@ -16,7 +16,3 @@ safe, it refuses to write it and says why.
 > **Pre-1.0 software.** CamCraft changes quickly. Treat every posted program
 > as a first draft: check it in your machine's own simulation and dry-run it
 > with the spindle off and Z raised before cutting material.
-
-Multi-axis work (indexed 3+1 and 3+2, continuous 4-axis, simultaneous 5-axis,
-TCP and the checks) has its own section:
-[4-axis and 5-axis machining](@/guide/multi-axis/_index.md).
