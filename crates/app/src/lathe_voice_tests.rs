@@ -272,3 +272,53 @@ fn the_door_refuses_on_every_turning_dialect_and_passes_every_milling_one() {
     // A script that does not load is a refusal, never a pass.
     assert!(at_post(&world, ["face"], "capabilities = ;").is_err_and(|w| w.starts_with("post engine:")));
 }
+
+/// A user's own turning script that states no `capabilities` (#1199):
+/// a minimal stand-in for one, so the door's reading of the manifest is
+/// all that is under test.
+const UNDECLARED: &str = "function onSection() { writeln(\"G97 S\" + properties.spindle_speed + \" M03\"); }";
+
+fn mount(world: &World, kind: &str) {
+    let machine = crate::machine::def::Machine { kind: Some(kind.into()), ..Default::default() };
+    crate::machine::set(world, "m.mch", Some(&machine));
+}
+
+/// An undeclared script is never read as a mill post where a work
+/// spindle could turn: on a lathe or a mill-turn it is held to the door
+/// and its refusal names the missing manifest line; on a mill (no work
+/// spindle) it passes as before; a declared mask is read as stated.
+#[test]
+fn an_undeclared_script_is_held_to_the_door_on_a_machine_with_a_work_spindle() {
+    let world = crate::world::new_world();
+    op_entity(&world, "face", OpType::Face, meridian());
+    op_entity(&world, "turn", OpType::Facing, meridian());
+    op_entity(&world, "on-centre", OpType::Drill, hole(0.0, 0.0));
+    op_entity(&world, "off-centre", OpType::Drill, hole(10.0, 0.0));
+    op_entity(&world, "live", OpType::RotaryContour, stating_c(meridian()));
+    for script in [UNDECLARED, "capabilities = \"2\"; function onSection() {}", "capabilities = -1;"] {
+        assert_eq!(crate::post::dialect::declared_turning(script).ok(), Some(None), "{script}");
+        for (kind, label) in [("lathe", "turning"), ("mill-turn", "mill-turning")] {
+            mount(&world, kind);
+            for refused in ["face", "off-centre"] {
+                let why = at_post(&world, [refused], script).expect_err("held to the lathe door");
+                assert!(why.starts_with(&format!("{refused}: a ")), "{kind}: {why}");
+                assert!(why.contains("work spindle"), "{kind}: says what would turn: {why}");
+                assert!(why.contains("no `capabilities` line"), "{kind}: names the missing manifest: {why}");
+                assert!(why.contains(&format!("this setup's {label} machine")), "{kind}: names the machine: {why}");
+                assert!(why.contains("`capabilities = 1;`"), "{kind}: says how to declare a mill post: {why}");
+            }
+            assert_eq!(at_post(&world, ["turn", "on-centre", "live"], script), Ok(()), "{kind}: what a lathe runs");
+            // A declared mask is read as stated, on the same machine.
+            assert_eq!(at_post(&world, ["face"], "capabilities = 1;"), Ok(()), "{kind}: a declared mill post");
+            let lathe = at_post(&world, ["face"], "capabilities = 2;").expect_err("a declared lathe post");
+            assert!(!lathe.contains("capabilities"), "{kind}: a declared script is not told to declare: {lathe}");
+        }
+        // A mill has no work spindle: an undeclared script passes there.
+        mount(&world, "mill");
+        assert_eq!(at_post(&world, ["face", "off-centre"], script), Ok(()), "mill: {script}");
+    }
+    // No machine loaded reads as a mill, as every other law reads it.
+    let bare = crate::world::new_world();
+    op_entity(&bare, "face", OpType::Face, meridian());
+    assert_eq!(at_post(&bare, ["face"], UNDECLARED), Ok(()));
+}
