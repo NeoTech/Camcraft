@@ -453,6 +453,9 @@ fn post_script_body(world: &World, out_path: &Path, cps: &str) -> Result<Posted,
     // #388: the program's one machine (a program over several refuses).
     let machine = mounts::single(world, false)?.machine;
     let streams = op_streams(world)?;
+    // No EDM dialect ships yet (#533, #542): an EDM program is refused
+    // here by name, before any file is written.
+    crate::posting_family::edm_at_post(world, streams.iter().map(|(n, _)| n.as_str()))?;
     // #1190: a turning dialect opens only what a lathe may run.
     crate::lathe_voice::at_post(world, streams.iter().map(|(n, _)| n.as_str()), cps)?;
     let records = join_streams(streams);

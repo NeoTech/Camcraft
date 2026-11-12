@@ -168,6 +168,7 @@ icon_table! {
     ToolChamferMill => "tool-chamfer-mill", "icon-tool-chamfer-mill";
     ToolProbe => "tool-probe", "icon-tool-probe";
     ToolTorch => "tool-torch", "icon-tool-torch";
+    ToolElectrode => "tool-electrode", "icon-tool-electrode";
 }
 
 /// Upload edge: 2x the token's `glyph_px` (20 display px at the dark
