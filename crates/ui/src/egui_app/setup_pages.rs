@@ -19,7 +19,7 @@ use egui::{RichText, Ui};
 
 use camcraft_app::{model, setup, setup_mount, tool_numbers};
 
-use crate::state::{CommandKind, SetupPage, State};
+use crate::state::{CommandKind, SetupPage, State, UiTarget};
 
 use super::pages;
 use super::panes::kind_name;
@@ -143,6 +143,7 @@ pub(crate) const ACTIVE_SETUP_LABEL: &str = "Active setup - new operations go in
 fn settings(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
     let Some(name) = ctx else {
         ui.label("No setups in this document: the one stock and the one WCS act as the first setup.");
+        hint(ui, "Its fixtures are under Fixtures in the browser, not on this page.");
         if ui.button("Create first setup").clicked() {
             state.pending.push_back(CommandKind::CreateSetup { name: None, datum_from: None });
         }
@@ -170,9 +171,16 @@ fn settings(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
     super::setup_wcs_pick::picker(ui, state, name);
     super::setup_workholding_row::row(ui, state, name);
     ui.separator();
-    if ui.button(format!("Delete {name}")).clicked() {
-        state.pending.push_back(CommandKind::DeleteSetup(name.to_owned()));
-    }
+    // Workholding is edited on the Fixtures page only (#1197): the one
+    // click to it sits on the Delete line, so the page gains no row.
+    ui.horizontal(|ui| {
+        if ui.button(format!("Delete {name}")).clicked() {
+            state.pending.push_back(CommandKind::DeleteSetup(name.to_owned()));
+        }
+        if ui.button(format!("Open {name} fixtures")).clicked() {
+            crate::actions::target(state, UiTarget::SetupNode(name.to_owned(), SetupPage::Fixtures));
+        }
+    });
 }
 
 /// The tools this setup's operations use, in program order: number,

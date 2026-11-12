@@ -1,7 +1,8 @@
 //! #1104: the Setups page lists setups only (rows with Delete, New setup,
 //! Export setup sheets) - a setup's alignment, work offset, workholding
-//! and tool list live on its own Setup<n> pages, and a document with no
-//! setups keeps its implicit-context sections.
+//! and tool list live on its own Setup<n> pages.
+//! #1197: workholding is under Fixtures in every state - never on the
+//! Setups page, with or without setups.
 //! Provenance: our own tests over our own shell; no HSMWorks material.
 //!
 //! Gate map (M4.4): covers ui::egui_app::pages (setups_page).
@@ -83,14 +84,51 @@ fn the_setups_page_lists_setups_only_and_each_setup_page_keeps_its_settings() {
     }
 }
 
+/// #1197: workholding is edited under Fixtures in every state. With no
+/// setups the Setups page keeps only "Create first setup", the pointer to
+/// Fixtures and Tool list, and the export row - the implicit first setup's
+/// Fixtures page holds the workholding.
 #[test]
-fn a_document_without_setups_keeps_its_implicit_sections_on_the_setups_page() {
+fn a_document_without_setups_keeps_workholding_under_fixtures_only() {
     let mut h = Harness::builder()
         .with_size(Vec2::new(1280.0, 720.0))
         .build_ui_state(frame, ShellUi::blank());
     open(&mut h, UiTarget::Setups);
     h.get_by_label("Create first setup");
-    assert!(shows(&h, "orkholding"), "the implicit workholding stays");
-    assert!(shows(&h, "Tool list"), "the implicit tool list stays");
+    for text in ["orkholding", "Tool list", "Add built-in vise", "Add fixture plate"] {
+        assert!(!shows(&h, text), "{text:?} is not on the Setups page with no setups");
+    }
     h.get_by_label_contains("Export setup sheets");
+    open(&mut h, UiTarget::SetupNode(String::new(), SetupPage::Fixtures));
+    assert!(shows(&h, "Fixtures - Setup"), "the implicit Fixtures page is open");
+    assert!(shows(&h, "orkholding"), "the implicit Fixtures page holds the workholding");
+    open(&mut h, UiTarget::SetupNode(String::new(), SetupPage::Tools));
+    assert!(shows(&h, "Tool list"), "the implicit tool list is on its Tool list page");
+}
+
+/// #1197: with one setup the Setups page still shows no workholding, and
+/// the setup's Settings page points to its Fixtures page with one click,
+/// which holds the workholding.
+#[test]
+fn one_setup_keeps_workholding_under_its_fixtures_page() {
+    let mut h = Harness::builder()
+        .with_size(Vec2::new(1280.0, 720.0))
+        .build_ui_state(frame, ShellUi::blank());
+    h.state_mut().state.pending.push_back(CommandKind::CreateSetup { name: None, datum_from: None });
+    h.state_mut().state.pending.push_back(CommandKind::ActivateSetup(Some("Setup1".into())));
+    h.state_mut().state.drain_actions();
+    open(&mut h, UiTarget::Setups);
+    for text in ["orkholding", "Tool list", "Add built-in vise"] {
+        assert!(!shows(&h, text), "{text:?} is not on the Setups page with one setup");
+    }
+    open(&mut h, UiTarget::SetupNode("Setup1".into(), SetupPage::Settings));
+    h.get_by_label("Open Setup1 fixtures");
+    // The button sits below the fold of the default pane, so the harness
+    // cannot click it; it is the same `actions::target` call "Open page"
+    // makes, and the Fixtures page it opens is pinned here.
+    h.get_by_label("Open Setup1 fixtures");
+    crate::actions::target(&mut h.state_mut().state, UiTarget::SetupNode("Setup1".into(), SetupPage::Fixtures));
+    h.run_steps(3);
+    assert!(shows(&h, "Fixtures - Setup1"), "the Fixtures page of Setup1 is open");
+    assert!(shows(&h, "orkholding"), "Setup1's Fixtures page holds the workholding");
 }
