@@ -23,7 +23,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 /// The recorded cases every post suite runs, in file-stem form.
-pub const CASES: [&str; 10] = [
+pub const CASES: [&str; 11] = [
     "arcs",
     "full_circle",
     "full_circle_raw",
@@ -34,6 +34,7 @@ pub const CASES: [&str; 10] = [
     "empty_section",
     "extreme_coords",
     "css_then_live",
+    "live_then_stop",
 ];
 
 /// Post bugs these suites found, by (script, case, issue): wrong output
@@ -56,7 +57,7 @@ pub fn known_bug(script: &str, case: &str) -> Option<u32> {
 /// live-tool words (`recorded/machines/millturn-live.mch`, the shipped
 /// millturn.mch plus test-bench placeholder words M1001-M1004 - no
 /// builder's codes, which is why it is a test fixture and not a shipped
-/// machine). Every other case posts machine-less, as the binary does with
+/// machine); `live_then_stop` (#1188) the same mill-turn. Every other case posts machine-less, as the binary does with
 /// no `--machine`. The file is handed to the binary in the grammar the
 /// app hands the engine (`post::machine::mirror` of the parsed vendor
 /// file): the binary's `--machine` door reads only that static grammar,
@@ -64,7 +65,7 @@ pub fn known_bug(script: &str, case: &str) -> Option<u32> {
 pub fn machine_of(case: &str) -> Option<PathBuf> {
     match case {
         "rotary" => Some(repo().join("assets/machines/tilthead.mch")),
-        "css_then_live" => Some(here().join("machines/millturn-live.mch")),
+        "css_then_live" | "live_then_stop" => Some(here().join("machines/millturn-live.mch")),
         _ => None,
     }
 }
@@ -203,6 +204,10 @@ macro_rules! post_suite {
         #[test]
         fn css_then_live() {
             recorded::check($script, "css_then_live");
+        }
+        #[test]
+        fn live_then_stop() {
+            recorded::check($script, "live_then_stop");
         }
     };
 }

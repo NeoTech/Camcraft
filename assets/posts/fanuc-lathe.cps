@@ -459,6 +459,9 @@ function endPreamble() {
   sCss = 0;                  // and its own spindle mode: no stale G96 (#772)
   sMax = 0;                  // and its own clamp (#891)
   if (liveAsk) {
+    // The live tool and the C axis are released before the op's stop or
+    // trip home (#1188): the operator never meets a driven tool still
+    // turning, and the home move never drags an engaged C.
     if (liveOk) {
       block([liveCodes.spindleOff]);
       block([liveCodes.cAxisOff]);
@@ -466,13 +469,13 @@ function endPreamble() {
     }
     liveAsk = false; liveOk = false; liveCodes = null; lastC = null;
     spindleWait = false;
-    return;
+  } else {
+    block(["M05"]);
+    if (cssOn) block(["G97"]); // #1173: no section opens under a G96 it did not state
+    cssOn = false;
+    spinRev = false;           // the next section states its own
   }
-  block(["M05"]);
-  if (cssOn) block(["G97"]); // #1173: no section opens under a G96 it did not state
-  cssOn = false;
-  spinRev = false;           // the next section states its own
-  afterOp();
+  afterOp();                 // #1188: every section ends with its own ask, live or not
 }
 
 // --------------------------------------------- C-axis live tooling (#33)
