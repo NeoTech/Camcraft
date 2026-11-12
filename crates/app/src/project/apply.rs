@@ -831,6 +831,8 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
                     relative_to: sdto.relative_to.clone(),
                     stock_source,
                     post_options,
+                    // #821: absent in every earlier file - states none.
+                    nose_to_axis: sdto.nose_to_axis,
                     workholding_max_rpm: sdto.workholding_max_rpm,
                 });
             }

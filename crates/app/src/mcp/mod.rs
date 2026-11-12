@@ -30,6 +30,7 @@ mod listen;
 mod live;
 mod model_tools;
 // #45: an operation's display name and its place in its setup.
+mod machine_tools;
 mod order_tools;
 mod pick;
 mod pockets;
@@ -40,6 +41,7 @@ mod vise_tools;
 mod accessory_tools;
 mod plate_tools;
 mod modvise_tools;
+mod rotary_tools;
 mod workholding_tools;
 
 // #183: the same tool table served live from inside the GUI, over a

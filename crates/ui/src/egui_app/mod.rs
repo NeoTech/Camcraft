@@ -92,6 +92,7 @@ mod setup_wcs_pick;
 // #343: a setup's own node pages (settings, machine, post, fixtures, tools).
 mod setup_pages;
 mod setup_post_page;
+mod setup_rotary_page;
 // #509: one fixture's row on the Fixtures page, sized to the pane.
 mod fixture_rows;
 // #561: the locate-in-fixture mate tools (Fixtures page and Model page).
@@ -114,6 +115,10 @@ mod setup_workholding_row;
 // params dispatcher and its kind-family pages, the shared widgets.
 mod fields;
 mod geo_page;
+#[cfg(test)]
+pub(crate) use boundary::hints as boundary_hints;
+#[cfg(test)]
+pub(crate) use geo_page::{click_selects_hint, edge_hint};
 mod heights_page;
 mod holes_page;
 mod pockets_page;
@@ -122,6 +127,7 @@ pub(crate) use pockets_page::row_text as pockets_row_text;
 mod probe_page;
 // #670: the Plasma Profile's page.
 mod plasma_page;
+mod wire_page;
 mod trochoid_page;
 mod kind_editors;
 mod mill2d_more_page;
@@ -179,6 +185,8 @@ pub mod theme_files;
 // digest straight (the imgui panels' fold checks moved there at M-g), and
 // the view cube's pick law straight.
 pub(crate) mod viewcube;
+pub(crate) mod viewport_bar;
+pub(crate) mod viewport_layout;
 pub(crate) mod world;
 
 #[cfg(test)]
@@ -193,6 +201,8 @@ mod fixture_ux_tests;
 mod locate_tests;
 #[cfg(test)]
 mod fixture_library_tests;
+#[cfg(test)]
+mod escape_tests;
 #[cfg(test)]
 mod fixture_vise_tests;
 #[cfg(test)]

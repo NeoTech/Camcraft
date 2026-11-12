@@ -57,6 +57,7 @@ pub mod lathe_voice;
 // #155: standalone Pause / Home entries in the operation list.
 pub mod program_entry;
 pub use camcraft_motion::plasma;
+pub use camcraft_motion::wire_edm;
 pub use camcraft_motion::probing;
 pub mod project;
 // #35: pocket and slot recognition on the model's faces.
@@ -68,6 +69,7 @@ pub mod prefs;
 pub mod recent;
 pub mod rest;
 pub mod ribbon;
+pub mod rotary_stack;
 pub mod schema;
 pub mod script;
 pub mod setup;
