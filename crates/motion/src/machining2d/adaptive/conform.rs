@@ -46,7 +46,7 @@ impl Planner<'_> {
 
     /// A reading on the coarse rim as the planner's rim would read the
     /// same load (the straight-wall law both ways).
-    fn from_coarse(&self, deg: f64) -> f64 {
+    fn coarse_as_planned(&self, deg: f64) -> f64 {
         let d = 2.0 * self.s.r;
         deg_at_rim(load_at_rim(deg, d, self.coarse_rim()), d, self.rim)
     }
@@ -64,7 +64,7 @@ impl Planner<'_> {
         let d = 2.0 * self.s.r;
         let lim = if limit.is_finite() { deg_at_rim(load_at_rim(limit, d, self.rim), d, self.coarse_rim()) } else { f64::INFINITY };
         let (deg, at) = probe.walk_until(rev, (self.s.r, self.coarse_rim(), self.step), lim);
-        let coarse = self.from_coarse(deg);
+        let coarse = self.coarse_as_planned(deg);
         if coarse > fine.0 { (coarse, at) } else { fine }
     }
 
