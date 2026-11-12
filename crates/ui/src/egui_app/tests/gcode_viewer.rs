@@ -90,3 +90,31 @@ fn a_line_wider_than_the_viewer_stays_on_one_row() {
         "and it starts at the same left edge"
     );
 }
+
+#[test]
+fn gcode_words_are_coloured_by_kind_and_the_text_is_untouched() {
+    let harness = viewer();
+    fn job(shape: &egui::Shape, text: &str) -> Option<std::sync::Arc<egui::text::LayoutJob>> {
+        match shape {
+            egui::Shape::Text(t) if t.galley.text() == text => Some(t.galley.job.clone()),
+            egui::Shape::Vec(v) => v.iter().find_map(|s| job(s, text)),
+            _ => None,
+        }
+    }
+    let colours = |i: usize| -> Vec<egui::Color32> {
+        let text = row_label(i);
+        let j = harness
+            .output()
+            .shapes
+            .iter()
+            .find_map(|c| job(&c.shape, &text))
+            .expect("row painted");
+        assert_eq!(j.text, text, "display only: the text is the posted line");
+        let mut v: Vec<_> = j.sections.iter().map(|s| s.format.color).collect();
+        v.sort_by_key(|c| c.to_array());
+        v.dedup();
+        v
+    };
+    assert!(colours(1).len() >= 4, "motion line: gutter, G, axis, number...");
+    assert!(colours(3).len() >= 2, "comment differs from the gutter");
+}
