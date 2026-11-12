@@ -9,6 +9,8 @@ pub mod cli;
 pub mod clock;
 pub mod commands;
 pub mod cutting;
+// #891: turning cutting data - CSS ops, working diameter, the suggestion.
+pub mod cutting_turn;
 pub mod smoothing;
 pub use camcraft_motion::drilling;
 pub mod fixture;

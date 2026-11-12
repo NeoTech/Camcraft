@@ -954,6 +954,9 @@ pub struct ToolUi {
     /// #630: the lathe tool orientation (LinuxCNC 1-9), None = the
     /// kind's default - carried so an Apply never rewrites it.
     pub orientation: Option<u8>,
+    /// #891: the turning cutting data (Vc, f/rev, max rpm), None = not
+    /// stated - carried so an Apply never drops it.
+    pub turning: Option<camcraft_app::tools::TurningData>,
 }
 
 impl Default for ToolUi {
@@ -1005,6 +1008,7 @@ impl ToolUi {
             flutes: t.flutes,
             center_cutting: t.center_cutting,
             orientation: t.orientation,
+            turning: t.turning,
         }
     }
 
@@ -1055,6 +1059,7 @@ impl ToolUi {
             flutes: self.flutes,
             center_cutting: self.center_cutting,
             orientation: self.orientation,
+            turning: self.turning,
         };
         tool.corner_r = tool.tip_corner_r();
         tool

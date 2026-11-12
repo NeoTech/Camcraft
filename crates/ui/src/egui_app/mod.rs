@@ -70,6 +70,7 @@ mod pages;
 mod tool_body_page;
 // #630: the tool editor's lathe orientation row.
 mod tool_orientation_row;
+mod tool_turning_row;
 mod tool_profile_page;
 // #793: the built-in taper holder picker in the Profile section.
 mod tool_holder_picker;

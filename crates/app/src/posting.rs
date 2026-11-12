@@ -898,6 +898,9 @@ pub fn op_streams(world: &World) -> Result<Vec<(String, Vec<cnc::Record>)>, Stri
             } else {
                 None
             },
+            // #891: a turning op whose tool states turning data asks
+            // for constant surface speed; everything else posts G97.
+            css: crate::cutting_turn::css_of(&op.params, &tool),
             coolant: op.coolant,
             // "Skip pauses and homes" (#110) mutes every after-action
             // at post; the ops keep their choices. Entries ride it (#155).
