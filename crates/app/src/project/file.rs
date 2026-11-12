@@ -336,6 +336,12 @@ pub struct ToolDto {
     /// tool sanity law (`validate`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub orientation: Option<u8>,
+    /// #891 addition, additive (no version step): the turning cutting
+    /// data (surface speed m/min, feed mm/rev, max-rpm clamp). Absent
+    /// from every older file and written only when stated; absent
+    /// reads as unstated - the turning ops post the tool's rpm (G97).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub turning: Option<camcraft_tools::turning_data::TurningData>,
 }
 
 fn centre_cutting() -> bool {
@@ -394,6 +400,8 @@ pub enum ToolKindDto {
     /// The plasma torch (#670): additive in the same way - no older
     /// file names it.
     Torch,
+    /// The sinker electrode (#541): additive in the same way.
+    Electrode,
 }
 
 impl ToolDto {
@@ -413,6 +421,7 @@ impl ToolDto {
                 ToolKind::Taper => ToolKindDto::Taper,
                 ToolKind::Probe => ToolKindDto::Probe,
                 ToolKind::Torch => ToolKindDto::Torch,
+                ToolKind::Electrode => ToolKindDto::Electrode,
             },
             diameter: t.diameter,
             corner_r: t.corner_r,
@@ -438,6 +447,7 @@ impl ToolDto {
             body: None,
             cutter: None,
             orientation: t.orientation,
+            turning: t.turning,
         }
     }
 
@@ -457,6 +467,7 @@ impl ToolDto {
                 ToolKindDto::Taper => ToolKind::Taper,
                 ToolKindDto::Probe => ToolKind::Probe,
                 ToolKindDto::Torch => ToolKind::Torch,
+                ToolKindDto::Electrode => ToolKind::Electrode,
             },
             diameter: self.diameter,
             corner_r: self.corner_r,
@@ -479,6 +490,7 @@ impl ToolDto {
             flutes: self.flutes,
             center_cutting: self.center_cutting,
             orientation: self.orientation,
+            turning: self.turning,
         }
     }
 }

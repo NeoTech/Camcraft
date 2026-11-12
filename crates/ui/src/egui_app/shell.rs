@@ -161,7 +161,7 @@ pub(crate) fn shell_layout(
     // in-app egui::Window over the dock; the single-OS-window law
     // stands). None on a fresh State, closed by ✖, reopened by the next
     // successful post, so the snapshot never moves until a post happens.
-    pages::gcode_window(ui.ctx(), state);
+    super::gcode_view::gcode_window(ui.ctx(), state);
     // #265: a refused post's reason, kept on screen past the status
     // line's next write. None on a fresh State, so no snapshot moves.
     post_refusal::window(ui.ctx(), state);
@@ -420,11 +420,7 @@ fn viewport_panel(
             let p = &a.pointer;
             (
                 p.interact_pos().or_else(|| p.hover_pos()),
-                interact::Mods {
-                    ctrl: a.modifiers.ctrl,
-                    shift: a.modifiers.shift,
-                    alt: a.modifiers.alt,
-                },
+                interact::Mods::from(a.modifiers),
                 p.button_pressed(egui::PointerButton::Middle),
                 p.button_pressed(egui::PointerButton::Secondary),
                 p.button_pressed(egui::PointerButton::Primary),
@@ -715,15 +711,21 @@ fn viewport_panel(
                     .iter()
                     .any(|(_, e)| model::is_operation(&state.world, e))
         };
-        if empty {
-            // Bottom-centre, clear of the origin triad and of the corner
-            // control legend (bottom-right): the hint names the door that
-            // fills the void without ever sitting on the scene's marks.
-            ui.painter().text(
-                egui::pos2(rx0 + rw * 0.5, (ry0 + rh - 56.0).max(ry0 + 24.0)),
-                egui::Align2::CENTER_CENTER,
-                "No model yet - File > Model imports an STL, STEP or OBJ file",
-                egui::FontId::proportional(font.size * 1.2),
+        // The bottom furniture (#1198 fix round): one placement, measured
+        // with the frame's fonts, decides where the ribbon's neighbours sit -
+        // the empty-document line and the control legend - so none of them
+        // lands on another or on the view cube.
+        let furn = super::viewport_layout::furniture(
+            ui.ctx(),
+            resp.rect,
+            !empty,
+            hud.as_ref().map(|h| h.cube),
+            &font,
+        );
+        if let (Some(r), Some(g)) = (furn.placed.empty, &furn.empty_text) {
+            ui.painter().galley_with_override_text_color(
+                r.min,
+                g.clone(),
                 egui::Color32::from_white_alpha(150),
             );
         }
@@ -731,16 +733,19 @@ fn viewport_panel(
         let hint = match state.drag {
             Some(DragMode::Orbit) => "orbit",
             Some(DragMode::Pan) => "pan",
-            None => "LMB pick / drag-orbit · MMB orbit · RMB pan · wheel · F frame",
+            None => super::viewport_layout::LEGEND,
         };
-        if hot || state.drag.is_some() {
-            ui.painter().text(
-                resp.rect.max - egui::vec2(12.0, 12.0),
-                egui::Align2::RIGHT_BOTTOM,
-                hint,
-                font.clone(),
-                super::ground_ink::cube().hint,
-            );
+        if (hot || state.drag.is_some())
+            && let Some(r) = furn.placed.legend
+        {
+            let g = if state.drag.is_none() {
+                furn.legend_text.clone()
+            } else {
+                super::viewport_layout::galley(ui.ctx(), hint, font.clone(), f32::INFINITY)
+            };
+            let at = egui::pos2(r.max.x - g.size().x, r.max.y - g.size().y);
+            ui.painter()
+                .galley_with_override_text_color(at, g, super::ground_ink::cube().hint);
         }
         // The corner furniture paints last of all: opaque over the scene,
         // and it lights the feature a click would command.

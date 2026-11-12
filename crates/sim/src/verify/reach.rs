@@ -4,7 +4,8 @@ use super::laws::{boundary_samples, dist2_seg, law_points};
 use super::rest::Rest;
 use super::types::{Mode, VerifyContext, Warning};
 
-use crate::cl::{MoveKind, Toolpath, is_vertical};
+use super::upright::is_upright;
+use crate::cl::{MoveKind, Toolpath};
 use crate::geo2d::{Point2, Region};
 
 /// (c) Shank/holder reach against rest material, then (c3) its
@@ -23,6 +24,8 @@ pub(super) fn band_reach(
     warns: &mut Vec<Warning>,
 ) {
     let r = cx.tool.radius;
+    // The kerf slack and the band growth on a coarse model (#904).
+    let (kerf_tol, grow) = (cx.tightened(cx.gouge_tol), cx.band_growth());
     // Deepest plane the path cuts at (drives the island law of the
     // reach samples and the part label below).
     let z_deepest = path
@@ -39,8 +42,11 @@ pub(super) fn band_reach(
     // draws, never the cylinder enclosing it. Each group convicts a
     // move once, the worst offender over its bands, so a body's many
     // bands report as the one holder they stand for.
-    let shank = [(cx.tool.flute_len, cx.tool.shank_radius, cx.tool.shank_len)];
-    let holder = super::Cutter::judged(cx.tool, cx.cutter).holder_bands();
+    // #852: a necked tool's shank is its drawn neck's bands, never
+    // wider than the stated cylinder; no neck reads that cylinder.
+    let judged = super::Cutter::judged(cx.tool, cx.cutter);
+    let shank = judged.shank_bands();
+    let holder = judged.holder_bands();
     let groups: [&[(f64, f64, f64)]; 2] = [&shank, &holder];
     let bands: Vec<(f64, f64, f64)> = groups.concat();
 
@@ -108,7 +114,10 @@ pub(super) fn band_reach(
                 continue;
             }
             let pts = law_points(m, chord_tol);
-            let lean = m.axis.filter(|a| !is_vertical(a));
+            let lean = m.axis.filter(|a| !is_upright(a));
+            // Law (c)'s own last report for THIS move: the de-duplication
+            // below never merges with a warning an earlier law pushed.
+            let mut reported: Option<bool> = None;
             for group in groups {
                 let mut convicted: Option<bool> = None;
                 for &(above, band_r, band_len) in group {
@@ -148,8 +157,12 @@ pub(super) fn band_reach(
                     if h0 >= cx.stock_top_z {
                         continue;
                     }
-                    let r2 = (r_band + 1e-9) * (r_band + 1e-9);
-                    let kerf2 = (r + cx.gouge_tol) * (r + cx.gouge_tol);
+                    // #904: on a model coarser than promised the band
+                    // reaches the excess further and the flutes' kerf
+                    // excuses that much less - a convex wall may stand
+                    // that far outside the facets these samples sit on.
+                    let r2 = (r_band + grow + 1e-9) * (r_band + grow + 1e-9);
+                    let kerf2 = (r + kerf_tol) * (r + kerf_tol);
                     let mut hit = None;
                     'worst: {
                         for p in &pts {
@@ -183,7 +196,7 @@ pub(super) fn band_reach(
                         && pts.iter().any(|p| {
                             let pc = Point2::new(p.x + offx, p.y + offy);
                             let tip = Point2::new(p.x, p.y);
-                            rest.hidden_in_annulus(pc, tip, r + cx.gouge_tol, r_band, h0, i + 1)
+                            rest.hidden_in_annulus(pc, tip, r + kerf_tol, r_band + grow, h0, i + 1)
                         })
                     {
                         hit = Some(false);
@@ -197,7 +210,12 @@ pub(super) fn band_reach(
                     if part {
                         shanked_part.push(i);
                     }
-                    warns.push(Warning::ShankHit { at: i, part });
+                    // One move, one report per verdict (#938): a leaning
+                    // shank and holder both in the part are one event.
+                    if reported != Some(part) {
+                        reported = Some(part);
+                        warns.push(Warning::ShankHit { at: i, part });
+                    }
                 }
             }
         }
@@ -219,7 +237,7 @@ pub(super) fn band_reach(
                 path,
                 &bands,
                 r,
-                cx.gouge_tol,
+                (kerf_tol, grow),
                 chord_tol,
                 &shanked_part,
                 &samples,
