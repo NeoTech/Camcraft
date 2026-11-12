@@ -62,6 +62,7 @@ fn judge(t: &Toolpath, region: &Region, model: Option<&[Triangle]>) -> Vec<Warni
         clearance_z: 5.0,
         stock_to_leave: 0.0,
         gouge_tol: TOL,
+        model_excess: 0.0,
         z_tol: 1e-6,
         finish_tol: None,
         fixtures: &[],
