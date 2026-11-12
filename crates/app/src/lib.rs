@@ -55,6 +55,9 @@ pub use camcraft_motion::probing;
 pub use camcraft_motion::sinker;
 // #543: sinker rough and finish with undersize.
 pub use camcraft_motion::sinker_undersize;
+// #547: electrode generation from part faces.
+pub use camcraft_motion::sinker_cavity;
+pub use camcraft_motion::sinker_electrode;
 pub mod project;
 // #35: pocket and slot recognition on the model's faces.
 pub mod recognize;

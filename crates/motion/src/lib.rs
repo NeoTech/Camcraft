@@ -33,6 +33,13 @@ pub mod probing;
 pub mod sinker;
 // #543: sinker rough and finish with undersize.
 pub mod sinker_undersize;
+// #547: a cavity read from picked faces, and the electrode it calls for.
+pub mod sinker_cavity;
+pub mod sinker_electrode;
+#[cfg(test)]
+mod sinker_electrode_tests;
+#[cfg(test)]
+mod sinker_electrode_fuzz;
 pub mod quality;
 pub mod multiaxis;
 pub mod turning;

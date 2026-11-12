@@ -101,6 +101,8 @@ pub mod plasma_op;
 pub mod sinker_op;
 // #543: the sinker's rough and finish passes.
 pub mod sinker_pass;
+// #547: picked cavity faces read as a sinker electrode.
+pub mod sinker_faces;
 // #171: the Probe op seeded from one picked face, edge, vertex or round wall.
 mod probe_pick;
 mod probe_pick_round;

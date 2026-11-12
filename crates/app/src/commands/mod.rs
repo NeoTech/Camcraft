@@ -63,6 +63,8 @@ pub mod tool_import;
 // #221: a tool's controller number.
 pub mod tool_number;
 pub mod update_model;
+// #547: a sinker electrode generated from a cavity's picked faces.
+pub mod electrode;
 
 use flecs_ecs::prelude::World;
 
@@ -110,6 +112,7 @@ pub use tool::{AddTool, ChangeTool, DeleteTool, HolderPick};
 pub use tool_body::{LatheBodySpec, SetToolBody, ToolBodySpec};
 pub use tool_cutter::SetToolCutter;
 pub use tool_import::{ImportMode, ImportReport, ImportTools};
+pub use electrode::ElectrodeFromFaces;
 pub use tool_number::SetToolNumber;
 pub use update_model::UpdateModel;
 
