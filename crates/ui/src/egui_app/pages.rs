@@ -1306,10 +1306,9 @@ pub(crate) fn tool_editor_window(ctx: &egui::Context, state: &mut State) {
             };
             if exists {
                 if ui.button("Apply").clicked() {
-                    state.pending.push_back(CommandKind::ChangeTool {
-                        name: name_now.clone(),
-                        tool: state.tool_ui.to_tool(),
-                    });
+                    // #93 slice 3: a landed drawn cutter rides the edit.
+                    let apply = state.apply_tool_numbers(&name_now);
+                    state.pending.push_back(apply);
                     push_number_if_changed(state, &name_now);
                 }
             } else {
