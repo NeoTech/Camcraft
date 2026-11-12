@@ -34,22 +34,28 @@ source-form distributions.
     OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
     USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-## Original artwork (assets/ui/drill.png, assets/ui/post.png, assets/ui/sim.png, assets/ui/finish3d.png, assets/ui/fixture.png, assets/ui/contour5d.png, assets/ui/parallel5d.png, assets/ui/swarf.png, assets/ui/advancedswarf.png, assets/ui/rotarycontour.png, assets/ui/rotaryparallel.png, assets/ui/probe.png, assets/ui/debug-info.png)
+## Original artwork (assets/ui/post.png, assets/ui/sim.png, assets/ui/fixture.png, assets/ui/debug-info.png, every assets/ui/op-*.png and every assets/ui/svg/*.svg)
 
-These thirteen glyphs are our own drawings, authored for M1.6, M1.7, M2.2,
-M3.2, M5.1, #108 and #157 (no Tabler drill-bit, post-to-G-code, waterline, vise,
-5-axis, swarf or rotary-turned-bar glyph exists, and the move-simulation
-mark is a bespoke curve; AGENTS.md's "operation-specific glyphs are
-drawn original when no generic set fits"). Public-domain subjects, our
-renderings; no license notice owed, and they are not part of the Tabler
-set below. (The note once missed fixture.png - the exclusion lists here
-are the only record of which pixels are ours, so both lines now name all
-thirteen.)
-debug-info.png (#157) is the exception to that reason: Tabler has a bug
-glyph, but ours was drawn by a short script (no SVG rasterizer in the
-authoring environment) - still our pixels, no notice owed.
+These glyphs are our own drawings. post.png, sim.png and fixture.png were
+authored for M1.6-M3.2 (no Tabler post-to-G-code or vise glyph exists, and
+the move-simulation mark is a bespoke curve); debug-info.png (#157) was
+drawn by a short script - Tabler has a bug glyph, but these are our pixels.
+The operation glyphs (#661) - one `op-*.png` per operation kind - are
+rasterised by `cargo xtask icons` from their SVG masters in
+assets/ui/svg/, drawn original from what each operation does (a cutter
+and its path) on Tabler's conventions (24-unit grid, 2-unit stroke, round
+caps and joins). They replace the earlier original PNGs (drill, probe,
+finish3d, contour5d, parallel5d, swarf, advancedswarf, rotarycontour,
+rotaryparallel, rotaryoffset, multiaxisrough, flow5d, multiaxiscontour)
+and the Tabler stand-ins the operations borrowed. Nothing in them is taken
+or adapted from HSMWorks, Fusion, SolidCraft or any other product's icons.
+AGENTS.md's "operation-specific glyphs are drawn original when no generic
+set fits"; public-domain subjects, our renderings; no license notice owed,
+and they are not part of the Tabler set below. (The exclusion lists here
+are the only record of which pixels are ours, so both headings name the
+same files.)
 
-## Tabler Icons (UI glyphs, assets/ui/*.png except drill.png, post.png, sim.png, finish3d.png, fixture.png, contour5d.png, parallel5d.png, swarf.png, advancedswarf.png, rotarycontour.png, rotaryparallel.png, probe.png and debug-info.png, loaded by crates/ui/src/egui_app/icons.rs)
+## Tabler Icons (UI glyphs, assets/ui/*.png except post.png, sim.png, fixture.png, debug-info.png and the op-*.png operation glyphs, loaded by crates/ui/src/egui_app/icons.rs)
 
 Outline glyphs from Tabler Icons (https://tabler-icons.io), version 3.49.0,
 MIT (below): recolored to white at load; shapes otherwise unmodified.
