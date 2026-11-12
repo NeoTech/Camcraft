@@ -105,6 +105,8 @@ fn drill_retract() -> String {
         tool_material: None,
         flutes: None,
         orientation: None,
+        catalog: Default::default(),
+        cutting: Vec::new(),
     };
     let hole = |x: f64, floor_z: f64| Hole {
         xy: Point2::new(x, 10.0),
