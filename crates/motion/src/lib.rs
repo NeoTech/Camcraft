@@ -17,6 +17,11 @@
 //! finishing - all from public machining literature and G-code
 //! standards; no vendor strategy was inspected. No flecs, no world.
 
+// Tests only (issue #1051): a unit suite reads the integration suites'
+// fixtures (`tests/rotary_adaptive_fixture`), which name this crate.
+#[cfg(test)]
+extern crate self as camcraft_motion;
+
 pub mod approach;
 pub mod drilling;
 pub mod entry;
