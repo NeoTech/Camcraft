@@ -50,7 +50,7 @@ const TOOLS: &[Tool] = &[
 ];
 
 /// Every row: this table, then the setup furniture's (#181), then the
-/// part placement (#716).
+/// part placement (#716), ..., then operation names and order (#45).
 fn all() -> impl Iterator<Item = &'static Tool> {
     TOOLS
         .iter()
@@ -63,6 +63,7 @@ fn all() -> impl Iterator<Item = &'static Tool> {
         .chain(super::cutter_tools::TOOLS)
         .chain(super::plate_tools::TOOLS)
         .chain(super::modvise_tools::TOOLS)
+        .chain(super::order_tools::TOOLS)
 }
 
 /// The `tools/list` rows.
