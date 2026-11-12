@@ -25,7 +25,7 @@ is in [Not bound yet](#not-bound-yet).
 | Redo | Ctrl+Y or Ctrl+Shift+Y | Cmd+Y or Cmd+Shift+Y |
 | Copy the selected operation | Ctrl+C | Cmd+C |
 | Paste the copied operation | Ctrl+V | Cmd+V |
-| Delete the selected item | Delete | Fn+Delete (the forward-delete key) |
+| Delete the selected item | Delete | Fn+Delete (the forward-delete key; not checked on hardware) |
 | Commit a typed value (parameter and step-budget fields) | Enter | Enter (Return) |
 
 New, open, save, post, quit, copy, paste and delete do nothing while a text
@@ -99,7 +99,5 @@ These have no keyboard or mouse binding in the app today:
 - Pan with Ctrl, Shift or Alt drag, or with the middle button alone.
 - Arrow keys to orbit or pan.
 - Escape for the side windows (tool editor, G-code view, machine editor and
-  similar panels): close them with their buttons. Escape does close the
-  modal dialogs (the unsaved-changes prompt and the fixture library
-  dialogs), topmost first, without applying anything.
+  similar panels): close them with their buttons.
 - A middle-click without a drag (it does nothing).
