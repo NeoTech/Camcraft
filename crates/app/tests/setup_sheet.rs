@@ -415,7 +415,9 @@ fn tool_list_prints_stated_catalog_facts_and_omits_unstated() {
     create_face(&world, &mut history, "F1", 19.5);
     let cmd = CreateOperation::new(&world, "F2", other, SrcRef::Stock, face_params());
     history.execute(&world, cmd.expect("second face op"));
-    let sheet = setup_sheet::render(&world, None).expect("sheet");
+    let cmd = GenerateOperation::new(&world, "F2").expect("generate F2");
+    history.execute(&world, cmd);
+    let sheet = setup_sheet::render(&world, Some("Setup2")).expect("sheet");
     let lines: Vec<&str> = sheet.lines().collect();
     let catalog_lines: Vec<&&str> = lines.iter().filter(|l| l.contains("PART ")).collect();
     assert_eq!(catalog_lines.len(), 1, "only the stating tool gets a line:\n{sheet}");
