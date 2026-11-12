@@ -73,6 +73,11 @@ cursor; Alt+click picks a single edge segment instead of the whole chain.
 The same rule holds for picks an AI agent makes over MCP by feature id: an
 id a click could not have picked is refused by name.
 
+## Order
+
+Operations post in the order the browser lists them. Which order to choose,
+and why, is covered in [Order of operations](@/guide/order-of-operations.md).
+
 ## Generating
 
 **Generate** computes the toolpath and checks it. An operation can be in
