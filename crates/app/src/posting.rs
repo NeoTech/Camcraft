@@ -452,7 +452,10 @@ pub fn post_script(world: &World, out_path: &Path, cps: &str) -> Result<Posted, 
 fn post_script_body(world: &World, out_path: &Path, cps: &str) -> Result<Posted, String> {
     // #388: the program's one machine (a program over several refuses).
     let machine = mounts::single(world, false)?.machine;
-    let records = stream_records(world)?;
+    let streams = op_streams(world)?;
+    // #1190: a turning dialect opens only what a lathe may run.
+    crate::lathe_voice::at_post(world, streams.iter().map(|(n, _)| n.as_str()), cps)?;
+    let records = join_streams(streams);
     // The verification gate (M2.3 D): the same two program-level
     // judgments the Deviate cell shows, made binding. Evidence is
     // computed here and now - never a cached verdict carried in from
