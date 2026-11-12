@@ -65,6 +65,9 @@ pub fn posed(facets: &[Triangle], tip: [f64; 3], axes: &LatheAxes) -> Vec<Triang
     facets.iter().map(|t| Triangle::new(map(t.a), map(t.b), map(t.c))).collect()
 }
 
+/// A lathe body's tool-frame facets with the world frame they are posed in.
+pub type Drawn = (Arc<[Triangle]>, LatheAxes);
+
 /// What the cache was built from: the op, its path's signature and the
 /// body's facets (by identity).
 #[derive(Clone, Debug)]
@@ -92,7 +95,7 @@ impl LatheBodyCache {
     /// `Ok(None)` when the tool carries no lathe body or the op has no
     /// path yet (draw as before), `Err` naming why a lathe body cannot
     /// be posed.
-    pub fn of(&mut self, world: &World, op: &str) -> Result<Option<(Arc<[Triangle]>, LatheAxes)>, String> {
+    pub fn of(&mut self, world: &World, op: &str) -> Result<Option<Drawn>, String> {
         let Some(e) = model::find_by_name(world, op) else { return self.none() };
         let Some(o) = model::operation_of(world, &e) else { return self.none() };
         let Some(body) = lathe_body(world, &o.tool) else { return self.none() };
@@ -112,7 +115,7 @@ impl LatheBodyCache {
         Ok(Some((key.facets, axes)))
     }
 
-    fn none(&mut self) -> Result<Option<(Arc<[Triangle]>, LatheAxes)>, String> {
+    fn none(&mut self) -> Result<Option<Drawn>, String> {
         self.built = None;
         Ok(None)
     }
