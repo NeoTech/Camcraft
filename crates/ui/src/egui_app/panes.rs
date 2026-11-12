@@ -382,7 +382,7 @@ pub(super) fn tip_of(c: Cmd, state: &State) -> String {
             // enforces at the command. The pin hint rides every live
             // tip: the gesture a ribbon cell answers to beyond the
             // click, so the tip table is where it belongs.
-            if state.tool_names().is_empty() {
+            if no_tool_for(i, state) {
                 "No tool yet - add one (Setup > Tools)".into()
             } else {
                 let machine = camcraft_app::machine::kind_of(&state.world);
@@ -450,7 +450,7 @@ pub(super) fn enabled(c: Cmd, state: &State) -> bool {
             // #216: every ribbon-made op machines the active setup's stock
             // (`SrcRef::Stock`) - without one the door refuses, so the
             // cell darkens and says so instead of failing on the click.
-            kind_admits && !state.tool_names().is_empty() && has_stock(state) && tool_law_note(i, state).is_none()
+            kind_admits && !no_tool_for(i, state) && has_stock(state) && tool_law_note(i, state).is_none()
         }
         // A dropdown button is live whenever it is on the ribbon; the
         // kinds behind it carry their own gates.
@@ -478,7 +478,7 @@ fn gate_note(c: Cmd, state: &State) -> Option<String> {
     if enabled(c, state) {
         return None;
     }
-    if state.tool_names().is_empty() {
+    if no_tool_for(i, state) {
         return Some(String::from(
             "cannot add an operation: no tool in the document - add one (Setup > Tools)",
         ));
@@ -539,7 +539,7 @@ pub(super) fn gate_route(c: Cmd, state: &State) -> Option<GateRoute> {
     if enabled(c, state) {
         return None;
     }
-    if state.tool_names().is_empty() {
+    if no_tool_for(i, state) {
         return Some(GateRoute::Tools);
     }
     let machine = camcraft_app::machine::kind_of(&state.world);
@@ -583,6 +583,13 @@ pub(super) fn follow_gate(c: Cmd, state: &mut State) {
 /// for creating kind `i` against the active setup's tools, or `None`
 /// when a fitting tool is there. The predicate lives in app (the same
 /// one `CreateOperation` enforces); the ribbon only renders it.
+/// The empty-rack gate of a Create cell - waived for a kind that
+/// mounts no library tool (the wire EDM's wire is the machine's, #535).
+fn no_tool_for(i: usize, state: &State) -> bool {
+    let needs = camcraft_app::operation::KindInfo::ALL.get(i).is_none_or(|k| k.mounts_tool());
+    needs && state.tool_names().is_empty()
+}
+
 fn tool_law_note(i: usize, state: &State) -> Option<String> {
     camcraft_app::operation::KindInfo::ALL
         .get(i)

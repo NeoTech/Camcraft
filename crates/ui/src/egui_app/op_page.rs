@@ -140,18 +140,26 @@ pub(super) fn operation_page(ui: &mut Ui, state: &mut State, name: &str, pal: &T
 
 /// Tool, Source and Setup as label | control rows of the header grid.
 fn header_rows(ui: &mut Ui, state: &mut State, target: &str, live: Option<&Operation>, exists: bool) {
+    // #535: a kind that mounts no library tool (the wire EDM's) has no
+    // Tool row - and must not adopt the rack's first tool into its draft.
+    let toolless = !state.op_ui.params.kind().info().mounts_tool();
     let mut tools = state.tool_names();
-    if !state.op_ui.tool.is_empty() && !tools.contains(&state.op_ui.tool) {
+    if toolless {
+        tools.clear();
+    } else if !state.op_ui.tool.is_empty() && !tools.contains(&state.op_ui.tool) {
         tools.push(state.op_ui.tool.clone());
     } else if state.op_ui.tool.is_empty()
         && let Some(first) = tools.first()
     {
         state.op_ui.tool = first.clone();
     }
-    ui.label("Tool");
-    if tools.is_empty() {
+    if toolless {
+        // no row: the wire is the machine's
+    } else if tools.is_empty() {
+        ui.label("Tool");
         ui.label("none").on_hover_text("no tools in the document - the Tools page has a catalog");
     } else {
+        ui.label("Tool");
         let mut t_idx = tools.iter().position(|t| *t == state.op_ui.tool).unwrap_or(0);
         let before = t_idx;
         combo_owned(ui, "op_tool", &mut t_idx, &tools);
@@ -168,8 +176,14 @@ fn header_rows(ui: &mut Ui, state: &mut State, target: &str, live: Option<&Opera
             }
         }
     }
-    ui.end_row();
-    coolant_row(ui, state, target, live);
+    if !toolless {
+        ui.end_row();
+    }
+    // #535: a wire EDM flushes with dielectric, which no coolant code
+    // of the machine states - no coolant row (the post ignores it).
+    if state.op_ui.params.kind().info().family() != camcraft_app::operation::Family::WireEdm {
+        coolant_row(ui, state, target, live);
+    }
 
     // Source: the stock or one of the user's parts - never a work
     // offset (G54...), a setup or a fixture (user review 2026-11-06).
