@@ -420,6 +420,7 @@ impl OpParams {
                 entry_ramp,
                 steep_stepover,
                 pencil_reference,
+                fill_openings,
             } => {
                 // v16: the pattern chooses a different kinematic (and
                 // the raster fields only answer to Parallel), so they
@@ -488,6 +489,14 @@ impl OpParams {
                         w(h, *s);
                     }
                     None => h.write_u8(0),
+                }
+                // #1196: the land width changes the surface the path
+                // is planned on. Only a stated width digests (a tag
+                // byte, then the number), so every op without one
+                // keeps the stamp it had - no one-time staleness.
+                if let Some(s) = fill_openings {
+                    h.write_u8(0x4C);
+                    w(h, *s);
                 }
             }
             // The deburr ride digests the one authored number, the

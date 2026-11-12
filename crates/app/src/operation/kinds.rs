@@ -1091,6 +1091,9 @@ fn seed_finish3d(c: &Carried) -> OpParams {
         // shallow pattern would ever read it.
         steep_stepover: None,
         pencil_reference: None,
+        // The model is the finished surface until a machinist asks
+        // for the land (#1196).
+        fill_openings: None,
     }
 }
 
