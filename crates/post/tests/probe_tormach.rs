@@ -10,15 +10,17 @@
 //! parameters #5061-#5070 / #5420-#5428, O-code conditionals, (MSG,...))
 //! and Tormach's PathPilot post-processor guidelines; our own fixtures.
 //!
+//! The streams are recorded (#926): `recorded/inputs/probe_t99_*`,
+//! written and guarded by app's `recorded_post_streams` from
+//! `motion::probing::probe_cycle` (the five modes of tests/probe_op.rs).
+//!
 //! Gate map (M4.4): covers assets/posts (tormach probing), post::probe_rec,
-//! motion::probing, post::machine (the 770MX's inch units and coolant).
+//! post::machine (the 770MX's inch units and coolant).
 
-mod common;
+mod recorded;
 
-use camcraft_app::geometry::Point3;
-use camcraft_app::machine::parse_mch;
-use camcraft_app::post::{self, cnc, engine, machine};
-use camcraft_app::probing::{probe_cycle, ProbeDir, ProbeMode, ProbeParams};
+use camcraft_post::machine::parse_mch;
+use camcraft_post::post::{engine, machine};
 
 const TORMACH: &str = include_str!("../../../assets/posts/tormach.cps");
 const MX770: &str = include_str!("../../../assets/machines/tormach-770mx.mch");
@@ -29,52 +31,16 @@ fn mx770() -> serde_json::Value {
     machine::mirror(&parse_mch(MX770).expect("770MX parses"))
 }
 
-fn cycle(mode: ProbeMode, dir: ProbeDir, target: Point3, radius: f64) -> ProbeParams {
-    ProbeParams {
-        mode,
-        dir,
-        dir_y: ProbeDir::YPos,
-        target,
-        radius,
-        ball_diameter: 4.0,
-        approach: 5.0,
-        overtravel: 5.0,
-        backoff: 1.0,
-        fast_feed: 300.0,
-        slow_feed: 30.0,
-        depth: 3.0,
-        inset: 5.0,
-        clearance_z: 50.0,
-    }
-}
-
-/// The five modes of tests/probe_op.rs `each_mode_lays_down_its_touches`.
-fn mode(name: &str) -> ProbeParams {
-    match name {
-        "face" => cycle(ProbeMode::Face, ProbeDir::ZNeg, Point3::new(10.0, 5.0, 20.0), 0.0),
-        "edge" => cycle(ProbeMode::Edge, ProbeDir::XPos, Point3::new(0.0, 5.0, 20.0), 0.0),
-        "corner" => cycle(ProbeMode::Corner, ProbeDir::XPos, Point3::new(0.0, 0.0, 20.0), 0.0),
-        "boss" => cycle(ProbeMode::Boss, ProbeDir::ZNeg, Point3::new(30.0, 30.0, 20.0), 10.0),
-        _ => cycle(ProbeMode::Bore, ProbeDir::ZNeg, Point3::new(30.0, 30.0, 20.0), 10.0),
-    }
-}
-
-fn stream(p: &ProbeParams, set_wcs: Option<u8>) -> String {
-    let t = probe_cycle(p).expect("probe cycle");
-    let d = post::Dump {
-        op_name: "Probe1",
-        tool_number: 99, // PathPilot's conventional probe tool number
-        tool_name: "PROBE-4",
-        tool_diameter: 4.0,
-        rpm: 0.0,
-        clearance_z: 50.0,
-        retract_z: 50.0,
-        probe_result: Some(post::probe_rec::ProbeResult { set_wcs, tol_mm: 0.5 }),
-        ..post::Dump::default()
+/// A recorded probe stream of one of the five modes of tests/probe_op.rs
+/// `each_mode_lays_down_its_touches`, on tool 99 (PathPilot's
+/// conventional probe tool number), setting G55 or measuring only.
+fn stream(mode: &str, set_wcs: Option<u8>) -> String {
+    let set = match set_wcs {
+        Some(1) => "g55",
+        None => "none",
+        Some(n) => panic!("no recorded {mode} setting offset {n}"),
     };
-    let recs = post::dump(&t, &d);
-    assert!(!recs.iter().any(|r| matches!(r, cnc::Record::Warn { .. })), "a sane probe path carries no WARN");
-    cnc::serialize(&recs)
+    recorded::input(&format!("probe_t99_{mode}_{set}.cnc"))
 }
 
 fn post_ok(machine: &serde_json::Value, stream: &str) -> String {
@@ -106,7 +72,7 @@ fn count(prog: &str, prefix: &str) -> usize {
 
 #[test]
 fn face_posts_g38_2_and_sets_z_on_the_770mx() {
-    let prog = post_ok(&mx770(), &stream(&mode("face"), Some(1)));
+    let prog = post_ok(&mx770(), &stream("face", Some(1)));
     assert!(prog.starts_with("(Tormach 770MX)\nG20 "), "an inch machine posts G20:\n{prog}");
     assert_eq!(count(&prog, "G38.2 "), 2, "a seek and a measure");
     assert!(prog.contains("#100=#5061\n#101=#5062\n#102=#5063\n"), "the measured trip is kept");
@@ -115,68 +81,68 @@ fn face_posts_g38_2_and_sets_z_on_the_770mx() {
     assert!(prog.contains("G10 L20 P2 Z[#5422-#190]"), "the result sets G55 Z: {prog}");
     o_blocks_pair_uniquely(&prog);
     assignments_are_bracketed(&prog);
-    common::write_golden("nc/tormach/probe_face.nc", &prog);
+    recorded::app_golden("nc/tormach/probe_face.nc", &prog);
 }
 
 #[test]
 fn edge_posts_g38_2_and_sets_x_on_the_770mx() {
-    let prog = post_ok(&mx770(), &stream(&mode("edge"), Some(1)));
+    let prog = post_ok(&mx770(), &stream("edge", Some(1)));
     assert_eq!(count(&prog, "G38.2 "), 2, "a seek and a measure");
     assert!(prog.contains("G10 L20 P2 X[#5420-#190]\n"), "the result sets G55 X: {prog}");
     o_blocks_pair_uniquely(&prog);
     assignments_are_bracketed(&prog);
-    common::write_golden("nc/tormach/probe_edge.nc", &prog);
+    recorded::app_golden("nc/tormach/probe_edge.nc", &prog);
 }
 
 #[test]
 fn corner_posts_g38_2_and_sets_x_and_y_on_the_770mx() {
-    let prog = post_ok(&mx770(), &stream(&mode("corner"), Some(1)));
+    let prog = post_ok(&mx770(), &stream("corner", Some(1)));
     assert_eq!(count(&prog, "G38.2 "), 4, "two touches, seek + measure");
     assert!(prog.contains("G10 L20 P2 X[#5420-#190] Y[#5421-#191]\n"), "{prog}");
     assert_eq!(prog.lines().filter(|l| l.ends_with(" OUT OF TOLERANCE)")).count(), 2, "one tolerance test per axis");
     o_blocks_pair_uniquely(&prog);
     assignments_are_bracketed(&prog);
-    common::write_golden("nc/tormach/probe_corner.nc", &prog);
+    recorded::app_golden("nc/tormach/probe_corner.nc", &prog);
 }
 
 #[test]
 fn bore_posts_g38_2_and_sets_the_centre_on_the_770mx() {
-    let prog = post_ok(&mx770(), &stream(&mode("bore"), Some(1)));
+    let prog = post_ok(&mx770(), &stream("bore", Some(1)));
     assert_eq!(count(&prog, "G38.2 "), 8, "four touches, seek + measure");
     assert!(prog.contains("#190=[[[#100+#103]/2]-1.1811]\n"), "the centre is the mean of opposite trips: {prog}");
     assert!(prog.contains("G10 L20 P2 X[#5420-#190] Y[#5421-#191]\n"), "{prog}");
     o_blocks_pair_uniquely(&prog);
     assignments_are_bracketed(&prog);
-    common::write_golden("nc/tormach/probe_bore_centre.nc", &prog);
+    recorded::app_golden("nc/tormach/probe_bore_centre.nc", &prog);
 }
 
 #[test]
 fn boss_posts_g38_2_and_sets_the_centre_on_the_770mx() {
-    let prog = post_ok(&mx770(), &stream(&mode("boss"), Some(1)));
+    let prog = post_ok(&mx770(), &stream("boss", Some(1)));
     assert_eq!(count(&prog, "G38.2 "), 8, "four touches, seek + measure");
     assert!(prog.contains("G10 L20 P2 X[#5420-#190] Y[#5421-#191]\n"), "{prog}");
     o_blocks_pair_uniquely(&prog);
     assignments_are_bracketed(&prog);
-    common::write_golden("nc/tormach/probe_boss_centre.nc", &prog);
+    recorded::app_golden("nc/tormach/probe_boss_centre.nc", &prog);
 }
 
 /// A metric machine posts the same program in mm (the bore centre of
 /// nc/fanuc/probe_bore_centre.nc, word for word in the LinuxCNC dialect).
 #[test]
 fn bore_posts_in_mm_on_a_metric_machine() {
-    let prog = post_ok(&serde_json::Value::Null, &stream(&mode("bore"), Some(1)));
+    let prog = post_ok(&serde_json::Value::Null, &stream("bore", Some(1)));
     assert!(prog.contains("\nG21 "), "{prog}");
     assert!(prog.contains("G38.2 X43 Y30 Z15 F300\n"), "{prog}");
     assert!(prog.contains("G91 G1 X-1 Y0 Z0 F300\nG90\n"), "{prog}");
     assert!(prog.contains("o901 if [ABS[#190] GT 0.5]\n"), "{prog}");
     assert!(prog.contains("G10 L20 P2 X[#5420-#190] Y[#5421-#191]\n"), "{prog}");
     assignments_are_bracketed(&prog);
-    common::write_golden("nc/tormach/probe_bore_centre_mm.nc", &prog);
+    recorded::app_golden("nc/tormach/probe_bore_centre_mm.nc", &prog);
 }
 
 #[test]
 fn without_an_offset_to_set_it_stops_for_the_operator() {
-    let prog = post_ok(&mx770(), &stream(&mode("bore"), None));
+    let prog = post_ok(&mx770(), &stream("bore", None));
     assert!(!prog.contains("G10"), "nothing is set");
     assert!(prog.contains("(MSG, CHECK PROBE RESULT #190..)\nM0\n"), "{prog}");
 }

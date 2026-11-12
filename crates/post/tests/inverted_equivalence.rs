@@ -10,7 +10,7 @@
 
 mod inverted_support;
 
-use camcraft_app::post::engine;
+use camcraft_post::post::engine;
 use inverted_support::{
     assert_same_path, cam_events, controller_events, cps, machine, probe_records, probe_stream, Event,
 };
