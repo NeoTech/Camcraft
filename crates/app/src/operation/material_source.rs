@@ -312,67 +312,6 @@ pub(super) fn disk_loop(center: Point2, radius: f64) -> Result<Loop, GenError> {
     Ok(Loop::new(pts)?)
 }
 
-/// A thread mill's region with each hole's rim moved out to the thread's
-/// MAJOR circle (#1071): the declared hole is the minor cylinder, and the
-/// helix runs `depth` past it by design (`machining2d::thread_mill`), so
-/// the circle the gouge law must hold a matched cutter to is the minor
-/// circle grown by the thread depth. Any loop that is a hole's minor rim
-/// (ours, or the model's own for a through hole) gives way to it; every
-/// other wall stays as it was.
-///
-/// The minor circle is the declared one, unless the model's own rim loop
-/// stands nearer the declared centre (PR #1099 review): then the major
-/// circle is grown from that loop's nearest vertex, so a declared hole
-/// wider than, or off the centre of, the model's own rim is held to the
-/// model's major circle, not its own. On a reduced-fidelity model the rim
-/// moves by exactly `depth` with no excess term: the containment solid law
-/// (whose allowance reads the excess) is the backstop there.
-pub(super) fn major_rims(region: Region, holes: &[Hole], depth: f64) -> Result<Region, GenError> {
-    if holes.is_empty() {
-        return Ok(region);
-    }
-    if !(depth.is_finite() && depth >= 0.0) {
-        return Err(GenError::Invalid(format!("thread depth {depth} is not a length")));
-    }
-    let mut minor: Vec<f64> = holes.iter().map(|h| h.radius).collect();
-    let mut loops: Vec<Loop> = Vec::new();
-    for l in region.loops() {
-        let mut theirs = false;
-        for (k, h) in holes.iter().enumerate() {
-            if rim_is(l, *h) {
-                theirs = true;
-                let near = l.points().iter().map(|p| (p.x - h.xy.x).hypot(p.y - h.xy.y)).fold(f64::INFINITY, f64::min);
-                if let Some(m) = minor.get_mut(k) {
-                    *m = m.min(near);
-                }
-            }
-        }
-        if !theirs {
-            loops.push(l.clone());
-        }
-    }
-    for (h, r) in holes.iter().zip(minor) {
-        loops.push(disk_loop(h.xy, r + depth)?);
-    }
-    Ok(Region::new(loops)?)
-}
-
-/// The holes a thread mill threads, as the solid law's grant reads them
-/// (#1071): each declared (minor) circle and the major circle its helix
-/// is cut to. Empty for every other kind, and for a pitch that is not a
-/// length (the Thread arm refuses that before any path).
-pub(super) fn thread_bores(params: &OpParams, pitch: f64) -> Vec<crate::verify::ThreadBore> {
-    let OpParams::Thread { holes, .. } = params else { return Vec::new() };
-    if !(pitch.is_finite() && pitch > 0.0) {
-        return Vec::new();
-    }
-    let depth = crate::machining2d::THREAD_DEPTH_PER_PITCH * pitch;
-    holes
-        .iter()
-        .map(|h| crate::verify::ThreadBore { xy: h.xy, minor: h.radius, major: h.radius + depth, top: h.entry_z })
-        .collect()
-}
-
 /// Whether `l` is `h`'s rim already: enough vertices, and every one of
 /// them on the hole's circle within a band that forgives tessellation
 /// (the fitted radius and the sliced rim share the mesh's own vertices

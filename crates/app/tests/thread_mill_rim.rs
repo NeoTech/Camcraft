@@ -71,29 +71,51 @@ fn drilled_block(r: f64) -> Mesh {
 /// [`drilled_block`], or with `through` the hole running out of the
 /// block's bottom (the model's own rim loop then stands in its footprint).
 fn holed_block(r: f64, through: bool) -> Mesh {
+    polygon_block(&ngon(r, SIDES), through)
+}
+
+/// `n` points on a circle of radius `r`, from 45 degrees on, so the
+/// block's corners (45, 135, 225, 315 degrees) fall on rays of the rim
+/// whenever `n` is a multiple of 4.
+fn ngon(r: f64, n: usize) -> Vec<Point2> {
+    (0..n)
+        .map(|k| {
+            let a = std::f64::consts::TAU * k as f64 / n as f64 + std::f64::consts::FRAC_PI_4;
+            Point2::new(r * a.cos(), r * a.sin())
+        })
+        .collect()
+}
+
+/// The 40 x 40 x [0, TOP] block with a hole whose rim is `rim` (counter-
+/// clockwise, star-shaped about the origin, with points on the 45-degree
+/// rays so the top face reaches the block's corners), blind to FLOOR or
+/// through. One closed, outward shell.
+fn polygon_block(rim: &[Point2], through: bool) -> Mesh {
     let mut f: Vec<Triangle> = Vec::new();
     let outer = cube(Point3::new(-20.0, -20.0, 0.0), Point3::new(20.0, 20.0, TOP));
     f.extend(outer.facets[4..12].iter().cloned());
     if !through {
         f.extend(outer.facets[0..2].iter().cloned());
     }
-    let ang = |k: usize| std::f64::consts::TAU * (k % SIDES) as f64 / SIDES as f64 + std::f64::consts::FRAC_PI_4;
-    let rim = |k: usize, z: f64| Point3::new(r * ang(k).cos(), r * ang(k).sin(), z);
-    // The square boundary point on the same ray: the corners fall on
-    // k = 0, 24, 48, 72 (the angles start at 45 degrees).
+    let n = rim.len();
+    let at = |k: usize, z: f64| {
+        let p = rim[k % n];
+        Point3::new(p.x, p.y, z)
+    };
+    // The square boundary point on the same ray.
     let edge = |k: usize, z: f64| {
-        let (c, s) = (ang(k).cos(), ang(k).sin());
-        let t = 20.0 / c.abs().max(s.abs());
-        Point3::new(t * c, t * s, z)
+        let p = rim[k % n];
+        let t = 20.0 / p.x.abs().max(p.y.abs());
+        Point3::new(t * p.x, t * p.y, z)
     };
     let low = if through { 0.0 } else { FLOOR };
     let centre = Point3::new(0.0, 0.0, FLOOR);
-    for k in 0..SIDES {
-        let (p0, p1) = (rim(k, TOP), rim(k + 1, TOP));
+    for k in 0..n {
+        let (p0, p1) = (at(k, TOP), at(k + 1, TOP));
         let (q0, q1) = (edge(k, TOP), edge(k + 1, TOP));
         f.push(Triangle::new(p0, q0, q1)); // top face, +z
         f.push(Triangle::new(p0, q1, p1));
-        let (b0, b1) = (rim(k, low), rim(k + 1, low));
+        let (b0, b1) = (at(k, low), at(k + 1, low));
         f.push(Triangle::new(b0, p0, p1)); // hole wall, facing the axis
         f.push(Triangle::new(b0, p1, b1));
         if through {
@@ -269,4 +291,38 @@ fn a_matched_thread_stays_clean_at_other_sizes_and_through() {
     assert_eq!(verdict(drilled_block(15.0), thread(0.0, 15.0)), Vec::new());
     assert_eq!(verdict(holed_block(5.0, true), thread(0.0, 5.0)), Vec::new());
     assert_eq!(verdict(drilled_block(5.0), thread(0.005, 5.0)), Vec::new());
+}
+
+/// PR #1099 third review: a flat whose corners stand on the declared
+/// circle is not the thread's wall. A chord dips inside the circle by its
+/// sagitta, and the helix, cut to the declared major circle, goes that
+/// much further into the flat than the thread depth: convicted, from
+/// both the region law and the solid law. Before the fix each case below
+/// verified clean.
+#[test]
+fn a_flat_whose_corners_stand_on_the_circle_convicts() {
+    // A D-bore: an r 5 96-gon with a flat from (3, 4) to (-3, 4), 1 mm
+    // inside the circle at its middle.
+    let (lo, hi) = (4.0f64.atan2(3.0), 4.0f64.atan2(-3.0));
+    let mut d: Vec<Point2> = ngon(5.0, SIDES).into_iter().filter(|p| !(p.y.atan2(p.x) > lo && p.y.atan2(p.x) < hi)).collect();
+    d.extend([Point2::new(3.0, 4.0), Point2::new(-3.0, 4.0)]);
+    d.sort_by(|a, b| {
+        let ang = |p: &Point2| (p.y.atan2(p.x) - std::f64::consts::FRAC_PI_4).rem_euclid(std::f64::consts::TAU);
+        ang(a).total_cmp(&ang(b))
+    });
+    for (name, rim) in [("D-bore", d), ("octagon on r 5", ngon(5.0, 8)), ("16-gon on r 5", ngon(5.0, 16))] {
+        let w = verdict(polygon_block(&rim, false), thread(0.0, 5.0));
+        assert!(gouged(&w), "{name}: {w:?}");
+    }
+    // Through, where the model's own rim loop stands in the region.
+    let w = verdict(polygon_block(&ngon(5.0, 8), true), thread(0.0, 5.0));
+    assert!(gouged(&w), "octagon, through: {w:?}");
+}
+
+/// The flats' twin: a fine polygon's sagitta fits the band, so a matched
+/// thread on it stays clean (96 sides: 2.7 um; 48 sides: 11 um).
+#[test]
+fn a_fine_polygon_bore_still_verifies_clean() {
+    assert_eq!(verdict(polygon_block(&ngon(5.0, 48), false), thread(0.0, 5.0)), Vec::new());
+    assert_eq!(verdict(polygon_block(&ngon(5.0, 96), true), thread(0.0, 5.0)), Vec::new());
 }

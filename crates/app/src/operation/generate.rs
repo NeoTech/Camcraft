@@ -2077,7 +2077,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             )?;
             // #1071: the gouge law reads the thread's major circle, the
             // wall the helix is cut to, not the declared minor rim.
-            let region = super::material_source::major_rims(
+            let region = super::thread_rims::major_rims(
                 region,
                 holes,
                 machining2d::THREAD_DEPTH_PER_PITCH * tool.pitch,
@@ -3003,7 +3003,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // along every move against the part solid. The Section kinds
             // answer the same law inside `verify` (b2), real tip (M13.7).
             if depth_law == DepthLaw::Contain {
-                contain_into(&mut warns, &path, &material.facets, &cutter, depth_law, stl, material.excess, &super::material_source::thread_bores(&params, tool.pitch));
+                contain_into(&mut warns, &path, &material.facets, &cutter, depth_law, stl, material.excess, &super::thread_rims::thread_bores(&params, tool.pitch));
             }
             // The rotary kinds' bands and rapids (M13): `Mode::Rotary`
             // stood the vertical-column laws down; the radial field
@@ -3118,7 +3118,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // along every move against the part solid. The Section kinds
             // answer the same law inside `verify` (b2), real tip (M13.7).
             if depth_law == DepthLaw::Contain {
-                contain_into(&mut warns, &path, &m_gen.facets, &cutter, depth_law, stl, material.excess, &super::material_source::thread_bores(&params, tool.pitch));
+                contain_into(&mut warns, &path, &m_gen.facets, &cutter, depth_law, stl, material.excess, &super::thread_rims::thread_bores(&params, tool.pitch));
             }
             warns.extend(workholding_warnings(
                 &path_world,

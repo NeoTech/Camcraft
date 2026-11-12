@@ -21,3 +21,17 @@
   - It matches the adaptive planner's own `guard::crosses` (`TOUCH` = 1e-9 mm, #1048), so the plan check and the verifier agree, which #1129 asks for.
   - Scoping it to retraces only (touching chords also near-collinear) was considered. It was dropped: #1129 wants the general rule, and the planner already applies it everywhere.
 - **Noted (reduced fidelity):** `major_rims` moves the rim by exactly H, with no excess term. On a coarse model the containment solid law, whose allowance reads the excess, is the backstop. The function's doc says so.
+
+## Third review round (434a464a)
+
+- **Chosen:** the wall is measured at the facet's (or rim loop's) NEAREST POINT to the bore axis, not at its nearest vertex. That covers both the solid law's `thread_bore::wall_radius` (the wall and the mouth branches) and `major_rims`. A chord between two on-circle vertices dips inside the circle by its sagitta.
+  - Recognition: the facet's nearest point must itself be on the band, so a D-bore's flat (1 mm in) or a step reaching inside the mouth is never read as the thread's material.
+  - Grading: the wall stands at that nearest point, credited at most `CHORD_CREDIT` toward its nearest vertex.
+  - Pins: `a_flat_whose_corners_stand_on_the_circle_convicts` (a D-bore, an octagon and a 16-gon on r 5, plus a through octagon) and `a_fine_polygon_bore_still_verifies_clean` (48 and 96 sides). Unit tests in `thread_bore.rs`. The D-bore case verified with no warning on the old reading, which was checked.
+- **Chosen:** `CHORD_CREDIT` = the program sim's `DEV_TOL`, 0.01 mm.
+  - Why: a tessellated round hole cannot be told from a polygon by shape alone, only by how far its chords dip. The STEP importer meshes at half that tolerance (`CHORD_CAP`), so a full-fidelity round hole is credited whole. The r 15 96-gon's 8 µm dip is a hand-built mesh coarser than the importer promises, and it is still credited whole. A flat that dips further is graded where it stands, less 0.01 mm.
+  - A reduced-fidelity model's excess still rides the law's allowance, as before.
+  - Dropped: the bare nearest point with no credit. Our own `disk_loop` rim is an inscribed polygon (a dip up to `RIM_SAG_BUDGET`), and a real model's tessellation dips too. Both made every matched thread convict by a few micrometres.
+  - Dropped: crediting only our own polygon's dip, 5 µm at most. A 96-gon at r 15 (8 µm) then convicted.
+- **Moved:** `major_rims`, `thread_bores` and the new `loop_nearest` went to `operation/thread_rims.rs`. `material_source.rs` stays at main's 350 lines.
+- **Not changed (noted by the review):** main's own `chord_dip` hole-wall grant for the containment kinds also credits a coarse polygon's flats. It is off this grant's path and worth its own issue.
