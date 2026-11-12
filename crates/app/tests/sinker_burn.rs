@@ -92,6 +92,7 @@ fn burn(datum: SinkerDatum, depth: f64, floor: f64) -> OpParams {
         y: 0.0,
         feed: 40.0,
         condition: "S1".into(),
+        orbit: None,
     })
 }
 
@@ -132,6 +133,7 @@ fn sinker_burn_cavity_matches_golden() {
         electrode_len: 30.0,
         feed: 40.0,
         gap: GAP,
+        orbit: None,
     };
     let path = burn_to_depth(&p).expect("burns");
     let text = common::gen_to_cltext(&path);

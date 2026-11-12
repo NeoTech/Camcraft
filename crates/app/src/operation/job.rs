@@ -325,7 +325,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         .and_then(crate::machine::AxisLimits::program_travel)
         .map(|(lo, hi)| wcs_origin[2] + lo.max(hi));
     let sinker_gap = match &op.params {
-        OpParams::SinkerBurn(p) => Some(super::sinker_op::condition_gap(world, setup, p)),
+        OpParams::SinkerBurn(p) => Some(super::sinker_op::burn_gap(world, setup, p)),
         _ => None,
     };
     let machine_rotaries = mounted.map(|m| {
