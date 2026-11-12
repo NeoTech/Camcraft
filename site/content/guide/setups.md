@@ -52,7 +52,7 @@ The workspace button on the Setup group mounts a built-in machine for
 Milling, Turning or Mill-turning, and the ribbon shows only the operations
 that machine can run. CamCraft also ships machine files for several
 Tormach mills, and **View > Panels > Machines** browses, validates and
-edits `.mch` machine files.
+edits `.mch` machine files. See [Machine types](@/guide/machines.md) for what each kind allows.
 
 A machine file states facts such as axis travel, spindle speed range and
 rigid-tapping support. CamCraft checks a program against the facts the
