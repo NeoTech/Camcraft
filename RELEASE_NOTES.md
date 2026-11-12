@@ -79,7 +79,8 @@ decision, 2026-11-12).
   operations on the new 770MX + microARC 4 machine (#785; simultaneous 4-axis,
   unreachable tilts and A past travel are refused by name); a PathPilot plasma
   post for the Tormach 1300PL (#671); a PathPilot lathe post (#612); a Doosan
-  DNM + Fanuc post aligned with a real sample program (#614, JSwetz);
+  DNM + Fanuc post aligned with a real sample program (#614, JSwetz; see
+  Known issues, #950, before using it with a 4th axis);
   documented Heidenhain drilling and tapping cycles with explicit floating
   holder intent (#51, seelesturm).
 - **Plasma** (#672, #801): the through-cut laws judge every Plasma Profile at
@@ -166,6 +167,12 @@ decision, 2026-11-12).
   (#900); the release build is untouched.
 
 ## Known issues
+- **#950 (P0)**: the new Doosan DNM post, on a 4th axis without TCP, assumes
+  the table stands at A0 at program start and after every tool change. An
+  operation at A0 that follows one at another angle is then posted with no A
+  word and cuts at the previous angle. Until it is fixed, do not post programs
+  through the Doosan DNM post that mix A0 with other A angles, or add the A0
+  move by hand and check every A word after a tool change.
 - **#934 (P0)**: the Sinumerik post writes work offsets 5 and 6 as G58 / G59,
   which on the 840D are programmable offsets, not settable frames. Check
   offsets 5 and 6 by hand on that post.
