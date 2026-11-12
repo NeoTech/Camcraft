@@ -77,6 +77,7 @@ mod step_budget_row;
 // #1094: the stock page's raw-stock-only checkbox.
 mod raw_stock_row;
 // #371: the tool editor's Body section and its picking preview.
+mod tool_body_lathe_page;
 mod tool_body_page;
 // #630: the tool editor's lathe orientation row.
 mod tool_orientation_row;

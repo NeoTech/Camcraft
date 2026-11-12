@@ -17,6 +17,7 @@
 
 mod align_tools;
 mod area;
+mod body_tools;
 mod bridge;
 // #93 slice 2: a milling tool's drawn cutter outline.
 mod cutter_tools;

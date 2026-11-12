@@ -128,6 +128,11 @@ pub mod tool_body;
 pub mod tool_body_view;
 // #369: lathe-held tool bodies (the turning tool frame).
 pub mod tool_body_lathe;
+// #369/#396: the turning tool frame and the insert zone, for the UI.
+pub use camcraft_tools::{lathe_holder, lathe_insert_zone};
+// #361: the one door a body file is read through; the lathe placement reads.
+pub mod tool_body_file;
+pub mod tool_body_lathe_view;
 // #743: the simulated tool as the collision laws read it, revolved.
 pub mod sim_tool_body;
 // #1038: a lathe-held body drawn as modelled in the holder law's frame.
