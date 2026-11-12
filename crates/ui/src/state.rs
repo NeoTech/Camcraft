@@ -30,7 +30,7 @@ use camcraft_app::geometry::{
 use camcraft_app::operation::{
     self, AreaControls, FeatureSel, GeoSel, Height, HeightReference, OpParams, SrcRef,
 };
-use camcraft_app::schema::{ColorVision, Location, Operation as OperationDef, PostRef, ThemeRef, WCS_SLOTS};
+use camcraft_app::schema::{ColorVision, Location, Operation as OperationDef, PostRef, ThemeRef};
 use camcraft_app::stock::{self, StockShape};
 use camcraft_app::tools::{Tool, ToolKind, catalog};
 use camcraft_app::units::{self, Unit};
@@ -358,8 +358,8 @@ pub enum CommandKind {
     /// Move the active-setup cursor. Inert for every stamp - it decides
     /// where NEW things join, never what already cuts.
     ActivateSetup(Option<String>),
-    /// Pick the program offset a setup posts at (#196): `Some(i)` is
-    /// `WCS_SLOTS[i]`, `None` clears the pick - an unset setup is `G54`.
+    /// Pick the program offset a setup posts at (#196, #931): `Some(i)` is
+    /// offset `i + 1`, `None` clears the pick - an unset setup is offset 1.
     /// Undoable (`SetSetupWorkOffset`).
     SetSetupWorkOffset {
         setup: String,
@@ -3295,7 +3295,7 @@ impl State {
                     Ok(command) => {
                         self.history.execute(&self.world, command);
                         self.doc_version += 1;
-                        let word = WCS_SLOTS.get(slot.unwrap_or(0)).copied().unwrap_or("G54");
+                        let word = camcraft_app::setup::wcs_name(&self.world, Some(&setup));
                         self.status = format!("{setup} WCS posts as {word}");
                     }
                     Err(err) => {

@@ -7,7 +7,7 @@ use flecs_ecs::prelude::World;
 use super::setup::StockSnap;
 use crate::commands::{Command, CommandError};
 use crate::model;
-use crate::schema::{Location, STOCK_NAME, SetupDef, StockDef, WCS_SLOTS, Wcs};
+use crate::schema::{Location, STOCK_NAME, SetupDef, StockDef, LEGACY_WCS_NAMES, Wcs};
 use crate::setup;
 
 /// Delete a setup, its private furniture, and its claim on the program.
@@ -51,7 +51,7 @@ impl DeleteSetup {
         }
         let owned = |n: &str| {
             n != STOCK_NAME
-                && !WCS_SLOTS.contains(&n)
+                && !LEGACY_WCS_NAMES.contains(&n)
                 && !setup::is_furniture_of_other(world, n, name)
         };
         let stock = if owned(&def.stock) {

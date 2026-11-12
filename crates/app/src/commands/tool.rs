@@ -9,7 +9,7 @@ use flecs_ecs::prelude::World;
 
 use crate::commands::{Command, CommandError};
 use crate::model;
-use crate::schema::{Location, STOCK_NAME, WCS_SLOTS, ToolBody, ToolDef};
+use crate::schema::{Location, STOCK_NAME, LEGACY_WCS_NAMES, ToolBody, ToolDef};
 use crate::tools::Tool;
 
 pub(super) fn reserved(world: &World, name: &str) -> Option<CommandError> {
@@ -21,7 +21,7 @@ pub(super) fn reserved(world: &World, name: &str) -> Option<CommandError> {
     // so a tool cannot squat on the entity a future setup will lazily
     // spawn.
     let taken = name == STOCK_NAME
-        || WCS_SLOTS.contains(&name)
+        || LEGACY_WCS_NAMES.contains(&name)
         || crate::setup::is_furniture_shape(name)
         || crate::setup::names(world).iter().any(|s| {
                 crate::setup::stock_entity_name(world, Some(s)) == name

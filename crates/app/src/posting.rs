@@ -18,7 +18,7 @@
 use crate::model;
 use crate::operation::{self, Height, OpStatus, OpParams};
 use crate::post::{self, cnc, engine, Dump};
-use crate::schema::{EndUnits, PostOptions, PostRef, ThreadingOutput, WCS_SLOTS};
+use crate::schema::{EndUnits, PostOptions, PostRef, ThreadingOutput};
 use flecs_ecs::prelude::*;
 use serde_json::Value;
 use std::path::Path;
@@ -646,6 +646,9 @@ pub fn verification_report(world: &World) -> GateReport {
     problems.extend(suppressed::suppressed_problems(world));
     // The rotated-offset clause (#315): the post carries translation only.
     problems.extend(wcs_rotation::rotated_wcs_problems(world));
+    // The offset-range clause (#931): each setup's offset index against
+    // its own post's maximum - never posted at offset 1.
+    problems.extend(crate::setup_offsets::range_problems(world));
     // #389: the setups' post options must agree on what shapes the whole
     // program (the Output and the thread output) - never posted half one
     // way. Judged program-wide, ahead of #388's per-mount split.
@@ -935,21 +938,22 @@ pub fn op_streams(world: &World) -> Result<Vec<(String, Vec<cnc::Record>)>, Stri
 }
 
 /// The work offset an operation of the `setup` context posts to: the
-/// setup's word (#196, #342: its label, else `G54`) and the setup's one
-/// WCS origin as the machine would measure it. `pub(crate)` so the
-/// machine-limit travel check (M2.3 C) reads program coordinates by
-/// exactly this law, not by a second copy of it.
+/// setup's 1-based offset index (#196, #342, #931: its label, else 1)
+/// and the setup's one WCS origin as the machine would measure it.
+/// `pub(crate)` so the machine-limit travel check (M2.3 C) reads program
+/// coordinates by exactly this law, not by a second copy of it.
 ///
-/// The G-code WORD is always `WCS_SLOTS[slot]` - the machine's register
-/// names do not take setup suffixes. The ENTITY the origin is measured
-/// from is the setup's WCS (M3.2 A, #342), whatever word it is labelled.
-pub(crate) fn wcs_context(world: &World, setup: Option<&str>) -> (&'static str, [f64; 3]) {
-    let slot = wcs_slot::wcs_slot(world, setup);
-    let name = WCS_SLOTS[slot];
+/// The stream carries the INDEX; the post writes its own word for it. An
+/// index the post cannot express is never read as offset 1 here - the
+/// gate refuses it by setup name ([`crate::setup_offsets::range_problems`]).
+/// The ENTITY the origin is measured from is the setup's WCS (M3.2 A,
+/// #342), whatever offset it is labelled.
+pub(crate) fn wcs_context(world: &World, setup: Option<&str>) -> (u32, [f64; 3]) {
+    let index = crate::setup_offsets::index(world, setup);
     let origin = crate::setup::wcs_entity(world, setup)
         .and_then(|e| model::transform_of(world, &e))
         .map_or([0.0; 3], |t| [t.pos.x, t.pos.y, t.pos.z]);
-    (name, origin)
+    (index, origin)
 }
 
 /// Every height a parameter set references (the same walk

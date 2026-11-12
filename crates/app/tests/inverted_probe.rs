@@ -155,7 +155,7 @@ fn records(c: &Case) -> Vec<Record> {
         tool_diameter: 2.0 * R,
         clearance_z: 50.0,
         retract_z: 50.0,
-        wcs: "G54",
+        wcs: 1,
         origin: ORIGIN,
         probe_result: Some(probe_rec::ProbeResult { set_wcs: Some(1), tol_mm: 0.5 }),
         ..post::Dump::default()

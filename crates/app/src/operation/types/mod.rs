@@ -32,4 +32,5 @@ pub use camcraft_post::post::AfterOperation;
 pub use height::{Height, HeightReference};
 pub use params::{OpParams, Tilt};
 pub use plasma::{PlasmaComp, PlasmaOp};
-pub use sel::{FeatureSel, GenStamp, GeoSel, OpStatus, OpType, SrcRef, WCS_SLOTS};
+pub use sel::{FeatureSel, GenStamp, GeoSel, OpStatus, OpType, SrcRef};
+pub(crate) use sel::LEGACY_WCS_NAMES;

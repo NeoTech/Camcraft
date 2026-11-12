@@ -74,10 +74,7 @@ pub fn collect(world: &World) -> ProjectFile {
                         stock: d.stock.clone(),
                         wcs: WcsDto::One(d.wcs.clone()),
                         datum_from: d.datum_from.clone(),
-                        work_offset: d
-                            .work_offset
-                            .and_then(|i| crate::schema::WCS_SLOTS.get(i))
-                            .map(|w| (*w).to_string()),
+                        work_offset: d.work_offset.map(crate::project::work_offset_text),
                         part_alignment: d.part_alignment.as_ref().map(AlignmentDto::from_location),
                         machine: d.machine.as_ref().map(SetupMachineDto::from_def),
                         post: d.post.as_ref().map(SetupPostDto::from_ref),

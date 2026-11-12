@@ -1,6 +1,7 @@
 //! #934: the Siemens 840D post writes the settable frame each work
-//! offset selects. The engine hands a setup's offset as its generic word
-//! (`WCS_SLOTS`, `G54`..`G59` - the setup is the one source of truth);
+//! offset selects. The engine hands a setup's offset as its index (#931;
+//! the legacy words `G54`..`G59` read as 1-6 - the setup is the one
+//! source of truth);
 //! on the 840D the settable zero offsets are `G54`..`G57` and then
 //! `G505`..`G599`, while `G58` / `G59` are axial programmable offsets
 //! that select no frame. So offsets 1-4 post `G54`..`G57` and offsets 5
@@ -14,7 +15,6 @@
 use camcraft_app::cl::MoveKind;
 use camcraft_app::post::cnc::{self, MoveRec, Record};
 use camcraft_app::post::engine;
-use camcraft_app::schema::WCS_SLOTS;
 use serde_json::{json, Value};
 
 const SINUMERIK: &str = include_str!("../../../assets/posts/sinumerik.cps");
@@ -50,7 +50,7 @@ fn opening_words(program: &str) -> Vec<String> {
 
 #[test]
 fn sinumerik_posts_offsets_one_to_six_as_their_settable_frames() {
-    let out = engine::run(SINUMERIK, &Value::Null, &stream(&WCS_SLOTS)).expect("posts");
+    let out = engine::run(SINUMERIK, &Value::Null, &stream(&["G54", "G55", "G56", "G57", "G58", "G59"])).expect("posts");
     assert!(out.warnings.is_empty(), "{:?}", out.warnings);
     assert_eq!(opening_words(&out.program), ["G54", "G55", "G56", "G57", "G505", "G506"], "{}", out.program);
     assert!(

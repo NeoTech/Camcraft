@@ -1,5 +1,6 @@
-//! The Setups page's work-offset picker (#196, #342): which `G54`..`G59`
-//! word the post writes for the setup's one WCS. It is only the label -
+//! The Setups page's work-offset picker (#196, #342): which work offset
+//! the post writes for the setup's one WCS, named by the setup's post
+//! (#931, `setup::offset_name`; slice 3 lists the post's whole range). It is only the label -
 //! the WCS origin, and every height measured from it, stay put.
 //! An unset setup IS `G54` - one `G54` entry, stored unset, so the file
 //! format is unchanged (#329). A pick queues the undoable
@@ -10,15 +11,19 @@
 
 use egui::{ComboBox, Ui};
 
-use camcraft_app::schema::WCS_SLOTS;
 
 use crate::state::{CommandKind, State};
 
-/// The combo text for a stored pick: the setup's word, plain - unset
-/// reads `G54`, exactly like an explicit `G54`.
+/// The entries the combo lists: offsets 1-6 (slice 3 of #931 widens it
+/// to the setup's post's maximum).
+const ENTRIES: usize = 6;
+
+/// The combo text for a stored pick: the setup's post's name for it,
+/// plain - unset reads like an explicit offset 1.
 #[must_use]
-pub(super) fn pick_text(slot: Option<usize>) -> &'static str {
-    WCS_SLOTS.get(slot.unwrap_or(0)).copied().unwrap_or("G54")
+pub(super) fn pick_text(world: &flecs_ecs::prelude::World, setup: &str, slot: Option<usize>) -> String {
+    let n = u32::try_from(slot.unwrap_or(0)).map_or(u32::MAX, |s| s.saturating_add(1));
+    camcraft_app::setup::offset_name(world, Some(setup), n)
 }
 
 /// A stored pick in the combo's terms: `G54` (slot 0) and unset are one
@@ -35,10 +40,11 @@ pub(super) fn picker(ui: &mut Ui, state: &mut State, setup: &str) {
     ui.horizontal(|ui| {
         ui.label("    Work offset");
         ComboBox::from_id_salt(("setup_wcs", setup))
-            .selected_text(pick_text(current))
+            .selected_text(pick_text(&state.world, setup, current))
             .show_ui(ui, |ui| {
-                for (i, w) in WCS_SLOTS.iter().enumerate() {
-                    ui.selectable_value(&mut chosen, normalized(Some(i)), *w);
+                for i in 0..ENTRIES {
+                    let w = pick_text(&state.world, setup, Some(i));
+                    ui.selectable_value(&mut chosen, normalized(Some(i)), w);
                 }
             })
             .response

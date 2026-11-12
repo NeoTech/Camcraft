@@ -2,8 +2,12 @@
 
 use crate::machining2d::Lead;
 
-/// Work coordinate system slots - the machine offsets posted as G54..G59.
-pub const WCS_SLOTS: [&str; 6] = ["G54", "G55", "G56", "G57", "G58", "G59"];
+/// The legacy work-offset ENTITY names (#931): the implicit setup's WCS
+/// is `G54`, and files before v54 named per-slot WCS entities
+/// `<setup>/G54`..`<setup>/G59`. Reservations and migrations read them;
+/// they are never a G-code word - the setup's post names its offsets
+/// (`crate::setup_offsets`).
+pub(crate) const LEGACY_WCS_NAMES: [&str; 6] = ["G54", "G55", "G56", "G57", "G58", "G59"];
 
 
 /// Where the operation's boundary geometry comes from. Names, never
