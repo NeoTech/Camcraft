@@ -91,6 +91,8 @@ mod post_refusal;
 mod gcode_viewer;
 mod first_setup;
 mod structural;
+// #661: every operation kind wears its own SVG-mastered glyph.
+mod op_icon_table;
 // #330: a clicked tilted face is turned flat onto the plane.
 mod plane_face_lay;
 // #554: the plane row's click takes the face, an axis row's the edge.
