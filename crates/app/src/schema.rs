@@ -145,9 +145,11 @@ pub struct ToolBody {
 }
 
 /// #93 slice 2: a milling tool's own drawn cutter, neck and shank
-/// outline (`SetToolCutter`, `crate::tool_cutter`). Display data: it
-/// agrees with the tool's numbers by law (`cutter_profile::check`) and
-/// no generator or judging law reads it. Absent = drawn from the numbers.
+/// outline (`SetToolCutter`, `crate::tool_cutter`). It agrees with the
+/// tool's numbers by law (`cutter_profile::check`); no generator reads
+/// it, and the stack laws and simulation read only its neck where it is
+/// narrower than the stated shank (#852, `tool_cutter::neck_of`).
+/// Absent = drawn from the numbers.
 #[derive(Component, Debug, Clone, PartialEq)]
 pub struct ToolCutter {
     pub spun: camcraft_tools::spun::SpunProfile,

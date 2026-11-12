@@ -60,11 +60,14 @@ pub(super) fn lathe_reads(facets: &[Triangle], origin: [f64; 3]) -> Result<(), G
 /// out to it, and the chain is proven clear of it). An origin on the
 /// world Z axis runs the kernel unshifted, and a stock that does not
 /// reach past the part (or none) keeps the part-only chain's bits.
+/// `cutter` is the tool as the stack laws read it (#842): with a body,
+/// its band stack, which the holder and part laws sweep.
 pub(super) fn cross_drill(
     p: CrossParams<'_>,
     facets: &[Triangle],
     stock: Option<&[Triangle]>,
     origin: [f64; 3],
+    cutter: &crate::verify::Cutter,
     tool_name: &str,
 ) -> Result<Toolpath, GenError> {
     let (ox, oy) = (origin[0], origin[1]);
@@ -108,10 +111,11 @@ pub(super) fn cross_drill(
     // #1015: these laws judge the chain in the spindle frame; their
     // refusals carry it back to the world by the same shift (`back`).
     super::cross_stock::rapids_clear(&t, &st, p.tool).map_err(|e| shifted_ghost(e, &t, ox, oy))?;
-    super::drill_reach::cross_holder(&t, facets, stock, (ox, oy), p.tool, tool_name).map_err(|e| shifted_ghost(e, &t, ox, oy))?;
+    super::drill_reach::cross_holder(&t, facets, stock, (ox, oy), p.tool, cutter.body.as_ref(), tool_name)
+        .map_err(|e| shifted_ghost(e, &t, ox, oy))?;
     if on_origin {
         // Issue #117: what the chain leaves is judged against the part.
-        super::cross_part::part_clear(&t, facets, p.tool, p.holes).map_err(|e| e.with_ghost(&t))?;
+        super::cross_part::part_clear(&t, facets, p.tool, cutter, p.holes).map_err(|e| e.with_ghost(&t))?;
         return Ok(t);
     }
     // The kernel's chain is straight, cycle-free and computer-
@@ -133,7 +137,7 @@ pub(super) fn cross_drill(
     if !t.is_chained() || !t.all_finite() {
         return Err(GenError::Invalid("cross-drill chain self-check failed after the spindle shift".into()));
     }
-    super::cross_part::part_clear(&t, facets, p.tool, p.holes).map_err(|e| e.with_ghost(&t))?;
+    super::cross_part::part_clear(&t, facets, p.tool, cutter, p.holes).map_err(|e| e.with_ghost(&t))?;
     Ok(t)
 }
 
