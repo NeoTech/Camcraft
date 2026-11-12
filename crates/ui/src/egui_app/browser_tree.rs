@@ -20,7 +20,7 @@ use crate::state::{SetupPage, State, UiTarget};
 
 use super::icons::Icon;
 use super::painted;
-use super::panes::op_icon;
+use super::op_icons::op_icon;
 
 /// The tree's collapsible top-level sections.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

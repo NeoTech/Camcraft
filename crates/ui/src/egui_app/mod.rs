@@ -46,6 +46,7 @@ pub mod window_chrome;
 mod post_options;
 pub mod cvd;
 mod icons;
+mod op_icons;
 mod layout;
 mod load_field;
 // pub(crate) past egui_app: `State::machine_editor` names its draft
