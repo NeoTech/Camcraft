@@ -14,13 +14,17 @@
 //!   height, where the thread breaks out at its mouth). A floor, a wall of
 //!   another radius, another hole, or anything below the entry that is
 //!   not the wall is never excused;
-//! - the swept cutter piece stays inside the major cylinder: the farther
-//!   tip end's distance from the axis plus the atom's radius is at most
-//!   the major radius plus the law's allowance.
+//! - the swept cutter piece stays inside the major cylinder OF THE MODEL'S
+//!   OWN WALL: the farther tip end's distance from the axis plus the
+//!   atom's radius is at most the hit facet's own radius about the axis
+//!   (its nearest on-circle vertex) plus the thread depth plus the law's
+//!   allowance (PR #1099 review).
 //!
-//! So a thread cut past its major circle, a thread declared wider than
-//! the model's hole, and a plunge through the hole's floor all still
-//! convict.
+//! The band only RECOGNISES the wall; the cap measures the cut. A hole
+//! declared wider than the model's, or off its centre, by more than the
+//! allowance therefore convicts - the helix would cut that much past the
+//! model's real major circle - however small the mismatch, and so do a
+//! thread cut past its major circle and a plunge through the hole's floor.
 
 use crate::geo2d::Point2;
 use crate::geometry::{Point3, Triangle};
@@ -50,33 +54,42 @@ impl ThreadBore {
         (p.x - self.xy.x).hypot(p.y - self.xy.y)
     }
 
-    /// Whether `t` is the thread's own material (module doc): the minor
-    /// wall, or the face the hole opens through.
-    fn threaded(&self, t: &Triangle) -> bool {
+    /// The model's own wall radius about the axis when `t` is the thread's
+    /// own material (module doc: the minor wall, or the face the hole opens
+    /// through) - the nearest of its vertices on the minor circle - else
+    /// `None`.
+    fn wall_radius(&self, t: &Triangle) -> Option<f64> {
         let band = (WALL_BAND_SHARE * self.minor).max(WALL_BAND);
-        let on = |p: Point3| (self.rho(p) - self.minor).abs() <= band;
-        let ons = [t.a, t.b, t.c].into_iter().filter(|&p| on(p)).count();
-        if ons == 3 {
+        let on = |p: &Point3| (self.rho(*p) - self.minor).abs() <= band;
+        let ons: Vec<f64> = [t.a, t.b, t.c].iter().filter(|p| on(p)).map(|&p| self.rho(p)).collect();
+        let nearest = ons.iter().copied().fold(f64::INFINITY, f64::min);
+        if ons.len() == 3 {
             let (u, v) = (t.b - t.a, t.c - t.a);
             let n = u.cross(v);
             let len = n.dot(n).sqrt();
             if len > f64::EPSILON && (n.z / len).abs() <= WALL_NZ {
-                return true;
+                return Some(nearest);
             }
         }
-        ons > 0 && t.a.z.min(t.b.z).min(t.c.z) >= self.top - WALL_BAND
+        (!ons.is_empty() && t.a.z.min(t.b.z).min(t.c.z) >= self.top - WALL_BAND).then_some(nearest)
     }
 
     /// Whether a disc of radius `rho` swept between tips `p` and `q`
-    /// stays inside the major cylinder, `allow` granted. The farthest
-    /// point of a segment from the axis is one of its ends.
-    fn holds(&self, p: Point3, q: Point3, rho: f64, allow: f64) -> bool {
-        self.rho(p).max(self.rho(q)) + rho <= self.major + allow
+    /// stays inside the major cylinder of a wall standing at `wall` from
+    /// the axis, `allow` granted. The farthest point of a segment from
+    /// the axis is one of its ends.
+    fn holds(&self, wall: f64, p: Point3, q: Point3, rho: f64, allow: f64) -> bool {
+        self.rho(p).max(self.rho(q)) + rho <= wall + (self.major - self.minor) + allow
     }
 }
 
 /// Whether the hit of an upright cutter disc of radius `rho`, swept
 /// between tips `p` and `q`, on facet `t` is a thread being cut.
 pub(super) fn excused(bores: &[ThreadBore], t: &Triangle, p: Point3, q: Point3, rho: f64, allow: f64) -> bool {
-    bores.iter().any(|b| b.minor.is_finite() && b.major >= b.minor && b.top.is_finite() && b.threaded(t) && b.holds(p, q, rho, allow))
+    bores.iter().any(|b| {
+        b.minor.is_finite()
+            && b.major >= b.minor
+            && b.top.is_finite()
+            && b.wall_radius(t).is_some_and(|wall| b.holds(wall, p, q, rho, allow))
+    })
 }

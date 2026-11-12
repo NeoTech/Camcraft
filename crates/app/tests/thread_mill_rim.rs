@@ -65,29 +65,44 @@ fn cavity_block() -> Mesh {
 /// from the top down to Z 10: what CAD draws of a tapped hole (the minor
 /// cylinder). Closed and outward-facing.
 fn drilled_block(r: f64) -> Mesh {
+    holed_block(r, false)
+}
+
+/// [`drilled_block`], or with `through` the hole running out of the
+/// block's bottom (the model's own rim loop then stands in its footprint).
+fn holed_block(r: f64, through: bool) -> Mesh {
     let mut f: Vec<Triangle> = Vec::new();
     let outer = cube(Point3::new(-20.0, -20.0, 0.0), Point3::new(20.0, 20.0, TOP));
     f.extend(outer.facets[4..12].iter().cloned());
-    f.extend(outer.facets[0..2].iter().cloned());
+    if !through {
+        f.extend(outer.facets[0..2].iter().cloned());
+    }
     let ang = |k: usize| std::f64::consts::TAU * (k % SIDES) as f64 / SIDES as f64 + std::f64::consts::FRAC_PI_4;
     let rim = |k: usize, z: f64| Point3::new(r * ang(k).cos(), r * ang(k).sin(), z);
     // The square boundary point on the same ray: the corners fall on
     // k = 0, 24, 48, 72 (the angles start at 45 degrees).
-    let edge = |k: usize| {
+    let edge = |k: usize, z: f64| {
         let (c, s) = (ang(k).cos(), ang(k).sin());
         let t = 20.0 / c.abs().max(s.abs());
-        Point3::new(t * c, t * s, TOP)
+        Point3::new(t * c, t * s, z)
     };
+    let low = if through { 0.0 } else { FLOOR };
     let centre = Point3::new(0.0, 0.0, FLOOR);
     for k in 0..SIDES {
         let (p0, p1) = (rim(k, TOP), rim(k + 1, TOP));
-        let (q0, q1) = (edge(k), edge(k + 1));
+        let (q0, q1) = (edge(k, TOP), edge(k + 1, TOP));
         f.push(Triangle::new(p0, q0, q1)); // top face, +z
         f.push(Triangle::new(p0, q1, p1));
-        let (b0, b1) = (rim(k, FLOOR), rim(k + 1, FLOOR));
+        let (b0, b1) = (rim(k, low), rim(k + 1, low));
         f.push(Triangle::new(b0, p0, p1)); // hole wall, facing the axis
         f.push(Triangle::new(b0, p1, b1));
-        f.push(Triangle::new(centre, b0, b1)); // floor, +z
+        if through {
+            let (e0, e1) = (edge(k, 0.0), edge(k + 1, 0.0));
+            f.push(Triangle::new(b0, e1, e0)); // bottom face, -z
+            f.push(Triangle::new(b0, b1, e1));
+        } else {
+            f.push(Triangle::new(centre, b0, b1)); // floor, +z
+        }
     }
     Mesh::from_facets(f)
 }
@@ -217,4 +232,40 @@ fn a_stock_sourced_thread_mill_verifies_clean_too() {
     let w: Vec<Warning> =
         model::toolpath_of(&world, &e).expect("cached").warnings.into_iter().filter(Warning::blocks_post).collect();
     assert_eq!(w, Vec::new());
+}
+
+/// PR #1099 review: the grant must hold the cutter to the MODEL's wall,
+/// not the declared circle. A declared hole wider than the model's, or off
+/// its centre, by more than the gouge tolerance cuts the thread that much
+/// past the model's real major circle: convicted, however small.
+#[test]
+fn a_declared_hole_wider_than_the_models_by_a_hair_convicts() {
+    for (model, declared) in [(5.0, 5.05), (5.0, 5.1), (15.0, 15.25)] {
+        let w = verdict(drilled_block(model), thread(0.0, declared));
+        assert!(gouged(&w), "r {declared} declared on an r {model} hole: {w:?}");
+    }
+    // The same on a through hole, where the model's own rim loop stands
+    // in the region (the region law's reading of it).
+    let w = verdict(holed_block(5.0, true), thread(0.0, 5.05));
+    assert!(gouged(&w), "through hole: {w:?}");
+}
+
+#[test]
+fn a_declared_hole_off_the_models_centre_by_a_hair_convicts() {
+    for (model, x) in [(5.0, 0.05), (5.0, 0.1), (15.0, 0.28)] {
+        let w = verdict(drilled_block(model), thread(x, model));
+        assert!(gouged(&w), "centre X {x} on an r {model} hole: {w:?}");
+    }
+    let w = verdict(holed_block(5.0, true), thread(0.05, 5.0));
+    assert!(gouged(&w), "through hole: {w:?}");
+}
+
+#[test]
+fn a_matched_thread_stays_clean_at_other_sizes_and_through() {
+    // The cap reads the model's own radius, so a match is still a match:
+    // a bigger bore, a through hole, and an off-centre declaration inside
+    // the gouge tolerance (5 um).
+    assert_eq!(verdict(drilled_block(15.0), thread(0.0, 15.0)), Vec::new());
+    assert_eq!(verdict(holed_block(5.0, true), thread(0.0, 5.0)), Vec::new());
+    assert_eq!(verdict(drilled_block(5.0), thread(0.005, 5.0)), Vec::new());
 }

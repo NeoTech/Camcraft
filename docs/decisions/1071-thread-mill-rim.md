@@ -8,3 +8,16 @@
 - **Chosen (crossing law):** two chords only touching (an endpoint within 1 nm of the other's line) are no crossing. `proper_cross` excluded a touch only at an exactly zero orientation. The retract runs the ride backwards, so its joints stand a last bit off their twins, and both the touches and the collinear overlap read as crossings. A real crossing keeps every endpoint off the other line; it is pinned down to a 0.001 rad angle.
   - Dropped: a parallel-only guard (sin < 1e-9). It removed 5 of the 21 pairs; the rest were touches at shared joints.
 - **Left:** the thread flanks are not modelled. The whole minor-to-major annulus is read as removable, which is what a thread mill cuts within its form. #986 owns the form.
+
+## Review round (PR #1099, f122474d)
+
+- **Fixed (blocker):** the grant recognised the model's wall with the drill rim's band, max(2 % r, 0.1 mm), but held the cutter to the DECLARED major circle. A declared hole up to that band wider than, or off the centre of, the model's hole therefore overcut its thread silently (the reviewer measured 0.05-0.30 mm; 37 % of an M3's depth).
+  - Now the band only recognises the wall. The cap reads the hit facet's own radius about the axis (its nearest on-circle vertex) plus the thread depth plus the law's allowance.
+  - `major_rims` grows a through hole's major circle from the model's own rim loop (its nearest vertex to the declared centre) when that stands nearer than the declared circle.
+  - Pinned: r 5.05 / 5.1 declared on r 5, r 15.25 on r 15, centres 0.05 / 0.1 / 0.28 mm off, and a through hole each way all convict. Matched r 15, a matched through hole, and a 5 um off-centre declaration stay clean.
+  - Dropped: only tightening the band to the allowance. The model's tessellation vertices do sit on the circle, but the band is a recognition test; the cap is what measures the cut, so the cap is the fix and the band stays as it was.
+- **Noted (crossing law scope):** `touching` reaches every operation's feed-feed crossing law, not only threads. It excuses a pair when any endpoint lies within 1 nm of the other chord's line. So a real crossing whose vertex lands within 1 nm of another chord, then continues across it, is read as two touches.
+  - The old predicate already missed that same case at an exactly zero orientation (an axis-aligned lattice), so the widening is the 1 nm band and nothing else.
+  - It matches the adaptive planner's own `guard::crosses` (`TOUCH` = 1e-9 mm, #1048), so the plan check and the verifier agree, which #1129 asks for.
+  - Scoping it to retraces only (touching chords also near-collinear) was considered. It was dropped: #1129 wants the general rule, and the planner already applies it everywhere.
+- **Noted (reduced fidelity):** `major_rims` moves the rim by exactly H, with no excess term. On a coarse model the containment solid law, whose allowance reads the excess, is the backstop. The function's doc says so.
