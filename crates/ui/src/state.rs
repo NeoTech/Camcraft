@@ -12,16 +12,17 @@
 use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, TryRecvError};
-use std::time::{Duration, Instant};
+use camcraft_app::clock::Instant;
+use std::time::Duration;
 
 use camcraft_app::commands::{
-    ActivateSetup, AlignPartToSetup, SetSetupRelative, SetSetupStockSource, SetSetupWorkOffset, AddTool, ApplyCuttingData, ChangeOperationKind, ChangeTool, CommandError, CreateOperation,
+    ActivateSetup, AlignPartToSetup, SetSetupRelative, SetSetupStockSource, SetSetupWorkOffset, AddTool, HolderPick, ApplyCuttingData, ChangeOperationKind, ChangeTool, CommandError, CreateOperation,
     ClearToolpath, CreateSetup, DeleteEntity, DeleteFixture, DeleteOperation, DeleteSetup, DeleteTool,
     EditOperationLinks, EditOperationParams, GenerateOperation, History, ImportModel,
     MoveFixture, MoveModel, PasteOperation, RegenerateAll, RenameOperation, ReorderOperation, RepairModel, SelectEntity, SetOperationGeometry,
-    SetColorVision, SetFixtureFixed, SetOperationSetup, SetStock, SetTheme, SetToolNumber, SetUnits, SetWcsOrigin,
+    SetFixtureFixed, SetOperationSetup, SetStock, SetToolNumber, SetUnits, SetWcsOrigin,
     SetWorkMaterial, TagFixture, UntagFixture, ImportFixture,
-    UpdateModel, theme_of, theme_set,
+    UpdateModel, theme_of,
 };
 use camcraft_app::geometry::{
     Point3, feature, quat_from_euler, quat_from_yaw, quat_to_euler, transform_point,
@@ -46,6 +47,8 @@ mod pockets;
 pub use pockets::PocketScan;
 #[path = "state_setup_post_options.rs"]
 mod setup_post_options;
+#[path = "state_setup_workholding.rs"]
+mod setup_workholding;
 #[path = "state_fixture.rs"]
 mod fixture_view;
 #[path = "state_locate.rs"]
@@ -57,6 +60,12 @@ pub use fixture_library::{FixtureLibDialog, InsertFixtureDraft, LibraryRow, Save
 #[path = "state_vise.rs"]
 mod vise_ui;
 pub use vise_ui::{ViseDraft, ViseOpeningDraft};
+#[path = "state_plate.rs"]
+mod plate_ui;
+pub use plate_ui::{PlateDraft, PlatePlaceDraft};
+#[path = "state_modvise.rs"]
+mod modvise_ui;
+pub use modvise_ui::ModViseDraft;
 #[path = "state_accessory.rs"]
 mod accessory_ui;
 pub use accessory_ui::{AccessoryDraft, AccessorySizeDraft};
@@ -68,8 +77,16 @@ mod tool_body_ui;
 pub use tool_body_ui::{BodyDraft, BodyPickMode, ToolBodyUi, ZOOM_MAX, ZOOM_MIN, clamp_zoom};
 #[path = "state_tool_profile.rs"]
 mod tool_profile_ui;
+#[path = "state_tool_cutter.rs"]
+mod tool_cutter_ui;
+pub use tool_cutter_ui::ToolCutterUi;
 #[path = "state_recent.rs"]
 mod recent_ui;
+#[path = "state_prefs.rs"]
+mod prefs_ui;
+#[path = "state_step_budget.rs"]
+mod step_budget_ui;
+pub use step_budget_ui::StepBudgetUi;
 pub use tool_profile_ui::{ToolColumn, ToolProfileUi, is_spun_kind, parametric_points};
 use flecs_ecs::prelude::World;
 
@@ -116,6 +133,9 @@ pub enum CommandKind {
         pos: [f64; 3],
         yaw_deg: f64,
     },
+    /// #1094: the stock page's "raw stock only" checkbox for a from-model
+    /// stock's source model, one undo unit (`SetStockSourceOnly`).
+    SetRawStockOnly(bool),
     /// Stock that wraps every model's world AABB plus `margin` mm, shaped
     /// like the pane's radio selection at click time (0 box, 1 cylinder).
     StockFit {
@@ -184,21 +204,23 @@ pub enum CommandKind {
         setup: String,
         own: bool,
     },
+    /// #1031: state (`Some`) or clear a setup's workholding maximum rpm
+    /// (`SetSetupWorkholdingRpm`).
+    SetSetupWorkholdingRpm { setup: String, max_rpm: Option<f64> },
     /// The post's user options (issue #34): the undoable
     /// `SetPostOptions` with the picked value.
     SetPostOptions(camcraft_app::schema::PostOptions),
-    /// The document's theme (M6.1 C), `SelectPost`'s twin: the two
-    /// built-ins and a discovered file arrive as a reference (what the
-    /// headless tests queue too), and the dialog arm opens the picker.
-    /// A `File` theme is parse-checked BEFORE the command is built -
-    /// the surface holds the JSON parser (layering), so a corrupt
-    /// theme refuses at the pick, never enters the history.
+    /// The user's theme (M6.1 C; a preference since #877, never on the
+    /// history): the two built-ins and a discovered file arrive as a
+    /// reference (what the headless tests queue too), and the dialog arm
+    /// opens the picker. A `File` theme is parse-checked before it is
+    /// set - the surface holds the JSON parser (layering), so a corrupt
+    /// theme refuses at the pick and is never stored.
     SelectTheme(ThemeRef),
     SelectThemeDialog,
     /// The viewer's colour-vision remap (M13.4), `SelectTheme`'s twin:
     /// gated (separation + readability through the simulated eye)
-    /// before the command is built, so a failing mode never enters
-    /// the history.
+    /// before it is set, so a failing mode is never worn or stored.
     SelectColorVision(ColorVision),
     /// The active setup's WCS (#342: one per setup): origin plus full
     /// orientation as yaw-pitch-roll degrees (R = Rz ⊗ Ry ⊗ Rx). The world
@@ -237,6 +259,22 @@ pub enum CommandKind {
     /// Apply profile, one `SetToolBody::spun`.
     SetToolProfile {
         name: String,
+        points: Option<Vec<camcraft_app::spun::SpunPoint>>,
+    },
+    /// #93 slice 2: set a milling tool's drawn cutter outline (`Some`)
+    /// or clear it back to the numbers' outline (`None`) - the tool
+    /// editor's Apply cutter, one `SetToolCutter`.
+    SetToolCutter {
+        name: String,
+        points: Option<Vec<camcraft_app::spun::SpunPoint>>,
+    },
+    /// #93 slice 3: a milling tool's numbers and its drawn cutter landed
+    /// together (`Some`: the outline carried onto the numbers; `None`:
+    /// the numbers' own) - the outline editor's parameter edits, one
+    /// `ReshapeTool`.
+    ReshapeTool {
+        name: String,
+        tool: Tool,
         points: Option<Vec<camcraft_app::spun::SpunPoint>>,
     },
     /// #793: drop a built-in library holder ("BT30 ER20") into a milling
@@ -468,6 +506,44 @@ pub enum CommandKind {
         params: camcraft_app::vise::ViseParams,
         from_stock: bool,
     },
+    /// #819: open "Add fixture plate…" over a setup's Fixtures node.
+    FixturePlateDialog(String),
+    /// Place built-in plate `params` into `setup`: centred on the machine
+    /// table, or its frame at `pos` (mm) turned `yaw_deg` - one `InsertPlate`.
+    InsertFixturePlate {
+        setup: Option<String>,
+        params: camcraft_app::plate::PlateParams,
+        on_table: bool,
+        pos: [f64; 3],
+        yaw_deg: f64,
+    },
+    /// Put fixture `fixture` on plate `plate` at `at` - one `PlaceOnPlate`.
+    PlaceOnPlate {
+        fixture: String,
+        plate: String,
+        at: camcraft_app::plate::MountAt,
+        yaw_deg: f64,
+    },
+    /// Detect fixture `name`'s plate grid from its holes, or (`clear`)
+    /// stop it being a plate - one `SetPlateGrid`.
+    DetectPlateGrid { name: String, clear: bool },
+    /// #820: a mod vise pair on plate `plate`, the fixed block at hole
+    /// `at` turned `yaw_deg`, fitted to the stock - one `PlaceModVisePair`.
+    PlaceModVisePair {
+        plate: String,
+        fixed: camcraft_app::modvise::JawParams,
+        adjustable: camcraft_app::modvise::JawParams,
+        at: String,
+        yaw_deg: f64,
+    },
+    /// #832: change placed jaw block `name`'s figures - one `SetModJaw`.
+    SetModJaw {
+        name: String,
+        params: camcraft_app::modvise::JawParams,
+    },
+    /// #832: re-fit adjustable jaw block `adjustable` to the stock as it
+    /// stands, against the fixed block on its plate - one `RefitModVise`.
+    RefitModVise { adjustable: String },
     /// #789: open the "Add accessory…" dialog over a setup's Fixtures
     /// node (`""` - the implicit setup). View state.
     AccessoryDialog(String),
@@ -906,6 +982,9 @@ pub struct ToolUi {
     /// #630: the lathe tool orientation (LinuxCNC 1-9), None = the
     /// kind's default - carried so an Apply never rewrites it.
     pub orientation: Option<u8>,
+    /// #891: the turning cutting data (Vc, f/rev, max rpm), None = not
+    /// stated - carried so an Apply never drops it.
+    pub turning: Option<camcraft_app::tools::TurningData>,
 }
 
 impl Default for ToolUi {
@@ -957,6 +1036,7 @@ impl ToolUi {
             flutes: t.flutes,
             center_cutting: t.center_cutting,
             orientation: t.orientation,
+            turning: t.turning,
         }
     }
 
@@ -1007,6 +1087,7 @@ impl ToolUi {
             flutes: self.flutes,
             center_cutting: self.center_cutting,
             orientation: self.orientation,
+            turning: self.turning,
         };
         tool.corner_r = tool.tip_corner_r();
         tool
@@ -1257,6 +1338,9 @@ pub struct State {
     /// #225: the Feeds tab shows the spindle speed as surface (cutting)
     /// speed instead of rpm. View state - never a command, never saved.
     pub spindle_as_vc: bool,
+    /// #899: how the Tool library page's Import treats a name the
+    /// document already has. View state - the import itself is the command.
+    pub tool_import_mode: camcraft_app::commands::ImportMode,
     /// Bumped whenever documents changed; drives GPU re-upload of meshes.
     pub doc_version: u64,
     /// Bumped whenever selection changed; re-sends the vertex stream (the
@@ -1350,6 +1434,12 @@ pub struct State {
     /// The transport's timeline, built once per `doc_version` (never
     /// per frame: it walks every op's path) - see `shell::cached_script`.
     pub sim_script_cache: Option<(u64, std::sync::Arc<camcraft_app::sim::Script>)>,
+    /// #743: the revolved mesh of the tool at the playhead, as the
+    /// collision laws read it - rebuilt only when its judged outline
+    /// changes, emptied when the tool, its operation or the transport
+    /// is gone. Display-only (a Mutex because the scene is collected
+    /// from `&State`).
+    pub sim_tool_cache: std::sync::Mutex<camcraft_app::sim_tool_body::SimToolCache>,
     /// What `field_view` was walked for: (transport up, Deviate armed,
     /// the document version a playback plan was frozen at). A change
     /// retires the view and the playback - never a stale picture.
@@ -1382,6 +1472,13 @@ pub struct State {
     /// Where the recents are written back; `None` (every headless
     /// State) keeps them in memory only.
     pub recent_store: Option<PathBuf>,
+    /// Where the theme and colour-vision preferences (#877) are written
+    /// back; `None` (every headless State) keeps them in memory only.
+    pub prefs_store: Option<PathBuf>,
+    /// #889: the Tool library page's "Import tool holders" - a per-user
+    /// preference (kept beside the theme), the `holders` parameter of
+    /// the `ImportTools` command an import runs. On by default.
+    pub import_tool_holders: bool,
     /// The dock's closable panels as of this frame (see [`PanelsOpen`]).
     pub panels_open: PanelsOpen,
     /// The View door's pending dock ask (see [`LayoutRequest`]).
@@ -1440,6 +1537,9 @@ pub struct State {
     /// implicit first setup. Public so tests run the dialog hand-off
     /// without a modal file picker.
     pub import_as_fixture: Option<Option<String>>,
+    /// #1054: the STEP facet budget the next import runs under (an import
+    /// setting, not on the history; the import that uses it is).
+    pub step_budget: StepBudgetUi,
     /// #789: each built-in accessory row's size draft, by name - view
     /// state; Apply lands it through `SetAccessory`.
     pub accessory_sizes: HashMap<String, AccessorySizeDraft>,
@@ -1455,6 +1555,12 @@ pub struct State {
     /// view state; Set lands it through `SetVise`. See
     /// [`State::vise_opening_draft`].
     pub vise_opening: HashMap<String, ViseOpeningDraft>,
+    /// #819: each fixture row's "Place on plate" draft, by fixture name.
+    pub plate_place: HashMap<String, PlatePlaceDraft>,
+    /// #820: each plate row's "Add mod vise pair" draft, by plate name.
+    pub mod_vise: HashMap<String, ModViseDraft>,
+    /// #832: each jaw block row's figure-edit draft, by block name.
+    pub mod_jaw_edit: HashMap<String, camcraft_app::modvise::JawParams>,
     /// The selected op's struck fixtures, per (version, op, path sig).
     pub struck_cache: camcraft_app::fixture_view::StruckCache,
     /// Properties / Tool Library pane drafts (ephemeral; see [`OpUi`]).
@@ -1524,6 +1630,9 @@ pub struct State {
     /// #93: the tool editor's spun-profile draft (Parametric/Custom, the
     /// points). Ephemeral like `tool_body_ui`; Apply profile is the command.
     pub tool_profile_ui: ToolProfileUi,
+    /// #93 slice 2: the tool editor's drawn-cutter draft; Apply cutter
+    /// is the command.
+    pub tool_cutter_ui: ToolCutterUi,
     /// The machine editor window (M3.3 stage C): `None` closed. An
     /// ephemeral draft like [`State::tool_editor`] - the numbers under
     /// edit are a copy of the machine until Apply pushes `LoadMachine`,
@@ -1570,6 +1679,11 @@ pub struct State {
     /// [`State::feedback`]; read only through [`State::refusal_focus`],
     /// which retires it with the refusal it belongs to.
     pub feedback_at: Option<[f64; 3]>,
+    /// #261 part 3: the moves a refused generation had built, beside
+    /// [`State::feedback`]; read only through [`State::refusal_ghost`].
+    /// Display-only and ephemeral: never cached on the operation, freed
+    /// with the refusal it belongs to.
+    pub feedback_ghost: Option<camcraft_app::machining2d::Ghost>,
 }
 
 /// Which page of the Operations pane a refused command's message belongs
@@ -1676,6 +1790,7 @@ impl State {
             debug_info_open: false,
             gpu_line: None,
             spindle_as_vc: false,
+            tool_import_mode: camcraft_app::commands::ImportMode::default(),
             doc_version: 0,
             selection_version: 0,
             viewport_rect: ([0.0, 0.0], [0.0, 0.0]),
@@ -1713,6 +1828,7 @@ impl State {
             field_view: None,
             field_play: None,
             sim_script_cache: None,
+            sim_tool_cache: std::sync::Mutex::default(),
             field_mode: None,
             stock_mesh: camcraft_app::stock_export::MeshCache::default(),
             ribbon_more: None,
@@ -1722,6 +1838,8 @@ impl State {
             ribbon_recent_open: None,
             recent: camcraft_app::recent::RecentFiles::default(),
             recent_store: None,
+            prefs_store: None,
+            import_tool_holders: true,
             panels_open: PanelsOpen { browser: true, properties: true, machines: false },
             layout_request: None,
             tree_menu: None,
@@ -1750,11 +1868,15 @@ impl State {
             repair_ui: RepairUi::default(),
             pocket_scan: PocketScan::default(),
             import_as_fixture: None,
+            step_budget: StepBudgetUi::default(),
             accessory_sizes: HashMap::new(),
             fixture_mesh_cache: Default::default(),
             fixture_lib: None,
             fixture_lib_dir: None,
             vise_opening: HashMap::new(),
+            plate_place: HashMap::new(),
+            mod_vise: HashMap::new(),
+            mod_jaw_edit: HashMap::new(),
             struck_cache: Default::default(),
             // The tool draft carries a plausible name from the first
             // frame: an empty Name field made Add look dead (refused
@@ -1770,6 +1892,7 @@ impl State {
             tool_editor: None,
             tool_body_ui: ToolBodyUi::default(),
             tool_profile_ui: ToolProfileUi::default(),
+            tool_cutter_ui: ToolCutterUi::default(),
             machine_editor: None,
             machines_pane: Default::default(),
             theme_cache: theme_files::Cache::new(),
@@ -1785,6 +1908,7 @@ impl State {
             feedback: None,
             feedback_ctx: None,
             feedback_at: None,
+            feedback_ghost: None,
         }
     }
 
@@ -1857,6 +1981,7 @@ impl State {
         self.feedback = Some((scope, msg));
         // A new refusal names no spot until its caller says so (#261).
         self.feedback_at = None;
+        self.feedback_ghost = None;
     }
 
     /// Refetch the Setup pane's drafts from the world after any document
@@ -2419,6 +2544,7 @@ impl State {
         self.tool_synced = (String::new(), self.doc_version);
         self.tool_body_ui = ToolBodyUi::default();
         self.tool_profile_ui = ToolProfileUi::default();
+        self.tool_cutter_ui = ToolCutterUi::default();
     }
 
     pub(crate) fn copy_operation(&mut self, name: &str) {
@@ -2558,7 +2684,7 @@ impl State {
             if Instant::now() >= deadline {
                 self.abandon_imports();
                 self.status = String::from("import timed out");
-                eprintln!("settle: queued work did not finish before the deadline");
+                diag_warn!("settle: queued work did not finish before the deadline");
                 return;
             }
             std::thread::sleep(Duration::from_millis(2));
@@ -2571,6 +2697,7 @@ impl State {
         self.feedback = None;
         self.feedback_ctx = None;
         self.feedback_at = None;
+        self.feedback_ghost = None;
         // #107: New, Open and Quit over unsaved changes wait for the
         // prompt's answer instead of discarding the document.
         let Some(action) = self.hold_if_unsaved(action) else {
@@ -2596,12 +2723,11 @@ impl State {
                 // inherits the last document's limits.
                 units::set(&self.world, Unit::default());
                 machine::set(&self.world, "", None);
-                // The post and the theme (M3.3 A, M6.1 C) are the same
-                // furniture and sat outside this reset: a blank used to
-                // inherit the last document's script - a leak found
-                // while wiring the theme's twin, fixed for both here.
+                // The post (M3.3 A) is the same furniture and sat outside
+                // this reset: a blank used to inherit the last document's
+                // script. The theme is NOT reset: it is the user's
+                // preference, not the document's (#877).
                 posting::post_set(&self.world, &PostRef::Builtin);
-                theme_set(&self.world, &ThemeRef::Dark);
                 self.history.clear();
                 // Frozen evidence of the old document retires with it.
                 self.post_view = None;
@@ -2707,6 +2833,20 @@ impl State {
                     Err(err) => self.refuse(ErrorScope::Setup, format!("stock not set: {err}")),
                 }
             }
+            CommandKind::SetRawStockOnly(on) => {
+                match camcraft_app::commands::SetStockSourceOnly::new(&self.world, on) {
+                    Ok(command) => {
+                        self.history.execute(&self.world, command);
+                        self.doc_version += 1;
+                        self.status = String::from(if on {
+                            "the stock's source model is raw stock only"
+                        } else {
+                            "the stock's source model is judged as the part"
+                        });
+                    }
+                    Err(err) => self.refuse(ErrorScope::Setup, format!("not changed: {err}")),
+                }
+            }
             CommandKind::SetUnits(next) => match SetUnits::new(&self.world, next) {
                 Ok(command) => {
                     self.history.execute(&self.world, command);
@@ -2728,6 +2868,7 @@ impl State {
             CommandKind::SetupOwnMachine { setup, own } => self.own_machine(&setup, own),
             CommandKind::SetupOwnPost { setup, own } => self.own_post(&setup, own),
             CommandKind::SetupOwnPostOptions { setup, own } => self.own_post_options(&setup, own),
+            CommandKind::SetSetupWorkholdingRpm { setup, max_rpm } => self.set_workholding_rpm(&setup, max_rpm),
             CommandKind::EditMachineDialog => {
                 let (path, m) = machine::of(&self.world);
                 match m {
@@ -2861,11 +3002,17 @@ impl State {
                     Err(err) => self.refuse(ErrorScope::Setup, format!("WCS not set: {err}")),
                 }
             }
-            CommandKind::AddTool { name, tool } => match AddTool::new(&self.world, &name, tool) {
+            // #828: a new tool starts with the machine's default holder,
+            // named in the status line (or why it was left off).
+            CommandKind::AddTool { name, tool } => match AddTool::with_holder(&self.world, &name, tool, HolderPick::MachineDefault) {
                 Ok(command) => {
+                    let note = command.note();
                     self.history.execute(&self.world, command);
                     self.doc_version += 1;
-                    self.status = format!("tool {name} added");
+                    self.status = match note {
+                        Some(n) => format!("tool {name} added - {n}"),
+                        None => format!("tool {name} added"),
+                    };
                 }
                 Err(err) => self.refuse(ErrorScope::Tool, format!("tool not added: {err}")),
             },
@@ -2884,6 +3031,8 @@ impl State {
             }
             CommandKind::SetToolBody { name, body } => self.run_set_tool_body(&name, body),
             CommandKind::SetToolProfile { name, points } => self.run_set_tool_profile(&name, points),
+            CommandKind::SetToolCutter { name, points } => self.run_set_tool_cutter(&name, points),
+            CommandKind::ReshapeTool { name, tool, points } => self.run_reshape_tool(&name, tool, points),
             CommandKind::SetToolHolder { name, entry, gauge, projection } => {
                 self.run_set_tool_holder(&name, &entry, gauge, projection)
             }
@@ -3120,6 +3269,8 @@ impl State {
                         self.refuse(ErrorScope::Operation, format!("generate failed: {err}"));
                         // #261 part 2: where the generator refused, if it said.
                         self.feedback_at = err.location().map(|p| [p.x, p.y, p.z]);
+                        // Part 3: the moves it had built, drawn as a ghost.
+                        self.feedback_ghost = err.ghost().cloned();
                     }
                 }
             }
@@ -3486,6 +3637,17 @@ impl State {
                 self.insert_builtin_vise(setup, &params, fit_stock, pos, yaw_deg);
             }
             CommandKind::SetVise { name, params, from_stock } => self.set_builtin_vise(&name, params, from_stock),
+            CommandKind::FixturePlateDialog(setup) => self.open_plate_dialog(setup),
+            CommandKind::InsertFixturePlate { setup, params, on_table, pos, yaw_deg } => {
+                self.insert_fixture_plate(setup, &params, on_table, pos, yaw_deg);
+            }
+            CommandKind::PlaceOnPlate { fixture, plate, at, yaw_deg } => self.place_fixture_on_plate(&fixture, &plate, at, yaw_deg),
+            CommandKind::DetectPlateGrid { name, clear } => self.detect_plate_grid(&name, clear),
+            CommandKind::PlaceModVisePair { plate, fixed, adjustable, at, yaw_deg } => {
+                self.place_mod_vise_pair(&plate, &fixed, &adjustable, &at, yaw_deg);
+            }
+            CommandKind::SetModJaw { name, params } => self.set_mod_jaw(&name, params),
+            CommandKind::RefitModVise { adjustable } => self.refit_mod_vise(&adjustable),
             CommandKind::SetupSheetDialog => {
                 if let Some(path) = save_sheet_dialog() {
                     self.setup_sheet_path(path);
@@ -3604,23 +3766,24 @@ impl State {
         self.import_started = Some(Instant::now());
         let (tx, rx) = mpsc::channel();
         let worker_path = path.clone();
+        let budget = self.step_budget_for(&path);
         let spawned = std::thread::Builder::new()
             .name("camcraft-import".to_string())
             .spawn(move || {
                 // No World here: pure file + geometry work, Send across.
-                let result = ImportModel::new(&worker_path);
+                let result = ImportModel::within(&worker_path, budget);
                 // A dropped rx means the document changed or we are closing;
                 // the command is simply never applied.
                 if tx.send(result).is_err() {
-                    eprintln!("import: result discarded, no receiver");
+                    diag_warn!("import: result discarded, no receiver");
                 }
             });
         match spawned {
             Ok(_) => self.import_rx = Some(rx),
             Err(err) => {
                 // Thread exhaustion must not lose the import: run inline.
-                eprintln!("import: worker spawn failed ({err}); running inline");
-                let result = ImportModel::new(&path);
+                diag_warn!("import: worker spawn failed ({err}); running inline");
+                let result = ImportModel::within(&path, budget);
                 self.finish_import(result);
             }
         }
@@ -3674,7 +3837,8 @@ impl State {
                     return;
                 }
                 if model::find_by_name(&self.world, &name).is_some() {
-                    match UpdateModel::new(&self.world, &name, command.mesh) {
+                    let (coarse, budget) = (command.coarse_mm, command.facet_budget);
+                    match UpdateModel::new(&self.world, &name, command.mesh).map(|u| u.with_fidelity(coarse).with_budget(budget)) {
                         Ok(upd) => {
                             let summary = upd.changes().describe();
                             self.history.execute(&self.world, upd);
@@ -3690,6 +3854,14 @@ impl State {
                     self.doc_version += 1;
                     self.note_recent_model(file.as_deref());
                     self.status = timed("imported", "");
+                }
+                // #864: an import kept coarser than promised is said, not
+                // only logged.
+                if let Some(chord) = model::find_by_name(&self.world, &name)
+                    .and_then(|e| camcraft_app::model_fidelity::chord_of(&self.world, &e))
+                {
+                    let said = camcraft_app::model_fidelity::summary(&self.world, chord);
+                    self.status = format!("{} - {said}", self.status);
                 }
             }
             Err(err) => {
@@ -3724,7 +3896,7 @@ impl State {
                 self.import_file = None;
                 self.import_started = None;
                 self.status = String::from("import failed: worker lost");
-                eprintln!("import: worker thread exited without a result");
+                diag_warn!("import: worker thread exited without a result");
             }
             None => {}
         }
@@ -3757,7 +3929,7 @@ impl State {
     /// A worker still running finishes in the background and discards itself.
     fn abandon_imports(&mut self) {
         if self.import_rx.take().is_some() {
-            eprintln!("import: document changed; pending import discarded");
+            diag_warn!("import: document changed; pending import discarded");
         }
         self.import_queue.clear();
         self.import_file = None;
@@ -3779,56 +3951,10 @@ impl State {
         self.choose_post(next);
     }
 
-    /// Choose the theme (M6.1 C). `SelectPost`'s twin with the
-    /// validation split by layering: `SetTheme::new` owns the cheap
-    /// existence/built-in law, and the full parse - which the app
-    /// cannot name (layering: the JSON reader lives on the surface
-    /// side) - is pre-checked HERE, so a corrupt theme is a visible
-    /// refusal at the pick and never enters the history. The look
-    /// itself lands on the next sync, not here: a selection writes
-    /// the reference; resolution is one change-edge on the read side.
-    fn select_theme(&mut self, next: ThemeRef) {
-        if let ThemeRef::File(path) = &next
-            && let Err(why) = &*self.theme_cache.get(Path::new(path))
-        {
-            self.refuse(ErrorScope::Setup, format!("theme not selected: {why}"));
-            return;
-        }
-        match SetTheme::new(&self.world, next) {
-            Ok(command) => {
-                self.history.execute(&self.world, command);
-                self.doc_version += 1;
-                self.status = format!("theme: {}", theme_label(&self.world));
-            }
-            Err(err) => self.refuse(ErrorScope::Setup, format!("theme not selected: {err}")),
-        }
-    }
-
-    /// Choose the colour-vision remap (M13.4), `select_theme`'s twin:
-    /// the surface owns the palette and the gate (layering - app holds
-    /// only the reference), so the gate runs HERE against the live
-    /// table and a failing mode is a visible refusal at the pick. The
-    /// look follows from the world on the next frame - the overlay
-    /// lines, the verdict shaders and the rings all read the singleton.
-    fn select_color_vision(&mut self, next: ColorVision) {
-        if let Some(why) = crate::egui_app::colorvision::gate(next, &crate::egui_app::theme::current()) {
-            self.refuse(ErrorScope::Setup, format!("colour vision not selected: {why}"));
-            return;
-        }
-        match SetColorVision::new(&self.world, next) {
-            Ok(command) => {
-                self.history.execute(&self.world, command);
-                self.doc_version += 1;
-                self.status = format!("colour vision: {}", next.label());
-            }
-            Err(err) => self.refuse(ErrorScope::Setup, format!("colour vision not selected: {err}")),
-        }
-    }
-
-    /// Install the document's theme (M6.1 C): the world singleton is
+    /// Install the user's theme (M6.1 C, #877): the world singleton is
     /// the truth, and this frame's job is to say whether it changed
-    /// since the last - an undo, a redo, a picker, or a project load
-    /// can all move it between frames, and none of them reaches into
+    /// since the last - a pick or the startup preferences read can
+    /// move it between frames, and none of them reaches into
     /// egui from app (layering; the command-law's other half). A
     /// refused reference - the file vanished, a corrupt parse, a
     /// stranger name - names itself in the status line ONCE per change
@@ -4102,13 +4228,13 @@ impl Default for State {
 
 fn pick_mesh_file() -> Option<PathBuf> {
     // STEP arrives tessellated through truck (mesh, not B-rep).
-    rfd::FileDialog::new()
+    crate::file_dialog::FileDialog::new()
         .add_filter("Mesh", &["stl", "obj", "step", "stp"])
         .pick_file()
 }
 
 fn pick_project_file() -> Option<PathBuf> {
-    rfd::FileDialog::new()
+    crate::file_dialog::FileDialog::new()
         .add_filter("CamCraft Project", &["camproj"])
         .pick_file()
 }
@@ -4116,7 +4242,7 @@ fn pick_project_file() -> Option<PathBuf> {
 fn pick_machine_file() -> Option<PathBuf> {
     // The `.mch` layout is the machine-definition JSON format we reuse
     // by user instruction (M2.3 C); the filter just names it.
-    rfd::FileDialog::new()
+    crate::file_dialog::FileDialog::new()
         .add_filter("Machine Definition", &["mch"])
         .pick_file()
 }
@@ -4124,7 +4250,7 @@ fn pick_machine_file() -> Option<PathBuf> {
 fn pick_post_file() -> Option<PathBuf> {
     // The `.cps` script format is the one we reuse by user instruction
     // (M3.3 A) - plain JavaScript, the user's own; the filter names it.
-    rfd::FileDialog::new()
+    crate::file_dialog::FileDialog::new()
         .add_filter("Post Script", &["cps"])
         .pick_file()
 }
@@ -4155,7 +4281,7 @@ fn pick_theme_file() -> Option<PathBuf> {
     // filter names it; the selection-time parse decides it. The dialog
     // opens on the discovered folder (`theme_dir`, M13.3) when there is
     // one; `State::new` already said so on the status line when not.
-    let mut dialog = rfd::FileDialog::new().add_filter("CamCraft Theme", &["json"]);
+    let mut dialog = crate::file_dialog::FileDialog::new().add_filter("CamCraft Theme", &["json"]);
     if let Ok(dir) = crate::theme_dir::from_process() {
         dialog = dialog.set_directory(dir);
     }
@@ -4163,7 +4289,7 @@ fn pick_theme_file() -> Option<PathBuf> {
 }
 
 pub(crate) fn save_project_dialog(current: Option<&Path>) -> Option<PathBuf> {
-    let mut dialog = rfd::FileDialog::new().add_filter("CamCraft Project", &["camproj"]);
+    let mut dialog = crate::file_dialog::FileDialog::new().add_filter("CamCraft Project", &["camproj"]);
     if let Some(parent) = current.and_then(Path::parent) {
         dialog = dialog.set_directory(parent);
     }
@@ -4179,7 +4305,7 @@ pub(crate) fn save_project_dialog(current: Option<&Path>) -> Option<PathBuf> {
 fn post_program_dialog(target: &crate::post_file::PostTarget) -> Option<PathBuf> {
     // The extension law lives with the script (fanuc.cps's `extension`
     // is "nc"); the dialog just offers it.
-    let mut dialog = rfd::FileDialog::new().add_filter("NC Program", &["nc"]);
+    let mut dialog = crate::file_dialog::FileDialog::new().add_filter("NC Program", &["nc"]);
     if let Some(dir) = &target.dir {
         dialog = dialog.set_directory(dir);
     }
@@ -4187,7 +4313,7 @@ fn post_program_dialog(target: &crate::post_file::PostTarget) -> Option<PathBuf>
 }
 
 fn save_stl_dialog() -> Option<PathBuf> {
-    rfd::FileDialog::new()
+    crate::file_dialog::FileDialog::new()
         .add_filter("STL", &["stl"])
         .set_file_name("machined-stock.stl")
         .save_file()
@@ -4196,7 +4322,7 @@ fn save_stl_dialog() -> Option<PathBuf> {
 fn save_sheet_dialog() -> Option<PathBuf> {
     // Plain text on purpose: the sheet is meant to be read on paper
     // next to the machine, so the format is whatever Notepad opens.
-    rfd::FileDialog::new()
+    crate::file_dialog::FileDialog::new()
         .add_filter("Text", &["txt"])
         .set_file_name("setup-sheets.txt")
         .save_file()

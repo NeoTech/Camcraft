@@ -29,6 +29,8 @@ fn cutter() -> Cutter {
         shank_len: 10.0,
         holder_radius: 4.0,
         holder_len: 10.0,
+        body: None,
+        neck: None,
     }
 }
 

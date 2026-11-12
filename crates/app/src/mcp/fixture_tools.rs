@@ -77,7 +77,10 @@ fn locate_part(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
     };
     let side = |m: &Map<String, Value>, key: &str, entity: &str| -> Result<GeoSel, String> {
         let feature = super::pick::parse_feature_id(req_str(m, key)?)?;
-        Ok(GeoSel { entity: entity.to_owned(), feature })
+        let g = GeoSel { entity: entity.to_owned(), feature };
+        // #692: the one pick rule - a mate id is taken only if a click could land on it.
+        crate::pick::check_pickable(&env.world, &g)?;
+        Ok(g)
     };
     let mates = items
         .iter()

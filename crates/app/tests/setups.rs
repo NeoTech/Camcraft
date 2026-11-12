@@ -6,7 +6,7 @@
 //! does not delete, activation is inert, and moving an operation keeps
 //! its stamp and lets the staleness machinery answer.
 //!
-//! Gate map (M4.4): covers app::commands, app::geometry, app::model, app::operation, app::posting, app::rest, app::schema, app::setup, app::stock, app::tools, app::world.
+//! Gate map (M4.4): covers app::commands, app::geometry, app::model, app::operation, app::posting, app::rest, app::schema, app::setup, geometry::geometry::stock, tools::tools, app::world.
 
 use flecs_ecs::prelude::World;
 
@@ -507,4 +507,21 @@ fn deleting_the_active_furniture_owner_falls_the_cursor() {
     assert_eq!(setup::active(&world).as_deref(), Some("Setup1"), "resolves to the first");
     assert!(history.undo(&world));
     assert_eq!(setup::active(&world).as_deref(), Some("Setup2"));
+}
+
+/// Guard (#878): the refusals a user reads never say "furniture", our
+/// in-code word for a setup's stock, work offsets and fixtures. Each
+/// message is built the way its own test builds it.
+#[test]
+fn setup_refusals_never_say_furniture() {
+    let world = new_world();
+    let messages = [
+        refused(CreateSetup::new(&world, Some("Setup9/Stock"), None)).to_string(),
+        refused(CreateSetup::new(&world, Some("Stock"), None)).to_string(),
+        refused(CreateSetup::new(&world, Some("G54"), None)).to_string(),
+        refused(AddTool::new(&world, "Setup9/Stock", catalog_tool("EM-0400-2FL"))).to_string(),
+    ];
+    for message in messages {
+        assert!(!message.to_lowercase().contains("furniture"), "{message}");
+    }
 }

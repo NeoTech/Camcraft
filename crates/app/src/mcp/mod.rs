@@ -18,13 +18,18 @@
 mod align_tools;
 mod area;
 mod bridge;
+// #93 slice 2: a milling tool's drawn cutter outline.
+mod cutter_tools;
 mod edit;
 mod features;
 mod fixture_tools;
+mod holders;
 mod job;
 mod listen;
 mod live;
 mod model_tools;
+// #45: an operation's display name and its place in its setup.
+mod order_tools;
 mod pick;
 mod pockets;
 mod render;
@@ -32,6 +37,9 @@ mod setup_tools;
 mod tools;
 mod vise_tools;
 mod accessory_tools;
+mod plate_tools;
+mod modvise_tools;
+mod workholding_tools;
 
 // #183: the same tool table served live from inside the GUI, over a
 // loopback socket, against the app's own document and History.

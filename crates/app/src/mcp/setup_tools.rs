@@ -9,7 +9,8 @@
 
 use super::tools::{opt_str, req_str, Tool};
 use crate::commands::{
-    ActivateSetup, CommandError, CreateSetup, LoadMachine, SetSetupMachine, SetSetupWorkOffset, SetWcsOrigin,
+    ActivateSetup, CommandError, CreateSetup, LoadMachine, SetSetupMachine, SetSetupWorkOffset, SetStockSourceOnly,
+    SetWcsOrigin,
 };
 use crate::geometry::{Point3, IDENTITY_Q};
 use crate::model;
@@ -23,7 +24,8 @@ pub(super) const TOOLS: &[Tool] = &[
     Tool { name: "add_setup", description: "Declare a new setup and make it active. With datum_from, it starts as a copy of that setup's stock and WCS placement. The first setup on a document without setups adopts the existing stock and G54.", schema: s_add_setup, run: add_setup },
     Tool { name: "activate_setup", description: "Make a declared setup the active one: where new operations, stock and WCS edits go.", schema: s_setup_name, run: activate_setup },
     Tool { name: "set_wcs", description: "Place the active setup's work coordinate system: an absolute origin, or a point of the stock's bounding box (min/center/max per axis) plus an optional offset. Rotation is a unit quaternion [x, y, z, w]; omitted keeps the current one.", schema: s_set_wcs, run: set_wcs },
-    Tool { name: "set_work_offset", description: "Set the word (G54 to G59) the post writes for a declared setup's WCS; null clears it (posts G54). Moves no origin.", schema: s_work_offset, run: set_work_offset },
+    Tool { name: "set_work_offset", description: "Set the work offset (G54 to G59) the post uses for a declared setup's WCS; null clears it (posts G54). Moves no origin.", schema: s_work_offset, run: set_work_offset },
+    Tool { name: "set_raw_stock_only", description: "For a stock made from a model (set_stock from_model): say whether that source model is raw stock only - a casting or blank you cut into, not the finished part - so the post's gouge verdict does not judge it (on), or is judged like every model (off, the default). An operation that machines the model judges it again. One undo step.", schema: s_raw_stock_only, run: set_raw_stock_only },
     Tool { name: "load_machine", description: "Mount a machine: a built-in by name or a .mch file, or clear it. With setup, the machine is that setup's own (clear: the setup follows the document's machine again); without, it is the document's.", schema: s_load_machine, run: load_machine },
 ];
 
@@ -221,6 +223,9 @@ fn load_machine(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> 
         "setup": target,
         "machine": m.as_ref().map(|m| m.model.clone()),
         "path": (!path.is_empty()).then_some(path),
+        // #828: the holder system and the holder new tools start with.
+        "spindle_mount": m.as_ref().and_then(|m| m.spindle_mount.clone()),
+        "default_holder": m.as_ref().and_then(|m| m.default_holder.clone()),
         // #388: the table of the machine just named - the setup's own,
         // or the document's - never the active setup's.
         "table": m.as_ref().and_then(crate::fixture::table_of).map(|b| json!({
@@ -244,6 +249,18 @@ fn s_add_setup() -> Value {
         }),
         &[],
     )
+}
+
+fn s_raw_stock_only() -> Value {
+    obj(json!({ "on": { "type": "boolean", "description": "true: the source model is raw stock only; false: judge it as the part (default)." } }), &["on"])
+}
+
+/// #1094: the stock page's checkbox, through the same command.
+fn set_raw_stock_only(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
+    let on = a.get("on").and_then(Value::as_bool).ok_or("\"on\" must be true or false")?;
+    let cmd = SetStockSourceOnly::new(&env.world, on).map_err(cmd_err)?;
+    env.history.execute(&env.world, cmd);
+    Ok(json!({ "raw_stock_only": on, "judged_out": crate::stock_source::stock_only_model(&env.world).and_then(|e| model::name_of(&env.world, &e)) }))
 }
 
 fn s_setup_name() -> Value {
@@ -271,7 +288,7 @@ fn s_work_offset() -> Value {
     obj(
         json!({
             "word": { "type": ["string", "null"], "enum": ["G54", "G55", "G56", "G57", "G58", "G59", null],
-                "description": "The work-offset word to post; null clears it." },
+                "description": "The work offset to post (G54 to G59); null clears it." },
             "setup": { "type": "string", "description": "A declared setup; defaults to the active one." }
         }),
         &["word"],

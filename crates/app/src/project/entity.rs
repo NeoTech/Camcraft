@@ -302,6 +302,10 @@ pub struct SetupDto {
     /// Absent follows the document's.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub post_options: Option<SetupPostOptionsDto>,
+    /// #1031: the rated maximum rpm of the setup's chuck or collet,
+    /// additive (no version step). Absent - every older file - states none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workholding_max_rpm: Option<f64>,
 }
 
 /// A setup's WCS as files hold it. v54 (#342) writes one entity name
@@ -370,6 +374,17 @@ pub struct FixtureDto {
     /// note, never a failed load (#812, `fixture_keys`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub vise: Option<serde_json::Value>,
+    /// A fixture plate's grid (#819); absent - not a plate. Kept as raw
+    /// JSON so a key this build can't read is dropped and logged on
+    /// load, never a failed load (#812).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plate: Option<serde_json::Value>,
+    /// Where this fixture stands on a plate (#819); same lenient read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub on_plate: Option<serde_json::Value>,
+    /// A mod-vise jaw block's parameters (#820); same lenient read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mod_jaw: Option<serde_json::Value>,
     /// A built-in accessory's kind and dimensions (#789); absent - not
     /// one. Same lenient read.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -547,12 +562,36 @@ pub struct EntityDto {
     /// identical to its v19 save.
     #[serde(default, skip_serializing_if = "is_unrevised")]
     pub rev: u64,
+    /// The chord error (mm) of a model imported coarser than the STEP
+    /// importer promises (#864, `schema::ReducedFidelity`). Absent on
+    /// every other entity, so a document without such a model - and every
+    /// file from before the key existed - saves byte for byte as it did
+    /// and loads as full fidelity.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub coarse_mm: Option<f64>,
+    /// The STEP facet budget a model was imported under when it is not the
+    /// default (#1054, `schema::StepBudget`). Absent everywhere else, so a
+    /// file from before the key existed - and every default import - reads
+    /// as `step_budget::DEFAULT` and saves byte for byte as it did. An old
+    /// reader dropping it loses only the record: the facets are stored.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub facet_budget: Option<u64>,
     /// Absent means Model; only non-model entities carry the tag.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kind: Option<EntityKind>,
     /// Stock parameters; present exactly when `kind == Some(Stock)`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stock: Option<StockDto>,
+    /// #1094: a from-model stock's source model is raw stock only, not
+    /// judged as the part. Absent is false - every older file judges it,
+    /// and an older reader that drops the key judges more, never less.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub raw_stock_only: bool,
+    /// #1094: the fingerprint of the source model's geometry the mark was
+    /// set on (`stock_print::to_text`). The mark loads only with it; a
+    /// flag without it (an early file, or by hand) loads unmarked.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raw_stock_print: Option<String>,
     /// Tool definition; present exactly when `kind == Some(Tool)`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool: Option<ToolDto>,

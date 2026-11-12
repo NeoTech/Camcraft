@@ -8,7 +8,7 @@
 
 use super::tools::{opt_str, req_str};
 use crate::commands::{
-    AddTool, CommandError, CreateOperation, DeleteOperation, EditOperationLinks, EditOperationParams, SetStock,
+    AddTool, CommandError, HolderPick, CreateOperation, DeleteOperation, EditOperationLinks, EditOperationParams, SetStock,
 };
 use crate::model;
 use crate::operation::{self, KindInfo, OpParams, SrcRef};
@@ -147,9 +147,23 @@ pub(super) fn add_tool(env: &mut Env, a: &Map<String, Value>) -> Result<Value, S
         Some(n) => n.to_owned(),
         None => default_name.ok_or("\"name\" is required with a definition")?,
     };
-    let cmd = AddTool::new(&env.world, &name, tool).map_err(cmd_err)?;
+    // #828: a stated holder wins ("none" adds it bare); unstated, the
+    // tool starts with the active setup's machine's default holder.
+    let (pick, from) = match opt_str(a, "holder")? {
+        None => (HolderPick::MachineDefault, "machine default"),
+        Some(h) if h.trim().eq_ignore_ascii_case("none") => (HolderPick::Bare, "stated"),
+        Some(h) => (HolderPick::Named(h.to_owned()), "stated"),
+    };
+    let cmd = AddTool::with_holder(&env.world, &name, tool, pick).map_err(cmd_err)?;
+    let holder = cmd.holder().map(str::to_owned);
+    let note = cmd.note();
     env.history.execute(&env.world, cmd);
-    Ok(json!({ "tool": name }))
+    Ok(json!({
+        "tool": name,
+        "holder": holder,
+        "holder_from": holder.as_ref().map(|_| from),
+        "note": note,
+    }))
 }
 
 pub(super) fn set_stock(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
