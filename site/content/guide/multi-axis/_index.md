@@ -42,7 +42,7 @@ state the rotary part with its `axis` direction, its `travel` in degrees, and
 ## Related pages
 
 - The per-operation reference for the multi-axis operations is in
-  [Multi-axis operations](https://neotech.github.io/Camcraft/guide/operations-multiaxis/).
+  [Multi-axis operations](@/guide/operations-multiaxis.md).
 - What each machine type means for setups and operations is in
-  [Machine types](https://neotech.github.io/Camcraft/guide/machines/).
+  [Machine types](@/guide/machines.md).
 - If a post is refused, see [Reading a refusal](@/guide/refusals.md).

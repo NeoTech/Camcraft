@@ -14,7 +14,12 @@ zola check          # build and check every link
   `developers/` (developer section). A page's place in its section is its
   `weight`.
 - `templates/` - our own Tera templates; no third-party theme.
-- `static/` - the stylesheet, copied as is.
+- `static/` - the stylesheet, copied as is, and `vendor/` (elasticlunr, the
+  MIT-licensed search library, with its licence beside it).
+- Search (#1245): `build_search_index` writes `search_index.en.js`, which the
+  header search box loads with the vendored elasticlunr. No third-party
+  service; the index is built from each page's title, description and the
+  first 2000 characters of its body.
 
 The version shown on the site comes from `version.toml`, which the release
 workflow writes from the workspace version before it builds. Without it the

@@ -5,15 +5,12 @@ weight = 3
 +++
 
 In continuous 4-axis work the rotary turns while the tool cuts. In CamCraft
-this is the three **Rotary** operations. They machine a part that is a
-shape of revolution (a shaft, a cam blank, a baluster), wrapping the
-toolpath around it. They are in the **Multi-axis** group on a mill.
-
-| Operation | What it does |
-|---|---|
-| Rotary Contour | Finishing: the waterline ladder about the part's axis, with the tool standing radial. Heights are axial stations along the axis. |
-| Rotary Parallel | Finishing: passes along the axis, stepping around the bar. For a bar lying on its side, where Rotary Contour's rings cannot be read. |
-| Rotary Offset | Roughing: the developed skin of the cylinder eroded level by level. **Stepdown** is the radial infeed per level. |
+this is the three **Rotary** operations (Rotary Contour, Rotary Parallel and
+Rotary Offset), which machine a shape of revolution such as a shaft or a
+cam blank. Their settings, defaults and refusals are in the
+[Multi-axis operations](@/guide/operations-multiaxis.md) reference; this page
+covers what the reference does not: how the axis meets the machine, feed, posts
+and a worked recipe.
 
 ## How the axis is found
 
@@ -32,22 +29,6 @@ generation and the machine check at post catches it.
 
 So the model must be placed so its axis lies along the rotary's line. On an
 A table the axis goes along X.
-
-## Parameters
-
-Parameters come from the code's `OpParams` for each operation. All three have
-a **tolerance** (verify budget; the finishing kinds also use it for the
-scallop and the arc-fit chord), clearance, top and bottom (the axial
-stations), feed, plunge feed and climb. The finishing pair also has **Stepover** (empty follows the
-tolerance). Rotary Offset adds stock to leave, strategy, entry and
-links. All three carry the lean trio:
-
-- **Tool lead angle**: lean along the travel, off the radial pose.
-- **Tool lag angle**: lean across the travel.
-- **Max tilt**: the cone half-angle the lean folds onto, from 0 (exclusive)
-  to 180.
-
-Lead and lag are limited to -90..90 degrees when the operation is created.
 
 ## Feed on a rotary move
 

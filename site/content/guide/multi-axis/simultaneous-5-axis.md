@@ -6,37 +6,13 @@ weight = 4
 
 In simultaneous 5-axis work the part stands still and the **tool axis moves**
 on every move, while the linear axes follow. CamCraft has seven operations
-for it, all in the **Multi-axis** group. This page covers what they have in
-common; each operation's own fields are in the
-[per-operation reference](https://neotech.github.io/Camcraft/guide/operations-multiaxis/).
-
-| Operation | Use |
-|---|---|
-| 5-Axis Contour | Waterline rings with the axis leaning, for shank clearance on steep walls. |
-| 5-Axis Parallel | Z-following raster with the same axis law. |
-| Swarf | Side-of-tool cutting on ruled walls: the tool lies along the surface's straight direction. A doubly curved or Z-only-ruled model is refused by name, pointing at another operation. |
-| Advanced Swarf | The swarf path run coarse-first in up to 4 passes (**Passes**, 1..4), finishing at the nominal tolerance. |
-| 5-Axis Flow | The raster turned to follow the surface's least-curving direction, so lines stay with a vane or channel. Plain ground falls back to the parallel raster. |
-| Multi-Axis Rough | The 3D pocket ladder with the axis posed on steep flanks. Floors and air keep the spindle vertical. |
-| Multi-Axis Contour | Machines picked edge chains where they stand: the chain is the path, so there is no stepover. |
-
-## Tool axis control
-
-The axis starts at the surface normal at the contact point, then:
-
-- **Tool lead angle** leans it forward along the feed.
-- **Tool lag angle** leans it sideways across the feed.
-- **Max tilt** is the cone half-angle from the normal. Where the lead and lag
-  would pass it, the axis folds back onto the cone's edge, never past it.
-  It is 90 degrees by default. Set it to what your machine's rotaries can
-  give: **the operation states the limit, not the machine**.
-- **Shank avoid** (Contour, Parallel, Flow, Multi-Axis Rough and Contour):
-  where the commanded pose would put the shank into the part, tilt to the
-  nearest clear angle inside the cone. The cut is the same path, since the
-  positions are ball-centre paths, so this is for safety, not shape.
-
-Lead and lag are limited to -90..90 degrees and Max tilt to above 0 and up
-to 180 when the operation is created.
+for it (5-Axis Contour, 5-Axis Parallel, 5-Axis Flow, Swarf, Advanced Swarf,
+Multi-Axis Rough and Multi-Axis Contour), all in the **Multi-axis** group.
+Each operation's settings, defaults, lead, lag, max tilt, shank avoidance
+and refusals are in the
+[Multi-axis operations](@/guide/operations-multiaxis.md) reference. This page
+covers what that reference leaves out: what the machine and post must offer,
+the checks, and a recipe.
 
 ## What it needs
 

@@ -188,7 +188,7 @@ pub(crate) fn click(state: &mut State, p: [f32; 2], mods: Mods) {
     if crate::axis_pick::hint_stray(state) {
         return; // #557: the axes rows are open, nothing armed
     }
-    let append = mods.ctrl || mods.shift;
+    let append = mods.command || mods.shift;
     match (found.target, state.boundary_pick.is_some()) {
         (PickTarget::Point(_), true) => {
             // A point bounds nothing: refused by name, never drafted.
