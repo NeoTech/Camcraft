@@ -45,8 +45,14 @@ pub fn parse(data: &[u8]) -> Result<Mesh, ImportError> {
     }
     let text = std::str::from_utf8(data)
         .map_err(|_| ImportError::Step("file is not valid UTF-8".into()))?;
-    let exchange = ruststep::parser::parse(text)
-        .map_err(|e| ImportError::Step(format!("syntax error: {e}")))?;
+    let exchange = ruststep::parser::parse(text).map_err(|e| {
+        // #912: ruststep fails the whole DATA section at once and its
+        // position is not the bad entity; re-scan to name it.
+        ImportError::Step(match super::step_diag::locate(text) {
+            Some(found) => found.to_string(),
+            None => format!("syntax error: {e}"),
+        })
+    })?;
     // An exchange with zero DATA sections parses fine but would index out of
     // bounds inside truck's convenience helpers; guard the only raw index.
     let Some(section) = exchange.data.first() else {
