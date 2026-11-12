@@ -155,7 +155,7 @@ fn header_rows(ui: &mut Ui, state: &mut State, target: &str, live: Option<&Opera
     } else {
         let mut t_idx = tools.iter().position(|t| *t == state.op_ui.tool).unwrap_or(0);
         let before = t_idx;
-        ui.horizontal(|ui| { super::tool_icons::named_glyph(ui, &state.world, &state.op_ui.tool); combo_owned(ui, "op_tool", &mut t_idx, &tools); });
+        ui.horizontal(|ui| { super::tool_icons::named_glyph(ui, &state.world, &state.op_ui.tool); super::tool_icons::tool_combo(ui, &state.world, "op_tool", &mut t_idx, &tools); });
         if t_idx != before
             && let Some(t) = tools.get(t_idx)
         {
