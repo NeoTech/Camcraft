@@ -9,22 +9,26 @@
 //! every one of them, and every posted `.nc` golden's program must be
 //! one the gate passes (the guard below); the crossing refusal the two
 //! disc-hole goldens used to carry is pinned on its own fixture.
-//! (Slot and trace cut their source - no depth law runs on them; the
-//! 3D finish goldens verify as `Mode::Envelope`, where the solid law
+//! (Slot and trace cut their source - no depth law runs on them; since
+//! #1000 they, the trochoidal slot and the plasma plate are judged by
+//! the gate their kind's post runs, `posted_gates`. The 3D
+//! finish goldens verify as `Mode::Envelope`, where the solid law
 //! stands down by mode gate - their verdict path is untouched; the
-//! arc-planes golden is a posting fixture with no part.)
+//! arc-planes golden is a hand-built posting fixture with no part.)
 //!
 //! Provenance: our own harness over our own goldens; no vendor material.
 //!
 //! Gate map (solid law): covers sim::verify (engine b2, solid_hits, the
 //! crossing law), the posted goldens under tests/golden/nc/,
-//! motion::machining2d (contour, face, pocket), motion::drilling (drill),
-//! and (#542) the sinker golden through app::stock_sim's program verdict
-//! (the electrode's box atom).
+//! motion::machining2d (contour, face, pocket, slot, trochoid, trace),
+//! motion::drilling (drill), app::operation (region_of), sim::verify::plasma,
+//! and (#542) the sinker golden through app::stock_sim's program verdict.
 
 mod common;
+mod posted_gates;
 
 use common::gen_to_cltext;
+use posted_gates::{narrowed_slot_verdict, plasma_findings, region_verdicts, sinker_gouge_cells};
 use common::solid_part::{cap, circle, mill, plate, plate_cell, rect, region, walls};
 
 use camcraft_app::cl::Toolpath;
@@ -214,6 +218,7 @@ fn verdicts() -> Vec<(&'static str, Vec<Warning>)> {
         flutes: None,
         center_cutting: true,
         orientation: None,
+        turning: None,
     };
     let hole = |x: f64, y: f64, r: f64, floor: f64, through: bool| Hole { xy: Point2::new(x, y), radius: r, entry_z: 0.0, floor_z: floor, through, stepped: false };
     let cycle = |holes: &[Hole], tool: &Tool, clear: f64| {
@@ -289,66 +294,41 @@ fn a_lead_on_the_rings_own_circle_is_refused() {
     }
 }
 
-/// (golden, gouge cells) for the sinker goldens, judged by the gate the
-/// sinker post's program runs (#541/#542): the program verdict
-/// (`stock_sim::simulate_document`), which cuts the burn with the
-/// electrode's box atom and convicts an overburn below the part. The op
-/// is the real Sinker Burn on a sinker, over a block whose cavity is the
-/// electrode grown by the spark gap, 6 mm deep - and its program must be
-/// the CL golden byte for byte.
-fn box_atom_verdicts() -> Vec<(&'static str, usize)> {
-    use camcraft_app::commands::{AddTool, CreateOperation, GenerateOperation, History, ImportModel, LoadMachine, SetStock};
-    use camcraft_app::operation::{Height, OpParams, SinkerBurnOp, SinkerDatum, SrcRef};
-    const GAP: f64 = 0.05;
-    let world = camcraft_app::world::new_world();
-    let mut h = History::default();
-    let mut part = Vec::new();
-    let cavity = rect(12.5 - 5.0 - GAP, -7.5 - 3.0 - GAP, 12.5 + 5.0 + GAP, -7.5 + 3.0 + GAP);
-    plate(&rect(-30.0, -30.0, 30.0, 30.0), Some((&cavity, 14.0)), 0.0, 20.0, &mut part);
-    h.execute(&world, ImportModel::from_mesh("part", camcraft_app::geometry::Mesh::from_facets(part)));
-    let stock = SetStock::new(&world, camcraft_app::stock::StockShape::Box { dx: 60.0, dy: 60.0, dz: 20.0 }, Default::default());
-    h.execute(&world, stock.expect("stock"));
-    let mut mch: serde_json::Value = serde_json::from_str(include_str!("edm/sinker-edm.mch")).expect("sinker template");
-    mch["edm"]["conditions"] = serde_json::json!([{ "id": "S1", "name": "synthetic rough", "gap": GAP, "undersize": 0.1, "role": "rough" }]);
-    let m = camcraft_app::machine::parse_mch(&mch.to_string()).expect("sinker parses");
-    h.execute(&world, LoadMachine::new(&world, "sinker.mch".into(), Some(m)).expect("mount"));
-    let electrode = camcraft_tools::electrode::electrode_tool(10.0, 6.0, 30.0, 15.0);
-    h.execute(&world, AddTool::new(&world, "E-10x6", electrode).expect("an electrode"));
-    let op = OpParams::SinkerBurn(SinkerBurnOp {
-        clearance_z: Height::fixed(25.0),
-        top_z: Height::fixed(20.0),
-        floor_z: Height::fixed(10.0),
-        datum: SinkerDatum::WorkTop,
-        depth: 6.0,
-        x: 12.5,
-        y: -7.5,
-        feed: 40.0,
-        condition: "S1".into(),
-    });
-    h.execute(&world, CreateOperation::new(&world, "Burn1", "E-10x6", SrcRef::Stock, op).expect("a sinker burn"));
-    h.execute(&world, GenerateOperation::new(&world, "Burn1").expect("generates"));
-    let e = camcraft_app::model::find_by_name(&world, "Burn1").expect("op");
-    let path = camcraft_app::model::toolpath_of(&world, &e).expect("generated").path;
-    assert_eq!(gen_to_cltext(&path), golden("sinker_burn_cavity.cl"), "the Sinker Burn's program is the golden");
-    let sim = camcraft_app::stock_sim::simulate_document(&world).expect("the program verdict judges a sinker burn");
-    vec![("sinker_burn_cavity.cl", sim.dev.gouge_cells)]
-}
-
 /// The first line a posted golden of a gate-refused program must carry
 /// (#862 option (c)); none does today.
 const REFUSED_HEADER: &str = "refused program, posted for syntax conformance";
 
-/// Posted goldens whose program no depth law judges, each with why:
-/// the guard below makes every other posted golden's program pass the
-/// gate, so a new one is either judged or named here.
-const UNJUDGED: &[(&str, &str)] = &[
-    ("slot_fullwidth_centerline", "a slot cuts its source; no depth law runs on it"),
-    ("slot_wide_channel_rows", "a slot cuts its source; no depth law runs on it"),
-    ("trochoid_slot_small", "a slot cuts its source; no depth law runs on it"),
-    ("trace_plate_with_hole", "a trace cuts its source; no depth law runs on it"),
-    ("arc_planes", "a posting fixture with no part"),
-    ("plasma_plate_with_holes", "a plasma profile; the depth laws do not apply (the plasma gate is plasma_gate.rs)"),
-];
+/// Posted goldens whose program no gate judges, each with why: the
+/// guard below makes every other posted golden's program pass the gate
+/// its kind's post runs, so a new one is either judged or named here.
+/// The slot, trochoid, trace and plasma goldens are judged since #1000
+/// (`posted_gates`).
+const UNJUDGED: &[(&str, &str)] = &[(
+    "arc_planes",
+    "a hand-built posting fixture (arc_planes.rs): no operation kind, part, region or tool record makes it, \
+     so no gate a user's post runs can judge it - #1093",
+)];
+
+#[test]
+fn the_slot_trace_and_plasma_goldens_pass_their_gates() {
+    // #1000: the posted goldens no depth law judges, each through the
+    // gate its kind's post runs - the region laws for the slots and the
+    // trace, the plasma laws for the plate: every one verifies clean.
+    let got = region_verdicts();
+    assert_eq!(got.len(), 4, "every region-law golden is judged");
+    for (name, w) in got {
+        assert_eq!(w, Vec::new(), "{name}");
+    }
+    assert_eq!(plasma_findings(), Vec::new(), "plasma_plate_with_holes.cl: the plasma laws find nothing");
+}
+
+#[test]
+fn the_slot_gate_bites() {
+    // The harness is not vacuous: the wide-channel slot's program judged
+    // against a stadium 2 mm narrower than the one it was cut for gouges.
+    let got = narrowed_slot_verdict();
+    assert!(got.iter().any(|w| matches!(w, Warning::Gouge { .. })), "{got:?}");
+}
 
 #[test]
 fn every_posted_golden_is_a_program_the_gate_passes() {
@@ -357,8 +337,17 @@ fn every_posted_golden_is_a_program_the_gate_passes() {
     // (the Fanuc top and each dialect's directory) whose stem is a `.cl`
     // golden is judged here.
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/golden");
-    let judged = verdicts();
-    let boxed = box_atom_verdicts();
+    // Every blocking finding of each judged program: the depth laws',
+    // the region laws' (slot, trochoid, trace) and the plasma laws'
+    // refusals (its warnings ride the verdict line, never block).
+    let blocking = |w: Vec<Warning>| w.iter().map(|w| format!("{w:?}")).collect::<Vec<_>>();
+    let mut judged: Vec<(&str, Vec<String>)> = verdicts().into_iter().chain(region_verdicts()).map(|(n, w)| (n, blocking(w))).collect();
+    let plasma = plasma_findings().iter().filter(|f| f.refuses()).map(|f| f.describe()).collect();
+    judged.push(("plasma_plate_with_holes.cl", plasma));
+    // The sinker burn through the program verdict its post's gate runs
+    // (the electrode's box atom): any gouge cell blocks.
+    let cells = sinker_gouge_cells();
+    judged.push(("sinker_burn_cavity.cl", if cells == 0 { vec![] } else { vec![format!("program verdict: {cells} gouge cell(s)")] }));
     let mut dirs = vec![root.join("nc")];
     let mut posted = 0;
     while let Some(dir) = dirs.pop() {
@@ -377,15 +366,16 @@ fn every_posted_golden_is_a_program_the_gate_passes() {
                 continue;
             }
             let cl = format!("{stem}.cl");
-            if let Some((_, cells)) = boxed.iter().find(|(n, _)| *n == cl) {
-                assert_eq!(*cells, 0, "{}: posted, but the program verdict convicts {cells} gouge cell(s)", e.display());
-                continue;
-            }
             match judged.iter().find(|(n, _)| *n == cl) {
                 Some((_, w)) => assert!(w.is_empty(), "{}: posted, but the gate refuses its program: {w:?}", e.display()),
-                None => assert!(UNJUDGED.iter().any(|(n, _)| *n == stem), "{}: posted, but no gate judges its program - judge it in verdicts() or name it in UNJUDGED", e.display()),
+                None => assert!(
+                    UNJUDGED.iter().any(|(n, _)| *n == stem),
+                    "{}: posted, but no gate judges its program - judge it in verdicts() / posted_gates or name it in UNJUDGED",
+                    e.display()
+                ),
             }
         }
     }
     assert!(posted > 50, "the guard saw only {posted} posted goldens");
 }
+
