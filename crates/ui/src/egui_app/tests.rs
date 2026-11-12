@@ -82,6 +82,7 @@ mod face_origin;
 mod spindle_row;
 mod stock_size;
 mod stock_fit_sides;
+mod raw_stock_row;
 mod layout;
 mod machines_pane;
 mod machines_edit;
@@ -128,6 +129,8 @@ mod fixture_rows;
 mod model_fidelity;
 // #709 hand check: both points of a two-point axis stay marked.
 mod two_point_marks;
+// #1104: the Setups page lists setups only.
+mod setups_declutter;
 
 /// What the per-frame state of `Shell` is, minus the GPU half: the fields
 /// `shell_layout` touches, so the harness exercises the window's real body.

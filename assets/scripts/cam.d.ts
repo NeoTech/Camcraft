@@ -94,7 +94,7 @@ interface CamApi {
   save(path?: string): { path: string };  // variadic
   import(path: string, name?: string): { model: string; facets: number };  // variadic
   exportTools(path: string): { path: string; tools: number };  // arity 1
-  importTools(path: string): { path: string; added: string[]; renamed: { from: string; to: string }[]; skipped: string[]; summary: string };  // arity 1
+  importTools(path: string, mode?: "add" | "update" | "replace", holders?: boolean): { path: string; mode: string; added: string[]; renamed: { from: string; to: string }[]; skipped: string[]; updated: string[]; replaced: string[]; removed: string[]; holders: number; holders_left_out: number; summary: string };  // variadic
   operations(): OperationInfo[];  // arity 0
   generate(...names: string[]): OperationInfo[];  // variadic
   verify(...names: string[]): VerifyReport;  // variadic

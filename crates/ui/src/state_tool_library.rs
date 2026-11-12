@@ -3,7 +3,7 @@
 //! `parse_tool_library` + `ImportTools` (one undo unit) to read. A
 //! refusal lands on the Tool pane by name, never swallowed.
 //! #889: the page's "Import tool holders" choice is the command's
-//! `holders` parameter (`ImportTools::with_holders`), remembered per user.
+//! `holders` parameter (`ImportTools::with_options`), remembered per user.
 //! Provenance: our own `camcraft-tools/1` format (app::tool_library); no
 //! vendor tool-library format consulted.
 
@@ -60,7 +60,8 @@ impl State {
             .map_err(|e| e.to_string())
             .and_then(|text| tool_library::parse_tool_library(&text))
             .and_then(|lib| {
-                ImportTools::with_holders(&self.world, lib, self.import_tool_holders).map_err(|e| e.to_string())
+                ImportTools::with_options(&self.world, lib, self.tool_import_mode, self.import_tool_holders)
+                    .map_err(|e| e.to_string())
             });
         match planned {
             Ok(command) => {

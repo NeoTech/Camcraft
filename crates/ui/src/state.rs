@@ -128,6 +128,9 @@ pub enum CommandKind {
         pos: [f64; 3],
         yaw_deg: f64,
     },
+    /// #1094: the stock page's "raw stock only" checkbox for a from-model
+    /// stock's source model, one undo unit (`SetStockSourceOnly`).
+    SetRawStockOnly(bool),
     /// Stock that wraps every model's world AABB plus `margin` mm, shaped
     /// like the pane's radio selection at click time (0 box, 1 cylinder).
     StockFit {
@@ -516,6 +519,14 @@ pub enum CommandKind {
         at: String,
         yaw_deg: f64,
     },
+    /// #832: change placed jaw block `name`'s figures - one `SetModJaw`.
+    SetModJaw {
+        name: String,
+        params: camcraft_app::modvise::JawParams,
+    },
+    /// #832: re-fit adjustable jaw block `adjustable` to the stock as it
+    /// stands, against the fixed block on its plate - one `RefitModVise`.
+    RefitModVise { adjustable: String },
     /// #789: open the "Add accessory…" dialog over a setup's Fixtures
     /// node (`""` - the implicit setup). View state.
     AccessoryDialog(String),
@@ -1305,6 +1316,9 @@ pub struct State {
     /// #225: the Feeds tab shows the spindle speed as surface (cutting)
     /// speed instead of rpm. View state - never a command, never saved.
     pub spindle_as_vc: bool,
+    /// #899: how the Tool library page's Import treats a name the
+    /// document already has. View state - the import itself is the command.
+    pub tool_import_mode: camcraft_app::commands::ImportMode,
     /// Bumped whenever documents changed; drives GPU re-upload of meshes.
     pub doc_version: u64,
     /// Bumped whenever selection changed; re-sends the vertex stream (the
@@ -1520,6 +1534,8 @@ pub struct State {
     pub plate_place: HashMap<String, PlatePlaceDraft>,
     /// #820: each plate row's "Add mod vise pair" draft, by plate name.
     pub mod_vise: HashMap<String, ModViseDraft>,
+    /// #832: each jaw block row's figure-edit draft, by block name.
+    pub mod_jaw_edit: HashMap<String, camcraft_app::modvise::JawParams>,
     /// The selected op's struck fixtures, per (version, op, path sig).
     pub struck_cache: camcraft_app::fixture_view::StruckCache,
     /// Properties / Tool Library pane drafts (ephemeral; see [`OpUi`]).
@@ -1749,6 +1765,7 @@ impl State {
             debug_info_open: false,
             gpu_line: None,
             spindle_as_vc: false,
+            tool_import_mode: camcraft_app::commands::ImportMode::default(),
             doc_version: 0,
             selection_version: 0,
             viewport_rect: ([0.0, 0.0], [0.0, 0.0]),
@@ -1833,6 +1850,7 @@ impl State {
             vise_opening: HashMap::new(),
             plate_place: HashMap::new(),
             mod_vise: HashMap::new(),
+            mod_jaw_edit: HashMap::new(),
             struck_cache: Default::default(),
             // The tool draft carries a plausible name from the first
             // frame: an empty Name field made Add look dead (refused
@@ -2789,6 +2807,20 @@ impl State {
                     Err(err) => self.refuse(ErrorScope::Setup, format!("stock not set: {err}")),
                 }
             }
+            CommandKind::SetRawStockOnly(on) => {
+                match camcraft_app::commands::SetStockSourceOnly::new(&self.world, on) {
+                    Ok(command) => {
+                        self.history.execute(&self.world, command);
+                        self.doc_version += 1;
+                        self.status = String::from(if on {
+                            "the stock's source model is raw stock only"
+                        } else {
+                            "the stock's source model is judged as the part"
+                        });
+                    }
+                    Err(err) => self.refuse(ErrorScope::Setup, format!("not changed: {err}")),
+                }
+            }
             CommandKind::SetUnits(next) => match SetUnits::new(&self.world, next) {
                 Ok(command) => {
                     self.history.execute(&self.world, command);
@@ -3586,6 +3618,8 @@ impl State {
             CommandKind::PlaceModVisePair { plate, fixed, adjustable, at, yaw_deg } => {
                 self.place_mod_vise_pair(&plate, &fixed, &adjustable, &at, yaw_deg);
             }
+            CommandKind::SetModJaw { name, params } => self.set_mod_jaw(&name, params),
+            CommandKind::RefitModVise { adjustable } => self.refit_mod_vise(&adjustable),
             CommandKind::SetupSheetDialog => {
                 if let Some(path) = save_sheet_dialog() {
                     self.setup_sheet_path(path);

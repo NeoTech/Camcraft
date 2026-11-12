@@ -34,12 +34,47 @@ an import toggle for the user on the import page").
    document's own tool and holder are never overwritten.
 6. *MCP.* `import_tool_library` takes optional `holders` (boolean, default
    true); its schema and description say so; the reply adds `holders` and
-   `holders_left_out`. The script verb `cam.importTools(path)` keeps its
-   arity (holders on) - changing it would move the generated TS bindings.
+   `holders_left_out`. The script verb takes it as a third optional
+   argument (item 8).
 7. *Counts.* The status line and MCP reply name how many tools landed with
    holders and how many file holders were left out.
 
+8. *With #899's import modes (merged main, 2026-11-12).* The holders
+   choice and `ImportMode` are two parameters of the one command,
+   `ImportTools::with_options(world, library, mode, holders)`
+   (`with_mode` = holders on, `with_holders` = Add). #899's Add / Update /
+   Replace semantics, its `Step` plan and its `change_refusal` gates are
+   unchanged; bodies ride on top:
+   - **Add**: as item 5 - land with the file body (on) or bare (off).
+   - **Update / Replace, holders on, file carries a body**: a body that
+     differs from the document tool's (compared as the DTO a save writes)
+     is a change like any other, even when the tool record is identical.
+     It goes through `change_refusal` (retype that strands an operation,
+     torch refusal, cutter-profile agreement, and the fit of the body that
+     will stand), lands in the same `Step::Change` (same entity, number
+     kept), and undo restores the previous body. The operation stamp
+     already digests the tool body (#368), so operations using the tool go
+     Stale exactly as after `SetToolBody` - pinned against a twin world.
+   - **Update / Replace, holders off, or the file carries no body for that
+     tool**: the document's body stays as it is - never cleared silently -
+     and must fit the incoming record (`change_refusal` checks it); an
+     identical record with holders off is "already in the document".
+   - Every file body is still judged with `tool_body::fits` at command
+     creation, in every mode; a bad one refuses the file by name.
+   - MCP `import_tool_library` takes both `mode` and `holders`; the script
+     verb is `cam.importTools(path, mode?, holders?)` (variadic; `cam.d.ts`
+     regenerated, the reply adds `holders` / `holders_left_out`); the Tool
+     library page keeps #899's mode combo and this PR's checkbox.
+
 **Considered and dropped.**
+- *A bodyless file entry clearing the document body in Update / Replace.*
+  An older or holders-off export says nothing about the holder, and a
+  fitted holder is a safety input of the collision laws; clearing it
+  would widen nothing but would silently lose it. Clearing stays an
+  explicit `SetToolBody` (clear) step.
+- *Treating a body-only difference in Update as "identical" (skip).* It
+  would leave the user's operations computed against a holder the file
+  says is gone - the M3 review of #1100 flagged exactly this.
 - *Showing the count before the import.* The toggle stands on the page
   before any file is picked, so the count arrives in the status line after
   the import instead; a pre-import preview dialog would be a new modal for
@@ -54,9 +89,10 @@ an import toggle for the user on the import page").
   and an older reader over-reports nothing (it imports the tool bare).
 
 **PROCESS_VERSION.** The camcraft-mcp skill line for `import_tool_library`
-changed, so this PR bumps `.claude/PROCESS_VERSION` 16 -> 17. Other open
-process PRs also claim 17-20; whichever merges later takes the next number
-when it merges main.
+changed (now with #899's `mode` as well), so this PR bumps
+`.claude/PROCESS_VERSION` to main's 18 + 1 = 19. Other open process PRs
+also claim 19-23; whichever merges later takes the next number when it
+merges main.
 
 **Cost to change later.** Low: the default of the toggle is one field
 initialiser and one prefs default; the identity rule is one closure in

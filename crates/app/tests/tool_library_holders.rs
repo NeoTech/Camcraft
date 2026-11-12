@@ -7,19 +7,29 @@
 //! ill-fitting body refuses the file by name with nothing applied; a
 //! file without bodies imports as before; the skip compares the body
 //! only when one lands; one undo removes tools and bodies; MCP's flag.
+//! With #899's modes: the round trip and holders-off hold in all three;
+//! in Update / Replace a changed file body is a change (operations go
+//! Stale as SetToolBody makes them, undo restores the old body), it
+//! takes the ChangeTool gates, and holders off never clears a body.
 //! Provenance: our own tests over our own format and commands.
 //!
 //! Gate map (M4.4): covers app::tool_library, app::commands (tool_import),
 //! app::mcp (import_tool_library), app::script (importTools).
 
-use camcraft_app::commands::{AddTool, History, ImportReport, ImportTools, SetToolBody, ToolBodySpec};
+use camcraft_app::commands::{
+    AddTool, CreateOperation, GenerateOperation, History, ImportMode, ImportReport, ImportTools, SetStock, SetToolBody,
+    ToolBodySpec,
+};
 use camcraft_app::geometry::{Point3, Triangle};
 use camcraft_app::mcp::Server;
 use camcraft_app::model;
+use camcraft_app::operation::{Height, OpParams, OpStatus, SrcRef, stale_reason, status_of};
+use camcraft_app::schema::Location;
+use camcraft_app::stock::StockShape;
 use camcraft_app::project::ToolBodyDto;
 use camcraft_app::tool_body::body_of;
 use camcraft_app::tool_library::{bodies_in, export_tool_library, parse_tool_library};
-use camcraft_app::tools::{Tool, catalog};
+use camcraft_app::tools::{Tool, ToolKind, catalog};
 use camcraft_app::world::new_world;
 use flecs_ecs::prelude::World;
 use serde_json::{Value, json};
@@ -70,8 +80,12 @@ fn body_dto(w: &World, n: &str) -> Option<ToolBodyDto> {
 }
 
 fn import(w: &World, h: &mut History, text: &str, holders: bool) -> Result<ImportReport, String> {
+    import_as(w, h, text, ImportMode::Add, holders)
+}
+
+fn import_as(w: &World, h: &mut History, text: &str, mode: ImportMode, holders: bool) -> Result<ImportReport, String> {
     let lib = parse_tool_library(text)?;
-    let cmd = ImportTools::with_holders(w, lib, holders).map_err(|e| e.to_string())?;
+    let cmd = ImportTools::with_options(w, lib, mode, holders).map_err(|e| e.to_string())?;
     let r = cmd.report().clone();
     h.execute(w, cmd);
     Ok(r)
@@ -240,4 +254,129 @@ fn mcp_import_tool_library_takes_the_holders_flag() {
     let (err, msg) = call(&mut s, 7, "import_tool_library", json!({ "path": path, "holders": "yes" }));
     assert!(err && msg.as_str().is_some_and(|m| m.contains("holders")), "{msg}");
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+const MODES: [ImportMode; 3] = [ImportMode::Add, ImportMode::Update, ImportMode::Replace];
+
+#[test]
+fn every_mode_round_trips_the_bodies_and_holders_off_lands_bare() {
+    let (src, _) = source();
+    let text = export_tool_library(&src).expect("export");
+    for mode in MODES {
+        let (dst, mut h) = (new_world(), History::default());
+        let r = import_as(&dst, &mut h, &text, mode, true).expect("import");
+        assert_eq!((r.holders, r.added.len()), (2, 3), "{mode:?}: {}", r.summary());
+        assert_eq!(export_tool_library(&dst).expect("re-export"), text, "{mode:?}: byte-stable");
+        assert!(h.undo(&dst), "{mode:?}: one undo step");
+        let r = import_as(&dst, &mut h, &text, mode, false).expect("import bare");
+        assert_eq!((r.holders, r.holders_left_out), (0, 2), "{mode:?}: {}", r.summary());
+        assert!([DRAWN, MESH, BARE].iter().all(|n| body_dto(&dst, n).is_none()), "{mode:?}: bare");
+        // Into the source itself: everything is already there.
+        let mut hs = History::default();
+        let err = import_as(&src, &mut hs, &text, mode, true).expect_err("all skipped");
+        assert!(err.contains("nothing to import"), "{mode:?}: {err}");
+    }
+}
+
+/// Stock, tool `DRAWN` on a BT30 ER20, and a generated Face op on it.
+fn held_op_world() -> (World, History) {
+    let w = new_world();
+    let mut h = History::default();
+    let stock = StockShape::Box { dx: 60.0, dy: 60.0, dz: 20.0 };
+    h.execute(&w, SetStock::new(&w, stock, Location::default()).expect("stock"));
+    h.execute(&w, AddTool::new(&w, DRAWN, cat("EM-0600-4FL")).expect("tool"));
+    h.execute(&w, SetToolBody::library(&w, DRAWN, "BT30 ER20", None, None).expect("holder"));
+    let params = OpParams::Face {
+        holes: Default::default(),
+        tilt: None,
+        blend_turns: false,
+        stepover: 3.0,
+        clearance_z: Height::fixed(25.0),
+        cut_z: Height::fixed(19.5),
+        top_z: None,
+        stepdown: None,
+        feed: 1200.0,
+        plunge_feed: 300.0,
+        climb: true,
+    };
+    h.execute(&w, CreateOperation::new(&w, "Face1", DRAWN, SrcRef::Stock, params).expect("op"));
+    h.execute(&w, GenerateOperation::new(&w, "Face1").expect("generate"));
+    (w, h)
+}
+
+fn op_status(w: &World) -> (OpStatus, Option<String>) {
+    let e = model::find_by_name(w, "Face1").expect("op");
+    (status_of(w, &e), stale_reason(w, &e))
+}
+
+/// A library holding `DRAWN` with the same record on another holder.
+fn rehoused() -> String {
+    let w = new_world();
+    let mut h = History::default();
+    h.execute(&w, AddTool::new(&w, DRAWN, cat("EM-0600-4FL")).expect("tool"));
+    h.execute(&w, SetToolBody::library(&w, DRAWN, "BT40 ER20", None, None).expect("holder"));
+    export_tool_library(&w).expect("export")
+}
+
+#[test]
+fn update_and_replace_take_a_changed_body_in_place_and_stale_the_op_as_set_tool_body_does() {
+    let text = rehoused();
+    let incoming = parse_tool_library(&text).expect("parse").remove(0).body.map(|b| ToolBodyDto::from_body(&b));
+    for mode in [ImportMode::Update, ImportMode::Replace] {
+        let (w, mut h) = held_op_world();
+        let entity = model::find_by_name(&w, DRAWN);
+        let old = body_dto(&w, DRAWN);
+        assert_eq!(op_status(&w).0, OpStatus::Ok);
+        // The reference: the same body landed by SetToolBody on a twin.
+        let (twin, mut th) = held_op_world();
+        th.execute(&twin, SetToolBody::library(&twin, DRAWN, "BT40 ER20", None, None).expect("twin"));
+        assert_eq!(body_dto(&twin, DRAWN), incoming);
+
+        let r = import_as(&w, &mut h, &text, mode, true).expect("import");
+        let changed = if mode == ImportMode::Update { &r.updated } else { &r.replaced };
+        assert_eq!((changed.clone(), r.holders), (vec![DRAWN.to_owned()], 1), "{mode:?}: {}", r.summary());
+        assert_eq!(model::find_by_name(&w, DRAWN), entity, "{mode:?}: same entity, no rename");
+        assert_eq!(body_dto(&w, DRAWN), incoming, "{mode:?}: the file body lands");
+        assert_eq!(op_status(&w).0, OpStatus::Stale, "{mode:?}: the op using it goes stale");
+        assert_eq!(op_status(&w), op_status(&twin), "{mode:?}: exactly as SetToolBody stales it");
+        assert!(h.undo(&w));
+        assert_eq!(body_dto(&w, DRAWN), old, "{mode:?}: undo restores the old body");
+        assert_eq!(op_status(&w).0, OpStatus::Ok, "{mode:?}: and the op is fresh again");
+        assert!(h.redo(&w));
+        assert_eq!(body_dto(&w, DRAWN), incoming);
+        // Holders off: the record is identical and the body stays.
+        assert!(h.undo(&w));
+        let err = import_as(&w, &mut h, &text, mode, false).expect_err("nothing to do");
+        assert!(err.contains("nothing to import"), "{mode:?}: {err}");
+        assert_eq!(body_dto(&w, DRAWN), old, "{mode:?}: holders off never clears or swaps a body");
+    }
+}
+
+#[test]
+fn a_changed_body_in_update_and_replace_takes_the_change_gates() {
+    let text = rehoused();
+    for mode in [ImportMode::Update, ImportMode::Replace] {
+        let (w, _h) = held_op_world();
+        let old = body_dto(&w, DRAWN);
+        // A retype that would strand Face1, riding a changed body: refused by name.
+        let mut lib = parse_tool_library(&text).expect("parse");
+        lib[0].tool.kind = ToolKind::Drill;
+        lib[0].tool.tip_angle = 118.0;
+        let err = ImportTools::with_options(&w, lib, mode, true).err().expect("stranding retype refused").to_string();
+        assert!(err.contains(DRAWN) && err.contains("Face1"), "{mode:?}: {err}");
+        assert_eq!(body_dto(&w, DRAWN), old, "{mode:?}: nothing applied");
+        // A bodyless entry (or holders off) keeps the document body, which
+        // must fit the incoming record: flutes up into the holder refuse.
+        let long = with_def(&text, DRAWN, |d| {
+            d["flute_len"] = json!(200.0);
+            d.as_object_mut().map(|o| o.remove("body"));
+        });
+        let lib = parse_tool_library(&long).expect("a bare file reads");
+        for holders in [false, true] {
+            let err = ImportTools::with_options(&w, lib.clone(), mode, holders).err().expect("refused").to_string();
+            assert!(err.contains(&format!("'{DRAWN}'")), "{mode:?}/{holders}: {err}");
+        }
+        assert_eq!(body_dto(&w, DRAWN), old, "{mode:?}: the body is never cleared silently");
+        assert_eq!(op_status(&w).0, OpStatus::Ok);
+    }
 }
