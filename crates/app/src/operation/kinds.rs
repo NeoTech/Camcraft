@@ -142,6 +142,8 @@ fn feed_of(p: &OpParams) -> f64 {
         OpParams::Probe { fast_feed, .. } => *fast_feed,
         // A blank plasma feed is the controller's (#670): no number.
         OpParams::PlasmaProfile(p) => p.feed.unwrap_or(0.0),
+        // The wire's rate is the control's generator's (#532): no number.
+        OpParams::WireContour(_) => 0.0,
     }
 }
 
@@ -214,6 +216,8 @@ fn plunge_of(p: &OpParams) -> f64 {
         // The torch never plunges into solid: it pierces at the
         // controller's height and delay (#670).
         OpParams::PlasmaProfile(p) => p.feed.unwrap_or(0.0),
+        // The wire's rate is the control's generator's (#532): no number.
+        OpParams::WireContour(_) => 0.0,
     }
 }
 
@@ -287,7 +291,7 @@ fn climb_of(p: &OpParams) -> bool {
         // The wall ride and the helix choose their flank: the climb
         // number says which way the circle runs (M2.4 C).
         OpParams::Bore { climb, .. } | OpParams::Thread { climb, .. } => *climb,
-        OpParams::Probe { .. } | OpParams::PlasmaProfile(_) => false,
+        OpParams::Probe { .. } | OpParams::PlasmaProfile(_) | OpParams::WireContour(_) => false,
     }
 }
 
@@ -370,7 +374,7 @@ fn stepover_of(p: &OpParams) -> Option<f64> {
         // One ride per exposed edge is the deburr answer: the model's
         // own edges are the pattern, nothing tiles (M2.5 E B).
         | OpParams::Deburr { .. } => None,
-        OpParams::Probe { .. } | OpParams::PlasmaProfile(_) => None,
+        OpParams::Probe { .. } | OpParams::PlasmaProfile(_) | OpParams::WireContour(_) => None,
     }
 }
 
@@ -447,7 +451,7 @@ fn stepdown_of(p: &OpParams) -> Option<f64> {
         // between the clearance plane and the edge there is no
         // infeed ladder to step (M2.5 E B).
         OpParams::Deburr { .. } => None,
-        OpParams::Probe { .. } | OpParams::PlasmaProfile(_) => None,
+        OpParams::Probe { .. } | OpParams::PlasmaProfile(_) | OpParams::WireContour(_) => None,
     }
 }
 
@@ -515,6 +519,8 @@ pub fn top_of(p: &OpParams) -> Option<Height> {
         OpParams::Probe { .. } => None,
         // The plasma cut rides the plate's top (#670).
         OpParams::PlasmaProfile(p) => Some(p.top_z),
+        // The wire's profile plane: the workpiece's top (#532).
+        OpParams::WireContour(p) => Some(p.top_z),
     }
 }
 
@@ -591,6 +597,8 @@ pub fn bottom_of(p: &OpParams) -> Option<Height> {
         OpParams::Probe { .. } => None,
         // The plate's bottom: the thickness the small-hole rule reads.
         OpParams::PlasmaProfile(p) => Some(p.bottom_z),
+        // The lower programmed plane the wire's moves ride (#532).
+        OpParams::WireContour(p) => Some(p.bottom_z),
     }
 }
 
@@ -667,7 +675,7 @@ fn retract_of(p: &OpParams) -> Option<Height> {
         // The deburr ride hops every run to the clearance plane -
         // the kernel's own word, no between-run plane authored (M2.5 E B).
         | OpParams::Deburr { .. } => None,
-        OpParams::Probe { .. } | OpParams::PlasmaProfile(_) => None,
+        OpParams::Probe { .. } | OpParams::PlasmaProfile(_) | OpParams::WireContour(_) => None,
     }
 }
 
@@ -1600,19 +1608,22 @@ pub enum Section {
     Turning,
     /// The plasma table's work (#670): the torch's 2D through-cuts.
     Plasma,
+    /// The wire EDM's work (#532, #290): the wire's through-cuts.
+    WireEdm,
 }
 
 impl Section {
     /// The catalog's order, which is the ribbon's: the sections appear
     /// left to right in exactly this sequence, each one's kinds in the
     /// registry's own order (the row order is the product order).
-    pub const ORDER: [Section; 6] = [
+    pub const ORDER: [Section; 7] = [
         Section::Mill2D,
         Section::Mill3D,
         Section::Drilling,
         Section::MultiAxis,
         Section::Turning,
         Section::Plasma,
+        Section::WireEdm,
     ];
 
     #[must_use]
@@ -1624,6 +1635,7 @@ impl Section {
             Section::MultiAxis => "Multi-axis",
             Section::Turning => "Turning",
             Section::Plasma => "Plasma",
+            Section::WireEdm => "Wire EDM",
         }
     }
 
@@ -1635,6 +1647,7 @@ impl Section {
         match self {
             Section::Turning => Family::Turn,
             Section::Plasma => Family::Plasma,
+            Section::WireEdm => Family::WireEdm,
             _ => Family::Mill,
         }
     }
@@ -1693,6 +1706,9 @@ pub enum Family {
     /// The plasma table's torch work (#670): admitted on a plasma
     /// table only - a mill-turn spins steel, it strikes no arc.
     Plasma,
+    /// The wire EDM's work (#532): admitted on a wire EDM only - the
+    /// wire and its spark gap are that machine's condition table.
+    WireEdm,
 }
 
 impl Family {
@@ -1709,6 +1725,7 @@ impl Family {
                 | (Family::Mill, Kind::Mill)
                 | (Family::Turn, Kind::Lathe)
                 | (Family::Plasma, Kind::Plasma)
+                | (Family::WireEdm, Kind::WireEdm)
         )
     }
 
@@ -1719,6 +1736,7 @@ impl Family {
             Family::Mill => "milling",
             Family::Turn => "turning",
             Family::Plasma => "plasma cutting",
+            Family::WireEdm => "wire EDM",
         }
     }
 
@@ -1729,6 +1747,7 @@ impl Family {
             Family::Mill => "mill",
             Family::Turn => "lathe",
             Family::Plasma => "plasma table",
+            Family::WireEdm => "wire EDM",
         }
     }
 }
@@ -2309,6 +2328,22 @@ impl KindInfo {
             seed: seed_trochoidal_slot,
             tool_kinds: tk::FLAT_MILLS,
         },
+        KindInfo {
+            ty: OpType::WireContour,
+            label: "Wire Contour",
+            caption: "Wire Contour",
+            tag: 41,
+            // The wire burns a kerf through the workpiece: no milling
+            // law has a cutter to judge, so they stand down as for the
+            // centre-line ride; the wire generator certifies its own
+            // kerf and corner laws, and #534 owns the wire verdicts.
+            mode: Mode::Engrave,
+            section: Section::WireEdm,
+            seed: super::wire_op::seed_wire_contour,
+            // No library tool (#532): the wire is the machine's
+            // condition (#531), its one source.
+            tool_kinds: tk::NO_TOOL,
+        },
     ];
 
     /// Whose machine this kind drives - read off the row's section
@@ -2383,6 +2418,7 @@ pub const ALL_LABELS: [&str; KIND_COUNT] = [
     KindInfo::ALL[38].label,
     KindInfo::ALL[39].label,
     KindInfo::ALL[40].label,
+    KindInfo::ALL[41].label,
 ];
 
 impl OpType {
@@ -2446,6 +2482,8 @@ impl OpType {
             OpType::PlasmaProfile => 39,
             // #220: appended after the plasma profile (39) (stored ids never move).
             OpType::TrochoidalSlot => 40,
+            // #532: the wire contour appends - the wire EDM's section.
+            OpType::WireContour => 41,
         }
     }
 
@@ -2497,7 +2535,7 @@ pub fn retype_params(cur: &OpParams, kind: usize) -> OpParams {
         Some(r) => r,
         None => {
             debug_assert!(false, "op kind index {kind} is past the table");
-            eprintln!("kinds: unknown op kind index {kind}, seeding a Face");
+            tracing::error!("kinds: unknown op kind index {kind}, seeding a Face");
             &KindInfo::ALL[0]
         }
     };
