@@ -103,16 +103,18 @@ pub fn plan(root: &Path, diff: &Diff, heavy: bool) -> Result<Quick, String> {
             p.libs.insert(d);
         } else if let Some(s) = src_file.captures(&rest) {
             p.libs.insert(d.clone());
-            let (m, sub) = match path_mods::included_as(root, &d, &rest)? {
-                Some(found) => found,
-                None => (
-                    s[1].to_string(),
-                    match s.get(4).map(|x| x.as_str()) {
-                        Some(x) if x != "mod" && x != "tests" => x.to_string(),
-                        _ => String::new(),
-                    },
-                ),
+            let m = s[1].to_string();
+            let sub = match s.get(4).map(|x| x.as_str()) {
+                Some(x) if x != "mod" && x != "tests" => x.to_string(),
+                _ => String::new(),
             };
+            // #1021: a `#[path]`-included file is also its parent's submodule; both names are
+            // mapped (a union), so resolving the includer can only ever add suites.
+            if let Some((pm, ps)) = path_mods::included_as(root, &d, &rest)?
+                && (pm.as_str(), ps.as_str()) != (m.as_str(), sub.as_str())
+            {
+                p.mods.push((d.clone(), pm, ps));
+            }
             if !["lib", "main", "bin"].contains(&m.as_str()) {
                 p.mods.push((d, m, sub));
             }

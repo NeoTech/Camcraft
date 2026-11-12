@@ -9,7 +9,8 @@ use std::path::Path;
 
 use crate::scan::re;
 
-/// The module a `#[path]`-included source file really is, as the quick plan's
+/// The module a `#[path]`-included source file also is (the plan maps it beside the file's own
+/// name, never instead of it), as the quick plan's
 /// `(module, submodule)` pair: `rest` is the file relative to the crate dir
 /// (`src/posting_index_swing.rs`). `None` when no file in the crate's `src/`
 /// includes it by a `#[path]` attribute (then the file's own name stands).
@@ -33,7 +34,9 @@ pub fn included_as(root: &Path, krate: &str, rest: &str) -> Result<Option<(Strin
         .collect();
     names.sort();
     for n in names {
-        let text = std::fs::read_to_string(crate_dir.join(dir).join(&n)).unwrap_or_default();
+        let raw = std::fs::read_to_string(crate_dir.join(dir).join(&n)).unwrap_or_default();
+        // A `#[path]` in a comment declares nothing: drop line comments before matching.
+        let text: String = raw.lines().map(|l| l.split("//").next().unwrap_or("")).collect::<Vec<_>>().join("\n");
         let Some(c) = attr.captures(&text) else { continue };
         let includer = format!("{dir}/{n}");
         let Some(s) = src_file.captures(&includer) else { continue };
