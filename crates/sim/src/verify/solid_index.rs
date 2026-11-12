@@ -19,6 +19,19 @@ const BIG_CELLS: usize = 1024;
 /// wall's vertices on the true circle, far inside this.
 const RIM_TOL: f64 = crate::stock_sim::DEV_TOL;
 
+/// Deepest a chord of a declared rim may dip inside that circle and
+/// still read as its tessellation, mm (#1231). From the mesh alone an
+/// octagon with its corners on r 5 is an 8-segment r 5 circle; a hole
+/// declared (or recognized, or drilled) at that corner circle would
+/// otherwise excuse the octagon's 0.38 mm flats in full. A chord dipping
+/// deeper than this is a flat - material - and is credited only the mesh
+/// tolerance like every off-rim edge. Over every round hole pinned
+/// (the 16-gon r 2 model hole dips 0.038 mm, the golden plates' 32-gons
+/// less); a coarser round hole is judged as the polygon it is - a
+/// refusal, never a pass. So a corner-circle declaration passes at most
+/// this much into a flat, never the whole dip.
+const RIM_SAG_MAX: f64 = 0.05;
+
 pub(super) struct SolidIndex<'a> {
     facets: &'a [Triangle],
     lo: [f64; 3],
@@ -182,15 +195,25 @@ impl<'a> SolidIndex<'a> {
     }
 
     /// Which edges of facet `f` (a-b, b-c, c-a) are chords of one
-    /// declared rim: both ends within [`RIM_TOL`] of its circle in XY.
-    /// None off an upright move - a leaning axis reads no world-XY rim.
+    /// declared rim: both ends within [`RIM_TOL`] of its circle in XY,
+    /// dipping at most [`RIM_SAG_MAX`] inside it (a deeper chord is a
+    /// polygon's flat, #1231). None off an upright move - a leaning
+    /// axis reads no world-XY rim.
     fn on_rim(&self, f: u32, upright: bool, rims: &[HoleRim]) -> [bool; 3] {
         let Some(t) = self.facets.get(f as usize).filter(|_| upright) else {
             return [false; 3];
         };
         let v = [t.a, t.b, t.c];
         let on = |r: &HoleRim, p: Point3| ((p.x - r.x).hypot(p.y - r.y) - r.r).abs() <= RIM_TOL;
-        std::array::from_fn(|k| rims.iter().any(|r| on(r, v[k]) && on(r, v[(k + 1) % 3])))
+        let fine = |r: &HoleRim, p: Point3, q: Point3| {
+            let half = 0.5 * (q.x - p.x).hypot(q.y - p.y);
+            let sag = r.r - (r.r * r.r - half * half).max(0.0).sqrt();
+            sag.is_finite() && sag <= RIM_SAG_MAX
+        };
+        std::array::from_fn(|k| {
+            let (p, q) = (v[k], v[(k + 1) % 3]);
+            rims.iter().any(|r| on(r, p) && on(r, q) && fine(r, p, q))
+        })
     }
 
     /// Ray parity up +Z from `p`. A ray that grazes an edge or vertex

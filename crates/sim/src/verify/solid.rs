@@ -51,8 +51,9 @@ pub struct SolidLaw {
 
 /// A declared round hole's rim in XY (centre, radius, mm): the circle
 /// a containment kind's region judges exactly. A mesh edge with both
-/// ends on it is a chord of that round wall and its dip is excused in
-/// full; every other edge's dip is credited at most the mesh tolerance
+/// ends on it, dipping no deeper than a tessellation would (#1231), is
+/// a chord of that round wall and its dip is excused in full; every
+/// other edge's dip is credited at most the mesh tolerance
 /// (#1217), so a coarse polygon hole's flats are judged.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct HoleRim {

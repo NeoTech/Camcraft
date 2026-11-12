@@ -7,7 +7,10 @@
 //! whole dip, any other at most the mesh tolerance. A full-fidelity
 //! round hole (a 96-gon) stays clean for every containment kind with
 //! or without its rim, and a coarse round hole (a 32-gon) stays clean
-//! when its rim is the one declared.
+//! when its rim is the one declared. A polygon declared at its own
+//! corner circle (#1231) is still a polygon: a chord dipping past a
+//! tessellation's depth is a flat and convicts, so a drill, bore or
+//! thread of the corner-circle size in an octagon is a Gouge.
 //!
 //! Provenance: our own fixtures, specced from the Prime Directive and
 //! the chord sagitta s = r - sqrt(r^2 - (l/2)^2); no vendor material.
@@ -109,4 +112,27 @@ fn a_coarse_round_hole_is_excused_only_on_its_declared_rim() {
     assert_eq!(contain(&drill(), &f, 2.0 * R, &[R]), Vec::new(), "drill on its rim");
     assert_eq!(contain(&orbit(0.0), &f, 6.0, &[R]), Vec::new(), "bore on its rim");
     assert!(gouged(&contain(&drill(), &f, 2.0 * R, &[4.4])), "drill off its rim");
+}
+
+#[test]
+fn a_polygon_declared_at_its_corner_circle_still_convicts_on_its_flats() {
+    // #1231: the octagon's corners lie on the declared r 5 rim, but its
+    // flats dip 0.38 mm (a 16-gon's 0.096 mm) - flats, not tessellation.
+    for n in [8, 16] {
+        let f = part(n);
+        assert!(gouged(&contain(&drill(), &f, 2.0 * R, &[R])), "{n}-gon: corner-circle drill passed");
+        assert!(gouged(&contain(&orbit(0.0), &f, 6.0, &[R])), "{n}-gon: corner-circle bore passed");
+        assert!(gouged(&contain(&orbit(1.0), &f, 6.0, &[R])), "{n}-gon: corner-circle thread passed");
+    }
+}
+
+#[test]
+fn a_small_tessellated_round_hole_keeps_its_rim_credit() {
+    // The operations fixture's 16-gon r 2 hole dips 0.038 mm: a round
+    // hole's tessellation, so a matched 4 mm drill on its rim is clean.
+    let hole = circle(C, 2.0, 16);
+    let mut f = Vec::new();
+    plate(&rect(0.0, 0.0, 40.0, 40.0), Some((&hole, -6.0)), -10.0, 0.0, &mut f);
+    assert_eq!(contain(&drill(), &f, 4.0, &[2.0]), Vec::new());
+    assert!(gouged(&contain(&drill(), &f, 4.0, &[])), "no rim, no full credit");
 }
