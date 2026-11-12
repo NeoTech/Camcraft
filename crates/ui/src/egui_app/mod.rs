@@ -70,6 +70,7 @@ mod op_tabs;
 mod painted;
 mod tree_glyphs;
 mod pages;
+mod step_budget_row;
 // #1094: the stock page's raw-stock-only checkbox.
 mod raw_stock_row;
 // #371: the tool editor's Body section and its picking preview.

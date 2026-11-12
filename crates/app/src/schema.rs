@@ -90,6 +90,16 @@ pub struct ReducedFidelity {
     pub chord_mm: f64,
 }
 
+/// The STEP facet budget a model's mesh was imported under, when it is not
+/// the default (#1054; `step_budget::DEFAULT`). Absent on every model
+/// imported at the default, on STL/OBJ meshes and on every model of a
+/// project saved before it existed. Written by the import and update
+/// commands and the project loader, through `model_fidelity::set_budget`.
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StepBudget {
+    pub facets: u64,
+}
+
 /// Selection marker (tag). Only `SelectEntity` writes it (AGENTS.md: changes
 /// go through commands); the tree and viewport read it to highlight.
 #[derive(Component, Debug)]
@@ -593,6 +603,7 @@ pub fn register_schema(world: &World) {
     world.component::<Revision>();
     world.component::<GeoSig>();
     world.component::<ReducedFidelity>();
+    world.component::<StepBudget>();
     world.component::<Selected>();
     world.component::<StockDef>();
     world.component::<StockSourceOnly>();
