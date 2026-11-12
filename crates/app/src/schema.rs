@@ -90,6 +90,16 @@ pub struct ReducedFidelity {
     pub chord_mm: f64,
 }
 
+/// The STEP facet budget a model's mesh was imported under, when it is not
+/// the default (#1054; `step_budget::DEFAULT`). Absent on every model
+/// imported at the default, on STL/OBJ meshes and on every model of a
+/// project saved before it existed. Written by the import and update
+/// commands and the project loader, through `model_fidelity::set_budget`.
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StepBudget {
+    pub facets: u64,
+}
+
 /// Selection marker (tag). Only `SelectEntity` writes it (AGENTS.md: changes
 /// go through commands); the tree and viewport read it to highlight.
 #[derive(Component, Debug)]
@@ -261,6 +271,10 @@ impl ToolBody {
 /// `post_options` (#389) is the setup's own post options; `None`, the
 /// default and every earlier file, follows the document's `PostOptions`.
 /// Written only by `SetSetupPostOptions` and the project loader.
+/// `workholding_max_rpm` (#1031) is the rated maximum rpm of the chuck
+/// or collet the setup holds the work in; `None`, the default and every
+/// earlier file, states none. Read through [`crate::setup_workholding`];
+/// written only by `SetSetupWorkholdingRpm` and the project loader.
 #[derive(Component, Debug, Clone, PartialEq)]
 pub struct SetupDef {
     pub stock: String,
@@ -273,6 +287,7 @@ pub struct SetupDef {
     pub relative_to: Option<String>,
     pub stock_source: Option<crate::setup_stock::StockSource>,
     pub post_options: Option<PostOptions>,
+    pub workholding_max_rpm: Option<f64>,
 }
 
 /// The M3.2 stage B marker turning a model entity into a FIXTURE: the
@@ -589,6 +604,7 @@ pub fn register_schema(world: &World) {
     world.component::<Revision>();
     world.component::<GeoSig>();
     world.component::<ReducedFidelity>();
+    world.component::<StepBudget>();
     world.component::<Selected>();
     world.component::<StockDef>();
     world.component::<StockSourceOnly>();

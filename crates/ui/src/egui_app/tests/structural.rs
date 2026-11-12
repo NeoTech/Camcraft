@@ -235,6 +235,34 @@ fn tool_editor_structure() {
     );
 }
 
+/// #93 slice 3: the Draw cutter view's parameters stand in the editor's
+/// third column, right of the fields and the profile, in the order the
+/// tool is drawn (cutter, flutes, shank, neck), above Apply cutter.
+#[test]
+fn tool_cutter_params_structure() {
+    let mut harness = shell_harness();
+    harness.run();
+    crate::actions::open_tool_editor(&mut harness.state_mut().state, "EM-0600-4FL");
+    harness.run_steps(2);
+    harness.get_by_label("Profile").click();
+    harness.run();
+    harness.get_by_label("Draw cutter").click();
+    harness.run_steps(2);
+    let win = harness
+        .query_all_by_role(egui::accesskit::Role::Window)
+        .find(|n| n.accesskit_node().label().as_deref() == Some("Tool: EM-0600-4FL"))
+        .expect("the editor window");
+    let fields_right = win.get_by_label("Shank diameter").rect().max.x;
+    let mut last_y = f32::MIN;
+    for label in ["cutter Ø", "flutes", "shank Ø", "Neck", "Apply cutter"] {
+        let r = win.get_by_label(label).rect();
+        assert!(r.center().y > last_y, "{label:?} must follow the row above it");
+        assert!(r.min.x > fields_right, "{label:?} sits in the third column");
+        last_y = r.center().y;
+    }
+    assert!(win.get_by_label("shank length").rect().min.x > win.get_by_label("shank Ø").rect().max.x, "shank length beside shank Ø");
+}
+
 /// #557 / #554 / #555: a setup's own page carries the part-alignment rows in
 /// the properties leaf - the plane row (a face), the three-points row (#555) and the axes-in-the-plane
 /// rows (an edge or two points), each saying which pick it takes, with nothing armed and Apply hidden until
@@ -306,6 +334,46 @@ fn setup_page_alignment_rows_structure() {
         assert!(pane.contains_rect(r), "Apply lies inside the pane: {r:?}");
     }
     assert!(h.state().state.points_pick.is_none(), "nothing is armed by drawing the page");
+}
+
+/// #1031: a lathe setup's Settings page carries the "Workholding max rpm"
+/// row (a value, Apply, and Clear once a limit is stated); Apply lands one
+/// undoable `SetSetupWorkholdingRpm`. A mill setup shows no row.
+#[test]
+fn setup_page_workholding_rpm_row_structure() {
+    let _g = snapshot_guard();
+    let mut h = Harness::builder()
+        .with_size(Vec2::new(1280.0, 1600.0)) // the row sits at the page's foot
+        .build_ui_state(frame, ShellUi::blank());
+    {
+        let st = &mut h.state_mut().state;
+        st.pending.push_back(CommandKind::CreateSetup { name: None, datum_from: None });
+        st.drain_actions();
+        crate::actions::target(st, UiTarget::SetupNode("Setup1".into(), crate::state::SetupPage::Settings));
+    }
+    h.run_steps(3);
+    let row = crate::egui_app::setup_workholding_row::ROW_LABEL.trim();
+    assert!(h.query_by_label_contains(row).is_none(), "a mill setup has no chuck rating row");
+    {
+        let st = &mut h.state_mut().state;
+        let lathe = camcraft_app::machine::Machine { kind: Some("lathe".into()), ..Default::default() };
+        let load = camcraft_app::commands::LoadMachine::new(&st.world, "lathe.mch".into(), Some(lathe));
+        st.history.execute(&st.world, load.expect("a lathe"));
+    }
+    h.run_steps(3);
+    assert!(h.query_by_label_contains(row).is_some(), "a lathe setup shows the row");
+    assert!(h.query_by_label_contains("No workholding limit stated").is_some());
+    assert!(h.query_by_label("Clear rpm").is_none(), "nothing to clear yet");
+    assert!(!disabled(&h, "Apply rpm"), "Apply is live");
+    h.get_by_label("Apply rpm").click();
+    h.run_steps(3);
+    let world = &h.state().state.world;
+    assert_eq!(camcraft_app::setup_workholding::of(world, Some("Setup1")), Some(2000.0), "the row's default, applied: {}", h.state().state.status);
+    assert!(h.query_by_label_contains("Stated: 2000 rpm").is_some());
+    assert!(h.query_by_label("Clear rpm").is_some_and(|n| !n.accesskit_node().is_disabled()), "Clear shows once stated");
+    let st = &mut h.state_mut().state;
+    assert!(st.history.undo(&st.world), "one undo step");
+    assert_eq!(camcraft_app::setup_workholding::of(&st.world, Some("Setup1")), None);
 }
 
 /// #948: at the default 1280 px window every ribbon button reads whole
