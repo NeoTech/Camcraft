@@ -83,6 +83,8 @@ pub use camcraft_sim::solid_rest;
 pub use camcraft_sim::sim;
 pub use camcraft_geometry::geometry::stock;
 pub mod stock_sim;
+// #1094: the model that is only the stock's source is not the part.
+pub mod stock_source;
 pub mod stock_export;
 // #561: a square stock keeps its allowance round a located part.
 pub mod stock_follow;
