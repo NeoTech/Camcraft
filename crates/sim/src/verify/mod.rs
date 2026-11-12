@@ -154,6 +154,7 @@ pub use crate::tools::ToolGeom;
 mod air;
 mod arc_bulge;
 mod arc_wall;
+mod arc_wall_plane;
 mod c_steel;
 mod contact;
 mod crossing;
