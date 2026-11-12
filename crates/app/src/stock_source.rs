@@ -14,6 +14,7 @@
 
 use flecs_ecs::prelude::*;
 
+use crate::geometry::Point3;
 use crate::model;
 use crate::schema::{Operation, StockSourceOnly};
 use crate::stock::StockShape;
@@ -119,36 +120,58 @@ pub fn judged(world: &World, entity: &Entity, skip: Option<Entity>) -> bool {
     !model::is_fixture(world, entity) && skip != Some(*entity)
 }
 
+/// Does the model `entity` give the verdict anything to judge - a body
+/// with facets? An empty model is no part (#1094 review).
+fn has_body(world: &World, entity: &Entity) -> bool {
+    model::facets_of(world, entity).is_some_and(|f| !f.is_empty())
+}
+
 /// The refusal when the mark leaves nothing to judge: the stock's source
-/// is the only non-fixture model, so no finished part is in the document.
-/// A program judged against nothing is never passed silently.
+/// is the only non-fixture model with a body, so no finished part is in
+/// the document. A program judged against nothing is never passed.
 #[must_use]
 pub fn nothing_judged(world: &World) -> Option<String> {
     let skip = stock_only_model(world)?;
     let any_part = model::model_entities(world)
         .into_iter()
-        .any(|(_, e)| judged(world, &e, Some(skip)));
+        .any(|(_, e)| judged(world, &e, Some(skip)) && has_body(world, &e));
     if any_part {
         return None;
     }
     let name = model::name_of(world, &skip).unwrap_or_default();
     Some(format!(
-        "nothing is judged as the part: '{name}' is marked raw stock only and the document has no other model - import the finished part, or untick \"{RAW_STOCK_ONLY}\" on the stock page"
+        "nothing is judged as the part: '{name}' is marked raw stock only and the document has no other model with a body - import the finished part, or untick \"{RAW_STOCK_ONLY}\" on the stock page"
     ))
 }
 
-/// One plain sentence for a gouge refusal when the model it is read
-/// against includes the program's stock source: how to tell the verdict
-/// that model is raw stock - or why the mark did not hold. The only
+/// Is `at` inside the model's world bounds (1 mm slack)?
+fn near(world: &World, entity: &Entity, at: Point3) -> bool {
+    let Some(tris) = model::world_facets(world, entity) else { return false };
+    let mut lo = [f64::INFINITY; 3];
+    let mut hi = [f64::NEG_INFINITY; 3];
+    for p in tris.iter().flat_map(|t| [t.a, t.b, t.c]) {
+        for (k, v) in [p.x, p.y, p.z].into_iter().enumerate() {
+            lo[k] = lo[k].min(v);
+            hi[k] = hi[k].max(v);
+        }
+    }
+    [at.x, at.y, at.z].into_iter().enumerate().all(|(k, v)| v >= lo[k] - 1.0 && v <= hi[k] + 1.0)
+}
+
+/// One plain sentence for a gouge refusal at `at` when the gouged model is
+/// a from-model stock's source: what the raw-stock setting means (so it
+/// cannot read as "tick this to make the error go away"), shown only when
+/// no operation names that model - or why a mark did not hold. The only
 /// inference in this module; it changes no verdict.
 #[must_use]
-pub fn gouge_hint(world: &World) -> Option<String> {
+pub fn gouge_hint(world: &World, at: Option<Point3>) -> Option<String> {
+    let at = at?;
     let ops = all_ops(world);
     let skip = stock_only_model(world);
     for stock in program_stocks(world, &ops) {
         let Some((source, marked)) = source_of(world, &stock) else { continue };
         let Some(e) = model::find_by_name(world, &source) else { continue };
-        if skip == Some(e) || !model::is_model(world, &e) || model::is_fixture(world, &e) {
+        if skip == Some(e) || !model::is_model(world, &e) || model::is_fixture(world, &e) || !near(world, &e, at) {
             continue;
         }
         if ops.iter().any(|op| names(op, &source)) {
@@ -157,7 +180,7 @@ pub fn gouge_hint(world: &World) -> Option<String> {
             ));
         }
         return Some(format!(
-            " - the stock is made from '{source}', which is judged as the part: if '{source}' is only the raw stock (a casting or blank) and the finished part is its own model, tick \"{RAW_STOCK_ONLY}\" on the stock page"
+            " - the cut is judged against '{source}', the model the stock is made from. If '{source}' is the finished part, the program cuts into it. Only if '{source}' is the raw casting or blank, not the finished part (which is its own model), tick \"{RAW_STOCK_ONLY}\" on the stock page"
         ));
     }
     None

@@ -9,25 +9,51 @@ model is judged exactly as before. The mark is one undoable command
 command, a component on the stock entity (`schema::StockSourceOnly { source }`)
 and an optional project-file key (`raw_stock_only`, absent = false).
 
+**The mark dies with the model it was given to (second review).** The mark
+names its source by name, so a model imported later under a deleted casting's
+name must never find it waiting. Chosen mechanism: every command that ends the
+model or the stock the mark was given to drops the mark *inside its own undo
+step* (`commands::stock_source_only::MarkDrops`, snapshotted at construction):
+- `DeleteEntity` of the source model (or of the stock) drops it; undo of the
+  delete restores the model AND the mark, redo drops it again;
+- `UpdateModel` (re-import in place, and `RepairModel` through it) drops it -
+  new geometry was never said to be raw stock; undo restores both;
+- `SetStock` - any new stock, another shape or the same model again - drops it;
+  only undo brings it back (stock -> box -> back to the casting comes back
+  unmarked).
+- No model rename command exists (only `RenameOperation`); a future one must
+  carry the mark with the model (or drop it) the same way.
+- Project load: the mark lands only when its source model is in the file; one
+  naming a missing model is read as unmarked (judged) with a load note, not
+  refused - the safe direction, and an older file still opens.
+Dropped: binding the mark to the entity id or a geometry stamp instead. An
+entity id cannot survive undo of a delete (the model respawns as a new entity,
+so undo could not restore the mark) nor a project load; a geometry stamp would
+keep a mark on an identical re-import, and needs the model loaded before the
+stock. Dropping in the commands keeps undo exact and leaves no dangling mark.
+
 Even when on, `stock_source::stock_only_model` keeps it honest:
-- the mark names the source it was said of; it holds only while every stock the
-  program starts from (the own stock of each setup the unsuppressed ops machine
-  in; a setup taking what the one before leaves is skipped) is a copy of that
-  same model and carries the mark. `SetStock` to another source drops its hold;
-  undo of that `SetStock` restores it.
+- it holds only while every stock the program starts from (the own stock of
+  each setup the unsuppressed ops machine in; a setup taking what the one
+  before leaves is skipped) is a copy of that same model and carries the mark.
 - an operation of the document - any setup, suppressed or not - that names the
   model in its source (`Entity`, any `Selection` entity) or in a boundary pick
   of its area controls puts it back in the verdict. Chosen over refusing the
   command while such an op exists: a refusal at tick time cannot stop an op
   added later, the reader-side rule holds whatever order things happen in.
-- a mark that leaves no other non-fixture model (nothing judged as the part)
-  refuses the post by name ("nothing is judged as the part: ...") - the
-  stricter of refuse or warn.
+- a mark that leaves no other non-fixture model with a body (facets) refuses
+  the post by name ("nothing is judged as the part: ...") - the stricter of
+  refuse or warn; an empty model is nothing to judge.
 
-**The hint is the only inference.** A gouge refusal whose verdict read the
-program stock's source model adds one sentence: how to mark it (when no op
-names it), or why the mark did not hold (an op machines it). It changes no
-verdict.
+**The hint is the only inference.** A gouge refusal whose worst gouge lies in
+the bounds of a program stock's source model that no operation names adds one
+sentence saying what the setting MEANS: if that model is the finished part, the
+program cuts into it; only if it is the raw casting or blank (the finished part
+being its own model) tick the box. It is worded so it cannot read as "tick this
+to make the error go away"; a stock made from the part itself still gets it,
+because the code cannot tell a part from a casting - that is the user's call.
+When a mark is set but an op names the model, the hint says why it did not
+hold. It changes no verdict.
 
 **Why explicit, not inferred (orchestrator's direction, taken unattended).**
 The first version inferred "only the stock's source" from three clauses (the

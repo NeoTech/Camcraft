@@ -626,6 +626,12 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
     crate::ribbon::pinned_set(world, &file.pinned);
     // Opening lands the material too - including None (the units law).
     crate::cutting::material_set(world, material);
+    // #1094: a raw-stock-only mark lands only when its source model is in
+    // the file - one naming a missing model is read as unmarked (judged),
+    // so a model imported later under that name never inherits it.
+    let model_names: std::collections::HashSet<String> = file.entities.iter()
+        .filter(|e| e.kind.unwrap_or(EntityKind::Model) == EntityKind::Model)
+        .map(|e| e.name.clone()).collect();
     for dto in file.entities {
         let kind = dto.kind.unwrap_or(EntityKind::Model);
         let entity = model::spawn(world, &dto.name);
@@ -683,7 +689,11 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
                 // #1094: the mark lands only on a from-model stock, naming
                 // its source; anywhere else it means nothing and is dropped.
                 if let (true, StockShape::FromModel { source }) = (dto.raw_stock_only, &shape) {
-                    entity.entity_view(world).set(crate::schema::StockSourceOnly { source: source.clone() });
+                    if model_names.contains(source) {
+                        entity.entity_view(world).set(crate::schema::StockSourceOnly { source: source.clone() });
+                    } else {
+                        notes.push(format!("'{}' was marked raw stock only, but its source model '{source}' is not in the file - read as unmarked", dto.name));
+                    }
                 }
             }
             EntityKind::Wcs => {

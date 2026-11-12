@@ -74,7 +74,7 @@ pub fn sim_clause(world: &World) -> SimClause {
                     sim.dev.gouge_cells,
                     crate::units::len(sim.dev.max_gouge, u, 2),
                     u.suffix(),
-                    crate::stock_source::gouge_hint(world).unwrap_or_default() // #1094
+                    crate::stock_source::gouge_hint(world, sim.dev.max_gouge_at).unwrap_or_default() // #1094
                 )),
                 not_judged: None,
             }

@@ -22,9 +22,10 @@
 use flecs_ecs::prelude::World;
 
 use camcraft_app::commands::{
-    AddTool, CreateOperation, EditOperationParams, GenerateOperation, History, ImportModel, SetStock,
-    SetStockSourceOnly,
+    AddTool, CreateOperation, DeleteEntity, EditOperationParams, GenerateOperation, History, ImportModel, SetStock,
+    SetStockSourceOnly, UpdateModel,
 };
+use camcraft_app::stock_source::raw_stock_only_of;
 use camcraft_app::drilling::Hole;
 use camcraft_app::geo2d::Point2;
 use camcraft_app::geometry::{Mesh, Point3, Triangle, cube};
@@ -313,3 +314,111 @@ fn the_mark_round_trips_the_project_file_and_an_older_file_judges_as_before() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+
+/// The second review's reproduction: the marked casting deleted, the
+/// finished part imported under its old name, an op on an unrelated
+/// model and one on the stock boring 5 mm under the new model's floor.
+fn delete_and_reimport_job() -> (World, History) {
+    let world = new_world();
+    let mut h = History::default();
+    h.execute(&world, ImportModel::from_mesh("casting", casting()));
+    let other = cube(Point3::new(80.0, -10.0, 0.0), Point3::new(100.0, 10.0, 20.0));
+    h.execute(&world, ImportModel::from_mesh("other", other));
+    let shape = StockShape::FromModel { source: "casting".into() };
+    h.execute(&world, SetStock::new(&world, shape, Location::default()).expect("stock"));
+    mark(&world, &mut h, true);
+    h.execute(&world, DeleteEntity::new(&world, "casting").expect("delete"));
+    h.execute(&world, ImportModel::from_mesh("casting", part()));
+    add_tool(&world, &mut h);
+    op(&world, &mut h, "Op2", SrcRef::Entity("other".into()), FLOOR);
+    op(&world, &mut h, "Op1", SrcRef::Stock, FLOOR - 5.0);
+    (world, h)
+}
+
+#[test]
+fn a_model_imported_under_a_deleted_marked_sources_name_does_not_inherit_the_mark() {
+    let (world, _) = delete_and_reimport_job();
+    assert_eq!(raw_stock_only_of(&world, None), Some(false), "the mark died with the casting");
+    assert_eq!(stock_only_model(&world), None);
+    assert!(gouge_line(&world).is_some(), "the 5 mm gouge into the new model went unjudged");
+    assert!(post(&world, "reimport").is_err(), "the review's delete + re-import reproduction posted");
+}
+
+#[test]
+fn undo_of_deleting_the_marked_source_restores_the_model_and_the_mark() {
+    let (world, mut h) = casting_job(FLOOR);
+    mark(&world, &mut h, true);
+    h.execute(&world, DeleteEntity::new(&world, "casting").expect("delete"));
+    assert_eq!(raw_stock_only_of(&world, None), Some(false), "deleted with the model");
+    h.undo(&world);
+    assert_eq!(stock_only_model(&world), Some(entity(&world, "casting")), "undo: model and mark together");
+    h.redo(&world);
+    assert!(model::find_by_name(&world, "casting").is_none());
+    assert_eq!(raw_stock_only_of(&world, None), Some(false), "redo drops it again");
+}
+
+#[test]
+fn a_re_import_in_place_drops_the_mark_and_undo_restores_it() {
+    let (world, mut h) = casting_job(FLOOR);
+    mark(&world, &mut h, true);
+    h.execute(&world, UpdateModel::new(&world, "casting", part()).expect("update"));
+    assert_eq!(raw_stock_only_of(&world, None), Some(false), "new geometry, no mark");
+    assert_eq!(stock_only_model(&world), None);
+    h.undo(&world);
+    assert_eq!(stock_only_model(&world), Some(entity(&world, "casting")), "undo restores geometry and mark");
+}
+
+#[test]
+fn a_stock_changed_to_a_box_and_back_comes_back_unmarked() {
+    let (world, mut h) = casting_job(FLOOR);
+    mark(&world, &mut h, true);
+    let shape = StockShape::Box { dx: 60.0, dy: 60.0, dz: 30.0 };
+    h.execute(&world, SetStock::new(&world, shape, Location::default()).expect("box"));
+    let shape = StockShape::FromModel { source: "casting".into() };
+    h.execute(&world, SetStock::new(&world, shape, Location::default()).expect("back"));
+    assert_eq!(raw_stock_only_of(&world, None), Some(false), "changing the stock dropped the mark");
+    assert_eq!(stock_only_model(&world), None);
+    h.undo(&world);
+    h.undo(&world);
+    assert_eq!(stock_only_model(&world), Some(entity(&world, "casting")), "only undo brings it back");
+}
+
+#[test]
+fn an_empty_model_is_nothing_to_judge() {
+    let world = new_world();
+    let mut h = History::default();
+    h.execute(&world, ImportModel::from_mesh("casting", casting()));
+    h.execute(&world, ImportModel::from_mesh("empty", Mesh::from_facets(Vec::new())));
+    let shape = StockShape::FromModel { source: "casting".into() };
+    h.execute(&world, SetStock::new(&world, shape, Location::default()).expect("stock"));
+    add_tool(&world, &mut h);
+    op(&world, &mut h, "Op1", SrcRef::Stock, FLOOR - 5.0);
+    mark(&world, &mut h, true);
+    let gate = posting::verification_gate(&world);
+    assert!(gate.iter().any(|l| l.starts_with("nothing is judged as the part")), "{gate:?}");
+    assert!(post(&world, "empty").is_err());
+}
+
+#[test]
+fn a_file_whose_mark_names_a_missing_source_loads_unmarked_with_a_note() {
+    let (world, mut h) = casting_job(FLOOR);
+    mark(&world, &mut h, true);
+    let dir = std::env::temp_dir().join(format!("camcraft-1094-miss-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("dir");
+    let path = dir.join("marked.camproj");
+    camcraft_app::project::save(&world, &path).expect("save");
+    let mut doc: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&path).expect("read")).expect("json");
+    let rows = doc["entities"].as_array_mut().expect("entities");
+    rows.retain(|r| r["name"] != serde_json::json!("casting"));
+    std::fs::write(&path, serde_json::to_string(&doc).expect("json")).expect("write");
+    let loaded = new_world();
+    let notes = camcraft_app::project::load_noted(&loaded, &path).expect("load");
+    assert_eq!(raw_stock_only_of(&loaded, None), Some(false), "read as unmarked");
+    assert!(notes.iter().any(|n| n.contains("read as unmarked")), "{notes:?}");
+    // A model imported later under the old name inherits nothing.
+    let mut h2 = History::default();
+    h2.execute(&loaded, ImportModel::from_mesh("casting", part()));
+    assert_eq!(stock_only_model(&loaded), None);
+    let _ = std::fs::remove_dir_all(&dir);
+}

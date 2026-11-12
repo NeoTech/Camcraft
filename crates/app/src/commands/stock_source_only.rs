@@ -75,3 +75,45 @@ impl Command for SetStockSourceOnly {
         land(world, &self.stock_name, &self.prev);
     }
 }
+
+/// The marks a command takes away with it (#1094 review): a mark dies
+/// with the model it was given to and with the stock it was ticked on.
+/// `DeleteEntity` (of the source model, or of the stock), `UpdateModel`
+/// (a re-import in place) and `SetStock` snapshot the marks they drop at
+/// construction and drop them in `apply`; `invert` puts them back, so one
+/// undo restores the model, the stock and the mark together. A later
+/// model wearing the old name never finds a mark waiting for it.
+#[derive(Default)]
+pub(crate) struct MarkDrops(Vec<(String, StockSourceOnly)>);
+
+impl MarkDrops {
+    /// Every stock's mark that names the model `name`, and the mark of
+    /// the stock entity `name` itself.
+    pub(crate) fn of(world: &World, name: &str) -> Self {
+        let marks = model::named_entities(world)
+            .into_iter()
+            .filter(|(_, e)| model::is_stock(world, e))
+            .filter_map(|(stock, e)| {
+                e.entity_view(world)
+                    .try_get::<&StockSourceOnly>(|f| f.clone())
+                    .filter(|f| f.source == name || stock == name)
+                    .map(|f| (stock, f))
+            })
+            .collect();
+        MarkDrops(marks)
+    }
+
+    /// The mark ticked on the stock entity `stock` alone (for `SetStock`).
+    pub(crate) fn of_stock(world: &World, stock: &str) -> Self {
+        let mark = model::find_by_name(world, stock)
+            .and_then(|e| e.entity_view(world).try_get::<&StockSourceOnly>(|f| f.clone()));
+        MarkDrops(mark.map(|m| (stock.to_owned(), m)).into_iter().collect())
+    }
+
+    /// `true`: drop the marks (apply); `false`: put them back (invert).
+    pub(crate) fn write(&self, world: &World, dropped: bool) {
+        for (stock, mark) in &self.0 {
+            land(world, stock, &(!dropped).then(|| mark.clone()));
+        }
+    }
+}
