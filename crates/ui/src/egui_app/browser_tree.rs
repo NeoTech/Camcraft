@@ -209,7 +209,8 @@ fn setup_children(
     let wcs_hidden = state.hidden_offsets.contains(&setup::wcs_entity_name(w, ctx));
     push_row(rows, leaves, "WCS".to_owned(), word.to_owned(), painted::Kind::Wcs, Some(Icon::WorkOffset), is_active && matches!(t, UiTarget::Wcs), wcs_hidden, depth, Leaf::Wcs(name.to_owned()));
     let stock_hidden = state.hidden_stocks.contains(&setup::stock_entity_name(w, ctx));
-    push_row(rows, leaves, "Stock".to_owned(), String::new(), painted::Kind::Stock, Some(Icon::Stock), is_active && matches!(t, UiTarget::Stock), stock_hidden, depth, Leaf::Stock(name.to_owned()));
+    let stock_text = if model::stock_world_aabb_for(w, ctx).is_some() { String::new() } else { "not set".to_owned() };
+    push_row(rows, leaves, "Stock".to_owned(), stock_text, painted::Kind::Stock, Some(Icon::Stock), is_active && matches!(t, UiTarget::Stock), stock_hidden, depth, Leaf::Stock(name.to_owned()));
     let own = |owns: bool| if owns { "  (own)" } else { "" };
     let machine = format!(
         "{}{}",
