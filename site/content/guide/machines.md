@@ -44,6 +44,11 @@ Tormach PathPilot, Doosan DNM and Makera Carvera. Machine files:
 `3axis-vmc`, `vmc`, `tilthead`, `doosan-dnm`, the Carvera pair and the
 Tormach mills.
 
+Common refusals: `a <kind> operation cannot run on its setup's milling
+machine` (a turning or plasma operation on a mill), `move <i> tilts the
+tool; <machine> states no tilting rotary`, and `move <i> commands <axis>
+<angle> deg, the travel is <lo>..<hi>`.
+
 ## Router
 
 CamCraft has no separate router kind: a router is a machine file that
@@ -69,6 +74,13 @@ gate, never silently capped. Slide strokes are judged on the posted path.
 
 Posts: Fanuc Lathe (the default for a lathe) and Tormach PathPilot Lathe.
 
+Common refusals: `a Drill operation would be posted on the work spindle
+with a hole off the spindle axis (X.. Y.. from the work offset)`, `turns
+the work at <rpm> rpm (G97), over setup '<name>''s workholding maximum of
+<limit> rpm`, `move <i> reaches <v> in <axis>, the stroke is <lo>..<hi>`,
+and `<post> does not serve <machine>, a turning machine` (a milling post
+on a lathe setup).
+
 ## Mill-turn
 
 Both families are admitted: turning on the work spindle and milling with
@@ -77,6 +89,12 @@ except plasma. For a live-tool move the machine's C rate is what is judged,
 and the work's chuck rpm limit applies to sections that run on the work
 spindle. Each shipped post script declares its dialect in
 `capabilities` (1 = milling, 2 = turning).
+
+Common refusals: `<post> is not a turning post - on <machine>, a mill-turning
+machine, these sections turn the work` (turning sections through a milling
+post), the same off-axis Drill refusal as a lathe, and `turns the work on
+the C axis at up to <rpm> rpm ... over setup '<name>''s workholding
+maximum`.
 
 ## Plasma
 
@@ -93,17 +111,30 @@ not run for a torch.
 Post: Tormach PathPilot Plasma, the default, and the only post that serves
 plasma. Machine file: `tormach-1300pl`.
 
+Common refusals: `a <kind> operation is <family> work - a plasma table
+cuts only plasma operations`, `tool <n> states <rpm> rpm - a plasma table
+has no spindle to turn`, `move <i> tilts or turns the tool - <machine>
+states no rotary axis`, and, when the machine file is read, `a plasma
+machine has no spindle - a torch states no rpm, power, speed range or
+tapping` and `a plasma table cuts flat sheet in X and Y - it states no
+rotary axis`.
+
 ## Wire and sinker EDM
 
 The kinds exist (`wire_edm`, `sinker_edm`), and the Wire Contour operation
 (`OpType::WireContour`) is admitted on a wire EDM machine. What does not ship
 yet is an EDM post or an EDM machine file: no post serves an EDM kind, so
-nothing can be posted for one.
+nothing can be posted for one. Status: Wire Contour can be created and
+generated on a machine file you write that declares `wire_edm`; posting it
+stops with `a Wire Contour operation posts through a wire EDM post, which
+is not built yet - nothing is posted`. The sinker EDM kind admits no
+operation yet.
 
 ## Changing a setup's machine
 
 Operations are judged against the machine at post, so switching a setup to
 another machine does not rewrite its operations; an operation the new kind
 does not admit, or a limit the new file states, is refused when you post.
-A post that does not serve the machine's kind is, today, only filtered out
-of the picker; a change in review (PR #1265) would refuse it by name.
+A post that does not serve the machine's kind is filtered out of the
+picker and, if mounted anyway, refused by name at post (`<post> does not
+serve <machine>, a <kind> machine`).
