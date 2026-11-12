@@ -559,7 +559,7 @@ Phase 4 refactors the codebase for reuse; work in the shape it is heading to:
   file, a command, MCP or the CLI. Code that works only on domain values
   (cl, geometry, tools, post, sim, motion types) goes in the crate that owns
   them, and `app` re-exports it. A reviewer checks this from the new file's
-  `use` lines: if none names one of those six things, the file is in the
+  `use` lines: if none names one of those five things, the file is in the
   wrong crate.
 - **No new dependency between our crates without a decision.** A
   `camcraft-*` entry added to `[dependencies]` or `[dev-dependencies]` in any
@@ -587,7 +587,7 @@ Each future subcrate carries its own tests inside its crate (M4.1).
 
 - **A test lives with the code it tests.** A new test file goes in the lowest
   crate that provides everything it imports, and its Gate map names that
-  crate (`camcraft_post::engine`, not `app::post`). A file in
+  crate (`camcraft_post::post::engine`, not `app::post`). A file in
   `crates/app/tests/` must import something `crates/app/src` defines; a test
   that uses only another crate's re-exports (`app::post`, `app::verify`,
   `app::machining2d`) belongs in that crate's `tests/`. A test that needs
