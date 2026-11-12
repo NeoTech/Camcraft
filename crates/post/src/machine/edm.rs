@@ -66,8 +66,9 @@ pub struct Edm {
     /// from the machine's manual: a chuck or holder system's name).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pickup: Option<String>,
-    /// The generator conditions the user states (#531). Empty = none
-    /// stated, and every EDM op refuses by name.
+    /// Either kind: the generator conditions the user states (#531).
+    /// Empty = none stated (absent and `[]` read the same), and every
+    /// EDM op refuses by name.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub conditions: Vec<Condition>,
 }
@@ -114,8 +115,7 @@ impl Edm {
             && self.wire_diameters.iter().all(|d| d.is_finite() && *d > 0.0)
             && pos(self.max_orbit_radius)
             && self.orbits.iter().all(|o| ORBIT_KINDS.contains(&o.kind.as_str()) && !o.word.trim().is_empty())
-            && self.conditions.iter().all(super::edm_conditions::condition_ok)
-            && super::edm_conditions::unique_ids(&self.conditions)
+            && self.conditions_sane()
     }
 
     /// Does this section state only keys of `k` (a wire states no
@@ -127,8 +127,12 @@ impl Edm {
             || self.upper_guide_z.is_some()
             || self.max_taper_deg.is_some()
             || !self.wire_diameters.is_empty()
-            || self.awt.is_some();
-        let sinker = !self.orbits.is_empty() || self.max_orbit_radius.is_some() || self.pickup.is_some();
+            || self.awt.is_some()
+            || self.conditions.iter().any(|c| c.wire_diameter.is_some());
+        let sinker = !self.orbits.is_empty()
+            || self.max_orbit_radius.is_some()
+            || self.pickup.is_some()
+            || self.conditions.iter().any(|c| c.undersize.is_some());
         match k {
             Kind::WireEdm => !sinker,
             Kind::SinkerEdm => !wire,
@@ -207,8 +211,8 @@ fn keys_fit(o: &serde_json::Map<String, Value>, k: Kind) -> Result<(), String> {
 /// An `edm` section on another kind, a key that is not the kind's, a
 /// non-number where a number is due (or one that is not finite once
 /// scaled), a non-positive length, a taper outside (0, 90) degrees, an
-/// upper guide not above the lower, or an orbit kind CamCraft does not
-/// generate.
+/// upper guide not above the lower, an orbit kind CamCraft does not
+/// generate, or a condition table entry `parse_conditions` refuses.
 pub(super) fn parse_edm(v: Option<&Value>, f: f64, k: Option<Kind>) -> Result<Option<Edm>, String> {
     let Some(v) = v.filter(|v| !v.is_null()) else {
         return Ok(None);
@@ -254,6 +258,7 @@ pub(super) fn parse_edm(v: Option<&Value>, f: f64, k: Option<Kind>) -> Result<Op
         }
         Some(x) => return Err(format!("machine file: edm.wire_diameters must be a list, not {x}")),
     }
+    e.conditions = super::edm_conditions::parse_conditions(v.get("conditions"), f, k, &e.wire_diameters)?;
     match v.get("awt") {
         None | Some(Value::Null) => {}
         Some(Value::Bool(b)) => e.awt = Some(*b),
@@ -273,7 +278,6 @@ pub(super) fn parse_edm(v: Option<&Value>, f: f64, k: Option<Kind>) -> Result<Op
         }
         Some(x) => return Err(format!("machine file: edm.orbits must be a list, not {x}")),
     }
-    e.conditions = super::edm_conditions::parse_conditions(v.get("conditions"), f)?;
     Ok(Some(e))
 }
 
@@ -295,4 +299,4 @@ fn orbit(o: &Value) -> Result<OrbitWord, String> {
 
 #[cfg(test)]
 #[path = "edm_tests.rs"]
-mod tests;
+pub(super) mod tests;
