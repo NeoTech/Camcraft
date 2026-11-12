@@ -34,11 +34,9 @@ pub fn name_enclosure(e: GenError, tool: &Tool, body: Option<&HolderProfile>) ->
         return e;
     }
     let say = |m: String| if m.contains("holder") { format!("{m} ({})", enclosure_words(tool)) } else { m };
-    match e {
-        GenError::Invalid(m) => GenError::Invalid(say(m)),
-        GenError::At { msg, at } => GenError::At { msg: say(msg), at },
-        other => other,
-    }
+    // #871: `map_msg` rewrites a located or ghost-carrying refusal's
+    // sentence alike, its spot and ghost riding along.
+    e.map_msg(say)
 }
 
 /// The touch probe's note for a tool with a body: its stylus reach
