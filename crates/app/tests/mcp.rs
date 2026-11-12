@@ -10,6 +10,7 @@
 //! app::operation (detect_holes, #312), app::mcp::pockets (detect_pockets, #35).
 
 mod common;
+mod mcp_open;
 
 use camcraft_app::mcp::{self, Server};
 
