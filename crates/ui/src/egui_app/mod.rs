@@ -67,6 +67,7 @@ mod painted;
 mod tree_glyphs;
 mod pages;
 // #371: the tool editor's Body section and its picking preview.
+mod tool_body_lathe_page;
 mod tool_body_page;
 // #630: the tool editor's lathe orientation row.
 mod tool_orientation_row;

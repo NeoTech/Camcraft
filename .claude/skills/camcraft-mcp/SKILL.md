@@ -82,13 +82,19 @@ The server exposes tools across three modules in `crates/app/src/mcp/` (see `cra
 - `move_fixture { "name": string, "position": [x, y, z], "rotation"?: [qx, qy, qz, qw] }`: Position a fixture body in world coordinates.
 - `get_fixture_findings {}`: Query live collision checks between generated toolpaths and fixture solids / machine table.
 
-### 4. Stock & Tool Management (`tools.rs`, `edit.rs`, #355)
+### 4. Stock & Tool Management (`tools.rs`, `edit.rs`, `body_tools.rs`, #355, #361)
 - `set_stock { "box"?: { "dx", "dy", "dz" }, "cylinder"?: { "diameter", "height" }, "from_model"?: string }`: Define setup stock as a box in mm (centred in XY, z from 0 to `dz`), a cylinder, or a copy of a model's mesh.
 - `list_tool_catalog {}`: List built-in tool definitions.
 - `add_tool { "catalog"?: string, "definition"?: object, "name"?: string }`: Add a tool: a copy of a `list_tool_catalog` entry, or a full definition (`get_job`'s tool shape); `name` defaults to the catalog name.
 - `set_tool { "operation": string, "tool": string }`: Assign a document tool to an operation.
 - `import_tool_library { "path": string }`: Import tools from a `.camtools` library file.
 - `export_tool_library { "path": string }`: Export document tools to a `.camtools` library file.
+- `get_tool_body { "tool": string }`: A tool's modelled body (#361), or `body: null` when it has none: a `"spindle"` body's axis, `tip_offset` and revolved envelope (`foot`, `top`, `max_radius`), or a `"lathe"` body's placement (`radial`, `along`, `tip`), `insert_zone` and `extent` from the tip. Lengths in mm.
+- `set_tool_body { "tool": string, "path": string, "axis"?: [x, y, z], "tip_offset"?: number }`: Give a milling tool a body from a holder or assembly file (STEP, STL, OBJ) along the spindle axis. With `axis` (model direction, tip toward spindle) and `tip_offset` (model origin's height above the tip): numeric placement. With neither: a STEP is aligned by the ISO 13399 tool coordinate systems it names, and refused by name when it names none. The collision laws then judge the body's revolved envelope. A lathe-held tool is refused (use `set_lathe_tool_body`).
+- `set_lathe_tool_body { "tool": string, "path": string, "radial": [x, y, z], "along": [x, y, z], "tip"?: [x, y, z], "insert_zone"?: { "lo": [x, y, z], "hi": [x, y, z] } | null }`: Give a lathe-held tool (turning, grooving, threading, form insert, or a boring bar) a holder body in the turning tool frame: `radial` is the model direction away from the spindle axis, `along` the model direction of the lathe's +Z, `tip` the model point the moves carry (default the model origin). The body need not be symmetric; every move of a turning operation is then judged against the part and the standing stock, and a rub blocks the post. `insert_zone` is the insert plate's box about the tip (turning frame), which the judge leaves out.
+- `set_lathe_insert_zone { "tool": string, "insert_zone": { "lo", "hi" } | null }`: Set or clear the insert zone of a tool's lathe body, keeping its mesh and placement.
+- `clear_tool_body { "tool": string }`: Remove a tool's body (either frame); the holder cylinder is judged again, and a turning tool's holder goes unjudged (its operations say so).
+- A body file too detailed to import at full fidelity (#864) is refused by name by every body tool: a coarse holder would read smaller than the holder is. Simplify the model and import again.
 
 ### 5. Operations & Geometric Features (`tools.rs`, `pick.rs`, `area.rs`, `features.rs`, #180, #312)
 - `list_operation_types {}`: Inspect all supported operation types, parameter schemas, defaults, and compatible tool types.
@@ -135,10 +141,7 @@ The following capabilities exist in the GUI or app command layer but do not yet 
    - Toggling the document-level unit lens between millimeters and inches (`crates/app/src/commands/set_units.rs`, #578). The MCP server currently exchanges dimensions in millimeters.
 3. **Persistent Program Header Metadata (#258):**
    - Setting document/setup program numbers and comments (`crates/app/src/commands/program_entry.rs`, `post_options.rs`). The MCP `post` tool currently relies on default or dialect-inferred numbers.
-4. **STEP Vendor Tool Body Attachment (`SetToolBody`, #368, #370):**
-   - Attaching and aligning vendor STEP models to tool holders is supported in the tool editor GUI, but lacks an MCP command wrapper.
-
-*Note:* Several remaining gaps above are tracked under dedicated milestone and feature issues (e.g. #258 program headers, #370 tool body alignment, #511 the UI's pocket recognition entry point). Per `AGENTS.md`, any future command PR that does not bundle an MCP tool must file a corresponding `source:agent` issue titled `MCP: <command>`, labelled `P1` and `area:mcp`.
+*Note:* Several remaining gaps above are tracked under dedicated milestone and feature issues (e.g. #258 program headers, #511 the UI's pocket recognition entry point). Per `AGENTS.md`, any future command PR that does not bundle an MCP tool must file a corresponding `source:agent` issue titled `MCP: <command>`, labelled `P1` and `area:mcp`.
 
 ---
 

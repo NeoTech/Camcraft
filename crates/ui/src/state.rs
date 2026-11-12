@@ -73,6 +73,9 @@ pub use program_entry::EntryVerb;
 #[path = "state_tool_body.rs"]
 mod tool_body_ui;
 pub use tool_body_ui::{BodyDraft, BodyPickMode, ToolBodyUi, ZOOM_MAX, ZOOM_MIN, clamp_zoom};
+#[path = "state_tool_body_lathe.rs"]
+mod tool_body_lathe_ui;
+pub use tool_body_lathe_ui::{LatheBodyDraft, LatheDraft};
 #[path = "state_tool_profile.rs"]
 mod tool_profile_ui;
 #[path = "state_tool_cutter.rs"]
@@ -242,6 +245,13 @@ pub enum CommandKind {
     SetToolBody {
         name: String,
         body: Option<BodyDraft>,
+    },
+    /// #361: set a lathe-held tool's body in the turning tool frame -
+    /// the tool editor's Apply body on a lathe draft, one
+    /// `SetToolBody::lathe`. (Clear body stays `SetToolBody` with `None`.)
+    SetLatheToolBody {
+        name: String,
+        body: LatheBodyDraft,
     },
     /// #93: set a milling tool's drawn spun holder (`Some` points) or
     /// return it to its parametric cylinder (`None`) - the tool editor's
@@ -2966,6 +2976,7 @@ impl State {
                 }
             }
             CommandKind::SetToolBody { name, body } => self.run_set_tool_body(&name, body),
+            CommandKind::SetLatheToolBody { name, body } => self.run_set_lathe_tool_body(&name, body),
             CommandKind::SetToolProfile { name, points } => self.run_set_tool_profile(&name, points),
             CommandKind::SetToolCutter { name, points } => self.run_set_tool_cutter(&name, points),
             CommandKind::SetToolHolder { name, entry, gauge, projection } => {
