@@ -27,6 +27,12 @@
 //!   `CAMCRAFT_CARRY_ENGINE=field` sets the process default for running
 //!   the carried suites whole on the field arm. A job thread never reads
 //!   the switch: a plan carries the stock it was built with.
+//! - **A shipped build ignores the switch (#1168).** The variable is
+//!   honoured only where [`CARRY_ENGINE_SWITCH_HONOURED`] holds - builds
+//!   with debug assertions (the dev and test profiles); a release build
+//!   always carries on the column engine, so two machines judge one file
+//!   alike. Wherever the field engine does judge, the verdict says so
+//!   ([`engine_note`]), never silently.
 
 use std::cell::Cell;
 use std::sync::OnceLock;
@@ -54,12 +60,44 @@ thread_local! {
     static ENGINE: Cell<Option<Backend>> = const { Cell::new(None) };
 }
 
+/// Whether this build honours [`CARRY_ENGINE_ENV`] (#1168): only builds
+/// with debug assertions (dev and test profiles). A release build - what
+/// ships - never reads it.
+pub const CARRY_ENGINE_SWITCH_HONOURED: bool = cfg!(debug_assertions);
+
+/// The default engine a [`CARRY_ENGINE_ENV`] value selects: the field
+/// engine for `field` when the switch is `honoured`; the column engine
+/// otherwise - always in a build that does not honour it.
+#[must_use]
+pub fn engine_from_switch(value: Option<&str>, honoured: bool) -> Backend {
+    match value {
+        Some(v) if honoured && v.trim().eq_ignore_ascii_case("field") => Backend::Field { band: FIELD_BAND },
+        _ => Backend::Column,
+    }
+}
+
 fn default_engine() -> Backend {
     static DEFAULT: OnceLock<Backend> = OnceLock::new();
-    *DEFAULT.get_or_init(|| match std::env::var(CARRY_ENGINE_ENV) {
-        Ok(v) if v.trim().eq_ignore_ascii_case("field") => Backend::Field { band: FIELD_BAND },
-        _ => Backend::Column,
+    *DEFAULT.get_or_init(|| {
+        if !CARRY_ENGINE_SWITCH_HONOURED {
+            return Backend::Column; // a shipped build never reads the variable
+        }
+        engine_from_switch(std::env::var(CARRY_ENGINE_ENV).ok().as_deref(), true)
     })
+}
+
+/// The line a verdict carries when this thread's carried stock is NOT on
+/// the shipped column engine (#1168): which engine judged, so a verdict
+/// that differs from another machine's says why. `None` on the column
+/// engine (every shipped verdict: nothing extra to say).
+#[must_use]
+pub fn engine_note() -> Option<String> {
+    match engine() {
+        Backend::Column => None,
+        Backend::Field { band } => Some(format!(
+            "carried stock judged by the field engine (band {band}, development switch {CARRY_ENGINE_ENV}), not the shipped column engine"
+        )),
+    }
 }
 
 /// The engine this thread's carried stock is built on.

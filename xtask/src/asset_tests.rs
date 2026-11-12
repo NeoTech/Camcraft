@@ -20,10 +20,19 @@ fn plan_for(root: &Path, files: &[&str]) -> crate::plan::Plan {
     }
 }
 
+/// The suites the plan runs, in every crate (`<crate> suites` steps): the
+/// post-script suites live in app and, since #926, in post too.
 fn app_suites(p: &crate::plan::Plan) -> Vec<String> {
-    suites(p, "app")
+    p.steps
+        .iter()
+        .filter(|s| s.name.ends_with(" suites"))
+        .flat_map(|s| {
+            s.args.iter().enumerate().filter(|(_, x)| *x == "--test").filter_map(|(i, _)| s.args.get(i + 1).cloned())
+        })
+        .collect()
 }
 
+/// The suites one crate's `<krate> suites` step runs (#921: tests moved between crates).
 fn suites(p: &crate::plan::Plan, krate: &str) -> Vec<String> {
     let Some(s) = p.steps.iter().find(|s| s.name == format!("{krate} suites")) else { return Vec::new() };
     s.args.iter().enumerate().filter(|(_, x)| *x == "--test").filter_map(|(i, _)| s.args.get(i + 1).cloned()).collect()
