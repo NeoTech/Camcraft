@@ -21,6 +21,7 @@ pub mod actions;
 mod axis_note;
 mod build_info;
 pub mod boundary_draft;
+pub mod box_pick;
 pub mod boundary_viz;
 pub mod plate_viz;
 pub mod boundary_summary;

@@ -27,7 +27,7 @@ fn body(ui: &mut Ui, state: &mut State, target: &str, live_setup: Option<&str>) 
     // Viewport pick mode - transient view state: the mode itself is not
     // undoable; what a Face/Edge click changes is.
     ui.horizontal_wrapped(|ui| {
-        ui.label("Click selects:").on_hover_text("Click in the viewport - Ctrl adds; in Edge mode Shift takes the whole loop and Alt one edge.");
+        ui.label("Click selects:").on_hover_text("Click in the viewport - Ctrl adds; in Edge mode Shift takes the whole loop and Alt one edge. Ctrl+drag adds every visible edge (Edge) or face (Face) in a box: drag right for what lies inside it, left for what it touches.");
         let mut pick_mode = match state.geo_pick {
             GeoPick::Model => 0,
             GeoPick::Face => 1,

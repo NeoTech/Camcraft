@@ -126,6 +126,8 @@ mod fixture_rows;
 mod model_fidelity;
 // #709 hand check: both points of a two-point axis stay marked.
 mod two_point_marks;
+// #979: the viewport box select.
+mod box_select;
 
 /// What the per-frame state of `Shell` is, minus the GPU half: the fields
 /// `shell_layout` touches, so the harness exercises the window's real body.
