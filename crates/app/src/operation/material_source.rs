@@ -119,6 +119,9 @@ fn source_region(
         OpParams::PlasmaProfile(_) => {
             slice::project(&material.facets, FOOTPRINT_SAMPLES).map_err(from_slice)
         }
+        // The wire cuts THROUGH the workpiece too (#532): its profile
+        // is the through-silhouette.
+        OpParams::WireContour(_) => slice::project(&material.facets, FOOTPRINT_SAMPLES).map_err(from_slice),
         // The 3D pocket's machine area is a silhouette, not a section:
         // columns whose surface sits below the first level are still
         // cut, down to that surface - a section would miss them. The

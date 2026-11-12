@@ -13,10 +13,13 @@ use flecs_ecs::prelude::*;
 use crate::model;
 
 /// Refuse the first program op whose family its setup's machine does
-/// not admit, naming the op, its kind and the machine kind.
+/// not admit, naming the op, its kind and the machine kind - or whose
+/// kind mounts no library tool (#532: the wire EDM's, whose post is not
+/// built yet).
 ///
 /// # Errors
-/// `"<op>: a <kind> operation cannot run on its setup's <machine> machine - ..."`.
+/// `"<op>: a <kind> operation cannot run on its setup's <machine> machine - ..."`,
+/// or `"<op>: a <kind> operation posts through a wire EDM post, which is not built yet - ..."`.
 pub(crate) fn family_at_post(world: &World, ops: &[(String, Entity)]) -> Result<(), String> {
     for (name, e) in ops {
         if let Some(op) = model::operation_of(world, e) {
@@ -26,6 +29,15 @@ pub(crate) fn family_at_post(world: &World, ops: &[(String, Entity)]) -> Result<
                     "{name}: a {} operation cannot run on its setup's {} machine - mount a machine that runs it, or suppress the operation",
                     op.params.kind(),
                     machine.label()
+                ));
+            }
+            // #532: a wire EDM kind posts through a wire EDM post, and
+            // none is built yet - refused by name, never posted in a
+            // cutting dialect (and before any tool is read: it has none).
+            if !op.params.kind().info().mounts_tool() {
+                return Err(format!(
+                    "{name}: a {} operation posts through a wire EDM post, which is not built yet - nothing is posted",
+                    op.params.kind()
                 ));
             }
         }

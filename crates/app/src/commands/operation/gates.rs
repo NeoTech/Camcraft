@@ -74,6 +74,34 @@ pub(super) fn valid_src(world: &World, setup: Option<&str>, src: &SrcRef) -> Res
     }
 }
 
+/// The tool door for a kind (#532): a kind that mounts a library tool
+/// must name one that exists ([`check_tool`]); a wire EDM kind mounts
+/// none - its wire is the machine's condition - and must name none, so
+/// no second source for the wire's diameter can ride an operation.
+pub(super) fn tool_door(world: &World, params: &OpParams, tool: &str) -> Result<(), CommandError> {
+    if params.kind().info().mounts_tool() {
+        return check_tool(world, tool);
+    }
+    if tool.is_empty() {
+        return Ok(());
+    }
+    Err(CommandError::Invalid(format!(
+        "a {} operation mounts no library tool - the wire is the machine's EDM condition; leave the tool empty (it names '{tool}')",
+        params.kind()
+    )))
+}
+
+/// The wire door (#531, #532): a wire EDM kind's condition must be
+/// stated by the machine its setup mounts, with its wire diameter and
+/// spark gap - refused by name here, at command creation, never first
+/// in the generator.
+pub(super) fn wire_gate(world: &World, setup: Option<&str>, params: &OpParams) -> Result<(), CommandError> {
+    match params {
+        OpParams::WireContour(w) => operation::wire_op::condition_of(world, setup, w).map(|_| ()).map_err(CommandError::Invalid),
+        _ => Ok(()),
+    }
+}
+
 pub(super) fn check_tool(world: &World, tool: &str) -> Result<(), CommandError> {
     match model::find_by_name(world, tool) {
         Some(e) if model::is_tool(world, &e) => Ok(()),
@@ -110,6 +138,16 @@ pub(super) fn family_gate(world: &World, context: Option<&str>, params: &OpParam
             "a {} operation is {} work; the setup's machine is a plasma table, which cuts only plasma operations (a Plasma Profile)",
             params.kind(),
             family.work(),
+        )));
+    }
+    // #532: wire EDM work needs a wire EDM, and a wire EDM cuts only it.
+    if family == Family::WireEdm || machine == crate::machine::Kind::WireEdm {
+        return Err(CommandError::Invalid(format!(
+            "a {} operation is {} work; the setup's machine is a {} - {}",
+            params.kind(),
+            family.work(),
+            machine.label(),
+            if family == Family::WireEdm { "mount a wire EDM first" } else { "a wire EDM cuts only wire EDM operations (a Wire Contour)" },
         )));
     }
     // #670: plasma work needs a plasma table - no mill or lathe (nor a

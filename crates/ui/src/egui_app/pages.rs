@@ -1026,6 +1026,7 @@ fn tool_page(ui: &mut Ui, state: &mut State, name: &str) {
         let taken = model::find_by_name(&state.world, cname).is_some();
         let clicked = ui
             .horizontal(|ui| {
+                super::tool_icons::glyph(ui, super::tool_icons::catalog_row_icon(&ct));
                 ui.label(format!(
                     "{}  Ø{} {}",
                     cname,

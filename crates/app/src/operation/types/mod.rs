@@ -20,6 +20,7 @@ mod plasma;
 mod sinker;
 mod sane;
 mod sel;
+mod wire_edm;
 
 pub use area::{
     AREA_DISTANCE_MAX, AreaControls, BoundaryMode, BoundaryShape, ChainSide, Containment, CornerStyle,
@@ -33,5 +34,6 @@ pub use camcraft_post::post::AfterOperation;
 pub use height::{Height, HeightReference};
 pub use params::{OpParams, Tilt};
 pub use plasma::{PlasmaComp, PlasmaOp};
+pub use wire_edm::{WireContourOp, WireSide, CONDITION_ID_MAX};
 pub use sinker::{SinkerBurnOp, SinkerDatum};
 pub use sel::{FeatureSel, GenStamp, GeoSel, OpStatus, OpType, SrcRef, WCS_SLOTS};

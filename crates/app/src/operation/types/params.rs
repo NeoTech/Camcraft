@@ -1163,6 +1163,11 @@ pub enum OpParams {
     /// rule and inner-before-outer order (see [`crate::plasma`]). The
     /// plasma table's only kind (#669's family seam).
     PlasmaProfile(super::plasma::PlasmaOp),
+    /// Wire EDM contour (#532): one closed profile cut by a vertical
+    /// wire at the kerf offset of the machine's condition, on a stated
+    /// punch / die side, from a stated start hole (see
+    /// [`crate::wire_edm`]). The wire EDM's first kind (#290 D1).
+    WireContour(super::wire_edm::WireContourOp),
     /// Sinker EDM burn to depth (#541): one electrode fed down Z to a
     /// depth from a stated datum (see [`crate::sinker`]). The sinker
     /// EDM's first kind.
@@ -1213,6 +1218,7 @@ impl OpParams {
             OpParams::Thread { .. } => OpType::Thread,
             OpParams::Probe { .. } => OpType::Probe,
             OpParams::PlasmaProfile(_) => OpType::PlasmaProfile,
+            OpParams::WireContour(_) => OpType::WireContour,
             OpParams::SinkerBurn(_) => OpType::SinkerBurn,
             OpParams::TrochoidalSlot { .. } => OpType::TrochoidalSlot,
         }
@@ -1240,11 +1246,12 @@ impl OpParams {
             // The probe touches along the machine's axes (#108); the
             // torch stands vertical over a flat plate (#670); the
             // trochoid carries no index (#220 slice 1).
+            OpParams::Probe { .. } | OpParams::PlasmaProfile(_) | OpParams::TrochoidalSlot { .. } => None,
+            // The wire stands vertical (#532): a taper is a pose per
+            // move (#290 D2, #536), never a 3+2 index.
+            OpParams::WireContour(_) => None,
             // The electrode burns straight down Z (#541).
-            OpParams::Probe { .. }
-            | OpParams::PlasmaProfile(_)
-            | OpParams::TrochoidalSlot { .. }
-            | OpParams::SinkerBurn(_) => None,
+            OpParams::SinkerBurn(_) => None,
             // The 5-axis kinds (M5.1 C) are the third answer, not the
             // second: the PART stands still and the TOOL AXIS moves -
             // a 3+2 index inside them would command the machine to
@@ -1315,6 +1322,9 @@ impl OpParams {
     pub fn clearance(&self) -> Height {
         match self {
             OpParams::PlasmaProfile(p) => p.clearance_z,
+            // A wire has no rapids plane (#532): it never lifts out of
+            // the work; its travel plane is the workpiece's top.
+            OpParams::WireContour(p) => p.top_z,
             OpParams::SinkerBurn(p) => p.clearance_z,
             OpParams::Face { clearance_z, .. }
             | OpParams::Contour { clearance_z, .. }
@@ -1371,6 +1381,8 @@ impl OpParams {
             OpParams::Probe { clearance_z, .. } => *clearance_z,
             // The plasma contours are drawn on the plate's top (#670).
             OpParams::PlasmaProfile(p) => p.top_z,
+            // The wire's profile is drawn on the workpiece's top (#532).
+            OpParams::WireContour(p) => p.top_z,
             // The electrode enters at the work top (#541).
             OpParams::SinkerBurn(p) => p.top_z,
             OpParams::Face { top_z, cut_z, .. } => top_z.unwrap_or(*cut_z),
@@ -1445,6 +1457,10 @@ impl OpParams {
             OpParams::Probe { clearance_z, .. } => f(*clearance_z),
             OpParams::PlasmaProfile(p) => {
                 f(p.clearance_z);
+                f(p.top_z);
+                f(p.bottom_z);
+            }
+            OpParams::WireContour(p) => {
                 f(p.top_z);
                 f(p.bottom_z);
             }

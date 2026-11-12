@@ -1429,6 +1429,24 @@ impl OpParams {
                 }
                 h.write_u8(set_wcs.unwrap_or(0xff));
             }
+            // The wire contour (#532): every stored word. The wire
+            // and the gap are the machine condition's - `current_stamp`
+            // digests them (`wire_op::stamp_condition`).
+            OpParams::WireContour(p) => {
+                wh(h, p.top_z);
+                wh(h, p.bottom_z);
+                h.write(p.condition.as_bytes());
+                h.write_u8(0xff);
+                h.write_u8(u8::from(p.side == super::WireSide::Punch));
+                match p.start {
+                    Some([x, y]) => {
+                        h.write_u8(1);
+                        w(h, x);
+                        w(h, y);
+                    }
+                    None => h.write_u8(0),
+                }
+            }
             // The sinker burn (#541): every stored number, the datum
             // and the condition id.
             OpParams::SinkerBurn(p) => {

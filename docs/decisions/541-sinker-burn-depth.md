@@ -23,3 +23,11 @@
 - A box atom in the field arm. It is a separate sweep in the SDF engine, so it is left for the sinker UI slice (#548), which owns the stock view.
 
 **Cost to change later:** low. The kind, section and family are appended. The box atom is a standalone column function. The wire stack (#532) appends its own kind next to this one, so whichever merges second renumbers its tag.
+
+### Refresh against main's wire EDM (2026-11-12)
+
+Main's wire EDM work (#532, #551, #560) merged first, so this PR took `git merge upstream/main` and kept both sides: `OpType::WireContour` / `Section::WireEdm` / `Family::WireEdm` beside `OpType::SinkerBurn` / `Section::Sinker` / `Family::Sinker`.
+
+- **Tag:** main's Wire Contour holds stored tag 41 and keeps it; the Sinker Burn moves from 41 to **42** (registry row 42, `KIND_COUNT` 43, ribbon's last kind is the Sinker Burn). No stored id on main moves. The tag is a digest byte (op stamps, rest digests), not a file id: the project file names the kind by its DTO variant (`sinker_burn`), and no project file, golden or machine file on main stores a sinker op. The sinker is unreleased, so the only cost is a one-time Stale read for a sinker op made on this branch before the refresh.
+- **Stamp:** main split the tool digest into `stamp_tool::write` and gave a toolless kind (the wire) its own condition digest. The electrode's share (kind byte 13, its Y face `width`) now lives in `stamp_tool::write`, beside every other kind. The sinker's spark gap is a machine-condition read, like the wire's, so it stays in `current_stamp` next to `wire_op::stamp_condition` (it needs the setup, which `stamp_tool::write` does not take). Taking main's side alone would have dropped both, and a re-stated gap or re-cut electrode would no longer mark the burn Stale. Pinned by `a_changed_spark_gap_or_electrode_face_marks_the_burn_stale`.
+- **Considered and dropped:** keeping the sinker at 41 and moving the wire to 42 (main's stored tags never move); threading `setup` into `stamp_tool::write` for the gap (that widens a shared seam for one kind; the condition digests sit together instead).
