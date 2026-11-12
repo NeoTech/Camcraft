@@ -134,6 +134,11 @@ write (the gate), so the released program never carries one.
   moves between holes lower than the verified path, and a cut that
   leaves the hole inside a group is refused by name
   (`crates/post/tests/cycle_hop.rs` reads every cycle post back).
+  A cycle read away from its hole with no rapid to it (two cycle
+  records back to back, or a cycle straight after probing) is seated
+  at the section's own `RetractPlane`: up to it, over the hole, down
+  to R. A section that states no `RetractPlane` is refused by name
+  (#1028). Probe moves seat the next cycle like any other motion.
   A dialect whose documented cycles this post was not specced from
   (Heidenhain DIN/ISO: G200-G209 with Q parameters, #50) posts the
   expanded chain as plain moves instead and refuses what plain moves
