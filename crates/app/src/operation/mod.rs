@@ -99,6 +99,7 @@ pub mod probe_op;
 pub mod plasma_op;
 // #894: the thread-milling operation's door, kernel plan and its two verdict readings.
 pub mod thread_op;
+mod thread_entry;
 // #171: the Probe op seeded from one picked face, edge, vertex or round wall.
 mod probe_pick;
 mod probe_pick_round;

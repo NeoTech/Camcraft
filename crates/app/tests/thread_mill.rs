@@ -3,7 +3,9 @@
 //! generator's own verdict and the program simulation find no gouge,
 //! the post gate passes and the program carries helical G2/G3 moves
 //! with Z; impossible tool and thread pairs are refused by name when
-//! the operation is created or edited.
+//! the operation is created or edited. Every thread here is cut after a
+//! Drill operation that opens the hole (#992; `thread_entry.rs` pins the
+//! refusal of an undrilled one).
 //!
 //! Provenance: ISO 724 thread sizes (M8 x 1.25: minor Ø6.647; M8 x 1:
 //! minor Ø6.917) and public handbook thread milling; our own fixtures.
@@ -15,113 +17,20 @@
 //! Lane shape (M4.4): all tests here run in seconds.
 
 mod common;
+mod thread_support;
 
 use flecs_ecs::prelude::World;
 
 use camcraft_app::cl::{ThreadHand, Toolpath};
-use camcraft_app::commands::{
-    AddTool, CreateOperation, EditOperationParams, GenerateOperation, History, ImportModel, SetStock,
-};
-use camcraft_app::drilling::Hole;
-use camcraft_app::geo2d::Point2;
-use camcraft_app::geometry::{Mesh, Point3, Triangle};
+use camcraft_app::commands::{CreateOperation, EditOperationParams, GenerateOperation, History};
 use camcraft_app::model;
 use camcraft_app::operation::{Height, OpParams, SrcRef};
 use camcraft_app::post::{cnc, engine};
 use camcraft_app::posting;
-use camcraft_app::schema::Location;
-use camcraft_app::stock::StockShape;
-use camcraft_app::stock_sim::simulate_document;
-use camcraft_app::tools::{Tool, ToolKind, catalog};
+use camcraft_app::tools::{Tool, ToolKind};
 use camcraft_app::world::new_world;
 
-const TOP: f64 = 20.0;
-const BOTTOM: f64 = 0.0;
-/// The blind hole's floor: 12 mm of thread.
-const FLOOR: f64 = 8.0;
-/// M8 x 1.25's minor radius (ISO 724: D1 = 8 - 1.0825 x 1.25).
-const R_M8: f64 = 3.3235;
-/// M8 x 1 (fine): D1 = 8 - 1.0825.
-const R_M8_FINE: f64 = 3.45875;
-const MULTI: &str = "TM-0600-P125";
-const SINGLE: &str = "TMS-0600-P050-150";
-
-/// A Ø36 disc from z 0 to 20 with a blind round hole of `radius` from
-/// the top down to `FLOOR`, walls in 96 flats. Outward-wound.
-fn disc_with_hole(radius: f64) -> Mesh {
-    let n = 96;
-    let at = |r: f64, k: usize, z: f64| {
-        let a = std::f64::consts::TAU * (k % n) as f64 / n as f64;
-        Point3::new(r * a.cos(), r * a.sin(), z)
-    };
-    let quad = |a: Point3, b: Point3, c: Point3, d: Point3, f: &mut Vec<Triangle>| {
-        f.push(Triangle::new(a, b, c));
-        f.push(Triangle::new(a, c, d));
-    };
-    let mut f = Vec::new();
-    for k in 0..n {
-        let (o, i) = (18.0, radius);
-        quad(at(o, k, BOTTOM), at(o, k + 1, BOTTOM), at(o, k + 1, TOP), at(o, k, TOP), &mut f);
-        quad(at(o, k, TOP), at(o, k + 1, TOP), at(i, k + 1, TOP), at(i, k, TOP), &mut f);
-        quad(at(i, k + 1, FLOOR), at(i, k, FLOOR), at(i, k, TOP), at(i, k + 1, TOP), &mut f);
-        f.push(Triangle::new(Point3::new(0.0, 0.0, FLOOR), at(i, k, FLOOR), at(i, k + 1, FLOOR)));
-        f.push(Triangle::new(Point3::new(0.0, 0.0, BOTTOM), at(o, k + 1, BOTTOM), at(o, k, BOTTOM)));
-    }
-    Mesh::from_facets(f)
-}
-
-fn hole(radius: f64) -> Hole {
-    Hole { xy: Point2::new(0.0, 0.0), radius, entry_z: TOP, floor_z: FLOOR, through: false, stepped: false }
-}
-
-fn catalog_tool(name: &str) -> Tool {
-    catalog().into_iter().find(|(n, _)| *n == name).map(|(_, t)| t).expect("catalog tool")
-}
-
-fn thread(radius: f64, pitch: Option<f64>, hand: ThreadHand, climb: bool) -> OpParams {
-    OpParams::Thread {
-        clearance_z: Height::fixed(TOP + 10.0),
-        retract_z: None,
-        top_z: Height::fixed(TOP),
-        bottom_z: None,
-        infeed: 0.25,
-        feed: 300.0,
-        plunge_feed: 150.0,
-        climb,
-        holes: vec![hole(radius)],
-        pitch,
-        hand,
-    }
-}
-
-/// A world holding the disc (hole of `model_radius`), a box stock
-/// around it and the named tools; nothing machined yet.
-fn world_with(model_radius: f64, tools: &[(&str, Tool)]) -> (World, History) {
-    let world = new_world();
-    let mut history = History::default();
-    let stock_at = Location { pos: Point3::new(0.0, 0.0, BOTTOM), ..Location::default() };
-    let stock = SetStock::new(&world, StockShape::Box { dx: 40.0, dy: 40.0, dz: TOP - BOTTOM }, stock_at);
-    history.execute(&world, stock.expect("box stock"));
-    for (name, tool) in tools {
-        history.execute(&world, AddTool::new(&world, name, tool.clone()).expect("tool"));
-    }
-    history.execute(&world, ImportModel::from_mesh("disc", disc_with_hole(model_radius)));
-    (world, history)
-}
-
-fn make(world: &World, history: &mut History, tool: &str, params: OpParams) -> Toolpath {
-    let op = CreateOperation::new(world, "Thread1", tool, SrcRef::Entity("disc".into()), params);
-    history.execute(world, op.expect("create op"));
-    history.execute(world, GenerateOperation::new(world, "Thread1").expect("generate op"));
-    let e = model::find_by_name(world, "Thread1").expect("op");
-    model::toolpath_of(world, &e).expect("cached path").path
-}
-
-fn blocking(world: &World) -> Vec<String> {
-    let e = model::find_by_name(world, "Thread1").expect("op");
-    let cache = model::toolpath_of(world, &e).expect("cached path");
-    cache.warnings.iter().filter(|w| w.blocks_post()).map(ToString::to_string).collect()
-}
+use thread_support::*;
 
 fn refusal(world: &World, tool: &str, params: OpParams) -> String {
     match CreateOperation::new(world, "Thread1", tool, SrcRef::Entity("disc".into()), params) {
@@ -143,13 +52,6 @@ fn fanuc(world: &World) -> String {
 /// The helix's half-turns: XY arcs about the hole's axis.
 fn helix(path: &Toolpath) -> Vec<camcraft_app::cl::Move> {
     path.moves.iter().filter(|m| m.arc.is_some_and(|a| a.center.x.abs() < 1e-9 && a.center.y.abs() < 1e-9)).copied().collect()
-}
-
-fn assert_clean(world: &World) {
-    assert_eq!(blocking(world), Vec::<String>::new(), "the generator's own verdict");
-    assert_eq!(posting::verification_gate(world), Vec::<String>::new(), "the post gate");
-    let sim = simulate_document(world).expect("the thread program simulates");
-    assert_eq!(sim.dev.gouge_cells, 0, "worst {:.3} mm at {:?}", sim.dev.max_gouge, sim.dev.max_gouge_at);
 }
 
 #[test]
@@ -216,11 +118,14 @@ fn a_thread_mill_whose_roots_meet_the_part_is_a_gouge() {
 
 #[test]
 fn a_bottom_below_the_blind_floor_is_a_gouge() {
-    // The floor law keeps no thread-depth allowance at the tip: one millimetre into the floor is convicted.
-    let (world, mut history) = world_with(R_M8, &[(MULTI, catalog_tool(MULTI))]);
+    // The floor law keeps no thread-depth allowance at the tip: one millimetre into the modelled floor is
+    // convicted. #992: the drill ahead goes deeper still (gouging the floor itself), so the thread mill's
+    // way in is open and the floor law is what judges it.
+    let (world, mut history) = bare_world(R_M8, &[(MULTI, catalog_tool(MULTI))]);
+    drill_ahead(&world, &mut history, tap_drill_for(R_M8), DRILL_FLOOR - 3.5);
     let mut params = thread(R_M8, None, ThreadHand::Right, true);
     if let OpParams::Thread { bottom_z, .. } = &mut params {
-        *bottom_z = Some(Height::fixed(FLOOR - 1.0));
+        *bottom_z = Some(Height::fixed(DRILL_FLOOR - 1.0));
     }
     make(&world, &mut history, MULTI, params);
     assert!(!blocking(&world).is_empty(), "the tip enters the blind floor");

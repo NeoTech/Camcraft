@@ -50,7 +50,9 @@ fn thread_mill(diameter: f64, pitch: f64) -> Tool {
     Tool { material_group: "steel".into(), ..camcraft_app::thread_mill::thread_mill(diameter, pitch, 0.0, 25.0) }
 }
 
-fn job_tool(tag: &str, tool: Tool, tool_name: &str, params: OpParams) -> (World, History, camcraft_app::cl::Toolpath) {
+/// #992: an op made and generated before `tag` - name, (tool name, tool), params.
+type Ahead<'a> = (&'a str, (&'a str, Option<Tool>), OpParams);
+fn job_tool(tag: &str, tool: Tool, tool_name: &str, params: OpParams, ahead: &[Ahead]) -> (World, History, camcraft_app::cl::Toolpath) {
     let world = new_world();
     let mut history = History::default();
     history.execute(
@@ -63,12 +65,13 @@ fn job_tool(tag: &str, tool: Tool, tool_name: &str, params: OpParams) -> (World,
         .expect("box stock"),
     );
     add_tool(&world, &mut history, tool, tool_name);
-    history.execute(
-        &world,
-        CreateOperation::new(&world, tag, tool_name, SrcRef::Stock, params).expect("create"),
-    );
-    let cmd = GenerateOperation::new(&world, tag).expect("generate");
-    history.execute(&world, cmd);
+    for (name, (tn, t), p) in ahead.iter().map(|(n, t, p)| (*n, t.clone(), p.clone())).chain([(tag, (tool_name, None), params)]) {
+        if let Some(t) = t {
+            add_tool(&world, &mut history, t, tn);
+        }
+        history.execute(&world, CreateOperation::new(&world, name, tn, SrcRef::Stock, p).expect("create"));
+        history.execute(&world, GenerateOperation::new(&world, name).expect("generate"));
+    }
     let e = model::find_by_name(&world, tag).expect("op exists");
     assert_eq!(operation::status_of(&world, &e), OpStatus::Ok, "{tag} reads Stale against its own lone world");
     let path = model::toolpath_of(&world, &e).expect("cached").path;
@@ -182,7 +185,7 @@ fn bore_rides_the_cutter_center_law() {
     // 6 about each hole, and NO feed move stands further from the
     // hole center than that - the never-gouge door of this kernel.
     let holes = vec![hole(15.0, 15.0, 10.0, 5.0, false), hole(45.0, 15.0, 10.0, 5.0, false)];
-    let (_w, _h, path) = job_tool("BOR", catalog_tool("EM-0800-4FL"), "EM-0800-4FL", bore(holes.clone()));
+    let (_w, _h, path) = job_tool("BOR", catalog_tool("EM-0800-4FL"), "EM-0800-4FL", bore(holes.clone()), &[]);
     assert!(path.all_finite());
     let feeds: Vec<_> = path.moves.iter().filter(|m| m.kind == MoveKind::Feed).collect();
     assert!(!feeds.is_empty());
@@ -243,7 +246,13 @@ fn thread_helices_are_timed_by_the_tools_pitch() {
     let h = 0.5413 * pitch;
     let (r, big) = (3.0, 10.0);
     let holes = vec![hole(15.0, 15.0, big, 6.0, false)];
-    let (_w, _h, path) = job_tool("THD", thread_mill(6.0, pitch), "TM-0600", thread(holes.clone()));
+    // #992: a Ø20 drill opens the hole first, its point at the stock's bottom (clear of the thread's floor).
+    let drill = Tool { diameter: 20.0, shank_d: 20.0, flute_len: 30.0, ..catalog_tool("DR-0600") };
+    let OpParams::Thread { clearance_z, top_z, .. } = thread(vec![]) else { unreachable!() };
+    let holes_dr = vec![hole(15.0, 15.0, big, 0.0, false)];
+    let dr = OpParams::Drill { clearance_z, retract_z: None, top_z, bottom_z: None, cycle: camcraft_app::drilling::CycleChoice::Drill,
+        peck: 0.0, dwell: 0.0, feed: 100.0, plunge_feed: 80.0, holes: holes_dr, cross: vec![] };
+    let (_w, _h, path) = job_tool("THD", thread_mill(6.0, pitch), "TM-0600", thread(holes.clone()), &[("DR", ("DR-20", Some(drill)), dr)]);
     assert!(path.all_finite());
     let feeds: Vec<_> = path.moves.iter().filter(|m| m.kind == MoveKind::Feed).collect();
     assert!(feeds.len() > 30, "a threaded wall is a long helix, got {}", feeds.len());
@@ -376,7 +385,7 @@ fn through_holes_drop_the_exit_allowance_below_the_floor() {
     // does. THROUGH_CLEAR is the drilling module's, read same.
     let clear = camcraft_app::drilling::THROUGH_CLEAR;
     let holes = vec![hole(15.0, 15.0, 10.0, 5.0, true)];
-    let (_w, _h, path) = job_tool("BORT", catalog_tool("EM-0800-4FL"), "EM-0800-4FL", bore(holes));
+    let (_w, _h, path) = job_tool("BORT", catalog_tool("EM-0800-4FL"), "EM-0800-4FL", bore(holes), &[]);
     assert!(path.all_finite());
     let lowest = path
         .moves
