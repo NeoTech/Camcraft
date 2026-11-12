@@ -71,7 +71,7 @@ pub(crate) fn window(ctx: &egui::Context, state: &mut State) {
                 ui.label("Note");
                 ui.add(TextEdit::singleline(&mut d.note).desired_width(320.0));
                 if let Some(err) = &d.error {
-                    ui.colored_label(ui.visuals().error_fg_color, err);
+                    super::error_text::error_text(ui, ui.visuals().error_fg_color, err);
                 }
                 ui.add_space(8.0);
                 if let Some(taken) = &d.confirm_replace {
@@ -146,7 +146,7 @@ pub(crate) fn window(ctx: &egui::Context, state: &mut State) {
                     }
                 });
                 if let Some(err) = &d.error {
-                    ui.colored_label(ui.visuals().error_fg_color, err);
+                    super::error_text::error_text(ui, ui.visuals().error_fg_color, err);
                 }
                 ui.add_space(8.0);
                 if let Some(name) = d.confirm_delete.clone() {

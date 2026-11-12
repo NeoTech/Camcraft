@@ -177,7 +177,7 @@ pub fn properties(ui: &mut Ui, state: &mut State, pal: &Tokens) {
 
 fn setup_error(ui: &mut Ui, state: &State) {
     if let Some(msg) = state.error_for(ErrorScope::Setup).map(str::to_owned) {
-        ui.colored_label(super::colorvision::text_inks(ui, &state.world).error, msg);
+        super::error_text::error_text(ui, super::colorvision::text_inks(ui, &state.world).error, &msg);
     }
 }
 // --------------------------------------------------------------- stock page
@@ -1002,7 +1002,7 @@ fn tool_page(ui: &mut Ui, state: &mut State, name: &str) {
         state.import_tool_library_dialog();
     }
     if let Some(msg) = state.error_for(ErrorScope::Tool).map(str::to_owned) {
-        ui.colored_label(super::colorvision::text_inks(ui, &state.world).error, msg);
+        super::error_text::error_text(ui, super::colorvision::text_inks(ui, &state.world).error, &msg);
     }
     ui.separator();
     ui.heading("Catalog");
@@ -1524,7 +1524,7 @@ pub(crate) fn tool_editor_window(ctx: &egui::Context, state: &mut State) {
                 }
             }
             if let Some(msg) = state.error_for(ErrorScope::Tool).map(str::to_owned) {
-                ui.colored_label(super::colorvision::text_inks(ui, &state.world).error, msg);
+                super::error_text::error_text(ui, super::colorvision::text_inks(ui, &state.world).error, &msg);
             }
             close_clicked = ui.button("Close").clicked();
         });

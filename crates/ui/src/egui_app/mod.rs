@@ -54,6 +54,8 @@ pub(crate) mod machine_editor;
 mod machine_grid;
 // pub(crate) for the same reason: `State::post_refusal` names its type.
 pub(crate) mod post_refusal;
+// #867: the one copyable error widget.
+pub(crate) mod error_text;
 // pub(crate) for the same reason: `State::machines_pane` (#287).
 pub(crate) mod machines_pane;
 // pub(crate): `MachinesPane::editor` names its type (#383).
