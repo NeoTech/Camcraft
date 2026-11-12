@@ -10,18 +10,22 @@
 //! (G17/G18/G19) and G2/G3 direction; the control families' public
 //! programming conventions (behavior only).
 //!
-//! Regenerate after an intentional change:
-//! `WRITE_GOLDEN=1 cargo test -p camcraft-app --test arc_planes`
+//! The project file's arc key is app's, so its test stays there
+//! (`crates/app/tests/float_roundtrip.rs`); the rest moved to post with
+//! #926 - every input here is built with cl's own `PathBuilder`, and the
+//! goldens stay in `crates/app/tests/golden/`.
 //!
-//! Gate map (M4.4): covers cl::cl, post::post, app::project.
+//! Regenerate after an intentional change:
+//! `WRITE_GOLDEN=1 cargo test -p camcraft-post --test arc_planes`
+//!
+//! Gate map (M4.4): covers cl::cl, cl::text, post::post.
 
-mod common;
+mod recorded;
 
-use camcraft_app::cl::{ArcPlane, CycleKind, MoveKind, PathBuilder, Toolpath};
-use camcraft_app::geo2d::Point2;
-use camcraft_app::geometry::Point3;
-use camcraft_app::post::{cnc, dump, engine, Dump};
-use camcraft_app::project::{ArcDto, ArcPlaneDto};
+use camcraft_post::cl::{ArcPlane, CycleKind, MoveKind, PathBuilder, Toolpath};
+use camcraft_post::geo2d::Point2;
+use camcraft_post::geometry::Point3;
+use camcraft_post::post::{cnc, dump, engine, Dump};
 use std::path::{Path, PathBuf};
 
 const POSTS: &[(&str, &str, &str)] = &[
@@ -97,20 +101,20 @@ fn post(stem: &str, stream: &str) -> String {
 fn the_cl_dump_states_the_plane_and_reads_back() {
     let t = program();
     assert_eq!(t.arc_count(), 4, "two vertical, two XY - none split");
-    let text = common::gen_to_cltext(&t);
+    let text = camcraft_post::cl::text::to_text(&t).unwrap_or_else(|e| panic!("{e}"));
     assert!(text.contains(" I15000 K5000 S1"), "the G18 arc dumps I/K:\n{text}");
     assert!(text.contains(" J10000 K0 S-1"), "the G19 arc dumps J/K:\n{text}");
     assert!(text.contains(" I0 J5000 S-1"), "an XY arc dumps exactly as ever:\n{text}");
-    common::write_golden("arc_planes.cl", &text);
-    let back = common::cl_read::parse_cl(&text).unwrap_or_else(|e| panic!("{e}"));
+    recorded::app_golden("arc_planes.cl", &text);
+    let back = camcraft_post::cl::text::from_text(&text).unwrap_or_else(|e| panic!("{e}")).moves;
     // The dump speaks microns; compare on the lattice it speaks.
-    let l = camcraft_app::cl::lattice;
+    let l = camcraft_post::cl::lattice;
     let lp = |q: Point3| (l(q.x), l(q.y), l(q.z));
     assert_eq!(back.len(), t.moves.len());
     for (a, b) in back.iter().zip(&t.moves) {
         assert_eq!((a.kind, lp(a.from), lp(a.to)), (b.kind, lp(b.from), lp(b.to)));
         assert_eq!(a.feed.map(l), b.feed.map(l));
-        let arc = |m: &camcraft_app::cl::Move| {
+        let arc = |m: &camcraft_post::cl::Move| {
             m.arc.map(|r| (l(r.center.x), l(r.center.y), r.ccw, r.plane))
         };
         assert_eq!(arc(a), arc(b), "the dump is the path, plane and all");
@@ -146,7 +150,7 @@ fn every_builtin_posts_the_plane_program_byte_exact() {
     let s = stream(&program());
     let write = std::env::var_os("WRITE_GOLDEN").is_some();
     for (name, stem, sub) in POSTS {
-        let out = common::with_synthetic_marker(stem, &post(stem, &s));
+        let out = recorded::with_synthetic_marker(stem, &post(stem, &s));
         let rel = if sub.is_empty() {
             "crates/app/tests/golden/nc/arc_planes.nc".to_string()
         } else {
@@ -323,20 +327,4 @@ fn no_xy_only_golden_posts_a_plane_word() {
             assert!(!out.contains("G18") && !out.contains("G19"), "{stem} on {g}");
         }
     }
-}
-
-#[test]
-fn the_project_file_states_only_a_vertical_plane() {
-    let xy = ArcDto { center: [1.0, 2.0], ccw: true, plane: ArcPlaneDto::Xy };
-    let xz = ArcDto { center: [1.0, 2.0], ccw: false, plane: ArcPlaneDto::Xz };
-    let sxy = serde_json::to_string(&xy).unwrap_or_default();
-    let sxz = serde_json::to_string(&xz).unwrap_or_default();
-    assert_eq!(sxy, r#"{"center":[1.0,2.0],"ccw":true}"#, "XY writes what it always wrote");
-    assert_eq!(sxz, r#"{"center":[1.0,2.0],"ccw":false,"plane":"xz"}"#);
-    let old: ArcDto = serde_json::from_str(r#"{"center":[1.0,2.0],"ccw":true}"#).expect("pre-M11.2 arc");
-    assert_eq!(old, xy, "absent is XY");
-    let back: ArcDto = serde_json::from_str(&sxz).expect("xz");
-    assert_eq!(back, xz);
-    let yz: ArcDto = serde_json::from_str(r#"{"center":[0.0,0.0],"ccw":true,"plane":"yz"}"#).expect("yz");
-    assert_eq!(yz.plane, ArcPlaneDto::Yz);
 }
