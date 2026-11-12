@@ -7662,8 +7662,9 @@ fn deburr_brick() -> camcraft_app::geometry::Mesh {
 /// the path never descends into it, the op still verifies clean
 /// against the REAL model (status Ok), and the path says what stands
 /// as land.
-#[test]
-fn finish3d_fill_openings_lands_over_a_pocket_and_verifies_on_the_model() {
+/// #1196's fixture: a 24 mm plate (top z 10) with a 12 mm blind
+/// pocket (floor z 5) in its middle, a 6 mm ball, on box stock.
+fn land_pocket_world() -> (World, History) {
     let world = new_world();
     let mut history = History::default();
     box_stock(&world, &mut history, 60.0, 60.0, 25.0);
@@ -7686,15 +7687,25 @@ fn finish3d_fill_openings_lands_over_a_pocket_and_verifies_on_the_model() {
     facets.extend(quad([pt(12.0, 12.0, 0.0), pt(-12.0, 12.0, 0.0), pt(-12.0, 12.0, t), pt(12.0, 12.0, t)]));
     facets.extend(quad([pt(-12.0, 12.0, 0.0), pt(-12.0, -12.0, 0.0), pt(-12.0, -12.0, t), pt(-12.0, 12.0, t)]));
     history.execute(&world, ImportModel::from_mesh("pocket", Mesh::from_facets(facets)));
-    let ask = |fill: Option<f64>| {
-        let mut a = finish_params(t, 0.0, 0.1);
-        let OpParams::Finish3D { pattern, fill_openings, .. } = &mut a else {
-            panic!("finish3d params expected");
-        };
-        *pattern = camcraft_app::finishing3d::FinishPattern::Parallel;
-        *fill_openings = fill;
-        a
+    (world, history)
+}
+
+/// The fixture's 3D finish ask: Parallel, the stated land width.
+fn land_ask(fill: Option<f64>) -> OpParams {
+    let mut a = finish_params(10.0, 0.0, 0.1);
+    let OpParams::Finish3D { pattern, fill_openings, .. } = &mut a else {
+        panic!("finish3d params expected");
     };
+    *pattern = camcraft_app::finishing3d::FinishPattern::Parallel;
+    *fill_openings = fill;
+    a
+}
+
+#[test]
+fn finish3d_fill_openings_lands_over_a_pocket_and_verifies_on_the_model() {
+    let (world, mut history) = land_pocket_world();
+    let t = 10.0;
+    let ask = land_ask;
     let inside_low = |name: &str| {
         cache(&world, name).expect("cached").path.moves.iter().any(|m| {
             matches!(m.kind, camcraft_app::cl::MoveKind::Feed)
@@ -7717,4 +7728,34 @@ fn finish3d_fill_openings_lands_over_a_pocket_and_verifies_on_the_model() {
     assert!(notes.iter().any(|n| n.starts_with("land: 1 closed opening")), "{notes:?}");
     // A nonsense width never reaches the generator: refused at the door.
     assert!(CreateOperation::new(&world, "LBAD", "BN-0600", SrcRef::Entity("pocket".into()), ask(Some(-1.0))).is_err());
+}
+
+/// #1196 review: Pencil and Corner walk crease loci off the mesh's
+/// shared-edge index, which the lids never join - with the fill on
+/// they would still clean inside a lidded opening while the land note
+/// claimed it was flown over. The pair is refused by name instead, as
+/// Geodesic is, and cuts nothing.
+#[test]
+fn finish3d_fill_openings_refuses_pencil_and_corner_by_name() {
+    let (world, mut history) = land_pocket_world();
+    use camcraft_app::finishing3d::FinishPattern;
+    for (name, pat, word) in [("LPEN", FinishPattern::Pencil, "Pencil"), ("LCOR", FinishPattern::Corner, "Corner")] {
+        let mut a = land_ask(Some(14.0));
+        let OpParams::Finish3D { pattern, .. } = &mut a else {
+            panic!("finish3d params expected");
+        };
+        *pattern = pat;
+        history.execute(
+            &world,
+            CreateOperation::new(&world, name, "BN-0600", SrcRef::Entity("pocket".into()), a).expect("create"),
+        );
+        let CommandError::Machining(msg) = GenerateOperation::new(&world, name)
+            .err()
+            .expect("a crease pattern with fill must be refused")
+        else {
+            panic!("expected a machining refusal");
+        };
+        assert!(msg.contains(word) && msg.contains("cannot fill them") && msg.contains("Fill openings"), "{msg}");
+        assert_eq!(status(&world, name), OpStatus::Never, "a refusal cuts nothing");
+    }
 }

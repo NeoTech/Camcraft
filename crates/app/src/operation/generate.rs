@@ -832,12 +832,29 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // stated width - only ever added facets, so the path can
             // rise, never sink; the verdict below still reads the real
             // model. Geodesic marches from the open boundary, and the
-            // lids would be new open boundary: refused by name.
+            // lids would be new open boundary: refused by name. Pencil
+            // and Corner walk crease loci off the mesh's shared-edge
+            // index, which the lids (sharing no edge with the model)
+            // never join: they would still clean the creases INSIDE a
+            // lidded opening, so the land note would lie - refused by
+            // name too. Flow grounds every column on the same support
+            // as Parallel and honours the lids (pinned in motion's
+            // finish3d_land).
             let land = match fill_openings {
                 Some(_) if *pattern == finishing3d::FinishPattern::Geodesic => {
                     return Err(GenError::Invalid(
                         "Geodesic 3D finish cannot fill openings: the lids would be new open boundary for the march - clear 'Fill openings' or pick another pattern".into(),
                     ));
+                }
+                Some(_)
+                    if matches!(
+                        *pattern,
+                        finishing3d::FinishPattern::Pencil | finishing3d::FinishPattern::Corner
+                    ) =>
+                {
+                    return Err(GenError::Invalid(format!(
+                        "{pattern:?} cleans the creases inside openings, so it cannot fill them - clear 'Fill openings' or pick another pattern"
+                    )));
                 }
                 Some(w) => Some((finishing3d::fill_openings(&material.facets, *w, *tolerance)?, *w)),
                 None => None,

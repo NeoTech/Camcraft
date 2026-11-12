@@ -37,11 +37,33 @@ as land on purpose.
 - Topological hole capping on the mesh (find the rim edge loops): needs
   a clean manifold and fails on the imported STEP meshes this is for; the
   height-field closing needs nothing but facets.
-- Filling every closed depression regardless of size: available by
-  stating a large width; an unbounded "all" would need a separate rule and
+- Filling every closed depression regardless of size: a large width
+  fills more, but the grid follows the width (cell = width/12), so a large
+  width samples coarsely and can miss a thin rim - the opening then reads
+  open and is not filled (safe: nothing is lidded). An unbounded "all"
+  would need its own rule (a cell clamped by tolerance or tool radius) and
   is left until asked.
 - Geodesic: the lids are new open boundary for its march, so the
   combination is refused by name rather than silently changing its seed.
+
+**Pencil and Corner are refused with the fill on (review of PR #1286).**
+Both walk crease loci off the mesh's shared-edge index; the lids share no
+edge with the model, so the creases inside a lidded opening were still
+found and cleaned while the path note said the opening was "flown over,
+not cut" - a note claiming a fill the path does not do. Chosen: refuse the
+pair by name at generation, as Geodesic is ("Pencil cleans the creases
+inside openings, so it cannot fill them - clear 'Fill openings' or pick
+another pattern"). Considered and dropped: making the crease walk honour
+the lids (drop every locus under a lid) - new crease logic under the
+safety floor for a combination nobody asked for, and a pencil pass whose
+whole job is the creases inside openings has little to gain from a fill.
+Flow was checked and is NOT refused: its seeds and march ground every
+column on the same ball support as Parallel (`plunge_support` over every
+drive facet) and its flanks ride the waterline rings, so it flies over the
+lids (pinned by `flow_honours_the_lids_and_never_descends_into_a_lidded_pocket`).
+When nothing was filled the note now says "no closed opening narrower than
+W mm found - the path follows the model" instead of "0 closed opening(s)
+... flown over".
 
 **No project-file version bump.** The key is optional and absent means
 off, so every older file reads unchanged; an older reader ignores the key

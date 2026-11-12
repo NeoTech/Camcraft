@@ -259,7 +259,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
                 }
                 // The land model (#1196): Off is the model itself.
                 auto_opt(ui, "Fill openings", "Off", fill_openings, "model surface", 5.0, |ui, d| num(ui, u, d));
-                hint(ui, "Off: the path follows the model, holes and all. Stated: closed holes and pockets a disk this wide cannot enter are lidded at their rim and flown over - their walls stand as land; the verdict still judges the real model");
+                hint(ui, "Off: the path follows the model, holes and all. Stated: closed holes and pockets a disk this wide cannot enter are lidded at their rim and flown over - the walls stay uncut; the gouge check still uses the real model");
                 prop_row(ui, "Tolerance", |ui| num(ui, u, tolerance));
                 hint(ui, "the finish budget: levels drop by 2 x sqrt(tool radius x tolerance), so the cusp under the ball stays within it");
                 hint(ui, "stepdown follows from tolerance and tool - it is not a second knob");

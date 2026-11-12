@@ -260,3 +260,38 @@ fn nonsense_widths_are_refused_by_name() {
     assert!(fill_openings(&[], 5.0, TOL).is_err());
 }
 
+
+/// #1196 review: Flow honours the lids. Its seeds and march ground
+/// every column on the same ball support as Parallel (`plunge_support`
+/// over every facet it is given) and its flanks ride the waterline
+/// rings, so on the land drive it never descends into a lidded pocket
+/// - unlike Pencil/Corner, whose crease walk the app refuses with the
+/// fill on. Off, the same pass reaches the pocket floor. The pocket is
+/// 8 mm square (floor z 4), wide enough for flow's lines to land on
+/// its floor; the 10 mm width lids it.
+#[test]
+fn flow_honours_the_lids_and_never_descends_into_a_lidded_pocket() {
+    use camcraft_motion::multiaxis::flow3d;
+    let xs = [0.0, 6.0, 14.0, 40.0];
+    let ys = [0.0, 6.0, 14.0, 20.0];
+    let plate = block(&xs, &ys, &|i, j| Some(if i == 1 && j == 1 { 4.0 } else { TOP }));
+    let filled = fill_openings(&plate, 10.0, TOL).expect("fill");
+    assert_eq!(filled.openings, 1);
+    let deep = |t: &Toolpath| {
+        tips(t).into_iter().any(|q| (q.x - 10.0).abs() < 4.0 && (q.y - 10.0).abs() < 4.0 && q.z < TOP - 1.0)
+    };
+    let off = flow3d(&plate, &fp(FinishPattern::Flow)).expect("plain flow");
+    assert!(deep(&off), "the plain flow reaches the pocket floor");
+    let land = flow3d(&filled.facets, &fp(FinishPattern::Flow)).expect("land flow");
+    assert!(!deep(&land), "the land flow never descends into the lidded pocket");
+    assert!(deepest_bite(&land, &plate) <= TOL, "the land flow verifies on the real plate");
+}
+
+#[test]
+fn the_note_says_so_when_nothing_was_filled() {
+    let plate = holed_plate();
+    let narrow = fill_openings(&plate, 3.0, TOL).expect("fill");
+    assert_eq!(narrow.openings, 0);
+    let n = narrow.note(3.0);
+    assert!(n.contains("no closed opening narrower than 3 mm found") && !n.contains("flown over"), "{n}");
+}

@@ -59,6 +59,11 @@ impl Filled {
     /// The path note: what stands as land, on purpose.
     #[must_use]
     pub fn note(&self, width: f64) -> String {
+        if self.openings == 0 {
+            return format!(
+                "land: no closed opening narrower than {width} mm found - the path follows the model"
+            );
+        }
         format!(
             "land: {} closed opening(s) narrower than {width} mm filled at their rim and flown over, not cut - their walls stand as land on purpose",
             self.openings
