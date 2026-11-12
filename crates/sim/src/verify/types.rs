@@ -134,6 +134,83 @@ pub struct VerifyContext<'a> {
     /// law only: against stock the housing still stands down by the
     /// same kerf reasoning as the holder band.
     pub spindle: Option<(f64, f64)>,
+    /// How much coarser than the importer's promise the judged model's
+    /// mesh is, mm (#864): the chord error the import actually kept less
+    /// the cap it promises. A facet of a curved wall stands inside the
+    /// true surface by up to its chord error, so on a convex wall a cut
+    /// that deep into the real part reads as clean against the mesh; the
+    /// gouge laws (b), (b2) and (f) give that much of their tolerance
+    /// back ([`VerifyContext::tightened`]). `0.0` - every model that met
+    /// the promise, and every context that never names a model - reads
+    /// each law exactly as it always did. Kept apart from `gouge_tol`,
+    /// which is also the budget moves are read into chords at and must
+    /// not shrink with the model.
+    pub model_excess: f64,
+}
+
+/// The inert tool of [`VerifyContext::default`].
+static NO_TOOL: ToolGeom = ToolGeom {
+    radius: 0.0,
+    nose_radius: 0.0,
+    flute_len: 0.0,
+    shank_radius: 0.0,
+    shank_len: 0.0,
+    holder_radius: 0.0,
+    holder_len: 0.0,
+};
+/// The empty region of [`VerifyContext::default`].
+static NO_REGION: std::sync::LazyLock<Region> = std::sync::LazyLock::new(Region::default);
+
+/// The base a context is written over (`..Default::default()`), so a new
+/// field with an inert reading (#864's `model_excess`) is not spelled out
+/// at every construction site. On its own it judges nothing.
+impl Default for VerifyContext<'_> {
+    fn default() -> Self {
+        VerifyContext {
+            region: &NO_REGION,
+            stock: None,
+            model: None,
+            tool: &NO_TOOL,
+            cutter: None,
+            mode: Mode::Area,
+            stock_top_z: 0.0,
+            clearance_z: 0.0,
+            stock_to_leave: 0.0,
+            gouge_tol: 0.0,
+            z_tol: 0.0,
+            finish_tol: None,
+            fixtures: &[],
+            spindle: None,
+            model_excess: 0.0,
+        }
+    }
+}
+
+impl VerifyContext<'_> {
+    /// A gouge tolerance, tightened for a model coarser than the
+    /// importer promises (#864): `tol` less [`Self::model_excess`], while
+    /// that stays positive. At or below zero it would convict every
+    /// exactly finished flat face - a misleading verdict - so `tol` comes
+    /// back unchanged and the program gate refuses the operation by name
+    /// ([`excess_floor`] is the one test both sides read).
+    #[must_use]
+    pub fn tightened(&self, tol: f64) -> f64 {
+        excess_floor(tol, self.model_excess).unwrap_or(tol)
+    }
+}
+
+/// `tol` less a model's `excess` chord error, while that is an honest
+/// tolerance (#864): `Some(tol)` untouched when there is no excess,
+/// `Some(tol - excess)` while it stays positive, `None` once the excess
+/// has used the whole tolerance - where the caller must refuse rather
+/// than judge. A non-finite or negative excess is no excess.
+#[must_use]
+pub fn excess_floor(tol: f64, excess: f64) -> Option<f64> {
+    if !(excess.is_finite() && excess > 0.0) {
+        return Some(tol);
+    }
+    let left = tol - excess;
+    (left.is_finite() && left > 0.0).then_some(left)
 }
 
 /// Which machine element struck a fixture (M3.2 stage B). Serde on it
