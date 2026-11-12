@@ -223,7 +223,7 @@ fn the_program_verdict_tightens_by_the_excess_while_a_tolerance_is_left() {
 fn a_model_too_coarse_to_verify_is_refused_by_name_with_no_gouge_verdict() {
     let world = faced_brick(Some(TOO_COARSE));
     assert!(model_fidelity::verdict_tol(&world).is_err());
-    let refusal = "OP: model 'brick' was imported too coarsely to verify; re-import with a larger budget (surfaces are approximated to within 0.030 mm)";
+    let refusal = "OP: model 'brick' was imported too coarsely to verify; re-import with a larger STEP facet budget (surfaces are approximated to within 0.030 mm)";
     // The exactly finished flat face: refused by name, not called a gouge.
     let report = posting::verification_report(&world);
     assert_eq!(report.problems, vec![refusal.to_string()], "{:?}", report.problems);
@@ -267,7 +267,7 @@ fn a_kind_whose_laws_do_not_read_the_excess_is_refused_on_any_reduced_model() {
     assert_eq!(op(None), None);
     let why = op(Some(TIGHT)).expect("refused");
     assert!(why.starts_with("CH: model 'brick' was imported at reduced fidelity (surfaces are approximated to within 0.012 mm)"), "{why}");
-    assert!(why.ends_with("re-import with a larger budget"), "{why}");
+    assert!(why.ends_with("re-import with a larger STEP facet budget"), "{why}");
 }
 
 #[test]
