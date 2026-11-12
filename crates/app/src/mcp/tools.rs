@@ -259,12 +259,12 @@ fn s_add_op() -> Value {
     obj(
         json!({
             "kind": { "type": "string", "description": "Operation kind: label or key from list_operation_types." },
-            "tool": { "type": "string", "description": "A document tool name (add_tool first)." },
+            "tool": { "type": "string", "description": "A document tool name (add_tool first). Required, except for a kind that mounts no tool (list_operation_types says \"mounts_tool\": false - the Wire Contour): omit it there; naming one is refused." },
             "name": { "type": "string", "description": "Operation name; defaults to the kind's label plus a number." },
             "source": { "type": "string", "description": "\"stock\" (default) or a model name." },
             "params": { "type": "object", "description": "Fields to change from the kind's defaults." }
         }),
-        &["kind", "tool"],
+        &["kind"],
     )
 }
 
