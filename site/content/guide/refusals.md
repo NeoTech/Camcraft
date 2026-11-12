@@ -1,7 +1,7 @@
 +++
 title = "Reading a refusal"
 description = "Why CamCraft refused, and how to fix it."
-weight = 6
+weight = 7
 +++
 
 CamCraft refuses rather than guess. A refusal is not a crash: the document

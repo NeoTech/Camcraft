@@ -13,7 +13,7 @@ milling. A mill-turn shows both.
 
 | Group | Operations |
 |---|---|
-| Milling 2D | Face, Contour, Pocket, Slot, Trace, Adaptive, Offset, Engrave, Chamfer, Circular, Thread |
+| Milling 2D | Face, Contour, Pocket, Slot, Trochoidal slot, Trace, Adaptive, Offset, Engrave, Chamfer, Circular, Thread |
 | Milling 3D | 3D Pocket, 3D Finish, Deburr |
 | Drilling | Drill, Bore, Probe |
 | Multi-axis | 5-Axis Contour, 5-Axis Parallel, Swarf, Adv. Swarf, Rotary Contour, Rotary Parallel, Rotary Offset, Multi-Axis Rough, 5-Axis Flow, Multi-Axis Contour |
@@ -25,6 +25,9 @@ pencil and steep/shallow finishing. Drill covers spot, drill, peck, deep,
 tap and bore cycles, and **Detect holes** finds the holes in the model for
 you. Milling operations can also be indexed (3+2) to a tilted plane on a
 machine that can tilt.
+
+Each 2D milling and hole kind has its own section, with its settings,
+defaults and common refusals, in [2D milling operations](@/guide/operations-2d.md).
 
 ## The settings tabs
 
