@@ -24,6 +24,7 @@ CamCraft exposes a Model Context Protocol (MCP) server on stdio (`camcraft-cli m
               ▼
     2. Stock, Setup & WCS
  (set_stock, add_setup, set_wcs,
+  set_wcs_from_features,
   set_work_offset, load_machine)
               │
               ▼
@@ -73,6 +74,7 @@ The server exposes tools across three modules in `crates/app/src/mcp/` (see `cra
 - `add_setup { "name": string, "datum_from"?: string }`: Declare a new setup and activate it. Can copy stock/WCS from an existing setup.
 - `activate_setup { "name": string }`: Switch the active setup context for subsequent operations and edits.
 - `set_wcs { "origin"?: [x, y, z], "stock_point"?: string, "offset"?: [dx, dy, dz], "rotation"?: [qx, qy, qz, qw] }`: Place the active setup's WCS origin and orientation quaternion.
+- `set_wcs_from_features { "picks": [{ "model": string, "id": string, "role": "origin" | "x" | "y" | "z" }], "setup"?: string }`: Place the active setup's WCS on a frame fitted to `list_features` picks - the GUI's "Set WCS from features" law (#701, #937). Axes read in Z, X, Y priority: the first axis pick is exact, the second squared to it, the third derived right-handed. A flat face sets its outward normal, a straight edge its direction, a curved wall (face or patch) its fitted axis; the origin is a vertex, a face's centroid or a wall's centre (else the second axis pick's anchor), projected onto the first pick's plane when that is a face. One undo step. Refused by name: under two picks, a role given twice, under two axes, a pick that cannot set its role, near-parallel axes (< 5 deg), a stale id, a `setup` that is not the active one. Note: a `list_features` face row's `normal` is the plane's canonical normal, not its outward side - tell faces apart by `bounds`.
 - `set_work_offset { "word": "G54" | "G55" | ... | "G59" | null, "setup"?: string }`: Set the posted G-code fixture coordinate word (G54–G59); `null` clears it.
 - `load_machine { "builtin"?: string, "path"?: string, "clear"?: boolean, "setup"?: string }`: Mount a machine configuration at document or setup level: a built-in preset by name (`"VMC 3-axis"`, `"Lathe"`, the Tormach models, ...) or a `.mch` file by path; `clear: true` mounts none.
 - `set_workholding_max_rpm { "max_rpm": number | null, "setup"?: string }`: State the rated maximum rpm of a setup's chuck or collet; `null` clears it. Refused with a named error: a missing or non-numeric value, zero, negative or non-finite numbers, anything under 1 rpm or over 100000 rpm, an unknown setup, and a value the setup already states. `setup` defaults to the active one. One undo step. At post time, a constant-rpm (G97) turning operation faster than the limit is refused by name, and a constant-surface-speed (G96) section's rpm ceiling is capped at it (Fanuc `G50 S`, Tormach `G96 D`).
@@ -134,6 +136,7 @@ When issue #356 was originally filed, several core features were GUI-only. The f
 - **Tool library import/export (#355):** Shipped via `export_tool_library` and `import_tool_library`.
 - **Operation display names and order (#45):** Shipped via `rename_operation` and `reorder_operation`.
 - **Pocket and slot recognition (#35):** Shipped via `detect_pockets` (with `create`, it adds the Pocket or Slot that machines one).
+- **WCS from feature picks (#937):** Shipped via `set_wcs_from_features` (origin/x/y/z roles over faces, edges, vertices and walls).
 - **Part axes in the work plane (#557):** Shipped via `set_part_axes` (a straight edge or two points along +Y and/or +X).
 - **Three-point plane alignment (#555):** Shipped via `lay_part_on_points` (three vertex ids onto G17, G18 or G19).
 - **Locating the part in a fixture (#561):** Shipped via `locate_part` (one to three face or vertex mates between part and fixture).
@@ -146,7 +149,7 @@ When issue #356 was originally filed, several core features were GUI-only. The f
 The following capabilities exist in the GUI or app command layer but do not yet have an MCP tool:
 
 1. **Face-to-Plane Alignment (`SetupAlign`, #330):**
-   - Mating a picked face (or two edges) to a G17/G18/G19 plane is on the GUI setup page. MCP has the in-plane axes (`set_part_axes`) and the three-point lay (`lay_part_on_points`); laying a face down still means picking three of its vertices or computing the origin and quaternion for `set_wcs`.
+   - Mating a picked face (or two edges) to a G17/G18/G19 plane is on the GUI setup page. MCP has the in-plane axes (`set_part_axes`) and the three-point lay (`lay_part_on_points`); laying a face down still means picking three of its vertices. (The WCS itself can be placed from picks with `set_wcs_from_features`.)
 2. **Document Units Lens (`SetUnits`):**
    - Toggling the document-level unit lens between millimeters and inches (`crates/app/src/commands/set_units.rs`, #578). The MCP server currently exchanges dimensions in millimeters.
 3. **Persistent Program Header Metadata (#258):**
