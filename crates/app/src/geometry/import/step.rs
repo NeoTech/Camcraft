@@ -130,7 +130,7 @@ pub fn parse_with_chord(data: &[u8]) -> Result<(Mesh, f64), ImportError> {
         }));
         let (tris, tol) = match per_shell {
             Err(_) => {
-                eprintln!("step: truck kernel panicked on a shell; import aborted");
+                tracing::error!("step: truck kernel panicked on a shell; import aborted");
                 return Err(ImportError::Step(
                     "geometry kernel failed on a shell (degenerate or unclosed B-rep)".into(),
                 ));
@@ -253,7 +253,7 @@ fn shell_facets(
     // it actually kept (#864).
     let kept = super::step_refine::refine(extent, tol_target, budget, triangulate)?;
     if kept.tol > wanted {
-        eprintln!(
+        tracing::warn!(
             "step: tessellated at reduced fidelity (tol {:e} mm, target {:e} mm, {} facets) - bounded by memory or by the kernel's least tolerance",
             kept.tol * k,
             wanted * k,

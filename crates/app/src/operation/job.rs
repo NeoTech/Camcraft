@@ -274,7 +274,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         match crate::rest::prior_plan(world, op_name, setup, tool.diameter * 0.5) {
             Ok(p) => p,
             Err(e) => {
-                eprintln!("camcraft: {op_name}: the program ahead is unreadable for the rapid law, raw stock stands: {e}");
+                tracing::warn!(op = %op_name, "the program ahead is unreadable for the rapid law, raw stock stands: {e}");
                 None
             }
         }

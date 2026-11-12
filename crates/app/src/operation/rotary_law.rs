@@ -56,7 +56,7 @@ pub(super) fn rotary_into(
             },
         ),
         Err(e) => {
-            eprintln!("rotary verdict: the axis fit refused ({e}); the path is not judged clean");
+            tracing::warn!("rotary verdict: the axis fit refused ({e}); the path is not judged clean");
             path.moves
                 .iter()
                 .position(|m| m.kind != crate::cl::MoveKind::Rapid)
