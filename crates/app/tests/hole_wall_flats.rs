@@ -34,9 +34,43 @@ use camcraft_app::world::new_world;
 /// A 30 x 30 x [0, 20] plate with the polygon hole `hole` from the top,
 /// blind at Z 8.
 fn part(hole: &[P2]) -> Mesh {
+    part_to(hole, 8.0)
+}
+
+/// The plate with its hole blind at `floor`.
+fn part_to(hole: &[P2], floor: f64) -> Mesh {
     let mut f = Vec::new();
-    plate(&rect(-15.0, -15.0, 15.0, 15.0), Some((hole, 8.0)), 0.0, 20.0, &mut f);
+    plate(&rect(-15.0, -15.0, 15.0, 15.0), Some((hole, floor)), 0.0, 20.0, &mut f);
     Mesh::from_facets(f)
+}
+
+/// #992: the thread's tap-drill hole is modelled deeper than the
+/// thread (floor 10), so a drill's 118-degree point stays under the mill.
+const TAP_FLOOR: f64 = 4.0;
+
+/// #992: a thread mill is not centre-cutting - a Drill operation ahead
+/// opens the declared hole of `radius` to `TAP_FLOOR`, at the minor
+/// diameter rounded to the tenth below.
+fn drill_ahead(world: &flecs_ecs::prelude::World, h: &mut History, radius: f64) {
+    let d = ((radius * 2.0 - 0.02) * 10.0).floor() / 10.0;
+    let tool = Tool { diameter: d, shank_d: d, flute_len: 30.0, ..catalog_tool("DR-0600") };
+    h.execute(world, AddTool::new(world, "TAP-DRILL", tool).expect("tap drill"));
+    let hole = Hole { xy: Point2::new(0.0, 0.0), radius: d * 0.5, entry_z: 20.0, floor_z: TAP_FLOOR, through: false, stepped: false };
+    let params = OpParams::Drill {
+        clearance_z: Height::fixed(25.0),
+        retract_z: None,
+        top_z: Height::fixed(20.0),
+        bottom_z: None,
+        cycle: CycleChoice::Drill,
+        peck: 0.0,
+        dwell: 0.0,
+        feed: 120.0,
+        plunge_feed: 80.0,
+        holes: vec![hole],
+        cross: Vec::new(),
+    };
+    h.execute(world, CreateOperation::new(world, "TAP", "TAP-DRILL", SrcRef::Entity("part".into()), params).expect("create drill"));
+    h.execute(world, GenerateOperation::new(world, "TAP").expect("generate drill"));
 }
 
 /// A regular `n`-gon with its corners on r `r` about the origin.
@@ -79,7 +113,11 @@ enum Kind {
 fn verdict(model_hole: &[P2], kind: Kind, radius: f64) -> Vec<Warning> {
     let world = new_world();
     let mut h = History::default();
-    h.execute(&world, ImportModel::from_mesh("part", part(model_hole)));
+    let mesh = match kind {
+        Kind::Thread => part_to(model_hole, TAP_FLOOR),
+        _ => part(model_hole),
+    };
+    h.execute(&world, ImportModel::from_mesh("part", mesh));
     let loc = Location { pos: Point3::new(0.0, 0.0, -2.0), ..Default::default() };
     h.execute(&world, SetStock::new(&world, StockShape::Box { dx: 40.0, dy: 40.0, dz: 22.0 }, loc).expect("stock"));
     let (tool_name, tool) = match kind {
@@ -91,6 +129,9 @@ fn verdict(model_hole: &[P2], kind: Kind, radius: f64) -> Vec<Warning> {
             ("DR-0600", d)
         }
     };
+    if matches!(kind, Kind::Thread) {
+        drill_ahead(&world, &mut h, radius);
+    }
     h.execute(&world, AddTool::new(&world, tool_name, tool).expect("tool"));
     let holes = vec![hole(radius)];
     let params = match kind {
