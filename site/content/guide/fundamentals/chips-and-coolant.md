@@ -35,7 +35,7 @@ of a deep hole.
   on for the operation. A choice the machine states no code for, such as
   through-tool coolant on a machine without it, blocks the post by name,
   rather than being written as a guess. Coolant modes are declared by the machine
-  file; see [Machine types](https://neotech.github.io/Camcraft/guide/machines/).
+  file; see Machine types.
 
 CamCraft has no separate "air blast" mode: the four choices above are
 the whole list. If you run air blast, set the operation to **Off** and

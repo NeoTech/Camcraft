@@ -45,14 +45,14 @@ spindle direction, and how it handles a tool change. Then proceed to
   the post raises a warning when the machine file is in inches. Making the program unit a
   document setting is an open issue (#902), so for an inch control check the
   first block of the file. See
-  [Units and coordinates](https://neotech.github.io/Camcraft/guide/units-and-coordinates/).
+  [Units and coordinates](@/guide/units-and-coordinates.md).
 - **Tilted output.** The Fanuc post arms its tool-centre-point mode (G43.4)
   when the path tilts the tool. The intermediate stream is specified so that a
   post that keeps the machine prismatic refuses a tilted record rather
   than reinterpret it ([the stream
   spec](https://github.com/NeoTech/Camcraft/blob/main/docs/CNC-INTERMEDIATE.md)).
-  See [Machine types](https://neotech.github.io/Camcraft/guide/machines/) and
-  [Multi-axis operations](https://neotech.github.io/Camcraft/guide/operations-multiaxis/).
+  See Machine types and
+  [Multi-axis operations](@/guide/operations-multiaxis.md).
 - **Machine files** state facts (axis travel, spindle range, tool changer,
   rigid tapping, coolant codes), and the program is checked against the
   facts stated. A machine file is not a guarantee that a real machine is

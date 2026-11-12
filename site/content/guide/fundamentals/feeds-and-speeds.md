@@ -87,7 +87,7 @@ lowest of the machine's, the tool's and the workholding's. Under constant
 rpm, an operation over that limit is refused by name, not capped, because
 the cut was planned at that speed. The limit is lathe-only; mill setups
 have no equivalent setting. See [Setups](@/guide/setups.md) and
-[Workholding](https://neotech.github.io/Camcraft/guide/workholding/).
+[Workholding](@/guide/workholding.md).
 
 CamCraft does not measure sound or chip colour and does not model machine
 rigidity. The first cut is where you learn whether the numbers fit.

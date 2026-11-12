@@ -52,4 +52,4 @@ simply leaves material there; **Deviate** shows the material left, and
 rest machining with a smaller tool can take it.
 
 See [Operations](@/guide/operations.md) and the
-[glossary](https://neotech.github.io/Camcraft/guide/glossary/) for holder and stick-out terms.
+[glossary](@/guide/glossary.md) for holder and stick-out terms.

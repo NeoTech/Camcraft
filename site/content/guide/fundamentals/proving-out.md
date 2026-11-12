@@ -36,7 +36,7 @@ cannot see a clamp you forgot to enter or a wrong tool length.
   material; a warning refusal names the flagged moves, which are marked in
   the viewport. The table of common messages is in
   [Reading a refusal](@/guide/refusals.md) and
-  [Troubleshooting](https://neotech.github.io/Camcraft/guide/troubleshooting/).
+  [Troubleshooting](@/guide/troubleshooting.md).
 - **Why refuse rather than warn.** A warning on a dialog gets clicked
   through and the program is posted anyway. Where the output could drive
   the tool into the part or a fixture, CamCraft writes nothing, and leaves any

@@ -49,4 +49,4 @@ just those areas instead of re-cutting everything.
 
 The full list of kinds and their settings is on the
 [Operations](@/guide/operations.md) page; ordering them is covered by
-[Order of operations](https://neotech.github.io/Camcraft/guide/order-of-operations/).
+[Order of operations](@/guide/order-of-operations.md).

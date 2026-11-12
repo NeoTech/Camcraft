@@ -30,13 +30,13 @@ something, the page says so.
 These topics have pages of their own. The fundamentals pages summarise them
 and link rather than repeat:
 
-- [Order of operations](https://neotech.github.io/Camcraft/guide/order-of-operations/)
-- [Workholding and fixtures](https://neotech.github.io/Camcraft/guide/workholding/)
-- [Machine types](https://neotech.github.io/Camcraft/guide/machines/)
-- [Multi-axis operations](https://neotech.github.io/Camcraft/guide/operations-multiaxis/)
-- [Units and coordinates](https://neotech.github.io/Camcraft/guide/units-and-coordinates/)
-- [Common workflows](https://neotech.github.io/Camcraft/guide/workflows/)
-- [Troubleshooting](https://neotech.github.io/Camcraft/guide/troubleshooting/)
-- [Glossary](https://neotech.github.io/Camcraft/guide/glossary/)
+- [Order of operations](@/guide/order-of-operations.md)
+- [Workholding and fixtures](@/guide/workholding.md)
+- Machine types
+- [Multi-axis operations](@/guide/operations-multiaxis.md)
+- [Units and coordinates](@/guide/units-and-coordinates.md)
+- [Common workflows](@/guide/workflows.md)
+- [Troubleshooting](@/guide/troubleshooting.md)
+- [Glossary](@/guide/glossary.md)
 - [Operations](@/guide/operations.md), [Setups](@/guide/setups.md),
   [Posting](@/guide/posting.md) and [Reading a refusal](@/guide/refusals.md)
