@@ -70,6 +70,7 @@ pub(crate) fn window(ctx: &egui::Context, state: &mut State) {
             draw_axes(ui, u, &mut ed.machine);
             draw_tooling(ui, u, &mut ed.machine);
             draw_coolants(ui, &mut ed.machine);
+            super::machine_edm_editor::draw(ui, u, &mut ed.machine);
             ui.separator();
             super::machine_grid::machine_grid(ui, "machine_editor_overview", &ed.machine, u, &[]);
             ui.horizontal(|ui| {

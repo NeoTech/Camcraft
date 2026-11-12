@@ -25,6 +25,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
         prop_row(ui, "Burn at Y", |ui| num(ui, u, y));
         prop_row(ui, "EDM condition", |ui| ui.add(egui::TextEdit::singleline(condition).desired_width(90.0)));
         hint(ui, "the machine's own condition id - its spark gap places the electrode tip above the floor");
+        condition_readout(ui, u, world, op_ctx.as_deref(), condition);
     }
     if tab == SEC_HEIGHTS {
         height_editor(ui, "Approach plane", world, op_ctx.as_deref(), clearance_z, "sinker.clearance");
@@ -65,5 +66,19 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
     }
     if tab == SEC_FEEDS {
         prop_row(ui, "Servo feed", |ui| num_feed(ui, u, feed));
+    }
+}
+
+/// What the mounted machine states for the typed condition (#548):
+/// its spark gap and electrode undersize, or "not stated" - the page
+/// shows what the generator will read, so a refusal is no surprise.
+fn condition_readout(ui: &mut Ui, u: Unit, world: &World, setup: Option<&str>, id: &str) {
+    let m = camcraft_app::machine::of_setup(world, setup).1;
+    let cond = m.as_ref().and_then(|m| m.edm.as_ref()).and_then(|e| e.conditions.iter().find(|c| c.id == id));
+    let word = |v: Option<f64>| v.map_or_else(|| "not stated".to_owned(), |x| format!("{} {}", units::len(x, u, 3), u.suffix()));
+    prop_row(ui, "Condition gap", |ui| ui.label(word(cond.and_then(|c| c.gap))));
+    prop_row(ui, "Electrode undersize", |ui| ui.label(word(cond.and_then(|c| c.undersize))));
+    if cond.is_none() {
+        hint(ui, "the mounted machine states no condition with this id - the op refuses until it does");
     }
 }

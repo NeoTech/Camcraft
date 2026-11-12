@@ -53,6 +53,8 @@ mod load_field;
 // pub(crate) past egui_app: `State::machine_editor` names its draft
 // type (M3.3 stage C), so state.rs has to see through the door.
 pub(crate) mod machine_editor;
+// #548: the sinker EDM section of the Machine window.
+mod machine_edm_editor;
 mod machine_grid;
 // pub(crate) for the same reason: `State::post_refusal` names its type.
 pub(crate) mod post_refusal;
@@ -249,6 +251,8 @@ mod ball_corner_tests;
 mod gate_route_tests;
 #[cfg(test)]
 mod sinker_pass_tests;
+#[cfg(test)]
+mod sinker_machine_tests;
 
 /// Entry for `--ui egui`; returns the process exit code. `--headless`
 /// selects the no-window proof (seeded document, fallback adapter, View3D
