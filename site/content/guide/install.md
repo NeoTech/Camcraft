@@ -55,3 +55,6 @@ cargo run   --release -p camcraft-ui                       # build and start the
 cargo build --release -p camcraft-app --bin camcraft-cli   # headless command line
 cargo build --release -p camcraft-post --bin post          # standalone post processor
 ```
+
+The command line is described, with runnable examples, in
+[Command line](@/guide/cli.md).
