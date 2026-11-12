@@ -173,6 +173,13 @@ decision, 2026-11-12).
   word and cuts at the previous angle. Until it is fixed, do not post programs
   through the Doosan DNM post that mix A0 with other A angles, or add the A0
   move by hand and check every A word after a tool change.
+- **#980 (P1)**: STEP models are now meshed much finer (the chord cap of
+  #689), and on some parts the Adaptive (HSM) plan of a level then crosses
+  itself and that level is cut with Offset rings instead - named in the
+  operation's notes, and the path still verifies clean. On the project's own
+  test part one more level falls back than in 0.17.0 and the path has fewer
+  arcs (222, was 600). Expect longer, less smooth roughing on imported STEP
+  parts until the planner is fixed.
 - **#934 (P0)**: the Sinumerik post writes work offsets 5 and 6 as G58 / G59,
   which on the 840D are programmable offsets, not settable frames. Check
   offsets 5 and 6 by hand on that post.
