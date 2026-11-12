@@ -98,3 +98,9 @@ can be clicked to frame it.
 - **Deviate** compares the machined stock with the model and colours where
   material is left or where the program cut into the part. **Frame rest**
   and **Frame gouge** take the view to the worst spot of each.
+
+The multi-axis kinds, Probe and Plasma Profile each have their own
+reference, with settings, defaults and common refusals:
+[Multi-axis operations](@/guide/operations-multiaxis.md),
+[Probing](@/guide/operations-probing.md) and
+[Plasma cutting](@/guide/operations-plasma.md).
