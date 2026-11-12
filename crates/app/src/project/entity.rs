@@ -302,6 +302,10 @@ pub struct SetupDto {
     /// Absent follows the document's.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub post_options: Option<SetupPostOptionsDto>,
+    /// #1031: the rated maximum rpm of the setup's chuck or collet,
+    /// additive (no version step). Absent - every older file - states none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workholding_max_rpm: Option<f64>,
 }
 
 /// A setup's WCS as files hold it. v54 (#342) writes one entity name

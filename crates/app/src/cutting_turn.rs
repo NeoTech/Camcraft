@@ -114,6 +114,7 @@ pub fn compute(
     material: WorkMaterial,
     diameter: f64,
     machine: Option<&crate::machine::Machine>,
+    workholding: Option<f64>,
 ) -> Result<Suggestion, String> {
     let win = turning_data::turn_window(material, tm);
     let (mut vc, mut frev) = (0.5 * (win.vc.0 + win.vc.1), 0.5 * (win.frev.0 + win.frev.1));
@@ -134,6 +135,13 @@ pub fn compute(
         && rpm > hi
     {
         notes.push(format!("{rpm:.0} rpm held to the tool's maximum {hi:.0}"));
+        rpm = hi.floor();
+    }
+    // #1031: the setup's chuck or collet rating.
+    if let Some(hi) = workholding
+        && rpm > hi
+    {
+        notes.push(format!("{rpm:.0} rpm held to the workholding's maximum {hi:.0}"));
         rpm = hi.floor();
     }
     if let Some(m) = machine {
@@ -187,5 +195,6 @@ pub fn suggest(world: &World, op: &crate::schema::Operation, tool: &Tool, materi
         .ok_or_else(|| format!("tool {} states no tool material (HSS or carbide)", op.tool))?;
     let setup = op.setup.as_deref();
     let d = working_diameter(world, setup).ok_or("no stock to read a working diameter from - set the stock first")?;
-    compute(&op.tool, tool, tm, material, d, crate::machine::of_setup(world, setup).1.as_ref())
+    let hold = crate::setup_workholding::of(world, setup);
+    compute(&op.tool, tool, tm, material, d, crate::machine::of_setup(world, setup).1.as_ref(), hold)
 }

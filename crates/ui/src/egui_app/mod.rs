@@ -94,6 +94,7 @@ mod setup_axis_pick;
 mod setup_points_pick;
 // #316: the setup page's "relative to the previous setup" control.
 mod setup_relative_pick;
+mod setup_workholding_row;
 // The operation dialog, split out of `pages` with the property grid
 // (user review 2026-11-06): the frame, the Geometry pick block, the
 // params dispatcher and its kind-family pages, the shared widgets.

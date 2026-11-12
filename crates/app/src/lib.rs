@@ -70,6 +70,8 @@ pub mod setup_mount;
 // #316: transforms between setups and the setup-relative link.
 pub mod setup_relative;
 pub mod setup_post_options;
+// #1031: a setup's workholding (chuck/collet) rpm limit.
+pub mod setup_workholding;
 pub mod setup_sheet;
 // #320: a setup's stock source - its own, or what the setup before leaves.
 pub mod setup_stock;
