@@ -154,6 +154,21 @@ fn only_upright_column_dives_are_re_read() {
     assert_eq!(judged(&lateral, Mode::Area, &[&s], &tool()), CONVICTED);
 }
 
+/// #938 at the #1091 site: rounding noise in a composed pose (1e-10 deg,
+/// ~1.7e-12 per component - past the old 1e-12 component test) is the
+/// upright dive and is re-read; a commanded 0.001 deg lean keeps its
+/// conviction.
+#[test]
+fn a_rounding_noise_pose_is_an_upright_dive_and_a_real_tilt_is_not() {
+    let s = stepped();
+    let lean = |deg: f64| {
+        let t = deg.to_radians();
+        Some([0.0, t.sin(), t.cos()])
+    };
+    assert!(judged(&dive_at(0.0, 22.0, lean(1e-10)), Mode::Area, &[&s], &tool()).is_empty());
+    assert_eq!(judged(&dive_at(0.0, 22.0, lean(1e-3)), Mode::Area, &[&s], &tool()), CONVICTED);
+}
+
 /// An upright lateral rapid from plan point `a` at Z `z0` to `b` at `z1`.
 fn link(a: (f64, f64), b: (f64, f64), z0: f64, z1: f64) -> Toolpath {
     let mut t = dive_at(a.0, z1, None);
