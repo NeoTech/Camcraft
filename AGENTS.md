@@ -87,7 +87,8 @@ go to `CHANGELOG.md`.
   (then drop any whose comments hold a live contributor claim - "A claim
   comment is a claim", below) and take the lowest priority number first (`P1` before `P2` ... before
   `P9`, "Priorities" below), then the oldest. User-reported bugs outrank
-  owed work of the same number.
+  owed work of the same number. An issue with no priority is untriaged,
+  not lowest: it is triaged ("Priorities") before any pick.
 - **Priorities: `P1`..`P9`, lower is picked first** (user, 2026-11-12: "We
   might need a P1-P9 prioritization system now.. we're having issues with
   scope creep throughout the issue list"; scale chosen as "replace P0/P1/P2
@@ -108,15 +109,22 @@ go to `CHANGELOG.md`.
   | `P9` | Someday: not picked while anything else is free | - |
 
   - `P1`-`P3` are fix-now work and are for defects only: "wanted" is never
-    a reason for them. Only `P1` and `P2` hold a release cut back (user,
-    2026-11-12: "only P1 and P2 block a release cut"); a `P3` is worked
-    ahead of planned work but a cut does not wait for it.
+    a reason for them. Only `P1` and `P2` hold a release cut back
+    (maintainer's choice, question dialog, 2026-11-12: "only P1 and P2
+    block a release cut"). A minor/major cut does not start while any `P1` or `P2` issue is open; a `P3` or lower never holds one. A `P3` is worked ahead of planned
+    work, but a cut does not wait for it.
   - `P4` is set only where the maintainer asked for the work in his own
     words; the issue quotes them.
   - A follow-up found while working or reviewing is `P7` unless it is a
     defect (then `P1`-`P3` by the table).
   - An agent filing an issue sets exactly one of `P1`..`P9` by this table,
     never `P?`.
+  - **No priority means untriaged.** A human-filed issue without a
+    priority is not the lowest: the first agent that reads it for a pick
+    sets its priority by this table (with its effort label) before
+    sorting, so a user-reported gouge bug is never picked last. An issue
+    found with two numbers is reported to the maintainer and read by the
+    lower number meanwhile.
 - **`P?` is paused, not prioritised** (user, 2026-11-09: "a P? label that
   holds an issue paused until maintainer tells it to be changed"). An issue
   labelled `P?` is held by the maintainer: Pick never takes it, no lane
@@ -509,8 +517,11 @@ drive CamCraft headlessly. A PR that adds a user-facing command also adds its
 MCP tool (and script verb where it fits) in `crates/app/src/mcp/`, or files a
 `source:agent` follow-up issue `MCP: <command>` and names it in the PR body. Every
 MCP issue (an `MCP:` title, or work on `crates/app/src/mcp/` or the camcraft-mcp
-skill) carries `area:mcp` and is `P5`, unless the maintainer paused it `P?` (user, 2026-11-10: "find all MCP tickets
-and make P1" - the top level then; the scale became P1-P9 on 2026-11-12), so the agent surface keeps up with the GUI. MCP
+skill) carries `area:mcp`. Owed agent-surface work (a tool, script verb or
+skill row for a shipped command) is `P5` (user, 2026-11-10: "find all MCP
+tickets and make P1" - the top level then, `P5` since the scale became
+P1-P9 on 2026-11-12); a defect in MCP code is rated by severity like any
+defect, `P1`-`P3`. A paused one stays `P?`. This keeps the agent surface up with the GUI. MCP
 tools call the same undoable commands the GUI uses, so undo/redo history and
 invariants hold headlessly.
 
@@ -789,7 +800,7 @@ only when no gate or cut is running and it is past ~60 GB. A red result is a new
 gouge, else `P2`, `source:agent`) naming the failing tests and the merge
 that broke them. A red result does not revert the merge by itself; the
 issue is worked in the normal order, and a minor/major cut does not start
-while a `P1` or `P2` it opened is unfixed (a `P3` it opened does not hold a cut). The full release tier runs only at a
+while any `P1` or `P2` issue is open (a `P3` or lower never holds one). The full release tier runs only at a
 minor/major cut. A fix-only stretch produces no build; to hand-test one, run
 `cargo xtask release --version <next> --no-tag --skip-gate` (or the wrapper
 `scripts/release.ps1 -Version <next> -NoTag -SkipGate`) locally on a scratch

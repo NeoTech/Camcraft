@@ -19,14 +19,17 @@ Create missing ones once: `gh label create claimed --color FBCA04
 
 ## Pick
 
-Open, unclaimed, unblocked; highest priority first, then oldest; issues a
-user reported outrank owed work at the same priority.
+Open, unclaimed, unblocked; lowest `P` number first, then oldest; issues a
+user reported outrank owed work at the same number. An issue with no priority
+is untriaged: set one by the AGENTS.md table first, never rank it last.
 
 ```bash
-gh issue list --state open --limit 200 --search "-label:claimed -label:blocked" \
+gh issue list --state open --limit 200 --search "-label:claimed -label:blocked -label:\"P?\"" \
   --json number,title,labels,createdAt --jq '
-  map(. + {p: ([.labels[].name | select(test("^P[0-9]$"))] | first // "P9")})
-  | sort_by(.p, .createdAt) | .[] | "\(.number) \(.p) \(.title)"'
+  map(. + {p: ([.labels[].name | select(test("^P[0-9]$"))] | first // "!")})
+  | sort_by(.p, .createdAt)
+  | (map(select(.p == "!")) | if length > 0 then "TRIAGE THESE FIRST (no priority; set one by the AGENTS.md table before picking):", (.[] | "  \(.number) \(.title)") else empty end),
+    (.[] | select(.p != "!") | "\(.number) \(.p) \(.title)")'
 ```
 
 Read the chosen issue's full comment thread before planning.

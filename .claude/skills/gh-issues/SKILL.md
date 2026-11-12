@@ -50,10 +50,12 @@ The default `--state open` still applies, so add `--state all` to include closed
 yourself, don't trust display order:
 
 ```bash
-gh issue list --state open --limit 200 --search "-label:claimed -label:blocked" \
+gh issue list --state open --limit 200 --search "-label:claimed -label:blocked -label:\"P?\"" \
   --json number,title,labels,createdAt --jq '
-  map(. + {p: ([.labels[].name | select(test("^P[0-9]$"))] | first // "PZ")})
-  | sort_by(.p, .createdAt) | .[] | "\(.number) \(.p) \(.title)"'
+  map(. + {p: ([.labels[].name | select(test("^P[0-9]$"))] | first // "!")})
+  | sort_by(.p, .createdAt)
+  | (map(select(.p == "!")) | if length > 0 then "TRIAGE THESE FIRST (no priority; set one by the AGENTS.md table before picking):", (.[] | "  \(.number) \(.title)") else empty end),
+    (.[] | select(.p != "!") | "\(.number) \(.p) \(.title)")'
 ```
 
 **Reading one issue fully** - the body is rarely enough; decisions, blockers
