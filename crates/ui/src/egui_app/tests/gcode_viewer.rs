@@ -130,7 +130,7 @@ fn long_viewer(lines: usize) -> Harness<'static, ShellUi> {
             .collect::<Vec<_>>()
             .join("
 "),
-        line_pos: vec![None; lines],
+        line_pos: (0..lines).map(|i| Some([i as f64, 0.0, 0.0])).collect(),
         open: true,
         line: 0,
         blocks: Vec::new(),
@@ -171,15 +171,27 @@ fn ticking_trace_keeps_the_window_its_size() {
 
 #[test]
 fn clicking_a_line_moves_the_cursor_there() {
+    // First row, a row in the top half page, a middle row, the last
+    // row: each click puts the cursor on exactly that row, the band
+    // follows it, and the viewport's segment is its move (#1089).
     let mut harness = long_viewer(300);
     harness.get_by_label("G01 X150.5 Y0. F200.").scroll_to_me();
     harness.run_steps(20);
     let mid = cursor(&harness);
     assert!(mid > 100, "scrolled to the middle of the program: {mid}");
-    let target = mid + 3;
-    harness.get_by_label(&format!("G01 X{target}.5 Y0. F200.")).click();
-    harness.run_steps(30);
-    assert_eq!(cursor(&harness), target, "the click became the cursor");
+    for target in [mid + 3, 0usize, 4, 150, 299, 295, 1] {
+        let label = format!("G01 X{target}.5 Y0. F200.");
+        // Bring the row into view first (a click needs it on screen).
+        harness.get_by_label(&label).scroll_to_me();
+        harness.run_steps(10);
+        harness.get_by_label(&label).click();
+        harness.run_steps(30);
+        assert_eq!(cursor(&harness), target, "the click became the cursor");
+        assert!(
+            super::super::shell::gcode_segment(&harness.state().state).is_some(),
+            "the amber segment follows row {target}"
+        );
+    }
 }
 
 #[test]

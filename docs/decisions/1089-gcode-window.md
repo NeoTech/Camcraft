@@ -1,12 +1,17 @@
 ## #1089 - G-code window: selectable text, cursor highlight, click to trace
 
 **Decided**
-- **The cursor stays the scroll's middle row; a click moves the scroll.**
-  The viewer's one cursor law (the middle row is the published line, which
-  drives the amber segment) is kept. Clicking a row (anywhere on it) asks
-  the scroll to centre that row, and the cursor then reads it back. No
-  second stored "picked line", so playback/cursor stay immediate-mode state
-  and no command is involved.
+- **A click pins the cursor to exactly the clicked row.** The cursor is
+  still the scroll's middle row (the one law the viewer is tested
+  against), except that a click scrolls the row to the middle instantly
+  and records a pin, (clicked row, the middle row the scroll settled on).
+  While the middle row stays that one, the cursor IS the clicked row, so
+  rows in the first and last half page - which cannot reach the middle -
+  still get the cursor, the band and the amber segment. Any scroll that
+  changes the middle row (wheel, drag, scrollbar) releases the pin and the
+  middle row rules again. The pin lives in egui temp memory (ephemeral, no
+  command, no new `PostView` field). Trace-pane block clicks use the same
+  path.
 - **The cursor row gets a background band** (theme selection fill at 45%),
   drawn in both the plain and the trace view.
 - **Line numbers are a separate, non-selectable label**; the code is
@@ -25,8 +30,6 @@
 **Considered and dropped**
 - Padding the scroll area so every row can reach the middle: it would
   change the cursor at scroll 0 and the existing cursor-law tests.
-  Consequence kept: a click on a row within half a page of the very top or
-  bottom cannot centre it, so the cursor lands on the nearest reachable row.
 - A stored picked-line field on `PostView`.
 - Clicking a line with no matching move: it still moves the cursor; the
   viewport segment is simply absent for it (`line_pos` is `None`), as for

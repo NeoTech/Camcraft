@@ -51,12 +51,12 @@ pub(crate) fn gcode_window(ctx: &egui::Context, state: &mut State) {
             .iter()
             .position(|b| ln >= b.first && ln < b.last.max(b.first + 1))
     };
+    let jump = std::cell::Cell::new(None::<usize>);
     Window::new(format!("G-code - {stem}"))
         .id(Id::new("gcode-viewer"))
         .open(&mut open)
         .default_size([560.0, 400.0])
         .show(ctx, |ui| {
-            let jump = std::cell::Cell::new(None::<usize>);
             ui.horizontal(|ui| {
                 // Stage D: the debugging trace, beside the program it
                 // explains. Off by default - the plain viewer draws
@@ -129,8 +129,19 @@ pub(crate) fn gcode_window(ctx: &egui::Context, state: &mut State) {
                 gcode_listing(ui, program.as_str(), line, blocks.as_slice(), false, &jump);
             }
         });
+    // A click (listing row or trace block) is queued for the next
+    // frame's listing, which scrolls and pins the cursor (#1089).
+    if let Some(row) = jump.take() {
+        ctx.data_mut(|d| d.insert_temp(Id::new(PENDING_ID), row));
+        ctx.request_repaint();
+    }
     view.open = open;
 }
+
+const PENDING_ID: &str = "gcode-click-pending";
+/// A pin whose middle row is not recorded yet.
+const UNSETTLED: usize = usize::MAX;
+const PIN_ID: &str = "gcode-cursor-pin";
 
 /// The program listing: every line, uniformly `row_h` tall, with the
 /// scroll cursor law the viewer is tested against (the middle row of
@@ -148,10 +159,20 @@ fn gcode_listing(
     trace_on: bool,
     jump: &std::cell::Cell<Option<usize>>,
 ) {
-    ScrollArea::vertical()
-        .id_salt("gcode-scroll")
-        .auto_shrink([false, false])
-        .show(ui, |ui| {
+    // A queued click: scroll so the row sits at the middle (instantly -
+    // no animation, so the middle row read back below is settled this
+    // frame) and pin the cursor to the clicked row (#1089).
+    let pend_id = Id::new(PENDING_ID);
+    let pin_id = Id::new(PIN_ID);
+    let pending = ui.ctx().data_mut(|d| d.remove_temp::<usize>(pend_id));
+    let n_rows = program.lines().count();
+    let row_h0 = ui.text_style_height(&egui::TextStyle::Monospace);
+    let mut area = ScrollArea::vertical().id_salt("gcode-scroll").auto_shrink([false, false]);
+    if let Some(r) = pending {
+        let y = r.min(n_rows.saturating_sub(1)) as f32 * row_h0 + row_h0 * 0.5 - ui.available_height() * 0.5;
+        area = area.vertical_scroll_offset(y.max(0.0));
+    }
+    area.show(ui, |ui| {
             // The scroll offset is read, not stored: egui lays the
             // inner ui out at `-offset`, so the clip rect's center
             // against the content top names the middle row - that row
@@ -163,8 +184,37 @@ fn gcode_listing(
             ui.spacing_mut().item_spacing.y = 0.0;
             let top = ui.min_rect().min.y;
             let vis = ui.clip_rect();
-            let cursor = (((vis.center().y - top) / row_h).max(0.0) as usize).min(n.saturating_sub(1));
-            *line = cursor;
+            let mid = (((vis.center().y - top) / row_h).max(0.0) as usize).min(n.saturating_sub(1));
+            // The cursor is the middle row, except while a click's pin
+            // holds: the pin is (clicked row, the middle row the scroll
+            // settled on), so the first and last half page - where the
+            // clicked row cannot reach the middle - still show the
+            // clicked row. Any scroll that changes the middle row
+            // releases the pin and the middle row rules again.
+            let pin = match pending {
+                Some(r) => Some((r.min(n.saturating_sub(1)), UNSETTLED)),
+                None => ui.ctx().data(|d| d.get_temp::<(usize, usize)>(pin_id)),
+            };
+            // The click's own frame may still lay out against the old
+            // content height (the offset is clamped a frame late), so
+            // the middle row is recorded on the frame AFTER it.
+            let pin = match pin {
+                Some((r, UNSETTLED)) if pending.is_none() => Some((r, mid)),
+                p => p,
+            };
+            *line = match pin {
+                Some((r, UNSETTLED)) => r,
+                Some((r, m)) if m == mid => r,
+                _ => mid,
+            };
+            ui.ctx().data_mut(|d| match pin {
+                Some((r, m)) if m == mid || m == UNSETTLED => {
+                    d.insert_temp(pin_id, (r, m));
+                }
+                _ => {
+                    d.remove_temp::<(usize, usize)>(pin_id);
+                }
+            });
             let want = trace_on
                 .then(|| {
                     blocks
@@ -195,7 +245,7 @@ fn gcode_listing(
                 // the code is selectable (drag, Ctrl+C), so a copy is
                 // the program without its numbers; a click anywhere on
                 // the row moves the cursor there.
-                let at_cursor = i == cursor;
+                let at_cursor = i == *line;
                 let resp = ui
                     .allocate_ui_with_layout(
                         Vec2::new(width, row_h),
@@ -220,15 +270,11 @@ fn gcode_listing(
                             bg.clicked() || code.clicked()
                         },
                     );
-                let (resp, clicked) = (resp.response, resp.inner);
+                let clicked = resp.inner;
                 if clicked {
                     jump.set(Some(i));
                 }
-                if jump.get() == Some(i) {
-                    resp.scroll_to_me(Some(Align::Center));
-                    jump.set(None);
-                }
-            }
+                            }
         });
 }
 
