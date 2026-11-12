@@ -4,7 +4,8 @@ use super::laws::{boundary_samples, dist2_seg, law_points};
 use super::rest::Rest;
 use super::types::{Mode, VerifyContext, Warning};
 
-use crate::cl::{MoveKind, Toolpath, is_vertical};
+use super::upright::is_upright;
+use crate::cl::{MoveKind, Toolpath};
 use crate::geo2d::{Point2, Region};
 
 /// (c) Shank/holder reach against rest material, then (c3) its
@@ -113,7 +114,10 @@ pub(super) fn band_reach(
                 continue;
             }
             let pts = law_points(m, chord_tol);
-            let lean = m.axis.filter(|a| !is_vertical(a));
+            let lean = m.axis.filter(|a| !is_upright(a));
+            // Law (c)'s own last report for THIS move: the de-duplication
+            // below never merges with a warning an earlier law pushed.
+            let mut reported: Option<bool> = None;
             for group in groups {
                 let mut convicted: Option<bool> = None;
                 for &(above, band_r, band_len) in group {
@@ -206,7 +210,12 @@ pub(super) fn band_reach(
                     if part {
                         shanked_part.push(i);
                     }
-                    warns.push(Warning::ShankHit { at: i, part });
+                    // One move, one report per verdict (#938): a leaning
+                    // shank and holder both in the part are one event.
+                    if reported != Some(part) {
+                        reported = Some(part);
+                        warns.push(Warning::ShankHit { at: i, part });
+                    }
                 }
             }
         }
