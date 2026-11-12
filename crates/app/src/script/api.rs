@@ -54,17 +54,22 @@ pub(crate) fn v_import(env: &mut Env, args: Vec<Value>) -> Result<Value, String>
     // extension refusals (IGES needs a kernel we do not have) are
     // ImportModel's law, not a second copy here.
     let imp = ImportModel::new(&path).map_err(|e| e.to_string())?;
-    let name = arg_opt(&args, 1, "a model name")?.unwrap_or(imp.name);
+    let name = arg_opt(&args, 1, "a model name")?.unwrap_or_else(|| imp.name.clone());
     if model::find_by_name(&env.world, &name).is_some() {
-        let cmd = UpdateModel::new(&env.world, &name, imp.mesh).map_err(|e| e.to_string())?;
+        let cmd = UpdateModel::new(&env.world, &name, imp.mesh).map_err(|e| e.to_string())?.with_fidelity(imp.coarse_mm);
         env.history.execute(&env.world, cmd);
     } else {
-        env.history.execute(&env.world, ImportModel::from_mesh(&name, imp.mesh));
+        env.history.execute(&env.world, imp.renamed(&name));
     }
-    let facets = model::find_by_name(&env.world, &name)
-        .and_then(|e| model::facets_of(&env.world, &e))
-        .map_or(0, |a| a.len());
-    Ok(json!({ "model": name, "facets": facets }))
+    let entity = model::find_by_name(&env.world, &name);
+    let facets = entity.and_then(|e| model::facets_of(&env.world, &e)).map_or(0, |a| a.len());
+    let mut out = json!({ "model": name, "facets": facets });
+    // #864: a mesh imported coarser than the importer promises says so,
+    // with the error it carries; a full-fidelity import adds nothing.
+    if let Some(chord) = entity.and_then(|e| crate::model_fidelity::chord_of(&env.world, &e)) {
+        out["reduced_fidelity"] = crate::model_fidelity::facts(&env.world, chord);
+    }
+    Ok(out)
 }
 
 /// `cam.exportTools(path)` - write the document's tools as a tool
