@@ -239,18 +239,42 @@ pub(super) fn from_slice(e: SliceError) -> GenError {
 
 /// The section at `z`, retried a micron below when the plane grazes a
 /// vertex or edge (a tangential slice is an error by contract, and a
-/// 1 um shift cannot change what a cutter sees).
+/// 1 um shift cannot change what a cutter sees) - or when it comes back
+/// empty: a plane at the very top of an imported mesh whose top corners
+/// scatter by float noise (#241: 3e-13 mm) meets only the highest few
+/// and reads "no material" over a part that is plainly there. The
+/// section is only ever taken at Top of Part Z (`section_z_of`), so an
+/// empty answer names that height and the span that would answer.
 pub(super) fn section(facets: &[Triangle], z: f64) -> Result<Region, GenError> {
-    match slice::slice(facets, z) {
-        Ok(r) if !r.is_empty() => Ok(r),
-        Ok(_) => Err(GenError::Empty(format!("no material at z = {z:.3}"))),
-        Err(e) => match slice::slice(facets, z - SLICE_NUDGE) {
-            Ok(r) if !r.is_empty() => Ok(r),
-            Ok(_) => Err(GenError::Empty(format!("no material at z = {z:.3}"))),
-            // Both the plane and the nudged plane are unusable: the
-            // original error describes the level the user asked for.
-            Err(_) => Err(from_slice(e)),
-        },
+    let first = match slice::slice(facets, z) {
+        Ok(r) if !r.is_empty() => return Ok(r),
+        other => other,
+    };
+    match (first, slice::slice(facets, z - SLICE_NUDGE)) {
+        (_, Ok(r)) if !r.is_empty() => Ok(r),
+        // The asked plane was clean, or the nudged one was: nothing is
+        // there - say where something is.
+        (Ok(_), _) | (Err(_), Ok(_)) => Err(empty_at(facets, z)),
+        // Both the plane and the nudged plane are unusable: the
+        // original error describes the level the user asked for.
+        (Err(e), Err(_)) => Err(from_slice(e)),
+    }
+}
+
+/// The empty-section refusal, with the fix: the Z span the source does
+/// occupy, so the user can move Top of Part Z into it.
+fn empty_at(facets: &[Triangle], z: f64) -> GenError {
+    let (lo, hi) = facets
+        .iter()
+        .flat_map(|t| [t.a.z, t.b.z, t.c.z])
+        .filter(|v| v.is_finite())
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), v| (lo.min(v), hi.max(v)));
+    if lo <= hi {
+        GenError::Empty(format!(
+            "no material at z = {z:.3} - the source spans Z{lo:.3} to Z{hi:.3}; set Top of Part Z inside that span, or pick the face or edges to machine"
+        ))
+    } else {
+        GenError::Empty(format!("no material at z = {z:.3}"))
     }
 }
 

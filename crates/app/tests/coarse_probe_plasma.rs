@@ -72,7 +72,7 @@ fn boxes(b: &[([f64; 3], [f64; 3])]) -> Vec<Triangle> {
 /// The whole protected-move law on a model `excess` coarser than promised.
 fn judge(t: &Toolpath, tool: &Tool, facets: &[Triangle], excess: f64) -> (Vec<Warning>, Vec<Warning>) {
     let ball = stylus_hits_excess(t, tool.diameter * 0.5, facets, excess);
-    let reach = stylus_reach_hits_excess(t, tool, facets, &ball, excess);
+    let reach = stylus_reach_hits_excess(t, tool, None, facets, &ball, excess);
     (ball, reach)
 }
 

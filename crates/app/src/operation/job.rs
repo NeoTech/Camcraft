@@ -31,6 +31,8 @@ pub struct GenJob {
     /// laws' band stack. `tool` already carries the cylinder enclosing
     /// it, for every law that reads one; None is no body.
     pub(super) body: Option<camcraft_tools::holder_profile::HolderProfile>,
+    /// #852: the tool's drawn neck (`tool_cutter::neck_of`); empty = none.
+    pub(super) neck: Vec<camcraft_tools::holder_profile::HolderBand>,
     /// The tool's lathe body (#369): its clearance bands, judged against
     /// the revolved stock on every move of a turning op; None is none.
     pub(super) lathe_body: Option<std::sync::Arc<camcraft_tools::lathe_holder::LatheClearance>>,
@@ -136,6 +138,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
     let Some(tool) = model::tool_of(world, &tool_entity) else {
         return Err(GenError::Invalid(format!("'{}' is not a tool", op.tool)));
     };
+    let neck = crate::tool_cutter::neck_of(world, &tool_entity, &tool);
     let (tool, body) = crate::tool_body::judged(world, &tool_entity, tool)
         .map_err(|e| GenError::Invalid(format!("tool '{}': {e}", op.tool)))?;
     // #369: a lathe body is judged only by the turning family's
@@ -274,7 +277,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         match crate::rest::prior_plan(world, op_name, setup, tool.diameter * 0.5) {
             Ok(p) => p,
             Err(e) => {
-                eprintln!("camcraft: {op_name}: the program ahead is unreadable for the rapid law, raw stock stands: {e}");
+                tracing::warn!(op = %op_name, "the program ahead is unreadable for the rapid law, raw stock stands: {e}");
                 None
             }
         }
@@ -327,6 +330,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         op_name: op_name.to_owned(),
         tool,
         body,
+        neck,
         lathe_body,
         tool_name: op.tool.clone(),
         params: op.params.clone(),

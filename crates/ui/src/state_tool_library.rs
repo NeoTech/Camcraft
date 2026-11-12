@@ -48,7 +48,7 @@ impl State {
         let planned = std::fs::read_to_string(path)
             .map_err(|e| e.to_string())
             .and_then(|text| tool_library::parse_tool_library(&text))
-            .and_then(|lib| ImportTools::new(&self.world, lib).map_err(|e| e.to_string()));
+            .and_then(|lib| ImportTools::with_mode(&self.world, lib, self.tool_import_mode).map_err(|e| e.to_string()));
         match planned {
             Ok(command) => {
                 let summary = command.report().summary();

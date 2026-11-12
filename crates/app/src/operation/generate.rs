@@ -39,8 +39,10 @@ pub fn run_job(mut job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
     // carried out through the same frame the path would have been.
     let frame = job.frame;
     // #835: a refusal naming the holder of a tool with a body says it
-    // judged the cylinder enclosing that body.
-    let (judged_tool, body) = (job.tool.clone(), job.body.clone());
+    // judged the cylinder enclosing that body - #842: only where it did,
+    // a body whose band stack does not fit the record.
+    let judged_tool = job.tool.clone();
+    let body = job.body.clone().filter(|p| super::body_judged::falls_back(&judged_tool, p));
     let _span = tracing::info_span!("generate", op = %job.op_name).entered();
     let started = crate::clock::Instant::now();
     tracing::debug!(kind = %kind, "generation started");
@@ -76,6 +78,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
     let GenJob {
         tool,
         body,
+        neck,
         lathe_body,
         tool_name,
         params,
@@ -111,13 +114,24 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         carried_overhang: _,
         op_name: _,
     } = job;
+    let geom = tool.geom();
+    // #368: what the fixture laws sweep above the shank.
+    // #852: and a necked tool's drawn shank beside it.
+    let holder = crate::tool_body::stack(&geom, body.as_ref()).with_neck(neck);
+    // #835: the cutter every stack law reads - its tip (M13.7) and,
+    // with a body, the same bands above the shank, never the cylinder
+    // enclosing them (#842: drill reach and the cross drill too).
+    let cutter = verify::Cutter::of(&tool).with_body(&geom, &holder);
     // The probe (#108) cuts nothing: its own protected-move law judges
     // the stylus against the model, and no cutting law or region applies.
     if matches!(params, OpParams::Probe { .. }) {
-        // #835: its stylus reads stem and holder as one band - a body is
-        // judged by the cylinder enclosing it, and the path says so.
-        let note = super::body_judged::probe_note(&tool, body.as_ref());
-        return super::probe_op::generate_probe(&params, &tool, hs.clearance, (&material.facets, material.excess)).map(|(mut p, w)| {
+        // #842: its stylus reads the body's bands above the stem; only a
+        // body that does not fit it is judged by the enclosing band, and
+        // the path says so.
+        let stack = body.as_ref().map(|_| &holder);
+        let enclosed = stack.is_some_and(|s| super::probe_op::stylus_cutter(&tool, Some(s)).body.is_none());
+        let note = super::body_judged::probe_note(&tool, body.as_ref().filter(|_| enclosed));
+        return super::probe_op::generate_probe(&params, &tool, stack, hs.clearance, (&material.facets, material.excess)).map(|(mut p, w)| {
             p.notes.extend(note);
             (p, w)
         });
@@ -156,8 +170,9 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
     // operation's setup's stock (M3.2 A), never a neighbor setup's
     // block, which is what the collect read of the setup's stock
     // entity guarantees.
-    let stock_region = stock_facets
-        .as_deref()
+    // #1066: a hole-list kind on the stock itself reads the unpunched stock.
+    let judged_stock = super::material_source::judged_stock(stock_facets.as_deref(), &src, &params, &material);
+    let stock_region = judged_stock
         .and_then(|f| slice::project(f, FOOTPRINT_SAMPLES).ok())
         .filter(|r| !r.is_empty());
     let stock_top_z =
@@ -298,7 +313,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 }
                 _ => None,
             };
-            let path = boundary_turn::turn_path(machining2d::face_over(&laid, &fparams, 0.0, solid.as_ref())?, -turn)?;
+            let path = boundary_turn::face_over_back(&laid, &fparams, 0.0, solid.as_ref(), turn)?;
             // M11.3 owed: the facer enters a radius off the footprint -
             // from air over the stock's edge; over the stock (an inner
             // patch) the entry runs on along its row out to air, or the
@@ -310,7 +325,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     path,
                     (stock_facets.as_deref(), m_gen, frame.as_ref()),
                     band.as_deref().unwrap_or(&[]),
-                    |lead| boundary_turn::turn_path(machining2d::face_over(&laid, &fparams, lead, solid.as_ref())?, -turn),
+                    |lead| boundary_turn::face_over_back(&laid, &fparams, lead, solid.as_ref(), turn),
                     d * 0.5,
                 )?
             };
@@ -1927,7 +1942,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     tool: &tool,
                     holes: cross,
                 };
-                super::cross_spindle::cross_drill(radial, &material.facets, stock_facets.as_deref(), wcs_origin, &tool_name)?
+                super::cross_spindle::cross_drill(radial, &material.facets, stock_facets.as_deref(), wcs_origin, &cutter, &tool_name)?
             } else {
                 // M13.5 A: on a plain lathe the Drill kind is the
                 // turret's axial hole - the doors refuse by name a
@@ -1955,7 +1970,15 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     // #89: a raw-stock refusal is re-read against what
                     // the setup's earlier operations left standing.
                     let reach = |prior| {
-                        super::drill_reach::axial_reach(&t, holes, &material.facets, stock_facets.as_deref(), prior, &tool, &tool_name)
+                        super::drill_reach::axial_reach(
+                            &t,
+                            holes,
+                            &material.facets,
+                            stock_facets.as_deref(),
+                            prior,
+                            (&tool, cutter.body.as_ref()),
+                            &tool_name,
+                        )
                     };
                     if let Err(raw) = reach(None) {
                         match verify_prior.get() {
@@ -2596,13 +2619,6 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
     // with the job (M5.3 B); the machine's own steel too: the
     // unstated-limit law means a file that names no spindle body adds
     // no band, exactly as it adds no feed or travel check.
-    let geom = tool.geom();
-    // #368: what the fixture laws sweep above the shank.
-    let holder = crate::tool_body::stack(&geom, body.as_ref());
-    // #835: the cutter every stack law reads - its tip (M13.7) and,
-    // with a body, the same bands above the shank, never the cylinder
-    // enclosing them.
-    let cutter = verify::Cutter::of(&tool).with_body(&geom, &holder);
     let fixture_boxes = fixtures;
     // #339 slice 5: an upright mill's links are planned over the steel -
     // a struck link rises over it, an unclearable one refuses by name.
@@ -3053,8 +3069,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     st_local = st_local.max(f.z_local(p));
                 }
             }
-            let stock_region_local = stock_facets
-                .as_deref()
+            let stock_region_local = judged_stock
                 .map(|t| f.local_facets(t))
                 .and_then(|t| slice::project(&t, FOOTPRINT_SAMPLES).ok())
                 .filter(|r| !r.is_empty());
