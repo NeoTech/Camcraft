@@ -196,6 +196,7 @@ pub use excess::excess_floor;
 pub use types::{FixturePart, Mode, VerifyContext, Warning};
 #[doc(hidden)]
 pub use crossing::{crossed_pairs, crossed_pairs_all};
+pub use laws::CROSSING_TOUCH;
 pub use engine::{verify, verify_bodies};
 pub use air::cuts_no_material;
 pub use prior::{acquit_by_prior, prior_surface};
