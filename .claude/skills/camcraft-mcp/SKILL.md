@@ -65,7 +65,7 @@ The server exposes tools across three modules in `crates/app/src/mcp/` (see `cra
 - `import_model { "path": string, "name"?: string }`: Import a mesh model (STEP, STL, OBJ). Re-importing with an existing name updates that model.
 - `move_model { "name": string, "position": [x, y, z], "rotation"?: [x, y, z, w] }`: Place and turn an imported part (mm, unit quaternion; omitted rotation keeps the current one). Undoable; reports where stock that follows the part ended up (#716).
 - `repair_model { "name": string, "weld_tol"?: number, "max_hole_edges"?: integer }`: Weld vertices (default 0.001 mm), drop degenerate or duplicate triangles and fill open loops of at most `max_hole_edges` edges (default 256); reports the counts (#717).
-- `get_job {}`: Dump the entire document state (setups, stock, WCS, models, tools, operations, status).
+- `get_job {}`: Dump the entire document state (setups, stock, WCS, models, tools, operations, status), and each setup's `workholding_max_rpm` (its stated limit, or `null`).
 - `undo {}`: Undo the last mutating document command.
 - `redo {}`: Redo the last undone command.
 
@@ -75,6 +75,7 @@ The server exposes tools across three modules in `crates/app/src/mcp/` (see `cra
 - `set_wcs { "origin"?: [x, y, z], "stock_point"?: string, "offset"?: [dx, dy, dz], "rotation"?: [qx, qy, qz, qw] }`: Place the active setup's WCS origin and orientation quaternion.
 - `set_work_offset { "word": "G54" | "G55" | ... | "G59" | null, "setup"?: string }`: Set the posted G-code fixture coordinate word (G54–G59); `null` clears it.
 - `load_machine { "builtin"?: string, "path"?: string, "clear"?: boolean, "setup"?: string }`: Mount a machine configuration at document or setup level: a built-in preset by name (`"VMC 3-axis"`, `"Lathe"`, the Tormach models, ...) or a `.mch` file by path; `clear: true` mounts none.
+- `set_workholding_max_rpm { "max_rpm": number | null, "setup"?: string }`: State the rated maximum rpm of a setup's chuck or collet; `null` clears it. Refused with a named error: a missing or non-numeric value, zero, negative or non-finite numbers, anything under 1 rpm or over 100000 rpm, an unknown setup, and a value the setup already states. `setup` defaults to the active one. One undo step. At post time, a constant-rpm (G97) turning operation faster than the limit is refused by name, and a constant-surface-speed (G96) section's rpm ceiling is capped at it (Fanuc `G50 S`, Tormach `G96 D`).
 
 ### 3. Fixtures & Workholding (`fixture_tools.rs`, #181)
 - `add_fixture { "model": string, "setup"?: string }`: Tag an imported model as fixture steel for collision checking.
@@ -84,10 +85,15 @@ The server exposes tools across three modules in `crates/app/src/mcp/` (see `cra
 
 ### 4. Stock & Tool Management (`tools.rs`, `edit.rs`, #355)
 - `set_stock { "box"?: { "dx", "dy", "dz" }, "cylinder"?: { "diameter", "height" }, "from_model"?: string }`: Define setup stock as a box in mm (centred in XY, z from 0 to `dz`), a cylinder, or a copy of a model's mesh.
+- `set_raw_stock_only { "on": boolean }`: For a stock made from a model (`set_stock` `from_model`), say whether that source model is raw stock only - a casting or blank you cut into, not the finished part. Default off: the model is judged like every model. On: the gouge verdict leaves it out. One undo step. Refused by name when there is no stock yet ("set the stock first"), when the stock is not made from a model, or when the source model has no geometry. The mark holds only while the model is still the stock's source and its geometry and placement (position and rotation) are unchanged, so moving or turning the model voids it; otherwise it is ignored and the post says so by name. An operation that machines the model (as its source or in a boundary pick) puts it back in the verdict. If the mark leaves nothing to judge, the post is refused by name.
 - `list_tool_catalog {}`: List built-in tool definitions.
 - `add_tool { "catalog"?: string, "definition"?: object, "name"?: string }`: Add a tool: a copy of a `list_tool_catalog` entry, or a full definition (`get_job`'s tool shape); `name` defaults to the catalog name.
+- `list_holder_library {}`: List the built-in holders (BT30/BT40/CAT40 with ER or Weldon, standalone ER chucks) with dimensions and the shanks each takes.
+- `set_tool_holder { "tool": string, "library"?: string, "gauge_len"?: number, "projection"?: number, "points"?: [{z, r, arc?}], "clear"?: bool }`: Set a tool's holder from a library entry, a drawn spun profile, or back to the cylinder (exactly one of `library`/`points`/`clear`); one undo step. `get_job` shows it as each tool's `holder`.
 - `set_tool { "operation": string, "tool": string }`: Assign a document tool to an operation.
-- `import_tool_library { "path": string }`: Import tools from a `.camtools` library file.
+- `get_tool_cutter_profile { "tool": string }`: Read a milling tool's cutter, neck and shank as a spun half-outline: points `[z, r, arc]` from the tip (z = 0, on the axis) up to the shank top (`arc` = 0 for a straight segment, else the signed radius of an arc to the next point). `drawn` says whether it is a hand-drawn outline or the one the tool's numbers draw. Turning tools have none.
+- `set_tool_cutter_profile { "tool": string, "points": [[z, r] | [z, r, arc], ...] | null }`: Set a milling tool's drawn cutter outline (tip-up, closed to the axis at both ends), or clear it with `null` (back to the outline its numbers draw). The outline must agree with the tool's numbers (reach exactly the stated diameter within the flute length, end at flute + shank length, not exceed the cutter or shank width above the flutes, not fold over itself), else it is refused by name. Display only: toolpaths and checks keep reading the numbers. One undoable step.
+- `import_tool_library { "path": string, "mode"?: "add"|"update"|"replace", "holders"?: bool }`: Import tools from a `.camtools` library file as one undo step. `mode` (#899, default add) decides what a same-named document tool does: add skips an identical one and renames a different one, update takes the file's definition in place (operations go Stale), replace also removes tools the file lacks unless an operation uses one. `holders` (default true, #889) takes each tool's holder body from the file (a tool's `definition.body`, the `.camproj` tool body shape); in update/replace a changed body is gated like any change and stales the operations using it. false lands new tools with their holder cylinder only and leaves existing tools' bodies as they are. A body that is malformed or no longer fits its tool refuses the file naming the tool. The reply adds `holders` (bodies landed) and `holders_left_out`.
 - `export_tool_library { "path": string }`: Export document tools to a `.camtools` library file.
 
 ### 5. Operations & Geometric Features (`tools.rs`, `pick.rs`, `area.rs`, `features.rs`, #180, #312)
@@ -138,11 +144,11 @@ The following capabilities exist in the GUI or app command layer but do not yet 
 4. **STEP Vendor Tool Body Attachment (`SetToolBody`, #368, #370):**
    - Attaching and aligning vendor STEP models to tool holders is supported in the tool editor GUI, but lacks an MCP command wrapper.
 
-*Note:* Several remaining gaps above are tracked under dedicated milestone and feature issues (e.g. #258 program headers, #370 tool body alignment, #511 the UI's pocket recognition entry point). Per `AGENTS.md`, any future command PR that does not bundle an MCP tool must file a corresponding `source:agent` issue titled `MCP: <command>`, labelled `P1` and `area:mcp`.
+*Note:* Several remaining gaps above are tracked under dedicated milestone and feature issues (e.g. #258 program headers, #370 tool body alignment, #511 the UI's pocket recognition entry point). Per `AGENTS.md`, any future command PR that does not bundle an MCP tool must file a corresponding `source:agent` issue titled `MCP: <command>`, labelled `P5` and `area:mcp`.
 
 ---
 
 ## Rule for Contributors
 
 Per `AGENTS.md` ("Everything Is a Command"):
-> A PR that adds a user-facing command also adds its MCP tool (and script verb where it fits) in `crates/app/src/mcp/`, or files a `source:agent` follow-up issue `MCP: <command>` (labels `P1`, `area:mcp`) and names it in the PR body.
+> A PR that adds a user-facing command also adds its MCP tool (and script verb where it fits) in `crates/app/src/mcp/`, or files a `source:agent` follow-up issue `MCP: <command>` (labels `P5`, `area:mcp`) and names it in the PR body.

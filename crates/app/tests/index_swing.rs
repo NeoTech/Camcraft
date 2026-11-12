@@ -303,6 +303,8 @@ fn a_standing_fixture_under_the_work_is_judged_by_its_distance_from_the_line() {
     stand(&world, "low plate", Point3::new(-30.0, -50.0, -35.0), Point3::new(-10.0, 50.0, -25.0));
     // A block whose top is 15 mm under the line, but beside the bar in X.
     stand(&world, "beside", Point3::new(5.0, -50.0, -35.0), Point3::new(30.0, 50.0, -15.0));
+    // A block that only touches the bar's end face (x = 0) is beside it too.
+    stand(&world, "touching", Point3::new(0.0, -50.0, -35.0), Point3::new(10.0, 50.0, -12.0));
     assert!(standing_lines(&world).is_empty(), "{:?}", verification_gate(&world));
     // A riser whose top is 15 mm under the line, under the bar: struck.
     stand(&world, "riser", Point3::new(-30.0, -50.0, -35.0), Point3::new(-20.0, 50.0, -15.0));

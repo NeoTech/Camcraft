@@ -49,6 +49,25 @@ or section start leaves it at, so every index is judged as a full swing.
   is topped at the Z travel minimum, which says nothing about where the
   rotary's centerline stands.
 
+**Re-derived on #818's lines (rework of PR #1133, 2026-11-12).** Main's
+#818 judges the tool half about any level line (A about X, B about Y, a
+stated level vector) and, with two rotaries turning the work, about the
+WCS origin. The standing half now follows the same verdict, not a
+private "A about X" gate, so no line main judges is skipped in silence:
+- *One level line `u`:* the work's span is taken along `u`, a fixed
+  fixture is beside it when its span along `u` misses the work's, and
+  its distance is the box distance in `(s, z)` (`s` along `u x Z`). For
+  X and Y this is exact on a box; off both it bounds the fixture's
+  points from below, so it can only refuse more. Chosen over naming an
+  off-axis line not judged: the bound is cheap and never clears falsely.
+- *Stacked rotaries:* a fixed fixture is judged by its box distance from
+  the WCS origin against the sweep about the origin (the same sphere the
+  tool half uses); a box holding the origin is named not judged. The
+  face is named not judged: with a rotary riding on another, which face
+  stands still and how far down is not stated by one `axis_to_table`.
+  Dropped: refusing stacked machines outright (blocks every trunnion
+  file over a face the file cannot describe yet).
+
 **Left open.** #1082's subplate is covered by the law above with no extra
 work (it lifts the line with the rotary). The review's other gap (a
 rotary standing on a plate with no subplate gets no note on the tool
