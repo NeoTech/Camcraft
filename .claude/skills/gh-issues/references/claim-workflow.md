@@ -6,8 +6,10 @@ CONTRIBUTING.md), follow that instead - it wins on every point.
 
 ## Labels
 
-- One priority: `P0` (wrong output, data loss, crash, security) > `P1`
-  (wrong behaviour a user hits) > `P2` (owed polish, enhancements).
+- One priority, `P1`..`P9`, lower number first: `P1` (wrong output, data
+  loss, crash, security) > `P2` (main broken) > `P3` (wrong behaviour a user
+  hits) > ... > `P7` (owed polish) > `P9` (someday). AGENTS.md "Priorities"
+  has the full table.
 - One or more `area:*`.
 - Workflow: `claimed` (someone is on it), `blocked` (can't proceed; say on
   what), `wontfix`.
