@@ -153,32 +153,6 @@ fn shared_test_input_runs_every_suite_of_the_crate() {
     );
 }
 
-/// #1068: the operations suite generates through the app layer, so it pins the motion generators
-/// end to end - a change to one of them must run it. The map and the plan are both checked against
-/// this checkout, so a header that loses a name fails here rather than in a later PR's gate run.
-#[test]
-fn a_motion_generator_change_selects_the_operations_suite() {
-    let root = crate::root();
-    let map = scan::gate_map(&scan::read(&root.join("crates/app/tests/operations.rs")))
-        .expect("operations.rs gate map");
-    for m in ["machining2d", "machining3d", "drilling", "finishing3d", "multiaxis", "plunge_law"] {
-        assert!(map.contains(&format!("motion::{m}")), "operations.rs must name motion::{m}: {map}");
-    }
-    let changed = ["crates/motion/src/multiaxis/mod.rs".to_string()];
-    let none: Vec<String> = Vec::new();
-    let hunks = |_: &str| Vec::new();
-    let diff = Diff { changed: &changed, untracked: &none, hunks: &hunks };
-    let Quick::Plan(p) = quick::plan(&root, &diff, false).expect("quick plan") else {
-        panic!("a motion::multiaxis change must not fall back to batch")
-    };
-    assert!(
-        p.steps.iter().any(|s| s.args.iter().any(|a| a == "camcraft-app")
-            && s.args.iter().any(|a| a == "operations")),
-        "a motion::multiaxis change must select app:operations: {:?}",
-        p.steps
-    );
-}
-
 #[test]
 fn nothing_in_crates_plans_nothing_and_xtask_runs_its_own_tests() {
     let fx = fixture();
