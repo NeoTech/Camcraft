@@ -222,3 +222,31 @@ fn mismatched_profiles_and_steep_rulings_are_refused_by_name() {
     let why = refusal(&up, &lo, &WireRuled { tolerance: f64::NAN, ..r });
     assert!(why.contains("tolerance"), "{why}");
 }
+
+/// The die side: the wire runs inside both profiles of a conical
+/// opening, every ruling leaning by the cone's angle, and the widening
+/// is a constant taper's `1 / cos(angle)` - nothing more.
+#[test]
+fn a_conical_die_runs_inside_both_profiles() {
+    let (up, lo) = (round(8.0, 64), round(10.0, 64));
+    let p = WireParams { side: WireSide::Die, start: Some(Point2::new(-3.0, 0.0)), ..params() };
+    let path = wire_contour_ruled(
+        WireProfile { loops: std::slice::from_ref(&up), chains: &[] },
+        WireProfile { loops: std::slice::from_ref(&lo), chains: &[] },
+        &p,
+        &ruled(WirePairing::ArcLength),
+    )
+    .expect("a conical die generates");
+    let angle = (2.0f64 / H).atan();
+    let facet = (std::f64::consts::PI / 64.0).cos();
+    let wide = K / angle.cos() + 0.02;
+    for (l, u) in &rulings(&path) {
+        // Inside both profiles, by the kerf offset widened for the lean.
+        let (rl, ru) = (l.x.hypot(l.y), u.x.hypot(u.y));
+        assert!(rl < 10.0 - K && ru < 8.0 - K, "{rl} {ru}");
+        assert!(rl > 10.0 * facet - wide && ru > 8.0 * facet - wide, "{rl} {ru}");
+    }
+    let cut = &path.moves[..path.moves.len() - 1];
+    let lean = |a: [f64; 3]| a[0].hypot(a[1]).atan2(a[2]);
+    assert!(cut.iter().all(|m| m.axis.is_some_and(|a| (lean(a) - angle).abs() < 2e-3)), "every ruling leans the cone's angle");
+}
