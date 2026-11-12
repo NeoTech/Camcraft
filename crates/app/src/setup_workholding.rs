@@ -107,11 +107,14 @@ fn work_speed(world: &World, declared: Option<&str>, voice: WorkVoice, e: &flecs
         (WorkVoice::WorkSpindle, Some(LatheVoice::WorkSpindle)) => WorkSpeed::Stated,
         // The lathe door refuses it by name before a line is posted.
         (WorkVoice::WorkSpindle, Some(LatheVoice::Refused(_))) => WorkSpeed::Not,
-        // A script that states no dialect (#1199): the lathe door does
-        // not fire for it, so every plain section may reach the work
-        // spindle - the stricter reading, judged while a limit is
-        // stated. Whoever settles #1199 changes this arm together with
-        // `lathe_voice::at_post`, which reads the same mask.
+        // A script that states no dialect (#1199): on a lathe or a
+        // mill-turn `lathe_voice::at_post` refuses every section of it
+        // but a C one (the arm above) by name, before this limit is
+        // judged at post; this arm speaks there only where the limit is
+        // read outside a post (the program gate). On a mill or with no machine
+        // the door passes it and no chuck turns, but the stricter
+        // reading stands: judged while a limit is stated. Change it
+        // together with `at_post`, which reads the same mask.
         (WorkVoice::Undeclared, Some(_)) => WorkSpeed::Stated,
         // A milling post: its S drives the tool spindle - on a mill. On a
         // lathe or mill-turn a work-spindle section (a turning kind, an
