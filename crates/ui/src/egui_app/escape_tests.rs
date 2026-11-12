@@ -7,6 +7,8 @@
 //! No pixels (the snapshot lane is release).
 //! Provenance: our own tests over our own shell; no vendor material.
 
+use std::path::PathBuf;
+
 use egui::{Event, Key, Modifiers, Vec2};
 use egui_kittest::Harness;
 
@@ -54,18 +56,39 @@ fn library_file_written(state: &State) -> bool {
     state.fixture_library_path().is_ok_and(|p| p.exists())
 }
 
+/// Put a pending, unapplied edit in the open fixture Save draft.
+const PENDING_NOTE: &str = "pending edit, must not apply";
+
+fn set_draft_note(h: &mut Harness<'static, State>) {
+    if let Some(FixtureLibDialog::Save(draft)) = h.state_mut().fixture_lib.as_mut() {
+        draft.note = PENDING_NOTE.to_string();
+    }
+}
+
+fn draft_note(state: &State) -> Option<&str> {
+    match state.fixture_lib.as_ref() {
+        Some(FixtureLibDialog::Save(draft)) => Some(draft.note.as_str()),
+        _ => None,
+    }
+}
+
 #[test]
 fn escape_closes_only_the_topmost_dialog_per_press() {
     let mut state = fresh_state("topmost");
     state.pending.push_back(CommandKind::FixtureLibrarySaveDialog(String::new()));
     state.drain_actions();
     state.unsaved_prompt = Some(CommandKind::NewDocument);
+    let open_doc = PathBuf::from("open-document.camcraft");
+    state.project_path = Some(open_doc.clone());
 
     let mut h = harness(state);
     h.run_steps(2);
+    set_draft_note(&mut h);
     press_escape(&mut h);
     assert!(h.state().unsaved_prompt.is_none(), "the topmost prompt closes");
     assert_eq!(h.state().status, "cancelled - the document stays open");
+    assert_eq!(h.state().project_path.as_deref(), Some(open_doc.as_path()), "the same document is still open");
+    assert_eq!(draft_note(h.state()), Some(PENDING_NOTE), "the fixture draft is unchanged by the first press");
     assert!(matches!(h.state().fixture_lib, Some(FixtureLibDialog::Save(_))), "one press closes one dialog");
 
     press_escape(&mut h);
@@ -80,9 +103,11 @@ fn escape_closes_the_fixture_dialog_without_applying() {
     state.drain_actions();
     let mut h = harness(state);
     h.run_steps(2);
+    set_draft_note(&mut h);
+    assert_eq!(draft_note(h.state()), Some(PENDING_NOTE), "the edit is in the draft before Escape");
     press_escape(&mut h);
 
-    assert!(h.state().fixture_lib.is_none(), "Escape closes the dialog");
+    assert!(h.state().fixture_lib.is_none(), "Escape closes the dialog and its draft with it");
     assert!(!library_file_written(h.state()), "Escape applies nothing: no library file");
     assert_eq!(h.state().status, "ready");
 }
