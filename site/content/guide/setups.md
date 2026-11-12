@@ -71,3 +71,6 @@ checked against its own machine.
 The Setups page lists each setup's tools in change order, with cut and
 rapid lengths and the estimated time. **Export setup sheets…** writes one
 text page per setup. Posting does not write them.
+
+For which unit and zero every number uses, see
+[Units and coordinates](@/guide/units-and-coordinates.md).

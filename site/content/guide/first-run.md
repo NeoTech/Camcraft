@@ -71,3 +71,6 @@ Every change to the document is a command, so Ctrl+Z and Ctrl+Y step
 through all of it: imports, stock, tools, operation settings, setups and
 theme changes. Moving the view, hovering and the simulation's playback
 position are not part of the history.
+
+Before you import a model, read [Units and coordinates](@/guide/units-and-coordinates.md): an
+STL or OBJ file has no unit, and a 25.4 times error is easy to miss.
