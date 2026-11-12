@@ -44,6 +44,9 @@ pub const BUILTINS: &[(&str, &str)] = &[
     // #671: the plasma dialect, from UM10720 §6-7 and the PathPilot
     // post guidelines; it serves plasma tables only (`PLASMA_POSTS`).
     ("Tormach PathPilot Plasma", include_str!("../../../assets/posts/tormach-plasma.cps")),
+    // #533: the generic RS-274 wire EDM post; every EDM code is the
+    // machine's `edm.codes` (#290 D5). It serves wire EDMs only.
+    ("Generic ISO Wire EDM", include_str!("../../../assets/posts/wire-iso.cps")),
 ];
 
 /// The registry entries that speak TURNING (M13.5): X as a diameter
@@ -58,6 +61,11 @@ pub const LATHE_POSTS: &[&str] = &["Fanuc Lathe", "Tormach PathPilot Lathe"];
 /// serves one (a torch has no spindle for their S/M3).
 pub const PLASMA_POSTS: &[&str] = &["Tormach PathPilot Plasma"];
 
+/// The registry entries that speak WIRE EDM (#533): RS-274 motion with
+/// the control's own codes from the machine file. They serve wire EDMs
+/// only, and no cutting post serves one.
+pub const WIRE_POSTS: &[&str] = &["Generic ISO Wire EDM"];
+
 /// Whether a registry entry can post programs for a machine of this
 /// kind: a lathe post serves lathes and mill-turns, a mill post serves
 /// mills and mill-turns. A mismatched choice is not refused here (a
@@ -68,15 +76,18 @@ pub fn post_serves(name: &str, kind: crate::machine::Kind) -> bool {
     use crate::machine::Kind;
     let lathe_post = LATHE_POSTS.contains(&name);
     let plasma_post = PLASMA_POSTS.contains(&name);
+    let wire_post = WIRE_POSTS.contains(&name);
     match kind {
-        Kind::Mill => !lathe_post && !plasma_post,
+        Kind::Mill => !lathe_post && !plasma_post && !wire_post,
         Kind::Lathe => lathe_post,
-        Kind::MillTurn => !plasma_post,
+        Kind::MillTurn => !plasma_post && !wire_post,
         // #669: a cutting post would write spindle words a torch has not.
         Kind::Plasma => plasma_post,
-        // #530: no EDM post ships yet (#533, #542); no milling or
-        // turning dialect speaks to an EDM control.
-        Kind::WireEdm | Kind::SinkerEdm => false,
+        // #533: the wire post serves wire EDMs; no milling or turning
+        // dialect speaks to an EDM control.
+        Kind::WireEdm => wire_post,
+        // #530: no sinker post ships yet (#542).
+        Kind::SinkerEdm => false,
     }
 }
 
@@ -93,6 +104,10 @@ pub fn default_post_for(kind: crate::machine::Kind) -> PostRef {
             .map_or(PostRef::Builtin, |n| PostRef::Named((*n).to_owned())),
         // #669/#671: the first plasma post (PathPilot's, for the 1300PL).
         crate::machine::Kind::Plasma => PLASMA_POSTS
+            .first()
+            .map_or(PostRef::Builtin, |n| PostRef::Named((*n).to_owned())),
+        // #533: the generic wire post.
+        crate::machine::Kind::WireEdm => WIRE_POSTS
             .first()
             .map_or(PostRef::Builtin, |n| PostRef::Named((*n).to_owned())),
         _ => PostRef::Builtin,
@@ -129,6 +144,8 @@ pub fn post_offer(world: &World) -> Option<(&'static str, PostRef)> {
         "lathe"
     } else if PLASMA_POSTS.contains(&name) {
         "plasma"
+    } else if WIRE_POSTS.contains(&name) {
+        "wire EDM"
     } else {
         "mill"
     };
@@ -382,6 +399,8 @@ mod sim_clause_impl;
 #[path = "posting_plasma.rs"]
 mod plasma_clause_impl;
 pub use plasma_clause_impl::{plasma_clause, PlasmaClause, PLASMA_VERDICT};
+#[path = "posting_wire.rs"]
+mod wire;
 #[path = "posting_per_op.rs"]
 mod per_op;
 #[path = "posting_suppressed.rs"]
@@ -822,12 +841,13 @@ pub fn op_streams(world: &World) -> Result<Vec<(String, Vec<cnc::Record>)>, Stri
                     machine.label()
                 ));
             }
-            // #532: a wire EDM kind posts through a wire EDM post, and
-            // none is built yet - refused by name, never posted in a
-            // cutting dialect (and before any tool is read: it has none).
-            if !op.params.kind().info().mounts_tool() {
+            // #532/#533: an op that mounts no tool posts only as its own
+            // kind's section - the Wire Contour's (`posting_wire`), whose
+            // condition word only a wire EDM post voices; any other
+            // tool-less kind is refused by name, never posted.
+            if !op.params.kind().info().mounts_tool() && !matches!(op.params, OpParams::WireContour(_)) {
                 return Err(format!(
-                    "{name}: a {} operation posts through a wire EDM post, which is not built yet - nothing is posted",
+                    "{name}: a {} operation has no post section yet - nothing is posted",
                     op.params.kind()
                 ));
             }
@@ -846,6 +866,11 @@ pub fn op_streams(world: &World) -> Result<Vec<(String, Vec<cnc::Record>)>, Stri
             .ok_or_else(|| format!("{name}: lost its operation"))?;
         let cache = model::toolpath_of(world, e)
             .ok_or_else(|| format!("{name}: lost its toolpath"))?;
+        if let OpParams::WireContour(p) = &op.params {
+            let after = afters.get(name).copied().unwrap_or_default();
+            streams.push((name.clone(), wire::stream(world, name, e, &op, &cache, p, after)?));
+            continue;
+        }
         let tool = model::find_by_name(world, &op.tool)
             .and_then(|t| model::tool_of(world, &t))
             .ok_or_else(|| format!("{name}: tool {} is not in the library", op.tool))?;
