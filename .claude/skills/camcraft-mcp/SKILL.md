@@ -87,6 +87,8 @@ The server exposes tools across three modules in `crates/app/src/mcp/` (see `cra
 - `list_tool_catalog {}`: List built-in tool definitions.
 - `add_tool { "catalog"?: string, "definition"?: object, "name"?: string }`: Add a tool: a copy of a `list_tool_catalog` entry, or a full definition (`get_job`'s tool shape); `name` defaults to the catalog name.
 - `set_tool { "operation": string, "tool": string }`: Assign a document tool to an operation.
+- `get_tool_cutter_profile { "tool": string }`: Read a milling tool's cutter, neck and shank as a spun half-outline: points `[z, r, arc]` from the tip (z = 0, on the axis) up to the shank top (`arc` = 0 for a straight segment, else the signed radius of an arc to the next point). `drawn` says whether it is a hand-drawn outline or the one the tool's numbers draw. Turning tools have none.
+- `set_tool_cutter_profile { "tool": string, "points": [[z, r] | [z, r, arc], ...] | null }`: Set a milling tool's drawn cutter outline (tip-up, closed to the axis at both ends), or clear it with `null` (back to the outline its numbers draw). The outline must agree with the tool's numbers (reach exactly the stated diameter within the flute length, end at flute + shank length, not exceed the cutter or shank width above the flutes, not fold over itself), else it is refused by name. Display only: toolpaths and checks keep reading the numbers. One undoable step.
 - `import_tool_library { "path": string }`: Import tools from a `.camtools` library file.
 - `export_tool_library { "path": string }`: Export document tools to a `.camtools` library file.
 
