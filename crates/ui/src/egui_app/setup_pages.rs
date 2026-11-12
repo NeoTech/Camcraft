@@ -210,7 +210,7 @@ fn tool_table(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
     let names: Vec<String> = used.iter().map(|(t, _)| t.clone()).collect();
     if let Some(why) = tool_numbers::clash(&state.world, &names) {
         let ink = super::colorvision::text_inks(ui, &state.world).error;
-        ui.colored_label(ink, why);
+        super::error_text::error_text(ui, ink, &why);
     }
     if let Some(tool) = open {
         crate::actions::open_tool_editor(state, &tool);
