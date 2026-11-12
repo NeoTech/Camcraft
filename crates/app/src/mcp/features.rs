@@ -11,13 +11,15 @@
 use super::pick::{feature_id, req_model};
 use super::tools::req_str;
 use crate::geometry::feature::{self, FaceKind, Features, LoopKind};
-use crate::geometry::{transform_point, Point3, Triangle};
+use crate::geometry::{transform_point, Point3};
 use crate::model;
-use crate::operation::FeatureSel;
+use crate::operation::{FeatureSel, GeoSel};
+use crate::pick::align::outward_normal;
 use crate::pick::{FeatureGraph, feature_chains, feature_graph_shared};
 use crate::schema::Location;
 use crate::script::{fnum, Env};
 
+use flecs_ecs::prelude::World;
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 
@@ -123,22 +125,21 @@ fn loop_view(lp: &feature::Loop, by_edge: &HashMap<(u32, u32), u64>, loc: &Locat
     })
 }
 
-/// #884: the face's plane normal is sign-canonical (winding-free), so a
-/// bottom cap and a top cap share one normal. Flip it to the outward side
-/// the facets' winding gives; a face whose winding sums to nothing (open or
-/// inconsistent shell) keeps the canonical normal.
-fn outward(fa: &feature::Face, tris: &[Triangle]) -> [f64; 3] {
-    let n = fa.normal;
-    let mut dot = 0.0;
-    for t in fa.facets.iter().filter_map(|&i| tris.get(i as usize)) {
-        let (u, v) = (t.b - t.a, t.c - t.a);
-        let c = [u.y * v.z - u.z * v.y, u.z * v.x - u.x * v.z, u.x * v.y - u.y * v.x];
-        dot += c[0] * n[0] + c[1] * n[1] + c[2] * n[2];
+/// #884, #956: the face's outward unit normal where the part sits. The
+/// plane normal is sign-canonical (winding-free), so a bottom cap and a top
+/// cap share one; `pick::align::outward_normal` (the WCS picks' helper)
+/// flips it to the facets' outside and turns it by the part's placement.
+/// Where it refuses (an open or inside-out shell, no usable plane) the row
+/// keeps the canonical normal, placed - a listing must not fail on one face.
+fn outward(w: &World, model: &str, fa: &feature::Face, loc: &Location) -> [f64; 3] {
+    let sel = GeoSel { entity: model.to_owned(), feature: FeatureSel::Face(fa.id) };
+    match outward_normal(w, &sel, model::transform_of) {
+        Ok(Some(n)) => n,
+        _ => world_dir(loc, fa.normal),
     }
-    if dot < 0.0 { [-n[0], -n[1], -n[2]] } else { n }
 }
 
-fn faces_view(g: &FeatureGraph, tris: &[Triangle], loc: &Location, limit: usize) -> (Vec<Value>, usize) {
+fn faces_view(w: &World, name: &str, g: &FeatureGraph, loc: &Location, limit: usize) -> (Vec<Value>, usize) {
     let f = &*g.features;
     let by_edge = edge_chains(g);
     // Strip -> welded smooth face, so a strip names the logical face too.
@@ -153,7 +154,7 @@ fn faces_view(g: &FeatureGraph, tris: &[Triangle], loc: &Location, limit: usize)
         .iter()
         .take(limit)
         .map(|fa| {
-            let n = world_dir(loc, outward(fa, tris));
+            let n = outward(w, name, fa, loc);
             let verts = fa.loops.iter().flat_map(|l| l.verts.iter()).filter_map(|&v| f.verts.get(v as usize).copied());
             json!({
                 "id": feature_id(FeatureSel::Face(fa.id)),
@@ -266,7 +267,7 @@ pub(super) fn list_features(env: &mut Env, a: &Map<String, Value>) -> Result<Val
     let mut truncated = false;
     for k in kinds {
         let (rows, total) = match k {
-            "faces" => faces_view(&g, &tris, &loc, limit),
+            "faces" => faces_view(w, name, &g, &loc, limit),
             "chains" => chains_view(&g, &loc, limit),
             "patches" => patches_view(f, limit),
             _ => vertices_view(&g, &loc, limit),

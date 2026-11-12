@@ -423,3 +423,34 @@ fn list_features_facing_follows_the_outward_side() {
     assert_eq!((n("up"), n("down"), n("side")), (1, 1, 4), "{f}");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// #956: the listed normal and facing are read where the part sits. The
+/// boss turned 90 degrees about Y lies on its side (its bottom cap looks
+/// -X, its top +X, both "side"); turned 180 degrees its bottom cap looks
+/// up and its top down.
+#[test]
+fn list_features_normal_follows_the_part_placement() {
+    let dir = std::env::temp_dir().join(format!("cc_placed_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("dir");
+    let boss = dir.join("boss.stl");
+    write_boss_stl(&boss);
+    let mut c = Client::new();
+    let part = c.ok("import_model", json!({ "path": boss.display().to_string() }))["model"].as_str().expect("name").to_owned();
+    let caps = |c: &mut Client| -> Vec<Value> {
+        let f = c.ok("list_features", json!({ "model": part, "kinds": ["faces"] }));
+        let mut flat: Vec<Value> = f["faces"].as_array().expect("faces").iter().filter(|fa| fa["normal"][2].as_f64().is_some()).cloned().collect();
+        flat.retain(|fa| fa["area"].as_f64().is_some_and(|a| a > 100.0));
+        flat
+    };
+    let facings = |fs: &[Value], w: &str| fs.iter().filter(|fa| fa["facing"] == json!(w)).count();
+    let h = std::f64::consts::FRAC_1_SQRT_2;
+    c.ok("move_model", json!({ "name": part, "position": [0.0, 0.0, 0.0], "rotation": [0.0, h, 0.0, h] }));
+    let side = caps(&mut c);
+    assert_eq!(facings(&side, "side"), side.len(), "on its side every cap reads side: {side:?}");
+    let x: Vec<f64> = side.iter().filter_map(|fa| fa["normal"][0].as_f64()).collect();
+    assert!(x.iter().any(|v| *v < -0.999) && x.iter().any(|v| *v > 0.999), "caps look -X and +X: {x:?}");
+    c.ok("move_model", json!({ "name": part, "position": [0.0, 0.0, 0.0], "rotation": [0.0, 1.0, 0.0, 0.0] }));
+    let flipped = caps(&mut c);
+    assert_eq!((facings(&flipped, "up"), facings(&flipped, "down")), (1, 1), "{flipped:?}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
