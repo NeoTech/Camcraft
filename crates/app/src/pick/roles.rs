@@ -136,8 +136,10 @@ pub fn align_roles(world: &World, picks: &[(GeoSel, Role)]) -> Result<Alignment,
             (x, cross(a, x), a)
         }
         (Role::Z, Role::Y) => {
-            let x = square_to(g2, d2.dir, a, tilt)?;
-            (x, a, cross(x, a))
+            // #937: the first pick is Z and stays Z; the second is Y,
+            // squared to it, and X closes the frame (y x z).
+            let y = square_to(g2, d2.dir, a, tilt)?;
+            (cross(y, a), y, a)
         }
         (Role::X, Role::Z) => {
             let z = square_to(g2, d2.dir, a, tilt)?;
