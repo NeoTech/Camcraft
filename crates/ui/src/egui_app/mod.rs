@@ -121,6 +121,7 @@ pub(crate) use pockets_page::row_text as pockets_row_text;
 mod probe_page;
 // #670: the Plasma Profile's page.
 mod plasma_page;
+mod wire_page;
 mod trochoid_page;
 mod kind_editors;
 mod mill2d_more_page;
@@ -178,6 +179,8 @@ pub mod theme_files;
 // digest straight (the imgui panels' fold checks moved there at M-g), and
 // the view cube's pick law straight.
 pub(crate) mod viewcube;
+pub(crate) mod viewport_bar;
+pub(crate) mod viewport_layout;
 pub(crate) mod world;
 
 #[cfg(test)]

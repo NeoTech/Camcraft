@@ -103,6 +103,13 @@ fn fit_under_stock(
     let vp = fixture::def_of(world, &entity)
         .and_then(|d| d.vise)
         .ok_or_else(|| CommandError::Invalid(format!("'{vise}' is not a built-in vise")))?;
+    // A grip jaw's frame z = 0 is its ledge, not the floor: a fit from
+    // the floor would stand the stock clear of the jaws (#1274 review).
+    if vp.seat_height() > 0.0 {
+        return Err(CommandError::Invalid(format!(
+            "'{vise}' is a grip-jaw vise: it seats the stock on its steps, parallels do not go under it"
+        )));
+    }
     let pose = model::transform_of(world, &entity).unwrap_or_default();
     let stock = model::stock_world_aabb_for(world, setup)
         .ok_or_else(|| CommandError::Needs(crate::vise_fit::no_stock_message(setup, "the parallels under")))?;
