@@ -166,6 +166,7 @@ mod turning_feeds;
 mod turning_holder;
 pub(crate) use turning_holder::body_axes as lathe_body_axes;
 mod turning_holder_scene;
+mod turning_holder_side;
 mod turning_outline;
 mod turning_rapids;
 mod turning_stock;
