@@ -54,7 +54,6 @@ use crate::machining2d::GenError;
 
 use super::blade;
 use super::infeed::{InfeedMethod, ThreadInfeed};
-use super::profile;
 use super::revolve;
 use super::stock::StockEnv;
 use super::thread_cycle;
