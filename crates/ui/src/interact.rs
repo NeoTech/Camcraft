@@ -1268,7 +1268,9 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
         // The probe travels at its clearance plane only (#108), and
         // so does the torch between contours (#670).
         | operation::OpParams::Probe { .. }
-        | operation::OpParams::PlasmaProfile(_) => None,
+        | operation::OpParams::PlasmaProfile(_)
+        // The wire never lifts out of the work (#532): no hop plane.
+        | operation::OpParams::WireContour(_) => None,
     };
     if let Some(hop) = hop
         && let (Some(r), Some(c)) = (hop.z_in(world, setup, src), draft.clearance().z_in(world, setup, src))
@@ -1397,6 +1399,9 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
         // The plate the torch cuts through: its top (the cut plane) and
         // bottom (#670).
         | operation::OpParams::PlasmaProfile(operation::PlasmaOp { top_z, bottom_z, .. })
+        // The workpiece the wire cuts through: its two programmed
+        // planes (#532).
+        | operation::OpParams::WireContour(operation::WireContourOp { top_z, bottom_z, .. })
         | operation::OpParams::Deburr { top_z, bottom_z, .. } => {
             if let Some(z) = top_z.z_in(world, setup, src) {
                 out.push(HeightPlane {

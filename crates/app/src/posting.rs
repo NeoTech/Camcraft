@@ -822,6 +822,15 @@ pub fn op_streams(world: &World) -> Result<Vec<(String, Vec<cnc::Record>)>, Stri
                     machine.label()
                 ));
             }
+            // #532: a wire EDM kind posts through a wire EDM post, and
+            // none is built yet - refused by name, never posted in a
+            // cutting dialect (and before any tool is read: it has none).
+            if !op.params.kind().info().mounts_tool() {
+                return Err(format!(
+                    "{name}: a {} operation posts through a wire EDM post, which is not built yet - nothing is posted",
+                    op.params.kind()
+                ));
+            }
         }
     }
 
@@ -983,6 +992,7 @@ impl HeightRefs for OpParams {
         match self {
             OpParams::Probe { clearance_z, .. } => vec![clearance_z],
             OpParams::PlasmaProfile(p) => vec![&p.clearance_z, &p.top_z, &p.bottom_z],
+            OpParams::WireContour(p) => vec![&p.top_z, &p.bottom_z],
             OpParams::Face {
                 clearance_z,
                 cut_z,

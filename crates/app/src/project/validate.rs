@@ -179,8 +179,16 @@ pub(super) fn validate_kind(dto: &EntityDto, kind: EntityKind) -> Result<(), Pro
             let Some(op) = &dto.operation else {
                 return Err(corrupt("operation entity without a definition"));
             };
-            if op.tool.is_empty() {
-                return Err(corrupt(format!("'{}' names no tool", dto.name)));
+            // #532: a wire EDM kind mounts no library tool (the wire is
+            // the machine's condition) - it must name none; every other
+            // kind must name one.
+            let wire = matches!(op.params, ParamsDto::WireContour(_));
+            if op.tool.is_empty() != wire {
+                return Err(corrupt(if wire {
+                    format!("'{}' is a wire EDM operation and names a tool - it mounts none", dto.name)
+                } else {
+                    format!("'{}' names no tool", dto.name)
+                }));
             }
             if op.label.as_deref().is_some_and(|s| s.trim().is_empty() || s.len() > 120 || s.chars().any(char::is_control)) {
                 return Err(corrupt(format!("'{}' has an invalid operation label", dto.name)));

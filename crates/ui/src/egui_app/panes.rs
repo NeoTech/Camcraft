@@ -653,6 +653,10 @@ pub(super) fn icon_of(c: Cmd, state: &State) -> Option<Icon> {
             // #670: the plasma section cuts 2D profiles - the contour's
             // glyph (the machine door's own choice, no new asset).
             operation::Section::Plasma => Icon::Contour,
+            // #532: the wire cuts a profile too - the same glyph the
+            // wire EDM's machine door wears (no new asset; the op page
+            // and its own glyph are #535).
+            operation::Section::WireEdm => Icon::Contour,
         }),
         // The machine door wears its workspace's glyph (#207), from the
         // existing set: the face mill for Milling, the turned bar for
@@ -716,6 +720,8 @@ pub(super) fn op_icon(kind: OpType) -> Icon {
         // The torch rides a profile: the contour's pixels (#670, the
         // reuse law).
         OpType::PlasmaProfile => Icon::Contour,
+        // The wire rides a profile as well (#532).
+        OpType::WireContour => Icon::Contour,
         OpType::Pocket3D => Icon::Pocket,
         OpType::Finish3D => Icon::Finish3D,
         OpType::Contour5D => Icon::Contour5D,
