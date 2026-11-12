@@ -1390,6 +1390,11 @@ pub struct State {
     /// setup, not decoration. Hiding the world axes is for the moment a
     /// G5x offset sits away from machine zero and two gizmos read as clutter.
     pub show_world_axes: bool,
+    /// Viewport picks may reach the far side of the part (#692): when on,
+    /// a click sends `through: true` and can pick a hidden edge or point.
+    /// Off by default, shown as off. View state like the axes toggle -
+    /// not undoable, not saved; flipped from the viewport's nav column.
+    pub pick_through: bool,
     /// Do the origin gizmos wear their names (#727 drew them, #645
     /// asked for the switch)? View state like the camera - never a
     /// command, never on the history - but unlike the camera it is a
@@ -1833,6 +1838,7 @@ impl State {
             browser_expanded: [true; 3],
             cam: Camera::default(),
             show_world_axes: true,
+            pick_through: false,
             show_gizmo_names: true,
             show_all_paths: false,
             display: DisplayMode::default(),
