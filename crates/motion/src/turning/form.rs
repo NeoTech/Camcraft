@@ -196,12 +196,22 @@ pub fn form_in(facets: &[Triangle], p: &FormParams, stock: Option<StockEnv>) -> 
 /// nothing - the shell owns what the gauge never reaches). A model
 /// this cannot even frame reports as a gouge at the first cut - a
 /// judge that cannot measure never reports silence.
-pub fn form_warnings(
+pub fn form_warnings(facets: &[Triangle], path: &Toolpath, band_width: f64, crown_radius: f64, tol: f64) -> Vec<Warning> {
+    form_warnings_excess(facets, path, band_width, crown_radius, tol, 0.0)
+}
+
+/// [`form_warnings`] on a model imported coarser than promised (#904):
+/// the crown scan's gouge clause gives the model's `excess` chord
+/// error back out of `tol` while a positive tolerance is left
+/// ([`revolve::gouge_tol_on`]). An `excess` of 0 is [`form_warnings`]
+/// exactly.
+pub fn form_warnings_excess(
     facets: &[Triangle],
     path: &Toolpath,
     band_width: f64,
     crown_radius: f64,
     tol: f64,
+    excess: f64,
 ) -> Vec<Warning> {
     let first_cut = || Warning::Gouge {
         at: path
@@ -248,5 +258,5 @@ pub fn form_warnings(
     // crown standing off the floor's edges must rest out loud even
     // where the window never sees the skin it cannot reach.
     let crest = pts.iter().map(|&(_, r)| r).fold(0.0f64, f64::max);
-    revolve::judge(&pts, moves, tol, 0.0, true, Some(crest))
+    revolve::judge(&pts, moves, (tol, excess), 0.0, true, Some(crest))
 }

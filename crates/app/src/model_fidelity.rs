@@ -21,9 +21,11 @@
 //!   every exactly finished flat face - a misleading verdict. The laws
 //!   then read untightened and [`gate_problems`] refuses the operation by
 //!   name at the post; the program sim does not judge at all.
-//! - A kind whose own gouge laws do not read the excess yet
+//! - A kind whose own laws do not read the excess yet
 //!   (`operation::fidelity_law::excess_aware`) is refused on any reduced
-//!   model: a refusal is the only verdict that cannot be looser.
+//!   model: a refusal is the only verdict that cannot be looser. #904
+//!   took turning, the rotary kinds and the multi-axis ball kinds off
+//!   that list; `fidelity_law`'s header says which law judges which.
 
 use flecs_ecs::core::EntityViewGet;
 use flecs_ecs::prelude::{Entity, World};
@@ -115,14 +117,17 @@ fn within(world: &World, chord_mm: f64) -> String {
 }
 
 /// The coarsest model an operation is judged against, by name: the
-/// entities its source names (the setup's stock, one entity, or every
-/// entity of a selection).
+/// entities its source names (one entity, or every entity of a
+/// selection) and the setup's stock - the collision laws read clearance
+/// against it (#904; `operation::material::judged_material` is the same
+/// pair at generation).
 fn op_coarse(world: &World, op: &Operation) -> Option<(String, f64)> {
-    let names: Vec<String> = match &op.src {
-        SrcRef::Stock => vec![crate::setup::stock_entity_name(world, op.setup.as_deref())],
-        SrcRef::Entity(n) => vec![n.clone()],
-        SrcRef::Selection(items) => items.iter().map(|g| g.entity.clone()).collect(),
-    };
+    let mut names = vec![crate::setup::stock_entity_name(world, op.setup.as_deref())];
+    match &op.src {
+        SrcRef::Stock => {}
+        SrcRef::Entity(n) => names.push(n.clone()),
+        SrcRef::Selection(items) => names.extend(items.iter().map(|g| g.entity.clone())),
+    }
     names
         .iter()
         .filter_map(|n| coarse_source(world, n))

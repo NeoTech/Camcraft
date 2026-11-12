@@ -159,6 +159,7 @@ mod contact;
 mod crossing;
 mod cut_index;
 mod engine;
+mod excess;
 mod finish;
 mod hidden;
 mod laws;
@@ -187,7 +188,8 @@ mod swept;
 mod types;
 mod workholding;
 
-pub use types::{excess_floor, FixturePart, Mode, VerifyContext, Warning};
+pub use excess::excess_floor;
+pub use types::{FixturePart, Mode, VerifyContext, Warning};
 #[doc(hidden)]
 pub use crossing::{crossed_pairs, crossed_pairs_all};
 pub use engine::{verify, verify_bodies};

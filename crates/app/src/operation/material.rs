@@ -114,6 +114,22 @@ pub(super) fn material_of(
     }
 }
 
+/// [`material_of`] as generation judges it (#904): the excess also
+/// covers the setup's stock when the source is not the stock itself.
+/// The collision laws (rapids in stock, the rotary bands, the turning
+/// margin) read clearance against that stock, so a stock copied from a
+/// coarser model than the part must tighten them too. One number for
+/// every law - the worst of the two - so it only ever tightens, and the
+/// program gate reads the same pair (`model_fidelity::op_problem`).
+pub(super) fn judged_material(world: &World, setup: Option<&str>, src: &SrcRef) -> Result<Material, GenError> {
+    let mut m = material_of(world, setup, src)?;
+    if !matches!(src, SrcRef::Stock) {
+        let stock = crate::setup::stock_entity_name(world, setup);
+        m.excess = m.excess.max(crate::model_fidelity::excess_of(world, &stock));
+    }
+    Ok(m)
+}
+
 /// The hole list of one source, for the panel's Detect holes button:
 /// the SAME world-transformed facets generation machines, so what is
 /// detected is what will be drilled - a local-frame list would drift
