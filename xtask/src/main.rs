@@ -6,8 +6,10 @@
 
 mod assets;
 mod braces;
+mod checkout;
 mod decisions;
 mod exec;
+mod icon_font;
 mod icons;
 mod package;
 mod plan;
@@ -27,6 +29,8 @@ mod tests;
 mod gate_maps_tests;
 #[cfg(test)]
 mod asset_tests;
+#[cfg(test)]
+mod checkout_tests;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
