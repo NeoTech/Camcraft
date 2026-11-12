@@ -2103,8 +2103,8 @@ mod view_cube_tests {
     #[test]
     fn the_hud_is_laid_out_from_the_pane_alone() {
         // Cube top-right (the legend owns bottom-right); the control ribbon
-        // rests on the bottom edge, against the LEFT corner, holding the
-        // five buttons (#1198 slice a, fix round); and no room, no furniture.
+        // rests on the bottom edge, against the LEFT corner, holding every
+        // view button (#1198 slice a, fix round); and no room, no furniture.
         let pane = egui::Rect::from_min_max(egui::pos2(300.0, 100.0), egui::pos2(1200.0, 700.0));
         let h = Hud::new(pane).expect("900 x 600 has room");
         assert!((h.cube.max.x - (1200.0 - 10.0)).abs() < 1e-6);
@@ -2119,8 +2119,9 @@ mod view_cube_tests {
         }
         assert!(Hud::new(egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(120.0, 800.0))).is_none());
         assert!(Hud::new(egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(800.0, 250.0))).is_none());
-        assert!(Hud::new(egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(180.0, 260.0))).is_some());
-        assert!(Hud::new(egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(170.0, 260.0))).is_none(), "the ribbon needs its width");
+        let fits = viewcube::min_width();
+        assert!(Hud::new(egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(fits, 260.0))).is_some());
+        assert!(Hud::new(egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(fits - 1.0, 260.0))).is_none(), "the ribbon needs its width");
     }
 }
 

@@ -21,9 +21,9 @@ pub(crate) const NAV_PX: f32 = 26.0;
 const NAV_GAP: f32 = 4.0;
 const PAD: f32 = 6.0;
 const BOTTOM_MARGIN: f32 = 10.0;
-/// Five buttons in a row: the ribbon's width and height, so the layout gate
+/// Six buttons in a row: the ribbon's width and height, so the layout gate
 /// can ask the pane for room (pinned by `bar_fits_its_buttons`).
-pub(crate) const BAR_W: f32 = 5.0 * NAV_PX + 4.0 * NAV_GAP + 2.0 * PAD;
+pub(crate) const BAR_W: f32 = 6.0 * NAV_PX + 5.0 * NAV_GAP + 2.0 * PAD;
 const BAR_H: f32 = NAV_PX + 2.0 * PAD;
 const BAR_RADIUS: f32 = 8.0;
 
@@ -39,9 +39,28 @@ pub(crate) enum Nav {
     Paths,
     /// The dimmed world origin axes.
     Axes,
+    /// Viewport picks may reach the far side of the part (#692). Off by
+    /// default; when on, a click sends `through: true`.
+    PickThrough,
 }
 
-pub(crate) const NAVS: [Nav; 5] = [Nav::Frame, Nav::Iso, Nav::Wire, Nav::Paths, Nav::Axes];
+/// The buttons in bar order. `NAV_COUNT` sizes the ribbon, and a test checks
+/// the two agree.
+pub(crate) const NAV_COUNT: usize = 6;
+pub(crate) const NAVS: [Nav; NAV_COUNT] = [
+    Nav::Frame,
+    Nav::Iso,
+    Nav::Wire,
+    Nav::Paths,
+    Nav::Axes,
+    Nav::PickThrough,
+];
+
+/// The plain-English state line of the pick-through button (#692).
+#[must_use]
+pub(crate) fn pick_through_label(on: bool) -> &'static str {
+    if on { "Pick through: on" } else { "Pick through: off" }
+}
 
 /// The control legend the shell paints at the pane's bottom-right while the
 /// pointer is over the viewport (or a drag runs). Its text lives here so the
@@ -94,6 +113,10 @@ pub(crate) fn act(state: &mut State, kind: Nav) {
         }
         Nav::Paths => state.toggle_all_toolpaths(),
         Nav::Axes => state.show_world_axes = !state.show_world_axes,
+        Nav::PickThrough => {
+            state.pick_through = !state.pick_through;
+            state.status = pick_through_label(state.pick_through).to_string();
+        }
     }
 }
 
@@ -119,6 +142,7 @@ pub(crate) fn draw(
             Nav::Wire => state.display == DisplayMode::Wireframe,
             Nav::Paths => state.show_all_paths,
             Nav::Axes => state.show_world_axes,
+            Nav::PickThrough => state.pick_through,
         };
         let hov = hover.is_some_and(|p| r.contains(p));
         let fill = if hov { ink.button.saturating_add(28) } else { ink.button };
@@ -214,6 +238,14 @@ pub(crate) fn draw(
                         .line_segment([o, o + dir], egui::Stroke::new(1.4, col));
                 }
             }
+            Nav::PickThrough => {
+                // A pick ray crossing a bar: the ray runs through, the bar
+                // is the near surface it passes.
+                let c = r.center();
+                let half = r.width() * 0.5 - m;
+                ui.painter().line_segment([c - egui::vec2(half, 0.0), c + egui::vec2(half, 0.0)], s);
+                ui.painter().line_segment([c - egui::vec2(m * 0.4, m), c + egui::vec2(m * 0.4, m)], s);
+            }
         }
     }
 }
@@ -224,14 +256,20 @@ mod tests {
 
     #[test]
     fn bar_fits_its_buttons() {
-        // The gate's width is the ribbon's, and the ribbon is the five
-        // buttons plus their gaps and padding - no slack, no overflow.
-        assert_eq!(NAVS.len(), 5);
+        // The ribbon is every button in the list plus their gaps and padding,
+        // counted from the list - no literal count, no slack, no overflow.
+        assert_eq!(NAVS.len(), NAV_COUNT, "NAV_COUNT sizes the ribbon");
+        let count = NAVS.len() as f32;
+        let width = count * NAV_PX + (count - 1.0) * NAV_GAP + 2.0 * PAD;
+        assert!((BAR_W - width).abs() < 1e-6, "the ribbon is as wide as its buttons");
         let bar = bar_rect(egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(900.0, 600.0)));
         assert!((bar.width() - BAR_W).abs() < 1e-6);
         let kids = buttons(bar);
         assert_eq!(kids.len(), NAVS.len());
         assert!(kids.iter().all(|(_, r)| bar.contains(r.min) && bar.contains(r.max)));
+        let last = kids.last().map(|(k, r)| (*k, *r));
+        assert_eq!(last.map(|(k, _)| k), NAVS.last().copied(), "the last button is the last in the list");
+        assert!(last.is_some_and(|(_, r)| bar.contains(r.max)), "the last button sits inside the ribbon");
     }
 
     /// The legend's painted rect: the shell's text style (Small) measured

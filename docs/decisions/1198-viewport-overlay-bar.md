@@ -1,6 +1,6 @@
 ## #1198 - Viewport bottom control bar (slice a): the right-edge view buttons move into a ribbon
 
-**What was decided.** The five view buttons (Frame, Iso, Shaded/Wireframe,
+**What was decided.** The view buttons (Frame, Iso, Shaded/Wireframe,
 Toolpaths, World axes) that stacked under the view cube move into a
 horizontal, rounded, translucent grey ribbon floating over the bottom edge
 of the 3D pane, against its left corner. The view cube stays top-right. The ribbon and its
@@ -57,8 +57,10 @@ line ("No model yet ...", 2-3 px above the ribbon's old row) on every pane.
 Moving the ribbon is one function (`bar_rect`) and changes no other row.
 
 **Where they still meet.** The two share the bottom strip only when the pane
-is narrower than the ribbon plus the legend plus the margins, about 490 px
-at the Small text style (the legend's width is font-measured, not fixed).
+is narrower than the ribbon plus the legend plus the margins, about 453 px
+with six buttons (the legend measures 242.75 px at the Small text style on the test font;
+the ribbon's right edge is at 198 px from the pane's left edge). Before the
+#1204 merge the ribbon had five buttons and the threshold was about 423 px.
 Below that the ribbon covers the legend's left end while the pointer is over
 the viewport. Not fixed in this round: the next step, if wanted, is to lift
 the legend above the ribbon only when the two would meet, which then sits
@@ -73,3 +75,27 @@ corner, on the bottom edge, buttons inside it).
 **Empty-document line.** Unchanged, not made worse: the line is centred
 at the pane's middle, 2-3 px above the ribbon's top at the bottom edge,
 which is the same clearance as before since the ribbon's row did not move.
+
+## Refresh against main 37482923: the Pick through button joins the bar
+
+**Conflict.** #1204 (merged) added a sixth view button, the "Pick through"
+toggle (`Nav::PickThrough`, #692), to the nav column in `viewcube.rs`, which
+this PR moves into `viewport_bar.rs`.
+
+**Resolution.** `viewcube.rs` keeps no nav column: our side was taken whole,
+and main's additions were ported into `viewport_bar.rs`, unchanged in
+behaviour: the `PickThrough` variant, the six-entry `NAVS` (sized by
+`NAV_COUNT`), `pick_through_label` (moved here; `viewcube` re-exports it for
+the tests only), the act arm (toggles `state.pick_through` and sets the
+status line), the active state (lit while on, off by default) and the glyph
+(a ray through a bar). No logic was changed on either side beyond the
+button list.
+
+**Ribbon width.** Six buttons: 6 x 26 + 5 x 4 + 2 x 6 = 188 px. The hud gate
+is `viewcube::min_width()` (the wider of the cube and the ribbon, plus margins),
+used by `Hud::new` and by the law test, so the test does not repeat the sum.
+
+**Tests.** The four `pick_through` tests in `egui_app/tests/pick_through.rs`
+are unchanged and find the button through `hud(...).nav_rect(...)`, which is
+now the bottom bar. The layout tests count the buttons from `NAVS`, check
+the last button is the last in the list, and check it sits inside the bar.

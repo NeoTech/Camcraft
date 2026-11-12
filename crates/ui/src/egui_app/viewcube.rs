@@ -27,6 +27,8 @@
 //! command, never saved.
 
 pub(crate) use super::viewport_bar::Nav;
+#[cfg(test)]
+pub(crate) use super::viewport_bar::pick_through_label;
 use super::viewport_bar;
 use crate::actions;
 use crate::state::State;
@@ -80,6 +82,13 @@ const FACE_QUADS: [[usize; 4]; 6] = [
     [0, 1, 5, 4], // FRONT y-
 ];
 
+/// The narrowest pane that hosts the furniture: the wider of the cube and
+/// the ribbon, plus the margin on each side.
+#[must_use]
+pub(crate) fn min_width() -> f32 {
+    CUBE_PX.max(viewport_bar::BAR_W) + 2.0 * MARGIN
+}
+
 pub(crate) struct Hud {
     pub cube: egui::Rect,
     /// The bottom control ribbon (`viewport_bar`), grey background.
@@ -94,8 +103,7 @@ impl Hud {
     /// presses, the draw pass after, and both get the same rects.
     #[must_use]
     pub fn new(pane: egui::Rect) -> Option<Hud> {
-        let need_w = (CUBE_PX).max(viewport_bar::BAR_W) + 2.0 * MARGIN;
-        if pane.width() < need_w || pane.height() < 260.0 {
+        if pane.width() < min_width() || pane.height() < 260.0 {
             return None;
         }
         let cube = egui::Rect::from_min_size(
