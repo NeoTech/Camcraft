@@ -2838,7 +2838,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 spindle: None,
                 // #864: a source imported coarser than promised.
                 model_excess: material.excess,
-                };
+            };
             // The picks' touching bodies, read as their union
             // (M13.11); empty for one body.
             let mut warns = verify::verify_bodies(&path, &ctx, &material.bodies);

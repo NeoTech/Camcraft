@@ -188,7 +188,7 @@ fn a_tap_deeper_than_its_hole_is_still_convicted() {
     // metal under the floor. The core re-read must not excuse that.
     let (world, _history) = tapped_to(2.5, HOLE_FLOOR - 3.0);
     let warns = blocking_warnings(&world);
-    assert!(!warns.is_empty(), "a tap past the hole's floor is convicted");
+    assert!(warns.iter().any(|w| w.contains("cuts past the finish surface")), "a tap past the hole's floor is convicted: {warns:?}");
     let sim = simulate_document(&world).expect("a fresh tap program simulates");
     assert!(sim.dev.gouge_cells > 0, "the tap cuts below the hole's floor");
 }
@@ -198,7 +198,36 @@ fn a_tap_with_no_hole_under_it_is_still_convicted() {
     // A hole record over solid metal (the model's hole is elsewhere,
     // here: a 0.5 mm slit): the tap would have to cut its own pilot.
     let (world, _history) = tapped_world(0.25);
-    assert!(!blocking_warnings(&world).is_empty(), "a tap into solid metal is convicted");
+    let warns = blocking_warnings(&world);
+    assert!(warns.iter().any(|w| w.contains("cuts past the finish surface")), "a tap into solid metal is convicted: {warns:?}");
+}
+
+#[test]
+fn a_tap_whose_shank_rides_into_the_hole_is_still_convicted() {
+    // #1289 review: an M6 tap with a Ø6 shank and a 4 mm thread length
+    // (DIN 371 style) fed 12 mm into the Ø5 hole. The hole record says
+    // Ø6 (the thread's nominal), so the reach law's shank check passes
+    // it; the full-diameter run reports each feed move as a `Gouge`,
+    // which hides its shank verdict. The core re-read drops the
+    // `Gouge` and must carry the shank rubbing the thread crests in.
+    let tap = catalog().into_iter().find(|(n, _)| *n == TAP).map(|(_, t)| t).expect("catalog tap");
+    let tool = Tool { flute_len: 4.0, shank_d: 6.0, ..tap };
+    let params = OpParams::Drill {
+        clearance_z: Height::fixed(TOP + 10.0),
+        retract_z: None,
+        top_z: Height::fixed(TOP),
+        bottom_z: None,
+        cycle: CycleChoice::Tap,
+        peck: 0.0,
+        dwell: 0.0,
+        feed: 600.0,
+        plunge_feed: 600.0,
+        holes: vec![hole(3.0)],
+        cross: vec![],
+    };
+    let (world, _history) = world_with_op(2.5, "TAP-M6-SHANK", tool, params);
+    let warns = blocking_warnings(&world);
+    assert!(warns.iter().any(|w| w.contains("shank/holder at move")), "a shank rubbing the thread crests blocks the post: {warns:?}");
 }
 
 #[test]

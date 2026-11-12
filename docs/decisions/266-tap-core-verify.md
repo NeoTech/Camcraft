@@ -30,3 +30,9 @@ kind); shrinking only the containment law's cutter (the tangency law still
 convicts - tried on #271); changing the `solid_law_goldens` convention that
 models a tapped hole at the major diameter (still passes: a re-read only
 removes warnings).
+
+### Review rework (PR #1289, 2026-11-12): the acquittal covers the thread band only
+
+- **Chosen:** for every move whose full-diameter `Gouge` the core run drops, carry the core run's body verdicts on that move (`ShankHit`, `SweepHit`, `HolderHit`, `FixtureHit`), one per kind and move. The core re-read is also limited to the tapping cycles (`Tap`, `FloatingTap`, `Auto`); a Tap-kind tool in a Drill/Peck/Bore cycle keeps its full verdict.
+- **Why:** the solid law reports a move once (`Gouge`, else the body), so a full-diameter `Gouge` hid a Ø6 shank fed past a 4 mm thread length into a Ø5 hole; dropping the `Gouge` posted a real shank collision. Pinned by `a_tap_whose_shank_rides_into_the_hole_is_still_convicted`.
+- **Dropped:** carrying every core-run warning anywhere (a narrower cutter can raise band-reach shank flags on moves that never gouged, false convictions on correct taps); keeping the full run's `Gouge` whenever the tool's shank is at least the core (blocks valid DIN 376 taps with reduced shanks too coarsely).
