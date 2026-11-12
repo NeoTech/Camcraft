@@ -111,6 +111,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         carried_overhang: _,
         op_name: _,
         sinker_gap,
+        sinker_pass,
     } = job;
     // The sinker burn (#541) is its own law: one electrode plunged to a
     // depth read from its datum; no milling law has an electrode to
@@ -120,7 +121,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         let gap = sinker_gap
             .ok_or_else(|| GenError::Invalid("sinker burn: its condition was never read".into()))?
             .map_err(GenError::Invalid)?;
-        return super::sinker_op::generate_sinker(op, &tool, &hs, gap, &material.facets);
+        return super::sinker_op::generate_sinker(op, &tool, &hs, gap, sinker_pass, &material.facets);
     }
     // The probe (#108) cuts nothing: its own protected-move law judges
     // the stylus against the model, and no cutting law or region applies.

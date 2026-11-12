@@ -4,7 +4,7 @@
 
 use super::*;
 
-use crate::operation::{SinkerBurnOp, SinkerDatum};
+use crate::operation::{SinkerBurnOp, SinkerDatum, SinkerPass};
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -12,6 +12,26 @@ pub enum SinkerDatumDto {
     WorkTop,
     CavityFloor,
     ElectrodeTip,
+}
+
+/// Which pass of the cavity (#543). A file of #541 names none: single.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SinkerPassDto {
+    #[default]
+    Single,
+    Rough,
+    Finish,
+}
+
+impl SinkerPassDto {
+    fn is_single(&self) -> bool {
+        *self == SinkerPassDto::Single
+    }
+}
+
+fn is_zero(v: &f64) -> bool {
+    *v == 0.0
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -26,6 +46,13 @@ pub struct SinkerDto {
     pub feed: f64,
     #[serde(default)]
     pub condition: String,
+    /// #543: additive keys, written only for a rough or finish burn.
+    #[serde(default, skip_serializing_if = "SinkerPassDto::is_single")]
+    pub pass: SinkerPassDto,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub cavity_x: f64,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub cavity_y: f64,
 }
 
 impl SinkerDto {
@@ -44,6 +71,13 @@ impl SinkerDto {
             y: p.y,
             feed: p.feed,
             condition: p.condition.clone(),
+            pass: match p.pass {
+                SinkerPass::Single => SinkerPassDto::Single,
+                SinkerPass::Rough => SinkerPassDto::Rough,
+                SinkerPass::Finish => SinkerPassDto::Finish,
+            },
+            cavity_x: p.cavity_x,
+            cavity_y: p.cavity_y,
         }
     }
 
@@ -62,6 +96,13 @@ impl SinkerDto {
             y: self.y,
             feed: self.feed,
             condition: self.condition.clone(),
+            pass: match self.pass {
+                SinkerPassDto::Single => SinkerPass::Single,
+                SinkerPassDto::Rough => SinkerPass::Rough,
+                SinkerPassDto::Finish => SinkerPass::Finish,
+            },
+            cavity_x: self.cavity_x,
+            cavity_y: self.cavity_y,
         })
     }
 }

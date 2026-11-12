@@ -92,6 +92,9 @@ fn burn(datum: SinkerDatum, depth: f64, floor: f64) -> OpParams {
         y: 0.0,
         feed: 40.0,
         condition: "S1".into(),
+        pass: camcraft_app::operation::SinkerPass::Single,
+        cavity_x: 0.0,
+        cavity_y: 0.0,
     })
 }
 
@@ -132,6 +135,7 @@ fn sinker_burn_cavity_matches_golden() {
         electrode_len: 30.0,
         feed: 40.0,
         gap: GAP,
+        stand: None,
     };
     let path = burn_to_depth(&p).expect("burns");
     let text = common::gen_to_cltext(&path);

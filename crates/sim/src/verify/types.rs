@@ -308,6 +308,13 @@ pub enum Warning {
     /// its overtravel. Advisory like the scallop: shown and named, never
     /// binding - a stated probe distance is the operator's to choose.
     ProbeSearch { at: usize, mm: f64, limit_mm: f64 },
+    /// A sinker finish out of order (#543): the finish burn at move `at`
+    /// is undersized `finish_mm` per side, not less than the `rough_mm`
+    /// of the rough burn it follows - the finish electrode is no larger
+    /// than the rough, so it takes nothing off the walls the rough left.
+    /// Advisory: the finish's own size law already holds the cavity to
+    /// size, so the post is not held.
+    SinkerFinishOrder { at: usize, finish_mm: f64, rough_mm: f64 },
 }
 
 impl Warning {
@@ -315,7 +322,7 @@ impl Warning {
     /// reading (M13.9), which is a quality note - shown, never binding.
     #[must_use]
     pub fn blocks_post(&self) -> bool {
-        !matches!(self, Warning::Scallop { .. } | Warning::ProbeSearch { .. })
+        !matches!(self, Warning::Scallop { .. } | Warning::ProbeSearch { .. } | Warning::SinkerFinishOrder { .. })
     }
 
     /// The envelope report's unjudged hidden half, as the warning that
@@ -392,6 +399,10 @@ impl core::fmt::Display for Warning {
             Warning::ProbeSearch { at, mm, limit_mm } => write!(
                 f,
                 "probe distance {mm:.3} mm at move {at}: the search may run that far past the expected contact, beyond the {limit_mm:.3} mm a stylus is trusted to overtravel (the post is not held)"
+            ),
+            Warning::SinkerFinishOrder { at, finish_mm, rough_mm } => write!(
+                f,
+                "sinker finish at move {at}: its electrode's undersize {finish_mm:.3} mm per side is not smaller than the rough's {rough_mm:.3} mm - the finish electrode is no larger than the rough and takes nothing off its walls (the post is not held)"
             ),
         }
     }

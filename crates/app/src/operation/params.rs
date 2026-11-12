@@ -1445,6 +1445,18 @@ impl OpParams {
                 }
                 h.write(p.condition.as_bytes());
                 h.write_u8(0xff);
+                // #543: the pass and the finished cavity it is judged
+                // against - a byte and the sizes only for a rough or
+                // finish, so a single burn's digest never moves.
+                if p.pass != super::SinkerPass::Single {
+                    h.write_u8(match p.pass {
+                        super::SinkerPass::Single => 0,
+                        super::SinkerPass::Rough => 1,
+                        super::SinkerPass::Finish => 2,
+                    });
+                    w(h, p.cavity_x);
+                    w(h, p.cavity_y);
+                }
             }
             // The plasma profile (#670): every stored number, the
             // optional ones with a presence byte.
