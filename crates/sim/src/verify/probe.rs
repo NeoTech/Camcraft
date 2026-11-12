@@ -294,6 +294,19 @@ impl Frame {
     pub(super) fn is_upright(&self) -> bool {
         self.a == [0.0, 0.0, 1.0]
     }
+
+    /// The local XY of the line through `at` along `dir` when it runs
+    /// along this frame's axis (within 1e-9 of parallel, either sense);
+    /// `None` for any other line, or one that is not finite (#1205).
+    pub(super) fn axis_xy(&self, at: Point3, dir: [f64; 3]) -> Option<[f64; 2]> {
+        let len = dot(dir, dir).sqrt();
+        if !(len.is_finite() && len > 0.0 && at.is_finite()) {
+            return None;
+        }
+        let c = dot(dir, self.a) / len;
+        let p = self.local(at);
+        (c.abs() >= 1.0 - 1e-9 && p[0].is_finite() && p[1].is_finite()).then_some([p[0], p[1]])
+    }
 }
 
 fn cross(p: [f64; 3], q: [f64; 3]) -> [f64; 3] {

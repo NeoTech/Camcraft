@@ -163,6 +163,7 @@ mod engine;
 mod excess;
 mod finish;
 mod hidden;
+mod hole_wall;
 mod laws;
 mod mesh_posed;
 mod mesh_steel;
@@ -210,7 +211,8 @@ pub use workholding::{
 pub use body_bands::{BodyBands, NeckBands, BODY_BANDS_CAP};
 pub use probe::Cutter;
 pub use rotary::{rotary_hits, RotaryAxis, RotaryLaw};
-pub use solid::{SolidLaw, solid_hits};
+pub use hole_wall::{HoleAxis, WALL_SAG};
+pub use solid::{SolidLaw, solid_hits, solid_hits_walled};
 pub use mesh_steel::{mesh_refined, steel_stack, MeshSteel, SteelBand};
 #[doc(hidden)]
 pub use contact::posed_contact;
