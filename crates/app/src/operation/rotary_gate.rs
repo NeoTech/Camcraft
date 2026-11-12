@@ -118,7 +118,18 @@ fn stamp_c_about(
         return Ok(stamped);
     };
     if unwinds {
-        return crate::cl::unwind_c(&stamped, center, (lo, hi), tol, false).map_err(|e| GenError::Invalid(format!("{kind}: {e}")));
+        let unwound = crate::cl::unwind_c(&stamped, center, (lo, hi), tol, false).map_err(|e| GenError::Invalid(format!("{kind}: {e}")))?;
+        // #906: a rewind orbit is C-turning rapids, capped only by the
+        // C rate the machine states. None stated: refuse the rewind by
+        // name rather than post it at an uncapped feed. (Shifting the
+        // opening stretch adds no move: the section's first G00 C
+        // positions it, at no F.)
+        if unwound.moves.len() != stamped.moves.len() && !c_rated(machine) {
+            return Err(GenError::Invalid(format!(
+                "{kind}: the path needs a C rewind, but the machine file states a C travel but no C rate - a rewind would post at an uncapped feed; state the C axis's feed or rapid rate"
+            )));
+        }
+        return Ok(unwound);
     }
     // A kind whose links the unwind law has not been proven on end to
     // end posts only what fits the travel as stamped - exactly what the
@@ -141,6 +152,13 @@ fn stamp_c_about(
 /// (the same axis `machine::check`'s C letter gate reads), or None.
 fn c_travel(machine: Option<&(String, Vec<AxisLimits>)>) -> Option<(f64, f64)> {
     machine?.1.iter().find(|a| a.rotary && a.name.eq_ignore_ascii_case("C"))?.travel
+}
+
+/// True when the mounted machine's rotary named C states a rate -
+/// its feed or its rapid (deg/min), as the lathe post caps by (#906).
+fn c_rated(machine: Option<&(String, Vec<AxisLimits>)>) -> bool {
+    let rated = |r: Option<f64>| r.is_some_and(|v| v.is_finite() && v > 0.0);
+    machine.is_some_and(|m| m.1.iter().any(|a| a.rotary && a.name.eq_ignore_ascii_case("C") && (rated(a.feed) || rated(a.rapid))))
 }
 
 #[cfg(test)]
@@ -245,6 +263,40 @@ mod tests {
         let path = crate::cl::Toolpath::new(moves);
         let e = stamp_spindle_c(path, spindle(), (Some(&m), true), 0.01, "Rotary Contour").err().map(|e| e.to_string()).unwrap_or_default();
         assert!(e.contains("Rotary Contour") && e.contains("radial links are not taken for this kind"), "{e}");
+    }
+
+    /// #906: two helices linked over the top need an orbit; with no C
+    /// rate stated the rewind is refused by name, with one it unwinds.
+    #[test]
+    fn a_rewind_without_a_stated_c_rate_is_refused_by_name() {
+        use crate::cl::{Move, MoveKind};
+        use crate::geometry::Point3;
+        let mut path = helix().moves;
+        let lower = |mut m: Move| {
+            m.from.z -= 4.0;
+            m.to.z -= 4.0;
+            m
+        };
+        let more: Vec<Move> = helix().moves.into_iter().map(lower).collect();
+        let (Some(end), Some(start)) = (path.last().map(|m| m.to), more.first().map(|m| m.from)) else {
+            panic!("the helix has moves")
+        };
+        // Up, round the spindle line through (0, 15) - never across it - and down.
+        let (up, via, over) = (Point3::new(end.x, end.y, 5.0), Point3::new(0.0, 15.0, 5.0), Point3::new(start.x, start.y, 5.0));
+        for (p, q) in [(end, up), (up, via), (via, over), (over, start)] {
+            path.push(Move::new(MoveKind::Rapid, p, q, None).with_axis([q.x / q.x.hypot(q.y), q.y / q.x.hypot(q.y), 0.0]));
+        }
+        path.extend(more);
+        let path = crate::cl::Toolpath::new(path);
+        let m = c_travel_machine(-360.0, 360.0);
+        let e = stamp_spindle_c(path.clone(), spindle(), (Some(&m), true), 0.01, "Rotary Contour").err().map(|e| e.to_string()).unwrap_or_default();
+        assert!(e.contains("Rotary Contour") && e.contains("states a C travel but no C rate"), "{e}");
+        let mut rated = m.clone();
+        for a in &mut rated.1 {
+            a.feed = Some(6000.0);
+        }
+        let t = stamp_spindle_c(path, spindle(), (Some(&rated), true), 0.01, "Rotary Contour");
+        assert!(t.is_ok_and(|t| t.moves.iter().all(|m| m.rotary.is_some_and(|c| (-360.0..=360.0).contains(&c)))));
     }
 
     #[test]

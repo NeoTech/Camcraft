@@ -34,6 +34,7 @@ fn cx<'a>(region: &'a Region, stock: &'a Region, g: &'a ToolGeom, cutter: Option
         finish_tol: None,
         fixtures: &[],
         spindle: None,
+        ..Default::default()
     }
 }
 

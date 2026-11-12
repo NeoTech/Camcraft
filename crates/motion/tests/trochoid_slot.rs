@@ -85,6 +85,7 @@ fn verified(path: &Toolpath, w: f64) -> Vec<Warning> {
         finish_tol: None,
         fixtures: &[],
         spindle: None,
+        ..Default::default()
     };
     verify(path, &cx)
 }
