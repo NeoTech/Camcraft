@@ -42,6 +42,7 @@ pub mod setup_wcs;
 // #343: a setup's own machine and post.
 pub mod setup_mount;
 pub mod setup_post_options;
+pub mod setup_workholding;
 // #316: a setup placed relative to another (flip / turn presets).
 pub mod setup_relative;
 // #320: a setup's stock source.
@@ -100,6 +101,7 @@ pub use setup_align::AlignPartToSetup;
 pub use setup_wcs::SetSetupWorkOffset;
 pub use setup_mount::{SetSetupMachine, SetSetupPost};
 pub use setup_post_options::SetSetupPostOptions;
+pub use setup_workholding::SetSetupWorkholdingRpm;
 pub use setup_relative::SetSetupRelative;
 pub use setup_stock::SetSetupStockSource;
 pub use set_units::SetUnits;
