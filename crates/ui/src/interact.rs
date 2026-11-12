@@ -340,6 +340,11 @@ pub(crate) struct Gizmo {
     pub rot: [f64; 4],
     /// Triad axes sit on X/Y/Z at this exact position with no rotation.
     pub world_axes: bool,
+    /// #727: whose origin this is - the work offset's entity name as the
+    /// Setup pane shows it (`G54`, `Setup2/WCS`), or `World` for the
+    /// dimmed neutral axes. Drawn beside the origin so whose-zero is
+    /// whose reads at a glance, with no hover.
+    pub name: String,
 }
 
 /// The axis inks on a light viewport (#698): the dark set washes out on
@@ -367,6 +372,17 @@ const AXES: [([f32; 3], [f64; 3]); 3] = [
 /// How much the neutral world axes are dimmed against a work offset's
 /// triad (#195: was 0.55 for the lines - too dark to read).
 const WORLD_DIM: f32 = 0.8;
+
+/// #727: the name the dimmed world axes carry, and the gray they wear it
+/// in - neutral, because no axis color belongs to the world as a whole.
+const WORLD_LABEL: &str = "World";
+const WORLD_GRAY: f32 = 0.75;
+
+/// #727: how far a gizmo's name sits below its projected origin, in uv
+/// (same currency as `axis_note::NOTE_DROP_UV`) - enough to clear the
+/// axis lines that meet at the origin, close enough to read as the
+/// origin's own tag.
+const NAME_DROP_UV: f32 = 0.02;
 
 /// Screen-space stroke widths of a gizmo axis, px (#195): the coloured
 /// line over a dark outline that keeps it readable on any ground.
@@ -420,6 +436,7 @@ pub(crate) fn gizmos(state: &State) -> Vec<Gizmo> {
             pos: [loc.pos.x, loc.pos.y, loc.pos.z],
             rot: loc.rot,
             world_axes: false,
+            name: name.clone(),
         });
     }
     let claims_origin = out.iter().any(|g| {
@@ -436,6 +453,7 @@ pub(crate) fn gizmos(state: &State) -> Vec<Gizmo> {
             pos: [0.0, 0.0, 0.0],
             rot: [0.0, 0.0, 0.0, 1.0],
             world_axes: true,
+            name: WORLD_LABEL.to_string(),
         });
     }
     out
@@ -570,9 +588,11 @@ fn push_poly(
 }
 
 /// Screen-space labels for the gizmos just drawn (feedback 7): each axis
-/// tip gets its letter, projected through the same camera math. Entries are
-/// (uv within the viewport image, linear rgb, text); tips behind the camera
-/// or at degenerate `w` are skipped.
+/// tip gets its letter, projected through the same camera math. #727:
+/// each gizmo also wears its name just under its origin - the work
+/// offset's entity name, or `World` for the dimmed neutral axes. Entries
+/// are (uv within the viewport image, linear rgb, text); tips behind the
+/// camera or at degenerate `w` are skipped.
 pub(crate) fn overlay_labels(state: &State, aspect: f64) -> Vec<([f32; 2], [f32; 3], String)> {
     let len = gizmo_len(state);
     let mvp = state.cam.mvp(aspect);
@@ -633,6 +653,24 @@ pub(crate) fn overlay_labels(state: &State, aspect: f64) -> Vec<([f32; 2], [f32;
     let mut notes = crate::axis_note::triad_notes(state);
     for gizmo in gizmos(state) {
         let base = Point3::new(gizmo.pos[0], gizmo.pos[1], gizmo.pos[2]);
+        // #727: the gizmo's own name, at its origin - whose zero this is,
+        // readable without a hover. Emitted before the letters so each
+        // name leads its gizmo's labels. The theme's Z-axis blue for
+        // offsets (via `axes()`, so it lifts for the light ground like
+        // the triad does); neutral gray dimmed like the world axes it
+        // stands for.
+        // #645: names only while the user's "Show origin names" is on -
+        // the letters below never depend on it, and no line does.
+        if state.show_gizmo_names
+            && let Some(uv) = project_uv(&mvp, gizmo.pos)
+        {
+            let c = if gizmo.world_axes {
+                [WORLD_GRAY * WORLD_DIM; 3]
+            } else {
+                axes()[2].0
+            };
+            out.push(([uv[0], uv[1] + NAME_DROP_UV], c, gizmo.name.clone()));
+        }
         for (axis, (rgb, dir)) in axes().iter().enumerate() {
             let p = transform_point(
                 Point3::new(

@@ -49,6 +49,11 @@ pub mod pick;
 pub use camcraft_post::post;
 pub mod path_sig;
 pub mod posting;
+// #530: the op-family door at post.
+mod posting_family;
+/// Which spindle a lathe post turns for a section, and the door that
+/// keeps a milling operation off the work spindle (#1190).
+pub mod lathe_voice;
 // #155: standalone Pause / Home entries in the operation list.
 pub mod program_entry;
 pub use camcraft_motion::plasma;
@@ -128,6 +133,8 @@ pub mod sim_tool_body;
 pub mod sim_lathe_body;
 pub mod units;
 pub use camcraft_sim::verify;
+// #645: the viewport view preferences (#727's name toggle), per user.
+pub mod view;
 // #261: the moves a cached path's warnings name.
 pub mod warned_moves;
 pub mod world;
