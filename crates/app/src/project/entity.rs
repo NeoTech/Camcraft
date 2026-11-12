@@ -302,6 +302,10 @@ pub struct SetupDto {
     /// Absent follows the document's.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub post_options: Option<SetupPostOptionsDto>,
+    /// #821: the setup's stated nose-to-rotary-centerline figure, mm,
+    /// additive (no version step). Absent states none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nose_to_axis: Option<f64>,
     /// #1031: the rated maximum rpm of the setup's chuck or collet,
     /// additive (no version step). Absent - every older file - states none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
