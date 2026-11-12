@@ -25,9 +25,9 @@ type Seg = ((f64, f64), (f64, f64));
 
 /// The holder's side of a path's signed radial, from its moves' meridian
 /// `pieces` (each flagged `true` when it is a round arc about the axis),
-/// and the pieces set on that side. `1.0` when the holder stands on the
-/// + side, `-1.0` on the - side ([`side_of`]). A round arc about the
-/// axis - a thread's half-turn - has its ends on both sides of the axis
+/// and the pieces set on that side: `1.0` when the holder stands on
+/// the plus side, `-1.0` on the minus side ([`side_of`]). A round arc
+/// about the axis (a thread's half-turn) has its ends on both sides of the axis
 /// by construction while the tip rides one radius: it tells no side, is
 /// left out of the reading, and is read at its radius on the holder's
 /// side (review of PR #1167: the thread kernel's antipodal arc ends read
