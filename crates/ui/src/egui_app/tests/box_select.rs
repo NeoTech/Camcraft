@@ -6,6 +6,8 @@
 //! top-rim chains to Contour1 as ONE `SetOperationGeometry` - one undo
 //! restores the seed's pick. A plain drag still orbits; a right-to-left
 //! drag over one rim side is a crossing box and takes that side alone.
+//! The box honours the Pick through toggle as a click does: off, the
+//! hidden rims under the top face stay out; on, they are taken too.
 //! Provenance: our own gesture test over our own shell; no vendor
 //! material consulted.
 
@@ -164,4 +166,28 @@ fn a_right_to_left_drag_is_a_crossing_box_and_a_plain_drag_still_orbits() {
     drag(&mut harness, a, b, Modifiers::NONE);
     assert_ne!(harness.state().state.cam.yaw, yaw0, "a plain drag orbits");
     assert_eq!(contour1(&harness), after, "an orbit picks nothing");
+}
+
+/// The same window around the first cutout, Pick through off then on.
+fn window_with_pick_through(on: bool) -> Vec<GeoSel> {
+    let mut harness = plate_harness();
+    harness.state_mut().state.pick_through = on;
+    let before = contour1(&harness);
+    let r = screen_box(harness.state(), [X0 + 15.0, 15.0], [X0 + 45.0, 45.0]);
+    drag(&mut harness, r.left_top(), r.right_bottom(), Modifiers::COMMAND);
+    let after = contour1(&harness);
+    assert_eq!(&after[..before.len()], &before[..], "the box adds to the picks");
+    after[before.len()..].to_vec()
+}
+
+#[test]
+fn the_box_honours_the_pick_through_toggle() {
+    let visible = window_with_pick_through(false);
+    assert_eq!(visible.len(), 4, "toggle off: the top rim only, nothing hidden: {visible:?}");
+    let through = window_with_pick_through(true);
+    // Toggle on: the top rim, the four vertical corners and the bottom
+    // rim under the top face - every chain of the cutout.
+    assert_eq!(through.len(), 12, "toggle on: hidden chains too: {through:?}");
+    assert!(visible.iter().all(|g| through.contains(g)), "the visible ones stay in");
+    assert!(through.iter().all(|g| g.entity == "plate" && matches!(g.feature, FeatureSel::Chain(_))));
 }

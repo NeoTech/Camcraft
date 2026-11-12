@@ -1,11 +1,13 @@
 //! The viewport box select (#979): Ctrl (or Shift) + left drag in Edge or
 //! Face mode, with an operation open, draws a rubber band instead of
 //! orbiting; its release adds every visible feature edge chain (Edge
-//! mode) or welded face (Face mode) in the box to the operation's pick
+//! mode) or welded face (Face mode) in the box - hidden ones too while
+//! Pick through is on - to the operation's pick
 //! list as ONE `SetOperationGeometry` - one undo step. A drag to the
 //! right is a window (wholly inside), to the left a crossing box (inside
 //! or touching). The geometry rule is the app's (`pick::box_select`, the
-//! #692 one pick rule: feature chains only, nothing hidden); this module
+//! #692 one pick rule: feature chains only, nothing hidden unless Pick
+//! through is on); this module
 //! only arms the gesture and routes the answer.
 //!
 //! Provenance: rubber-band window/crossing selection as public CAD user
@@ -41,7 +43,8 @@ pub(crate) fn mode_of(b: [[f32; 2]; 2]) -> BoxMode {
 }
 
 /// What the box takes in the viewport: the visible feature chains (Edge
-/// mode) or welded faces (Face mode) in `b`, logical px.
+/// mode) or welded faces (Face mode) in `b`, logical px - the hidden ones
+/// too while `state.pick_through` is on.
 pub(crate) fn picks_in(state: &State, b: [[f32; 2]; 2]) -> Vec<GeoSel> {
     let ([x0, y0], [x1, y1]) = state.viewport_rect;
     let (w, h) = (x1 - x0, y1 - y0);
@@ -71,7 +74,9 @@ pub(crate) fn picks_in(state: &State, b: [[f32; 2]; 2]) -> Vec<GeoSel> {
         mode: mode_of(b),
         kinds,
         view: PickRay { origin, dir, projection },
-        through: false, // pick-through is not offered (#692's decision record)
+        // The viewport's Pick through toggle, as a click reads it
+        // (`feature_click`): a click and a box agree on hidden features.
+        through: state.pick_through,
     };
     pick::box_select(&state.world, &q, |name| state.hidden_in_view(name))
 }
@@ -91,7 +96,8 @@ pub(crate) fn finish(state: &mut State, b: [[f32; 2]; 2]) {
     };
     let found = picks_in(state, b);
     if found.is_empty() {
-        state.status = format!("no visible {what} {how} the box");
+        let seen = if state.pick_through { "" } else { "visible " };
+        state.status = format!("no {seen}{what} {how} the box");
         return;
     }
     let mut items: Vec<GeoSel> = model::find_by_name(&state.world, &name)

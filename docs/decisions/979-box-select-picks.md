@@ -21,7 +21,10 @@
   (never a facet seam), and a candidate counts only if some part of it is
   unoccluded from the eye, by the click pick's own sight test
   (`feature_pick::occluded`), up to 16 sight rays per candidate, spread
-  along it. Pick-through stays off (it is not offered, as for clicks).
+  along it. **The box honours the Pick through toggle** (`state.pick_through`,
+  #1204) exactly as a click does (`feature_click`): off, hidden chains and
+  faces stay out; on, the sight test is skipped and they are taken too.
+  A click and a box never disagree about hidden features.
   "Visible" is literal: in perspective straight over a through-cutout
   the eye sees down into it, so its walls' corners and bottom rim count;
   from the Top view in orthographic they are hidden and stay out.
@@ -37,9 +40,18 @@
   (+Z, orthographic: the Top view), same modes and kinds, adds by default
   (`replace: true` replaces), one undo step, refuses an empty, degenerate
   or already-picked box by name. The headless surface has no camera, so
-  it takes the one view a 2.5D part is boxed from.
+  it takes the one view a 2.5D part is boxed from. It takes an optional
+  `through` (default false): without it a headless box is visible-only,
+  with `through: true` it also takes the hidden features - the toggle's
+  twin. The tool description says so.
 
 **Considered and dropped.**
+
+- A box that ignores Pick through (always visible-only): a click with the
+  toggle on takes a hidden rim the box beside it would leave out - the
+  two gestures would disagree (NeoTech's review of PR #1078).
+- MCP `pick_in_box` always visible-only, documented: workable, but the
+  headless surface would lose a capability the GUI has.
 
 - Plain left drag as the box (orbit moved to a modifier): changes the
   viewport's oldest gesture; every user's muscle memory and the drag law

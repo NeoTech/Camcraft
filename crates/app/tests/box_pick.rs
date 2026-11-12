@@ -5,7 +5,8 @@
 //! pick-through is what brings the hidden rims in; a crossing box takes
 //! what it touches; faces box the same way; degenerate boxes take
 //! nothing. Plus the MCP twin, `pick_in_box`: one undo step, undo
-//! restores, refusals by name.
+//! restores, refusals by name, and `through` (default off) as the
+//! viewport's Pick through toggle.
 //!
 //! Gate map (#979): covers app::pick::box_pick, app::pick::feature_pick
 //! (occluded), app::mcp::box_pick, app::commands (SetOperationGeometry).
@@ -252,9 +253,36 @@ fn mcp_pick_in_box_adds_the_rim_in_one_undo_step() {
         (json!({ "operation": "C1", "box": { "x0": 1.0, "y0": 1.0, "x1": 1.0, "y1": 9.0 } }), "no area"),
         (json!({ "operation": "C1", "box": { "x0": 1.0, "y0": 1.0, "x1": 9.0 } }), "\"y1\""),
         (json!({ "operation": "C1", "mode": "lasso", "box": { "x0": 0.0, "y0": 0.0, "x1": 9.0, "y1": 9.0 } }), "unknown mode"),
+        (json!({ "operation": "C1", "through": "yes", "box": { "x0": 0.0, "y0": 0.0, "x1": 9.0, "y1": 9.0 } }), "\"through\" must be"),
         (json!({ "operation": "Nope", "box": { "x0": 0.0, "y0": 0.0, "x1": 9.0, "y1": 9.0 } }), "Nope"),
     ] {
         let (err, msg) = call(&mut s, 20, "pick_in_box", args);
         assert!(err && msg.as_str().is_some_and(|m| m.contains(want)), "{want}: {msg}");
     }
+}
+
+#[test]
+fn mcp_pick_in_box_is_visible_only_unless_through() {
+    let stl = write_plate_stl();
+    let mut s = Server::new();
+    let ok = |s: &mut Server, id: i64, name: &str, args: Value| {
+        let (err, body) = call(s, id, name, args);
+        assert!(!err, "{name} refused: {body}");
+        body
+    };
+    ok(&mut s, 1, "import_model", json!({ "path": stl.display().to_string() }));
+    ok(&mut s, 2, "set_stock", json!({ "box": { "dx": 100.0, "dy": 60.0, "dz": 10.0 } }));
+    ok(&mut s, 3, "add_tool", json!({ "catalog": "EM-0400-2FL" }));
+    ok(&mut s, 4, "add_operation", json!({ "kind": "contour", "tool": "EM-0400-2FL", "name": "C1", "source": "plate" }));
+    let cut = json!({ "x0": 15.0, "y0": 15.0, "x1": 45.0, "y1": 45.0 });
+    // No `through`, and `through: false`: the top rim only.
+    let plain = ok(&mut s, 5, "pick_in_box", json!({ "operation": "C1", "replace": true, "box": cut }));
+    assert_eq!(plain["added"], json!(4), "{plain}");
+    let off = ok(&mut s, 6, "pick_in_box", json!({ "operation": "C1", "replace": true, "through": false, "box": cut }));
+    assert_eq!(off["source"], plain["source"], "through: false is the default");
+    // `through: true`: the hidden bottom rim and vertical corners too.
+    let on = ok(&mut s, 7, "pick_in_box", json!({ "operation": "C1", "replace": true, "through": true, "box": cut }));
+    assert_eq!(on["added"], json!(12), "{on}");
+    let (plain_picks, on_picks) = (plain["source"]["picks"].as_array().cloned().unwrap_or_default(), on["source"]["picks"].as_array().cloned().unwrap_or_default());
+    assert!(plain_picks.iter().all(|p| on_picks.contains(p)), "the visible ones stay in");
 }

@@ -262,9 +262,10 @@ fn part_body(world: &World, b: &PickBody) -> bool {
 /// The box rule seen from straight above (+Z, orthographic): `corners`
 /// are world X/Y, mm. The headless twin of the viewport box (MCP
 /// `pick_in_box`), with the same visibility law - an edge under the top
-/// face is hidden from above, as it is in the Top view.
+/// face is hidden from above, as it is in the Top view - unless `through`
+/// (pick-through, as the viewport's toggle) takes the hidden ones too.
 #[must_use]
-pub fn box_select_top(world: &World, corners: [[f64; 2]; 2], mode: BoxMode, kinds: PickKinds) -> Vec<GeoSel> {
+pub fn box_select_top(world: &World, corners: [[f64; 2]; 2], mode: BoxMode, kinds: PickKinds, through: bool) -> Vec<GeoSel> {
     let bodies = pick_bodies_of(world, |_| false);
     // The sight lines start just above everything drawn: a far eye would
     // stretch the occlusion slack, which grows with the sight length.
@@ -278,6 +279,6 @@ pub fn box_select_top(world: &World, corners: [[f64; 2]; 2], mode: BoxMode, kind
     }
     let project = |p: [f64; 3]| Some([p[0], p[1]]);
     let view = PickRay { origin: [0.0, 0.0, top + 10.0], dir: [0.0, 0.0, -1.0], projection: Projection::Ortho };
-    let q = BoxQuery { project: &project, corners, mode, kinds, view, through: false };
+    let q = BoxQuery { project: &project, corners, mode, kinds, view, through };
     box_bodies(&bodies, &q, |b| part_body(world, b))
 }

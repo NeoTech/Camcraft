@@ -28,7 +28,7 @@ pub fn edge_hint() -> String {
 pub fn click_selects_hint() -> String {
     format!(
         "Click in the viewport - {key} adds; in Edge mode Shift takes the whole loop and Alt one edge. \
-         {key}+drag adds every visible edge (Edge) or face (Face) in a box: drag right for what lies inside it, left for what it touches.",
+         {key}+drag adds every visible edge (Edge) or face (Face) in a box - hidden ones too with Pick through on: drag right for what lies inside it, left for what it touches.",
         key = command_key()
     )
 }

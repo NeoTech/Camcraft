@@ -2,7 +2,8 @@
 //! A world X/Y box seen from straight above picks every visible feature
 //! edge chain (or welded face) in it - window or crossing - and adds them
 //! to an operation's picks through `SetOperationGeometry`: one undo step,
-//! the #692 one pick rule (feature chains only, nothing hidden).
+//! the #692 one pick rule (feature chains only; nothing hidden unless
+//! `through`, the viewport's Pick through toggle, asks for it).
 //!
 //! Provenance: our own tool surface over this repo's pick commands.
 
@@ -19,7 +20,7 @@ use crate::script::Env;
 
 pub(super) const TOOLS: &[Tool] = &[Tool {
     name: "pick_in_box",
-    description: "Box-select features into an operation's picks, seen from straight above (+Z, like the Top view): every visible feature edge chain (kind \"chains\", the default) or face (kind \"faces\") whose outline lies inside the world X/Y box (mode \"window\", the default) or touches it (mode \"crossing\"). Hidden edges (under the top face) and mesh triangulation edges are never taken. Adds to the current picks unless replace is true. One undo step.",
+    description: "Box-select features into an operation's picks, seen from straight above (+Z, like the Top view): every visible feature edge chain (kind \"chains\", the default) or face (kind \"faces\") whose outline lies inside the world X/Y box (mode \"window\", the default) or touches it (mode \"crossing\"). Without \"through\" the box is visible-only: hidden edges and faces (under the top face) are left out; \"through\": true takes them too, like the viewport's Pick through toggle. Mesh triangulation edges are never taken. Adds to the current picks unless replace is true. One undo step.",
     schema: s_pick_in_box,
     run: pick_in_box,
 }];
@@ -54,9 +55,15 @@ fn pick_in_box(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
         Some(Value::Bool(r)) => *r,
         Some(v) => return Err(format!("\"replace\" must be true or false, got {v}")),
     };
-    let found = box_select_top(&env.world, corners, mode, kinds);
+    let through = match a.get("through") {
+        None | Some(Value::Null) => false,
+        Some(Value::Bool(t)) => *t,
+        Some(v) => return Err(format!("\"through\" must be true or false, got {v}")),
+    };
+    let found = box_select_top(&env.world, corners, mode, kinds, through);
     if found.is_empty() {
-        return Err(format!("no visible {what} in the box - nothing picked, nothing changed"));
+        let seen = if through { "" } else { "visible " };
+        return Err(format!("no {seen}{what} in the box - nothing picked, nothing changed"));
     }
     let e = model::find_by_name(&env.world, &key).ok_or_else(|| format!("no operation named '{key}'"))?;
     let op = model::operation_of(&env.world, &e).ok_or_else(|| format!("'{key}' is not an operation"))?;
@@ -102,7 +109,8 @@ fn s_pick_in_box() -> Value {
             },
             "mode": { "type": "string", "enum": ["window", "crossing"], "description": "window: wholly inside (default); crossing: inside or touching." },
             "kind": { "type": "string", "enum": ["chains", "faces"], "description": "What to pick: edge chains (default) or faces." },
-            "replace": { "type": "boolean", "description": "Replace the current picks instead of adding to them (default false)." }
+            "replace": { "type": "boolean", "description": "Replace the current picks instead of adding to them (default false)." },
+            "through": { "type": "boolean", "description": "Pick through: also take hidden edges/faces (default false = visible only, as the viewport with Pick through off)." }
         },
         "required": ["operation", "box"],
         "additionalProperties": false
