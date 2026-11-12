@@ -21,7 +21,8 @@
 //! through a Z window that is the union (a superset) of the two
 //! endpoints' windows. This law names what meets steel in between.
 
-use crate::cl::{Move, MoveKind, Toolpath, angles_to_axis, axis_to_angles, is_vertical, normalize_axis};
+use super::upright::is_upright;
+use crate::cl::{Move, MoveKind, Toolpath, angles_to_axis, axis_to_angles, normalize_axis};
 use crate::geo2d::Point2;
 use crate::geometry::Point3;
 
@@ -167,7 +168,7 @@ fn swing_hit(
                 from_abc[1] + (to_abc[1] - from_abc[1]) * g,
                 from_abc[2] + (to_abc[2] - from_abc[2]) * g,
             ];
-            let lean = angles_to_axis(abc).filter(|a| !is_vertical(a));
+            let lean = angles_to_axis(abc).filter(|a| !is_upright(a));
             for &(above, band_r, band_len) in bands {
                 // Law (c)'s skip, read the same way: a band within the
                 // cutter's radius is the flutes' kerf only upright (#903).

@@ -2,7 +2,8 @@
 
 use super::types::{FixturePart, Warning};
 
-use crate::cl::{is_vertical, Move, MoveKind, Toolpath};
+use super::upright::is_upright;
+use crate::cl::{Move, MoveKind, Toolpath};
 use crate::geo2d::{Point2, Region};
 use crate::geometry::Point3;
 pub use crate::tools::ToolGeom;
@@ -180,7 +181,7 @@ pub fn bands_vs_fixtures_held(
         // measuring exactly when stage B's generators start leaning
         // real stock paths. The prismatic branch is bit-identical to
         // the law's own history: same sums, same comparisons.
-        let lean = m.axis.filter(|a| !is_vertical(a));
+        let lean = m.axis.filter(|a| !is_upright(a));
         let mut struck = None;
         for (part, above, band_r, band_len) in bands.iter().copied().chain(spindle) {
             // Unlike law (c), a band THINNER than the flute still
@@ -300,7 +301,7 @@ pub fn rapids_vs_fixtures_held(
         // report a graze, never hide a crash - the bands law's exact
         // precedent. The prismatic branch stays bit-identical to the
         // law's own history: same `rapid_hits_box`, same sums.
-        match m.axis.filter(|a| !is_vertical(a)) {
+        match m.axis.filter(|a| !is_upright(a)) {
             None => {
                 // The flute disc first, its verdict as ever; then the
                 // rest of the stack (#424) - shank, holder, the housing

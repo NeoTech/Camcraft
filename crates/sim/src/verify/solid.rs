@@ -28,7 +28,8 @@ use super::midpose;
 use super::probe::{Cutter, Frame};
 use super::solid_index::SolidIndex;
 use super::types::Warning;
-use crate::cl::{MoveKind, Toolpath, is_vertical, normalize_axis};
+use super::upright::is_upright;
+use crate::cl::{MoveKind, Toolpath, normalize_axis};
 use crate::geometry::{Point3, Triangle};
 
 /// How the solid law samples and what it excuses.
@@ -107,7 +108,7 @@ pub fn solid_hits(path: &Toolpath, facets: &[Triangle], cutter: &Cutter, law: &S
         if !(m.from.is_finite() && m.to.is_finite()) {
             continue; // the NonFinite law owns it
         }
-        let axis = m.axis.and_then(normalize_axis).filter(|a| !is_vertical(a));
+        let axis = m.axis.and_then(normalize_axis).filter(|a| !is_upright(a));
         let mid = poses
             .get(i)
             .and_then(|&(f, t)| midpose::change(f, t))
@@ -125,7 +126,7 @@ pub fn solid_hits(path: &Toolpath, facets: &[Triangle], cutter: &Cutter, law: &S
                     // within the interval is the stated sampling limit
                     // (STEP of far-end travel), the same as the fixture
                     // laws' posed sweep.
-                    let fr = Frame::new(iv.p0, normalize_axis(iv.am).filter(|a| !is_vertical(a)));
+                    let fr = Frame::new(iv.p0, normalize_axis(iv.am).filter(|a| !is_upright(a)));
                     index.hits(&fr, fr.local(iv.p1), set, allow, grow_mid, law.hole_walls)
                 }))
         };

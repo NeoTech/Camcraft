@@ -41,7 +41,8 @@
 //! "Real-Time Collision Detection", public material); the modal pose
 //! law is RS-274's. Our own design; no vendor source consulted.
 
-use crate::cl::{is_vertical, MoveKind, Toolpath};
+use super::upright::is_upright;
+use crate::cl::{MoveKind, Toolpath};
 use crate::fixture::{FixtureBox, FIXTURE_HIT_TOL};
 use crate::geometry::Point3;
 use crate::tools::ToolGeom;
@@ -132,7 +133,7 @@ pub(super) fn sweep(
     stack.retain(|&(_, lo, hi, r)| hi - lo > 0.0 || !(lo.is_finite() && hi.is_finite() && r.is_finite()));
     let reach = stack.iter().map(|e| e.2).fold(0.0f64, |a, b| if b.is_finite() { a.max(b) } else { a });
     let tol = if chord_tol.is_finite() && chord_tol > 0.0 { chord_tol } else { 0.01 };
-    let upright = |a: Option<[f64; 3]>| a.is_none_or(|a| is_vertical(&a));
+    let upright = |a: Option<[f64; 3]>| a.is_none_or(|a| is_upright(&a));
     let mut held: Option<[f64; 3]> = path.moves.first().and_then(|m| m.axis);
     for (i, m) in path.moves.iter().enumerate() {
         let from_pose = held;

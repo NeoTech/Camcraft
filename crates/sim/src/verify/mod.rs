@@ -185,6 +185,7 @@ mod stack_span;
 mod sweep;
 mod swept;
 mod types;
+mod upright;
 mod workholding;
 
 pub use types::{FixturePart, Mode, VerifyContext, Warning};

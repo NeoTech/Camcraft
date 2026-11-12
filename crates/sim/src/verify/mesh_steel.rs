@@ -44,7 +44,8 @@
 
 use std::slice;
 
-use crate::cl::{is_vertical, Move, Toolpath};
+use super::upright::is_upright;
+use crate::cl::{Move, Toolpath};
 use crate::fixture::{FixtureBox, FIXTURE_HIT_TOL};
 use crate::fixture_mesh::{FixtureMesh, MeshedFixture};
 use crate::geometry::Point3;
@@ -262,7 +263,7 @@ fn judge(
         }
         return mesh_posed::judge_c(mesh, m, (pose.prev_c, pose.to), steel, rapids, fixed);
     }
-    let up = |a: Option<[f64; 3]>| a.is_none_or(|a| is_vertical(&a));
+    let up = |a: Option<[f64; 3]>| a.is_none_or(|a| is_upright(&a));
     if up(pose.from) && up(pose.to) {
         return judge_move(mesh, m, steel, rapids);
     }
