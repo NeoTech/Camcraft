@@ -62,23 +62,19 @@ Vertex modes. A plain click replaces the picks.
 | Action | Windows/Linux | macOS |
 |---|---|---|
 | Replace the picks with this one | Click | Click |
-| Add a face, vertex or edge to the picks | Ctrl+click or Shift+click | Control+click or Shift+click |
-| Add one edge, or remove it if it is already picked (Edge mode) | Ctrl+click | Control+click |
+| Add a face, vertex or edge to the picks | Ctrl+click or Shift+click | Cmd+click or Shift+click |
+| Add one edge, or remove it if it is already picked (Edge mode) | Ctrl+click | Cmd+click |
 | Pick the whole face loop the edge lies on (Edge mode) | Shift+click | Shift+click |
 | Pick one mesh segment instead of the whole chain (Edge mode, boundaries) | Alt+click | Option+click |
-| Remove an edge from the picks | Ctrl+click on the picked edge | Control+click on the picked edge |
+| Remove an edge from the picks | Ctrl+click on the picked edge | Cmd+click on the picked edge |
 
-In a boundary, Ctrl toggles a pick, Shift closes the picks around their
-face loop, and Alt takes one segment, the same keys as above. Ctrl-clicking
+In a boundary, Ctrl (Cmd on macOS) toggles a pick, Shift closes the picks around their
+face loop, and Alt takes one segment, the same keys as above. Ctrl- or Cmd-clicking
 a face or vertex that is already picked is refused with a status note;
 only edges toggle out.
 
-On macOS the Control key is also the secondary (right) click, so a
-Control+click can arrive as a right-click and not add the edge. This was
-not checked on a Mac. The description of pull request #1242 says it is the
-case. That pull request, when merged, changes the add-to-selection keys
-above from Control to Cmd on macOS (Ctrl stays on Windows and Linux). The
-table shows the keys as they are on main today.
+On macOS the picking modifier is Cmd (the platform command key), so Control
+stays free for its secondary-click meaning.
 
 ## Right-click menus
 
