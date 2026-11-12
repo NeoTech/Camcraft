@@ -30,6 +30,7 @@ pub mod feature_click;
 pub mod egui_app;
 pub mod feedback;
 pub mod file_dialog;
+pub mod file_pick;
 pub mod incoming_view;
 pub mod headless_gpu;
 pub mod interact;
@@ -51,6 +52,8 @@ pub mod unsaved;
 pub mod vertex_pick;
 pub mod viewport;
 
+#[cfg(test)]
+mod file_pick_tests;
 #[cfg(test)]
 mod law_tests;
 #[cfg(test)]

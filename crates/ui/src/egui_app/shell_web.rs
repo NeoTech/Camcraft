@@ -147,6 +147,8 @@ impl WebShell {
                 .write()
                 .register_native_texture(&rs.device, view.color_view(), wgpu::FilterMode::Linear);
         theme::apply(&cc.egui_ctx);
+        // A file the async picker reads wakes the next frame to land it.
+        crate::file_pick::set_repaint(&cc.egui_ctx);
 
         // The traced-stock eye: awaited on the event loop, not blocked on.
         // Until it lands (or if the device refuses it) the sheet stands.
