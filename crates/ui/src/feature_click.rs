@@ -60,7 +60,11 @@ impl Ask {
 pub(crate) fn ask(state: &State, mods: Mods) -> Ask {
     let chain = if mods.alt {
         EdgeUnit::Segment
-    } else if state.boundary_pick.is_some() || crate::axis_pick::collecting(state) {
+    } else if state.boundary_pick.is_some()
+        || crate::axis_pick::collecting(state)
+        || crate::wcs_pick::collecting(state)
+    {
+        // #701: a role pick takes one run per edge click too, like a boundary.
         EdgeUnit::Run
     } else {
         EdgeUnit::Chain
@@ -90,6 +94,10 @@ pub(crate) fn ask(state: &State, mods: Mods) -> Ask {
             AxisBy::Edge => PickKinds::EDGES,
             AxisBy::Points => PickKinds::POINTS,
         }
+    } else if crate::wcs_pick::collecting(state) {
+        // #701: the role draft takes faces, edges, corners and walls alike -
+        // the toolbar's pick mode stays the user's own.
+        PickKinds { faces: true, edges: true, points: true, centres: false }
     } else {
         mode
     };
@@ -139,9 +147,10 @@ pub(crate) fn hover(state: &mut State, p: [f32; 2]) {
 
 /// A Face/Edge/Vertex click: resolve it by the one rule, then hand it to
 /// whoever collects - in main's order: a fixture locate draft, the
-/// three-points plane, an axis or plane row, the stray-click hint, a
-/// boundary, or the open operation's geometry (edges through the edge
-/// pick's Ctrl/Shift law, faces and points straight into the list).
+/// three-points plane, a #701 WCS role draft, an axis or plane row, the
+/// stray-click hint, a boundary, or the open operation's geometry (edges
+/// through the edge pick's Ctrl/Shift law, faces and points straight into
+/// the list).
 pub(crate) fn click(state: &mut State, p: [f32; 2], mods: Mods) {
     let ask = ask(state, mods);
     let Some((found, sel)) = feature_at(state, p, ask) else {
@@ -162,6 +171,10 @@ pub(crate) fn click(state: &mut State, p: [f32; 2], mods: Mods) {
     }
     if state.points_pick.is_some() {
         crate::points_pick::take(state, pick); // #555: refuses a face or an edge by name
+        return;
+    }
+    if crate::wcs_pick::collecting(state) {
+        crate::wcs_pick::take(state, pick); // #701: the Setups page's role draft
         return;
     }
     if crate::axis_pick::collecting(state) {
