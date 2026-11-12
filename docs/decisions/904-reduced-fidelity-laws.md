@@ -54,11 +54,11 @@ up to 0.01 mm too generous on a convex wall.
   proved clear only inside the generator (`multiaxis::stamp_pose`,
   `flank_clear` at the plan tolerance). No verify law re-measures it, so
   there is no verdict to tighten. Making the proof read the excess changes
-  generated paths; it is filed as its own issue.
+  generated paths; it is filed as #1052.
 - *The cone and engrave rides, probe, the cross drill and plasma stay
   refused,* as #864 left them: construction laws or their own modules.
   `rapids_radial` (the cross drill's rapid law) is not tightened either; it
-  only ever judges a kind that is refused.
+  only ever judges a kind that is refused. Filed as #1053.
 - *The excess is taken out along the law's own measure.* The radial field law
   measures along a ray out of the axis, the posed rapid reading across the
   lean. On a surface oblique to that measure the mesh can stand further off
@@ -87,6 +87,18 @@ up to 0.01 mm too generous on a convex wall.
   judgments out of `revolve.rs` (`blade_law.rs`), the threading verdicts out
   of `thread.rs` (`thread_law.rs`), and the excess readings out of
   `verify/types.rs` (`verify/excess.rs`). Structure only.
+
+- *The containment law's pin uses a model flagged 0.0075 mm, not 0.012 mm.*
+  Pinning it showed that #864's section law (b) convicts a matched drill
+  against its own polygon rim once the excess passes about 0.0055 mm: the
+  0.01 mm tolerance was sized to absorb our own regions' chord error, and the
+  excess takes it away. That is in the merged code, not in this slice, and
+  is a false gouge on the safe side; it is filed as #1057 and not fixed here.
+  The turning, rotary and groove fixtures of this slice were run at 0.0105,
+  0.012, 0.0135 and 0.0149 mm and stay clean.
+- *What #904 still listed is filed, so the umbrella can close:* the facet
+  budget as a setting (#1054), metre-unit STEP scaling (#1055), and the flag
+  gaps and display tolerances from #911's review (#1056).
 
 **Considered and dropped.**
 - Threading the excess into the multi-axis generators (stamp, ramp, link
