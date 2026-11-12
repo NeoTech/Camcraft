@@ -464,7 +464,9 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                         )));
                     }
                     for run in &runs {
-                        path = stitch(path, machining2d::contour_along_chain(run, &cp)?);
+                        // #1015: a run refused shows the rings and runs before it.
+                        let next = machining2d::contour_along_chain(run, &cp).map_err(|e| e.after_moves(&path.moves))?;
+                        path = stitch(path, next);
                     }
                     (region, path)
                 }
