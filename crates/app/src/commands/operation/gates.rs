@@ -112,20 +112,26 @@ pub(super) fn family_gate(world: &World, context: Option<&str>, params: &OpParam
             family.work(),
         )));
     }
+    // #1291: an unmounted setup reads as a mill (the kind_of law), so
+    // the words must not call it one - they say no machine is mounted.
+    let mounted = crate::machine::of_setup(world, context).1.is_some();
+    let clause = if mounted {
+        format!("the setup's machine is a {}", machine.word())
+    } else {
+        "the setup has no machine mounted".to_owned()
+    };
     // #670: plasma work needs a plasma table - no mill or lathe (nor a
     // mill-turn) strikes an arc.
     if family == Family::Plasma {
         return Err(CommandError::Invalid(format!(
-            "a {} operation is plasma cutting work; the setup's machine is a {} - mount a plasma table first",
+            "a {} operation is plasma cutting work; {clause} - mount a plasma table first",
             params.kind(),
-            machine.word(),
         )));
     }
     Err(CommandError::Invalid(format!(
-        "a {} operation is {} work; the setup's machine is a {} - mount a {} (or a mill-turn) first",
+        "a {} operation is {} work; {clause} - mount a {} (or a mill-turn) first",
         params.kind(),
         family.work(),
-        machine.word(),
         family.machine(),
     )))
 }
