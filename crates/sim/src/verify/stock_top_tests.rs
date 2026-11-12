@@ -2,6 +2,7 @@
 //! stepped slab (Z 20, a boss to Z 30 over x 10..20) with an 8 mm tool.
 
 use super::*;
+use super::super::stock_top_shell::closed_shell;
 use crate::cl::Move;
 use crate::geometry::{Point3, cube};
 
@@ -17,12 +18,32 @@ fn tool() -> ToolGeom {
     }
 }
 
-/// The slab and the boss as two closed boxes (the bound only needs each
-/// facet's plan and height).
-fn stepped() -> Vec<Triangle> {
-    let mut f = cube(Point3::new(-30.0, -30.0, -10.0), Point3::new(30.0, 30.0, 20.0)).facets.to_vec();
-    f.extend(cube(Point3::new(10.0, -5.0, 20.0), Point3::new(20.0, 5.0, 30.0)).facets.iter().cloned());
+fn quad(a: Point3, b: Point3, c: Point3, d: Point3, f: &mut Vec<Triangle>) {
+    f.push(Triangle::new(a, b, c));
+    f.push(Triangle::new(a, c, d));
+}
+
+/// The slab with the boss as ONE closed, outward shell: the slab's low
+/// top ringed round the boss's foot. `boss_top` false leaves the boss's
+/// two top facets out - an open shell (the PR #1098 review's case).
+fn stepped_shell(boss_top: bool) -> Vec<Triangle> {
+    let slab = cube(Point3::new(-30.0, -30.0, -10.0), Point3::new(30.0, 30.0, 20.0)).facets;
+    let boss = cube(Point3::new(10.0, -5.0, 20.0), Point3::new(20.0, 5.0, 30.0)).facets;
+    let mut f: Vec<Triangle> = slab.iter().take(2).cloned().collect(); // bottom
+    f.extend(slab.iter().skip(4).cloned()); // sides
+    let o = [(-30.0, -30.0), (30.0, -30.0), (30.0, 30.0), (-30.0, 30.0)];
+    let i = [(10.0, -5.0), (20.0, -5.0), (20.0, 5.0), (10.0, 5.0)];
+    let p = |(x, y): (f64, f64)| Point3::new(x, y, 20.0);
+    for k in 0..4 {
+        let n = (k + 1) % 4;
+        quad(p(o[k]), p(o[n]), p(i[n]), p(i[k]), &mut f);
+    }
+    f.extend(boss.iter().skip(if boss_top { 2 } else { 4 }).cloned());
     f
+}
+
+fn stepped() -> Vec<Triangle> {
+    stepped_shell(true)
 }
 
 fn dive_at(x: f64, z1: f64, axis: Option<[f64; 3]>) -> Toolpath {
@@ -125,4 +146,71 @@ fn only_upright_column_dives_are_re_read() {
         m.to.x = 3.0;
     }
     assert_eq!(judged(&lateral, Mode::Area, &[&s], &tool()), CONVICTED);
+}
+
+#[test]
+fn the_fixtures_are_closed_shells() {
+    assert!(closed_shell(&stepped()));
+    assert!(closed_shell(&cube(Point3::new(0.0, 0.0, 0.0), Point3::new(1.0, 2.0, 3.0)).facets));
+}
+
+#[test]
+fn an_open_shell_keeps_the_conviction() {
+    // The boss without its top: the facets over the dive are missing,
+    // and only the slab's floor and the boss's walls stand under it.
+    let open = stepped_shell(false);
+    assert!(!closed_shell(&open));
+    assert_eq!(judged(&dive_at(15.0, 22.0, None), Mode::Area, &[&open], &tool()), CONVICTED);
+    // Open too far away to matter for the column - still no proof.
+    assert_eq!(judged(&dive_at(0.0, 22.0, None), Mode::Area, &[&open], &tool()), CONVICTED);
+    // A closed stock beside an open part is no proof either.
+    let s = stepped();
+    let mut part = cube(Point3::new(-3.0, -3.0, 0.0), Point3::new(3.0, 3.0, 25.0)).facets.to_vec();
+    part.truncate(10);
+    assert_eq!(judged(&dive_at(0.0, 22.0, None), Mode::Area, &[&s, &part], &tool()), CONVICTED);
+}
+
+#[test]
+fn a_non_manifold_or_duplicated_edge_keeps_the_conviction() {
+    // A fin: one extra facet on the slab's top edge - three facets there.
+    let mut fin = stepped();
+    fin.push(Triangle::new(Point3::new(-30.0, -30.0, 20.0), Point3::new(30.0, -30.0, 20.0), Point3::new(0.0, -30.0, 40.0)));
+    assert!(!closed_shell(&fin));
+    assert_eq!(judged(&dive_at(0.0, 22.0, None), Mode::Area, &[&fin], &tool()), CONVICTED);
+    // A facet listed twice.
+    let mut twice = stepped();
+    if let Some(t) = twice.first().cloned() {
+        twice.push(t);
+    }
+    assert!(!closed_shell(&twice));
+    assert_eq!(judged(&dive_at(0.0, 22.0, None), Mode::Area, &[&twice], &tool()), CONVICTED);
+    // A degenerate (zero-area) facet.
+    let mut flat = stepped();
+    flat.push(Triangle::new(Point3::new(0.0, 0.0, 20.0), Point3::new(1.0, 0.0, 20.0), Point3::new(2.0, 0.0, 20.0)));
+    assert!(!closed_shell(&flat));
+}
+
+#[test]
+fn an_inside_out_or_split_solid_keeps_the_conviction() {
+    let flipped: Vec<Triangle> = stepped().iter().map(|t| Triangle::new(t.a, t.c, t.b)).collect();
+    assert!(!closed_shell(&flipped));
+    assert_eq!(judged(&dive_at(0.0, 22.0, None), Mode::Area, &[&flipped], &tool()), CONVICTED);
+    // Two closed boxes handed as one solid.
+    let mut two = cube(Point3::new(-30.0, -30.0, -10.0), Point3::new(30.0, 30.0, 20.0)).facets.to_vec();
+    two.extend(cube(Point3::new(10.0, -5.0, 20.0), Point3::new(20.0, 5.0, 30.0)).facets.iter().cloned());
+    assert!(!closed_shell(&two));
+    assert_eq!(judged(&dive_at(0.0, 22.0, None), Mode::Area, &[&two], &tool()), CONVICTED);
+}
+
+#[test]
+fn an_empty_or_non_finite_solid_keeps_the_conviction() {
+    let s = stepped();
+    let empty: Vec<Triangle> = Vec::new();
+    assert_eq!(judged(&dive_at(0.0, 22.0, None), Mode::Area, &[&s, &empty], &tool()), CONVICTED);
+    let mut bad = s.clone();
+    if let Some(t) = bad.last_mut() {
+        t.b.x = f64::INFINITY;
+    }
+    assert!(!closed_shell(&bad));
+    assert_eq!(judged(&dive_at(0.0, 22.0, None), Mode::Area, &[&bad], &tool()), CONVICTED);
 }

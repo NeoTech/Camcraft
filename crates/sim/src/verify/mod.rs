@@ -183,6 +183,7 @@ mod solid;
 mod solid_index;
 mod stack_span;
 mod stock_top;
+mod stock_top_shell;
 mod sweep;
 mod swept;
 mod types;

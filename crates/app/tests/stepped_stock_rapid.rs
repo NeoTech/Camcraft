@@ -46,9 +46,11 @@ fn quad(a: Point3, b: Point3, c: Point3, d: Point3, f: &mut Vec<Triangle>) {
     f.push(Triangle::new(a, c, d));
 }
 
-/// A closed, outward-wound casting: a 60 x 60 slab Z -10..20 with a boss
-/// over `[x0, x1] x [y0, y1]` up to Z 30 (inside the slab's outline).
-fn casting(x0: f64, x1: f64, y0: f64, y1: f64) -> Mesh {
+/// An outward-wound casting: a 60 x 60 slab Z -10..20 with a boss over
+/// `[x0, x1] x [y0, y1]` up to Z 30 (inside the slab's outline). Closed,
+/// unless `open`: then the boss's two top facets are left out (PR #1098
+/// review) - the walls still stand to Z 30, the shell has a hole.
+fn casting(x0: f64, x1: f64, y0: f64, y1: f64, open: bool) -> Mesh {
     let slab = cube(Point3::new(-30.0, -30.0, -10.0), Point3::new(30.0, 30.0, MOUTH));
     let boss = cube(Point3::new(x0, y0, MOUTH), Point3::new(x1, y1, BOSS));
     let mut f: Vec<Triangle> = slab.facets[0..2].to_vec(); // bottom
@@ -60,7 +62,8 @@ fn casting(x0: f64, x1: f64, y0: f64, y1: f64) -> Mesh {
         let n = (k + 1) % 4;
         quad(p(o[k]), p(o[n]), p(i[n]), p(i[k]), &mut f); // the low top, ringed round the boss
     }
-    f.extend(boss.facets[2..12].iter().cloned()); // the boss's top and sides
+    let from = if open { 4 } else { 2 };
+    f.extend(boss.facets[from..12].iter().cloned()); // the boss's top and sides
     Mesh::from_facets(f)
 }
 
@@ -117,10 +120,14 @@ enum Src {
 /// The Bore from `src` under the casting with its boss over `boss`: the
 /// first vertical rapid down (index, XY, end Z), the warnings, the post.
 fn run(src: Src, boss: [f64; 4]) -> ((usize, Point2, f64), Vec<Warning>, Result<(), String>) {
+    run_on(src, boss, false)
+}
+
+fn run_on(src: Src, boss: [f64; 4], open: bool) -> ((usize, Point2, f64), Vec<Warning>, Result<(), String>) {
     let world = new_world();
     let mut h = History::default();
     let [x0, x1, y0, y1] = boss;
-    h.execute(&world, ImportModel::from_mesh("casting", casting(x0, x1, y0, y1)));
+    h.execute(&world, ImportModel::from_mesh("casting", casting(x0, x1, y0, y1, open)));
     let source = match src {
         Src::Part => {
             h.execute(&world, ImportModel::from_mesh("part", part()));
@@ -199,5 +206,21 @@ fn a_boss_reaching_into_the_tool_footprint_is_convicted() {
         let ((_, c, _), _, _) = run(src, FAR);
         let edge = c.x + R - 2.5;
         convicted_and_blocked(src, [edge, edge + 10.0, c.y - 5.0, c.y + 5.0], "boss under the rim");
+    }
+}
+
+#[test]
+fn an_open_stock_mesh_proves_nothing_and_the_dive_stays_convicted() {
+    // PR #1098 review: the boss over the hole without its top facets. No
+    // facet stands over the dive, yet the boss's walls do - the re-reading
+    // must not take a hole in the shell for air.
+    for src in [Src::Part, Src::Stock] {
+        let ((at, _, z), warns, posted) = run_on(src, [-12.0, 12.0, -12.0, 12.0], true);
+        assert!(z < BOSS, "{src:?}: the fixture must dive under the boss's walls, not to Z {z}");
+        assert!(warns.contains(&Warning::RapidInStock { at }), "{src:?}: the dive into the open boss went unnamed: {warns:?}");
+        match posted {
+            Ok(()) => panic!("{src:?}: a program diving into the open boss posted"),
+            Err(e) => assert!(e.contains("post blocked"), "{src:?}: {e}"),
+        }
     }
 }

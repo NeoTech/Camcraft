@@ -17,12 +17,14 @@
 //! stack is judged at its own disc and its own height over the tip: the
 //! flute's radius at the tip, the shank's from the flute's top, the
 //! holder's from the shank's top (and on up - the cap is a height, so a
-//! band that is taller changes nothing). Fails closed: a non-finite
-//! vertex anywhere, a band whose radius or offset is not a finite
-//! non-negative number, or a flute disc that meets no facet at all
-//! leaves the conviction standing.
+//! band that is taller changes nothing). Fails closed: a solid that is
+//! not one closed, outward shell ([`super::stock_top_shell`] - an open
+//! shell, a non-manifold edge, a non-finite vertex, no facets), a band
+//! whose radius or offset is not a finite non-negative number, or a
+//! flute disc that meets no facet at all leaves the conviction standing.
 
 use super::laws::dist2_seg;
+use super::stock_top_shell::closed_shell;
 use super::types::{Mode, Warning};
 
 use crate::cl::{MoveKind, Toolpath};
@@ -48,7 +50,7 @@ pub fn acquit_by_stock_top(
     if matches!(mode, Mode::Radial | Mode::Revolve | Mode::Rotary)
         || solids.is_empty()
         || !z_tol.is_finite()
-        || !all_finite(solids)
+        || !solids.iter().all(|s| closed_shell(s))
     {
         return;
     }
@@ -115,9 +117,6 @@ fn dist2_tri(p: Point2, t: &Triangle) -> f64 {
     dist2_seg(p, a, b).min(dist2_seg(p, b, c)).min(dist2_seg(p, c, a))
 }
 
-fn all_finite(solids: &[&[Triangle]]) -> bool {
-    solids.iter().flat_map(|s| s.iter()).all(|t| [t.a, t.b, t.c].iter().all(|v| v.x.is_finite() && v.y.is_finite() && v.z.is_finite()))
-}
 
 #[cfg(test)]
 #[path = "stock_top_tests.rs"]
