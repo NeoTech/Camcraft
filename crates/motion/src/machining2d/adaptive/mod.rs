@@ -47,6 +47,7 @@ mod lift;
 mod lift_coarse;
 mod lift_link;
 mod lift_split;
+mod lift_swept;
 mod link;
 mod loops;
 // Issue #5: the trochoidal fallback (`pocket_hsm`: spiral -> trochoid ->
