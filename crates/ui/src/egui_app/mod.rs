@@ -196,6 +196,8 @@ mod locate_tests;
 #[cfg(test)]
 mod fixture_library_tests;
 #[cfg(test)]
+mod escape_tests;
+#[cfg(test)]
 mod fixture_vise_tests;
 #[cfg(test)]
 mod fixture_vise_stock_tests;
