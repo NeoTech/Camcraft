@@ -1217,6 +1217,8 @@ pub(crate) fn tool_editor_window(ctx: &egui::Context, state: &mut State) {
                     }
                     // #630: which point of the nose the lathe posts write.
                     super::tool_orientation_row::orientation_row(ui, state);
+                    // #891: a lathe steel's surface speed, feed per rev, clamp.
+                    super::tool_turning_row::turning_rows(ui, state);
                     if state.tool_ui.kind == 7 {
                         field(ui, "Blade width");
                         num(ui, u, &mut state.tool_ui.width);

@@ -60,6 +60,8 @@ fn setups_view(env: &Env) -> Vec<Value> {
                 "stock": stock.as_ref().map(project::stock_to_json),
                 "stock_bounds": model::stock_world_aabb_for(w, d).as_ref().map(aabb),
                 "wcs": wcs,
+                // #1031: the chuck's or collet's rated maximum rpm.
+                "workholding_max_rpm": s.as_deref().and_then(|n| crate::setup_workholding::of(w, Some(n))).map(fnum),
             })
         })
         .collect()

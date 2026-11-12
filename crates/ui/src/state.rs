@@ -47,6 +47,8 @@ mod pockets;
 pub use pockets::PocketScan;
 #[path = "state_setup_post_options.rs"]
 mod setup_post_options;
+#[path = "state_setup_workholding.rs"]
+mod setup_workholding;
 #[path = "state_fixture.rs"]
 mod fixture_view;
 #[path = "state_locate.rs"]
@@ -199,6 +201,9 @@ pub enum CommandKind {
         setup: String,
         own: bool,
     },
+    /// #1031: state (`Some`) or clear a setup's workholding maximum rpm
+    /// (`SetSetupWorkholdingRpm`).
+    SetSetupWorkholdingRpm { setup: String, max_rpm: Option<f64> },
     /// The post's user options (issue #34): the undoable
     /// `SetPostOptions` with the picked value.
     SetPostOptions(camcraft_app::schema::PostOptions),
@@ -974,6 +979,9 @@ pub struct ToolUi {
     /// #630: the lathe tool orientation (LinuxCNC 1-9), None = the
     /// kind's default - carried so an Apply never rewrites it.
     pub orientation: Option<u8>,
+    /// #891: the turning cutting data (Vc, f/rev, max rpm), None = not
+    /// stated - carried so an Apply never drops it.
+    pub turning: Option<camcraft_app::tools::TurningData>,
 }
 
 impl Default for ToolUi {
@@ -1025,6 +1033,7 @@ impl ToolUi {
             flutes: t.flutes,
             center_cutting: t.center_cutting,
             orientation: t.orientation,
+            turning: t.turning,
         }
     }
 
@@ -1075,6 +1084,7 @@ impl ToolUi {
             flutes: self.flutes,
             center_cutting: self.center_cutting,
             orientation: self.orientation,
+            turning: self.turning,
         };
         tool.corner_r = tool.tip_corner_r();
         tool
@@ -2846,6 +2856,7 @@ impl State {
             CommandKind::SetupOwnMachine { setup, own } => self.own_machine(&setup, own),
             CommandKind::SetupOwnPost { setup, own } => self.own_post(&setup, own),
             CommandKind::SetupOwnPostOptions { setup, own } => self.own_post_options(&setup, own),
+            CommandKind::SetSetupWorkholdingRpm { setup, max_rpm } => self.set_workholding_rpm(&setup, max_rpm),
             CommandKind::EditMachineDialog => {
                 let (path, m) = machine::of(&self.world);
                 match m {

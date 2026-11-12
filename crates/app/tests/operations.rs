@@ -6594,6 +6594,7 @@ fn stub_tool() -> Tool {
         tool_material: None,
         flutes: None,
         orientation: None,
+        turning: None,
     }
 }
 

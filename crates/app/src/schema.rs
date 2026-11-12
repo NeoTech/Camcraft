@@ -260,6 +260,10 @@ impl ToolBody {
 /// `post_options` (#389) is the setup's own post options; `None`, the
 /// default and every earlier file, follows the document's `PostOptions`.
 /// Written only by `SetSetupPostOptions` and the project loader.
+/// `workholding_max_rpm` (#1031) is the rated maximum rpm of the chuck
+/// or collet the setup holds the work in; `None`, the default and every
+/// earlier file, states none. Read through [`crate::setup_workholding`];
+/// written only by `SetSetupWorkholdingRpm` and the project loader.
 #[derive(Component, Debug, Clone, PartialEq)]
 pub struct SetupDef {
     pub stock: String,
@@ -272,6 +276,7 @@ pub struct SetupDef {
     pub relative_to: Option<String>,
     pub stock_source: Option<crate::setup_stock::StockSource>,
     pub post_options: Option<PostOptions>,
+    pub workholding_max_rpm: Option<f64>,
 }
 
 /// The M3.2 stage B marker turning a model entity into a FIXTURE: the
