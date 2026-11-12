@@ -94,7 +94,7 @@
 //!   rapid - with no clearance or kerf exemptions, because steel is
 //!   never removed material. A POSED move (held or stated pose off
 //!   the upright) is also swept with its real pose - the whole stack
-//!   as capsules along the lerped pose ([`posed_steel`], M13.8): a
+//!   as flat-ended bands along the lerped pose ([`posed_steel`], M13.8): a
 //!   radial index under a bar's equator carries its holder toward the
 //!   chuck, and the column enclosures never looked there. Z contact within
 //!   [`crate::fixture::FIXTURE_HIT_TOL`]
