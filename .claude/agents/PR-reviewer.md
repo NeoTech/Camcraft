@@ -52,11 +52,20 @@ merge.
 
 ## Steps
 
-1. **Skip check.** `gh pr view <N> --json headRefOid,reviews,comments,state,isDraft,author,headRepositoryOwner`.
+1. **Skip check.** `owner=$(gh repo view --json owner --jq .owner.login)`, then
+   `gh pr view <N> --json headRefOid,reviews,comments,state,isDraft,author,headRepositoryOwner`.
    If the PR is closed, merged or a draft, report "skipped: <why>" and stop. If a
-   review or comment by NeoTech already contains
+   review or comment whose author is `$owner` already contains
    `<!-- pr-reviewer: <headRefOid> -->` for the current head SHA, report
-   "skipped: already reviewed at <sha7>" and stop.
+   "skipped: already reviewed at <sha7>" and stop. Only the owner's account's
+   marker counts (AGENTS.md "Only the owner's reviews count"); another
+   account's marker is ignored.
+   If the new commits since the owner's last marker are only merges of main
+   with an empty remerge-diff, the review of that marker stands (AGENTS.md "A
+   clean merge of main keeps its review"): run
+   `cargo xtask merge-plan --delta <N> --reviewed <marker sha>`; on SAME report
+   "skipped: clean merge of main since <sha7>, review stands" and stop. Any
+   other verdict is reviewed as below.
 2. **Read.** `gh pr view <N>` (body, commits, files) and the linked issue(s).
    Note what the PR claims and what the issue asks for.
 3. **Worktree + trial merge.**
