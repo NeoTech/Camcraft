@@ -729,7 +729,7 @@ fn setups_page(ui: &mut Ui, state: &mut State) {
         // Workholding and the tool list of the implicit first setup live
         // under its Fixtures and Tool list nodes in the browser (#1197),
         // the same place as in a document with setups.
-        ui.label("Its fixtures and tools are in the browser, under Setup.");
+        ui.label(super::setup_pages::WORKHOLDING_POINTER);
         sheet_footer(ui, state);
         return;
     }

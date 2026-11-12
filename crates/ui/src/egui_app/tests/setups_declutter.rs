@@ -129,3 +129,34 @@ fn one_setup_keeps_workholding_under_its_fixtures_page() {
     assert!(shows(&h, "Fixtures - Setup1"), "the Fixtures page of Setup1 is open");
     assert!(shows(&h, "orkholding"), "Setup1's Fixtures page holds the workholding");
 }
+
+/// #1197 review: the Setup<n> Fixtures button activates its setup as the
+/// browser's Fixtures row does. From an inactive Setup2 the page must open
+/// editable, with Setup2's workholding - not the "not the active setup" line.
+#[test]
+fn an_inactive_setups_fixtures_button_activates_it_and_opens_its_workholding() {
+    let mut h = Harness::builder()
+        .with_size(Vec2::new(1280.0, 1400.0))
+        .build_ui_state(frame, ShellUi::blank());
+    {
+        let st = &mut h.state_mut().state;
+        for _ in 0..2 {
+            st.pending.push_back(CommandKind::CreateSetup { name: None, datum_from: None });
+            st.drain_actions();
+        }
+        st.pending.push_back(CommandKind::ActivateSetup(Some("Setup1".into())));
+        st.drain_actions();
+    }
+    assert_eq!(camcraft_app::setup::active(&h.state().state.world).as_deref(), Some("Setup1"));
+    open(&mut h, UiTarget::SetupNode("Setup2".into(), SetupPage::Settings));
+    h.get_by_label("Open Setup2 fixtures").click();
+    h.run_steps(3);
+    assert_eq!(
+        camcraft_app::setup::active(&h.state().state.world).as_deref(),
+        Some("Setup2"),
+        "the button activates Setup2, as a browser click on its Fixtures row does"
+    );
+    assert!(shows(&h, "Fixtures - Setup2"), "the Fixtures page of Setup2 is open");
+    assert!(!shows(&h, "not the active setup"), "the page is editable, not refused");
+    assert!(shows(&h, "orkholding"), "Setup2's Fixtures page holds the workholding");
+}

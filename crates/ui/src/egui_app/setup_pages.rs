@@ -136,6 +136,10 @@ fn ownership(ui: &mut Ui, state: &mut State, ctx: Option<&str>, which: Mount) {
 
 /// The active-setup radio's words (#866: "furniture" was our in-code
 /// word for a setup's stock, WCS and fixtures - never a user's).
+/// The one pointer line to the browser's Fixtures and Tool list nodes, shared
+/// by the Setups page (no setups) and the implicit Settings page (#1197).
+pub(crate) const WORKHOLDING_POINTER: &str = "Fixtures and tools are under Setup in the browser, not on this page.";
+
 pub(crate) const ACTIVE_SETUP_LABEL: &str = "Active setup - new operations go into it, and the Stock and Work offset pages edit it";
 
 /// The setup's settings: which setup is active, where its stock comes
@@ -143,7 +147,7 @@ pub(crate) const ACTIVE_SETUP_LABEL: &str = "Active setup - new operations go in
 fn settings(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
     let Some(name) = ctx else {
         ui.label("No setups in this document: the one stock and the one WCS act as the first setup.");
-        hint(ui, "Its fixtures are under Fixtures in the browser, not on this page.");
+        hint(ui, WORKHOLDING_POINTER);
         if ui.button("Create first setup").clicked() {
             state.pending.push_back(CommandKind::CreateSetup { name: None, datum_from: None });
         }
@@ -178,6 +182,9 @@ fn settings(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
             state.pending.push_back(CommandKind::DeleteSetup(name.to_owned()));
         }
         if ui.button(format!("Open {name} fixtures")).clicked() {
+            // Activate it too, as the browser's Fixtures row does: the
+            // fixture page edits only the active setup.
+            super::browser_pane::focus(state, name);
             crate::actions::target(state, UiTarget::SetupNode(name.to_owned(), SetupPage::Fixtures));
         }
     });

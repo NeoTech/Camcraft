@@ -1,6 +1,6 @@
 # 1197: workholding lives under Fixtures in every state
 
-Issue #1197 (P3, effort:medium). Taken unattended by the medium worker.
+Issue #1197 (P3, effort:high). Taken unattended by the medium worker, escalated to high after its quick gate failed twice; continued on the high worker.
 
 ## Chosen
 
@@ -37,7 +37,14 @@ Fixtures, in all three states (no setup, one setup, several).
 
 ## Pinned by
 
-`tests::setups_declutter::a_document_without_setups_keeps_workholding_under_fixtures_only`
-and `tests::setups_declutter::one_setup_keeps_workholding_under_its_fixtures_page`.
+`tests::setups_declutter::a_document_without_setups_keeps_workholding_under_fixtures_only`,
+`tests::setups_declutter::one_setup_keeps_workholding_under_its_fixtures_page`
+and `tests::setups_declutter::an_inactive_setups_fixtures_button_activates_it_and_opens_its_workholding`
+(the button activates its setup first, as the browser's Fixtures row and the
+Setups page's Open page button do - PR #1211 review).
+The implicit Fixtures and Tool list rows under Setup with no setups are pinned by
+`setup_tree::every_setup_owns_its_nodes_in_order`.
 The existing `the_setups_page_lists_setups_only_and_each_setup_page_keeps_its_settings`
 covers the several-setups state.
+
+The two pointer lines share one wording (`setup_pages::WORKHOLDING_POINTER`).
