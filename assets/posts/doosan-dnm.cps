@@ -63,7 +63,7 @@ var homedAt = -1;          // linesWritten() just after a trip home (#504): onCl
 var coolantOp = "";        // the section's OperationName, for refusals (#150)
 var sectionOpen = false;   // preamble written (a legacy .cl carries no SECTION)
 var tcpmOn = false;        // G43.4 armed (stage D RTCP): re-armed at tool change
-var lastA = 0, lastB = 0, lastC = 0; // angle words the last block commanded (deg)
+var lastA = null, lastB = null, lastC = null; // angle words the last block commanded (deg); null: none written yet, so the next A is written (#950)
 var tiltRefused = false;   // a refusal the gate counts once, not per line
 var rotAt = { A: null, B: null, C: null }; // #885: the angles the control holds (null: not known) - never reset, a tool change turns nothing
 var compG = "";            // G41/G42/G40 pending for the next straight block (M13.11)
@@ -527,7 +527,7 @@ function onToolChange(number, name) {
   tNo = number;
   toolWait = true;
   tcpmOn = false;
-  lastA = 0; lastB = 0; lastC = 0;
+  lastA = null; lastB = null; lastC = null; // #950: never assume A0 - the first A after this is written
   rotaryAClamped = true;
 }
 
@@ -612,7 +612,7 @@ function endPreamble() {
   block(["M5"]);
   afterOp();
   tcpmOn = false;
-  lastA = 0; lastB = 0; lastC = 0;
+  lastA = null; lastB = null; lastC = null; // #950: never assume A0 - the first A after this is written
 }
 
 function onSection() { startPreamble(); }

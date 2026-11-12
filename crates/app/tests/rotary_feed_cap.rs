@@ -150,15 +150,13 @@ fn doosan_tcp_feed_holds_the_stated_a_rate() {
 #[test]
 fn doosan_fourth_axis_composite_feed_holds_the_stated_a_rate() {
     let rate = 600.0;
-    // Without TCP the post takes the table to start at A0 and writes no
-    // A0 word, so the control's A is never placed: refused by name.
-    let unplaced = post("assets/posts/doosan-dnm.cps", &plain_fourth(rate), STREAM);
-    assert_eq!(
-        unplaced.warnings,
-        vec!["a feed that turns A from an angle the post does not know - the stated A rate cannot be held"],
-        "{}",
-        unplaced.program
-    );
+    // #950: the opening rapid writes its A0 (the post never assumes the
+    // table stands at A0), so the control's A is placed and every turn
+    // after it is held at the stated rate.
+    let placed = post("assets/posts/doosan-dnm.cps", &plain_fourth(rate), STREAM);
+    assert!(placed.warnings.is_empty(), "{:?}", placed.warnings);
+    assert!(placed.program.contains("G00 X10 Y0 Z5 A0"), "{}", placed.program);
+    assert_eq!(assert_within(&placed.program, Reading::Composite, rate), 5, "{}", placed.program);
     // A program whose rapid writes an A word places the table first.
     let stream = STREAM.replace("Rapid X 10000 Y 0 Z 5000 A 0 ", "Rapid X 10000 Y 0 Z 5000 A 1000 ");
     let out = post("assets/posts/doosan-dnm.cps", &plain_fourth(rate), &stream);
