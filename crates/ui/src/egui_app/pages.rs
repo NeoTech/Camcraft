@@ -646,7 +646,7 @@ fn wcs_page(ui: &mut Ui, state: &mut State) {
         None => format!("{label}: not placed (at the origin)"),
     };
     ui.label(line);
-    ui.label("Work offset: the G54-G59 slot this setup posts. It does not move the origin.");
+    ui.label("Work offset: the offset this setup posts, as its post names it. It does not move the origin.");
 }
 
 fn apply_wcs_drafts(state: &mut State) {

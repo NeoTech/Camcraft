@@ -20,9 +20,11 @@ offset 1 - the silent fallback triage point 2 forbids) and clamping it
 
 **Other UI words.** Slice 2 already moved the browser tree, the heights
 page row, the viewport chips (`interact.rs`) and the status line
-(`state.rs`) to `setup::wcs_name`. Left here: the combo's hover text and
-the heights page hint, which named a fixed "G54-G59" range; both now say
-the post names the offsets. The probe page's "Set G54".."Set G59" results
+(`state.rs`) to `setup::wcs_name`. Left here: the combo's hover text, the
+heights page hint and the WCS page's "Work offset:" line, which named a
+fixed "G54-G59" range; all three now say the post names the offsets
+(the WCS page line shows in a release-lane snapshot, regenerated at the
+cut; its structural twin `one_wcs` is updated here). The probe page's "Set G54".."Set G59" results
 are unchanged on purpose: the probe register arithmetic reaches offsets
 1-6 only (triage point 4), so a probe never sets an extended offset.
 
