@@ -74,6 +74,9 @@ pub fn post_serves(name: &str, kind: crate::machine::Kind) -> bool {
         Kind::MillTurn => !plasma_post,
         // #669: a cutting post would write spindle words a torch has not.
         Kind::Plasma => plasma_post,
+        // #530: no EDM post ships yet (#533, #542); no milling or
+        // turning dialect speaks to an EDM control.
+        Kind::WireEdm | Kind::SinkerEdm => false,
     }
 }
 
@@ -92,7 +95,10 @@ pub fn default_post_for(kind: crate::machine::Kind) -> PostRef {
         crate::machine::Kind::Plasma => PLASMA_POSTS
             .first()
             .map_or(PostRef::Builtin, |n| PostRef::Named((*n).to_owned())),
-        _ => PostRef::Builtin,
+        // #533/#542: no EDM post ships yet; `post_serves` refuses every
+        // post for an EDM, so this name is never offered or posted.
+        crate::machine::Kind::WireEdm | crate::machine::Kind::SinkerEdm => PostRef::Builtin,
+        crate::machine::Kind::Mill | crate::machine::Kind::MillTurn => PostRef::Builtin,
     }
 }
 
@@ -446,7 +452,10 @@ pub fn post_script(world: &World, out_path: &Path, cps: &str) -> Result<Posted, 
 fn post_script_body(world: &World, out_path: &Path, cps: &str) -> Result<Posted, String> {
     // #388: the program's one machine (a program over several refuses).
     let machine = mounts::single(world, false)?.machine;
-    let records = stream_records(world)?;
+    let streams = op_streams(world)?;
+    // #1190: a turning dialect opens only what a lathe may run.
+    crate::lathe_voice::at_post(world, streams.iter().map(|(n, _)| n.as_str()), cps)?;
+    let records = join_streams(streams);
     // The verification gate (M2.3 D): the same two program-level
     // judgments the Deviate cell shows, made binding. Evidence is
     // computed here and now - never a cached verdict carried in from
@@ -625,6 +634,12 @@ pub fn verification_gate(world: &World) -> Vec<String> {
 pub fn verification_report(world: &World) -> GateReport {
     let mut problems = Vec::new();
 
+    // The fidelity clause (#864), first: an operation judged against a
+    // model imported too coarsely to verify is refused by name - the sim
+    // below then refuses to judge it too, so no gouge verdict is read off
+    // a mesh that cannot carry one.
+    problems.extend(crate::model_fidelity::gate_problems(world));
+
     let sim = sim_clause(world);
     problems.extend(sim.problem);
     // The plasma clause (#672): the 3D stock sim carves nothing for a
@@ -644,6 +659,8 @@ pub fn verification_report(world: &World) -> GateReport {
     // program (the Output and the thread output) - never posted half one
     // way. Judged program-wide, ahead of #388's per-mount split.
     problems.extend(crate::setup_post_options::program_problems(world));
+    // #1031: a G97 rpm over a setup's workholding maximum, by name.
+    problems.extend(crate::setup_workholding::program_problems(world));
     // The carried-stock clause (#319): a feed move into carried material
     // outside a setup's declared stock is engagement nothing verified.
     problems.extend(crate::operation::carried_problems(world));
@@ -799,6 +816,9 @@ pub fn op_streams(world: &World) -> Result<Vec<(String, Vec<cnc::Record>)>, Stri
         return Err(msg);
     }
 
+    // #530: the family door again, at post (`posting_family`).
+    crate::posting_family::family_at_post(world, &ops)?;
+
     // #155: Pause / Home entries fold into the gap they stand in; #389:
     // "Skip pauses and homes" is read per op, from its own setup.
     let afters = crate::program_entry::posted_afters(world, &ops, |e| {
@@ -898,6 +918,10 @@ pub fn op_streams(world: &World) -> Result<Vec<(String, Vec<cnc::Record>)>, Stri
             } else {
                 None
             },
+            // #891: a turning op whose tool states turning data asks
+            // for constant surface speed; everything else posts G97.
+            // #1031: under the setup's workholding rpm limit too.
+            css: crate::setup_workholding::css_of(world, setup, crate::cutting_turn::css_of(&op.params, &tool)),
             coolant: op.coolant,
             // "Skip pauses and homes" (#110) mutes every after-action
             // at post; the ops keep their choices. Entries ride it (#155).
