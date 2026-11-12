@@ -12,7 +12,7 @@
 //! vendor material.
 //!
 //! Gate map (solid law): covers app::operation (generate, contain_into),
-//! app::verify (engine b2, solid_hits), app::posting.
+//! sim::verify (engine b2, solid_hits), app::posting.
 
 use camcraft_app::cl::{MoveKind, Toolpath};
 use camcraft_app::commands::{AddTool, CreateOperation, GenerateOperation, History, ImportModel, SetStock};
