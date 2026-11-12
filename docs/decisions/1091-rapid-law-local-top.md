@@ -95,12 +95,44 @@
    which stock is passed to the re-reading:
    - **Box or cylinder stock, or no stock entity:** acquittable. There
      is no mesh to be coarse.
-   - **From-model stock whose source model is in the tree:**
-     acquittable. Its `ReducedFidelity` record gives the chord, and no
-     record means an exact import, because the importer writes the
-     record for every coarse import.
-   - **From-model stock whose source is gone:** never acquitted. Both
-     sites pass no stock, so every conviction stands.
+   - **From-model stock whose source is provably the model it was
+     copied from:** acquittable. Its `ReducedFidelity` record gives the
+     chord, and no record means an exact import, because the importer
+     writes the record for every coarse import.
+   - **Any other from-model stock:** never acquitted. Both sites pass no
+     stock, so every conviction stands. That covers a gone source, a
+     different model under the old name, a source re-meshed without its
+     copy, and a stock or source with no facets.
+
+   *Proof of the source (fourth review), option (a):* the stock's own
+   facets are compared with the named model's current local facets.
+   They must be the same `Arc` (the copy `SetStock` took, untouched), or
+   the same count with every coordinate equal bit for bit. Of the
+   reviewer's two options, I chose (a) over (b), a fingerprint stored
+   with the stock:
+   - It needs no stored state, no schema or project-file field, and no
+     "old file" rule.
+   - It compares the geometry the chord describes, not a digest of it.
+   - It is an exact equality, not a 128-bit hash, and it adds no second
+     fingerprint derivation (`stock_print` stays the only one).
+   - Cost: `Arc::ptr_eq` while the copy is untouched. Otherwise (after a
+     project load, the two lists are separate allocations) one O(F)
+     pass, once per operation generation, never per rapid.
+
+   Placement is not compared on purpose. The chord is a property of the
+   mesh, and a moved source carries the same mesh and record
+   (`MoveModel` carries a from-model stock with it). A re-import in
+   place (`UpdateModel`) trades the copy and the fidelity record
+   together, so it stays known. No command renames a model (only
+   `RenameOperation`, which relabels an operation), so a rename cannot
+   reach the name.
+
+   One remaining case: an identical mesh that carries a different
+   fidelity record (the same facets imported once coarse-flagged and
+   once exact) would be read through the present model's record. The
+   facets are identical, so the mesh the verdict reads is the same.
+   Only the record's claim about the real surface differs, and the
+   importer never writes two records for one mesh.
    - **Carried stock:** `carried_stock::judged` always judges a box (the
      declared box, or the box enclosing the carried body), and that box
      reads no lower than the flat cap. The flag is still read from the
@@ -143,6 +175,14 @@
      blocked by the rapid law
      (`a_coarse_stock_whose_source_is_gone_is_never_acquitted`, which
      fails with the guard off);
+   - an exact model imported under the deleted coarse casting's name
+     stays convicted, and the post is blocked
+     (`an_exact_model_imported_under_the_old_name_proves_nothing`);
+   - the guard follows the mesh, not the name: a copy left untouched, a
+     moved source and an in-place re-import are known, and a source
+     re-meshed behind the copy is not
+     (`the_guard_follows_the_mesh_not_the_name`). Both of these tests
+     fail with a name-only guard;
    - with the source kept, chord 2.5 is convicted and chord 1.0 is
      cleared (`a_coarse_stock_whose_source_stands_reads_its_excess`);
    - box stocks are pinned unchanged by `ladder_entry_height`. The `ladder_entry_height` pins and the #96 pins are

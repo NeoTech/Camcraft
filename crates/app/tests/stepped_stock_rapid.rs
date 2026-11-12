@@ -139,6 +139,10 @@ struct Casting {
     /// chord is then unknown, #1056); otherwise kept and marked raw
     /// stock only (#1094) so the verdict does not read it as a part.
     deleted: bool,
+    /// After the delete, an unrelated EXACT model is imported under the
+    /// casting's name (PR #1098 fourth review): the stock still holds
+    /// the coarse casting's mesh.
+    replaced: bool,
 }
 
 fn run_on(src: Src, boss: [f64; 4], c: Casting) -> ((usize, Point2, f64), Vec<Warning>, Result<(), String>) {
@@ -161,6 +165,10 @@ fn run_on(src: Src, boss: [f64; 4], c: Casting) -> ((usize, Point2, f64), Vec<Wa
     h.execute(&world, SetStock::new(&world, shape, Location::default()).expect("stock"));
     if c.deleted {
         h.execute(&world, DeleteEntity::new(&world, "casting").expect("delete casting"));
+        if c.replaced {
+            let other = cube(Point3::new(-30.0, -30.0, -10.0), Point3::new(30.0, 30.0, MOUTH));
+            h.execute(&world, ImportModel::from_mesh("casting", other));
+        }
     } else {
         h.execute(&world, SetStockSourceOnly::new(&world, true).expect("raw stock only"));
     }
@@ -284,4 +292,60 @@ fn a_coarse_stock_whose_source_stands_reads_its_excess() {
         let (_, warns, _) = run_on(src, FAR, Casting { coarse: Some(1.0), ..Casting::default() });
         assert!(!warns.iter().any(|w| matches!(w, Warning::RapidInStock { .. })), "{src:?}: {warns:?}");
     }
+}
+
+#[test]
+fn an_exact_model_imported_under_the_old_name_proves_nothing() {
+    // PR #1098 fourth review: the coarse casting deleted, an exact model
+    // imported as "casting". The name resolves, but not to the mesh the
+    // stock holds - the chord stays unknown and the dive stays convicted.
+    for src in [Src::Part, Src::Stock] {
+        let swapped = Casting { coarse: Some(2.5), deleted: true, replaced: true, ..Casting::default() };
+        let ((at, _, z), warns, posted) = run_on(src, FAR, swapped);
+        assert!(z > MOUTH && z < BOSS, "{src:?}: Z {z}");
+        assert!(warns.contains(&Warning::RapidInStock { at }), "{src:?}: acquitted against a stranger's chord: {warns:?}");
+        assert!(posted.is_err(), "{src:?}: posted");
+    }
+}
+
+/// The casting as stock with its source kept: the world, to ask the
+/// guard directly after an edit.
+fn stocked(coarse: Option<f64>) -> (flecs_ecs::prelude::World, History) {
+    let world = new_world();
+    let mut h = History::default();
+    h.execute(&world, ImportModel::from_mesh("casting", casting(18.0, 28.0, -5.0, 5.0, false)));
+    if coarse.is_some() {
+        let e = model::find_by_name(&world, "casting").expect("casting");
+        camcraft_app::model_fidelity::set(&world, &e, coarse);
+    }
+    let shape = StockShape::FromModel { source: "casting".into() };
+    h.execute(&world, SetStock::new(&world, shape, Location::default()).expect("stock"));
+    (world, h)
+}
+
+#[test]
+fn the_guard_follows_the_mesh_not_the_name() {
+    use camcraft_app::commands::{MoveModel, UpdateModel};
+    use camcraft_app::model_fidelity::stock_fidelity_known as known;
+    // Copied and untouched: known.
+    let (world, _h) = stocked(Some(2.5));
+    assert!(known(&world, None));
+    // Moved: the stock moves with it, the mesh and its record are the
+    // same - still known.
+    let (world, mut h) = stocked(Some(2.5));
+    let to = Location { pos: Point3::new(5.0, 0.0, 0.0), ..Location::default() };
+    h.execute(&world, MoveModel::new(&world, "casting", to).expect("move"));
+    assert!(known(&world, None), "a moved source carries the same mesh");
+    // Re-imported in place: the copy and the record are traded together.
+    let (world, mut h) = stocked(Some(2.5));
+    let fresh = casting(18.0, 28.0, -5.0, 6.0, false);
+    h.execute(&world, UpdateModel::new(&world, "casting", fresh).expect("update"));
+    assert!(known(&world, None), "a re-import in place updates the copy with its source");
+    // Re-meshed behind the copy's back (no command does this; a raw
+    // write stands in for any path that would): not known.
+    let (world, _h) = stocked(None);
+    let e = model::find_by_name(&world, "casting").expect("casting");
+    let other = cube(Point3::new(-30.0, -30.0, -10.0), Point3::new(30.0, 30.0, MOUTH)).facets;
+    e.entity_view(&world).set(camcraft_app::schema::Facets { tris: other });
+    assert!(!known(&world, None), "a source re-meshed without its copy is not the copy's source");
 }
