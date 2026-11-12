@@ -1438,6 +1438,11 @@ impl OpParams {
                 h.write(p.condition.as_bytes());
                 h.write_u8(0xff);
                 h.write_u8(u8::from(p.side == super::WireSide::Punch));
+                // #540: written only when set, so no contour's stamp moves.
+                if let Some(c) = p.burnout {
+                    h.write(b"burnout");
+                    w(h, c);
+                }
                 match p.start {
                     Some([x, y]) => {
                         h.write_u8(1);

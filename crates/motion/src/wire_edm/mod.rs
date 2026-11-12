@@ -29,10 +29,14 @@
 //! Seams left for the family (built by none of this): the wire post
 //! (#533) reads the feed moves between the threading point's visits;
 //! verification (#534), taper as a pose per move (#536), skims as
-//! further offsets (#538) and tabs (#539) stand on this path.
+//! further offsets (#538) and tabs (#539) stand on this path; the
+//! no-core burnout of a pocket (#540) is `burnout`.
 
+mod burnout;
 mod laws;
 mod ring;
+
+pub use burnout::{clearance_door, wire_burnout, CORE_AREA_TOL, RING_STEP};
 
 use crate::cl::{MoveKind, PathBuilder, Toolpath};
 use crate::geo2d::{Loop, Point2, Region};

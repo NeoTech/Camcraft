@@ -22,7 +22,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
     let OpParams::WireContour(p) = params else {
         return;
     };
-    let WireContourOp { top_z, bottom_z, condition, side, start } = p;
+    let WireContourOp { top_z, bottom_z, condition, side, start, burnout } = p;
     if tab == SEC_GEO {
         let mut si = usize::from(*side == WireSide::Punch);
         prop_row(ui, "Side", |ui| combo(ui, "wire.side", &mut si, &SIDES));
@@ -61,5 +61,17 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             *condition = idx.checked_sub(1).and_then(|i| ids.get(i)).cloned().unwrap_or_default();
         }
         hint(ui, "the machine's EDM condition states the wire diameter and the spark gap; the path stands wire radius + gap off the profile");
+        // #540: no-core burnout - the pocket's interior burnt out by
+        // offset rings, the wire at least the clearance from the walls.
+        let mut on = burnout.is_some();
+        check_row(ui, "Burn out the pocket (no core)", &mut on);
+        match (on, burnout.as_mut()) {
+            (true, Some(c)) => {
+                prop_row(ui, "Wall clearance", |ui| num(ui, u, c));
+            }
+            (true, None) => *burnout = Some(0.5),
+            (false, _) => *burnout = None,
+        }
+        hint(ui, "a burnout leaves no slug to drop; the wall clearance may not be under the kerf offset (wire radius + gap)");
     }
 }

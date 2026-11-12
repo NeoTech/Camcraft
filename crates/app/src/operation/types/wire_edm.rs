@@ -35,6 +35,11 @@ pub struct WireContourOp {
     /// The start hole / threading point, world XY mm; `None` is not
     /// stated, and a closed profile is refused at generation without it.
     pub start: Option<[f64; 2]>,
+    /// No-core burnout (#540): `Some(clearance)` burns the pocket's
+    /// whole interior out by offset rings, the wire centre at least
+    /// `clearance` mm from the walls (never under the kerf offset);
+    /// `None` cuts the profile alone.
+    pub burnout: Option<f64>,
 }
 
 impl WireContourOp {
@@ -47,6 +52,7 @@ impl WireContourOp {
         self.top_z.is_sane()
             && self.bottom_z.is_sane()
             && self.start.is_none_or(|s| s.iter().all(|v| v.is_finite() && v.abs() < 1e9))
+            && self.burnout.is_none_or(|c| c.is_finite() && c > 0.0 && c < 1e6)
             && self.condition.len() <= CONDITION_ID_MAX
             && !self.condition.chars().any(char::is_control)
     }

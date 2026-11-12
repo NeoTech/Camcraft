@@ -34,7 +34,7 @@ fn sections(part: &Region, stock: Option<&Region>) -> Vec<WireSection> {
 }
 
 fn run(side: CutSide, tp: &Toolpath, start: Option<Point2>, part: &Region, stock: Option<&Region>) -> WireVerdict {
-    judge(&WireJob { path: tp, kerf_offset: K, side, start, sections: sections(part, stock) })
+    judge(&WireJob { path: tp, kerf_offset: K, side, start, sections: sections(part, stock), burnout: false })
 }
 
 #[test]
@@ -112,4 +112,30 @@ fn the_slug_is_read_for_the_stated_side() {
     // No stock around a die plate's hole: nothing drops, and that is said.
     let v = run(CutSide::Die, &path(5.0 - K, start), Some(start), &plate, None);
     assert!(v.findings.iter().any(|f| matches!(f, WireFinding::NothingFreed { .. })), "{:?}", v.findings);
+}
+
+/// #540: a burnout must free nothing. Concentric squares cut innermost
+/// first burn the opening out and pass; the one die ring alone frees
+/// its slug, which for a burnout is a core left to drop.
+#[test]
+fn a_burnout_frees_nothing_and_a_core_is_refused() {
+    let (part, stock) = (square(5.0), square(15.0));
+    let start = Point2::new(0.0, 0.0);
+    let p = |x: f64, y: f64| Point3::new(x, y, 0.0);
+    let mut b = PathBuilder::new(p(0.0, 0.0));
+    for j in 1..=32 {
+        let h = 0.15 * f64::from(j);
+        for (x, y) in [(-h, 0.0), (-h, -h), (h, -h), (h, h), (-h, h), (-h, 0.0)] {
+            b.push(MoveKind::Feed, p(x, y), None);
+        }
+    }
+    b.push(MoveKind::Feed, p(0.0, 0.0), None);
+    let burnt = b.finish();
+    let job = |tp| WireJob { path: tp, kerf_offset: K, side: CutSide::Die, start: Some(start), sections: sections(&part, Some(&stock)), burnout: true };
+    let v = judge(&job(&burnt));
+    assert!(v.findings.is_empty() && v.slugs.is_empty(), "{:?}", v);
+    let ring = path(5.0 - K, start);
+    let v = judge(&job(&ring));
+    assert!(matches!(v.findings.as_slice(), [WireFinding::Core { .. }]), "{:?}", v.findings);
+    assert!(v.findings[0].describe().contains("leave no core"), "{}", v.findings[0].describe());
 }

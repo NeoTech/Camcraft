@@ -16,7 +16,7 @@ use crate::geo2d::{Loop, Point2, Region};
 use crate::machine::{ConditionField, Kind};
 use crate::machining2d::GenError;
 use crate::verify::Warning;
-use crate::wire_edm::{wire_contour, WireParams};
+use crate::wire_edm::{clearance_door, wire_burnout, wire_contour, WireParams};
 
 use super::kinds::Carried;
 use super::types::{OpParams, WireContourOp, WireSide};
@@ -32,6 +32,7 @@ pub(super) fn seed_wire_contour(c: &Carried) -> OpParams {
         condition: String::new(),
         side: WireSide::Die,
         start: None,
+        burnout: None,
     })
 }
 
@@ -84,7 +85,12 @@ pub fn condition_of(world: &World, setup: Option<&str>, op: &WireContourOp) -> R
     let (Some(gap), Some(wire_diameter)) = (c.gap, c.wire_diameter) else {
         return Err(format!("machine {}: EDM condition {:?} states no gap or no wire diameter", machine.model, c.id));
     };
-    Ok(WireCondition { id: c.id.clone(), wire_diameter, gap })
+    let cond = WireCondition { id: c.id.clone(), wire_diameter, gap };
+    // The burnout's clearance against the condition's kerf (#540).
+    if let Some(clear) = op.burnout {
+        clearance_door(clear, cond.wire_diameter * 0.5 + cond.gap)?;
+    }
+    Ok(cond)
 }
 
 /// The condition a wire EDM kind's generation cuts with, read where
@@ -182,6 +188,9 @@ pub(super) fn generate_wire(
         Some(geom) => geom,
         None => (base()?.loops().to_vec(), Vec::new()),
     };
-    let path = wire_contour(&loops, &chains, &p)?;
+    let path = match op.burnout {
+        Some(clearance) => wire_burnout(&loops, &chains, &p, clearance)?,
+        None => wire_contour(&loops, &chains, &p)?,
+    };
     Ok((path, Vec::new()))
 }

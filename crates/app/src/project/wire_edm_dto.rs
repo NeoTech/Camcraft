@@ -29,6 +29,10 @@ pub struct WireContourDto {
     /// stated.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub start: Option<[f64; 2]>,
+    /// No-core burnout's wall clearance, mm (#540); absent cuts the
+    /// profile alone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub burnout_clearance: Option<f64>,
 }
 
 impl WireContourDto {
@@ -42,6 +46,7 @@ impl WireContourDto {
                 WireSide::Punch => WireSideDto::Punch,
             },
             start: p.start,
+            burnout_clearance: p.burnout,
         }
     }
 
@@ -55,6 +60,7 @@ impl WireContourDto {
                 WireSideDto::Punch => WireSide::Punch,
             },
             start: self.start,
+            burnout: self.burnout_clearance,
         })
     }
 }

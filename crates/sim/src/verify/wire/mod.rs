@@ -15,7 +15,9 @@
 //!   are what drops free when the cut closes. A die keeps the material
 //!   outside the cut, so its freed piece must hold none of the product;
 //!   a punch's freed piece IS the product. A cut that frees nothing, or
-//!   frees the wrong side, is refused by name.
+//!   frees the wrong side, is refused by name. A no-core burnout (#540)
+//!   reads the other way: it must free nothing - a freed piece is a
+//!   core left to drop, refused.
 //!
 //! The product's section by the stated side: a punch's product is the
 //! model. A die's product is the model too when the start hole stands
@@ -91,6 +93,9 @@ pub struct WireJob<'a> {
     pub start: Option<Point2>,
     /// The sections through the height the wire passes, low to high.
     pub sections: Vec<WireSection>,
+    /// A no-core burnout (#540): the cut must free nothing - any piece
+    /// it frees is a core that drops, refused.
+    pub burnout: bool,
 }
 
 /// Every finding refuses: the wire laws have no warning tier.
@@ -110,6 +115,8 @@ pub enum WireFinding {
     NothingFreed { z: f64 },
     /// The piece freed is not the one the stated side drops.
     WrongSlug { z: f64, side: CutSide, at: Point2, product_area: f64 },
+    /// A burnout (#540) frees a piece: a core is left to drop.
+    Core { z: f64, at: Point2, area: f64 },
 }
 
 impl WireFinding {
@@ -140,6 +147,10 @@ impl WireFinding {
             ),
             WireFinding::WrongSlug { z, side: CutSide::Die, at, product_area } => format!(
                 "slug: the piece freed near X{:.3} Y{:.3} at Z{z:.3} holds {product_area:.3} mm² of the part - a die keeps the material outside the cut, but here the part drops",
+                at.x, at.y
+            ),
+            WireFinding::Core { z, at, area } => format!(
+                "core: the burnout frees a piece of {area:.3} mm² near X{:.3} Y{:.3} at Z{z:.3} - a burnout must leave no core to drop",
                 at.x, at.y
             ),
             WireFinding::WrongSlug { z, side: CutSide::Punch, at, .. } => format!(
