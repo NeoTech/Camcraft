@@ -475,6 +475,7 @@ fn cycle_tool(kind: ToolKind, diameter: f64, tip_angle: f64, pitch: f64) -> Tool
         flutes: None,
         orientation: None,
         catalog: camcraft_tools::catalog_fields::ToolCatalog::default(),
+        turning: None,
     }
 }
 

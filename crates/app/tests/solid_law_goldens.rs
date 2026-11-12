@@ -9,20 +9,25 @@
 //! every one of them, and every posted `.nc` golden's program must be
 //! one the gate passes (the guard below); the crossing refusal the two
 //! disc-hole goldens used to carry is pinned on its own fixture.
-//! (Slot and trace cut their source - no depth law runs on them; the
-//! 3D finish goldens verify as `Mode::Envelope`, where the solid law
+//! (Slot and trace cut their source - no depth law runs on them; since
+//! #1000 they, the trochoidal slot and the plasma plate are judged by
+//! the gate their kind's post runs, `posted_gates`. The 3D
+//! finish goldens verify as `Mode::Envelope`, where the solid law
 //! stands down by mode gate - their verdict path is untouched; the
-//! arc-planes golden is a posting fixture with no part.)
+//! arc-planes golden is a hand-built posting fixture with no part.)
 //!
 //! Provenance: our own harness over our own goldens; no vendor material.
 //!
 //! Gate map (solid law): covers sim::verify (engine b2, solid_hits, the
 //! crossing law), the posted goldens under tests/golden/nc/,
-//! motion::machining2d (contour, face, pocket), motion::drilling (drill).
+//! motion::machining2d (contour, face, pocket, slot, trochoid, trace),
+//! motion::drilling (drill), app::operation (region_of), sim::verify::plasma.
 
 mod common;
+mod posted_gates;
 
 use common::gen_to_cltext;
+use posted_gates::{narrowed_slot_verdict, plasma_findings, region_verdicts};
 use common::solid_part::{cap, circle, mill, plate, plate_cell, rect, region, walls};
 
 use camcraft_app::cl::Toolpath;
@@ -213,6 +218,7 @@ fn verdicts() -> Vec<(&'static str, Vec<Warning>)> {
         center_cutting: true,
         orientation: None,
         catalog: camcraft_tools::catalog_fields::ToolCatalog::default(),
+        turning: None,
     };
     let hole = |x: f64, y: f64, r: f64, floor: f64, through: bool| Hole { xy: Point2::new(x, y), radius: r, entry_z: 0.0, floor_z: floor, through, stepped: false };
     let cycle = |holes: &[Hole], tool: &Tool, clear: f64| {
@@ -292,17 +298,37 @@ fn a_lead_on_the_rings_own_circle_is_refused() {
 /// (#862 option (c)); none does today.
 const REFUSED_HEADER: &str = "refused program, posted for syntax conformance";
 
-/// Posted goldens whose program no depth law judges, each with why:
-/// the guard below makes every other posted golden's program pass the
-/// gate, so a new one is either judged or named here.
-const UNJUDGED: &[(&str, &str)] = &[
-    ("slot_fullwidth_centerline", "a slot cuts its source; no depth law runs on it"),
-    ("slot_wide_channel_rows", "a slot cuts its source; no depth law runs on it"),
-    ("trochoid_slot_small", "a slot cuts its source; no depth law runs on it"),
-    ("trace_plate_with_hole", "a trace cuts its source; no depth law runs on it"),
-    ("arc_planes", "a posting fixture with no part"),
-    ("plasma_plate_with_holes", "a plasma profile; the depth laws do not apply (the plasma gate is plasma_gate.rs)"),
-];
+/// Posted goldens whose program no gate judges, each with why: the
+/// guard below makes every other posted golden's program pass the gate
+/// its kind's post runs, so a new one is either judged or named here.
+/// The slot, trochoid, trace and plasma goldens are judged since #1000
+/// (`posted_gates`).
+const UNJUDGED: &[(&str, &str)] = &[(
+    "arc_planes",
+    "a hand-built posting fixture (arc_planes.rs): no operation kind, part, region or tool record makes it, \
+     so no gate a user's post runs can judge it - #1093",
+)];
+
+#[test]
+fn the_slot_trace_and_plasma_goldens_pass_their_gates() {
+    // #1000: the posted goldens no depth law judges, each through the
+    // gate its kind's post runs - the region laws for the slots and the
+    // trace, the plasma laws for the plate: every one verifies clean.
+    let got = region_verdicts();
+    assert_eq!(got.len(), 4, "every region-law golden is judged");
+    for (name, w) in got {
+        assert_eq!(w, Vec::new(), "{name}");
+    }
+    assert_eq!(plasma_findings(), Vec::new(), "plasma_plate_with_holes.cl: the plasma laws find nothing");
+}
+
+#[test]
+fn the_slot_gate_bites() {
+    // The harness is not vacuous: the wide-channel slot's program judged
+    // against a stadium 2 mm narrower than the one it was cut for gouges.
+    let got = narrowed_slot_verdict();
+    assert!(got.iter().any(|w| matches!(w, Warning::Gouge { .. })), "{got:?}");
+}
 
 #[test]
 fn every_posted_golden_is_a_program_the_gate_passes() {
@@ -311,7 +337,13 @@ fn every_posted_golden_is_a_program_the_gate_passes() {
     // (the Fanuc top and each dialect's directory) whose stem is a `.cl`
     // golden is judged here.
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/golden");
-    let judged = verdicts();
+    // Every blocking finding of each judged program: the depth laws',
+    // the region laws' (slot, trochoid, trace) and the plasma laws'
+    // refusals (its warnings ride the verdict line, never block).
+    let blocking = |w: Vec<Warning>| w.iter().map(|w| format!("{w:?}")).collect::<Vec<_>>();
+    let mut judged: Vec<(&str, Vec<String>)> = verdicts().into_iter().chain(region_verdicts()).map(|(n, w)| (n, blocking(w))).collect();
+    let plasma = plasma_findings().iter().filter(|f| f.refuses()).map(|f| f.describe()).collect();
+    judged.push(("plasma_plate_with_holes.cl", plasma));
     let mut dirs = vec![root.join("nc")];
     let mut posted = 0;
     while let Some(dir) = dirs.pop() {
@@ -332,9 +364,14 @@ fn every_posted_golden_is_a_program_the_gate_passes() {
             let cl = format!("{stem}.cl");
             match judged.iter().find(|(n, _)| *n == cl) {
                 Some((_, w)) => assert!(w.is_empty(), "{}: posted, but the gate refuses its program: {w:?}", e.display()),
-                None => assert!(UNJUDGED.iter().any(|(n, _)| *n == stem), "{}: posted, but no gate judges its program - judge it in verdicts() or name it in UNJUDGED", e.display()),
+                None => assert!(
+                    UNJUDGED.iter().any(|(n, _)| *n == stem),
+                    "{}: posted, but no gate judges its program - judge it in verdicts() / posted_gates or name it in UNJUDGED",
+                    e.display()
+                ),
             }
         }
     }
     assert!(posted > 50, "the guard saw only {posted} posted goldens");
 }
+
