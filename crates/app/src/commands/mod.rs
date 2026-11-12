@@ -12,6 +12,8 @@ pub mod fixture;
 pub mod fixture_move;
 pub mod fixture_plate;
 pub mod mod_vise;
+// #832: edit and re-fit a placed mod vise pair.
+pub mod mod_vise_edit;
 pub mod import_fixture;
 pub mod import_model;
 // #339 slice 6: a fixture library entry placed into a setup.
@@ -31,6 +33,7 @@ pub mod repair_model;
 pub mod ribbon_pins;
 pub mod select_entity;
 pub mod set_stock;
+pub mod stock_source_only;
 pub mod setup;
 pub mod setup_delete;
 // #196: a setup's picked program offset.
@@ -72,6 +75,7 @@ pub use fixture::{
 };
 pub use fixture_plate::{InsertPlate, PlaceOnPlate, PlatePlacement, SetPlate, SetPlateGrid};
 pub use mod_vise::PlaceModVisePair;
+pub use mod_vise_edit::{RefitModVise, SetModJaw};
 pub use import_fixture::ImportFixture;
 pub use import_model::ImportModel;
 pub use insert_fixture::InsertFixture;
@@ -90,6 +94,7 @@ pub use repair_model::RepairModel;
 pub use ribbon_pins::SetRibbonPins;
 pub use select_entity::SelectEntity;
 pub use set_stock::SetStock;
+pub use stock_source_only::SetStockSourceOnly;
 pub use setup::{ActivateSetup, CreateSetup, DeleteSetup, SetOperationSetup};
 pub use setup_align::AlignPartToSetup;
 pub use setup_wcs::SetSetupWorkOffset;
@@ -104,7 +109,7 @@ pub use set_wcs::SetWcsOrigin;
 pub use tool::{AddTool, ChangeTool, DeleteTool, HolderPick};
 pub use tool_body::{LatheBodySpec, SetToolBody, ToolBodySpec};
 pub use tool_cutter::SetToolCutter;
-pub use tool_import::{ImportReport, ImportTools};
+pub use tool_import::{ImportMode, ImportReport, ImportTools};
 pub use tool_number::SetToolNumber;
 pub use update_model::UpdateModel;
 
@@ -116,6 +121,10 @@ pub enum CommandError {
     NameConflict(String),
     #[error("invalid parameters: {0}")]
     Invalid(String),
+    /// A precondition the user can fix, said in plain English with what to
+    /// do next (#1105): shown as is, with no "invalid parameters:" prefix.
+    #[error("{0}")]
+    Needs(String),
     #[error(transparent)]
     Import(#[from] crate::geometry::ImportError),
     #[error("'{0}' import is not supported yet; import a STEP, STL, or OBJ file instead")]
