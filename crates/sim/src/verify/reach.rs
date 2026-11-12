@@ -115,6 +115,9 @@ pub(super) fn band_reach(
             }
             let pts = law_points(m, chord_tol);
             let lean = m.axis.filter(|a| !is_upright(a));
+            // Law (c)'s own last report for THIS move: the de-duplication
+            // below never merges with a warning an earlier law pushed.
+            let mut reported: Option<bool> = None;
             for group in groups {
                 let mut convicted: Option<bool> = None;
                 for &(above, band_r, band_len) in group {
@@ -209,9 +212,9 @@ pub(super) fn band_reach(
                     }
                     // One move, one report per verdict (#938): a leaning
                     // shank and holder both in the part are one event.
-                    let hit = Warning::ShankHit { at: i, part };
-                    if warns.last() != Some(&hit) {
-                        warns.push(hit);
+                    if reported != Some(part) {
+                        reported = Some(part);
+                        warns.push(Warning::ShankHit { at: i, part });
                     }
                 }
             }

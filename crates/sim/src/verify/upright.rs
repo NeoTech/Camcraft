@@ -42,7 +42,6 @@ pub(crate) fn is_upright(axis: &[f64; 3]) -> bool {
     axis[2] > 0.0 && len.is_finite() && h <= UPRIGHT_TILT_RAD * len
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
