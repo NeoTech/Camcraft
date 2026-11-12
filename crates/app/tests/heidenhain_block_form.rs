@@ -46,7 +46,12 @@ const GOLDENS: &[&str] = &[
 
 /// The manual's program frame, block by block; returns the block bodies.
 fn check_form(nc: &str, what: &str) -> Vec<String> {
-    let lines: Vec<&str> = nc.lines().collect();
+    let mut lines: Vec<&str> = nc.lines().collect();
+    // A hand-built fixture's golden leads with its synthetic marker (#1093),
+    // a line outside the program the post wrote.
+    if lines.first().is_some_and(|l| l.contains("synthetic program, posted for syntax conformance")) {
+        lines.remove(0);
+    }
     assert!(lines.len() >= 2, "{what}: a program has a begin and an end block");
     let first = lines[0];
     let name = first
