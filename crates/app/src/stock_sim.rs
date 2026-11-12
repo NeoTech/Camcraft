@@ -421,8 +421,9 @@ fn part_facets_as_modelled(world: &flecs_ecs::prelude::World) -> Vec<Triangle> {
     use crate::model;
 
     let mut model_facets: Vec<Triangle> = Vec::new();
+    let skip = crate::stock_source::stock_only_model(world); // #1094
     for (_, e) in model::model_entities(world) {
-        if model::is_fixture(world, &e) {
+        if !crate::stock_source::judged(world, &e, skip) {
             continue;
         }
         let tris = model::facets_of(world, &e).unwrap_or_default();
