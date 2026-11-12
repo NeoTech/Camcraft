@@ -23,13 +23,14 @@
 use egui::{Key, Label, Rect, RichText, Sense, Ui, Vec2};
 
 use camcraft_app::model;
-use camcraft_app::operation::{self, OpType};
+use camcraft_app::operation;
 
 use crate::actions;
 use crate::build_info;
 use crate::state::{CommandKind, Sim, State, UiTarget};
 
 use super::icons::{Icon, IconSet};
+use super::op_icons::op_icon;
 use super::layout;
 use super::painted;
 use super::theme::Tokens;
@@ -320,6 +321,19 @@ fn mode_caption(k: camcraft_app::machine::Kind) -> &'static str {
         .map_or("Machine", |(_, c, _)| *c)
 }
 
+/// The section door's short ribbon word: a cell is ~43 px wide at 1280, so
+/// "Milling 2D" would not fit; the full name stays in the tip and the
+/// dropdown. Plain English, deliberate - never a cut-off one (#948).
+fn door_label(s: operation::Section) -> &'static str {
+    match s {
+        operation::Section::Mill2D => "Mill 2D",
+        operation::Section::Mill3D => "Mill 3D",
+        operation::Section::Drilling => "Drill",
+        operation::Section::MultiAxis => "Multi",
+        other => other.label(),
+    }
+}
+
 fn text_of(c: Cmd, state: &State) -> String {
     match c {
         // The overflow button wears the section's name plus an
@@ -327,7 +341,7 @@ fn text_of(c: Cmd, state: &State) -> String {
         // here", which is exactly the law the dropdown keeps (M6.2:
         // a labeled door, never a faceless chevron). The machine door
         // wears the same invitation: the ellipsis says "a list opens".
-        Cmd::More(s) => format!("{}…", s.label()),
+        Cmd::More(s) => format!("{}…", door_label(s)),
         Cmd::Machine => {
             format!("{}…", mode_caption(camcraft_app::machine::kind_of(&state.world)))
         }
@@ -649,7 +663,8 @@ pub(super) fn icon_of(c: Cmd, state: &State) -> Option<Icon> {
             operation::Section::Mill3D => Icon::Finish3D,
             operation::Section::Drilling => Icon::Drill,
             operation::Section::MultiAxis => Icon::MultiAxisRough,
-            operation::Section::Turning => Icon::Face,
+            // #661: turning has glyphs of its own now - the facing cut.
+            operation::Section::Turning => Icon::Facing,
             // #670: the plasma section cuts 2D profiles - the contour's
             // glyph (the machine door's own choice, no new asset).
             operation::Section::Plasma => Icon::Contour,
@@ -682,81 +697,6 @@ pub(super) fn icon_of(c: Cmd, state: &State) -> Option<Icon> {
         // The Theme door follows the View door: a list door captioned by
         // its own word (no fitting glyph in the bundled set).
         Cmd::View | Cmd::Theme => None,
-    }
-}
-
-/// The op row's glyph (browser.rs's `op_icon`); `Generate` stands in where
-/// the operation component is gone but the entity still names itself -
-/// the fallback imgui's eyes list refuses to leave blank.
-pub(super) fn op_icon(kind: OpType) -> Icon {
-    match kind {
-        OpType::Face => Icon::Face,
-        OpType::Contour => Icon::Contour,
-        OpType::Pocket => Icon::Pocket,
-        // The roughing twins ARE the pocket ladder under two catalog
-        // names (M2.4 A) - the Pocket3D precedent says: same word,
-        // same pixels.
-        OpType::Adaptive2D | OpType::Offset2D => Icon::Pocket,
-        OpType::Slot | OpType::TrochoidalSlot => Icon::Slot,
-        OpType::Trace => Icon::Trace,
-        // The 2D run's new names keep their family's pixels (M2.4 B,
-        // the twins' reuse law): the engrave twin IS Trace's field
-        // shape, the chamfer ride is a contour peeling a derived
-        // corner, and the circular ladder is the pocket family
-        // around a centre.
-        OpType::Engrave => Icon::Trace,
-        OpType::Chamfer2D => Icon::Contour,
-        // The deburr ride is the chamfer's word read on the model's
-        // own edges - same promise, a loop of peeled corner, so the
-        // contour's pixels again (M2.5 E B, the reuse law).
-        OpType::Deburr => Icon::Contour,
-        OpType::Circular => Icon::Pocket,
-        OpType::Drill => Icon::Drill,
-        OpType::Probe => Icon::Probe,
-        // The torch rides a profile: the contour's pixels (#670, the
-        // reuse law).
-        OpType::PlasmaProfile => Icon::Contour,
-        OpType::Pocket3D => Icon::Pocket,
-        OpType::Finish3D => Icon::Finish3D,
-        OpType::Contour5D => Icon::Contour5D,
-        OpType::Parallel5D => Icon::Parallel5D,
-        OpType::Swarf => Icon::Swarf,
-        OpType::AdvancedSwarf => Icon::AdvancedSwarf,
-        OpType::RotaryContour => Icon::RotaryContour,
-        OpType::RotaryParallel => Icon::RotaryParallel,
-        OpType::RotaryOffset => Icon::RotaryOffset,
-        OpType::MultiAxisRough => Icon::MultiAxisRough,
-        OpType::Flow5D => Icon::Flow5D,
-        OpType::MultiAxisContour => Icon::MultiAxisContour,
-        // The face mill's glyph, reused (the no-new-asset law, and the
-        // Pocket3D precedent above): what the cell makes is a face -
-        // spun rather than swept, same word, same pixels.
-        OpType::Facing => Icon::Face,
-        // The profile kinds keep the same glyph for the same reason:
-        // what they leave is the turned surface - the bar's own
-        // skin, roughed to a wall or finished to tolerance (M5.2 B).
-        OpType::ProfileRough | OpType::ProfileFinish => Icon::Face,
-        // Same reuse for the blade kinds: the kerf and the severed
-        // column are both the turned surface giving way to the
-        // tool's width (M5.2 C) - and so is the threaded wall, the
-        // same surface recut one helix at a time (M5.2 D). The
-        // contour rides leave the same turned skin, finished to a
-        // promised face (M5.2 E).
-        OpType::GrooveRough | OpType::GrooveFinish | OpType::Part | OpType::Threading => Icon::Face,
-        OpType::Chamfering | OpType::TaperTurning | OpType::MultiPassTurning => Icon::Face,
-        // So is the formed surface the gauge stamps (M5.2 E2), and
-        // the wall the bar rides - the turned surface held to size
-        // from the inside (M5.2 F), same glyph by the no-new-asset
-        // law the whole family keeps.
-        OpType::FormTurning | OpType::BoringTurning => Icon::Face,
-        // The standalone boring ride lives in the drilling section -
-        // the drill's pixels, same word about a hole (M2.4 C, the
-        // twins' reuse law). The thread mill lives in the 2D mill's
-        // run and is a contour that closes on itself one pitch at a
-        // time - the contour's pixels, a circle peeled to a thread
-        // (the Chamfer2D precedent).
-        OpType::Bore => Icon::Drill,
-        OpType::Thread => Icon::Contour,
     }
 }
 
@@ -1131,11 +1071,13 @@ pub fn ribbon(
             toggle_pin(state, i);
         }
     }
-    // Group captions are intentionally NOT drawn: each cell already names
-    // itself, and a second line under the row only duplicated and clipped
-    // the section name (the user's "unreadable" complaint). The dividers
-    // alone separate the groups.
-    let _ = captions;
+    // Group captions (#948): under each group's cells when they fit the
+    // group's span. A single-door group (Milling 2D, Drilling ...) is one
+    // narrow cell that already names its section, so its caption is
+    // skipped rather than run under the neighbour's.
+    for (mid, width, title) in captions {
+        painted::caption(ui, mid, width, title, rect, pal, rect.top() + 4.0 + pal.cell_h);
+    }
     for dx in dividers {
         painted::divider(ui.painter(), dx, rect, pal);
     }
