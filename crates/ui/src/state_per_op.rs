@@ -97,7 +97,7 @@ impl State {
         // beside the saved project (`post_file::for_document`).
         let target = crate::post_file::for_document(self);
         if posting::post_options(&self.world).per_op {
-            let mut picker = rfd::FileDialog::new().set_title("Post one file per operation into");
+            let mut picker = crate::file_dialog::FileDialog::new().set_title("Post one file per operation into");
             if let Some(dir) = &target.dir {
                 picker = picker.set_directory(dir);
             }

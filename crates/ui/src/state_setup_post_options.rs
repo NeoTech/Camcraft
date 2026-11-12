@@ -66,7 +66,7 @@ impl State {
     /// Ask where to write `setup`'s tool list, then write it.
     pub(super) fn tool_list_export_dialog(&mut self, setup: Option<String>) {
         let stem = setup.clone().or_else(|| setup::effective(&self.world, None)).unwrap_or_else(|| "setup".to_owned());
-        let picked: Option<PathBuf> = rfd::FileDialog::new()
+        let picked: Option<PathBuf> = crate::file_dialog::FileDialog::new()
             .add_filter("CSV", &["csv"])
             .add_filter("Text", &["txt"])
             .set_file_name(format!("{stem}-tools.csv"))

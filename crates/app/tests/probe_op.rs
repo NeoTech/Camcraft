@@ -351,7 +351,7 @@ fn the_probe_row_appends_and_lists_in_drilling() {
     // Drilling by display order.
     assert_eq!(KindInfo::ALL[38].ty, OpType::Probe);
     // #670 appended the plasma profile behind it - the probe's id held.
-    assert_eq!(KindInfo::ALL.last().map(|k| k.ty), Some(OpType::PlasmaProfile));
+    assert_eq!(KindInfo::ALL[39].ty, OpType::PlasmaProfile);
     assert_eq!(KindInfo::ALL[13].ty, OpType::Pocket3D);
     assert_eq!(OpType::Probe.info().section, Section::Drilling);
     assert_eq!(OpType::Probe.info().tool_kinds, &[camcraft_app::tools::ToolKind::Probe]);
