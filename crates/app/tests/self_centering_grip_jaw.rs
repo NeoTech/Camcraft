@@ -6,14 +6,16 @@
 //! pass clear of the lowered jaws posts, one cut into the step is
 //! refused); bad figures are refused by name; an older file (no grip
 //! keys) loads and saves unchanged, a grip vise round-trips, and the
-//! edit is one undo.
+//! edit is one undo; parallels under a grip vise are refused by name.
 //!
 //! Gate map (M4.4): covers app::vise, app::vise::self_centering,
 //! app::commands::builtin_vise, app::project (fixture vise key),
-//! app::fixture, app::posting.
+//! app::fixture, app::posting, app::commands::accessory.
 
+use camcraft_app::accessory::Accessory;
 use camcraft_app::commands::{
-    AddTool, CreateOperation, GenerateOperation, History, InsertVise, SetStock, SetVise, VisePlacement,
+    AccessoryPlacement, AddTool, CreateOperation, GenerateOperation, History, InsertAccessory, InsertVise, SetStock, SetVise,
+    VisePlacement,
 };
 use camcraft_app::fixture;
 use camcraft_app::geometry::{IDENTITY_Q, Point3, Triangle};
@@ -221,4 +223,22 @@ fn an_older_vise_key_reads_and_writes_unchanged_and_a_grip_round_trips() {
     assert_eq!(model::facets_of(&world, &e).expect("facets").to_vec(), before, "one undo takes the step");
     assert!(history.redo(&world));
     assert_eq!(params_of(&world, &name).map(|p| p.seat_height()), Some(12.0), "redo puts it back");
+}
+
+/// Parallels fit from the vise floor; a grip vise seats the stock on its
+/// ledges, so "parallels under the stock" there would stand the stock
+/// clear of the jaws. It is refused by name; a stepless vise still fits.
+#[test]
+fn parallels_are_refused_under_a_grip_jaw_vise() {
+    let par = Accessory::Parallels { height: 25.4, thickness: 3.175, length: 152.4, spacing: 101.6 };
+    let (plain, gripped) = (new_world(), new_world());
+    let (mut hp, mut hg) = (History::default(), History::default());
+    stock(&plain, &mut hp);
+    stock(&gripped, &mut hg);
+    let np = fitted(&plain, &mut hp, &row(SC80));
+    let ng = fitted(&gripped, &mut hg, &grip(&row(SC80), 3.0, 1.5));
+    let under = |vise: String| AccessoryPlacement::UnderStockInVise { vise, above: 2.0 };
+    assert!(InsertAccessory::new(&plain, &par, None, under(np)).is_ok(), "a stepless vise takes parallels");
+    let err = InsertAccessory::new(&gripped, &par, None, under(ng)).err().map(|e| e.to_string()).unwrap_or_default();
+    assert!(err.contains("grip-jaw vise") && err.contains("parallels do not go under it"), "refused by name: {err}");
 }

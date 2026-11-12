@@ -29,6 +29,19 @@ the ledge - and the whole profile drops by `jaw_height - grip_depth`.
   does not move. An older build reading a grip vise ignores the keys and
   keeps the saved (stepped) facets; only a re-edit in that older build
   would drop the step.
+- **Defaults are 0 (off), not 3 / 1.5.** The issue asks for parameters
+  with defaults; the step is opt-in so existing vises stay unchanged, and
+  the dialog tooltips name the typical 3 mm deep / 1.5 mm wide figures.
+- **Width is measured against `jaw_thickness`.** `check_grip` caps
+  `grip_width` below the jaw plate's thickness. The ledge is added inward
+  of the clamping face (into the opening), not cut from the jaw body
+  (`jaw_body_depth`), so the model is never thinner than the real steel.
+- **No parallels under a grip vise** (review of f0e63454). Parallels fit
+  from the vise floor; a grip vise seats the stock on its ledges, so a
+  fit would stand the stock clear of the jaws. "Parallels under the
+  stock" in a grip-jaw vise is refused by name. Dropped: a seat-aware
+  `fit_parallels` - parallels under a stepped jaw make little physical
+  sense.
 - **Setup sheet.** Not touched: it does not state vise jaw forms today.
 
 **Cost to change later.** A jaw-form enum, or combining dovetail and grip,
