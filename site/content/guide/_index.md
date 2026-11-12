@@ -12,3 +12,8 @@ post.
 
 For task recipes (facing, two-setup squaring, pockets, holes, lathe,
 re-posting) see [Common workflows](@/guide/workflows.md).
+
+The [glossary](@/guide/glossary.md) defines the terms CamCraft uses, such as
+setup, work offset, stale, gouge and refusal, and links each to its page.
+
+Stuck on a message? See [Troubleshooting](@/guide/troubleshooting.md).
