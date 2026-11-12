@@ -114,7 +114,7 @@ pub fn hole_is_round(facets: &[Triangle], c: [f64; 2], reach: f64, z_lo: f64, z_
         let (u, v) = ([t[1][0] - t[0][0], t[1][1] - t[0][1], t[1][2] - t[0][2]], [t[2][0] - t[0][0], t[2][1] - t[0][1], t[2][2] - t[0][2]]);
         let n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
         let len = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
-        if !(len > 1e-12) || n[2].abs() > 0.1 * len {
+        if len <= 1e-12 || n[2].abs() > 0.1 * len {
             return true; // a floor, a lid or a sliver: no wall to excuse
         }
         facet_sag(&t, c).is_some_and(|s| s <= WALL_SAG)
