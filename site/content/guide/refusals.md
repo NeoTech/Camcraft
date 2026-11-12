@@ -40,6 +40,9 @@ range (move the work offset or the part, or choose another machine), or
 the machine file's number is wrong (check it against the machine's
 manual).
 
+For a message that is not in this table, look it up by what you see on the
+[Troubleshooting](@/guide/troubleshooting.md) page.
+
 ## When you think a refusal is wrong
 
 Report it on the
