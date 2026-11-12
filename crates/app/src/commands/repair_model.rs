@@ -44,7 +44,7 @@ impl RepairModel {
         };
         if !model::is_model(world, &entity) {
             return Err(CommandError::Invalid(format!(
-                "'{name}' is setup furniture, not a model"
+                "'{name}' is not a model - it is a setup's stock or work offset, a setup, a tool, an operation or other CAM data"
             )));
         }
         let Some(facets) = model::facets_of(world, &entity) else {
@@ -71,7 +71,7 @@ impl RepairModel {
                 report.vertices_after, report.triangles_after
             )));
         }
-        let inner = UpdateModel::new(world, name, report.mesh.clone())?;
+        let inner = UpdateModel::new(world, name, report.mesh.clone())?.keeping_fidelity();
         Ok(RepairModel {
             name: name.to_string(),
             weld_tol,

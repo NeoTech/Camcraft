@@ -31,6 +31,8 @@ pub struct GenJob {
     /// laws' band stack. `tool` already carries the cylinder enclosing
     /// it, for every law that reads one; None is no body.
     pub(super) body: Option<camcraft_tools::holder_profile::HolderProfile>,
+    /// #852: the tool's drawn neck (`tool_cutter::neck_of`); empty = none.
+    pub(super) neck: Vec<camcraft_tools::holder_profile::HolderBand>,
     /// The tool's lathe body (#369): its clearance bands, judged against
     /// the revolved stock on every move of a turning op; None is none.
     pub(super) lathe_body: Option<std::sync::Arc<camcraft_tools::lathe_holder::LatheClearance>>,
@@ -75,6 +77,10 @@ pub struct GenJob {
     pub(super) machine_rotaries: Option<(String, Vec<crate::machine::AxisLimits>)>,
     pub(super) spindle: Option<(f64, f64)>,
     pub(super) fixtures: Vec<crate::fixture::FixtureBox>,
+    /// `fixtures`' names, index for index (#339 slice 5 refusals).
+    pub(super) fixture_names: Vec<String>,
+    /// The highest world Z the tip reaches (WCS origin + stated Z top).
+    pub(super) z_ceiling: Option<f64>,
     /// `fixtures` split by whether the steel turns with the part
     /// (M13.8 (2)): `.0` rides the rotary, `.1` stands still (the
     /// declared-fixed models, then the machine table) - the post gate's
@@ -132,6 +138,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
     let Some(tool) = model::tool_of(world, &tool_entity) else {
         return Err(GenError::Invalid(format!("'{}' is not a tool", op.tool)));
     };
+    let neck = crate::tool_cutter::neck_of(world, &tool_entity, &tool);
     let (tool, body) = crate::tool_body::judged(world, &tool_entity, tool)
         .map_err(|e| GenError::Invalid(format!("tool '{}': {e}", op.tool)))?;
     // #369: a lathe body is judged only by the turning family's
@@ -151,7 +158,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
     if let Some(why) = crate::setup_align::generation_problem(world, op) {
         return Err(GenError::Invalid(why));
     }
-    let material = material_of(world, setup, &op.src)?;
+    let material = super::material::judged_material(world, setup, &op.src)?;
     let part_solid = part_solid_of(world, setup, &op.src, &material);
     // Setup stock, when it is not the source itself: the swarf column
     // around a smaller model (the head read at `generate` - same call).
@@ -210,7 +217,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         // answer.
         (params, SrcRef::Selection(items))
             if selection_drives_region(params)
-                && !matches!(params, OpParams::Contour { .. }) =>
+                && !matches!(params, OpParams::Contour { .. } | OpParams::PlasmaProfile(_)) =>
         {
             Some(selection_region(world, setup, items, params, &op.area))
         }
@@ -219,7 +226,9 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         (params, src) => whole_model_pocket(world, setup, src, params, frame.as_ref()),
     };
     let contour_sel = match (&op.params, &op.src) {
-        (OpParams::Contour { .. }, SrcRef::Selection(items)) => {
+        // The plasma cut reads its picks the contour's way (#670):
+        // closed rings AND open runs, each cut as picked.
+        (OpParams::Contour { .. } | OpParams::PlasmaProfile(_), SrcRef::Selection(items)) => {
             Some(selection_geometry_impl(world, setup, items, &op.params, None))
         }
         _ => None,
@@ -268,7 +277,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         match crate::rest::prior_plan(world, op_name, setup, tool.diameter * 0.5) {
             Ok(p) => p,
             Err(e) => {
-                eprintln!("camcraft: {op_name}: the program ahead is unreadable for the rapid law, raw stock stands: {e}");
+                tracing::warn!(op = %op_name, "the program ahead is unreadable for the rapid law, raw stock stands: {e}");
                 None
             }
         }
@@ -298,7 +307,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         None
     };
     let is_mill = machine_kind == crate::machine::Kind::Mill;
-    let fixtures = crate::fixture::boxes_for(world, setup);
+    let (fixture_names, fixtures) = crate::fixture::named_boxes_for(world, setup).into_iter().unzip();
     let workholding = crate::fixture::workholding_for(world, setup);
     let fixture_meshes = crate::fixture::meshes_for(world, setup);
     let rotary_axis = crate::fixture::rotary_axis_of(world, op);
@@ -307,6 +316,11 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         .as_ref()
         .and_then(|m| m.spindle_d.zip(m.spindle_len))
         .map(|(d, l)| (d * 0.5, l));
+    let z_ceiling = mounted
+        .as_ref()
+        .and_then(|m| m.axis(2))
+        .and_then(crate::machine::AxisLimits::program_travel)
+        .map(|(lo, hi)| wcs_origin[2] + lo.max(hi));
     let machine_rotaries = mounted.map(|m| {
         let rot: Vec<_> = m.axes.iter().filter(|a| a.rotary).cloned().collect();
         (m.model, rot)
@@ -316,6 +330,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         op_name: op_name.to_owned(),
         tool,
         body,
+        neck,
         lathe_body,
         tool_name: op.tool.clone(),
         params: op.params.clone(),
@@ -339,6 +354,8 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         machine_rotaries,
         spindle,
         fixtures,
+        fixture_names,
+        z_ceiling,
         workholding,
         fixture_meshes,
         rotary_axis,

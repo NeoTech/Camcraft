@@ -71,6 +71,7 @@ fn judge_with(p: &Toolpath, mode: Mode, tool: &ToolGeom, stock_top_z: f64, z_tol
         finish_tol: None,
         fixtures: &[],
         spindle: None,
+        ..Default::default()
     };
     verify(p, &cx)
 }
@@ -99,7 +100,7 @@ fn chain(start: (f64, f64, f64), steps: &[Step]) -> Toolpath {
             m
         })
         .collect();
-    Toolpath { moves, cycles: Vec::new(), notes: Vec::new(), comps: Vec::new(), threads: Vec::new(), probes: Vec::new(), breaks: Vec::new() }
+    Toolpath { moves, cycles: Vec::new(), notes: Vec::new(), comps: Vec::new(), threads: Vec::new(), probes: Vec::new(), breaks: Vec::new(), plasma: None }
 }
 
 const R: MoveKind = MoveKind::Rapid;
