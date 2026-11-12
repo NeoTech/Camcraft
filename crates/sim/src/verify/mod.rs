@@ -190,6 +190,7 @@ mod stock_top_shell;
 mod sweep;
 mod swept;
 mod types;
+mod upright;
 mod workholding;
 
 pub use excess::excess_floor;

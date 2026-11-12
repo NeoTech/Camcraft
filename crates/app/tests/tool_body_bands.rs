@@ -142,15 +142,13 @@ fn a_raised_foot_over_a_slim_shank_is_judged_looser_than_the_cylinder() {
 fn a_raised_foot_over_a_fat_shank_is_judged_stricter_than_the_cylinder() {
     // Shank wider than the body: the cylinder judged the gap at the
     // body's r 6, the stack at the shank's r 8. Wall 7 off: the shank
-    // band convicts either way; the holder group now convicts too.
+    // band convicts either way; the holder group now convicts too - the
+    // same event on the same move, reported once (#938).
     let (g, stack) = raised_foot(8.0, 6.0);
     let body = Cutter::flat(&g).with_body(&g, &stack);
     assert_eq!(body.holder_bands(), vec![(14.0, 8.0, 10.0), (24.0, 6.0, 26.0)]);
     assert_eq!(plunge_beside_island(7.0, -20.0, &g, None), vec![Warning::ShankHit { at: 1, part: true }]);
-    assert_eq!(
-        plunge_beside_island(7.0, -20.0, &g, Some(body)),
-        vec![Warning::ShankHit { at: 1, part: true }, Warning::ShankHit { at: 1, part: true }]
-    );
+    assert_eq!(plunge_beside_island(7.0, -20.0, &g, Some(body)), vec![Warning::ShankHit { at: 1, part: true }]);
 }
 
 // ---- (c3) is not hidden behind a stock-only (c) --------------------
