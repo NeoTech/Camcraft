@@ -54,6 +54,12 @@ pub struct Condition {
     /// Sinker: the electrode undersize per side this condition wants, mm.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub undersize: Option<f64>,
+    /// Sinker: the electrode's axial wear rate under this condition
+    /// (#546) - electrode length lost per unit of depth burned, a ratio
+    /// in [0, 1). Unstated = no rate: the burn is not wear-compensated
+    /// from the table (no fixed ratio is ever assumed).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub wear: Option<f64>,
     /// One of [`CONDITION_ROLES`], or empty: not stated.
     #[serde(skip_serializing_if = "String::is_empty")]
     pub role: String,
@@ -170,7 +176,16 @@ fn condition_ok(c: &Condition) -> bool {
         && c.gap.is_none_or(|g| g.is_finite() && g >= 0.0)
         && len(c.wire_diameter)
         && c.undersize.is_none_or(|u| u.is_finite() && u >= 0.0)
+        && c.wear.is_none_or(wear_rate_ok)
         && (c.role.is_empty() || CONDITION_ROLES.contains(&c.role.as_str()))
+}
+
+/// The axial wear rate law (#546): a finite ratio from 0 up to, but not
+/// including, 1 - the electrode cannot lose more length than the burn
+/// gains depth.
+#[must_use]
+pub fn wear_rate_ok(r: f64) -> bool {
+    r.is_finite() && (0.0..1.0).contains(&r)
 }
 
 fn unique_ids(cs: &[Condition]) -> bool {
@@ -310,6 +325,15 @@ fn parse_conditions(v: Option<&serde_json::Value>, f: f64) -> Result<Vec<Conditi
             gap: num_at("gap", true)?,
             wire_diameter: num_at("wire_diameter", false)?,
             undersize: num_at("undersize", true)?,
+            wear: match num(c, "wear", 1.0) {
+                Err(_) => return Err(format!("machine file: edm condition {id:?} wear must be a number")),
+                Ok(Some(w)) if !wear_rate_ok(w) => {
+                    return Err(format!(
+                        "machine file: edm condition {id:?} wear {w} is not an axial wear rate - state a ratio from 0 up to (not including) 1: the electrode cannot wear more than the burn deepens"
+                    ));
+                }
+                Ok(w) => w,
+            },
             role: word("role")?,
             notes: word("notes")?,
             id,

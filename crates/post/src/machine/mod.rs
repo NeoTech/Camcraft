@@ -15,7 +15,7 @@ mod tooling;
 
 pub use def::*;
 pub use direction::{inverted_axis_line, inverted_motion, inverted_phrase, untranslated_inversion, AxisDirection};
-pub use edm::{Condition, ConditionField, Edm, OrbitWord, CONDITION_ROLES, ORBIT_KINDS};
+pub use edm::{wear_rate_ok, Condition, ConditionField, Edm, OrbitWord, CONDITION_ROLES, ORBIT_KINDS};
 pub use parse::{parse_mch, parse_mch_with};
 pub use plasma::plasma_refusals;
 pub use tooling::{mount_check, tooling_refusals, HolderInfo, HolderLookup, SPINDLE_MOUNTS};

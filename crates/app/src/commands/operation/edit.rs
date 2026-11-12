@@ -108,6 +108,9 @@ impl EditOperationParams {
                 prev.params.kind()
             )));
         }
+        if let Some(why) = params.named_refusal() {
+            return Err(CommandError::Invalid(why));
+        }
         if !params.is_sane() {
             return Err(CommandError::Invalid(format!(
                 "operation parameters are not usable for a {} operation",

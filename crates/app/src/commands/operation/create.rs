@@ -85,6 +85,9 @@ impl CreateOperation {
         // law makes that the first/legacy context byte-identically.
         let setup = crate::setup::active(world);
         valid_src(world, setup.as_deref(), &src)?;
+        if let Some(why) = params.named_refusal() {
+            return Err(CommandError::Invalid(why));
+        }
         if !params.is_sane() {
             return Err(CommandError::Invalid(format!(
                 "operation parameters are not usable for a {} operation",

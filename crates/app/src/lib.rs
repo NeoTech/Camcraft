@@ -53,6 +53,7 @@ pub use camcraft_motion::plasma;
 pub use camcraft_motion::probing;
 // #541: sinker EDM burn to depth.
 pub use camcraft_motion::sinker;
+pub use camcraft_motion::sinker_wear;
 pub mod project;
 // #35: pocket and slot recognition on the model's faces.
 pub mod recognize;

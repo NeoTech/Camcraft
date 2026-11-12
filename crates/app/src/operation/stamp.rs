@@ -124,6 +124,12 @@ pub fn current_stamp(
             Ok(g) => w(&mut h, g),
             Err(e) => h.write(e.as_bytes()),
         }
+        // #546: and the condition's stated wear rate - a re-stated rate
+        // is a different (compensated) burn. Nothing when unstated.
+        if let Some(r) = super::sinker_wear_op::condition_wear(world, setup, p) {
+            h.write(b"sinker-wear");
+            w(&mut h, r);
+        }
     }
     // M11.3: a tool that may not plunge into solid changes the entries;
     // a byte only then, so no centre-cutting op's digest moves.

@@ -13,7 +13,8 @@ use crate::cl::Toolpath;
 use crate::geometry::Triangle;
 use crate::machine::{ConditionField, Kind};
 use crate::machining2d::GenError;
-use crate::sinker::{burn_to_depth, SinkerDatum, SinkerParams};
+use crate::sinker::{SinkerDatum, SinkerParams};
+use crate::sinker_wear::burn_compensated;
 use crate::tools::{Tool, ToolKind};
 use crate::verify::Warning;
 
@@ -36,6 +37,9 @@ pub(super) fn seed_sinker_burn(c: &Carried) -> OpParams {
         y: 0.0,
         feed: 50.0,
         condition: String::new(),
+        layer: None,
+        wear_lost: None,
+        wear_over: None,
     })
 }
 
@@ -114,14 +118,20 @@ pub fn sinker_params(
     })
 }
 
-/// Generate the burn.
+/// Generate the burn, wear-compensated in Z when a rate is stated
+/// (#546: measured on the op, else the condition's `cond_wear`).
 pub(super) fn generate_sinker(
     op: &SinkerBurnOp,
     tool: &Tool,
     hs: &ResolvedHeights,
     gap: f64,
+    cond_wear: Option<f64>,
     facets: &[Triangle],
 ) -> Result<(Toolpath, Vec<Warning>), GenError> {
+    if let Some(why) = op.wear_refusal() {
+        return Err(GenError::Invalid(why));
+    }
     let p = sinker_params(op, tool, hs, gap, facets)?;
-    Ok((burn_to_depth(&p)?, Vec::new()))
+    let w = super::sinker_wear_op::sinker_wear(op, cond_wear);
+    Ok((burn_compensated(&p, &w)?, Vec::new()))
 }

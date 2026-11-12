@@ -6,6 +6,17 @@ use crate::operation::types::params::OpParams;
 use crate::operation::types::sel::lead_sane;
 
 impl OpParams {
+    /// The by-name refusal behind a failed [`Self::is_sane`], where a
+    /// kind can say it (#546: the sinker burn's wear rate and layer
+    /// step); `None` keeps the commands' generic "not usable".
+    #[must_use]
+    pub fn named_refusal(&self) -> Option<String> {
+        match self {
+            OpParams::SinkerBurn(p) => p.compensation_refusal(),
+            _ => None,
+        }
+    }
+
     /// Shallow sanity for command construction, no world: finite numbers,
     /// positive increments, in-range slots. Ordering needs resolved
     /// heights and runs in [`crate::operation::depth_sane`] wherever a command holds the

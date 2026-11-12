@@ -31,6 +31,8 @@ pub mod plasma;
 pub mod probing;
 // #541: sinker EDM burn to depth.
 pub mod sinker;
+// #546: sinker electrode wear compensation in Z.
+pub mod sinker_wear;
 pub mod quality;
 pub mod multiaxis;
 pub mod turning;
