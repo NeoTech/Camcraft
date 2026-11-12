@@ -18,7 +18,7 @@
 //! no vendor material.
 //!
 //! Gate map (M4.4): covers assets/posts/fanuc-lathe.cps and
-//! tormach-lathe.cps (their drilling paths), app::post (engine on the
+//! tormach-lathe.cps (their drilling paths), post::post (engine on the
 //! lathe dialects), app::posting (stream_records).
 //! Lane shape (M4.4): all tests here run in seconds.
 
