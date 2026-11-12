@@ -289,13 +289,15 @@ ENDSECTION
 fn non_rtcp_dialects_refuse_a_tilted_stream() {
     // Haas (and the four share the law): a tilted stream is a
     // refusal, never a prismatic approximation of 5-axis motion.
-    for name in ["haas", "mazak", "sinumerik", "heidenhain", "tormach"] {
+    for name in ["haas", "mazak", "sinumerik", "heidenhain", "tormach", "grblhal", "tinyg"] {
         let cps = read(&format!("assets/posts/{name}.cps"));
         let stream = "TOOL 1 T1\nSECTION\nFeed X 0 Y 0 Z -1 F 1000 A 40000\nENDSECTION\n";
         let out = engine::run(&cps, &serde_json::json!({}), stream).expect("run");
         assert!(!out.warnings.is_empty(), "{name}: a tilt must warn");
+        // Any of the refusals: grblHAL also refuses its Z lift here (no
+        // clearance height in this bare stream, #710), before the tilt.
         assert!(
-            out.warnings[0].contains("RTCP"),
+            out.warnings.iter().any(|w| w.contains("RTCP")),
             "{name} refuses by name: {:?}",
             out.warnings
         );
