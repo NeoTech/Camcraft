@@ -33,6 +33,7 @@ fn params() -> PlasmaParams {
         pierce_height: None,
         cut_height: None,
         pierce_delay: None,
+        model_excess: 0.0,
     }
 }
 

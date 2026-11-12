@@ -117,7 +117,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         // #835: its stylus reads stem and holder as one band - a body is
         // judged by the cylinder enclosing it, and the path says so.
         let note = super::body_judged::probe_note(&tool, body.as_ref());
-        return super::probe_op::generate_probe(&params, &tool, hs.clearance, &material.facets).map(|(mut p, w)| {
+        return super::probe_op::generate_probe(&params, &tool, hs.clearance, (&material.facets, material.excess)).map(|(mut p, w)| {
             p.notes.extend(note);
             (p, w)
         });
@@ -133,7 +133,8 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             &hs,
             picks,
             || region_for_job(&mut picked_region, &mut section_z, &src, &params, &material, None),
-            &material.facets,
+            // #1053: the kerf law gives a coarse model's excess back.
+            (&material.facets, material.excess),
         );
     }
     // The program ahead, cut only when a law asks (#89, #96 review).
