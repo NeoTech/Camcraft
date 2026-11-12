@@ -26,6 +26,7 @@ use camcraft_app::model;
 use camcraft_app::operation;
 
 use crate::actions;
+use crate::machine_modes;
 use crate::build_info;
 use crate::state::{CommandKind, Sim, State, UiTarget};
 
@@ -147,8 +148,8 @@ pub(super) enum Cmd {
     Origin,
     Tools,
     /// The machine door (the ribbon law): one cell that opens the
-    /// three workspaces - Milling, Turning, Mill-turning - and wears
-    /// the current one as its caption. Switching mounts the kind's
+    /// workspaces of `machine_modes::MACHINE_MODES` and wears the
+    /// current one's plain caption. Switching mounts the kind's
     /// built-in reference through `LoadBuiltinMachine`, so the change
     /// rides undo like every other setup move.
     Machine,
@@ -312,12 +313,6 @@ fn label_of(c: Cmd) -> &'static str {
     }
 }
 
-/// The machine mode's caption: the Title-case word the door wears,
-/// read off the switcher's own table so cell and rows cannot disagree.
-fn mode_caption(k: camcraft_app::machine::Kind) -> String {
-    actions::mode_label(k)
-}
-
 /// The section door's short ribbon word: a cell is ~43 px wide at 1280, so
 /// "Milling 2D" would not fit; the full name stays in the tip and the
 /// dropdown. Plain English, deliberate - never a cut-off one (#948).
@@ -331,7 +326,7 @@ fn door_label(s: operation::Section) -> &'static str {
     }
 }
 
-fn text_of(c: Cmd, state: &State) -> String {
+pub(super) fn text_of(c: Cmd, state: &State) -> String {
     match c {
         // The overflow button wears the section's name plus an
         // ellipsis - "Milling 3D…" reads as "the rest of this is in
@@ -340,7 +335,7 @@ fn text_of(c: Cmd, state: &State) -> String {
         // wears the same invitation: the ellipsis says "a list opens".
         Cmd::More(s) => format!("{}…", door_label(s)),
         Cmd::Machine => {
-            format!("{}…", mode_caption(camcraft_app::machine::kind_of(&state.world)))
+            format!("{}…", machine_modes::caption(camcraft_app::machine::kind_of(&state.world)))
         }
         Cmd::View | Cmd::Theme => format!("{}…", label_of(c)),
         // The ribbon caption is registry data (M5.0.2) - imgui's strings,
@@ -380,7 +375,10 @@ pub(super) fn tip_of(c: Cmd, state: &State) -> String {
         Cmd::Tools => "Tool library".into(),
         // The cell's caption already says which workspace is running;
         // the tip says what a click does, and how to undo it.
-        Cmd::Machine => "Switch the workspace: Milling, Turning or Mill-turning (mounts the kind's built-in machine, undoable)".into(),
+        Cmd::Machine => format!(
+            "Switch the workspace: {} (mounts the kind's built-in machine, undoable)",
+            machine_modes::modes_phrase()
+        ),
         Cmd::Create(i) => {
             // The tool-less swap first (imgui's law, ribbon.rs:138):
             // an empty tool list is the deeper trouble - nothing
@@ -848,15 +846,16 @@ pub(super) struct Drop {
 pub(super) type RibbonGeom = (Vec<Cell>, Vec<(f32, f32, &'static str)>, Vec<f32>, Vec<Drop>);
 
 /// The machine door's dropdown rows, pure geometry (the section doors'
-/// `Drop` law, worn by the switcher): the three workspaces in switcher
-/// order, one theme row tall each, hung under the door button in the
+/// `Drop` law, worn by the switcher): the modes in table order, one
+/// theme row tall each, `width` wide, hung under the door button in the
 /// strip's global frame. The tests click the switch through exactly
 /// these rects - one source of truth for where each mode lives.
 pub(super) fn machine_rows(
     button: Rect,
     row_h: f32,
+    width: f32,
 ) -> Vec<(camcraft_app::machine::Kind, Rect)> {
-    actions::MACHINE_MODES
+    machine_modes::MACHINE_MODES
         .iter()
         .enumerate()
         .map(|(k, (kind, _, _))| {
@@ -867,12 +866,20 @@ pub(super) fn machine_rows(
                         button.left(),
                         button.bottom() + DROP_GAP + k as f32 * row_h,
                     ),
-                    Vec2::new(DROP_W, row_h),
+                    Vec2::new(width, row_h),
                 ),
             )
         })
         .collect()
 }
+
+/// The machine dropdown's width: as wide as its longest row (text is
+/// never cut), and never narrower than `DROP_W`. `longest_px` is the
+/// measured width of that row's text.
+pub(super) fn machine_menu_width(longest_px: f32) -> f32 {
+    (longest_px + 2.0 * DROP_TEXT_PAD).max(DROP_W)
+}
+const DROP_TEXT_PAD: f32 = 8.0;
 pub(super) const DROP_W: f32 = 200.0;
 pub(super) const DROP_GAP: f32 = 2.0;
 
@@ -1197,8 +1204,8 @@ pub fn ribbon(
             }
         }
     }
-    // The machine door's dropdown (the ribbon law): the three
-    // workspaces, the current one marked and inert, the others
+    // The machine door's dropdown (the ribbon law): the workspaces
+    // of the mode table, the current one marked and inert, the others
     // mounting their kind's library reference - through the queue,
     // so the switch rides undo. Same hand-drawn popup law as the
     // section doors: foreground order, outside press closes it.
@@ -1214,13 +1221,25 @@ pub fn ribbon(
             }
             Some(cell) => {
                 let button = cell.rect;
-                let rows = machine_rows(button, pal.row_height);
+                // The menu is as wide as its longest row, the current
+                // row's "(current)" tail included.
+                let longest = ui.ctx().fonts_mut(|f| {
+                    machine_modes::MACHINE_MODES
+                        .iter()
+                        .map(|(k, _, _)| {
+                            let text = format!("{}  (current)", machine_modes::mode_label(*k));
+                            f.layout_no_wrap(text, egui::FontId::proportional(pal.font_row), pal.text).size().x
+                        })
+                        .fold(0.0_f32, f32::max)
+                });
+                let width = machine_menu_width(longest);
+                let rows = machine_rows(button, pal.row_height, width);
                 let machine = camcraft_app::machine::kind_of(&state.world);
                 let mut pick: Option<camcraft_app::machine::Kind> = None;
                 let mut chose = false;
                 let panel = Rect::from_min_size(
                     button.left_bottom() + Vec2::new(0.0, DROP_GAP),
-                    Vec2::new(DROP_W, rows.len() as f32 * pal.row_height),
+                    Vec2::new(width, rows.len() as f32 * pal.row_height),
                 );
                 egui::Area::new(base.with("machine-drop"))
                     .fixed_pos(panel.min)
@@ -1243,9 +1262,9 @@ pub fn ribbon(
                             }
                             let current = *kind == machine;
                             let label = if current {
-                                format!("{}  (current)", mode_caption(*kind))
+                                format!("{}  (current)", machine_modes::mode_label(*kind))
                             } else {
-                                mode_caption(*kind).to_owned()
+                                machine_modes::mode_label(*kind)
                             };
                             p.text(
                                 r.left_center() + Vec2::new(8.0, 0.0),
@@ -1267,7 +1286,7 @@ pub fn ribbon(
                     });
                 if chose {
                     if let Some(k) = pick {
-                        actions::set_machine_mode(state, k);
+                        machine_modes::set_machine_mode(state, k);
                     }
                     state.ribbon_mode_open = false;
                 } else {
