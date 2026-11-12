@@ -43,6 +43,7 @@ mod grow;
 mod guard;
 mod kernel;
 mod lift;
+mod lift_coarse;
 mod lift_link;
 mod lift_split;
 mod link;
