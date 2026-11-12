@@ -35,6 +35,12 @@ Open the DMG and drag `CamCraft.app` to Applications, or extract the ZIP.
 The app is ad-hoc signed and not notarized, so the first launch may need
 Control-click, then **Open**.
 
+The app runs from `CamCraft.app/Contents/MacOS/camcraft-ui`. The
+command-line tool (`camcraft-cli`) and the post processor (`post`) sit in
+the same `MacOS` folder. The release files are `camcraft-<version>-macos-universal.dmg`
+(the disk image) and `camcraft-<version>-macos-universal.zip` (the portable
+archive, which holds `CamCraft.app`).
+
 ## FreeBSD
 
 Extract the `freebsd-amd64.tar.gz` archive and run `camcraft-ui` from it.

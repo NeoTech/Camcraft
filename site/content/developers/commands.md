@@ -21,7 +21,8 @@ pub trait Command {
 
 The history (`History` in `crates/app/src/commands/mod.rs`) is a linear
 undo/redo stack of executed commands, and it is the single source of
-truth for what undo (Ctrl+Z) and redo (Ctrl+Y) can do. Executing a new
+truth for what undo (Ctrl+Z, Cmd+Z on macOS) and redo (Ctrl+Y, Cmd+Y on
+macOS) can do. Executing a new
 command clears the redo stack. The history also tracks the depth at the
 last save, so undoing back to the saved point makes the document clean
 again.
