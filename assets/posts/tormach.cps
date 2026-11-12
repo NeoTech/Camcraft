@@ -12,7 +12,7 @@
 // vendor post script text and no CAM post's output used; original work.
 // Structure follows our own haas.cps; the goldens lock this file's
 // decisions, not any vendor's.
-description = "Tormach PathPilot (3-axis mill, A indexing about X, G20/G21 from the machine, G73/G81/G82/G83/G84/G86/G89, G2/G3, G98, G38.2 probing)";
+description = "Tormach PathPilot (3-axis mill, A indexing about X, G20/G21 from the machine, G73/G81/G82/G83/G84/G86/G89, G2/G3, G99, G38.2 probing)";
 vendor = "Camcraft";
 legal = "Original clean-room work; public documentation only";
 certificationLevel = 1;
@@ -32,7 +32,8 @@ var toolWait = false;      // when the first motion needs them legal
 var tNo = 0;
 var inCycle = false;       // a cycle group is open; its chain is suppressed
 var cycleSig = "";         // g|Z|R|Q of the open group (modal X Y holes)
-var retractSet = false;    // G98 written once per program
+var cycX = 0, cycY = 0, cycR = 0; // the open group's hole XY and R plane (world, #994)
+var seatKnown = false;     // #994: this section moved, so the stream's Start is where the tool is
 var coolant = "";          // the M-code this program started, if any
 var sectionOpen = false;   // preamble written (a legacy .cl carries no SECTION)
 var smoothTol = 0;          // #616: the section's PARAM Smoothing, mm (0: none asked)
@@ -383,7 +384,7 @@ function endPreamble() {
   block(["M5"]);
 }
 
-function onSection() { startPreamble(); }
+function onSection() { seatKnown = false; startPreamble(); }
 function onSectionEnd() { endPreamble(); }
 
 // ------------------------------------------------------- the 4th axis
@@ -561,21 +562,44 @@ function startXY(p) {
 
 // While a canned-cycle group is open its expanded hole chain is the
 // cycle block's business only.
+// The chain stays on its hole: the hole's XY, at or below its R plane.
+// #994: a rapid that leaves it (the hop up, the traverse, the exit)
+// ends the group - G80, then the rapid posted as the stream says - so
+// the program moves between holes at the hop the path was verified at,
+// never at R. A cut leaving the hole is no chain a cycle replaces:
+// refused by name.
+function onHole(p) {
+  return Math.abs(p.X - cycX) < 1e-6 && Math.abs(p.Y - cycY) < 1e-6 && p.Z <= cycR + 1e-6;
+}
+function chainRapid() {  // true: the open group's own retract, swallowed
+  seatKnown = true;
+  if (!inCycle) return false;
+  if (onHole(properties)) return true;
+  block(["G80"]);
+  inCycle = false;
+  return false;
+}
+function chainCut() {  // true: the cut is the cycle's (or refused)
+  seatKnown = true;
+  if (!inCycle) return false;
+  if (!onHole(properties)) msg("a cutting move leaves its hole inside a canned-cycle group");
+  return true;
+}
 function onRapid() {
   startPreamble();
-  if (inCycle || !indexFor(properties)) return;
+  if (chainRapid() || !indexFor(properties)) return;
   xyFirst(properties.X, properties.Y, properties.Z);
   block(["G0"].concat(xyz(properties)));
 }
 function onLinear() {
   startPreamble();
-  if (inCycle || !indexFor(properties)) return;
+  if (chainCut() || !indexFor(properties)) return;
   startXY(properties);
   block(["G1"].concat(xyz(properties), [fw(properties.FeedRate)]));
 }
 function onCircular() {
   startPreamble();
-  if (inCycle || !indexFor(properties)) return;
+  if (chainCut() || !indexFor(properties)) return;
   var p = properties;
   if (indexed()) {  // #785: a tilted path is chords; an arc here is unstated
     aRefuse("arc on an indexed A" + inOp() + " - the indexed frame posts lines only");
@@ -621,7 +645,33 @@ function onProbeGuard() {
 // One block per hole, holes of an unchanged cycle continuing modally
 // with bare X Y lines. LinuxCNC's dwell P is in SECONDS (not the
 // milliseconds Fanuc-family controls read).
+// #994: G99, stated as each group opens - each hole returns to its R
+// plane, where the stream's chain ends (RS-274 / ISO 6983: G98 returns
+// to the level the tool stood at when the cycle was read, G99 to R).
+// The hop and traverse to the next hole are the stream's own rapids,
+// posted after G80 (above), so no hole's retract level is left to where
+// the tool happened to be.
 function secs(s) { return trim(Number(s).toFixed(3)); }
+// #994: the cycle is read with the tool on its R plane over the hole,
+// where the stream's chain starts, so the level a hole returns to is R
+// and never the height the tool happened to stand at. A stream whose
+// tool stands elsewhere (its anchor on the rapid down to R) is seated
+// here: up to R first when below it, then over the hole, then down -
+// never under the straight rapid the stream itself states. A cycle
+// that is its section's first motion has no stream position to seat
+// from: the cycle positions over the hole from the height it is at.
+function cycleSeat(p) {
+  if (!seatKnown) return;
+  var lo = has(p.StartZ) && p.StartZ < p.R - 1e-6;
+  var away = !(has(p.StartX) && has(p.StartY)) || Math.abs(p.StartX - p.X) >= 1e-6 || Math.abs(p.StartY - p.Y) >= 1e-6;
+  var hi = !has(p.StartZ) || p.StartZ > p.R + 1e-6;
+  if (!lo && !away && !hi) return;
+  if (inCycle) block(["G80"]);
+  inCycle = false;
+  if (lo) block(["G0", wo("Z", p.R, orgZ)]);
+  if (away) block(["G0", wo("X", p.X, orgX), wo("Y", p.Y, orgY)]);
+  if (hi) block(["G0", wo("Z", p.R, orgZ)]);
+}
 function onCycle() {
   startPreamble();
   restorePlane();            // a cycle drills along G17's Z
@@ -650,13 +700,13 @@ function onCycle() {
     g = "G84";
   }
   xyFirst(p.X, p.Y);         // a cycle as the first move: its first hole
+  cycleSeat(p);
   var sig = g + "|" + p.Z + "|" + p.R + "|" + p.Q;
   if (inCycle && sig === cycleSig) {
     block([wo("X", p.X, orgX), wo("Y", p.Y, orgY)]);
   } else {
     if (inCycle) block(["G80"]);
-    // The chain retracts to its initial (clearance) level each hole.
-    if (!retractSet) { block(["G98"]); retractSet = true; }
+    block(["G99"]);            // #994: each hole returns to R
     // Q is an increment (peck depth), not a position: no origin shift.
     var words = [g, wo("X", p.X, orgX), wo("Y", p.Y, orgY), wo("Z", p.Z, orgZ), wo("R", p.R, orgZ)];
     if ((p.CycleType === "PECK" || p.CycleType === "DEEP") && has(p.Q) && p.Q > 0) {
@@ -667,6 +717,8 @@ function onCycle() {
     block(words);
     cycleSig = sig;
   }
+  cycX = p.X; cycY = p.Y; cycR = p.R;
+  seatKnown = true;
   inCycle = true;
 }
 
