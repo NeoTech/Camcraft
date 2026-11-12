@@ -45,6 +45,9 @@ Hover any ribbon button to read what it does. A greyed-out operation says
 why in its tooltip, for example "No tool yet - add one (Setup > Tools)" or
 "No stock yet - set up stock first (Setup > Stock)".
 
+Every keyboard shortcut and mouse gesture, for Windows, Linux and macOS, is
+on the [Keyboard and mouse](@/guide/keyboard-and-mouse.md) page.
+
 ## A first toolpath
 
 1. **Import a model.** Click **Model** and pick an STL, OBJ or STEP file. If
