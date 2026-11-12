@@ -14,18 +14,18 @@
 //! The turning documents' goldens live in `lathe_post.rs`.
 //!
 //! Gate map (M4.4): covers post::post (engine, cnc on the lathe
-//! dialect), app::machine, post::machine (the mirror the script reads).
+//! dialect), post::machine (the mirror the script reads).
 //! Lane shape (M4.4): all tests here run in milliseconds.
 
-use camcraft_app::cl::{CycleKind, MoveKind};
-use camcraft_app::machine::{Coolant, Machine};
-use camcraft_app::post::{cnc, engine};
+use camcraft_post::cl::{CycleKind, MoveKind};
+use camcraft_post::machine::{Coolant, Machine};
+use camcraft_post::post::{cnc, engine};
 use serde_json::json;
 
 const LATHE_CPS: &str = include_str!("../../../assets/posts/fanuc-lathe.cps");
 
 fn lathe_mch() -> serde_json::Value {
-    camcraft_app::post::machine::mirror(&Machine {
+    camcraft_post::post::machine::mirror(&Machine {
         model: "TestBench lathe".into(),
         kind: Some("lathe".into()),
         spindle_max: Some(12000.0),
@@ -247,8 +247,8 @@ fn a_face_cycle_ends_on_the_rapid_leaving_its_hole_and_refuses_a_cut_that_leaves
 
 /// Test-bench live-tool words - placeholders, not any builder's codes.
 fn mill_turn_mch() -> serde_json::Value {
-    use camcraft_app::machine::{AxisLimits, LiveToolCodes};
-    camcraft_app::post::machine::mirror(&Machine {
+    use camcraft_post::machine::{AxisLimits, LiveToolCodes};
+    camcraft_post::post::machine::mirror(&Machine {
         model: "TestBench mill-turn".into(),
         kind: Some("mill-turn".into()),
         spindle_max: Some(6000.0),

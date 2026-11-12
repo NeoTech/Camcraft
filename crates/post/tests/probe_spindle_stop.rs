@@ -13,9 +13,9 @@
 //! script's preamble (assets/posts/*.cps startPreamble, lathe excluded;
 //! doosan-dnm since #1035).
 
-use camcraft_app::cl::{MoveKind, PathBuilder, Toolpath};
-use camcraft_app::geometry::Point3;
-use camcraft_app::post::{cnc, dump, engine, Dump};
+use camcraft_post::cl::{MoveKind, PathBuilder, Toolpath};
+use camcraft_post::geometry::Point3;
+use camcraft_post::post::{cnc, dump, engine, Dump};
 use std::path::Path;
 
 /// Every built-in mill post and its spindle-stop word (the lathe post
