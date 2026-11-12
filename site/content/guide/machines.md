@@ -19,7 +19,7 @@ messages below.
 | Lathe | Turning, plus the axial Drill | Fanuc Lathe, Tormach PathPilot Lathe | Turning center 2-axis, Tormach 8L, 15L, 15LX |
 | Mill-turn | milling and turning | every post except plasma | Multitasking 5-axis |
 | Plasma | Plasma Profile only | Tormach PathPilot Plasma | Tormach 1300PL |
-| Wire / sinker EDM | none yet | none yet | none yet |
+| Wire / sinker EDM | Wire Contour (wire EDM) | none yet | none yet |
 
 The rules are `Family::admits` in `crates/app/src/operation/kinds.rs` and
 `post_serves` in `crates/app/src/posting.rs`. A picker lists posts by this
@@ -95,10 +95,10 @@ plasma. Machine file: `tormach-1300pl`.
 
 ## Wire and sinker EDM
 
-The kinds exist (`wire_edm`, `sinker_edm`), but on this release no EDM
-operation, post or machine file ships: no post serves an EDM kind, so
-nothing can be posted for one. This section is in progress; the posts and
-pages are in review.
+The kinds exist (`wire_edm`, `sinker_edm`), and the Wire Contour operation
+(`OpType::WireContour`) is admitted on a wire EDM machine. What does not ship
+yet is an EDM post or an EDM machine file: no post serves an EDM kind, so
+nothing can be posted for one.
 
 ## Changing a setup's machine
 
