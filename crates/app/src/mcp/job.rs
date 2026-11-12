@@ -90,12 +90,17 @@ pub(super) fn get_job(env: &mut Env, _a: &Map<String, Value>) -> Result<Value, S
         .iter()
         .filter(|(_, e)| !model::is_stock(w, e))
         .map(|(n, e)| {
-            json!({
+            let mut m = json!({
                 "name": n,
                 "facets": model::facets_of(w, e).map_or(0, |f| f.len()),
                 "bounds": model::entity_world_aabb(w, e).as_ref().map(aabb),
                 "fixture": model::is_fixture(w, e),
-            })
+            });
+            // #864: only a model imported coarser than promised says so.
+            if let Some(chord) = crate::model_fidelity::chord_of(w, e) {
+                m["reduced_fidelity"] = crate::model_fidelity::facts(w, chord);
+            }
+            m
         })
         .collect();
     let tools: Vec<Value> = model::named_entities(w)

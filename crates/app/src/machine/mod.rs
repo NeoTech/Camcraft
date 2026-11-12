@@ -50,6 +50,10 @@
 // (crates/post/src/machine/); this module keeps only what touches the
 // world - the singleton glue and the program checker.
 pub use camcraft_post::machine::*;
+// #828: the reader, validator and re-judge with the holder library
+// passed in - these shadow the post crate's word-only ones.
+mod holders;
+pub use holders::{holder_lookup, parse_mch, tooling_refusal, tooling_refusals};
 
 // #287: the Machines pane's catalogue, property sheet and validator.
 pub mod library;

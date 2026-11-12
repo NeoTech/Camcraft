@@ -291,3 +291,13 @@ fn the_compile_cache_is_enabled_only_when_sccache_exists_and_nobody_chose_otherw
     // A size the caller chose is not overridden.
     assert_eq!(exec::cache_env(Some("/bin/sccache"), false, false, true), [("RUSTC_WRAPPER", "/bin/sccache".to_string())]);
 }
+
+#[test]
+fn packaging_build_clears_compiler_wrappers() {
+    // Both wrapper variables set: both are removed from the packaging build's environment (#935).
+    let both = exec::packaging_env_clear(|_| true);
+    assert_eq!(both, ["RUSTC_WRAPPER", "CARGO_BUILD_RUSTC_WRAPPER"]);
+    // Only the one that is set is named; none set, nothing to clear.
+    assert_eq!(exec::packaging_env_clear(|v| v == "CARGO_BUILD_RUSTC_WRAPPER"), ["CARGO_BUILD_RUSTC_WRAPPER"]);
+    assert!(exec::packaging_env_clear(|_| false).is_empty());
+}

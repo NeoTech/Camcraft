@@ -39,6 +39,8 @@ pub mod machine;
 pub mod machined_classes;
 pub mod mcp;
 pub mod model;
+// #864: models imported coarser than the importer promises.
+pub mod model_fidelity;
 pub mod operation;
 pub mod pick;
 pub use camcraft_post::post;
@@ -53,6 +55,8 @@ pub mod project;
 pub mod recognize;
 // #182: the CPU rasteriser behind the MCP stock render.
 pub mod raster;
+// #877: the theme and colour-vision mode, kept per user (not per project).
+pub mod prefs;
 pub mod recent;
 pub mod rest;
 pub mod ribbon;

@@ -38,10 +38,14 @@ pub fn run_job(mut job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
     // in (a 3+2 tilt's local one); the UI draws in world, so it is
     // carried out through the same frame the path would have been.
     let frame = job.frame;
+    // #835: a refusal naming the holder of a tool with a body says it
+    // judged the cylinder enclosing that body.
+    let (judged_tool, body) = (job.tool.clone(), job.body.clone());
     let _span = tracing::info_span!("generate", op = %job.op_name).entered();
     let started = crate::clock::Instant::now();
     tracing::debug!(kind = %kind, "generation started");
     let (mut path, warns) = run_job_arms(job)
+        .map_err(|e| super::body_judged::name_enclosure(e, &judged_tool, body.as_ref()))
         .map_err(|e| e.map_location(|p| frame.map_or(p, |f| f.to_world(p))))
         // #261 part 3: a refusal's ghost rides the same frame map as a path.
         .map_err(|e| match &frame {
@@ -110,7 +114,13 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
     // The probe (#108) cuts nothing: its own protected-move law judges
     // the stylus against the model, and no cutting law or region applies.
     if matches!(params, OpParams::Probe { .. }) {
-        return super::probe_op::generate_probe(&params, &tool, hs.clearance, &material.facets);
+        // #835: its stylus reads stem and holder as one band - a body is
+        // judged by the cylinder enclosing it, and the path says so.
+        let note = super::body_judged::probe_note(&tool, body.as_ref());
+        return super::probe_op::generate_probe(&params, &tool, hs.clearance, &material.facets).map(|(mut p, w)| {
+            p.notes.extend(note);
+            (p, w)
+        });
     }
     // The plasma cut (#670) is its own law: picked contours (or the
     // model's through-silhouette) cut with the torch's kerf; no milling
@@ -201,6 +211,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         facets: f.local_facets(&material.facets),
         top: material.top - oz,
         bodies: material.bodies.clone(),
+        excess: material.excess,
     });
     let m_gen = material_local.as_ref().unwrap_or(&material);
 
@@ -2587,6 +2598,10 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
     let geom = tool.geom();
     // #368: what the fixture laws sweep above the shank.
     let holder = crate::tool_body::stack(&geom, body.as_ref());
+    // #835: the cutter every stack law reads - its tip (M13.7) and,
+    // with a body, the same bands above the shank, never the cylinder
+    // enclosing them.
+    let cutter = verify::Cutter::of(&tool).with_body(&geom, &holder);
     let fixture_boxes = fixtures;
     // #339 slice 5: an upright mill's links are planned over the steel -
     // a struck link rises over it, an unclearable one refuses by name.
@@ -2786,7 +2801,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     .or((depth_law == DepthLaw::Section).then_some(&material.facets[..])),
                     tool: &geom,
                     // The op's real tip for the solid law (M13.7).
-                    cutter: Some(verify::Cutter::of(&tool)),
+                    cutter: Some(cutter),
                     mode,
                     stock_top_z,
                     clearance_z: hl.clearance,
@@ -2799,61 +2814,13 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     // shank, so they carry their tolerance the same way
                     // (the ball's path is identical; the envelope scan
                     // never sees the difference).
-                    finish_tol: match &params {
-                        OpParams::Finish3D { tolerance, .. }
-                        | OpParams::Contour5D { tolerance, .. }
-                        | OpParams::Parallel5D { tolerance, .. }
-                        | OpParams::Swarf { tolerance, .. }
-                        | OpParams::AdvancedSwarf { tolerance, .. }
-                        | OpParams::RotaryContour { tolerance, .. }
-                        | OpParams::RotaryParallel { tolerance, .. }
-                        // The rough ladder's tolerance is exactly this
-                        // law's budget - its only reading (E2), and
-                        // the stamped ladder reads it the same way
-                        // (E3): the positions are the pocket's, the
-                        // verdict measures them under the pose.
-                        | OpParams::RotaryOffset { tolerance, .. }
-                        | OpParams::MultiAxisRough { tolerance, .. }
-                        // Flow is the finish's law on turning lines:
-                        // the tolerance is the envelope budget, as
-                        // always in this group (M5.1 I). The
-                        // drive-curve contour reads it the same way -
-                        // its ONLY reading, the path itself comes from
-                        // the picks (M5.1 J).
-                        | OpParams::Flow5D { tolerance, .. }
-                        | OpParams::MultiAxisContour { tolerance, .. }
-                        // Facing reads it the same way - its ONLY
-                        // reading: the stations come from the
-                        // profile, the budget judges them (M5.2 A).
-                        // The profile kinds read it TWICE (the
-                        // kernel chords its ride at it) and stand
-                        // before this same budget (M5.2 B).
-                        | OpParams::Facing { tolerance, .. }
-                        | OpParams::ProfileRough { tolerance, .. }
-                        | OpParams::ProfileFinish { tolerance, .. }
-                        // The contour rides read it the same way the
-                        // profile kinds do - TWICE: the kernel chords
-                        // the ride at it, the door judges the promised
-                        // line at it, and the envelope scan measures
-                        // the same skin under this budget (M5.2 E).
-                        // Without it the verdict cannot measure, and
-                        // an unmeasurable Envelope op refuses.
-                        | OpParams::Chamfering { tolerance, .. }
-                        | OpParams::TaperTurning { tolerance, .. }
-                        // The boring bar reads it the contour twins'
-                        // way - TWICE, and from the inside: the
-                        // kernel chords the wall and the center curve
-                        // at quarters of it, and the envelope scan
-                        // measures the ride against the same
-                        // promise (M5.2 F).
-                        | OpParams::BoringTurning { tolerance, .. }
-                        | OpParams::MultiPassTurning { tolerance, .. } => Some(*tolerance),
-                        _ => None,
-                    },
+                    finish_tol: super::fidelity_law::finish_tol_of(&params),
                     // Steel runs against the path below, under the
                     // post gate's workholding laws (M13.8 owed).
                     fixtures: &[],
                     spindle: None,
+                    // #864: a source imported coarser than promised.
+                    model_excess: material.excess,
                 },
                 // The picks' touching bodies, read as their union
                 // (M13.11); empty for one body.
@@ -2993,14 +2960,15 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // own recognized bore - width, floor and existence, by
             // name at the cycle's first move.
             if lathe_axial {
-                warns.extend(drilling::axial_warnings(&material.facets, &path, d, GOUGE_TOL));
+                let tol = verify::excess_floor(GOUGE_TOL, material.excess).unwrap_or(GOUGE_TOL);
+                warns.extend(drilling::axial_warnings(&material.facets, &path, d, tol));
             }
             // The containment kinds' solid law (their verify runs without
             // the model - exact rims): the tool's own tip and stack swept
             // along every move against the part solid. The Section kinds
             // answer the same law inside `verify` (b2), real tip (M13.7).
             if depth_law == DepthLaw::Contain {
-                contain_into(&mut warns, &path, &material.facets, &tool, depth_law, stl);
+                contain_into(&mut warns, &path, &material.facets, &cutter, depth_law, stl, material.excess);
             }
             // The rotary kinds' bands and rapids (M13): `Mode::Rotary`
             // stood the vertical-column laws down; the radial field
@@ -3011,7 +2979,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     &path,
                     &material.facets,
                     stock_facets.as_deref(),
-                    &tool,
+                    &cutter,
                     tol,
                 );
             }
@@ -3092,7 +3060,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     model: (depth_law == DepthLaw::Section).then_some(&m_gen.facets[..]),
                     tool: &geom,
                     // The op's real tip for the solid law (M13.7).
-                    cutter: Some(verify::Cutter::of(&tool)),
+                    cutter: Some(cutter),
                     mode,
                     stock_top_z: st_local,
                     clearance_z: hl.clearance,
@@ -3103,6 +3071,8 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     // Steel runs against the world path below.
                     fixtures: &[],
                     spindle: None,
+                    // #864: a source imported coarser than promised.
+                    model_excess: material.excess,
                 },
                 &m_gen.bodies,
             );
@@ -3111,7 +3081,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // along every move against the part solid. The Section kinds
             // answer the same law inside `verify` (b2), real tip (M13.7).
             if depth_law == DepthLaw::Contain {
-                contain_into(&mut warns, &path, &m_gen.facets, &tool, depth_law, stl);
+                contain_into(&mut warns, &path, &m_gen.facets, &cutter, depth_law, stl, material.excess);
             }
             warns.extend(workholding_warnings(
                 &path_world,
@@ -3241,16 +3211,18 @@ fn contain_into(
     warns: &mut Vec<Warning>,
     path: &Toolpath,
     facets: &[Triangle],
-    tool: &crate::tools::Tool,
+    cutter: &verify::Cutter,
     law: DepthLaw,
     stl: f64,
+    excess: f64,
 ) {
     let law = verify::SolidLaw {
         step: CONTAIN_STEP,
-        allow: GOUGE_TOL + (-stl).max(0.0),
+        // #864: less a coarse model's excess, while that is honest.
+        allow: verify::excess_floor(GOUGE_TOL, excess).unwrap_or(GOUGE_TOL) + (-stl).max(0.0),
         hole_walls: law == DepthLaw::Contain,
     };
-    for w in verify::solid_hits(path, facets, &verify::Cutter::of(tool), &law) {
+    for w in verify::solid_hits(path, facets, cutter, &law) {
         if !warns.contains(&w) {
             warns.push(w);
         }

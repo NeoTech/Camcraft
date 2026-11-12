@@ -131,6 +131,7 @@ use boundary_ctx::*;
 mod job;
 pub use job::*;
 mod generate;
+pub mod body_judged;
 /// #339 slice 5: links routed over the setup's fixtures.
 pub mod fixture_route;
 mod cross_entry;
@@ -149,6 +150,8 @@ pub(crate) mod spindle_law;
 pub use spindle_law::{spindle_reading, SpindleReading, SPINDLE_TOL};
 mod rotary_gate;
 mod air_law;
+// #864: what a kind's gouge laws need of its model's fidelity.
+pub(crate) mod fidelity_law;
 mod top_stock;
 pub use top_stock::TOP_STOCK_WARNING;
 mod turning_credit;

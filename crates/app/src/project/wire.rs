@@ -160,6 +160,7 @@ pub fn collect(world: &World) -> ProjectFile {
                 // The counter moves on models and stocks (every facet
                 // landing); everywhere else it reads 0 and omits itself.
                 rev: model::rev_of(world, &entity),
+                coarse_mm: crate::model_fidelity::chord_of(world, &entity),
                 kind,
                 stock,
                 tool,
@@ -216,13 +217,6 @@ pub fn collect(world: &World) -> ProjectFile {
             crate::schema::PostRef::Builtin => None,
             crate::schema::PostRef::Named(name) => Some(PostDto::Named(name)),
             crate::schema::PostRef::File(path) => Some(PostDto::File(path)),
-        },
-        // The default theme matches every pre-v41 document, so it
-        // writes no key (the post's law, worn in the theme's clothes).
-        theme: match crate::commands::theme_of(world) {
-            crate::schema::ThemeRef::Dark => None,
-            crate::schema::ThemeRef::Named(name) => Some(ThemeDto::Named(name)),
-            crate::schema::ThemeRef::File(path) => Some(ThemeDto::File(path)),
         },
         // An unpinned ribbon writes no key (the theme's law, worn in
         // the pin's clothes - and the default is what every pre-M6.2

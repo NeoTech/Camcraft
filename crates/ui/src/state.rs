@@ -16,13 +16,13 @@ use camcraft_app::clock::Instant;
 use std::time::Duration;
 
 use camcraft_app::commands::{
-    ActivateSetup, AlignPartToSetup, SetSetupRelative, SetSetupStockSource, SetSetupWorkOffset, AddTool, ApplyCuttingData, ChangeOperationKind, ChangeTool, CommandError, CreateOperation,
+    ActivateSetup, AlignPartToSetup, SetSetupRelative, SetSetupStockSource, SetSetupWorkOffset, AddTool, HolderPick, ApplyCuttingData, ChangeOperationKind, ChangeTool, CommandError, CreateOperation,
     ClearToolpath, CreateSetup, DeleteEntity, DeleteFixture, DeleteOperation, DeleteSetup, DeleteTool,
     EditOperationLinks, EditOperationParams, GenerateOperation, History, ImportModel,
     MoveFixture, MoveModel, PasteOperation, RegenerateAll, RenameOperation, ReorderOperation, RepairModel, SelectEntity, SetOperationGeometry,
-    SetColorVision, SetFixtureFixed, SetOperationSetup, SetStock, SetTheme, SetToolNumber, SetUnits, SetWcsOrigin,
+    SetFixtureFixed, SetOperationSetup, SetStock, SetToolNumber, SetUnits, SetWcsOrigin,
     SetWorkMaterial, TagFixture, UntagFixture, ImportFixture,
-    UpdateModel, theme_of, theme_set,
+    UpdateModel, theme_of,
 };
 use camcraft_app::geometry::{
     Point3, feature, quat_from_euler, quat_from_yaw, quat_to_euler, transform_point,
@@ -80,6 +80,8 @@ mod tool_cutter_ui;
 pub use tool_cutter_ui::ToolCutterUi;
 #[path = "state_recent.rs"]
 mod recent_ui;
+#[path = "state_prefs.rs"]
+mod prefs_ui;
 pub use tool_profile_ui::{ToolColumn, ToolProfileUi, is_spun_kind, parametric_points};
 use flecs_ecs::prelude::World;
 
@@ -197,18 +199,17 @@ pub enum CommandKind {
     /// The post's user options (issue #34): the undoable
     /// `SetPostOptions` with the picked value.
     SetPostOptions(camcraft_app::schema::PostOptions),
-    /// The document's theme (M6.1 C), `SelectPost`'s twin: the two
-    /// built-ins and a discovered file arrive as a reference (what the
-    /// headless tests queue too), and the dialog arm opens the picker.
-    /// A `File` theme is parse-checked BEFORE the command is built -
-    /// the surface holds the JSON parser (layering), so a corrupt
-    /// theme refuses at the pick, never enters the history.
+    /// The user's theme (M6.1 C; a preference since #877, never on the
+    /// history): the two built-ins and a discovered file arrive as a
+    /// reference (what the headless tests queue too), and the dialog arm
+    /// opens the picker. A `File` theme is parse-checked before it is
+    /// set - the surface holds the JSON parser (layering), so a corrupt
+    /// theme refuses at the pick and is never stored.
     SelectTheme(ThemeRef),
     SelectThemeDialog,
     /// The viewer's colour-vision remap (M13.4), `SelectTheme`'s twin:
     /// gated (separation + readability through the simulated eye)
-    /// before the command is built, so a failing mode never enters
-    /// the history.
+    /// before it is set, so a failing mode is never worn or stored.
     SelectColorVision(ColorVision),
     /// The active setup's WCS (#342: one per setup): origin plus full
     /// orientation as yaw-pitch-roll degrees (R = Rz ⊗ Ry ⊗ Rx). The world
@@ -1435,6 +1436,9 @@ pub struct State {
     /// Where the recents are written back; `None` (every headless
     /// State) keeps them in memory only.
     pub recent_store: Option<PathBuf>,
+    /// Where the theme and colour-vision preferences (#877) are written
+    /// back; `None` (every headless State) keeps them in memory only.
+    pub prefs_store: Option<PathBuf>,
     /// The dock's closable panels as of this frame (see [`PanelsOpen`]).
     pub panels_open: PanelsOpen,
     /// The View door's pending dock ask (see [`LayoutRequest`]).
@@ -1788,6 +1792,7 @@ impl State {
             ribbon_recent_open: None,
             recent: camcraft_app::recent::RecentFiles::default(),
             recent_store: None,
+            prefs_store: None,
             panels_open: PanelsOpen { browser: true, properties: true, machines: false },
             layout_request: None,
             tree_menu: None,
@@ -2669,12 +2674,11 @@ impl State {
                 // inherits the last document's limits.
                 units::set(&self.world, Unit::default());
                 machine::set(&self.world, "", None);
-                // The post and the theme (M3.3 A, M6.1 C) are the same
-                // furniture and sat outside this reset: a blank used to
-                // inherit the last document's script - a leak found
-                // while wiring the theme's twin, fixed for both here.
+                // The post (M3.3 A) is the same furniture and sat outside
+                // this reset: a blank used to inherit the last document's
+                // script. The theme is NOT reset: it is the user's
+                // preference, not the document's (#877).
                 posting::post_set(&self.world, &PostRef::Builtin);
-                theme_set(&self.world, &ThemeRef::Dark);
                 self.history.clear();
                 // Frozen evidence of the old document retires with it.
                 self.post_view = None;
@@ -2934,11 +2938,17 @@ impl State {
                     Err(err) => self.refuse(ErrorScope::Setup, format!("WCS not set: {err}")),
                 }
             }
-            CommandKind::AddTool { name, tool } => match AddTool::new(&self.world, &name, tool) {
+            // #828: a new tool starts with the machine's default holder,
+            // named in the status line (or why it was left off).
+            CommandKind::AddTool { name, tool } => match AddTool::with_holder(&self.world, &name, tool, HolderPick::MachineDefault) {
                 Ok(command) => {
+                    let note = command.note();
                     self.history.execute(&self.world, command);
                     self.doc_version += 1;
-                    self.status = format!("tool {name} added");
+                    self.status = match note {
+                        Some(n) => format!("tool {name} added - {n}"),
+                        None => format!("tool {name} added"),
+                    };
                 }
                 Err(err) => self.refuse(ErrorScope::Tool, format!("tool not added: {err}")),
             },
@@ -3759,7 +3769,8 @@ impl State {
                     return;
                 }
                 if model::find_by_name(&self.world, &name).is_some() {
-                    match UpdateModel::new(&self.world, &name, command.mesh) {
+                    let coarse = command.coarse_mm;
+                    match UpdateModel::new(&self.world, &name, command.mesh).map(|u| u.with_fidelity(coarse)) {
                         Ok(upd) => {
                             let summary = upd.changes().describe();
                             self.history.execute(&self.world, upd);
@@ -3775,6 +3786,14 @@ impl State {
                     self.doc_version += 1;
                     self.note_recent_model(file.as_deref());
                     self.status = timed("imported", "");
+                }
+                // #864: an import kept coarser than promised is said, not
+                // only logged.
+                if let Some(chord) = model::find_by_name(&self.world, &name)
+                    .and_then(|e| camcraft_app::model_fidelity::chord_of(&self.world, &e))
+                {
+                    let said = camcraft_app::model_fidelity::summary(&self.world, chord);
+                    self.status = format!("{} - {said}", self.status);
                 }
             }
             Err(err) => {
@@ -3864,56 +3883,10 @@ impl State {
         self.choose_post(next);
     }
 
-    /// Choose the theme (M6.1 C). `SelectPost`'s twin with the
-    /// validation split by layering: `SetTheme::new` owns the cheap
-    /// existence/built-in law, and the full parse - which the app
-    /// cannot name (layering: the JSON reader lives on the surface
-    /// side) - is pre-checked HERE, so a corrupt theme is a visible
-    /// refusal at the pick and never enters the history. The look
-    /// itself lands on the next sync, not here: a selection writes
-    /// the reference; resolution is one change-edge on the read side.
-    fn select_theme(&mut self, next: ThemeRef) {
-        if let ThemeRef::File(path) = &next
-            && let Err(why) = &*self.theme_cache.get(Path::new(path))
-        {
-            self.refuse(ErrorScope::Setup, format!("theme not selected: {why}"));
-            return;
-        }
-        match SetTheme::new(&self.world, next) {
-            Ok(command) => {
-                self.history.execute(&self.world, command);
-                self.doc_version += 1;
-                self.status = format!("theme: {}", theme_label(&self.world));
-            }
-            Err(err) => self.refuse(ErrorScope::Setup, format!("theme not selected: {err}")),
-        }
-    }
-
-    /// Choose the colour-vision remap (M13.4), `select_theme`'s twin:
-    /// the surface owns the palette and the gate (layering - app holds
-    /// only the reference), so the gate runs HERE against the live
-    /// table and a failing mode is a visible refusal at the pick. The
-    /// look follows from the world on the next frame - the overlay
-    /// lines, the verdict shaders and the rings all read the singleton.
-    fn select_color_vision(&mut self, next: ColorVision) {
-        if let Some(why) = crate::egui_app::colorvision::gate(next, &crate::egui_app::theme::current()) {
-            self.refuse(ErrorScope::Setup, format!("colour vision not selected: {why}"));
-            return;
-        }
-        match SetColorVision::new(&self.world, next) {
-            Ok(command) => {
-                self.history.execute(&self.world, command);
-                self.doc_version += 1;
-                self.status = format!("colour vision: {}", next.label());
-            }
-            Err(err) => self.refuse(ErrorScope::Setup, format!("colour vision not selected: {err}")),
-        }
-    }
-
-    /// Install the document's theme (M6.1 C): the world singleton is
+    /// Install the user's theme (M6.1 C, #877): the world singleton is
     /// the truth, and this frame's job is to say whether it changed
-    /// since the last - an undo, a redo, a picker, or a project load
-    /// can all move it between frames, and none of them reaches into
+    /// since the last - a pick or the startup preferences read can
+    /// move it between frames, and none of them reaches into
     /// egui from app (layering; the command-law's other half). A
     /// refused reference - the file vanished, a corrupt parse, a
     /// stranger name - names itself in the status line ONCE per change
