@@ -84,13 +84,20 @@ pub fn parse(data: &[u8]) -> Result<Mesh, ImportError> {
 /// file's length unit (#864). Never NaN, infinite or negative - such a
 /// value is refused as a corrupt import, not carried into a verdict.
 pub fn parse_with_chord(data: &[u8]) -> Result<(Mesh, f64), ImportError> {
+    super::step_depth::check(data)?; // #1075: refuse before ruststep can overflow
     if data.is_empty() {
         return Err(ImportError::Empty);
     }
     let text = std::str::from_utf8(data)
         .map_err(|_| ImportError::Step("file is not valid UTF-8".into()))?;
-    let exchange = ruststep::parser::parse(text)
-        .map_err(|e| ImportError::Step(format!("syntax error: {e}")))?;
+    let exchange = ruststep::parser::parse(text).map_err(|e| {
+        // #912: ruststep fails the whole DATA section at once and its
+        // position is not the bad entity; re-scan to name it.
+        ImportError::Step(match super::step_diag::locate(text) {
+            Some(found) => found.to_string(),
+            None => format!("syntax error: {e}"),
+        })
+    })?;
     // An exchange with zero DATA sections parses fine but would index out of
     // bounds inside truck's convenience helpers; guard the only raw index.
     let Some(section) = exchange.data.first() else {
@@ -123,7 +130,7 @@ pub fn parse_with_chord(data: &[u8]) -> Result<(Mesh, f64), ImportError> {
         }));
         let (tris, tol) = match per_shell {
             Err(_) => {
-                eprintln!("step: truck kernel panicked on a shell; import aborted");
+                tracing::error!("step: truck kernel panicked on a shell; import aborted");
                 return Err(ImportError::Step(
                     "geometry kernel failed on a shell (degenerate or unclosed B-rep)".into(),
                 ));
@@ -246,7 +253,7 @@ fn shell_facets(
     // it actually kept (#864).
     let kept = super::step_refine::refine(extent, tol_target, budget, triangulate)?;
     if kept.tol > wanted {
-        eprintln!(
+        tracing::warn!(
             "step: tessellated at reduced fidelity (tol {:e} mm, target {:e} mm, {} facets) - bounded by memory or by the kernel's least tolerance",
             kept.tol * k,
             wanted * k,
