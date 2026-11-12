@@ -226,6 +226,9 @@ pub struct DeleteFixture {
     /// #819: a deleted plate's riders leave it (they stay where they
     /// stand), so a later plate given the same name never carries them.
     riders: crate::plate::mount::Unmounts,
+    /// #1094: a raw-stock-only mark naming this model goes with it (the
+    /// print check in `stock_source` is the law; this is tidiness).
+    marks: super::stock_source_only::MarkDrops,
 }
 
 impl DeleteFixture {
@@ -239,6 +242,7 @@ impl DeleteFixture {
             location: model::transform_of(world, &entity).unwrap_or_default(),
             facets: model::facets_of(world, &entity).unwrap_or_default(),
             riders: crate::plate::mount::Unmounts::of(world, name),
+            marks: super::stock_source_only::MarkDrops::of(world, name),
         })
     }
 }
@@ -249,6 +253,7 @@ impl Command for DeleteFixture {
             model::remove(world, &e);
         }
         self.riders.write(world, true);
+        self.marks.write(world, true);
     }
 
     fn invert(&self, world: &World) {
@@ -260,6 +265,7 @@ impl Command for DeleteFixture {
         model::set_transform(world, &entity, self.location);
         model::set_facets(world, &entity, self.facets.clone());
         entity.entity_view(world).set(self.def.clone());
+        self.marks.write(world, false);
     }
 }
 

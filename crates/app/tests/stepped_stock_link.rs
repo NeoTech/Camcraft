@@ -1,6 +1,7 @@
 //! #1095: the rapid-in-stock law's lateral rapids over a stepped stock.
 //! A drill's link from hole to hole runs at its retract plane, under the
-//! clearance plane. A part-sourced drill under a "from model" casting -
+//! clearance plane. A part-sourced drill under a "from model" casting
+//! (kept in the tree as raw stock only) -
 //! solid to Z 20 with a boss to Z 30 elsewhere: a link at Z 22 across
 //! the low part was
 //! convicted as if the boss stood under it (the column law caps every
@@ -21,7 +22,7 @@
 //! Lane shape: all tests here run in seconds.
 
 use camcraft_app::cl::MoveKind;
-use camcraft_app::commands::{AddTool, CreateOperation, DeleteEntity, GenerateOperation, History, ImportModel, SetStock};
+use camcraft_app::commands::{AddTool, CreateOperation, GenerateOperation, History, ImportModel, SetStock, SetStockSourceOnly};
 use camcraft_app::drilling::{CycleChoice, Hole};
 use camcraft_app::geo2d::Point2;
 use camcraft_app::geometry::{Mesh, Point3, Triangle, cube};
@@ -117,7 +118,10 @@ fn run(boss: [f64; 4]) -> ((usize, f64), Vec<Warning>, Result<(), String>) {
     h.execute(&world, ImportModel::from_mesh("part", part()));
     let shape = StockShape::FromModel { source: "casting".into() };
     h.execute(&world, SetStock::new(&world, shape, Location::default()).expect("stock"));
-    h.execute(&world, DeleteEntity::new(&world, "casting").expect("delete casting"));
+    // The casting stays in the tree, marked raw stock only (#1094): a
+    // from-model stock whose source is gone has an unknown chord and is
+    // never re-read (#1056), so deleting it would prove nothing here.
+    h.execute(&world, SetStockSourceOnly::new(&world, true).expect("raw stock only"));
     let tool = catalog().into_iter().find(|(n, _)| *n == "DR-0400").map(|(_, t)| t).expect("catalog");
     h.execute(&world, AddTool::new(&world, "T", tool).expect("tool"));
     h.execute(&world, CreateOperation::new(&world, "Op1", "T", SrcRef::Entity("part".into()), drill()).expect("create op"));
