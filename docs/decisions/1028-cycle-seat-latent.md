@@ -35,6 +35,19 @@
   and G31 / G38.2-G38.5 read as straight moves. Its own pin is
   `the_checker_reads_probe_moves_and_incremental_back_offs`.
 
+- The conformance synth stream (`crates/app/tests/conformance.rs`,
+  `synth_stream_with`) was the one fixture of this shape: cycle records
+  back to back, with no `RetractPlane`. With this change it would be
+  refused. The decision (option 1) is that it now states
+  `PARAM ClearancePlane 10` and `PARAM RetractPlane 5` (above its R plane
+  2), placed after the origin PARAMs as the recorded `drill_retract`
+  stream has them. So it states what every generated stream states.
+- The six `synth_*.nc` goldens (fanuc, haas, mazak, sinumerik, tormach,
+  doosan-dnm) now lock the hop traverse. Each hole climbs to the hop
+  (work Z0), traverses there, and drops to R (Z-3), where before it
+  traversed at R. Sinumerik's N numbers shift with the added blocks. The
+  Heidenhain and Carvera synth goldens do not move.
+
 **Why.** Both streams are latent: no generator writes them today (the
 generator always writes the chain and the rapids that leave it). A
 legacy or foreign stream that does would post an XY traverse at R, or at
@@ -57,6 +70,13 @@ inventing one.
   inside an armed G7x/G8x group is outside what the cycle words describe.
   Closing with `G80` costs one line and is what every other leaving motion
   does.
+
+- *Synth fixture: leaving rapids instead of the planes (option 2).*
+  This drifts the fixture further from real streams, which state their
+  planes. The hop seat would then go untested in conformance. Dropped.
+- *Synth fixture: keep the R-level traverse for a stream that states no
+  hop (option 3).* This undoes the issue: it is the traverse #994 and
+  #1028 remove. Dropped.
 
 **Cost to change.** The same three helpers (`hopZ`, `probeSeat`, the away
 branch of `cycleSeat`) are in each of the six `.cps` files. A new cycle
