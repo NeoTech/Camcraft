@@ -144,7 +144,7 @@ fn flat_face(world: &World, g: &GeoSel, pose: PoseOf) -> Result<Option<Plane>, S
 /// A planar face's outward unit normal, placed by `pose`; `None` when the
 /// face is not planar (or the pick is not a face). Refused by name when
 /// the face's body is inside-out, open, non-manifold or mixed (#366).
-pub(super) fn outward_normal(world: &World, g: &GeoSel, pose: PoseOf) -> Result<Option<[f64; 3]>, String> {
+pub(crate) fn outward_normal(world: &World, g: &GeoSel, pose: PoseOf) -> Result<Option<[f64; 3]>, String> {
     let FeatureSel::Face(fid) = g.feature else { return Ok(None) };
     let e = model::find_by_name(world, &g.entity).ok_or_else(|| gone(g))?;
     let features = model::features_of(world, &e).ok_or_else(|| gone(g))?;
