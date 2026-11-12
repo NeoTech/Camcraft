@@ -40,6 +40,7 @@ pub(super) fn page(ui: &mut Ui, state: &mut State, name: &str, page: SetupPage) 
             if editable(ui, state, ctx) {
                 ownership(ui, state, ctx, Mount::Machine);
                 pages::machine_section(ui, state);
+                super::setup_rotary_page::section(ui, state, ctx);
             }
         }
         SetupPage::Post => {

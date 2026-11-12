@@ -84,6 +84,7 @@ pub fn collect(world: &World) -> ProjectFile {
                         relative_to: d.relative_to.clone(),
                         stock_source: d.stock_source.map(|s| s.word().to_string()),
                         post_options: d.post_options.as_ref().map(SetupPostOptionsDto::from_options),
+                        nose_to_axis: d.nose_to_axis.filter(|v| v.is_finite()),
                     })
             } else {
                 None

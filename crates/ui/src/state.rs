@@ -196,6 +196,12 @@ pub enum CommandKind {
         setup: String,
         own: bool,
     },
+    /// #821: a setup states its own nose-to-rotary figure, mm, or clears
+    /// it (`SetSetupNoseToAxis`).
+    SetupNoseToAxis {
+        setup: String,
+        value: Option<f64>,
+    },
     /// The post's user options (issue #34): the undoable
     /// `SetPostOptions` with the picked value.
     SetPostOptions(camcraft_app::schema::PostOptions),
@@ -2805,6 +2811,7 @@ impl State {
             CommandKind::SetupOwnMachine { setup, own } => self.own_machine(&setup, own),
             CommandKind::SetupOwnPost { setup, own } => self.own_post(&setup, own),
             CommandKind::SetupOwnPostOptions { setup, own } => self.own_post_options(&setup, own),
+            CommandKind::SetupNoseToAxis { setup, value } => self.set_setup_nose(&setup, value),
             CommandKind::EditMachineDialog => {
                 let (path, m) = machine::of(&self.world);
                 match m {

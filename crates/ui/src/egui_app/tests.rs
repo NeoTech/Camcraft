@@ -106,6 +106,8 @@ mod setup_tree;
 mod mcp_live;
 // #389: per-setup post options and the tool-list export.
 mod setup_post_options;
+// #821: the raised-rotary rows of a setup's Machine page.
+mod setup_rotary;
 // #155: Pause / Home entries in the operation list.
 mod program_entry;
 // #371: the tool editor's Body section.

@@ -127,6 +127,7 @@ impl CreateSetup {
                 relative_to: None,
                 stock_source: None,
                 post_options: None,
+                nose_to_axis: None,
             }
         } else {
             SetupDef {
@@ -152,6 +153,9 @@ impl CreateSetup {
                 stock_source: None,
                 // #389: the post's options ride the post (#343's transfer).
                 post_options: datum_from.and_then(|f| setup::def_of(world, f)).and_then(|d| d.post_options),
+                // #821: the stated nose figure rides the machine (#343's
+                // transfer: the same clamping system).
+                nose_to_axis: datum_from.and_then(|f| setup::def_of(world, f)).and_then(|d| d.nose_to_axis),
             }
         };
         let mut stock = None;
