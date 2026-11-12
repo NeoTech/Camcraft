@@ -184,6 +184,7 @@ fn judge(world: &World, path: &Toolpath) -> Vec<Warning> {
             finish_tol: None,
             fixtures: &[],
             spindle: None,
+            ..Default::default()
         },
     )
 }

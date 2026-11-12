@@ -188,6 +188,7 @@ fn cx<'a>(region: &'a Region, model: Option<&'a [Triangle]>, tool: &'a ToolGeom,
         finish_tol: None,
         fixtures: &[],
         spindle: None,
+        ..Default::default()
     }
 }
 

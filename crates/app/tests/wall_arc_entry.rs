@@ -319,6 +319,7 @@ fn verify_wall(t: &Toolpath, region: &Region) -> Vec<camcraft_app::verify::Warni
         finish_tol: None,
         fixtures: &[],
         spindle: None,
+        ..Default::default()
     };
     verify(t, &cx)
 }
