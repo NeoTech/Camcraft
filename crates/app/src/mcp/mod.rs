@@ -29,6 +29,7 @@ mod listen;
 mod live;
 mod model_tools;
 // #45: an operation's display name and its place in its setup.
+mod machine_tools;
 mod order_tools;
 mod pick;
 mod pockets;

@@ -338,7 +338,8 @@ fn every_kind_is_either_judged_or_refused_for_a_stated_reason_on_a_reduced_model
     use OpType::*;
     // Still refused: the verdict is a generator's own proof, or its own
     // module's, and does not read the excess yet.
-    let refused = [Swarf, AdvancedSwarf, Trace, Engrave, Chamfer2D, Deburr, Probe, PlasmaProfile];
+    // #532: the wire's kerf law does not read the excess yet either.
+    let refused = [Swarf, AdvancedSwarf, Trace, Engrave, Chamfer2D, Deburr, Probe, PlasmaProfile, WireContour];
     for row in KindInfo::ALL {
         assert_eq!(problem(row.ty, None, None), None, "{:?}: full fidelity is untouched", row.ty);
         let said = problem(row.ty, Some(TIGHT), None);
