@@ -75,4 +75,18 @@ mod tests {
         assert!(err.contains("\"pickup\""), "{err}");
         assert!(parse_codes(Some(&json!(["E1"]))).is_err());
     }
+
+    #[test]
+    fn codes_is_a_key_of_either_edm_kind_and_reads_after_the_strict_keys() {
+        use super::super::edm::parse_edm;
+        use super::super::Kind;
+        let v = json!({ "codes": { "condition": "E{id}" } });
+        for k in [Kind::SinkerEdm, Kind::WireEdm] {
+            let e = parse_edm(Some(&v), 1.0, Some(k)).expect("codes on an EDM").expect("section");
+            assert_eq!(e.codes.get("condition").map(String::as_str), Some("E{id}"));
+            assert!(e.is_sane(), "{k:?}");
+        }
+        let err = parse_edm(Some(&json!({ "codes": { "end": 2 } })), 1.0, Some(Kind::SinkerEdm)).expect_err("garbled");
+        assert!(err.contains("\"end\""), "{err}");
+    }
 }
