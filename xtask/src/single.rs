@@ -69,12 +69,6 @@ pub fn plan(root: &Path, f: &Filter) -> Result<Plan, String> {
             for file in scan::rs_files_recursive(&root.join("crates").join(d).join("src")) {
                 for tf in scan::test_fns(&scan::read(&file))? {
                     if matches(&tf.name, f) {
-                        if !source.precise {
-                            return Err(format!(
-                                "conditional suite test {} cannot be selected statically; run the whole {} suite",
-                                tf.name, bin
-                            ));
-                        }
                         hits.push(Hit {
                             dir: d.clone(),
                             suite: false,
