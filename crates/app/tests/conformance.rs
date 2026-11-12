@@ -11,7 +11,7 @@
 //! suite `fanuc_post.rs` already locks); the four stage-B dialects get
 //! one subdirectory each.
 //!
-//! Gate map (M4.4): covers app::cl, app::post, app::posting.
+//! Gate map (M4.4): covers cl::cl, post::post, app::posting.
 
 use camcraft_app::cl::{CycleKind, MoveKind};
 use camcraft_app::post::{cnc, engine};
@@ -77,6 +77,11 @@ const REFUSED: &[(&str, &str, &str)] = &[
 /// documents' own streams (`lathe_post.rs`); on a mill golden they
 /// must REFUSE by name - never project a Y move onto a diameter.
 const LATHE_POSTS: &[(&str, &str)] = &[("Fanuc Lathe", "fanuc-lathe"), ("Tormach PathPilot Lathe", "tormach-lathe")];
+
+/// The PLASMA dialects (#671): their goldens are the plasma streams'
+/// own (`plasma_post.rs`, `nc/tormach-plasma/`); on a mill golden they
+/// refuse by name (`plasma_post_refusals.rs`).
+const PLASMA_POSTS: &[(&str, &str)] = &[("Tormach PathPilot Plasma", "tormach-plasma")];
 
 #[test]
 fn every_lathe_post_refuses_every_mill_golden_by_name() {
@@ -196,6 +201,12 @@ fn synth_stream_with(wcs: &str, tap: bool) -> String {
         R::Param { name: "OriginX".into(), value: json!(10.0) },
         R::Param { name: "OriginY".into(), value: json!(20.0) },
         R::Param { name: "OriginZ".into(), value: json!(5.0) },
+        // #1028: the planes a generator states for every section (as in
+        // the recorded drill_retract stream): the clearance, and the hop
+        // the holes traverse at - above their R plane 2. The holes below
+        // carry no leaving rapids, so each cycle is seated at this hop.
+        R::Param { name: "ClearancePlane".into(), value: json!(10.0) },
+        R::Param { name: "RetractPlane".into(), value: json!(5.0) },
         R::Tool { number: 2, name: "10MM END MILL".into() },
         R::Section { begin: true },
         // The contour: moves 0..2, no cycle anchored at or below 2
@@ -350,7 +361,11 @@ fn every_builtin_registry_entry_compiles() {
     let names: Vec<&str> = camcraft_app::posting::BUILTINS.iter().map(|(n, _)| *n).collect();
     let mut want: Vec<&str> = POSTS.iter().map(|(n, _, _)| *n).collect();
     want.extend(LATHE_POSTS.iter().map(|(n, _)| *n));
+    want.extend(PLASMA_POSTS.iter().map(|(n, _)| *n));
     assert_eq!(names, want, "the picker lists what the registry ships");
+    for (n, _) in PLASMA_POSTS {
+        assert!(camcraft_app::posting::PLASMA_POSTS.contains(n), "{n} is a plasma dialect in the registry's own table");
+    }
     for (n, _) in LATHE_POSTS {
         assert!(
             camcraft_app::posting::LATHE_POSTS.contains(n),
@@ -375,6 +390,7 @@ const EXTENSIONS: &[(&str, &str)] = &[
     ("carvera", "nc"),
     ("fanuc-lathe", "nc"),
     ("tormach-lathe", "nc"),
+    ("tormach-plasma", "nc"),
 ];
 
 /// The top-level `extension = "..."` manifest line's value.
@@ -388,6 +404,7 @@ fn declared_extension(script: &str) -> Option<&str> {
 fn every_builtin_declares_its_controls_file_extension() {
     let mut stems: Vec<&str> = POSTS.iter().map(|(_, s, _)| *s).collect();
     stems.extend(LATHE_POSTS.iter().map(|(_, s)| *s));
+    stems.extend(PLASMA_POSTS.iter().map(|(_, s)| *s));
     let pinned: Vec<&str> = EXTENSIONS.iter().map(|(s, _)| *s).collect();
     assert_eq!(pinned, stems, "every shipped post has its extension pinned");
     for (stem, want) in EXTENSIONS {

@@ -2,7 +2,9 @@
 //! from the size table into a setup (at a pose, or fitted to the stock),
 //! and change a placed vise's jaw opening or dimensions. Each is the very
 //! undoable command the Fixtures page queues (`InsertVise`, `SetVise`),
-//! one History step, so `undo` takes it back.
+//! one History step, so `undo` takes it back. The 5-axis self-centering
+//! vises (#787) are rows of the same size list, centred on the stock, with
+//! their own `min_opening` / `lip_height` / `lip_depth` dimensions.
 //!
 //! Provenance: our own tool surface over this repo's vise commands.
 
@@ -14,18 +16,18 @@ use crate::geometry::IDENTITY_Q;
 use crate::model;
 use crate::schema::Location;
 use crate::script::{Env, fnum};
-use crate::vise::{self, ViseParams};
+use crate::vise::{self, ViseParams, ViseStyle};
 
 use serde_json::{Map, Value, json};
 
 pub(super) const TOOLS: &[Tool] = &[
-    Tool { name: "add_builtin_vise", description: "Place a built-in generic milling vise (size table: 3-8 in, 100-200 mm jaw widths) as a fixture of a setup - the active one by default. Either fit it to the setup's stock (fixed jaw on the stock's +Y side, centred in X, floor under the stock, jaws opened to the stock's Y width) or place its frame (origin = the fixed jaw's clamping face, centred, at the floor; jaws open toward -Y) at a position/rotation with an opening. Optional dimension overrides in mm. One undoable step; nonsense dimensions are refused by name.", schema: s_add, run: add_builtin_vise },
+    Tool { name: "add_builtin_vise", description: "Place a built-in generic milling vise (size table: 3-8 in, 100-200 mm jaw widths, and the 5-axis self-centering 52/75/80/125 mm rows) as a fixture of a setup - the active one by default. Either fit it to the setup's stock (standard: fixed jaw on the stock's +Y side, centred in X, floor under the stock, jaws opened to the stock's Y width; self-centering: centred on the stock in X and Y, jaws closed to its Y width within the clamping range) or place its frame (standard: origin = the fixed jaw's clamping face, centred, at the floor, jaws open toward -Y; self-centering: origin = the centre between the jaws at the floor) at a position/rotation with an opening. Optional dimension overrides in mm. One undoable step; nonsense dimensions are refused by name.", schema: s_add, run: add_builtin_vise },
     Tool { name: "set_vise", description: "Change a placed built-in vise: its jaw opening in mm, or from_stock to open the jaws to the setup's stock as the vise stands, and/or dimension overrides in mm. The mesh is regenerated; one undoable step.", schema: s_set, run: set_vise },
 ];
 
-const DIMS: [&str; 10] = [
+const DIMS: [&str; 13] = [
     "jaw_width", "jaw_height", "jaw_thickness", "jaw_body_depth", "max_opening", "length", "width", "base_height", "housing_length",
-    "housing_height",
+    "housing_height", "min_opening", "lip_height", "lip_depth",
 ];
 
 /// `p` with every dimension `dims` names replaced.
@@ -35,6 +37,16 @@ fn with_dims(mut p: ViseParams, a: &Map<String, Value>) -> Result<ViseParams, St
     for (k, v) in d {
         let v = v.as_f64().ok_or_else(|| format!("dimension \"{k}\" must be a number of mm"))?;
         let slot = match k.as_str() {
+            "min_opening" | "lip_height" | "lip_depth" => {
+                let ViseStyle::SelfCentering(sc) = &mut p.style else {
+                    return Err(format!("dimension \"{k}\" is a self-centering vise's; this one is a standard vise"));
+                };
+                match k.as_str() {
+                    "min_opening" => &mut sc.min_opening,
+                    "lip_height" => &mut sc.lip_height,
+                    _ => &mut sc.lip_depth,
+                }
+            }
             "jaw_width" => &mut p.jaw_width,
             "jaw_height" => &mut p.jaw_height,
             "jaw_thickness" => &mut p.jaw_thickness,
@@ -60,26 +72,41 @@ fn opt_f64(a: &Map<String, Value>, key: &str) -> Result<Option<f64>, String> {
 }
 
 fn params_view(p: &ViseParams) -> Value {
-    json!({
+    let mut v = json!({
         "size": p.size, "opening": fnum(p.opening), "max_opening": fnum(p.max_opening),
         "jaw_width": fnum(p.jaw_width), "jaw_height": fnum(p.jaw_height), "jaw_thickness": fnum(p.jaw_thickness),
         "jaw_body_depth": fnum(p.jaw_body_depth),
         "length": fnum(p.length), "width": fnum(p.width), "base_height": fnum(p.base_height),
         "housing_length": fnum(p.housing_length), "housing_height": fnum(p.housing_height),
-    })
+    });
+    if let ViseStyle::SelfCentering(sc) = &p.style {
+        v["style"] = json!("self-centering");
+        v["min_opening"] = json!(fnum(sc.min_opening));
+        v["lip_height"] = json!(fnum(sc.lip_height));
+        v["lip_depth"] = json!(fnum(sc.lip_depth));
+    } else {
+        v["style"] = json!("standard");
+    }
+    v
 }
 
 fn add_builtin_vise(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
     let label = req_str(a, "size")?;
     let row = vise::size(label).ok_or_else(|| {
-        let all: Vec<&str> = vise::SIZES.iter().map(|s| s.label).collect();
+        let all: Vec<&str> = vise::presets().map(|s| s.label).collect();
         format!("no built-in vise '{label}' (one of {})", all.join(", "))
     })?;
     let mut params = with_dims(row.half_open(), a)?;
     if let Some(o) = opt_f64(a, "opening")? {
         params.opening = o;
-    } else if params.opening > params.max_opening {
-        params.opening = 0.5 * params.max_opening;
+    } else {
+        let lo = match &params.style {
+            ViseStyle::SelfCentering(sc) => sc.min_opening,
+            ViseStyle::Standard => 0.0,
+        };
+        if params.opening > params.max_opening || params.opening < lo {
+            params.opening = 0.5 * (lo + params.max_opening);
+        }
     }
     let target = setup_or_active(env, a)?;
     let fit = matches!(a.get("fit_to_stock"), Some(Value::Bool(true)));
@@ -136,7 +163,7 @@ fn dims_schema() -> Value {
 }
 
 fn s_add() -> Value {
-    let sizes: Vec<&str> = vise::SIZES.iter().map(|s| s.label).collect();
+    let sizes: Vec<&str> = vise::presets().map(|s| s.label).collect();
     obj(
         json!({
             "size": { "type": "string", "enum": sizes, "description": "The size table row (jaw width)." },

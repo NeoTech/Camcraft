@@ -147,6 +147,10 @@ pub const HOOKS: &[&str] = &[
     "onProbeRetreat",
     "onProbeGuard",
     "onProbeResult",
+    // #671: the plasma header and the torch spans.
+    "onPlasma",
+    "onTorchOn",
+    "onTorchOff",
     "onComment",
     "onClose",
 ];
@@ -273,6 +277,13 @@ impl Script {
     pub fn string_global(&mut self, name: &str) -> Result<Option<String>, PostError> {
         let v = self.eval(&format!("(typeof {name} === \"string\") ? {name} : null"))?;
         Ok(v.as_string().map(|s| s.to_std_string_escaped()))
+    }
+
+    /// A top-level number the script states (the manifest's
+    /// `capabilities` mask), or `None` when it states none.
+    pub fn number_global(&mut self, name: &str) -> Result<Option<f64>, PostError> {
+        let v = self.eval(&format!("(typeof {name} === \"number\") ? {name} : null"))?;
+        Ok(v.as_number())
     }
 
     /// Publish the document's post options once (issue #34).

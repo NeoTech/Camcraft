@@ -18,16 +18,19 @@ use crate::fixture_library::FixtureEntry;
 use crate::geometry::{IDENTITY_Q, Mesh, Point3};
 use crate::model;
 use crate::schema::{FixtureDef, Location};
-use crate::vise::{self, ViseParams};
+use crate::vise::ViseParams;
+use crate::vise_fit;
 
 /// Where a new vise goes.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum VisePlacement {
     /// The vise frame's origin (the fixed jaw's face, centred, at the
-    /// floor) at this pose, the opening as given.
+    /// floor; a self-centering vise's centre between the jaws, #787) at
+    /// this pose, the opening as given.
     At(Location),
     /// Against the setup's stock: fixed jaw on the stock's +y side,
-    /// centred in x, floor under it, the opening the stock's y extent.
+    /// centred in x, floor under it, the opening the stock's y extent (a
+    /// self-centering vise: centred on the stock in x and y).
     FitStock,
 }
 
@@ -50,13 +53,7 @@ impl InsertVise {
         let (params, pick) = match placement {
             VisePlacement::At(loc) => (params.clone(), loc),
             VisePlacement::FitStock => {
-                let stock = model::stock_world_aabb_for(world, setup).ok_or_else(|| {
-                    CommandError::Invalid(format!(
-                        "{} has no stock to fit the vise to",
-                        setup.map_or_else(|| "the setup".to_owned(), |s| format!("setup '{s}'"))
-                    ))
-                })?;
-                vise::fit_to_stock(params, &stock).map_err(CommandError::Invalid)?
+                vise_fit::fit(world, params, setup).map_err(|e| CommandError::Needs(e.message().to_owned()))?
             }
         };
         let facets = params.mesh().map_err(CommandError::Invalid)?;
@@ -151,7 +148,7 @@ impl SetVise {
         let pose = model::transform_of(world, &entity).unwrap_or_default();
         let stock = model::stock_world_aabb_for(world, def.setup.as_deref())
             .ok_or_else(|| CommandError::Invalid(format!("'{name}': its setup has no stock to open the jaws to")))?;
-        let opening = vise::opening_from_stock(&pose, &stock).map_err(|e| CommandError::Invalid(format!("'{name}': {e}")))?;
+        let opening = params.opening_to_stock(&pose, &stock).map_err(|e| CommandError::Invalid(format!("'{name}': {e}")))?;
         Self::new(world, name, params.with_opening(opening))
     }
 

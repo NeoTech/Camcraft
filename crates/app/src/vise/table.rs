@@ -8,7 +8,7 @@
 //! Provenance: our own table from published catalog ranges (jaw width,
 //! jaw height, max opening, overall length/width/height).
 
-use super::ViseParams;
+use super::{ViseParams, ViseStyle};
 
 /// One row: a label and its figures, all millimetres.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -27,6 +27,8 @@ pub struct ViseSize {
     pub base_height: f64,
     pub housing_length: f64,
     pub housing_height: f64,
+    /// Standard, or self-centering with its clamping range floor (#787).
+    pub style: ViseStyle,
 }
 
 const IN: f64 = 25.4;
@@ -63,6 +65,7 @@ const fn inch(
         base_height: base_height * IN,
         housing_length: housing_length * IN,
         housing_height: housing_height * IN,
+        style: ViseStyle::Standard,
     }
 }
 
@@ -92,6 +95,7 @@ const fn mm(
         base_height,
         housing_length,
         housing_height,
+        style: ViseStyle::Standard,
     }
 }
 
@@ -112,11 +116,25 @@ pub const SIZES: &[ViseSize] = &[
     mm("200 mm", 200.0, 62.0, 45.0, 260.0, 550.0, 240.0, 85.0, 60.0, 35.0),
 ];
 
-/// The row labelled `label` (exact, then case- and space-blind).
+/// Every built-in row: the standard table, then the 5-axis
+/// self-centering vises (#787). The dialog and the MCP size list read
+/// this; an index into it is stable for a build.
+pub fn presets() -> impl Iterator<Item = &'static ViseSize> {
+    SIZES.iter().chain(super::self_centering::SIZES.iter())
+}
+
+/// Row `k` of `presets()`.
+#[must_use]
+pub fn preset(k: usize) -> Option<&'static ViseSize> {
+    presets().nth(k)
+}
+
+/// The row labelled `label` among `presets()` (exact, then case- and
+/// space-blind).
 #[must_use]
 pub fn size(label: &str) -> Option<&'static ViseSize> {
     let squash = |s: &str| s.chars().filter(|c| !c.is_whitespace()).collect::<String>().to_lowercase();
-    SIZES.iter().find(|s| s.label == label).or_else(|| SIZES.iter().find(|s| squash(s.label) == squash(label)))
+    presets().find(|s| s.label == label).or_else(|| presets().find(|s| squash(s.label) == squash(label)))
 }
 
 impl ViseSize {
@@ -136,6 +154,7 @@ impl ViseSize {
             housing_length: self.housing_length,
             housing_height: self.housing_height,
             opening,
+            style: self.style,
         }
     }
 

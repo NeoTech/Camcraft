@@ -30,6 +30,7 @@ use camcraft_app::{model, operation, pick};
 use winit::keyboard::ModifiersState;
 
 use crate::state::{CommandKind, GeoPick, HoverHit, State};
+use crate::egui_app::ground_ink::{Overlay, light_ground, overlay};
 
 /// Keyboard modifiers as the pick law reads them - the winit state or the
 /// egui `Modifiers`, converted at the shell's edge so the law itself names
@@ -340,6 +341,24 @@ pub(crate) struct Gizmo {
     pub rot: [f64; 4],
     /// Triad axes sit on X/Y/Z at this exact position with no rotation.
     pub world_axes: bool,
+    /// #727: whose origin this is - the work offset's entity name as the
+    /// Setup pane shows it (`G54`, `Setup2/WCS`), or `World` for the
+    /// dimmed neutral axes. Drawn beside the origin so whose-zero is
+    /// whose reads at a glance, with no hover.
+    pub name: String,
+}
+
+/// The axis inks on a light viewport (#698): the dark set washes out on
+/// paper (the blue tip sat near 2:1 on the light ground).
+pub(crate) const AXES_LIGHT: [([f32; 3], [f64; 3]); 3] = [
+    ([0.75, 0.12, 0.10], [1.0, 0.0, 0.0]),
+    ([0.10, 0.55, 0.20], [0.0, 1.0, 0.0]),
+    ([0.10, 0.35, 0.85], [0.0, 0.0, 1.0]),
+];
+
+/// The axis set the live viewport ground reads (see [`AXES`], [`AXES_LIGHT`]).
+pub(crate) fn axes() -> [([f32; 3], [f64; 3]); 3] {
+    if light_ground(crate::egui_app::theme::current().viewport) { AXES_LIGHT } else { AXES }
 }
 
 /// Axis colors and tip offsets shared by the line overlay and the labels.
@@ -354,6 +373,17 @@ const AXES: [([f32; 3], [f64; 3]); 3] = [
 /// How much the neutral world axes are dimmed against a work offset's
 /// triad (#195: was 0.55 for the lines - too dark to read).
 const WORLD_DIM: f32 = 0.8;
+
+/// #727: the name the dimmed world axes carry, and the gray they wear it
+/// in - neutral, because no axis color belongs to the world as a whole.
+const WORLD_LABEL: &str = "World";
+const WORLD_GRAY: f32 = 0.75;
+
+/// #727: how far a gizmo's name sits below its projected origin, in uv
+/// (same currency as `axis_note::NOTE_DROP_UV`) - enough to clear the
+/// axis lines that meet at the origin, close enough to read as the
+/// origin's own tag.
+const NAME_DROP_UV: f32 = 0.02;
 
 /// Screen-space stroke widths of a gizmo axis, px (#195): the coloured
 /// line over a dark outline that keeps it readable on any ground.
@@ -407,6 +437,7 @@ pub(crate) fn gizmos(state: &State) -> Vec<Gizmo> {
             pos: [loc.pos.x, loc.pos.y, loc.pos.z],
             rot: loc.rot,
             world_axes: false,
+            name: name.clone(),
         });
     }
     let claims_origin = out.iter().any(|g| {
@@ -423,6 +454,7 @@ pub(crate) fn gizmos(state: &State) -> Vec<Gizmo> {
             pos: [0.0, 0.0, 0.0],
             rot: [0.0, 0.0, 0.0, 1.0],
             world_axes: true,
+            name: WORLD_LABEL.to_string(),
         });
     }
     out
@@ -557,9 +589,11 @@ fn push_poly(
 }
 
 /// Screen-space labels for the gizmos just drawn (feedback 7): each axis
-/// tip gets its letter, projected through the same camera math. Entries are
-/// (uv within the viewport image, linear rgb, text); tips behind the camera
-/// or at degenerate `w` are skipped.
+/// tip gets its letter, projected through the same camera math. #727:
+/// each gizmo also wears its name just under its origin - the work
+/// offset's entity name, or `World` for the dimmed neutral axes. Entries
+/// are (uv within the viewport image, linear rgb, text); tips behind the
+/// camera or at degenerate `w` are skipped.
 pub(crate) fn overlay_labels(state: &State, aspect: f64) -> Vec<([f32; 2], [f32; 3], String)> {
     let len = gizmo_len(state);
     let mvp = state.cam.mvp(aspect);
@@ -623,7 +657,25 @@ pub(crate) fn overlay_labels(state: &State, aspect: f64) -> Vec<([f32; 2], [f32;
     let mut notes = crate::axis_note::triad_notes(state);
     for gizmo in gizmos(state) {
         let base = Point3::new(gizmo.pos[0], gizmo.pos[1], gizmo.pos[2]);
-        for (axis, (rgb, dir)) in AXES.iter().enumerate() {
+        // #727: the gizmo's own name, at its origin - whose zero this is,
+        // readable without a hover. Emitted before the letters so each
+        // name leads its gizmo's labels. The theme's Z-axis blue for
+        // offsets (via `axes()`, so it lifts for the light ground like
+        // the triad does); neutral gray dimmed like the world axes it
+        // stands for.
+        // #645: names only while the user's "Show origin names" is on -
+        // the letters below never depend on it, and no line does.
+        if state.show_gizmo_names
+            && let Some(uv) = project_uv(&mvp, gizmo.pos)
+        {
+            let c = if gizmo.world_axes {
+                [WORLD_GRAY * WORLD_DIM; 3]
+            } else {
+                axes()[2].0
+            };
+            out.push(([uv[0], uv[1] + NAME_DROP_UV], c, gizmo.name.clone()));
+        }
+        for (axis, (rgb, dir)) in axes().iter().enumerate() {
             let p = transform_point(
                 Point3::new(
                     dir[0] * len * 1.08,
@@ -663,7 +715,7 @@ pub(crate) fn gizmo_segments(state: &State, aspect: f64) -> Vec<([f32; 2], [f32;
         let Some(o) = project_uv(&mvp, gizmo.pos) else {
             continue;
         };
-        for (rgb, dir) in &AXES {
+        for (rgb, dir) in &axes() {
             let p = transform_point(Point3::new(dir[0] * len, dir[1] * len, dir[2] * len), base, gizmo.rot);
             let Some(tip) = project_uv(&mvp, [p.x, p.y, p.z]) else {
                 continue;
@@ -679,6 +731,120 @@ pub(crate) fn gizmo_segments(state: &State, aspect: f64) -> Vec<([f32; 2], [f32;
     out
 }
 
+// ------------------------------------------------------ the ground grid
+
+/// The viewport's clear colour (viewport.rs's `LoadOp::Clear`): the grid
+/// fades toward it at its rim, so the floor never ends on a hard edge.
+const VIEWPORT_BG: [f32; 3] = [0.09, 0.10, 0.12];
+
+/// Minor / major ground-grid ink, a step above [`VIEWPORT_BG`] so the floor
+/// reads as a surface without competing with the part or the toolpath.
+const GRID_MINOR: [f32; 3] = [0.16, 0.17, 0.20];
+const GRID_MAJOR: [f32; 3] = [0.23, 0.25, 0.29];
+
+/// Grid lines from the camera target to the rim, per axis. The rim sits
+/// beyond what the default framing shows, so no hard edge is ever on
+/// screen; the outermost rings fade into the ground (issue: an empty
+/// viewport read as a void).
+const GRID_HALF_STEPS: i64 = 24;
+/// Beyond this (mm) the grid is not drawn: far past any machine table, and
+/// where `step * GRID_HALF_STEPS` can overflow to infinity and stretch the
+/// line-index range to the whole of i64.
+const GRID_MAX_COORD: f64 = 1.0e9;
+/// Every fifth line is a major one (0.5, 1, 5, 10, 50 ... on a 1-2-5 step).
+const GRID_MAJOR_EVERY: i64 = 5;
+
+/// The Z=0 ground grid: the machine table plane under the part, one line
+/// per 1-2-5 step of `dist / 10`, centred on the camera target and snapped
+/// to round machine coordinates so the spacing reads in whole millimetres
+/// at any zoom. World-space geometry in the overlay buffer, not a
+/// screen-space overlay, so the part occludes it like a real table.
+///
+/// The same switch as the triads (`show_world_axes`): the grid is
+/// reference furniture, and hiding the axes hides it too. It fades toward
+/// the viewport ground at the rim rather than stopping on a rectangle.
+pub(crate) fn ground_grid_lines(state: &State) -> Vec<[f32; 6]> {
+    if !state.show_world_axes {
+        return Vec::new();
+    }
+    let step = nice_step(state.cam.dist / 10.0);
+    let (cx, cy) = (state.cam.target[0], state.cam.target[1]);
+    // A non-finite or absurdly far target (or a non-finite step) would
+    // turn the index range below into billions of lines; the grid is
+    // furniture, so it simply stays out of that frame (Prime Directive:
+    // no hang).
+    if !(cx.is_finite() && cy.is_finite() && step.is_finite())
+        || cx.abs() > GRID_MAX_COORD
+        || cy.abs() > GRID_MAX_COORD
+        || step > GRID_MAX_COORD
+    {
+        return Vec::new();
+    }
+    let reach = step * GRID_HALF_STEPS as f64;
+    let (k0x, k1x) = (
+        ((cx - reach) / step).floor() as i64,
+        ((cx + reach) / step).ceil() as i64,
+    );
+    let (k0y, k1y) = (
+        ((cy - reach) / step).floor() as i64,
+        ((cy + reach) / step).ceil() as i64,
+    );
+    // The line nearest the target is the fade's centre.
+    let (cix, ciy) = ((cx / step).round() as i64, (cy / step).round() as i64);
+    let mut out: Vec<[f32; 6]> = Vec::new();
+    // Lines of constant y run along X, and the other way round.
+    for k in k0y..=k1y {
+        let y = k as f64 * step;
+        let c = grid_ink(k, ciy);
+        push_line(&mut out, Point3::new(cx - reach, y, 0.0), Point3::new(cx + reach, y, 0.0), c);
+    }
+    for k in k0x..=k1x {
+        let x = k as f64 * step;
+        let c = grid_ink(k, cix);
+        push_line(&mut out, Point3::new(x, cy - reach, 0.0), Point3::new(x, cy + reach, 0.0), c);
+    }
+    out
+}
+
+/// The ink of the grid line at index `k` (round machine coordinates, so a
+/// zoomed camera keeps landing on 0, 5, 10 ...), faded toward the viewport
+/// ground for the lines near the rim, `centre` being the target's index.
+fn grid_ink(k: i64, centre: i64) -> [f32; 3] {
+    let base = if k.rem_euclid(GRID_MAJOR_EVERY) == 0 {
+        GRID_MAJOR
+    } else {
+        GRID_MINOR
+    };
+    // Cube the falloff: only the last few rings dim visibly.
+    let d = (k - centre).unsigned_abs() as f32 / GRID_HALF_STEPS as f32;
+    let fade = (1.0 - d * d * d).clamp(0.0, 1.0);
+    [
+        VIEWPORT_BG[0] + (base[0] - VIEWPORT_BG[0]) * fade,
+        VIEWPORT_BG[1] + (base[1] - VIEWPORT_BG[1]) * fade,
+        VIEWPORT_BG[2] + (base[2] - VIEWPORT_BG[2]) * fade,
+    ]
+}
+
+/// The next 1-2-5 decade at or above `v` (0.1, 0.2, 0.5, 1, 2, 5, 10 ...),
+/// so grid spacing is a round machine number at every zoom.
+fn nice_step(v: f64) -> f64 {
+    if !v.is_finite() || v <= 0.0 {
+        return 1.0;
+    }
+    let decade = 10f64.powf(v.log10().floor());
+    let m = v / decade;
+    let m = if m <= 1.0 {
+        1.0
+    } else if m <= 2.0 {
+        2.0
+    } else if m <= 5.0 {
+        5.0
+    } else {
+        10.0
+    };
+    m * decade
+}
+
 /// Is this overlay label an axis letter (drawn larger, #195)?
 pub(crate) fn is_axis_label(text: &str) -> bool {
     AXIS_NAMES.contains(&text)
@@ -691,7 +857,7 @@ pub(crate) fn collect_overlay(state: &State) -> Vec<[f32; 6]> {
     let mut out: Vec<[f32; 6]> = Vec::new();
     for gizmo in gizmos(state) {
         let (px, py, pz) = (ftoz(gizmo.pos[0]), ftoz(gizmo.pos[1]), ftoz(gizmo.pos[2]));
-        for (rgb, dir) in &AXES {
+        for (rgb, dir) in &axes() {
             let p = transform_point(
                 Point3::new(dir[0] * len, dir[1] * len, dir[2] * len),
                 Point3::new(gizmo.pos[0], gizmo.pos[1], gizmo.pos[2]),
@@ -771,7 +937,13 @@ pub(crate) fn ftoz(v: f64) -> f32 {
 /// Staleness is not a display state here - what is drawn is the cache
 /// itself, and the tree's STALE badge is where a stale path is called
 /// out.
-pub(crate) fn toolpath_lines(state: &State) -> Vec<[f32; 6]> {
+///
+/// Public for the docs-image harness (`crates/ui/tests/docs_images.rs`):
+/// tutorial pictures must carry the app's own path display - same colors,
+/// same chords, same chevrons - never a test-local reconstitution that
+/// can drift from what the viewport actually paints.
+#[must_use]
+pub fn toolpath_lines(state: &State) -> Vec<[f32; 6]> {
     let mut out = Vec::new();
     let arm = chevron_arm(state);
     // M13.4: the move kinds wear the viewer's colour-vision palette
@@ -795,6 +967,13 @@ pub(crate) fn toolpath_lines(state: &State) -> Vec<[f32; 6]> {
         if !crate::path_lines::cache_lines(&mut out, &cache, pal, dim, arm) {
             return out;
         }
+    }
+    // #261 part 3: and draws the moves it had built as a dashed ghost
+    // (crate::refusal_ghost) - off the refusal, never off the operation.
+    if let Some(g) = state.refusal_ghost()
+        && !crate::refusal_ghost::ghost_lines(&mut out, g, pal, arm)
+    {
+        return out;
     }
     // #261 part 2: a standing generate refusal marks the spot it names.
     if let Some(at) = state.refusal_focus() {
@@ -877,7 +1056,7 @@ pub(crate) fn chevrons(out: &mut Vec<[f32; 6]>, from: Point3, to: Point3, c: [f3
 /// and say so in the log.
 pub(crate) fn capped(mut lines: Vec<[f32; 6]>) -> Vec<[f32; 6]> {
     if lines.len() > MAX_OVERLAY_VERTICES {
-        eprintln!(
+        diag_warn!(
             "overlay: {} vertices exceed the display budget; the rest of this frame's \
              lines are dropped",
             lines.len()
@@ -920,7 +1099,7 @@ pub(crate) fn region_lines(state: &State) -> Vec<[f32; 6]> {
                 for i in 0..pts.len() {
                     let a = Point3::new(pts[i].x, pts[i].y, z);
                     let q = pts[(i + 1) % pts.len()];
-                    push_line(&mut out, a, Point3::new(q.x, q.y, z), REGION_RGB);
+                    push_line(&mut out, a, Point3::new(q.x, q.y, z), overlay(Overlay::Region));
                 }
             }
         }
@@ -930,7 +1109,7 @@ pub(crate) fn region_lines(state: &State) -> Vec<[f32; 6]> {
             for w in run.windows(2) {
                 let a = Point3::new(w[0].x, w[0].y, z);
                 let b = Point3::new(w[1].x, w[1].y, z);
-                push_line(&mut out, a, b, REGION_RGB);
+                push_line(&mut out, a, b, overlay(Overlay::Region));
             }
         }
     }
@@ -1150,7 +1329,7 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
         out.push(HeightPlane {
             z: r.min(c),
             src: hop,
-            rgb: RETRACT_RGB,
+            rgb: overlay(Overlay::Retract),
             name: "Retract",
             corner: 1,
             skip_rect: false,
@@ -1170,7 +1349,7 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
                 out.push(HeightPlane {
                     z: tz,
                     src: t,
-                    rgb: REGION_RGB,
+                    rgb: overlay(Overlay::Region),
                     name: "Top",
                     corner: 1,
                     skip_rect: stands(tz),
@@ -1180,7 +1359,7 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
                 out.push(HeightPlane {
                     z,
                     src: *cut_z,
-                    rgb: CUT_RGB,
+                    rgb: overlay(Overlay::Cut),
                     name: "Cut",
                     corner: 2,
                     // Stands only where no outline is painted AT the cut
@@ -1276,7 +1455,7 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
                 out.push(HeightPlane {
                     z,
                     src: *top_z,
-                    rgb: REGION_RGB,
+                    rgb: overlay(Overlay::Region),
                     name: "Top",
                     corner: 2,
                     skip_rect: stands(z),
@@ -1286,7 +1465,7 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
                 out.push(HeightPlane {
                     z,
                     src: *bottom_z,
-                    rgb: CUT_RGB,
+                    rgb: overlay(Overlay::Cut),
                     name: "Bottom",
                     corner: 3,
                     skip_rect: false,
@@ -1306,7 +1485,7 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
                 out.push(HeightPlane {
                     z,
                     src: *bottom_z,
-                    rgb: CUT_RGB,
+                    rgb: overlay(Overlay::Cut),
                     name: "Parting",
                     corner: 3,
                     skip_rect: false,
@@ -1325,7 +1504,7 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
                 out.push(HeightPlane {
                     z,
                     src: *top_z,
-                    rgb: REGION_RGB,
+                    rgb: overlay(Overlay::Region),
                     name: "Top",
                     corner: 2,
                     skip_rect: stands(z),
@@ -1345,7 +1524,7 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
                 out.push(HeightPlane {
                     z,
                     src: *top_z,
-                    rgb: REGION_RGB,
+                    rgb: overlay(Overlay::Region),
                     name: "R plane",
                     corner: 2,
                     skip_rect: stands(z),
@@ -1357,7 +1536,7 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
                 out.push(HeightPlane {
                     z,
                     src: *b,
-                    rgb: CUT_RGB,
+                    rgb: overlay(Overlay::Cut),
                     name: "Depth",
                     corner: 3,
                     skip_rect: false,
@@ -1498,7 +1677,7 @@ fn feature_lines(state: &State, items: &[GeoSel]) -> Vec<[f32; 6]> {
                 let a = transform_point(Point3::new(pts[i][0], pts[i][1], pts[i][2]), loc.pos, loc.rot);
                 let q = &pts[(i + 1) % n];
                 let b = transform_point(Point3::new(q[0], q[1], q[2]), loc.pos, loc.rot);
-                push_line(out, a, b, PICK_RGB);
+                push_line(out, a, b, overlay(Overlay::Pick));
             }
         };
         match item.feature {
@@ -1550,7 +1729,7 @@ fn feature_lines(state: &State, items: &[GeoSel]) -> Vec<[f32; 6]> {
                 for d in [[arm, 0.0, 0.0], [0.0, arm, 0.0], [0.0, 0.0, arm]] {
                     let a = Point3::new(c.x - d[0], c.y - d[1], c.z - d[2]);
                     let b = Point3::new(c.x + d[0], c.y + d[1], c.z + d[2]);
-                    push_line(&mut out, a, b, PICK_RGB);
+                    push_line(&mut out, a, b, overlay(Overlay::Pick));
                 }
             }
         }
