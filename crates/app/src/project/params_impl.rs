@@ -384,6 +384,7 @@ impl ParamsDto {
                 entry_ramp,
                 steep_stepover,
                 pencil_reference,
+                fill_openings,
             } => ParamsDto::Finish3D {
                 pattern: (*pattern).into(),
                 stepover: *stepover,
@@ -401,6 +402,7 @@ impl ParamsDto {
                 entry_ramp: *entry_ramp,
                 steep_stepover: *steep_stepover,
                 pencil_reference: *pencil_reference,
+                fill_openings: *fill_openings,
             },
             // The deburr ride (M2.5 E B): the six keys are the kind's
             // whole content - no pattern, no retract, nothing derived
@@ -1563,6 +1565,7 @@ impl ParamsDto {
                 entry_ramp,
                 steep_stepover,
                 pencil_reference,
+                fill_openings,
             } => OpParams::Finish3D {
                 pattern: (*pattern).into(),
                 stepover: *stepover,
@@ -1580,6 +1583,7 @@ impl ParamsDto {
                 entry_ramp: *entry_ramp,
                 steep_stepover: *steep_stepover,
                 pencil_reference: *pencil_reference,
+                fill_openings: *fill_openings,
             },
             // Read back whole, the blade kinds' way - sane or
             // nothing, `validate_kind`'s door first (M2.5 E B):

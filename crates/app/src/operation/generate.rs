@@ -764,6 +764,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             entry_ramp,
             steep_stepover,
             pencil_reference,
+            fill_openings,
             ..
         } => {
             // Ball jurisdiction: the rings are the tangent locus of a
@@ -826,28 +827,44 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 Some((forbidden, _)) => Some(super::finish_clip::centre_area(&region, &forbidden, d * 0.5)?),
                 None => None,
             };
+            // The land model (#1196): the path is PLANNED on the model
+            // plus lids over its closed openings narrower than the
+            // stated width - only ever added facets, so the path can
+            // rise, never sink; the verdict below still reads the real
+            // model. Geodesic marches from the open boundary, and the
+            // lids would be new open boundary: refused by name.
+            let land = match fill_openings {
+                Some(_) if *pattern == finishing3d::FinishPattern::Geodesic => {
+                    return Err(GenError::Invalid(
+                        "Geodesic 3D finish cannot fill openings: the lids would be new open boundary for the march - clear 'Fill openings' or pick another pattern".into(),
+                    ));
+                }
+                Some(w) => Some((finishing3d::fill_openings(&material.facets, *w, *tolerance)?, *w)),
+                None => None,
+            };
+            let drive = land.as_ref().map_or(&material.facets[..], |(f, _)| f.facets.as_slice());
             let run = |fp: &Finish3DParams| -> Result<Toolpath, GenError> {
                 let whole = match fp.pattern {
                 finishing3d::FinishPattern::Waterline => {
-                    finishing3d::waterline(&material.facets, fp)?
+                    finishing3d::waterline(drive, fp)?
                 }
                 finishing3d::FinishPattern::Parallel
                 | finishing3d::FinishPattern::ParallelMulti
                 | finishing3d::FinishPattern::Scallop
                 | finishing3d::FinishPattern::SteepShallow => {
-                    finishing3d::parallel(&material.facets, fp)?
+                    finishing3d::parallel(drive, fp)?
                 }
-                finishing3d::FinishPattern::Radial => finishing3d::radial(&material.facets, fp)?,
-                finishing3d::FinishPattern::Spiral => finishing3d::spiral(&material.facets, fp)?,
-                finishing3d::FinishPattern::Contour => finishing3d::contour(&material.facets, fp)?,
-                finishing3d::FinishPattern::Project => finishing3d::project(&material.facets, fp)?,
-                finishing3d::FinishPattern::Flat => finishing3d::flat(&material.facets, fp)?,
+                finishing3d::FinishPattern::Radial => finishing3d::radial(drive, fp)?,
+                finishing3d::FinishPattern::Spiral => finishing3d::spiral(drive, fp)?,
+                finishing3d::FinishPattern::Contour => finishing3d::contour(drive, fp)?,
+                finishing3d::FinishPattern::Project => finishing3d::project(drive, fp)?,
+                finishing3d::FinishPattern::Flat => finishing3d::flat(drive, fp)?,
                 // The crease pair (M2.5 B): the same locus walk in
                 // pencil.rs, and the band filter's reference is the
                 // only thing that differs - Corner asks its own
                 // ball's band, Pencil the stated reference's.
-                finishing3d::FinishPattern::Pencil => finishing3d::pencil(&material.facets, fp)?,
-                finishing3d::FinishPattern::Corner => finishing3d::corner(&material.facets, fp)?,
+                finishing3d::FinishPattern::Pencil => finishing3d::pencil(drive, fp)?,
+                finishing3d::FinishPattern::Corner => finishing3d::corner(drive, fp)?,
                 // M2.5 C. Ramp is Parallel's twin with the sloped
                 // laws always on - the diagonal chains (M2.2e) and
                 // the ramped ring entries (M8.2 B) are the two
@@ -862,13 +879,13 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     q.pattern = finishing3d::FinishPattern::Parallel;
                     q.ramp = true;
                     q.entry_ramp = true;
-                    finishing3d::parallel(&material.facets, &q)?
+                    finishing3d::parallel(drive, &q)?
                 }
                 finishing3d::FinishPattern::MorphSpiral => {
-                    finishing3d::morphed_spiral(&material.facets, fp)?
+                    finishing3d::morphed_spiral(drive, fp)?
                 }
                 finishing3d::FinishPattern::Geodesic => {
-                    finishing3d::geodesic(&material.facets, fp)?
+                    finishing3d::geodesic(drive, fp)?
                 }
                 // M2.5 D. Blend is Parallel's raster plus the ring
                 // ladder reading the border at the BAND line: the
@@ -876,7 +893,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 // the seam's staircase is shaved, per `blend`'s own
                 // note - the difference lives in `emit_rings`.
                 finishing3d::FinishPattern::Blend => {
-                    finishing3d::blend(&material.facets, fp)?
+                    finishing3d::blend(drive, fp)?
                 }
                 // M2.5 D. Morph is the waterline ladder PLUS the
                 // ruled lofts between its levels: the ring part is
@@ -884,7 +901,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 // nor band there), and `morph` adds one column-
                 // grounded interpolated guide per paired level gap.
                 finishing3d::FinishPattern::Morph => {
-                    finishing3d::morph(&material.facets, fp)?
+                    finishing3d::morph(drive, fp)?
                 }
                 // M2.5 E. Flow is the 5-axis kind's field law asked
                 // of a 3-axis machine: the host lives in
@@ -893,7 +910,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 // grain lives once and the two entries can never
                 // drift.
                 finishing3d::FinishPattern::Flow => {
-                    crate::multiaxis::flow3d(&material.facets, fp)?
+                    crate::multiaxis::flow3d(drive, fp)?
                 }
                 };
                 // M13.10: the clip's re-entries ramp along the kept
@@ -905,7 +922,10 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     None => Ok(whole),
                 }
             };
-            let path = finishing3d::center_cut_guard(tool.center_cutting, &solid, &fp, run)?;
+            let mut path = finishing3d::center_cut_guard(tool.center_cutting, &solid, &fp, run)?;
+            if let Some((f, w)) = &land {
+                path.notes.push(f.note(*w));
+            }
             (region, path)
         }
         // Deburr (M2.5 E B): the cone stands OVER each exposed edge -

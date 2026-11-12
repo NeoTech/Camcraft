@@ -4025,6 +4025,7 @@ fn finish_params(top_z: f64, bottom_z: f64, tolerance: f64) -> OpParams {
         entry_ramp: false,
         steep_stepover: None,
         pencil_reference: None,
+        fill_openings: None,
     }
 }
 
@@ -7652,4 +7653,68 @@ fn deburr_brick() -> camcraft_app::geometry::Mesh {
         Point3::new(-20.0, -10.0, 0.0),
         Point3::new(20.0, 10.0, 10.0),
     )
+}
+
+/// #1196: the land model end to end - a 12 mm blind pocket in a plate,
+/// finished with a 6 mm ball. Off, the raster dives to the pocket
+/// floor (the model is the finished surface). With `fill_openings` at
+/// 14 mm the pocket is lidded at its rim on the drive surface only:
+/// the path never descends into it, the op still verifies clean
+/// against the REAL model (status Ok), and the path says what stands
+/// as land.
+#[test]
+fn finish3d_fill_openings_lands_over_a_pocket_and_verifies_on_the_model() {
+    let world = new_world();
+    let mut history = History::default();
+    box_stock(&world, &mut history, 60.0, 60.0, 25.0);
+    add_tool(&world, &mut history, "BN-0600");
+    let quad = |p: [Point3; 4]| vec![Triangle::new(p[0], p[1], p[2]), Triangle::new(p[0], p[2], p[3])];
+    let (t, f) = (10.0, 5.0);
+    let pt = Point3::new;
+    let mut facets = Vec::new();
+    facets.extend(quad([pt(-12.0, -12.0, t), pt(12.0, -12.0, t), pt(12.0, -6.0, t), pt(-12.0, -6.0, t)]));
+    facets.extend(quad([pt(-12.0, 6.0, t), pt(12.0, 6.0, t), pt(12.0, 12.0, t), pt(-12.0, 12.0, t)]));
+    facets.extend(quad([pt(-12.0, -6.0, t), pt(-6.0, -6.0, t), pt(-6.0, 6.0, t), pt(-12.0, 6.0, t)]));
+    facets.extend(quad([pt(6.0, -6.0, t), pt(12.0, -6.0, t), pt(12.0, 6.0, t), pt(6.0, 6.0, t)]));
+    facets.extend(quad([pt(6.0, -6.0, f), pt(-6.0, -6.0, f), pt(-6.0, -6.0, t), pt(6.0, -6.0, t)]));
+    facets.extend(quad([pt(6.0, 6.0, f), pt(6.0, -6.0, f), pt(6.0, -6.0, t), pt(6.0, 6.0, t)]));
+    facets.extend(quad([pt(-6.0, 6.0, f), pt(6.0, 6.0, f), pt(6.0, 6.0, t), pt(-6.0, 6.0, t)]));
+    facets.extend(quad([pt(-6.0, -6.0, f), pt(-6.0, 6.0, f), pt(-6.0, 6.0, t), pt(-6.0, -6.0, t)]));
+    facets.extend(quad([pt(-6.0, -6.0, f), pt(6.0, -6.0, f), pt(6.0, 6.0, f), pt(-6.0, 6.0, f)]));
+    facets.extend(quad([pt(-12.0, -12.0, 0.0), pt(12.0, -12.0, 0.0), pt(12.0, -12.0, t), pt(-12.0, -12.0, t)]));
+    facets.extend(quad([pt(12.0, -12.0, 0.0), pt(12.0, 12.0, 0.0), pt(12.0, 12.0, t), pt(12.0, -12.0, t)]));
+    facets.extend(quad([pt(12.0, 12.0, 0.0), pt(-12.0, 12.0, 0.0), pt(-12.0, 12.0, t), pt(12.0, 12.0, t)]));
+    facets.extend(quad([pt(-12.0, 12.0, 0.0), pt(-12.0, -12.0, 0.0), pt(-12.0, -12.0, t), pt(-12.0, 12.0, t)]));
+    history.execute(&world, ImportModel::from_mesh("pocket", Mesh::from_facets(facets)));
+    let ask = |fill: Option<f64>| {
+        let mut a = finish_params(t, 0.0, 0.1);
+        let OpParams::Finish3D { pattern, fill_openings, .. } = &mut a else {
+            panic!("finish3d params expected");
+        };
+        *pattern = camcraft_app::finishing3d::FinishPattern::Parallel;
+        *fill_openings = fill;
+        a
+    };
+    let inside_low = |name: &str| {
+        cache(&world, name).expect("cached").path.moves.iter().any(|m| {
+            matches!(m.kind, camcraft_app::cl::MoveKind::Feed)
+                && m.to.x.abs() < 3.0
+                && m.to.y.abs() < 3.0
+                && m.to.z < t - 0.5
+        })
+    };
+    for (name, fill) in [("LOFF", None), ("LON", Some(14.0))] {
+        history.execute(
+            &world,
+            CreateOperation::new(&world, name, "BN-0600", SrcRef::Entity("pocket".into()), ask(fill)).expect("create"),
+        );
+        history.execute(&world, GenerateOperation::new(&world, name).expect("generate"));
+        assert_eq!(status(&world, name), OpStatus::Ok, "{name} must cut and verify clean on the real model");
+    }
+    assert!(inside_low("LOFF"), "off: the finish rides the pocket floor");
+    assert!(!inside_low("LON"), "on: the finish never descends into the lidded pocket");
+    let notes = cache(&world, "LON").expect("cached").path.notes;
+    assert!(notes.iter().any(|n| n.starts_with("land: 1 closed opening")), "{notes:?}");
+    // A nonsense width never reaches the generator: refused at the door.
+    assert!(CreateOperation::new(&world, "LBAD", "BN-0600", SrcRef::Entity("pocket".into()), ask(Some(-1.0))).is_err());
 }

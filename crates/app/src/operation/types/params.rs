@@ -540,6 +540,14 @@ pub enum OpParams {
         /// the op's tool diameter or the pencil refuses by name;
         /// every other pattern ignores it as if it never arrived.
         pencil_reference: Option<f64>,
+        /// The land model (#1196): lid every CLOSED opening (hole or
+        /// pocket) a flat disk of this diameter, mm, cannot enter, on
+        /// the surface the path is PLANNED on - the finish flies over
+        /// it at its rim instead of diving down its walls. The verdict
+        /// still judges the real model. `None` (every older file) is
+        /// the model itself, byte for byte. See
+        /// [`crate::finishing3d::fill_openings`] for the rule.
+        fill_openings: Option<f64>,
     },
     /// Deburr (M2.5 E B): the cone-ruled edge break in 3D. The ONE
     /// authored number is `width` - the break's width in the edge's

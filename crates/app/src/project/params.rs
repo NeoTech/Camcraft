@@ -496,6 +496,11 @@ pub enum ParamsDto {
         /// `stepover`.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pencil_reference: Option<f64>,
+        /// Absent means no land model: the path rides the model's own
+        /// surface, holes and all - what every older file ran (#1196).
+        /// Absent spells None exactly like `stepover`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        fill_openings: Option<f64>,
     },
     /// Declared at v48 with the deburr ride (M2.5 E B). `Deburr`'s
     /// automatic snake_case tag IS the clean word - no rename needed -

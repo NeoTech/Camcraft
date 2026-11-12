@@ -343,6 +343,7 @@ impl OpParams {
                 ramp_angle,
                 steep_stepover,
                 pencil_reference,
+                fill_openings,
                 ..
             } => {
                 // No stepdown to check: the scallop law derives it from
@@ -359,6 +360,9 @@ impl OpParams {
                     // (which bigger is whose law is the kernel's to
                     // refuse by name; sanity only asks for a number).
                     && pencil_reference.is_none_or(pos)
+                    // #1196: the land width is a diameter - finite
+                    // and positive, or absent (no land model).
+                    && fill_openings.is_none_or(pos)
                     && clearance_z.is_sane()
                     && retract_z.is_none_or(|r| r.is_sane())
                     && top_z.is_sane()
