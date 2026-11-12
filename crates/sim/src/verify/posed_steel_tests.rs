@@ -168,21 +168,21 @@ fn steel_at_any_point_of_the_true_leaning_band_is_struck() {
         let framed = case % 2 == 1;
         // Poses up to 60 deg off the upright; under the rotary, in its plane.
         let pose = |g: &mut Lcg| {
-            let (t, az) = (g.span(0.02, 1.05), if framed { std::f64::consts::FRAC_PI_2 } else { g.span(0.0, 6.28) });
+            let (t, az) = (g.span(0.02, 1.05), if framed { std::f64::consts::FRAC_PI_2 } else { g.span(0.0, std::f64::consts::TAU) });
             [t.sin() * az.cos(), t.sin() * az.sin(), t.cos()]
         };
         let (a, b) = (pose(&mut g), if case % 4 < 2 { pose(&mut g) } else { [0.0, 0.0, 1.0] });
         let from = Point3::new(g.span(-5.0, 5.0), g.span(-5.0, 5.0), g.span(-5.0, 5.0));
         let to = Point3::new(from.x + g.span(-6.0, 6.0), from.y + g.span(-6.0, 6.0), from.z + g.span(-6.0, 6.0));
         let m = feed(from, to, b);
-        let path = Toolpath::new(vec![feed(from, from, a), m.clone()]);
+        let path = Toolpath::new(vec![feed(from, from, a), m]);
         for _ in 0..12 {
             let (lo, hi, r) = bands[(g.next() * 3.0) as usize % 3];
             // Half the samples on a rim or an end face, the rest inside.
             let edge = g.next() < 0.5;
             let h = if edge { if g.next() < 0.5 { lo } else { hi } } else { g.span(lo, hi) };
             let rho = if edge && g.next() < 0.7 { r } else { g.span(0.0, r) };
-            let (pt, p) = band_point(&m, a, b, g.next(), h, rho, g.span(0.0, 6.28));
+            let (pt, p) = band_point(&m, a, b, g.next(), h, rho, g.span(0.0, std::f64::consts::TAU));
             if framed {
                 let th = upright_turn(&ax, p).unwrap_or_else(|| panic!("case {case}: pose {p:?} left the rotary's plane"));
                 let at = turn_about(&ax, pt, th);
