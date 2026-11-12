@@ -52,7 +52,6 @@ const INCH_POSTS: &[(&str, &str, &str)] = &[
 const MM_ONLY: &[(&str, &str)] = &[
     ("carvera", "Makera Carvera"),
     ("heidenhain", "Heidenhain TNC"),
-    ("fanuc-lathe", "Fanuc lathe"),
 ];
 
 /// Mill `.cl` goldens every inch post must post (arcs, plunges, pecks,
