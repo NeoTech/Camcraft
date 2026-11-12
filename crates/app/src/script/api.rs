@@ -60,9 +60,12 @@ pub(crate) fn v_import(env: &mut Env, args: Vec<Value>) -> Result<Value, String>
     // The command's own construction door: parse, validate, and the
     // extension refusals (IGES needs a kernel we do not have) are
     // ImportModel's law, not a second copy here.
-    let budget = crate::geometry::import::step_budget::from_json(args.get(2))?;
+    let explicit = crate::geometry::import::step_budget::from_json(args.get(2))?;
+    // #1185: no budget given -> a re-import keeps the model's recorded one.
+    let given_name = arg_opt(&args, 1, "a model name")?;
+    let budget = explicit.or_else(|| crate::model_fidelity::reimport_budget(&env.world, &path, given_name.as_deref()));
     let imp = ImportModel::within(&path, budget).map_err(|e| e.to_string())?;
-    let name = arg_opt(&args, 1, "a model name")?.unwrap_or_else(|| imp.name.clone());
+    let name = given_name.unwrap_or_else(|| imp.name.clone());
     if model::find_by_name(&env.world, &name).is_some() {
         let cmd = UpdateModel::new(&env.world, &name, imp.mesh).map_err(|e| e.to_string())?.with_fidelity(imp.coarse_mm).with_budget(imp.facet_budget);
         env.history.execute(&env.world, cmd);
