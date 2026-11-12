@@ -101,6 +101,8 @@ The server exposes tools across three modules in `crates/app/src/mcp/` (see `cra
 - `add_operation { "kind": string, "tool": string, "name"?: string, "source"?: string, "params"?: object }`: Add an operation to the active setup. `source` is `"stock"` (the default) or a model name.
 - `edit_operation { "name": string, "params": object }`: JSON merge-patch operation parameters (e.g. `stepdown`, `stepover`, `feed`, `spindle_speed`).
 - `delete_operation { "name": string }`: Remove an operation and invalidate its cached toolpath.
+- `rename_operation { "name": string, "new_name": string }`: Change an operation's display name (1-120 printable characters). Its stable key and its place in the program do not change; naming it back to its key clears the display name. Names are unique and cannot take another operation's key. One undo step.
+- `reorder_operation { "name": string, "target": string, "place"?: "before" | "after" }`: Move an operation before (default) or after another operation of the SAME setup, as the browser's drag and drop does. Moving between setups is refused. Answers with that setup's operations in their new order. One undo step.
 - `list_features { "model": string }`: Query pickable faces, loops, edge chains, and vertices with stable integer IDs.
 - `get_operation_geometry { "operation": string }`: Inspect the features and area boundaries an operation machines.
 - `set_operation_geometry { "operation": string, "picks": [id1, id2, ...] }`: Bind specific geometric feature IDs to an operation.
@@ -123,6 +125,7 @@ When issue #356 was originally filed, several core features were GUI-only. The f
 - **Stock simulation render (#182):** Shipped via `render_stock`.
 - **Hole feature detection (#312):** Shipped via `detect_holes`.
 - **Tool library import/export (#355):** Shipped via `export_tool_library` and `import_tool_library`.
+- **Operation display names and order (#45):** Shipped via `rename_operation` and `reorder_operation`.
 - **Pocket and slot recognition (#35):** Shipped via `detect_pockets` (with `create`, it adds the Pocket or Slot that machines one).
 - **Part axes in the work plane (#557):** Shipped via `set_part_axes` (a straight edge or two points along +Y and/or +X).
 - **Three-point plane alignment (#555):** Shipped via `lay_part_on_points` (three vertex ids onto G17, G18 or G19).
