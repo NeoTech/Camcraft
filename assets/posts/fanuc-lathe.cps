@@ -46,6 +46,11 @@ threadHands = true;  // reads PARAM SpindleDirection (#629): the engine refuses 
 //    and again before a G96 section whose tool states a lower max rpm
 //    (PARAM MaxSpindleSpeed, #891). A G96 with neither clamp stated is
 //    refused by name - unclamped CSS runs away toward the centre.
+//    A section that posted G96 cancels it at its end (G97 after M05,
+//    #1173), so every section opens under G97 unless it states G96
+//    itself: a live tool's, a drill's or a thread's S is read as rpm,
+//    whatever kind of section follows, and the program never ends -
+//    or hands the next program - a constant-surface-speed mode.
 //  - G99 feed per revolution: F = mm/min / rpm, so the cut speed the
 //    generator planned is the cut speed the control runs. No rpm, no
 //    per-rev feed - refused by name.
@@ -125,6 +130,7 @@ var sRpm = 0;              // S/M3 waits for the section (PARAMs, TOOL, SECTION 
 var sCss = 0;              // SurfaceSpeed PARAM (m/min), 0 = none stated
 var sMax = 0;              // MaxSpindleSpeed PARAM (#891): the tool's own rpm ceiling, 0 = none
 var clampS = 0;            // the G50 S in force (#891), 0 = none posted yet
+var cssOn = false;         // this section posted G96: its end cancels it (#1173)
 var spindleWait = false;
 var toolWait = false;
 var tNo = 0;
@@ -402,6 +408,7 @@ function startPreamble() {
       else {
         if (cap !== clampS) { block(["G50", "S" + ff(cap)]); clampS = cap; }   // a tool rated under the machine (#891)
         block(["G96", "S" + ff(sCss), m]);
+        cssOn = true;
       }
     } else {
       // A tool's lower clamp is lifted back to the machine's before a
@@ -462,6 +469,8 @@ function endPreamble() {
     return;
   }
   block(["M05"]);
+  if (cssOn) block(["G97"]); // #1173: no section opens under a G96 it did not state
+  cssOn = false;
   spinRev = false;           // the next section states its own
   afterOp();
 }
