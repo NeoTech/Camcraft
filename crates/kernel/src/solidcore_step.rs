@@ -40,6 +40,9 @@ pub struct StepSolid {
     pub name: String,
     /// The kernel solid: closed, manifold, positive volume.
     pub brep: Brep,
+    /// The reader's B-rep record the kernel solid was built from (mm): what
+    /// [`crate::machining_mesh`] meshes, face for face (#940).
+    pub record: solidcore_record::brep::Brep,
     /// Exact volume, and the port's "tight" bounding box (mm). FINDING at
     /// the pinned commit (#939): the box takes the whole cylinder of a
     /// trimmed cylinder face, so it can be too large. Do not size or place
@@ -317,6 +320,7 @@ fn build(k: &mut SolidcoreKernel, s: topology::Solid) -> Result<StepSolid, (&'st
         item: s.item,
         name: s.name,
         brep,
+        record: s.brep,
         measure,
         area,
         vertex_gap: gaps.gap,

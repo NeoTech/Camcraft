@@ -758,6 +758,7 @@ dependencies = [
  "ruststep",
  "solidcore",
  "solidcore-convert",
+ "solidcore-record",
  "solidcore-step",
  "solidcore-tess",
  "thiserror 2.0.21",
