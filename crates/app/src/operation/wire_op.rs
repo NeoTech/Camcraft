@@ -127,6 +127,20 @@ pub(super) fn stamp_condition(world: &World, setup: Option<&str>, op: &WireConto
     }
 }
 
+/// The condition ids the setup's wire EDM states, in the file's order -
+/// what a page offers to choose from. Empty when no wire EDM is mounted
+/// or its table is empty; whether a condition is complete is
+/// [`condition_of`]'s question, asked when one is chosen.
+#[must_use]
+pub fn conditions_of(world: &World, setup: Option<&str>) -> Vec<String> {
+    crate::machine::of_setup(world, setup)
+        .1
+        .filter(|m| crate::machine::kind(Some(m)) == Kind::WireEdm)
+        .and_then(|m| m.edm)
+        .map(|e| e.conditions.into_iter().map(|c| c.id).collect())
+        .unwrap_or_default()
+}
+
 /// The generator's numbers from the op's, the condition's and the
 /// world's.
 ///

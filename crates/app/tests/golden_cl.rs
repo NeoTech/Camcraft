@@ -2,7 +2,7 @@
 //! testing rule made concrete. Format, naming and the regeneration
 //! workflow: tests/golden/CLAUDE.md.
 //!
-//! Gate map (M4.4): covers app::cl, app::drilling, app::finishing3d, app::geo2d, app::geometry, app::machining2d, app::tools.
+//! Gate map (M4.4): covers app::cl, app::drilling, app::finishing3d, app::geo2d, app::geometry, app::machining2d, app::tools, app::wire_edm.
 
 
 mod common;
@@ -1083,7 +1083,7 @@ fn wire_contour_die_and_punch_match_golden() {
             start: Some(start),
             plane_z: 0.0,
         };
-        let path = wire_contour(&[profile.clone()], &[], &p).unwrap();
+        let path = wire_contour(std::slice::from_ref(&profile), &[], &p).unwrap();
         assert!(path.is_prismatic() && path.moves.iter().all(|m| m.kind == MoveKind::Feed && m.feed.is_none()));
         let text = gen_to_cltext(&path);
         // The in-app writer and the golden writer agree byte for byte,

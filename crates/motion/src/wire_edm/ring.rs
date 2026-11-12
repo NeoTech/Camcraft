@@ -52,7 +52,7 @@ pub(super) fn profile(loops: &[Loop], chains: &[Vec<Point2>]) -> Result<(Vec<Poi
         [one] => one,
         many => {
             return Err(invalid(format!(
-                "{} closed profiles are picked - one operation cuts one profile from its own start hole; give each profile its own operation",
+                "{} closed profiles are given - one operation cuts one profile from its own start hole; pick one, and give each profile its own operation",
                 many.len()
             )));
         }

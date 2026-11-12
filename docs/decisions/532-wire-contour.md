@@ -1,0 +1,34 @@
+## #532 - Wire EDM 2-axis contour op
+
+The umbrella (#290, D1-D10) decided the build order, the CL shape (D2: `to` on the lower programmed plane, no pose for a vertical cut), the condition table (D4) and that punch/die and the corner minimum belong to this op (D8). These are the points it left open.
+
+**Decided:**
+
+- **A wire cut mounts no library tool.** `KindInfo::tool_kinds` is the empty set for the wire family (`tool_law::NO_TOOL`, `KindInfo::mounts_tool`), the operation's `tool` is the empty word, and the command door refuses a wire cut that names one. The wire's diameter and the spark gap come from the machine's condition (#531) through `Edm::condition`, their only source; the stamp digests them in the tool's place, so an edited condition table re-marks the cut Stale.
+- **The side is stated; a reader never defaults it.** `side` is `die` (wire inside the profile) or `punch` (wire outside). The file and MCP shape has no serde default for it: a parameter object without `side` is refused. The in-app draft (`seed_wire_contour`) starts at `die`, as the umbrella's "explicit parameter with a default" says - and that draft cannot be created anyway until a condition is named.
+- **One closed profile per operation.** An open run, several rings, a crossing or area-less ring are refused by name. An open profile has no punch or die side; it is a follow-up issue, not a guess.
+- **Outside corners are mitred, not rolled.** The wire-centre path is `geo2d::Region::offset_sharp` (the existing clipper2 offsetter): at a corner the wire wraps around, the path is the sharp intersection of the two parallels, so the wire stays at or beyond the kerf offset and the product's corner stays sharp. Past the offsetter's mitre limit (corners sharper than about 60 degrees) the join is squared, still no nearer than the offset.
+- **Inside corners: the cover law, 2 um.** A corner is "too tight" when some point of the profile stands farther than `wire radius + gap + 0.002 mm` from the wire-centre path - the rolling-circle reading of "minimum internal radius is wire radius + gap". It also catches a slot, notch or neck under the kerf width. The refusal names the spot, the minimum radius and its two terms.
+- **The profile is judged as given.** It is a polygon (picked edges or the model's through-silhouette). A round drawn with facets turning more than about 17 degrees reads as a row of sharp inside corners at a 0.165 mm offset and is refused; a finer model is the fix.
+- **No arc fitting.** The path is straight moves: the exact mitred parallel of the polygon, on the offsetter's 1 nm lattice. Fitting arcs would move the path by a facet's sagitta, more than the cover law's tolerance.
+- **Start hole and leads.** Every closed profile needs a stated start hole / threading point, a punch included (a hole or the stock's edge outside the profile). It must stand on the waste side at least the kerf offset from the profile. The lead-in is the straight line from it to the nearest point of the wire path (it meets a straight side square); the profile is cut counter-clockwise from there; the lead-out retraces the lead-in back to the threading point. No lead length or shape parameter exists yet.
+- **Where the refusals stand.** A missing condition, gap or wire diameter: at command creation (create, paste, edit, retype). A missing or misplaced start hole and the corner minimum: at generation, where the profile is read. So an operation can be created first and its start hole placed after.
+- **Planes.** The op stores the workpiece top (where the profile is read) and bottom (the lower programmed plane the moves ride). It has no clearance plane - a wire never lifts out of the work - and `OpParams::clearance()` answers the top for it.
+- **Moves.** All `Feed`, with no feed number (the control's generator sets the rate) and no pose. The path starts and ends at the threading point; there is no rapid.
+- **No CL format change.** The CL carries no wire record. The path's notes state the side, the offset's two terms, the kerf width and the threading point; the wire post (#533) can read the condition id and the start hole from the op's parameters, as the plasma post reads its op.
+- **Until the wire post exists** the program gate refuses a wire cut by name. The machine check on a wire EDM judges X/Y travel and names what it does not judge (wire sweep, slug, start-hole clearance: #534).
+- **A minimal op page ships here.** The UI's registry-wide tab law draws every kind's sections and fails a kind whose tabs are empty, so `wire_page.rs` gives the Wire Contour its fields: side and start hole on Geometry, the two planes on Heights, the condition (a list of what the op's machine states) on Passes, and no Feeds tab. Picking the start hole in the viewport, the kind's own glyph and the ribbon's behaviour on a wire EDM document stay #535's.
+- **`stamp_tool.rs`.** The tool's share of the stamp moved out of `stamp.rs` unchanged, so the wire branch fits without growing that file; no stored stamp of a tool-mounting op moves.
+
+**Why:** Prime Directive - correct or refused by name. A second statement of the wire's diameter (a tool beside the condition) could disagree with the first; a defaulted side scraps a part; a rounded or arc-fitted path is not "offset by exactly the kerf".
+
+**Considered and dropped:**
+
+- A `ToolKind::Wire` library tool: a second source for the wire diameter, plus a tool editor page before any wire op could be made.
+- Rolling the wire around outside corners (round joins): the offsetter flattens that arc to 5 um chords, which brings the wire up to 5 um nearer the corner than the offset.
+- Refusing a missing start hole at command creation: the profile is only read at generation, and the natural order is create, then place the hole.
+- A typed wire record in the CL (as plasma's `PlasmaCut`): a `.cl` format change with every reader and golden touched, for facts the post can read from the op.
+- Lead-in length, angle and arc leads, overlap past the entry point, cut direction as a parameter: none is in the issue, and none is needed for a correct cut.
+- Checking the condition's wire against the machine's `edm.wire_diameters` list: a contradiction inside the machine file, which is #531's file law, not this op's.
+
+**Cost to change later:** low for the parameters (the DTO is additive: leads, direction and corner style can join as optional keys); medium for the tool-less law (about a dozen doors read `mounts_tool`); a CL wire record, if #533 wants one, bumps the dump version and regenerates the two goldens.

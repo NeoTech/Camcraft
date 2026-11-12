@@ -106,6 +106,7 @@ pub(crate) use pockets_page::row_text as pockets_row_text;
 mod probe_page;
 // #670: the Plasma Profile's page.
 mod plasma_page;
+mod wire_page;
 mod trochoid_page;
 mod kind_editors;
 mod mill2d_more_page;

@@ -223,17 +223,18 @@ pub fn tool_problem_of(world: &World, entity: &Entity) -> Option<String> {
     tool_problem(world, &name, &op)
 }
 
+/// A generation's tool: the tool, its body's envelope, its lathe body.
+pub(super) type JobTool = (
+    Tool,
+    Option<camcraft_tools::holder_profile::HolderProfile>,
+    Option<std::sync::Arc<camcraft_tools::lathe_holder::LatheClearance>>,
+);
+
 /// The library tool a generation cuts with, as `collect_job` reads it:
 /// the tool, its modelled body's envelope (#368) and its lathe body's
 /// clearance (#369) - or the refusal by name. Kinds that mount no
 /// library tool (#532) never come here.
-pub(super) fn job_tool(
-    world: &World,
-    op: &Operation,
-) -> Result<
-    (Tool, Option<camcraft_tools::holder_profile::HolderProfile>, Option<std::sync::Arc<camcraft_tools::lathe_holder::LatheClearance>>),
-    crate::machining2d::GenError,
-> {
+pub(super) fn job_tool(world: &World, op: &Operation) -> Result<JobTool, crate::machining2d::GenError> {
     use crate::machining2d::GenError;
     let Some(tool_entity) = model::find_by_name(world, &op.tool) else {
         return Err(GenError::Invalid(format!("no tool named '{}'", op.tool)));

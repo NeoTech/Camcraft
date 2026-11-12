@@ -71,8 +71,8 @@ fn refusal(loops: &[Loop], chains: &[Vec<Point2>], p: &WireParams) -> String {
 fn a_die_and_a_punch_on_one_profile_stand_apart_by_exactly_the_kerf() {
     let profile = rounded(40.0, 20.0, 2.0);
     let region = Region::new(vec![profile.clone()]).unwrap();
-    let die = wire_contour(&[profile.clone()], &[], &params(WireSide::Die, Some((0.0, 0.0)))).unwrap();
-    let punch = wire_contour(&[profile.clone()], &[], &params(WireSide::Punch, Some((-30.0, 0.0)))).unwrap();
+    let die = wire_contour(std::slice::from_ref(&profile), &[], &params(WireSide::Die, Some((0.0, 0.0)))).unwrap();
+    let punch = wire_contour(std::slice::from_ref(&profile), &[], &params(WireSide::Punch, Some((-30.0, 0.0)))).unwrap();
     let (d, p) = (ride(&die), ride(&punch));
     // Opposite sides: the die's wire inside the profile, the punch's outside.
     assert!(d.iter().all(|q| region.contains(*q)), "the die's wire stays inside the profile");
@@ -103,11 +103,11 @@ fn a_die_and_a_punch_on_one_profile_stand_apart_by_exactly_the_kerf() {
 fn a_corner_tighter_than_the_wire_is_refused_by_name() {
     // A sharp rectangle: four inside corners for a die's wire.
     let sharp = rect(-20.0, -10.0, 20.0, 10.0);
-    let why = refusal(&[sharp.clone()], &[], &params(WireSide::Die, Some((0.0, 0.0))));
+    let why = refusal(std::slice::from_ref(&sharp), &[], &params(WireSide::Die, Some((0.0, 0.0))));
     assert!(why.contains("inside corner") && why.contains("minimum inside radius is 0.1650 mm"), "{why}");
     assert!(why.contains("wire radius 0.1250 + spark gap 0.0400") && why.contains("die side"), "{why}");
     // It names the spot: one of the four corners.
-    let at = wire_contour(&[sharp.clone()], &[], &params(WireSide::Die, Some((0.0, 0.0)))).expect_err("refused").location().expect("a spot");
+    let at = wire_contour(std::slice::from_ref(&sharp), &[], &params(WireSide::Die, Some((0.0, 0.0)))).expect_err("refused").location().expect("a spot");
     assert!((at.x.abs() - 20.0).abs() < 1e-9 && (at.y.abs() - 10.0).abs() < 1e-9 && at.z == -12.0, "{at:?}");
     // The same corners are OUTSIDE corners for a punch's wire: cut, and sharp.
     let punch = wire_contour(&[sharp], &[], &params(WireSide::Punch, Some((-30.0, 0.0)))).unwrap();
@@ -137,18 +137,18 @@ fn a_corner_tighter_than_the_wire_is_refused_by_name() {
 #[test]
 fn a_missing_or_misplaced_start_hole_is_refused_by_name() {
     let profile = rounded(40.0, 20.0, 2.0);
-    let none = refusal(&[profile.clone()], &[], &params(WireSide::Die, None));
+    let none = refusal(std::slice::from_ref(&profile), &[], &params(WireSide::Die, None));
     assert!(none.contains("no start hole is stated") && none.contains("threaded through solid material"), "{none}");
-    let none = refusal(&[profile.clone()], &[], &params(WireSide::Punch, None));
+    let none = refusal(std::slice::from_ref(&profile), &[], &params(WireSide::Punch, None));
     assert!(none.contains("no start hole is stated") && none.contains("outside the profile"), "{none}");
-    let out = refusal(&[profile.clone()], &[], &params(WireSide::Die, Some((-30.0, 0.0))));
+    let out = refusal(std::slice::from_ref(&profile), &[], &params(WireSide::Die, Some((-30.0, 0.0))));
     assert!(out.contains("lies outside the profile") && out.contains("slug"), "{out}");
-    let inside = refusal(&[profile.clone()], &[], &params(WireSide::Punch, Some((0.0, 0.0))));
+    let inside = refusal(std::slice::from_ref(&profile), &[], &params(WireSide::Punch, Some((0.0, 0.0))));
     assert!(inside.contains("lies inside the profile") && inside.contains("punch"), "{inside}");
     // 0.1 mm inside the wall: nearer than the 0.165 mm offset.
-    let near = refusal(&[profile.clone()], &[], &params(WireSide::Die, Some((0.0, 9.9))));
+    let near = refusal(std::slice::from_ref(&profile), &[], &params(WireSide::Die, Some((0.0, 9.9))));
     assert!(near.contains("closer to the profile than the kerf offset (0.1650 mm)") && near.contains("die"), "{near}");
-    let near = refusal(&[profile.clone()], &[], &params(WireSide::Punch, Some((0.0, 10.1))));
+    let near = refusal(std::slice::from_ref(&profile), &[], &params(WireSide::Punch, Some((0.0, 10.1))));
     assert!(near.contains("closer to the profile than the kerf offset") && near.contains("punch"), "{near}");
     let on = refusal(&[profile], &[], &params(WireSide::Die, Some((0.0, 10.0 - K))));
     assert!(on.contains("stands on the wire path itself"), "{on}");
@@ -199,7 +199,7 @@ fn degenerate_profiles_and_numbers_are_refused_by_name() {
     ] {
         let mut q = p.clone();
         edit(&mut q);
-        let why = refusal(&[profile.clone()], &[], &q);
+        let why = refusal(std::slice::from_ref(&profile), &[], &q);
         assert!(why.contains(says), "{why}");
     }
 }
