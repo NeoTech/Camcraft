@@ -383,9 +383,12 @@ fn contour_impl(
                         e2.x,
                         e2.y,
                         lead_notes.join("; ")
-                    )));
+                    ))
+                    .with_ghost_moves(b.moves()));
                 }
-                contour_comp::push_span(&mut b, &SpanCtx { prog, p }, walk_at - 1, out_at)?;
+                // #871: a part-way refusal hands back the rings so far.
+                contour_comp::push_span(&mut b, &SpanCtx { prog, p }, walk_at - 1, out_at)
+                    .map_err(|e| e.with_ghost_moves(b.moves()))?;
             }
         }
     }
@@ -401,7 +404,8 @@ fn contour_impl(
 
     let path = b.finish();
     if let Some(why) = crate::approach::refusal(&path) {
-        return Err(GenError::Invalid(why));
+        // #261 part 3: the moves built so far ride the refusal, display-only.
+        return Err(GenError::Invalid(why).with_ghost(&path));
     }
     if !path.all_finite() {
         return Err(GenError::Invalid("path left the finite horizon".into()));

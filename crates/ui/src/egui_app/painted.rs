@@ -33,7 +33,7 @@
 
 use egui::text::{LayoutJob, TextWrapping};
 use egui::{
-    Align2, Color32, FontId, Pos2, Rect, Response, Sense, Shape, Stroke, TextureHandle, TextFormat,
+    Color32, FontId, Pos2, Rect, Response, Sense, Shape, Stroke, TextureHandle, TextFormat,
     Ui, Vec2,
 };
 
@@ -93,14 +93,81 @@ pub fn cell(
         painter.image(tex.id(), r, UV_FULL, tint);
     }
     let ink = if enabled { pal.text } else { pal.text_faint };
-    painter.text(
-        Pos2::new(rect.center().x, rect.top() + pal.glyph_px + 2.0),
-        Align2::CENTER_TOP,
-        label,
-        FontId::proportional(pal.font_label),
+    // The label shrinks to fit its cell (down to MIN_LABEL_PX) so a short
+    // word reads whole at the narrow 1280 px cell (#948); only a label
+    // that still does not fit at the floor truncates with an ellipsis, so
+    // it can never collide with the neighbour's.
+    let max_w = (rect.width() - 2.0).max(0.0);
+    let galley = fit_label(ui, label, pal.font_label, max_w, ink);
+    painter.galley(
+        Pos2::new(rect.center().x - galley.size().x * 0.5, rect.top() + pal.glyph_px + 2.0),
+        galley,
         ink,
     );
     resp
+}
+
+/// The smallest ribbon label size (px); below it a label elides instead.
+pub const MIN_LABEL_PX: f32 = 10.0;
+
+/// Lay `label` out on one line at the largest whole size from `start_px`
+/// down to MIN_LABEL_PX whose width fits `max_w`; at the floor it truncates
+/// with an ellipsis (never overflows).
+fn fit_label(
+    ui: &Ui,
+    label: &str,
+    start_px: f32,
+    max_w: f32,
+    ink: Color32,
+) -> std::sync::Arc<egui::Galley> {
+    let mut px = start_px.max(MIN_LABEL_PX);
+    loop {
+        let floor = px <= MIN_LABEL_PX;
+        let mut job = LayoutJob {
+            wrap: if floor {
+                TextWrapping::truncate_at_width(max_w)
+            } else {
+                TextWrapping::no_max_width()
+            },
+            ..LayoutJob::default()
+        };
+        job.append(label, 0.0, TextFormat::simple(FontId::proportional(px), ink));
+        let galley = ui.painter().layout_job(job);
+        if floor || galley.size().x <= max_w {
+            return galley;
+        }
+        px = (px - 1.0).max(MIN_LABEL_PX);
+    }
+}
+
+/// A group caption under its cells, centred on `mid_x` in the strip's
+/// bottom band, faint ink. Painted only when it fits inside `width` (the
+/// group's own span): a caption wider than its group would run under the
+/// neighbour's, so single-door groups - whose cell already names the
+/// section - skip it (#948). Returns whether it was painted.
+pub fn caption(
+    ui: &Ui,
+    mid_x: f32,
+    width: f32,
+    title: &str,
+    strip: Rect,
+    pal: &Tokens,
+    cell_bottom: f32,
+) -> bool {
+    let ink = pal.text_faint;
+    let mut job = LayoutJob {
+        wrap: TextWrapping::no_max_width(),
+        ..LayoutJob::default()
+    };
+    job.append(title, 0.0, TextFormat::simple(FontId::proportional(MIN_LABEL_PX), ink));
+    let galley = ui.painter().layout_job(job);
+    if galley.size().x > width {
+        return false;
+    }
+    let y = (cell_bottom + 3.0).min(strip.bottom() - galley.size().y);
+    ui.painter()
+        .galley(Pos2::new(mid_x - galley.size().x * 0.5, y), galley, ink);
+    true
 }
 
 /// A group divider: one vertical hairline, ink only.
@@ -108,17 +175,6 @@ pub fn divider(painter: &egui::Painter, x: f32, rect: Rect, pal: &Tokens) {
     painter.line_segment(
         [Pos2::new(x, rect.top() + 4.0), Pos2::new(x, rect.bottom() - 4.0)],
         Stroke::new(1.0, pal.border),
-    );
-}
-
-/// A group caption: small dim text centered under its cells' row.
-pub fn caption(painter: &egui::Painter, center_x: f32, y: f32, title: &str, pal: &Tokens) {
-    painter.text(
-        Pos2::new(center_x, y),
-        Align2::CENTER_TOP,
-        title,
-        FontId::proportional(pal.font_caption),
-        pal.text_dim,
     );
 }
 
