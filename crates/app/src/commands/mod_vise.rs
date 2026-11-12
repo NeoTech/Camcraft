@@ -58,12 +58,8 @@ impl PlaceModVisePair {
         let entity = model::find_by_name(world, plate).ok_or_else(|| CommandError::NotFound(plate.to_owned()))?;
         let plate_at = model::transform_of(world, &entity).unwrap_or_default();
         let setup = fixture::def_of(world, &entity).and_then(|d| d.setup);
-        let stock = model::stock_world_aabb_for(world, setup.as_deref()).ok_or_else(|| {
-            CommandError::Invalid(format!(
-                "{} has no stock to fit the mod vise to",
-                setup.as_deref().map_or_else(|| "the setup".to_owned(), |s| format!("setup '{s}'"))
-            ))
-        })?;
+        let stock = model::stock_world_aabb_for(world, setup.as_deref())
+            .ok_or_else(|| CommandError::Needs(crate::vise_fit::no_stock_message(setup.as_deref(), "the mod vise to")))?;
         let fit = modvise::fit_pair(&def, plate_at, fixed, adjustable, at, yaw_deg, &stock)
             .map_err(|e| CommandError::Invalid(format!("mod vise on '{plate}': {e}")))?;
         let fixed_cmd = block(world, plate, setup.as_deref(), fixed.with_slide(0.0), &fit.fixed_at, fit.yaw_deg)?;
