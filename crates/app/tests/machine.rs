@@ -729,6 +729,8 @@ fn every_shipped_machine_mounts_and_speaks_its_declaration() {
         ("Lathe", Kind::Lathe),
         ("Tormach 770MX", Kind::Mill),
         ("Tormach 770MX (ML)", Kind::Mill),
+        // #785: an A about X leans the tool - still a mill, never a mill-turn.
+        ("Tormach 770MX + microARC 4", Kind::Mill),
         ("Tormach 770M", Kind::Mill),
         ("Tormach 1100MX", Kind::Mill),
         ("Tormach 1500MX", Kind::Mill),
@@ -754,6 +756,7 @@ fn every_shipped_machine_mounts_and_speaks_its_declaration() {
         ("Sienci AltMill 2x4", Kind::Mill),
         ("Sienci AltMill 4x4", Kind::Mill),
         ("Sienci AltMill 4x8", Kind::Mill),
+        ("Doosan DNM 5700", Kind::Mill),
     ];
     assert_eq!(MACHINES.len(), expectations.len(), "the pane offers what the tests pin");
     for ((name, text), (want_name, want_kind)) in MACHINES.iter().zip(expectations) {

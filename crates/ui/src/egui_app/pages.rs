@@ -628,8 +628,9 @@ fn wcs_page(ui: &mut Ui, state: &mut State) {
     }
 
     ui.add_space(6.0);
-    // #342: the setup's one WCS, and the word its post writes - which
-    // word is chosen on the Setups page, never here.
+    // #342: the setup's one WCS, and the work offset its post writes. The
+    // dropdown that picks it is drawn under this page (#343), so the note
+    // names what this page shows, not where the choice lives.
     let wcs_ctx = camcraft_app::setup::active(&state.world);
     let label = camcraft_app::setup::wcs_label(&state.world, wcs_ctx.as_deref());
     let line = match camcraft_app::setup::wcs_entity(&state.world, wcs_ctx.as_deref())
@@ -645,7 +646,7 @@ fn wcs_page(ui: &mut Ui, state: &mut State) {
         None => format!("{label}: not placed (at the origin)"),
     };
     ui.label(line);
-    ui.label("The work offset word is set per setup on the Setups page.");
+    ui.label("Work offset: the G54-G59 slot this setup posts. It does not move the origin.");
 }
 
 fn apply_wcs_drafts(state: &mut State) {
@@ -791,7 +792,7 @@ fn setups_page(ui: &mut Ui, state: &mut State) {
     ui.separator();
     tool_list_section(ui, state, active.as_deref());
     sheet_footer(ui, state);
-    ui.label("The Stock and Work-offset pages edit the active setup's furniture.");
+    ui.label("The Stock and Work offset pages edit the active setup's stock and work offset.");
 }
 
 /// The tool list of one setup context (M3.2 stage C): what goes into
@@ -859,6 +860,10 @@ pub(super) fn fixtures_section(ui: &mut Ui, state: &mut State, ctx: Option<&str>
     {
         state.fixture_ui = FixtureUi::default();
     }
+    state.retire_vise_opening_drafts();
+    state.retire_plate_place_drafts();
+    state.retire_mod_vise_drafts();
+    state.retire_accessory_size_drafts();
     ui.label(if fixtures.is_empty() && table.is_none() {
         "No workholding modeled: the collision checks see stock and part only."
     } else {
@@ -880,6 +885,18 @@ pub(super) fn fixtures_section(ui: &mut Ui, state: &mut State, ctx: Option<&str>
     ui.horizontal_wrapped(|ui| {
         if ui.button("Import fixture…").clicked() {
             state.pending.push_back(CommandKind::ImportFixtureDialog);
+        }
+        // #788: a generic parametric vise, placed in one undoable step.
+        if ui.button("Add built-in vise…").clicked() {
+            state.pending.push_back(CommandKind::BuiltinViseDialog(ctx.unwrap_or_default().to_owned()));
+        }
+        // #789: parallels, blocks, strap clamps, soft jaws.
+        if ui.button("Add accessory…").clicked() {
+            state.pending.push_back(CommandKind::AccessoryDialog(ctx.unwrap_or_default().to_owned()));
+        }
+        // #819: a parametric grid plate, fixtures placed on its holes.
+        if ui.button("Add fixture plate…").clicked() {
+            state.pending.push_back(CommandKind::FixturePlateDialog(ctx.unwrap_or_default().to_owned()));
         }
         // The other way in: a model already imported - select its row
         // in the browser and mark it. Offered only for exactly one
@@ -1660,6 +1677,17 @@ fn model_page(ui: &mut Ui, state: &mut State, name: String) {
     };
     let tris = model::facets_of(&state.world, &entity).map_or(0, |f| f.len());
     ui.label(format!("{tris} triangle(s)"));
+    // #864: a model imported coarser than the importer promises says so,
+    // with the error it carries and what that does to the checks.
+    if let Some(chord) = camcraft_app::model_fidelity::chord_of(&state.world, &entity) {
+        ui.label(camcraft_app::model_fidelity::summary(&state.world, chord));
+        hint(
+            ui,
+            "This model was too large to import at full detail. Gouge checks against it are \
+             stricter to make up for that; when it is too coarse to check at all, its operations \
+             are refused at the post. Re-import with a larger budget to clear this.",
+        );
+    }
     if let Some(a) = model::entity_world_aabb(&state.world, &entity) {
         ui.label(format!(
             "{} x {} x {} {}",
@@ -1723,6 +1751,8 @@ fn model_page(ui: &mut Ui, state: &mut State, name: String) {
             apply_model_draft(state);
         }
     });
+    // Pockets and slots (#511): recognition on a click, Create per row.
+    super::pockets_page::section(ui, state, &name);
     // #561: the part into a fixture (or a fixture onto the part) by mates.
     super::locate_form::model_row(ui, state, &name);
     // Mesh repair (M13.11): weld and fill on the user's say-so, never on

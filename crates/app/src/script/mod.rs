@@ -27,6 +27,7 @@
 //! context and every function registered inside it is dropped first.
 
 pub(crate) mod api;
+pub use api::refusal_text;
 mod report;
 
 use crate::commands::History;

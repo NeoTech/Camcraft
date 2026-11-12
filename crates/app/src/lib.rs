@@ -6,6 +6,7 @@
 
 pub use camcraft_cl::cl;
 pub mod cli;
+pub mod clock;
 pub mod commands;
 pub mod cutting;
 pub mod smoothing;
@@ -19,6 +20,10 @@ pub mod fixture_clash;
 pub mod fixture_locate;
 pub mod fixture_struck;
 pub mod fixture_view;
+pub mod vise;
+pub mod accessory;
+pub mod plate;
+pub mod modvise;
 pub use camcraft_motion::finishing3d;
 pub use camcraft_geometry::geo2d;
 pub mod geometry;
@@ -34,6 +39,8 @@ pub mod machine;
 pub mod machined_classes;
 pub mod mcp;
 pub mod model;
+// #864: models imported coarser than the importer promises.
+pub mod model_fidelity;
 pub mod operation;
 pub mod pick;
 pub use camcraft_post::post;
@@ -48,6 +55,8 @@ pub mod project;
 pub mod recognize;
 // #182: the CPU rasteriser behind the MCP stock render.
 pub mod raster;
+// #877: the theme and colour-vision mode, kept per user (not per project).
+pub mod prefs;
 pub mod recent;
 pub mod rest;
 pub mod ribbon;
@@ -90,12 +99,19 @@ pub use camcraft_tools::tools;
 pub use camcraft_tools::orientation;
 // #93: the drawn spun profile of a milling holder.
 pub use camcraft_tools::spun;
+// #93 slice 2: the drawn cutter law, and the tool's stored drawn cutter.
+pub use camcraft_tools::cutter_profile;
+pub mod tool_cutter;
+// #793: the built-in taper holder library.
+pub use camcraft_tools::holder_library;
 // #368: a tool's modelled body and the reads the judging laws take from it.
 pub mod tool_body;
 // #371: the editor's placement preview and picks, the sim's posed body.
 pub mod tool_body_view;
 // #369: lathe-held tool bodies (the turning tool frame).
 pub mod tool_body_lathe;
+// #743: the simulated tool as the collision laws read it, revolved.
+pub mod sim_tool_body;
 pub mod units;
 pub use camcraft_sim::verify;
 // #261: the moves a cached path's warnings name.

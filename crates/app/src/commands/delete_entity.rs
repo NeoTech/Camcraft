@@ -14,6 +14,9 @@ pub struct DeleteEntity {
     name: String,
     location: Location,
     facets: Option<std::sync::Arc<[Triangle]>>,
+    /// #864: a reduced-fidelity model comes back flagged - an undo that
+    /// dropped the flag would loosen every verdict against it.
+    coarse_mm: Option<f64>,
     /// Non-`None` restores the `StockDef` component; `wcs` restores the
     /// `Wcs` tag. Together with the CAM components below they keep every
     /// kind of named entity undoable with its kind intact.
@@ -24,6 +27,8 @@ pub struct DeleteEntity {
     tool_number: Option<u32>,
     /// #368: a deleted tool's modelled body, restored with it on undo.
     tool_body: Option<crate::schema::ToolBody>,
+    /// #93: a tool's drawn cutter, restored with it.
+    tool_cutter: Option<camcraft_tools::spun::SpunProfile>,
     operation: Option<Operation>,
     operation_meta: Option<OperationMeta>,
     /// A Pause / Home entry of the operation list (#155), with its
@@ -38,6 +43,9 @@ pub struct DeleteEntity {
     /// they belong to (AGENTS.md: deleting frees, undoing must restore
     /// ALL associated resources - in both directions).
     path: Option<Toolpath>,
+    /// #819: a plate deleted from the tree lets go of its riders, the
+    /// way `DeleteFixture` does.
+    riders: crate::plate::mount::Unmounts,
 }
 
 impl DeleteEntity {
@@ -51,17 +59,20 @@ impl DeleteEntity {
             name: name.to_string(),
             location: model::transform_of(world, &entity).unwrap_or_default(),
             facets: model::facets_of(world, &entity),
+            coarse_mm: crate::model_fidelity::chord_of(world, &entity),
             stock: model::stock_def_of(world, &entity),
             wcs: model::is_wcs(world, &entity),
             tool: model::tool_of(world, &entity),
             tool_number: model::tool_number_of(world, &entity),
             tool_body: crate::tool_body::body_of(world, &entity),
+            tool_cutter: crate::tool_cutter::cutter_of(world, &entity),
             operation: model::operation_of(world, &entity),
             operation_meta: crate::program_entry::is_sequenced(world, &entity)
                 .then(|| model::operation_meta_of(world, &entity)),
             entry: crate::program_entry::entry_of(world, &entity),
             path: model::toolpath_of(world, &entity),
             fixture: crate::fixture::def_of(world, &entity),
+            riders: crate::plate::mount::Unmounts::of(world, name),
         })
     }
 }
@@ -71,9 +82,11 @@ impl Command for DeleteEntity {
         if let Some(entity) = model::find_by_name(world, &self.name) {
             model::remove(world, &entity);
         }
+        self.riders.write(world, true);
     }
 
     fn invert(&self, world: &World) {
+        self.riders.write(world, false);
         if model::find_by_name(world, &self.name).is_some() {
             return; // already restored (idempotent redo path)
         }
@@ -82,6 +95,7 @@ impl Command for DeleteEntity {
         if let Some(tris) = &self.facets {
             model::set_facets(world, &entity, tris.clone());
         }
+        crate::model_fidelity::set(world, &entity, self.coarse_mm);
         if let Some(shape) = &self.stock {
             entity
                 .entity_view(world)
@@ -95,6 +109,7 @@ impl Command for DeleteEntity {
                 .entity_view(world)
                 .set(ToolDef { tool: tool.clone(), number: self.tool_number });
             crate::tool_body::set_body(world, &entity, self.tool_body.as_ref());
+            crate::tool_cutter::set_cutter(world, &entity, self.tool_cutter.as_ref());
         }
         if let Some(operation) = &self.operation {
             entity.entity_view(world).set(operation.clone());
