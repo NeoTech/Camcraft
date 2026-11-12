@@ -32,7 +32,9 @@ pub mod carry;
 pub mod held;
 #[path = "stock_sim_breaks.rs"]
 pub mod breaks;
-pub use carry::{CARRY_MACHINE_CHANGE_REFUSAL, CARRY_MACHINE_REFUSAL, incoming_body};
+pub use carry::{
+    CARRY_MACHINE_CHANGE_REFUSAL, CARRY_MACHINE_REFUSAL, carry_machine_refusal, incoming_body, machine_kind_name,
+};
 pub use held::{CARRY_ENGINE_ENV, CARRY_ENGINE_SWITCH_HONOURED, FIELD_CARRY_SHAPE_REFUSAL, engine as carry_engine};
 pub use held::{engine_from_switch as carry_engine_from_switch, engine_note as carry_engine_note, with_engine as with_carry_engine};
 
