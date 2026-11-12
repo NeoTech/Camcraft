@@ -181,3 +181,15 @@ fn list_operation_types_says_the_wire_kind_mounts_no_tool() {
     assert_eq!(face["mounts_tool"], json!(true));
     assert!(face.get("note").is_none());
 }
+
+#[test]
+fn a_wire_contour_cannot_post_over_mcp_and_writes_no_file() {
+    let mut c = wire_job("post");
+    c.ok("add_operation", wire_args("C110"));
+    c.ok("generate", json!({ "name": "W" }));
+    let out = tmp_dir("post-out").join("wire.nc");
+    let why = c.refused("post", json!({ "output": out.display().to_string() }));
+    let low = why.to_lowercase();
+    assert!(low.contains("wire") || low.contains("edm"), "refusal names the wire cut: {why}");
+    assert!(!out.exists(), "a refused post writes no file");
+}
