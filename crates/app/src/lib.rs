@@ -51,6 +51,9 @@ pub mod path_sig;
 pub mod posting;
 // #530: the op-family door at post.
 mod posting_family;
+/// Which spindle a lathe post turns for a section, and the door that
+/// keeps a milling operation off the work spindle (#1190).
+pub mod lathe_voice;
 // #155: standalone Pause / Home entries in the operation list.
 pub mod program_entry;
 pub use camcraft_motion::plasma;
