@@ -31,8 +31,12 @@ pub struct SetStock {
     coarse_mm: Option<f64>,
     /// Stock's state before this command; `None` means the command creates
     /// the stock entity, so its inverse removes it.
-    prev: Option<(StockShape, Location, std::sync::Arc<[Triangle]>, Option<f64>)>,
+    prev: Option<Prev>,
 }
+
+/// A stock as it stood: shape, placement, facets and its own
+/// reduced-fidelity chord (#1056).
+type Prev = (StockShape, Location, std::sync::Arc<[Triangle]>, Option<f64>);
 
 impl SetStock {
     /// Validates against the world now. `location` places the stock; for
