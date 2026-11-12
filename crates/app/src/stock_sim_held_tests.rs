@@ -27,6 +27,7 @@ fn burn_moves() -> Vec<crate::cl::Move> {
         electrode_len: 30.0,
         feed: 40.0,
         gap: GAP,
+        stand: None,
     };
     burn_to_depth(&p).expect("burns").moves
 }
