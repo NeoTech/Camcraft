@@ -92,22 +92,20 @@ enum WorkSpeed {
 
 fn work_speed(world: &World, declared: Option<&str>, voice: WorkVoice, e: &flecs_ecs::prelude::Entity) -> WorkSpeed {
     use crate::lathe_voice::LatheVoice;
+    use crate::machine::Kind;
     let section = crate::lathe_voice::voice_of(world, e);
-    // A plain lathe has one spindle, and it holds the chuck: a milling
-    // script's S turns the work there too, and the lathe door does not
-    // fire for a milling script - so every plain section is judged, as
-    // for an undeclared one. Only widens what is judged (the safe
-    // direction); a mill-turn through a milling post drives the tool
-    // spindle and is not judged.
-    let voice = match (voice, crate::machine::kind_of_setup(world, declared)) {
-        (WorkVoice::ToolSpindle, crate::machine::Kind::Lathe) => WorkVoice::Undeclared,
-        (v, _) => v,
-    };
+    let kind = crate::machine::kind_of_setup(world, declared);
+    // A lathe or mill-turn has a work spindle holding the chuck.
+    let chucked = matches!(kind, Kind::Lathe | Kind::MillTurn);
     match (voice, section) {
-        (_, None) | (WorkVoice::ToolSpindle, _) => WorkSpeed::Not,
+        (_, None) => WorkSpeed::Not,
+        // A C section turns the work on C; only a milling post on a
+        // machine with no work spindle (a mill, or none) is spared -
+        // the engine refuses a live section there anyway.
+        (WorkVoice::ToolSpindle, Some(LatheVoice::LiveTool)) if !chucked => WorkSpeed::Not,
         (_, Some(LatheVoice::LiveTool)) => WorkSpeed::OnC,
         (WorkVoice::WorkSpindle, Some(LatheVoice::WorkSpindle)) => WorkSpeed::Stated,
-        // The door refuses it by name before a line is posted.
+        // The lathe door refuses it by name before a line is posted.
         (WorkVoice::WorkSpindle, Some(LatheVoice::Refused(_))) => WorkSpeed::Not,
         // A script that states no dialect (#1199): the lathe door does
         // not fire for it, so every plain section may reach the work
@@ -115,6 +113,20 @@ fn work_speed(world: &World, declared: Option<&str>, voice: WorkVoice, e: &flecs
         // stated. Whoever settles #1199 changes this arm together with
         // `lathe_voice::at_post`, which reads the same mask.
         (WorkVoice::Undeclared, Some(_)) => WorkSpeed::Stated,
+        // A milling post: its S drives the tool spindle - on a mill. On a
+        // lathe or mill-turn a work-spindle section (a turning kind, an
+        // on-centre drill) only cuts if the work turns, so it is judged
+        // at its rpm whatever the post calls itself (#1174 third review:
+        // a mill-turn's facing op through fanuc.cps posted `S3000 M3`
+        // under a 2000 rpm chuck). Judging only ever adds a refusal.
+        (WorkVoice::ToolSpindle, Some(LatheVoice::WorkSpindle)) if chucked => WorkSpeed::Stated,
+        // A plain lathe's one spindle holds the chuck, and the lathe
+        // door does not fire for a milling script: every plain section
+        // is judged there, as for an undeclared script.
+        (WorkVoice::ToolSpindle, Some(LatheVoice::Refused(_))) if kind == Kind::Lathe => WorkSpeed::Stated,
+        // A milling section (a mill-turn's live milling on the tool
+        // spindle) or any section on a mill: no chuck turns at that S.
+        (WorkVoice::ToolSpindle, Some(_)) => WorkSpeed::Not,
     }
 }
 

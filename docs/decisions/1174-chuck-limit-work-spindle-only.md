@@ -19,7 +19,10 @@ two shared readings and no list of kinds of its own:
 | turning (`fanuc-lathe.cps`, `tormach-lathe.cps`) | `WorkSpindle` (turning kinds, on-centre Drill) | the stated rpm: G97 refused by name above the limit, at it allowed; the G96 clamp min(machine, tool, chuck) untouched |
 | turning | `LiveTool` (moves state C) | the machine's C rate, max(C feed, C rapid) / 360; no C rate -> refused by name |
 | turning | `Refused` (milling kinds, off-centre or tilted drill, probe) | nothing - the lathe door refuses it by name before a line posts |
-| milling (`capabilities = 1`), on a mill or mill-turn | any | nothing: the S word drives the TOOL spindle, which no chuck holds. A workholding limit stated on such a setup has no effect on what that post writes |
+| milling (`capabilities = 1`), on a mill or no machine | any | nothing: the S word drives the TOOL spindle, which no chuck holds (turning kinds cannot be created there). A workholding limit stated on such a setup has no effect on what that post writes |
+| milling, on a MILL-TURN | `WorkSpindle` (turning kinds, on-centre Drill) | the stated rpm (third review: a facing op through `fanuc.cps` / `haas.cps` posted `S3000 M3` under a 2000 rpm chuck - main refused it). A turning pass only cuts if the work turns, so whatever the post calls itself its S turns the chuck |
+| milling, on a mill-turn | `LiveTool` | the C rate (the engine refuses a live section through a milling post anyway) |
+| milling, on a mill-turn | `Refused` (a milling section) | nothing - the tool spindle cuts; no chuck turns at that S |
 | milling, on a plain LATHE | any plain section | judged as undeclared (next row): a lathe's one spindle holds the chuck, so whatever the script calls itself its S turns the work, and the lathe door does not fire for a milling script |
 | undeclared (no mask; #1199) | `WorkSpindle` or `Refused` | the stated rpm - the stricter reading while a limit is stated (the door does not fire for it). Whoever settles #1199 changes this arm and `lathe_voice::at_post` together |
 | undeclared | `LiveTool` | the C rate, as above |
@@ -27,8 +30,12 @@ two shared readings and no list of kinds of its own:
 The dialect is the one of the script that RUNS: `post_script` /
 `post_mounts` with an explicit script judge every op by it; the gate and
 per-mount / per-op posts judge each op by its own setup's post. The
-machine's kind is no part of it except the plain-lathe row (which only
-widens). No machine mounted (or a mill) under a lathe post is judged like
+machine's kind enters only through the milling-post rows, and only to
+widen what is judged. Judging was chosen over a door that refuses turning
+kinds through a milling post: judging adds a refusal only when the speed
+is over the limit, while a door would refuse every turning op through a
+mill post on a mill-turn, limit stated or not - changing programs that
+post today. No machine mounted (or a mill) under a lathe post is judged like
 a lathe - the second review's fail-open.
 
 Refusal text prints whole rpm, or one decimal when the two numbers would
