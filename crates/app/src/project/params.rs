@@ -1015,6 +1015,9 @@ pub enum ParamsDto {
     /// like the probe - no format rung (a file holding one cannot have
     /// been written by a build without it).
     TrochoidalSlot(TrochoidDto),
+    /// The sinker burn (#541): an appended variant, like the probe - no
+    /// older file names it.
+    SinkerBurn(SinkerDto),
 }
 
 /// The angle an absent `ramp_angle` means: 45°, the ground the

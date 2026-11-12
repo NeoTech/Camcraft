@@ -471,6 +471,9 @@ fn post_script_body(world: &World, out_path: &Path, cps: &str, label: Option<&st
     // #388: the program's one machine (a program over several refuses).
     let mount = mounts::single(world, false)?;
     let streams = op_streams(world)?;
+    // No EDM dialect ships yet (#533, #542): an EDM program is refused
+    // here by name, before any file is written.
+    crate::posting_family::edm_at_post(world, streams.iter().map(|(n, _)| n.as_str()))?;
     // #1190: a turning dialect opens only what a lathe may run.
     crate::lathe_voice::at_post(world, streams.iter().map(|(n, _)| n.as_str()), cps, label)?;
     // #1232: and a post writes only for a machine kind it serves.
@@ -1029,6 +1032,7 @@ impl HeightRefs for OpParams {
             OpParams::Probe { clearance_z, .. } => vec![clearance_z],
             OpParams::PlasmaProfile(p) => vec![&p.clearance_z, &p.top_z, &p.bottom_z],
             OpParams::WireContour(p) => vec![&p.top_z, &p.bottom_z],
+            OpParams::SinkerBurn(p) => vec![&p.clearance_z, &p.top_z, &p.floor_z],
             OpParams::Face {
                 clearance_z,
                 cut_z,

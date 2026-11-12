@@ -144,6 +144,8 @@ fn feed_of(p: &OpParams) -> f64 {
         OpParams::PlasmaProfile(p) => p.feed.unwrap_or(0.0),
         // The wire's rate is the control's generator's (#532): no number.
         OpParams::WireContour(_) => 0.0,
+        // The sinker's servo feed down (#541).
+        OpParams::SinkerBurn(p) => p.feed,
     }
 }
 
@@ -218,6 +220,8 @@ fn plunge_of(p: &OpParams) -> f64 {
         OpParams::PlasmaProfile(p) => p.feed.unwrap_or(0.0),
         // The wire's rate is the control's generator's (#532): no number.
         OpParams::WireContour(_) => 0.0,
+        // The sinker's servo feed down (#541).
+        OpParams::SinkerBurn(p) => p.feed,
     }
 }
 
@@ -291,7 +295,7 @@ fn climb_of(p: &OpParams) -> bool {
         // The wall ride and the helix choose their flank: the climb
         // number says which way the circle runs (M2.4 C).
         OpParams::Bore { climb, .. } | OpParams::Thread { climb, .. } => *climb,
-        OpParams::Probe { .. } | OpParams::PlasmaProfile(_) | OpParams::WireContour(_) => false,
+        OpParams::Probe { .. } | OpParams::PlasmaProfile(_) | OpParams::WireContour(_) | OpParams::SinkerBurn(_) => false,
     }
 }
 
@@ -374,7 +378,7 @@ fn stepover_of(p: &OpParams) -> Option<f64> {
         // One ride per exposed edge is the deburr answer: the model's
         // own edges are the pattern, nothing tiles (M2.5 E B).
         | OpParams::Deburr { .. } => None,
-        OpParams::Probe { .. } | OpParams::PlasmaProfile(_) | OpParams::WireContour(_) => None,
+        OpParams::Probe { .. } | OpParams::PlasmaProfile(_) | OpParams::WireContour(_) | OpParams::SinkerBurn(_) => None,
     }
 }
 
@@ -451,7 +455,7 @@ fn stepdown_of(p: &OpParams) -> Option<f64> {
         // between the clearance plane and the edge there is no
         // infeed ladder to step (M2.5 E B).
         OpParams::Deburr { .. } => None,
-        OpParams::Probe { .. } | OpParams::PlasmaProfile(_) | OpParams::WireContour(_) => None,
+        OpParams::Probe { .. } | OpParams::PlasmaProfile(_) | OpParams::WireContour(_) | OpParams::SinkerBurn(_) => None,
     }
 }
 
@@ -521,6 +525,8 @@ pub fn top_of(p: &OpParams) -> Option<Height> {
         OpParams::PlasmaProfile(p) => Some(p.top_z),
         // The wire's profile plane: the workpiece's top (#532).
         OpParams::WireContour(p) => Some(p.top_z),
+        // The work top the sinker's depth may be read from (#541).
+        OpParams::SinkerBurn(p) => Some(p.top_z),
     }
 }
 
@@ -599,6 +605,8 @@ pub fn bottom_of(p: &OpParams) -> Option<Height> {
         OpParams::PlasmaProfile(p) => Some(p.bottom_z),
         // The lower programmed plane the wire's moves ride (#532).
         OpParams::WireContour(p) => Some(p.bottom_z),
+        // The cavity floor datum no burn passes (#541).
+        OpParams::SinkerBurn(p) => Some(p.floor_z),
     }
 }
 
@@ -675,7 +683,7 @@ fn retract_of(p: &OpParams) -> Option<Height> {
         // The deburr ride hops every run to the clearance plane -
         // the kernel's own word, no between-run plane authored (M2.5 E B).
         | OpParams::Deburr { .. } => None,
-        OpParams::Probe { .. } | OpParams::PlasmaProfile(_) | OpParams::WireContour(_) => None,
+        OpParams::Probe { .. } | OpParams::PlasmaProfile(_) | OpParams::WireContour(_) | OpParams::SinkerBurn(_) => None,
     }
 }
 
@@ -1613,13 +1621,15 @@ pub enum Section {
     Plasma,
     /// The wire EDM's work (#532, #290): the wire's through-cuts.
     WireEdm,
+    /// The sinker EDM's work (#541): an electrode burned down Z.
+    Sinker,
 }
 
 impl Section {
     /// The catalog's order, which is the ribbon's: the sections appear
     /// left to right in exactly this sequence, each one's kinds in the
     /// registry's own order (the row order is the product order).
-    pub const ORDER: [Section; 7] = [
+    pub const ORDER: [Section; 8] = [
         Section::Mill2D,
         Section::Mill3D,
         Section::Drilling,
@@ -1627,6 +1637,7 @@ impl Section {
         Section::Turning,
         Section::Plasma,
         Section::WireEdm,
+        Section::Sinker,
     ];
 
     #[must_use]
@@ -1639,6 +1650,7 @@ impl Section {
             Section::Turning => "Turning",
             Section::Plasma => "Plasma",
             Section::WireEdm => "Wire EDM",
+            Section::Sinker => "Sinker EDM",
         }
     }
 
@@ -1651,6 +1663,7 @@ impl Section {
             Section::Turning => Family::Turn,
             Section::Plasma => Family::Plasma,
             Section::WireEdm => Family::WireEdm,
+            Section::Sinker => Family::Sinker,
             _ => Family::Mill,
         }
     }
@@ -1712,6 +1725,9 @@ pub enum Family {
     /// The wire EDM's work (#532): admitted on a wire EDM only - the
     /// wire and its spark gap are that machine's condition table.
     WireEdm,
+    /// The sinker EDM's electrode work (#541): admitted on a sinker
+    /// EDM only.
+    Sinker,
 }
 
 impl Family {
@@ -1729,6 +1745,7 @@ impl Family {
                 | (Family::Turn, Kind::Lathe)
                 | (Family::Plasma, Kind::Plasma)
                 | (Family::WireEdm, Kind::WireEdm)
+                | (Family::Sinker, Kind::SinkerEdm)
         )
     }
 
@@ -1740,6 +1757,7 @@ impl Family {
             Family::Turn => "turning",
             Family::Plasma => "plasma cutting",
             Family::WireEdm => "wire EDM",
+            Family::Sinker => "sinker EDM",
         }
     }
 
@@ -1751,6 +1769,7 @@ impl Family {
             Family::Turn => "lathe",
             Family::Plasma => "plasma table",
             Family::WireEdm => "wire EDM",
+            Family::Sinker => "sinker EDM",
         }
     }
 }
@@ -2347,6 +2366,21 @@ impl KindInfo {
             // condition (#531), its one source.
             tool_kinds: tk::NO_TOOL,
         },
+        KindInfo {
+            ty: OpType::SinkerBurn,
+            label: "Sinker Burn",
+            caption: "Sinker Burn",
+            tag: 42,
+            // The electrode burns straight down Z: the milling laws
+            // (tangency, reach, depth) have no electrode to judge, so
+            // they stand down as for the centre-line ride; the burn's
+            // own door refuses a depth past the floor datum by name and
+            // the stock sim's box atom verifies the plunge (#290 D7).
+            mode: Mode::Engrave,
+            section: Section::Sinker,
+            seed: super::sinker_op::seed_sinker_burn,
+            tool_kinds: tk::ELECTRODE,
+        },
     ];
 
     /// Whose machine this kind drives - read off the row's section
@@ -2422,6 +2456,7 @@ pub const ALL_LABELS: [&str; KIND_COUNT] = [
     KindInfo::ALL[39].label,
     KindInfo::ALL[40].label,
     KindInfo::ALL[41].label,
+    KindInfo::ALL[42].label,
 ];
 
 impl OpType {
@@ -2487,6 +2522,8 @@ impl OpType {
             OpType::TrochoidalSlot => 40,
             // #532: the wire contour appends - the wire EDM's section.
             OpType::WireContour => 41,
+            // #541: the sinker burn appends (stored ids never move).
+            OpType::SinkerBurn => 42,
         }
     }
 
