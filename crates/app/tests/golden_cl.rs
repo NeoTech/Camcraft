@@ -2,7 +2,7 @@
 //! testing rule made concrete. Format, naming and the regeneration
 //! workflow: tests/golden/CLAUDE.md.
 //!
-//! Gate map (M4.4): covers app::cl, app::drilling, app::finishing3d, app::geo2d, app::geometry, app::machining2d, app::tools.
+//! Gate map (M4.4): covers cl::cl, motion::drilling, motion::finishing3d, geometry::geo2d, app::geometry, motion::machining2d, tools::tools.
 
 
 mod common;
@@ -474,6 +474,7 @@ fn cycle_tool(kind: ToolKind, diameter: f64, tip_angle: f64, pitch: f64) -> Tool
         tool_material: None,
         flutes: None,
         orientation: None,
+        turning: None,
     }
 }
 

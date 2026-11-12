@@ -142,6 +142,7 @@ pub fn thread_world_with(inch: bool, hand: ThreadHand, pitch: f64, depth: f64) -
         infeed: 0.4,
         feed: 120.0,
         plunge_feed: 40.0,
+        infeed_plan: Default::default(),
         hand,
     };
     create(&world, &mut history, "TH1", "TD-1732-60", params);
