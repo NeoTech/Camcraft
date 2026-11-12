@@ -151,7 +151,7 @@ cargo test --release -p camcraft-app -p camcraft-motion -- --ignored   # slow ve
 ```
 
 Golden toolpath and G-code outputs live under each crate's `tests/golden/`.
-Gates run locally through `scripts/gate.ps1` (see Contributing). GitHub
+Gates run locally through `cargo xtask gate` (see Contributing). GitHub
 Actions runs only on a pushed release tag; the CI and nightly workflows in
 `.github/workflows/` are manual.
 
@@ -195,30 +195,34 @@ version.
   (generated, never committed or hand-edited). Agents query it before
   grepping (`graphify query "<question>"`) and refresh it after code changes
   (`graphify update`).
-- **`scripts/gate.ps1`** runs the test gates: `-Tier quick` per change,
-  `-Tier batch` before a batch of commits, `-Tier release` at a release cut,
-  and `-Test <name>` for a single test.
-- **`scripts/gate.sh`** is its bash twin for macOS and Linux (works with
-  the bash 3.2 macOS ships): `scripts/gate.sh quick [base]`,
-  `scripts/gate.sh batch`, `scripts/gate.sh release` and
-  `scripts/gate.sh test <name> [crate] [--exact] [--ignored]`. Its quick
-  tier is coarser than the PowerShell one: it runs every suite of each
-  crate the diff touches (slow suites included), rather than only the
-  changed test functions. For the finer quick tier on macOS or Linux,
-  `gate.ps1` also runs under PowerShell 7: `pwsh scripts/gate.ps1 -Tier
-  quick` (`brew install --cask powershell` on macOS).
+- **`cargo xtask gate`** runs the test gates, the same on Windows, macOS
+  and Linux (the `xtask/` crate; nothing to install beyond cargo):
+  `cargo xtask gate quick` per change (only the test functions and suites
+  the diff touches), `cargo xtask gate batch` before a batch of commits,
+  `cargo xtask gate release` at a release cut, and
+  `cargo xtask gate test <name> [--crate c] [--exact]` for a single test.
+  `--dry-run` prints the plan without running it. `cargo xtask decisions
+  --version X.Y.Z` gathers the decision files at a cut.
+- **`scripts/gate.ps1`** (`-Tier quick`, `-Test <name>`, ...) and
+  **`scripts/gate.sh`** (`quick [base]`, `test <name> [crate] [--exact]`,
+  ...) are thin wrappers over `cargo xtask gate`, kept so the old commands
+  still work.
 - Project agents and skills for Claude Code live in `.claude/agents/` and
   `.claude/skills/` (gate runner, graph updater, PR reviewer).
 
 ### Issues
 
-Work is the open GitHub issues, picked by priority: `P0` (wrong output,
-gouge, crash, data loss), then `P1` (wrong behaviour a user hits), then `P2`
-(owed polish), oldest first. Each issue carries one `P*` label and one or
+Work is the open GitHub issues, picked by priority, `P1` to `P9`, lowest
+number first and oldest first within a number: `P1` is wrong output, gouge,
+crash or data loss; `P2` a broken main; `P3` wrong behaviour a user hits;
+`P4` work the maintainer asked for; `P5` agent surface and tooling; `P6`
+accepted enhancements; `P7` owed polish; `P8` ideas needing research; `P9`
+someday (AGENTS.md "Priorities" has the table). `P1`-`P3` are defects only.
+Each issue carries one `P*` label and one or
 more `area:*` labels. Issues opened by an agent also carry `source:agent`.
 
 **`P?` means paused.** The maintainer puts `P?` on an issue (in place of
-`P0`/`P1`/`P2`) to hold it: nobody picks it up, claims it or changes its
+`P1`..`P9`) to hold it: nobody picks it up, claims it or changes its
 priority until the maintainer swaps `P?` for a real priority or closes it.
 Comments with relevant facts (a duplicate, a related fix) are still
 welcome.
@@ -255,9 +259,9 @@ sub-issues are picked up like any other issue.
   (or `none` for docs and tests). It ends with `Fixes #N`, or `Refs #N` for
   partial work. Do not edit `CHANGELOG.md` in the PR; rows are written at
   release time.
-- Gate it locally before asking for review:
-  `powershell -File scripts/gate.ps1 -Tier quick` on Windows, or
-  `scripts/gate.sh quick` on macOS and Linux.
+- Gate it locally before asking for review: `cargo xtask gate quick` (any
+  OS; `scripts/gate.ps1 -Tier quick` and `scripts/gate.sh quick` forward to
+  it).
 - Follow the engineering rules in `AGENTS.md`: the clean-room protocol, never
   crash and never gouge (no `unwrap`, `expect` or `panic!` outside tests;
   refuse bad input by name), every UI change as an undoable command, files
@@ -275,7 +279,7 @@ only when one of these holds:
    - **Mergeable** - it merges cleanly with current `main` (merge `main`
      in and re-test if not);
    - **Tested** - the quick gate is green on its final commit
-     (`scripts/gate.ps1 -Tier quick` / `scripts/gate.sh quick`), with the
+     (`cargo xtask gate quick`), with the
      pinning tests named in the description;
    - **Complete description** - what changed, how it was tested, what was
      *not* exercised, a `Changelog:` line, and `Fixes #N` / `Refs #N` when
@@ -342,6 +346,19 @@ be resolved; only merge commits are allowed.
   is 0, breaking bumps the minor). Each issue gets a `shipped in vX.Y.Z`
   comment when its release is published. Only `vX.Y.0` tags (and manual
   runs) build the release artifact on GitHub.
+
+## Supporting the project
+
+The best way to support CamCraft is to point your coding agent at it. Pick an
+open issue, or a pull request that needs work or a review, and let your agent
+take it through the process described under [Contributing](#contributing).
+Every fixed issue and every reviewed PR moves the project forward.
+
+If you'd rather support it another way, you can
+[chip in here](https://buy.stripe.com/8x2dR93Up10S6eP0FO4c800) or use the
+**Sponsor** button at the top of the repository page. Contributions go
+toward more agent subscriptions, which means more agents working through the
+issue list.
 
 ## License
 

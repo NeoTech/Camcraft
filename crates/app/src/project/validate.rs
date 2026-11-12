@@ -15,6 +15,14 @@ pub(super) fn validate_kind(dto: &EntityDto, kind: EntityKind) -> Result<(), Pro
         )));
     }
     super::program_entry_dto::validate(dto, kind)?; // #155
+    // #1054: a recorded STEP facet budget rides a model row only, inside
+    // the bounds an import would accept.
+    if let Some(b) = dto.facet_budget {
+        if !matches!(kind, EntityKind::Model) {
+            return Err(corrupt(format!("'{}' records a STEP facet budget but is not a model", dto.name)));
+        }
+        crate::geometry::import::step_budget::check(b).map_err(|e| corrupt(format!("'{}': {e}", dto.name)))?;
+    }
     match kind {
         EntityKind::Entry => {}
         EntityKind::Model => {
@@ -119,7 +127,7 @@ pub(super) fn validate_kind(dto: &EntityDto, kind: EntityKind) -> Result<(), Pro
         EntityKind::Tool => {
             if is_furniture_name(&dto.name) {
                 return Err(corrupt(format!(
-                    "'{}' is reserved for setup furniture, not a tool",
+                    "'{}' is reserved for the setup's stock or work offsets, not a tool",
                     dto.name
                 )));
             }
@@ -155,6 +163,11 @@ pub(super) fn validate_kind(dto: &EntityDto, kind: EntityKind) -> Result<(), Pro
                 let body = b.to_body(&dto.name).map_err(corrupt)?;
                 crate::tool_body::fits(&tool.to_tool(), &body)
                     .map_err(|e| corrupt(format!("tool '{}': {e}", dto.name)))?;
+            }
+            // #93: a drawn cutter agrees with the tool's numbers, or
+            // the file refuses by name.
+            if let Some(c) = &tool.cutter {
+                super::tool_body_wire::cutter_from_dto(&tool.to_tool(), c, &dto.name).map_err(corrupt)?;
             }
         }
         EntityKind::Operation => {
@@ -269,7 +282,7 @@ pub(super) fn validate_kind(dto: &EntityDto, kind: EntityKind) -> Result<(), Pro
             };
             if s.stock.is_empty() || wcs_empty {
                 return Err(corrupt(format!(
-                    "'{}' has an empty furniture name",
+                    "'{}' has an empty stock or work-offset name",
                     dto.name
                 )));
             }

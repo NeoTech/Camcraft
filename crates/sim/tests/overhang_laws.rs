@@ -47,7 +47,7 @@ fn mv(kind: MoveKind, from: Point3, to: Point3) -> Move {
 }
 
 fn path(moves: Vec<Move>) -> Toolpath {
-    Toolpath { moves, cycles: Vec::new(), notes: Vec::new(), comps: Vec::new(), threads: Vec::new(), probes: Vec::new(), breaks: Vec::new() }
+    Toolpath { moves, cycles: Vec::new(), notes: Vec::new(), comps: Vec::new(), threads: Vec::new(), probes: Vec::new(), breaks: Vec::new(), plasma: None }
 }
 
 /// A post X/Y [-5, 5], Z [0, 10] carrying a ledge X [-5, 15], Y [-5, 5],
@@ -79,6 +79,7 @@ fn judge(p: &Toolpath, facets: &[Triangle], tool: &ToolGeom) -> Vec<Warning> {
         finish_tol: None,
         fixtures: &[],
         spindle: None,
+        ..Default::default()
     };
     verify(p, &cx)
 }
@@ -238,6 +239,7 @@ fn a_2d_path_without_a_model_is_unchanged() {
         finish_tol: None,
         fixtures: &[],
         spindle: None,
+        ..Default::default()
     };
     let w = verify(&rapid_cleared(5.0), &cx);
     assert!(w.is_empty(), "{w:?}");
@@ -263,6 +265,7 @@ fn judge_2d(p: &Toolpath, tool: &ToolGeom) -> Vec<Warning> {
         finish_tol: None,
         fixtures: &[],
         spindle: None,
+        ..Default::default()
     };
     verify(p, &cx)
 }
@@ -342,6 +345,8 @@ fn judge_ball(p: &Toolpath, facets: &[Triangle]) -> Vec<Warning> {
         shank_len: tool.shank_len,
         holder_radius: tool.holder_radius,
         holder_len: tool.holder_len,
+        body: None,
+        neck: None,
     };
     let cx = VerifyContext {
         region: &region,
@@ -358,6 +363,7 @@ fn judge_ball(p: &Toolpath, facets: &[Triangle]) -> Vec<Warning> {
         finish_tol: None,
         fixtures: &[],
         spindle: None,
+        ..Default::default()
     };
     verify(p, &cx)
 }

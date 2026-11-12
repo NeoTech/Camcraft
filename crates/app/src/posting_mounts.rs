@@ -177,7 +177,7 @@ fn post_mounts_with(world: &World, out_path: &Path, cps: Option<&str>) -> Result
         let mount = mounts.into_iter().next().unwrap_or_else(|| active(world));
         return Ok(vec![PostedMount { path: out_path.to_path_buf(), mount, posted }]);
     }
-    let started = std::time::Instant::now();
+    let started = crate::clock::Instant::now();
     let posted = post_each(world, out_path, cps, mounts);
     match &posted {
         Ok(files) => tracing::info!(
@@ -201,6 +201,14 @@ fn post_each(world: &World, out_path: &Path, cps: Option<&str>, mounts: Vec<Moun
         });
     }
     let streams = op_streams(world)?;
+    // #1190: each mount's own script opens only what a lathe may run.
+    for (m, cps) in mounts.iter().zip(&scripts) {
+        let own = streams
+            .iter()
+            .map(|(name, _)| name.as_str())
+            .filter(|name| model::find_by_name(world, name).is_some_and(|e| member(world, &e, &m.setups)));
+        crate::lathe_voice::at_post(world, own, cps)?;
+    }
     let mut report = verification_report(world);
     for m in &mounts {
         report.problems.extend(wcs_slot::shared_word_problems_in(world, Some(&m.setups)));

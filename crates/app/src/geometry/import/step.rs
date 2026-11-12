@@ -24,17 +24,85 @@ use truck_stepio::r#in::Table;
 use super::{ImportError, MAX_FACETS};
 use crate::geometry::{Mesh, Point3, Triangle};
 
-/// Lower bound for tessellation tolerance; truck asserts tol >= 1e-7.
-const MIN_TOL: f64 = 1e-6;
+/// Lower bound for tessellation tolerance, in the FILE's length unit
+/// (the unit truck meshes in): ten times truck's own `TOLERANCE` (1e-6,
+/// also in model units), which it welds vertices at. Meshing within a
+/// few of those split the metre-unit AP214 sample into a non-manifold
+/// body (at 5e-6 m, #689); 1e-5 keeps it whole. For a millimetre or inch
+/// file it never binds; a metre file stops at 1e-5 m = 0.01 mm, short of
+/// the 0.005 mm cap, and the import logs it as reduced fidelity.
+const MIN_TOL: f64 = 1e-5;
+/// The coarsest chord tolerance a STEP mesh is made at, in MILLIMETRES:
+/// half the program sim's verdict tolerance, so the facets' sagitta on a
+/// curved wall stays inside what the gouge verdict already forgives
+/// (#689). The mesh is made in the file's unit and scaled to mm after,
+/// so `shell_facets` divides this by the file's mm-per-unit.
+const MAX_CHORD: f64 = crate::stock_sim::DEV_TOL * 0.5;
+
+/// The finest chord tolerance the STEP importer promises (mm); a model
+/// tessellated coarser than this is "reduced fidelity" (#864).
+pub const CHORD_CAP: f64 = MAX_CHORD;
+
+/// The chord error of a kept mesh when it is coarser than the importer
+/// promises, else `None` (#864). A nanometre of slack: an inch or metre
+/// file's cap is divided into the file's unit and multiplied back, and
+/// that round trip must not flag a mesh that met the promise.
+#[must_use]
+pub fn coarse(chord_mm: f64) -> Option<f64> {
+    (chord_mm.is_finite() && chord_mm > CHORD_CAP + 1e-9).then_some(chord_mm)
+}
+
+thread_local! {
+    /// Test-only override of the facet budget (#864's pins force a small
+    /// STEP fixture over budget instead of committing a huge model).
+    static BUDGET_OVERRIDE: std::cell::Cell<Option<usize>> = const { std::cell::Cell::new(None) };
+}
+
+/// Run `f` with the STEP facet budget lowered to `budget` on this thread.
+/// Never raises the budget an import asked for. For tests; the override
+/// is cleared on return.
+#[doc(hidden)]
+pub fn with_facet_budget<R>(budget: usize, f: impl FnOnce() -> R) -> R {
+    BUDGET_OVERRIDE.with(|b| b.set(Some(budget)));
+    let out = f();
+    BUDGET_OVERRIDE.with(|b| b.set(None));
+    out
+}
+
+fn facet_budget(asked: usize) -> usize {
+    BUDGET_OVERRIDE.with(std::cell::Cell::get).map_or(asked, |b| b.min(asked))
+}
 
 pub fn parse(data: &[u8]) -> Result<Mesh, ImportError> {
+    parse_with_chord(data).map(|(mesh, _)| mesh)
+}
+
+/// [`parse_with_chord`] under the default budget, [`MAX_FACETS`].
+pub fn parse_with_chord(data: &[u8]) -> Result<(Mesh, f64), ImportError> {
+    parse_with_chord_budget(data, MAX_FACETS)
+}
+
+/// [`parse`], and the chord error the kept mesh was actually made at, in
+/// millimetres: the coarsest kept tolerance over all shells, scaled by the
+/// file's length unit (#864). Never NaN, infinite or negative - such a
+/// value is refused as a corrupt import, not carried into a verdict.
+/// `budget` caps the whole model's facets (#1054: the caller checked it
+/// against `step_budget`'s bounds).
+pub fn parse_with_chord_budget(data: &[u8], budget: usize) -> Result<(Mesh, f64), ImportError> {
+    super::step_depth::check(data)?; // #1075: refuse before ruststep can overflow
     if data.is_empty() {
         return Err(ImportError::Empty);
     }
     let text = std::str::from_utf8(data)
         .map_err(|_| ImportError::Step("file is not valid UTF-8".into()))?;
-    let exchange = ruststep::parser::parse(text)
-        .map_err(|e| ImportError::Step(format!("syntax error: {e}")))?;
+    let exchange = ruststep::parser::parse(text).map_err(|e| {
+        // #912: ruststep fails the whole DATA section at once and its
+        // position is not the bad entity; re-scan to name it.
+        ImportError::Step(match super::step_diag::locate(text) {
+            Some(found) => found.to_string(),
+            None => format!("syntax error: {e}"),
+        })
+    })?;
     // An exchange with zero DATA sections parses fine but would index out of
     // bounds inside truck's convenience helpers; guard the only raw index.
     let Some(section) = exchange.data.first() else {
@@ -50,29 +118,32 @@ pub fn parse(data: &[u8]) -> Result<Mesh, ImportError> {
         return Err(ImportError::Step("no shells found".into()));
     }
 
+    let max_facets = facet_budget(budget);
     let mut facets: Vec<Triangle> = Vec::new();
+    let mut chord = 0.0f64;
     for shell in table.shell.values() {
-        if facets.len() >= MAX_FACETS {
+        if facets.len() >= max_facets {
             return Err(ImportError::TooLarge);
         }
-        let budget = MAX_FACETS - facets.len();
+        let budget = max_facets - facets.len();
         // The whole per-shell kernel sequence runs inside one guarded call.
         // Everything it touches is shared-immutable or thread-local, so
         // AssertUnwindSafe holds for our purposes: on a panic we discard all
         // outputs and abort the import.
         let per_shell = std::panic::catch_unwind(AssertUnwindSafe(|| {
-            shell_facets(&table, shell, budget)
+            shell_facets(&table, shell, budget, mm_per_unit.unwrap_or(1.0))
         }));
-        let tris = match per_shell {
+        let (tris, tol) = match per_shell {
             Err(_) => {
-                eprintln!("step: truck kernel panicked on a shell; import aborted");
+                tracing::error!("step: truck kernel panicked on a shell; import aborted");
                 return Err(ImportError::Step(
                     "geometry kernel failed on a shell (degenerate or unclosed B-rep)".into(),
                 ));
             }
             Ok(Err(err)) => return Err(err),
-            Ok(Ok(tris)) => tris,
+            Ok(Ok(kept)) => kept,
         };
+        chord = chord.max(tol);
         facets.extend(tris);
     }
     if facets.is_empty() {
@@ -86,17 +157,24 @@ pub fn parse(data: &[u8]) -> Result<Mesh, ImportError> {
         for t in &mut facets {
             *t = Triangle::new(mm(t.a), mm(t.b), mm(t.c));
         }
+        chord *= k.abs();
     }
-    Ok(Mesh::from_facets(facets))
+    if !(chord.is_finite() && chord >= 0.0) {
+        return Err(ImportError::Step(format!("tessellation reported a chord error of {chord} mm")));
+    }
+    Ok((Mesh::from_facets(facets), chord))
 }
 
 /// Tessellate one STEP shell into triangles, staying inside `budget` facets.
+/// The triangles are in the file's length unit; `mm_per_unit` (millimetres
+/// in one of them) only converts the mm chord cap into that unit.
 /// Runs inside `catch_unwind`; returns `Err` only for reasons we control.
 fn shell_facets(
     table: &Table,
     shell: &truck_stepio::r#in::ShellHolder,
     budget: usize,
-) -> Result<Vec<Triangle>, ImportError> {
+    mm_per_unit: f64,
+) -> Result<(Vec<Triangle>, f64), ImportError> {
     let cshell = table
         .to_compressed_shell(shell)
         .map_err(|e| ImportError::Step(format!("shell conversion failed: {e}")))?;
@@ -147,49 +225,45 @@ fn shell_facets(
         Ok(facets)
     };
     // Quality target: ~0.1% of the model extent, floored so tiny parts still
-    // subdivide and truck's assert (tol >= 1e-7) holds.
-    let tol_target = (extent * 1e-3).max(MIN_TOL);
+    // subdivide and truck's assert (tol >= 1e-7) holds - and never coarser
+    // than half the program gate's verdict tolerance (#689). The sim judges
+    // the program against these facets, and on a concave wall a chord
+    // stands inside the true surface by its sagitta: a mesh coarser than
+    // the verdict charged a bore at the hole's own size as a gouge the
+    // wall's full height. Half the verdict leaves the other half for the
+    // cut itself, so a nominal finish passes and 0.05 mm into the wall is
+    // still a gouge. The facet budget below still bounds the mesh.
+    //
+    // Units: `extent`, `tol` and `tol_target` are in the FILE's length unit
+    // (truck meshes there; `parse` scales to mm after). `extent * 1e-3` is
+    // relative, so it needs no conversion; the mm cap does - an inch file
+    // capped at a bare 0.005 got 0.005 in = 0.127 mm chords (#689).
+    // `mm_per_unit` comes from step_units, which reads only positive
+    // finite units; anything else falls back to millimetres.
+    let k = if mm_per_unit.is_finite() && mm_per_unit > 0.0 { mm_per_unit } else { 1.0 };
+    let max_chord = MAX_CHORD / k;
+    // `wanted` is the target before truck's floor: a unit so large that
+    // 0.005 mm is under MIN_TOL of it (the kilometre: 5e-9 km) can't be
+    // meshed that fine, and the log below says so instead of passing.
+    let wanted = (extent * 1e-3).min(max_chord);
+    // min/max, not clamp: a NaN extent then lands on a finite target
+    // instead of carrying NaN into truck's tolerance assert.
+    #[allow(clippy::manual_clamp)]
+    let tol_target = wanted.max(MIN_TOL);
     // Start 250x coarser than the target - the first pass then costs a few
     // dozen triangles per face no matter how big the model, so no shell can
-    // silently allocate a monster mesh before we have measured it.
-    let mut tol = (extent * 0.25).max(tol_target);
-    let mut refined = loop {
-        match triangulate(tol) {
-            Ok(tris) => break tris,
-            // Face count alone can overflow the budget; coarsen up to a
-            // bounded cap. tol grows strictly each retry, so this ends.
-            Err(ImportError::TooLarge) => {
-                if tol >= extent * 16.0 {
-                    return Err(ImportError::TooLarge);
-                }
-                tol = (tol * 4.0).min(extent * 16.0);
-            }
-            Err(err) => return Err(err),
-        }
-    };
-    // Refine toward the target: halving the tolerance at most quadruples the
-    // count, so a pass is taken only while the projected mesh stays within
-    // budget/2. The loop ends at the target, at the budget, or at the pass
-    // cap - never on a panicking or unbounded path.
-    for _ in 0..24 {
-        if tol <= tol_target || refined.len() > budget / 8 {
-            break;
-        }
-        tol = (tol * 0.5).max(tol_target);
-        match triangulate(tol) {
-            Ok(tris) => refined = tris,
-            // Should not happen (the projection bounds it); if truck's
-            // density does not follow the tol^-2 law, keep the last mesh
-            // that fit rather than failing the import.
-            Err(ImportError::TooLarge) => break,
-            Err(err) => return Err(err),
-        }
-    }
-    if tol > tol_target {
-        eprintln!(
-            "step: tessellated at reduced fidelity (tol {tol:e}, target {tol_target:e}, {} facets) to bound memory",
-            refined.len()
+    // silently allocate a monster mesh before we have measured it. The
+    // schedule (coarse start, halving toward the target inside the budget)
+    // lives in `step_refine`, which also keeps the tolerance of the mesh
+    // it actually kept (#864).
+    let kept = super::step_refine::refine(extent, tol_target, budget, triangulate)?;
+    if kept.tol > wanted {
+        tracing::warn!(
+            "step: tessellated at reduced fidelity (tol {:e} mm, target {:e} mm, {} facets) - bounded by memory or by the kernel's least tolerance",
+            kept.tol * k,
+            wanted * k,
+            kept.facets.len()
         );
     }
-    Ok(refined)
+    Ok((kept.facets, kept.tol))
 }

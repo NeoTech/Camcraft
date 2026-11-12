@@ -8,7 +8,7 @@
 //! the `.mch` layout of `assets/machines/AGENTS.md`.
 //! Provenance: our own tests, specced from the issue's "Done means".
 //!
-//! Gate map (M4.4): covers app::machine::draft, app::machine::fields, app::machine::store, app::machine::library.
+//! Gate map (M4.4): covers app::machine, post::machine::draft, app::machine, post::machine::fields, app::machine, post::machine::store, app::machine, post::machine::library.
 
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
@@ -168,7 +168,7 @@ fn live_tool_codes_are_all_four_or_none() {
 
 #[test]
 fn every_blank_kind_starts_with_its_required_keys_and_validates() {
-    for (k, axes) in [(Kind::Mill, "XYZ"), (Kind::Lathe, "XZ"), (Kind::MillTurn, "XYZC")] {
+    for (k, axes) in [(Kind::Mill, "XYZ"), (Kind::Lathe, "XZ"), (Kind::MillTurn, "XYZC"), (Kind::Plasma, "XYZ")] {
         let m = MachineDraft::blank(k);
         assert!(m.refusals().is_empty(), "{k:?}: {:?}", m.refusals());
         assert!(m.path.is_none() && !m.read_only && m.dirty);

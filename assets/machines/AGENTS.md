@@ -27,10 +27,10 @@ unstated capability into existence.
       "general":    { "model": "...", "vendor": "Camcraft", "kind": "mill" },
       "kinematics": { "default": { "units": {...}, "parts": [ ... ] } },
       "controller": { "synced_configuration": { "parts": { "X": {...} } } },
-      "tooling":    { "number_of_tools": N }
+      "tooling":    { "number_of_tools": N, "spindle_mount": "BT30", "default_holder": "BT30 ER20" }
     }
 
-- `general.kind` ∈ `mill` | `lathe` | `mill-turn`. The DECLARATION
+- `general.kind` ∈ `mill` | `lathe` | `mill-turn` | `plasma` | `wire_edm` | `sinker_edm`. The DECLARATION
   outranks the axis inventory (`kind()` checks the word first; an
   unknown word REFUSES the file at the door — never a silent demotion
   to inference). The inference, when no kind is stated: Y + a TURNING
@@ -40,6 +40,57 @@ unstated capability into existence.
   — the same tilt test the RTCP judgment and `can_tilt` read, one law
   at three sites): an XYZ machine with A/B trunnions or a tilt head is
   a MILL whose axes can lean, not a mill-turn.
+- `wire_edm` / `sinker_edm` (#530, part of #290) are DECLARED only: no
+  axis inventory infers an EDM. A wire machine needs X and Y (U and V,
+  the upper guide, add taper); a sinker needs Z. Neither has a spindle
+  or coolant - the head is the guides or the ram. No milling or turning
+  op is admitted on either (`Family::admits`), and since #530 the post
+  refuses by name an op whose setup's machine cannot run it, even when
+  the machine was mounted after the op was made. The EDM section:
+
+      "edm": {
+        "lower_guide_z": 0.0, "upper_guide_z": 150.0,  // wire, machine Z, length unit
+        "max_taper_deg": 15.0,                         // wire, (0, 90)
+        "wire_diameters": [0.25, 0.20],                // wire, length unit
+        "awt": true,                                   // wire, automatic threading
+        "orbits": [ { "kind": "circular", "word": "..." } ],  // sinker: circular|vector|planetary + the control's word
+        "max_orbit_radius": 2.0,                       // sinker, length unit
+        "pickup": "..."                                // sinker, the holder system's name
+      }
+
+  Every key is optional and absent means NOT STATED (an op that needs
+  it refuses by name). A garbled value refuses the file. The section is
+  read strictly, every refusal BY NAME (#551 review): only a `wire_edm`
+  or `sinker_edm` file states `edm` at all (on any other kind, declared
+  or inferred, it refuses); a key outside the list above refuses
+  (`edm.max_taper is not an edm key (...)`, never read as unstated); a
+  wire file states only the wire keys and a sinker file only the sinker
+  keys (`edm.orbits is a sinker_edm key; this is a wire_edm machine`);
+  an `orbits` entry has only `kind` and `word`. Lengths are scaled to
+  mm first and must still be finite (an inch `1e308` refuses by its
+  key). Like plasma, an EDM head states no `spindle`, `live_tool` or
+  coolant list (`post::machine::edm_refusals`, read by the reader and
+  the Machines pane's validator alike); a rotary is allowed. No vendor
+  values are shipped. No EDM machine is in the built-in library yet:
+  every library machine must have a post (`machine_library`), so the
+  empty wire / sinker templates join it with their kind's first post
+  (#533 / #542). Until then they are test fixtures
+  (`crates/app/tests/edm/`).
+
+- `plasma` (#669) is DECLARED only, never inferred (its X/Y/Z reads as
+  a mill), and the word carries rules both doors refuse BY NAME
+  (`post::machine::plasma_refusals` - the reader the first, the
+  Machines pane's validator all): no `spindle` on any head (each stated
+  key named: `spindle.max_speed`, `spindle.power`, ...), no
+  `live_tool`, no coolant list (station or tooling root), no rotary
+  axis. X, Y and Z are required; Z is the TORCH LIFTER - the control
+  owns pierce height, cut height and THC - so the machine check judges
+  only X/Y travel and feed, and skips Z depth and rpm with a named note
+  (`MachineCheck.notes`). The torch is Tool 1 (`tooling.number_of_tools:
+  1`); its KERF is the torch tool's diameter, not a machine number
+  (docs/decisions/669-plasma-kind.md). A plasma table states no
+  `safe_retract` (its post retracts with G30). `tormach-1300pl.mch` is
+  the shipped one.
 - `kinematics.default.units`: `"length": "mm"` (or `"inch"`/`"inches"`
   — the factor multiplies EVERY distance and distance-per-minute at
   load; the checker stays mm-only), `"angle": "degrees"`.
@@ -83,8 +134,32 @@ unstated capability into existence.
   - rotary only: `axis` `[x,y,z]` — the rotation direction; three
     finite numbers or the file refuses NAMING the axis (a garbled
     tilt vector must never read as "no tilt": the RTCP judgment rides
-    on it). A stated zero vector refuses too. `resolution` is the
+    on it). A stated zero vector refuses too. The vector's SIGN is the
+    rotary's direction sense (#785): a 4th axis about X states
+    `[1, 0, 0]` when a + A turns the tool right-handed about +X relative
+    to the part (RS-274 / ISO 841 - the table turns the part the other
+    way), `[-1, 0, 0]` when it turns the other way; the Tormach post
+    negates its A words for the second. `tormach-770mx-microarc4.mch` is
+    the shipped 4th-axis mill (an A about X, travel -360..360 degrees,
+    rates unstated: TD10749 states none). `resolution` is the
     positioning step (same scaling law as travel).
+  - rotary that turns the WORK only (#804): `nose_to_axis` - how far
+    the spindle nose sits above the rotary's centerline with Z at
+    `safe_retract` (the file's length unit, scaled like travel). A
+    rotary turns the work when no `head` part hangs below it (a table
+    bolted to the bed); one that carries the head tilts the tool and
+    may not state it. With WCS Y0 Z0 on the centerline, the program
+    gate puts the retracted tool tip at `nose_to_axis` minus the tool
+    length and refuses an op on a work-turning A about X whose tip
+    there is inside the stock / part / turning fixtures' swept radius
+    plus 5 mm - or whose machine states no `nose_to_axis` at all. A
+    work-turning rotary with no `axis` vector takes its RS-274 letter's
+    line (an A is about X and is judged, #813); one whose name is no
+    RS-274 rotary letter refuses every op by name - state its `axis`.
+    The
+    microARC 4 file states 10.6 in: the 770MX's 13.75 in spindle nose
+    to table (Tormach 770MX spec page) less the microARC 4's 3.15 in
+    table to centerline (4th-axis comparison sheet 02/24).
   - `type: "head"` parts carry the spindle and station, first match
     wins: `spindle { min_speed, max_speed }` rpm, `power` kW (stated,
     not judged — the sheet renders it, no model consumes it),
@@ -129,6 +204,19 @@ unstated capability into existence.
 - `tooling.number_of_tools`: DISTINCT tool positions the program may
   call (a double-tier of the same 40 stations is 40, not 80); a
   program asking for a tool number above it is a checker refusal.
+- `tooling.spindle_mount` / `tooling.default_holder` (#828, both
+  optional): the holder system the spindle takes (`BT30`, `BT40`,
+  `CAT40` or `TTS` - the R8 spindle of a Tormach PCNC/M mill takes TTS
+  holders) and the built-in holder-library entry a NEW tool on the
+  machine starts with (`"BT30 ER20"`, the tool editor's own name). Both
+  refuse BY NAME at the reader and in the Machines pane: an unknown
+  mount or holder, a non-word, and a holder whose taper is not the
+  stated mount (a straight-shank chuck names no mount). The default is
+  applied only when a tool is added (GUI, MCP `add_tool`), in the add's
+  own undo step and named in its status/reply; existing tools never
+  change, and a holder that cannot take the tool's shank is left off
+  with a named note. `tooling.mount_source` is free text the reader
+  never reads: the public page the mount was taken from.
 
 ## What the script sees
 

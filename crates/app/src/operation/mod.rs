@@ -72,9 +72,12 @@ mod heights_sel;
 pub use heights_sel::*;
 mod kinds;
 pub use kinds::*;
+mod seed;
+pub use seed::seed_params;
 pub mod tool_law;
 pub mod tool_gate;
 mod params;
+mod trochoid_op;
 mod stamp;
 pub use stamp::*;
 mod stamp_stock;
@@ -92,6 +95,8 @@ pub use footprint::machined_footprint;
 mod probe;
 // #108: the Probe operation's generation and protected-move law.
 pub mod probe_op;
+// #670: the Plasma Profile's seed and generation glue.
+pub mod plasma_op;
 // #171: the Probe op seeded from one picked face, edge, vertex or round wall.
 mod probe_pick;
 mod probe_pick_round;
@@ -126,6 +131,9 @@ use boundary_ctx::*;
 mod job;
 pub use job::*;
 mod generate;
+pub mod body_judged;
+/// #339 slice 5: links routed over the setup's fixtures.
+pub mod fixture_route;
 mod cross_entry;
 mod cross_sag;
 mod cross_part;
@@ -142,11 +150,15 @@ pub(crate) mod spindle_law;
 pub use spindle_law::{spindle_reading, SpindleReading, SPINDLE_TOL};
 mod rotary_gate;
 mod air_law;
+// #864: what a kind's gouge laws need of its model's fidelity.
+pub(crate) mod fidelity_law;
 mod top_stock;
+mod stock_top_law;
 pub use top_stock::TOP_STOCK_WARNING;
 mod turning_credit;
 mod turning_feeds;
 mod turning_holder;
+pub(crate) use turning_holder::body_axes as lathe_body_axes;
 mod turning_holder_scene;
 mod turning_outline;
 mod turning_rapids;

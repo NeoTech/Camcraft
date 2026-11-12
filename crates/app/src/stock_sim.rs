@@ -27,9 +27,13 @@ pub use lathe::{LathePlan, LATHE_HELIX_REFUSAL, LATHE_THREAD_REFUSAL, LATHE_VERD
 // next setup's frame through the transform between the two.
 #[path = "stock_sim_carry.rs"]
 pub mod carry;
+// The stock as the walk holds it, and the engine that carries it (#637).
+#[path = "stock_sim_held.rs"]
+pub mod held;
 #[path = "stock_sim_breaks.rs"]
 pub mod breaks;
 pub use carry::{CARRY_MACHINE_CHANGE_REFUSAL, CARRY_MACHINE_REFUSAL, incoming_body};
+pub use held::{CARRY_ENGINE_ENV, FIELD_CARRY_SHAPE_REFUSAL, engine as carry_engine, with_engine as with_carry_engine};
 
 use crate::geometry::Triangle;
 
@@ -135,6 +139,9 @@ pub fn simulate_document(
 ) -> Result<ProgramSim, String> {
     let planned = plan_program(world)?;
     refuse_unjudged(&planned)?;
+    // #864: a part imported coarser than promised tightens the verdict by
+    // its excess; one too coarse for that is refused by name, not judged.
+    let tol = crate::model_fidelity::verdict_tol(world)?;
 
     // Setup changes (#317): a setup that holds the part differently, or
     // is placed relative to the one before it, starts from the body the
@@ -147,10 +154,7 @@ pub fn simulate_document(
     } else {
         part_facets(world)?
     };
-    let (mut dev, display) = match walked.held {
-        carry::Held::Plain(dex) => (deviate(&dex, &model_facets, DEV_TOL).map_err(|e| e.to_string())?, dex),
-        carry::Held::Carried(body) => (body.deviate(&model_facets, DEV_TOL).map_err(|e| e.to_string())?, body.display()),
-    };
+    let (mut dev, display) = walked.held.verdict(&model_facets, tol)?;
     // #303: the op owns its break - a chamfer's or deburr's declared
     // bevel is part of the finished part, judged by its own depth.
     credit_breaks(&mut dev, &display, &model_facets, &program_breaks(world, &planned, walked.spanned, &walked.frame));
@@ -266,8 +270,9 @@ pub(crate) fn plan_program(world: &flecs_ecs::prelude::World) -> Result<Vec<Plan
     // full radius at the corner depth); a bull nose sweeps its exact
     // corner-rounded solid (M13.1 - the disc it rode before removed
     // the fillet's ring the real tool leaves); everything whose cut
-    // IS its cylinder - end mills, drills, taps, bores - sweeps the
-    // disc.
+    // IS its cylinder - end mills, drills, bores - sweeps the disc,
+    // and a tap sweeps the disc of its thread's core (#266,
+    // `tool_law::cutting_radius`).
     let mut planned: Vec<Planned> = Vec::with_capacity(ops.len());
     for (name, e) in &ops {
         let op = model::operation_of(world, e)
@@ -292,7 +297,12 @@ pub(crate) fn plan_program(world: &flecs_ecs::prelude::World) -> Result<Vec<Plan
         // meets the part tangent, and the protected-move law in
         // `operation::probe_op` already convicted any other meeting -
         // so the probe op carves nothing and stays out of the plan.
-        if tool.kind == crate::tools::ToolKind::Probe {
+        // A plasma torch (#670) cuts THROUGH the plate along a kerf the
+        // dexel column model has no atom for: the plasma verdicts (cut
+        // order, kerf crossings, the through-cut) are #672's laws, and
+        // the generator certified that no lit move's kerf reaches the
+        // part - so the torch carves nothing here, said not silenced.
+        if matches!(tool.kind, crate::tools::ToolKind::Probe | crate::tools::ToolKind::Torch) {
             continue;
         }
         let cache = model::toolpath_of(world, e)
@@ -319,15 +329,20 @@ pub(crate) fn plan_program(world: &flecs_ecs::prelude::World) -> Result<Vec<Plan
         // the plan carries the nose and that axis for the field eye's
         // revolved stadium, a blade its own footprint (`lathe`, #21).
         let lathe = lathe::lathe_plan(world, name, &op, &tool, &cache.path.moves)?;
+        // A turning insert's cutting feature is its nose (a blade's,
+        // half its band - `LathePlan::feature`): the display cell law
+        // (`auto_cell`) reads it, not the IC. Every other tool sweeps
+        // its cutting radius - a tap its thread's core (#266).
+        let radius = match lathe {
+            Some(plan) => plan.feature(),
+            None => crate::operation::tool_law::cutting_radius(&tool).map_err(|e| format!("{name}: {e}"))?,
+        };
         planned.push(Planned {
             name: name.clone(),
             moves: cache.path.moves,
             // #529: only what the op itself declared, never wider.
             breaks: breaks::bounded(name, &op.params, cache.path.breaks),
-            // A turning insert's cutting feature is its nose (a
-            // blade's, half its band - `LathePlan::feature`): the
-            // display cell law (`auto_cell`) reads it, not the IC.
-            radius: lathe.map_or(tool.diameter / 2.0, |l| l.feature()),
+            radius,
             ball: tool.kind == crate::tools::ToolKind::BallNose,
             cone,
             corner,
@@ -385,8 +400,9 @@ fn part_facets_as_modelled(world: &flecs_ecs::prelude::World) -> Vec<Triangle> {
     use crate::model;
 
     let mut model_facets: Vec<Triangle> = Vec::new();
+    let skip = crate::stock_source::stock_only_model(world); // #1094
     for (_, e) in model::model_entities(world) {
-        if model::is_fixture(world, &e) {
+        if !crate::stock_source::judged(world, &e, skip) {
             continue;
         }
         let tris = model::facets_of(world, &e).unwrap_or_default();

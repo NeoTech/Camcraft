@@ -80,22 +80,35 @@ impl MachineDraft {
 
     /// A new machine with the keys its kind requires: the model, the
     /// kind, the units and the axis tree the kind moves (mill X/Y/Z,
-    /// lathe X/Z, mill-turn X/Y/Z and a C rotary), with one head to
+    /// lathe X/Z, mill-turn X/Y/Z and a C rotary, plasma X/Y/Z and a
+    /// spindle-less torch head), with one head to
     /// carry the spindle and tool station. Travels, feeds and speeds
     /// are left unstated for the user to fill.
     #[must_use]
     pub fn blank(kind: Kind) -> Self {
         let lin = |n: &str| json!({ "id": n.to_ascii_lowercase(), "name": n, "type": "linear" });
-        let head = json!({ "id": "head", "name": "head", "type": "head",
-            "spindle": {}, "tool_station": { "coolants": [ { "name": "Flood", "mCode": "M8" } ] } });
+        // #530: an EDM machine carries no spindle and no coolant; its
+        // head is the wire guides or the electrode ram.
+        let head = if matches!(kind, Kind::WireEdm | Kind::SinkerEdm) {
+            json!({ "id": "head", "name": "head", "type": "head" })
+        } else {
+            json!({ "id": "head", "name": "head", "type": "head",
+                "spindle": {}, "tool_station": { "coolants": [ { "name": "Flood", "mCode": "M8" } ] } })
+        };
         let mut parts: Vec<Value> = match kind {
             Kind::Lathe => vec![lin("X"), lin("Z")],
-            Kind::Mill | Kind::MillTurn => vec![lin("X"), lin("Y"), lin("Z")],
+            Kind::Mill | Kind::MillTurn | Kind::Plasma | Kind::SinkerEdm => {
+                vec![lin("X"), lin("Y"), lin("Z")]
+            }
+            // #530: lower guide X/Y and upper guide U/V.
+            Kind::WireEdm => vec![lin("X"), lin("Y"), lin("U"), lin("V")],
         };
         if kind == Kind::MillTurn {
             parts.push(json!({ "id": "c", "name": "C", "type": "rotary", "axis": [0.0, 0.0, 1.0] }));
         }
-        parts.push(head);
+        // #669: a plasma table's head is the torch - no spindle, no
+        // coolant (the plasma rules refuse both by name).
+        parts.push(if kind == Kind::Plasma { json!({ "id": "torch", "name": "torch", "type": "head" }) } else { head });
         let value = json!({
             "general": { "model": format!("New {}", kind.word()), "kind": kind.word() },
             "kinematics": { "default": {

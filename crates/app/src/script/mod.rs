@@ -27,6 +27,7 @@
 //! context and every function registered inside it is dropped first.
 
 pub(crate) mod api;
+pub use api::refusal_text;
 mod report;
 
 use crate::commands::History;
@@ -81,9 +82,9 @@ pub(crate) struct Env {
 pub(crate) const VERBS: &[Verb] = &[
     Verb::new("load", 1, api::v_load, "load(path: string): DocumentInfo"),
     Verb::new("save", -1, api::v_save, "save(path?: string): { path: string }"),
-    Verb::new("import", -1, api::v_import, "import(path: string, name?: string): { model: string; facets: number }"),
+    Verb::new("import", -1, api::v_import, "import(path: string, name?: string | null, facetBudget?: number): { model: string; facets: number; facet_budget?: number }"),
     Verb::new("exportTools", 1, api::v_export_tools, "exportTools(path: string): { path: string; tools: number }"),
-    Verb::new("importTools", 1, api::v_import_tools, "importTools(path: string): { path: string; added: string[]; renamed: { from: string; to: string }[]; skipped: string[]; summary: string }"),
+    Verb::new("importTools", -1, api::v_import_tools, "importTools(path: string, mode?: \"add\" | \"update\" | \"replace\", holders?: boolean): { path: string; mode: string; added: string[]; renamed: { from: string; to: string }[]; skipped: string[]; updated: string[]; replaced: string[]; removed: string[]; holders: number; holders_left_out: number; summary: string }"),
     Verb::new("operations", 0, api::v_operations, "operations(): OperationInfo[]"),
     Verb::new("generate", -1, api::v_generate, "generate(...names: string[]): OperationInfo[]"),
     Verb::new("verify", -1, api::v_verify, "verify(...names: string[]): VerifyReport"),
@@ -327,10 +328,14 @@ interface DocumentInfo {
 }
 
 interface VerifyReport {
+  /** The post's whole verdict: every op in scope fresh, the gate passed,
+   *  and no op in scope holding the post with its own warnings. */
   ok: boolean;
   operations: OperationInfo[];
   /** The program-level gate; skipped (with reason) while anything is stale. */
   gate: { ok: boolean; problems: string[]; skipped?: string };
+  /** Ops in scope whose own cached warnings refuse the post (#722). */
+  held_by: string[];
 }
 
 interface PostOptions {

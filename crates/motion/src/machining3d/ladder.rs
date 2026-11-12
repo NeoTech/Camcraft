@@ -16,7 +16,7 @@ use crate::geometry::{Point3, Triangle};
 use crate::links::{Link, LinkTally, NOT_PROVED, TOO_LONG};
 use crate::machining2d::{chord_clears, GenError};
 use crate::plunge_law;
-use crate::stock_sim::Dexel;
+use crate::stock_sim::Columns;
 /// One ladder run: the level loop shared by both entry points. `zs` is
 /// the plane list, `rest` the post-coarse state whose still-standing
 /// columns the pass is aimed at (None: the pure level law), `mask` the
@@ -66,8 +66,8 @@ pub(super) fn ladder(
     footprint: &Region,
     p: &Pocket3DParams,
     zs: &[f64],
-    rest: Option<&Dexel>,
-    mask: Option<&Dexel>,
+    rest: Option<&Columns<'_>>,
+    mask: Option<&Columns<'_>>,
     start: Point3,
     shell: bool,
     seam: Option<&hsm::Seam>,
@@ -137,7 +137,9 @@ pub(super) fn ladder(
         }
         // The level's plan: the strategy's tiling, or the HSM plan
         // (M11.4, `hsm`) - whose entry bore the level's params carry.
-        let lp = hsm::plan_level(&mut b, &center, p, z, hop_z, rest.is_some(), shell, seam)?;
+        // #871: a part-way refusal hands back the levels so far.
+        let lp = hsm::plan_level(&mut b, &center, p, z, hop_z, rest.is_some(), shell, seam)
+            .map_err(|e| e.with_ghost_moves(b.moves()))?;
         let passes = &lp.passes;
         let level_p = lp.params(p);
         let Some(first_pass) = passes.first() else {
@@ -345,7 +347,8 @@ pub(super) fn ladder(
     b.push(MoveKind::Rapid, Point3::new(cur.x, cur.y, p.clearance_z), None);
     let path = b.finish();
     if let Some(why) = crate::approach::refusal(&path) {
-        return Err(GenError::Invalid(why));
+        // #261 part 3: the moves built so far ride the refusal, display-only.
+        return Err(GenError::Invalid(why).with_ghost(&path));
     }
     if path.moves.is_empty() {
         return Err(GenError::Empty(
