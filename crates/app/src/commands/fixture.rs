@@ -272,6 +272,8 @@ impl Command for DeleteFixture {
 pub struct AddFixtureModel {
     name: String,
     facets: std::sync::Arc<[Triangle]>,
+    /// #864: the chord error of a mesh imported coarser than promised.
+    coarse_mm: Option<f64>,
 }
 
 impl AddFixtureModel {
@@ -293,10 +295,11 @@ impl AddFixtureModel {
         if model::find_by_name(world, name).is_some() {
             return Err(CommandError::NameConflict(name.to_string()));
         }
-        let mesh = crate::geometry::import::load_model(path)?;
+        let graded = crate::geometry::import::load_model_graded(path)?;
         Ok(AddFixtureModel {
             name: name.to_string(),
-            facets: mesh.facets,
+            facets: graded.mesh.facets,
+            coarse_mm: graded.coarse_mm,
         })
     }
 }
@@ -314,6 +317,7 @@ impl Command for AddFixtureModel {
         let entity = model::spawn(world, &self.name);
         model::set_facets(world, &entity, self.facets.clone());
         model::set_rev(world, &entity, 1);
+        crate::model_fidelity::set(world, &entity, self.coarse_mm);
         entity.entity_view(world).set(FixtureDef::default());
     }
 

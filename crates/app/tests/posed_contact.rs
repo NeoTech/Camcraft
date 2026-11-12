@@ -119,6 +119,7 @@ fn ctx<'a>(region: &'a Region, facets: &'a [Triangle], tool: &'a ToolGeom) -> Ve
         finish_tol: Some(TOL),
         fixtures: &[],
         spindle: None,
+        ..Default::default()
     }
 }
 
