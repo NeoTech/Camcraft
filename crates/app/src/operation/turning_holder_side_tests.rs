@@ -28,7 +28,6 @@ fn the_side_is_where_the_path_reaches_and_a_past_centre_overrun_keeps_it() {
         assert!(e.contains("both sides of the spindle axis"), "{xs:?}: {e}");
     }
     assert!(side_of([f64::NAN]).is_err());
-    assert!(PAST_CENTRE > 2.4);
 }
 
 fn cylinder(r: f64, z0: f64, z1: f64) -> Vec<Triangle> {

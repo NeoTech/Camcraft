@@ -117,7 +117,7 @@ pub(super) fn judge(
         None => None,
     };
     let sm = SignedMeridian::of(&frame, path);
-    let side = holder_side(&sm, path).map_err(&unjudged)?;
+    let side = holder_side(&sm, path).map_err(unjudged)?;
     let mut pieces = Vec::with_capacity(path.moves.len());
     for (i, m) in path.moves.iter().enumerate() {
         pieces.push(pieces_of(m, &sm, cx.z_tol).ok_or_else(|| unjudged(format!("move {i} leaves the turning plane")))?);
