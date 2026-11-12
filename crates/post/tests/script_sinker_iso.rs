@@ -1,19 +1,32 @@
-//! #542 (part of #290): the generic ISO-style sinker post,
-//! `assets/posts/sinker-iso.cps`, posted from a RECORDED stream (the
-//! #926 direction): the Sinker Burn's CL golden that app's
-//! `sinker_burn_cavity_matches_golden` regenerates, wrapped in the
-//! PARAMs and section the in-app dump adds. Every EDM code comes from the
-//! fixture dialect's `edm.codes` (#290 D5); a missing one refuses by
-//! name, and the serves law keeps a mill post off a sinker and the
-//! sinker post off a mill.
+//! The `sinker-iso.cps` script suite (#542, part of #290; the #926 suite
+//! pattern): the generic ISO-style sinker post.
 //!
-//! Regenerate the NC golden after an intentional change:
-//! `WRITE_GOLDEN=1 cargo test -p camcraft-post --test sinker_post`.
+//! - The recorded mill cases (`recorded/streams/*.cnc`) through the post
+//!   binary, machine-less as every suite posts them: this post serves
+//!   sinker_edm machines only, so each case's golden under
+//!   `recorded/golden/sinker-iso/` is its named refusal - never a program.
+//! - The sinker's own recorded stream through the binary on the fixture
+//!   dialect (`sinker_burn_cavity`, same golden dir): the Sinker Burn's CL
+//!   golden that app's `sinker_burn_cavity_matches_golden` regenerates,
+//!   wrapped in the PARAMs and section the in-app dump adds.
+//! - The same stream through the engine: every EDM code comes from the
+//!   fixture dialect's `edm.codes` (#290 D5); a missing one refuses by
+//!   name, and the serves law keeps a mill post off a sinker and the
+//!   sinker post off a mill.
 //!
-//! Gate map (#542): covers post::post (engine serves gate, machine_edm,
-//! machine mirror/script_props edm), post::machine (edm codes).
+//! Regenerate after an intentional change, then read the diff:
+//! `WRITE_GOLDEN=1 cargo test -p camcraft-post --test script_sinker_iso`.
+//!
+//! Gate map (M4.4, #542): covers assets/posts/sinker-iso.cps, the post
+//! binary, post::post (engine serves gate, machine_edm, machine
+//! mirror/script_props edm), post::machine (edm codes).
 //! Provenance: our own SYNTHETIC fixture dialect (invented words, no
 //! machine's manual). Not exercised on a real EDM control.
+
+#[macro_use]
+mod recorded;
+
+post_suite!("sinker-iso.cps");
 
 use camcraft_post::post::cnc::{self, Record};
 use camcraft_post::post::{engine, PostError};
@@ -151,4 +164,16 @@ fn a_feed_with_xy_travel_or_an_rpm_is_refused_by_name() {
     let stream = stream_with(&[]).replace("PARAM SpindleSpeed 0.000000", "PARAM SpindleSpeed 1000");
     let out = post(&dialect(), &stream);
     assert!(out.warnings.iter().any(|w| w.contains("turns no spindle")), "{:?}", out.warnings);
+}
+
+#[test]
+fn sinker_burn_cavity() {
+    // The binary's door: the stream as a file, the dialect as the CLI
+    // reads it (the vendor tree mirrored by the binary itself).
+    let input = std::env::temp_dir().join(format!("camcraft_recorded_sinker_burn_{}.cnc", std::process::id()));
+    std::fs::write(&input, stream_with(&[])).expect("write the sinker stream");
+    let mch = repo("crates/app/tests/edm/sinker-iso-dialect.mch");
+    let (ext, text) = recorded::verdict_on("sinker-iso.cps", "sinker_burn_cavity", &input, Some(&mch));
+    let _ = std::fs::remove_file(&input);
+    recorded::compare("sinker-iso.cps", "sinker_burn_cavity", ext, &text);
 }

@@ -78,7 +78,7 @@ const LATHE_POSTS: &[(&str, &str)] = &[("Fanuc Lathe", "fanuc-lathe"), ("Tormach
 const PLASMA_POSTS: &[(&str, &str)] = &[("Tormach PathPilot Plasma", "tormach-plasma")];
 
 /// The SINKER EDM dialects (#542): their golden is the sinker burn's
-/// own (`crates/post/tests/sinker_post.rs`, `nc/sinker-iso/`); on a mill
+/// own (`crates/post/tests/script_sinker_iso.rs`, `nc/sinker-iso/`); on a mill
 /// golden over a mill machine the engine's serves law refuses them by
 /// name before the script runs.
 const SINKER_POSTS: &[(&str, &str)] = &[("Sinker EDM (ISO)", "sinker-iso")];

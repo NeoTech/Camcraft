@@ -4,6 +4,7 @@
 //! Provenance: our own build and process law (AGENTS.md "Three gate tiers", "Test the change",
 //! release step 2), replacing the scripts/gate.*, collect-decisions.* and release.ps1 twins (#748, #749).
 
+mod assets;
 mod braces;
 mod decisions;
 mod exec;
@@ -21,6 +22,8 @@ mod release_tests;
 mod tests;
 #[cfg(test)]
 mod gate_maps_tests;
+#[cfg(test)]
+mod asset_tests;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;

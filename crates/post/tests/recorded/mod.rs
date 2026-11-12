@@ -40,11 +40,9 @@ pub const CASES: [&str; 9] = [
 /// (no crash, no hang) but compares nothing and has no golden; the fix
 /// removes its line and records the golden (`WRITE_GOLDEN=1`), read first.
 /// `recorded_streams.rs` holds that no listed case has a golden.
-pub const KNOWN_BUGS: [(&str, &str, u32); 2] = [
+pub const KNOWN_BUGS: [(&str, &str, u32); 1] = [
     // Flood coolant (M8) in a probing section.
     ("doosan-dnm.cps", "probe", 995),
-    // A C0 word on a machine with no C rotary.
-    ("fanuc.cps", "rotary", 997),
 ];
 
 pub fn known_bug(script: &str, case: &str) -> Option<u32> {
@@ -81,8 +79,26 @@ fn tmp(tag: &str) -> PathBuf {
 /// What the binary did with one stream: the golden's file extension and
 /// its text.
 pub fn verdict(script: &str, case: &str) -> (&'static str, String) {
+    let tag = format!("{}_{case}", script.trim_end_matches(".cps"));
+    let mch = tmp(&format!("{tag}.mch"));
+    let machine = machine_of(case).map(|m| {
+        let path = repo().join("assets/machines").join(m);
+        let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+        let parsed = camcraft_post::machine::parse_mch(&text).unwrap_or_else(|e| panic!("{m}: {e}"));
+        let mirrored = camcraft_post::post::machine::mirror(&parsed);
+        std::fs::write(&mch, mirrored.to_string()).expect("write the mirrored machine");
+        mch.clone()
+    });
+    let v = verdict_on(script, case, &stream_path(case), machine.as_deref());
+    let _ = std::fs::remove_file(&mch);
+    v
+}
+
+/// [`verdict`] on any stream file and machine file (handed to the
+/// binary's `--machine` as written): the door a suite whose post serves
+/// another machine family than the recorded mill cases' uses.
+pub fn verdict_on(script: &str, case: &str, input: &Path, machine: Option<&Path>) -> (&'static str, String) {
     let cps = repo().join("assets/posts").join(script);
-    let input = stream_path(case);
     assert!(cps.is_file(), "no post script {}", cps.display());
     assert!(input.is_file(), "no recorded stream {}", input.display());
     let tag = format!("{}_{case}", script.trim_end_matches(".cps"));
@@ -91,19 +107,13 @@ pub fn verdict(script: &str, case: &str) -> (&'static str, String) {
     let _ = std::fs::remove_file(&out);
     let _ = std::fs::remove_file(&log);
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_post"));
-    let mch = tmp(&format!("{tag}.mch"));
-    if let Some(m) = machine_of(case) {
-        let path = repo().join("assets/machines").join(m);
-        let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
-        let parsed = camcraft_post::machine::parse_mch(&text).unwrap_or_else(|e| panic!("{m}: {e}"));
-        let mirrored = camcraft_post::post::machine::mirror(&parsed);
-        std::fs::write(&mch, mirrored.to_string()).expect("write the mirrored machine");
-        cmd.arg("--machine").arg(&mch);
+    if let Some(m) = machine {
+        cmd.arg("--machine").arg(m);
     }
-    let r = cmd.arg("--log").arg(&log).arg(&cps).arg(&input).arg(&out).output().expect("run the post binary");
+    let r = cmd.arg("--log").arg(&log).arg(&cps).arg(input).arg(&out).output().expect("run the post binary");
     let program = std::fs::read_to_string(&out).ok();
     let warnings = std::fs::read_to_string(&log).ok();
-    for f in [&out, &log, &mch] {
+    for f in [&out, &log] {
         let _ = std::fs::remove_file(f);
     }
     if !r.status.success() {
@@ -125,6 +135,12 @@ pub fn verdict(script: &str, case: &str) -> (&'static str, String) {
 /// WRITE_GOLDEN set, write the golden instead (and drop the other form).
 pub fn check(script: &str, case: &str) {
     let (ext, text) = verdict(script, case);
+    compare(script, case, ext, &text);
+}
+
+/// Compare one verdict with its golden under `recorded/golden/<post>/`
+/// (or, with WRITE_GOLDEN set, write it and drop the other form).
+pub fn compare(script: &str, case: &str, ext: &str, text: &str) {
     if let Some(issue) = known_bug(script, case) {
         eprintln!("{script} {case}: known post bug #{issue} - posted ({ext}), not compared");
         return;
@@ -134,7 +150,7 @@ pub fn check(script: &str, case: &str) {
     let other = dir.join(format!("{case}.{}", if ext == "nc" { "refusal" } else { "nc" }));
     if std::env::var_os("WRITE_GOLDEN").is_some() {
         std::fs::create_dir_all(&dir).expect("create the golden dir");
-        std::fs::write(&path, &text).expect("write the golden");
+        std::fs::write(&path, text).expect("write the golden");
         let _ = std::fs::remove_file(&other);
         return;
     }

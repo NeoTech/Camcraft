@@ -1228,6 +1228,8 @@ pub(crate) fn tool_editor_window(ctx: &egui::Context, state: &mut State) {
                     }
                     // #630: which point of the nose the lathe posts write.
                     super::tool_orientation_row::orientation_row(ui, state);
+                    // #891: a lathe steel's surface speed, feed per rev, clamp.
+                    super::tool_turning_row::turning_rows(ui, state);
                     if state.tool_ui.kind == 7 {
                         field(ui, "Blade width");
                         num(ui, u, &mut state.tool_ui.width);
@@ -1500,9 +1502,11 @@ fn model_page(ui: &mut Ui, state: &mut State, name: String) {
             ui,
             "This model was too large to import at full detail. Gouge checks against it are \
              stricter to make up for that; when it is too coarse to check at all, its operations \
-             are refused at the post. Re-import with a larger budget to clear this.",
+             are refused at the post. Raise the STEP facet budget below and import the file \
+             again to clear this.",
         );
     }
+    super::step_budget_row::row(ui, state, &entity);
     if let Some(a) = model::entity_world_aabb(&state.world, &entity) {
         ui.label(format!(
             "{} x {} x {} {}",
