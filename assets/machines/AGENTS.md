@@ -59,7 +59,18 @@ unstated capability into existence.
       }
 
   Every key is optional and absent means NOT STATED (an op that needs
-  it refuses by name). A garbled value refuses the file. No vendor
+  it refuses by name). A garbled value refuses the file. The section is
+  read strictly, every refusal BY NAME (#551 review): only a `wire_edm`
+  or `sinker_edm` file states `edm` at all (on any other kind, declared
+  or inferred, it refuses); a key outside the list above refuses
+  (`edm.max_taper is not an edm key (...)`, never read as unstated); a
+  wire file states only the wire keys and a sinker file only the sinker
+  keys (`edm.orbits is a sinker_edm key; this is a wire_edm machine`);
+  an `orbits` entry has only `kind` and `word`. Lengths are scaled to
+  mm first and must still be finite (an inch `1e308` refuses by its
+  key). Like plasma, an EDM head states no `spindle`, `live_tool` or
+  coolant list (`post::machine::edm_refusals`, read by the reader and
+  the Machines pane's validator alike); a rotary is allowed. No vendor
   values are shipped. No EDM machine is in the built-in library yet:
   every library machine must have a post (`machine_library`), so the
   empty wire / sinker templates join it with their kind's first post
