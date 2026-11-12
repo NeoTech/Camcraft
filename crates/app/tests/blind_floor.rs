@@ -213,6 +213,7 @@ fn depth_verify(t: &Toolpath, region: &Region, model: Option<&[Triangle]>, leave
             finish_tol: None,
             fixtures: &[],
             spindle: None,
+            ..Default::default()
         },
     )
 }

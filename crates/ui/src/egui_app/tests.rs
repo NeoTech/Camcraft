@@ -122,6 +122,8 @@ mod recent_door;
 mod prefs_door;
 // #509: the Fixtures page rows fit the pane.
 mod fixture_rows;
+// #864: a reduced-fidelity model says so on its page.
+mod model_fidelity;
 // #709 hand check: both points of a two-point axis stay marked.
 mod two_point_marks;
 
