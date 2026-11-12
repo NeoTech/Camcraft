@@ -21,13 +21,14 @@
 //! Gate map (solid law): covers sim::verify (engine b2, solid_hits, the
 //! crossing law), the posted goldens under tests/golden/nc/,
 //! motion::machining2d (contour, face, pocket, slot, trochoid, trace),
-//! motion::drilling (drill), app::operation (region_of), sim::verify::plasma.
+//! motion::drilling (drill), app::operation (region_of), sim::verify::plasma,
+//! sim::verify::wire and app::posting (posting_wire's wire_clause, #534).
 
 mod common;
 mod posted_gates;
 
 use common::gen_to_cltext;
-use posted_gates::{narrowed_slot_verdict, plasma_findings, region_verdicts};
+use posted_gates::{narrowed_slot_verdict, plasma_findings, region_verdicts, wire_findings, wire_verdict};
 use common::solid_part::{cap, circle, mill, plate, plate_cell, rect, region, walls};
 
 use camcraft_app::cl::Toolpath;
@@ -306,17 +307,12 @@ const REFUSED_HEADER: &str = "refused program, posted for syntax conformance";
 /// guard below makes every other posted golden's program pass the gate
 /// its kind's post runs, so a new one is either judged or named here.
 /// The slot, trochoid, trace and plasma goldens are judged since #1000
-/// (`posted_gates`).
+/// (`posted_gates`), the wire punch since #534 (its wire laws).
 const UNJUDGED: &[(&str, &str)] = &[
     (
         "arc_planes",
         "a hand-built posting fixture (arc_planes.rs): no operation kind, part, region or tool record makes it, \
          so no gate a user's post runs can judge it - #1093",
-    ),
-    (
-        "wire_contour_punch",
-        "the wire ISO post's golden (wire_post.rs, #533): a tool-less wire cut, and wire verification \
-         (the wire's sweep, start hole, slug) is not built yet - #534",
     ),
 ];
 
@@ -331,6 +327,11 @@ fn the_slot_trace_and_plasma_goldens_pass_their_gates() {
         assert_eq!(w, Vec::new(), "{name}");
     }
     assert_eq!(plasma_findings(), Vec::new(), "plasma_plate_with_holes.cl: the plasma laws find nothing");
+    // #534: the wire punch through the wire laws - clean, and judged,
+    // not skipped: the piece its closed cut frees is the part.
+    let wire = wire_verdict();
+    assert_eq!(wire.findings, Vec::new(), "wire_contour_punch.cl: the wire laws find nothing");
+    assert!(wire.slugs.iter().any(|s| s.product_area > 0.0), "the punch frees the part: {:?}", wire.slugs);
 }
 
 #[test]
@@ -355,6 +356,7 @@ fn every_posted_golden_is_a_program_the_gate_passes() {
     let mut judged: Vec<(&str, Vec<String>)> = verdicts().into_iter().chain(region_verdicts()).map(|(n, w)| (n, blocking(w))).collect();
     let plasma = plasma_findings().iter().filter(|f| f.refuses()).map(|f| f.describe()).collect();
     judged.push(("plasma_plate_with_holes.cl", plasma));
+    judged.push(("wire_contour_punch.cl", wire_findings().iter().map(|f| f.describe()).collect()));
     let mut dirs = vec![root.join("nc")];
     let mut posted = 0;
     while let Some(dir) = dirs.pop() {
