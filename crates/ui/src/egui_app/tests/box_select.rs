@@ -118,7 +118,7 @@ fn drag(h: &mut Harness<'static, ShellUi>, a: egui::Pos2, b: egui::Pos2, m: Modi
     move_to(h, b, m);
     {
         let st = &h.state().state;
-        if m.ctrl {
+        if m.command {
             assert!(st.pick_box.is_some(), "Ctrl + drag draws a pick box");
             assert_eq!(st.drag, None, "a pick box never orbits");
         }
@@ -135,7 +135,7 @@ fn a_ctrl_drag_window_around_one_cutout_adds_its_rim_in_one_undo_step() {
     // Left to right: a window around the first cutout, [220, 240] x [20, 40].
     let r = screen_box(harness.state(), [X0 + 15.0, 15.0], [X0 + 45.0, 45.0]);
     let (a, b) = (r.left_top(), r.right_bottom());
-    drag(&mut harness, a, b, Modifiers::CTRL);
+    drag(&mut harness, a, b, Modifiers::COMMAND);
     let st = &harness.state().state;
     assert_eq!(st.pick_box, None, "the release ends the box");
     let after = contour1(&harness);
@@ -156,7 +156,7 @@ fn a_right_to_left_drag_is_a_crossing_box_and_a_plain_drag_still_orbits() {
     // Right to left over the first cutout's left side (x = 220).
     let r = screen_box(harness.state(), [X0 + 17.0, 25.0], [X0 + 23.0, 35.0]);
     let (a, b) = (r.right_top(), r.left_bottom());
-    drag(&mut harness, a, b, Modifiers::CTRL);
+    drag(&mut harness, a, b, Modifiers::COMMAND);
     let after = contour1(&harness);
     assert_eq!(after.len(), before.len() + 1, "the one rim side it crosses: {after:?}");
     // Without Ctrl the same drag orbits and picks nothing.

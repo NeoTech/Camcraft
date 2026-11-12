@@ -25,7 +25,7 @@ use crate::viewport::ProjectionMode;
 /// (the add-to-selection keys), Edge or Face mode, an operation open, and
 /// no other pick draft (boundary, locate, plane, axis, points) collecting.
 pub(crate) fn armed(state: &State, mods: Mods) -> bool {
-    (mods.ctrl || mods.shift)
+    (mods.command || mods.shift)
         && matches!(state.geo_pick, GeoPick::Edge | GeoPick::Face)
         && !state.op_ui.name.is_empty()
         && state.boundary_pick.is_none()
