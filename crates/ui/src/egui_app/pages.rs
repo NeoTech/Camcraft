@@ -1221,14 +1221,17 @@ fn gcode_listing(
                 })
                 .flatten();
             let width = ui.available_width();
+            let spans = super::gcode_highlight::spans_for(ui.ctx(), program);
             for (i, ln) in program.lines().enumerate() {
-                let label = format!("{:>4}  {}", i + 1, ln);
-                let mut rt = egui::RichText::new(label).monospace();
-                if let Some((a, b)) = want
-                    && !(i >= a && i < b.max(a + 1))
-                {
-                    rt = rt.weak();
-                }
+                let dim = want.is_some_and(|(a, b)| !(i >= a && i < b.max(a + 1)));
+                let empty = Vec::new();
+                let rt = super::gcode_highlight::row_job(
+                    ui,
+                    i + 1,
+                    ln,
+                    spans.get(i).unwrap_or(&empty),
+                    dim,
+                );
                 // Every row is a left-to-right box exactly `width` by
                 // `row_h`, so the text starts at the left edge (#256:
                 // `add_sized` centred it) and the cursor arithmetic
