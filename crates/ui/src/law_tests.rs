@@ -76,6 +76,27 @@ mod gizmo_tests {
         assert!(ground_grid_lines(&state).is_empty(), "hiding the axes hides the floor");
     }
 
+    /// #948: a non-finite or absurd camera must not stretch the grid's
+    /// line-index range (dist 1e308 made `reach` infinite and the loop
+    /// walk the whole i64 range): the floor stays out of that frame.
+    #[test]
+    fn the_ground_grid_survives_a_nan_or_huge_camera() {
+        for (dist, target) in [
+            (f64::NAN, [0.0, 0.0, 0.0]),
+            (f64::INFINITY, [0.0, 0.0, 0.0]),
+            (1.0e308, [0.0, 0.0, 0.0]),
+            (80.0, [f64::NAN, 0.0, 0.0]),
+            (80.0, [0.0, f64::INFINITY, 0.0]),
+            (80.0, [f64::NEG_INFINITY, 1.0e300, 0.0]),
+        ] {
+            let mut state = State::new();
+            state.cam.dist = dist;
+            state.cam.target = target;
+            let grid = ground_grid_lines(&state);
+            assert!(grid.len() < 1000, "dist {dist} target {target:?}: {} lines", grid.len());
+        }
+    }
+
     #[test]
     fn a_fresh_world_shows_only_the_world_axes() {
         let state = State::new();

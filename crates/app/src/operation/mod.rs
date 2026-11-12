@@ -161,6 +161,7 @@ pub use top_stock::TOP_STOCK_WARNING;
 mod turning_credit;
 mod turning_feeds;
 mod turning_holder;
+pub(crate) use turning_holder::body_axes as lathe_body_axes;
 mod turning_holder_scene;
 mod turning_outline;
 mod turning_rapids;

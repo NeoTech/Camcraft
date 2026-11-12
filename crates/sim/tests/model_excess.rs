@@ -9,11 +9,12 @@
 //! Provenance: our own fixtures; the sagitta `R * (1 - cos(pi / n))` of an
 //! inscribed n-gon is elementary geometry. No vendor material.
 //!
-//! Gate map (#864): covers camcraft_sim::verify (types, section).
+//! Gate map (#864, #904): covers camcraft_sim::verify (excess, section,
+//! finish).
 
 use camcraft_sim::cl::{Move, MoveKind, Toolpath};
 use camcraft_sim::geo2d::{Loop, Point2, Region};
-use camcraft_sim::geometry::Point3;
+use camcraft_sim::geometry::{Point3, Triangle};
 use camcraft_sim::verify::{excess_floor, verify, Mode, ToolGeom, VerifyContext, Warning};
 
 /// The importer's promise and the verdict tolerance, mm.
@@ -155,4 +156,86 @@ fn the_excess_floor_only_ever_tightens() {
     let cx = VerifyContext::default();
     assert_eq!(cx.model_excess, 0.0);
     assert_eq!(cx.tightened(TOL), TOL);
+}
+
+// ---- law (f): the envelope's gouge half (#904) ---------------------------
+
+/// A 6 mm ball rastered over a flat 40 mm plate (top Z 0) with its tip
+/// `d` mm below the surface: 0.5 mm passes, well inside the scallop.
+fn sunk_raster(d: f64) -> Toolpath {
+    let mut moves = Vec::new();
+    let (mut y, mut right) = (-12.0, true);
+    while y <= 12.0 + 1e-9 {
+        let (x0, x1) = if right { (-12.0, 12.0) } else { (12.0, -12.0) };
+        moves.push(Move::new(MoveKind::Feed, Point3::new(x0, y, -d), Point3::new(x1, y, -d), Some(600.0)));
+        if y + 0.5 <= 12.0 + 1e-9 {
+            moves.push(Move::new(MoveKind::Feed, Point3::new(x1, y, -d), Point3::new(x1, y + 0.5, -d), Some(600.0)));
+        }
+        y += 0.5;
+        right = !right;
+    }
+    Toolpath { moves, cycles: Vec::new(), notes: Vec::new(), comps: Vec::new(), threads: Vec::new(), probes: Vec::new(), breaks: Vec::new(), plasma: None }
+}
+
+fn plate() -> Vec<Triangle> {
+    let p = |x: f64, y: f64| Point3::new(x, y, 0.0);
+    vec![Triangle::new(p(-20.0, -20.0), p(20.0, -20.0), p(20.0, 20.0)), Triangle::new(p(-20.0, -20.0), p(20.0, 20.0), p(-20.0, 20.0))]
+}
+
+/// The envelope verdict's gouge reading of `path`, `None` when silent.
+fn envelope_gouge(path: &Toolpath, mode: Mode, finish_tol: f64, excess: f64) -> Option<f64> {
+    let (facets, wall) = (plate(), region(vec![Point2::new(-20.0, -20.0), Point2::new(20.0, -20.0), Point2::new(20.0, 20.0), Point2::new(-20.0, 20.0)]));
+    let ball = ToolGeom { radius: 3.0, nose_radius: 0.0, flute_len: 20.0, shank_radius: 3.0, shank_len: 20.0, holder_radius: 3.0, holder_len: 10.0 };
+    let cx = VerifyContext {
+        region: &wall,
+        model: Some(&facets),
+        tool: &ball,
+        mode,
+        stock_top_z: 0.0,
+        clearance_z: 20.0,
+        gouge_tol: TOL,
+        z_tol: 1e-6,
+        finish_tol: Some(finish_tol),
+        model_excess: excess,
+        ..Default::default()
+    };
+    verify(path, &cx).iter().find_map(|w| match w {
+        Warning::Envelope { gouge_mm, .. } => Some(*gouge_mm),
+        _ => None,
+    })
+}
+
+#[test]
+fn the_envelope_laws_gouge_half_answers_to_the_tolerance_less_the_excess() {
+    // The posed kinds (5-axis, rotary) and the turning nose kinds are
+    // judged by this law alone: a posed ball is the same ball about the
+    // same centre. Its gate is the finish tolerance plus the scan's own
+    // quantization floor (the ball's sagitta across one cell).
+    const FINISH: f64 = 0.05;
+    let cell = match camcraft_sim::stock_sim::envelope_scan(&plate(), &sunk_raster(0.0).moves, 3.0, FINISH) {
+        Ok(rep) => rep.cell,
+        Err(e) => panic!("the scan measures the plate: {e:?}"),
+    };
+    let gate = FINISH + cell * cell / 6.0;
+    let excess = 0.007;
+    for mode in [Mode::Envelope, Mode::Rotary] {
+        // 0.004 mm inside the gate: silent at full fidelity, convicted
+        // with a 0.007 mm excess - and measured, not invented.
+        let near = sunk_raster(gate - 0.004);
+        assert_eq!(envelope_gouge(&near, mode, FINISH, 0.0), None, "{mode:?}: today's verdict");
+        let g = envelope_gouge(&near, mode, FINISH, excess).unwrap_or(0.0);
+        assert!((g - (gate - 0.004)).abs() < 1e-6, "{mode:?}: convicted at its own depth, {g}");
+        // 0.009 mm inside the gate: silent on the coarse model too.
+        assert_eq!(envelope_gouge(&sunk_raster(gate - 0.009), mode, FINISH, excess), None, "{mode:?}");
+        // On the surface: never a gouge, whatever the excess.
+        for e in [0.0, excess, FINISH, 0.5] {
+            assert_eq!(envelope_gouge(&sunk_raster(0.0), mode, FINISH, e), None, "{mode:?}, excess {e}");
+        }
+        // Past the tolerance the law reads untightened; a real gouge
+        // is one at every excess.
+        assert_eq!(envelope_gouge(&near, mode, FINISH, FINISH), None, "{mode:?}: the gate refuses instead");
+        for e in [0.0, excess, FINISH, 0.5] {
+            assert!(envelope_gouge(&sunk_raster(0.3), mode, FINISH, e).is_some_and(|g| g > 0.29), "{mode:?}, excess {e}");
+        }
+    }
 }

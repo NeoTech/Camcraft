@@ -320,6 +320,19 @@ fn mode_caption(k: camcraft_app::machine::Kind) -> &'static str {
         .map_or("Machine", |(_, c, _)| *c)
 }
 
+/// The section door's short ribbon word: a cell is ~43 px wide at 1280, so
+/// "Milling 2D" would not fit; the full name stays in the tip and the
+/// dropdown. Plain English, deliberate - never a cut-off one (#948).
+fn door_label(s: operation::Section) -> &'static str {
+    match s {
+        operation::Section::Mill2D => "Mill 2D",
+        operation::Section::Mill3D => "Mill 3D",
+        operation::Section::Drilling => "Drill",
+        operation::Section::MultiAxis => "Multi",
+        other => other.label(),
+    }
+}
+
 fn text_of(c: Cmd, state: &State) -> String {
     match c {
         // The overflow button wears the section's name plus an
@@ -327,7 +340,7 @@ fn text_of(c: Cmd, state: &State) -> String {
         // here", which is exactly the law the dropdown keeps (M6.2:
         // a labeled door, never a faceless chevron). The machine door
         // wears the same invitation: the ellipsis says "a list opens".
-        Cmd::More(s) => format!("{}…", s.label()),
+        Cmd::More(s) => format!("{}…", door_label(s)),
         Cmd::Machine => {
             format!("{}…", mode_caption(camcraft_app::machine::kind_of(&state.world)))
         }
@@ -1136,11 +1149,13 @@ pub fn ribbon(
             toggle_pin(state, i);
         }
     }
-    // Group captions are intentionally NOT drawn: each cell already names
-    // itself, and a second line under the row only duplicated and clipped
-    // the section name (the user's "unreadable" complaint). The dividers
-    // alone separate the groups.
-    let _ = captions;
+    // Group captions (#948): under each group's cells when they fit the
+    // group's span. A single-door group (Milling 2D, Drilling ...) is one
+    // narrow cell that already names its section, so its caption is
+    // skipped rather than run under the neighbour's.
+    for (mid, width, title) in captions {
+        painted::caption(ui, mid, width, title, rect, pal, rect.top() + 4.0 + pal.cell_h);
+    }
     for dx in dividers {
         painted::divider(ui.painter(), dx, rect, pal);
     }

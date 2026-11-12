@@ -140,7 +140,12 @@ pub struct VerifyContext<'a> {
     /// true surface by up to its chord error, so on a convex wall a cut
     /// that deep into the real part reads as clean against the mesh; the
     /// gouge laws (b), (b2) and (f) give that much of their tolerance
-    /// back ([`VerifyContext::tightened`]). `0.0` - every model that met
+    /// back ([`VerifyContext::tightened`]), and - #904 - the collision
+    /// laws read it too: the reach law (c) and its sweep (c3) grow their
+    /// bands by it ([`VerifyContext::band_growth`]) and shrink the kerf
+    /// that excuses the flutes' own cut, and the rapid law (d) and its
+    /// posed reading shrink the slack of the footprint they march.
+    /// `0.0` - every model that met
     /// the promise, and every context that never names a model - reads
     /// each law exactly as it always did. Kept apart from `gouge_tol`,
     /// which is also the budget moves are read into chords at and must
@@ -184,33 +189,6 @@ impl Default for VerifyContext<'_> {
             model_excess: 0.0,
         }
     }
-}
-
-impl VerifyContext<'_> {
-    /// A gouge tolerance, tightened for a model coarser than the
-    /// importer promises (#864): `tol` less [`Self::model_excess`], while
-    /// that stays positive. At or below zero it would convict every
-    /// exactly finished flat face - a misleading verdict - so `tol` comes
-    /// back unchanged and the program gate refuses the operation by name
-    /// ([`excess_floor`] is the one test both sides read).
-    #[must_use]
-    pub fn tightened(&self, tol: f64) -> f64 {
-        excess_floor(tol, self.model_excess).unwrap_or(tol)
-    }
-}
-
-/// `tol` less a model's `excess` chord error, while that is an honest
-/// tolerance (#864): `Some(tol)` untouched when there is no excess,
-/// `Some(tol - excess)` while it stays positive, `None` once the excess
-/// has used the whole tolerance - where the caller must refuse rather
-/// than judge. A non-finite or negative excess is no excess.
-#[must_use]
-pub fn excess_floor(tol: f64, excess: f64) -> Option<f64> {
-    if !(excess.is_finite() && excess > 0.0) {
-        return Some(tol);
-    }
-    let left = tol - excess;
-    (left.is_finite() && left > 0.0).then_some(left)
 }
 
 /// Which machine element struck a fixture (M3.2 stage B). Serde on it
