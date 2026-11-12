@@ -733,12 +733,10 @@ fn setups_page(ui: &mut Ui, state: &mut State) {
             });
         }
         ui.separator();
-        // A document with no setups still machines steel - the
-        // workholding section and the tool list belong to the implicit
-        // context too.
-        fixtures_section(ui, state, None);
-        ui.separator();
-        tool_list_section(ui, state, None);
+        // Workholding and the tool list of the implicit first setup live
+        // under its Fixtures and Tool list nodes in the browser (#1197),
+        // the same place as in a document with setups.
+        ui.label(super::setup_pages::WORKHOLDING_POINTER);
         sheet_footer(ui, state);
         return;
     }
@@ -1033,6 +1031,7 @@ fn tool_page(ui: &mut Ui, state: &mut State, name: &str) {
         let taken = model::find_by_name(&state.world, cname).is_some();
         let clicked = ui
             .horizontal(|ui| {
+                super::tool_icons::glyph(ui, super::tool_icons::catalog_row_icon(&ct));
                 ui.label(format!(
                     "{}  Ø{} {}",
                     cname,

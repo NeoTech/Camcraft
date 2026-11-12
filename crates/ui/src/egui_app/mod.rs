@@ -105,6 +105,8 @@ mod setup_plane_pick;
 mod setup_axis_pick;
 // #555: the Setups page's lay-on-three-points row.
 mod setup_points_pick;
+// #701: the Setups page's set-WCS-from-features role row.
+mod wcs_pick_row;
 // #316: the setup page's "relative to the previous setup" control.
 mod setup_relative_pick;
 mod setup_workholding_row;
@@ -121,6 +123,7 @@ pub(crate) use pockets_page::row_text as pockets_row_text;
 mod probe_page;
 // #670: the Plasma Profile's page.
 mod plasma_page;
+mod wire_page;
 mod trochoid_page;
 mod kind_editors;
 mod mill2d_more_page;
@@ -178,6 +181,8 @@ pub mod theme_files;
 // digest straight (the imgui panels' fold checks moved there at M-g), and
 // the view cube's pick law straight.
 pub(crate) mod viewcube;
+pub(crate) mod viewport_bar;
+pub(crate) mod viewport_layout;
 pub(crate) mod world;
 
 #[cfg(test)]
@@ -251,6 +256,8 @@ mod setup_plane_tests;
 mod setup_axis_tests;
 #[cfg(test)]
 mod setup_points_tests;
+#[cfg(test)]
+mod wcs_pick_tests;
 #[cfg(test)]
 mod ball_corner_tests;
 #[cfg(test)]

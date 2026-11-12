@@ -193,23 +193,35 @@ fn post_mounts_with(world: &World, out_path: &Path, cps: Option<&str>) -> Result
 fn post_each(world: &World, out_path: &Path, cps: Option<&str>, mounts: Vec<Mount>) -> Result<Vec<PostedMount>, String> {
     // Every script first: a post that cannot be read refuses before
     // anything is judged, as the single-file post does.
+    // Each with its name for a refusal (#1199); an explicit script has none.
     let mut scripts: Vec<String> = Vec::with_capacity(mounts.len());
+    let mut names: Vec<Option<String>> = Vec::with_capacity(mounts.len());
     for m in &mounts {
-        scripts.push(match cps {
-            Some(c) => c.to_owned(),
-            None => script_of(&m.post)?.1,
-        });
+        let (name, text) = match cps {
+            Some(c) => (None, c.to_owned()),
+            None => script_of(&m.post).map(|(n, t)| (Some(n), t))?,
+        };
+        scripts.push(text);
+        names.push(name);
     }
     let streams = op_streams(world)?;
     // #1190: each mount's own script opens only what a lathe may run.
-    for (m, cps) in mounts.iter().zip(&scripts) {
+    for ((m, cps), script) in mounts.iter().zip(&scripts).zip(&names) {
         let own = streams
             .iter()
             .map(|(name, _)| name.as_str())
             .filter(|name| model::find_by_name(world, name).is_some_and(|e| member(world, &e, &m.setups)));
-        crate::lathe_voice::at_post(world, own, cps)?;
+        crate::lathe_voice::at_post(world, own, cps, script.as_deref())?;
     }
-    let mut report = verification_report(world);
+    // #1174: an explicit script is the dialect every op posts through;
+    // otherwise each op's own mount's post (the scripts read above).
+    let mut report = match cps {
+        Some(c) => {
+            let voice = crate::post::dialect::work_voice(c).map_err(|e| format!("post engine: {e}"))?;
+            crate::posting::verification_report_by(world, &|_| voice)
+        }
+        None => verification_report(world),
+    };
     for m in &mounts {
         report.problems.extend(wcs_slot::shared_word_problems_in(world, Some(&m.setups)));
     }

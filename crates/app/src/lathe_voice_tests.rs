@@ -129,6 +129,7 @@ fn want(ty: OpType) -> Want {
         | OpType::MultiAxisContour
         | OpType::Probe
         | OpType::PlasmaProfile
+        | OpType::WireContour
         | OpType::TrochoidalSlot => Want::Refused,
     }
 }
@@ -175,7 +176,7 @@ fn every_kind_is_work_spindle_live_tool_or_refused_by_name() {
         // The post's own order: a path stating C is live-tool work.
         assert_eq!(voice(&params, &stating_c(meridian()), ORIGIN), LatheVoice::LiveTool, "{}", info.label);
     }
-    assert_eq!((turns, holes, refused), (12, 1, 28), "the table covers every kind");
+    assert_eq!((turns, holes, refused), (12, 1, 29), "the table covers every kind");
     assert_eq!(turns + holes + refused, KindInfo::ALL.len());
 }
 
@@ -249,8 +250,8 @@ fn the_door_refuses_on_every_turning_dialect_and_passes_every_milling_one() {
         assert_eq!(crate::post::dialect::speaks_turning(cps).ok(), Some(lathe), "{post}: manifest and registry agree");
         for info in KindInfo::ALL {
             let (m, c) = (format!("m-{}", info.tag), format!("c-{}", info.tag));
-            assert_eq!(at_post(&world, [c.as_str()], cps), Ok(()), "{post}: {} stating C is live-tool work", info.label);
-            let got = at_post(&world, [m.as_str()], cps);
+            assert_eq!(at_post(&world, [c.as_str()], cps, None), Ok(()), "{post}: {} stating C is live-tool work", info.label);
+            let got = at_post(&world, [m.as_str()], cps, None);
             if !lathe || want(info.ty) == Want::Turns {
                 assert_eq!(got, Ok(()), "{post}: {}", info.label);
                 continue;
@@ -267,8 +268,79 @@ fn the_door_refuses_on_every_turning_dialect_and_passes_every_milling_one() {
     assert!(on_work_spindle(&world, &drill) && on_work_spindle(&world, &turn));
     assert!(!on_work_spindle(&world, &face) && !on_work_spindle(&world, &live));
     // The first refusal in program order is the one named.
-    let both = at_post(&world, ["on-centre", "turn", "face", "live"], "capabilities = 2;");
+    let both = at_post(&world, ["on-centre", "turn", "face", "live"], "capabilities = 2;", None);
     assert!(both.is_err_and(|w| w.starts_with("face: a Face operation would be posted on the work spindle")));
     // A script that does not load is a refusal, never a pass.
-    assert!(at_post(&world, ["face"], "capabilities = ;").is_err_and(|w| w.starts_with("post engine:")));
+    assert!(at_post(&world, ["face"], "capabilities = ;", None).is_err_and(|w| w.starts_with("post engine:")));
+}
+
+/// A user's own turning script that states no `capabilities` (#1199):
+/// a minimal stand-in for one, so the door's reading of the manifest is
+/// all that is under test.
+const UNDECLARED: &str = "function onSection() { writeln(\"G97 S\" + properties.spindle_speed + \" M03\"); }";
+
+fn mount(world: &World, kind: &str) {
+    let machine = crate::machine::def::Machine { kind: Some(kind.into()), ..Default::default() };
+    crate::machine::set(world, "m.mch", Some(&machine));
+}
+
+/// An undeclared script is not known to be either kind of post: on a
+/// lathe or a mill-turn it posts only a C section - a milling section
+/// and a section that turns the work (a turning kind, an on-centre
+/// drill) are refused by name, naming the missing manifest line; on a
+/// mill (no work spindle) it passes as before; a declared mask is read
+/// as stated.
+#[test]
+fn an_undeclared_script_is_held_to_the_door_on_a_machine_with_a_work_spindle() {
+    let world = crate::world::new_world();
+    op_entity(&world, "face", OpType::Face, meridian());
+    op_entity(&world, "turn", OpType::Facing, meridian());
+    op_entity(&world, "on-centre", OpType::Drill, hole(0.0, 0.0));
+    op_entity(&world, "off-centre", OpType::Drill, hole(10.0, 0.0));
+    op_entity(&world, "live", OpType::RotaryContour, stating_c(meridian()));
+    for script in [
+        UNDECLARED,
+        "capabilities = \"2\"; function onSection() {}",
+        "capabilities = -1;",
+        "capabilities = 0;",
+        "capabilities = 4;",
+    ] {
+        assert_eq!(crate::post::dialect::work_voice(script).ok(), Some(crate::post::dialect::WorkVoice::Undeclared), "{script}");
+        for (kind, label) in [("lathe", "turning"), ("mill-turn", "mill-turning")] {
+            mount(&world, kind);
+            for refused in ["face", "off-centre", "turn", "on-centre"] {
+                let why = at_post(&world, [refused], script, None).expect_err("held to the door");
+                assert!(why.starts_with(&format!("{refused}: a ")), "{kind}: {why}");
+                assert!(why.contains("work spindle") || why.contains("turns the work"), "{kind}: says why: {why}");
+                assert!(why.contains("no `capabilities` line"), "{kind}: names the missing manifest: {why}");
+                assert!(why.contains(&format!("this setup's {label} machine")), "{kind}: names the machine: {why}");
+                assert!(why.contains("`capabilities = 1;`"), "{kind}: says how to declare a mill post: {why}");
+                assert!(why.contains("`capabilities = 2;`"), "{kind}: says how to declare a turning post: {why}");
+            }
+            // A section that turns the work: why a turning post is needed.
+            for turns in ["turn", "on-centre"] {
+                let why = at_post(&world, [turns], script, None).expect_err("not known to be a turning post");
+                assert!(why.contains("only a turning post may post it"), "{kind}: {why}");
+                assert!(why.contains("not known to be one"), "{kind}: {why}");
+            }
+            // The one section both dialects open alike: C-axis live tool.
+            assert_eq!(at_post(&world, ["live"], script, None), Ok(()), "{kind}: a C section");
+            // The script is named when the caller knows it.
+            let named = at_post(&world, ["turn"], script, Some("my-lathe.cps")).expect_err("named");
+            assert!(named.contains("the post script my-lathe.cps does not state"), "{kind}: {named}");
+            // A declared mask is read as stated, on the same machine.
+            assert_eq!(at_post(&world, ["face"], "capabilities = 1;", None), Ok(()), "{kind}: a declared mill post");
+            let turning = at_post(&world, ["turn", "on-centre", "live"], "capabilities = 2;", None);
+            assert_eq!(turning, Ok(()), "{kind}: a declared turning post runs what a lathe runs");
+            let lathe = at_post(&world, ["face"], "capabilities = 2;", None).expect_err("a declared lathe post");
+            assert!(!lathe.contains("capabilities"), "{kind}: a declared script is not told to declare: {lathe}");
+        }
+        // A mill has no work spindle: an undeclared script passes there.
+        mount(&world, "mill");
+        assert_eq!(at_post(&world, ["face", "off-centre", "live"], script, None), Ok(()), "mill: {script}");
+    }
+    // No machine loaded reads as a mill, as every other law reads it.
+    let bare = crate::world::new_world();
+    op_entity(&bare, "face", OpType::Face, meridian());
+    assert_eq!(at_post(&bare, ["face"], UNDECLARED, None), Ok(()));
 }
