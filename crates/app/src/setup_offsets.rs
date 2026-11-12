@@ -115,6 +115,45 @@ pub fn name_in(t: &WorkOffsets, n: u32) -> String {
     }
 }
 
+/// How the UI and MCP word offset `n` (1-based) within a table: "Work
+/// offset 2 (G55)", or "Work offset 2" when the post gives it no name
+/// (#931 triage wording note).
+#[must_use]
+pub fn entry_label(t: &WorkOffsets, n: u32) -> String {
+    let named = usize::try_from(n)
+        .ok()
+        .and_then(|n| n.checked_sub(1))
+        .and_then(|i| t.names.get(i))
+        .filter(|s| !s.is_empty());
+    match named {
+        Some(s) => format!("Work offset {n} ({s})"),
+        None => format!("Work offset {n}"),
+    }
+}
+
+/// The 1-based index a caller's offset names: a whole number
+/// `1..=MAX_SLOT + 1`, or one of the legacy words `G54`..`G59` (aliases
+/// of 1-6). `Err` says what is accepted. Whether the setup's post can
+/// express it is [`check`]'s (the command's) to say.
+pub fn parse_index(v: &serde_json::Value) -> Result<u32, String> {
+    let top = u32::try_from(MAX_SLOT).map_or(u32::MAX, |m| m.saturating_add(1));
+    let bad = || {
+        format!("work offset must be a whole number 1 to {top}, or one of the words G54-G59 (offsets 1-6), got {v}")
+    };
+    match v {
+        serde_json::Value::Number(n) => n
+            .as_u64()
+            .and_then(|n| u32::try_from(n).ok())
+            .filter(|n| (1..=top).contains(n))
+            .ok_or_else(bad),
+        serde_json::Value::String(s) => legacy_slot(s)
+            .and_then(|i| u32::try_from(i).ok())
+            .map(|i| i.saturating_add(1))
+            .ok_or_else(bad),
+        _ => Err(bad()),
+    }
+}
+
 /// The name of the offset a setup context posts at ([`index`]).
 #[must_use]
 pub fn wcs_name(world: &World, setup: Option<&str>) -> String {
