@@ -155,8 +155,9 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
     // operation's setup's stock (M3.2 A), never a neighbor setup's
     // block, which is what the collect read of the setup's stock
     // entity guarantees.
-    let stock_region = stock_facets
-        .as_deref()
+    // #1066: a hole-list kind on the stock itself reads the unpunched stock.
+    let judged_stock = super::material_source::judged_stock(stock_facets.as_deref(), &src, &params, &material);
+    let stock_region = judged_stock
         .and_then(|f| slice::project(f, FOOTPRINT_SAMPLES).ok())
         .filter(|r| !r.is_empty());
     let stock_top_z =
@@ -3045,8 +3046,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     st_local = st_local.max(f.z_local(p));
                 }
             }
-            let stock_region_local = stock_facets
-                .as_deref()
+            let stock_region_local = judged_stock
                 .map(|t| f.local_facets(t))
                 .and_then(|t| slice::project(&t, FOOTPRINT_SAMPLES).ok())
                 .filter(|r| !r.is_empty());
