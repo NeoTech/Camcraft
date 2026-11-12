@@ -43,8 +43,10 @@
 //!   plates is judged with the EFFECTIVE `nose_to_axis`: the setup's
 //!   stated figure when it has one, else the machine's less the stack's
 //!   thickness (`crate::rotary_stack`). A stack whose thickness is not
-//!   known, or an effective figure at or under zero, refuses by name. No
-//!   stack and no stated figure: judged as before, word for word.
+//!   known, or an effective figure at or under zero, refuses by name; so
+//!   does a stated figure above the machine's, or above the machine's
+//!   less the setup's own stack. No stack and no stated figure: judged
+//!   as before, word for word.
 //! - **The margin.** [`MARGIN_MM`] between the tip and the swept radius.
 
 use crate::rotary_stack::Rise;
@@ -253,7 +255,23 @@ pub(super) fn index_swing_problems(world: &World) -> Vec<String> {
         // #821: a rotary raised by a stack is judged from its raised line.
         let (nose, from) = match crate::rotary_stack::rise(world, op.setup.as_deref()) {
             Rise::Table => (nose, String::new()),
-            Rise::Stated(v) => (Ok(v), format!(" (the setup's stated nose_to_axis {v:.3} mm)")),
+            Rise::Stated(v) => {
+                // #821 review: a stated figure never loosens the check
+                // past the machine's own, or past the machine's less the
+                // stack the setup models.
+                let checked = match nose {
+                    Ok(n) if n.is_finite() => crate::rotary_stack::check_stated(world, op.setup.as_deref(), v, n),
+                    _ => Ok(()),
+                };
+                if let Err(why) = checked {
+                    out.push(format!(
+                        "{name}: {why} - the {letter}{a:.3} index swing is not judged (correct the setup's \
+                         nose_to_axis, or the machine file's)"
+                    ));
+                    continue;
+                }
+                (Ok(v), format!(" (the setup's stated nose_to_axis {v:.3} mm)"))
+            }
             Rise::Stack(s) => (
                 nose.map(|n| n - s.thickness),
                 format!(" (nose_to_axis less the {:.3} mm stack under the rotary: {})", s.thickness, s.describe()),

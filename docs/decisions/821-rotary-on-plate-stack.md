@@ -76,3 +76,40 @@ themselves in `tools/list`).
 **Cost to change later:** the stack rule is one function
 (`rotary_stack::rise`); a geometric rise (the subplate's top over the
 machine table) would replace it without touching the swing clause.
+
+**2026-11-12 - review fixes (NeoTech's review of `642cd694`).**
+- **Where the subplate stands counts, not only its links.** Chosen: each
+  subplate's posed top over the machine table's top (the table box the
+  collision laws and `InsertPlate`'s on-table placement already use) is
+  read beside its linked stack, and the larger is its rise; a gap above
+  the links is a layer of its own ("unlinked support, read from its height
+  over the machine table"). So a subplate put on a plate by position, or
+  left up after its plate was deleted, is judged on 39.05 mm, not 19.05.
+  A subplate standing LOWER than its links say keeps the links' figure
+  (the larger, never the smaller). A machine that states no table, or a
+  subplate with no posed geometry, refuses the swing by name. Considered
+  and dropped: refusing every subplate whose underside is not on the table
+  and not linked (the review's minimum) - reading the height covers that
+  case conservatively and still judges the program; and detecting the
+  plate under it by footprint overlap - it would miss a subplate left
+  floating after its plate went, the second probe.
+- **A stated `nose_to_axis` never loosens the check.** Chosen: refusal
+  (the conservative reading), not a note. A stated figure above the
+  machine's own bare-table figure is refused by name ("exceeds the
+  machine's own N mm"), and so is one above the machine's figure less the
+  setup's own modelled stack ("exceeds the machine's Y mm less the Z mm
+  stack under the rotary (...)"). A figure at or under it is used as
+  before (tighter only). When the stack cannot be read (an imported
+  plate), the stated figure stays the remedy and is used, still capped by
+  the machine's figure. A machine that states no figure leaves the stated
+  one unchecked, as before. Considered and dropped: a passing note in the
+  post - a figure the model contradicts is a typo or a wrong model, and a
+  note nobody reads lets it pass; a measurement that really beats the
+  machine file's nominal figure is fixed in the machine file.
+- **Datum transfer.** The figure still rides `CreateSetup` from another
+  setup (#343); it is re-checked against the NEW setup's own stack at the
+  gate, so a transfer onto a taller stack is refused there by name. Not
+  refused at creation: the new setup has no fixtures yet.
+- **UI text.** The Machine page says "spindle nose to rotary centerline",
+  not the file key `nose_to_axis`, and shows the stated-figure refusal in
+  red beside the field.

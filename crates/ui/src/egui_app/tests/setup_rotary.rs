@@ -1,6 +1,6 @@
 //! #821 in the shell: a setup whose machine turns the work on a rotary
 //! shows its Machine page's "Rotary centerline" rows - the machine file's
-//! nose_to_axis and how the stack raises it - and its own measured figure
+//! spindle nose to rotary centerline (its `nose_to_axis`) and how the stack raises it - and its own measured figure
 //! is one undoable command (`SetupNoseToAxis`), stated from the checkbox.
 //! A machine with no work-turning rotary draws none of it.
 //! Provenance: our own tests over our own shell; no vendor material.
@@ -39,7 +39,9 @@ fn the_machine_page_shows_the_rotary_rows_and_states_the_figure() {
     harness.run_steps(2);
     assert!(harness.query_by_label(crate::egui_app::setup_rotary_page::HEADING).is_some(), "the section is drawn");
     assert!(harness.query_by_label("No rotary subplate in this setup: judged on the machine's figure.").is_some());
-    harness.get_by_label("This setup states its own nose_to_axis (measured on its stack)").click();
+    let file_row = format!("Machine file: A spindle nose to rotary centerline {NOSE:.4} mm");
+    assert!(harness.query_by_label(&file_row).is_some(), "plain words, not the file key: {file_row}");
+    harness.get_by_label(crate::egui_app::setup_rotary_page::STATE_OWN).click();
     harness.run_steps(2);
     let stated = rotary_stack::stated(&harness.state().state.world, Some("Setup1"));
     assert!(stated.is_some_and(|v| (v - NOSE).abs() < 1e-9), "stated from the machine's figure: {stated:?}");

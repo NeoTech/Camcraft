@@ -98,10 +98,17 @@ fn doc(len: f64) -> (World, History) {
     (world, h)
 }
 
-/// A fixed 300 x 300 mm dowel plate well under the bar; its name.
+/// The top of the machine's table (its Z-travel minimum), where a plate
+/// or a lone subplate stands (#821 review: the rise is read from there).
+fn table_top(world: &World) -> f64 {
+    fixture::table_box(world, None).expect("the microARC machine states a table").max.z
+}
+
+/// A fixed 300 x 300 mm dowel plate on the table, well under the bar
+/// (its frame's origin on its top face); its name.
 fn plate(world: &World, h: &mut History) -> String {
     let p = plate::preset("300 x 300 mm").expect("preset").params();
-    let at = Location { pos: Point3::new(-150.0, -150.0, -150.0), rot: IDENTITY_Q };
+    let at = Location { pos: Point3::new(-150.0, -150.0, table_top(world) + PLATE_T), rot: IDENTITY_Q };
     let cmd = ok(InsertPlate::new(world, &p, None, PlatePlacement::At(at)), "plate");
     let name = cmd.name().to_owned();
     h.execute(world, cmd);
@@ -114,8 +121,9 @@ fn subplate_params(thickness: f64) -> Accessory {
     ok(subplate::generic().with_dim("bore_spacing", 100.0).and_then(|a| a.with_dim("thickness", thickness)), "dims")
 }
 
+/// The subplate standing on the bare table (the T-slots).
 fn add_subplate(world: &World, h: &mut History, thickness: f64) -> String {
-    let at = Location { pos: Point3::new(0.0, 0.0, -100.0), rot: IDENTITY_Q };
+    let at = Location { pos: Point3::new(0.0, 0.0, table_top(world)), rot: IDENTITY_Q };
     let cmd = ok(InsertAccessory::new(world, &subplate_params(thickness), None, AccessoryPlacement::At(at)), "subplate");
     let name = cmd.name().to_owned();
     h.execute(world, cmd);
@@ -147,7 +155,8 @@ fn a_subplate_lands_fixed_and_seats_on_a_dowel_pair_by_its_pins() {
     let place = ok(PlaceOnPlate::new(&world, &s, &p, on_dowels("C2", "C4"), 0.0), "pins fit");
     // C2 is (75, 125) on the plate's top face; the underside stands on it.
     let at = place.location().pos;
-    assert!((at.x - -75.0).abs() < 1e-9 && (at.y - -25.0).abs() < 1e-9 && (at.z - -150.0).abs() < 1e-9, "{at:?}");
+    let top = table_top(&world) + PLATE_T;
+    assert!((at.x - -75.0).abs() < 1e-9 && (at.y - -25.0).abs() < 1e-9 && (at.z - top).abs() < 1e-9, "{at:?}");
     h.execute(&world, place);
     let hole = PlaceOnPlate::new(&world, &s, &p, MountAt::Hole("C3".into()), 0.0).err().expect("a hole is no pin pair");
     assert!(hole.to_string().contains("located by its two pin bores - place it on a dowel pair"), "{hole}");

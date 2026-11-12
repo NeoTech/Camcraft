@@ -7,7 +7,10 @@
 //! Gate map (M4.4): covers app::mcp::rotary_tools, app::mcp::accessory_tools
 //! (rotary_subplate), app::mcp::plate_tools (the pin law).
 
+use camcraft_app::fixture::table_of;
+use camcraft_app::machine::parse_mch;
 use camcraft_app::mcp::Server;
+use camcraft_app::posting::MACHINES;
 
 use serde_json::{Value, json};
 
@@ -64,8 +67,11 @@ fn a_subplate_is_pinned_on_a_plate_and_raises_the_rotary_over_mcp() {
     }
     c.ok("load_machine", json!({ "builtin": "Tormach 770MX + microARC 4" }));
     c.ok("add_setup", json!({ "name": "Setup1" }));
-    let plate = c.ok("add_fixture_plate", json!({ "preset": "300 x 300 mm" }))["fixture"].as_str().expect("name").to_owned();
-    let added = c.ok("add_accessory", json!({ "kind": "rotary_subplate", "position": [0.0, 0.0, 100.0], "dimensions": { "bore_spacing": 100.0 } }));
+    let plate = c.ok("add_fixture_plate", json!({ "preset": "300 x 300 mm", "on_table": true }))["fixture"].as_str().expect("name").to_owned();
+    // On the table's top (#821 review: the rise is read from where it stands).
+    let text = MACHINES.iter().find(|(n, _)| *n == "Tormach 770MX + microARC 4").map(|(_, t)| *t).expect("shipped");
+    let top = table_of(&parse_mch(text).expect("parses")).expect("a table").max.z;
+    let added = c.ok("add_accessory", json!({ "kind": "rotary_subplate", "position": [0.0, 0.0, top], "dimensions": { "bore_spacing": 100.0 } }));
     let sub = added["fixture"].as_str().expect("name").to_owned();
     assert_eq!(added["accessory"]["kind"], json!("rotary_subplate"), "{added}");
     let why = c.refused("place_on_plate", json!({ "fixture": sub, "plate": plate, "hole": "C3" }));
