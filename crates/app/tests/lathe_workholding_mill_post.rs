@@ -123,7 +123,11 @@ fn post(world: &World, cps: &str, tag: &str) -> Result<String, String> {
 }
 
 #[test]
-fn a_mill_turn_facing_op_through_a_milling_post_is_held_to_the_chuck() {
+fn a_mill_turn_facing_op_through_a_milling_post_is_refused_and_held_to_the_chuck() {
+    // #1232 (maintainer, 2026-11-12: "Refuse it"): a work-spindle
+    // section needs a turning post on a mill-turn as on a lathe - so
+    // the facing op is refused by name even at the chuck limit, and
+    // over it the chuck limit is still named beside that refusal.
     for (name, cps) in [("fanuc", FANUC), ("haas", HAAS)] {
         let over = doc("mill-turn", Section::Work, 3000.0).expect("facing on a mill-turn");
         let why = post(&over, cps, name).err().unwrap_or_default();
@@ -131,9 +135,13 @@ fn a_mill_turn_facing_op_through_a_milling_post_is_held_to_the_chuck() {
             why.contains("K: turns the work at 3000 rpm (G97)") && why.contains("workholding maximum of 2000 rpm"),
             "{name}: facing at 3000 under a 2000 chuck is refused by name: {why}"
         );
+        assert!(why.contains("is not a turning post") && why.contains("(K)"), "{name}: {why}");
         let at = doc("mill-turn", Section::Work, CHUCK).expect("facing on a mill-turn");
-        let posted = post(&at, cps, name);
-        assert!(posted.is_ok(), "{name}: exactly at the limit posts: {:?}", posted.err());
+        let why = post(&at, cps, name).expect_err("a turning section through a milling post");
+        assert!(why.contains("is not a turning post") && why.contains("(K)"), "{name}: refused by name: {why}");
+        assert!(!why.contains("workholding maximum"), "{name}: at the limit the chuck is not the reason: {why}");
+        // Through the turning post the same section posts at the limit.
+        assert!(post(&at, LATHE, name).is_ok(), "{name}: a turning post serves it");
     }
 }
 

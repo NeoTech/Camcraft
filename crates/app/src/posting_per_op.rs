@@ -139,7 +139,7 @@ fn post_per_op_with(
     let mut unserved = Vec::new();
     for (setup, ops, label, cps) in &by_setup {
         let machine = crate::setup_mount::machine_of(world, Some(setup.as_str()).filter(|s| !s.is_empty()));
-        unserved.extend(super::serves::refusal(std::slice::from_ref(setup), ops, &machine, cps, label.as_deref())?);
+        unserved.extend(super::serves::refusal(world, std::slice::from_ref(setup), ops, &machine, cps, label.as_deref())?);
     }
     // #1174: the workholding clause reads each op's own script's dialect
     // (keyed by effective setup name, as `script` is); unreadable reads

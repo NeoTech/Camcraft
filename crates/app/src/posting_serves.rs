@@ -18,6 +18,17 @@
 //! refuses one that declares turning, and no script serves an EDM (no
 //! EDM dialect ships, #533). A refusal names the setup, its operations,
 //! the post and the machine's kind - nothing is posted.
+//!
+//! And per section (maintainer, 2026-11-12, on a mill-turn): a section
+//! that turns the work - a turning op or an on-centre drill, as
+//! [`crate::lathe_voice::voice_of`] reads it - posts only through a
+//! post whose dialect is turning ([`work_voice`] `WorkSpindle`). On a
+//! lathe or a mill-turn a milling post would write it for the TOOL
+//! spindle (a turning insert spun at the section's rpm, the facing
+//! pass as Y moves): refused by name. Milling and C-axis sections on a
+//! mill-turn still post through a milling post.
+
+use flecs_ecs::prelude::World;
 
 use crate::machine::{Kind, Machine};
 use crate::post::dialect::{work_voice, WorkVoice};
@@ -44,6 +55,22 @@ fn serves(cps: &str, kind: Kind) -> Result<bool, String> {
     })
 }
 
+/// The operations of `ops` that turn the work, when `kind` has a work
+/// spindle and `cps` is not a turning dialect: each would be written
+/// for the tool spindle.
+fn unturned<'a>(world: &World, ops: &[&'a str], kind: Kind, cps: &str) -> Result<Vec<&'a str>, String> {
+    if !matches!(kind, Kind::Lathe | Kind::MillTurn)
+        || work_voice(cps).map_err(|e| format!("post engine: {e}"))? == WorkVoice::WorkSpindle
+    {
+        return Ok(Vec::new());
+    }
+    Ok(ops
+        .iter()
+        .copied()
+        .filter(|name| crate::model::find_by_name(world, name).is_some_and(|e| crate::lathe_voice::on_work_spindle(world, &e)))
+        .collect())
+}
+
 /// The refusal for one mount, or `None` when its post serves it:
 /// `setups` (effective names, `""` for the implicit setup) and their
 /// `ops` (program order) run on `machine` through the script `cps`;
@@ -52,6 +79,7 @@ fn serves(cps: &str, kind: Kind) -> Result<bool, String> {
 /// # Errors
 /// A script that does not load, as everywhere.
 pub(super) fn refusal(
+    world: &World,
     setups: &[String],
     ops: &[&str],
     machine: &(String, Option<Machine>),
@@ -59,15 +87,26 @@ pub(super) fn refusal(
     label: Option<&str>,
 ) -> Result<Option<String>, String> {
     let kind = crate::machine::kind(machine.1.as_ref());
-    if serves(cps, kind)? {
-        return Ok(None);
-    }
     let who = if setups.iter().all(String::is_empty) { "the setup".to_owned() } else { setups.join(", ") };
     let post = match (registry_name(cps), label) {
         (Some(name), _) => format!("post {name}"),
         (None, Some(path)) => format!("post script {path}"),
         (None, None) => "the given post script".to_owned(),
     };
+    if serves(cps, kind)? {
+        let turned = unturned(world, ops, kind, cps)?;
+        if turned.is_empty() {
+            return Ok(None);
+        }
+        return Ok(Some(format!(
+            "{who} ({}): {post} is not a turning post - on {}, a {} machine, these sections turn the work, and a \
+             milling post would write them for the tool spindle; give the setup a post that serves turning, or move \
+             them to a setup that does, or suppress them",
+            turned.join(", "),
+            crate::setup_mount::machine_label(machine),
+            kind.label()
+        )));
+    }
     Ok(Some(format!(
         "{who} ({}): {post} does not serve {}, a {} machine - it would write a program that machine cannot run; \
          give the setup a post that serves {}, or suppress its operations",

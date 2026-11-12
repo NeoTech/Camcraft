@@ -465,7 +465,7 @@ fn post_script_body(world: &World, out_path: &Path, cps: &str, label: Option<&st
     crate::lathe_voice::at_post(world, streams.iter().map(|(n, _)| n.as_str()), cps)?;
     // #1232: and a post writes only for a machine kind it serves.
     let names: Vec<&str> = streams.iter().map(|(n, _)| n.as_str()).collect();
-    let unserved = serves::refusal(&mount.setups, &names, &mount.machine, cps, label)?;
+    let unserved = serves::refusal(world, &mount.setups, &names, &mount.machine, cps, label)?;
     let machine = mount.machine;
     let records = join_streams(streams);
     // The verification gate (M2.3 D): the same two program-level
