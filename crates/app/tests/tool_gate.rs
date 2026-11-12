@@ -215,7 +215,7 @@ fn the_refusal_names_a_fitting_catalog_entry() {
     }
     for (ty, want) in [
         (OpType::Drill, "'DR-0600' (6 mm drill)"),
-        (OpType::Thread, "'TAP-M6' (6 mm tap)"),
+        (OpType::Thread, "'TM-0600-P125' (6 mm thread mill)"),
         (OpType::BoringTurning, "'BR-1000' (10 mm boring bar)"),
         (OpType::GrooveFinish, "'GT-0300' (3 mm grooving blade)"),
         (OpType::Threading, "'TD-1732-60' (1.732 mm threading insert)"),

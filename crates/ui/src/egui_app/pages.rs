@@ -78,7 +78,7 @@ use super::theme::Tokens;
 pub(crate) use super::fields::{combo, combo_owned, field, num, num_feed, num_plain};
 
 /// Tool kind labels, same order as `ToolKind` (mirrors the tool page).
-const TOOL_KINDS: [&str; 13] = [
+const TOOL_KINDS: [&str; 15] = [
     "End mill",
     "Ball nose",
     "Bull nose",
@@ -93,6 +93,9 @@ const TOOL_KINDS: [&str; 13] = [
     "Touch probe",
     // #670: the kerf is its diameter; it turns no spindle.
     "Plasma torch",
+    // #894: rows of teeth at one pitch / one row over a pitch range.
+    "Thread mill",
+    "Single-form thread mill",
 ];
 
 /// The note gray the model page's notes use ([0.62,0.66,0.72]).
@@ -1369,6 +1372,8 @@ pub(crate) fn tool_editor_window(ctx: &egui::Context, state: &mut State) {
                         {
                             state.tool_ui.tip_angle = 90.0;
                         }
+                        // The thread mills (#894): a form and a pitch.
+                        super::tool_thread_mill_row::seed(&mut state.tool_ui);
                         // The torch (#670): no spindle, no corner - a
                         // kerf. Leaving it, a spinning kind needs an rpm.
                         if state.tool_ui.tool_kind() == tools::ToolKind::Torch {
@@ -1415,6 +1420,8 @@ pub(crate) fn tool_editor_window(ctx: &egui::Context, state: &mut State) {
                     }
                     // #630: which point of the nose the lathe posts write.
                     super::tool_orientation_row::orientation_row(ui, state);
+                    // #894: a thread mill's pitch (range) and form angle.
+                    super::tool_thread_mill_row::thread_mill_rows(ui, state);
                     if state.tool_ui.kind == 7 {
                         field(ui, "Blade width");
                         num(ui, u, &mut state.tool_ui.width);
@@ -1448,7 +1455,10 @@ pub(crate) fn tool_editor_window(ctx: &egui::Context, state: &mut State) {
                         field(ui, "Corner radius");
                         ui.label(format!("{} {}", units::len(state.tool_ui.diameter * 0.5, u, 3), u.suffix()));
                         ui.label("half the diameter - a ball nose's whole tip is its ball");
-                    } else if !matches!(state.tool_ui.tool_kind(), tools::ToolKind::Tap | tools::ToolKind::Torch) {
+                    } else if !matches!(
+                        state.tool_ui.tool_kind(),
+                        tools::ToolKind::Tap | tools::ToolKind::Torch | tools::ToolKind::ThreadMill | tools::ToolKind::ThreadMillSingle
+                    ) {
                         field(ui, "Corner radius");
                         num(ui, u, &mut state.tool_ui.corner_r);
                     }

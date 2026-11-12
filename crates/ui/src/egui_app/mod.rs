@@ -70,6 +70,10 @@ mod pages;
 mod tool_body_page;
 // #630: the tool editor's lathe orientation row.
 mod tool_orientation_row;
+// #894: the Thread operation's pitch and hand rows.
+mod thread_page;
+// #894: the thread mills' pitch and form rows.
+mod tool_thread_mill_row;
 mod tool_profile_page;
 // #793: the built-in taper holder picker in the Profile section.
 mod tool_holder_picker;
@@ -195,6 +199,8 @@ mod dialog_tests;
 mod coolant_tests;
 #[cfg(test)]
 mod thread_hand_tests;
+#[cfg(test)]
+mod thread_mill_page_tests;
 #[cfg(test)]
 mod after_op_tests;
 #[cfg(test)]

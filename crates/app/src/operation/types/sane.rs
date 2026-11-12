@@ -1103,12 +1103,14 @@ impl OpParams {
                 feed,
                 plunge_feed,
                 holes,
+                pitch,
                 ..
             } => {
                 clearance_z.is_sane()
                     && retract_z.is_none_or(|r| r.is_sane())
                     && top_z.is_sane()
                     && bottom_z.is_none_or(|b| b.is_sane())
+                    && pitch.is_none_or(pos)
                     && pos(*infeed)
                     && pos(*feed)
                     && pos(*plunge_feed)

@@ -469,6 +469,7 @@ fn cycle_tool(kind: ToolKind, diameter: f64, tip_angle: f64, pitch: f64) -> Tool
         tool_material: None,
         flutes: None,
         orientation: None,
+        pitch_min: 0.0,
     }
 }
 
@@ -1050,4 +1051,60 @@ fn trochoid_slot_small_matches_golden() {
     let t = camcraft_app::machining2d::trochoidal_slot(&[Point2::new(0.0, 0.0), Point2::new(12.0, 0.0)], &p).unwrap();
     assert!(t.has_arcs());
     write_golden("trochoid_slot_small.cl", &gen_to_cltext(&t));
+}
+
+// ---------------------------------------------------------------------------
+// #894 - thread milling. The exact ride - lead arcs, helix, radial passes,
+// levels - for both tool forms, both hands and a boss must not move
+// unnoticed.
+// ---------------------------------------------------------------------------
+
+fn thread_ride(rows: u32, external: bool, hand: camcraft_app::cl::ThreadHand, climb: bool, through: bool) -> camcraft_app::cl::Toolpath {
+    use camcraft_app::machining2d::{thread_mill, ThreadHole, ThreadParams};
+    thread_mill(&ThreadParams {
+        holes: vec![
+            ThreadHole { xy: Point2::new(10.0, 10.0), radius: 5.0, top_z: 0.0, floor_z: -8.0, stepped: false, through },
+            ThreadHole { xy: Point2::new(40.0, 10.0), radius: 5.0, top_z: 0.0, floor_z: -8.0, stepped: false, through },
+        ],
+        pitch: 1.5,
+        tool_diameter: 6.0,
+        rows,
+        infeed: 0.45,
+        external,
+        hand,
+        climb,
+        clearance_z: 10.0,
+        retract_z: Some(4.0),
+        feed: 300.0,
+        plunge_feed: 100.0,
+    })
+    .expect("a valid thread ride")
+}
+
+#[test]
+fn thread_mill_internal_single_form_matches_golden() {
+    // Right-hand climb in two blind holes with a one-row mill: bottom-up,
+    // counter-clockwise, one turn per thread, two radial passes.
+    let t = thread_ride(1, false, camcraft_app::cl::ThreadHand::Right, true, false);
+    assert!(t.is_chained() && t.has_arcs());
+    write_golden("thread_mill_internal_single_form.cl", &gen_to_cltext(&t));
+}
+
+#[test]
+fn thread_mill_internal_multi_form_left_hand_matches_golden() {
+    // Left-hand conventional through holes with a three-row mill: two
+    // levels of one clockwise revolution each, rising, the tip running one
+    // pitch past the exit.
+    let t = thread_ride(3, false, camcraft_app::cl::ThreadHand::Left, false, true);
+    assert!(t.is_chained() && t.has_arcs());
+    write_golden("thread_mill_internal_multi_form_left_hand.cl", &gen_to_cltext(&t));
+}
+
+#[test]
+fn thread_mill_external_single_form_matches_golden() {
+    // Right-hand climb round two bosses: clockwise, top-down, quarter-arc
+    // leads from one tool radius outside the centre circle.
+    let t = thread_ride(1, true, camcraft_app::cl::ThreadHand::Right, true, false);
+    assert!(t.is_chained() && t.has_arcs());
+    write_golden("thread_mill_external_single_form.cl", &gen_to_cltext(&t));
 }

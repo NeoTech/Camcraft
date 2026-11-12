@@ -2020,26 +2020,12 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             })?;
             (region, path)
         }
-        // M2.4 C: helical thread milling. The pitch is the TOOL's,
-        // read the way the tap cycle reads it; a thread mill that
-        // cannot state one is refused here, by name. Every move
-        // posted is plain 3-axis interpolation - the spindle-sync
-        // word stays M3.3's machine-definition question, and this
-        // kind asks nothing of it.
-        OpParams::Thread {
-            infeed,
-            feed,
-            plunge_feed,
-            climb,
-            holes,
-            ..
-        } => {
-            if !(tool.pitch.is_finite() && tool.pitch > 0.0) {
-                return Err(GenError::Invalid(
-                    "a thread mill needs a positive pitch on the tool - the tap cycle's law, \
-                     read the same way".into(),
-                ));
-            }
+        // M2.4 C, #894: helical thread milling with a thread mill
+        // (`thread_op`): the tool's form and the thread's pitch are
+        // judged at the door, by name. Every move posted is plain
+        // 3-axis interpolation (G2/G3 with Z) - no spindle sync.
+        OpParams::Thread { holes, .. } => {
+            let plan = super::thread_op::kernel_params(&tool, &params, &hl)?;
             let region = region_for_job(
                     &mut picked_region,
                     &mut section_z,
@@ -2048,26 +2034,10 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 m_gen,
                 frame.as_ref(),
             )?;
-            let path = machining2d::thread_mill(&machining2d::ThreadParams {
-                holes: holes
-                    .iter()
-                    .map(|h| machining2d::ThreadHole {
-                        xy: h.xy,
-                        radius: h.radius,
-                        top_z: h.entry_z,
-                        floor_z: hl.bottom.unwrap_or(h.floor_z),
-                        stepped: h.stepped,
-                    })
-                    .collect(),
-                pitch: tool.pitch,
-                tool_diameter: d,
-                infeed: *infeed,
-                clearance_z: hl.clearance,
-                retract_z: hl.retract,
-                feed: *feed,
-                plunge_feed: *plunge_feed,
-                climb: *climb,
-            })?;
+            // The crest law's wall: the tangency verdict reads the
+            // thread's MAJOR circle, the furthest the teeth may reach.
+            let region = super::thread_op::crest_region(region, holes, plan.depth())?;
+            let path = machining2d::thread_mill(&plan)?;
             (region, path)
         }
         // M5.2 stage A: the first turning kind. Which documents may
@@ -2601,6 +2571,8 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
     // with a body, the same bands above the shank, never the cylinder
     // enclosing them.
     let cutter = verify::Cutter::of(&tool).with_body(&geom, &holder);
+    // #894: the solid law judges a thread mill at its tooth roots.
+    let cutter = super::thread_op::root_cutter(cutter, &tool, &params);
     let fixture_boxes = fixtures;
     // #339 slice 5: an upright mill's links are planned over the steel -
     // a struck link rises over it, an unclearable one refuses by name.
@@ -3042,6 +3014,8 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     stock_facets.as_deref().unwrap_or(&material.facets), analytic_stock.then_some(&mut verify_prior),
                 );
             }
+            // #894: a thread mill's passes retrace one helix by design.
+            super::thread_op::stand_down_crossings(&params, &mut warns);
             Ok((path, warns))
         }
         Some(f) => {

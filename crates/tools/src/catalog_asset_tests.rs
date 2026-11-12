@@ -6,11 +6,11 @@
 use crate::catalog_asset::{CATALOG_JSON, parse_catalog};
 use crate::tools::{Tool, ToolKind, ToolMaterial, catalog, probe_tool, torch_tool};
 
-const ORDER: [&str; 29] = [
+const ORDER: [&str; 31] = [
     "EM-0200-2FL", "EM-0300-2FL", "EM-0400-2FL", "EM-0600-4FL", "EM-0800-4FL", "EM-1000-4FL", "EM-1200-2FL",
     "BN-0600", "BN-1000", "BB-1000-R1", "DR-0200", "DR-0300", "DR-0400", "DR-0600", "CM-0400-90", "CM-0600-90",
     "CM-1000-90", "TAP-M4", "TAP-M6", "BR-1000", "TN-1600-0R8", "GT-0200", "GT-0300", "TD-0866-60", "TD-1732-60",
-    "FG-0600-04", "FG-1200-08", "PRB-0400", "PT-KERF-150",
+    "FG-0600-04", "FG-1200-08", "PRB-0400", "PT-KERF-150", "TM-0600-P125", "TMS-0600-P050-150",
 ];
 
 fn tool(name: &str) -> Tool {

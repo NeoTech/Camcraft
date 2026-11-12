@@ -28,4 +28,6 @@ pub mod lathe_holder;
 pub mod lathe_insert_zone;
 // #630: the lathe tool orientation code and its control point.
 pub mod orientation;
+// #894: the thread mills - form constants, sanity and the pitch door.
+pub mod thread_mill;
 pub mod tools;

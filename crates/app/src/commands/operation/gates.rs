@@ -136,8 +136,24 @@ pub(super) fn family_gate(world: &World, context: Option<&str>, params: &OpParam
 /// and setup name. Runs at construction, before any entity exists, so
 /// every surface (UI, CLI, scripts, undo replay) meets the same wall.
 pub(super) fn tool_gate(world: &World, params: &OpParams, tool: &str) -> Result<(), CommandError> {
-    match operation::tool_gate::tool_refusal(world, params.kind().info(), tool) {
-        Some(msg) => Err(CommandError::Invalid(msg)),
+    if let Some(msg) = operation::tool_gate::tool_refusal(world, params.kind().info(), tool) {
+        return Err(CommandError::Invalid(msg));
+    }
+    thread_gate(world, params, tool)
+}
+
+/// The thread door (#894): a thread mill against the thread the
+/// operation states - a pitch outside the tool's range, a form it is not
+/// ground to, an infeed past the thread depth, a mill wider than a
+/// hole's minor diameter - refused by name when the operation is made,
+/// edited or re-tooled. Open for every other kind and for a tool that
+/// is no thread mill (the tool law names that one).
+pub(super) fn thread_gate(world: &World, params: &OpParams, tool: &str) -> Result<(), CommandError> {
+    match model::find_by_name(world, tool).and_then(|e| model::tool_of(world, &e)) {
+        Some(def) => match operation::thread_op::door(&def, params) {
+            Some(msg) => Err(CommandError::Invalid(msg)),
+            None => Ok(()),
+        },
         None => Ok(()),
     }
 }
