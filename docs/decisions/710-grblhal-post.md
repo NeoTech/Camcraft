@@ -62,6 +62,15 @@ G-code list in grblHAL's public core README and the LinuxCNC G-code reference
 - **End units option** (`EndUnits`) is read by the script, but the Setup
   pane's end-units row still shows only for Tormach; widening it is UI
   work left out of this PR.
+- **Per-operation smoothing (#616) is named, not written** (review of
+  PR #715). grblHAL's core lists G61 (exact path) only - no G64 P and no
+  other word bounds the deviation by a tolerance. With smoothing on, the
+  program carries one `(SMOOTHING NOT WRITTEN - GRBLHAL STATES NO
+  SMOOTHING TOLERANCE)` note, the way Fanuc and Mazak name an ask they
+  cannot bound; the ask resets at each section end. Dropped: writing G64
+  without P (unbounded blending - worse than none), and staying silent
+  (the user's ask would vanish). Pinned by
+  `smoothing::fanuc_and_mazak_name_the_ask_once_and_write_no_unbounded_word`.
 
 **Cost to change later:** low - a post option for the length offset or for G30
 before M6 adds words without moving any existing golden.

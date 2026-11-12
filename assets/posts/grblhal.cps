@@ -39,6 +39,9 @@ var coolantOp = "";        // the section's OperationName, for refusals (#150)
 var sectionOpen = false;   // preamble written (a legacy .cl carries no SECTION)
 var orgX = 0, orgY = 0, orgZ = 0; // the WCS slot origin (OriginX/Y/Z PARAMs)
 var inch = false;          // the machine is programmed in inches (onOpen)
+var smoothTol = 0;         // #616: the section's PARAM Smoothing, mm (0: none asked)
+var smoothMode = "";       // #616: "finish" or "rough"
+var smoothNamed = false;   // the not-written note, once per program
 
 // ------------------------------------------------------------ helpers
 // The stream speaks mm and mm/min. An inch machine gets every length and
@@ -270,6 +273,8 @@ function onParameter(name, value) {
   if (name === "OperationName") coolantOp = String(value || "");
   if (name === "Coolant") { coolantAsk = String(value || "flood"); return; }
   if (name === "AfterOperation") { afterAsk = String(value || ""); return; }
+  if (name === "Smoothing") { smoothTol = Number(value) || 0; return; }
+  if (name === "SmoothingMode") { smoothMode = String(value || ""); return; }
   if (name === "WorkOffset" && value) wcsWord = String(value);
   else if (name === "OriginX" && has(value)) orgX = Number(value);
   else if (name === "OriginY" && has(value)) orgY = Number(value);
@@ -290,6 +295,20 @@ function onToolChange(number, name) {
   toolName = clean(name);
   tNo = number;
   toolWait = true;
+}
+
+// #616: per-operation smoothing. grblHAL's core states path control
+// G61 (exact path) only - no G64 P and no other word that bounds the
+// deviation by a tolerance - so the ask is named once per program and
+// nothing is written: never an unbounded blending word.
+function smoothOn() {
+  if (!(smoothTol > 0) || smoothNamed) return;
+  note("SMOOTHING NOT WRITTEN - GRBLHAL STATES NO SMOOTHING TOLERANCE");
+  smoothNamed = true;
+}
+function smoothOff() {  // the next section states its own ask
+  smoothTol = 0;
+  smoothMode = "";
 }
 
 // The preamble closes over everything a raw motion line needs to be a
@@ -318,6 +337,7 @@ function startPreamble() {
   spindleWait = false;
   coolant = touchProbe ? "" : coolantFor(coolantAsk);
   if (coolant) block([coolant]);
+  smoothOn();
 }
 
 // The op's after-action (#110), written once its spindle has stopped:
@@ -341,6 +361,7 @@ function endPreamble() {
   if (!sectionOpen) return;
   restorePlane();            // the plane never leaks past its section
   sectionOpen = false;
+  smoothOff();
   if (inCycle) block(["G80"]);
   inCycle = false;
   if (coolant) block(["M9"]);
@@ -410,7 +431,9 @@ function onCircular() {
 }
 
 // ------------------------------------------------------- canned cycles
-// grblHAL's core lists G73, G81, G82, G83, G85, G86, G89 with G98/G99.
+// grblHAL's core lists G73, G81, G82, G83, G85, G86, G89 with G98/G99;
+// this post writes all of them but G85 (no CamCraft cycle asks for a
+// feed-out bore, so it is never mapped).
 // One block per hole, holes of an unchanged cycle continuing modally
 // with bare X Y lines. The dwell P is in SECONDS, as in LinuxCNC (not
 // the milliseconds Fanuc-family controls read). G84 is not in the list
