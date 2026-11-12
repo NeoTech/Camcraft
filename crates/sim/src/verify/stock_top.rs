@@ -17,7 +17,17 @@
 //! stack is judged at its own disc and its own height over the tip: the
 //! flute's radius at the tip, the shank's from the flute's top, the
 //! holder's from the shank's top (and on up - the cap is a height, so a
-//! band that is taller changes nothing). Fails closed: a solid that is
+//! band that is taller changes nothing).
+//!
+//! Never narrower than the laws read the stack (#957/#993 merge): the
+//! shank at the STATED shank radius, never a drawn neck's narrower bands
+//! (`NeckBands` are never wider than it), and above the shank the
+//! wider of holder and shank radius - what `BodyBands` bounds a holder
+//! body by there. A coarse model (#864/#904, `model_excess` `e`) may
+//! stand up to `e` outside its facets, sideways and up: every disc
+//! grows by `e` and every top rises by `e`, so a dive that clears the
+//! meshed material by less than the excess stays convicted. A
+//! non-finite excess keeps every conviction. Fails closed: a solid that is
 //! not one closed, outward shell ([`super::stock_top_shell`] - an open
 //! shell, a non-manifold edge, a non-finite vertex, no facets), a band
 //! whose radius or offset is not a finite non-negative number, or a
@@ -45,16 +55,19 @@ pub fn acquit_by_stock_top(
     solids: &[&[Triangle]],
     tool: &ToolGeom,
     z_tol: f64,
+    excess: f64,
     warns: &mut Vec<Warning>,
 ) {
     if matches!(mode, Mode::Radial | Mode::Revolve | Mode::Rotary)
         || solids.is_empty()
         || !z_tol.is_finite()
+        || !excess.is_finite()
         || !solids.iter().all(|s| closed_shell(s))
     {
         return;
     }
-    let Some(bands) = bands(tool) else { return };
+    let e = excess.max(0.0);
+    let Some(bands) = bands(tool, e) else { return };
     warns.retain(|w| {
         let Warning::RapidInStock { at } = *w else { return true };
         let Some(m) = path.moves.get(at) else { return true };
@@ -66,16 +79,23 @@ pub fn acquit_by_stock_top(
             return true;
         }
         let c = Point2::new(m.to.x, m.to.y);
-        !clear_of(solids, c, m.to.z, &bands, z_tol)
+        !clear_of(solids, c, m.to.z - e, &bands, z_tol)
     });
 }
 
-/// The stack's bands as `(radius, height of its bottom over the tip)`;
-/// `None` when any number is not a finite non-negative value.
-fn bands(t: &ToolGeom) -> Option<[(f64, f64); 3]> {
+/// The stack's bands as `(radius, height of its bottom over the tip)`,
+/// each radius grown by the excess `e` (see the module doc); `None` when
+/// any number is not a finite non-negative value.
+fn bands(t: &ToolGeom, e: f64) -> Option<[(f64, f64); 3]> {
     let shank_at = t.flute_len;
     let holder_at = t.flute_len + t.shank_len;
-    let b = [(t.radius, 0.0), (t.shank_radius, shank_at), (t.holder_radius, holder_at)];
+    // `f64::max` drops a NaN: every raw number is checked before it.
+    let raw = [t.radius, t.shank_radius, t.holder_radius, t.flute_len, t.shank_len];
+    if !raw.iter().all(|v| v.is_finite() && *v >= 0.0) {
+        return None;
+    }
+    let above_shank = t.holder_radius.max(t.shank_radius);
+    let b = [(t.radius + e, 0.0), (t.shank_radius + e, shank_at), (above_shank + e, holder_at)];
     b.iter().all(|&(r, h)| r.is_finite() && r >= 0.0 && h.is_finite() && h >= 0.0).then_some(b)
 }
 

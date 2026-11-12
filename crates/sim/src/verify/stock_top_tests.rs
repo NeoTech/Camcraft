@@ -69,7 +69,7 @@ fn dive_at(x: f64, z1: f64, axis: Option<[f64; 3]>) -> Toolpath {
 
 fn judged(path: &Toolpath, mode: Mode, solids: &[&[Triangle]], t: &ToolGeom) -> Vec<Warning> {
     let mut w = vec![Warning::RapidInStock { at: 0 }];
-    acquit_by_stock_top(path, mode, solids, t, 1e-3, &mut w);
+    acquit_by_stock_top(path, mode, solids, t, 1e-3, 0.0, &mut w);
     w
 }
 
@@ -214,3 +214,26 @@ fn an_empty_or_non_finite_solid_keeps_the_conviction() {
     assert!(!closed_shell(&bad));
     assert_eq!(judged(&dive_at(0.0, 22.0, None), Mode::Area, &[&bad], &tool()), CONVICTED);
 }
+
+fn judged_coarse(path: &Toolpath, solids: &[&[Triangle]], excess: f64) -> Vec<Warning> {
+    let mut w = vec![Warning::RapidInStock { at: 0 }];
+    acquit_by_stock_top(path, Mode::Area, solids, &tool(), 1e-3, excess, &mut w);
+    w
+}
+
+#[test]
+fn a_coarse_models_excess_is_read_up_and_sideways() {
+    let s = stepped();
+    // 0.3 mm over the meshed low step: clear at full fidelity, not when
+    // the real surface may stand 0.5 mm above its facets.
+    assert!(judged_coarse(&dive_at(0.0, 20.3, None), &[&s], 0.0).is_empty());
+    assert_eq!(judged_coarse(&dive_at(0.0, 20.3, None), &[&s], 0.5), CONVICTED);
+    // The rim 0.3 mm short of the meshed boss's wall: clear at full
+    // fidelity, not with 0.5 mm of excess.
+    assert!(judged_coarse(&dive_at(5.7, 22.0, None), &[&s], 0.0).is_empty());
+    assert_eq!(judged_coarse(&dive_at(5.7, 22.0, None), &[&s], 0.5), CONVICTED);
+    // An excess that is not a number keeps it; a negative one is none.
+    assert_eq!(judged_coarse(&dive_at(0.0, 22.0, None), &[&s], f64::NAN), CONVICTED);
+    assert!(judged_coarse(&dive_at(0.0, 22.0, None), &[&s], -1.0).is_empty());
+}
+

@@ -2843,7 +2843,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 &material.bodies,
             );
             // #1091: a dive convicted against the stock's highest point is re-read under the tool.
-            super::stock_top_law::acquit(&path, mode, judged_stock, &material.facets, &geom, &mut warns);
+            super::stock_top_law::acquit(&path, mode, judged_stock, &material.facets, &geom, material.excess, &mut warns);
             // The program ahead cut too (#96 review): a dive the column
             // convicted against the raw block is re-read against what
             // the setup's earlier operations left standing.
@@ -3102,7 +3102,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 &m_gen.bodies,
             );
             // #1091: the dive re-read under the tool, in the plane's frame.
-            super::stock_top_law::acquit(&path, mode, stock_local.as_deref(), &m_gen.facets, &geom, &mut warns);
+            super::stock_top_law::acquit(&path, mode, stock_local.as_deref(), &m_gen.facets, &geom, m_gen.excess, &mut warns);
             // The containment kinds' solid law (their verify runs without
             // the model - exact rims): the tool's own tip and stack swept
             // along every move against the part solid. The Section kinds

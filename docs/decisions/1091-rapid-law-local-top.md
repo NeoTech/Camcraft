@@ -56,12 +56,37 @@
      test self-intersection.
    - The meshes are the stock and part the program really meets. The
      whole verifier rests on this too.
-   - Like the column law, the re-reading does not read `model_excess`
-     (#864). A coarse dome whose true apex bulges above its highest
-     vertex reads the same as before.
+   - The tool stack and the model excess are read as item 5 says.
 
    No cheaper independent cross-check proves an empty column.
-5. **The solids are `judged_stock` (the stock the column law judged,
+5. **Band stack and model excess (merged main after #971, #1064,
+   #957/#993).**
+   - *Band stack:* the re-reading is never narrower than the laws read
+     the stack.
+     - The flute zone is read at `tool.radius`.
+     - The shank zone is read at the **stated** `shank_radius`. #957
+       made the laws read a drawn neck's narrower bands there, and
+       `NeckBands` are never wider than the stated shank, so reading the
+       stated shank is the conservative side.
+     - Above the shank's top, it reads `max(holder_radius,
+       shank_radius)`, the bound `BodyBands` puts on a holder body
+       there, and on upward without end.
+     - Every raw number is checked as finite and non-negative before
+       the `max`. `f64::max` drops a NaN, and the unit test caught a NaN
+       holder radius slipping through that way.
+   - *Excess:* a coarse model's real surface may stand up to
+     `model_excess` (`e`) outside its facets, sideways and upward. Every
+     band's disc grows by `e`, and the tip is compared against the
+     facets' top plus `e`, so a dive that clears the meshed material by
+     less than the excess stays convicted. A non-finite excess keeps
+     every conviction, and a negative excess counts as zero (as
+     `excess_floor` reads it). I chose this over "keep every conviction
+     when an excess is present" because it stays exact at full fidelity
+     and stays conservative on a coarse model. The excess is the op's
+     own model excess, applied to the stock and part solids alike. A
+     stock mesh coarser than its source has no excess of its own here,
+     and the column law has none either.
+6. **The solids are `judged_stock` (the stock the column law judged,
    #1066: the setup's or carried stock, or the stock itself for a
    stock-sourced Bore/Thread) and the op's own material.** Both are
    read in the path's frame: world at the upright site, and the
@@ -69,7 +94,7 @@
    vertical rapid, so it is re-read the same way.
    `acquit_by_prior` still runs afterwards, for stock the program ahead
    removed.
-6. **Pinned by** `crates/app/tests/stepped_stock_rapid.rs` (the dive
+7. **Pinned by** `crates/app/tests/stepped_stock_rapid.rs` (the dive
    over the low part passes and posts. With the boss over the hole, or
    with its edge 1.5 mm beside the dive's centre under the 4 mm rim, the
    dive is convicted and the post is blocked by the rapid law. Each
@@ -80,7 +105,10 @@
    counting too; an open shell, a non-manifold or duplicated edge, a
    degenerate facet, an inside-out or split solid, an empty solid and a
    non-finite vertex all keep the conviction; and the posed, lateral and
-   radial/revolved/rotary exclusions. The `ladder_entry_height` pins and the #96 pins are
+   radial/revolved/rotary exclusions. A dive 0.3 mm over the meshed
+   step, or with its rim 0.3 mm short of the boss's wall, is acquitted
+   at full fidelity and stays convicted with 0.5 mm of excess
+   (`a_coarse_models_excess_is_read_up_and_sideways`). The `ladder_entry_height` pins and the #96 pins are
    unchanged.
 
 **Why**
