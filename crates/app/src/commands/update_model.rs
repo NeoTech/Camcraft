@@ -67,6 +67,9 @@ pub struct UpdateModel {
     /// the plate (the safe reading: the user re-detects), in this same
     /// undo step - the rule `ImportFixture` already kept for itself.
     plate: Option<Box<(FixtureDef, crate::plate::mount::Unmounts)>>,
+    /// #1094: a raw-stock-only mark was said of the geometry it replaces,
+    /// so a re-import in place drops it, in this same undo step.
+    marks: super::stock_source_only::MarkDrops,
 }
 
 impl UpdateModel {
@@ -106,6 +109,7 @@ impl UpdateModel {
             plate: crate::fixture::def_of(world, &entity)
                 .filter(|d| d.plate.plate.is_some())
                 .map(|d| Box::new((d, crate::plate::mount::Unmounts::of(world, name)))),
+            marks: super::stock_source_only::MarkDrops::of(world, name),
         })
     }
 
@@ -184,6 +188,7 @@ impl Command for UpdateModel {
             entity.entity_view(world).set(off);
             p.1.write(world, true);
         }
+        self.marks.write(world, true);
     }
 
     fn invert(&self, world: &World) {
@@ -209,5 +214,6 @@ impl Command for UpdateModel {
                 model::set_facets(world, &stock, tris.clone());
             }
         }
+        self.marks.write(world, false);
     }
 }

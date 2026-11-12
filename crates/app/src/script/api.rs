@@ -7,7 +7,7 @@
 
 use super::{arg_opt, arg_str, builtin_cps, inventory, only_keys, Env};
 
-use crate::commands::{GenerateOperation, History, ImportModel, ImportTools, UpdateModel};
+use crate::commands::{GenerateOperation, History, ImportMode, ImportModel, ImportTools, UpdateModel};
 use crate::model;
 use crate::operation::OpStatus;
 use crate::posting;
@@ -21,8 +21,12 @@ use std::path::{Path, PathBuf};
 /// the run owns that law here exactly as the app's menu does.
 pub(crate) fn v_load(env: &mut Env, args: Vec<Value>) -> Result<Value, String> {
     let path = PathBuf::from(arg_str(&args, 0, "a project path")?);
-    crate::project::load(&env.world, &path).map_err(|e| e.to_string())?;
+    // Load in isolation: refusal leaves the current document and its undo/redo intact.
+    let world = crate::world::new_world();
+    crate::project::load(&world, &path).map_err(|e| e.to_string())?;
     env.history = History::default();
+    env.world = world;
+    env.posted = None;
     env.doc_path = Some(path.clone());
     Ok(json!({ "path": path.display().to_string(), "operations": ops_view(env) }))
 }
@@ -91,16 +95,23 @@ pub(crate) fn v_export_tools(env: &mut Env, args: Vec<Value>) -> Result<Value, S
     Ok(json!({ "path": path.display().to_string(), "tools": count }))
 }
 
-/// `cam.importTools(path)` - read a tool library file into the
+/// `cam.importTools(path, mode?)` - read a tool library file into the
 /// document through `ImportTools`, the GUI's own command: the whole
 /// file is checked first (a malformed or insane file refuses by name),
 /// an identical tool is skipped, a clashing name arrives as "Name (2)",
-/// and the import is one undo step.
+/// and the import is one undo step. #899: `mode` is `add` (default),
+/// `update` (same-named tools take the file's definition in place) or
+/// `replace` (update, and tools the file lacks are removed unless an
+/// operation uses them).
 pub(crate) fn v_import_tools(env: &mut Env, args: Vec<Value>) -> Result<Value, String> {
     let path = PathBuf::from(arg_str(&args, 0, "a tool library path")?);
     let text = std::fs::read_to_string(&path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
     let library = crate::tool_library::parse_tool_library(&text)?;
-    let cmd = ImportTools::new(&env.world, library).map_err(|e| e.to_string())?;
+    let mode = match args.get(1) {
+        None | Some(Value::Null) => ImportMode::Add,
+        Some(v) => ImportMode::parse(v.as_str().ok_or("import mode must be a string")?)?,
+    };
+    let cmd = ImportTools::with_mode(&env.world, library, mode).map_err(|e| e.to_string())?;
     let report = cmd.report().clone();
     env.history.execute(&env.world, cmd);
     let renamed: Vec<Value> = report.renamed.iter().map(|(from, to)| json!({ "from": from, "to": to })).collect();
@@ -109,6 +120,10 @@ pub(crate) fn v_import_tools(env: &mut Env, args: Vec<Value>) -> Result<Value, S
         "added": report.added,
         "renamed": renamed,
         "skipped": report.skipped,
+        "updated": report.updated,
+        "replaced": report.replaced,
+        "removed": report.removed,
+        "mode": mode.label(),
         "summary": report.summary(),
     }))
 }

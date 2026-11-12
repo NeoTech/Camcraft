@@ -48,6 +48,9 @@ pub struct DeleteEntity {
     /// #819: a plate deleted from the tree lets go of its riders, the
     /// way `DeleteFixture` does.
     riders: crate::plate::mount::Unmounts,
+    /// #1094: the raw-stock-only marks naming this model (or ticked on
+    /// this stock) die with it and come back with its undo.
+    marks: super::stock_source_only::MarkDrops,
 }
 
 impl DeleteEntity {
@@ -76,6 +79,7 @@ impl DeleteEntity {
             path: model::toolpath_of(world, &entity),
             fixture: crate::fixture::def_of(world, &entity),
             riders: crate::plate::mount::Unmounts::of(world, name),
+            marks: super::stock_source_only::MarkDrops::of(world, name),
         })
     }
 }
@@ -86,6 +90,7 @@ impl Command for DeleteEntity {
             model::remove(world, &entity);
         }
         self.riders.write(world, true);
+        self.marks.write(world, true);
     }
 
     fn invert(&self, world: &World) {
@@ -130,5 +135,6 @@ impl Command for DeleteEntity {
         if let Some(fixture) = &self.fixture {
             entity.entity_view(world).set(fixture.clone());
         }
+        self.marks.write(world, false);
     }
 }
