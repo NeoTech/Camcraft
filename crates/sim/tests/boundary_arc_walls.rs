@@ -5,15 +5,15 @@
 //! depends on where the joints land. Area mode reads its chords whole and
 //! is unchanged.
 //!
-//! Gate map: covers app::verify (sim::verify::section, sim::verify::arc_wall, law (b)).
+//! Gate map: covers sim::verify (sim::verify::section, sim::verify::arc_wall, law (b)).
 //!
 //! Provenance: point-to-circle distance along the radius, from elementary
 //! plane geometry; the tangency law is our own (sim::verify::section).
 
-use camcraft_app::cl::{Move, MoveKind, Toolpath};
-use camcraft_app::geo2d::{Loop, Point2, Region};
-use camcraft_app::geometry::Point3;
-use camcraft_app::verify::{Mode, ToolGeom, VerifyContext, Warning, verify};
+use camcraft_sim::cl::{Move, MoveKind, Toolpath};
+use camcraft_sim::geo2d::{Loop, Point2, Region};
+use camcraft_sim::geometry::Point3;
+use camcraft_sim::verify::{Mode, ToolGeom, VerifyContext, Warning, verify};
 
 /// The gouge verdict tolerance (`GOUGE_TOL`).
 const TOL: f64 = 0.01;
@@ -63,6 +63,7 @@ fn ctx<'a>(region: &'a Region, tool: &'a ToolGeom, mode: Mode) -> VerifyContext<
         finish_tol: None,
         fixtures: &[],
         spindle: None,
+        ..Default::default()
     }
 }
 
@@ -155,4 +156,55 @@ fn area_mode_verdicts_on_the_corner_are_unchanged() {
     assert_eq!(verify(&t, &ctx(&past, &g, Mode::Area)), vec![Warning::Gouge { at: 0 }]);
     let (clear, _) = region_at(4.0, true);
     assert_eq!(verify(&t, &ctx(&clear, &g, Mode::Area)), Vec::new());
+}
+
+/// #864 with #905: a model coarser than the importer promises tightens
+/// every part-facing floor of law (b) - the whole-arc wall reading too,
+/// not only the joints. A corner BETWEEN the joints, where only the
+/// whole-arc reading measures, is convicted between the plain and the
+/// tightened floor on such a model; at full fidelity, and outside the
+/// tightened floor, the verdicts above stand unchanged.
+#[test]
+fn the_whole_arc_reading_answers_to_a_coarse_models_tightened_floor() {
+    let g = tool();
+    let judge = |t: &Toolpath, region: &Region, excess: f64| {
+        let mut c = ctx(region, &g, Mode::Boundary);
+        c.model_excess = excess;
+        verify(t, &c)
+    };
+    // 7 um of excess leaves 3 um of tolerance: the floor rises from
+    // 3.990 to 3.997 mm. The whole-arc reading pads the arc's radius by
+    // the centre's 1 um lattice (it never reads farther than the truth),
+    // so the clearances below stand 3 um or more off whichever floor they
+    // must read clear of.
+    let excess = 0.007;
+    let tight = R - (TOL - excess);
+    assert!(floor() < tight && tight < R);
+    for outward in [true, false] {
+        for ccw in [true, false] {
+            let t = arc(ccw);
+            // Between the two floors.
+            for d in [3.994, 3.995, 3.996] {
+                assert!(d >= floor() + 0.003 && d < tight);
+                let (region, v) = region_at(d, outward);
+                // No joint comes near: only the whole-arc reading sees it.
+                assert!(joint_clearance(&t.moves[0], v) >= tight, "the joints read it clear of the tightened floor too");
+                assert_eq!(judge(&t, &region, 0.0), Vec::new(), "full fidelity, d {d}, outward {outward}, ccw {ccw}");
+                assert_eq!(judge(&t, &region, excess), vec![Warning::Gouge { at: 0 }], "coarse model, d {d}, outward {outward}, ccw {ccw}");
+                // An excess that uses the whole tolerance reads untightened
+                // (the program gate refuses instead).
+                assert_eq!(judge(&t, &region, 0.02), Vec::new(), "past the tolerance, d {d}");
+            }
+            // Outside the tightened floor: clean either way.
+            for d in [4.001, 4.01, 4.5] {
+                assert!(d >= tight + 0.003);
+                let (region, _) = region_at(d, outward);
+                assert_eq!(judge(&t, &region, excess), Vec::new(), "coarse model, d {d}, outward {outward}, ccw {ccw}");
+            }
+            // Inside the plain floor: a gouge either way.
+            let (region, _) = region_at(3.98, outward);
+            assert_eq!(judge(&t, &region, excess), judge(&t, &region, 0.0));
+            assert_eq!(judge(&t, &region, excess), vec![Warning::Gouge { at: 0 }]);
+        }
+    }
 }

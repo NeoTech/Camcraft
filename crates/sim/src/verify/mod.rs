@@ -154,11 +154,13 @@ pub use crate::tools::ToolGeom;
 mod air;
 mod arc_bulge;
 mod arc_wall;
+mod arc_wall_plane;
 mod c_steel;
 mod contact;
 mod crossing;
 mod cut_index;
 mod engine;
+mod excess;
 mod finish;
 mod hidden;
 mod laws;
@@ -187,6 +189,7 @@ mod swept;
 mod types;
 mod workholding;
 
+pub use excess::excess_floor;
 pub use types::{FixturePart, Mode, VerifyContext, Warning};
 #[doc(hidden)]
 pub use crossing::{crossed_pairs, crossed_pairs_all};
@@ -201,7 +204,7 @@ pub use workholding::{
     bands_vs_workholding, bands_vs_workholding_held, rapids_vs_workholding,
     rapids_vs_workholding_held, Workholding,
 };
-pub use body_bands::{BodyBands, BODY_BANDS_CAP};
+pub use body_bands::{BodyBands, NeckBands, BODY_BANDS_CAP};
 pub use probe::Cutter;
 pub use rotary::{rotary_hits, RotaryAxis, RotaryLaw};
 pub use solid::{SolidLaw, solid_hits};
