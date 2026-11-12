@@ -144,7 +144,8 @@ write (the gate), so the released program never carries one.
   to R. A section that states no `RetractPlane` is refused by name
   (#1028). Probe moves seat the next cycle like any other motion.
   A dialect whose documented cycles this post was not specced from
-  (Heidenhain DIN/ISO: G200-G209 with Q parameters, #50) posts the
+  (Heidenhain DIN/ISO: G200-G209 with Q parameters, #50; TinyG, which
+  has no canned cycles at all) posts the
   expanded chain as plain moves instead and refuses what plain moves
   cannot do (tapping) - never a cycle word the manual does not list.
   The arc plane (M11.2 A) is modal too: `CircularPlane` XY/XZ/YZ maps

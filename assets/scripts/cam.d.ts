@@ -43,8 +43,8 @@ interface PostOptions {
   /** The .nc (or .cnc) file to write. Required. */
   to: string;
   /** A built-in post name - "Fanuc", "Haas", "Siemens 840D",
-   *  "Heidenhain", "Mazak", "Tormach PathPilot", "grblHAL" - or the path of a
-   *  .cps file.
+   *  "Heidenhain", "Mazak", "Tormach PathPilot", "grblHAL", "TinyG" - or the
+   *  path of a .cps file.
    *  Omitted means the document's own post. */
   cps?: string;
   /** Also return the program text in the result. */
