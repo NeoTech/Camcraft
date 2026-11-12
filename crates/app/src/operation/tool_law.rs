@@ -102,9 +102,10 @@ pub const TORCH: &[ToolKind] = &[ToolKind::Torch];
 /// models a tapped hole at that minor size and the thread band outside
 /// it is meant to be cut, so judging a tap at its full diameter called
 /// every such hole a gouge. Into solid metal the core still gouges.
-/// The program sim sweeps this radius (`stock_sim::plan_program`); the
-/// generator's verify still judges a tap at its full diameter. A pitch
-/// too coarse to leave a core is refused by name.
+/// The program sim sweeps this radius (`stock_sim::plan_program`), and
+/// the generator's verify re-reads a Z tap cycle's `Gouge` convictions
+/// at it (`tap_core`); its rapids keep the full diameter. A pitch too
+/// coarse to leave a core is refused by name.
 pub fn cutting_radius(tool: &crate::tools::Tool) -> Result<f64, String> {
     let radius = tool.diameter * 0.5;
     if tool.kind != ToolKind::Tap {
