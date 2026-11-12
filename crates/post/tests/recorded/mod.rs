@@ -40,14 +40,7 @@ pub const CASES: [&str; 9] = [
 /// (no crash, no hang) but compares nothing and has no golden; the fix
 /// removes its line and records the golden (`WRITE_GOLDEN=1`), read first.
 /// `recorded_streams.rs` holds that no listed case has a golden.
-pub const KNOWN_BUGS: [(&str, &str, u32); 7] = [
-    // The cycle traverses between holes at the R plane, not the hop.
-    ("fanuc.cps", "drill_retract", 994),
-    ("haas.cps", "drill_retract", 994),
-    ("mazak.cps", "drill_retract", 994),
-    ("sinumerik.cps", "drill_retract", 994),
-    ("tormach.cps", "drill_retract", 994),
-    ("doosan-dnm.cps", "drill_retract", 994),
+pub const KNOWN_BUGS: [(&str, &str, u32); 1] = [
     // Flood coolant (M8) in a probing section.
     ("doosan-dnm.cps", "probe", 995),
 ];
