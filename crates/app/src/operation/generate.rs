@@ -111,6 +111,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         part_solid,
         area,
         wcs_origin,
+        unit,
         spindle_note: _,
         carried_overhang: _,
         op_name: _,
@@ -1849,7 +1850,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // rim, round floor or holed face hands its own centre and
             // radius; the typed ones rule only without a selection.
             let (center, radius) = match &src {
-                SrcRef::Selection(s) if !s.is_empty() => circle_of_region(&region)?,
+                SrcRef::Selection(s) if !s.is_empty() => circle_of_region(&region, unit)?,
                 _ => (*center, *radius),
             };
             let path = machining2d::circular(
@@ -1954,7 +1955,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     tool: &tool,
                     holes: cross,
                 };
-                super::cross_spindle::cross_drill(radial, &material.facets, stock_facets.as_deref(), wcs_origin, &cutter, &tool_name)?
+                super::cross_spindle::cross_drill(radial, &material.facets, stock_facets.as_deref(), wcs_origin, &cutter, &tool_name, unit)?
             } else {
                 // M13.5 A: on a plain lathe the Drill kind is the
                 // turret's axial hole - the doors refuse by name a
@@ -1990,6 +1991,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                             prior,
                             (&tool, cutter.body.as_ref()),
                             &tool_name,
+                            unit,
                         )
                     };
                     if let Err(raw) = reach(None) {
@@ -2084,6 +2086,13 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     &params,
                 m_gen,
                 frame.as_ref(),
+            )?;
+            // #1071: the gouge law reads the thread's major circle, the
+            // wall the helix is cut to, not the declared minor rim.
+            let region = super::thread_rims::major_rims(
+                region,
+                holes,
+                machining2d::THREAD_DEPTH_PER_PITCH * tool.pitch,
             )?;
             let path = machining2d::thread_mill(&machining2d::ThreadParams {
                 holes: holes
@@ -3004,7 +3013,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // along every move against the part solid. The Section kinds
             // answer the same law inside `verify` (b2), real tip (M13.7).
             if depth_law == DepthLaw::Contain {
-                contain_into(&mut warns, &path, &material.facets, &cutter, depth_law, stl, material.excess, &params);
+                contain_into(&mut warns, &path, &material.facets, &cutter, depth_law, stl, material.excess, &params, &super::thread_rims::thread_bores(&params, tool.pitch));
             }
             // #266: a tap's cutting moves re-read at its thread's core.
             super::tap_core::acquit(&mut warns, &tool, &params, |core| {
@@ -3012,7 +3021,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 let c = verify::Cutter::of(core).with_body(&g, &crate::tool_body::stack(&g, body.as_ref()).with_neck(holder.neck.clone()));
                 let mut w = verify::verify_bodies(&path, &VerifyContext { tool: &g, cutter: Some(c), ..ctx.clone() }, &material.bodies);
                 if depth_law == DepthLaw::Contain {
-                    contain_into(&mut w, &path, &material.facets, &c, depth_law, stl, material.excess, &params);
+                    contain_into(&mut w, &path, &material.facets, &c, depth_law, stl, material.excess, &params, &[]);
                 }
                 w
             });
@@ -3129,7 +3138,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // along every move against the part solid. The Section kinds
             // answer the same law inside `verify` (b2), real tip (M13.7).
             if depth_law == DepthLaw::Contain {
-                contain_into(&mut warns, &path, &m_gen.facets, &cutter, depth_law, stl, material.excess, &params);
+                contain_into(&mut warns, &path, &m_gen.facets, &cutter, depth_law, stl, material.excess, &params, &super::thread_rims::thread_bores(&params, tool.pitch));
             }
             warns.extend(workholding_warnings(
                 &path_world,
@@ -3256,8 +3265,9 @@ const CONTAIN_STEP: f64 = 0.25;
 /// and stack against the part solid at every sampled position, the
 /// containment kinds' tessellated hole rims excused (`SolidLaw`) - the
 /// round walls of the holes the op declares, measured about each hole's
-/// own axis (#1205), never a flat.
-#[allow(clippy::too_many_arguments)]
+/// own axis (#1205), never a flat - and a thread mill's `bores` their
+/// threads (#1071).
+#[allow(clippy::too_many_arguments)] // the path, the part, the cutter and the law's inputs
 fn contain_into(
     warns: &mut Vec<Warning>,
     path: &Toolpath,
@@ -3267,6 +3277,7 @@ fn contain_into(
     stl: f64,
     excess: f64,
     params: &OpParams,
+    bores: &[verify::ThreadBore],
 ) {
     let law = verify::SolidLaw {
         step: CONTAIN_STEP,
@@ -3279,7 +3290,7 @@ fn contain_into(
         _ => &[],
     };
     let walls: Vec<verify::HoleAxis> = holes.iter().map(|h| verify::HoleAxis::vertical(h.xy.x, h.xy.y)).collect();
-    for w in verify::solid_hits_walled(path, facets, cutter, &law, &walls) {
+    for w in verify::solid_hits_threaded(path, facets, cutter, &law, &walls, bores) {
         if !warns.contains(&w) {
             warns.push(w);
         }

@@ -17,6 +17,7 @@
 
 mod align_tools;
 mod area;
+mod body_tools;
 mod bridge;
 // #93 slice 2: a milling tool's drawn cutter outline.
 mod cutter_tools;
@@ -41,6 +42,7 @@ mod accessory_tools;
 mod plate_tools;
 mod modvise_tools;
 mod wcs_tools;
+mod rotary_tools;
 mod workholding_tools;
 
 // #183: the same tool table served live from inside the GUI, over a

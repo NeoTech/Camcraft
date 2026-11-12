@@ -77,6 +77,7 @@ mod step_budget_row;
 // #1094: the stock page's raw-stock-only checkbox.
 mod raw_stock_row;
 // #371: the tool editor's Body section and its picking preview.
+mod tool_body_lathe_page;
 mod tool_body_page;
 // #630: the tool editor's lathe orientation row.
 mod tool_orientation_row;
@@ -91,6 +92,7 @@ mod setup_wcs_pick;
 // #343: a setup's own node pages (settings, machine, post, fixtures, tools).
 mod setup_pages;
 mod setup_post_page;
+mod setup_rotary_page;
 // #509: one fixture's row on the Fixtures page, sized to the pane.
 mod fixture_rows;
 // #561: the locate-in-fixture mate tools (Fixtures page and Model page).
@@ -113,6 +115,10 @@ mod setup_workholding_row;
 // params dispatcher and its kind-family pages, the shared widgets.
 mod fields;
 mod geo_page;
+#[cfg(test)]
+pub(crate) use boundary::hints as boundary_hints;
+#[cfg(test)]
+pub(crate) use geo_page::{click_selects_hint, edge_hint};
 mod heights_page;
 mod holes_page;
 mod pockets_page;
@@ -195,6 +201,8 @@ mod fixture_ux_tests;
 mod locate_tests;
 #[cfg(test)]
 mod fixture_library_tests;
+#[cfg(test)]
+mod escape_tests;
 #[cfg(test)]
 mod fixture_vise_tests;
 #[cfg(test)]
