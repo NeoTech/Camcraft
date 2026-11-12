@@ -8,6 +8,7 @@ mod assets;
 mod braces;
 mod decisions;
 mod exec;
+mod icon_font;
 mod icons;
 mod package;
 mod path_mods;
