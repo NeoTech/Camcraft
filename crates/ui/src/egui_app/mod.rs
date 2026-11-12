@@ -49,6 +49,7 @@ mod post_options;
 pub mod cvd;
 mod icons;
 mod op_icons;
+mod tool_icons;
 mod layout;
 mod load_field;
 // pub(crate) past egui_app: `State::machine_editor` names its draft
@@ -69,6 +70,7 @@ mod approach_page;
 mod lead_page;
 mod op_tabs;
 mod painted;
+mod tree_badges;
 mod tree_glyphs;
 mod pages;
 mod step_budget_row;
@@ -222,6 +224,8 @@ mod pin_tests;
 mod ribbon_icon_tests;
 #[cfg(test)]
 mod plasma_ribbon_tests;
+#[cfg(test)]
+mod machine_mode_tests;
 #[cfg(test)]
 mod debug_info_tests;
 #[cfg(test)]
