@@ -751,6 +751,17 @@ fn setups_page(ui: &mut Ui, state: &mut State) {
                         .pending
                         .push_back(CommandKind::DeleteSetup(name.clone()));
                 }
+                // Alignment, work offset, workholding and tools live on
+                // the setup's own page: one click from here (#1104).
+                if ui.small_button("Open page").clicked() {
+                    // Activate it too, as the browser's Stock row does: the
+                    // fixture and tool pages edit only the active setup.
+                    super::browser_pane::focus(state, name);
+                    actions::target(
+                        state,
+                        UiTarget::SetupNode(name.clone(), crate::state::SetupPage::Settings),
+                    );
+                }
             });
         });
         if let Some(def) = camcraft_app::setup::def_of(&state.world, name) {
@@ -764,11 +775,6 @@ fn setups_page(ui: &mut Ui, state: &mut State) {
                 line.push_str(&format!(", datum from {}", def.datum_from));
             }
             ui.label(line);
-            super::setup_align_pick::picker(ui, state, name);
-            super::setup_plane_pick::row(ui, state, name);
-            super::setup_points_pick::row(ui, state, name);
-            super::setup_axis_pick::rows(ui, state, name);
-            super::setup_wcs_pick::picker(ui, state, name);
         }
     }
     ui.separator();
@@ -788,11 +794,10 @@ fn setups_page(ui: &mut Ui, state: &mut State) {
         }
     });
     ui.separator();
-    fixtures_section(ui, state, active.as_deref());
-    ui.separator();
-    tool_list_section(ui, state, active.as_deref());
     sheet_footer(ui, state);
-    ui.label("The Stock and Work offset pages edit the active setup's stock and work offset.");
+    ui.label(
+        "Each setup's alignment, work offset, fixtures and tool list are on its own          Setup page in the browser (Open page).",
+    );
 }
 
 /// The tool list of one setup context (M3.2 stage C): what goes into
@@ -1677,6 +1682,17 @@ fn model_page(ui: &mut Ui, state: &mut State, name: String) {
     };
     let tris = model::facets_of(&state.world, &entity).map_or(0, |f| f.len());
     ui.label(format!("{tris} triangle(s)"));
+    // #864: a model imported coarser than the importer promises says so,
+    // with the error it carries and what that does to the checks.
+    if let Some(chord) = camcraft_app::model_fidelity::chord_of(&state.world, &entity) {
+        ui.label(camcraft_app::model_fidelity::summary(&state.world, chord));
+        hint(
+            ui,
+            "This model was too large to import at full detail. Gouge checks against it are \
+             stricter to make up for that; when it is too coarse to check at all, its operations \
+             are refused at the post. Re-import with a larger budget to clear this.",
+        );
+    }
     if let Some(a) = model::entity_world_aabb(&state.world, &entity) {
         ui.label(format!(
             "{} x {} x {} {}",

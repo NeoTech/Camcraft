@@ -59,6 +59,7 @@ fn judge(t: &Toolpath, region: &Region, tool: &ToolGeom) -> Vec<camcraft_app::ve
         finish_tol: None,
         fixtures: &[],
         spindle: None,
+        ..Default::default()
     };
     verify(t, &cx)
 }
