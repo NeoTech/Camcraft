@@ -2578,8 +2578,8 @@ fn the_machine_door_switches_workspaces_and_rides_undo() {
         .find(|c| c.cmd == Cmd::Machine)
         .expect("the machine door stands on the bar")
         .rect;
-    let rows = panes::machine_rows(button, theme::current().row_height);
-    assert_eq!(rows.len(), 3, "Milling, Turning, Mill-turning");
+    let rows = panes::machine_rows(button, theme::current().row_height, 200.0);
+    assert_eq!(rows.len(), 4, "Milling, Turning, Mill-turning, Plasma cutting");
     // Open the door.
     let at = button.center();
     set_pos(&mut harness, at);
@@ -2678,7 +2678,7 @@ fn tips_match_the_imgui_table() {
         (Cmd::Tools, "Tool library"),
         (
             Cmd::Machine,
-            "Switch the workspace: Milling, Turning or Mill-turning (mounts the kind's built-in machine, undoable)",
+            "Switch the workspace: Milling, Turning, Mill-turning or Plasma cutting (mounts the kind's built-in machine, undoable)",
         ),
         (Cmd::Undo, "Undo\tCtrl+Z"),
         (Cmd::Redo, "Redo\tCtrl+Y"),
