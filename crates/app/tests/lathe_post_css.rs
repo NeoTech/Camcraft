@@ -15,7 +15,7 @@
 //!
 //! Gate map (M4.4): covers app::cutting, app::cutting_turn,
 //! app::commands (ApplyCuttingData), app::posting (the CSS PARAMs),
-//! app::post (both lathe dialects), app::project (the additive key),
+//! post::post (both lathe dialects), app::project (the additive key),
 //! tools::turning_data.
 //! Lane shape (M4.4): all tests here run in seconds.
 
