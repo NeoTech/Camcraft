@@ -18,12 +18,8 @@ mod common;
 
 use flecs_ecs::prelude::World;
 
-use camcraft_app::commands::{
-    AddTool, CreateOperation, EditOperationParams, GenerateOperation, History, ImportModel, LoadMachine, SetStock,
-};
-use camcraft_app::geometry::{Mesh, Point3, Triangle};
-use camcraft_app::machine::parse_mch;
-use camcraft_app::operation::{Height, OpParams, SinkerBurnOp, SinkerDatum, SrcRef};
+use camcraft_app::commands::{AddTool, CreateOperation, EditOperationParams, GenerateOperation, History, SetStock};
+use camcraft_app::operation::{OpParams, SinkerDatum, SrcRef};
 use camcraft_app::sinker::{burn_to_depth, SinkerParams};
 use camcraft_app::stock::StockShape;
 use camcraft_app::stock_sim::{simulate_box, simulate_document, Dexel};
@@ -31,85 +27,10 @@ use camcraft_app::tools::Tool;
 use camcraft_app::world::new_world;
 use camcraft_app::{model, project};
 
-const SINKER: &str = include_str!("edm/sinker-edm.mch");
-const MILL_TOOL: &str = "EM-0400-2FL";
-const ELECTRODE: &str = "E-10x6";
-/// Synthetic spark gap per side, mm.
-const GAP: f64 = 0.05;
+#[path = "edm/sinker_fixture.rs"]
+mod sinker_fixture;
 
-/// The sinker template with one synthetic condition.
-fn sinker_machine() -> String {
-    let mut v: serde_json::Value = serde_json::from_str(SINKER).expect("template json");
-    v["edm"]["conditions"] = serde_json::json!([
-        { "id": "S1", "name": "synthetic rough", "gap": GAP, "undersize": 0.1, "role": "rough" }
-    ]);
-    v.to_string()
-}
-
-fn electrode() -> Tool {
-    camcraft_tools::electrode::electrode_tool(10.0, 6.0, 30.0, 15.0)
-}
-
-fn quad(out: &mut Vec<Triangle>, a: Point3, b: Point3, c: Point3, d: Point3) {
-    out.push(Triangle::new(a, b, c));
-    out.push(Triangle::new(a, c, d));
-}
-
-/// A 60 x 60 x 20 block (z 0..20) with a rectangular blind cavity
-/// `2hx` x `2hy`, `depth` deep, centred on the origin.
-fn block_with_cavity(hx: f64, hy: f64, depth: f64) -> Mesh {
-    let p = Point3::new;
-    let (s, top, fl) = (30.0, 20.0, 20.0 - depth);
-    let mut f = Vec::new();
-    // Top, around the cavity: four strips.
-    quad(&mut f, p(-s, -s, top), p(-hx, -s, top), p(-hx, s, top), p(-s, s, top));
-    quad(&mut f, p(hx, -s, top), p(s, -s, top), p(s, s, top), p(hx, s, top));
-    quad(&mut f, p(-hx, -s, top), p(hx, -s, top), p(hx, -hy, top), p(-hx, -hy, top));
-    quad(&mut f, p(-hx, hy, top), p(hx, hy, top), p(hx, s, top), p(-hx, s, top));
-    // Cavity floor and walls.
-    quad(&mut f, p(-hx, -hy, fl), p(hx, -hy, fl), p(hx, hy, fl), p(-hx, hy, fl));
-    quad(&mut f, p(-hx, -hy, fl), p(-hx, -hy, top), p(hx, -hy, top), p(hx, -hy, fl));
-    quad(&mut f, p(hx, hy, fl), p(hx, hy, top), p(-hx, hy, top), p(-hx, hy, fl));
-    quad(&mut f, p(-hx, hy, fl), p(-hx, hy, top), p(-hx, -hy, top), p(-hx, -hy, fl));
-    quad(&mut f, p(hx, -hy, fl), p(hx, -hy, top), p(hx, hy, top), p(hx, hy, fl));
-    // Outer walls and bottom.
-    quad(&mut f, p(-s, -s, 0.0), p(s, -s, 0.0), p(s, -s, top), p(-s, -s, top));
-    quad(&mut f, p(s, s, 0.0), p(-s, s, 0.0), p(-s, s, top), p(s, s, top));
-    quad(&mut f, p(-s, s, 0.0), p(-s, -s, 0.0), p(-s, -s, top), p(-s, s, top));
-    quad(&mut f, p(s, -s, 0.0), p(s, s, 0.0), p(s, s, top), p(s, -s, top));
-    quad(&mut f, p(-s, -s, 0.0), p(-s, s, 0.0), p(s, s, 0.0), p(s, -s, 0.0));
-    Mesh::from_facets(f)
-}
-
-fn burn(datum: SinkerDatum, depth: f64, floor: f64) -> OpParams {
-    OpParams::SinkerBurn(SinkerBurnOp {
-        clearance_z: Height::fixed(25.0),
-        top_z: Height::fixed(20.0),
-        floor_z: Height::fixed(floor),
-        datum,
-        depth,
-        x: 0.0,
-        y: 0.0,
-        feed: 40.0,
-        condition: "S1".into(),
-        orbit: None,
-    })
-}
-
-/// A sinker document: the part (cavity `cavity_depth` deep, sized to the
-/// electrode plus the gap), a matching block of stock, the sinker
-/// machine, the electrode.
-fn sinker_doc(cavity_depth: f64) -> (World, History) {
-    let world = new_world();
-    let mut h = History::default();
-    h.execute(&world, ImportModel::from_mesh("part", block_with_cavity(5.0 + GAP, 3.0 + GAP, cavity_depth)));
-    let stock = SetStock::new(&world, StockShape::Box { dx: 60.0, dy: 60.0, dz: 20.0 }, Default::default());
-    h.execute(&world, stock.expect("stock"));
-    let m = parse_mch(&sinker_machine()).expect("sinker parses");
-    h.execute(&world, LoadMachine::new(&world, "sinker.mch".into(), Some(m)).expect("mount"));
-    h.execute(&world, AddTool::new(&world, ELECTRODE, electrode()).expect("an electrode is a tool"));
-    (world, h)
-}
+use sinker_fixture::*;
 
 fn feed_tip(world: &World, name: &str) -> f64 {
     let e = model::find_by_name(world, name).expect("op");
@@ -139,6 +60,39 @@ fn sinker_burn_cavity_matches_golden() {
     let text = common::gen_to_cltext(&path);
     assert_eq!(camcraft_app::cl::text::to_text(&path).expect("text"), text);
     common::write_golden("sinker_burn_cavity.cl", &text);
+}
+
+/// The review of #1131: the plunge must go DOWN into the work. A spark
+/// gap that lifts the tip to the approach plane would post an upward
+/// "burn" feed; a gap not smaller than the burn below the work top
+/// leaves the electrode outside the work. Both refused by name.
+#[test]
+fn a_spark_gap_that_lifts_the_tip_out_of_the_work_is_refused_by_name() {
+    let mut p = SinkerParams {
+        x: 0.0,
+        y: 0.0,
+        approach_z: 25.0,
+        top_z: 20.0,
+        floor_z: 10.0,
+        model_floor_z: Some(0.0),
+        datum: SinkerDatum::WorkTop,
+        depth: 6.0,
+        electrode_len: 30.0,
+        feed: 40.0,
+        gap: 30.0,
+        orbit: None,
+    };
+    let e = burn_to_depth(&p).expect_err("a 30 mm gap feeds the tip up to Z 44");
+    assert!(e.to_string().contains("the spark gap 30.000 places the tip at or above the approach plane"), "{e}");
+    p.gap = 11.0; // tip Z 25: on the approach plane exactly
+    let e = burn_to_depth(&p).expect_err("a tip on the approach plane");
+    assert!(e.to_string().contains("at or above the approach plane"), "{e}");
+    p.gap = 6.0; // tip Z 20: on the work top, the burn is 6
+    let e = burn_to_depth(&p).expect_err("a gap as large as the burn");
+    assert!(e.to_string().contains("the spark gap 6.000 is not smaller than the burn's 6.000 below the work top"), "{e}");
+    p.gap = 5.5; // tip Z 19.5: inside the work
+    let path = burn_to_depth(&p).expect("a gap smaller than the burn burns");
+    assert!(path.moves.iter().all(|m| m.to.z <= 25.0), "nothing climbs past the approach plane");
 }
 
 #[test]
@@ -284,4 +238,17 @@ fn the_sinker_burn_is_driven_over_mcp_with_the_gui_commands() {
     assert!(text.contains("past the cavity floor datum"), "{text}");
     call(&mut s, &mut id, "undo", json!({}));
     call(&mut s, &mut id, "generate", json!({ "name": "Burn1" }));
+    // The review of #1131: no EDM dialect ships yet (#542), so the post
+    // tool refuses the burn by name and writes no file.
+    let nc = std::env::temp_dir().join(format!("camcraft-1131-mcp-{}.nc", std::process::id()));
+    let _ = std::fs::remove_file(&nc);
+    id += 1;
+    let args = json!({ "output": nc.display().to_string() });
+    let reply = s
+        .handle(&json!({ "jsonrpc": "2.0", "id": id, "method": "tools/call", "params": { "name": "post", "arguments": args } }))
+        .expect("a response");
+    let text = reply["result"]["content"][0]["text"].as_str().unwrap_or_default().to_owned();
+    assert_eq!(reply["result"]["isError"], json!(true), "{reply}");
+    assert!(text.contains("no post for a sinker EDM machine yet (#542)") && text.contains("Burn1"), "{text}");
+    assert!(!nc.exists(), "the refused post wrote {}", nc.display());
 }

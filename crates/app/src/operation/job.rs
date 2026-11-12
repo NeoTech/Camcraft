@@ -50,6 +50,8 @@ pub struct GenJob {
     pub(super) stock_aabb: Option<(Point3, Point3)>,
     // Sampled mesh stock can miss narrow features; only analytic stock credits this advisory.
     pub(super) analytic_stock: bool,
+    /// #1091 review: the stock's mesh fidelity is known (`model_fidelity::stock_fidelity_known`).
+    pub(super) stock_fidelity_known: bool,
     pub(super) section_z: Option<Result<f64, GenError>>,
     pub(super) picked_region: Option<Result<Region, GenError>>,
     pub(super) contour_sel:
@@ -350,6 +352,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         stock_facets,
         stock_aabb,
         analytic_stock,
+        stock_fidelity_known: crate::model_fidelity::stock_fidelity_known(world, setup),
         section_z,
         picked_region,
         contour_sel,
