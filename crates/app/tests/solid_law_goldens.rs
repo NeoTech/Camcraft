@@ -18,10 +18,10 @@
 //!
 //! Provenance: our own harness over our own goldens; no vendor material.
 //!
-//! Gate map (solid law): covers app::verify (engine b2, solid_hits, the
+//! Gate map (solid law): covers sim::verify (engine b2, solid_hits, the
 //! crossing law), the posted goldens under tests/golden/nc/,
-//! app::machining2d (contour, face, pocket, slot, trochoid, trace),
-//! app::drilling (drill), app::operation (region_of), sim::verify::plasma.
+//! motion::machining2d (contour, face, pocket, slot, trochoid, trace),
+//! motion::drilling (drill), app::operation (region_of), sim::verify::plasma.
 
 mod common;
 mod posted_gates;
