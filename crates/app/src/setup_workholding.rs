@@ -28,6 +28,7 @@
 use flecs_ecs::prelude::World;
 
 use crate::model;
+use crate::post::section_spindle::{self, WorkVoice};
 use crate::post::Css;
 use crate::setup;
 
@@ -69,13 +70,13 @@ pub fn css_of(world: &World, declared: Option<&str>, css: Option<Css>) -> Option
 }
 
 /// What the workholding limit judges in an operation's section (#1174),
-/// read from what the lathe post will do with it - the one derivation
-/// the stream itself takes (`post::section_spindle`), never a list of
-/// operation kinds: on a lathe or mill-turn a section with no C and no
-/// lean is opened `G97 S<rpm> M03` (or `G96`) on the WORK spindle,
-/// whatever its kind; a C section gives S to the live spindle while the
-/// work is fed on C; a leaning (A/B) section is refused by the lathe
-/// posts. A mill's spindle turns the tool, never the work.
+/// read from what the post will do with it - the derivations the stream
+/// and the posts themselves take (`post::section_spindle`), never a list
+/// of operation kinds nor the machine's kind: a section with no C and no
+/// lean is opened `G97 S<rpm> M03` (or `G96`) on the WORK spindle by a
+/// turning post, whatever its kind and whatever machine is (or is not)
+/// mounted; a C section gives S to the live spindle while the work is
+/// fed on C; a leaning (A/B) section is refused by the lathe posts.
 enum WorkSpeed {
     /// The work turns at the section's stated speed.
     Stated,
@@ -84,23 +85,43 @@ enum WorkSpeed {
     OnC,
     /// Nothing the limit judges: no path yet (the post refuses an
     /// ungenerated op), a posed section the lathe posts refuse (the
-    /// cross drill's radial plunges), or a machine whose spindle turns
-    /// the tool.
+    /// cross drill's radial plunges), or a Work section through a
+    /// milling post (its S drives the tool spindle, not the chuck).
     Not,
 }
 
-fn work_speed(world: &World, declared: Option<&str>, e: &flecs_ecs::prelude::Entity) -> WorkSpeed {
+fn work_speed(world: &World, voice: WorkVoice, e: &flecs_ecs::prelude::Entity) -> WorkSpeed {
     use crate::post::section_spindle::{self, SectionSpindle};
     use flecs_ecs::prelude::*;
-    use crate::machine::Kind;
-    if !matches!(crate::machine::kind_of_setup(world, declared), Kind::Lathe | Kind::MillTurn) {
-        return WorkSpeed::Not;
-    }
     match e.entity_view(world).try_get::<&crate::schema::Toolpath>(|t| section_spindle::of(&t.path)) {
-        Some(SectionSpindle::Work) => WorkSpeed::Stated,
+        Some(SectionSpindle::Work) => match voice {
+            WorkVoice::WorkSpindle => WorkSpeed::Stated,
+            WorkVoice::ToolSpindle => WorkSpeed::Not,
+            // A script that states no dialect (#1199): the stricter
+            // reading - judged as a turning post while a limit is
+            // stated. Whoever settles #1199 changes this arm together
+            // with the lathe door that reads the same mask (#1190).
+            WorkVoice::Undeclared => WorkSpeed::Stated,
+        },
         Some(SectionSpindle::LiveTool) => WorkSpeed::OnC,
         Some(SectionSpindle::Posed) | None => WorkSpeed::Not,
     }
+}
+
+/// The dialect of the post a declared setup context runs (its own, else
+/// the document's): a script that cannot be read is `Undeclared` - the
+/// stricter reading; the post itself refuses it by name.
+#[must_use]
+pub fn mounted_voice(world: &World, declared: Option<&str>) -> WorkVoice {
+    let post = crate::setup_mount::post_of(world, declared);
+    crate::posting::script_of(&post).map_or(WorkVoice::Undeclared, |(_, cps)| section_spindle::work_voice(&cps))
+}
+
+/// `rpm` and `limit` as the refusal prints them: whole rpm, or one
+/// decimal when whole rpm would print the two the same (2000.4 over 2000).
+fn shown(rpm: f64, limit: f64) -> (String, String) {
+    let (a, b) = (format!("{rpm:.0}"), format!("{limit:.0}"));
+    if a == b { (format!("{rpm:.1}"), format!("{limit:.1}")) } else { (a, b) }
 }
 
 /// The fastest the machine states its C axis turns, deg/min: the larger
@@ -119,6 +140,14 @@ fn c_rate(world: &World, declared: Option<&str>) -> Option<f64> {
 /// live tool's own rpm). Empty when no setup states a limit.
 #[must_use]
 pub fn program_problems(world: &World) -> Vec<String> {
+    program_problems_by(world, &|declared| mounted_voice(world, declared))
+}
+
+/// [`program_problems`] with each operation's post dialect read by
+/// `voice` from its declared setup context - what a post of an explicit
+/// script (every op through that script) or of per-setup scripts passes.
+#[must_use]
+pub fn program_problems_by(world: &World, voice: &dyn Fn(Option<&str>) -> WorkVoice) -> Vec<String> {
     let mut out = Vec::new();
     for (name, e) in setup::operation_order(world) {
         let Some(op) = model::operation_of(world, &e) else {
@@ -132,16 +161,18 @@ pub fn program_problems(world: &World) -> Vec<String> {
             continue;
         };
         let setup_name = || setup::effective(world, declared).unwrap_or_default();
-        match work_speed(world, declared, &e) {
+        match work_speed(world, voice(declared), &e) {
             WorkSpeed::Not => {}
             WorkSpeed::OnC => {
                 let label = model::operation_label(world, &name, &e);
                 match c_rate(world, declared) {
-                    Some(rate) if rate / 360.0 > hold => out.push(format!(
-                        "{label}: turns the work on the C axis at up to {:.0} rpm (the machine's C rate of {rate:.0} degrees per minute), over setup '{}''s workholding maximum of {hold:.0} rpm - state the chuck's real rating or a slower C rate",
-                        rate / 360.0,
-                        setup_name()
-                    )),
+                    Some(rate) if rate / 360.0 > hold => {
+                        let (c, h) = shown(rate / 360.0, hold);
+                        out.push(format!(
+                            "{label}: turns the work on the C axis at up to {c} rpm (the machine's C rate of {rate:.0} degrees per minute), over setup '{}''s workholding maximum of {h} rpm - state the chuck's real rating or a slower C rate",
+                            setup_name()
+                        ));
+                    }
                     Some(_) => {}
                     None => out.push(format!(
                         "{label}: turns the work on the C axis, but the machine states no C rate, so how fast the work turns cannot be held to setup '{}''s workholding maximum of {hold:.0} rpm - state the C axis's speeds in the machine file",
@@ -159,8 +190,9 @@ pub fn program_problems(world: &World) -> Vec<String> {
                 let rpm = crate::posting::posted_rpm(&tool);
                 if rpm > hold {
                     let label = model::operation_label(world, &name, &e);
+                    let (r, h) = shown(rpm, hold);
                     out.push(format!(
-                        "{label}: turns the work at {rpm:.0} rpm (G97), over setup '{}''s workholding maximum of {hold:.0} rpm - lower tool {}'s rpm or state the chuck's real rating",
+                        "{label}: turns the work at {r} rpm (G97), over setup '{}''s workholding maximum of {h} rpm - lower tool {}'s rpm or state the chuck's real rating",
                         setup_name(),
                         op.tool
                     ));

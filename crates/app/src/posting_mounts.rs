@@ -201,7 +201,15 @@ fn post_each(world: &World, out_path: &Path, cps: Option<&str>, mounts: Vec<Moun
         });
     }
     let streams = op_streams(world)?;
-    let mut report = verification_report(world);
+    // #1174: an explicit script is the dialect every op posts through;
+    // otherwise each op's own mount's post (the scripts read above).
+    let mut report = match cps {
+        Some(c) => {
+            let voice = crate::post::section_spindle::work_voice(c);
+            crate::posting::verification_report_by(world, &|_| voice)
+        }
+        None => verification_report(world),
+    };
     for m in &mounts {
         report.problems.extend(wcs_slot::shared_word_problems_in(world, Some(&m.setups)));
     }

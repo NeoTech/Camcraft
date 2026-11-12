@@ -458,7 +458,9 @@ fn post_script_body(world: &World, out_path: &Path, cps: &str) -> Result<Posted,
     // computed here and now - never a cached verdict carried in from
     // the viewer (the PostView law: a verdict about an older world
     // must not release this one's metal).
-    let mut report = verification_report(world);
+    // #1174: the workholding clause reads the dialect of THIS script.
+    let voice = post::section_spindle::work_voice(cps);
+    let mut report = verification_report_by(world, &|_| voice);
     // One file, one register per word (#196): two setups posting the same
     // word from different placements refuse here - per-op files are exempt.
     report.problems.extend(wcs_slot::shared_word_problems(world));
@@ -629,6 +631,15 @@ pub fn verification_gate(world: &World) -> Vec<String> {
 /// read, so the visible line and the binding gate are one run.
 #[must_use]
 pub fn verification_report(world: &World) -> GateReport {
+    verification_report_by(world, &|declared| crate::setup_workholding::mounted_voice(world, declared))
+}
+
+/// [`verification_report`] with the workholding clause (#1174) judged
+/// for the post scripts that will actually run: `voice` names the
+/// dialect of the script each operation's setup context posts through
+/// (an explicit script: the same for every op).
+#[must_use]
+pub fn verification_report_by(world: &World, voice: &dyn Fn(Option<&str>) -> post::section_spindle::WorkVoice) -> GateReport {
     let mut problems = Vec::new();
 
     // The fidelity clause (#864), first: an operation judged against a
@@ -656,8 +667,9 @@ pub fn verification_report(world: &World) -> GateReport {
     // program (the Output and the thread output) - never posted half one
     // way. Judged program-wide, ahead of #388's per-mount split.
     problems.extend(crate::setup_post_options::program_problems(world));
-    // #1031: a G97 rpm over a setup's workholding maximum, by name.
-    problems.extend(crate::setup_workholding::program_problems(world));
+    // #1031/#1174: the work spindle over a setup's workholding maximum,
+    // by name - judged for the post dialect each op runs through.
+    problems.extend(crate::setup_workholding::program_problems_by(world, voice));
     // The carried-stock clause (#319): a feed move into carried material
     // outside a setup's declared stock is engagement nothing verified.
     problems.extend(crate::operation::carried_problems(world));
