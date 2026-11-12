@@ -34,3 +34,5 @@ pub mod lathe_insert_zone;
 pub mod orientation;
 pub mod catalog_fields;
 pub mod tools;
+// #891: turning surface speed, feed per rev and the max-rpm clamp.
+pub mod turning_data;
