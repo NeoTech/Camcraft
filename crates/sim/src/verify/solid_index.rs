@@ -133,6 +133,7 @@ impl<'a> SolidIndex<'a> {
     /// atom (the arc chords' sagitta); `hole_walls` grants the
     /// containment kinds their tessellated rims ([`chord_dip`]); `bores`
     /// grants a thread mill its threads ([`super::thread_bore`]).
+    #[allow(clippy::too_many_arguments)] // the sweep, its atoms and the two grants
     pub(super) fn hits(&mut self, fr: &Frame, d: [f64; 3], atoms: &[Atom], allow: f64, grow: f64, hole_walls: bool, bores: &[ThreadBore]) -> bool {
         let len = atoms.iter().map(|a| a.z1).fold(0.0, f64::max);
         let (p0, p1) = (fr.up(0.0), fr.up(len));

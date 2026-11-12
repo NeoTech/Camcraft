@@ -3215,6 +3215,7 @@ const CONTAIN_STEP: f64 = 0.25;
 /// and stack against the part solid at every sampled position, the
 /// containment kinds' tessellated hole rims excused (`SolidLaw`), and a
 /// thread mill's `bores` their threads (#1071).
+#[allow(clippy::too_many_arguments)] // the path, the part, the cutter and the law's four inputs
 fn contain_into(
     warns: &mut Vec<Warning>,
     path: &Toolpath,
