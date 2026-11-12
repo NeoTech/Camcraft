@@ -633,9 +633,9 @@ pub(super) fn icon_of(c: Cmd, state: &State) -> Option<Icon> {
         Cmd::Save => Some(Icon::Save),
         Cmd::SaveAs => Some(Icon::Save),
         Cmd::Post => Some(Icon::Post),
-        // A setup is a clamping: the workholding glyph, from the
-        // existing set (#322), so it never twins Origin's beside it.
-        Cmd::Setups => Some(Icon::Fixture),
+        // A setup wears the setup sheet (#661), the tree's Setups glyph;
+        // it never twins Origin's beside it.
+        Cmd::Setups => Some(Icon::Setup),
         Cmd::Stock => Some(Icon::Stock),
         Cmd::Origin => Some(Icon::WorkOffset),
         Cmd::Tools => Some(Icon::Tools),

@@ -5,7 +5,8 @@
 //! icons.rs. The chrome glyphs are Tabler Icons (MIT, see
 //! assets/ui/LICENSES.md), unmodified except channel order; the
 //! operation glyphs (#661) are our own drawings, SVG masters under
-//! assets/ui/svg/ rasterised by `cargo xtask icons` (AGENTS.md clean-room:
+//! assets/ui/svg/ rasterised by `cargo xtask icons`, as are the tool-kind,
+//! tree-row, status-badge and action glyphs since #661 slice 2 (AGENTS.md clean-room:
 //! never any HSMWorks or other CAM product's asset).
 //!
 //! The imgui loader hand-built wgpu textures and registered them as
@@ -60,10 +61,15 @@ icon_table! {
     OpenModel => "folder-open", "icon-open-model";
     OpenProject => "file-import", "icon-open-project";
     Save => "device-floppy", "icon-save";
-    /// Original drawing (no Tabler "post to G-code" glyph exists).
-    Post => "post", "icon-post";
-    Stock => "box-model", "icon-stock";
-    WorkOffset => "transform", "icon-work-offset";
+    // The CamCraft actions and tree rows (#661 slice 2): original SVG
+    // masters too - `act-*` for the actions, `tree-*` for the browser's
+    // setup rows.
+    /// A program page with the arrow out of it.
+    Post => "act-post", "icon-post";
+    /// The isometric block with its hidden edges dashed: raw material.
+    Stock => "tree-stock", "icon-stock";
+    /// The origin dot and its X/Y arrows.
+    WorkOffset => "tree-wcs", "icon-work-offset";
     Tools => "tools", "icon-tools";
     // The operation glyphs (#661): one per `OpType`, every one an
     // original SVG master in assets/ui/svg/ - a cutter and its path,
@@ -121,17 +127,47 @@ icon_table! {
     Undo => "arrow-back-up", "icon-undo";
     Redo => "arrow-forward-up", "icon-redo";
     Delete => "trash", "icon-delete";
-    Generate => "player-play", "icon-generate";
-    FrameAll => "maximize", "icon-frame-all";
-    Toolpaths => "eye", "icon-toolpaths";
-    Model => "cube", "icon-model";
-    EyeOff => "eye-off", "icon-eye-off";
-    Simulate => "sim", "icon-simulate";
-    /// Original drawing (no Tabler vise glyph exists): the two jaws,
-    /// screw shaft and round knob of a machine vise.
-    Fixture => "fixture", "icon-fixture";
-    /// The status strip's Debug info door (#157), an original glyph.
-    DebugInfo => "debug-info", "icon-debug-info";
+    /// A raster path with its arrowhead and a spark: make the toolpath.
+    Generate => "act-generate", "icon-generate";
+    FrameAll => "act-frame-all", "icon-frame-all";
+    Toolpaths => "act-show-paths", "icon-toolpaths";
+    /// The machined part: the block with a bore in its face.
+    Model => "tree-part", "icon-model";
+    EyeOff => "act-hide-paths", "icon-eye-off";
+    /// The play mark with speed lines: run the move simulation.
+    Simulate => "act-simulate", "icon-simulate";
+    /// The vise: two jaws over the bed, the part between, the screw bar.
+    Fixture => "tree-fixture", "icon-fixture";
+    /// The status strip's Debug info door (#157).
+    DebugInfo => "act-debug-info", "icon-debug-info";
+    /// A setup: the setup sheet with its origin corner.
+    Setup => "tree-setup", "icon-setup";
+    /// The machine: column, head and spindle over the table.
+    Machine => "tree-machine", "icon-machine";
+    /// A setup's Operations node: the folder with a toolpath in it.
+    OpGroup => "tree-op-group", "icon-op-group";
+    // Operation status badges (#661 section 7): solid shapes with a
+    // knocked-out mark, painted small over an op row's glyph.
+    BadgeNever => "badge-never", "icon-badge-never";
+    BadgeOk => "badge-ok", "icon-badge-ok";
+    BadgeStale => "badge-stale", "icon-badge-stale";
+    BadgeWarning => "badge-warning", "icon-badge-warning";
+    // Tool kinds (#661 section 4), one per `ToolKind`, drawn from the
+    // cutter's silhouette: mill tools hang from a solid holder block,
+    // lathe tools run left from a solid tool-post block at the right.
+    ToolEndMill => "tool-end-mill", "icon-tool-end-mill";
+    ToolBallNose => "tool-ball-nose", "icon-tool-ball-nose";
+    ToolBullNose => "tool-bull-nose", "icon-tool-bull-nose";
+    ToolDrill => "tool-drill", "icon-tool-drill";
+    ToolTap => "tool-tap", "icon-tool-tap";
+    ToolBoringBar => "tool-boring-bar", "icon-tool-boring-bar";
+    ToolTurningInsert => "tool-turning-insert", "icon-tool-turning-insert";
+    ToolGroovingBlade => "tool-grooving-blade", "icon-tool-grooving-blade";
+    ToolThreadingInsert => "tool-threading-insert", "icon-tool-threading-insert";
+    ToolForm => "tool-form", "icon-tool-form";
+    ToolChamferMill => "tool-chamfer-mill", "icon-tool-chamfer-mill";
+    ToolProbe => "tool-probe", "icon-tool-probe";
+    ToolTorch => "tool-torch", "icon-tool-torch";
 }
 
 /// Upload edge: 2x the token's `glyph_px` (20 display px at the dark
@@ -142,8 +178,16 @@ const UPLOAD_PX: u32 = 40;
 /// Loaded icon set: one handle per slot, parallel to [`Icon::ALL`], with
 /// `None` where a glyph failed to decode. A headless frame never builds
 /// one at all, so every consumer takes `Option<&IconSet>`.
+#[derive(Clone)]
 pub(crate) struct IconSet {
     handles: Vec<Option<TextureHandle>>,
+}
+
+/// Where `load` leaves a copy of the set (the handles are shared, not the
+/// pixels) for panes that are not handed one: the property pages draw the
+/// tool kind glyphs through it (#661).
+fn ctx_key() -> egui::Id {
+    egui::Id::new("camcraft-icon-set")
 }
 
 impl IconSet {
@@ -160,7 +204,15 @@ impl IconSet {
                 }
             })
             .collect();
-        IconSet { handles }
+        let set = IconSet { handles };
+        ctx.data_mut(|d| d.insert_temp(ctx_key(), std::sync::Arc::new(set.clone())));
+        set
+    }
+
+    /// The set `load` built for this context (`None` before the first
+    /// GPU-backed frame, and headless): every caller degrades to its text.
+    pub(crate) fn from_ctx(ctx: &Context) -> Option<std::sync::Arc<IconSet>> {
+        ctx.data(|d| d.get_temp(ctx_key()))
     }
 
     fn upload(ctx: &Context, icon: Icon) -> Result<TextureHandle, String> {
