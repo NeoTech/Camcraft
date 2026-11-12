@@ -167,6 +167,89 @@ fn the_third_axis_role_is_derived_right_handed_never_read() {
 }
 
 #[test]
+fn a_z_face_a_y_edge_and_a_corner_build_the_upright_frame() {
+    // #701 round 5 blocker: the (Z, Y) arm read the Y pick's direction
+    // as X, leaving a frame turned 120 degrees about its diagonal -
+    // right-handed and orthonormal, so every guard passed, but every
+    // posted coordinate was wrong. The Y pick must set Y.
+    let w = block(0.0);
+    let top = face(&w, "block", [10.0, 10.0, 10.0]);
+    let side = edge(&w, "block", [0.0, 0.0, 10.0], [0.0, 20.0, 10.0]);
+    let c = corner(&w, "block", [0.0, 0.0, 10.0]);
+    let a = align_roles(&w, &[(top, Role::Z), (side, Role::Y), (c, Role::Origin)]).expect("Z face, Y edge, corner");
+    assert!(near(a.x, [1.0, 0.0, 0.0]), "X derived right-handed: {:?}", a.x);
+    assert!(near(a.y, [0.0, 1.0, 0.0]), "Y stands on the picked edge: {:?}", a.y);
+    assert!(near(a.z, [0.0, 0.0, 1.0]), "Z stands on the picked face: {:?}", a.z);
+    assert!(near(a.pos, [0.0, 0.0, 10.0]), "origin on the corner: {:?}", a.pos);
+    assert!([a.roll_deg, a.pitch_deg, a.yaw_deg].iter().all(|v| v.abs() < 1e-9), "identity turn: {a:?}");
+}
+
+#[test]
+fn every_reachable_pair_puts_each_pick_on_its_own_axis() {
+    // `AXIS_PRIORITY` collects the frame picks in priority order, so
+    // exactly three pairs are reachable: (Z, X), (Z, Y) and (X, Y). The
+    // round 5 bug sat in a reachable pair that no pin used. On a block
+    // tipped 25 degrees about X the Z and Y picks stand off the world
+    // axes, so a frame turned out of true cannot hide: each pick's role
+    // axis must equal that pick's own direction, and the frame must
+    // stay right-handed.
+    let w = tilted_block(25.0);
+    let q = quat_from_euler(25f64.to_radians(), 0.0, 0.0);
+    let turn = |v: [f64; 3]| {
+        let p = quat_rotate_point(q, Point3::new(v[0], v[1], v[2]));
+        [p.x, p.y, p.z]
+    };
+    let cross = |u: [f64; 3], v: [f64; 3]| {
+        [
+            u[1] * v[2] - u[2] * v[1],
+            u[2] * v[0] - u[0] * v[2],
+            u[0] * v[1] - u[1] * v[0],
+        ]
+    };
+    let (z_dir, x_dir, y_dir) = (turn([0.0, 0.0, 1.0]), turn([1.0, 0.0, 0.0]), turn([0.0, 1.0, 0.0]));
+    // The corner stands at one end of both edges, so #187's siding rule
+    // pins both edge directions: each runs from the corner toward its
+    // far end, exactly the turned local direction.
+    let top = face(&w, "block", [10.0, 10.0, 10.0]);
+    let along_x = edge(&w, "block", [0.0, 0.0, 10.0], [20.0, 0.0, 10.0]);
+    let along_y = edge(&w, "block", [0.0, 0.0, 10.0], [0.0, 20.0, 10.0]);
+    let c = corner(&w, "block", [0.0, 0.0, 10.0]);
+    for (f1, r1, f2, r2) in [
+        (&top, Role::Z, &along_x, Role::X),
+        (&top, Role::Z, &along_y, Role::Y),
+        (&along_x, Role::X, &along_y, Role::Y),
+    ] {
+        let a = align_roles(&w, &[(f1.clone(), r1), (f2.clone(), r2), (c.clone(), Role::Origin)])
+            .expect("two axes and an origin on the tipped block");
+        let dir_of = |role: Role| match role {
+            Role::Z => z_dir,
+            Role::X => x_dir,
+            Role::Y => y_dir,
+            Role::Origin => unreachable!("only axes are looped"),
+        };
+        let axis_of = |role: Role| match role {
+            Role::Z => a.z,
+            Role::X => a.x,
+            Role::Y => a.y,
+            Role::Origin => unreachable!("only axes are looped"),
+        };
+        for role in [r1, r2] {
+            let (axis, want) = (axis_of(role), dir_of(role));
+            assert!(
+                close(axis, want, 1e-9),
+                "the {role:?} pick must set its own axis (pair {r1:?}+{r2:?}): got {axis:?}, want {want:?}"
+            );
+        }
+        assert!(
+            close(a.x, cross(a.y, a.z), 1e-9),
+            "the frame must stay right-handed: x {:?} vs y cross z {:?}",
+            a.x,
+            cross(a.y, a.z)
+        );
+    }
+}
+
+#[test]
 fn a_bore_wall_picked_as_z_stands_upright_with_a_pinned_sign() {
     // The fitted axis of an upright wall is vertical; the sign is
     // pinned: the fit returns the +Z-pointing root, whatever the walk
@@ -285,9 +368,9 @@ fn every_degenerate_role_set_is_refused_by_name() {
         let e = align_roles(&w, picks).expect_err("must refuse");
         assert!(e.contains(want), "{want:?} not in {e:?}");
     };
-    says(&[], "at least two picks");
-    says(&[(top.clone(), Role::Z)], "at least two picks");
-    says(&[(c.clone(), Role::Origin)], "at least two picks");
+    says(&[], "two axes, plus an optional origin");
+    says(&[(top.clone(), Role::Z)], "two axes, plus an optional origin");
+    says(&[(c.clone(), Role::Origin)], "two axes, plus an optional origin");
     says(&[(top.clone(), Role::Z), (side.clone(), Role::Z)], "only one pick may set Z");
     says(&[(top.clone(), Role::Z), (c.clone(), Role::Origin), (corner(&w, "block", [20.0, 0.0, 10.0]), Role::Origin)], "only one pick may set Origin");
     says(&[(top.clone(), Role::Z), (upright.clone(), Role::X)], "too near parallel");

@@ -79,7 +79,7 @@ const AXIS_PRIORITY: [Role; 3] = [Role::Z, Role::X, Role::Y];
 /// axes, then each datum by name, then how square the two axes stand.
 pub fn align_roles(world: &World, picks: &[(GeoSel, Role)]) -> Result<Alignment, String> {
     if picks.len() < 2 {
-        return Err("set the WCS from at least two picks - two axes, or an axis and an origin".into());
+        return Err("set the WCS from two axes, plus an optional origin".into());
     }
     for r in [Role::Origin, Role::X, Role::Y, Role::Z] {
         if picks.iter().filter(|(_, role)| *role == r).count() > 1 {
@@ -130,32 +130,22 @@ pub fn align_roles(world: &World, picks: &[(GeoSel, Role)]) -> Result<Alignment,
     // The projection maths is #187's step for step, so a role table with
     // the old fixed roles agrees with `align_321` to the last digit.
     let tilt = MIN_EDGE_TILT_DEG.to_radians().sin();
+    // Only the ordered-by-priority pairs are reachable: (Z, X), (Z, Y)
+    // and (X, Y). Each arm places every pick's direction on the axis its
+    // role names and derives the third right-handed; the derived axis is
+    // never the projected one.
     let (x, y, z) = match (frame[0].1, frame[1].1) {
         (Role::Z, Role::X) => {
             let x = square_to(g2, d2.dir, a, tilt)?;
             (x, cross(a, x), a)
         }
         (Role::Z, Role::Y) => {
-            // #937: the first pick is Z and stays Z; the second is Y,
-            // squared to it, and X closes the frame (y x z).
             let y = square_to(g2, d2.dir, a, tilt)?;
             (cross(y, a), y, a)
-        }
-        (Role::X, Role::Z) => {
-            let z = square_to(g2, d2.dir, a, tilt)?;
-            (a, cross(z, a), z)
         }
         (Role::X, Role::Y) => {
             let y = square_to(g2, d2.dir, a, tilt)?;
             (a, y, cross(a, y))
-        }
-        (Role::Y, Role::Z) => {
-            let z = square_to(g2, d2.dir, a, tilt)?;
-            (cross(a, z), a, z)
-        }
-        (Role::Y, Role::X) => {
-            let x = square_to(g2, d2.dir, a, tilt)?;
-            (x, a, cross(x, a))
         }
         _ => return Err("two different axes set the frame - re-pick one of them".into()),
     };
