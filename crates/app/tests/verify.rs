@@ -85,6 +85,7 @@ fn ctx<'a>(region: &'a Region, stock: Option<&'a Region>, tool: &'a ToolGeom, mo
         // what it was before the stage existed.
         fixtures: &[],
         spindle: None,
+        ..Default::default()
     }
 }
 
@@ -659,6 +660,7 @@ fn env_ctx<'a>(
         finish_tol,
         fixtures: &[],
         spindle: None,
+        ..Default::default()
     }
 }
 

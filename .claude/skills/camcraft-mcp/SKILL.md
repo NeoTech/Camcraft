@@ -87,6 +87,8 @@ The server exposes tools across three modules in `crates/app/src/mcp/` (see `cra
 - `set_stock { "box"?: { "dx", "dy", "dz" }, "cylinder"?: { "diameter", "height" }, "from_model"?: string }`: Define setup stock as a box in mm (centred in XY, z from 0 to `dz`), a cylinder, or a copy of a model's mesh.
 - `list_tool_catalog {}`: List built-in tool definitions.
 - `add_tool { "catalog"?: string, "definition"?: object, "name"?: string }`: Add a tool: a copy of a `list_tool_catalog` entry, or a full definition (`get_job`'s tool shape); `name` defaults to the catalog name.
+- `list_holder_library {}`: List the built-in holders (BT30/BT40/CAT40 with ER or Weldon, standalone ER chucks) with dimensions and the shanks each takes.
+- `set_tool_holder { "tool": string, "library"?: string, "gauge_len"?: number, "projection"?: number, "points"?: [{z, r, arc?}], "clear"?: bool }`: Set a tool's holder from a library entry, a drawn spun profile, or back to the cylinder (exactly one of `library`/`points`/`clear`); one undo step. `get_job` shows it as each tool's `holder`.
 - `set_tool { "operation": string, "tool": string }`: Assign a document tool to an operation.
 - `import_tool_library { "path": string }`: Import tools from a `.camtools` library file.
 - `export_tool_library { "path": string }`: Export document tools to a `.camtools` library file.

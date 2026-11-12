@@ -699,6 +699,10 @@ const GRID_MAJOR: [f32; 3] = [0.23, 0.25, 0.29];
 /// screen; the outermost rings fade into the ground (issue: an empty
 /// viewport read as a void).
 const GRID_HALF_STEPS: i64 = 24;
+/// Beyond this (mm) the grid is not drawn: far past any machine table, and
+/// where `step * GRID_HALF_STEPS` can overflow to infinity and stretch the
+/// line-index range to the whole of i64.
+const GRID_MAX_COORD: f64 = 1.0e9;
 /// Every fifth line is a major one (0.5, 1, 5, 10, 50 ... on a 1-2-5 step).
 const GRID_MAJOR_EVERY: i64 = 5;
 
@@ -717,6 +721,17 @@ pub(crate) fn ground_grid_lines(state: &State) -> Vec<[f32; 6]> {
     }
     let step = nice_step(state.cam.dist / 10.0);
     let (cx, cy) = (state.cam.target[0], state.cam.target[1]);
+    // A non-finite or absurdly far target (or a non-finite step) would
+    // turn the index range below into billions of lines; the grid is
+    // furniture, so it simply stays out of that frame (Prime Directive:
+    // no hang).
+    if !(cx.is_finite() && cy.is_finite() && step.is_finite())
+        || cx.abs() > GRID_MAX_COORD
+        || cy.abs() > GRID_MAX_COORD
+        || step > GRID_MAX_COORD
+    {
+        return Vec::new();
+    }
     let reach = step * GRID_HALF_STEPS as f64;
     let (k0x, k1x) = (
         ((cx - reach) / step).floor() as i64,

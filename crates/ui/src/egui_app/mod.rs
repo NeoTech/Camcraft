@@ -34,6 +34,7 @@ pub(crate) mod gpu_select;
 // glyph tint are the consumers (ratio, on-fill, the follow law, the gate).
 pub mod contrast;
 mod boundary;
+mod gcode_highlight;
 mod debug_info;
 mod status_alert;
 
@@ -54,6 +55,8 @@ pub(crate) mod machine_editor;
 mod machine_grid;
 // pub(crate) for the same reason: `State::post_refusal` names its type.
 pub(crate) mod post_refusal;
+// #867: the one copyable error widget.
+pub(crate) mod error_text;
 // pub(crate) for the same reason: `State::machines_pane` (#287).
 pub(crate) mod machines_pane;
 // pub(crate): `MachinesPane::editor` names its type (#383).
@@ -68,6 +71,8 @@ mod tree_glyphs;
 mod pages;
 // #739: the WCS page, split out of pages.rs.
 mod wcs_page;
+// #1094: the stock page's raw-stock-only checkbox.
+mod raw_stock_row;
 // #371: the tool editor's Body section and its picking preview.
 mod tool_body_page;
 // #630: the tool editor's lathe orientation row.
@@ -181,6 +186,8 @@ mod locate_tests;
 mod fixture_library_tests;
 #[cfg(test)]
 mod fixture_vise_tests;
+#[cfg(test)]
+mod fixture_vise_stock_tests;
 #[cfg(test)]
 mod fixture_self_centering_tests;
 #[cfg(test)]
