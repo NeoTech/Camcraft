@@ -142,16 +142,9 @@ pub struct ProjectFile {
     /// every earlier document means - so the default writes no key.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub post_options: Option<PostOptionsDto>,
-    /// The document's theme (M6.1 C), same law as `post`: an absent key
-    /// is the built-in `dark` - what every earlier document wears - so
-    /// the default writes nothing. `{"named": ...}` is a built-in by
-    /// name, `{"file": path}` a user `.json` theme; landed values are
-    /// not re-validated on open (the `SelectTheme` constructor and the
-    /// shell's parse pre-step did), and one that went missing refuses
-    /// by name at apply time in the status line, never silently
-    /// reverting the look of an intact document.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub theme: Option<ThemeDto>,
+    // From v41 a `theme` key lived here (M6.1 C). Since #877 the theme is a
+    // user preference (`app::prefs`): the key is no longer written, and an
+    // older file that carries it reads cleanly - serde ignores unknown keys.
     /// The ribbon's pinned kinds (M6.2), v42+: registry indices in pin
     /// order. An absent key pins nothing - what every v41 document is,
     /// since the ribbon could not pin then. The indices ride the
@@ -189,17 +182,6 @@ pub struct ProjectFile {
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub smoothing: bool,
     pub entities: Vec<EntityDto>,
-}
-
-/// The file mirror of the `ThemeRef` singleton (M6.1 C), spelled like
-/// `PostDto`: a built-in name or a path, never one string standing
-/// ambiguously for both. `dark` is the default and needs no key, so a
-/// `{"named": "dark"}` is as legal as an omission - it reads the same.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-#[serde(rename_all = "lowercase")]
-pub enum ThemeDto {
-    Named(String),
-    File(String),
 }
 
 /// The file mirror of the `ProgramInfo` singleton (#258): each value

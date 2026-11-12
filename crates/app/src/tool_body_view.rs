@@ -102,6 +102,7 @@ pub fn spun_preview(tool: &Tool, points: &[SpunPoint]) -> Result<SpunProfile, St
         facets: std::sync::Arc::from(Vec::new()),
         frame: tool_body::BodyFrame::Spindle { axis: [0.0, 0.0, 1.0], offset: 0.0, profile: spun.holder_profile() },
         spun: None,
+        machine_default: false,
     };
     tool_body::fits(tool, &probe)?;
     Ok(spun)

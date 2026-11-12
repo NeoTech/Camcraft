@@ -245,6 +245,9 @@ fn load_machine(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> 
         "setup": target,
         "machine": m.as_ref().map(|m| m.model.clone()),
         "path": (!path.is_empty()).then_some(path),
+        // #828: the holder system and the holder new tools start with.
+        "spindle_mount": m.as_ref().and_then(|m| m.spindle_mount.clone()),
+        "default_holder": m.as_ref().and_then(|m| m.default_holder.clone()),
         // #388: the table of the machine just named - the setup's own,
         // or the document's - never the active setup's.
         "table": m.as_ref().and_then(crate::fixture::table_of).map(|b| json!({
