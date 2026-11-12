@@ -516,6 +516,14 @@ pub enum CommandKind {
         at: String,
         yaw_deg: f64,
     },
+    /// #832: change placed jaw block `name`'s figures - one `SetModJaw`.
+    SetModJaw {
+        name: String,
+        params: camcraft_app::modvise::JawParams,
+    },
+    /// #832: re-fit adjustable jaw block `adjustable` to the stock as it
+    /// stands, against the fixed block on its plate - one `RefitModVise`.
+    RefitModVise { adjustable: String },
     /// #789: open the "Add accessory…" dialog over a setup's Fixtures
     /// node (`""` - the implicit setup). View state.
     AccessoryDialog(String),
@@ -1516,6 +1524,8 @@ pub struct State {
     pub plate_place: HashMap<String, PlatePlaceDraft>,
     /// #820: each plate row's "Add mod vise pair" draft, by plate name.
     pub mod_vise: HashMap<String, ModViseDraft>,
+    /// #832: each jaw block row's figure-edit draft, by block name.
+    pub mod_jaw_edit: HashMap<String, camcraft_app::modvise::JawParams>,
     /// The selected op's struck fixtures, per (version, op, path sig).
     pub struck_cache: camcraft_app::fixture_view::StruckCache,
     /// Properties / Tool Library pane drafts (ephemeral; see [`OpUi`]).
@@ -1828,6 +1838,7 @@ impl State {
             vise_opening: HashMap::new(),
             plate_place: HashMap::new(),
             mod_vise: HashMap::new(),
+            mod_jaw_edit: HashMap::new(),
             struck_cache: Default::default(),
             // The tool draft carries a plausible name from the first
             // frame: an empty Name field made Add look dead (refused
@@ -3581,6 +3592,8 @@ impl State {
             CommandKind::PlaceModVisePair { plate, fixed, adjustable, at, yaw_deg } => {
                 self.place_mod_vise_pair(&plate, &fixed, &adjustable, &at, yaw_deg);
             }
+            CommandKind::SetModJaw { name, params } => self.set_mod_jaw(&name, params),
+            CommandKind::RefitModVise { adjustable } => self.refit_mod_vise(&adjustable),
             CommandKind::SetupSheetDialog => {
                 if let Some(path) = save_sheet_dialog() {
                     self.setup_sheet_path(path);

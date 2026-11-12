@@ -12,6 +12,8 @@ pub mod fixture;
 pub mod fixture_move;
 pub mod fixture_plate;
 pub mod mod_vise;
+// #832: edit and re-fit a placed mod vise pair.
+pub mod mod_vise_edit;
 pub mod import_fixture;
 pub mod import_model;
 // #339 slice 6: a fixture library entry placed into a setup.
@@ -72,6 +74,7 @@ pub use fixture::{
 };
 pub use fixture_plate::{InsertPlate, PlaceOnPlate, PlatePlacement, SetPlate, SetPlateGrid};
 pub use mod_vise::PlaceModVisePair;
+pub use mod_vise_edit::{RefitModVise, SetModJaw};
 pub use import_fixture::ImportFixture;
 pub use import_model::ImportModel;
 pub use insert_fixture::InsertFixture;
