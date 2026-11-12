@@ -161,6 +161,6 @@ pub(crate) fn excess_aware(params: &OpParams) -> bool {
         }
         Section::Turning => true,
         Section::MultiAxis => !matches!(params, OpParams::Swarf { .. } | OpParams::AdvancedSwarf { .. }),
-        Section::Plasma => false,
+        Section::Plasma | Section::Sinker => false,
     }
 }
