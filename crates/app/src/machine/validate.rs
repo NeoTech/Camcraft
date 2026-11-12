@@ -382,6 +382,10 @@ fn required_by_kind(v: &Value, text: &str, axes: &[(String, &Value, bool)], out:
     if k == Kind::Plasma {
         out.extend(super::plasma_refusals(v).into_iter().map(|(key, rule)| Refusal::new(key, rule)));
     }
+    // #530: an EDM's head states no spindle, live tool or coolant.
+    if matches!(k, Kind::WireEdm | Kind::SinkerEdm) {
+        out.extend(super::edm_refusals(v).into_iter().map(|(key, rule)| Refusal::new(key, rule)));
+    }
     if k == Kind::MillTurn && !axes.iter().any(|(_, _, r)| *r) {
         out.push(Refusal::new("rotary axis", "required for a mill-turn machine (the turning spindle, C)"));
     }
