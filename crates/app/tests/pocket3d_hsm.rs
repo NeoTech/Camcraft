@@ -104,7 +104,9 @@ fn the_users_bore_roughs_adaptive_level_by_level_and_verifies_clean() {
     // Windows (the #850 measure) Z 20.000 alone, 5530 moves / 5497
     // planar / 600 arcs; macOS (Apple silicon) Z 20.000 alone, 5786 /
     // 5753 / 651. On f490458a (after #689), macOS: Z 20.000 and Z 10.000,
-    // 6503 / 6467 / 222. The planner's crossing and acceptance decisions
+    // 6503 / 6467 / 222; main's own re-measure (2c97351b, another
+    // platform) read 6500 / 6464 / 222 with Z 20 and Z 10 on the rings
+    // (getting Z 10's HSM plan back is Refs #980). The planner's crossing and acceptance decisions
     // are knife edges a 16 nm change of the rings flips (#882, #982), so
     // last-place float differences between platforms (most likely libm's
     // sin, cos, atan2, hypot under the STEP tessellation and the planner)
