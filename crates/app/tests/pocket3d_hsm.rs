@@ -11,7 +11,7 @@
 //! `golden_cl`'s business, unchanged.
 //!
 //! Gate map (M11.4): covers app::operation (params digest, generate's
-//! Pocket3D arm), app::commands, app::verify.
+//! Pocket3D arm), app::commands, sim::verify.
 
 use camcraft_app::cl::{MoveKind, Toolpath};
 use camcraft_app::commands::{AddTool, CreateOperation, GenerateOperation, History, ImportModel, SetStock};
