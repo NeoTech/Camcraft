@@ -21,6 +21,7 @@ pub mod fixture_locate;
 pub mod fixture_struck;
 pub mod fixture_view;
 pub mod vise;
+pub mod vise_fit;
 pub mod accessory;
 pub mod plate;
 pub mod modvise;
@@ -39,6 +40,8 @@ pub mod machine;
 pub mod machined_classes;
 pub mod mcp;
 pub mod model;
+// #864: models imported coarser than the importer promises.
+pub mod model_fidelity;
 pub mod operation;
 pub mod pick;
 pub use camcraft_post::post;

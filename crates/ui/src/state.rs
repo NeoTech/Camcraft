@@ -3769,7 +3769,8 @@ impl State {
                     return;
                 }
                 if model::find_by_name(&self.world, &name).is_some() {
-                    match UpdateModel::new(&self.world, &name, command.mesh) {
+                    let coarse = command.coarse_mm;
+                    match UpdateModel::new(&self.world, &name, command.mesh).map(|u| u.with_fidelity(coarse)) {
                         Ok(upd) => {
                             let summary = upd.changes().describe();
                             self.history.execute(&self.world, upd);
@@ -3785,6 +3786,14 @@ impl State {
                     self.doc_version += 1;
                     self.note_recent_model(file.as_deref());
                     self.status = timed("imported", "");
+                }
+                // #864: an import kept coarser than promised is said, not
+                // only logged.
+                if let Some(chord) = model::find_by_name(&self.world, &name)
+                    .and_then(|e| camcraft_app::model_fidelity::chord_of(&self.world, &e))
+                {
+                    let said = camcraft_app::model_fidelity::summary(&self.world, chord);
+                    self.status = format!("{} - {said}", self.status);
                 }
             }
             Err(err) => {
