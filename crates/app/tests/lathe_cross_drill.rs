@@ -93,7 +93,7 @@ fn lathe_at(raw: Option<f64>, dx: f64) -> (World, History) {
         let shape = StockShape::Cylinder { diameter: d, height: 40.0 };
         history.execute(&world, SetStock::new(&world, shape, at).expect("stock"));
     }
-    let m = Machine { model: "TestBench lathe".into(), kind: Some("lathe".into()), axes: rotaries(), ..Default::default() };
+    let m = Machine { model: "TestBench lathe".into(), kind: Some("mill-turn".into()), axes: rotaries(), ..Default::default() };
     history.execute(&world, LoadMachine::new(&world, "bench.mch".into(), Some(m)).expect("machine"));
     let mut tool = catalog().into_iter().find(|(n, _)| *n == "DR-0400").map(|(_, t)| t).expect("catalog entry");
     tool.flute_len = 30.0;
@@ -193,7 +193,7 @@ fn a_bar_with_one_modelled_cross_hole_fits_on_the_spindle_and_drills_clean() {
     assert!(r.trusted && r.worst() <= operation::SPINDLE_TOL, "the one-hole bar sits on the spindle: {r:?}");
     let world = new_world();
     let mut history = History::default();
-    let m = Machine { model: "TestBench lathe".into(), kind: Some("lathe".into()), axes: rotaries(), ..Default::default() };
+    let m = Machine { model: "TestBench lathe".into(), kind: Some("mill-turn".into()), axes: rotaries(), ..Default::default() };
     history.execute(&world, LoadMachine::new(&world, "bench.mch".into(), Some(m)).expect("machine"));
     let mut tool = catalog().into_iter().find(|(n, _)| *n == "DR-0400").map(|(_, t)| t).expect("catalog entry");
     tool.flute_len = 30.0;

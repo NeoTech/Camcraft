@@ -94,6 +94,11 @@ fn job_load(clearance: f64, load: impl FnOnce(&World) -> LoadMachine) -> World {
     h.execute(&world, stock.expect("bar stock"));
     let cmd = load(&world);
     h.execute(&world, cmd);
+    // #1232: a lathe posts only through a turning dialect.
+    if camcraft_app::machine::kind_of(&world) == camcraft_app::machine::Kind::Lathe {
+        let post = camcraft_app::schema::PostRef::Named("Fanuc Lathe".into());
+        h.execute(&world, camcraft_app::commands::SelectPost::new(&world, post).expect("lathe post"));
+    }
     let tool = catalog().into_iter().find(|(n, _)| *n == TOOL).map(|(_, t)| t).expect("catalog");
     h.execute(&world, AddTool::new(&world, TOOL, tool).expect("tool"));
     h.execute(&world, ImportModel::from_mesh("bar", revolve(&BAR)));
