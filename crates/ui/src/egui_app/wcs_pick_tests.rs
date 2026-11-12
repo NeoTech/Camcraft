@@ -178,7 +178,7 @@ fn an_incomplete_frame_greys_apply_and_shows_the_apps_why() {
     crate::wcs_pick::take(h.state_mut(), top);
     h.run();
     assert!(apply_disabled(&h), "one axis is no frame");
-    let why = h.query_by_label_contains("at least two picks").is_some();
+    let why = h.query_by_label_contains("two axes, plus an optional origin").is_some();
     assert!(why, "the app's own words ride the row");
     let front = edge(h.state(), [0.0, 0.0, 10.0], [20.0, 0.0, 10.0]);
     h.state_mut().wcs_pick.as_mut().expect("armed").role = Role::X;

@@ -36,7 +36,7 @@ pub(super) fn row(ui: &mut Ui, state: &mut State, setup: &str) {
             .selectable_label(armed, pick_text)
             .on_hover_text(
                 "Click faces, edges, corners or walls in the viewport; each pick sets the \
-                 role in the box. Two axes, or an axis and an origin, place the WCS.",
+                 role in the box. Two axes place the WCS, plus an optional origin.",
             )
             .clicked()
         {
