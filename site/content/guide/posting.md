@@ -1,7 +1,7 @@
 +++
 title = "Posting"
 description = "Writing the NC program, and what is checked first."
-weight = 5
+weight = 6
 +++
 
 Posting turns the document's operations into an NC program for one
