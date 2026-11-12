@@ -278,3 +278,26 @@ fn a_change_in_the_test_after_a_brace_string_is_attributed_to_it() {
     let got: Vec<String> = steps(quick_plan(&fx.0, &[f], &[], &[(f, "@@ -9 +9 @@")], false)).iter().map(line).collect();
     assert_eq!(got, ["app brace (1 fn) | test -j 6 -p camcraft-app --test brace -- --test-threads=6 --exact second"]);
 }
+
+#[test]
+fn the_compile_cache_is_enabled_only_when_sccache_exists_and_nobody_chose_otherwise() {
+    let on = exec::cache_env(Some("/bin/sccache"), false, false, false);
+    assert_eq!(on, [("RUSTC_WRAPPER", "/bin/sccache".to_string()), ("SCCACHE_CACHE_SIZE", "20G".to_string())]);
+    // A machine without sccache builds exactly as before.
+    assert!(exec::cache_env(None, false, false, false).is_empty());
+    // A wrapper the caller already set, or the opt-out, wins.
+    assert!(exec::cache_env(Some("/bin/sccache"), true, false, false).is_empty());
+    assert!(exec::cache_env(Some("/bin/sccache"), false, true, false).is_empty());
+    // A size the caller chose is not overridden.
+    assert_eq!(exec::cache_env(Some("/bin/sccache"), false, false, true), [("RUSTC_WRAPPER", "/bin/sccache".to_string())]);
+}
+
+#[test]
+fn packaging_build_clears_compiler_wrappers() {
+    // Both wrapper variables set: both are removed from the packaging build's environment (#935).
+    let both = exec::packaging_env_clear(|_| true);
+    assert_eq!(both, ["RUSTC_WRAPPER", "CARGO_BUILD_RUSTC_WRAPPER"]);
+    // Only the one that is set is named; none set, nothing to clear.
+    assert_eq!(exec::packaging_env_clear(|v| v == "CARGO_BUILD_RUSTC_WRAPPER"), ["CARGO_BUILD_RUSTC_WRAPPER"]);
+    assert!(exec::packaging_env_clear(|_| false).is_empty());
+}

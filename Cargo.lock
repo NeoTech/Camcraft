@@ -709,7 +709,7 @@ dependencies = [
 
 [[package]]
 name = "camcraft-app"
-version = "0.17.0"
+version = "0.18.0"
 dependencies = [
  "boa_engine",
  "camcraft-cl",
@@ -737,14 +737,14 @@ dependencies = [
 
 [[package]]
 name = "camcraft-cl"
-version = "0.17.0"
+version = "0.18.0"
 dependencies = [
  "camcraft-geometry",
 ]
 
 [[package]]
 name = "camcraft-geometry"
-version = "0.17.0"
+version = "0.18.0"
 dependencies = [
  "clipper2-rust",
  "thiserror 2.0.21",
@@ -752,7 +752,7 @@ dependencies = [
 
 [[package]]
 name = "camcraft-kernel"
-version = "0.17.0"
+version = "0.18.0"
 dependencies = [
  "camcraft-kernel",
  "ruststep",
@@ -769,7 +769,7 @@ dependencies = [
 
 [[package]]
 name = "camcraft-motion"
-version = "0.17.0"
+version = "0.18.0"
 dependencies = [
  "camcraft-cl",
  "camcraft-geometry",
@@ -782,7 +782,7 @@ dependencies = [
 
 [[package]]
 name = "camcraft-post"
-version = "0.17.0"
+version = "0.18.0"
 dependencies = [
  "boa_engine",
  "camcraft-cl",
@@ -795,7 +795,7 @@ dependencies = [
 
 [[package]]
 name = "camcraft-sim"
-version = "0.17.0"
+version = "0.18.0"
 dependencies = [
  "camcraft-cl",
  "camcraft-geometry",
@@ -807,7 +807,7 @@ dependencies = [
 
 [[package]]
 name = "camcraft-tools"
-version = "0.17.0"
+version = "0.18.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -815,7 +815,7 @@ dependencies = [
 
 [[package]]
 name = "camcraft-ui"
-version = "0.17.0"
+version = "0.18.0"
 dependencies = [
  "camcraft-app",
  "chrono",
@@ -5582,7 +5582,7 @@ checksum = "0637d3a5566a82fa5214bae89087bc8c9fb94cd8e8a3c07feb691bb8d9c632db"
 
 [[package]]
 name = "xtask"
-version = "0.17.0"
+version = "0.18.0"
 dependencies = [
  "regex",
 ]

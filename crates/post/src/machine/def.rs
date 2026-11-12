@@ -193,6 +193,16 @@ pub struct Machine {
     /// post that needs it refuses rather than guess where up is.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub safe_retract_z: Option<f64>,
+    /// The holder system the spindle takes (#828): `tooling.spindle_mount`,
+    /// one of [`super::SPINDLE_MOUNTS`]. Unstated reads `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spindle_mount: Option<String>,
+    /// The built-in library holder a NEW tool on this machine starts
+    /// with (#828): `tooling.default_holder`, the library's own name
+    /// ("BT30 ER20"). Never applied to an existing tool; `None` adds a
+    /// tool with no holder body, as before.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_holder: Option<String>,
 }
 
 /// The words a control needs around C-axis live-tool work (issue
@@ -217,6 +227,21 @@ impl Machine {
     /// corrupt file, refused, never a checker that fails backwards.
     #[must_use]
     pub fn is_sane(&self) -> bool {
+        self.tooling_refusal(None).is_none() && self.limits_sane()
+    }
+
+    /// #828: why the stored `tooling` keys cannot be meant, as
+    /// `"key: rule"` (a default holder that no longer resolves in
+    /// `lookup`, the caller's holder library; one off the stated mount),
+    /// so a refusal names the key, not "a limit". With no lookup only
+    /// the words are judged ([`Self::is_sane`]); every app door that
+    /// stores a machine passes its library.
+    #[must_use]
+    pub fn tooling_refusal(&self, lookup: Option<super::HolderLookup>) -> Option<String> {
+        super::mount_check(self.spindle_mount.as_deref(), self.default_holder.as_deref(), lookup).err()
+    }
+
+    fn limits_sane(&self) -> bool {
         let rate_ok = |r: Option<f64>| r.is_none_or(|x| x.is_finite() && x > 0.0);
         rate_ok(self.spindle_min)
             && rate_ok(self.spindle_max)
