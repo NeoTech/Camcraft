@@ -247,3 +247,16 @@ macro_rules! post_suite {
         }
     };
 }
+
+/// The line every conformance golden opens with (#1093): the program is
+/// synthetic, posted for syntax only. Same text and comment form as app's
+/// `common::with_synthetic_marker`, whose goldens these suites share.
+pub const SYNTHETIC_MARKER: &str = "synthetic program, posted for syntax conformance";
+
+/// Prefix `out` with [`SYNTHETIC_MARKER`] in the dialect's comment form.
+pub fn with_synthetic_marker(stem: &str, out: &str) -> String {
+    match stem {
+        "sinumerik" | "heidenhain" => format!("; {SYNTHETIC_MARKER}\n{out}"),
+        _ => format!("({SYNTHETIC_MARKER})\n{out}"),
+    }
+}

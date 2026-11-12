@@ -150,7 +150,7 @@ fn every_builtin_posts_the_plane_program_byte_exact() {
     let s = stream(&program());
     let write = std::env::var_os("WRITE_GOLDEN").is_some();
     for (name, stem, sub) in POSTS {
-        let out = common::with_synthetic_marker(stem, &post(stem, &s));
+        let out = recorded::with_synthetic_marker(stem, &post(stem, &s));
         let rel = if sub.is_empty() {
             "crates/app/tests/golden/nc/arc_planes.nc".to_string()
         } else {
