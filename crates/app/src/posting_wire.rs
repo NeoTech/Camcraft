@@ -212,6 +212,10 @@ fn guided(records: Vec<cnc::Record>, guides: (f64, f64)) -> Result<Vec<cnc::Reco
     Ok(out)
 }
 
+/// A posed move's wire point on the top plane and its lean (toward the
+/// top, per unit of height).
+type TopLean = ([f64; 2], [f64; 2]);
+
 /// A tapered section's moves as an angle-word control takes them
 /// (#1164): each leaning move's X Y become the wire's point on the top
 /// plane `top` (the plane the control pivots on), and `PARAM WireAngle`
@@ -222,7 +226,7 @@ fn guided(records: Vec<cnc::Record>, guides: (f64, f64)) -> Result<Vec<cnc::Reco
 /// the control's own and are not written.
 fn angled(records: Vec<cnc::Record>, top: f64, deg: f64, left: bool) -> Result<Vec<cnc::Record>, String> {
     // The wire's top-plane point and its lean (toward the top) per posed move.
-    let lean_of = |m: &cnc::MoveRec| -> Result<Option<([f64; 2], [f64; 2])>, String> {
+    let lean_of = |m: &cnc::MoveRec| -> Result<Option<TopLean>, String> {
         let Some(abc) = m.abc else { return Ok(None) };
         if m.center.is_some() {
             return Err("a tapered arc - the wire post writes straight tapered moves only".into());

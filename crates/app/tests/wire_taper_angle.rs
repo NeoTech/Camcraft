@@ -159,7 +159,7 @@ fn an_angle_word_punch_posts_its_golden_with_the_mitre_rule() {
     assert!(on + 1 == ang && ang < off && off < cut, "{text}");
     assert!(!text.contains(" U") && !text.contains(" V"), "no U V words: {text}");
     assert_eq!(lines[off + 1], "G1 X-30 Y0", "the taper is switched off before the lead-out stands the wire upright: {text}");
-    assert!(lines[ang + 1..off].iter().any(|l| *l == "G1 X-20.165 Y-10.165"), "X Y on the top plane, at the kerf: {text}");
+    assert!(lines[ang + 1..off].contains(&"G1 X-20.165 Y-10.165"), "X Y on the top plane, at the kerf: {text}");
     // The other side rule writes the other sign.
     let (world, made) = punch(&angle_machine(&rules("mitre")).replace("top_left", "top_right"), block(), false, None);
     made.expect("generates");
