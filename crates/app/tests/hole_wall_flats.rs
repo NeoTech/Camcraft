@@ -240,3 +240,13 @@ fn the_wall_excuse_ends_at_its_stated_sagitta() {
     assert!(gouges(&w) > 0, "{} sides, sag {s_out}: {w:?}", flat.len());
 }
 
+
+#[test]
+fn a_thread_op_in_a_finely_faceted_round_hole_stays_clean() {
+    // #894 x #1205: the crest allowance past the model wall holds where
+    // the hole is a tessellated circle - a 96-gon at the minor r 4.4
+    // (sagitta 0.002 mm) - so the thread's own cut is no gouge there,
+    // while the octagon above convicts.
+    let w = verdict(&ngon(4.4, 96), Kind::Thread, 4.4);
+    assert_eq!(gouges(&w), 0, "{w:?}");
+}

@@ -27,6 +27,7 @@ mod common;
 mod posted_gates;
 
 use common::gen_to_cltext;
+use posted_gates::thread::thread_verdicts;
 use posted_gates::{narrowed_slot_verdict, plasma_findings, region_verdicts};
 use common::solid_part::{cap, circle, mill, plate, plate_cell, rect, region, walls};
 
@@ -328,6 +329,16 @@ fn the_slot_trace_and_plasma_goldens_pass_their_gates() {
 }
 
 #[test]
+fn the_thread_golden_passes_its_gate() {
+    // #894: the thread-mill golden through the real operation and the
+    // post's gate - the crest region, the root solid law over its round
+    // (96-flat) hole and the verification gate find nothing.
+    for (name, w) in thread_verdicts() {
+        assert_eq!(w, Vec::<String>::new(), "{name}");
+    }
+}
+
+#[test]
 fn the_slot_gate_bites() {
     // The harness is not vacuous: the wide-channel slot's program judged
     // against a stadium 2 mm narrower than the one it was cut for gouges.
@@ -349,6 +360,7 @@ fn every_posted_golden_is_a_program_the_gate_passes() {
     let mut judged: Vec<(&str, Vec<String>)> = verdicts().into_iter().chain(region_verdicts()).map(|(n, w)| (n, blocking(w))).collect();
     let plasma = plasma_findings().iter().filter(|f| f.refuses()).map(|f| f.describe()).collect();
     judged.push(("plasma_plate_with_holes.cl", plasma));
+    judged.extend(thread_verdicts());
     let mut dirs = vec![root.join("nc")];
     let mut posted = 0;
     while let Some(dir) = dirs.pop() {

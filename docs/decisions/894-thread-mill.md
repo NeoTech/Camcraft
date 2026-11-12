@@ -142,3 +142,45 @@ ride; the operation's name and place in the catalog predate this PR.
   and the file.
 - The simulation shows the thread as its minor (root-swept) cylinder; drawing
   the helical form needs a new sweep atom.
+
+## The crest allowance needs a round wall (merging #1205, 2026-11-12)
+
+**Decision.** The two thread readings - the crest region with each rim moved
+out to the major circle (`crest_region`) and the solid law at the tooth
+roots (`root_cutter`) - apply only when every threaded hole is a round wall
+in the model: each wall facet the crests can reach (minor radius + thread
+depth + `WALL_SAG`) within the thread's Z span has its sagitta about the
+hole's axis at most `WALL_SAG` (0.05 mm), measured by #1205's own
+`facet_sag` (`verify::hole_is_round` in `hole_wall.rs`; the constant is not
+duplicated). Otherwise (an octagon, a D-bore, any flat in reach) the
+operation keeps its region's own rim and the full tooth radius, so a crest
+cutting into a flat is a gouge. The stricter reading wins, consistent with
+#1205.
+
+**Why.** Main's #1205 law (no hole-wall credit for a polygon's flats) and
+this PR's thread laws were each right alone; merged, the crest region
+erased the octagon's rim and the root cutter excused 0.32 mm of the crests
+in the flats - 0 warnings where the kernel helix with the full cutter
+finds 14 gouges. A thread is cut into a round hole; there is no thread
+form in a flat to excuse.
+
+**Pins.** `hole_wall_flats::a_thread_mill_cutting_into_an_octagons_flats_is_a_gouge`
+(convicts again), `hole_wall_flats::a_thread_op_in_a_finely_faceted_round_hole_stays_clean`
+(96-gon, clean), `hole_wall::a_hole_is_round_only_while_its_reachable_wall_is_a_fine_circle`,
+and the root cutter's unit test (full radius when not round). The #1005
+thread goldens regenerate byte-identical.
+
+**The thread golden is judged, not UNJUDGED.** `thread_mill_m8_multi_form`
+runs through the real operation in `posted_gates/thread.rs` (proved equal
+to its CL golden, then the generator's blocking warnings plus the post's
+`verification_gate`): it passes, so it joins `every_posted_golden_is_a_program_the_gate_passes`
+with a real verdict (`the_thread_golden_passes_its_gate`).
+
+**Considered and dropped.**
+- *Intersecting the crest region with the model's own hole*: fixes the
+  region law only; the root-radius solid law would still excuse the flats.
+- *A crest-radius solid check beside the root one*: convicts every thread
+  in a round hole (the crests are meant to pass the drawn minor wall).
+- *Per-hole rather than per-operation*: one Thread op with one polygonal
+  hole judges all its holes at full radius - stricter, never looser; per
+  hole needs a cutter per move, deferred until an op threads mixed holes.

@@ -21,7 +21,7 @@
 
 use super::probe::Atom;
 use super::swept::seg_dist;
-use crate::geometry::Point3;
+use crate::geometry::{Point3, Triangle};
 
 /// The deepest sagitta a facet may have about its hole's axis and still
 /// be read as the tessellation of a round wall, mm: five gouge
@@ -90,6 +90,37 @@ pub(super) fn facet_sag(t: &[[f64; 3]; 3], c: [f64; 2]) -> Option<f64> {
     s.is_finite().then_some(s.max(0.0))
 }
 
+/// Whether the part's wall about the vertical axis through `c` is a
+/// tessellated circle wherever a tool reaching `reach` from that axis
+/// could touch it between `z_lo` and `z_hi` (#894 x #1205): every wall
+/// facet (normal square to the axis) standing nearer than `reach` to the
+/// axis in that span has its sagitta about the axis at most [`WALL_SAG`].
+/// A flat (an octagon, a D-bore) there, or anything not finite, answers
+/// `false`; a thread mill's crests may pass only a round wall.
+#[must_use]
+pub fn hole_is_round(facets: &[Triangle], c: [f64; 2], reach: f64, z_lo: f64, z_hi: f64) -> bool {
+    if !([c[0], c[1], reach, z_lo, z_hi].iter().all(|v| v.is_finite())) {
+        return false;
+    }
+    facets.iter().all(|f| {
+        let t = [[f.a.x, f.a.y, f.a.z], [f.b.x, f.b.y, f.b.z], [f.c.x, f.c.y, f.c.z]];
+        if !t.iter().flatten().all(|v| v.is_finite()) {
+            return false;
+        }
+        let (lo, hi) = t.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(l, h), p| (l.min(p[2]), h.max(p[2])));
+        if hi < z_lo || lo > z_hi || nearest(&t, c) >= reach {
+            return true; // out of the teeth's reach
+        }
+        let (u, v) = ([t[1][0] - t[0][0], t[1][1] - t[0][1], t[1][2] - t[0][2]], [t[2][0] - t[0][0], t[2][1] - t[0][1], t[2][2] - t[0][2]]);
+        let n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+        let len = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
+        if !(len > 1e-12) || n[2].abs() > 0.1 * len {
+            return true; // a floor, a lid or a sliver: no wall to excuse
+        }
+        facet_sag(&t, c).is_some_and(|s| s <= WALL_SAG)
+    })
+}
+
 /// The nearest distance from `c` to the facet's projection on the XY
 /// plane: 0 when `c` lies inside it, else the nearest edge's.
 fn nearest(t: &[[f64; 3]; 3], c: [f64; 2]) -> f64 {
@@ -132,5 +163,24 @@ mod tests {
         bad[1][0] = f64::NAN;
         assert_eq!(facet_sag(&bad, [0.0, 0.0]), None);
         assert_eq!(facet_sag(&chord(5.0, 0.0, 0.1), [f64::INFINITY, 0.0]), None);
+    }
+
+    #[test]
+    fn a_hole_is_round_only_while_its_reachable_wall_is_a_fine_circle() {
+        let ring = |r: f64, n: usize| -> Vec<Triangle> {
+            let step = std::f64::consts::TAU / n as f64;
+            (0..n)
+                .map(|k| {
+                    let w = chord(r, k as f64 * step, (k + 1) as f64 * step);
+                    let p = |q: [f64; 3]| Point3::new(q[0], q[1], q[2]);
+                    Triangle::new(p(w[0]), p(w[1]), p(w[2]))
+                })
+                .collect()
+        };
+        assert!(hole_is_round(&ring(5.0, 32), [0.0, 0.0], 5.0, 0.0, 5.0), "a 32-gon on r 5");
+        assert!(!hole_is_round(&ring(5.0, 8), [0.0, 0.0], 5.0, 0.0, 5.0), "an octagon's flats");
+        assert!(hole_is_round(&ring(5.0, 8), [0.0, 0.0], 4.5, 0.0, 5.0), "flats out of reach");
+        assert!(hole_is_round(&ring(5.0, 8), [0.0, 0.0], 5.0, 6.0, 9.0), "flats out of the span");
+        assert!(!hole_is_round(&ring(5.0, 32), [f64::NAN, 0.0], 5.0, 0.0, 5.0));
     }
 }

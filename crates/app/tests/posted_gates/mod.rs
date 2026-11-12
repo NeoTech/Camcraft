@@ -11,6 +11,8 @@
 //!
 //! Provenance: our own harness over our own goldens; no vendor material.
 
+pub mod thread;
+
 use flecs_ecs::prelude::World;
 
 use crate::common::gen_to_cltext;
