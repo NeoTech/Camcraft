@@ -48,7 +48,7 @@ tabs it has settings for:
   their own.
 
 Edits on a page are pending until you click **Apply** or **Generate**.
-Both are undoable with Ctrl+Z.
+Both are undoable with Ctrl+Z (Cmd+Z on macOS).
 
 ## What a click picks
 
@@ -72,7 +72,7 @@ same rule:
   plane is picked by a face, so it never snaps to an edge.
 
 Edge mode picks the face between the edges when no edge is under the
-cursor; Alt+click picks a single edge segment instead of the whole chain.
+cursor; Alt+click (Option+click on macOS) picks a single edge segment instead of the whole chain.
 The same rule holds for picks an AI agent makes over MCP by feature id: an
 id a click could not have picked is refused by name.
 

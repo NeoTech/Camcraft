@@ -5,7 +5,7 @@ weight = 6
 +++
 
 Posting turns the document's operations into an NC program for one
-machine controller. Click **Post** (Ctrl+P), choose where to save the
+machine controller. Click **Post** (Ctrl+P, Cmd+P on macOS), choose where to save the
 program, and CamCraft checks the program, writes it, and opens it in the
 G-code viewer.
 
