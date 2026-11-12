@@ -55,7 +55,8 @@ unstated capability into existence.
         "awt": true,                                   // wire, automatic threading
         "orbits": [ { "kind": "circular", "word": "..." } ],  // sinker: circular|vector|planetary + the control's word
         "max_orbit_radius": 2.0,                       // sinker, length unit
-        "pickup": "..."                                // sinker, the holder system's name
+        "pickup": "...",                               // sinker, the holder system's name
+        "conditions": [ { "id": "C110", "gap": 0.02, "wire_diameter": 0.25, "role": "rough" } ]  // either kind (#531)
       }
 
   Every key is optional and absent means NOT STATED (an op that needs
@@ -76,6 +77,30 @@ unstated capability into existence.
   empty wire / sinker templates join it with their kind's first post
   (#533 / #542). Until then they are test fixtures
   (`crates/app/tests/edm/`).
+
+- `edm.conditions[]` (#531): the generator conditions the user states
+  from their machine's manual. None ship. CamCraft reads only the
+  geometry a path needs; power and flushing stay the control's, picked
+  by `id`. Each entry is an object of these keys only (any other key
+  refuses by name: `edm condition "C1" gapp is not a condition key`):
+
+  | key | unit | rule |
+  |---|---|---|
+  | `id` | - | required. A word with no surrounding spaces, or a whole number ≥ 0 (`330` reads as `"330"`; `1.0`, `1.5`, `-3` refuse). Unique ignoring case and leading zeros: `"C1"`/`"c1"` and `"01"`/`1` are one selector and refuse as a pair. A lookup matches the id exactly as the table writes it. |
+  | `name`, `notes` | - | words, free text |
+  | `role` | - | `rough`, `skim` or `finish` |
+  | `gap` | length | spark gap per side, in (0, 0.5] mm. On a wire, smaller than the wire's radius when both are stated; on a sinker, no larger than the undersize when both are stated. |
+  | `wire_diameter` | length | WIRE only (refused on a sinker). In [0.02, 1] mm. When the machine states `edm.wire_diameters`, it must be one of them within 0.001 mm; when it states none, any wire in range passes. |
+  | `undersize` | length | SINKER only (refused on a wire): the electrode undersize per side, in (0, 1] mm |
+
+  Lengths are in the file's length unit, scaled to mm on the way in;
+  the bounds and the finite check apply to the mm value. Every
+  refusal names the condition id, the key and the unit (`edm condition
+  "C1" wire_diameter: 50 mm is outside [0.02, 1] mm`). Every field but
+  `id` is optional (absent = not stated; the op that needs it refuses
+  by name, `Edm::condition`). An absent `conditions` and `[]` read the
+  same: no table, and every EDM op refuses. `Machine::is_sane` applies
+  the same rules to a hand-edited project file.
 
 - `plasma` (#669) is DECLARED only, never inferred (its X/Y/Z reads as
   a mill), and the word carries rules both doors refuse BY NAME
