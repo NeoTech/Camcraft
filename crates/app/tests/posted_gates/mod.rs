@@ -268,6 +268,9 @@ pub fn sinker_gouge_cells() -> usize {
         y: -7.5,
         feed: 40.0,
         condition: "S1".into(),
+        pass: camcraft_app::operation::SinkerPass::Single,
+        cavity_x: 0.0,
+        cavity_y: 0.0,
     });
     h.execute(&world, CreateOperation::new(&world, "Burn1", "E-10x6", SrcRef::Stock, op).expect("a sinker burn"));
     h.execute(&world, GenerateOperation::new(&world, "Burn1").expect("generates"));

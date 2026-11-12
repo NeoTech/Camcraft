@@ -49,6 +49,7 @@ fn electrode() -> Tool {
         flutes: None,
         center_cutting: true,
         orientation: None,
+        turning: None,
     }
 }
 
