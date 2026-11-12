@@ -198,8 +198,8 @@ fn two_ops_post_to_one_program_cycles_stay_in_their_section() {
     );
     assert!(parts[2].contains("T01 M6"), "DR-0400 is library rank 1");
     assert!(
-        parts[2].contains("G98"),
-        "the cycle retract mode posted once"
+        parts[2].contains("G99"),
+        "the cycle returns to R (#994)"
     );
     assert!(
         parts[2].contains("G73 X20 Y20"),

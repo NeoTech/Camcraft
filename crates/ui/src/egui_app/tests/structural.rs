@@ -335,3 +335,64 @@ fn setup_page_alignment_rows_structure() {
     }
     assert!(h.state().state.points_pick.is_none(), "nothing is armed by drawing the page");
 }
+
+/// #948: at the default 1280 px window every ribbon button reads whole
+/// (no elided galley, the "Milli..." clash gone: the four section doors
+/// say four different things), and the group captions are painted again
+/// under the cells they name. Text and coarse placement only.
+#[test]
+fn ribbon_labels_whole_and_captions_painted() {
+    let _g = snapshot_guard();
+    let mut h = shell_harness();
+    h.run_steps(3);
+    // (text, top-left, elided) of every painted galley, in paint order.
+    fn walk(shape: &egui::Shape, out: &mut Vec<(String, egui::Pos2, bool)>) {
+        match shape {
+            egui::Shape::Text(t) => {
+                out.push((t.galley.text().to_owned(), t.pos, t.galley.elided));
+            }
+            egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, out)),
+            _ => {}
+        }
+    }
+    let mut all = Vec::new();
+    for s in &h.output().shapes {
+        walk(&s.shape, &mut all);
+    }
+    let tab_y = at(&painted(&h), "Browser").y;
+    let ribbon: Vec<_> = all.iter().filter(|(_, p, _)| p.y < tab_y).cloned().collect();
+    assert!(!ribbon.is_empty(), "the ribbon paints text");
+    for (t, _, elided) in &ribbon {
+        assert!(!elided, "ribbon text {t:?} is elided at 1280 px");
+    }
+    // Every button is identifiable: the cell words, the four doors, each
+    // once - no two buttons share a label.
+    let words = [
+        "New", "Model", "Open", "Save", "Save As", "Post", "Setups", "Stock", "Origin", "Tools",
+        "Undo", "Redo", "Run", "Delete", "Frame", "Paths", "Simulate", "Deviate", "Panels\u{2026}",
+        "Theme\u{2026}", "Mill 2D\u{2026}", "Mill 3D\u{2026}", "Drill\u{2026}", "Multi\u{2026}",
+    ];
+    for w in words {
+        let n = ribbon.iter().filter(|(t, _, _)| t == w).count();
+        assert_eq!(n, 1, "ribbon button {w:?} must be painted exactly once, found {n}");
+    }
+    // The captions are back: one under each multi-cell group, in left to
+    // right order, below the cell row and above the dock.
+    let caps: Vec<(&str, egui::Pos2)> = ["File", "Setup", "Modify", "Inspect", "View"]
+        .into_iter()
+        .map(|c| {
+            let hit = ribbon.iter().find(|(t, _, _)| t == c);
+            match hit {
+                Some((_, p, _)) => (c, *p),
+                None => panic!("caption {c:?} missing; ribbon: {ribbon:?}"),
+            }
+        })
+        .collect();
+    let new_y = ribbon.iter().find(|(t, _, _)| t == "New").map(|(_, p, _)| p.y).unwrap_or(0.0);
+    for (c, p) in &caps {
+        assert!(p.y > new_y, "caption {c:?} sits under the cell labels");
+    }
+    for pair in caps.windows(2) {
+        assert!(pair[0].1.x < pair[1].1.x, "captions run left to right: {pair:?}");
+    }
+}

@@ -209,6 +209,7 @@ fn plunge_beside_island(gap: f64, tip_z: f64, g: &ToolGeom, cutter: Option<Cutte
         finish_tol: None,
         fixtures: &[],
         spindle: None,
+        ..Default::default()
     };
     verify(&t, &cx).into_iter().filter(|w| matches!(w, Warning::ShankHit { .. } | Warning::SweepHit { .. })).collect()
 }
@@ -333,6 +334,16 @@ fn a_law_that_keeps_the_cylinder_names_it() {
     let named = body_judged::name_enclosure(refusal(), &judged, Some(&profile)).to_string();
     let words = format!("judged here by the cylinder enclosing it, Ø{:.3} mm", judged.holder_d);
     assert!(named.contains(&words), "{named}");
+    // #871: a ghost-carrying refusal is named alike, its ghost kept.
+    let built = camcraft_app::cl::Toolpath::new(vec![camcraft_app::cl::Move::new(
+        camcraft_app::cl::MoveKind::Feed,
+        camcraft_app::geometry::Point3::new(0.0, 0.0, 0.0),
+        camcraft_app::geometry::Point3::new(5.0, 0.0, 0.0),
+        Some(500.0),
+    )]);
+    let ghosted = body_judged::name_enclosure(refusal().with_ghost(&built), &judged, Some(&profile));
+    assert!(ghosted.ghost().is_some(), "the ghost rides the rewrite");
+    assert_eq!(ghosted.to_string(), named, "the same words as the plain refusal");
     // No body, or a refusal about something else: unchanged.
     assert_eq!(body_judged::name_enclosure(refusal(), &t, None).to_string(), refusal().to_string());
     let other = || GenError::Invalid("the hole is deeper than the flute".into());
