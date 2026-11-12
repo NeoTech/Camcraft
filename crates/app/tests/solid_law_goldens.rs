@@ -18,7 +18,9 @@
 //!
 //! Gate map (solid law): covers sim::verify (engine b2, solid_hits, the
 //! crossing law), the posted goldens under tests/golden/nc/,
-//! motion::machining2d (contour, face, pocket), motion::drilling (drill).
+//! motion::machining2d (contour, face, pocket), motion::drilling (drill),
+//! and (#542) the sinker golden through app::stock_sim's program verdict
+//! (the electrode's box atom).
 
 mod common;
 
@@ -287,6 +289,51 @@ fn a_lead_on_the_rings_own_circle_is_refused() {
     }
 }
 
+/// (golden, gouge cells) for the sinker goldens, judged by the gate the
+/// sinker post's program runs (#541/#542): the program verdict
+/// (`stock_sim::simulate_document`), which cuts the burn with the
+/// electrode's box atom and convicts an overburn below the part. The op
+/// is the real Sinker Burn on a sinker, over a block whose cavity is the
+/// electrode grown by the spark gap, 6 mm deep - and its program must be
+/// the CL golden byte for byte.
+fn box_atom_verdicts() -> Vec<(&'static str, usize)> {
+    use camcraft_app::commands::{AddTool, CreateOperation, GenerateOperation, History, ImportModel, LoadMachine, SetStock};
+    use camcraft_app::operation::{Height, OpParams, SinkerBurnOp, SinkerDatum, SrcRef};
+    const GAP: f64 = 0.05;
+    let world = camcraft_app::world::new_world();
+    let mut h = History::default();
+    let mut part = Vec::new();
+    let cavity = rect(12.5 - 5.0 - GAP, -7.5 - 3.0 - GAP, 12.5 + 5.0 + GAP, -7.5 + 3.0 + GAP);
+    plate(&rect(-30.0, -30.0, 30.0, 30.0), Some((&cavity, 14.0)), 0.0, 20.0, &mut part);
+    h.execute(&world, ImportModel::from_mesh("part", camcraft_app::geometry::Mesh::from_facets(part)));
+    let stock = SetStock::new(&world, camcraft_app::stock::StockShape::Box { dx: 60.0, dy: 60.0, dz: 20.0 }, Default::default());
+    h.execute(&world, stock.expect("stock"));
+    let mut mch: serde_json::Value = serde_json::from_str(include_str!("edm/sinker-edm.mch")).expect("sinker template");
+    mch["edm"]["conditions"] = serde_json::json!([{ "id": "S1", "name": "synthetic rough", "gap": GAP, "undersize": 0.1, "role": "rough" }]);
+    let m = camcraft_app::machine::parse_mch(&mch.to_string()).expect("sinker parses");
+    h.execute(&world, LoadMachine::new(&world, "sinker.mch".into(), Some(m)).expect("mount"));
+    let electrode = camcraft_tools::electrode::electrode_tool(10.0, 6.0, 30.0, 15.0);
+    h.execute(&world, AddTool::new(&world, "E-10x6", electrode).expect("an electrode"));
+    let op = OpParams::SinkerBurn(SinkerBurnOp {
+        clearance_z: Height::fixed(25.0),
+        top_z: Height::fixed(20.0),
+        floor_z: Height::fixed(10.0),
+        datum: SinkerDatum::WorkTop,
+        depth: 6.0,
+        x: 12.5,
+        y: -7.5,
+        feed: 40.0,
+        condition: "S1".into(),
+    });
+    h.execute(&world, CreateOperation::new(&world, "Burn1", "E-10x6", SrcRef::Stock, op).expect("a sinker burn"));
+    h.execute(&world, GenerateOperation::new(&world, "Burn1").expect("generates"));
+    let e = camcraft_app::model::find_by_name(&world, "Burn1").expect("op");
+    let path = camcraft_app::model::toolpath_of(&world, &e).expect("generated").path;
+    assert_eq!(gen_to_cltext(&path), golden("sinker_burn_cavity.cl"), "the Sinker Burn's program is the golden");
+    let sim = camcraft_app::stock_sim::simulate_document(&world).expect("the program verdict judges a sinker burn");
+    vec![("sinker_burn_cavity.cl", sim.dev.gouge_cells)]
+}
+
 /// The first line a posted golden of a gate-refused program must carry
 /// (#862 option (c)); none does today.
 const REFUSED_HEADER: &str = "refused program, posted for syntax conformance";
@@ -311,6 +358,7 @@ fn every_posted_golden_is_a_program_the_gate_passes() {
     // golden is judged here.
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/golden");
     let judged = verdicts();
+    let boxed = box_atom_verdicts();
     let mut dirs = vec![root.join("nc")];
     let mut posted = 0;
     while let Some(dir) = dirs.pop() {
@@ -329,6 +377,10 @@ fn every_posted_golden_is_a_program_the_gate_passes() {
                 continue;
             }
             let cl = format!("{stem}.cl");
+            if let Some((_, cells)) = boxed.iter().find(|(n, _)| *n == cl) {
+                assert_eq!(*cells, 0, "{}: posted, but the program verdict convicts {cells} gouge cell(s)", e.display());
+                continue;
+            }
             match judged.iter().find(|(n, _)| *n == cl) {
                 Some((_, w)) => assert!(w.is_empty(), "{}: posted, but the gate refuses its program: {w:?}", e.display()),
                 None => assert!(UNJUDGED.iter().any(|(n, _)| *n == stem), "{}: posted, but no gate judges its program - judge it in verdicts() or name it in UNJUDGED", e.display()),
