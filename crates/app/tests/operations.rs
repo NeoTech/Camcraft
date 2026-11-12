@@ -3,7 +3,7 @@
 //! at command construction (validate early), and staleness is derived,
 //! never stored.
 //!
-//! Gate map (M4.4): covers cl::cl, app::commands, motion::drilling, motion::finishing3d, geometry::geo2d, app::geometry, motion::machining2d, app::model, app::operation, app::schema, geometry::geometry::stock, tools::tools, sim::verify, app::world.
+//! Gate map (M4.4): covers cl::cl, app::commands, motion::drilling, motion::finishing3d, geometry::geo2d, app::geometry, motion::machining2d, motion::machining3d, motion::multiaxis, motion::plunge_law, app::model, app::operation, app::schema, geometry::geometry::stock, tools::tools, sim::verify, app::world (the motion generators these tests drive end to end, #1068).
 //!
 //! Lane shape (M13.8): the debug ladder runs every test here in seconds.
 //! The six slow generate-and-verify laws (swarf, the swarf ladder,

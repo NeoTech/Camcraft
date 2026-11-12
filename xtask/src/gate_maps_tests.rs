@@ -66,6 +66,19 @@ fn motion_machining2d_change_selects_the_machining2d_suites() {
     assert!(count("crates/motion/src/machining2d/mod.rs", "app") >= 20, "machining2d selects too few");
 }
 
+/// #1068: the operations suite generates every operation through the app layer, so it pins the
+/// motion generators end to end - a change to one of them must select it.
+#[test]
+fn motion_generator_change_selects_the_operations_suite() {
+    let map = scan::gate_map(&scan::read(&root().join("crates/app/tests/operations.rs")))
+        .expect("operations.rs gate map");
+    for m in ["machining2d", "machining3d", "drilling", "finishing3d", "multiaxis", "plunge_law"] {
+        assert!(map.contains(&format!("motion::{m}")), "operations.rs must name motion::{m}: {map}");
+    }
+    let got = selected("crates/motion/src/multiaxis/mod.rs", "app");
+    assert!(got.iter().any(|b| b == "operations"), "operations missing from {got:?}");
+}
+
 /// No app suite may name a module that lives in another crate as `app::<module>`.
 #[test]
 fn no_gate_map_names_a_moved_module_as_app() {
