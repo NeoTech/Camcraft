@@ -78,8 +78,15 @@ enum Section {
 
 /// The bar on machine `kind` ("none" mounts nothing), Setup1 stating a
 /// 2000 rpm chuck, op K of `section` with its tool at `rpm` - generated.
-/// `None` when the kind's door refuses the op on that machine.
-fn doc(kind: &str, section: Section, rpm: f64) -> Option<World> {
+/// `Err` with the creation refusal when the kind's door refuses the op on that machine.
+fn doc(kind: &str, section: Section, rpm: f64) -> Result<World, String> {
+    built(kind, None, section, rpm)
+}
+
+/// `doc`, then the machine is swapped to `remount` once the op exists: the
+/// only way a section the lathe door refuses at creation reaches a post
+/// on a lathe (the op was made on a mill, the machine changed after).
+fn built(kind: &str, remount: Option<&str>, section: Section, rpm: f64) -> Result<World, String> {
     let world = new_world();
     let mut h = History::default();
     let at = Location { pos: Point3::new(0.0, 0.0, -16.0), ..Location::default() };
@@ -110,9 +117,14 @@ fn doc(kind: &str, section: Section, rpm: f64) -> Option<World> {
     };
     let t = catalog().into_iter().find(|(n, _)| *n == tool).map(|(_, t)| t).expect("catalog tool");
     h.execute(&world, AddTool::new(&world, tool, Tool { rpm, ..t }).expect("tool"));
-    h.execute(&world, CreateOperation::new(&world, "K", tool, SrcRef::Entity("bar".into()), params).ok()?);
-    h.execute(&world, GenerateOperation::new(&world, "K").ok()?);
-    Some(world)
+    let create = CreateOperation::new(&world, "K", tool, SrcRef::Entity("bar".into()), params).map_err(|e| e.to_string())?;
+    h.execute(&world, create);
+    let generate = GenerateOperation::new(&world, "K").map_err(|e| e.to_string())?;
+    h.execute(&world, generate);
+    if let Some(k) = remount {
+        h.execute(&world, LoadMachine::new(&world, "bench.mch".into(), machine(k)).expect("remount"));
+    }
+    Ok(world)
 }
 
 fn post(world: &World, cps: &str, tag: &str) -> Result<String, String> {
@@ -122,8 +134,37 @@ fn post(world: &World, cps: &str, tag: &str) -> Result<String, String> {
     posted
 }
 
+/// The arm `work_speed` judges by the chuck (`(ToolSpindle, Refused)` on a
+/// plain lathe): a milling section the lathe door refuses at creation,
+/// made on a mill, then the machine becomes a plain lathe. Reached through
+/// `program_problems_by` with a milling voice: over the chuck it is named;
+/// at the limit it is clean. The post itself refuses the same section
+/// first by the family clause (posting_family), so that refusal is pinned too.
 #[test]
-fn a_mill_turn_facing_op_through_a_milling_post_is_held_to_the_chuck() {
+fn a_milling_section_on_a_plain_lathe_is_judged_by_the_chuck() {
+    use camcraft_app::post::dialect::WorkVoice;
+    use camcraft_app::setup_workholding::program_problems_by;
+    let milling = |_: Option<&str>| WorkVoice::ToolSpindle;
+    let over = built("mill", Some("lathe"), Section::Tool, 8000.0).expect("mill Face made on a mill");
+    let problems = program_problems_by(&over, &milling);
+    assert!(
+        problems.iter().any(|p| p.contains("K: turns the work at 8000 rpm (G97)") && p.contains("2000 rpm")),
+        "a milling section on a plain lathe is judged at 8000 over a 2000 chuck: {problems:?}"
+    );
+    for (name, cps) in [("fanuc", FANUC), ("haas", HAAS)] {
+        let why = post(&over, cps, name).err().unwrap_or_default();
+        assert!(why.contains("a Face operation cannot run on its setup's"), "{name}: the post refuses it first by family: {why}");
+    }
+    let at = built("mill", Some("lathe"), Section::Tool, CHUCK).expect("mill Face made on a mill");
+    assert!(program_problems_by(&at, &milling).is_empty(), "exactly at the chuck limit is clean");
+}
+
+#[test]
+fn a_mill_turn_facing_op_through_a_milling_post_is_refused_and_held_to_the_chuck() {
+    // #1232 (maintainer, 2026-11-12: "Refuse it"): a work-spindle
+    // section needs a turning post on a mill-turn as on a lathe - so
+    // the facing op is refused by name even at the chuck limit, and
+    // over it the chuck limit is still named beside that refusal.
     for (name, cps) in [("fanuc", FANUC), ("haas", HAAS)] {
         let over = doc("mill-turn", Section::Work, 3000.0).expect("facing on a mill-turn");
         let why = post(&over, cps, name).err().unwrap_or_default();
@@ -131,9 +172,13 @@ fn a_mill_turn_facing_op_through_a_milling_post_is_held_to_the_chuck() {
             why.contains("K: turns the work at 3000 rpm (G97)") && why.contains("workholding maximum of 2000 rpm"),
             "{name}: facing at 3000 under a 2000 chuck is refused by name: {why}"
         );
+        assert!(why.contains("is not a turning post") && why.contains("(K)"), "{name}: {why}");
         let at = doc("mill-turn", Section::Work, CHUCK).expect("facing on a mill-turn");
-        let posted = post(&at, cps, name);
-        assert!(posted.is_ok(), "{name}: exactly at the limit posts: {:?}", posted.err());
+        let why = post(&at, cps, name).expect_err("a turning section through a milling post");
+        assert!(why.contains("is not a turning post") && why.contains("(K)"), "{name}: refused by name: {why}");
+        assert!(!why.contains("workholding maximum"), "{name}: at the limit the chuck is not the reason: {why}");
+        // Through the turning post the same section posts at the limit.
+        assert!(post(&at, LATHE, name).is_ok(), "{name}: a turning post serves it");
     }
 }
 
@@ -156,8 +201,12 @@ fn judged(kind: &str, dialect: &str, section: Section) -> bool {
         // lathe door (#1190) refuses a milling section by name first.
         ("turning", Section::Work) => true,
         ("turning", Section::Tool) => false,
-        // An undeclared script (#1199): the stricter reading.
-        ("undeclared", _) => true,
+        // An undeclared script (#1199): on a machine with a work spindle
+        // the door refuses every section but a C one by name first (a
+        // turning section too: only a turning post may post it, and an
+        // unstated script is not known to be one). Elsewhere a work
+        // section is not creatable and a milling section is not judged.
+        ("undeclared", _) => !chucked,
         // A milling post: a work section on a chucked machine cuts only
         // if the work turns; a milling section turns the tool - except
         // on a plain lathe, whose one spindle holds the chuck.
@@ -175,15 +224,41 @@ fn every_machine_dialect_and_section_cell_gives_its_verdict() {
         for (dialect, cps) in [("turning", LATHE), ("milling", FANUC), ("undeclared", undeclared.as_str())] {
             for section in [Section::Work, Section::Tool] {
                 let rpm = if section == Section::Work { 3000.0 } else { 8000.0 };
-                let Some(w) = doc(kind, section, rpm) else {
-                    rows.push(format!("{kind:9} {dialect:10} {section:?}: not creatable on this machine"));
-                    continue;
+                // The creation refusals: turning work on a mill, milling
+                // work on a lathe (the lathe door, #1190). Each is pinned
+                // by its message; every other cell must be created.
+                let refused = matches!((kind, section), ("none" | "mill", Section::Work) | ("lathe", Section::Tool));
+                let w = match doc(kind, section, rpm) {
+                    Ok(w) => {
+                        assert!(!refused, "{kind} / {dialect} / {section:?}: must be refused at creation, was created");
+                        w
+                    }
+                    Err(why) => {
+                        assert!(refused, "{kind} / {dialect} / {section:?}: refused but should be creatable: {why}");
+                        let (what, mount) = match section {
+                            Section::Work => ("a Facing operation is turning work", "mount a lathe (or a mill-turn) first"),
+                            Section::Tool => ("a Face operation is milling work", "mount a mill (or a mill-turn) first"),
+                        };
+                        assert!(
+                            why.contains(what) && why.contains(mount),
+                            "{kind} / {dialect} / {section:?}: refused for another reason: {why}"
+                        );
+                        rows.push(format!("{kind:9} {dialect:10} {section:?}: REFUSED at creation: {why}"));
+                        continue;
+                    }
                 };
                 let got = post(&w, cps, &format!("{kind}-{dialect}-{section:?}"));
                 let by_limit = got.as_ref().err().is_some_and(|e| e.contains("workholding maximum"));
                 let want = judged(kind, dialect, section);
                 rows.push(format!("{kind:9} {dialect:10} {section:?}: {}", if by_limit { "judged" } else { "not judged" }));
                 assert_eq!(by_limit, want, "{kind} / {dialect} / {section:?}: {got:?}");
+                // What the undeclared cells on a chucked machine guard:
+                // the door's refusal, naming the missing manifest line.
+                if dialect == "undeclared" && (kind == "lathe" || kind == "mill-turn") {
+                    let why = got.as_ref().err().map_or("", String::as_str);
+                    assert!(why.contains("no `capabilities` line"), "{kind} / {section:?}: the door refuses: {got:?}");
+                    assert!(why.contains("`capabilities = 2;`"), "{kind} / {section:?}: names the fix: {why}");
+                }
                 if let Ok(program) = &got {
                     assert!(!(section == Section::Work && program.contains("G97 S3000")), "work spindle over the chuck: {program}");
                 }

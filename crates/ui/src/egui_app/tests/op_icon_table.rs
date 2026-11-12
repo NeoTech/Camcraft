@@ -31,7 +31,7 @@ fn every_op_kind_has_its_own_svg_mastered_icon() {
 /// Every tool kind the editor can set, read from the editor's own kind
 /// numbering (`ToolUi::tool_kind`, exhaustive in `from_tool`) - not a hand
 /// list: a kind the numbering gains is enumerated here with it.
-fn every_tool_kind() -> Vec<camcraft_app::tools::ToolKind> {
+pub(super) fn every_tool_kind() -> Vec<camcraft_app::tools::ToolKind> {
     let mut ui = crate::state::ToolUi::default();
     let mut kinds = Vec::new();
     for i in 0..64 {

@@ -28,6 +28,7 @@ pub mod machining2d;
 pub mod machining3d;
 pub mod plunge_law;
 pub mod plasma;
+pub mod wire_edm;
 pub mod probing;
 pub mod quality;
 pub mod multiaxis;
