@@ -260,6 +260,11 @@ pub(super) fn parse_conditions(v: Option<&Value>, f: f64, k: Kind, wires: &[f64]
             let field_kind = if k == Kind::WireEdm { "a sinker" } else { "a wire" };
             return Err(at(format!("{other} is {field_kind} field; this is a {} machine", k.word())));
         }
+        // `wear` (#546) is a sinker field: a wire is fed fresh, so a rate
+        // stated on a wire machine would be read by nothing - refuse it.
+        if k == Kind::WireEdm && o.get("wear").is_some_and(|x| !x.is_null()) {
+            return Err(at(format!("wear is a sinker field; this is a {} machine", k.word())));
+        }
         let word = |key: &str| -> Result<String, String> {
             match c.get(key) {
                 None | Some(Value::Null) => Ok(String::new()),

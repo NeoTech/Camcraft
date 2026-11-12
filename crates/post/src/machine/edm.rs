@@ -132,7 +132,7 @@ impl Edm {
         let sinker = !self.orbits.is_empty()
             || self.max_orbit_radius.is_some()
             || self.pickup.is_some()
-            || self.conditions.iter().any(|c| c.undersize.is_some());
+            || self.conditions.iter().any(|c| c.undersize.is_some() || c.wear.is_some());
         match k {
             Kind::WireEdm => !sinker,
             Kind::SinkerEdm => !wire,
