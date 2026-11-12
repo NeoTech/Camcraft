@@ -307,10 +307,23 @@ function tilt(p) {  // words to append, [] if none, null if refused
       if (!tiltRefused) { tiltRefused = true; msg("tilted move on a machine without a tilting rotary"); }
       return null;
     }
+    // #1155: the index names only a rotary the machine states, as the
+    // RTCP path does - a turning letter with no rotary of that name is
+    // refused by name, never posted as an address the control lacks; a
+    // stated C that turns is refused too, as this path writes only A.
+    var lostIx = missingLetter(p);
+    if (lostIx) {
+      if (!tiltRefused) { tiltRefused = true; msg("indexed move commands " + lostIx + " - the machine states no " + lostIx + " rotary"); }
+      return null;
+    }
+    if (has(p.C) && Math.abs(p.C) > 1e-9) {
+      if (!tiltRefused) { tiltRefused = true; msg("indexed move commands C - this dialect's indexing path writes only an A rotary"); }
+      return null;
+    }
     var rotWords = [];
     var aChanged = !has(lastA) || p.A !== lastA;
     if (aChanged) {
-      rotWords.push("A" + fu(p.A));
+      rotWords.push(angleWord("A", p.A));
     }
     return rotWords;
   }
