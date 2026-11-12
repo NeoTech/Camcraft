@@ -295,8 +295,14 @@ fn an_undeclared_script_is_held_to_the_door_on_a_machine_with_a_work_spindle() {
     op_entity(&world, "on-centre", OpType::Drill, hole(0.0, 0.0));
     op_entity(&world, "off-centre", OpType::Drill, hole(10.0, 0.0));
     op_entity(&world, "live", OpType::RotaryContour, stating_c(meridian()));
-    for script in [UNDECLARED, "capabilities = \"2\"; function onSection() {}", "capabilities = -1;"] {
-        assert_eq!(crate::post::dialect::declared_turning(script).ok(), Some(None), "{script}");
+    for script in [
+        UNDECLARED,
+        "capabilities = \"2\"; function onSection() {}",
+        "capabilities = -1;",
+        "capabilities = 0;",
+        "capabilities = 4;",
+    ] {
+        assert_eq!(crate::post::dialect::work_voice(script).ok(), Some(crate::post::dialect::WorkVoice::Undeclared), "{script}");
         for (kind, label) in [("lathe", "turning"), ("mill-turn", "mill-turning")] {
             mount(&world, kind);
             for refused in ["face", "off-centre"] {

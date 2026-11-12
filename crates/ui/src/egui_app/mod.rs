@@ -103,6 +103,8 @@ mod setup_plane_pick;
 mod setup_axis_pick;
 // #555: the Setups page's lay-on-three-points row.
 mod setup_points_pick;
+// #701: the Setups page's set-WCS-from-features role row.
+mod wcs_pick_row;
 // #316: the setup page's "relative to the previous setup" control.
 mod setup_relative_pick;
 mod setup_workholding_row;
@@ -249,6 +251,8 @@ mod setup_plane_tests;
 mod setup_axis_tests;
 #[cfg(test)]
 mod setup_points_tests;
+#[cfg(test)]
+mod wcs_pick_tests;
 #[cfg(test)]
 mod ball_corner_tests;
 #[cfg(test)]

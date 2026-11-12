@@ -153,8 +153,8 @@ pub fn on_work_spindle(world: &World, e: &Entity) -> bool {
 /// lathe post may not open. A milling dialect passes untouched - there
 /// `M03` is the tool's own spindle.
 ///
-/// A script that does not state its dialect (no usable `capabilities`
-/// mask, #1199) is never read as a mill post where that matters: an
+/// A script that does not state its dialect (`WorkVoice::Undeclared`:
+/// no `capabilities` mask naming 1 or 2, #1199) is never read as a mill post where that matters: an
 /// operation whose setup mounts a machine with a work spindle (a lathe
 /// or a mill-turn) is held to the door as if the script were a turning
 /// one, and its refusal says the manifest line is what to add. On any
@@ -164,17 +164,18 @@ pub fn on_work_spindle(world: &World, e: &Entity) -> bool {
 /// `"<op>: a <kind> operation would be posted on the work spindle - ..."`,
 /// or the script's own load failure.
 pub(crate) fn at_post<'a>(world: &World, ops: impl IntoIterator<Item = &'a str>, cps: &str) -> Result<(), String> {
-    let declared = crate::post::dialect::declared_turning(cps).map_err(|e| format!("post engine: {e}"))?;
-    if declared == Some(false) {
+    use crate::post::dialect::WorkVoice;
+    let voice = crate::post::dialect::work_voice(cps).map_err(|e| format!("post engine: {e}"))?;
+    if voice == WorkVoice::ToolSpindle {
         return Ok(());
     }
     for name in ops {
         let Some(e) = model::find_by_name(world, name) else {
             continue;
         };
-        let undeclared_on = match declared {
-            Some(_) => None,
-            None => match work_spindle_machine(world, &e) {
+        let undeclared_on = match voice {
+            WorkVoice::WorkSpindle | WorkVoice::ToolSpindle => None,
+            WorkVoice::Undeclared => match work_spindle_machine(world, &e) {
                 Some(kind) => Some(kind),
                 None => continue,
             },
@@ -185,7 +186,7 @@ pub(crate) fn at_post<'a>(world: &World, ops: impl IntoIterator<Item = &'a str>,
                 None => format!("{label}: {why}"),
                 Some(kind) => format!(
                     "{label}: {why} (the post script does not state whether it is a milling or a turning post - it \
-                     has no `capabilities` line - so on this setup's {} machine it is held to the turning rules; \
+                     has no `capabilities` line naming 1 or 2 - so on this setup's {} machine it is held to the turning rules; \
                      if it is a milling post, add `capabilities = 1;` to it, a turning post `capabilities = 2;`)",
                     kind.label()
                 ),

@@ -2,13 +2,15 @@
 
 **What was decided.** Option (b) of the issue. The lathe door
 (`app::lathe_voice::at_post`, #1190) now reads the post script's manifest
-three ways through `post::dialect::declared_turning`:
+three ways through `post::dialect::work_voice` (main's #1174 reading, which
+this PR adopted on merging main; an earlier head of the PR had its own
+`declared_turning` and read masks 0 and 4 as a declared mill post):
 
 | The script states | The door |
 |---|---|
 | `capabilities` with the turning bit (2, 3) | fires for every operation, as before |
-| a mask without it (1, 0, 4) | passes, as before - a declared mill post |
-| no usable mask (no `capabilities`, a string, a negative or non-finite number) | fires for every operation whose setup mounts a lathe or a mill-turn, and its refusal says the manifest line is missing and what to add (`capabilities = 1;` for a milling post, `= 2;` for a turning one); passes on every other machine |
+| the milling bit alone (1) | passes, as before - a declared mill post |
+| no mask naming 1 or 2 (no `capabilities`, 0, 4, a string, a negative or non-finite number) | fires for every operation whose setup mounts a lathe or a mill-turn, and its refusal says the manifest line is missing and what to add (`capabilities = 1;` for a milling post, `= 2;` for a turning one); passes on every other machine |
 
 So a user's own turning script without the manifest line can no longer
 post a milling section on a work spindle unnoticed: on the only machines

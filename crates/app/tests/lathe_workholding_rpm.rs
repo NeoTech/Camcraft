@@ -190,6 +190,16 @@ fn a_g97_op_over_the_chuck_is_refused_by_name_never_capped() {
 }
 
 #[test]
+fn a_3000_rpm_g97_turning_op_under_a_2000_rpm_chuck_is_still_refused_by_name() {
+    // #1174 narrowed the limit to the work spindle; turning is that spindle.
+    let (world, _h) = faced(Tool { rpm: 3000.0, ..insert() }, Some(2000.0));
+    let lines = chuck_lines(&world);
+    assert_eq!(lines.len(), 1, "{lines:?}");
+    assert!(lines[0].contains("F1: turns the work at 3000 rpm (G97)"), "{}", lines[0]);
+    assert!(lines[0].contains("setup 'Setup1''s workholding maximum of 2000 rpm"), "{}", lines[0]);
+}
+
+#[test]
 fn the_limit_is_one_validated_undoable_command() {
     let (world, mut h) = faced(insert(), None);
     assert_eq!(setup_workholding::of(&world, Some("Setup1")), None);
