@@ -2577,7 +2577,7 @@ fn the_machine_door_switches_workspaces_and_rides_undo() {
         .expect("the machine door stands on the bar")
         .rect;
     let rows = panes::machine_rows(button, theme::current().row_height);
-    assert_eq!(rows.len(), 3, "Milling, Turning, Mill-turning");
+    assert_eq!(rows.len(), 4, "Milling, Turning, Mill-turning, Plasma cutting");
     // Open the door.
     let at = button.center();
     set_pos(&mut harness, at);

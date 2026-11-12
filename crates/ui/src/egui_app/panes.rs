@@ -314,11 +314,8 @@ fn label_of(c: Cmd) -> &'static str {
 
 /// The machine mode's caption: the Title-case word the door wears,
 /// read off the switcher's own table so cell and rows cannot disagree.
-fn mode_caption(k: camcraft_app::machine::Kind) -> &'static str {
-    actions::MACHINE_MODES
-        .iter()
-        .find(|(m, _, _)| *m == k)
-        .map_or("Machine", |(_, c, _)| *c)
+fn mode_caption(k: camcraft_app::machine::Kind) -> String {
+    actions::mode_label(k)
 }
 
 /// The section door's short ribbon word: a cell is ~43 px wide at 1280, so

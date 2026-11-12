@@ -26,12 +26,37 @@ use crate::viewport::ProjectionMode;
 /// rides undo exactly like the Setup pane's picker does. A mill's
 /// reference is the plain VMC (the library's entry 0); the Tilt-head
 /// 5-axis stays picker-only, because a mode says what the document
-/// machines, not which five axes it owns.
-pub(crate) const MACHINE_MODES: [(MachineKind, &str, &str); 3] = [
+/// machines, not which five axes it owns. The table is explicit (one
+/// reference per kind, named here); `machine_mode_tests` fails when a
+/// kind with a shipped machine has no row, or a row mounts nothing.
+pub(crate) const MACHINE_MODES: [(MachineKind, &str, &str); 4] = [
     (MachineKind::Mill, "Milling", "VMC 3-axis"),
     (MachineKind::Lathe, "Turning", "Lathe"),
     (MachineKind::MillTurn, "Mill-turning", "Mill-turn"),
+    (MachineKind::Plasma, "Plasma cutting", "Tormach 1300PL"),
 ];
+
+/// A mode's row text: its caption, then the sections it adds to a mill
+/// document (`shown_for`, labels read off the registry), so a hidden
+/// section is named where the machine is picked - "Plasma cutting -
+/// Plasma". A mode that adds none keeps the bare caption.
+pub(crate) fn mode_label(kind: MachineKind) -> String {
+    let caption = MACHINE_MODES
+        .iter()
+        .find(|(k, _, _)| *k == kind)
+        .map_or("Machine", |(_, c, _)| *c);
+    let mill = camcraft_app::operation::shown_for(MachineKind::Mill);
+    let extra: Vec<&str> = camcraft_app::operation::shown_for(kind)
+        .into_iter()
+        .filter(|s| !mill.contains(s))
+        .map(|s| s.label())
+        .collect();
+    if extra.is_empty() {
+        caption.to_owned()
+    } else {
+        format!("{caption} - {}", extra.join(", "))
+    }
+}
 
 /// Switch the document's workspace kind by mounting that kind's
 /// reference machine. Picking the mode already running mounts nothing
