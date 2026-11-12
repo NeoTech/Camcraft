@@ -190,6 +190,7 @@ mod stock_top_shell;
 mod sweep;
 mod swept;
 mod turn_cells;
+mod turn_hidden;
 mod types;
 mod upright;
 mod workholding;

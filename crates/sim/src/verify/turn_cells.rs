@@ -36,6 +36,8 @@ pub(super) const SAG: f64 = 0.001;
 /// Cells per band cap. Past it the cells stay conservative and the
 /// overstatement grows instead (90 degrees at 150 mm reach: 0.011 mm).
 pub(super) const MAX_CELLS: usize = 64;
+/// Ring points per radius in a cell's footprint probes ([`Cell::probes`]).
+const PROBE_RING: usize = 24;
 
 /// One band's column swept along one tip chord under every pose of one
 /// interval of the turn. Offsets are from the tip; radii carry the
@@ -53,15 +55,25 @@ pub(super) struct Cell {
     /// `n . x <= bound` in tip-relative XY; `None` when one disc holds
     /// the other (the hull is that disc).
     flanks: Option<[(f64, f64, f64); 4]>,
+    /// The interval of the turn this cell holds (`0..n`), for the
+    /// overhang backstop's plane grouping ([`super::turn_hidden`]).
+    pub interval: usize,
     pub lo: Point2,
     pub hi: Point2,
 }
 
 /// The intervals a band of `reach` needs for a turn of `rate` radians
 /// (the letters' summed sweep) to keep its sag within [`SAG`].
+#[cfg(test)]
 pub(super) fn cell_count(reach: f64, rate: f64) -> usize {
-    let want = rate * (reach / (8.0 * SAG)).sqrt();
-    if want.is_finite() { (want.ceil() as usize).clamp(1, MAX_CELLS) } else { MAX_CELLS }
+    cell_count_for(reach, rate, SAG, MAX_CELLS)
+}
+
+/// [`cell_count`] for a stated sag budget `sag` and cap `cap`.
+pub(super) fn cell_count_for(reach: f64, rate: f64, sag: f64, cap: usize) -> usize {
+    let cap = cap.max(1);
+    let want = rate * (reach / (8.0 * sag)).sqrt();
+    if want.is_finite() { (want.ceil() as usize).clamp(1, cap) } else { cap }
 }
 
 /// Law (c)'s column for one band at one pose, tip-relative: (offset,
@@ -89,12 +101,28 @@ pub(super) fn push_cells(
     r: f64,
     grow: f64,
 ) {
+    push_cells_with(out, pieces, from, to, (above, band_r, band_len), r, grow, (SAG, MAX_CELLS));
+}
+
+/// [`push_cells`] under a stated `(sag, cap)` cell budget; returns the
+/// interval count `n` it split the turn into (0 for a dead band).
+#[allow(clippy::too_many_arguments)]
+pub(super) fn push_cells_with(
+    out: &mut Vec<Cell>,
+    pieces: &[(Point3, Point3)],
+    from: [f64; 3],
+    to: [f64; 3],
+    (above, band_r, band_len): (f64, f64, f64),
+    r: f64,
+    grow: f64,
+    (sag_budget, cap): (f64, usize),
+) -> usize {
     if band_len <= 0.0 || band_r <= 0.0 {
-        return;
+        return 0;
     }
     let reach = above.abs().max((above + band_len).abs());
     let rate: f64 = (0..3).map(|k| (to[k] - from[k]).abs()).sum::<f64>().to_radians();
-    let n = cell_count(reach, rate);
+    let n = cell_count_for(reach, rate, sag_budget, cap);
     let w = rate / n as f64;
     // Non-finite letters cannot be bounded: the widest sag there is
     // (the axis is a unit vector, so no chord is off by more than 2).
@@ -128,11 +156,13 @@ pub(super) fn push_cells(
                 z0: p.z + b,
                 z1: q.z + b,
                 flanks,
+                interval: j,
                 lo: Point2::new(p.x + x_lo, p.y + y_lo),
                 hi: Point2::new(p.x + x_hi, p.y + y_hi),
             });
         }
     }
+    n
 }
 
 /// The four half-planes of the quadrilateral between the outer tangent
@@ -197,6 +227,37 @@ fn clip(e: (f64, f64), d: (f64, f64), planes: &[(f64, f64, f64); 4]) -> Option<(
 }
 
 impl Cell {
+    /// The lowest the band's bottom stands anywhere in this cell.
+    pub(super) fn floor(&self) -> f64 {
+        self.z0.min(self.z1)
+    }
+
+    /// Points of the cell's footprint, appended to `out`: at
+    /// `stations + 1` tip positions along the chord, each end disc's centre, the
+    /// hull's middle and rings of [`PROBE_RING`] points at a quarter,
+    /// half, three quarters and the whole of each disc's radius. The
+    /// hidden region's own boundary samples catch a region that only
+    /// clips the footprint; these catch one that swallows it.
+    pub(super) fn probes(&self, stations: usize, out: &mut Vec<Point2>) {
+        let stations = stations.max(1);
+        for i in 0..=stations {
+            let s = i as f64 / stations as f64;
+            let t = (self.t0.x + self.d.0 * s, self.t0.y + self.d.1 * s);
+            let mid = ((self.o[0].0 + self.o[1].0) * 0.5, (self.o[0].1 + self.o[1].1) * 0.5);
+            out.push(Point2::new(t.0 + mid.0, t.1 + mid.1));
+            for k in 0..2 {
+                let (c, rad) = ((t.0 + self.o[k].0, t.1 + self.o[k].1), self.r[k]);
+                out.push(Point2::new(c.0, c.1));
+                for f in [0.25, 0.5, 0.75, 1.0] {
+                    for j in 0..PROBE_RING {
+                        let a = std::f64::consts::TAU * j as f64 / PROBE_RING as f64;
+                        out.push(Point2::new(c.0 + f * rad * a.cos(), c.1 + f * rad * a.sin()));
+                    }
+                }
+            }
+        }
+    }
+
     /// The lowest the band's column bottom stands over the sample
     /// column `q` anywhere in this cell - `None` when no position of
     /// the cell puts the column over `q` outside the flutes' kerf

@@ -21,25 +21,19 @@
 //! through a Z window that is the union (a superset) of the two
 //! endpoints' windows. This law names what meets steel in between.
 
-use super::upright::is_upright;
-use crate::cl::{Move, MoveKind, Toolpath, angles_to_axis, axis_to_angles, normalize_axis};
+use crate::cl::{Move, MoveKind, Toolpath, axis_to_angles, normalize_axis};
 use crate::geo2d::Point2;
-use crate::geometry::Point3;
 
 use super::rest::Steps;
 use super::turn_cells::{Cell, push_cells};
+use super::turn_hidden::backstop_asks;
 use super::types::Warning;
 
-/// The overhang backstop's path fractions INSIDE the move (its
-/// endpoints are law (c)'s domain). The column law itself no longer
-/// samples: it reads every tip position and every pose of the turn
-/// through [`super::turn_cells`] (#1313). The backstop
-/// ([`super::hidden`]) is sampled by its own law and keeps this grid.
-const PATH_FRACS: [f64; 4] = [0.2, 0.4, 0.6, 0.8];
-/// The backstop's pose fractions through the turn, endpoints INCLUDED:
-/// the head may finish its arc before the table arrives, so "at the
-/// to-pose but not yet at the to-point" is reachable.
-const POSE_FRACS: [f64; 5] = [0.0, 0.25, 0.5, 0.75, 1.0];
+/// The overhang backstop's ask ([`super::hidden`]'s `hidden_in_cover`):
+/// (box, plane, footprint probes - built on demand -, footprint
+/// membership, judged move).
+pub(super) type Hidden<'a> =
+    dyn Fn((Point2, Point2), f64, &dyn Fn() -> Vec<Point2>, &dyn Fn(Point2) -> bool, usize) -> bool + 'a;
 
 /// The reachable-set sweep of one path: for every cut move that
 /// CHANGES the commanded pose (the modal law threaded through the
@@ -78,7 +72,7 @@ pub(super) fn mid_turn_sweeps(
     in_stock: &dyn Fn(Point2) -> bool,
     surface: &dyn Fn(Point2) -> Steps,
     part_at: &dyn Fn(Point2) -> bool,
-    hidden: &dyn Fn(Point2, Point2, f64, f64, f64, usize) -> bool,
+    hidden: &Hidden<'_>,
 ) -> Vec<Warning> {
     let mut warns = Vec::new();
     // The column memo, one per path (see the module law above): a
@@ -149,7 +143,7 @@ fn swing_hit(
     in_stock: &dyn Fn(Point2) -> bool,
     surface: &dyn Fn(Point2) -> Steps,
     part_at: &dyn Fn(Point2) -> bool,
-    hidden: &dyn Fn(Point2, Point2, f64, f64, f64, usize) -> bool,
+    hidden: &Hidden<'_>,
 ) -> Option<bool> {
     // The tip's own path: a straight move, or an arc's chords with
     // their Z (the discretization every chord law lives with).
@@ -201,99 +195,14 @@ fn swing_hit(
     // The overhang backstop (M13.7 B, [`super::hidden`]): stock hidden
     // under a ledge is in no column sample; asked only when the column
     // law found nothing, so it adds convictions, never removes one.
+    // Since #1316 it reads the same reachable set, on its own coarser
+    // cells and a stated plane budget ([`super::turn_hidden`]).
     if worst.is_none()
-        && backstop_columns(m, from_abc, to_abc, bands, r, grow, chord_tol)
+        && backstop_asks(&pieces, from_abc, to_abc, bands, r, grow)
             .iter()
-            .any(|&(pc, tip, rb, h0)| hidden(pc, tip, r + gouge_tol, rb, h0, upto))
+            .any(|a| hidden((a.lo, a.hi), a.plane, &|| a.probes(), &|q| a.covers(q, kerf2), upto))
     {
         worst = Some(false);
     }
     worst
-}
-
-/// The overhang backstop's columns `(pc, tip, radius, bottom)`: law
-/// (c)'s enclosure at 4 path stations x 5 turn fractions per live
-/// band. Sampled, like the hidden-stock law they feed (its own XY
-/// rings and plane are samples too).
-fn backstop_columns(
-    m: &Move,
-    from_abc: [f64; 3],
-    to_abc: [f64; 3],
-    bands: &[(f64, f64, f64)],
-    r: f64,
-    grow: f64,
-    chord_tol: f64,
-) -> Vec<(Point2, Point2, f64, f64)> {
-    let mut out = Vec::new();
-    for &t in &PATH_FRACS {
-        let p = path_point(m, t, chord_tol);
-        for &g in &POSE_FRACS {
-            let abc = [
-                from_abc[0] + (to_abc[0] - from_abc[0]) * g,
-                from_abc[1] + (to_abc[1] - from_abc[1]) * g,
-                from_abc[2] + (to_abc[2] - from_abc[2]) * g,
-            ];
-            let lean = angles_to_axis(abc).filter(|a| !is_upright(a));
-            for &(above, band_r, band_len) in bands {
-                // Law (c)'s skip, read the same way: a band within the
-                // cutter's radius is the flutes' kerf only upright (#903).
-                if band_len <= 0.0 || band_r <= 0.0 || (lean.is_none() && band_r <= r) {
-                    continue;
-                }
-                let (offx, offy, r_band, h0) = match lean {
-                    Some(a) => {
-                        let mid = above + band_len * 0.5;
-                        let spread = (band_len * 0.5) * (a[0] * a[0] + a[1] * a[1]).sqrt();
-                        let za = p.z + above * a[2];
-                        let zb = p.z + (above + band_len) * a[2];
-                        (mid * a[0], mid * a[1], band_r + spread, za.min(zb) - band_r)
-                    }
-                    None => (0.0, 0.0, band_r, p.z + above),
-                };
-                // #904: law (c)'s growth on a coarse model.
-                out.push((Point2::new(p.x + offx, p.y + offy), Point2::new(p.x, p.y), r_band + grow, h0));
-            }
-        }
-    }
-    out
-}
-
-/// The point `t` along the move: XY by cumulative chord walk, Z on
-/// the move's own linear ramp. A zero-XY move keeps its column and
-/// the Z lerp does the work - which is the whole point for a plunge
-/// that turns while it descends.
-fn path_point(m: &Move, t: f64, chord_tol: f64) -> Point3 {
-    // An XZ / YZ arc (M11.2 A) moves in Z along its sweep, not on the
-    // endpoints' lerp: its own exact point at the sweep fraction.
-    if let Some(a) = m.arc.filter(|a| !a.plane.is_xy())
-        && let Some(p) = a.point_at(m.from, m.to, t)
-    {
-        return p;
-    }
-    let chords = m.chords(chord_tol);
-    let mut total = 0.0;
-    for (a, b) in &chords {
-        total += ((b.x - a.x) * (b.x - a.x) + (b.y - a.y) * (b.y - a.y)).sqrt();
-    }
-    let z = m.from.z + (m.to.z - m.from.z) * t;
-    // `!(total > 0.0)` in NaN-honest form: a non-positive OR
-    // non-finite walk parks the column at the move's start.
-    if total <= 0.0 || !total.is_finite() || chords.is_empty() {
-        return Point3::new(m.from.x, m.from.y, z);
-    }
-    let target = t * total;
-    let mut acc = 0.0;
-    for (a, b) in &chords {
-        let l = ((b.x - a.x) * (b.x - a.x) + (b.y - a.y) * (b.y - a.y)).sqrt();
-        if acc + l >= target {
-            let f = if l > 0.0 {
-                ((target - acc) / l).clamp(0.0, 1.0)
-            } else {
-                0.0
-            };
-            return Point3::new(a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f, z);
-        }
-        acc += l;
-    }
-    Point3::new(m.to.x, m.to.y, z)
 }

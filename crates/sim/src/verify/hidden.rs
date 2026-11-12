@@ -1,4 +1,4 @@
-//! Uncut stock under overhangs (M13.7 B): the solid-law backstop of the reach laws (c), (c3) and rapid law (d) - stock a plane section cannot show because part material hangs over it, read from the model's down-facing shadow (the projection identity of a closed solid's boundary, `slice::shadow_above`) on our own conservative rest model; no vendor source.
+//! Uncut stock under overhangs (M13.7 B): the solid-law backstop of the reach laws (c), (c3, over its swept cells since #1316) and rapid law (d) - stock a plane section cannot show because part material hangs over it, read from the model's down-facing shadow (the projection identity of a closed solid's boundary, `slice::shadow_above`) on our own conservative rest model; no vendor source.
 //!
 //! The plane-section laws ask "is the part's section at height h over
 //! this column, or was the column never cut down to h?" - and they only
@@ -200,6 +200,38 @@ impl Rest<'_, '_> {
         rings
             .chain(hid.samples.iter().copied())
             .filter(in_ring)
+            .any(|q| self.uncut(&hid, q, h, upto))
+    }
+
+    /// Law (c3) backstop (#1316): uncut hidden stock at plane `h` in a
+    /// swept footprint inside the box [lo, hi], against the cuts of the
+    /// moves before `upto`. `covers` is the footprint's exact membership
+    /// (the swept cells' own test, the flutes' kerf excluded where the
+    /// tip stands); `probes` builds points of the footprint itself, asked
+    /// beside the hidden region's boundary samples in the box - those
+    /// catch a region that clips the footprint, the probes one that
+    /// swallows it. A slice that fails convicts (fail closed).
+    pub(super) fn hidden_in_cover(
+        &self,
+        (lo, hi): (Point2, Point2),
+        h: f64,
+        probes: &dyn Fn() -> Vec<Point2>,
+        covers: &dyn Fn(Point2) -> bool,
+        upto: usize,
+    ) -> bool {
+        if !(lo.x.is_finite() && lo.y.is_finite() && hi.x.is_finite() && hi.y.is_finite()) {
+            return false; // the NonFinite law names it
+        }
+        let hid = match self.hidden_near(h, lo, hi, 0.0) {
+            Err(()) => return true,
+            Ok(None) => return false,
+            Ok(Some(hid)) => hid,
+        };
+        let in_box = |q: &Point2| q.x >= lo.x && q.x <= hi.x && q.y >= lo.y && q.y <= hi.y;
+        probes()
+            .into_iter()
+            .chain(hid.samples.iter().copied().filter(in_box))
+            .filter(|q| covers(*q))
             .any(|q| self.uncut(&hid, q, h, upto))
     }
 

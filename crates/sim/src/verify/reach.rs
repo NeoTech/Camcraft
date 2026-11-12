@@ -244,7 +244,7 @@ pub(super) fn band_reach(
                 &in_stock,
                 &|q: Point2| rest.surface_steps(q),
                 &part_at,
-                &|pc, tip, r_in, r_out, h, upto| rest.hidden_in_annulus(pc, tip, r_in, r_out, h, upto),
+                &|bx, h, probes, covers, upto| rest.hidden_in_cover(bx, h, probes, covers, upto),
             );
             warns.extend(
                 sweeps
