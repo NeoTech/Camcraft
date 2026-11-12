@@ -540,6 +540,14 @@ pub enum OpParams {
         /// the op's tool diameter or the pencil refuses by name;
         /// every other pattern ignores it as if it never arrived.
         pencil_reference: Option<f64>,
+        /// The land model (#1196): lid every CLOSED opening (hole or
+        /// pocket) a flat disk of this diameter, mm, cannot enter, on
+        /// the surface the path is PLANNED on - the finish flies over
+        /// it at its rim instead of diving down its walls. The verdict
+        /// still judges the real model. `None` (every older file) is
+        /// the model itself, byte for byte. See
+        /// [`crate::finishing3d::fill_openings`] for the rule.
+        fill_openings: Option<f64>,
     },
     /// Deburr (M2.5 E B): the cone-ruled edge break in 3D. The ONE
     /// authored number is `width` - the break's width in the edge's
@@ -1163,6 +1171,11 @@ pub enum OpParams {
     /// rule and inner-before-outer order (see [`crate::plasma`]). The
     /// plasma table's only kind (#669's family seam).
     PlasmaProfile(super::plasma::PlasmaOp),
+    /// Wire EDM contour (#532): one closed profile cut by a vertical
+    /// wire at the kerf offset of the machine's condition, on a stated
+    /// punch / die side, from a stated start hole (see
+    /// [`crate::wire_edm`]). The wire EDM's first kind (#290 D1).
+    WireContour(super::wire_edm::WireContourOp),
 }
 
 impl OpParams {
@@ -1209,6 +1222,7 @@ impl OpParams {
             OpParams::Thread { .. } => OpType::Thread,
             OpParams::Probe { .. } => OpType::Probe,
             OpParams::PlasmaProfile(_) => OpType::PlasmaProfile,
+            OpParams::WireContour(_) => OpType::WireContour,
             OpParams::TrochoidalSlot { .. } => OpType::TrochoidalSlot,
         }
     }
@@ -1236,6 +1250,9 @@ impl OpParams {
             // torch stands vertical over a flat plate (#670); the
             // trochoid carries no index (#220 slice 1).
             OpParams::Probe { .. } | OpParams::PlasmaProfile(_) | OpParams::TrochoidalSlot { .. } => None,
+            // The wire stands vertical (#532): a taper is a pose per
+            // move (#290 D2, #536), never a 3+2 index.
+            OpParams::WireContour(_) => None,
             // The 5-axis kinds (M5.1 C) are the third answer, not the
             // second: the PART stands still and the TOOL AXIS moves -
             // a 3+2 index inside them would command the machine to
@@ -1306,6 +1323,9 @@ impl OpParams {
     pub fn clearance(&self) -> Height {
         match self {
             OpParams::PlasmaProfile(p) => p.clearance_z,
+            // A wire has no rapids plane (#532): it never lifts out of
+            // the work; its travel plane is the workpiece's top.
+            OpParams::WireContour(p) => p.top_z,
             OpParams::Face { clearance_z, .. }
             | OpParams::Contour { clearance_z, .. }
             | OpParams::Pocket { clearance_z, .. }
@@ -1361,6 +1381,8 @@ impl OpParams {
             OpParams::Probe { clearance_z, .. } => *clearance_z,
             // The plasma contours are drawn on the plate's top (#670).
             OpParams::PlasmaProfile(p) => p.top_z,
+            // The wire's profile is drawn on the workpiece's top (#532).
+            OpParams::WireContour(p) => p.top_z,
             OpParams::Face { top_z, cut_z, .. } => top_z.unwrap_or(*cut_z),
             OpParams::Contour { top_z, .. }
             | OpParams::Pocket { top_z, .. }
@@ -1433,6 +1455,10 @@ impl OpParams {
             OpParams::Probe { clearance_z, .. } => f(*clearance_z),
             OpParams::PlasmaProfile(p) => {
                 f(p.clearance_z);
+                f(p.top_z);
+                f(p.bottom_z);
+            }
+            OpParams::WireContour(p) => {
                 f(p.top_z);
                 f(p.bottom_z);
             }
