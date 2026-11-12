@@ -19,8 +19,19 @@ the property table there is the vocabulary, this file is the grammar.
 
 Manifest: top-level assignments only — `description`, `vendor`, `legal`,
 `certificationLevel`, `minimumRevision`, `extension`, `setCodePage`,
-`capabilities`, `coolantModes`, `liveTooling`, `afterModes`, `axisInversion`, `probeAxisInversion`, `threadHands`. All but the last six are
-text the engine reads none of; `threadHands = true` (#629) says the script
+`capabilities`, `coolantModes`, `liveTooling`, `afterModes`, `axisInversion`, `probeAxisInversion`, `threadHands`,
+`workOffsetIndex`, `workOffsetMax`. All but the last eight are
+text the engine reads none of; `workOffsetIndex = true` (#931) says the
+script reads `PARAM WorkOffset` as the 1-based offset number and writes
+its own word for it, up to `workOffsetMax` (6 when unstated) - the
+engine refuses a higher offset by setup name; without the flag the
+script receives the word `G54`..`G59` for offsets 1-6 and the engine
+refuses any offset above 6. A flagged script also defines
+`workOffsetName(n)`, its control's name for offset n (display only).
+Every shipped post sets it; an extended word (`G59.1`, `G505`...) is
+written only where the control's public manual is cited (tormach.cps
+and tormach-lathe.cps: the LinuxCNC G-code reference's G59.1-G59.3);
+ `threadHands = true` (#629) says the script
 reads `PARAM SpindleDirection` and states a thread's hand (M04 when the
 helix needs the spindle reversed) - without it the engine refuses a
 reverse-spindle thread section by name (fanuc-lathe.cps and tormach-lathe.cps set it); `liveTooling = true` (issue #33) says the

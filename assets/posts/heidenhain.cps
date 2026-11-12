@@ -22,6 +22,8 @@ capabilities = 1; // reference contract: integer feature mask (bit 1 = milling)
 coolantModes = true; // reads PARAM Coolant (#112/#150): the engine refuses non-Flood ops for a post without it
 afterModes = true; // reads PARAM AfterOperation (#110): the engine refuses a stop or home ask for a post without it
 floatingTapping = true; // #51: G206 requires the operation's explicit floating-holder choice
+workOffsetIndex = true; // reads PARAM WorkOffset as the 1-based offset number (#931)
+workOffsetMax = 6;      // preset rows 1..6; more rows depend on the machine's preset table, not verified here (#931)
 
 // Determinism law: no timestamps, no randomness - the same stream
 // always posts to the same text (golden files depend on it).
@@ -224,7 +226,11 @@ function onRadiusCompensation() {
 }
 
 // In DIN/ISO G54 is DATUM SHIFT, not an offset register. Explicit
-// app offsets instead select preset rows through G247 (#51).
+// app offsets instead select preset rows through G247 (#51): offset n
+// is preset-table row n (#931: PARAM WorkOffset is that number).
+function workOffsetName(n) {  // offset n -> what the control calls it; "" when none
+  return n >= 1 && n <= 6 && n === Math.floor(n) ? "preset " + n : "";
+}
 function onParameter(name, value) {
   if (name === "Smoothing") { smoothTol = Number(value) || 0; return; }
   if (name === "SmoothingMode") { smoothMode = String(value || ""); return; }
@@ -233,11 +239,11 @@ function onParameter(name, value) {
   if (name === "Coolant") { coolantAsk = String(value || "flood"); return; }
   if (name === "AfterOperation") { afterAsk = String(value || ""); return; }
   if (name === "WorkOffset" && value) {
-    // House mapping: explicit G54..G59 selects preset-table rows 1..6.
+    // House mapping: offsets 1..6 select preset-table rows 1..6.
     // Legacy streams without WorkOffset keep the control's active preset.
-    var word = String(value), match = /^G5([4-9])$/.exec(word);
-    if (!match) { msg("work offset " + word + " has no configured TNC preset row"); return; }
-    preset = Number(match[1]) - 3;
+    var n = Number(value);
+    if (!workOffsetName(n)) { msg("work offset " + value + " has no configured TNC preset row"); return; }
+    preset = n;
   }
   else if (name === "OriginX" && has(value)) orgX = Number(value);
   else if (name === "OriginY" && has(value)) orgY = Number(value);

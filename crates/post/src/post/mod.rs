@@ -38,6 +38,7 @@ pub mod machine;
 pub mod nose_tip;
 pub mod probe_rec;
 mod program;
+pub mod work_offset;
 
 pub use after_op::AfterOperation;
 pub use coolant::CoolantMode;
@@ -96,6 +97,9 @@ pub struct Dump<'a> {
     pub clearance_z: f64,
     pub retract_z: f64,
     pub top_z: f64,
+    /// The setup's work offset. The stream carries it as the 1-based
+    /// index (#931: `G54`..`G59` or a number both read as one); the post
+    /// writes its own word for it.
     pub wcs: &'a str,
     pub origin: [f64; 3],
     /// Stock bounds in mm: left, right, front, back (XY), plus top Z.
@@ -208,7 +212,11 @@ pub fn dump(t: &Toolpath, d: &Dump) -> Vec<Record> {
     out.push(Record::Param { name: "ToolDiameter".into(), value: json!(d.tool_diameter) });
     comment_params(d, &mut out);
     out.push(Record::Param { name: "SpindleSpeed".into(), value: json!(d.rpm) });
-    out.push(Record::Param { name: "WorkOffset".into(), value: json!(d.wcs) });
+    // #931: the stream carries the 1-based offset index; the post maps
+    // it to its word. A word the index law cannot read rides as itself,
+    // and the engine refuses it by name.
+    let wcs = work_offset::index_of(&json!(d.wcs)).map_or_else(|| json!(d.wcs), |n| json!(f64::from(n)));
+    out.push(Record::Param { name: "WorkOffset".into(), value: wcs });
     out.push(Record::Param { name: "OriginX".into(), value: json!(d.origin[0]) });
     out.push(Record::Param { name: "OriginY".into(), value: json!(d.origin[1]) });
     out.push(Record::Param { name: "OriginZ".into(), value: json!(d.origin[2]) });

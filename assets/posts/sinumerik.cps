@@ -15,12 +15,15 @@ setCodePage = "utf-8";
 capabilities = 1; // reference contract: integer feature mask (bit 1 = milling)
 coolantModes = true; // reads PARAM Coolant (#112/#150): the engine refuses non-Flood ops for a post without it
 afterModes = true; // reads PARAM AfterOperation (#110): the engine refuses a stop or home ask for a post without it
+workOffsetIndex = true; // reads PARAM WorkOffset as the 1-based offset number (#931)
+workOffsetMax = 6;      // G54..G57, G505, G506 (#934); more G505+ frames need the machine's frame count (#931)
 
 // Determinism law: no timestamps, no randomness - the same stream
 // always posts to the same text (golden files depend on it).
 
 // ---------------------------------------------------------------- state
 var wcsWord = "G54";
+var wcsIndex = 1;          // the offset number wcsWord writes (#931)
 var sRpm = 0;
 var spindleWait = false;
 var toolWait = false;
@@ -288,6 +291,19 @@ function compRefuse(what) {
   }
 }
 
+// #931: PARAM WorkOffset arrives as the 1-based offset number (the engine
+// refuses one above workOffsetMax by setup name); the word is ours to write.
+function workOffsetName(n) {  // offset n -> this control's word; "" when it has none
+  if (!(n >= 1 && n <= 6 && n === Math.floor(n))) return "";
+  return n <= 4 ? "G" + (53 + n) : "G" + (500 + n);  // settable frames G54..G57, then G505..
+}
+function offsetWord(value) {
+  var n = Number(value), w = workOffsetName(n);
+  if (!w) { msg("work offset " + value + " - this post expresses work offsets 1-" + workOffsetMax + " only"); return wcsWord; }
+  wcsIndex = n;
+  return w;
+}
+
 function onParameter(name, value) {
   if (name === "Smoothing") { smoothTol = Number(value) || 0; return; }
   if (name === "SmoothingMode") { smoothMode = String(value || ""); return; }
@@ -295,7 +311,7 @@ function onParameter(name, value) {
   if (name === "OperationName") coolantOp = String(value || "");
   if (name === "Coolant") { coolantAsk = String(value || "flood"); return; }
   if (name === "AfterOperation") { afterAsk = String(value || ""); return; }
-  if (name === "WorkOffset" && value) wcsWord = frameWord(String(value));
+  if (name === "WorkOffset" && value) wcsWord = offsetWord(value);
   else if (name === "OriginX" && has(value)) orgX = Number(value);
   else if (name === "OriginY" && has(value)) orgY = Number(value);
   else if (name === "OriginZ" && has(value)) orgZ = Number(value);
@@ -482,7 +498,7 @@ function onCycle() {
 // deviations in R90.., inside R0..R99 (the R parameters every 840D
 // carries; more are a machine-data option). The back-off is incremental
 // (G91). The fifth and sixth work offsets are the settable frames
-// G505/G506 here (frameWord, #934), so a probe sets those frames.
+// G505/G506 here (workOffsetName, #934/#931), so a probe sets those frames.
 // Arming the probe is the machine's own.
 var probeBase = 50;
 function axisIx(a) { return a === "X" ? 0 : (a === "Y" ? 1 : 2); }
@@ -533,25 +549,11 @@ function onProbeGuard() {
   block(["MEAS=1", "G1", wo("X", p.X, orgX), wo("Y", p.Y, orgY), wo("Z", p.Z, orgZ), fw(p.Feed)]);
   stopAlarm("$AC_MEA[1]==1", 65002, "PROBE HIT ON POSITIONING");
 }
-// #934: the engine hands the setup's work offset as its generic word
-// (G54..G59, one per controller register). On the 840D the settable
-// zero offsets are G54..G57 and then G505..G599 (840D sl Fundamentals,
-// "settable zero offset"); G58/G59 are axial programmable offsets that
-// select no frame. So offsets 5 and 6 are written G505/G506, and a
-// word naming no settable frame is refused by name, never posted.
-function frameWord(word) {
-  var w = String(word).toUpperCase();
-  if (w === "G58") return "G505";
-  if (w === "G59") return "G506";
-  if (!frameOf(w)) msg("work offset " + w + " - only the settable frames G54..G57 / G505..G599 can be selected on this control");
-  return w;
-}
-function frameOf(word) {  // "G54".."G57" -> 1..4, G505..G599 -> 5..99; 0 none
-  var n = Number(String(word).replace(/[^0-9]/g, ""));
-  if (n >= 54 && n <= 57) return n - 53;
-  if (n >= 505 && n <= 599) return n - 500;
-  return 0;
-}
+// #934/#931: on the 840D the settable zero offsets are G54..G57 and
+// then G505..G599 (840D sl Fundamentals, "settable zero offset"); G58/G59
+// are axial programmable offsets that select no frame. Offset n is
+// settable frame n - $P_UIFR[n] - written by workOffsetName: offsets 5
+// and 6 are G505/G506.
 function onProbeResult() {
   var p = properties;
   var org = [orgX, orgY, orgZ];
@@ -571,9 +573,9 @@ function onProbeResult() {
     stopAlarm("ABS(R" + (dev + i) + ")>" + fu(p.Tolerance), 65001, "PROBE " + a.Axis + " OUT OF TOLERANCE");
   }
   if (has(p.SetWorkOffset) && p.SetWorkOffset >= 0) {
-    var want = frameWord("G" + (54 + Number(p.SetWorkOffset)));
-    var to = frameOf(want), from = frameOf(wcsWord);
-    if (!to || !from) {
+    var to = Number(p.SetWorkOffset) + 1, from = wcsIndex;  // SetWorkOffset is 0-based
+    var want = workOffsetName(to) || ("work offset " + to);
+    if (!workOffsetName(to) || !workOffsetName(from)) {
       msg("probing: setting " + want + " from " + wcsWord + " - only the settable frames G54..G57 / G505..G599 can be set on this control");
       return;
     }
