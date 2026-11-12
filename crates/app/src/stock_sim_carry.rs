@@ -45,12 +45,31 @@ use crate::stock_sim::{Body, Deviation, LatticeTurn, Planned, SimOp, stock_grid}
 /// is never handed across a machine change on a guess.
 pub const CARRY_MACHINE_CHANGE_REFUSAL: &str = "the setups are on different machines - the program sim carries the stock only between setups on one machine; simulate each machine's setups on their own";
 
-/// The refusal for a carry on a lathe or mill-turn machine (#321 decided:
+/// The refusal for a carry on a machine that is not a mill (#321 decided:
 /// the part flip / sub-spindle hand-off is not implemented - the column
 /// lattice carries milled bodies only, and a turned body lives in the
 /// meridian field). Every reader of the carry - the program sim, the rest
 /// and judged stock of generation, and so the post - says this by name.
-pub const CARRY_MACHINE_REFUSAL: &str = "a part flip or sub-spindle hand-off is not supported yet on a lathe or mill-turn machine";
+/// This is the stable prefix; [`carry_machine_refusal`] appends the
+/// machine kind's name (#1182).
+pub const CARRY_MACHINE_REFUSAL: &str = "a part flip or sub-spindle hand-off is not supported yet on a";
+
+/// The full carry refusal for a setup on a `kind` machine: the stable
+/// [`CARRY_MACHINE_REFUSAL`] prefix, then the kind named ("lathe",
+/// "sinker EDM", ...) so the reader sees what the setup really is.
+#[must_use]
+pub fn carry_machine_refusal(kind: crate::machine::Kind) -> String {
+    use crate::machine::Kind;
+    let name = match kind {
+        Kind::Mill => "mill",
+        Kind::Lathe => "lathe",
+        Kind::MillTurn => "mill-turn",
+        Kind::Plasma => "plasma",
+        Kind::WireEdm => "wire EDM",
+        Kind::SinkerEdm => "sinker EDM",
+    };
+    format!("{CARRY_MACHINE_REFUSAL} {name} machine")
+}
 
 /// How the program enters a setup from the setup before it.
 pub(crate) enum Entry {
@@ -113,8 +132,9 @@ pub(crate) fn carry_turn(world: &flecs_ecs::prelude::World, from: &str, to: &str
     // ends on that one machine, its kind is both ends' kind - a carry off
     // or onto a machine that is not a mill is the same unverified turn.
     let m_to = one_machine(world, from, to)?;
-    if crate::machine::kind(m_to.1.as_ref()) != crate::machine::Kind::Mill {
-        return Err(format!("{head}: {CARRY_MACHINE_REFUSAL}"));
+    let kind = crate::machine::kind(m_to.1.as_ref());
+    if kind != crate::machine::Kind::Mill {
+        return Err(format!("{head}: {}", carry_machine_refusal(kind)));
     }
     let t = crate::setup_relative::transform_between(world, from, to).map_err(|e| format!("{head}: {e}"))?;
     LatticeTurn::from_matrix(matrix_of(t.rot), [t.pos.x, t.pos.y, t.pos.z]).map_err(|e| {
