@@ -156,8 +156,12 @@ fn judged(kind: &str, dialect: &str, section: Section) -> bool {
         // lathe door (#1190) refuses a milling section by name first.
         ("turning", Section::Work) => true,
         ("turning", Section::Tool) => false,
-        // An undeclared script (#1199): the stricter reading.
-        ("undeclared", _) => true,
+        // An undeclared script (#1199): on a machine with a work spindle
+        // the door refuses every section but a C one by name first (a
+        // turning section too: only a turning post may post it, and an
+        // unstated script is not known to be one). Elsewhere a work
+        // section is not creatable and a milling section is not judged.
+        ("undeclared", _) => !chucked,
         // A milling post: a work section on a chucked machine cuts only
         // if the work turns; a milling section turns the tool - except
         // on a plain lathe, whose one spindle holds the chuck.
@@ -184,6 +188,13 @@ fn every_machine_dialect_and_section_cell_gives_its_verdict() {
                 let want = judged(kind, dialect, section);
                 rows.push(format!("{kind:9} {dialect:10} {section:?}: {}", if by_limit { "judged" } else { "not judged" }));
                 assert_eq!(by_limit, want, "{kind} / {dialect} / {section:?}: {got:?}");
+                // What the undeclared cells on a chucked machine guard:
+                // the door's refusal, naming the missing manifest line.
+                if dialect == "undeclared" && (kind == "lathe" || kind == "mill-turn") {
+                    let why = got.as_ref().err().map_or("", String::as_str);
+                    assert!(why.contains("no `capabilities` line"), "{kind} / {section:?}: the door refuses: {got:?}");
+                    assert!(why.contains("`capabilities = 2;`"), "{kind} / {section:?}: names the fix: {why}");
+                }
                 if let Ok(program) = &got {
                     assert!(!(section == Section::Work && program.contains("G97 S3000")), "work spindle over the chuck: {program}");
                 }
