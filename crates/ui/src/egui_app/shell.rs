@@ -258,7 +258,7 @@ impl TabViewer for ShellTabs<'_> {
 
 /// The viewport tab: the 3D image, the pointer law, and the screen-space
 /// overlays. M-e moved the law to `crate::interact`, where the retired
-/// imgui shell had it first: a short LMB press picks (Ctrl adds, the
+/// imgui shell had it first: a short LMB press picks (Ctrl, or Cmd on macOS, adds, the
 /// gesture table), an LMB drag past the click-travel threshold orbits, MMB
 /// orbits, RMB pans, wheel dollies toward the cursor. egui's press/drag
 /// bookkeeping differs from winit's raw stream, so the gestures are read

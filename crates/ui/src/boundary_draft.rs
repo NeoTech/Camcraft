@@ -4,8 +4,8 @@
 //! its picks spell, and the roles its shape cannot take, disabled with
 //! the reason. Viewport picks land here while the group is collecting:
 //! a plain click takes ONE edge (a run - one straight stretch or one
-//! arc, never the whole tangent loop), Ctrl toggles a run in or out
-//! (Ctrl on an edge of a picked loop breaks it open), Shift closes the
+//! arc, never the whole tangent loop), Ctrl (Cmd on macOS) toggles a run in or out
+//! (Ctrl, or Cmd on macOS, on an edge of a picked loop breaks it open), Shift closes the
 //! picks around their face loop, Alt narrows any of them to the single
 //! mesh segment. Everything here edits the page draft (`OpUi::area`):
 //! Apply commits it as one undoable `EditOperationParams::with_area`, so

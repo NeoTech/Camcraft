@@ -17,7 +17,7 @@ use super::colorvision::text_inks;
 use super::layout::group;
 
 /// The Edge mode's one-line hint: how a loop gets closed.
-pub const EDGE_HINT: &str = "Ctrl+click adds an edge · Shift+click picks the whole loop";
+pub const EDGE_HINT: &str = "Ctrl+click (Cmd+click on macOS) adds an edge · Shift+click picks the whole loop";
 
 pub(super) fn pick_block(ui: &mut Ui, state: &mut State, target: &str, live_setup: Option<&str>) {
     group(ui, "Selection", None, |ui| body(ui, state, target, live_setup));
@@ -27,7 +27,7 @@ fn body(ui: &mut Ui, state: &mut State, target: &str, live_setup: Option<&str>) 
     // Viewport pick mode - transient view state: the mode itself is not
     // undoable; what a Face/Edge click changes is.
     ui.horizontal_wrapped(|ui| {
-        ui.label("Click selects:").on_hover_text("Click in the viewport - Ctrl adds; in Edge mode Shift takes the whole loop and Alt one edge.");
+        ui.label("Click selects:").on_hover_text("Click in the viewport - Ctrl (Cmd on macOS) adds; in Edge mode Shift takes the whole loop and Alt one edge.");
         let mut pick_mode = match state.geo_pick {
             GeoPick::Model => 0,
             GeoPick::Face => 1,

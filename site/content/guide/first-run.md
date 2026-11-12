@@ -30,7 +30,7 @@ Shortcuts on this page are written with Ctrl. On macOS, press Cmd in their place
     3D, Drilling and Multi-axis on a mill; Turning on a lathe. Each group
     opens a list of its operations. Right-click (Control-click or a two-finger
     click on a Mac) an operation to pin it to the ribbon (up to four pins).
-  - **Modify:** Undo (Ctrl+Z), Redo (Ctrl+Y), Run (generate the selected
+  - **Modify:** Undo (Ctrl+Z, Cmd+Z on macOS), Redo (Ctrl+Y, Cmd+Y on macOS), Run (generate the selected
     operation) and Delete.
   - **Inspect:** Frame (F), Paths (show every toolpath), Simulate and
     Deviate.

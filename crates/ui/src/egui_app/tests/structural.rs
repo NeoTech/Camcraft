@@ -531,3 +531,14 @@ fn origin_names_paint_on_and_quiet_off_letters_and_lines_always() {
     }
     let _ = std::fs::remove_dir_all(&d);
 }
+
+/// #1238: every pick hint names the platform command key (Cmd on macOS,
+/// Ctrl elsewhere), not a bare Ctrl that a Mac user cannot press.
+#[test]
+fn pick_hints_name_the_platform_command_key() {
+    use crate::egui_app::{boundary::HINTS, geo_page::EDGE_HINT};
+    assert!(EDGE_HINT.contains("Cmd+click on macOS"), "edge hint: {EDGE_HINT}");
+    assert!(HINTS[2].contains("Cmd-click on macOS"), "boundary pick hint: {}", HINTS[2]);
+    let geo = include_str!("../geo_page.rs");
+    assert!(geo.contains("Ctrl (Cmd on macOS) adds"), "Click selects hover names Cmd");
+}

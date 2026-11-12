@@ -38,7 +38,7 @@ use super::layout::{auto_value, consequence, group, group_open, hint, prop_row, 
 pub const HINTS: [&str; 4] = [
     "Include adds the area a closed boundary encloses; Exclude keeps the whole tool out of it.",
     "Open: an open edge chain runs on straight to the stock and splits it - side A holds more of the selection's area, side B is the rest; arrows in the viewport point into the side machined.",
-    "Picking: click an edge to take that one edge, Ctrl-click to add or remove one (removing breaks a picked loop open), Shift-click to close the edges around their face loop, Alt for a single mesh segment; a face adds its loop.",
+    "Picking: click an edge to take that one edge, Ctrl-click (Cmd-click on macOS) to add or remove one (removing breaks a picked loop open), Shift-click to close the edges around their face loop, Alt for a single mesh segment; a face adds its loop.",
     "The filled area in the viewport is what the operation will machine after Apply.",
 ];
 
