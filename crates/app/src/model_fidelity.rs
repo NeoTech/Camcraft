@@ -39,16 +39,16 @@
 use flecs_ecs::core::EntityViewGet;
 use flecs_ecs::prelude::{Entity, World};
 
-use crate::geometry::import::step;
+use crate::geometry::import::{step, step_budget};
 use crate::model;
 use crate::operation::{fidelity_law, SrcRef};
-use crate::schema::{Operation, ReducedFidelity};
+use crate::schema::{Operation, ReducedFidelity, StepBudget};
 use crate::stock::StockShape;
 use crate::stock_sim::DEV_TOL;
 use crate::verify::excess_floor;
 
 /// What every refusal here says, in the user's words.
-pub const TOO_COARSE: &str = "imported too coarsely to verify; re-import with a larger budget";
+pub const TOO_COARSE: &str = "imported too coarsely to verify; re-import with a larger STEP facet budget";
 
 /// The chord error a reduced-fidelity model was imported at, mm; `None`
 /// for a model at full fidelity. A stored value that is not a coarse
@@ -68,6 +68,32 @@ pub fn set(world: &World, entity: &Entity, coarse_mm: Option<f64>) {
         }
         None => {
             view.remove(world.component::<ReducedFidelity>());
+        }
+    }
+}
+
+/// The STEP facet budget the model was imported under when it is not the
+/// default (#1054); `None` reads as the default. A stored value outside
+/// the bounds (a hand-edited file) reads as the default too.
+#[must_use]
+pub fn budget_of(world: &World, entity: &Entity) -> Option<u64> {
+    entity
+        .entity_view(world)
+        .try_get::<&StepBudget>(|b| b.facets)
+        .filter(|b| step_budget::check(*b).is_ok())
+        .and_then(|b| step_budget::recorded(Some(b)))
+}
+
+/// Write or clear the recorded budget. Like [`set`]: for the import and
+/// update commands, their undo and the project loader only.
+pub fn set_budget(world: &World, entity: &Entity, budget: Option<u64>) {
+    let view = entity.entity_view(world);
+    match step_budget::recorded(budget) {
+        Some(facets) => {
+            view.set(StepBudget { facets });
+        }
+        None => {
+            view.remove(world.component::<StepBudget>());
         }
     }
 }
@@ -142,7 +168,7 @@ pub fn facts(world: &World, chord_mm: f64) -> serde_json::Value {
         "approximation_mm": chord_mm,
         "promised_mm": step::CHORD_CAP,
         "note": format!(
-            "{}. Gouge checks against this model are stricter; if it is too coarse to check, its operations are refused at the post. Re-import with a larger budget to clear this.",
+            "{}. Gouge checks against this model are stricter; if it is too coarse to check, its operations are refused at the post. Re-import with a larger STEP facet budget to clear this.",
             summary(world, chord_mm)
         ),
     })
@@ -180,7 +206,7 @@ pub fn op_problem(world: &World, name: &str, op: &Operation) -> Option<String> {
     let said = format!("surfaces are approximated to within {}", within(world, chord));
     if !fidelity_law::excess_aware(&op.params) {
         return Some(format!(
-            "{name}: model '{model}' was imported at reduced fidelity ({said}) and this kind of operation cannot be verified against it; re-import with a larger budget"
+            "{name}: model '{model}' was imported at reduced fidelity ({said}) and this kind of operation cannot be verified against it; re-import with a larger STEP facet budget"
         ));
     }
     excess_floor(fidelity_law::floor_of(&op.params), excess(chord))

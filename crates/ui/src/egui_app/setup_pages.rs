@@ -168,6 +168,7 @@ fn settings(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
     super::setup_points_pick::row(ui, state, name);
     super::setup_axis_pick::rows(ui, state, name);
     super::setup_wcs_pick::picker(ui, state, name);
+    super::setup_workholding_row::row(ui, state, name);
     ui.separator();
     if ui.button(format!("Delete {name}")).clicked() {
         state.pending.push_back(CommandKind::DeleteSetup(name.to_owned()));
@@ -209,7 +210,7 @@ fn tool_table(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
     let names: Vec<String> = used.iter().map(|(t, _)| t.clone()).collect();
     if let Some(why) = tool_numbers::clash(&state.world, &names) {
         let ink = super::colorvision::text_inks(ui, &state.world).error;
-        ui.colored_label(ink, why);
+        super::error_text::error_text(ui, ink, &why);
     }
     if let Some(tool) = open {
         crate::actions::open_tool_editor(state, &tool);

@@ -340,14 +340,14 @@ fn actions(ui: &mut Ui, state: &mut State, target: &str, live: Option<&Operation
         // frames it (view state, like every camera move - no command).
         match state.refusal_focus() {
             Some(p) => {
-                let text = egui::RichText::new(msg).color(inks.error).underline();
-                let r = ui.add(egui::Label::new(text).sense(egui::Sense::click()).wrap());
+                let text = egui::RichText::new(&msg).color(inks.error).underline();
+                let r = super::error_text::error_rich(ui, text, &msg, true);
                 if r.on_hover_text(REFUSAL_LINK_HINT).clicked() {
                     crate::actions::frame_at(state, p);
                 }
             }
             None => {
-                ui.colored_label(inks.error, msg);
+                super::error_text::error_text(ui, inks.error, &msg);
             }
         }
     } else if !unchanged && let Some(why) = &apply_hint {

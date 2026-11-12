@@ -32,6 +32,9 @@ pub struct SetStock {
     /// Stock's state before this command; `None` means the command creates
     /// the stock entity, so its inverse removes it.
     prev: Option<Prev>,
+    /// #1094: any new stock - another shape, or the same model again -
+    /// drops the raw-stock-only mark; only undo brings it back.
+    marks: super::stock_source_only::MarkDrops,
 }
 
 /// A stock as it stood: shape, placement, facets and its own
@@ -119,6 +122,7 @@ impl SetStock {
             None => None,
         };
         Ok(SetStock {
+            marks: super::stock_source_only::MarkDrops::of_stock(world, &stock_name),
             stock_name,
             shape,
             location,
@@ -142,6 +146,7 @@ impl Command for SetStock {
         entity
             .entity_view(world)
             .set(StockDef { shape: self.shape.clone() });
+        self.marks.write(world, true);
     }
 
     fn invert(&self, world: &World) {
@@ -159,5 +164,6 @@ impl Command for SetStock {
             }
             None => model::remove(world, &entity), // we created it
         }
+        self.marks.write(world, false);
     }
 }

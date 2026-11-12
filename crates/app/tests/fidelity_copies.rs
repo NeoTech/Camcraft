@@ -79,7 +79,7 @@ fn op_problem(world: &World) -> Option<String> {
     model_fidelity::op_problem(world, "OP", &op)
 }
 
-const REFUSAL: &str = "OP: model 'blank' was imported too coarsely to verify; re-import with a larger budget (surfaces are approximated to within 0.030 mm)";
+const REFUSAL: &str = "OP: model 'blank' was imported too coarsely to verify; re-import with a larger STEP facet budget (surfaces are approximated to within 0.030 mm)";
 
 #[test]
 fn a_stock_copy_keeps_its_flag_when_its_source_is_deleted() {

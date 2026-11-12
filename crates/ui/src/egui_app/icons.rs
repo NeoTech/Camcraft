@@ -1,10 +1,12 @@
-//! The UI icon set, folded into the egui stack at M1.4.2 M-g: Tabler
-//! outline glyphs (MIT, see assets/ui/LICENSES.md) bundled as PNGs,
-//! recolored to white line art and loaded as egui textures.
+//! The UI icon set, folded into the egui stack at M1.4.2 M-g: bundled
+//! 32 px PNGs, recolored to white line art and loaded as egui textures.
 //!
 //! Provenance: the loader is our own, ported from the retired imgui
-//! icons.rs; the glyphs are Tabler Icons, unmodified except channel order
-//! (AGENTS.md clean-room: never any HSMWorks asset).
+//! icons.rs. The chrome glyphs are Tabler Icons (MIT, see
+//! assets/ui/LICENSES.md), unmodified except channel order; the
+//! operation glyphs (#661) are our own drawings, SVG masters under
+//! assets/ui/svg/ rasterised by `cargo xtask icons` (AGENTS.md clean-room:
+//! never any HSMWorks or other CAM product's asset).
 //!
 //! The imgui loader hand-built wgpu textures and registered them as
 //! external ids; egui owns that machinery, so `TextureHandle`s come from
@@ -17,220 +19,117 @@
 
 use egui::{ColorImage, Context, TextureHandle, TextureOptions};
 
-/// One bundled glyph. The ribbon is the first consumer; the browser tree
-/// pass added slots here, not elsewhere - the PNG table lives once.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Icon {
-    New,
-    OpenModel,
-    OpenProject,
-    Save,
-    Post,
-    Stock,
-    WorkOffset,
-    Tools,
-    Face,
-    Contour,
-    Pocket,
-    Slot,
-    Trace,
-    Drill,
-    /// The touch probe (#108): original artwork, a stylus over its ball.
-    Probe,
-    Finish3D,
-    Contour5D,
-    Parallel5D,
-    Swarf,
-    AdvancedSwarf,
-    RotaryContour,
-    RotaryParallel,
-    RotaryOffset,
-    MultiAxisRough,
-    Flow5D,
-    MultiAxisContour,
-    Undo,
-    Redo,
-    Delete,
-    Generate,
-    FrameAll,
-    Toolpaths,
-    Model,
-    EyeOff,
-    Simulate,
-    Fixture,
-    /// The status strip's Debug info door (#157), an original glyph.
-    DebugInfo,
+/// One table row per slot: the variant, its PNG stem under assets/ui/
+/// (an `op-*` stem has an SVG master under assets/ui/svg/), and its egui
+/// texture key - stable per slot, never reused for other pixels (a rename
+/// would alias old uploads). The table lives once; the enum, `ALL`, the
+/// bytes and the keys are all generated from it.
+macro_rules! icon_table {
+    ($( $(#[$m:meta])* $v:ident => $file:literal, $key:literal; )*) => {
+        /// One bundled glyph. The ribbon is the first consumer; the
+        /// browser tree pass added slots here, not elsewhere.
+        #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+        pub(crate) enum Icon { $( $(#[$m])* $v, )* }
+
+        impl Icon {
+            /// Every slot, ribbon order - the table and the store share this list.
+            pub(crate) const ALL: &'static [Icon] = &[ $( Icon::$v, )* ];
+
+            fn png(self) -> &'static [u8] {
+                match self {
+                    $( Icon::$v => include_bytes!(concat!("../../../../assets/ui/", $file, ".png")), )*
+                }
+            }
+
+            /// The PNG stem under assets/ui/ (pinned by the structural tests:
+            /// every operation glyph is an `op-*` file with an SVG master).
+            #[cfg(test)]
+            pub(crate) fn file(self) -> &'static str {
+                match self { $( Icon::$v => $file, )* }
+            }
+
+            fn name(self) -> &'static str {
+                match self { $( Icon::$v => $key, )* }
+            }
+        }
+    };
 }
 
-impl Icon {
-    /// Every slot, ribbon order - the table and the store share this list.
-    pub(crate) const ALL: [Icon; 37] = [
-        Icon::New,
-        Icon::OpenModel,
-        Icon::OpenProject,
-        Icon::Save,
-        Icon::Post,
-        Icon::Stock,
-        Icon::WorkOffset,
-        Icon::Tools,
-        Icon::Face,
-        Icon::Contour,
-        Icon::Pocket,
-        Icon::Slot,
-        Icon::Trace,
-        Icon::Drill,
-        Icon::Probe,
-        Icon::Finish3D,
-        Icon::Contour5D,
-        Icon::Parallel5D,
-        Icon::Swarf,
-        Icon::AdvancedSwarf,
-        Icon::RotaryContour,
-        Icon::RotaryParallel,
-        Icon::RotaryOffset,
-        Icon::MultiAxisRough,
-        Icon::Flow5D,
-        Icon::MultiAxisContour,
-        Icon::Undo,
-        Icon::Redo,
-        Icon::Delete,
-        Icon::Generate,
-        Icon::FrameAll,
-        Icon::Toolpaths,
-        Icon::Model,
-        Icon::EyeOff,
-        Icon::Simulate,
-        Icon::Fixture,
-        Icon::DebugInfo,
-    ];
-
-    fn png(self) -> &'static [u8] {
-        match self {
-            Icon::New => include_bytes!("../../../../assets/ui/file-plus.png"),
-            Icon::OpenModel => include_bytes!("../../../../assets/ui/folder-open.png"),
-            Icon::OpenProject => include_bytes!("../../../../assets/ui/file-import.png"),
-            Icon::Save => include_bytes!("../../../../assets/ui/device-floppy.png"),
-            // Original drawing (no Tabler "post to G-code" glyph exists):
-            // the code chevrons, in the set's stroke weight. Ours to give.
-            Icon::Post => include_bytes!("../../../../assets/ui/post.png"),
-            Icon::Stock => include_bytes!("../../../../assets/ui/box-model.png"),
-            Icon::WorkOffset => include_bytes!("../../../../assets/ui/transform.png"),
-            Icon::Tools => include_bytes!("../../../../assets/ui/tools.png"),
-            Icon::Face => include_bytes!("../../../../assets/ui/layers-difference.png"),
-            Icon::Contour => include_bytes!("../../../../assets/ui/border-outer.png"),
-            Icon::Pocket => include_bytes!("../../../../assets/ui/container.png"),
-            Icon::Slot => include_bytes!("../../../../assets/ui/minus.png"),
-            Icon::Trace => include_bytes!("../../../../assets/ui/route.png"),
-            // Original drawing (no Tabler drill-bit exists): a twist
-            // drill - shank, shouldered body, one helix wrap, cone
-            // point - in the set's stroke weight. Ours to give.
-            Icon::Drill => include_bytes!("../../../../assets/ui/drill.png"),
-            Icon::Probe => include_bytes!("../../../../assets/ui/probe.png"),
-            // Original drawing (no Tabler waterline glyph exists): nested
-            // contour rings tightening toward the high point - the map
-            // reading of a waterline finish. Ours to give.
-            Icon::Finish3D => include_bytes!("../../../../assets/ui/finish3d.png"),
-            // Original drawings (no Tabler 5-axis glyph exists): the dome
-            // cross-section with the leaning ball-end - flank contour
-            // lines for the ring ladder, a straight chord for the
-            // raster. Ours to give.
-            Icon::Contour5D => include_bytes!("../../../../assets/ui/contour5d.png"),
-            Icon::Parallel5D => include_bytes!("../../../../assets/ui/parallel5d.png"),
-            // Original drawings (no Tabler swarf glyph exists): the
-            // curved blade flank, the tool LYING with it - axis and
-            // ruling on one line through the ball - the advanced
-            // variant adding the second, shallower rung above. Ours
-            // to give.
-            Icon::Swarf => include_bytes!("../../../../assets/ui/swarf.png"),
-            Icon::AdvancedSwarf => include_bytes!("../../../../assets/ui/advancedswarf.png"),
-            // Original drawings (no Tabler rotary glyph exists): the
-            // turned bar with the tool riding OUTSIDE it - rings about
-            // the barrel for the contour's stations, lines along it for
-            // the parallel's raster - the ball on the radial, not the
-            // normal. Ours to give.
-            Icon::RotaryContour => include_bytes!("../../../../assets/ui/rotarycontour.png"),
-            Icon::RotaryParallel => include_bytes!("../../../../assets/ui/rotaryparallel.png"),
-            // Original drawing (no Tabler rotary-roughing glyph exists):
-            // the turned bar with a STEPPED face - the rough ladder
-            // peeling radii, the tool riding outside on the radial.
-            // Ours to give.
-            Icon::RotaryOffset => include_bytes!("../../../../assets/ui/rotaryoffset.png"),
-            // Original drawing (no Tabler tilted-tool glyph exists): the
-            // stepped block with a LEANING tool - the ladder, posed.
-            // Ours to give.
-            Icon::MultiAxisRough => include_bytes!("../../../../assets/ui/multiaxisrough.png"),
-            // Original drawing (no Tabler flowline glyph exists): the
-            // dome cross-section with the leaning ball-end - the lines
-            // CURVING with the surface instead of crossing it, the
-            // parallel's chord bent into the blade's own sweep. Ours
-            // to give.
-            Icon::Flow5D => include_bytes!("../../../../assets/ui/flow5d.png"),
-            // Original drawing (no Tabler drive-curve glyph exists): the
-            // dome with a CHAIN of straight runs riding its shoulder,
-            // dots marking the picked vertices - the path is the picks,
-            // no pattern - and the ball leaning off vertical at the
-            // last one, the pose law the family shares. Ours to give.
-            Icon::MultiAxisContour => include_bytes!("../../../../assets/ui/multiaxiscontour.png"),
-            Icon::Undo => include_bytes!("../../../../assets/ui/arrow-back-up.png"),
-            Icon::Redo => include_bytes!("../../../../assets/ui/arrow-forward-up.png"),
-            Icon::Delete => include_bytes!("../../../../assets/ui/trash.png"),
-            Icon::Generate => include_bytes!("../../../../assets/ui/player-play.png"),
-            Icon::FrameAll => include_bytes!("../../../../assets/ui/maximize.png"),
-            Icon::Toolpaths => include_bytes!("../../../../assets/ui/eye.png"),
-            Icon::Model => include_bytes!("../../../../assets/ui/cube.png"),
-            Icon::EyeOff => include_bytes!("../../../../assets/ui/eye-off.png"),
-            Icon::Simulate => include_bytes!("../../../../assets/ui/sim.png"),
-            // Original drawing (no Tabler vise glyph exists): the two
-            // jaws, screw shaft and round knob of a machine vise, in the
-            // set's stroke weight. Ours to give.
-            Icon::Fixture => include_bytes!("../../../../assets/ui/fixture.png"),
-            Icon::DebugInfo => include_bytes!("../../../../assets/ui/debug-info.png"),
-        }
-    }
-
-    fn name(self) -> &'static str {
-        // The egui texture registry key; stable per slot, never reused
-        // for other pixels (a rename here would alias old uploads).
-        match self {
-            Icon::New => "icon-new",
-            Icon::OpenModel => "icon-open-model",
-            Icon::OpenProject => "icon-open-project",
-            Icon::Save => "icon-save",
-            Icon::Post => "icon-post",
-            Icon::Stock => "icon-stock",
-            Icon::WorkOffset => "icon-work-offset",
-            Icon::Tools => "icon-tools",
-            Icon::Face => "icon-face",
-            Icon::Contour => "icon-contour",
-            Icon::Pocket => "icon-pocket",
-            Icon::Slot => "icon-slot",
-            Icon::Trace => "icon-trace",
-            Icon::Drill => "icon-drill",
-            Icon::Probe => "icon-probe",
-            Icon::Finish3D => "icon-finish3d",
-            Icon::Contour5D => "icon-contour5d",
-            Icon::Parallel5D => "icon-parallel5d",
-            Icon::Swarf => "icon-swarf",
-            Icon::AdvancedSwarf => "icon-advanced-swarf",
-            Icon::RotaryContour => "icon-rotary-contour",
-            Icon::RotaryParallel => "icon-rotary-parallel",
-            Icon::RotaryOffset => "icon-rotary-offset",
-            Icon::MultiAxisRough => "icon-multiaxis-rough",
-            Icon::Flow5D => "icon-flow5d",
-            Icon::MultiAxisContour => "icon-multiaxis-contour",
-            Icon::Undo => "icon-undo",
-            Icon::Redo => "icon-redo",
-            Icon::Delete => "icon-delete",
-            Icon::Generate => "icon-generate",
-            Icon::FrameAll => "icon-frame-all",
-            Icon::Toolpaths => "icon-toolpaths",
-            Icon::Model => "icon-model",
-            Icon::EyeOff => "icon-eye-off",
-            Icon::Simulate => "icon-simulate",
-            Icon::Fixture => "icon-fixture",
-            Icon::DebugInfo => "icon-debug-info",
-        }
-    }
+icon_table! {
+    New => "file-plus", "icon-new";
+    OpenModel => "folder-open", "icon-open-model";
+    OpenProject => "file-import", "icon-open-project";
+    Save => "device-floppy", "icon-save";
+    /// Original drawing (no Tabler "post to G-code" glyph exists).
+    Post => "post", "icon-post";
+    Stock => "box-model", "icon-stock";
+    WorkOffset => "transform", "icon-work-offset";
+    Tools => "tools", "icon-tools";
+    // The operation glyphs (#661): one per `OpType`, every one an
+    // original SVG master in assets/ui/svg/ - a cutter and its path,
+    // drawn from what the operation does. 2D milling:
+    Face => "op-face", "icon-face";
+    Contour => "op-contour", "icon-contour";
+    Pocket => "op-pocket", "icon-pocket";
+    Adaptive2D => "op-adaptive2d", "icon-adaptive2d";
+    Offset2D => "op-offset2d", "icon-offset2d";
+    Slot => "op-slot", "icon-slot";
+    TrochoidalSlot => "op-trochoidal-slot", "icon-trochoidal-slot";
+    Trace => "op-trace", "icon-trace";
+    Engrave => "op-engrave", "icon-engrave";
+    Chamfer2D => "op-chamfer2d", "icon-chamfer2d";
+    Deburr => "op-deburr", "icon-deburr";
+    Circular => "op-circular", "icon-circular";
+    PlasmaProfile => "op-plasma-profile", "icon-plasma-profile";
+    // Holes and probing:
+    Drill => "op-drill", "icon-drill";
+    Bore => "op-bore", "icon-bore";
+    Thread => "op-thread", "icon-thread";
+    /// The touch probe (#108): a stylus over its ball.
+    Probe => "op-probe", "icon-probe";
+    // 3D milling:
+    Pocket3D => "op-pocket3d", "icon-pocket3d";
+    Finish3D => "op-finish3d", "icon-finish3d";
+    // Multi-axis: the dome with the ball leaning on its normal; the
+    // swarf blade with the tool lying on it; the rotary bar with the
+    // tool riding outside it on the radial.
+    Contour5D => "op-contour5d", "icon-contour5d";
+    Parallel5D => "op-parallel5d", "icon-parallel5d";
+    Swarf => "op-swarf", "icon-swarf";
+    AdvancedSwarf => "op-advanced-swarf", "icon-advanced-swarf";
+    RotaryContour => "op-rotary-contour", "icon-rotary-contour";
+    RotaryParallel => "op-rotary-parallel", "icon-rotary-parallel";
+    RotaryOffset => "op-rotary-offset", "icon-rotary-offset";
+    MultiAxisRough => "op-multiaxis-rough", "icon-multiaxis-rough";
+    Flow5D => "op-flow5d", "icon-flow5d";
+    MultiAxisContour => "op-multiaxis-contour", "icon-multiaxis-contour";
+    // Turning: the chuck block at the left, the bar, an insert or blade.
+    Facing => "op-facing", "icon-facing";
+    ProfileRough => "op-profile-rough", "icon-profile-rough";
+    ProfileFinish => "op-profile-finish", "icon-profile-finish";
+    GrooveRough => "op-groove-rough", "icon-groove-rough";
+    GrooveFinish => "op-groove-finish", "icon-groove-finish";
+    PartOff => "op-part-off", "icon-part-off";
+    Threading => "op-threading", "icon-threading";
+    Chamfering => "op-chamfering", "icon-chamfering";
+    TaperTurning => "op-taper-turning", "icon-taper-turning";
+    MultiPassTurning => "op-multipass-turning", "icon-multipass-turning";
+    FormTurning => "op-form-turning", "icon-form-turning";
+    BoringTurning => "op-boring-turning", "icon-boring-turning";
+    Undo => "arrow-back-up", "icon-undo";
+    Redo => "arrow-forward-up", "icon-redo";
+    Delete => "trash", "icon-delete";
+    Generate => "player-play", "icon-generate";
+    FrameAll => "maximize", "icon-frame-all";
+    Toolpaths => "eye", "icon-toolpaths";
+    Model => "cube", "icon-model";
+    EyeOff => "eye-off", "icon-eye-off";
+    Simulate => "sim", "icon-simulate";
+    /// Original drawing (no Tabler vise glyph exists): the two jaws,
+    /// screw shaft and round knob of a machine vise.
+    Fixture => "fixture", "icon-fixture";
+    /// The status strip's Debug info door (#157), an original glyph.
+    DebugInfo => "debug-info", "icon-debug-info";
 }
 
 /// Upload edge: 2x the token's `glyph_px` (20 display px at the dark
