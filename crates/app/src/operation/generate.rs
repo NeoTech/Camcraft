@@ -111,6 +111,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         carried_overhang: _,
         op_name: _,
         wire,
+        wire_ruled,
     } = job;
     // The probe (#108) cuts nothing: its own protected-move law judges
     // the stylus against the model, and no cutting law or region applies.
@@ -142,7 +143,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
     // the generator certifies its kerf and corner laws (#534 verifies).
     if let OpParams::WireContour(op) = &params {
         let picks = contour_sel.take().transpose()?.map(|(loops, chains, _)| (loops, chains));
-        return super::wire_op::generate_wire(op, wire.ok_or_else(|| unreached("wire condition")), &hs, picks, || {
+        return super::wire_op::generate_wire(op, wire.ok_or_else(|| unreached("wire condition")), &hs, picks, wire_ruled, || {
             region_for_job(&mut picked_region, &mut section_z, &src, &params, &material, None)
         });
     }

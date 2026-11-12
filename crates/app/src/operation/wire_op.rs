@@ -33,6 +33,7 @@ pub(super) fn seed_wire_contour(c: &Carried) -> OpParams {
         side: WireSide::Die,
         start: None,
         taper_deg: 0.0,
+        four_axis: None,
     })
 }
 
@@ -129,7 +130,7 @@ pub(super) fn stamp_condition(world: &World, setup: Option<&str>, op: &WireConto
             h.write(&c.gap.to_bits().to_le_bytes());
             // #536: a taper also reads the machine's maximum; a vertical
             // cut's stamp stays what it was.
-            if op.taper_deg != 0.0 {
+            if op.taper_deg != 0.0 || op.four_axis.is_some() {
                 h.write(&c.max_taper_deg.map_or(u64::MAX, f64::to_bits).to_le_bytes());
             }
         }
@@ -185,10 +186,16 @@ pub(super) fn generate_wire(
     cond: Result<WireCondition, GenError>,
     hs: &ResolvedHeights,
     picks: Option<(Vec<Loop>, Vec<Vec<Point2>>)>,
+    ruled: Option<Result<super::wire_ruled::RuledPicks, GenError>>,
     base: impl FnOnce() -> Result<Region, GenError>,
 ) -> Result<(Toolpath, Vec<Warning>), GenError> {
     let cond = cond?;
     let p = wire_params(op, &cond, hs)?;
+    // #537: two profiles paired into rulings - its own generator.
+    if let Some(four) = &op.four_axis {
+        let picks = ruled.ok_or_else(|| super::job::unreached("wire profiles"))??;
+        return super::wire_ruled::generate(op, four, &cond, &p, hs, &picks).map(|path| (path, Vec::new()));
+    }
     let taper = WireTaper {
         angle_deg: op.taper_deg,
         top_z: hs.top.unwrap_or(p.plane_z),

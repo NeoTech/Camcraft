@@ -96,7 +96,8 @@ pub fn wire_verdict(world: &World, e: &Entity) -> Option<Result<WireVerdict, Str
             side,
             start: w.start.map(|[x, y]| Point2::new(x, y)),
             sections,
-            taper: w.taper_deg != 0.0,
+            // #537: a 4-axis cut's poses are its rulings.
+            taper: w.taper_deg != 0.0 || w.four_axis.is_some(),
         }))
     })())
 }

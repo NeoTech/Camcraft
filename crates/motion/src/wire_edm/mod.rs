@@ -29,12 +29,17 @@
 //! Seams left for the family (built by none of this): the wire post
 //! (#533) reads the feed moves between the threading point's visits;
 //! verification (#534), taper as a pose per move (#536), skims as
-//! further offsets (#538) and tabs (#539) stand on this path.
+//! further offsets (#538) and tabs (#539) stand on this path; the
+//! 4-axis cut between two profiles (#537) is `ruled`.
 
 mod laws;
+mod pairing;
 mod ring;
+mod ruled;
+mod ruled_laws;
 mod taper;
 
+pub use ruled::{wire_contour_ruled, WirePairing, WireProfile, WireRuled, WireSync, SYNC_TOL};
 pub use taper::{wire_contour_tapered, WireTaper};
 
 use crate::cl::{MoveKind, PathBuilder, Toolpath};
@@ -246,5 +251,7 @@ fn notes(p: &WireParams, start: Point2, lead: f64) -> Vec<String> {
     ]
 }
 
+#[cfg(test)]
+mod ruled_tests;
 #[cfg(test)]
 mod tests;

@@ -133,10 +133,15 @@ pub(super) fn stream(
         ..Dump::default()
     };
     let mut records = post::dump(&cache.path, &d);
-    if p.taper_deg != 0.0 {
+    // #537: a 4-axis cut's moves lean as a taper's do.
+    let four = p.four_axis.as_ref().map(|f| match f.pairing {
+        operation::WirePairingRule::ArcLength => "arc length",
+        operation::WirePairingRule::SyncPoints => "sync points",
+    });
+    if p.taper_deg != 0.0 || four.is_some() {
         let machine = crate::machine::of_setup(world, setup)
             .1
-            .ok_or_else(|| format!("{name}: a tapered wire cut needs its wire EDM machine mounted"))?;
+            .ok_or_else(|| format!("{name}: a leaning wire cut needs its wire EDM machine mounted"))?;
         let guides = crate::machine::wire_edm::guide_planes(&machine, origin[2]).map_err(|e| format!("{name}: {e}"))?;
         records = guided(records, guides).map_err(|e| format!("{name}: {e}"))?;
     }
@@ -151,7 +156,8 @@ pub(super) fn stream(
         cnc::Record::Param { name: "WireTaper".into(), value: json!(p.taper_deg) },
     ];
     let wire = if p.taper_deg == 0.0 { &wire[..2] } else { &wire[..] };
-    records.splice(at..at, wire.iter().cloned());
+    let four = four.map(|rule| cnc::Record::Param { name: "WireFourAxis".into(), value: json!(rule) });
+    records.splice(at..at, wire.iter().cloned().chain(four));
     Ok(records)
 }
 

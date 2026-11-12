@@ -63,6 +63,7 @@ fn punch(text: &str, taper: f64) -> (World, Result<(), String>) {
         side: WireSide::Punch,
         start: Some([-30.0, 0.0]),
         taper_deg: taper,
+        four_axis: None,
     };
     let c = CreateOperation::new(&world, "Punch1", "", SrcRef::Entity("block".into()), OpParams::WireContour(op)).expect("op");
     h.execute(&world, c);

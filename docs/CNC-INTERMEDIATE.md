@@ -121,6 +121,7 @@ behavior only):
 | `PlasmaKerf` `PlasmaCompensation` `PierceHeight` `CutHeight` `PierceDelay` `PlasmaFeed` `PlasmaReversed` | the `PLASMA` header (#671), for the section: kerf mm; `control` (G41/G42 spans follow) / `computer`; pierce and cut height mm and pierce delay s - each ABSENT when unstated (the controller's AutoFS decides); `auto` (the lit moves carry no feed) / `stated`; the reversed cut direction. Cleared at `ENDSECTION` |
 | `EdmCondition` `WireSide` | a wire EDM section (#533): the machine's condition id the cut burns with, and `die` / `punch` (commentary). The moves are the wire-centre path (kerf in them, no feed). A script without `wireEdm = true` is refused the section by name |
 | `WireTaper` `WireU` `WireV` | a tapered wire section (#536): the stated taper in degrees (before the section), then before each leaning move the upper guide's offset from the lower one, mm; that move's X Y are the lower guide's. Both are computed from the move's pose and the machine's `edm` guide planes |
+| `WireFourAxis` | a 4-axis wire section (#537): the pairing rule in words (`arc length` or `sync points`), before the section; its leaning moves carry `WireU` `WireV` exactly as a tapered section's do, and no `WireTaper` |
 | `Contour` `ContourRole` `ParentContour` `SmallHole` | a `TORCH` record (#671): the contour id; on `onTorchOn` also `outer` / `inner` / `open`, the enclosing contour's id (absent = none) and the small-hole feed factor (absent = not small) |
 
 ## The hook contract

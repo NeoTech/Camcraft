@@ -70,7 +70,7 @@ fn doc(dz: f64) -> (World, History) {
 }
 
 fn cut(world: &World, h: &mut History, name: &str, side: WireSide, start: Option<[f64; 2]>) {
-    let op = WireContourOp { top_z: Height::fixed(12.0), bottom_z: Height::fixed(0.0), condition: "C110".into(), side, start, taper_deg: 0.0 };
+    let op = WireContourOp { top_z: Height::fixed(12.0), bottom_z: Height::fixed(0.0), condition: "C110".into(), side, start, taper_deg: 0.0, four_axis: None };
     let c = CreateOperation::new(world, name, "", SrcRef::Entity("part".into()), OpParams::WireContour(op)).expect("op");
     h.execute(world, c);
     if start.is_some() {

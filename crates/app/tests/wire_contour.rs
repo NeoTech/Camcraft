@@ -96,6 +96,7 @@ fn wire_op(side: WireSide, start: Option<[f64; 2]>) -> WireContourOp {
         side,
         start,
         taper_deg: 0.0,
+        four_axis: None,
     }
 }
 

@@ -99,6 +99,7 @@ pub mod probe_op;
 // #670: the Plasma Profile's seed and generation glue.
 pub mod plasma_op;
 pub mod wire_op;
+mod wire_ruled;
 // #534: the wire laws' inputs, read live at the post.
 pub mod wire_verify;
 // #171: the Probe op seeded from one picked face, edge, vertex or round wall.

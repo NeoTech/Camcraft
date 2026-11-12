@@ -1452,6 +1452,10 @@ impl OpParams {
                     h.write(b"taper");
                     w(h, p.taper_deg);
                 }
+                // #537: likewise only a stated 4-axis cut.
+                if let Some(f) = &p.four_axis {
+                    super::wire_ruled::digest(f, h);
+                }
             }
             // The plasma profile (#670): every stored number, the
             // optional ones with a presence byte.

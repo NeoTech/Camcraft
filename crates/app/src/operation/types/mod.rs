@@ -33,5 +33,7 @@ pub use camcraft_post::post::AfterOperation;
 pub use height::{Height, HeightReference};
 pub use params::{OpParams, Tilt};
 pub use plasma::{PlasmaComp, PlasmaOp};
-pub use wire_edm::{WireContourOp, WireSide, CONDITION_ID_MAX};
+pub use wire_edm::{
+    WireContourOp, WireFourAxis, WirePairingRule, WireSide, WireSyncPair, CONDITION_ID_MAX, FOUR_AXIS_TOLERANCE, SYNC_PAIRS_MAX,
+};
 pub use sel::{FeatureSel, GenStamp, GeoSel, OpStatus, OpType, SrcRef, WCS_SLOTS};
