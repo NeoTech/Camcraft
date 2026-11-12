@@ -41,6 +41,9 @@ fn the_machine_page_shows_the_rotary_rows_and_states_the_figure() {
     assert!(harness.query_by_label("No rotary subplate in this setup: judged on the machine's figure.").is_some());
     let file_row = format!("Machine file: A spindle nose to rotary centerline {NOSE:.4} mm");
     assert!(harness.query_by_label(&file_row).is_some(), "plain words, not the file key: {file_row}");
+    // The plain-words rows wrap: bring the checkbox into view first.
+    harness.get_by_label(crate::egui_app::setup_rotary_page::STATE_OWN).scroll_to_me();
+    harness.run_steps(10);
     harness.get_by_label(crate::egui_app::setup_rotary_page::STATE_OWN).click();
     harness.run_steps(2);
     let stated = rotary_stack::stated(&harness.state().state.world, Some("Setup1"));
