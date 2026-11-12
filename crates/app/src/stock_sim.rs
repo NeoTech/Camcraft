@@ -328,10 +328,10 @@ pub(crate) fn plan_program(world: &flecs_ecs::prelude::World) -> Result<Vec<Plan
         // A turning insert's cutting feature is its nose (a blade's,
         // half its band - `LathePlan::feature`): the display cell law
         // (`auto_cell`) reads it, not the IC. Every other tool sweeps
-        // its cutting radius - a tap its thread's core (#266).
+        // its cutting radius - a tap its thread's core (#266, #985).
         let radius = match lathe {
             Some(plan) => plan.feature(),
-            None => crate::operation::tool_law::cutting_radius(&tool).map_err(|e| format!("{name}: {e}"))?,
+            None => crate::operation::thread_op::sim_radius(&tool, &op.params).map_err(|e| format!("{name}: {e}"))?,
         };
         planned.push(Planned {
             name: name.clone(),

@@ -542,3 +542,38 @@ fn thread_milling_over_the_tools() {
     let msg = c.refused("generate", json!({ "name": name }));
     assert!(msg.contains("the hole at (30.000, 30.000) is not drilled yet"), "{msg}");
 }
+
+/// #985: an external thread is drivable with the tools that exist - the
+/// `external` param on add/edit, `detect_holes` reading bosses for it,
+/// the boss door's refusal by name, undo, and generate's refusal of a
+/// boss standing in uncut stock.
+#[test]
+fn external_thread_milling_over_the_tools() {
+    let dir = tmp_dir("thread_boss");
+    let stl = dir.join("block.stl");
+    write_box_stl(&stl);
+    let mut c = Client::new();
+    c.request("initialize", json!({ "protocolVersion": "2025-06-18" }));
+    c.ok("import_model", json!({ "path": stl.display().to_string() }));
+    c.ok("set_stock", json!({ "box": { "dx": 60.0, "dy": 60.0, "dz": 20.0 } }));
+    c.ok("add_tool", json!({ "catalog": "TM-0600-P125" }));
+    let boss = json!({ "xy": [30.0, 30.0], "radius": 4.0, "entry_z": 20.0, "floor_z": 10.0, "through": false });
+    // A pin thinner than the thread is deep is refused when the operation is made.
+    let pin = json!({ "xy": [30.0, 30.0], "radius": 0.7, "entry_z": 20.0, "floor_z": 10.0, "through": false });
+    let msg = c.refused("add_operation", json!({ "kind": "Thread", "tool": "TM-0600-P125", "params": { "external": true, "holes": [pin] } }));
+    assert!(msg.contains("thinner than the 0.76675 mm thread is deep"), "{msg}");
+    let add = c.ok("add_operation", json!({ "kind": "Thread", "tool": "TM-0600-P125", "params": { "holes": [] } }));
+    let name = add["operation"].as_str().expect("the operation's name").to_owned();
+    assert!(add["params"]["thread"].get("external").is_none(), "an internal thread writes no flag: {add}");
+    let edit = c.ok("edit_operation", json!({ "name": name, "params": { "external": true, "holes": [boss] } }));
+    assert_eq!(edit["params"]["thread"]["external"], json!(true));
+    // The box has no round wall: detect says so for bosses, by name.
+    let msg = c.refused("detect_holes", json!({ "name": name }));
+    assert!(msg.contains("no upright round bosses"), "{msg}");
+    // Nothing ahead machined round the boss: generate refuses the thread by name.
+    let msg = c.refused("generate", json!({ "name": name }));
+    assert!(msg.contains("the boss at (30.000, 30.000) is not cleared"), "{msg}");
+    c.ok("undo", json!({}));
+    let job = c.ok("get_job", json!({}));
+    assert!(job["operations"][0]["params"]["thread"].get("external").is_none(), "undo restores the internal thread");
+}

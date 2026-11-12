@@ -2024,23 +2024,26 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         // (`thread_op`): the tool's form and the thread's pitch are
         // judged at the door, by name. Every move posted is plain
         // 3-axis interpolation (G2/G3 with Z) - no spindle sync.
-        OpParams::Thread { holes, .. } => {
+        OpParams::Thread { holes, external, .. } => {
             let plan = super::thread_op::kernel_params(&tool, &params, &hl)?;
-            let region = region_for_job(
-                    &mut picked_region,
-                    &mut section_z,
-                    &src,
-                    &params,
-                m_gen,
-                frame.as_ref(),
-            )?;
             // The crest law's wall: the tangency verdict reads the
-            // thread's MAJOR circle, the furthest the teeth may reach.
-            let region = super::thread_op::crest_region(region, holes, plan.depth())?;
+            // furthest the teeth may reach - a hole's MAJOR circle, or
+            // (#985) a boss's minor circle, with no silhouette beside it.
+            let region = if *external {
+                super::thread_boss::crest_region(holes, plan.depth())?
+            } else {
+                let region = region_for_job(&mut picked_region, &mut section_z, &src, &params, m_gen, frame.as_ref())?;
+                super::thread_op::crest_region(region, holes, plan.depth())?
+            };
             let path = machining2d::thread_mill(&plan)?;
             // #992: the mill is not centre-cutting - each hole must be
             // open in the stock the program ahead leaves, or refused.
-            super::thread_entry::judge(holes, &path, d * 0.5, verify_prior.get())?;
+            // #985: beside a boss, the stock around it must be gone.
+            if *external {
+                super::thread_entry::judge_bosses(holes, &path, d * 0.5, verify_prior.get())?;
+            } else {
+                super::thread_entry::judge(holes, &path, d * 0.5, verify_prior.get())?;
+            }
             (region, path)
         }
         // M5.2 stage A: the first turning kind. Which documents may
@@ -2990,6 +2993,13 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // answer the same law inside `verify` (b2), real tip (M13.7).
             if depth_law == DepthLaw::Contain {
                 contain_into(&mut warns, &path, &material.facets, &cutter, depth_law, stl);
+            }
+            // #985: an external thread's crest ring against every wall
+            // that is not the boss it threads, with no thread allowance.
+            for w in super::thread_boss::neighbours(&params, &path, &material.facets, &tool) {
+                if !warns.contains(&w) {
+                    warns.push(w);
+                }
             }
             // The rotary kinds' bands and rapids (M13): `Mode::Rotary`
             // stood the vertical-column laws down; the radial field

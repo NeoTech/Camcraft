@@ -1114,7 +1114,8 @@ pub enum OpParams {
         links: Links,
     },
     /// Helical thread milling (M2.4 C, reworked by #894): internal
-    /// threads in the listed holes with a thread mill
+    /// threads in the listed holes - or, `external`, on the listed
+    /// bosses (#985) - with a thread mill
     /// ([`super::super::thread_op`]). `infeed` is the radial depth per
     /// pass and must stay inside the standard's depth `0.5413 x
     /// pitch`; the last pass lands on the major circle whatever it is.
@@ -1136,6 +1137,12 @@ pub enum OpParams {
         pitch: Option<f64>,
         /// Right-hand unless the drawing says LH (#894).
         hand: crate::cl::ThreadHand,
+        /// External threads (#985): the listed features are BOSSES -
+        /// `radius` is each one's major radius, `floor_z` its shoulder -
+        /// and the mill orbits beside them, cutting `0.6134 x pitch`
+        /// deep ([`super::super::thread_boss`]). `false` is every
+        /// thread made before the flag existed: internal, in holes.
+        external: bool,
     },
     /// Probing (#108): a spindle touch probe finds a face, an edge, an
     /// outside corner or a bore / boss centre, then sets a work offset
