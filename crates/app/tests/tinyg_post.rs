@@ -115,16 +115,16 @@ fn each_tool_change_lifts_z_then_selects_the_tool_and_stops() {
         // Z up in the work offset (no homing assumed), the tool word alone,
         // then the stop that is the operator's change; the spindle starts
         // only after it.
-        assert!(nc.contains(&format!("G0 Z15\n{call}\nM0\nS")), "{call}: lift, call, stop, spindle\n{nc}");
+        assert!(nc.contains(&format!("M5\nM9\nG0 Z15\n{call}\nM0\nG21 G17 G90 G91.1 G94 G64 G54\nG0 Z15\nS")), "{call}: lift, call, stop, spindle\n{nc}");
     }
     assert_eq!(nc.matches("\nM0\n").count(), 2, "one stop per tool change and no other\n{nc}");
-    assert_eq!(nc.matches("G0 Z15\n").count(), 3, "two changes and the end\n{nc}");
+    assert_eq!(nc.matches("G0 Z15\n").count(), 5, "before and after two changes and the end\n{nc}");
     assert!(!nc.contains("G53"), "no machine-coordinate move without homing\n{nc}");
-    // X Y move first after a change, at the safe height; Z comes down after.
+    // Touch-off may lower Z: the first resumed move restores clearance before X Y.
     let lines: Vec<&str> = nc.lines().collect();
     let t4 = lines.iter().position(|l| *l == "T4 M6").expect("T4");
     let first_motion = lines[t4 + 1..].iter().find(|l| l.starts_with("G0 ") || l.starts_with("G1 ")).expect("a move");
-    assert_eq!(*first_motion, "G0 X20 Y5", "{nc}");
+    assert_eq!(*first_motion, "G0 Z15", "{nc}");
 }
 
 #[test]
@@ -174,7 +174,7 @@ fn a_homed_machine_lifts_in_machine_coordinates() {
         let nc = post(&m, STREAM);
         let want = format!("G53 G0 Z{z}\nT3 M6\nM0\n");
         assert!(nc.contains(&want), "{want:?}\n{nc}");
-        assert_eq!(nc.matches("G53 G0 Z").count(), 3, "{nc}");
+        assert_eq!(nc.matches("G53 G0 Z").count(), 5, "{nc}");
     }
 }
 
@@ -235,4 +235,130 @@ fn an_inch_machine_posts_g20_and_inches() {
     assert!(nc.lines().nth(1).is_some_and(|l| l.starts_with("G20 ")), "{nc}");
     assert!(nc.contains("G1 X0.3937 Y0 Z-0.0394 F19.69"), "{nc}");
     assert!(nc.contains("G4 P1.5"), "a dwell is seconds in either unit\n{nc}");
+}
+
+#[test]
+fn a_smoothing_ask_is_named_once_and_writes_no_tolerance_word() {
+    // #616 as #715: TinyG's G64 is run as exact path and takes no P, so the
+    // ask is named once and the program is otherwise the smoothing-off one.
+    let off = post(&generic(), STREAM);
+    let ask = STREAM
+        .replacen("PARAM SpindleSpeed 8000\n", "PARAM Smoothing 0.01\nPARAM SmoothingMode finish\nPARAM SpindleSpeed 8000\n", 1)
+        .replacen("PARAM SpindleSpeed 6000\n", "PARAM Smoothing 0.1\nPARAM SmoothingMode rough\nPARAM SpindleSpeed 6000\n", 1);
+    let on = post(&generic(), &ask);
+    let named: Vec<&str> = on.lines().filter(|l| l.contains("SMOOTHING NOT WRITTEN")).collect();
+    assert_eq!(named, ["(SMOOTHING NOT WRITTEN - TINYG STATES NO SMOOTHING TOLERANCE)"], "{on}");
+    let rest: String = on.lines().filter(|l| !l.contains("SMOOTHING NOT WRITTEN")).map(|l| format!("{l}\n")).collect();
+    assert_eq!(rest, off, "only the note differs");
+    assert!(!on.contains("G64 P"), "{on}");
+    assert_tinyg_words(&on);
+}
+
+#[test]
+fn feeds_that_round_to_zero_are_refused_in_each_machine_unit() {
+    for (inch, bad, good, word) in [(false, 499, 500, "F1"), (true, 126, 128, "F0.01")] {
+        let mut m = generic();
+        if inch { m["units"] = json!("inch"); }
+        for rate in [0, bad] {
+            let stream = STREAM.replacen("F 500000", &format!("F {rate}"), 1);
+            let out = engine::run(&cps(), &m, &stream).expect("runs");
+            assert!(out.warnings.iter().any(|w| w.contains("feed") && w.contains("rounding")), "{:?}", out.warnings);
+            assert!(!out.program.split_whitespace().any(|w| w == "F0"), "{}", out.program);
+        }
+        let stream = STREAM.replacen("F 500000", &format!("F {good}"), 1);
+        assert!(post(&m, &stream).split_whitespace().any(|w| w == word));
+    }
+    // Hostile JS inputs cannot be represented by the integer CL grammar.
+    for value in ["-1", "NaN", "Infinity", "-Infinity"] {
+        let script = format!("{}\nvar openSaved = onOpen; onOpen = function() {{ openSaved(); fw({value}); }};", cps());
+        let out = engine::run(&script, &generic(), STREAM).expect("runs");
+        assert!(out.warnings.iter().any(|w| w.contains("feed") && w.contains("rounding")), "{value}: {:?}", out.warnings);
+    }
+}
+
+#[test]
+fn spindle_delay_is_optional_validated_and_rounds_up_in_seconds() {
+    for inch in [false, true] {
+        let mut m = generic();
+        if inch { m["units"] = json!("inch"); }
+        let baseline = post(&m, STREAM);
+        for options in [Value::Null, json!({"SpindleDwellSeconds": 0})] {
+            let out = engine::run_with(&cps(), &m, STREAM, &options).expect("runs");
+            assert!(out.warnings.is_empty());
+            assert_eq!(out.program, baseline);
+        }
+        for (delay, word) in [(0.0001, "0.001"), (0.0011, "0.002"), (1.5, "1.5"), (4294.0, "4294")] {
+            let out = engine::run_with(&cps(), &m, STREAM, &json!({"SpindleDwellSeconds": delay})).expect("runs");
+            assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+            for rpm in [8000, 6000] {
+                assert!(out.program.contains(&format!("S{rpm} M3\nG4 P{word}\n")), "{}", out.program);
+            }
+        }
+    }
+    for value in [json!(-1), json!(4294.001), json!("1.5"), json!(true)] {
+        let out = engine::run_with(&cps(), &generic(), STREAM, &json!({"SpindleDwellSeconds": value})).expect("runs");
+        assert!(out.warnings.iter().any(|w| w.contains("SpindleDwellSeconds")), "{:?}", out.warnings);
+    }
+    let script = format!("{}\nvar openSaved = onOpen; onOpen = function() {{ openSaved(); postOptions.SpindleDwellSeconds = Infinity; }};", cps());
+    assert!(engine::run(&script, &generic(), STREAM).expect("runs").warnings.iter().any(|w| w.contains("SpindleDwellSeconds")));
+}
+
+#[test]
+fn full_xy_circles_and_helices_split_without_losing_direction_or_depth() {
+    for direction in ["CW", "CCW"] {
+        for end_z in [5000, -5000] {
+            let stream = format!("Rapid X 10000 Y 0 Z 5000\nArc {direction} X 10000 Y 0 Z {end_z} F 100000 I 0 J 0\n");
+            let nc = post(&json!({"safeRetractZ": 0.0}), &stream);
+            let arcs: Vec<_> = nc.lines().filter(|l| l.starts_with("G2 ") || l.starts_with("G3 ")).collect();
+            let code = if direction == "CW" { "G2" } else { "G3" };
+            assert_eq!(arcs, [format!("{code} X-10 Y0 Z{} I-10 J0 F100", (5000 + end_z) / 2000), format!("{code} X10 Y0 Z{} I10 J0 F100", end_z / 1000)]);
+        }
+    }
+}
+
+#[test]
+fn rounded_coincident_xy_arc_endpoints_are_refused() {
+    // 1 micron separates the endpoints in mm, but both round to zero in inches.
+    let stream = "Rapid X 1 Y 0 Z 5000\nArc CCW X 0 Y 1 Z 5000 F 100000 I 0 J 0\n";
+    let out = engine::run(&cps(), &json!({"safeRetractZ": 0.0, "units": "inch"}), stream).expect("runs");
+    assert!(out.warnings.iter().any(|w| w.contains("too small to distinguish")), "{:?}", out.warnings);
+}
+
+#[test]
+fn vertical_arcs_are_chords_within_five_microns() {
+    for (start, arc, axes) in [
+        ("X 10000 Y 0 Z 0", "CW X 0 Y 0 Z 10000 I 0 K 0", ['X', 'Z']),
+        ("X 0 Y 10000 Z 0", "CCW X 0 Y 0 Z 10000 J 0 K 0", ['Y', 'Z']),
+    ] {
+        let stream = format!("Rapid {start}\nArc {arc} F 100000\n");
+        let nc = post(&json!({"safeRetractZ": 20.0}), &stream);
+        assert!(!nc.lines().any(|l| l.starts_with("G2 ") || l.starts_with("G3 ")), "{nc}");
+        let mut previous = [10.0_f64, 0.0];
+        let mut count = 0;
+        for line in nc.lines().filter(|l| l.starts_with("G1 ")) {
+            let point = axes.map(|axis| line.split_whitespace().find_map(|w| w.strip_prefix(axis).and_then(|n| n.parse::<f64>().ok())).expect("axis"));
+            assert!((point[0].hypot(point[1]) - 10.0).abs() <= 0.0002, "endpoint: {line}");
+            let mid = [(previous[0] + point[0]) / 2.0, (previous[1] + point[1]) / 2.0];
+            assert!(10.0 - mid[0].hypot(mid[1]) <= 0.005, "chord: {previous:?} -> {point:?}");
+            assert!(point[0] <= previous[0] && point[1] >= previous[1], "direction: {line}");
+            previous = point;
+            count += 1;
+        }
+        assert!(count > 1);
+        assert_eq!(previous, [0.0, 10.0]);
+    }
+}
+
+#[test]
+fn first_cut_after_a_tool_change_seats_at_a_safe_start_height() {
+    for (start, end) in [(5000, 5000), (5000, 10000), (-1000, -1000)] {
+        let stream = format!("PARAM ClearancePlane 15\nPARAM StockZTop 0\nPARAM SpindleSpeed 8000\nTOOL 3 EM6\nSECTION\nRapid X 0 Y 0 Z {start}\nENDSECTION\nPARAM SpindleSpeed 8000\nTOOL 4 EM6\nSECTION\nFeed X 10000 Y 0 Z {end} F 100000\nENDSECTION\n");
+        let out = engine::run(&cps(), &generic(), &stream).expect("runs");
+        if start < 0 {
+            assert!(out.warnings.iter().any(|w| w.contains("first cutting move must start above the stock")), "{:?}", out.warnings);
+        } else {
+            assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+            assert!(out.program.contains(&format!("G0 X0 Y0\nG0 Z5\nG1 X10 Y0 Z{} F100", end / 1000)), "{}", out.program);
+        }
+    }
 }

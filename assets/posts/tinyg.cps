@@ -10,7 +10,7 @@
 // script text and no other CAM's output used; original work. Structure
 // follows our own grblhal.cps (the other grbl-family dialect); the
 // goldens lock this file's decisions.
-description = "Synthetos TinyG (3-axis mill, G20/G21 from the machine, G2/G3, G4 dwell; drilling as plain moves - no canned cycles, no G41/G42, no G84, no probing macros; tools T1-T31, M0 after every tool change)";
+description = "Synthetos TinyG (3-axis mill, G20/G21 from the machine, XY G2/G3 in half turns, other-plane arcs as chords, G4 dwell; drilling as plain moves - no canned cycles, no G41/G42, no G84, no probing macros; tools T1-T31, M0 after every tool change)";
 vendor = "Camcraft";
 legal = "Original clean-room work; public documentation only";
 certificationLevel = 1;
@@ -37,6 +37,8 @@ var coolantOp = "";        // the section's OperationName, for refusals (#150)
 var sectionOpen = false;   // preamble written (a legacy .cl carries no SECTION)
 var orgX = 0, orgY = 0, orgZ = 0; // the WCS slot origin (OriginX/Y/Z PARAMs)
 var inch = false;          // the machine is programmed in inches (onOpen)
+var smoothTol = 0;         // #616: the section's PARAM Smoothing, mm (0: none asked)
+var smoothNamed = false;   // the not-written note, once per program
 
 // ------------------------------------------------------------ helpers
 // The stream speaks mm and mm/min. Lengths are written at four decimals
@@ -61,7 +63,15 @@ function ff(v) {  // a feed: whole mm/min, or in/min at two decimals
 }
 function ni(v) { return has(v) ? String(Math.round(v)) : "0"; } // integer word
 function w(letter, v) { return has(v) ? letter + fu(v) : ""; }
-function fw(v) { return has(v) ? "F" + ff(v) : ""; }
+function fw(v) {
+  if (v === null || v === undefined) return ""; // retain a stated modal feed
+  var formatted = ff(v);
+  if (!has(v) || !(v > 0) || !(Number(formatted) > 0)) {
+    msg("the cutting feed must remain positive after rounding in the machine unit");
+    return "";
+  }
+  return "F" + formatted;
+}
 // TinyG's serial receive ring holds 250 bytes, 248 of them usable (wiki,
 // "Flow Control and Footers"), and a sender pacing on the board's RTS
 // marks has a 192-byte window: a line is kept to 191 content bytes so it
@@ -137,32 +147,6 @@ function coolantFor(ask) {
   return "";
 }
 
-// ------------------------------------------------------------ the plane
-// The arc's plane (G17 XY, G18 XZ, G19 YZ - all three in TinyG's table),
-// stated modally: written only on change and taken back to G17 at
-// section end.
-var planeG = 17;
-function planeOf(p) {
-  return p.CircularPlane === "XZ" ? 18 : (p.CircularPlane === "YZ" ? 19 : 17);
-}
-function planeWord(g) {  // "" while modal; the word (and the new state) on change
-  if (g === planeG) return "";
-  planeG = g;
-  return "G" + g;
-}
-function restorePlane() { var pw = planeWord(17); if (pw) block([pw]); }
-// The center words of the arc's plane as increments from the start
-// point (G91.1, stated in the header): a shared translation cancels in
-// an increment, so the origin must NOT enter them.
-function centerWords(p) {
-  var c = p.IJKIncrement || {};
-  return [
-    w("I", has(c.I) && has(p.StartX) ? c.I - p.StartX : null),
-    w("J", has(c.J) && has(p.StartY) ? c.J - p.StartY : null),
-    w("K", has(c.K) && has(p.StartZ) ? c.K - p.StartZ : null),
-  ];
-}
-
 // ------------------------------------------------------------ comments
 // Program commentary (#257): the setup, the operation and the tool, for
 // the operator reading the program - never a word the control moves on.
@@ -218,8 +202,9 @@ function toolNote() {  // just before the tool change it describes
 // Program End"), so a previous program's choice would otherwise stand:
 // the unit (G20/G21 stays as it was), the plane, absolute positions,
 // incremental arc centres (G91.1 is the default, but a G90.1 persists),
-// feed per minute, and G64 continuous path (an exact-stop G61.1 persists
-// too, and would stop the machine at every block of a contour). No O
+// feed per minute, and G64 path control (the wiki: recognised, run as
+// exact path; an exact-stop G61.1 persists too, and would stop the
+// machine at every block of a contour). No O
 // number, no % fence (a line starting with % is a queue flush), no N
 // numbers.
 //
@@ -285,6 +270,7 @@ function onParameter(name, value) {
   if (name === "OperationName") coolantOp = String(value || "");
   if (name === "Coolant") { coolantAsk = String(value || "flood"); return; }
   if (name === "AfterOperation") { afterAsk = String(value || ""); return; }
+  if (name === "Smoothing") { smoothTol = Number(value) || 0; return; }
   if (name === "WorkOffset" && value) wcsWord = String(value);
   else if (name === "OriginX" && has(value)) orgX = Number(value);
   else if (name === "OriginY" && has(value)) orgY = Number(value);
@@ -308,7 +294,7 @@ function onToolChange(number, name) {
   toolName = clean(name);
   tNo = number;
   toolWait = true;
-  if (!has(number) || number < 1 || number > 31) {
+  if (!has(number) || number !== Math.floor(number) || number < 1 || number > 31) {
     msg("tool number " + ni(number) + " is outside TinyG's tool range (1-31)");
   }
 }
@@ -322,26 +308,64 @@ function onToolChange(number, name) {
 // moves, so everything before it has finished when the machine holds,
 // and released by the sender's cycle start. The spindle is stopped
 // before it by the previous section's M5 (or has not started yet).
+// #616: per-operation smoothing. TinyG's path-control words carry no
+// tolerance: the wiki ("G61, G61.1, G64 Path Control Modes") states that
+// G64 is recognised but treated as exact path, and no word bounds a
+// deviation. So the ask is named once per program and nothing is written
+// - never a guessed word, never silence.
+function smoothOn() {
+  if (!(smoothTol > 0) || smoothNamed) return;
+  note("SMOOTHING NOT WRITTEN - TINYG STATES NO SMOOTHING TOLERANCE");
+  smoothNamed = true;
+}
+function smoothOff() {  // the next section states its own ask
+  smoothTol = 0;
+}
+
+// Optional machine-specific acceleration time, seconds. No guessed delay:
+// absent means the existing immediate-start behavior. TinyG's documented
+// G4 P range is 0..4294 seconds, independent of length units.
+function spindleDwell() {
+  var value = typeof postOptions !== "undefined" && postOptions
+    ? postOptions.SpindleDwellSeconds : undefined;
+  if (value === undefined || value === null) return;
+  if (typeof value !== "number" || !isFinite(value) || value < 0 || value > 4294) {
+    msg("SpindleDwellSeconds must be a finite number from 0 to 4294 seconds");
+    return;
+  }
+  // A requested minimum must never round down to zero or a shorter wait.
+  if (value > 0) block(["G4", "P" + trim((Math.ceil(value * 1000) / 1000).toFixed(3))]);
+}
+
 function startPreamble() {
   if (sectionOpen) return;
   sectionOpen = true;
   opNotes();
   block(["G17", "G90", wcsWord]);
-  planeG = 17;              // the preamble states the plane
   if (toolWait) {
     toolNote();
+    block(["M5"]);
+    block(["M9"]);
     retract();
     xyUnknown = true;        // the operator may jog X and Y at the stop
     block(["T" + ni(tNo), "M6"]);
     block(["M0"]);
+    // Touch-off may change Z and jogging may change distance mode.
+    // Re-establish the programmed frame, then lift before any XY move.
+    block([inch ? "G20" : "G21", "G17", "G90", "G91.1", "G94", "G64", wcsWord]);
+    retract();
     toolWait = false;
   }
   // A touch probe states 0 rpm: no spindle start and no cutting fluid.
   var touchProbe = spindleWait && !(sRpm > 0);
-  if (spindleWait && sRpm > 0) block(["S" + ni(sRpm), "M3"]);
+  if (spindleWait && sRpm > 0) {
+    block(["S" + ni(sRpm), "M3"]);
+    spindleDwell();
+  }
   spindleWait = false;
   coolant = touchProbe ? "" : coolantFor(coolantAsk);
   if (coolant) block([coolant]);
+  smoothOn();
 }
 
 // The op's after-action (#110), written once its spindle has stopped:
@@ -365,12 +389,12 @@ function afterOp() {
 function endPreamble() {
   if (!sectionOpen) return;
   owedDwell();
-  restorePlane();            // the plane never leaks past its section
   sectionOpen = false;
   if (coolant) block(["M9"]);
   coolant = "";
   coolantAsk = "flood";      // the next section states its own ask
   block(["M5"]);
+  smoothOff();
   afterOp();
 }
 
@@ -396,12 +420,20 @@ function xyFirst(x, y) {
 // the whole way down: once X Y are positioned, a rapid takes Z down to
 // that start height and the feed runs only the stretch it planned.
 function startXY(p) {
-  if (!xyUnknown) return;
-  if (has(p.StartX) && has(p.StartY)) xyFirst(p.StartX, p.StartY);
-  else xyFirst(p.X, p.Y);
-  if (!xyUnknown && has(p.StartZ) && has(p.Z) && p.StartZ > p.Z) {
-    block(["G0", wo("Z", p.StartZ, orgZ)]);
+  if (!xyUnknown) return true;
+  if (!has(p.StartX) || !has(p.StartY) || !has(p.StartZ)) {
+    msg("the first cutting move needs a known start position after the tool change");
+    return false;
   }
+  if (stockTop !== null && !(p.StartZ > stockTop)) {
+    msg("the first cutting move must start above the stock after the tool change; provide a safe rapid approach");
+    return false;
+  }
+  xyFirst(p.StartX, p.StartY);
+  // Horizontal and rising cuts also start at their stated Z, never at
+  // the retract height. The first cutting start must be a safe approach.
+  block(["G0", wo("Z", p.StartZ, orgZ)]);
+  return true;
 }
 
 function onRapid() {
@@ -415,21 +447,68 @@ function onLinear() {
   startPreamble();
   seeZ(properties.Z); seeZ(properties.StartZ);
   if (!tiltOk(properties)) return;
-  startXY(properties);
+  if (!startXY(properties)) return;
   block(["G1"].concat(xyz(properties), [fw(properties.FeedRate)]));
   dwellAtBottom(properties.Z);
 }
+// XY arcs stay native, split at half turns for older TinyG controls.
+// Other planes use chords: public RS-274 plane orientation and circle
+// geometry, with a 0.005 mm deviation budget including coordinate rounding.
+// No firmware implementation or another CAM's output used.
 function onCircular() {
   startPreamble();
   if (!tiltOk(properties)) return;
-  var p = properties;
+  var p = properties, c = p.IJKIncrement || {};
+  var from = [p.StartX, p.StartY, p.StartZ], to = [p.X, p.Y, p.Z];
+  var axes = p.CircularPlane === "XZ" ? [2, 0, 1] :
+    (p.CircularPlane === "YZ" ? [1, 2, 0] : [0, 1, 2]);
+  var u = axes[0], v = axes[1], h = axes[2], centers = [c.I, c.J, c.K];
+  for (var j = 0; j < 3; j++) {
+    if (!has(from[j]) || !has(to[j])) { msg("an arc needs finite start and end coordinates"); return; }
+  }
+  if (!has(centers[u]) || !has(centers[v])) { msg("an arc needs a finite center in its plane"); return; }
+  var du = from[u] - centers[u], dv = from[v] - centers[v];
+  var radius = Math.sqrt(du * du + dv * dv);
+  if (!(radius > 0) || !isFinite(radius)) { msg("an arc needs a finite positive radius"); return; }
+  var angle = Math.atan2(dv, du), end = Math.atan2(to[v] - centers[v], to[u] - centers[u]);
+  var ccw = p.CircularDirection !== "CW", turn = 2 * Math.PI;
+  var sweep = ccw ? end - angle : angle - end;
+  if (sweep <= 0) sweep += turn;
+  var nativeXY = u === 0 && v === 1;
+  var step = Math.PI;
+  if (!nativeXY) {
+    var grid = inch ? 25.4e-4 : 1e-4;
+    var eu = to[u] - centers[u], ev = to[v] - centers[v];
+    var endRadius = Math.sqrt(eu * eu + ev * ev);
+    var budget = 0.005 - Math.sqrt(3) * grid - Math.abs(endRadius - radius);
+    if (!(budget > 0)) { msg("arc endpoint rounding leaves no room for the 0.005 mm chord tolerance"); return; }
+    step = Math.min(Math.PI / 2, 2 * Math.acos(Math.max(-1, 1 - budget / radius)));
+  }
+  var count = Math.ceil(sweep / step);
+  if (!isFinite(count) || count < 1 || count > 10000) {
+    msg("the arc needs too many segments to preserve the 0.005 mm tolerance"); return;
+  }
   seeZ(p.Z); seeZ(p.StartZ);
-  startXY(p);
-  block([
-    planeWord(planeOf(p)),
-    p.CircularDirection === "CW" ? "G2" : "G3",
-    wo("X", p.X, orgX), wo("Y", p.Y, orgY), wo("Z", p.Z, orgZ),
-  ].concat(centerWords(p)).concat([fw(p.FeedRate)]));
+  if (!startXY(p)) return;
+  var previous = from;
+  for (var i = 1; i <= count; i++) {
+    var t = i / count, at = angle + (ccw ? 1 : -1) * sweep * t;
+    var next = [to[0], to[1], to[2]];
+    if (i < count) {
+      next[u] = centers[u] + radius * Math.cos(at);
+      next[v] = centers[v] + radius * Math.sin(at);
+      next[h] = from[h] + (to[h] - from[h]) * t;
+    }
+    if (nativeXY && fu(next[0] - orgX) === fu(previous[0] - orgX) &&
+        fu(next[1] - orgY) === fu(previous[1] - orgY)) {
+      msg("an arc is too small to distinguish its endpoints at the output precision"); return;
+    }
+    var words = [nativeXY ? (ccw ? "G3" : "G2") : "G1",
+      wo("X", next[0], orgX), wo("Y", next[1], orgY), wo("Z", next[2], orgZ)];
+    if (nativeXY) words = words.concat([w("I", centers[0] - previous[0]), w("J", centers[1] - previous[1])]);
+    block(words.concat([fw(p.FeedRate)]));
+    previous = next;
+  }
 }
 
 // ------------------------------------------------------- drilling
