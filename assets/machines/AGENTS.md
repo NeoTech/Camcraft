@@ -30,7 +30,7 @@ unstated capability into existence.
       "tooling":    { "number_of_tools": N, "spindle_mount": "BT30", "default_holder": "BT30 ER20" }
     }
 
-- `general.kind` ∈ `mill` | `lathe` | `mill-turn` | `plasma`. The DECLARATION
+- `general.kind` ∈ `mill` | `lathe` | `mill-turn` | `plasma` | `wire_edm` | `sinker_edm`. The DECLARATION
   outranks the axis inventory (`kind()` checks the word first; an
   unknown word REFUSES the file at the door — never a silent demotion
   to inference). The inference, when no kind is stated: Y + a TURNING
@@ -40,6 +40,43 @@ unstated capability into existence.
   — the same tilt test the RTCP judgment and `can_tilt` read, one law
   at three sites): an XYZ machine with A/B trunnions or a tilt head is
   a MILL whose axes can lean, not a mill-turn.
+- `wire_edm` / `sinker_edm` (#530, part of #290) are DECLARED only: no
+  axis inventory infers an EDM. A wire machine needs X and Y (U and V,
+  the upper guide, add taper); a sinker needs Z. Neither has a spindle
+  or coolant - the head is the guides or the ram. No milling or turning
+  op is admitted on either (`Family::admits`), and since #530 the post
+  refuses by name an op whose setup's machine cannot run it, even when
+  the machine was mounted after the op was made. The EDM section:
+
+      "edm": {
+        "lower_guide_z": 0.0, "upper_guide_z": 150.0,  // wire, machine Z, length unit
+        "max_taper_deg": 15.0,                         // wire, (0, 90)
+        "wire_diameters": [0.25, 0.20],                // wire, length unit
+        "awt": true,                                   // wire, automatic threading
+        "orbits": [ { "kind": "circular", "word": "..." } ],  // sinker: circular|vector|planetary + the control's word
+        "max_orbit_radius": 2.0,                       // sinker, length unit
+        "pickup": "..."                                // sinker, the holder system's name
+      }
+
+  Every key is optional and absent means NOT STATED (an op that needs
+  it refuses by name). A garbled value refuses the file. The section is
+  read strictly, every refusal BY NAME (#551 review): only a `wire_edm`
+  or `sinker_edm` file states `edm` at all (on any other kind, declared
+  or inferred, it refuses); a key outside the list above refuses
+  (`edm.max_taper is not an edm key (...)`, never read as unstated); a
+  wire file states only the wire keys and a sinker file only the sinker
+  keys (`edm.orbits is a sinker_edm key; this is a wire_edm machine`);
+  an `orbits` entry has only `kind` and `word`. Lengths are scaled to
+  mm first and must still be finite (an inch `1e308` refuses by its
+  key). Like plasma, an EDM head states no `spindle`, `live_tool` or
+  coolant list (`post::machine::edm_refusals`, read by the reader and
+  the Machines pane's validator alike); a rotary is allowed. No vendor
+  values are shipped. No EDM machine is in the built-in library yet:
+  every library machine must have a post (`machine_library`), so the
+  empty wire / sinker templates join it with their kind's first post
+  (#533 / #542). Until then they are test fixtures
+  (`crates/app/tests/edm/`).
+
 - `plasma` (#669) is DECLARED only, never inferred (its X/Y/Z reads as
   a mill), and the word carries rules both doors refuse BY NAME
   (`post::machine::plasma_refusals` - the reader the first, the
