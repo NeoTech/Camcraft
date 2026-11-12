@@ -17,4 +17,4 @@ warning: probing: operation "Probe1": this post script does not define onProbeRe
 warning: probing: this post script does not define onProbeMove - it cannot write a probing (skip) move, so the probe operation is refused
 warning: probing: operation "Probe1": this post script does not define onProbeRetreat - it cannot back off a probe trip incrementally, so the probe operation is refused
 warning: probing: this post script does not define onProbeResult - it cannot set a work offset or stop on a probing result, so the probe operation is refused
-warning: the Tormach 1300PL plasma post writes torch words (M200, G15, G16, M205) only a plasma table reads - no machine is not declared a plasma machine
+warning: the Tormach 1300PL plasma post writes torch words (M200, G15, G16, M205) only a plasma table reads - no machine is stated, so none is declared a plasma machine
