@@ -91,6 +91,7 @@ pub fn electrode_tool(x: f64, y: f64, length: f64, pickup: f64) -> Tool {
         flutes: None,
         center_cutting: true,
         orientation: None,
+        turning: None,
     }
 }
 

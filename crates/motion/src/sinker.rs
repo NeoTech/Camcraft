@@ -13,8 +13,9 @@
 //! plunge to the burn floor, a rapid retract back up the same axis.
 //! Nothing here guesses: a depth that is not a positive finite number,
 //! a burn floor below the stated floor datum or below the model's
-//! floor, a burn deeper than the electrode is long, or an approach
-//! plane at or below the floor - each is refused by name.
+//! floor, a burn deeper than the electrode is long, an approach plane
+//! at or below the floor, or a spark gap that lifts the tip to the
+//! approach plane or out of the work - each is refused by name.
 
 use crate::cl::{MoveKind, PathBuilder, Toolpath};
 use crate::geometry::Point3;
@@ -59,8 +60,10 @@ pub struct SinkerParams {
     pub top_z: f64,
     /// The cavity floor datum - the burn never passes it.
     pub floor_z: f64,
-    /// The model's floor under the electrode, when one is known: the
-    /// burn never passes it either.
+    /// The model's lowest Z over all its facets (its global bottom, not
+    /// the floor under the electrode's footprint), when one is known:
+    /// the burn never passes it either. A coarse bound only - the stock
+    /// sim's box atom is what judges the burn against the cavity.
     pub model_floor_z: Option<f64>,
     pub datum: SinkerDatum,
     pub depth: f64,
@@ -145,6 +148,23 @@ pub(crate) fn check(p: &SinkerParams) -> Result<f64, GenError> {
         )));
     }
     let tip = z + p.gap;
+    // The plunge must go DOWN: a gap that lifts the tip to the approach
+    // plane would post an upward "burn" feed (review of #1131).
+    if tip >= p.approach_z {
+        return Err(GenError::Invalid(format!(
+            "sinker burn: the spark gap {:.3} places the tip at or above the approach plane (tip Z {tip:.3}, approach Z {:.3})",
+            p.gap, p.approach_z
+        )));
+    }
+    // A gap not smaller than the burn below the work top leaves the tip
+    // at or above the top: the electrode never enters the work.
+    let burn = p.top_z - z;
+    if p.gap >= burn {
+        return Err(GenError::Invalid(format!(
+            "sinker burn: the spark gap {:.3} is not smaller than the burn's {burn:.3} below the work top - the electrode would never enter the work",
+            p.gap
+        )));
+    }
     let buried = p.top_z - tip;
     if buried > p.electrode_len + ON_FLOOR {
         return Err(GenError::Invalid(format!(
