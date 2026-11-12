@@ -11,7 +11,7 @@
 //! posts clean.
 //! Provenance: our own tests over our own post and machine file.
 //!
-//! Gate map (#710): covers app::post (grblhal.cps), post::machine
+//! Gate map (#710): covers camcraft_post::post (grblhal.cps), camcraft_post::machine
 //! (safeRetractZ, units), app::posting (registry, machine library).
 
 use camcraft_app::machine::parse_mch;
