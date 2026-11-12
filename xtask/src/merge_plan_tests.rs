@@ -214,7 +214,7 @@ fn render_names_both_waves() {
     let fake = Fake { base: BTreeMap::from([(2, vec!["b.rs".to_string()])]), ..Fake::default() };
     let text = merge_plan::render(&run(&f, &fake));
     assert!(text.contains("WAVE 1"));
-    assert!(text.contains("#1  PR 1"));
+    assert!(text.contains("#1 @h1  PR 1"));
     assert!(text.contains("WAVE 2"));
     assert!(text.contains("[clean after wave 1] conflicts with main now"));
 }

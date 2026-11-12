@@ -14,6 +14,7 @@ mod icons;
 mod merge_delta;
 mod merge_plan;
 mod merge_plan_git;
+mod merge_plan_out;
 mod package;
 mod plan;
 mod quick;
@@ -36,6 +37,8 @@ mod asset_tests;
 mod checkout_tests;
 #[cfg(test)]
 mod merge_plan_tests;
+#[cfg(test)]
+mod merge_plan_det_tests;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -53,7 +56,7 @@ usage:
   cargo xtask decisions --version X.Y.Z            gather docs/decisions/*.md into RECOMMENDED.md
   cargo xtask release --version X.Y.Z --no-tag [--title T] [--skip-gate] [--skip-build] [--installer] [--dry-run]
                                                    the release cut on release/vX.Y.Z (scripts/release.ps1's phases)
-  cargo xtask merge-plan <PR>... | --label <name> | --delta <PR> --reviewed <sha>
+  cargo xtask merge-plan <PR>... | --label <name> [--json] | --delta <PR> --reviewed <sha>
                                                    the merge order of open PRs (waves, refresh only at merge time)
                                                    or the delta class of a PR since a reviewed head (#1221)
   cargo xtask package [--version X.Y.Z] [--out dist] [--bin-dir target/release] [--dry-run]
