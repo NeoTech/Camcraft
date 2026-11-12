@@ -31,6 +31,7 @@ pub mod cnc;
 pub mod cnc_thread;
 pub mod cnc_torch;
 mod coolant;
+pub mod dialect;
 pub mod engine;
 pub mod invert;
 pub mod js;
@@ -38,7 +39,6 @@ pub mod machine;
 pub mod nose_tip;
 pub mod probe_rec;
 mod program;
-pub mod section_spindle;
 
 pub use after_op::AfterOperation;
 pub use coolant::CoolantMode;
@@ -259,7 +259,7 @@ pub fn dump(t: &Toolpath, d: &Dump) -> Vec<Record> {
     // a C turn: the section says so before it opens, so a script can
     // engage C and the live spindle in its preamble - and the engine
     // refuses, by name, a script that does not declare `liveTooling`.
-    if section_spindle::of(t) == section_spindle::SectionSpindle::LiveTool {
+    if dialect::states_live_tool(t) {
         out.push(Record::Param { name: "LiveTool".into(), value: json!("radial") });
     }
     // A thread whose passes need the spindle reversed (#629): the
@@ -443,7 +443,7 @@ pub fn dump(t: &Toolpath, d: &Dump) -> Vec<Record> {
                 tilted = false;
                 Some([0.0, 0.0, c])
             }
-            (None, Some(a)) if section_spindle::leans(m) => {
+            (None, Some(a)) if !crate::cl::is_vertical(&a) => {
                 tilted = true;
                 Some(crate::cl::axis_to_angles(a))
             }

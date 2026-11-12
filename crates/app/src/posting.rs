@@ -452,14 +452,17 @@ pub fn post_script(world: &World, out_path: &Path, cps: &str) -> Result<Posted, 
 fn post_script_body(world: &World, out_path: &Path, cps: &str) -> Result<Posted, String> {
     // #388: the program's one machine (a program over several refuses).
     let machine = mounts::single(world, false)?.machine;
-    let records = stream_records(world)?;
+    let streams = op_streams(world)?;
+    // #1190: a turning dialect opens only what a lathe may run.
+    crate::lathe_voice::at_post(world, streams.iter().map(|(n, _)| n.as_str()), cps)?;
+    let records = join_streams(streams);
     // The verification gate (M2.3 D): the same two program-level
     // judgments the Deviate cell shows, made binding. Evidence is
     // computed here and now - never a cached verdict carried in from
     // the viewer (the PostView law: a verdict about an older world
     // must not release this one's metal).
     // #1174: the workholding clause reads the dialect of THIS script.
-    let voice = post::section_spindle::work_voice(cps);
+    let voice = post::dialect::work_voice(cps).map_err(|e| format!("post engine: {e}"))?;
     let mut report = verification_report_by(world, &|_| voice);
     // One file, one register per word (#196): two setups posting the same
     // word from different placements refuse here - per-op files are exempt.
@@ -631,7 +634,7 @@ pub fn verification_gate(world: &World) -> Vec<String> {
 /// read, so the visible line and the binding gate are one run.
 #[must_use]
 pub fn verification_report(world: &World) -> GateReport {
-    verification_report_by(world, &|declared| crate::setup_workholding::mounted_voice(world, declared))
+    verification_report_by(world, &crate::setup_workholding::mounted_voices(world))
 }
 
 /// [`verification_report`] with the workholding clause (#1174) judged
@@ -639,7 +642,7 @@ pub fn verification_report(world: &World) -> GateReport {
 /// dialect of the script each operation's setup context posts through
 /// (an explicit script: the same for every op).
 #[must_use]
-pub fn verification_report_by(world: &World, voice: &dyn Fn(Option<&str>) -> post::section_spindle::WorkVoice) -> GateReport {
+pub fn verification_report_by(world: &World, voice: &dyn Fn(Option<&str>) -> post::dialect::WorkVoice) -> GateReport {
     let mut problems = Vec::new();
 
     // The fidelity clause (#864), first: an operation judged against a

@@ -111,13 +111,26 @@ fn post_per_op_with(
         return Err(format!("{} is not a folder", dir.display()));
     }
     let streams = op_streams(world)?;
+    // Each op's setup and script, resolved once - and the lathe door
+    // (#1190) before anything else is judged: a turning dialect opens
+    // only what a lathe may run.
+    let mut resolved = Vec::with_capacity(streams.len());
+    for (name, _) in &streams {
+        let setup = crate::model::find_by_name(world, name)
+            .and_then(|e| crate::model::operation_of(world, &e))
+            .and_then(|op| op.setup);
+        let effective = crate::setup::effective(world, setup.as_deref()).unwrap_or_default();
+        let cps = script(&effective).ok_or_else(|| format!("{name}: no post resolved for its setup"))?;
+        crate::lathe_voice::at_post(world, [name.as_str()], &cps)?;
+        resolved.push((setup, cps));
+    }
     // #1174: the workholding clause reads each op's own script's dialect
     // (keyed by effective setup name, as `script` is); unreadable reads
     // as undeclared - the stricter reading.
     let voice = |declared: Option<&str>| {
         let setup = crate::setup::effective(world, declared).unwrap_or_default();
-        script(&setup).map_or(crate::post::section_spindle::WorkVoice::Undeclared, |c| {
-            crate::post::section_spindle::work_voice(&c)
+        script(&setup).map_or(crate::post::dialect::WorkVoice::Undeclared, |c| {
+            crate::post::dialect::work_voice(&c).unwrap_or(crate::post::dialect::WorkVoice::Undeclared)
         })
     };
     let report = crate::posting::verification_report_by(world, &voice);
@@ -126,14 +139,9 @@ fn post_per_op_with(
     }
     let options = options_value(post_options(world));
     let mut files = Vec::with_capacity(streams.len());
-    for (k, (name, records)) in streams.iter().enumerate() {
+    for (k, ((name, records), (setup, cps))) in streams.iter().zip(resolved).enumerate() {
         let index = k + 1;
         let number = u32::try_from(index).map_err(|_| "too many operations to number".to_owned())?;
-        let setup = crate::model::find_by_name(world, name)
-            .and_then(|e| crate::model::operation_of(world, &e))
-            .and_then(|op| op.setup);
-        let effective = crate::setup::effective(world, setup.as_deref()).unwrap_or_default();
-        let cps = script(&effective).ok_or_else(|| format!("{name}: no post resolved for its setup"))?;
         let ext = engine::extension_of(&cps).map_err(|e| format!("post engine: {e}"))?;
         let ext = sanitise(&ext, "nc");
         let mch = machine_value_of(world, setup.as_deref());

@@ -1,6 +1,7 @@
 //! The workholding rpm limit fails closed for EVERY operation kind a
 //! lathe or mill-turn setup can hold (#1174 review): the program gate
-//! reads the same derivation the stream does (`post::section_spindle`),
+//! reads the post door's own derivation (`lathe_voice::voice_of`, #1190)
+//! and the script's declared dialect (`post::dialect::work_voice`),
 //! so a section the lathe post opens on the work spindle (`G97 S M03`,
 //! whatever its kind) is judged at its stated rpm, a C section by the
 //! machine's C rate, and nothing posts with the work spindle above the
@@ -9,7 +10,7 @@
 //! judged what `spindle_law::turns` named.
 //!
 //! Gate map (M4.4): covers app::setup_workholding (the program gate),
-//! post::post (section_spindle), app::posting (post_script).
+//! app::lathe_voice, post::post (dialect), app::posting (post_script).
 //! Lane shape (M4.4): the default tests run in seconds each; the slow
 //! kinds' rows are one heavy-lane test (`SLOW`).
 
@@ -178,6 +179,10 @@ fn judge(kind: &str, i: usize, chuck: f64, rpm: f64) -> Outcome {
     let program = std::fs::read_to_string(&out).unwrap_or_default();
     let _ = std::fs::remove_file(&out);
     match posted {
+        // Judged at the post, for the script that runs (a mill-turn's
+        // document post is the mill one; this program goes through the
+        // lathe script).
+        Err(e) if e.contains("workholding maximum") => Outcome::Limit,
         Err(e) => Outcome::Refused(e),
         Ok(_) => {
             if let Err(why) = work_spindle_within(&program, chuck) {
@@ -245,16 +250,105 @@ fn every_slow_kind_on_a_mill_turn_keeps_the_work_spindle_within_the_chuck() {
 }
 
 #[test]
-fn a_mill_turn_on_centre_drill_bore_is_judged_like_the_lathes() {
+fn a_mill_turn_on_centre_drill_is_judged_like_the_lathes() {
     use camcraft_app::machine::Kind;
+    let drill = KindInfo::ALL.iter().position(|k| k.ty == OpType::Drill).expect("Drill");
+    let bore = KindInfo::ALL.iter().position(|k| k.ty == OpType::Bore).expect("Bore");
     for (kind, mk) in [("lathe", Kind::Lathe), ("mill-turn", Kind::MillTurn)] {
-        for ty in [OpType::Drill, OpType::Bore] {
-            let i = KindInfo::ALL.iter().position(|k| k.ty == ty).expect("kind");
-            if !KindInfo::ALL[i].admits(mk) {
-                continue;
-            }
-            assert!(matches!(judge(kind, i, CHUCK, FAST), Outcome::Limit), "{kind} {ty:?} at 8000 under 2000 is refused by the limit");
-            assert!(!matches!(judge(kind, i, CHUCK, CHUCK), Outcome::Limit), "{kind} {ty:?} exactly at the limit is allowed");
+        assert!(KindInfo::ALL[drill].admits(mk));
+        assert!(matches!(judge(kind, drill, CHUCK, FAST), Outcome::Limit), "{kind} on-centre Drill at 8000 under 2000 is refused by the limit");
+        assert!(!matches!(judge(kind, drill, CHUCK, CHUCK), Outcome::Limit), "{kind} Drill exactly at the limit is allowed");
+    }
+    // The helical Bore moves off the axis: the lathe door (#1190) refuses
+    // it by name before the limit is asked - never posted on the work spindle.
+    match judge("mill-turn", bore, CHUCK, FAST) {
+        Outcome::Refused(e) => assert!(e.contains("work spindle"), "{e}"),
+        Outcome::Limit => {}
+        Outcome::Posted => panic!("a mill-turn Bore posted through the lathe post"),
+        Outcome::NotBuilt => panic!("the on-centre Bore builds on the bar"),
+    }
+}
+
+// ---- #1174 second review: the post decides, not the machine ----
+
+const TORMACH: &str = include_str!("../../../assets/posts/tormach-lathe.cps");
+const MILL: &str = include_str!("../../../assets/posts/fanuc.cps");
+
+/// The bored bar with no machine (`None`) or `m`, Setup1 stating a 2000
+/// rpm chuck, an on-centre Drill D1 with DR-0400 at `rpm` - generated.
+fn drilled(m: Option<Machine>, rpm: f64) -> World {
+    let world = new_world();
+    let mut h = History::default();
+    let at = Location { pos: Point3::new(0.0, 0.0, -16.0), ..Location::default() };
+    h.execute(&world, SetStock::new(&world, StockShape::Cylinder { diameter: 12.0, height: 32.0 }, at).expect("stock"));
+    if let Some(m) = m {
+        h.execute(&world, LoadMachine::new(&world, "bench.mch".into(), Some(m)).expect("machine"));
+    }
+    let drill = catalog().into_iter().find(|(n, _)| *n == "DR-0400").map(|(_, t)| t).expect("catalog drill");
+    h.execute(&world, AddTool::new(&world, "DR-0400", Tool { rpm, flute_len: 20.0, ..drill }).expect("drill"));
+    h.execute(&world, ImportModel::from_mesh("bar", revolve(&BORED, 24)));
+    h.execute(&world, CreateSetup::new(&world, None, None).expect("Setup1"));
+    h.execute(&world, SetSetupWorkholdingRpm::new(&world, "Setup1", Some(CHUCK)).expect("chuck limit"));
+    let i = KindInfo::ALL.iter().position(|k| k.ty == OpType::Drill).expect("Drill");
+    let mut p = seed_params(i);
+    on_centre(&mut p);
+    h.execute(&world, CreateOperation::new(&world, "D1", "DR-0400", SrcRef::Entity("bar".into()), p).expect("create"));
+    h.execute(&world, GenerateOperation::new(&world, "D1").expect("generate"));
+    world
+}
+
+fn post_through(world: &World, cps: &str) -> Result<String, String> {
+    let out = std::env::temp_dir().join(format!("camcraft-1174b-{}-{}.nc", std::process::id(), cps.len()));
+    let posted = posting::post_script(world, &out, cps).map(|p| p.program);
+    let _ = std::fs::remove_file(&out);
+    posted
+}
+
+fn mill_machine() -> Machine {
+    Machine { model: "TestBench mill".into(), kind: Some("mill".into()), spindle_max: Some(12_000.0), ..Default::default() }
+}
+
+#[test]
+fn a_lathe_post_is_held_to_the_chuck_whatever_machine_is_mounted() {
+    for (what, m) in [("no machine", None), ("a mill machine", Some(mill_machine()))] {
+        for (dialect, cps) in [("fanuc-lathe", FANUC), ("tormach-lathe", TORMACH)] {
+            let why = post_through(&drilled(m.clone(), FAST), cps).err().unwrap_or_default();
+            assert!(
+                why.contains("D1: turns the work at 8000 rpm (G97)") && why.contains("workholding maximum of 2000 rpm"),
+                "{what}, {dialect}: the drill at 8000 under a 2000 chuck is refused by name: {why}"
+            );
+            let at = post_through(&drilled(m.clone(), CHUCK), cps);
+            assert!(at.is_ok(), "{what}, {dialect}: exactly at the limit posts: {:?}", at.err());
         }
     }
+}
+
+#[test]
+fn a_mill_post_drives_the_tool_spindle_so_the_chuck_limit_does_not_judge_it() {
+    let program = post_through(&drilled(Some(mill_machine()), FAST), MILL).unwrap_or_else(|e| panic!("the mill post posts: {e}"));
+    assert!(program.contains("S8000 M3"), "the tool spindle at the drill's rpm: {program}");
+}
+
+#[test]
+fn an_undeclared_script_takes_the_stricter_reading() {
+    // #1199: a lathe script without its manifest line states no dialect.
+    let undeclared = FANUC.replacen("capabilities = 2;", "", 1);
+    assert!(!undeclared.contains("capabilities ="), "the manifest line came out");
+    let why = post_through(&drilled(Some(mill_machine()), FAST), &undeclared).err().unwrap_or_default();
+    assert!(why.contains("workholding maximum of 2000 rpm"), "judged as a turning post: {why}");
+}
+
+#[test]
+fn a_speed_a_hair_over_the_chuck_prints_a_decimal() {
+    let why = post_through(&drilled(None, 2000.4), FANUC).err().unwrap_or_default();
+    assert!(why.contains("turns the work at 2000.4 rpm (G97)") && why.contains("workholding maximum of 2000.0 rpm"), "{why}");
+}
+
+#[test]
+fn a_milling_script_on_a_plain_lathe_still_turns_the_work() {
+    // A lathe's one spindle holds the chuck: whatever the script calls
+    // itself, its S turns the work there.
+    let lathe = Machine { model: "TestBench lathe".into(), kind: Some("lathe".into()), spindle_max: Some(12_000.0), ..Default::default() };
+    let why = post_through(&drilled(Some(lathe), FAST), MILL).err().unwrap_or_default();
+    assert!(why.contains("workholding maximum of 2000 rpm"), "{why}");
 }

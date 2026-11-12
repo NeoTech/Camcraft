@@ -18,9 +18,16 @@ mod cross_support;
 
 use cross_support::*;
 
-use camcraft_app::commands::{CreateSetup, SetSetupWorkholdingRpm};
+use camcraft_app::commands::{CreateSetup, SelectPost, SetSetupWorkholdingRpm};
+use camcraft_app::schema::PostRef;
 use camcraft_app::machine::{AxisLimits, LiveToolCodes};
 use camcraft_app::posting;
+
+/// The document posts through the Fanuc lathe script (a mill-turn's
+/// default is the mill post, whose S drives the tool - #1174).
+fn lathe_post(world: &World, h: &mut History) {
+    h.execute(world, SelectPost::new(world, PostRef::Named("Fanuc Lathe".into())).expect("the lathe post"));
+}
 
 fn chuck_lines(world: &World) -> Vec<String> {
     posting::verification_gate(world).into_iter().filter(|p| p.contains("workholding")).collect()
@@ -32,6 +39,7 @@ fn cross_drilled(chuck: Option<f64>) -> World {
     let (world, mut h) = bar_stock_world("mill-turn");
     let fast = Tool { rpm: 10_000.0, flute_len: 50.0, ..catalog_tool("DR-0400") };
     h.execute(&world, camcraft_app::commands::ChangeTool::new(&world, "DR-0400", fast).expect("10000 rpm drill"));
+    lathe_post(&world, &mut h);
     h.execute(&world, CreateSetup::new(&world, None, None).expect("Setup1"));
     if chuck.is_some() {
         h.execute(&world, SetSetupWorkholdingRpm::new(&world, "Setup1", chuck).expect("chuck limit"));
@@ -120,6 +128,7 @@ fn wrapped(m: Machine, chuck: Option<f64>) -> World {
     h.execute(&world, stock.expect("stock"));
     h.execute(&world, ImportModel::from_mesh("bar", Mesh::from_facets(bar())));
     h.execute(&world, LoadMachine::new(&world, "millturn.mch".into(), Some(m)).expect("machine"));
+    lathe_post(&world, &mut h);
     h.execute(&world, CreateSetup::new(&world, None, None).expect("Setup1"));
     if chuck.is_some() {
         h.execute(&world, SetSetupWorkholdingRpm::new(&world, "Setup1", chuck).expect("chuck limit"));

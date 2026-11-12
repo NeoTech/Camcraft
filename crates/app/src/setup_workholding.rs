@@ -28,7 +28,7 @@
 use flecs_ecs::prelude::World;
 
 use crate::model;
-use crate::post::section_spindle::{self, WorkVoice};
+use crate::post::dialect::{self, WorkVoice};
 use crate::post::Css;
 use crate::setup;
 
@@ -70,13 +70,12 @@ pub fn css_of(world: &World, declared: Option<&str>, css: Option<Css>) -> Option
 }
 
 /// What the workholding limit judges in an operation's section (#1174),
-/// read from what the post will do with it - the derivations the stream
-/// and the posts themselves take (`post::section_spindle`), never a list
-/// of operation kinds nor the machine's kind: a section with no C and no
-/// lean is opened `G97 S<rpm> M03` (or `G96`) on the WORK spindle by a
-/// turning post, whatever its kind and whatever machine is (or is not)
-/// mounted; a C section gives S to the live spindle while the work is
-/// fed on C; a leaning (A/B) section is refused by the lathe posts.
+/// read from what the post will do with it - the one derivation the
+/// post door shares (`lathe_voice::voice_of`, #1190) and the script's
+/// own declared dialect (`post::dialect::work_voice`), never the
+/// machine's kind: a turning post opens a work-spindle section `G97
+/// S<rpm> M03` (or `G96`) whatever machine is (or is not) mounted; a C
+/// section gives S to the live spindle while the work is fed on C.
 enum WorkSpeed {
     /// The work turns at the section's stated speed.
     Stated,
@@ -84,37 +83,51 @@ enum WorkSpeed {
     /// the work turns only on C, at most at the machine's C rate.
     OnC,
     /// Nothing the limit judges: no path yet (the post refuses an
-    /// ungenerated op), a posed section the lathe posts refuse (the
-    /// cross drill's radial plunges), or a Work section through a
-    /// milling post (its S drives the tool spindle, not the chuck).
+    /// ungenerated op), a section the lathe door refuses by name
+    /// (`lathe_voice::at_post` - a milling kind, an off-centre or
+    /// tilted drill, a probe), or any section of a milling post (its S
+    /// drives the tool spindle, not the chuck).
     Not,
 }
 
-fn work_speed(world: &World, voice: WorkVoice, e: &flecs_ecs::prelude::Entity) -> WorkSpeed {
-    use crate::post::section_spindle::{self, SectionSpindle};
-    use flecs_ecs::prelude::*;
-    match e.entity_view(world).try_get::<&crate::schema::Toolpath>(|t| section_spindle::of(&t.path)) {
-        Some(SectionSpindle::Work) => match voice {
-            WorkVoice::WorkSpindle => WorkSpeed::Stated,
-            WorkVoice::ToolSpindle => WorkSpeed::Not,
-            // A script that states no dialect (#1199): the stricter
-            // reading - judged as a turning post while a limit is
-            // stated. Whoever settles #1199 changes this arm together
-            // with the lathe door that reads the same mask (#1190).
-            WorkVoice::Undeclared => WorkSpeed::Stated,
-        },
-        Some(SectionSpindle::LiveTool) => WorkSpeed::OnC,
-        Some(SectionSpindle::Posed) | None => WorkSpeed::Not,
+fn work_speed(world: &World, declared: Option<&str>, voice: WorkVoice, e: &flecs_ecs::prelude::Entity) -> WorkSpeed {
+    use crate::lathe_voice::LatheVoice;
+    let section = crate::lathe_voice::voice_of(world, e);
+    // A plain lathe has one spindle, and it holds the chuck: a milling
+    // script's S turns the work there too, and the lathe door does not
+    // fire for a milling script - so every plain section is judged, as
+    // for an undeclared one. Only widens what is judged (the safe
+    // direction); a mill-turn through a milling post drives the tool
+    // spindle and is not judged.
+    let voice = match (voice, crate::machine::kind_of_setup(world, declared)) {
+        (WorkVoice::ToolSpindle, crate::machine::Kind::Lathe) => WorkVoice::Undeclared,
+        (v, _) => v,
+    };
+    match (voice, section) {
+        (_, None) | (WorkVoice::ToolSpindle, _) => WorkSpeed::Not,
+        (_, Some(LatheVoice::LiveTool)) => WorkSpeed::OnC,
+        (WorkVoice::WorkSpindle, Some(LatheVoice::WorkSpindle)) => WorkSpeed::Stated,
+        // The door refuses it by name before a line is posted.
+        (WorkVoice::WorkSpindle, Some(LatheVoice::Refused(_))) => WorkSpeed::Not,
+        // A script that states no dialect (#1199): the lathe door does
+        // not fire for it, so every plain section may reach the work
+        // spindle - the stricter reading, judged while a limit is
+        // stated. Whoever settles #1199 changes this arm together with
+        // `lathe_voice::at_post`, which reads the same mask.
+        (WorkVoice::Undeclared, Some(_)) => WorkSpeed::Stated,
     }
 }
 
 /// The dialect of the post a declared setup context runs (its own, else
-/// the document's): a script that cannot be read is `Undeclared` - the
-/// stricter reading; the post itself refuses it by name.
+/// the document's): a script that cannot be read or loaded is
+/// `Undeclared` - the stricter reading; the post itself refuses it.
 #[must_use]
 pub fn mounted_voice(world: &World, declared: Option<&str>) -> WorkVoice {
     let post = crate::setup_mount::post_of(world, declared);
-    crate::posting::script_of(&post).map_or(WorkVoice::Undeclared, |(_, cps)| section_spindle::work_voice(&cps))
+    crate::posting::script_of(&post)
+        .ok()
+        .and_then(|(_, cps)| dialect::work_voice(&cps).ok())
+        .unwrap_or(WorkVoice::Undeclared)
 }
 
 /// `rpm` and `limit` as the refusal prints them: whole rpm, or one
@@ -140,7 +153,22 @@ fn c_rate(world: &World, declared: Option<&str>) -> Option<f64> {
 /// live tool's own rpm). Empty when no setup states a limit.
 #[must_use]
 pub fn program_problems(world: &World) -> Vec<String> {
-    program_problems_by(world, &|declared| mounted_voice(world, declared))
+    program_problems_by(world, &mounted_voices(world))
+}
+
+/// [`mounted_voice`] for every declared setup context, loading each
+/// distinct post script once (a script load runs the JS engine).
+pub fn mounted_voices(world: &World) -> impl Fn(Option<&str>) -> WorkVoice + '_ {
+    let seen = std::cell::RefCell::new(Vec::<(crate::schema::PostRef, WorkVoice)>::new());
+    move |declared| {
+        let post = crate::setup_mount::post_of(world, declared);
+        if let Some((_, v)) = seen.borrow().iter().find(|(p, _)| *p == post) {
+            return *v;
+        }
+        let v = mounted_voice(world, declared);
+        seen.borrow_mut().push((post, v));
+        v
+    }
 }
 
 /// [`program_problems`] with each operation's post dialect read by
@@ -161,7 +189,7 @@ pub fn program_problems_by(world: &World, voice: &dyn Fn(Option<&str>) -> WorkVo
             continue;
         };
         let setup_name = || setup::effective(world, declared).unwrap_or_default();
-        match work_speed(world, voice(declared), &e) {
+        match work_speed(world, declared, voice(declared), &e) {
             WorkSpeed::Not => {}
             WorkSpeed::OnC => {
                 let label = model::operation_label(world, &name, &e);
