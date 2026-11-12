@@ -6,7 +6,7 @@
 //! Provenance: our own tool surface over this repo's commands and the
 //! script verbs; schemas are JSON Schema as the MCP spec carries them.
 
-use super::{area, edit, features, job, pick, pockets, render, tool_edit};
+use super::{area, edit, features, holders, job, pick, pockets, render, tool_edit};
 use crate::script::{api, Env};
 
 use serde_json::{json, Map, Value};
@@ -27,6 +27,8 @@ const TOOLS: &[Tool] = &[
     Tool { name: "get_job", description: "The whole document as JSON: setups, stock, work offsets, models (one imported at reduced fidelity carries reduced_fidelity), tools, and operations with their parameters and status.", schema: s_empty, run: job::get_job },
     Tool { name: "list_operation_types", description: "Every operation kind with its parameter fields, JSON types and default values, and the tool kinds it accepts.", schema: s_empty, run: job::list_operation_types },
     Tool { name: "list_tool_catalog", description: "The built-in tool catalog: names and definitions add_tool can copy into the document.", schema: s_empty, run: job::list_tool_catalog },
+    Tool { name: "list_holder_library", description: "The built-in holder library: BT30, BT40 and CAT40 holders with ER collet or Weldon side-lock noses, and standalone ER11-ER40 chucks - names set_tool_holder takes, with their dimensions and the shanks they clamp.", schema: s_empty, run: holders::list_holder_library },
+    Tool { name: "set_tool_holder", description: "Set a document tool's holder: from the holder library by name (optional gauge_len and projection, mm), from a drawn spun profile (points), or back to the holder cylinder (clear). One undo step; an unknown entry, a shank the holder cannot take or a bad profile is refused by name.", schema: holders::s_set_tool_holder, run: holders::set_tool_holder },
     Tool { name: "add_tool", description: "Add a tool to the document, from the catalog by name or from a full definition (the shape get_job shows). It starts with the machine's default holder unless \"holder\" says otherwise; one undo removes the tool and its holder.", schema: s_add_tool, run: edit::add_tool },
     Tool { name: "edit_tool", description: "Edit a document tool: \"patch\" is a partial tool definition (the shape add_tool's definition and get_job show, JSON merge patch - null removes an optional key). It runs the app's undoable ChangeTool, one undo step, so every gate applies (a retype that strands an operation, bad cutting_data rows, catalog values) and refuses by tool name. An unknown key is refused by name. Operations using the tool go stale.", schema: s_edit_tool, run: tool_edit::edit_tool },
     Tool { name: "export_tool_library", description: "Write the document's tools to a tool library file (.camtools), the same format the Tool library page's Export writes. Refuses a document with no tools or a path that cannot be written.", schema: s_library, run: export_tool_library },
@@ -51,7 +53,7 @@ const TOOLS: &[Tool] = &[
 ];
 
 /// Every row: this table, then the setup furniture's (#181), then the
-/// part placement (#716).
+/// part placement (#716), ..., then operation names and order (#45).
 fn all() -> impl Iterator<Item = &'static Tool> {
     TOOLS
         .iter()
@@ -64,6 +66,7 @@ fn all() -> impl Iterator<Item = &'static Tool> {
         .chain(super::cutter_tools::TOOLS)
         .chain(super::plate_tools::TOOLS)
         .chain(super::modvise_tools::TOOLS)
+        .chain(super::order_tools::TOOLS)
 }
 
 /// The `tools/list` rows.

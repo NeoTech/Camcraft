@@ -21,8 +21,12 @@ use std::path::{Path, PathBuf};
 /// the run owns that law here exactly as the app's menu does.
 pub(crate) fn v_load(env: &mut Env, args: Vec<Value>) -> Result<Value, String> {
     let path = PathBuf::from(arg_str(&args, 0, "a project path")?);
-    crate::project::load(&env.world, &path).map_err(|e| e.to_string())?;
+    // Load in isolation: refusal leaves the current document and its undo/redo intact.
+    let world = crate::world::new_world();
+    crate::project::load(&world, &path).map_err(|e| e.to_string())?;
     env.history = History::default();
+    env.world = world;
+    env.posted = None;
     env.doc_path = Some(path.clone());
     Ok(json!({ "path": path.display().to_string(), "operations": ops_view(env) }))
 }
