@@ -128,6 +128,8 @@ mod model_fidelity;
 mod two_point_marks;
 // #979: the viewport box select.
 mod box_select;
+// #1104: the Setups page lists setups only.
+mod setups_declutter;
 
 /// What the per-frame state of `Shell` is, minus the GPU half: the fields
 /// `shell_layout` touches, so the harness exercises the window's real body.
