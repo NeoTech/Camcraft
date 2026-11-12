@@ -123,6 +123,10 @@ pub struct GenJob {
     /// #541: a sinker burn's spark gap, read from its setup's machine
     /// condition (`sinker_op::condition_gap`); `None` for every other kind.
     pub(super) sinker_gap: Option<Result<f64, String>>,
+    /// #740: the document's display unit, read off the world here where
+    /// it can be. The drill-reach refusals run on worker threads with
+    /// no World to read, so they spell their depths through this lens.
+    pub(super) unit: crate::units::Unit,
 }
 
 /// The tripwire phrase for a stored precompute whose arm never collected
@@ -367,6 +371,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         carried_overhang,
         wire,
         sinker_gap,
+        unit: crate::units::of(world),
     })
 }
 
