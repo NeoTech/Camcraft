@@ -21,46 +21,17 @@ mod thread_support;
 use flecs_ecs::prelude::World;
 
 use camcraft_app::cl::{ThreadHand, Toolpath};
-use camcraft_app::commands::{AddTool, CreateOperation, EditOperationParams, GenerateOperation, History, ImportModel, SetStock};
+use camcraft_app::commands::{CreateOperation, EditOperationParams, GenerateOperation, History, ImportModel};
 use camcraft_app::drilling::Hole;
-use camcraft_app::geometry::{Mesh, Point3};
+use camcraft_app::geometry::Point3;
 use camcraft_app::model;
 use camcraft_app::operation::{self, Height, OpParams, OpStatus, SrcRef};
 use camcraft_app::post::{cnc, engine};
 use camcraft_app::posting;
-use camcraft_app::schema::Location;
-use camcraft_app::stock::StockShape;
 use camcraft_app::world::new_world;
 
 use thread_support::boss::*;
-use thread_support::{MULTI, SINGLE, assert_clean, blocking, catalog_tool};
-
-
-/// A world holding the stud in a 40 x 40 x 20 block, the thread mills
-/// and the end mill; nothing machined yet.
-fn bare_world(mesh: Mesh) -> (World, History) {
-    let world = new_world();
-    let mut history = History::default();
-    let stock = SetStock::new(&world, StockShape::Box { dx: 40.0, dy: 40.0, dz: TOP }, Location::default());
-    history.execute(&world, stock.expect("box stock"));
-    for name in [MULTI, SINGLE, ENDMILL] {
-        history.execute(&world, AddTool::new(&world, name, catalog_tool(name)).expect("tool"));
-    }
-    history.execute(&world, ImportModel::from_mesh("stud", mesh));
-    (world, history)
-}
-
-fn clear_around(world: &World, history: &mut History, bottom: f64, leave: f64) {
-    let op = CreateOperation::new(world, "Rough1", ENDMILL, SrcRef::Entity("stud".into()), clearing(bottom, leave));
-    history.execute(world, op.expect("create the roughing"));
-    history.execute(world, GenerateOperation::new(world, "Rough1").expect("generate the roughing"));
-}
-
-fn world_with(mesh: Mesh) -> (World, History) {
-    let (world, mut history) = bare_world(mesh);
-    clear_around(&world, &mut history, SHOULDER, 0.0);
-    (world, history)
-}
+use thread_support::{MULTI, SINGLE, assert_clean, blocking};
 
 /// Create "Thread1" and generate it: the refusal's words, or empty.
 fn try_thread(world: &World, history: &mut History, tool: &str, params: OpParams) -> String {
@@ -108,7 +79,7 @@ fn thread_params(world: &World) -> OpParams {
 fn an_external_m8_thread_verifies_clean_and_posts_helical_moves() {
     // M8 x 1.25 on a Ø8 boss, 10 mm long, with the catalog's Ø6 multi-form mill (ten rows): one helical
     // revolution per radial pass. Right-hand climb orbits a boss clockwise, winding down from the top.
-    let (world, mut history) = world_with(stud(4.0, Vec::new()));
+    let (world, mut history) = stud_world(stud(4.0, Vec::new()));
     assert_eq!(try_thread(&world, &mut history, MULTI, external(vec![boss(4.0)], None, ThreadHand::Right, true)), "");
     assert_eq!(status(&world, "Thread1"), OpStatus::Ok);
     assert_clean(&world);
@@ -135,7 +106,7 @@ fn an_external_m8_thread_verifies_clean_and_posts_helical_moves() {
 #[test]
 fn a_single_form_mill_threads_an_m10_boss_one_turn_per_thread() {
     // M10 x 1.5 on a Ø10 boss with the catalog's single-form mill (0.5 to 1.5 mm): the pitch is stated.
-    let (world, mut history) = world_with(stud(5.0, Vec::new()));
+    let (world, mut history) = stud_world(stud(5.0, Vec::new()));
     assert_eq!(try_thread(&world, &mut history, SINGLE, external(vec![boss(5.0)], Some(1.5), ThreadHand::Right, true)), "");
     assert_clean(&world);
     let path = path_of(&world);
@@ -151,7 +122,7 @@ fn a_single_form_mill_threads_an_m10_boss_one_turn_per_thread() {
 #[test]
 fn left_hand_and_conventional_external_threads_verify_clean_too() {
     for (hand, climb) in [(ThreadHand::Left, true), (ThreadHand::Left, false), (ThreadHand::Right, false)] {
-        let (world, mut history) = world_with(stud(5.0, Vec::new()));
+        let (world, mut history) = stud_world(stud(5.0, Vec::new()));
         assert_eq!(try_thread(&world, &mut history, SINGLE, external(vec![boss(5.0)], Some(1.5), hand, climb)), "");
         assert_clean(&world);
         for m in helix(&path_of(&world)) {
@@ -166,7 +137,7 @@ fn left_hand_and_conventional_external_threads_verify_clean_too() {
 
 #[test]
 fn detect_reads_the_bosses_of_an_external_thread_and_holes_of_an_internal_one() {
-    let (world, _history) = bare_world(stud(4.0, Vec::new()));
+    let (world, _history) = stud_bare(stud(4.0, Vec::new()));
     let src = SrcRef::Entity("stud".into());
     let found = operation::detect_holes(&world, "Thread1", &external(Vec::new(), None, ThreadHand::Right, true), None, &src);
     let OpParams::Thread { holes, external: true, .. } = found.expect("the stud's bosses") else {
@@ -196,18 +167,18 @@ fn detect_reads_the_bosses_of_an_external_thread_and_holes_of_an_internal_one() 
 #[test]
 fn a_boss_standing_in_uncut_stock_is_refused_by_name() {
     // Nothing ahead machined round the boss: the block is solid beside it.
-    let (world, mut history) = bare_world(stud(4.0, Vec::new()));
+    let (world, mut history) = stud_bare(stud(4.0, Vec::new()));
     let msg = try_thread(&world, &mut history, MULTI, external(vec![boss(4.0)], None, ThreadHand::Right, true));
     assert!(msg.contains("the boss at (0.000, 0.000) is not cleared: nothing ahead of the thread"), "{msg}");
     assert_eq!(status(&world, "Thread1"), OpStatus::Never, "no path is cached for a refused thread");
     assert!(!posting::verification_gate(&world).is_empty(), "nothing posts");
     // Roughed, but two millimetres short of the shoulder: the thread runs deeper than the air does.
-    let (world, mut history) = bare_world(stud(4.0, Vec::new()));
+    let (world, mut history) = stud_bare(stud(4.0, Vec::new()));
     clear_around(&world, &mut history, SHOULDER + 2.0, 0.0);
     let msg = try_thread(&world, &mut history, MULTI, external(vec![boss(4.0)], None, ThreadHand::Right, true));
     assert!(msg.contains("is not cleared") && msg.contains("stands at z 12.000") && msg.contains("down to z 10.000"), "{msg}");
     // Roughed with a millimetre left on the boss: more than a thread mill may take.
-    let (world, mut history) = bare_world(stud(4.0, Vec::new()));
+    let (world, mut history) = stud_bare(stud(4.0, Vec::new()));
     clear_around(&world, &mut history, SHOULDER, 1.0);
     let msg = try_thread(&world, &mut history, MULTI, external(vec![boss(4.0)], None, ThreadHand::Right, true));
     assert!(msg.contains("the boss at (0.000, 0.000) is not cleared") && msg.contains("stands at z 20.000"), "{msg}");
@@ -215,7 +186,7 @@ fn a_boss_standing_in_uncut_stock_is_refused_by_name() {
 
 #[test]
 fn moving_the_roughing_after_the_thread_marks_it_stale_and_refuses_it() {
-    let (world, mut history) = world_with(stud(4.0, Vec::new()));
+    let (world, mut history) = stud_world(stud(4.0, Vec::new()));
     assert_eq!(try_thread(&world, &mut history, MULTI, external(vec![boss(4.0)], None, ThreadHand::Right, true)), "");
     let reorder = camcraft_app::commands::ReorderOperation::new(&world, "Rough1", "Thread1", true).expect("reorder");
     history.execute(&world, reorder);
@@ -228,7 +199,7 @@ fn moving_the_roughing_after_the_thread_marks_it_stale_and_refuses_it() {
 
 #[test]
 fn impossible_bosses_are_refused_when_the_operation_is_made() {
-    let (world, mut history) = world_with(stud(4.0, Vec::new()));
+    let (world, mut history) = stud_world(stud(4.0, Vec::new()));
     let src = || SrcRef::Entity("stud".into());
     let refusal = |tool: &str, params: OpParams| match CreateOperation::new(&world, "Thread1", tool, src(), params) {
         Ok(_) => panic!("the door was meant to refuse"),
@@ -267,7 +238,7 @@ fn a_wall_inside_the_crest_rings_sweep_is_a_gouge_that_blocks_the_post() {
     // model without the rib (it mills the rib away), so the air law has nothing to say and the neighbour
     // law is what convicts the thread; the same rib 0.2 mm further out is air.
     for (x1, gouged) in [(-9.6, true), (-9.8, false)] {
-        let (world, mut history) = bare_world(stud(4.0, rib(-12.0, x1, 2.0, 16.0)));
+        let (world, mut history) = stud_bare(stud(4.0, rib(-12.0, x1, 2.0, 16.0)));
         history.execute(&world, ImportModel::from_mesh("core", stud(4.0, Vec::new())));
         let op = CreateOperation::new(&world, "Rough1", ENDMILL, SrcRef::Entity("core".into()), clearing(SHOULDER, 0.0));
         history.execute(&world, op.expect("create the roughing"));
@@ -289,7 +260,7 @@ fn a_wall_inside_the_crest_rings_sweep_is_a_gouge_that_blocks_the_post() {
 fn a_part_wall_the_roughing_left_standing_in_the_sweep_is_refused() {
     // The same rib under a roughing that respects it: the contour stops above the rib, so stock stands
     // where the mill would feed down - the air law refuses the thread before a move is cached.
-    let (world, mut history) = world_with(stud(4.0, rib(-12.0, -9.0, 2.0, 16.0)));
+    let (world, mut history) = stud_world(stud(4.0, rib(-12.0, -9.0, 2.0, 16.0)));
     let msg = try_thread(&world, &mut history, MULTI, external(vec![boss(4.0)], None, ThreadHand::Right, true));
     assert!(msg.contains("the boss at (0.000, 0.000) is not cleared") && msg.contains("stands at z 16.000"), "{msg}");
 }
@@ -298,14 +269,14 @@ fn a_part_wall_the_roughing_left_standing_in_the_sweep_is_refused() {
 fn a_hole_list_read_as_bosses_never_passes_silently() {
     // The flag flipped on a list that holds no boss: "a boss" of 2 mm radius inside the real Ø8 one. The
     // mill would orbit inside the part - the stock stands there, so the thread is refused by name.
-    let (world, mut history) = world_with(stud(4.0, Vec::new()));
+    let (world, mut history) = stud_world(stud(4.0, Vec::new()));
     let msg = try_thread(&world, &mut history, MULTI, external(vec![boss(2.0)], None, ThreadHand::Right, true));
     assert!(msg.contains("is not cleared"), "{msg}");
 }
 
 #[test]
 fn the_external_flag_edits_undoes_and_round_trips_the_project_file() {
-    let (world, mut history) = world_with(stud(4.0, Vec::new()));
+    let (world, mut history) = stud_world(stud(4.0, Vec::new()));
     let params = external(vec![boss(4.0)], None, ThreadHand::Left, false);
     assert_eq!(try_thread(&world, &mut history, MULTI, params.clone()), "");
     // Written only when set: every internal thread's file text is what it was.
