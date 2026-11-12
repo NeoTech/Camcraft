@@ -83,7 +83,11 @@ threadHands = true;  // reads PARAM SpindleDirection (#629): the engine refuses 
 //    centre, at or below R); the first rapid leaving it - the exit to
 //    clearance - ends the group with G80 and posts as the stream says
 //    (#1011, the hop law of #994), so the tool leaves the hole at the
-//    verified exit level, never at R.
+//    verified exit level, never at R. A cycle read with the tool off
+//    its seat (on centre at R) is seated by the same law (#1026): Z out
+//    to R first when below it, then X onto the centre, then down -
+//    never one diagonal X+Z rapid; one the post cannot seat (its
+//    section's first motion, no R, R not above the bottom) is refused.
 //  - M03 unless the stream states PARAM SpindleDirection reverse (#629,
 //    a thread whose hand needs it): then M04, with a note for the
 //    operator that the threading insert must be mounted for reverse
@@ -121,6 +125,7 @@ var toolWait = false;
 var tNo = 0;
 var inCycle = false;       // a cycle group is open; its chain is suppressed
 var cycX = 0, cycY = 0, cycR = 0; // the open group's hole XY and R level (world, #1011)
+var seatKnown = false;     // #1026: this section moved, so currentPosition is where the tool is
 var sectionOpen = false;
 var coolant = "";
 var coolantAsk = "flood";  // the section's PARAM Coolant (#112), flood when unstated
@@ -522,7 +527,7 @@ function liveMove(p, rapid) {
   lastC = Number(p.C); lastR = r; lastZ = p.Z;
 }
 
-function onSection() { startPreamble(); }
+function onSection() { seatKnown = false; startPreamble(); }
 function onSectionEnd() { endPreamble(); }
 
 // A WARN record (only a gate-refused program ever carries one) is
@@ -556,6 +561,7 @@ function chainCut(p) {  // true: the cut is the cycle's (or refused)
 function onRapid() {
   startPreamble();
   var p = properties;
+  seatKnown = true;
   if (liveAsk) { liveMove(p, true); return; }
   if (posed(p) || inThread || chainRapid(p)) return;
   var r = radiusOf(p.X, p.Y, "rapid");
@@ -565,6 +571,7 @@ function onRapid() {
 function onLinear() {
   startPreamble();
   var p = properties;
+  seatKnown = true;
   if (liveAsk) { liveMove(p, false); return; }
   if (posed(p) || inThread || chainCut(p)) return;
   var r = radiusOf(p.X, p.Y, "feed move");
@@ -624,6 +631,7 @@ function threadHalfTurn(p) {
 function onCircular() {
   startPreamble();
   var p = properties;
+  seatKnown = true;
   if (liveAsk) { refuse("an arc in a C-axis section - only straight moves ride a C turn"); return; }
   if (posed(p) || inThread || chainCut(p)) return;
   if (p.CircularPlane === "XZ" || p.CircularPlane === "YZ") meridianArc(p);
@@ -690,10 +698,48 @@ function onThreadCycle() {
 function onThreadCycleEnd() { inThread = false; threadSeen = false; }
 
 // ------------------------------------------------------- canned cycles
-// One positioning rapid to the hole's retract plane, then the face
-// cycle whose initial level that is (the 0i-T cycle returns there).
-// The group's expanded chain on its hole is suppressed while the cycle
-// is open; the rapid leaving the hole closes it (#1011, above).
+// The face cycle is read with the tool seated on its R level on centre
+// (the 0i-T cycle returns to the level it was read at, so that level
+// must be R). The group's expanded chain on its hole is suppressed
+// while the cycle is open; the rapid leaving the hole closes it
+// (#1011, above).
+// #1026, #994's cycleSeat on the lathe: a tool that stands off that
+// seat is seated by the hop law - Z out to R first when it stands
+// below R (nearer the face), then X onto the centre, then Z down to R
+// when it stands above - never one diagonal X+Z rapid. "Away from the
+// work" is +Z: the program's Z is the spindle axis with the face at
+// the free end, and a face cycle drills toward -Z from R (its bottom
+// below R), which the post checks. A cycle with no stated R, whose R
+// is not above its bottom, or that is its section's first motion (no
+// stream position to seat from) and stands off the seat cannot be
+// seated: refused by name, never positioned by a guess.
+function cycleSeat(p, r) {  // true: seated (blocks written as needed)
+  var cp = (typeof currentPosition !== "undefined") ? currentPosition : {};
+  var known = seatKnown && has(cp.X) && has(cp.Y) && has(cp.Z);
+  var onAxis = known && Math.abs(cp.X - orgX) <= EPS && Math.abs(cp.Y - orgY) <= EPS;
+  if (!has(p.R)) {
+    if (onAxis) return true;  // a legacy record: the chain stands on centre
+    refuse("a face cycle with no R level starts off the spindle axis - the post cannot seat it");
+    return false;
+  }
+  var lo = known && cp.Z < p.R - EPS;
+  var hi = known && cp.Z > p.R + EPS;
+  if (onAxis && !lo && !hi) return true;  // already on its seat
+  if (!known) {
+    refuse("a face cycle is its section's first motion - the post cannot tell where the tool stands to seat it on R; approach the hole first");
+    return false;
+  }
+  if (!(has(p.Z) && p.Z < p.R - EPS)) {
+    refuse("a face cycle whose bottom is not below its R level - the post cannot tell which way is clear of the face");
+    return false;
+  }
+  if (inCycle) block(["G80"]);
+  inCycle = false;
+  if (lo) block(["G00", zWord(p.R)]);        // out of the work first
+  if (!onAxis) block(["G00", xWord(r)]);     // onto the centre at the safe level
+  if (hi) block(["G00", zWord(p.R)]);        // down to the seat
+  return true;
+}
 function onCycle() {
   startPreamble();
   var p = properties;
@@ -706,15 +752,7 @@ function onCycle() {
   if (p.CycleType === "TAP") g = "G84";
   else if (p.CycleType === "BORE") g = "G85";
   else if (p.CycleType === "BACKBORE") { refuse("back-boring cycle - no such face cycle on a 2-axis lathe"); return; }
-  if (!inCycle) {
-    // The chain's own approach rapid usually stands here already;
-    // the positioning block is written only when the tool is not.
-    var cp = (typeof currentPosition !== "undefined") ? currentPosition : {};
-    var there = has(cp.X) && has(cp.Y) && has(cp.Z) && has(p.R)
-      && Math.abs(cp.X - orgX) <= EPS && Math.abs(cp.Y - orgY) <= EPS   // on the axis, as the cycle is
-      && Math.abs(cp.Z - p.R) <= EPS;
-    if (!there) block(["G00", xWord(r), zWord(p.R)]);
-  }
+  if (!cycleSeat(p, r)) return;
   var words = [g, zWord(p.Z)];
   if ((p.CycleType === "PECK" || p.CycleType === "DEEP") && has(p.Q) && p.Q > 0) {
     words.push("Q" + Math.round(p.Q * 1000));    // whole microns, no decimal point
@@ -724,6 +762,7 @@ function onCycle() {
   block(words);
   // A legacy record with no R word keeps the whole on-axis chain.
   cycX = p.X; cycY = p.Y; cycR = has(p.R) ? Number(p.R) : Infinity;
+  seatKnown = true;
   inCycle = true;
 }
 
