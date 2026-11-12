@@ -25,20 +25,55 @@ use crate::cl::Toolpath;
 /// The `capabilities` bit a turning dialect declares.
 const TURNING: f64 = 2.0;
 
+/// The `capabilities` bit a milling dialect declares.
+const MILLING: f64 = 1.0;
+
+/// Which spindle a script's plain (non-live) section turns, by the
+/// dialect its manifest declares (#1174): what the workholding rpm
+/// limit asks before it judges a section's S against the chuck.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WorkVoice {
+    /// The turning bit: a plain section opens `G97 S M03` / `G96` on
+    /// the WORK spindle.
+    WorkSpindle,
+    /// The milling bit only: the S word drives the TOOL spindle.
+    ToolSpindle,
+    /// No dialect stated (no mask, or one with neither bit - a user's
+    /// own script without the manifest line): the caller takes the
+    /// stricter reading. #1199 settles undeclared scripts for good.
+    Undeclared,
+}
+
+/// The [`WorkVoice`] the script's manifest declares.
+///
+/// # Errors
+/// A script that does not load is a clean refusal, as everywhere.
+pub fn work_voice(cps: &str) -> Result<WorkVoice, PostError> {
+    let mut s = Script::load(cps)?;
+    let mask = s.number_global("capabilities")?.unwrap_or(0.0);
+    if !mask.is_finite() || mask < 0.0 {
+        return Ok(WorkVoice::Undeclared);
+    }
+    // The mask is a small whole number; read its bits without a
+    // float-to-integer cast that could wrap.
+    let bit = |b: f64| ((mask / b).floor() % 2.0) >= 1.0;
+    Ok(if bit(TURNING) {
+        WorkVoice::WorkSpindle
+    } else if bit(MILLING) {
+        WorkVoice::ToolSpindle
+    } else {
+        WorkVoice::Undeclared
+    })
+}
+
 /// Whether the script's manifest declares the turning dialect
-/// (`capabilities` with the turning bit set).
+/// (`capabilities` with the turning bit set) - [`work_voice`]'s
+/// `WorkSpindle`, the one reading of the mask.
 ///
 /// # Errors
 /// A script that does not load is a clean refusal, as everywhere.
 pub fn speaks_turning(cps: &str) -> Result<bool, PostError> {
-    let mut s = Script::load(cps)?;
-    let mask = s.number_global("capabilities")?.unwrap_or(0.0);
-    if !mask.is_finite() || mask < 0.0 {
-        return Ok(false);
-    }
-    // The mask is a small whole number; read its turning bit without a
-    // float-to-integer cast that could wrap.
-    Ok(((mask / TURNING).floor() % 2.0) >= 1.0)
+    Ok(work_voice(cps)? == WorkVoice::WorkSpindle)
 }
 
 /// Whether a path is C-axis live-tool work: some move states the
@@ -72,6 +107,26 @@ mod tests {
             assert_eq!(speaks_turning(text).expect("loads"), want, "{text}");
         }
         assert!(speaks_turning("capabilities = ;").is_err(), "a script that does not parse refuses");
+    }
+
+    #[test]
+    fn the_mask_names_the_spindle_a_plain_section_drives() {
+        for (text, want) in [
+            ("capabilities = 2;", WorkVoice::WorkSpindle),
+            ("capabilities = 3;", WorkVoice::WorkSpindle),
+            ("capabilities = 1;", WorkVoice::ToolSpindle),
+            ("capabilities = 0;", WorkVoice::Undeclared),
+            ("capabilities = 4;", WorkVoice::Undeclared),
+            ("capabilities = -1;", WorkVoice::Undeclared),
+            ("capabilities = 0 / 0;", WorkVoice::Undeclared),
+            ("function onOpen() {}", WorkVoice::Undeclared),
+        ] {
+            assert_eq!(work_voice(text).expect("loads"), want, "{text}");
+        }
+        let shipped = |cps: &str| work_voice(cps).expect("a shipped post loads");
+        assert_eq!(shipped(include_str!("../../../../assets/posts/fanuc-lathe.cps")), WorkVoice::WorkSpindle);
+        assert_eq!(shipped(include_str!("../../../../assets/posts/tormach-lathe.cps")), WorkVoice::WorkSpindle);
+        assert_eq!(shipped(include_str!("../../../../assets/posts/fanuc.cps")), WorkVoice::ToolSpindle);
     }
 
     #[test]
