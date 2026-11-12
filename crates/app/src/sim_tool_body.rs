@@ -5,7 +5,9 @@
 //! holder's bands (#93)), spun about the tool axis into a display mesh.
 //! What is drawn is what is checked: a modelled body's own facets (flats,
 //! slots, its turn about the axis) are not what any law reads, so the
-//! simulation draws the envelope instead. A solid of revolution from its
+//! simulation draws the envelope instead; a necked tool's shank is
+//! drawn as its drawn neck's bands (#852), the very bands the laws
+//! read. A solid of revolution from its
 //! meridian is elementary geometry; our own design, no vendor file or
 //! source consulted.
 //!
@@ -59,7 +61,9 @@ impl std::error::Error for OutlineError {}
 pub struct JudgedOutline {
     /// `(z, r)` from the tip centre up the cutter and the shank, closed
     /// to the axis at the shank's top - `Tool::profile` of the judged
-    /// record, whose breakpoints are the bands the shank laws sweep.
+    /// record, whose breakpoints are the bands the shank laws sweep; a
+    /// necked tool's shank is its neck's bands instead (#852), the very
+    /// `HolderStack::shank_bands` the laws read.
     pub cutter: Vec<(f64, f64)>,
     /// What stands above the shank, bottom-up: exactly the bands
     /// `tool_body::stack` hands the fixture laws (empty bands dropped).
@@ -71,7 +75,7 @@ impl JudgedOutline {
     /// `tool_body::judged`) under `stack` (`tool_body::stack` of its
     /// geometry). Refuses a degenerate outline by name.
     pub fn new(tool: &Tool, stack: &HolderStack) -> Result<Self, OutlineError> {
-        let cutter = Tool { holder_len: 0.0, ..tool.clone() }.profile();
+        let cutter = with_neck(Tool { holder_len: 0.0, ..tool.clone() }.profile(), tool, stack);
         if !cutter.iter().all(|p| p.0.is_finite() && p.1.is_finite())
             || !stack.bands.iter().all(|b| b.above.is_finite() && b.len.is_finite() && b.r.is_finite())
         {
@@ -138,6 +142,32 @@ impl JudgedOutline {
     }
 }
 
+/// `profile` (the judged record's cutter and shank) with its shank read
+/// as the neck `stack` carries (#852): the cutter up to the flute top,
+/// then each neck band, closed to the axis at the stickout. No neck, or
+/// one that does not fit the tool, leaves `profile` exactly as it is.
+fn with_neck(profile: Vec<(f64, f64)>, tool: &Tool, stack: &HolderStack) -> Vec<(f64, f64)> {
+    let g = tool.geom();
+    let neck = stack.shank_bands(&g);
+    if stack.neck.is_empty() || neck == HolderStack::cylinder(&g).shank_bands(&g) {
+        return profile;
+    }
+    let fl = g.flute_len;
+    let mut c: Vec<(f64, f64)> = profile.into_iter().take_while(|p| p.0 <= fl + EPS).collect();
+    // Up to the first point on the flute top: the step out to the
+    // stated shank is the neck's now.
+    if let Some(i) = c.iter().position(|p| (p.0 - fl).abs() <= EPS) {
+        c.truncate(i + 1);
+    }
+    for b in &neck {
+        c.extend([(b.above, b.r), (b.above + b.len, b.r)]);
+    }
+    if let Some(&(z, _)) = c.last() {
+        c.push((z, 0.0));
+    }
+    c
+}
+
 /// The judged outline of the tool operation `op` runs. `Ok(None)` when
 /// there is nothing to spin: the operation or its tool is gone, or the
 /// tool is a lathe insert kind (its truth lives in the work's meridian;
@@ -154,8 +184,10 @@ pub fn for_operation(world: &World, op: &str) -> Result<Option<JudgedOutline>, S
     }
     // The same two reads every fixture law makes (`fixture_struck`,
     // `operation::generate`): the judged record, then its stack.
+    // #852: and the drawn neck, judged against the stored record.
+    let neck = crate::tool_cutter::neck_of(world, &te, &tool);
     let (judged, body) = tool_body::judged(world, &te, tool).map_err(|e| format!("tool {name}: {e}"))?;
-    let stack = tool_body::stack(&judged.geom(), body.as_ref());
+    let stack = tool_body::stack(&judged.geom(), body.as_ref()).with_neck(neck);
     JudgedOutline::new(&judged, &stack).map(Some).map_err(|e| format!("tool {name}: {e}"))
 }
 
