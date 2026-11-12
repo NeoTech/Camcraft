@@ -4,10 +4,17 @@
 use std::collections::BTreeMap;
 
 use crate::merge_delta::{self, Commit, Verdict};
-use crate::merge_plan::{self, Facts, Kind, Pr};
+use crate::merge_plan::{self, BaseState, Facts, Kind, Mergeable, Pr};
 
 fn pr(n: u32, paths: &[&str]) -> Pr {
-    Pr { number: n, title: format!("PR {n}"), head: format!("h{n}"), paths: paths.iter().map(|p| p.to_string()).collect() }
+    Pr {
+        number: n,
+        title: format!("PR {n}"),
+        head: format!("h{n}"),
+        paths: paths.iter().map(|p| p.to_string()).collect(),
+        mergeable: Mergeable::Clean,
+        merge_bases: 0,
+    }
 }
 
 fn facts(prs: Vec<Pr>) -> Facts {
@@ -45,8 +52,67 @@ impl Fake {
     }
 }
 
+/// The plan; a planner error fails the test with its message (never an empty plan).
 fn run(f: &Facts, fake: &Fake) -> merge_plan::Plan {
-    merge_plan::plan(f, &mut |onto: &[u32], n: u32| fake.trial(onto, n)).unwrap_or_default()
+    merge_plan::plan(f, &mut |onto: &[u32], n: u32| fake.trial(onto, n)).expect("the planner returns a plan")
+}
+
+#[test]
+fn planner_error_is_returned_not_hidden() {
+    let f = facts(vec![pr(1, &["a.rs"])]);
+    let mut failing = |_: &[u32], _: u32| {
+        Err::<Option<Vec<String>>, String>("git merge-tree failed (exit 128) for PR #1".to_string())
+    };
+    let r = merge_plan::plan(&f, &mut failing);
+    assert_eq!(r.err().as_deref(), Some("git merge-tree failed (exit 128) for PR #1"));
+}
+
+#[test]
+fn base_state_is_the_git_and_github_decision_table() {
+    use Mergeable::{Clean, Conflicting, Unknown};
+    assert_eq!(merge_plan::base_state(Clean, true), BaseState::Sim);
+    assert_eq!(merge_plan::base_state(Unknown, true), BaseState::Sim);
+    assert_eq!(merge_plan::base_state(Conflicting, true), BaseState::GithubOnly);
+    assert_eq!(merge_plan::base_state(Clean, false), BaseState::Conflict);
+    assert_eq!(merge_plan::base_state(Unknown, false), BaseState::Conflict);
+    assert_eq!(merge_plan::base_state(Conflicting, false), BaseState::Conflict);
+}
+
+#[test]
+fn github_conflict_git_does_not_see_is_a_plain_refresh_not_wave_one() {
+    let mut conflicting = pr(1, &["a.rs"]);
+    conflicting.mergeable = Mergeable::Conflicting;
+    conflicting.merge_bases = 2;
+    let f = facts(vec![conflicting, pr(2, &["b.rs"])]);
+    let p = run(&f, &Fake::default());
+    assert_eq!(p.wave1, vec![2]);
+    assert_eq!(p.wave2.len(), 1);
+    assert_eq!(p.wave2[0].number, 1);
+    assert_eq!(p.wave2[0].kind, Kind::PlainRefresh);
+    assert!(p.wave2[0].why.contains("2 merge bases"), "why: {}", p.wave2[0].why);
+}
+
+#[test]
+fn a_child_of_a_github_only_parent_waits_too() {
+    let mut conflicting = pr(1, &["a.rs"]);
+    conflicting.mergeable = Mergeable::Conflicting;
+    conflicting.merge_bases = 2;
+    let mut f = facts(vec![conflicting, pr(2, &["b.rs"])]);
+    f.before.insert(2, [1].into_iter().collect());
+    let p = run(&f, &Fake::default());
+    assert!(p.wave1.is_empty());
+    assert_eq!(p.wave2[1].why, "its parent #1 is not in wave 1");
+}
+
+#[test]
+fn unknown_mergeable_is_listed_and_still_planned_as_git_says() {
+    let mut unknown = pr(3, &["c.rs"]);
+    unknown.mergeable = Mergeable::Unknown;
+    let f = facts(vec![unknown]);
+    let p = run(&f, &Fake::default());
+    assert_eq!(p.wave1, vec![3]);
+    assert_eq!(p.unknown, vec![3]);
+    assert!(merge_plan::render(&p).contains("WARNING: GitHub has not computed mergeability yet for #3"));
 }
 
 #[test]
@@ -199,6 +265,21 @@ fn delta_merge_of_another_branch_is_new_code() {
     let d = merge_delta::classify("h", "r", true, "main", &[other]);
     assert_eq!(d.verdict, Verdict::NewCode);
     assert!(d.notes[0].starts_with("c1 merges a branch that is not main (p2): "));
+}
+
+#[test]
+fn delta_octopus_merge_of_main_is_new_code_even_with_main_second() {
+    // Three parents: the second is main, the third is an unreviewed branch that git does not remerge.
+    let octopus = Commit {
+        sha: "c3".into(),
+        subject: "Merge main and feat".into(),
+        parents: vec!["p1".into(), "p2".into(), "p3".into()],
+        second_is_base: true,
+        remerge_files: Vec::new(),
+    };
+    let d = merge_delta::classify("h", "r", true, "main", &[octopus]);
+    assert_eq!(d.verdict, Verdict::NewCode);
+    assert_eq!(d.notes, vec!["c3 octopus merge (3 parents): Merge main and feat".to_string()]);
 }
 
 #[test]

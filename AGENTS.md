@@ -42,9 +42,11 @@ afterwards - the work must not bother them.
   been resolved."). Merging moves `main`, so reviewed PRs keep turning
   `conflicts` (orange). The skill `/resolve-conflicts` (`.claude/skills/
   resolve-conflicts/`) handles both sides:
-  - **Contributor mode** (`/resolve-conflicts [login]`): for the author's
-    open conflicting PRs, merge main into each branch (never rebase or
-    force-push), keep both sides where both added lines, take main's
+  - **Contributor mode** (`/resolve-conflicts [login]`): for the PR the merge
+    batch is about to merge, the one PR the author names, or one the author
+    is pushing a review fix to anyway (not every conflicting PR at once,
+    see "Refresh only at merge time"), merge main into the branch (never
+    rebase or force-push), keep both sides where both added lines, take main's
     snapshot PNGs and changelog files, run the targeted gate, push, and
     comment "ready for a re-check". If both sides changed the same logic,
     or a safety rule could be dropped, stop and report the hunk instead
@@ -93,7 +95,8 @@ afterwards - the work must not bother them.
 - **Only the owner's reviews count** (issue #1207, 2026-11-12: "No, only
   ours count"). A `<!-- pr-reviewer: ... -->` or `<!-- review-cost: ... -->`
   marker counts only in a review or comment whose author is the repository
-  owner's account (`gh repo view --json owner`). `merge-ready` counts only
+  owner's account (`gh repo view <base repo> --json owner`, the repository
+  the PR targets: `NeoTech/Camcraft`, also in a fork). `merge-ready` counts only
   when that account set it. A contributor's pre-check is a plain comment
   without the marker. `/review-prs`, `/resolve-conflicts check` and the
   PR-reviewer agent all filter on the author.
@@ -472,11 +475,19 @@ go to `CHANGELOG.md`.
   finding, a needed `git merge origin/main` or any other change first turns
   it back into a draft (`gh pr ready <M> --undo`), says why in a PR
   comment, is pushed and re-gated, and only then is flagged ready again.
-  Superseded since 2026-11-12 for one case: a clean merge of main with an
-  empty remerge-diff (see "A clean merge of main keeps its review") keeps
-  the review and the ready flag; it is pushed as it is and the merging
-  session restores `merge-ready`. Any other merge of main still turns the
-  PR back into a draft.
+  Superseded since 2026-11-12 for the merge-time refresh only (the
+  maintainer's decision in the question dialog, "Refresh only at merge
+  time", issue #1221): a refresh that is only a merge of main with no hand
+  edits (`cargo xtask merge-plan --delta` says SAME) is not new work on the
+  PR, so the review stands and the refresh is pushed without the draft
+  round-trip. A merge-time refresh with hand edits (MECHANICAL after the
+  merging session's own read, or DELTA) is new work: a ready PR goes back to
+  draft first, is pushed, and is reviewed as usual. Either way the merging
+  session flags the PR ready again right before merging it (`gh pr ready
+  <M>`), with one PR comment naming the class (SAME, MECHANICAL or DELTA) and
+  the review it stands on, and nothing is pushed after that flag. A PR under
+  an orange `conflicts` verdict is a draft (review-prs), so that flag is what
+  makes it mergeable again.
   Merging (by the main session for fix/docs PRs, at the cut for `feat`)
   takes only a ready PR, never a draft.
 - **Never close by hand without a commit**, except: a duplicate (link the

@@ -52,7 +52,7 @@ merge.
 
 ## Steps
 
-1. **Skip check.** `owner=$(gh repo view --json owner --jq .owner.login)`, then
+1. **Skip check.** `owner=$(gh repo view NeoTech/Camcraft --json owner --jq .owner.login)` (the base repository of the PR; a fork's own owner is not the owner of the review), then
    `gh pr view <N> --json headRefOid,reviews,comments,state,isDraft,author,headRepositoryOwner`.
    If the PR is closed, merged or a draft, report "skipped: <why>" and stop. If a
    review or comment whose author is `$owner` already contains

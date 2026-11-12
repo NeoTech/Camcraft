@@ -38,3 +38,27 @@ AGENTS.md only.
 
 **Not done here.** The announcement on #681 ("PROCESS_VERSION 31") is made
 when this PR merges, by the merging session, per AGENTS.md "Process changes".
+
+## Fix round (PR #1227 review, head 31b8e2d2)
+
+- **Octopus merges are NEW CODE.** A commit with more than two parents is
+  never a merge of main: git skips its remerge-diff (`warning: Skipping
+  remerge-diff for octopus merges`), so it cannot be shown to be clean.
+  Pinned by `delta_octopus_merge_of_main_is_new_code_even_with_main_second`.
+- **GitHub's `mergeable` decides a git-clean PR too.** A PR that git merges
+  but GitHub reports CONFLICTING (criss-cross history) is a plain refresh in
+  wave 2, never wave 1; the reason names the merge-base count, as the
+  reference does. UNKNOWN is read again (6 tries, 5 s) and a PR still UNKNOWN
+  is named in a WARNING before the plan. Decision table in
+  `base_state` (unit-tested: `base_state_is_the_git_and_github_decision_table`).
+- **Ready flag after a merge-time refresh.** The merging session flags a PR
+  ready right before merging it, with one comment naming the class. A
+  SAME refresh of a ready PR is pushed without the draft round-trip; a
+  refresh with hand edits goes through draft and review first. Authority: the
+  maintainer's question-dialog decision "Refresh only at merge time" (#1221).
+- **Owner lookup names the base repository** (`NeoTech/Camcraft`), not the
+  checkout's owner, so a fork checkout reads the same owner.
+- **Scratch refs are deleted** after each run (`refs/merge-plan/<N>`), also on
+  an error. The simulated commits stay as loose objects.
+- **Planner errors are not hidden** in the tests (`expect`, and
+  `planner_error_is_returned_not_hidden`).

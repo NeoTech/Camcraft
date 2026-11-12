@@ -129,6 +129,13 @@ ready again for a fresh review (AGENTS.md "Every PR opens as a draft").
 That applies to our own PRs; a fork contributor's PR is left as they set
 it, and the review comment says what to fix.
 
+A conflicting PR of ours that waits for the merge batch therefore stays a
+draft until merge time. The merging session refreshes it, and then flags it
+ready (`gh pr ready <N>`) right before the merge, with one PR comment naming
+the `--delta` class (SAME, MECHANICAL or DELTA) - AGENTS.md "Every PR opens
+as a draft", decided in #1221 ("Refresh only at merge time"). The review
+skill does not flag ready; it only reads the state.
+
 Whoever refreshes a branch (at merge time, AGENTS.md "Refresh only at merge
 time") re-reads `mergeable` after the push: once it is `MERGEABLE`, drop
 `conflicts` and restore `merge-ready` if the last review was clean. Run

@@ -6,9 +6,15 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::Path;
 use std::process::Command;
+use std::thread;
+use std::time::Duration;
 
 use crate::merge_delta::{self, Commit};
-use crate::merge_plan::{self, Facts, Pr};
+use crate::merge_plan::{self, Facts, Mergeable, Pr};
+
+/// GitHub computes `mergeable` lazily: after main moves it answers UNKNOWN for a few seconds (reference planner: 6 x 5 s).
+const UNKNOWN_RETRIES: usize = 6;
+const UNKNOWN_WAIT: Duration = Duration::from_secs(5);
 
 const USAGE: &str = "usage: cargo xtask merge-plan <PR>... | --label <name> | --delta <PR> --reviewed <sha>
       [--repo owner/name] [--remote origin] [--base main]";
@@ -21,9 +27,9 @@ const IDENTITY: [(&str, &str); 4] = [
     ("GIT_COMMITTER_EMAIL", "merge-plan@localhost"),
 ];
 
-/// The gh list fields: number, head branch, base branch, labels, paths (unit separator), title.
+/// The gh list fields: number, head branch, base branch, labels, paths (unit separator), mergeable, title.
 const JQ: &str = ".[] | [(.number|tostring), .headRefName, .baseRefName, (.labels|map(.name)|join(\",\")), \
-     (.files|map(.path)|join(\"\\u001f\")), (.title|gsub(\"[\\t\\r\\n]\";\" \"))] | join(\"\\t\")";
+     (.files|map(.path)|join(\"\\u001f\")), .mergeable, (.title|gsub(\"[\\t\\r\\n]\";\" \"))] | join(\"\\t\")";
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct Args {
@@ -71,14 +77,27 @@ pub fn parse(args: &[String]) -> Result<Args, String> {
 pub fn run(root: &Path, args: &[String]) -> Result<i32, String> {
     let a = parse(args)?;
     if let (Some(pr), Some(reviewed)) = (a.delta, a.reviewed.as_deref()) {
-        let text = delta(root, &a, pr, reviewed)?;
-        print!("{text}");
+        let result = delta(root, &a, pr, reviewed);
+        cleanup_refs(root, &[pr]);
+        print!("{}", result?);
         return Ok(0);
     }
     let listed = load(root, &a)?;
-    let plan = plan_for(root, &a, listed)?;
-    print!("{}", merge_plan::render(&plan));
+    let numbers: Vec<u32> = listed.iter().map(|p| p.number).collect();
+    let result = plan_for(root, &a, listed);
+    cleanup_refs(root, &numbers);
+    print!("{}", merge_plan::render(&result?));
     Ok(0)
+}
+
+/// Deletes the `refs/merge-plan/<N>` refs this run fetched (they are scratch refs; the simulated commits stay as loose
+/// objects). A failure is printed, never silent, and does not hide the plan's own result.
+fn cleanup_refs(root: &Path, numbers: &[u32]) {
+    for n in numbers {
+        if let Err(e) = git(root, &["update-ref", "-d", &format!("refs/merge-plan/{n}")]) {
+            eprintln!("warning: could not delete refs/merge-plan/{n}: {e}");
+        }
+    }
 }
 
 /// `gh` stdout, or the error gh printed.
@@ -128,12 +147,13 @@ struct Listed {
     base_ref: String,
     labels: Vec<String>,
     paths: Vec<String>,
+    mergeable: Mergeable,
     head: String,
 }
 
 fn parse_row(line: &str) -> Result<Listed, String> {
-    let f: Vec<&str> = line.splitn(6, '\t').collect();
-    let [number, head_ref, base_ref, labels, paths, title] = f.as_slice() else {
+    let f: Vec<&str> = line.splitn(7, '\t').collect();
+    let [number, head_ref, base_ref, labels, paths, mergeable, title] = f.as_slice() else {
         return Err(format!("unexpected gh row: {line}"));
     };
     Ok(Listed {
@@ -143,24 +163,38 @@ fn parse_row(line: &str) -> Result<Listed, String> {
         base_ref: base_ref.to_string(),
         labels: labels.split(',').filter(|l| !l.is_empty()).map(str::to_string).collect(),
         paths: paths.split('\u{1f}').filter(|p| !p.is_empty()).map(str::to_string).collect(),
+        mergeable: Mergeable::parse(mergeable),
         head: String::new(),
     })
 }
 
-/// The open PRs the plan covers: by label, or the numbers given (each must be open).
-fn load(root: &Path, a: &Args) -> Result<Vec<Listed>, String> {
+/// Every open PR, as gh lists it now.
+fn fetch_listed(root: &Path, a: &Args) -> Result<Vec<Listed>, String> {
     let mut cmd = vec![
         "pr", "list", "--state", "open", "--limit", "300", "--json",
-        "number,title,headRefName,baseRefName,files,labels", "--jq", JQ,
+        "number,title,headRefName,baseRefName,files,labels,mergeable", "--jq", JQ,
     ];
     if let Some(r) = a.repo.as_deref() {
         cmd.extend(["--repo", r]);
     }
-    let all: Vec<Listed> = gh(root, &cmd)?
-        .lines()
-        .filter(|l| !l.is_empty())
-        .map(parse_row)
-        .collect::<Result<_, _>>()?;
+    gh(root, &cmd)?.lines().filter(|l| !l.is_empty()).map(parse_row).collect()
+}
+
+/// The open PRs the plan covers: by label, or the numbers given (each must be open). A PR whose `mergeable` is
+/// still UNKNOWN is read again after a short wait, a few times; the plan warns about any that stay unknown.
+fn load(root: &Path, a: &Args) -> Result<Vec<Listed>, String> {
+    let mut chosen = select(fetch_listed(root, a)?, a)?;
+    for _ in 0..UNKNOWN_RETRIES {
+        if !chosen.iter().any(|p| p.mergeable == Mergeable::Unknown) {
+            break;
+        }
+        thread::sleep(UNKNOWN_WAIT);
+        chosen = select(fetch_listed(root, a)?, a)?;
+    }
+    Ok(chosen)
+}
+
+fn select(all: Vec<Listed>, a: &Args) -> Result<Vec<Listed>, String> {
     let mut chosen: Vec<Listed> = if let Some(label) = &a.label {
         all.into_iter().filter(|p| p.labels.contains(label)).collect()
     } else {
@@ -272,11 +306,26 @@ fn plan_for(root: &Path, a: &Args, mut listed: Vec<Listed>) -> Result<merge_plan
         }
     }
 
+    // Merge bases matter only where GitHub reports a conflict: criss-cross history gives several.
+    let mut prs: Vec<Pr> = Vec::new();
+    for p in &listed {
+        let merge_bases = match p.mergeable {
+            Mergeable::Conflicting => match git_status(root, &["merge-base", "--all", &base_sha, &p.head])? {
+                (0, out) => out.lines().filter(|l| !l.trim().is_empty()).count(),
+                _ => 0,
+            },
+            Mergeable::Clean | Mergeable::Unknown => 0,
+        };
+        prs.push(Pr {
+            number: p.number,
+            title: p.title.clone(),
+            head: p.head.clone(),
+            paths: p.paths.clone(),
+            mergeable: p.mergeable,
+            merge_bases,
+        });
+    }
     let heads: BTreeMap<u32, String> = listed.iter().map(|p| (p.number, p.head.clone())).collect();
-    let prs: Vec<Pr> = listed
-        .iter()
-        .map(|p| Pr { number: p.number, title: p.title.clone(), head: p.head.clone(), paths: p.paths.clone() })
-        .collect();
     let facts = Facts { base_name: base.to_string(), base_sha: base_sha.clone(), prs, before, shared };
     let mut sim = Sim { root, base_sha, heads, commits: HashMap::new() };
     merge_plan::plan(&facts, &mut |onto: &[u32], pr: u32| sim.trial(onto, pr))
@@ -302,9 +351,10 @@ fn delta(root: &Path, a: &Args, pr: u32, reviewed_arg: &str) -> Result<String, S
                 .map(str::to_string)
                 .collect();
             let subject = git(root, &["show", "-s", "--format=%s", sha])?;
-            let second_is_base = match parents.get(1) {
-                Some(p) => is_ancestor(root, p, &base_ref)?,
-                None => false,
+            // Only a two-parent merge can be a merge of main: git skips the remerge-diff of an octopus.
+            let second_is_base = match parents.as_slice() {
+                [_, second] => is_ancestor(root, second, &base_ref)?,
+                _ => false,
             };
             let remerge_files = if second_is_base {
                 git(root, &["show", "--remerge-diff", "--format=", "--name-only", sha])?

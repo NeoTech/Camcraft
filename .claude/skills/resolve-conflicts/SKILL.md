@@ -44,10 +44,18 @@ fork, `upstream` is NeoTech/Camcraft and `origin` is the fork).
   `merge-ready` (the label is `conflicts`), so pushing a merge to it is
   allowed. If the PR is still marked ready (ours or a contributor's), run
   `gh pr ready <N> --undo` before pushing and say why in a PR comment -
-  except a clean merge of main with an empty remerge-diff (AGENTS.md "A
-  clean merge of main keeps its review"), which keeps the ready flag: push
-  it as it is and say so in the comment. A
-  contributor can do this on their own PR; when you can't (someone else's
+  except a refresh that is only a merge of main with no hand edits
+  (`cargo xtask merge-plan --delta` says SAME; AGENTS.md "Every PR opens as
+  a draft", superseded since 2026-11-12 by the decision "Refresh only at
+  merge time", issue #1221): that one is pushed as it is, and the comment
+  says so.
+- The ready flag after a merge-time refresh is the merging session's: when
+  it refreshes a PR for the batch and `--delta` says SAME, or MECHANICAL
+  after its own read, the merging session flags the PR ready (`gh pr ready
+  <N>`) right before it merges it, with one PR comment naming the class.
+  Nothing is pushed after that flag. A PR under an orange `conflicts` verdict
+  is a draft (review-prs), so this step is what makes it mergeable again.
+  A contributor does the flag on their own PR; when you can't (someone else's
   PR you only have push access to), say in the comment that it should be
   re-flagged ready after the re-check.
 

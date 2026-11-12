@@ -88,6 +88,12 @@ pub fn classify(head: &str, reviewed: &str, reviewed_is_ancestor: bool, base_nam
     let mut notes = Vec::new();
     for c in commits {
         let sha = short(&c.sha);
+        // git skips the remerge-diff of an octopus merge, so only the second parent is no evidence of a merge of main.
+        if c.parents.len() > 2 {
+            verdict = Verdict::NewCode;
+            notes.push(format!("{sha} octopus merge ({} parents): {}", c.parents.len(), subject(&c.subject)));
+            continue;
+        }
         let Some(second) = c.parents.get(1) else {
             verdict = Verdict::NewCode;
             notes.push(format!("{sha} commit: {}", subject(&c.subject)));

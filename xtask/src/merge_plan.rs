@@ -33,6 +33,47 @@ fn basename(path: &str) -> &str {
     path.rsplit('/').next().unwrap_or(path)
 }
 
+/// GitHub's own answer for a PR against the base (`mergeable` in gh): it can disagree with git's merge.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Mergeable {
+    Clean,
+    Conflicting,
+    /// GitHub has not computed it yet (common for a few seconds after main moves).
+    Unknown,
+}
+
+impl Mergeable {
+    /// The gh word (`MERGEABLE`, `CONFLICTING`, anything else is unknown).
+    pub fn parse(word: &str) -> Mergeable {
+        match word {
+            "MERGEABLE" => Mergeable::Clean,
+            "CONFLICTING" => Mergeable::Conflicting,
+            _ => Mergeable::Unknown,
+        }
+    }
+}
+
+/// Where a PR stands against the base alone, from git's merge and GitHub's answer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BaseState {
+    /// Merges cleanly: it can join wave 1.
+    Sim,
+    /// git merges it, GitHub reports a conflict (criss-cross history): a plain refresh, never wave 1.
+    GithubOnly,
+    /// Conflicts with the base now.
+    Conflict,
+}
+
+/// The decision table of the base check (reference planner: `github_only` when git is clean and GitHub says
+/// CONFLICTING). An UNKNOWN answer is trusted as git says, and reported by the caller.
+pub fn base_state(mergeable: Mergeable, git_clean: bool) -> BaseState {
+    match (git_clean, mergeable) {
+        (false, _) => BaseState::Conflict,
+        (true, Mergeable::Conflicting) => BaseState::GithubOnly,
+        (true, Mergeable::Clean | Mergeable::Unknown) => BaseState::Sim,
+    }
+}
+
 /// One open PR as the planner sees it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Pr {
@@ -42,6 +83,10 @@ pub struct Pr {
     pub head: String,
     /// Every path the PR changes.
     pub paths: Vec<String>,
+    /// GitHub's `mergeable` against the base.
+    pub mergeable: Mergeable,
+    /// Merge bases of the PR's head and the base (only read when GitHub says CONFLICTING; 0 otherwise).
+    pub merge_bases: usize,
 }
 
 impl Pr {
@@ -79,6 +124,8 @@ pub enum Kind {
     Mechanical,
     /// Conflicts in code: someone reads the hunk.
     ByHand,
+    /// GitHub reports a conflict git does not: a plain merge of main settles it.
+    PlainRefresh,
 }
 
 impl Kind {
@@ -87,6 +134,7 @@ impl Kind {
             Kind::CleanAfterWave1 => "clean after wave 1",
             Kind::Mechanical => "mechanical",
             Kind::ByHand => "by hand",
+            Kind::PlainRefresh => "plain refresh",
         }
     }
 }
@@ -108,6 +156,8 @@ pub struct Plan {
     pub wave2: Vec<Refresh>,
     pub titles: BTreeMap<u32, String>,
     pub stacked: BTreeMap<u32, Vec<u32>>,
+    /// PRs GitHub had not yet computed `mergeable` for: wave 1 may be wrong until they are read again.
+    pub unknown: Vec<u32>,
 }
 
 struct Deferred {
@@ -154,14 +204,27 @@ pub fn plan(facts: &Facts, trial: &mut Trial<'_>) -> Result<Plan, String> {
 
     // Which PRs merge with the base on their own; the rest are refreshed later.
     let mut base_clash: BTreeMap<u32, Vec<String>> = BTreeMap::new();
+    let mut github_only: BTreeSet<u32> = BTreeSet::new();
+    let mut deferred: BTreeMap<u32, Deferred> = BTreeMap::new();
     let mut ok: Vec<u32> = Vec::new();
     for &n in &nums {
+        let mergeable = by.get(&n).map_or(Mergeable::Unknown, |p| p.mergeable);
         match trial(&[], n)? {
-            None => ok.push(n),
+            None => match base_state(mergeable, true) {
+                BaseState::GithubOnly => {
+                    github_only.insert(n);
+                }
+                BaseState::Sim | BaseState::Conflict => ok.push(n),
+            },
             Some(files) => {
                 base_clash.insert(n, files);
             }
         }
+    }
+    for &n in &github_only {
+        let bases = by.get(&n).map_or(0, |p| p.merge_bases);
+        let why = format!("GitHub reports a conflict git does not ({bases} merge bases) - a refresh is a plain merge of {}", facts.base_name);
+        deferred.insert(n, Deferred { why, files: Vec::new() });
     }
 
     // Pairwise clashes among those, each tried on top of the first of the pair.
@@ -179,7 +242,6 @@ pub fn plan(facts: &Facts, trial: &mut Trial<'_>) -> Result<Plan, String> {
     }
 
     // Wave 1 is an independent set: the PR with the fewest live rivals goes in, its rivals are deferred.
-    let mut deferred: BTreeMap<u32, Deferred> = BTreeMap::new();
     for &n in &nums {
         if let Some(files) = base_clash.remove(&n) {
             deferred.insert(n, Deferred { why: format!("conflicts with {} now", facts.base_name), files });
@@ -268,7 +330,9 @@ pub fn plan(facts: &Facts, trial: &mut Trial<'_>) -> Result<Plan, String> {
         if files.is_empty() {
             files = d.files;
         }
-        let kind = if clean {
+        let kind = if clean && github_only.contains(&n) {
+            Kind::PlainRefresh
+        } else if clean {
             Kind::CleanAfterWave1
         } else if !files.is_empty() && files.iter().all(|f| mechanical(f)) {
             Kind::Mechanical
@@ -286,12 +350,17 @@ pub fn plan(facts: &Facts, trial: &mut Trial<'_>) -> Result<Plan, String> {
             (!parents.is_empty()).then_some((*n, parents))
         })
         .collect();
-    Ok(Plan { base_sha: facts.base_sha.clone(), wave1, wave2, titles, stacked })
+    let unknown = nums.iter().copied().filter(|n| by.get(n).is_some_and(|p| p.mergeable == Mergeable::Unknown)).collect();
+    Ok(Plan { base_sha: facts.base_sha.clone(), wave1, wave2, titles, stacked, unknown })
 }
 
 /// The plan as the text the skill reads.
 pub fn render(p: &Plan) -> String {
     let mut s = format!("base {}\n", short(&p.base_sha));
+    if !p.unknown.is_empty() {
+        let names: Vec<String> = p.unknown.iter().map(|n| format!("#{n}")).collect();
+        let _ = writeln!(s, "WARNING: GitHub has not computed mergeability yet for {} - run again before trusting wave 1", names.join(", "));
+    }
     let _ = writeln!(s, "\nWAVE 1 - merge in this order; no head moves, so no refresh and no delta review ({}):", p.wave1.len());
     for n in &p.wave1 {
         let dep = p.stacked.get(n).map(|a| format!("  (after {})", refs(a))).unwrap_or_default();
