@@ -130,6 +130,9 @@ pub use probe_dto::*;
 // #670: the plasma profile's file mirror and its path record.
 mod plasma_dto;
 pub use plasma_dto::*;
+// #541: the sinker burn's file mirror.
+mod sinker_dto;
+pub use sinker_dto::*;
 mod trochoid_dto;
 pub use trochoid_dto::*;
 mod approach;

@@ -185,8 +185,9 @@ fn stamp_follows_every_input() {
     // contour), to its true 38 - #108's probe row, seated to close
     // the Drilling run, to its true 39 - #670's plasma profile,
     // appended as the plasma table's own section, to 40 - #220's
-    // trochoidal slot, seated after it at 40, to 41.)
-    assert_eq!(KindInfo::ALL.len(), 41);
+    // trochoidal slot, seated after it at 40, to 41 - #541's sinker
+    // burn, appended as the sinker EDM's own section, to 42.)
+    assert_eq!(KindInfo::ALL.len(), 42);
     for (i, row) in KindInfo::ALL.iter().enumerate() {
         assert_eq!(row.ty.ordinal(), i, "row {i} out of step with ordinal");
         assert_eq!(row.tag as usize, i, "digest tag must equal table order");

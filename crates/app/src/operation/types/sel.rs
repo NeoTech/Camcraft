@@ -281,6 +281,10 @@ pub enum OpType {
     /// probe - the stored kind id never moves - and listed in the 2D
     /// mill section by display order.
     TrochoidalSlot,
+    /// Sinker EDM burn to depth (#541): one electrode fed down Z to a
+    /// depth read from a stated datum (see [`crate::sinker`]). Appended:
+    /// stored kind ids never move.
+    SinkerBurn,
 }
 
 impl core::fmt::Display for OpType {

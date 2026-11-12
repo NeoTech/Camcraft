@@ -1,0 +1,23 @@
+## #541 - Sinker EDM: burn to depth with a single electrode
+
+**Decided:**
+- **The electrode is a tool** (`ToolKind::Electrode`, appended). It rides the existing `Tool` fields so the library, the project file and the commands carry it unchanged: `diameter` is the face's X size, `width` its Y size, `flute_len` the electrode's length below the holder, `shank_len` the pickup offset. It turns no spindle (rpm 0 by law) and has a sharp face (no corner). A garbled electrode is refused by name at AddTool / ChangeTool / the library reader, through the torch's existing refusal seam (`Tool::torch_refusal`).
+- **The Sinker Burn op** (`OpType::SinkerBurn`, tag 41, `Section::Sinker`, `Family::Sinker`) admits only a sinker EDM. On any other machine the family door refuses it by name ("sinker EDM work ... mount a sinker EDM first"). A milling op on a sinker stays refused as #530 defines. Only an electrode mounts it (the tool law).
+- **The datum** is one of work top (floor = top - depth), cavity floor (floor = floor datum + depth, a stand-off, 0 burns exactly to it) or electrode tip (floor = approach plane - depth). The burn is refused by name when its floor lands past the cavity floor datum, past the model's lowest point, or deeper than the electrode is long (its holder would enter the work).
+- **The spark gap places the tip.** The op names a machine condition id (required, #290 D4: none ship). Its gap is read through #531's `Edm::condition` asking only `ConditionField::Gap`, after checking that the setup's machine is a sinker EDM, so a wire field is never asked of a sinker. The tip stops one gap above the stated floor, so the cavity, not the electrode, reaches the stated depth. Conditions are looked up by id only. Nothing picks one by role, so no "first match" is ever taken.
+- **The CL** is a rapid to the approach plane over the burn point, one feed plunge at the servo feed, and a rapid retract. Golden: `tests/golden/sinker_burn_cavity.cl`. No orbit (#544), no undersize passes (#543), no post (#542 owns the sinker post; `post_serves` still refuses every EDM).
+- **Verification** (D7): the column engine gains a box atom (`stock_sim::simulate_box`, `dexel_box.rs`). It sweeps the rectangular face grown by the gap along straight chords, exact per column (the intersection of the two per-axis windows), with arcs refused by name. The program verdict (`simulate_document`) cuts a sinker op with it, so a burn deeper than the part's cavity is convicted as a gouge. The field eye (stock view and playback) has no box atom yet and refuses a program with an electrode by name, rather than cutting it as a disc. Rest masks count an electrode as removing nothing, which leaves material standing for a later op: the safe side.
+- **Catalog:** `EDM-E10X6` (10 x 6 mm face, 30 long, 15 pickup) joins the starter catalog, so the tool law's empty-rack refusal names a real entry for the Sinker Burn, as it does for every other kind. Its stem (`shank_d`) is drawn as wide as the X side, a plain spun envelope for the body laws. A face wider in Y than in X is under-drawn there, and the sim reads the true box.
+- **UI:** a minimal Sinker Burn page (`sinker_page.rs`) has the burn point, condition, heights, datum, depth and feed, so the tab law holds and the GUI edits through `EditOperationParams`. The full sinker setup and op pages stay #548's.
+- **Staleness:** the op's stamp digests the resolved gap (or the refusal text), so a re-stated condition marks the op stale.
+- **MCP:** no new tool is needed. `add_tool` (definition), `add_operation` (kind "Sinker Burn"), `edit_operation`, `generate` and `undo` drive it through the same undoable commands. This is pinned in `sinker_burn.rs`.
+
+**Why:** #290 D3/D4/D7. The plunge is CL moves the existing sim judges, and a gap-less burn would leave the cavity one gap deeper and wider than stated, a silent wrong answer.
+
+**Considered and dropped:**
+- A disc atom of the half-diagonal or the inscribed radius. The first over-reports removal and would phantom-gouge a correct cavity's walls. The second hides a real gouge at the corners.
+- An optional condition (no gap when blank). Absent is not zero (#531), so the gap must be stated.
+- A new `Tool` field for the Y size. It would have touched every `Tool` literal in the tree, while `width` is already "inert for the mill kinds".
+- A box atom in the field arm. It is a separate sweep in the SDF engine, so it is left for the sinker UI slice (#548), which owns the stock view.
+
+**Cost to change later:** low. The kind, section and family are appended. The box atom is a standalone column function. The wire stack (#532) appends its own kind next to this one, so whichever merges second renumbers its tag.

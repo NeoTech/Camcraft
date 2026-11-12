@@ -983,6 +983,7 @@ impl HeightRefs for OpParams {
         match self {
             OpParams::Probe { clearance_z, .. } => vec![clearance_z],
             OpParams::PlasmaProfile(p) => vec![&p.clearance_z, &p.top_z, &p.bottom_z],
+            OpParams::SinkerBurn(p) => vec![&p.clearance_z, &p.top_z, &p.floor_z],
             OpParams::Face {
                 clearance_z,
                 cut_z,

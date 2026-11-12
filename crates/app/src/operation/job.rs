@@ -113,6 +113,9 @@ pub struct GenJob {
     /// the path once it exists (`carried_stock::Overhang::note`) - the post
     /// gate refuses when a feed move reaches it.
     pub(super) carried_overhang: Option<super::carried_stock::Overhang>,
+    /// #541: a sinker burn's spark gap, read from its setup's machine
+    /// condition (`sinker_op::condition_gap`); `None` for every other kind.
+    pub(super) sinker_gap: Option<Result<f64, String>>,
 }
 
 /// The tripwire phrase for a stored precompute whose arm never collected
@@ -318,6 +321,10 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         .and_then(|m| m.axis(2))
         .and_then(crate::machine::AxisLimits::program_travel)
         .map(|(lo, hi)| wcs_origin[2] + lo.max(hi));
+    let sinker_gap = match &op.params {
+        OpParams::SinkerBurn(p) => Some(super::sinker_op::condition_gap(world, setup, p)),
+        _ => None,
+    };
     let machine_rotaries = mounted.map(|m| {
         let rot: Vec<_> = m.axes.iter().filter(|a| a.rotary).cloned().collect();
         (m.model, rot)
@@ -360,6 +367,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         wcs_origin,
         spindle_note,
         carried_overhang,
+        sinker_gap,
     })
 }
 

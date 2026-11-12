@@ -1429,6 +1429,23 @@ impl OpParams {
                 }
                 h.write_u8(set_wcs.unwrap_or(0xff));
             }
+            // The sinker burn (#541): every stored number, the datum
+            // and the condition id.
+            OpParams::SinkerBurn(p) => {
+                wh(h, p.clearance_z);
+                wh(h, p.top_z);
+                wh(h, p.floor_z);
+                h.write_u8(match p.datum {
+                    super::SinkerDatum::WorkTop => 0,
+                    super::SinkerDatum::CavityFloor => 1,
+                    super::SinkerDatum::ElectrodeTip => 2,
+                });
+                for v in [p.depth, p.x, p.y, p.feed] {
+                    w(h, v);
+                }
+                h.write(p.condition.as_bytes());
+                h.write_u8(0xff);
+            }
             // The plasma profile (#670): every stored number, the
             // optional ones with a presence byte.
             OpParams::PlasmaProfile(p) => {

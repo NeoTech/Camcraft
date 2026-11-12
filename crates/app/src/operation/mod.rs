@@ -97,6 +97,8 @@ mod probe;
 pub mod probe_op;
 // #670: the Plasma Profile's seed and generation glue.
 pub mod plasma_op;
+// #541: the sinker EDM burn to depth.
+pub mod sinker_op;
 // #171: the Probe op seeded from one picked face, edge, vertex or round wall.
 mod probe_pick;
 mod probe_pick_round;

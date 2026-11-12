@@ -2698,11 +2698,16 @@ fn tips_match_the_imgui_table() {
         );
         let is_plasma = camcraft_app::operation::KindInfo::ALL[i].family()
             == camcraft_app::operation::Family::Plasma;
+        let is_sinker = camcraft_app::operation::KindInfo::ALL[i].family()
+            == camcraft_app::operation::Family::Sinker;
         let want = if is_turn {
             "The document's machine is a mill - turning operations do not drive it; mount a lathe or a mill-turn (Setup > Machine)".to_owned()
         } else if is_plasma {
             // #670: the torch's work has no mill-turn to fall back on.
             "The document's machine is a mill - plasma cutting operations do not drive it; mount a plasma table (Setup > Machine)".to_owned()
+        } else if is_sinker {
+            // #541: nor the electrode's.
+            "The document's machine is a mill - sinker EDM operations do not drive it; mount a sinker EDM (Setup > Machine)".to_owned()
         } else if let Some(reason) = tool_law {
             // M10.1 B: the demo's one flat end mill cannot cut every
             // mill kind - those cells say which tool kind is missing.

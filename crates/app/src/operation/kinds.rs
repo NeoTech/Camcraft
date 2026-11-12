@@ -142,6 +142,8 @@ fn feed_of(p: &OpParams) -> f64 {
         OpParams::Probe { fast_feed, .. } => *fast_feed,
         // A blank plasma feed is the controller's (#670): no number.
         OpParams::PlasmaProfile(p) => p.feed.unwrap_or(0.0),
+        // The sinker's servo feed down (#541).
+        OpParams::SinkerBurn(p) => p.feed,
     }
 }
 
@@ -214,6 +216,8 @@ fn plunge_of(p: &OpParams) -> f64 {
         // The torch never plunges into solid: it pierces at the
         // controller's height and delay (#670).
         OpParams::PlasmaProfile(p) => p.feed.unwrap_or(0.0),
+        // The sinker's servo feed down (#541).
+        OpParams::SinkerBurn(p) => p.feed,
     }
 }
 
@@ -287,7 +291,7 @@ fn climb_of(p: &OpParams) -> bool {
         // The wall ride and the helix choose their flank: the climb
         // number says which way the circle runs (M2.4 C).
         OpParams::Bore { climb, .. } | OpParams::Thread { climb, .. } => *climb,
-        OpParams::Probe { .. } | OpParams::PlasmaProfile(_) => false,
+        OpParams::Probe { .. } | OpParams::PlasmaProfile(_) | OpParams::SinkerBurn(_) => false,
     }
 }
 
@@ -370,7 +374,7 @@ fn stepover_of(p: &OpParams) -> Option<f64> {
         // One ride per exposed edge is the deburr answer: the model's
         // own edges are the pattern, nothing tiles (M2.5 E B).
         | OpParams::Deburr { .. } => None,
-        OpParams::Probe { .. } | OpParams::PlasmaProfile(_) => None,
+        OpParams::Probe { .. } | OpParams::PlasmaProfile(_) | OpParams::SinkerBurn(_) => None,
     }
 }
 
@@ -447,7 +451,7 @@ fn stepdown_of(p: &OpParams) -> Option<f64> {
         // between the clearance plane and the edge there is no
         // infeed ladder to step (M2.5 E B).
         OpParams::Deburr { .. } => None,
-        OpParams::Probe { .. } | OpParams::PlasmaProfile(_) => None,
+        OpParams::Probe { .. } | OpParams::PlasmaProfile(_) | OpParams::SinkerBurn(_) => None,
     }
 }
 
@@ -515,6 +519,8 @@ pub fn top_of(p: &OpParams) -> Option<Height> {
         OpParams::Probe { .. } => None,
         // The plasma cut rides the plate's top (#670).
         OpParams::PlasmaProfile(p) => Some(p.top_z),
+        // The work top the sinker's depth may be read from (#541).
+        OpParams::SinkerBurn(p) => Some(p.top_z),
     }
 }
 
@@ -591,6 +597,8 @@ pub fn bottom_of(p: &OpParams) -> Option<Height> {
         OpParams::Probe { .. } => None,
         // The plate's bottom: the thickness the small-hole rule reads.
         OpParams::PlasmaProfile(p) => Some(p.bottom_z),
+        // The cavity floor datum no burn passes (#541).
+        OpParams::SinkerBurn(p) => Some(p.floor_z),
     }
 }
 
@@ -667,7 +675,7 @@ fn retract_of(p: &OpParams) -> Option<Height> {
         // The deburr ride hops every run to the clearance plane -
         // the kernel's own word, no between-run plane authored (M2.5 E B).
         | OpParams::Deburr { .. } => None,
-        OpParams::Probe { .. } | OpParams::PlasmaProfile(_) => None,
+        OpParams::Probe { .. } | OpParams::PlasmaProfile(_) | OpParams::SinkerBurn(_) => None,
     }
 }
 
@@ -1600,19 +1608,22 @@ pub enum Section {
     Turning,
     /// The plasma table's work (#670): the torch's 2D through-cuts.
     Plasma,
+    /// The sinker EDM's work (#541): an electrode burned down Z.
+    Sinker,
 }
 
 impl Section {
     /// The catalog's order, which is the ribbon's: the sections appear
     /// left to right in exactly this sequence, each one's kinds in the
     /// registry's own order (the row order is the product order).
-    pub const ORDER: [Section; 6] = [
+    pub const ORDER: [Section; 7] = [
         Section::Mill2D,
         Section::Mill3D,
         Section::Drilling,
         Section::MultiAxis,
         Section::Turning,
         Section::Plasma,
+        Section::Sinker,
     ];
 
     #[must_use]
@@ -1624,6 +1635,7 @@ impl Section {
             Section::MultiAxis => "Multi-axis",
             Section::Turning => "Turning",
             Section::Plasma => "Plasma",
+            Section::Sinker => "Sinker EDM",
         }
     }
 
@@ -1635,6 +1647,7 @@ impl Section {
         match self {
             Section::Turning => Family::Turn,
             Section::Plasma => Family::Plasma,
+            Section::Sinker => Family::Sinker,
             _ => Family::Mill,
         }
     }
@@ -1693,6 +1706,9 @@ pub enum Family {
     /// The plasma table's torch work (#670): admitted on a plasma
     /// table only - a mill-turn spins steel, it strikes no arc.
     Plasma,
+    /// The sinker EDM's electrode work (#541): admitted on a sinker
+    /// EDM only.
+    Sinker,
 }
 
 impl Family {
@@ -1709,6 +1725,7 @@ impl Family {
                 | (Family::Mill, Kind::Mill)
                 | (Family::Turn, Kind::Lathe)
                 | (Family::Plasma, Kind::Plasma)
+                | (Family::Sinker, Kind::SinkerEdm)
         )
     }
 
@@ -1719,6 +1736,7 @@ impl Family {
             Family::Mill => "milling",
             Family::Turn => "turning",
             Family::Plasma => "plasma cutting",
+            Family::Sinker => "sinker EDM",
         }
     }
 
@@ -1729,6 +1747,7 @@ impl Family {
             Family::Mill => "mill",
             Family::Turn => "lathe",
             Family::Plasma => "plasma table",
+            Family::Sinker => "sinker EDM",
         }
     }
 }
@@ -2309,6 +2328,21 @@ impl KindInfo {
             seed: seed_trochoidal_slot,
             tool_kinds: tk::FLAT_MILLS,
         },
+        KindInfo {
+            ty: OpType::SinkerBurn,
+            label: "Sinker Burn",
+            caption: "Sinker Burn",
+            tag: 41,
+            // The electrode burns straight down Z: the milling laws
+            // (tangency, reach, depth) have no electrode to judge, so
+            // they stand down as for the centre-line ride; the burn's
+            // own door refuses a depth past the floor datum by name and
+            // the stock sim's box atom verifies the plunge (#290 D7).
+            mode: Mode::Engrave,
+            section: Section::Sinker,
+            seed: super::sinker_op::seed_sinker_burn,
+            tool_kinds: tk::ELECTRODE,
+        },
     ];
 
     /// Whose machine this kind drives - read off the row's section
@@ -2383,6 +2417,7 @@ pub const ALL_LABELS: [&str; KIND_COUNT] = [
     KindInfo::ALL[38].label,
     KindInfo::ALL[39].label,
     KindInfo::ALL[40].label,
+    KindInfo::ALL[41].label,
 ];
 
 impl OpType {
@@ -2446,6 +2481,8 @@ impl OpType {
             OpType::PlasmaProfile => 39,
             // #220: appended after the plasma profile (39) (stored ids never move).
             OpType::TrochoidalSlot => 40,
+            // #541: the sinker burn appends (stored ids never move).
+            OpType::SinkerBurn => 41,
         }
     }
 

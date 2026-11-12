@@ -1163,6 +1163,10 @@ pub enum OpParams {
     /// rule and inner-before-outer order (see [`crate::plasma`]). The
     /// plasma table's only kind (#669's family seam).
     PlasmaProfile(super::plasma::PlasmaOp),
+    /// Sinker EDM burn to depth (#541): one electrode fed down Z to a
+    /// depth from a stated datum (see [`crate::sinker`]). The sinker
+    /// EDM's first kind.
+    SinkerBurn(super::sinker::SinkerBurnOp),
 }
 
 impl OpParams {
@@ -1209,6 +1213,7 @@ impl OpParams {
             OpParams::Thread { .. } => OpType::Thread,
             OpParams::Probe { .. } => OpType::Probe,
             OpParams::PlasmaProfile(_) => OpType::PlasmaProfile,
+            OpParams::SinkerBurn(_) => OpType::SinkerBurn,
             OpParams::TrochoidalSlot { .. } => OpType::TrochoidalSlot,
         }
     }
@@ -1235,7 +1240,11 @@ impl OpParams {
             // The probe touches along the machine's axes (#108); the
             // torch stands vertical over a flat plate (#670); the
             // trochoid carries no index (#220 slice 1).
-            OpParams::Probe { .. } | OpParams::PlasmaProfile(_) | OpParams::TrochoidalSlot { .. } => None,
+            // The electrode burns straight down Z (#541).
+            OpParams::Probe { .. }
+            | OpParams::PlasmaProfile(_)
+            | OpParams::TrochoidalSlot { .. }
+            | OpParams::SinkerBurn(_) => None,
             // The 5-axis kinds (M5.1 C) are the third answer, not the
             // second: the PART stands still and the TOOL AXIS moves -
             // a 3+2 index inside them would command the machine to
@@ -1306,6 +1315,7 @@ impl OpParams {
     pub fn clearance(&self) -> Height {
         match self {
             OpParams::PlasmaProfile(p) => p.clearance_z,
+            OpParams::SinkerBurn(p) => p.clearance_z,
             OpParams::Face { clearance_z, .. }
             | OpParams::Contour { clearance_z, .. }
             | OpParams::Pocket { clearance_z, .. }
@@ -1361,6 +1371,8 @@ impl OpParams {
             OpParams::Probe { clearance_z, .. } => *clearance_z,
             // The plasma contours are drawn on the plate's top (#670).
             OpParams::PlasmaProfile(p) => p.top_z,
+            // The electrode enters at the work top (#541).
+            OpParams::SinkerBurn(p) => p.top_z,
             OpParams::Face { top_z, cut_z, .. } => top_z.unwrap_or(*cut_z),
             OpParams::Contour { top_z, .. }
             | OpParams::Pocket { top_z, .. }
@@ -1435,6 +1447,11 @@ impl OpParams {
                 f(p.clearance_z);
                 f(p.top_z);
                 f(p.bottom_z);
+            }
+            OpParams::SinkerBurn(p) => {
+                f(p.clearance_z);
+                f(p.top_z);
+                f(p.floor_z);
             }
             OpParams::Face { clearance_z, cut_z, top_z, .. } => {
                 f(*clearance_z);

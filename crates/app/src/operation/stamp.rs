@@ -54,6 +54,7 @@ pub fn current_stamp(
         crate::tools::ToolKind::Taper => 10,
         crate::tools::ToolKind::Probe => 11,
         crate::tools::ToolKind::Torch => 12,
+        crate::tools::ToolKind::Electrode => 13,
     });
     for v in [
         tool.diameter,
@@ -83,6 +84,8 @@ pub fn current_stamp(
         crate::tools::ToolKind::Drill => w(&mut h, tool.tip_angle),
         crate::tools::ToolKind::Tap => w(&mut h, tool.pitch),
         crate::tools::ToolKind::Groove => w(&mut h, tool.width),
+        // The electrode's Y size is its face (#541).
+        crate::tools::ToolKind::Electrode => w(&mut h, tool.width),
         // The threading insert digests BOTH its profile numbers
         // (M5.2 D): the crest width and the flanks' angle are the
         // wave's footprint - a recut V is a different thread even
@@ -111,6 +114,16 @@ pub fn current_stamp(
     // operation kinds reach past this line.
     if matches!(params, OpParams::Thread { .. }) {
         w(&mut h, tool.pitch);
+    }
+    // #541: the sinker burn places its tip one spark gap above the floor,
+    // read from the setup machine's condition - a re-stated gap (or a
+    // condition gone) is a different burn, marked Stale through here.
+    if let OpParams::SinkerBurn(p) = params {
+        h.write(b"sinker-gap");
+        match super::sinker_op::condition_gap(world, setup, p) {
+            Ok(g) => w(&mut h, g),
+            Err(e) => h.write(e.as_bytes()),
+        }
     }
     // M11.3: a tool that may not plunge into solid changes the entries;
     // a byte only then, so no centre-cutting op's digest moves.

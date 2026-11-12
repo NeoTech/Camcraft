@@ -173,6 +173,8 @@ pub fn region_z(
         OpParams::Probe { target, .. } => Some(target[2]),
         // The plasma cut rides the plate's top (#670).
         OpParams::PlasmaProfile(p) => resolve_height(world, setup, src, p.top_z),
+        // The electrode enters at the work top (#541).
+        OpParams::SinkerBurn(p) => resolve_height(world, setup, src, p.top_z),
     }
 }
 
@@ -387,6 +389,15 @@ pub fn resolve_params(
             req("Clearance Z", p.clearance_z)?,
             Some(req("Top of Plate Z", p.top_z)?),
             Some(req("Bottom of Plate Z", p.bottom_z)?),
+            None,
+            None,
+        ),
+        // The sinker burn (#541): the approach plane, the work top and
+        // the cavity floor datum - no hop plane.
+        OpParams::SinkerBurn(p) => (
+            req("Clearance Z", p.clearance_z)?,
+            Some(req("Work Top Z", p.top_z)?),
+            Some(req("Cavity Floor Z", p.floor_z)?),
             None,
             None,
         ),
