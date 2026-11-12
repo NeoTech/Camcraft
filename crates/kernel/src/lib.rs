@@ -14,6 +14,9 @@
 //!
 //! Stage 4 (#916) adds a STEP importer on the solidcore side
 //! ([`solidcore_step`]), bench only: the app still imports through truck.
+//! #940 adds the machining mesh of such a solid ([`machining_mesh`]):
+//! solidcore-tess at a chord in mm, every shortfall a named refusal, the
+//! deviation from the exact surfaces measured ([`mesh_deviation`]).
 //!
 //! Provenance: our own seam design; solidcore (tangency-labs, Apache-2.0
 //! port of NVIDIA's SMLib) and its STEP reader are linked at one pinned
@@ -24,7 +27,9 @@
 #![forbid(unsafe_code)]
 
 mod error;
+pub mod machining_mesh;
 mod measure;
+pub mod mesh_deviation;
 mod solidcore_blend;
 pub mod solidcore_impl;
 pub mod solidcore_import;

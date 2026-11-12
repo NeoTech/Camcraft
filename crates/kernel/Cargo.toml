@@ -26,6 +26,11 @@ thiserror = { workspace = true }
 solidcore = { git = "https://github.com/NeoTech/solidcore", rev = "55d0e7638b9e1ebbf91ab8c10657e595c114ecda" }
 solidcore-step = { git = "https://github.com/NeoTech/solidcore", rev = "55d0e7638b9e1ebbf91ab8c10657e595c114ecda" }
 solidcore-convert = { git = "https://github.com/NeoTech/solidcore", rev = "55d0e7638b9e1ebbf91ab8c10657e595c114ecda" }
+# The record type the STEP reader hands out, and solidcore's mesher over it
+# (#940: the machining mesh, `machining_mesh`). Same commit as the kernel.
+# solidcore-tess turns rayon off on wasm32 in its own manifest.
+solidcore-record = { git = "https://github.com/NeoTech/solidcore", rev = "55d0e7638b9e1ebbf91ab8c10657e595c114ecda" }
+solidcore-tess = { git = "https://github.com/NeoTech/solidcore", rev = "55d0e7638b9e1ebbf91ab8c10657e595c114ecda" }
 truck-shapeops = { version = "=0.4.0", default-features = false, optional = true }
 truck-modeling = { version = "=0.6.0", optional = true }
 truck-meshalgo = { workspace = true, optional = true }
@@ -34,9 +39,7 @@ truck-meshalgo = { workspace = true, optional = true }
 camcraft-kernel = { path = ".", features = ["truck"] }
 # The STEP bench (#916, tests/step_agreement.rs) only: truck's STEP reader
 # and mesher exactly as crates/app imports with them today (the workspace
-# pins), and solidcore's own mesher at the same commit as the kernel above.
-# Dev-only on purpose: the library gains no truck-stepio and no mesher.
+# pins). Dev-only on purpose: the library gains no truck-stepio.
 truck-stepio = { workspace = true }
 truck-meshalgo = { workspace = true }
 ruststep = { workspace = true }
-solidcore-tess = { git = "https://github.com/NeoTech/solidcore", rev = "55d0e7638b9e1ebbf91ab8c10657e595c114ecda" }
