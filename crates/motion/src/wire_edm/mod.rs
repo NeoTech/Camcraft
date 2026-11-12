@@ -40,7 +40,7 @@ mod ruled_laws;
 mod taper;
 
 pub use ruled::{wire_contour_ruled, WirePairing, WireProfile, WireRuled, WireSync, SYNC_TOL};
-pub use taper::{wire_contour_tapered, WireTaper};
+pub use taper::{wire_contour_tapered, WireCorner, WireTaper};
 
 use crate::cl::{MoveKind, PathBuilder, Toolpath};
 use crate::geo2d::{Loop, Point2, Region};

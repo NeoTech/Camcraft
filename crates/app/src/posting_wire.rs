@@ -138,12 +138,33 @@ pub(super) fn stream(
         operation::WirePairingRule::ArcLength => "arc length",
         operation::WirePairingRule::SyncPoints => "sync points",
     });
+    let mut dialect = Vec::new();
     if p.taper_deg != 0.0 || four.is_some() {
         let machine = crate::machine::of_setup(world, setup)
             .1
             .ok_or_else(|| format!("{name}: a leaning wire cut needs its wire EDM machine mounted"))?;
-        let guides = crate::machine::wire_edm::guide_planes(&machine, origin[2]).map_err(|e| format!("{name}: {e}"))?;
-        records = guided(records, guides).map_err(|e| format!("{name}: {e}"))?;
+        let angle = machine.edm.as_ref().and_then(|e| e.taper_angle);
+        if let Some(a) = angle {
+            // #1164: the control leans the wire from an angle word.
+            if four.is_some() {
+                return Err(format!(
+                    "{name}: a 4-axis cut, and machine {} tapers by angle word (edm.taper_angle) - one angle cannot state different upper and lower profiles",
+                    machine.model
+                ));
+            }
+            let (positive, corner) = a.complete(&machine.model).map_err(|e| format!("{name}: {e}"))?;
+            let top = hs.top.ok_or_else(|| format!("{name}: the workpiece's top does not resolve"))?;
+            let left = positive == crate::machine::AngleSide::TopLeft;
+            records = angled(records, top, p.taper_deg.abs(), left).map_err(|e| format!("{name}: {e}"))?;
+            dialect = vec![
+                cnc::Record::Param { name: "WireTaperDialect".into(), value: json!("angle") },
+                cnc::Record::Param { name: "WireCorner".into(), value: json!(corner.word()) },
+                cnc::Record::Param { name: "WirePlane".into(), value: json!(top - origin[2]) },
+            ];
+        } else {
+            let guides = crate::machine::wire_edm::guide_planes(&machine, origin[2]).map_err(|e| format!("{name}: {e}"))?;
+            records = guided(records, guides).map_err(|e| format!("{name}: {e}"))?;
+        }
     }
     // The wire words ride before the section opens, like every PARAM.
     let at = records
@@ -157,7 +178,7 @@ pub(super) fn stream(
     ];
     let wire = if p.taper_deg == 0.0 { &wire[..2] } else { &wire[..] };
     let four = four.map(|rule| cnc::Record::Param { name: "WireFourAxis".into(), value: json!(rule) });
-    records.splice(at..at, wire.iter().cloned().chain(four));
+    records.splice(at..at, wire.iter().cloned().chain(dialect).chain(four));
     Ok(records)
 }
 
@@ -186,6 +207,82 @@ fn guided(records: Vec<cnc::Record>, guides: (f64, f64)) -> Result<Vec<cnc::Reco
             out.push(cnc::Record::Param { name: "WireU".into(), value: json!(uv[0]) });
             out.push(cnc::Record::Param { name: "WireV".into(), value: json!(uv[1]) });
         }
+        out.push(cnc::Record::Move(m));
+    }
+    Ok(out)
+}
+
+/// A tapered section's moves as an angle-word control takes them
+/// (#1164): each leaning move's X Y become the wire's point on the top
+/// plane `top` (the plane the control pivots on), and `PARAM WireAngle`
+/// before it is the angle word - the stated taper `deg`, signed by the
+/// machine's side rule (`left`: a positive word leans the top left of
+/// travel), 0 for the move that stands the wire upright. The posed
+/// moves that only turn the wire about a corner (the cone rule) are
+/// the control's own and are not written.
+fn angled(records: Vec<cnc::Record>, top: f64, deg: f64, left: bool) -> Result<Vec<cnc::Record>, String> {
+    // The wire's top-plane point and its lean (toward the top) per posed move.
+    let lean_of = |m: &cnc::MoveRec| -> Result<Option<([f64; 2], [f64; 2])>, String> {
+        let Some(abc) = m.abc else { return Ok(None) };
+        if m.center.is_some() {
+            return Err("a tapered arc - the wire post writes straight tapered moves only".into());
+        }
+        let a = crate::cl::angles_to_axis(abc).ok_or("a move's pose is not a direction")?;
+        if !(a.iter().all(|c| c.is_finite()) && a[2] > 0.0175) {
+            return Err("a move states a pose the wire cannot hold (leaning past 89 degrees, or not a direction)".into());
+        }
+        let (tx, ty) = (a[0] / a[2], a[1] / a[2]);
+        Ok(Some(([m.x + tx * (top - m.z), m.y + ty * (top - m.z)], [tx, ty])))
+    };
+    // The side the top leans toward, from every side move (the lead-in
+    // and the upright lead-out say nothing of it).
+    let mut sign: Option<f64> = None;
+    let mut last: Option<[f64; 2]> = None;
+    let mut posed = 0usize;
+    for r in &records {
+        let cnc::Record::Move(m) = r else { continue };
+        let Some((at, t)) = lean_of(m)? else {
+            last = Some([m.x, m.y]);
+            continue;
+        };
+        posed += 1;
+        if let Some(l) = last
+            && posed > 1
+            && t[0].hypot(t[1]) > 1e-12
+        {
+            let (dx, dy) = (at[0] - l[0], at[1] - l[1]);
+            let cross = dx * t[1] - dy * t[0];
+            // A turn in place (the cone rule's) travels nowhere.
+            if dx.hypot(dy) >= 1e-7 && cross.abs() > 1e-9 * dx.hypot(dy) {
+                let s = cross.signum();
+                if sign.is_some_and(|w| w != s) {
+                    return Err("the wire's lean changes side along the cut - an angle word holds one side".into());
+                }
+                sign = Some(s);
+            }
+        }
+        last = Some(at);
+    }
+    let sign = sign.ok_or("a tapered cut with no leaning side - nothing for an angle word to state")?;
+    let word = deg * sign * if left { 1.0 } else { -1.0 };
+    let mut out = Vec::with_capacity(records.len() * 2);
+    let mut last: Option<[f64; 2]> = None;
+    for r in records {
+        let cnc::Record::Move(mut m) = r else {
+            out.push(r);
+            continue;
+        };
+        if let Some((at, t)) = lean_of(&m)? {
+            let upright = t[0].hypot(t[1]) <= 1e-12;
+            if !upright && last.is_some_and(|l| (at[0] - l[0]).hypot(at[1] - l[1]) < 1e-7) {
+                continue;
+            }
+            m.abc = None;
+            m.x = at[0];
+            m.y = at[1];
+            out.push(cnc::Record::Param { name: "WireAngle".into(), value: json!(if upright { 0.0 } else { word }) });
+        }
+        last = Some([m.x, m.y]);
         out.push(cnc::Record::Move(m));
     }
     Ok(out)

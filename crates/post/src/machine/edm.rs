@@ -94,6 +94,10 @@ pub struct Edm {
     /// vertical (0 < angle < 90).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_taper_deg: Option<f64>,
+    /// Wire: the angle-word taper dialect (#1164); `None` = the machine
+    /// tapers by U/V moves (#536).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub taper_angle: Option<super::edm_taper::TaperAngle>,
     /// Wire: the wire diameters the machine takes, mm.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub wire_diameters: Vec<f64>,
@@ -266,6 +270,7 @@ pub(super) fn parse_edm(v: Option<&serde_json::Value>, f: f64) -> Result<Option<
         }
         Some(x) => return Err(format!("machine file: edm.orbits must be a list, not {x}")),
     }
+    e.taper_angle = super::edm_taper::parse_taper_angle(v.get("taper_angle"))?;
     e.conditions = parse_conditions(v.get("conditions"), f)?;
     Ok(Some(e))
 }

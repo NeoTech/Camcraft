@@ -16,7 +16,7 @@ use crate::geo2d::{Loop, Point2, Region};
 use crate::machine::{ConditionField, Kind};
 use crate::machining2d::GenError;
 use crate::verify::Warning;
-use crate::wire_edm::{wire_contour_tapered, WireParams, WireTaper};
+use crate::wire_edm::{wire_contour_tapered, WireCorner, WireParams, WireTaper};
 
 use super::kinds::Carried;
 use super::types::{OpParams, WireContourOp, WireSide};
@@ -49,6 +49,9 @@ pub struct WireCondition {
     /// taper's door.
     pub machine: String,
     pub max_taper_deg: Option<f64>,
+    /// The machine's angle-word taper dialect (#1164), as stated;
+    /// `None` = it tapers by U/V moves.
+    pub taper_angle: Option<crate::machine::TaperAngle>,
 }
 
 /// The condition door (#531, #532): the op's condition on the machine
@@ -90,7 +93,7 @@ pub fn condition_of(world: &World, setup: Option<&str>, op: &WireContourOp) -> R
     let (Some(gap), Some(wire_diameter)) = (c.gap, c.wire_diameter) else {
         return Err(format!("machine {}: EDM condition {:?} states no gap or no wire diameter", machine.model, c.id));
     };
-    Ok(WireCondition { id: c.id.clone(), wire_diameter, gap, machine: machine.model.clone(), max_taper_deg: edm.max_taper_deg })
+    Ok(WireCondition { id: c.id.clone(), wire_diameter, gap, machine: machine.model.clone(), max_taper_deg: edm.max_taper_deg, taper_angle: edm.taper_angle })
 }
 
 /// The condition a wire EDM kind's generation cuts with, read where
@@ -132,6 +135,12 @@ pub(super) fn stamp_condition(world: &World, setup: Option<&str>, op: &WireConto
             // cut's stamp stays what it was.
             if op.taper_deg != 0.0 || op.four_axis.is_some() {
                 h.write(&c.max_taper_deg.map_or(u64::MAX, f64::to_bits).to_le_bytes());
+                // #1164: an angle-word machine's rules shape the path;
+                // a U/V machine's stamp stays what it was.
+                if let Some(a) = c.taper_angle {
+                    h.write(b"taper-angle");
+                    h.write(format!("{:?}{:?}", a.positive, a.corner).as_bytes());
+                }
             }
         }
         Err(_) => h.write_u8(0),
@@ -191,6 +200,7 @@ pub(super) fn generate_wire(
 ) -> Result<(Toolpath, Vec<Warning>), GenError> {
     let cond = cond?;
     let p = wire_params(op, &cond, hs)?;
+    let corner = corner_rule(op, &cond)?;
     // #537: two profiles paired into rulings - its own generator.
     if let Some(four) = &op.four_axis {
         let picks = ruled.ok_or_else(|| super::job::unreached("wire profiles"))??;
@@ -201,6 +211,7 @@ pub(super) fn generate_wire(
         top_z: hs.top.unwrap_or(p.plane_z),
         max_deg: cond.max_taper_deg,
         machine: cond.machine.clone(),
+        corner,
     };
     let (loops, chains) = match picks {
         Some(geom) => geom,
@@ -208,4 +219,28 @@ pub(super) fn generate_wire(
     };
     let path = wire_contour_tapered(&loops, &chains, &p, &taper)?;
     Ok((path, Vec::new()))
+}
+
+/// The corner rule a leaning cut is generated under (#1164): on a U/V
+/// machine CamCraft's own mitre (#536); on an angle-word machine the
+/// control's stated rule - unstated is refused by name, and so is a
+/// 4-axis cut, which one angle cannot state.
+///
+/// # Errors
+/// A 4-axis cut on an angle-word machine, or its rules incomplete.
+pub(super) fn corner_rule(op: &WireContourOp, cond: &WireCondition) -> Result<WireCorner, GenError> {
+    let Some(angle) = cond.taper_angle.filter(|_| op.taper_deg != 0.0 || op.four_axis.is_some()) else {
+        return Ok(WireCorner::Mitre);
+    };
+    if op.four_axis.is_some() {
+        return Err(GenError::Invalid(format!(
+            "wire contour: a 4-axis cut, and machine {} tapers by angle word (edm.taper_angle) - one angle cannot state different upper and lower profiles; a 4-axis cut needs a U/V machine",
+            cond.machine
+        )));
+    }
+    let (_, corner) = angle.complete(&cond.machine).map_err(|e| GenError::Invalid(format!("wire contour: {e}")))?;
+    Ok(match corner {
+        crate::machine::TaperCorner::Mitre => WireCorner::Mitre,
+        crate::machine::TaperCorner::Cone => WireCorner::Cone,
+    })
 }
