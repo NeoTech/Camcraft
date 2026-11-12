@@ -66,6 +66,7 @@ fn judge(t: &Toolpath, model: Option<&[Triangle]>) -> Vec<Warning> {
             finish_tol: None,
             fixtures: &[],
             spindle: None,
+            ..Default::default()
         },
     )
 }
