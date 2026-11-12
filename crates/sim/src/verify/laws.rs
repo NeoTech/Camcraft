@@ -176,7 +176,8 @@ pub fn bands_vs_fixtures_held(
         // swept path shifts to the band's mid-height point on the
         // leaning axis, the radius gains the half-length's horizontal
         // spread, and the z planes gain the half-length's vertical
-        // reach plus the disc's own radius. An ENCLOSING model can
+        // reach plus the disc rim's exact dip, R·sin θ (#1303,
+        // [`super::tilt_band`]). An ENCLOSING model can
         // over-report a graze; it cannot hide a crash - the tilted
         // truth (a swept tilted cylinder against a box) is worth
         // measuring exactly when stage B's generators start leaning
@@ -298,7 +299,8 @@ pub fn rapids_vs_fixtures_held(
         // along the whole lean run - in a capsule that is never
         // smaller: the centre chord moved half the lean aside, and the
         // radius grown by the parallelogram's own half-diagonal. The
-        // z window spans both tips' axis reach plus the disc. Over-
+        // z window spans both tips' axis reach plus the disc's rim
+        // dip. Over-
         // report a graze, never hide a crash - the bands law's exact
         // precedent. The prismatic branch stays bit-identical to the
         // law's own history: same `rapid_hits_box`, same sums.
@@ -323,19 +325,19 @@ pub fn rapids_vs_fixtures_held(
                 }
             }
             Some(a) => {
-                let lean_xy = (a[0] * a[0] + a[1] * a[1]).sqrt();
-                // |Q|/2: the parallelogram (chord ⊕ lean run) is exactly
-                // contained in the capsule of radius half the run about
-                // its centre line - every point sits |Q|/2 or less off it.
-                let run2 = 0.5 * tool.flute_len * lean_xy;
-                let r_use = tool.radius + run2;
-                let (ox, oy) = (0.5 * tool.flute_len * a[0], 0.5 * tool.flute_len * a[1]);
-                let (x0, y0) = (m.from.x + ox, m.from.y + oy);
-                let (x1, y1) = (m.to.x + ox, m.to.y + oy);
-                let za = m.from.z + tool.flute_len * a[2];
-                let zb = m.to.z + tool.flute_len * a[2];
-                let z_lo = m.from.z.min(m.to.z).min(za).min(zb) - tool.radius;
-                let z_hi = m.from.z.max(m.to.z).max(za).max(zb) + tool.radius;
+                // The flute as a leaning band from the tip, the one
+                // column of [`super::tilt_band`] (#1303). Half the lean
+                // run aside and the radius grown by it: the
+                // parallelogram (chord ⊕ lean run) is exactly contained
+                // in the capsule of radius half the run about its
+                // centre line. In z, both tips' axis reach plus the
+                // disc rim's exact dip R·sin θ.
+                let col = super::tilt_band::lean(&a, 0.0, tool.radius, tool.flute_len);
+                let r_use = col.r;
+                let (x0, y0) = (m.from.x + col.off.0, m.from.y + col.off.1);
+                let (x1, y1) = (m.to.x + col.off.0, m.to.y + col.off.1);
+                let z_lo = m.from.z.min(m.to.z) + col.lo - col.dip;
+                let z_hi = m.from.z.max(m.to.z) + col.hi + col.dip;
                 if fixtures.iter().any(|b| {
                     crate::fixture::band_hits_box(x0, y0, x1, y1, z_lo, z_hi, r_use, b)
                 }) {

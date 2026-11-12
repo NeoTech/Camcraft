@@ -179,11 +179,10 @@ fn swing_hit(
                 }
                 let (offx, offy, r_band, h0) = match lean {
                     Some(a) => {
-                        let mid = above + band_len * 0.5;
-                        let spread = (band_len * 0.5) * (a[0] * a[0] + a[1] * a[1]).sqrt();
-                        let za = p.z + above * a[2];
-                        let zb = p.z + (above + band_len) * a[2];
-                        (mid * a[0], mid * a[1], band_r + spread, za.min(zb) - band_r)
+                        // Law (c)'s column, the one helper (#1303): the
+                        // bottom dips by the rim's exact R·sin θ.
+                        let col = super::tilt_band::lean(&a, above, band_r, band_len);
+                        (col.off.0, col.off.1, col.r, p.z + col.lo - col.dip)
                     }
                     None => (0.0, 0.0, band_r, p.z + above),
                 };
