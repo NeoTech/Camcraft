@@ -27,6 +27,7 @@ use camcraft_app::operation;
 
 use crate::actions;
 use crate::machine_modes;
+use crate::shortcut_keys::chord;
 use crate::build_info;
 use crate::state::{CommandKind, Sim, State, UiTarget};
 
@@ -363,12 +364,12 @@ pub(super) fn text_of(c: Cmd, state: &State) -> String {
 /// `shortcuts` implements them all, and the pin gesture names itself.
 pub(super) fn tip_of(c: Cmd, state: &State) -> String {
     match c {
-        Cmd::New => "New document\tCtrl+N".into(),
-        Cmd::Model => "Open a mesh model\tCtrl+O".into(),
-        Cmd::Project => "Open a project\tCtrl+Shift+O".into(),
-        Cmd::Save => "Save the project\tCtrl+S".into(),
-        Cmd::SaveAs => "Save the project under a new name\tCtrl+Shift+S".into(),
-        Cmd::Post => "Post NC program (validation gate), then review it\tCtrl+P".into(),
+        Cmd::New => format!("New document\t{}", chord("N")),
+        Cmd::Model => format!("Open a mesh model\t{}", chord("O")),
+        Cmd::Project => format!("Open a project\t{}", chord("Shift+O")),
+        Cmd::Save => format!("Save the project\t{}", chord("S")),
+        Cmd::SaveAs => format!("Save the project under a new name\t{}", chord("Shift+S")),
+        Cmd::Post => format!("Post NC program (validation gate), then review it\t{}", chord("P")),
         Cmd::Setups => "Setups: create, activate and delete the document's setups".into(),
         Cmd::Stock => "Stock definition".into(),
         Cmd::Origin => "Work offset (WCS)".into(),
@@ -419,8 +420,8 @@ pub(super) fn tip_of(c: Cmd, state: &State) -> String {
             }
         }
         Cmd::More(s) => format!("The rest of the {} kinds", s.label()),
-        Cmd::Undo => "Undo\tCtrl+Z".into(),
-        Cmd::Redo => "Redo\tCtrl+Y".into(),
+        Cmd::Undo => format!("Undo\t{}", chord("Z")),
+        Cmd::Redo => format!("Redo\t{}", chord("Y")),
         Cmd::Run => "Generate the selected operation".into(),
         Cmd::Delete => "Delete the selection\tDel".into(),
         Cmd::Frame => "Frame all\tF".into(),
