@@ -420,11 +420,7 @@ fn viewport_panel(
             let p = &a.pointer;
             (
                 p.interact_pos().or_else(|| p.hover_pos()),
-                interact::Mods {
-                    ctrl: a.modifiers.ctrl,
-                    shift: a.modifiers.shift,
-                    alt: a.modifiers.alt,
-                },
+                interact::Mods::from(a.modifiers),
                 p.button_pressed(egui::PointerButton::Middle),
                 p.button_pressed(egui::PointerButton::Secondary),
                 p.button_pressed(egui::PointerButton::Primary),
