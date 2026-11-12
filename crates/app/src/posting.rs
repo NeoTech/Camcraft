@@ -389,6 +389,9 @@ mod wcs_rotation;
 mod wcs_slot;
 #[path = "posting_mounts.rs"]
 mod mounts;
+#[path = "posting_units.rs"]
+mod program_unit;
+pub use program_unit::{program_options, unit_word};
 #[path = "posting_nose.rs"]
 pub mod nose;
 #[path = "posting_index_swing.rs"]
@@ -460,7 +463,7 @@ fn post_script_body(world: &World, out_path: &Path, cps: &str) -> Result<Posted,
         return Err(format!("post blocked - {}", report.problems.join("; ")));
     }
     let stream = cnc::serialize(&records);
-    let out = engine::run_with(cps, &machine_value_for(&machine), &stream, &options_value(post_options(world)))
+    let out = engine::run_with(cps, &machine_value_for(&machine), &stream, &program_options(world))
         .map_err(|e| format!("post engine: {e}"))?;
     if !out.warnings.is_empty() {
         return Err(format!(

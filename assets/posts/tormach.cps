@@ -20,6 +20,7 @@ minimumRevision = 1;
 extension = "nc";
 setCodePage = "utf-8";
 capabilities = 1; // reference contract: integer feature mask (bit 1 = milling)
+programUnits = "mm inch"; // #902: writes the document's unit (postOptions.Units), G21 / G20
 
 // Determinism law: no timestamps, no randomness - the same stream
 // always posts to the same text (golden files depend on it).
@@ -39,10 +40,10 @@ var smoothTol = 0;          // #616: the section's PARAM Smoothing, mm (0: none 
 var smoothMode = "";        // #616: "finish" or "rough"
 var smoothActive = false;   // #616: this section wrote its smoothing words
 var orgX = 0, orgY = 0, orgZ = 0; // the WCS slot origin (OriginX/Y/Z PARAMs)
-var inch = false;          // the machine is programmed in inches (onOpen)
+var inch = false;          // the document's unit is inch (onOpen, #902: postOptions.Units, never the machine file's)
 
 // ------------------------------------------------------------ helpers
-// The stream speaks mm and mm/min. An inch machine gets every length and
+// The stream speaks mm and mm/min. An inch program gets every length and
 // feed divided by 25.4 and written at four decimals (a tenth of a
 // thousandth); a metric one keeps mm at three. Angles and rpm never scale.
 function has(v) { return v !== null && v !== undefined && isFinite(v); }
@@ -51,7 +52,7 @@ function trim(s) {
   return s === "-0" ? "0" : s;
 }
 function len(v) { return inch ? v / 25.4 : v; }
-function fu(v) {  // a length, in the machine's unit
+function fu(v) {  // a length, in the program's unit
   if (!has(v)) return "0";
   return trim(Number(len(v)).toFixed(inch ? 4 : 3));
 }
@@ -193,7 +194,7 @@ function toolNote() {  // just before the tool change it describes
 // "no tolerance" in plain LinuxCNC, and a stated P reads the same on
 // every build (0.001 in, or its 0.025 mm twin).
 function onOpen() {
-  inch = typeof machine !== "undefined" && machine.units === "inch";
+  inch = typeof postOptions !== "undefined" && postOptions.Units === "inch";
   var nm = (typeof machine !== "undefined" && machine.name) || "CAMCRAFT";
   // #594: the name is user text from the machine file - cleaned like
   // every other comment text, so `Tormach 770MX (ML)` never nests.

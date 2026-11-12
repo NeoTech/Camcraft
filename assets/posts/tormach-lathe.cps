@@ -27,6 +27,7 @@ capabilities = 2; // reference contract: integer feature mask (bit 2 = turning)
 coolantModes = true; // reads PARAM Coolant (#112/#150)
 afterModes = true;   // reads PARAM AfterOperation (#110)
 threadHands = true;  // reads PARAM SpindleDirection (#629): M4 when the thread's hand needs it
+programUnits = "mm inch"; // #902: writes the document's unit (postOptions.Units), G21 / G20
 // liveTooling is NOT declared: PathPilot's lathe tables list no C axis
 // and no live-tool words, so the engine refuses a C-axis section by
 // name before this script ever sees it.
@@ -48,11 +49,11 @@ threadHands = true;  // reads PARAM SpindleDirection (#629): M4 when the thread'
 //    touched-off corner. This script never shifts a point; it writes
 //    the orientation in the tool note so the setup can be checked
 //    against the tool table's Q.
-//  - Units from the machine: G20 (every length / 25.4, four decimals,
+//  - Units from the document (#902): G20 (every length / 25.4, four decimals,
 //    feeds per rev at five, pitches at six) or G21 (mm, three decimals,
 //    feeds per rev at four, pitches at six). Angles and rpm never scale.
 //  - G95 feed per revolution for every cut: F = mm/min / rpm (/ 25.4 on
-//    an inch machine), so the cut speed the generator planned is the
+//    an inch program), so the cut speed the generator planned is the
 //    one the control runs. No rpm, no per-rev feed - refused by name.
 //    Nothing this post writes needs G94 (no live tooling, no C axis).
 //  - G97 S constant rpm from the stream's SpindleSpeed; G96 constant
@@ -127,7 +128,7 @@ var threadLead = 0;        // ... and that record's lead (mm/rev), 0 = none stat
 var spinRev = false;       // PARAM SpindleDirection reverse (#629): this section's spindle runs M4
 var refused = {};          // each refusal counted once per program, by name
 var EPS = 0.0005;          // half a micron: the stream's own lattice
-var inch = false;          // the machine is programmed in inches (onOpen)
+var inch = false;          // the document's unit is inch (onOpen, #902: postOptions.Units, never the machine file's)
 var pass = null;           // the G33 pass being merged: { r, z0, z, halves, lead, dir }
 var drillDwell = 0;        // the open hole's floor dwell, seconds (0 = none)
 var drillFloor = null;     // ... and its floor Z (world mm)
@@ -141,11 +142,11 @@ function trim0(s) {
   return s === "-0" ? "0" : s;
 }
 function len(v) { return inch ? v / 25.4 : v; }
-function fu(v) {  // a length, in the machine's unit
+function fu(v) {  // a length, in the program's unit
   if (!has(v)) return "0";
   return trim0(Number(len(v)).toFixed(inch ? 4 : 3));
 }
-function fr(v) {  // a feed per revolution (mm/rev in), in the machine's unit
+function fr(v) {  // a feed per revolution (mm/rev in), in the program's unit
   if (!has(v)) return "0";
   return trim0(Number(len(v)).toFixed(inch ? 5 : 4));
 }
@@ -300,7 +301,7 @@ function onPartUnloading() { flushPass(); note("PART UNLOAD"); }
 // blending gets an explicit tolerance: a bare G64 is "no tolerance" in
 // plain LinuxCNC (0.001 in, or its 0.025 mm twin).
 function onOpen() {
-  inch = typeof machine !== "undefined" && machine.units === "inch";
+  inch = typeof postOptions !== "undefined" && postOptions.Units === "inch";
   var nm = (typeof machine !== "undefined" && machine.name) || "CAMCRAFT";
   note(clean(nm));
   block(["G7", "G18", inch ? "G20" : "G21", "G90", "G91.1", "G40", "G95"]);

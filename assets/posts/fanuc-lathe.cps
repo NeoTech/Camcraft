@@ -18,6 +18,11 @@ coolantModes = true; // reads PARAM Coolant (#112/#150): the engine refuses non-
 afterModes = true; // reads PARAM AfterOperation (#110): the engine refuses a stop or home ask for a post without it
 liveTooling = true;  // voices PARAM LiveTool sections (issue #33): the engine refuses them for a post without it
 threadHands = true;  // reads PARAM SpindleDirection (#629): the engine refuses a reverse-spindle thread for a post without it
+// #902: millimetres only for now - the engine refuses an inch document by
+// name. Inch turning is more than dividing by 25.4 (G96 S in surface feet,
+// G99 F per revolution, G76's Q / R in the inch increment) and is its own
+// verified piece of work, never a guess posted to a spindle.
+programUnits = "mm";
 
 // Determinism law: no timestamps, no randomness - the same stream
 // always posts to the same text (golden files depend on it).

@@ -19,12 +19,13 @@ extension = "nc";
 setCodePage = "utf-8";
 capabilities = 1;          // reference contract: integer feature mask
 coolantModes = true;       // reads PARAM Coolant - to refuse every ask but Off
+programUnits = "mm inch";  // #902: writes the document's unit (postOptions.Units), G21 / G20
 
 // Determinism law: no timestamps, no randomness - the same stream always
 // posts to the same text (golden files depend on it).
 
 // ---------------------------------------------------------------- state
-var inch = false;          // the machine is programmed in inches (onOpen)
+var inch = false;          // the document's unit is inch (onOpen, #902: postOptions.Units, never the machine file's)
 var wcsWord = "G54";       // from the WorkOffset PARAM
 var orgX = 0, orgY = 0;    // the WCS slot origin (OriginX/Y PARAMs)
 var sectionOpen = false;   // preamble written (a legacy .cl has no SECTION)
@@ -37,7 +38,7 @@ var opName = "", opKind = "", setupName = "", setupSaid = "", toolName = "";
 var refused = {};          // one named refusal per key, not one per line
 
 // ------------------------------------------------------------ helpers
-// The stream speaks mm and mm/min. An inch machine gets every length and
+// The stream speaks mm and mm/min. An inch program gets every length and
 // feed divided by 25.4 and written at four decimals; a metric one keeps
 // mm at three.
 function has(v) { return v !== null && v !== undefined && isFinite(v); }
@@ -98,7 +99,7 @@ function machineOk() {
 // centres (G91.1), feed per minute (G94; G95 is refused on plasma), no
 // cutter compensation (G40), no length offset yet (G49), no cycle (G80).
 function onOpen() {
-  inch = typeof machine !== "undefined" && machine.units === "inch";
+  inch = typeof postOptions !== "undefined" && postOptions.Units === "inch";
   var nm = (typeof machine !== "undefined" && (machine.name || machine.model)) || "CAMCRAFT";
   note(clean(nm));
   block([inch ? "G20" : "G21"]);

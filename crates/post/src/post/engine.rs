@@ -96,6 +96,10 @@ pub fn run_numbered_with(
 ) -> Result<PostOutput, PostError> {
     let records = super::normalize_program_order(cnc::parse(stream)?);
     let mut s = Script::load(cps)?;
+    // #902: an inch document on a script that cannot write inch.
+    if let Some(why) = super::units::refusal(&mut s, options)? {
+        return Err(PostError::Refused(why));
+    }
     // #374: an inverted machine axis - the one place the stream is
     // mirrored into the controller's frame, or refused by name.
     let records = super::invert::apply(records, mch, &s)?;

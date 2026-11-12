@@ -183,18 +183,10 @@ fn setup_error(ui: &mut Ui, state: &State) {
 // --------------------------------------------------------------- stock page
 
 fn stock_page(ui: &mut Ui, state: &mut State) {
+    // The document's unit (display and posted program, #902) - the
+    // numbers below re-render from the world next pass.
+    super::post_options::units_row(ui, state, "Units");
     let u = state.units();
-    // The document's unit lens, straight off the world singleton - the
-    // click queues SetUnits; the numbers below re-render from the world
-    // next pass, so there is no mirror to keep in step.
-    ui.horizontal(|ui| {
-        ui.label("Units");
-        for cand in [Unit::Millimeters, Unit::Inches] {
-            if ui.radio(u == cand, cand.label()).clicked() && u != cand {
-                state.pending.push_back(CommandKind::SetUnits(cand));
-            }
-        }
-    });
     ui.add_space(3.0);
     ui.horizontal(|ui| {
         for (i, name) in ["Box", "Cylinder", "From model"].iter().enumerate() {
@@ -339,6 +331,8 @@ pub(super) fn post_section(ui: &mut Ui, state: &mut State) {
     let current = posting::post_of(&state.world);
     ui.label("Post");
     ui.label(posting::post_label(&state.world));
+    // #902: the unit the program is written in - the document's own.
+    super::post_options::units_row(ui, state, "Program units");
     post_offer_banner(ui, state);
     ui.horizontal(|ui| {
         // The registry by name; the combo OFFERS only the dialects

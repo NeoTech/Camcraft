@@ -19,8 +19,17 @@ the property table there is the vocabulary, this file is the grammar.
 
 Manifest: top-level assignments only — `description`, `vendor`, `legal`,
 `certificationLevel`, `minimumRevision`, `extension`, `setCodePage`,
-`capabilities`, `coolantModes`, `liveTooling`, `afterModes`, `axisInversion`, `probeAxisInversion`, `threadHands`. All but the last six are
-text the engine reads none of; `threadHands = true` (#629) says the script
+`capabilities`, `coolantModes`, `programUnits`, `liveTooling`, `afterModes`, `axisInversion`, `probeAxisInversion`, `threadHands`. All but the last six are
+text the engine reads none of; `programUnits = "mm inch"` (#902) says
+the script writes the program in the document's unit -
+`postOptions.Units`, `"mm"` or `"inch"`, absent = mm: the dialect's
+unit word (G21 / G20, the 840D's G710 / G700) before any motion, every
+length / 25.4 at four decimals and every feed in in/min, angles,
+seconds and rpm as they come - and an inch document on a script whose
+`programUnits` lacks `inch` (Carvera, Heidenhain and Fanuc Lathe say
+`"mm"`) is refused by name before any hook runs; never read
+`machine.units` for the program's unit, it is only the unit the
+machine file was written in; `threadHands = true` (#629) says the script
 reads `PARAM SpindleDirection` and states a thread's hand (M04 when the
 helix needs the spindle reversed) - without it the engine refuses a
 reverse-spindle thread section by name (fanuc-lathe.cps and tormach-lathe.cps set it); `liveTooling = true` (issue #33) says the

@@ -22,7 +22,7 @@
 
 use super::per_op::{sanitise, write_all};
 use super::{
-    file_stem, join_streams, op_streams, options_value, post_options, script_of, verification_report, viewer_map,
+    file_stem, join_streams, op_streams, script_of, verification_report, viewer_map,
     wcs_slot, Posted,
 };
 use crate::machine::{check_ops, Machine, MachineCheck};
@@ -210,7 +210,7 @@ fn post_each(world: &World, out_path: &Path, cps: Option<&str>, mounts: Vec<Moun
     }
     let dir = out_path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
     let program = out_path.file_stem().and_then(|s| s.to_str()).unwrap_or("program");
-    let options = options_value(post_options(world));
+    let options = super::program_options(world);
     let mut files = Vec::with_capacity(mounts.len());
     for (k, (mount, cps)) in mounts.into_iter().zip(scripts).enumerate() {
         let own: Vec<(String, Vec<cnc::Record>)> = streams

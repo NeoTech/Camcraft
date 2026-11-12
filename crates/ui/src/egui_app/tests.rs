@@ -87,6 +87,7 @@ mod machines_pane;
 mod machines_edit;
 mod unsaved;
 mod post_refusal;
+mod program_units;
 mod gcode_viewer;
 mod first_setup;
 mod structural;

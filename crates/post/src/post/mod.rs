@@ -38,6 +38,7 @@ pub mod machine;
 pub mod nose_tip;
 pub mod probe_rec;
 mod program;
+pub mod units;
 
 pub use after_op::AfterOperation;
 pub use coolant::CoolantMode;

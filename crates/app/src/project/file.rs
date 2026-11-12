@@ -77,7 +77,13 @@ use super::*;
 /// `tool_body_wire`). Absent is the holder cylinder every v57 file
 /// judged; an old reader must refuse a v58 file rather than drop the
 /// body and judge the smaller cylinder in its place.
-pub const PROJECT_VERSION: u32 = 58;
+/// v59 (#902): the document's unit (`units`) is the unit every program
+/// posts in, not only a display lens; a machine file's unit no longer
+/// chooses it. An older file opens on the unit its programs posted in
+/// (`units_migrate`, with a load note when its display changes); an old
+/// reader must refuse a v59 file rather than post an inch document in
+/// the machine file's mm.
+pub const PROJECT_VERSION: u32 = 59;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ProjectError {
@@ -101,7 +107,8 @@ pub enum ProjectError {
 #[derive(Serialize, Deserialize)]
 pub struct ProjectFile {
     pub version: u32,
-    /// The document's display unit ("mm" | "in"), v8+. Absent means
+    /// The document's unit ("mm" | "in"), v8+: the display lens, and
+    /// since v59 (#902) the unit every program posts in. Absent means
     /// millimeters - exactly what every pre-v8 file displayed, so the
     /// serde default is itself the whole migration. A millimeter document
     /// omits the field (byte-shape of the pre-v8 files, plus the stamp).

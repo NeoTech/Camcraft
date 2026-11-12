@@ -78,7 +78,7 @@ fn stream(p: &ProbeParams, set_wcs: Option<u8>) -> String {
 }
 
 fn post_ok(machine: &serde_json::Value, stream: &str) -> String {
-    let out = engine::run(TORMACH, machine, stream).expect("post");
+    let out = engine::run_with(TORMACH, machine, stream, &doc_units(machine)).expect("post");
     assert!(out.warnings.is_empty(), "{:?}", out.warnings);
     let prog = out.program;
     assert!(
@@ -192,4 +192,16 @@ fn assignments_are_bracketed(prog: &str) {
         assert!(plain || (rhs.starts_with('[') && rhs.ends_with(']')), "unbracketed expression: {l}");
         assert!(!rhs.contains("--") && !rhs.contains("+-"), "a doubled sign: {l}");
     }
+}
+
+/// #902: the program's unit is the document's, never the machine file's.
+/// These runs on an inch machine file stand for the inch document they
+/// posted before #902 (the file's own unit, through either door).
+fn doc_units(m: &serde_json::Value) -> serde_json::Value {
+    let word = m
+        .get("units")
+        .and_then(serde_json::Value::as_str)
+        .or_else(|| m.pointer("/kinematics/default/units/length").and_then(serde_json::Value::as_str));
+    let inch = matches!(word, Some("inch" | "inches"));
+    serde_json::json!({ "Units": if inch { "inch" } else { "mm" } })
 }

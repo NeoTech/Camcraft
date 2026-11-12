@@ -109,8 +109,12 @@ pub fn stream_of(t: &Toolpath) -> String {
     cnc::serialize(&post::dump(t, &d))
 }
 
+/// #902: the program's unit is the document's; a run on the inch file
+/// stands for the inch document it posted before #902.
 fn post_clean(mch: &Value, stream: &str) -> String {
-    let out = engine::run(cps(), mch, stream).expect("posts");
+    let inch = mch.pointer("/kinematics/default/units/length").and_then(Value::as_str) == Some("inch");
+    let units = serde_json::json!({ "Units": if inch { "inch" } else { "mm" } });
+    let out = engine::run_with(cps(), mch, stream, &units).expect("posts");
     assert!(out.warnings.is_empty(), "the gate counts warnings: {:?}", out.warnings);
     out.program
 }

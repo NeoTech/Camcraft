@@ -511,6 +511,11 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
         // body; absent is the holder cylinder every older tool judged.
         // None of these rungs needs a rewrite.
         notes = super::wcs_one::settle(&mut file, from)?;
+        // v58 -> v59 (#902): the document's unit is its programs' unit;
+        // an older file opens on the unit it posted in (`units_migrate`).
+        if from < 59 {
+            notes.extend(super::units_migrate::settle(&mut file));
+        }
         file.version = PROJECT_VERSION;
     }
     if file.version != PROJECT_VERSION {

@@ -41,13 +41,22 @@ fn post(mch: &str, golden: &str, end: Option<EndUnits>) -> String {
     let cps = read("assets/posts/tormach.cps");
     let stream = read(&format!("crates/app/tests/golden/{golden}.cl"));
     let m = machine_for(mch);
+    // #902: the program's unit is the document's - the inch machine's
+    // runs here stand for an inch document, as before #902 they posted.
+    let unit = |mut o: serde_json::Value| {
+        if mch == INCH_MCH {
+            o["Units"] = serde_json::json!("inch");
+        }
+        o
+    };
     let out = match end {
+        None if mch == INCH_MCH => engine::run_with(&cps, &m, &stream, &unit(serde_json::json!({}))),
         None => engine::run(&cps, &m, &stream),
         Some(e) => engine::run_with(
             &cps,
             &m,
             &stream,
-            &posting::options_value(PostOptions { end_units: e, ..PostOptions::default() }),
+            &unit(posting::options_value(PostOptions { end_units: e, ..PostOptions::default() })),
         ),
     }
     .unwrap_or_else(|e| panic!("{golden}: {e}"));

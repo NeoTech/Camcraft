@@ -106,12 +106,22 @@ fn a_two_tool_pocket_posts_in_the_carveras_own_words() {
     common::write_golden("nc/carvera/two_tool_pocket.nc", p);
 }
 
+/// #902: the program's unit is the document's. An inch document is
+/// refused by name (the firmware is mm only); an inch machine file no
+/// longer decides anything - the mm document posts G21 as ever.
 #[test]
-fn an_inch_machine_is_refused_by_name() {
+fn an_inch_document_is_refused_by_name() {
+    let cps = read("assets/posts/carvera.cps");
+    let stream = two_tool_pocket(1, false);
+    match engine::run_with(&cps, &carvera(), &stream, &json!({ "Units": "inch" })) {
+        Err(e) => assert!(e.to_string().contains("Makera Carvera post writes mm programs only"), "{e}"),
+        Ok(out) => panic!("an inch document posted on the Carvera:\n{}", out.program),
+    }
     let mut mch = carvera();
     mch["units"] = json!("inch");
-    let out = post(&mch, &two_tool_pocket(1, false));
-    assert!(out.warnings.iter().any(|w| w.contains("millimetres only")), "{:?}", out.warnings);
+    let out = post(&mch, &stream);
+    assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+    assert!(out.program.lines().any(|l| l == "G21 G17 G90 G94"), "{}", out.program);
 }
 
 #[test]
