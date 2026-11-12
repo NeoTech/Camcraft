@@ -74,6 +74,9 @@ pub fn post_serves(name: &str, kind: crate::machine::Kind) -> bool {
         Kind::MillTurn => !plasma_post,
         // #669: a cutting post would write spindle words a torch has not.
         Kind::Plasma => plasma_post,
+        // #530: no EDM post ships yet (#533, #542); no milling or
+        // turning dialect speaks to an EDM control.
+        Kind::WireEdm | Kind::SinkerEdm => false,
     }
 }
 
@@ -92,7 +95,10 @@ pub fn default_post_for(kind: crate::machine::Kind) -> PostRef {
         crate::machine::Kind::Plasma => PLASMA_POSTS
             .first()
             .map_or(PostRef::Builtin, |n| PostRef::Named((*n).to_owned())),
-        _ => PostRef::Builtin,
+        // #533/#542: no EDM post ships yet; `post_serves` refuses every
+        // post for an EDM, so this name is never offered or posted.
+        crate::machine::Kind::WireEdm | crate::machine::Kind::SinkerEdm => PostRef::Builtin,
+        crate::machine::Kind::Mill | crate::machine::Kind::MillTurn => PostRef::Builtin,
     }
 }
 
@@ -806,6 +812,9 @@ pub fn op_streams(world: &World) -> Result<Vec<(String, Vec<cnc::Record>)>, Stri
     if let Some(msg) = crate::tool_numbers::clash_per_machine(world, &ops) {
         return Err(msg);
     }
+
+    // #530: the family door again, at post (`posting_family`).
+    crate::posting_family::family_at_post(world, &ops)?;
 
     // #155: Pause / Home entries fold into the gap they stand in; #389:
     // "Skip pauses and homes" is read per op, from its own setup.
