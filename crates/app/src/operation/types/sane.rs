@@ -35,6 +35,9 @@ impl OpParams {
             && match self {
             // The plasma door (#670): the parameter set's own sanity.
             OpParams::PlasmaProfile(p) => p.is_sane(),
+            // The wire door (#532): the parameter set's own sanity; the
+            // condition is the command door's world question.
+            OpParams::WireContour(p) => p.is_sane(),
             // The probe's door (#108): every distance and feed a real
             // number, the measure no faster than the seek, the back-off
             // inside the approach, a slot G54..G59 when one is named.
