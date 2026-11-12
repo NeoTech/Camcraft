@@ -382,6 +382,9 @@ mod sim_clause_impl;
 #[path = "posting_plasma.rs"]
 mod plasma_clause_impl;
 pub use plasma_clause_impl::{plasma_clause, PlasmaClause, PLASMA_VERDICT};
+#[path = "posting_wire.rs"]
+mod wire_clause_impl;
+pub use wire_clause_impl::{wire_clause, WireClause, WIRE_VERDICT};
 #[path = "posting_per_op.rs"]
 mod per_op;
 #[path = "posting_suppressed.rs"]
@@ -642,6 +645,10 @@ pub fn verification_report(world: &World) -> GateReport {
     // not run for it, never a silent skip.
     let plasma = plasma_clause(world);
     problems.extend(plasma.problems);
+    // The wire clause (#534): likewise for a wire EDM cut - the 2.5D
+    // kerf, threading and slug laws, every finding binding.
+    let wire = wire_clause(world);
+    problems.extend(wire.problems);
 
     // The suppression clause (#110 review B1): an op generated against
     // a suppressed op's cut refuses by name - the cut it assumed is not
@@ -685,7 +692,11 @@ pub fn verification_report(world: &World) -> GateReport {
     // what came after it). The law and lines live in
     // `operation::probe_problems`.
     problems.extend(crate::operation::probe_problems(world));
-    let not_judged = match (sim.not_judged, plasma.line) {
+    let plasma_line = match (plasma.line, wire.line) {
+        (Some(p), Some(w)) => Some(format!("{p}; {w}")),
+        (p, w) => p.or(w),
+    };
+    let not_judged = match (sim.not_judged, plasma_line) {
         (Some(s), Some(p)) => Some(format!("{s}; {p}")),
         (None, Some(p)) => Some(format!("{NOT_JUDGED}: {p}")),
         (s, None) => s,

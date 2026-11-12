@@ -225,7 +225,7 @@ fn a_die_and_a_punch_on_one_profile_stand_apart_by_exactly_the_kerf() {
     let (_, m) = machine::of_setup(&world, None);
     let c = check_document(&world, &m.expect("the wire EDM")).expect("checks");
     assert!(c.problems.is_empty(), "{:?}", c.problems);
-    assert!(c.notes.iter().any(|n| n.contains("wire verification is not built yet")), "{:?}", c.notes);
+    assert!(c.notes.iter().any(|n| n.contains("judged at the post by the wire laws")), "{:?}", c.notes);
     // No wire post exists yet: the program is refused by name, never posted.
     let err = posting::op_streams(&world).expect_err("no wire post");
     assert!(err.contains("Die1") && err.contains("wire EDM post"), "{err}");
