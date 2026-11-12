@@ -282,3 +282,77 @@ fn the_engine_switch_is_scoped_and_defaults_to_the_column_engine() {
     assert!(caught.is_err());
     assert_eq!(carry_engine(), outer, "restored after an unwind");
 }
+
+#[test]
+fn a_shipped_build_ignores_the_carry_engine_switch() {
+    use camcraft_app::stock_sim::{CARRY_ENGINE_SWITCH_HONOURED, carry_engine_from_switch};
+    // #1168: a release build (no debug assertions) never honours the
+    // variable - every machine carries on the column engine.
+    assert_eq!(CARRY_ENGINE_SWITCH_HONOURED, cfg!(debug_assertions));
+    for v in [
+        Some("field"),
+        Some(" FIELD "),
+        Some("column"),
+        Some(""),
+        None,
+    ] {
+        assert_eq!(
+            carry_engine_from_switch(v, false),
+            Backend::Column,
+            "{v:?} in a shipped build"
+        );
+    }
+    // Where it is honoured (dev and test builds), `field` selects the
+    // field engine and anything else the column engine.
+    assert_eq!(carry_engine_from_switch(Some("field"), true), FIELD);
+    assert_eq!(carry_engine_from_switch(Some(" FIELD "), true), FIELD);
+    assert_eq!(
+        carry_engine_from_switch(Some("column"), true),
+        Backend::Column
+    );
+    assert_eq!(carry_engine_from_switch(None, true), Backend::Column);
+}
+
+#[test]
+fn a_verdict_the_field_engine_judged_names_the_engine() {
+    use camcraft_app::posting::sim_clause;
+    use camcraft_app::setup_sheet::simulate_verdict;
+    use camcraft_app::stock_sim::carry_engine_note;
+    // #1168: the program report says which carry engine judged when it
+    // is not the shipped one, and says nothing extra on the column engine.
+    let doc = fixtures::faced(
+        "same as",
+        (0.0, 0.0),
+        (10.0, 10.0),
+        (24.0, 24.0),
+        17.0,
+        fixtures::Second::SameAs,
+    );
+    let w = &doc.world;
+    with_carry_engine(Backend::Column, || {
+        assert_eq!(carry_engine_note(), None);
+        let clause = sim_clause(w);
+        assert!(
+            !clause
+                .not_judged
+                .unwrap_or_default()
+                .contains("field engine"),
+            "column verdict stays as it was"
+        );
+        assert!(!simulate_verdict(w).contains("field engine"));
+    });
+    with_carry_engine(FIELD, || {
+        let clause = sim_clause(w);
+        let line = clause.not_judged.unwrap_or_default();
+        assert!(
+            line.contains("note: carried stock judged by the field engine"),
+            "gate line: {line}"
+        );
+        assert!(
+            line.contains(camcraft_app::stock_sim::CARRY_ENGINE_ENV),
+            "names the switch: {line}"
+        );
+        let sheet = simulate_verdict(w);
+        assert!(sheet.contains("field engine"), "setup sheet line: {sheet}");
+    });
+}
