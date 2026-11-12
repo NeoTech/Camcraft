@@ -179,7 +179,9 @@ pub fn form_in(facets: &[Triangle], p: &FormParams, stock: Option<StockEnv>) -> 
             return Err(GenError::Invalid(format!(
                 "the crown that fits the valley at station {c:.3} stands on the axis or \
                  through it - that is a hole, and holes are boring work"
-            )));
+            ))
+            // #871: a part-way refusal hands back the valleys so far.
+            .with_ghost_moves(b.moves()));
         }
         b.push(MoveKind::Rapid, f.point(rho_clear, c), None);
         b.push(MoveKind::Feed, f.point(tip, c), Some(p.plunge_feed));

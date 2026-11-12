@@ -339,3 +339,25 @@ pub(super) fn rims_of(params: &OpParams) -> Vec<(Point2, f64)> {
         _ => Vec::new(),
     }
 }
+
+/// The stock the verify's column law reads as material (`VerifyContext::
+/// stock`): the setup's stock when the source is a model, and - #1066 -
+/// the source itself when the source IS the stock and the kind's region
+/// punches the holes' rims out of it (Bore, Thread). That region says
+/// where the walls stand, not where material is: the hole's column above
+/// its mouth is uncut stock until something removes it, and read through
+/// the punched region the ladder's entry rapid down to the mouth's plunge
+/// height under a taller block went unjudged and posted. Every other
+/// stock-sourced kind's region IS the stock's footprint, so it keeps
+/// `None` (the region stands in) byte for byte.
+pub(super) fn judged_stock<'a>(
+    stock_facets: Option<&'a [Triangle]>,
+    src: &SrcRef,
+    params: &OpParams,
+    material: &'a Material,
+) -> Option<&'a [Triangle]> {
+    stock_facets.or_else(|| {
+        (matches!(src, SrcRef::Stock) && matches!(params, OpParams::Bore { .. } | OpParams::Thread { .. }))
+            .then_some(&material.facets[..])
+    })
+}
