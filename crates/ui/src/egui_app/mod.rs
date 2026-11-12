@@ -34,6 +34,8 @@ pub(crate) mod gpu_select;
 // glyph tint are the consumers (ratio, on-fill, the follow law, the gate).
 pub mod contrast;
 mod boundary;
+mod gcode_highlight;
+mod gcode_view;
 mod debug_info;
 mod status_alert;
 
@@ -46,6 +48,7 @@ pub mod window_chrome;
 mod post_options;
 pub mod cvd;
 mod icons;
+mod op_icons;
 mod layout;
 mod load_field;
 // pub(crate) past egui_app: `State::machine_editor` names its draft
@@ -54,6 +57,8 @@ pub(crate) mod machine_editor;
 mod machine_grid;
 // pub(crate) for the same reason: `State::post_refusal` names its type.
 pub(crate) mod post_refusal;
+// #867: the one copyable error widget.
+pub(crate) mod error_text;
 // pub(crate) for the same reason: `State::machines_pane` (#287).
 pub(crate) mod machines_pane;
 // pub(crate): `MachinesPane::editor` names its type (#383).
@@ -66,15 +71,20 @@ mod op_tabs;
 mod painted;
 mod tree_glyphs;
 mod pages;
+mod step_budget_row;
+// #1094: the stock page's raw-stock-only checkbox.
+mod raw_stock_row;
 // #371: the tool editor's Body section and its picking preview.
 mod tool_body_page;
 // #630: the tool editor's lathe orientation row.
 mod tool_orientation_row;
+mod tool_turning_row;
 mod tool_profile_page;
 // #793: the built-in taper holder picker in the Profile section.
 mod tool_holder_picker;
 // #93 slice 2: the Profile tab's drawn cutter, neck and shank.
 mod tool_cutter_page;
+mod tool_cutter_params;
 mod setup_wcs_pick;
 // #343: a setup's own node pages (settings, machine, post, fixtures, tools).
 mod setup_pages;
@@ -93,6 +103,7 @@ mod setup_axis_pick;
 mod setup_points_pick;
 // #316: the setup page's "relative to the previous setup" control.
 mod setup_relative_pick;
+mod setup_workholding_row;
 // The operation dialog, split out of `pages` with the property grid
 // (user review 2026-11-06): the frame, the Geometry pick block, the
 // params dispatcher and its kind-family pages, the shared widgets.
@@ -179,6 +190,8 @@ mod locate_tests;
 mod fixture_library_tests;
 #[cfg(test)]
 mod fixture_vise_tests;
+#[cfg(test)]
+mod fixture_vise_stock_tests;
 #[cfg(test)]
 mod fixture_self_centering_tests;
 #[cfg(test)]
