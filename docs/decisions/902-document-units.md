@@ -30,7 +30,8 @@
    programs and cycle Q feeds take was not confirmed from the public
    manual the post is specced from. Fanuc Lathe: inch turning is more
    than dividing by 25.4 (G96 S in surface feet, G99 per-rev feeds,
-   G76's Q / R in the inch increment). Both are follow-up issues; a feed
+   G76's Q / R in the inch increment). Both are follow-up issues (#976
+   Heidenhain, #977 Fanuc Lathe); a feed
    off by a factor is not a program to post.
 6. **Old projects post byte-identical.** `PROJECT_VERSION` 59. A v58 or
    older file opens on the unit its programs posted in (the units of
