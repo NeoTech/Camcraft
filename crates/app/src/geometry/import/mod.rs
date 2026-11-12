@@ -9,6 +9,7 @@ pub mod obj;
 pub mod step;
 pub mod step_budget;
 pub mod step_csys;
+pub mod step_depth;
 mod step_refine;
 mod step_units;
 pub mod stl;

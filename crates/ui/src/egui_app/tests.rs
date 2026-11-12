@@ -128,6 +128,8 @@ mod model_fidelity;
 mod step_budget;
 // #709 hand check: both points of a two-point axis stay marked.
 mod two_point_marks;
+// #1104: the Setups page lists setups only.
+mod setups_declutter;
 
 /// What the per-frame state of `Shell` is, minus the GPU half: the fields
 /// `shell_layout` touches, so the harness exercises the window's real body.
