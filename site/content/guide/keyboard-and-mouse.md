@@ -102,6 +102,8 @@ These have no keyboard or mouse binding in the app today:
 - Pinch to zoom in the viewport (the wheel and two-finger scroll zoom).
 - Pan with Ctrl, Shift or Alt drag, or with the middle button alone.
 - Arrow keys to orbit or pan.
-- Escape to close a dialog. Some dialog comments mention it, but no Escape
-  handler exists in the code, so close them with their buttons.
+- Escape for the side windows (tool editor, G-code view, machine editor and
+  similar panels): close them with their buttons. Escape does close the
+  modal dialogs (the unsaved-changes prompt and the fixture library
+  dialogs), topmost first, without applying anything.
 - A middle-click without a drag (it does nothing).
