@@ -43,7 +43,7 @@ fn polyline(path: &Toolpath) -> Vec<Point2> {
 fn a_pocket_burns_out_with_no_core_left() {
     let pocket = rect(-6.0, -3.0, 6.0, 3.0);
     let c = 0.5;
-    let path = wire_burnout(&[pocket.clone()], &[], &params(WireSide::Die, Some((1.0, 0.5))), c).unwrap();
+    let path = wire_burnout(std::slice::from_ref(&pocket), &[], &params(WireSide::Die, Some((1.0, 0.5))), c).unwrap();
     assert!(path.moves.iter().all(|m| m.kind == MoveKind::Feed && m.axis.is_none() && m.arc.is_none()));
     let pts = polyline(&path);
     assert_eq!((pts[0], *pts.last().unwrap()), (Point2::new(1.0, 0.5), Point2::new(1.0, 0.5)), "from and back to the start hole");
