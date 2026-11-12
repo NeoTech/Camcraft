@@ -2996,7 +2996,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // along every move against the part solid. The Section kinds
             // answer the same law inside `verify` (b2), real tip (M13.7).
             if depth_law == DepthLaw::Contain {
-                contain_into(&mut warns, &path, &material.facets, &cutter, depth_law, stl, material.excess);
+                contain_into(&mut warns, &path, &material.facets, &cutter, (depth_law, &params, d), stl, material.excess);
             }
             // The rotary kinds' bands and rapids (M13): `Mode::Rotary`
             // stood the vertical-column laws down; the radial field
@@ -3111,7 +3111,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // along every move against the part solid. The Section kinds
             // answer the same law inside `verify` (b2), real tip (M13.7).
             if depth_law == DepthLaw::Contain {
-                contain_into(&mut warns, &path, &m_gen.facets, &cutter, depth_law, stl, material.excess);
+                contain_into(&mut warns, &path, &m_gen.facets, &cutter, (depth_law, &params, d), stl, material.excess);
             }
             warns.extend(workholding_warnings(
                 &path_world,
@@ -3236,23 +3236,36 @@ const CONTAIN_STEP: f64 = 0.25;
 /// Append the solid law's warnings that the region laws did not
 /// already report, keeping the list's move order: the tool's own tip
 /// and stack against the part solid at every sampled position, the
-/// containment kinds' tessellated hole rims excused (`SolidLaw`).
+/// containment kinds' tessellated hole rims excused (`SolidLaw`) - in
+/// full only on the chords of the op's declared holes (#1217).
 fn contain_into(
     warns: &mut Vec<Warning>,
     path: &Toolpath,
     facets: &[Triangle],
     cutter: &verify::Cutter,
-    law: DepthLaw,
+    (law, params, tool_d): (DepthLaw, &OpParams, f64),
     stl: f64,
     excess: f64,
 ) {
+    // The rims judged exactly: each declared hole's circle, and a drill
+    // cycle's own (it cuts its diameter at the hole's centre).
+    let (holes, drill): (&[crate::drilling::Hole], bool) = match params {
+        OpParams::Drill { holes, .. } => (holes, true),
+        OpParams::Bore { holes, .. } | OpParams::Thread { holes, .. } => (holes, false),
+        _ => (&[], false),
+    };
+    let rim = |h: &crate::drilling::Hole, r: f64| verify::HoleRim { x: h.xy.x, y: h.xy.y, r };
+    let mut rims: Vec<verify::HoleRim> = holes.iter().map(|h| rim(h, h.radius)).collect();
+    if drill {
+        rims.extend(holes.iter().map(|h| rim(h, 0.5 * tool_d)));
+    }
     let law = verify::SolidLaw {
         step: CONTAIN_STEP,
         // #864: less a coarse model's excess, while that is honest.
         allow: verify::excess_floor(GOUGE_TOL, excess).unwrap_or(GOUGE_TOL) + (-stl).max(0.0),
         hole_walls: law == DepthLaw::Contain,
     };
-    for w in verify::solid_hits(path, facets, cutter, &law) {
+    for w in verify::solid_hits_rims(path, facets, cutter, &law, &rims) {
         if !warns.contains(&w) {
             warns.push(w);
         }

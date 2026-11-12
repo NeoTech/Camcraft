@@ -36,7 +36,7 @@ use camcraft_app::geo2d::{Point2, Region};
 use camcraft_app::geometry::Triangle;
 use camcraft_app::machining2d::{ContourParams, FaceParams, Lead, PocketParams, PocketStrategy, Side, contour, face, pocket};
 use camcraft_app::tools::{Tool, ToolKind};
-use camcraft_app::verify::{Cutter, Mode, SolidLaw, ToolGeom, VerifyContext, Warning, solid_hits, verify};
+use camcraft_app::verify::{Cutter, HoleRim, Mode, SolidLaw, ToolGeom, VerifyContext, Warning, solid_hits_rims, verify};
 
 fn golden(name: &str) -> String {
     let p = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/golden").join(name);
@@ -70,10 +70,16 @@ fn section_law(t: &Toolpath, region: &Region, part: &[Triangle], tool: &ToolGeom
 
 /// The containment kinds' depth verdict: the solid law with the tool's
 /// own tip, hole walls excused (their region laws read the exact rims,
-/// untouched by the solid law and not judged here).
-fn contain_law(t: &Toolpath, part: &[Triangle], tool: &Tool) -> Vec<Warning> {
+/// untouched by the solid law and not judged here) - in full on the
+/// drill cycle's rims as the operation layer declares them (#1217):
+/// each hole's circle and the drill's own.
+fn contain_law(t: &Toolpath, part: &[Triangle], tool: &Tool, holes: &[Hole]) -> Vec<Warning> {
     let law = SolidLaw { step: 0.25, allow: 0.01, hole_walls: true };
-    solid_hits(t, part, &Cutter::of(tool), &law)
+    let rims: Vec<HoleRim> = holes
+        .iter()
+        .flat_map(|h| [h.radius, 0.5 * tool.diameter].map(|r| HoleRim { x: h.xy.x, y: h.xy.y, r }))
+        .collect();
+    solid_hits_rims(t, part, &Cutter::of(tool), &law, &rims)
 }
 
 fn contour_params(d: f64, lead: Lead, side: Side) -> ContourParams {
@@ -230,21 +236,24 @@ fn verdicts() -> Vec<(&'static str, Vec<Warning>)> {
     walls(&rect(0.0, 0.0, 40.0, 20.0), -4.0, 0.0, true, &mut part);
     plate_cell(&rect(0.0, 0.0, 20.0, 20.0), Some((&ha, -4.0)), -4.0, 0.0, &mut part);
     plate_cell(&rect(20.0, 0.0, 40.0, 20.0), Some((&hb, -3.0)), -4.0, 0.0, &mut part);
-    let t = cycle(&[hole(10.0, 10.0, 3.0, -4.0, true), hole(30.0, 10.0, 3.0, -3.0, false)], &dr6, 5.0);
-    check("drill_plate.cl", &t, contain_law(&t, &part, &dr6));
+    let hs = [hole(10.0, 10.0, 3.0, -4.0, true), hole(30.0, 10.0, 3.0, -3.0, false)];
+    let t = cycle(&hs, &dr6, 5.0);
+    check("drill_plate.cl", &t, contain_law(&t, &part, &dr6, &hs));
     let hp = circle((20.0, 10.0), 3.0, 32);
     let mut part = Vec::new();
     plate(&rect(0.0, 0.0, 40.0, 20.0), Some((&hp, -23.0)), -23.0, 0.0, &mut part);
-    let t = cycle(&[hole(20.0, 10.0, 3.0, -23.0, true)], &dr6, 6.0);
-    check("drill_peck.cl", &t, contain_law(&t, &part, &dr6));
+    let hs = [hole(20.0, 10.0, 3.0, -23.0, true)];
+    let t = cycle(&hs, &dr6, 6.0);
+    check("drill_peck.cl", &t, contain_law(&t, &part, &dr6, &hs));
     // The tapped hole: the finished part's thread stands at the tap's
     // own diameter (the golden's 2.5 mm hole record is the tap DRILL's).
     let tap = tool(ToolKind::Tap, 10.0, 0.0, 1.5);
     let ht = circle((15.0, 15.0), 5.0, 32);
     let mut part = Vec::new();
     plate(&rect(0.0, 0.0, 30.0, 30.0), Some((&ht, -12.0)), -20.0, 0.0, &mut part);
-    let t = cycle(&[hole(15.0, 15.0, 2.5, -12.0, false)], &tap, 5.0);
-    check("tap_plate.cl", &t, contain_law(&t, &part, &tap));
+    let hs = [hole(15.0, 15.0, 2.5, -12.0, false)];
+    let t = cycle(&hs, &tap, 5.0);
+    check("tap_plate.cl", &t, contain_law(&t, &part, &tap, &hs));
     out
 }
 

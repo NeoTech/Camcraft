@@ -43,8 +43,22 @@ pub struct SolidLaw {
     /// The containment kinds (drill, bore, thread mill): their regions
     /// carry exact rims for the mesh's tessellated hole walls, so a
     /// facet entered only by its chord's dip between two vertices that
-    /// stand outside the tool is the rim, not a gouge.
+    /// stand outside the tool is the rim, not a gouge: in full on a
+    /// declared rim's chords ([`solid_hits_rims`]), else at most the
+    /// mesh tolerance - a coarse polygon's flats are material (#1217).
     pub hole_walls: bool,
+}
+
+/// A declared round hole's rim in XY (centre, radius, mm): the circle
+/// a containment kind's region judges exactly. A mesh edge with both
+/// ends on it is a chord of that round wall and its dip is excused in
+/// full; every other edge's dip is credited at most the mesh tolerance
+/// (#1217), so a coarse polygon hole's flats are judged.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct HoleRim {
+    pub x: f64,
+    pub y: f64,
+    pub r: f64,
 }
 
 /// Sagitta of the chords an XY arc is swept along, mm; every atom is
@@ -81,6 +95,12 @@ fn pieces(m: &crate::cl::Move, step: f64) -> Vec<(Point3, Point3, f64)> {
 /// mesh or tool that cannot be read honestly fails closed: a Gouge at
 /// the first cutting move, never a pass.
 pub fn solid_hits(path: &Toolpath, facets: &[Triangle], cutter: &Cutter, law: &SolidLaw) -> Vec<Warning> {
+    solid_hits_rims(path, facets, cutter, law, &[])
+}
+
+/// [`solid_hits`] with the containment kind's declared hole `rims`: a
+/// chord of one is excused its whole dip under `law.hole_walls`.
+pub fn solid_hits_rims(path: &Toolpath, facets: &[Triangle], cutter: &Cutter, law: &SolidLaw, rims: &[HoleRim]) -> Vec<Warning> {
     let first_cut = path.moves.iter().position(|m| m.kind != MoveKind::Rapid);
     if facets.is_empty() {
         return Vec::new();
@@ -118,7 +138,7 @@ pub fn solid_hits(path: &Toolpath, facets: &[Triangle], cutter: &Cutter, law: &S
             !set.is_empty()
                 && (pieces(m, law.step).into_iter().any(|(a, b, grow)| {
                     let fr = Frame::new(a, axis);
-                    index.hits(&fr, fr.local(b), set, allow, grow, law.hole_walls)
+                    index.hits(&fr, fr.local(b), set, allow, grow, law.hole_walls, rims)
                 }) || mid.iter().any(|iv| {
                     // The interval's tip travel swept exactly under the
                     // pose held at its midpoint: the pose's own turn
@@ -126,7 +146,7 @@ pub fn solid_hits(path: &Toolpath, facets: &[Triangle], cutter: &Cutter, law: &S
                     // (STEP of far-end travel), the same as the fixture
                     // laws' posed sweep.
                     let fr = Frame::new(iv.p0, normalize_axis(iv.am).filter(|a| !is_vertical(a)));
-                    index.hits(&fr, fr.local(iv.p1), set, allow, grow_mid, law.hole_walls)
+                    index.hits(&fr, fr.local(iv.p1), set, allow, grow_mid, law.hole_walls, rims)
                 }))
         };
         if m.kind == MoveKind::Rapid {

@@ -1,15 +1,19 @@
 //! The containment kinds' hole-wall excuse credits tessellation, not
 //! flats (#1217, Prime Directive): a hole that really is a coarse
 //! polygon (an octagon, a 16-gon, corners on r 5) cut out to its corner
-//! circle by a drill plunge, a bore orbit or a thread-mill helix is a
-//! Gouge on its flats; the same cuts in a full-fidelity round hole (a
-//! 96-gon, dip under the mesh tolerance) stay clean.
+//! circle by a bore orbit or a thread-mill helix declared at another
+//! radius (r 4.4, off the corners, as the issue's thread was) is a
+//! Gouge on its flats - only a chord of a declared rim is excused its
+//! whole dip, any other at most the mesh tolerance. A full-fidelity
+//! round hole (a 96-gon) stays clean for every containment kind with
+//! or without its rim, and a coarse round hole (a 32-gon) stays clean
+//! when its rim is the one declared.
 //!
 //! Provenance: our own fixtures, specced from the Prime Directive and
 //! the chord sagitta s = r - sqrt(r^2 - (l/2)^2); no vendor material.
 //!
-//! Gate map (solid law): covers sim::verify (solid_hits, swept::chord_dip,
-//! solid_index hole_walls).
+//! Gate map (solid law): covers sim::verify (solid_hits_rims,
+//! swept::chord_dip, solid_index hole_walls).
 
 mod common;
 
@@ -18,7 +22,7 @@ use common::solid_part::{circle, mill, plate, rect};
 use camcraft_app::cl::{Move, MoveKind, Toolpath};
 use camcraft_app::geo2d::Point2;
 use camcraft_app::geometry::{Point3, Triangle};
-use camcraft_app::verify::{Cutter, SolidLaw, Warning, solid_hits};
+use camcraft_app::verify::{Cutter, HoleRim, SolidLaw, Warning, solid_hits_rims};
 
 const C: (f64, f64) = (20.0, 20.0);
 const R: f64 = 5.0;
@@ -36,10 +40,12 @@ fn p(x: f64, y: f64, z: f64) -> Point3 {
     Point3::new(x, y, z)
 }
 
-/// The containment law as the operation layer runs it.
-fn contain(t: &Toolpath, part: &[Triangle], d: f64) -> Vec<Warning> {
+/// The containment law as the operation layer runs it, with the op's
+/// declared rims at the hole's centre.
+fn contain(t: &Toolpath, part: &[Triangle], d: f64, rims: &[f64]) -> Vec<Warning> {
     let law = SolidLaw { step: 0.25, allow: 0.01, hole_walls: true };
-    solid_hits(t, part, &Cutter::flat(&mill(d)), &law)
+    let rims: Vec<HoleRim> = rims.iter().map(|&r| HoleRim { x: C.0, y: C.1, r }).collect();
+    solid_hits_rims(t, part, &Cutter::flat(&mill(d)), &law, &rims)
 }
 
 /// A drill of the corner circle's diameter plunged at the centre.
@@ -75,16 +81,32 @@ fn gouged(w: &[Warning]) -> bool {
 fn a_coarse_polygon_holes_flats_cut_by_a_containment_kind_convict() {
     for n in [8, 16] {
         let f = part(n);
-        assert!(gouged(&contain(&drill(), &f, 2.0 * R)), "{n}-gon: drill cut its flats silently");
-        assert!(gouged(&contain(&orbit(0.0), &f, 6.0)), "{n}-gon: bore cut its flats silently");
-        assert!(gouged(&contain(&orbit(1.0), &f, 6.0)), "{n}-gon: thread helix cut its flats silently");
+        // Declared off the corner circle (the issue's thread, r 4.4), or
+        // with no rim at all: the flats are judged.
+        for rims in [&[4.4][..], &[]] {
+            assert!(gouged(&contain(&orbit(0.0), &f, 6.0, rims)), "{n}-gon {rims:?}: bore cut its flats silently");
+            assert!(gouged(&contain(&orbit(1.0), &f, 6.0, rims)), "{n}-gon {rims:?}: thread helix cut its flats silently");
+        }
+        assert!(gouged(&contain(&drill(), &f, 2.0 * R, &[])), "{n}-gon: drill cut its flats silently");
     }
 }
 
 #[test]
 fn a_full_fidelity_round_hole_stays_clean_for_every_containment_kind() {
     let f = part(96);
-    assert_eq!(contain(&drill(), &f, 2.0 * R), Vec::new(), "drill");
-    assert_eq!(contain(&orbit(0.0), &f, 6.0), Vec::new(), "bore");
-    assert_eq!(contain(&orbit(1.0), &f, 6.0), Vec::new(), "thread helix");
+    for rims in [&[R][..], &[]] {
+        assert_eq!(contain(&drill(), &f, 2.0 * R, rims), Vec::new(), "drill {rims:?}");
+        assert_eq!(contain(&orbit(0.0), &f, 6.0, rims), Vec::new(), "bore {rims:?}");
+        assert_eq!(contain(&orbit(1.0), &f, 6.0, rims), Vec::new(), "thread helix {rims:?}");
+    }
+}
+
+#[test]
+fn a_coarse_round_hole_is_excused_only_on_its_declared_rim() {
+    // A 32-gon at r 5 dips 0.024 mm: past the mesh tolerance, so only
+    // its declared rim excuses it - a matched drill and bore stay clean.
+    let f = part(32);
+    assert_eq!(contain(&drill(), &f, 2.0 * R, &[R]), Vec::new(), "drill on its rim");
+    assert_eq!(contain(&orbit(0.0), &f, 6.0, &[R]), Vec::new(), "bore on its rim");
+    assert!(gouged(&contain(&drill(), &f, 2.0 * R, &[4.4])), "drill off its rim");
 }

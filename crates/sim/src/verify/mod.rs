@@ -210,7 +210,7 @@ pub use workholding::{
 pub use body_bands::{BodyBands, NeckBands, BODY_BANDS_CAP};
 pub use probe::Cutter;
 pub use rotary::{rotary_hits, RotaryAxis, RotaryLaw};
-pub use solid::{SolidLaw, solid_hits};
+pub use solid::{HoleRim, SolidLaw, solid_hits, solid_hits_rims};
 pub use mesh_steel::{mesh_refined, steel_stack, MeshSteel, SteelBand};
 #[doc(hidden)]
 pub use contact::posed_contact;

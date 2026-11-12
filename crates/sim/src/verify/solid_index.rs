@@ -6,12 +6,18 @@
 //! design; no vendor source.
 
 use super::probe::{Atom, Frame};
+use super::solid::HoleRim;
 use super::swept::{Body, chord_dip, pen};
 use crate::geometry::{Point3, Triangle};
 
 /// Facets whose XY box spans more cells than this ride the always-asked
 /// list instead of being copied into every cell.
 const BIG_CELLS: usize = 1024;
+
+/// How near a declared rim's circle a facet vertex must stand to be on
+/// it, mm: the mesh tolerance (#1217) - an importer places a round
+/// wall's vertices on the true circle, far inside this.
+const RIM_TOL: f64 = crate::stock_sim::DEV_TOL;
 
 pub(super) struct SolidIndex<'a> {
     facets: &'a [Triangle],
@@ -130,8 +136,10 @@ impl<'a> SolidIndex<'a> {
     /// Does the assembly swept from `fr`'s tip along the local move `d`
     /// share volume with the solid beyond `allow`? `grow` widens every
     /// atom (the arc chords' sagitta); `hole_walls` grants the
-    /// containment kinds their tessellated rims ([`chord_dip`]).
-    pub(super) fn hits(&mut self, fr: &Frame, d: [f64; 3], atoms: &[Atom], allow: f64, grow: f64, hole_walls: bool) -> bool {
+    /// containment kinds their tessellated rims ([`chord_dip`]), in full
+    /// on the chords of the declared `rims` (an upright move only).
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn hits(&mut self, fr: &Frame, d: [f64; 3], atoms: &[Atom], allow: f64, grow: f64, hole_walls: bool, rims: &[HoleRim]) -> bool {
         let len = atoms.iter().map(|a| a.z1).fold(0.0, f64::max);
         let (p0, p1) = (fr.up(0.0), fr.up(len));
         let e = fr.end(d);
@@ -161,7 +169,7 @@ impl<'a> SolidIndex<'a> {
                 let body = Body::new(&t, d);
                 for a in set {
                     let pen = pen(&body, a, allow, allow, grow, &mut pts);
-                    if pen > allow && !(hole_walls && pen <= chord_dip(&t, d, a, allow, grow) + allow) {
+                    if pen > allow && !(hole_walls && pen <= chord_dip(&t, d, a, allow, grow, self.on_rim(f, upright, rims)) + allow) {
                         return true;
                     }
                 }
@@ -171,6 +179,18 @@ impl<'a> SolidIndex<'a> {
         // outside; it can be inside only if its axis is inside the box.
         let within = (0..3).all(|k| axis_lo[k] >= self.lo[k] && axis_hi[k] <= self.hi[k]);
         within && self.inside(fr.up(atoms.first().map_or(0.0, |a| 0.5 * (a.z0 + a.z1))))
+    }
+
+    /// Which edges of facet `f` (a-b, b-c, c-a) are chords of one
+    /// declared rim: both ends within [`RIM_TOL`] of its circle in XY.
+    /// None off an upright move - a leaning axis reads no world-XY rim.
+    fn on_rim(&self, f: u32, upright: bool, rims: &[HoleRim]) -> [bool; 3] {
+        let Some(t) = self.facets.get(f as usize).filter(|_| upright) else {
+            return [false; 3];
+        };
+        let v = [t.a, t.b, t.c];
+        let on = |r: &HoleRim, p: Point3| ((p.x - r.x).hypot(p.y - r.y) - r.r).abs() <= RIM_TOL;
+        std::array::from_fn(|k| rims.iter().any(|r| on(r, v[k]) && on(r, v[(k + 1) % 3])))
     }
 
     /// Ray parity up +Z from `p`. A ray that grazes an edge or vertex

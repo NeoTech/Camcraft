@@ -127,10 +127,11 @@ pub(super) fn pen(b: &Body, atom: &Atom, cut_lo: f64, allow: f64, grow: f64, pts
     -best
 }
 
-/// Most the hole-wall excuse credits of a chord's dip, mm: the mesh
-/// tolerance a round wall's tessellation stands within (the program
-/// sim's `DEV_TOL`; the STEP importer meshes at half of it). A dip past
-/// it is a flat of a polygonal hole - real material - not tessellation
+/// Most the hole-wall excuse credits of a chord's dip that is not a
+/// chord of a declared round hole, mm: the mesh tolerance a round
+/// wall's tessellation stands within (the program sim's `DEV_TOL`; the
+/// STEP importer meshes at half of it). A deeper dip off every declared
+/// rim is a polygonal hole's flat - real material - not tessellation
 /// (#1217).
 const HOLE_CHORD_CREDIT: f64 = crate::stock_sim::DEV_TOL;
 
@@ -139,10 +140,12 @@ const HOLE_CHORD_CREDIT: f64 = crate::stock_sim::DEV_TOL;
 /// by its edges' dip between them - the inscribed tessellation of a
 /// wall the region's exact rim already judged. The swept slice is a
 /// union of discs of radius rho, so a chord of horizontal length l with
-/// both ends outside dips at most rho - sqrt(rho^2 - l^2/4). Credited
-/// at most [`HOLE_CHORD_CREDIT`]: a coarse polygon's flats dip far
-/// further, and a cut into them is a gouge (#1217).
-pub(super) fn chord_dip(t: &[[f64; 3]; 3], d: [f64; 3], atom: &Atom, allow: f64, grow: f64) -> f64 {
+/// both ends outside dips at most rho - sqrt(rho^2 - l^2/4). Edge `k`
+/// (`t[k]` to `t[k + 1]`) is credited that dip in full only when
+/// `on_rim[k]` - both its ends on one declared hole's rim circle, a
+/// chord of the round wall the region judged; any other edge at most
+/// [`HOLE_CHORD_CREDIT`], so a coarse polygon's flats are judged (#1217).
+pub(super) fn chord_dip(t: &[[f64; 3]; 3], d: [f64; 3], atom: &Atom, allow: f64, grow: f64, on_rim: [bool; 3]) -> f64 {
     let rho = atom.rho_max() + grow;
     let out = t.iter().all(|p| seg_dist([p[0], p[1]], [0.0, 0.0], [d[0], d[1]]) >= rho - allow);
     if !out {
@@ -153,10 +156,11 @@ pub(super) fn chord_dip(t: &[[f64; 3]; 3], d: [f64; 3], atom: &Atom, allow: f64,
         let (p, q) = (t[k], t[(k + 1) % 3]);
         let half = 0.5 * (q[0] - p[0]).hypot(q[1] - p[1]);
         if half < rho {
-            dip = dip.max(rho - (rho * rho - half * half).sqrt());
+            let s = rho - (rho * rho - half * half).sqrt();
+            dip = dip.max(if on_rim[k] { s } else { s.min(HOLE_CHORD_CREDIT) });
         }
     }
-    dip.min(HOLE_CHORD_CREDIT)
+    dip
 }
 
 /// Distance from `o` to segment p-q.
