@@ -1313,6 +1313,9 @@ pub struct State {
     /// #225: the Feeds tab shows the spindle speed as surface (cutting)
     /// speed instead of rpm. View state - never a command, never saved.
     pub spindle_as_vc: bool,
+    /// #899: how the Tool library page's Import treats a name the
+    /// document already has. View state - the import itself is the command.
+    pub tool_import_mode: camcraft_app::commands::ImportMode,
     /// Bumped whenever documents changed; drives GPU re-upload of meshes.
     pub doc_version: u64,
     /// Bumped whenever selection changed; re-sends the vertex stream (the
@@ -1755,6 +1758,7 @@ impl State {
             debug_info_open: false,
             gpu_line: None,
             spindle_as_vc: false,
+            tool_import_mode: camcraft_app::commands::ImportMode::default(),
             doc_version: 0,
             selection_version: 0,
             viewport_rect: ([0.0, 0.0], [0.0, 0.0]),
