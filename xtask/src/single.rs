@@ -27,8 +27,11 @@ type Group = (String, bool, String, bool);
 /// Match either a leaf function name or its fully qualified harness path.
 fn matches(name: &str, f: &Filter) -> bool {
     let leaf = name.rsplit("::").next().unwrap_or(name);
-    if f.exact { name.eq_ignore_ascii_case(f.name) || leaf.eq_ignore_ascii_case(f.name) }
-    else { name.contains(f.name) }
+    if f.exact {
+        name.eq_ignore_ascii_case(f.name) || leaf.eq_ignore_ascii_case(f.name)
+    } else {
+        name.contains(f.name)
+    }
 }
 
 pub fn plan(root: &Path, f: &Filter) -> Result<Plan, String> {
@@ -39,14 +42,25 @@ pub fn plan(root: &Path, f: &Filter) -> Result<Plan, String> {
     let mut hits: Vec<Hit> = Vec::new();
     for d in &dirs {
         for bin in scan::binaries(root, d) {
-            if f.binary.is_some_and(|b| b != bin) { continue; }
+            if f.binary.is_some_and(|b| b != bin) {
+                continue;
+            }
             for source in suites::sources(&suites::entry(root, d, &bin))? {
                 for tf in suites::test_fns(&source)? {
                     if matches(&tf.name, f) {
                         if !source.precise {
-                            return Err(format!("conditional suite test {} cannot be selected statically; run the whole {} suite", tf.name, bin));
+                            return Err(format!(
+                                "conditional suite test {} cannot be selected statically; run the whole {} suite",
+                                tf.name, bin
+                            ));
                         }
-                        hits.push(Hit { dir: d.clone(), suite: true, bin: bin.clone(), func: tf.name, ignored: tf.ignored });
+                        hits.push(Hit {
+                            dir: d.clone(),
+                            suite: true,
+                            bin: bin.clone(),
+                            func: tf.name,
+                            ignored: tf.ignored,
+                        });
                     }
                 }
             }
@@ -56,20 +70,41 @@ pub fn plan(root: &Path, f: &Filter) -> Result<Plan, String> {
                 for tf in scan::test_fns(&scan::read(&file))? {
                     if matches(&tf.name, f) {
                         if !source.precise {
-                            return Err(format!("conditional suite test {} cannot be selected statically; run the whole {} suite", tf.name, bin));
+                            return Err(format!(
+                                "conditional suite test {} cannot be selected statically; run the whole {} suite",
+                                tf.name, bin
+                            ));
                         }
-                        hits.push(Hit { dir: d.clone(), suite: false, bin: String::new(), func: tf.name, ignored: tf.ignored });
+                        hits.push(Hit {
+                            dir: d.clone(),
+                            suite: false,
+                            bin: String::new(),
+                            func: tf.name,
+                            ignored: tf.ignored,
+                        });
                     }
                 }
             }
         }
     }
-    if hits.is_empty() { return Err(format!("no #[test] fn matches '{}'", f.name)); }
+    if hits.is_empty() {
+        return Err(format!("no #[test] fn matches '{}'", f.name));
+    }
     let mut plan = Plan::default();
     plan.notes.push("matched:".into());
     for h in &hits {
-        plan.notes.push(format!("  {} {} {}::{}{}", h.dir, if h.suite { "test" } else { "lib" }, h.bin, h.func,
-            if h.ignored { "  [ignored -> release]" } else { "" }));
+        plan.notes.push(format!(
+            "  {} {} {}::{}{}",
+            h.dir,
+            if h.suite { "test" } else { "lib" },
+            h.bin,
+            h.func,
+            if h.ignored {
+                "  [ignored -> release]"
+            } else {
+                ""
+            }
+        ));
     }
     let group = |h: &Hit| (h.dir.clone(), h.suite, h.bin.clone(), h.ignored);
     let mut groups: Vec<(Group, Vec<String>)> = Vec::new();
@@ -83,12 +118,21 @@ pub fn plan(root: &Path, f: &Filter) -> Result<Plan, String> {
     for ((dir, suite, bin, ignored), mut fns) in groups {
         let pk = pkg(&dir);
         let mut args: Vec<String> = vec!["test".into()];
-        if ignored { args.push("--release".into()); }
-        for a in ["-j", J, "-p", &pk] { args.push(a.into()); }
-        if suite { args.extend(["--test".to_string(), bin.clone()]); }
-        else { args.push("--lib".into()); }
+        if ignored {
+            args.push("--release".into());
+        }
+        for a in ["-j", J, "-p", &pk] {
+            args.push(a.into());
+        }
+        if suite {
+            args.extend(["--test".to_string(), bin.clone()]);
+        } else {
+            args.push("--lib".into());
+        }
         args.extend(["--".to_string(), T.to_string()]);
-        if ignored { args.push("--ignored".into()); }
+        if ignored {
+            args.push("--ignored".into());
+        }
         // Integration hits carry their real module paths, so --exact cannot silently run zero.
         // Lib discovery retains its existing substring filtering (src file != module path).
         if suite {
@@ -96,9 +140,14 @@ pub fn plan(root: &Path, f: &Filter) -> Result<Plan, String> {
             fns.sort();
             fns.dedup();
             args.extend(fns);
-        } else { args.push(f.name.to_string()); }
-        let name = format!("{dir} {}{}", if suite { bin.as_str() } else { "lib" },
-            if ignored { " (ignored, release)" } else { "" });
+        } else {
+            args.push(f.name.to_string());
+        }
+        let name = format!(
+            "{dir} {}{}",
+            if suite { bin.as_str() } else { "lib" },
+            if ignored { " (ignored, release)" } else { "" }
+        );
         plan.steps.push(Step::new(name, &[], &dir).with(&args));
     }
     Ok(plan)
