@@ -195,7 +195,7 @@ fn s_set_lathe() -> Value {
             "path": { "type": "string", "description": "The holder file: .step/.stp, .stl or .obj." },
             "radial": vec_schema("The model direction that points away from the spindle axis (the turning frame's +x)."),
             "along": vec_schema("The model direction of the lathe's +Z, chuck toward the free end; square to radial."),
-            "tip": vec_schema("The model point that is the tool tip (the insert's nose centre), in the file's length unit read as mm. Default the model origin."),
+            "tip": vec_schema("The model point that is the tool tip (the insert's nose centre), in mm, in the model's frame after import (an inch or metre STEP is scaled to mm; STL and OBJ numbers are read as mm). Default the model origin."),
             "insert_zone": zone_schema()
         }),
         &["tool", "path", "radial", "along"],
