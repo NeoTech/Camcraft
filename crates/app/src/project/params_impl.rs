@@ -4,6 +4,8 @@ impl ParamsDto {
     pub(super) fn from_params(p: &OpParams) -> Self {
         match p {
             OpParams::Probe { .. } => ParamsDto::Probe(ProbeDto::from_params(p)),
+            OpParams::PlasmaProfile(op) => ParamsDto::PlasmaProfile(PlasmaDto::from_op(op)),
+            OpParams::TrochoidalSlot { .. } => ParamsDto::TrochoidalSlot(TrochoidDto::from_params(p)),
             OpParams::Face {
                 stepover,
                 clearance_z,
@@ -1113,6 +1115,7 @@ impl ParamsDto {
                     CycleChoice::Drill => CycleChoiceDto::Drill,
                     CycleChoice::Peck => CycleChoiceDto::Peck,
                     CycleChoice::Tap => CycleChoiceDto::Tap,
+                    CycleChoice::FloatingTap => CycleChoiceDto::FloatingTap,
                     CycleChoice::Bore => CycleChoiceDto::Bore,
                     CycleChoice::BackBore => CycleChoiceDto::BackBore,
                 },
@@ -1180,6 +1183,8 @@ impl ParamsDto {
     pub(super) fn to_params(&self) -> OpParams {
         match self {
             ParamsDto::Probe(d) => d.to_params(),
+            ParamsDto::PlasmaProfile(d) => d.to_params(),
+            ParamsDto::TrochoidalSlot(d) => d.to_params(),
             // Absent v5 keys decode (via serde defaults) to the legacy
             // single-level face, byte-exact; present ones land on the
             // domain as staged facing.
@@ -2272,6 +2277,7 @@ impl ParamsDto {
                     CycleChoiceDto::Drill => CycleChoice::Drill,
                     CycleChoiceDto::Peck => CycleChoice::Peck,
                     CycleChoiceDto::Tap => CycleChoice::Tap,
+                    CycleChoiceDto::FloatingTap => CycleChoice::FloatingTap,
                     CycleChoiceDto::Bore => CycleChoice::Bore,
                     CycleChoiceDto::BackBore => CycleChoice::BackBore,
                 },

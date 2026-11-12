@@ -40,6 +40,8 @@ pub fn op_hits(
     };
     // #368: the body's enclosing cylinder and band stack; a body that no
     // longer fits its tool is itself the problem, by name.
+    // #852: the drawn neck, judged against the stored record.
+    let neck = crate::tool_cutter::neck_of(world, &tool_entity, &tool);
     let (tool, body) =
         crate::tool_body::judged(world, &tool_entity, tool).map_err(|e| format!("tool {}: {e}", op.tool))?;
     // `boxes_for` already folds in the machine-derived table, so empty
@@ -54,19 +56,34 @@ pub fn op_hits(
         .map(|(d, l)| (d * 0.5, l));
     let wh = crate::verify::Workholding { turning, fixed, axis: fixture::rotary_axis_of(world, op) };
     let geom = tool.geom();
-    let holder = crate::tool_body::stack(&geom, body.as_ref());
+    let holder = crate::tool_body::stack(&geom, body.as_ref()).with_neck(neck);
+    Ok(path_hits(path, (&geom, &holder), &wh, spindle, meshes))
+}
+
+/// The per-op workholding laws themselves, world-free: the post gate's
+/// verdict ([`op_hits`]) and the generator's - its warnings and the
+/// link planner's re-judge (#339 slice 5) - all call this one law over
+/// the same inputs, so a routed link is judged exactly as it posts.
+#[must_use]
+pub fn path_hits(
+    path: &ClPath,
+    (geom, holder): (&crate::tools::ToolGeom, &camcraft_tools::holder_profile::HolderStack),
+    wh: &crate::verify::Workholding<'_>,
+    spindle: Option<(f64, f64)>,
+    meshes: &[MeshedFixture],
+) -> Vec<Warning> {
     // #339: each law's hits on a meshed fixture re-read against its
     // closed mesh - the mesh only ever acquits.
-    let stack = crate::verify::steel_stack(&geom, &holder, spindle);
+    let stack = crate::verify::steel_stack(geom, holder, spindle);
     let steel = crate::verify::MeshSteel { fixtures: meshes, stack: &stack, chord_tol: operation::GOUGE_TOL };
-    let mut hits = crate::verify::mesh_refined(path, &wh, &steel, false, |w| {
-        crate::verify::bands_vs_workholding_held(path, &geom, &holder, w, spindle, operation::GOUGE_TOL)
+    let mut hits = crate::verify::mesh_refined(path, wh, &steel, false, |w| {
+        crate::verify::bands_vs_workholding_held(path, geom, holder, w, spindle, operation::GOUGE_TOL)
     });
     // The spindle housing rides posed rapids too (M13.8 (1)).
-    hits.extend(crate::verify::mesh_refined(path, &wh, &steel, true, |w| {
-        crate::verify::rapids_vs_workholding_held(path, &geom, &holder, w, spindle)
+    hits.extend(crate::verify::mesh_refined(path, wh, &steel, true, |w| {
+        crate::verify::rapids_vs_workholding_held(path, geom, holder, w, spindle)
     }));
-    Ok(hits)
+    hits
 }
 
 /// The moves an op's cached warnings say strike a fixture, ascending.

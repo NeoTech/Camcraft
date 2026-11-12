@@ -5,7 +5,8 @@
 //! input a tool error.
 //!
 //! Gate map (M4.4): covers app::mcp::setup_tools, app::mcp::fixture_tools,
-//! app::mcp::align_tools (#557),
+//! app::mcp::align_tools (#557, #555), app::commands::stock_source_only
+//! (#1094),
 //! app::posting (fixture_findings).
 
 use camcraft_app::mcp::Server;
@@ -271,6 +272,57 @@ fn bad_setup_input_is_a_tool_error() {
     assert!(e.contains("unknown argument"), "{e}");
 }
 
+/// #561: `locate_part` mates a part face onto a fixture face by
+/// `list_features` ids (a fixture's features list too), one undo step;
+/// an edge is refused by name.
+#[test]
+fn locate_part_seats_the_part_on_the_fixture_by_feature_ids() {
+    let dir = tmp_dir("locate");
+    let part = dir.join("block.stl");
+    let vise = dir.join("vise.stl");
+    write_box_stl(&part, (10.0, 5.0, 8.0));
+    write_box_stl(&vise, (40.0, 30.0, 15.0));
+    let mut c = Client::new();
+    c.ok("import_model", json!({ "path": part.display().to_string() }));
+    c.ok("import_model", json!({ "path": vise.display().to_string() }));
+    c.ok("add_fixture", json!({ "model": "vise" }));
+    c.ok("move_fixture", json!({ "name": "vise", "position": [100.0, 0.0, -20.0] }));
+    // The flat face lying at world Z `z`.
+    let face = |c: &mut Client, model: &str, z: f64| -> String {
+        let f = c.ok("list_features", json!({ "model": model, "kinds": ["faces"] }));
+        f["faces"]
+            .as_array()
+            .and_then(|fs| {
+                fs.iter().find(|fa| fa["bounds"]["min"][2] == json!(z) && fa["bounds"]["max"][2] == json!(z))
+            })
+            .and_then(|fa| fa["id"].as_str())
+            .map(str::to_owned)
+            .unwrap_or_else(|| panic!("{model} has a face at Z {z}: {f}"))
+    };
+    let bottom = face(&mut c, "block", 0.0);
+    let top = face(&mut c, "vise", -5.0);
+    let placed = c.ok(
+        "locate_part",
+        json!({ "part": "block", "fixture": "vise", "mates": [{ "part": bottom, "fixture": top }], "offset": [0.0, 0.0, 2.0] }),
+    );
+    assert_eq!(placed["moved"], json!("block"), "{placed}");
+    assert_eq!(placed["origin"][2], json!(-3.0), "the bottom 2 mm above the vise top at Z -5: {placed}");
+    assert_eq!(placed["warning"], Value::Null, "{placed}");
+    c.ok("undo", json!({}));
+    let job = c.ok("get_job", json!({}));
+    assert!(job.to_string().contains("block"), "{job}");
+
+    let chain = c.ok("list_features", json!({ "model": "block", "kinds": ["chains"] }))["chains"][0]["id"]
+        .as_str()
+        .map(str::to_owned)
+        .expect("a chain");
+    let e = c.refused("locate_part", json!({ "part": "block", "fixture": "vise", "mates": [{ "part": chain, "fixture": top }] }));
+    assert!(e.contains("is an edge"), "{e}");
+    let e = c.refused("locate_part", json!({ "part": "block", "fixture": "vise", "mates": [{ "part": bottom, "fixture": top }], "move": "both" }));
+    assert!(e.contains("\"move\""), "{e}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// #557: `set_part_axes` turns the part in the setup's work plane from an
 /// edge chain or two vertices, one undo step, refusals by name.
 #[test]
@@ -324,4 +376,76 @@ fn set_part_axes_turns_the_part_from_an_edge_or_two_points() {
     assert!(msg.contains("along the work plane's normal"), "{msg}");
     let msg = c.refused("set_part_axes", json!({ "y": [pick(&along_x)], "primary": "z" }));
     assert!(msg.contains("\"primary\""), "{msg}");
+}
+
+/// #555: `lay_part_on_points` lays the part on a plane through three
+/// vertices - flip rests them on the table - one undo step, refusals by
+/// name.
+#[test]
+fn lay_part_on_points_lays_the_plane_through_three_vertices() {
+    let dir = tmp_dir("points");
+    let part = dir.join("block.stl");
+    write_box_stl(&part, (20.0, 20.0, 15.0));
+    let mut c = Client::new();
+    c.ok("import_model", json!({ "path": part.display().to_string() }));
+    c.ok("add_setup", json!({}));
+    let f = c.ok("list_features", json!({ "model": "block", "kinds": ["vertices"] }));
+    let pick = |at: [f64; 3]| -> Value {
+        let id = f["vertices"]
+            .as_array()
+            .and_then(|vs| vs.iter().find(|v| v["at"] == json!(at)))
+            .and_then(|v| v["id"].as_str())
+            .expect("a vertex")
+            .to_owned();
+        json!({ "model": "block", "id": id })
+    };
+    let names: Vec<String> = c.request("tools/list", json!({}))["result"]["tools"]
+        .as_array()
+        .map(|t| t.iter().filter_map(|t| t["name"].as_str().map(str::to_owned)).collect())
+        .unwrap_or_default();
+    assert!(names.iter().any(|n| n == "lay_part_on_points"), "{names:?}");
+
+    // The front wall (y = -20): its outside is -Y; flip lays it on the table.
+    let wall = [pick([-20.0, -20.0, 0.0]), pick([20.0, -20.0, 0.0]), pick([20.0, -20.0, 15.0])];
+    let laid = c.ok("lay_part_on_points", json!({ "points": wall, "flip": true }));
+    assert!(laid["alignment"].is_object(), "{laid}");
+    assert!(laid["outside"].as_str().is_some_and(|s| s.contains("-Y")), "{laid}");
+    let again = c.refused("lay_part_on_points", json!({ "points": wall, "flip": true }));
+    assert!(again.contains("already holds the part that way"), "{again}");
+    c.ok("undo", json!({}));
+    let framed = c.ok("lay_part_on_points", json!({ "points": wall, "flip": true, "frame": true, "plane": "g17" }));
+    assert!(framed["alignment"].is_object(), "{framed}");
+    c.ok("undo", json!({}));
+    let same = [pick([-20.0, -20.0, 0.0]), pick([-20.0, -20.0, 0.0]), pick([20.0, -20.0, 15.0])];
+    let msg = c.refused("lay_part_on_points", json!({ "points": same }));
+    assert!(msg.contains("coincide"), "{msg}");
+    let msg = c.refused("lay_part_on_points", json!({ "points": [pick([-20.0, -20.0, 0.0])] }));
+    assert!(msg.contains("pick three points - 1 picked"), "{msg}");
+    let msg = c.refused("lay_part_on_points", json!({ "points": wall, "plane": "g20" }));
+    assert!(msg.contains("\"plane\""), "{msg}");
+}
+
+/// #1094: the stock page's "raw stock only" checkbox over MCP - the same
+/// command, one undo step, refused on a stock not made from a model.
+#[test]
+fn set_raw_stock_only_marks_the_stock_source_through_the_command() {
+    let dir = tmp_dir("raw");
+    let casting = dir.join("casting.stl");
+    write_box_stl(&casting, (30.0, 30.0, 20.0));
+    let mut c = Client::new();
+    c.ok("set_stock", json!({ "box": { "dx": 10.0, "dy": 10.0, "dz": 10.0 } }));
+    let e = c.refused("set_raw_stock_only", json!({ "on": true }));
+    assert!(e.contains("not made from a model"), "{e}");
+    c.ok("import_model", json!({ "path": casting.display().to_string() }));
+    c.ok("set_stock", json!({ "from_model": "casting" }));
+    let e = c.refused("set_raw_stock_only", json!({}));
+    assert!(e.contains("\"on\""), "{e}");
+    let on = c.ok("set_raw_stock_only", json!({ "on": true }));
+    assert_eq!(on["raw_stock_only"], json!(true), "{on}");
+    // No operation and no other model: the mark holds; nothing else to judge.
+    assert_eq!(on["judged_out"], json!("casting"), "{on}");
+    c.ok("undo", json!({}));
+    let off = c.ok("set_raw_stock_only", json!({ "on": false }));
+    assert_eq!(off["judged_out"], Value::Null, "undo walked the mark back: {off}");
+    let _ = std::fs::remove_dir_all(&dir);
 }

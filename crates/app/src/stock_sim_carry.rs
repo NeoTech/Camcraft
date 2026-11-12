@@ -115,7 +115,15 @@ pub(crate) fn carry_turn(world: &flecs_ecs::prelude::World, from: &str, to: &str
         return Err(format!("{head}: {CARRY_MACHINE_REFUSAL}"));
     }
     let t = crate::setup_relative::transform_between(world, from, to).map_err(|e| format!("{head}: {e}"))?;
-    LatticeTurn::from_matrix(matrix_of(t.rot), [t.pos.x, t.pos.y, t.pos.z]).map_err(|e| format!("{head}: {e}"))
+    LatticeTurn::from_matrix(matrix_of(t.rot), [t.pos.x, t.pos.y, t.pos.z]).map_err(|e| {
+        if e == crate::stock_sim::CARRY_TURN_REFUSAL {
+            // #866: say WHICH turn, in the words the alignment row uses.
+            let [x, y, z] = crate::setup_align::angles_of(Some(t));
+            format!("{head}: '{to}' holds the part turned X {x}°, Y {y}°, Z {z}° from how '{from}' holds it, and {e}")
+        } else {
+            format!("{head}: {e}")
+        }
+    })
 }
 
 /// Decide how the program enters setup `to` from setup `from`, by the
@@ -265,9 +273,11 @@ pub(crate) fn walk(
 /// The verdict of the stock as held, against the parts in `frame`.
 pub(crate) fn judge(world: &flecs_ecs::prelude::World, held: &Held, frame: Option<&str>) -> Result<Deviation, String> {
     let facets = crate::setup_align::parts_facets_in(world, frame);
+    // #864: the same tightened tolerance the final verdict is read at.
+    let tol = crate::model_fidelity::verdict_tol(world)?;
     match held {
-        Held::Plain(d) => crate::stock_sim::deviate(d, &facets, crate::stock_sim::DEV_TOL),
-        Held::Carried(b) => b.deviate(&facets, crate::stock_sim::DEV_TOL),
+        Held::Plain(d) => crate::stock_sim::deviate(d, &facets, tol),
+        Held::Carried(b) => b.deviate(&facets, tol),
     }
     .map_err(|e| e.to_string())
 }
