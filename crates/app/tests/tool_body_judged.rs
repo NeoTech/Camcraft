@@ -175,6 +175,7 @@ fn stepped() -> (ToolGeom, HolderStack) {
     let stack = HolderStack {
         bands: vec![HolderBand { above: 14.0, len: 20.0, r: 6.0 }, HolderBand { above: 34.0, len: 15.0, r: 20.0 }],
         top: 49.0,
+        neck: Vec::new(),
     };
     (g, stack)
 }
@@ -254,10 +255,10 @@ fn a_tool_with_no_body_reads_unchanged() {
 #[test]
 fn a_stack_that_is_not_this_tools_is_refused_and_the_cylinder_stands() {
     let (g, stack) = stepped();
-    let wider = HolderStack { bands: vec![HolderBand { above: 14.0, len: 35.0, r: 25.0 }], top: 49.0 };
-    let shorter = HolderStack { bands: vec![stack.bands[0]], top: 34.0 };
-    let in_flutes = HolderStack { bands: vec![HolderBand { above: 2.0, len: 47.0, r: 3.0 }], top: 49.0 };
-    let nan = HolderStack { bands: vec![HolderBand { above: 14.0, len: f64::NAN, r: 6.0 }], top: 49.0 };
+    let wider = HolderStack { bands: vec![HolderBand { above: 14.0, len: 35.0, r: 25.0 }], top: 49.0, neck: Vec::new() };
+    let shorter = HolderStack { bands: vec![stack.bands[0]], top: 34.0, neck: Vec::new() };
+    let in_flutes = HolderStack { bands: vec![HolderBand { above: 2.0, len: 47.0, r: 3.0 }], top: 49.0, neck: Vec::new() };
+    let nan = HolderStack { bands: vec![HolderBand { above: 14.0, len: f64::NAN, r: 6.0 }], top: 49.0, neck: Vec::new() };
     for s in [wider, shorter, in_flutes, nan] {
         assert_eq!(BodyBands::of(&g, &s), None, "{s:?}");
         assert_eq!(Cutter::flat(&g).with_body(&g, &s).holder_bands(), vec![(14.0, 20.0, 35.0)]);

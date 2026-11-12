@@ -76,6 +76,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
     let GenJob {
         tool,
         body,
+        neck,
         lathe_body,
         tool_name,
         params,
@@ -2598,7 +2599,8 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
     // no band, exactly as it adds no feed or travel check.
     let geom = tool.geom();
     // #368: what the fixture laws sweep above the shank.
-    let holder = crate::tool_body::stack(&geom, body.as_ref());
+    // #852: and a necked tool's drawn shank beside it.
+    let holder = crate::tool_body::stack(&geom, body.as_ref()).with_neck(neck);
     // #835: the cutter every stack law reads - its tip (M13.7) and,
     // with a body, the same bands above the shank, never the cylinder
     // enclosing them.

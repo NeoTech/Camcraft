@@ -160,6 +160,7 @@ pub fn stylus_cutter(tool: &Tool) -> Cutter {
         // probe's body is judged by that enclosing band; the probe
         // reach note names it).
         body: None,
+        neck: None,
     }
 }
 
