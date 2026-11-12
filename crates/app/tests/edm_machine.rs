@@ -6,9 +6,10 @@
 //! law - an op made on a mill is refused by name at post once its setup
 //! is remounted on an EDM. A project file round-trips the edm section.
 //!
-//! Gate map (#530): covers post::machine (def Kind, edm, parse),
-//! app::machine (validate, draft), app::posting (post_serves,
-//! op_streams family gate), app::project (Machine round trip).
+//! Gate map (#530): covers app::machine (validate, draft),
+//! app::posting (post_serves, op_streams), app::posting_family (the
+//! family gate at post), app::project (Machine round trip). The pure
+//! `.mch` parser cases live in camcraft-post (`machine::edm::tests`).
 //! Provenance: our own fixtures (`tests/edm/*.mch`, empty templates
 //! with no vendor values; they join the shipped library with their
 //! kind's first post, #533 / #542).
@@ -16,6 +17,7 @@
 use flecs_ecs::prelude::World;
 
 use camcraft_app::commands::{AddTool, CreateOperation, GenerateOperation, History, LoadMachine, SetStock};
+use camcraft_app::machine::validate::validate_text;
 use camcraft_app::machine::{self, kind, parse_mch, Kind};
 use camcraft_app::operation::{Height, OpParams, SrcRef};
 use camcraft_app::stock::StockShape;
@@ -50,65 +52,21 @@ fn the_templates_declare_their_kinds_and_state_nothing() {
     }
 }
 
+/// The Machines pane's validator lists an EDM's spindle and coolant by
+/// name, as the reader refuses them (review #551 request 3; the parser's
+/// cases live in camcraft-post `machine::edm::tests`).
 #[test]
-fn a_filled_edm_section_reads_and_scales_with_the_unit() {
-    let mm = with_edm(
-        WIRE,
-        r#"{ "lower_guide_z": 0, "upper_guide_z": 150, "max_taper_deg": 15,
-             "wire_diameters": [0.25, 0.2], "awt": true }"#,
-    );
-    let e = parse_mch(&mm).expect("parses").edm.expect("edm");
-    assert_eq!((e.lower_guide_z, e.upper_guide_z, e.max_taper_deg), (Some(0.0), Some(150.0), Some(15.0)));
-    assert_eq!(e.wire_diameters, vec![0.25, 0.2]);
-    assert_eq!(e.awt, Some(true));
-
-    let mut inch: serde_json::Value = serde_json::from_str(&with_edm(
-        SINKER,
-        r#"{ "max_orbit_radius": 0.1, "pickup": "3R macro",
-             "orbits": [ { "kind": "circular", "word": "OBT1" }, { "kind": "vector", "word": "OBT2" } ] }"#,
-    ))
-    .expect("json");
-    inch["kinematics"]["default"]["units"]["length"] = "inch".into();
-    let e = parse_mch(&inch.to_string()).expect("parses").edm.expect("edm");
-    assert!((e.max_orbit_radius.expect("radius") - 2.54).abs() < 1e-9, "an inch length reads in mm: {e:?}");
-    assert_eq!(e.orbits.len(), 2);
-    assert_eq!(e.orbits[1].word, "OBT2");
-    assert_eq!(e.pickup.as_deref(), Some("3R macro"));
-}
-
-#[test]
-fn a_garbled_edm_section_refuses_the_file_by_name() {
-    for (edm, says) in [
-        (r#"{ "max_taper_deg": 95 }"#, "max_taper_deg"),
-        (r#"{ "max_taper_deg": "steep" }"#, "max_taper_deg"),
-        (r#"{ "lower_guide_z": 100, "upper_guide_z": 50 }"#, "upper_guide_z"),
-        (r#"{ "wire_diameters": [0.25, -1] }"#, "wire_diameters"),
-        (r#"{ "awt": "yes" }"#, "awt"),
-        (r#"{ "orbits": [ { "kind": "spiral", "word": "S" } ] }"#, "spiral"),
-        (r#"{ "orbits": [ { "kind": "circular", "word": " " } ] }"#, "word"),
-        (r#"{ "max_orbit_radius": 0 }"#, "max_orbit_radius"),
-        (r#"[1, 2]"#, "edm must be an object"),
-    ] {
-        let err = parse_mch(&with_edm(SINKER, edm)).expect_err(edm);
-        assert!(err.contains(says), "{edm}: {err}");
+fn the_machines_pane_lists_an_edm_spindle_and_coolant_by_name() {
+    for text in [WIRE, SINKER] {
+        assert!(validate_text(text).is_empty(), "{:?}", validate_text(text));
+        let bad = text.replace(
+            r#""type": "head" }"#,
+            r#""type": "head", "spindle": { "max_speed": 12000 }, "tool_station": { "coolants": [ { "name": "Flood", "on": "M8", "off": "M9" } ] } }"#,
+        );
+        assert_ne!(bad, text, "the template has a head");
+        let keys: Vec<String> = validate_text(&bad).into_iter().map(|r| r.key).collect();
+        assert!(keys.contains(&"spindle.max_speed".to_owned()) && keys.contains(&"coolants".to_owned()), "{keys:?}");
     }
-}
-
-#[test]
-fn the_kind_words_read_and_an_unknown_kind_still_refuses() {
-    for (w, k) in [
-        ("wire_edm", Kind::WireEdm),
-        ("Wire EDM", Kind::WireEdm),
-        ("wedm", Kind::WireEdm),
-        ("sinker_edm", Kind::SinkerEdm),
-        ("die-sinker", Kind::SinkerEdm),
-        ("ram EDM", Kind::SinkerEdm),
-    ] {
-        assert_eq!(Kind::from_word(w), Some(k), "{w}");
-        assert_eq!(Kind::from_word(k.word()), Some(k), "{k:?} round-trips its word");
-    }
-    let err = parse_mch(&WIRE.replace("wire_edm", "laser")).expect_err("unknown kind");
-    assert!(err.contains("wire_edm") && err.contains("sinker_edm"), "{err}");
     assert!(!posting::post_serves("Fanuc", Kind::WireEdm) && !posting::post_serves("Fanuc Lathe", Kind::SinkerEdm));
 }
 

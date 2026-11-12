@@ -95,7 +95,10 @@ pub fn default_post_for(kind: crate::machine::Kind) -> PostRef {
         crate::machine::Kind::Plasma => PLASMA_POSTS
             .first()
             .map_or(PostRef::Builtin, |n| PostRef::Named((*n).to_owned())),
-        _ => PostRef::Builtin,
+        // #533/#542: no EDM post ships yet; `post_serves` refuses every
+        // post for an EDM, so this name is never offered or posted.
+        crate::machine::Kind::WireEdm | crate::machine::Kind::SinkerEdm => PostRef::Builtin,
+        crate::machine::Kind::Mill | crate::machine::Kind::MillTurn => PostRef::Builtin,
     }
 }
 
@@ -810,22 +813,8 @@ pub fn op_streams(world: &World) -> Result<Vec<(String, Vec<cnc::Record>)>, Stri
         return Err(msg);
     }
 
-    // #530: the family door again, at post. An op created on one
-    // machine and then remounted onto steel that cannot run it (an EDM,
-    // a lathe under a milling op) is refused by name - never posted in
-    // a dialect its machine does not speak. Same law as `family_gate`.
-    for (name, e) in &ops {
-        if let Some(op) = model::operation_of(world, e) {
-            let machine = crate::machine::kind_of_setup(world, op.setup.as_deref());
-            if !op.params.kind().info().admits(machine) {
-                return Err(format!(
-                    "{name}: a {} operation cannot run on its setup's {} machine - mount a machine that runs it, or suppress the operation",
-                    op.params.kind(),
-                    machine.label()
-                ));
-            }
-        }
-    }
+    // #530: the family door again, at post (`posting_family`).
+    crate::posting_family::family_at_post(world, &ops)?;
 
     // #155: Pause / Home entries fold into the gap they stand in; #389:
     // "Skip pauses and homes" is read per op, from its own setup.
