@@ -8,6 +8,8 @@
 pub mod obj;
 pub mod step;
 pub mod step_csys;
+mod step_diag;
+pub mod step_depth;
 mod step_refine;
 mod step_units;
 pub mod stl;
