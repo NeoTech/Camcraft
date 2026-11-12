@@ -12,8 +12,8 @@
 //! values are our own invention.
 #![allow(dead_code)]
 
-use camcraft_app::cl::{ArcPlane, CompSide, CycleKind, MoveKind};
-use camcraft_app::post::cnc::{self, CycleRec, MoveRec, Record};
+use camcraft_post::cl::{ArcPlane, CompSide, CycleKind, MoveKind};
+use camcraft_post::post::cnc::{self, CycleRec, MoveRec, Record};
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 
