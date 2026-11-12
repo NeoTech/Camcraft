@@ -17,8 +17,10 @@ fn rs_files(dir: &Path, out: &mut String) {
         let p = e.path();
         if p.is_dir() {
             rs_files(&p, out);
-        } else if p.extension().is_some_and(|x| x == "rs") {
-            if let Ok(t) = fs::read_to_string(&p) {
+        } else if p.extension().is_some_and(|x| x == "rs")
+            && let Ok(t) = fs::read_to_string(&p)
+        {
+            {
                 // join string-literal line continuations ("...\<newline>   ...")
                 let mut joined = String::new();
                 let mut it = t.split("\\\n");
@@ -80,11 +82,18 @@ fn troubleshooting_messages_still_exist_in_the_sources() {
     let page = fs::read_to_string(root().join("site/content/guide/troubleshooting.md"))
         .expect("troubleshooting page is readable");
     let mut src = String::new();
-    for entry in fs::read_dir(root().join("crates")).expect("crates dir").flatten() {
+    for entry in fs::read_dir(root().join("crates"))
+        .expect("crates dir")
+        .flatten()
+    {
         rs_files(&entry.path().join("src"), &mut src);
     }
     let found = stems(&page);
-    assert!(found.len() > 20, "the stem extractor found only {} stems", found.len());
+    assert!(
+        found.len() > 20,
+        "the stem extractor found only {} stems",
+        found.len()
+    );
     let stale: Vec<&String> = found.iter().filter(|s| !src.contains(s.as_str())).collect();
     assert!(
         stale.is_empty(),
