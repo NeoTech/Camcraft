@@ -171,8 +171,8 @@ fn a_leaning_shank_and_holder_report_one_shank_hit_per_move() {
 
 /// The fixture band law (c2) branches on the same tolerance: a clamp
 /// beside the cut whose top stands just under the upright holder's
-/// bottom (Z 30) is clear upright and at noise, and convicts the leaning
-/// holder's enclosing column.
+/// bottom (Z 30) is clear upright and at noise, and convicts a real lean
+/// (3 deg; the clamp is struck from about 2.1 deg on).
 #[test]
 fn the_fixture_band_law_reads_noise_as_upright_and_a_real_tilt_as_tilted() {
     let clamp = [FixtureBox { min: Point3::new(6.0, -8.0, -10.0), max: Point3::new(14.0, 8.0, 29.5) }];
@@ -184,6 +184,6 @@ fn the_fixture_band_law_reads_noise_as_upright_and_a_real_tilt_as_tilted() {
     let up = bands_vs_fixtures(&feed(None), &tool, &clamp, None, 0.01);
     assert!(up.is_empty(), "upright, the holder clears the clamp: {up:?}");
     assert_eq!(bands_vs_fixtures(&feed(noise()), &tool, &clamp, None, 0.01), up);
-    let lean = bands_vs_fixtures(&feed(just_tilted()), &tool, &clamp, None, 0.01);
+    let lean = bands_vs_fixtures(&feed(Some(tilt(3f64.to_radians()))), &tool, &clamp, None, 0.01);
     assert!(!lean.is_empty(), "a real tilt keeps the enclosing reading");
 }
