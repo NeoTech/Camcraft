@@ -156,6 +156,7 @@ pub fn thread_mill(d: f64, pitch: f64, pitch_min: f64, cutting_len: f64) -> Tool
         flutes: Some(3),
         center_cutting: false,
         orientation: None,
+        turning: None,
     }
 }
 

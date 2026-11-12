@@ -235,6 +235,7 @@ fn tool(kind: ToolKind, center_cutting: bool) -> Tool {
         flutes: None,
         orientation: None,
         pitch_min: 0.0,
+        turning: None,
     }
 }
 
