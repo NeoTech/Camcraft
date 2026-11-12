@@ -57,6 +57,7 @@ var inCycle = false;       // a cycle group is open; its chain is suppressed
 var cycleSig = "";         // g|Z|R|Q of the open group (modal X Y holes)
 var cycX = 0, cycY = 0, cycR = 0; // the open group's hole XY and R plane (world, #994)
 var seatKnown = false;     // #994: this section moved, so the stream's Start is where the tool is
+var hopZ = null;           // #1028: the section's RetractPlane (its hop), null when unstated
 var coolant = "";          // the M-code this program started, if any
 var coolantAsk = "flood";  // the section's PARAM Coolant (#112), flood when unstated
 var afterAsk = "";         // the section's PARAM AfterOperation (#110), none when unstated
@@ -502,6 +503,7 @@ function onOpen() {
 }
 
 function onParameter(name, value) {
+  if (name === "RetractPlane") hopZ = has(value) ? Number(value) : null;  // #1028
   if (name === "Smoothing") { smoothTol = Number(value) || 0; return; }
   if (name === "SmoothingLevel") { smoothingLevel = Number(value) || 5; return; }
   commentParam(name, value);
@@ -616,7 +618,7 @@ function endPreamble() {
 }
 
 function onSection() { seatKnown = false; startPreamble(); }
-function onSectionEnd() { endPreamble(); }
+function onSectionEnd() { endPreamble(); hopZ = null; }  // #1028: the next section states its own hop
 
 // ------------------------------------------------------------- motions
 // While a canned-cycle group is open its expanded hole chain is the
@@ -643,6 +645,16 @@ function chainCut() {  // true: the cut is the cycle's (or refused)
   if (!inCycle) return false;
   if (!onHole(properties)) msg("a cutting move leaves its hole inside a canned-cycle group");
   return true;
+}
+// #1028: a probing move (a touch, its back-off, a protected positioning
+// move) moves the tool like any other motion: it ends an open cycle
+// group (G80 - no probe move is a hole's chain) and the tool stands
+// where the stream says, so a cycle read after it is seated.
+function probeSeat() {
+  seatKnown = true;
+  if (!inCycle) return;
+  block(["G80"]);
+  inCycle = false;
 }
 function onRapid() {
   startPreamble();
@@ -718,9 +730,25 @@ function cycleSeat(p) {
   if (!lo && !away && !hi) return;
   if (inCycle) block(["G80"]);
   inCycle = false;
-  if (lo) block(["G00", wo("Z", p.R, orgZ)]);
-  if (away) block(["G00", wo("X", p.X, orgX), wo("Y", p.Y, orgY)]);
-  if (hi) block(["G00", wo("Z", p.R, orgZ)]);
+  if (away) {
+    // #1028: no stream rapid took the tool to this hole (two cycle
+    // records back to back, or a cycle straight after a probe), so
+    // the traverse runs at the section's hop: up to its RetractPlane
+    // when below it, over the hole, then down to R - never lower than
+    // the hop the path was verified at. A section that states no
+    // RetractPlane has no hop to seat at: refused by name.
+    if (!has(hopZ)) {
+      msg("a canned cycle is read away from its hole with no rapid to it, and the section states no RetractPlane to traverse at");
+      return;
+    }
+    var top = Math.max(hopZ, p.R);
+    var at = has(p.StartZ) ? p.StartZ : -Infinity;
+    if (at < top - 1e-6) { block(["G00", wo("Z", top, orgZ)]); at = top; }
+    block(["G00", wo("X", p.X, orgX), wo("Y", p.Y, orgY)]);
+    if (at > p.R + 1e-6) block(["G00", wo("Z", p.R, orgZ)]);
+    return;
+  }
+  if (lo || hi) block(["G00", wo("Z", p.R, orgZ)]);
 }
 function onCycle() {
   startPreamble();
@@ -797,6 +825,7 @@ function ensureProbeOff() {
 
 function onProbeMove() {
   startPreamble();
+  probeSeat();               // #1028
   disableSmoothing();
   compRefuse("a probing move");
   var p = properties;
@@ -823,12 +852,14 @@ function onProbeMove() {
   }
 }
 function onProbeRetreat() {
+  probeSeat();               // #1028
   var p = properties;
   block(["G91", "G01", w("X", p.DeltaX), w("Y", p.DeltaY), w("Z", p.DeltaZ), fw(p.Feed)]);
   block(["G90"]);
 }
 function onProbeGuard() {
   startPreamble();
+  probeSeat();               // #1028
   disableSmoothing();
   compRefuse("a protected probe move");
   var p = properties;

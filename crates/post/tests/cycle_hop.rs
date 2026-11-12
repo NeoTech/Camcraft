@@ -11,6 +11,13 @@
 //! A program that states no return mode is read the conservative way:
 //! the lower of the two levels.
 //!
+//! #1028 adds the two streams no generator writes but a legacy or foreign
+//! one may: two cycle records back to back (no rapid leaves the first
+//! hole) and a cycle read straight after probing in its section. Both
+//! must seat at the section's hop, and the first is refused by name when
+//! the section states no hop. The checker reads probe moves (G31, G38.n,
+//! MEAS) as the straight moves they are and G91 back-offs incrementally.
+//!
 //! Provenance: our own test; canned-cycle semantics from the public
 //! RS-274 / ISO 6983 vocabulary and general machine-tool handbook
 //! practice, no vendor material.
@@ -52,7 +59,16 @@ fn word(tok: &str) -> Option<(char, f64)> {
 /// or its end). The positions are the work frame's; homing (G28 / G30 /
 /// G53) puts the tool at the top of Z travel and forgets X Y.
 fn check(program: &str, hop: f64, exit: f64) -> Read {
+    check_from(program, hop, exit, false)
+}
+
+/// [`check`], and with `from_start` every XY traverse made once the
+/// tool's position is known (after its first positioned block), not only
+/// after the first hole - for a stream whose first hole follows other
+/// low motion in its section (a probe, #1028).
+fn check_from(program: &str, hop: f64, exit: f64, from_start: bool) -> Read {
     let mut r = Read::default();
+    let mut inc = false; // G91 in force
     let (mut x, mut y, mut z): (Option<f64>, Option<f64>, f64) = (None, None, f64::INFINITY);
     let mut motion = 0u32; // 0/1/2/3, or the cycle's number (73, 81..89)
     let mut ret: Option<u32> = None; // 98 / 99, None while unstated
@@ -78,6 +94,10 @@ fn check(program: &str, hop: f64, exit: f64) -> Read {
         for g in &gs {
             match *g {
                 0 | 10 | 20 | 30 => motion = *g / 10,
+                // A skip / straight-probe move travels in a straight line.
+                310 | 382..=385 => motion = 1,
+                900 => inc = false,
+                910 => inc = true,
                 800 => motion = 0,
                 980 => ret = Some(98),
                 990 => ret = Some(99),
@@ -100,7 +120,13 @@ fn check(program: &str, hop: f64, exit: f64) -> Read {
         if gs.contains(&800) {
             continue; // G80 cancels the group and moves nothing
         }
-        let (nx, ny, nz) = (get('X').or(x), get('Y').or(y), get('Z'));
+        let (nx, ny, nz) = if inc {
+            let step = |l: char, at: Option<f64>| at.map(|v| v + get(l).unwrap_or(0.0));
+            (step('X', x), step('Y', y), get('Z').map(|d| z + d))
+        } else {
+            (get('X').or(x), get('Y').or(y), get('Z'))
+        };
+        let watching = r.holes > 0 || (from_start && x.is_some() && y.is_some() && z.is_finite());
         let moves_xy = |a: Option<f64>, b: Option<f64>| match (a, b) {
             (Some(a), Some(b)) => (a - b).abs() > EPS,
             _ => true,
@@ -116,7 +142,7 @@ fn check(program: &str, hop: f64, exit: f64) -> Read {
                 cyc_r = get('R').unwrap_or(cyc_r);
             }
             // The control positions over the hole at the level it stands at.
-            if traverse && r.holes > 0 && z < hop - EPS {
+            if traverse && watching && z < hop - EPS {
                 r.faults.push(format!("line {}: `{}` moves to the next hole at Z{z}, below the hop Z{hop}", n + 1, raw.trim()));
             }
             if !(cyc_r.is_finite() && cyc_z.is_finite()) {
@@ -139,7 +165,7 @@ fn check(program: &str, hop: f64, exit: f64) -> Read {
         let to_z = nz.unwrap_or(z);
         // A rapid may dogleg (each axis at its own rate): during the XY
         // travel Z can already be at either end, so the lower one counts.
-        if traverse && r.holes > 0 && z.min(to_z) < hop - EPS {
+        if traverse && watching && z.min(to_z) < hop - EPS {
             r.faults.push(format!(
                 "line {}: `{}` traverses at Z{}, below the hop Z{hop}",
                 n + 1,
@@ -203,11 +229,15 @@ fn param(stream: &str, name: &str) -> f64 {
 }
 
 fn assert_hop_law(stream: &str, tag: &str) {
+    assert_hop_law_from(stream, tag, false);
+}
+
+fn assert_hop_law_from(stream: &str, tag: &str, from_start: bool) {
     let hop = param(stream, "RetractPlane");
     let exit = param(stream, "ClearancePlane");
     for script in CYCLE_POSTS {
         let program = post(script, stream, tag).unwrap_or_else(|e| panic!("{script} {tag}: must post: {e}"));
-        let r = check(&program, hop, exit);
+        let r = check_from(&program, hop, exit, from_start);
         assert_eq!(r.holes, 2, "{script} {tag}: two holes drilled by cycle words:\n{program}");
         assert!(r.faults.is_empty(), "{script} {tag}: {:#?}\n{program}", r.faults);
     }
@@ -257,4 +287,101 @@ fn the_checker_catches_the_r_plane_traverse() {
                 G99 G73 X30 Y10 Z-15 R1 Q4 F60\nG80\nG00 X30 Y10 Z3\nG00 X30 Y10 Z10\nM5\nG91 G28 Z0\n";
     let r = check(good, 3.0, 10.0);
     assert_eq!((r.holes, r.faults.len()), (2, 0), "{:#?}", r.faults);
+}
+
+/// #1028: the recorded stream with the first hole's hop, traverse and
+/// descent cut out, so the second cycle record follows the first hole's
+/// chain with no rapid leaving it - the tool stands on R over hole 1.
+fn back_to_back() -> String {
+    let s = drill_retract();
+    let leave = "Rapid X 10000 Y 10000 Z 3000\nRapid X 30000 Y 10000 Z 3000\nRapid X 30000 Y 10000 Z 1000\n";
+    assert!(s.contains(leave) && s.contains(" AT 16\n"), "the recorded hop moved: update this variant");
+    // Three moves fewer before hole 2's first plunge.
+    s.replace(leave, "").replace(" AT 16\n", " AT 13\n")
+}
+
+#[test]
+fn back_to_back_cycle_records_traverse_at_the_hop() {
+    assert_hop_law(&back_to_back(), "back_to_back");
+}
+
+#[test]
+fn back_to_back_cycle_records_without_a_hop_are_refused_by_name() {
+    let full = back_to_back();
+    let s = full.replace("PARAM RetractPlane 3.000000\n", "");
+    assert_ne!(s, full, "the recorded stream states no RetractPlane: update this variant");
+    for script in CYCLE_POSTS {
+        match post(script, &s, "no_hop") {
+            Ok(program) => panic!("{script}: a cycle away from its hole with no hop must be refused:\n{program}"),
+            Err(e) => assert!(e.contains("no RetractPlane to traverse at"), "{script}: refused, but not by name: {e}"),
+        }
+    }
+}
+
+/// #1028: a section whose first motion is probing - a protected descent
+/// to Z5, a touch on the stock top at X10 Y10, a back-off to Z1 (below the
+/// hop Z3) - and whose first cycle, at X30, is read straight after it with
+/// no rapid to the hole; then a second hole by the stream's hop. With no
+/// rapid in the section before the cycle, only the probe moves tell the
+/// post where the tool stands.
+const PROBE_THEN_CYCLE: &str = "; HSMW-CNC v1
+PARAM StartX 10.000000
+PARAM StartY 10.000000
+PARAM StartZ 10.000000
+PARAM OperationName ProbeThenPeck
+PARAM ToolDiameter 6.000000
+PARAM SpindleSpeed 1500.000000
+PARAM WorkOffset G54
+PARAM OriginX 0.000000
+PARAM OriginY 0.000000
+PARAM OriginZ 0.000000
+PARAM ClearancePlane 10.000000
+PARAM RetractPlane 3.000000
+PARAM TopOfStock 0.000000
+TOOL 3 DRILL-6
+SECTION
+GUARD 10000 10000 5000 F 300000
+TOUCH 10000 10000 -5000 EXPECT 10000 10000 0 F 30000 M -
+RETREAT 0 0 1000 EXPECT 10000 10000 1000 F 300000
+CYCLE PECK X 30000 Y 10000 Z -8000 R 1000 ENTRY 0 Q 4000 P 0 F 60000 AT 0
+Plunge X 30000 Y 10000 Z -3000 F 60000
+Rapid X 30000 Y 10000 Z -2000
+Plunge X 30000 Y 10000 Z -7000 F 60000
+Rapid X 30000 Y 10000 Z -6000
+Plunge X 30000 Y 10000 Z -8000 F 60000
+Rapid X 30000 Y 10000 Z 1000
+Rapid X 30000 Y 10000 Z 3000
+Rapid X 50000 Y 10000 Z 3000
+Rapid X 50000 Y 10000 Z 1000
+CYCLE PECK X 50000 Y 10000 Z -8000 R 1000 ENTRY 0 Q 4000 P 0 F 60000 AT 9
+Plunge X 50000 Y 10000 Z -3000 F 60000
+Rapid X 50000 Y 10000 Z -2000
+Plunge X 50000 Y 10000 Z -7000 F 60000
+Rapid X 50000 Y 10000 Z -6000
+Plunge X 50000 Y 10000 Z -8000 F 60000
+Rapid X 50000 Y 10000 Z 1000
+Rapid X 50000 Y 10000 Z 10000
+ENDSECTION
+";
+
+#[test]
+fn a_cycle_read_after_probing_is_seated_at_the_hop() {
+    assert_hop_law_from(PROBE_THEN_CYCLE, "probe_then_cycle", true);
+}
+
+#[test]
+fn the_checker_reads_probe_moves_and_incremental_back_offs() {
+    // A G31 touch to Z0, a G91 back-off of 1 to Z1, then a cycle read
+    // away from the touch: the control positions at Z1, below the hop.
+    let bad = "G00 X10 Y10 Z10\nG31 X10 Y10 Z0 F30\nG91 G01 X0 Y0 Z1 F300\nG90\nG99 G73 X30 Y10 Z-8 R1 Q4 F60\nG80\nG00 Z10\n";
+    let r = check_from(bad, 3.0, 10.0, true);
+    assert_eq!((r.holes, r.faults.len()), (1, 1), "{:#?}", r.faults);
+    assert!(r.faults[0].contains("at Z1, below the hop Z3"), "{:#?}", r.faults);
+    // Without `from_start` the first hole's approach is not watched.
+    assert!(check(bad, 3.0, 10.0).faults.is_empty());
+    // The seated shape passes.
+    let good = "G00 X10 Y10 Z10\nG38.2 X10 Y10 Z0 F30\nG91 G1 Z1 F300\nG90\nG0 Z3\nG0 X30 Y10\nG0 Z1\n\
+                G99 G73 X30 Y10 Z-8 R1 Q4 F60\nG80\nG0 Z10\n";
+    let r = check_from(good, 3.0, 10.0, true);
+    assert_eq!((r.holes, r.faults.len()), (1, 0), "{:#?}", r.faults);
 }
