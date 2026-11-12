@@ -151,13 +151,18 @@ pub(super) fn list_operation_types(_env: &mut Env, _a: &Map<String, Value>) -> R
                 .as_object()
                 .map(|m| m.iter().map(|(n, v)| json!({ "name": n, "type": json_type(v), "default": v })).collect())
                 .unwrap_or_default();
-            json!({
+            let mut kind = json!({
                 "label": k.label,
                 "key": key,
                 "section": format!("{:?}", k.section),
                 "tool_kinds": k.tool_kinds.iter().map(|t| format!("{t:?}")).collect::<Vec<_>>(),
+                "mounts_tool": k.mounts_tool(),
                 "fields": fields,
-            })
+            });
+            if !k.mounts_tool() {
+                kind["note"] = json!("mounts no library tool: add_operation takes no \"tool\" for this kind (the wire is the machine's EDM condition, named in params.condition)");
+            }
+            kind
         })
         .collect();
     Ok(json!({
