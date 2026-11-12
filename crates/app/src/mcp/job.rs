@@ -89,6 +89,16 @@ fn op_full(env: &Env, key: &str, e: &flecs_ecs::prelude::Entity, status: operati
     })
 }
 
+/// #1162: the document's mounted machine, its whole definition, so an
+/// agent reads back what `edit_machine` changed.
+fn machine_view(w: &flecs_ecs::prelude::World) -> Value {
+    let (path, m) = crate::machine::document_of(w);
+    json!({
+        "path": (!path.is_empty()).then_some(path),
+        "definition": m.as_ref().and_then(|m| serde_json::to_value(m).ok()),
+    })
+}
+
 pub(super) fn get_job(env: &mut Env, _a: &Map<String, Value>) -> Result<Value, String> {
     let w = &env.world;
     let models: Vec<Value> = model::model_entities(w)
@@ -124,6 +134,7 @@ pub(super) fn get_job(env: &mut Env, _a: &Map<String, Value>) -> Result<Value, S
         "models": models,
         "tools": tools,
         "operations": ops,
+        "machine": machine_view(w),
         "can_undo": env.history.can_undo(),
         "can_redo": env.history.can_redo(),
     }))

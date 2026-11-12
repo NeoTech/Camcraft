@@ -87,6 +87,8 @@ icon_table! {
     Deburr => "op-deburr", "icon-deburr";
     Circular => "op-circular", "icon-circular";
     PlasmaProfile => "op-plasma-profile", "icon-plasma-profile";
+    /// The wire between its two guides, through the plate it cuts (#532).
+    WireContour => "op-wire-contour", "icon-wire-contour";
     // Holes and probing:
     Drill => "op-drill", "icon-drill";
     Bore => "op-bore", "icon-bore";
