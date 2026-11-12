@@ -19,6 +19,8 @@ mod single;
 mod release_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod gate_maps_tests;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
