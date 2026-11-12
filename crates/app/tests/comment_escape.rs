@@ -101,11 +101,11 @@ fn assert_inert(stem: &str, l: &str) {
 fn hostile_names_post_well_formed_comments_in_every_mill_dialect() {
     let stream = mill_stream(8000.0);
     let m = mill(MACHINE);
-    for stem in ["fanuc", "haas", "mazak", "tormach"] {
+    for stem in ["fanuc", "haas", "mazak", "tormach", "grblhal"] {
         let nc = post(stem, &m, &stream);
         for l in nc.lines() {
             assert_paren_line(stem, l);
-            if stem == "tormach" {
+            if stem == "tormach" || stem == "grblhal" {
                 assert_inert(stem, l);
             }
         }

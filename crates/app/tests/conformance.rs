@@ -54,17 +54,23 @@ const POSTS: &[(&str, &str, &str)] = &[
     ("Heidenhain", "heidenhain", "heidenhain"),
     ("Mazak", "mazak", "mazak"),
     ("Tormach PathPilot", "tormach", "tormach"),
+    ("grblHAL", "grblhal", "grblhal"),
     ("Doosan DNM", "doosan-dnm", "doosan-dnm"),
     ("Makera Carvera", "carvera", "carvera"),
 ];
 
 /// (post stem, golden, named reason): a golden a dialect must REFUSE
+/// rather than post, so it has no `.nc` there. #50: the Heidenhain
+/// DIN/ISO post has no tapping form (G206/G207 are not specced) and a
+/// tap cannot be plain moves.
+/// #710: grblHAL's core G-code list has no G84 either.
 /// rather than post, so it has no `.nc` there. Heidenhain (#51) supports
 /// tapping, but this legacy golden lacks spindle speed. Carvera (#707)
 /// cannot tap (no canned cycles or spindle reverse).
 const REFUSED: &[(&str, &str, &str)] = &[
     ("heidenhain", "tap_plate", "tapping needs a positive integral spindle speed"),
     ("carvera", "tap_plate", "tapping"),
+    ("grblhal", "tap_plate", "tapping"),
 ];
 
 /// The TURNING dialects (M13.5): their goldens are the lathe
@@ -285,11 +291,15 @@ fn the_synthesized_stream_locks_the_tool_and_spindle_words() {
         serde_json::from_str(&read("assets/machines/3axis-vmc.mch")).expect("machine json");
     let write = std::env::var_os("WRITE_GOLDEN").is_some();
     for (name, cps_stem, _) in POSTS {
+        // #50: Heidenhain refuses a G55 offset and a tap by name, so
+        // its golden locks the same stream without those two records.
+        // #710: grblHAL has no G84, so its golden drops only the tap.
         // #51: Heidenhain supports the full G55 + tap stream.
         // #707: the Carvera refuses the tap the same way (no canned
         // cycles, no spindle reverse); its G55 stands.
         let stream = match *cps_stem {
             "carvera" => synth_stream_with("G55", false),
+            "grblhal" => synth_stream_with("G55", false),
             _ => synth_stream(),
         };
         let cps = read(&format!("assets/posts/{cps_stem}.cps"));
@@ -375,6 +385,7 @@ const EXTENSIONS: &[(&str, &str)] = &[
     ("heidenhain", "I"),
     ("mazak", "nc"),
     ("tormach", "nc"),
+    ("grblhal", "nc"),
     ("doosan-dnm", "nc"),
     ("carvera", "nc"),
     ("fanuc-lathe", "nc"),

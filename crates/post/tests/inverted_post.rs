@@ -244,7 +244,7 @@ fn an_inverted_z_or_other_letter_refuses_by_name() {
 
 #[test]
 fn every_unverified_dialect_refuses_by_name() {
-    for stem in ["sinumerik", "heidenhain", "mazak", "tormach", "fanuc-lathe"] {
+    for stem in ["sinumerik", "heidenhain", "mazak", "tormach", "grblhal", "fanuc-lathe"] {
         let e = refused(stem, &["X"], &probe_records());
         assert_eq!(
             e,

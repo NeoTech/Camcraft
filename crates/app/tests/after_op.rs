@@ -76,7 +76,7 @@ fn has_word(line: &str, code: &str) -> bool {
     line.split_whitespace().any(|w| w.trim_end_matches('*') == code)
 }
 
-const MILLS: [&str; 5] = ["Fanuc", "Haas", "Siemens 840D", "Heidenhain", "Mazak"];
+const MILLS: [&str; 6] = ["Fanuc", "Haas", "Siemens 840D", "Heidenhain", "Mazak", "grblHAL"];
 
 fn script(name: &str) -> &'static str {
     posting::BUILTINS.iter().find(|(n, _)| *n == name).map(|(_, s)| *s).expect("a built-in")
@@ -155,12 +155,15 @@ fn go_home_retracts_z_then_homes_xy_in_each_dialect() {
 #[test]
 fn a_post_that_cannot_go_home_refuses_by_name() {
     let (world, _h) = two_faces(AfterOperation::GoHome);
-    let out = post_with(&world, script("Heidenhain"));
-    assert!(
-        out.warnings.iter().any(|w| w.contains("Heidenhain") && w.contains("home")),
-        "refused by name, never guessed: {:?}",
-        out.warnings
-    );
+    // #710: grblHAL's G28/G30 positions are controller settings too.
+    for name in ["Heidenhain", "grblHAL"] {
+        let out = post_with(&world, script(name));
+        assert!(
+            out.warnings.iter().any(|w| w.contains(name) && w.contains("home")),
+            "{name}: refused by name, never guessed: {:?}",
+            out.warnings
+        );
+    }
 }
 
 #[test]
