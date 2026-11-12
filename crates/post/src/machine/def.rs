@@ -260,6 +260,7 @@ impl Machine {
                 .is_none_or(|w| Kind::from_word(w).is_some())
             && self.coolants.iter().all(|c| !c.name.is_empty())
             && self.plasma_sane()
+            && self.edm_sane()
             && self.axes.iter().all(|a| {
                 rate_ok(a.feed) && rate_ok(a.rapid) && rate_ok(a.resolution) && a.travel.is_none_or(|(lo, hi)| lo.is_finite() && hi.is_finite() && hi > lo)
                     && a.axis.is_none_or(|d| d.iter().all(|x| x.is_finite()))

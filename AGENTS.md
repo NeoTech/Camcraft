@@ -85,20 +85,57 @@ go to `CHANGELOG.md`.
   where the two differ.
 - **Pick.** `gh issue list --state open --search "-label:claimed -label:blocked -label:in-review -label:needs-research -label:\"P?\""`
   (then drop any whose comments hold a live contributor claim - "A claim
-  comment is a claim", below) and take the highest priority first: `P0` (wrong output, gouge, crash,
-  data loss) before `P1` (wrong behaviour a user hits) before `P2` (owed
-  polish), then the oldest. User-reported bugs outrank owed work.
+  comment is a claim", below) and take the lowest priority number first (`P1` before `P2` ... before
+  `P9`, "Priorities" below), then the oldest. User-reported bugs outrank
+  owed work of the same number. An issue with no priority is untriaged,
+  not lowest: it is triaged ("Priorities") before any pick.
+- **Priorities: `P1`..`P9`, lower is picked first** (user, 2026-11-12: "We
+  might need a P1-P9 prioritization system now.. we're having issues with
+  scope creep throughout the issue list"; scale chosen as "replace P0/P1/P2
+  with nine levels; agents keep filing and rating their own issues", and
+  read as "P4 is our normal; P1 to P3 is fix now"). `P?` (next point) is
+  outside the scale.
+
+  | Label | Means | Was |
+  |---|---|---|
+  | `P1` | Unsafe or wrong output: a gouge or collision that passes, wrong posted G-code, a crash, data loss | `P0` |
+  | `P2` | Main is broken, or a regression in the last release with no workaround: main does not build, a gate on main is red, the app cannot open a project it saved | red-gate `P1` |
+  | `P3` | Wrong behaviour a user hits, with a workaround: a legal program refused, a misleading message, a dialog that cannot do what it says | `P1` bugs |
+  | `P4` | Work the maintainer asked for, for the next cut | `P1` enhancements he opened |
+  | `P5` | The agent surface and the tooling keep up with what shipped: an MCP tool or skill row for a shipped command, a gate or process fix that blocks contributors | `P1` MCP / process |
+  | `P6` | Accepted enhancements, not scheduled | other `P1` enhancements |
+  | `P7` | Owed polish and small fixes: wording, layout, a missing test, a refusal that could say more | `P2` bugs and polish |
+  | `P8` | Larger ideas that need design or research before code | `P2` enhancements, `effort:max` |
+  | `P9` | Someday: not picked while anything else is free | - |
+
+  - `P1`-`P3` are fix-now work and are for defects only: "wanted" is never
+    a reason for them. Only `P1` and `P2` hold a release cut back
+    (maintainer's choice, question dialog, 2026-11-12: "only P1 and P2
+    block a release cut"). A minor/major cut does not start while any `P1` or `P2` issue is open; a `P3` or lower never holds one. A `P3` is worked ahead of planned
+    work, but a cut does not wait for it.
+  - `P4` is set only where the maintainer asked for the work in his own
+    words; the issue quotes them.
+  - A follow-up found while working or reviewing is `P7` unless it is a
+    defect (then `P1`-`P3` by the table).
+  - An agent filing an issue sets exactly one of `P1`..`P9` by this table,
+    never `P?`.
+  - **No priority means untriaged.** A human-filed issue without a
+    priority is not the lowest: the first agent that reads it for a pick
+    sets its priority by this table (with its effort label) before
+    sorting, so a user-reported gouge bug is never picked last. An issue
+    found with two numbers is reported to the maintainer and read by the
+    lower number meanwhile.
 - **`P?` is paused, not prioritised** (user, 2026-11-09: "a P? label that
   holds an issue paused until maintainer tells it to be changed"). An issue
   labelled `P?` is held by the maintainer: Pick never takes it, no lane
   slot works it, no agent claims, researches, files sub-issues for or
   re-prioritises it, and the bug/enhancement lanes skip it the same way.
-  It carries `P?` *instead of* a `P0`/`P1`/`P2` label, never beside one -
+  It carries `P?` *instead of* a `P1`..`P9` label, never beside one -
   an agent that finds both reports it rather than choosing. Only the
   maintainer swaps `P?` for a real priority (or closes the issue); until
   then agents may only read it, link it, and comment facts that belong on
   it (e.g. a duplicate or a related fix), without changing its labels.
-  An agent filing a new issue never uses `P?` - it picks `P0`/`P1`/`P2`.
+  An agent filing a new issue never uses `P?` - it picks one of `P1`..`P9`.
 - **Two lanes, two issues each** (user, 2026-11-07: "open up the issue
   limit to 2 bugs 2 enhancements.. as we are now just working on the latest
   issues and not the old ones"). At most four issues are worked at once: two
@@ -109,7 +146,7 @@ go to `CHANGELOG.md`.
   review finding afterwards rides the same issue and takes no new slot, so a
   `feat` waiting for its cut never holds a lane. The bug lane picks by the order above. The enhancement lane has its
   own order, which overrides Pick's: user-filed issues (no `source:agent`)
-  first, then `P1` before `P2`, then the oldest, so old owed work is not
+  first, then the lower number, then the oldest, so old owed work is not
   starved by fresh bugs. When a slot frees, refill that lane at once. Each
   slot is its own worktree and branch (check free disk first: each
   worktree's `target/` is 10-20 GB). Merging follows "Done on a branch"
@@ -126,6 +163,14 @@ go to `CHANGELOG.md`.
   outside the working folder u started up in?"), and are removed once their
   PR is pushed. One issue, one branch; every commit for it lands there, never
   on `main`.
+- **A worktree agent never touches the main checkout's HEAD or tree.** It
+  runs `git fetch origin` and `git worktree add ... origin/main` and nothing
+  else there: no `switch`, `pull`, `merge`, `reset`, `checkout` or `stash` in
+  `C:\...\Claude-001` (any checkout the maintainer works in). The main checkout
+  may be running a gate (`cargo xtask gate` reads HEAD and the working tree
+  before and after, and prints VOID if a pull moved them mid-run, #1201), so a
+  worker's pull there voids that run for everyone. The first form above is for
+  the main session only, when it is the one owning `main`.
 - **A fork syncs from upstream at each cut tag, not continuously** (user,
   2026-11-09: "If we are on a forked repository (check for upstream), we
   pull from upstream, with every detected cut tag ex. jump from 0.14 to
@@ -241,7 +286,7 @@ go to `CHANGELOG.md`.
     It only sets a missing label; it never lowers or replaces one.
   - **Safety floor.** Anything that can change posted G-code, a collision
     or gouge check, stock simulation or geometry is at least
-    `effort:high`, however small the diff; every `P0` is at least
+    `effort:high`, however small the diff; every `P1` is at least
     `effort:high`. The Prime Directive is never handed to the cheapest
     tier.
   - **Who works it.** The main session picks by Pick and the lanes as
@@ -480,8 +525,11 @@ drive CamCraft headlessly. A PR that adds a user-facing command also adds its
 MCP tool (and script verb where it fits) in `crates/app/src/mcp/`, or files a
 `source:agent` follow-up issue `MCP: <command>` and names it in the PR body. Every
 MCP issue (an `MCP:` title, or work on `crates/app/src/mcp/` or the camcraft-mcp
-skill) carries `area:mcp` and is `P1`, unless the maintainer paused it `P?` (user, 2026-11-10: "find all MCP tickets
-and make P1"), so the agent surface keeps up with the GUI. MCP
+skill) carries `area:mcp`. Owed agent-surface work (a tool, script verb or
+skill row for a shipped command) is `P5` (user, 2026-11-10: "find all MCP
+tickets and make P1" - the top level then, `P5` since the scale became
+P1-P9 on 2026-11-12); a defect in MCP code is rated by severity like any
+defect, `P1`-`P3`. A paused one stays `P?`. This keeps the agent surface up with the GUI. MCP
 tools call the same undoable commands the GUI uses, so undo/redo history and
 invariants hold headlessly.
 
@@ -756,11 +804,11 @@ in progress and no other gate running; otherwise it waits, and the main
 session starts no cut until a running gate has finished. The main session
 therefore does its own issue work in a worktree while a gate runs. Before
 dispatching, check the free disk space; `cargo clean` the main `target/`
-only when no gate or cut is running and it is past ~60 GB. A red result is a new issue (`P0` if it is wrong output or a
-gouge, else `P1`, `source:agent`) naming the failing tests and the merge
+only when no gate or cut is running and it is past ~60 GB. A red result is a new issue (`P1` if it is wrong output or a
+gouge, else `P2`, `source:agent`) naming the failing tests and the merge
 that broke them. A red result does not revert the merge by itself; the
 issue is worked in the normal order, and a minor/major cut does not start
-while a `P0` it opened is unfixed. The full release tier runs only at a
+while any `P1` or `P2` issue is open (a `P3` or lower never holds one). The full release tier runs only at a
 minor/major cut. A fix-only stretch produces no build; to hand-test one, run
 `cargo xtask release --version <next> --no-tag --skip-gate` (or the wrapper
 `scripts/release.ps1 -Version <next> -NoTag -SkipGate`) locally on a scratch
