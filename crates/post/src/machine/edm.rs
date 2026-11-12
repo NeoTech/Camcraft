@@ -5,10 +5,10 @@
 //! (with the control's own word for each), the maximum orbit radius and
 //! the pickup method. The U/V and Z strokes are ordinary kinematics
 //! axes. Every number is optional by the unstated-limits law - absent is
-//! "not stated", never zero - and the condition table, codes and
-//! generator codes are separate sub-issues (#533, #542); the condition
-//! table (#531) holds only the geometry a toolpath needs, and the
-//! control's words live in `edm.codes` (#542, `edm_codes`).
+//! "not stated", never zero. The condition table (#531, `conditions[]`,
+//! either kind) is `edm_conditions`; the control's words (#542,
+//! `codes`, either kind - the wire post #533 joins later) are
+//! `edm_codes`.
 //!
 //! Provenance: the umbrella's design notes (#290, D1-D10) over public
 //! EDM terminology (machine builders' published tutorials and the
@@ -16,6 +16,12 @@
 //! table or post was copied.
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
+use super::def::{kind, Kind, Machine};
+use super::no_spindle::{head_refusals, NoSpindle};
+
+pub use super::edm_conditions::{Condition, ConditionField, CONDITION_ROLES};
 
 /// The orbit pattern geometries CamCraft can generate (#290 D6). A
 /// machine lists which it offers; the word is the control's.
@@ -28,56 +34,6 @@ pub const ORBIT_KINDS: [&str; 3] = ["circular", "vector", "planetary"];
 pub struct OrbitWord {
     pub kind: String,
     pub word: String,
-}
-
-/// What a generator condition is for (#531): the rough cut, a skim
-/// pass, or the finish. The word is the file's; this is CamCraft's.
-pub const CONDITION_ROLES: [&str; 3] = ["rough", "skim", "finish"];
-
-/// One generator condition the user states from their machine's manual
-/// (#531, #290 D4). CamCraft reads only the geometry it needs - the
-/// spark gap per side and the wire diameter (wire) or the electrode
-/// undersize per side (sinker); power, flushing and the rest stay the
-/// control's, named by `id` (the word the control selects it by).
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct Condition {
-    /// The control's own selector for this condition.
-    pub id: String,
-    #[serde(skip_serializing_if = "String::is_empty")]
-    pub name: String,
-    /// Spark gap per side, mm.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub gap: Option<f64>,
-    /// Wire: the wire diameter this condition burns with, mm.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub wire_diameter: Option<f64>,
-    /// Sinker: the electrode undersize per side this condition wants, mm.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub undersize: Option<f64>,
-    /// One of [`CONDITION_ROLES`], or empty: not stated.
-    #[serde(skip_serializing_if = "String::is_empty")]
-    pub role: String,
-    #[serde(skip_serializing_if = "String::is_empty")]
-    pub notes: String,
-}
-
-/// A field an operation needs from a condition (#531).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ConditionField {
-    Gap,
-    WireDiameter,
-    Undersize,
-}
-
-impl ConditionField {
-    fn word(self) -> &'static str {
-        match self {
-            ConditionField::Gap => "gap",
-            ConditionField::WireDiameter => "wire_diameter",
-            ConditionField::Undersize => "undersize",
-        }
-    }
 }
 
 /// The `edm` section. Lengths are mm (the parser scales the file's
@@ -111,15 +67,41 @@ pub struct Edm {
     /// from the machine's manual: a chuck or holder system's name).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pickup: Option<String>,
-    /// The generator conditions the user states (#531). Empty = none
-    /// stated, and every EDM op refuses by name.
+    /// Either kind: the generator conditions the user states (#531).
+    /// Empty = none stated (absent and `[]` read the same), and every
+    /// EDM op refuses by name.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub conditions: Vec<Condition>,
-    /// The control's EDM words by role (#542, #290 D5): templates a
-    /// post fills (`super::edm_codes`). Empty = none stated, and a post
-    /// needing one refuses by name.
+    /// Either kind: the control's EDM words by role (#542, #290 D5):
+    /// templates a post fills (`super::edm_codes`). Empty = none stated,
+    /// and a post needing one refuses by name.
     #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub codes: std::collections::BTreeMap<String, String>,
+}
+
+/// The keys only a wire machine states.
+pub const WIRE_KEYS: [&str; 5] = ["lower_guide_z", "upper_guide_z", "max_taper_deg", "wire_diameters", "awt"];
+/// The keys only a sinker machine states.
+pub const SINKER_KEYS: [&str; 3] = ["orbits", "max_orbit_radius", "pickup"];
+/// The keys either EDM kind states.
+pub const COMMON_KEYS: [&str; 2] = ["conditions", "codes"];
+/// The keys of one orbit entry.
+const ORBIT_KEYS: [&str; 2] = ["kind", "word"];
+
+/// Why an EDM states no spindle or coolant: one sentence per key.
+const EDM_HEAD: NoSpindle = NoSpindle {
+    spindle: "an EDM machine has no spindle - a wire or an electrode states no rpm, power, speed range or tapping",
+    live_tool: "an EDM machine has no spindle to drive a live tool",
+    coolant: "an EDM machine states no coolant - its dielectric is the machine's own, not an M7/M8/M9 list",
+};
+
+/// The EDM head rules over a file's raw JSON (#530, the plasma law's
+/// twin): no `spindle` key, live tool or coolant list, each named.
+/// The caller has read the declared kind as wire or sinker EDM. A
+/// rotary is allowed (an indexer on a wire or sinker table).
+#[must_use]
+pub fn edm_refusals(v: &Value) -> Vec<(String, String)> {
+    head_refusals(v, &EDM_HEAD).0
 }
 
 impl Edm {
@@ -139,76 +121,116 @@ impl Edm {
             && self.wire_diameters.iter().all(|d| d.is_finite() && *d > 0.0)
             && pos(self.max_orbit_radius)
             && self.orbits.iter().all(|o| ORBIT_KINDS.contains(&o.kind.as_str()) && !o.word.trim().is_empty())
-            && self.conditions.iter().all(condition_ok)
-            && unique_ids(&self.conditions)
+            && self.conditions_sane()
             && super::edm_codes::codes_sane(&self.codes)
     }
 
-    /// The condition `id` with every field in `need` stated, or the
-    /// refusal that names what is missing - the door an EDM op's command
-    /// calls at creation (#531), so a missing gap is refused before any
-    /// generator runs.
-    ///
-    /// # Errors
-    /// No condition `id` on this machine, or one of `need` not stated.
-    pub fn condition(&self, machine: &str, id: &str, need: &[ConditionField]) -> Result<&Condition, String> {
-        let c = self
-            .conditions
-            .iter()
-            .find(|c| c.id == id)
-            .ok_or_else(|| format!("machine {machine} states no EDM condition {id:?}"))?;
-        for f in need {
-            let stated = match f {
-                ConditionField::Gap => c.gap.is_some(),
-                ConditionField::WireDiameter => c.wire_diameter.is_some(),
-                ConditionField::Undersize => c.undersize.is_some(),
-            };
-            if !stated {
-                return Err(format!("machine {machine}: EDM condition {id:?} states no {}", f.word()));
-            }
+    /// Does this section state only keys of `k` (a wire states no
+    /// sinker key, a sinker no wire key, and no other kind states an
+    /// `edm` section at all)? The parsed form of `parse_edm`'s rule.
+    #[must_use]
+    pub fn fits(&self, k: Kind) -> bool {
+        let wire = self.lower_guide_z.is_some()
+            || self.upper_guide_z.is_some()
+            || self.max_taper_deg.is_some()
+            || !self.wire_diameters.is_empty()
+            || self.awt.is_some()
+            || self.conditions.iter().any(|c| c.wire_diameter.is_some());
+        let sinker = !self.orbits.is_empty()
+            || self.max_orbit_radius.is_some()
+            || self.pickup.is_some()
+            || self.conditions.iter().any(|c| c.undersize.is_some());
+        match k {
+            Kind::WireEdm => !sinker,
+            Kind::SinkerEdm => !wire,
+            Kind::Mill | Kind::Lathe | Kind::MillTurn | Kind::Plasma => false,
         }
-        Ok(c)
     }
 }
 
-fn condition_ok(c: &Condition) -> bool {
-    let len = |r: Option<f64>| r.is_none_or(|x| x.is_finite() && x > 0.0);
-    !c.id.trim().is_empty()
-        && c.gap.is_none_or(|g| g.is_finite() && g >= 0.0)
-        && len(c.wire_diameter)
-        && c.undersize.is_none_or(|u| u.is_finite() && u >= 0.0)
-        && (c.role.is_empty() || CONDITION_ROLES.contains(&c.role.as_str()))
+impl Machine {
+    /// The EDM rules over the PARSED machine (a hand-edited project file
+    /// never went through `parse_mch`): an `edm` section only on an EDM
+    /// kind and only with that kind's keys; an EDM states no spindle
+    /// number, range, tapping word, spindle count, live tool or coolant.
+    #[must_use]
+    pub fn edm_sane(&self) -> bool {
+        let k = kind(Some(self));
+        if self.edm.as_ref().is_some_and(|e| !e.fits(k)) {
+            return false;
+        }
+        if !matches!(k, Kind::WireEdm | Kind::SinkerEdm) {
+            return true;
+        }
+        self.spindle_min.is_none()
+            && self.spindle_max.is_none()
+            && self.spindle_power.is_none()
+            && self.spindle_ranges.is_empty()
+            && self.rigid_tapping.is_none()
+            && self.spindles.is_none()
+            && self.live_tool.is_none()
+            && self.coolants.is_empty()
+    }
 }
 
-fn unique_ids(cs: &[Condition]) -> bool {
-    cs.iter().enumerate().all(|(i, c)| cs.iter().skip(i + 1).all(|d| d.id != c.id))
-}
-
-fn num(v: &serde_json::Value, key: &str, f: f64) -> Result<Option<f64>, String> {
+/// A stated number, scaled by `f`, finite AFTER the scaling (an inch
+/// `1e308` is no length), refused by its key.
+fn num(v: &Value, key: &str, f: f64) -> Result<Option<f64>, String> {
     match v.get(key) {
-        None | Some(serde_json::Value::Null) => Ok(None),
-        Some(x) => match x.as_f64() {
-            Some(n) if n.is_finite() => Ok(Some(n * f)),
-            _ => Err(format!("machine file: edm.{key} must be a number, not {x}")),
+        None | Some(Value::Null) => Ok(None),
+        Some(x) => match x.as_f64().map(|n| n * f) {
+            Some(n) if n.is_finite() => Ok(Some(n)),
+            Some(_) => Err(format!("machine file: edm.{key} = {x} is out of range")),
+            None => Err(format!("machine file: edm.{key} must be a number, not {x}")),
         },
     }
 }
 
-/// Read the `edm` section (`None` when the file has none). Lengths are
-/// scaled by `f` (the file's mm factor); a garbled value refuses the
-/// file by name, never reads as unstated.
+/// Every key of the section is one of the declared kind's, by name.
+fn keys_fit(o: &serde_json::Map<String, Value>, k: Kind) -> Result<(), String> {
+    let (own, other, other_kind) = match k {
+        Kind::WireEdm => (&WIRE_KEYS[..], &SINKER_KEYS[..], Kind::SinkerEdm),
+        _ => (&SINKER_KEYS[..], &WIRE_KEYS[..], Kind::WireEdm),
+    };
+    for key in o.keys() {
+        if own.contains(&key.as_str()) || COMMON_KEYS.contains(&key.as_str()) {
+            continue;
+        }
+        if other.contains(&key.as_str()) {
+            return Err(format!(
+                "machine file: edm.{key} is a {} key; this is a {} machine",
+                other_kind.word(),
+                k.word()
+            ));
+        }
+        return Err(format!("machine file: edm.{key} is not an edm key ({}, {})", own.join(", "), COMMON_KEYS.join(", ")));
+    }
+    Ok(())
+}
+
+/// Read the `edm` section (`None` when the file has none). `k` is the
+/// file's declared kind: only `wire_edm` / `sinker_edm` state the
+/// section, each with its own keys. Lengths are scaled by `f` (the
+/// file's mm factor); a garbled value refuses the file by name, never
+/// reads as unstated.
 ///
 /// # Errors
-/// A non-number where a number is due, a non-positive length, a taper
-/// outside (0, 90) degrees, an upper guide not above the lower, or an
-/// orbit kind CamCraft does not generate.
-pub(super) fn parse_edm(v: Option<&serde_json::Value>, f: f64) -> Result<Option<Edm>, String> {
+/// An `edm` section on another kind, a key that is not the kind's, a
+/// non-number where a number is due (or one that is not finite once
+/// scaled), a non-positive length, a taper outside (0, 90) degrees, an
+/// upper guide not above the lower, an orbit kind CamCraft does not
+/// generate, or a condition table entry `parse_conditions` refuses.
+pub(super) fn parse_edm(v: Option<&Value>, f: f64, k: Option<Kind>) -> Result<Option<Edm>, String> {
     let Some(v) = v.filter(|v| !v.is_null()) else {
         return Ok(None);
     };
-    if !v.is_object() {
+    let Some(k) = k.filter(|k| matches!(k, Kind::WireEdm | Kind::SinkerEdm)) else {
+        return Err("machine file: edm: only a wire_edm or sinker_edm machine states an edm section".to_owned());
+    };
+    let Some(o) = v.as_object() else {
         return Err("machine file: edm must be an object".to_owned());
-    }
+    };
+    keys_fit(o, k)?;
     let mut e = Edm {
         lower_guide_z: num(v, "lower_guide_z", f)?,
         upper_guide_z: num(v, "upper_guide_z", f)?,
@@ -232,105 +254,57 @@ pub(super) fn parse_edm(v: Option<&serde_json::Value>, f: f64) -> Result<Option<
         return Err(format!("machine file: edm.max_orbit_radius must be positive, not {r}"));
     }
     match v.get("wire_diameters") {
-        None | Some(serde_json::Value::Null) => {}
-        Some(serde_json::Value::Array(ds)) => {
+        None | Some(Value::Null) => {}
+        Some(Value::Array(ds)) => {
             for d in ds {
-                match d.as_f64() {
-                    Some(n) if n.is_finite() && n > 0.0 => e.wire_diameters.push(n * f),
+                match d.as_f64().map(|n| n * f) {
+                    Some(n) if n.is_finite() && n > 0.0 => e.wire_diameters.push(n),
                     _ => return Err(format!("machine file: edm.wire_diameters holds {d}, not a positive number")),
                 }
             }
         }
         Some(x) => return Err(format!("machine file: edm.wire_diameters must be a list, not {x}")),
     }
+    e.conditions = super::edm_conditions::parse_conditions(v.get("conditions"), f, k, &e.wire_diameters)?;
+    e.codes = super::edm_codes::parse_codes(v.get("codes"))?;
     match v.get("awt") {
-        None | Some(serde_json::Value::Null) => {}
-        Some(serde_json::Value::Bool(b)) => e.awt = Some(*b),
+        None | Some(Value::Null) => {}
+        Some(Value::Bool(b)) => e.awt = Some(*b),
         Some(x) => return Err(format!("machine file: edm.awt must be true or false, not {x}")),
     }
     match v.get("pickup") {
-        None | Some(serde_json::Value::Null) => {}
-        Some(serde_json::Value::String(s)) if !s.trim().is_empty() => e.pickup = Some(s.clone()),
+        None | Some(Value::Null) => {}
+        Some(Value::String(s)) if !s.trim().is_empty() => e.pickup = Some(s.clone()),
         Some(x) => return Err(format!("machine file: edm.pickup must be a word, not {x}")),
     }
     match v.get("orbits") {
-        None | Some(serde_json::Value::Null) => {}
-        Some(serde_json::Value::Array(os)) => {
+        None | Some(Value::Null) => {}
+        Some(Value::Array(os)) => {
             for o in os {
-                let kind = o.get("kind").and_then(|k| k.as_str()).unwrap_or_default();
-                let word = o.get("word").and_then(|w| w.as_str()).unwrap_or_default();
-                if !ORBIT_KINDS.contains(&kind) {
-                    return Err(format!(
-                        "machine file: edm orbit kind {kind:?} is not one of {}",
-                        ORBIT_KINDS.join(", ")
-                    ));
-                }
-                if word.trim().is_empty() {
-                    return Err(format!("machine file: edm orbit {kind} states no control word"));
-                }
-                e.orbits.push(OrbitWord { kind: kind.to_owned(), word: word.to_owned() });
+                e.orbits.push(orbit(o)?);
             }
         }
         Some(x) => return Err(format!("machine file: edm.orbits must be a list, not {x}")),
     }
-    e.conditions = parse_conditions(v.get("conditions"), f)?;
-    e.codes = super::edm_codes::parse_codes(v.get("codes"))?;
     Ok(Some(e))
 }
 
-/// `edm.conditions[]` (#531): each entry's id is required and unique;
-/// lengths scale with the file's unit; a garbled entry refuses the
-/// file by its id.
-fn parse_conditions(v: Option<&serde_json::Value>, f: f64) -> Result<Vec<Condition>, String> {
-    let list = match v {
-        None | Some(serde_json::Value::Null) => return Ok(Vec::new()),
-        Some(serde_json::Value::Array(a)) => a,
-        Some(x) => return Err(format!("machine file: edm.conditions must be a list, not {x}")),
-    };
-    let mut out: Vec<Condition> = Vec::new();
-    for c in list {
-        let id = match c.get("id") {
-            Some(serde_json::Value::String(s)) if !s.trim().is_empty() => s.clone(),
-            Some(serde_json::Value::Number(n)) => n.to_string(),
-            _ => return Err(format!("machine file: an edm condition states no id: {c}")),
-        };
-        if out.iter().any(|o| o.id == id) {
-            return Err(format!("machine file: edm condition {id:?} is stated twice"));
-        }
-        let word = |k: &str| -> Result<String, String> {
-            match c.get(k) {
-                None | Some(serde_json::Value::Null) => Ok(String::new()),
-                Some(serde_json::Value::String(s)) => Ok(s.clone()),
-                Some(x) => Err(format!("machine file: edm condition {id:?} {k} must be a word, not {x}")),
-            }
-        };
-        let num_at = |k: &str, zero_ok: bool| -> Result<Option<f64>, String> {
-            let n = num(c, k, f).map_err(|_| format!("machine file: edm condition {id:?} {k} must be a number"))?;
-            match n {
-                Some(x) if x < 0.0 || (!zero_ok && x == 0.0) => {
-                    Err(format!("machine file: edm condition {id:?} {k} must be positive, not {x}"))
-                }
-                other => Ok(other),
-            }
-        };
-        let cond = Condition {
-            name: word("name")?,
-            gap: num_at("gap", true)?,
-            wire_diameter: num_at("wire_diameter", false)?,
-            undersize: num_at("undersize", true)?,
-            role: word("role")?,
-            notes: word("notes")?,
-            id,
-        };
-        if !(cond.role.is_empty() || CONDITION_ROLES.contains(&cond.role.as_str())) {
-            return Err(format!(
-                "machine file: edm condition {:?} role {:?} is not one of {}",
-                cond.id,
-                cond.role,
-                CONDITION_ROLES.join(", ")
-            ));
-        }
-        out.push(cond);
+/// One `orbits` entry: an object of `kind` and `word`, nothing else.
+fn orbit(o: &Value) -> Result<OrbitWord, String> {
+    if let Some(key) = o.as_object().and_then(|m| m.keys().find(|k| !ORBIT_KEYS.contains(&k.as_str()))) {
+        return Err(format!("machine file: edm.orbits: {key} is not an orbit key (kind, word)"));
     }
-    Ok(out)
+    let kind = o.get("kind").and_then(Value::as_str).unwrap_or_default();
+    let word = o.get("word").and_then(Value::as_str).unwrap_or_default();
+    if !ORBIT_KINDS.contains(&kind) {
+        return Err(format!("machine file: edm orbit kind {kind:?} is not one of {}", ORBIT_KINDS.join(", ")));
+    }
+    if word.trim().is_empty() {
+        return Err(format!("machine file: edm orbit {kind} states no control word"));
+    }
+    Ok(OrbitWord { kind: kind.to_owned(), word: word.to_owned() })
 }
+
+#[cfg(test)]
+#[path = "edm_tests.rs"]
+pub(super) mod tests;
