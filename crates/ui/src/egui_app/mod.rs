@@ -88,6 +88,8 @@ mod tool_holder_picker;
 mod tool_cutter_page;
 mod tool_cutter_params;
 mod setup_wcs_pick;
+// #870: the WCS page's footer (Set origin beside Close) and origin line.
+mod wcs_footer;
 // #343: a setup's own node pages (settings, machine, post, fixtures, tools).
 mod setup_pages;
 mod setup_post_page;

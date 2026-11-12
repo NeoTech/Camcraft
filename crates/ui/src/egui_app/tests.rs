@@ -142,6 +142,8 @@ mod step_budget;
 mod two_point_marks;
 // #1104: the Setups page lists setups only.
 mod setups_declutter;
+// #870: the WCS page's footer and its origin in words.
+mod wcs_footer;
 // #1206: each setup's own Machine and Post pages pick its own mount.
 mod setup_mount_pages;
 
@@ -1705,7 +1707,11 @@ fn anchor_click_queues_setwcs() {
 /// arm pick mode from the checkbox.
 #[test]
 fn origin_page_shows_the_anchor_grid_and_arms_pick_mode() {
-    let mut harness = shell_harness();
+    // #870: the page's origin line made it taller; at 720 px the grid's
+    // bottom row scrolls under the footer, so the window is 900 px.
+    let mut harness = Harness::builder()
+        .with_size(Vec2::new(1280.0, 900.0))
+        .build_ui_state(frame, ShellUi::seeded());
     harness.state_mut().state.ui_target = UiTarget::Wcs;
     harness.run();
     // The draft default highlight is center (anchor_xy 4), so that cell

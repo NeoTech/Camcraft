@@ -118,6 +118,11 @@ pub(super) fn render_wcs(world: &World, ctx: Option<&str>, out: &mut String) {
         }
         None => out.push_str(&format!("  {label}  (not placed - at the origin)\n")),
     }
+    // #870: where that origin sits, in words - what the operator touches
+    // off. An unplaced WCS is read at the world origin.
+    let words = crate::setup_origin::origin_words(world, ctx, &|v| format!("{} mm", mm(v)));
+    out.push_str(&format!("  origin: {words} (X0 Y0 Z0)
+"));
     // #196, #329: the one word the setup's program runs in: the setup's
     // label, G54 when unset.
     let slot = setup::wcs_slot(world, ctx);
