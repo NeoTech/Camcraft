@@ -110,7 +110,7 @@ pub fn verdict_on(script: &str, case: &str, input: &Path, machine: Option<&Path>
     if let Some(m) = machine {
         cmd.arg("--machine").arg(m);
     }
-    let r = cmd.arg("--log").arg(&log).arg(&cps).arg(&input).arg(&out).output().expect("run the post binary");
+    let r = cmd.arg("--log").arg(&log).arg(&cps).arg(input).arg(&out).output().expect("run the post binary");
     let program = std::fs::read_to_string(&out).ok();
     let warnings = std::fs::read_to_string(&log).ok();
     for f in [&out, &log] {
