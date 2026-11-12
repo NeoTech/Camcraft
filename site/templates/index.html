@@ -13,6 +13,21 @@
   {% endif %}
 </section>
 {{ section.content | safe }}
+{#- #1103: the browser build lives at app/ (the release workflow puts it there; without it that page says so). -#}
+<section class="browser">
+  <h2>Try CamCraft in your browser</h2>
+  <p><a class="button" href="{{ get_url(path='@/app.md') }}">Open CamCraft in the browser</a></p>
+  <p>
+    {% if version %}The browser build is CamCraft {{ version }}, built from the same release tag as this site.{% else %}A released site carries the browser build of its release; this local preview does not.{% endif %}
+    It runs in a current browser on WebGL2, with nothing to install.
+    It is an early build: there is no file picker yet (models, projects and programs
+    cannot be opened or saved), simulation playback does not work yet (it runs on a
+    thread, and the browser gives the shell none), it does not use WebGPU, and views
+    that need desktop GPU features say so instead of drawing. Use the
+    <a href="{{ config.extra.repo }}/releases">desktop downloads</a> for real work
+    (<a href="{{ config.extra.repo }}/issues/31">#31</a> tracks what is still owed).
+  </p>
+</section>
 <div class="cards">
   {% set guide = get_section(path="guide/_index.md") %}
   <div class="card">

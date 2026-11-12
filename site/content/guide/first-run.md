@@ -4,6 +4,15 @@ description = "The window, the ribbon, and a first toolpath."
 weight = 2
 +++
 
+## Trying it in the browser first
+
+[CamCraft in the browser](@/app.md) is the same release as this site, built
+for WebAssembly: it opens in a current browser on WebGL2 with nothing to
+install, so you can look around the window described below. It cannot open
+or save files yet, simulation playback does not work there, and it does not
+use WebGPU; for a real first toolpath, install a
+[desktop build](@/guide/install.md).
+
 ## The window
 
 - **The ribbon** across the top holds the commands, in groups:
