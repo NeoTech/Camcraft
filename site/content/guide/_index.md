@@ -20,4 +20,8 @@ re-posting) see [Common workflows](@/guide/workflows.md).
 The [glossary](@/guide/glossary.md) defines the terms CamCraft uses, such as
 setup, work offset, stale, gouge and refusal, and links each to its page.
 
+Multi-axis work (indexed 3+1 and 3+2, continuous 4-axis, simultaneous 5-axis,
+TCP and the checks) has its own section:
+[4-axis and 5-axis machining](@/guide/multi-axis/_index.md).
+
 Stuck on a message? See [Troubleshooting](@/guide/troubleshooting.md).

@@ -34,6 +34,10 @@ operations; an axis that states a leaning direction (a tilting head or
 trunnion) tilts the cutter, while a C table only turns the part. A program
 that asks for a tilt the machine cannot hold is refused by name.
 
+For setting up 3+2, continuous 4-axis and 5-axis work, which machines and
+posts allow it and what is checked, see
+[4-axis and 5-axis machining](@/guide/multi-axis/_index.md).
+
 Checked against the machine file at post, when it states them: axis travel
 (arc bulges included), feed ceilings, spindle rpm range, spindle power,
 tool length and diameter against the tool table, changer capacity, and
