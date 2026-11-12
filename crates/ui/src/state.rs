@@ -962,6 +962,10 @@ pub struct ToolUi {
     pub coating: String,
     pub helix_deg: String,
     pub notes: String,
+    /// #890 cutting data per workpiece material, as edited; Apply / Add
+    /// carry it through `ChangeTool` / `AddTool`, which refuse a bad row
+    /// by the tool's name.
+    pub cutting: Vec<camcraft_app::tool_cutting_rows::CuttingRow>,
 }
 
 impl Default for ToolUi {
@@ -1018,6 +1022,7 @@ impl ToolUi {
             coating: t.catalog.coating.clone().unwrap_or_default(),
             helix_deg: t.catalog.helix_deg.map(|h| h.to_string()).unwrap_or_default(),
             notes: t.catalog.notes.clone().unwrap_or_default(),
+            cutting: t.cutting.clone(),
         }
     }
 
@@ -1086,6 +1091,7 @@ impl ToolUi {
             center_cutting: self.center_cutting,
             orientation: self.orientation,
             catalog: self.catalog(),
+            cutting: self.cutting.clone(),
         };
         tool.corner_r = tool.tip_corner_r();
         tool
@@ -3018,9 +3024,15 @@ impl State {
             }
             CommandKind::SetWorkMaterial(m) => match SetWorkMaterial::new(&self.world, m) {
                 Ok(command) => {
+                    let (tools, ops) = command.seeded();
                     self.history.execute(&self.world, command);
                     self.doc_version += 1;
-                    self.status = format!("workpiece material: {}", m.map_or("not stated", |m| m.label()));
+                    let mut status = format!("workpiece material: {}", m.map_or("not stated", |m| m.label()));
+                    // #890: say what the tools' material rows moved.
+                    if tools + ops > 0 {
+                        status.push_str(&format!(" - cutting data seeded on {tools} tool(s), {ops} operation(s)"));
+                    }
+                    self.status = status;
                 }
                 Err(err) => self.refuse(ErrorScope::Operation, format!("material not set: {err}")),
             },

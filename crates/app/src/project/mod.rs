@@ -129,6 +129,9 @@ mod probe_dto;
 pub use probe_dto::*;
 // #670: the plasma profile's file mirror and its path record.
 mod plasma_dto;
+// #890: a tool's cutting data per workpiece material.
+mod cutting_rows_dto;
+pub use cutting_rows_dto::{CuttingRowDto, MaterialWord};
 pub use plasma_dto::*;
 mod trochoid_dto;
 pub use trochoid_dto::*;

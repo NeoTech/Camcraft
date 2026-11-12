@@ -9,6 +9,8 @@ pub mod cli;
 pub mod clock;
 pub mod commands;
 pub mod cutting;
+// #890: which row of a tool's per-material cutting data the document picks.
+pub mod cutting_rows;
 pub mod smoothing;
 pub use camcraft_motion::drilling;
 pub mod fixture;
@@ -98,6 +100,7 @@ pub use camcraft_tools::tools;
 // #630: the lathe tool orientation code (LinuxCNC 1-9) and its control point.
 pub use camcraft_tools::orientation;
 pub use camcraft_tools::catalog_fields;
+pub use camcraft_tools::cutting_rows as tool_cutting_rows;
 // #93: the drawn spun profile of a milling holder.
 pub use camcraft_tools::spun;
 // #93 slice 2: the drawn cutter law, and the tool's stored drawn cutter.

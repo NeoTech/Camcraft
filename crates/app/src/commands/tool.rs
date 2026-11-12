@@ -46,6 +46,17 @@ fn catalog_gate(name: &str, tool: &mut Tool) -> Result<(), CommandError> {
     }
 }
 
+/// #890: refuse a per-material cutting-data table that cannot be kept
+/// (non-finite or non-positive rpm / feed, a material twice) by the
+/// tool's name, before anything enters the history.
+fn cutting_gate(name: &str, tool: &Tool) -> Result<(), CommandError> {
+    let torch = tool.kind == crate::tools::ToolKind::Torch;
+    match camcraft_tools::cutting_rows::refusal(&tool.cutting, torch) {
+        Some(why) => Err(CommandError::Invalid(format!("tool '{name}': {why}"))),
+        None => Ok(()),
+    }
+}
+
 /// Which holder a new tool starts with (#828).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum HolderPick {
@@ -76,6 +87,12 @@ impl AddTool {
             return Err(err);
         }
         catalog_gate(name, &mut tool)?;
+        cutting_gate(name, &tool)?;
+        // #890: a tool entering a document with a stated material runs
+        // its row for that material (one undo step with the add).
+        if let Some(seeded) = crate::cutting_rows::seeded_for(&tool, crate::cutting::material_of(world)) {
+            tool = seeded;
+        }
         // #670: a torch stating a spindle speed is refused by name.
         if let Some(why) = tool.torch_refusal() {
             return Err(CommandError::Invalid(format!("tool '{name}': {why}")));
@@ -181,6 +198,7 @@ pub struct ChangeTool {
 impl ChangeTool {
     pub fn new(world: &World, name: &str, mut next: Tool) -> Result<Self, CommandError> {
         catalog_gate(name, &mut next)?;
+        cutting_gate(name, &next)?;
         if let Some(why) = next.torch_refusal() {
             return Err(CommandError::Invalid(format!("tool '{name}': {why}")));
         }
@@ -194,6 +212,16 @@ impl ChangeTool {
         };
         let prev = model::tool_of(world, &entity)
             .ok_or_else(|| CommandError::Invalid(format!("'{name}' is not a tool")))?;
+        // #890: an edit of the per-material table that leaves the
+        // running numbers alone loads the document material's row into
+        // them; an edit that states rpm / feed itself keeps its own.
+        if next.cutting != prev.cutting
+            && next.rpm == prev.rpm
+            && next.feed == prev.feed
+            && let Some(seeded) = crate::cutting_rows::seeded_for(&next, crate::cutting::material_of(world))
+        {
+            next = seeded;
+        }
         // The tool law (M10.1 B): a retype that would leave an operation
         // holding a tool its family cannot cut with is refused by name.
         if let Some(msg) =

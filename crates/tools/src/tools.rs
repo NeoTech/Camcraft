@@ -203,6 +203,9 @@ pub struct Tool {
     /// Part number, vendor, coating, helix and notes (#898): catalog
     /// facts no generator or law reads.
     pub catalog: crate::catalog_fields::ToolCatalog,
+    /// Cutting data per workpiece material (#890): `rpm` / `feed` above
+    /// stay the running numbers and the fallback; empty = none stated.
+    pub cutting: Vec<crate::cutting_rows::CuttingRow>,
 }
 
 impl Tool {
@@ -255,6 +258,7 @@ impl Tool {
             && self.flutes.is_none_or(|z| (1..=32).contains(&z))
             && self.orientation.is_none_or(crate::orientation::is_valid)
             && self.catalog.refusal().is_none()
+            && crate::cutting_rows::refusal(&self.cutting, self.kind == ToolKind::Torch).is_none()
             && match self.kind {
                 // A point that cannot self-center is not a drill, and a
                 // tap with no thread pitch has no feed the cycle could
@@ -518,6 +522,7 @@ pub fn probe_tool(ball_d: f64, stylus_len: f64) -> Tool {
         center_cutting: false,
         orientation: None,
         catalog: crate::catalog_fields::ToolCatalog::default(),
+        cutting: Vec::new(),
     }
 }
 
@@ -548,6 +553,7 @@ pub fn torch_tool(kerf: f64) -> Tool {
         center_cutting: false,
         orientation: None,
         catalog: crate::catalog_fields::ToolCatalog::default(),
+        cutting: Vec::new(),
     }
 }
 

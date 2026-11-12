@@ -1475,6 +1475,7 @@ pub(crate) fn tool_editor_window(ctx: &egui::Context, state: &mut State) {
                     }
                     field(ui, &format!("Feed ({})", u.feed_suffix()));
                     num_feed(ui, u, &mut state.tool_ui.feed);
+                    super::tool_cutting_rows::cutting_rows(ui, &mut state.tool_ui, u, torch);
                     // M11.3: an entry may plunge into solid only with a
                     // centre-cutting tool; otherwise it helixes, ramps,
                     // or the operation is refused by name.
