@@ -1390,6 +1390,11 @@ pub struct State {
     /// setup, not decoration. Hiding the world axes is for the moment a
     /// G5x offset sits away from machine zero and two gizmos read as clutter.
     pub show_world_axes: bool,
+    /// Viewport picks may reach the far side of the part (#692): when on,
+    /// a click sends `through: true` and can pick a hidden edge or point.
+    /// Off by default, shown as off. View state like the axes toggle -
+    /// not undoable, not saved; flipped from the viewport's nav column.
+    pub pick_through: bool,
     /// Do the origin gizmos wear their names (#727 drew them, #645
     /// asked for the switch)? View state like the camera - never a
     /// command, never on the history - but unlike the camera it is a
@@ -1610,6 +1615,9 @@ pub struct State {
     /// The setups whose pick rows (plane, axes) were drawn this frame
     /// (#664): any other setup's armed pick is disarmed at frame end.
     pub setup_pick_rows: Vec<String>,
+    /// The Setups page's WCS-from-features role draft (#701); while it
+    /// is collecting, feature picks land in it ahead of everything else.
+    pub wcs_pick: Option<crate::wcs_pick::WcsPick>,
     /// The Boundary group's view state and caches (M11.5 UX): open this
     /// frame, the draft's machined-area preview, the entries' shapes.
     pub boundary_view: crate::boundary_draft::BoundaryView,
@@ -1821,6 +1829,7 @@ impl State {
             points_pick: None,
             axis_rows_shown: false,
             setup_pick_rows: Vec::new(),
+            wcs_pick: None,
             boundary_view: Default::default(),
             incoming_view: Default::default(),
             geo_hover: None,
@@ -1833,6 +1842,7 @@ impl State {
             browser_expanded: [true; 3],
             cam: Camera::default(),
             show_world_axes: true,
+            pick_through: false,
             show_gizmo_names: true,
             show_all_paths: false,
             display: DisplayMode::default(),
@@ -3011,6 +3021,7 @@ impl State {
                     Ok(command) => {
                         self.history.execute(&self.world, command);
                         self.doc_version += 1;
+                        self.wcs_pick = None; // #701: a landed frame ends the role draft
                         let active = camcraft_app::setup::active(&self.world);
                         self.status =
                             format!("{} origin set", camcraft_app::setup::wcs_label(&self.world, active.as_deref()));
@@ -3783,6 +3794,9 @@ impl State {
         let (tx, rx) = mpsc::channel();
         let worker_path = path.clone();
         let budget = self.step_budget_for(&path);
+        if let (Some(b), false) = (budget, self.step_budget.explicit) {
+            self.status = format!("importing {} under its recorded STEP facet budget of {b}…", file_label(&path));
+        }
         let spawned = std::thread::Builder::new()
             .name("camcraft-import".to_string())
             .spawn(move || {

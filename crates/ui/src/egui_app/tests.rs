@@ -93,12 +93,15 @@ mod first_setup;
 mod structural;
 // #661: every operation kind wears its own SVG-mastered glyph.
 mod op_icon_table;
+mod tool_icon_wiring;
 // #330: a clicked tilted face is turned flat onto the plane.
 mod plane_face_lay;
 // #554: the plane row's click takes the face, an axis row's the edge.
 mod plane_face_pick;
 // #692: one pick rule on the op page, the setup page and a smooth wall.
 mod one_pick_rule;
+// #692: the user-facing pick-through toggle (off by default) reaches the far side.
+mod pick_through;
 // #664: a left Setups page disarms its picks.
 mod setup_picks_disarm;
 // #555: real clicks pick the three points of the plane.
@@ -139,6 +142,8 @@ mod step_budget;
 mod two_point_marks;
 // #1104: the Setups page lists setups only.
 mod setups_declutter;
+// #1206: each setup's own Machine and Post pages pick its own mount.
+mod setup_mount_pages;
 
 /// What the per-frame state of `Shell` is, minus the GPU half: the fields
 /// `shell_layout` touches, so the harness exercises the window's real body.
@@ -2711,8 +2716,13 @@ fn tips_match_the_imgui_table() {
         );
         let is_plasma = camcraft_app::operation::KindInfo::ALL[i].family()
             == camcraft_app::operation::Family::Plasma;
+        let is_wire = camcraft_app::operation::KindInfo::ALL[i].family()
+            == camcraft_app::operation::Family::WireEdm;
         let want = if is_turn {
             "The document's machine is a mill - turning operations do not drive it; mount a lathe or a mill-turn (Setup > Machine)".to_owned()
+        } else if is_wire {
+            // #532: nor has the wire's work a mill-turn to fall back on.
+            "The document's machine is a mill - wire EDM operations do not drive it; mount a wire EDM (Setup > Machine)".to_owned()
         } else if is_plasma {
             // #670: the torch's work has no mill-turn to fall back on.
             "The document's machine is a mill - plasma cutting operations do not drive it; mount a plasma table (Setup > Machine)".to_owned()

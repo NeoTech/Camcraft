@@ -16,7 +16,7 @@
 //! writes nothing: never a folder with ops 1 and 3 but not 2.
 
 use super::{
-    machine_value_of, op_streams, options_value, post_options, script_of, script_source, verification_report, viewer_map,
+    machine_value_of, op_streams, options_value, post_options, script_of, script_source, viewer_map,
     Posted,
 };
 use crate::post::{cnc, engine};
@@ -73,13 +73,13 @@ pub fn post_per_op(world: &World, dir: &Path, program: &str) -> Result<Vec<Poste
     if mounts.is_empty() {
         script_source(world)?;
     }
-    let mut scripts: Vec<(Vec<String>, String)> = Vec::with_capacity(mounts.len());
+    let mut scripts: Vec<(Vec<String>, String, String)> = Vec::with_capacity(mounts.len());
     for m in mounts {
-        let text = script_of(&m.post)?.1;
-        scripts.push((m.setups, text));
+        let (name, text) = script_of(&m.post)?;
+        scripts.push((m.setups, name, text));
     }
     post_per_op_with(world, dir, program, |setup| {
-        scripts.iter().find(|(s, _)| s.contains(&setup.to_owned())).map(|(_, t)| t.clone())
+        scripts.iter().find(|(s, _, _)| s.contains(&setup.to_owned())).map(|(_, n, t)| (Some(n.clone()), t.clone()))
     })
 }
 
@@ -95,17 +95,18 @@ pub fn post_per_op_script(
     program: &str,
     cps: &str,
 ) -> Result<Vec<PostedFile>, String> {
-    post_per_op_with(world, dir, program, |_| Some(cps.to_owned()))
+    post_per_op_with(world, dir, program, |_| Some((None, cps.to_owned())))
 }
 
 /// The per-op post with each op's script chosen by its effective setup
-/// name (`""` for the implicit setup); the machine is always the op's
-/// own setup's (#388).
+/// name (`""` for the implicit setup), as its name for a refusal (when
+/// known) and its text; the machine is always the op's own setup's
+/// (#388).
 fn post_per_op_with(
     world: &World,
     dir: &Path,
     program: &str,
-    script: impl Fn(&str) -> Option<String>,
+    script: impl Fn(&str) -> Option<(Option<String>, String)>,
 ) -> Result<Vec<PostedFile>, String> {
     if !dir.is_dir() {
         return Err(format!("{} is not a folder", dir.display()));
@@ -120,11 +121,20 @@ fn post_per_op_with(
             .and_then(|e| crate::model::operation_of(world, &e))
             .and_then(|op| op.setup);
         let effective = crate::setup::effective(world, setup.as_deref()).unwrap_or_default();
-        let cps = script(&effective).ok_or_else(|| format!("{name}: no post resolved for its setup"))?;
-        crate::lathe_voice::at_post(world, [name.as_str()], &cps)?;
+        let (label, cps) = script(&effective).ok_or_else(|| format!("{name}: no post resolved for its setup"))?;
+        crate::lathe_voice::at_post(world, [name.as_str()], &cps, label.as_deref())?;
         resolved.push((setup, cps));
     }
-    let report = verification_report(world);
+    // #1174: the workholding clause reads each op's own script's dialect
+    // (keyed by effective setup name, as `script` is); unreadable reads
+    // as undeclared - the stricter reading.
+    let voice = |declared: Option<&str>| {
+        let setup = crate::setup::effective(world, declared).unwrap_or_default();
+        script(&setup).map_or(crate::post::dialect::WorkVoice::Undeclared, |(_, c)| {
+            crate::post::dialect::work_voice(&c).unwrap_or(crate::post::dialect::WorkVoice::Undeclared)
+        })
+    };
+    let report = crate::posting::verification_report_by(world, &voice);
     if !report.problems.is_empty() {
         return Err(format!("post blocked - {}", report.problems.join("; ")));
     }

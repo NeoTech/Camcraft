@@ -10,12 +10,19 @@
 //! machine file (a 770MX-sized mill with a table B, numbers from
 //! Tormach's microARC spec sheet); RS-274 / ISO 6983 rotary lettering.
 //!
+//! #1107 on those lines: the swept work against the standing steel is
+//! judged about the same line (span and distance along and off it), or
+//! about the WCS origin for stacked rotaries.
+//!
 //! Gate map (M4.4): covers app::posting (index_swing, verification_gate),
-//! project (swing_note).
+//! project (swing_note), app::posting::swing_standing (#1107).
 
-use camcraft_app::commands::{AddTool, CreateOperation, GenerateOperation, History, LoadMachine, SelectPost, SetStock};
+use camcraft_app::commands::{
+    AddTool, CreateOperation, GenerateOperation, History, ImportModel, LoadMachine, SelectPost, SetFixtureFixed,
+    SetStock, TagFixture,
+};
 use camcraft_app::geo2d::Point2;
-use camcraft_app::geometry::Point3;
+use camcraft_app::geometry::{Point3, cube};
 use camcraft_app::machine::{Machine, parse_mch};
 use camcraft_app::machining3d::Entry3D;
 use camcraft_app::operation::{Height, OpParams, SrcRef, Tilt};
@@ -301,4 +308,119 @@ fn a_project_saved_before_804_names_its_unjudged_table_b_on_load() {
     let swing: Vec<&String> = notes.iter().filter(|n| n.contains("index-swing")).collect();
     assert_eq!(swing.len(), 1, "{notes:?}");
     assert!(swing[0].contains(&format!("machine {MODEL}")) && swing[0].contains("rotary B"), "{}", swing[0]);
+}
+
+// ---- #1107: the swept work against what stands still, off X ----
+
+/// The gate lines of the standing-steel half (#1107).
+fn standing_lines(world: &World) -> Vec<String> {
+    verification_gate(world).into_iter().filter(|p| p.contains("swings the work into")).collect()
+}
+
+/// `m` with every rotary's centre height over its face set to `h` mm.
+fn at(mut m: Machine, h: Option<f64>) -> Machine {
+    for a in m.axes.iter_mut().filter(|a| a.rotary) {
+        a.axis_to_table = h;
+    }
+    m
+}
+
+/// A fixed (standing) box fixture `name` from `lo` to `hi`.
+fn stand(world: &World, name: &str, lo: Point3, hi: Point3) {
+    let mut h = History::default();
+    h.execute(world, ImportModel::from_mesh(name, cube(lo, hi)));
+    h.execute(world, ok(TagFixture::new(world, name, None), "tag"));
+    h.execute(world, ok(SetFixtureFixed::new(world, name, true), "fixed"));
+}
+
+#[test]
+fn a_table_b_judges_the_work_against_standing_steel_about_y() {
+    let r = bar_swept([0.0, 1.0, 0.0]);
+    // The face: 2 mm inside the margin is refused, 2 mm outside clears.
+    let world = doc(at(table_b(), Some(r + MARGIN_MM - 2.0)), 3.0 * IN, None);
+    let lines = standing_lines(&world);
+    assert_eq!(lines.len(), 1, "{lines:?}");
+    assert!(
+        lines[0].starts_with("FLAT: the B0.000 index swings the work into the face the rotary stands on"),
+        "{}",
+        lines[0]
+    );
+    assert!(lines[0].contains(&format!("sweep {r:.3} mm about the B centerline")), "{}", lines[0]);
+    assert!(lines[0].contains("a clearance of 3.000 mm"), "{}", lines[0]);
+    refused_post(&world, "standing_b", "swings the work into the face");
+    let world = doc(at(table_b(), Some(r + MARGIN_MM + 2.0)), 3.0 * IN, None);
+    assert!(standing_lines(&world).is_empty(), "{:?}", verification_gate(&world));
+    // Beside the bar along Y (its span is y within R): clear, however close.
+    stand(&world, "beside", Point3::new(-30.0, 15.0, -35.0), Point3::new(-10.0, 40.0, -3.0));
+    // A plate 50 mm under the line: clear of the bar's swing about Y.
+    stand(&world, "plate", Point3::new(-60.0, -50.0, -80.0), Point3::new(20.0, 50.0, -50.0));
+    assert!(standing_lines(&world).is_empty(), "{:?}", verification_gate(&world));
+    // A riser past the bar's end in X but across its Y span: the bar's
+    // end sweeps about Y into it (beside it in X, as an about-X law
+    // would wrongly read it).
+    stand(&world, "riser", Point3::new(5.0, -50.0, -35.0), Point3::new(30.0, 50.0, -3.0));
+    let lines = standing_lines(&world);
+    assert_eq!(lines.len(), 1, "{lines:?}");
+    let d = 5.0_f64.hypot(3.0);
+    assert!(lines[0].starts_with("FLAT: the B0.000 index swings the work into standing fixture riser"), "{}", lines[0]);
+    assert!(lines[0].contains(&format!("riser stands {d:.3} mm from it")), "{}", lines[0]);
+}
+
+#[test]
+fn an_a_stated_level_but_off_x_judges_standing_steel_about_its_own_line() {
+    let u = [0.6, 0.8, 0.0];
+    let r = bar_swept(u);
+    let m = || table_b_as("A", Some([3.0, 4.0, 0.0]), None);
+    let world = doc(at(m(), Some(r + MARGIN_MM - 2.0)), 3.0 * IN, None);
+    let lines = standing_lines(&world);
+    assert_eq!(lines.len(), 1, "{lines:?}");
+    assert!(lines[0].contains(&format!("sweep {r:.3} mm about the A centerline")), "{}", lines[0]);
+    let world = doc(at(m(), Some(r + MARGIN_MM + 2.0)), 3.0 * IN, None);
+    // A plate whose top is r + margin + 1 under the line: clear.
+    let top = -(r + MARGIN_MM + 1.0);
+    stand(&world, "plate", Point3::new(-80.0, -80.0, top - 20.0), Point3::new(40.0, 80.0, top));
+    assert!(standing_lines(&world).is_empty(), "{:?}", verification_gate(&world));
+    // ... and one 2 mm inside the margin: struck.
+    let top = -(r + MARGIN_MM - 2.0);
+    stand(&world, "riser", Point3::new(-80.0, -80.0, top - 20.0), Point3::new(40.0, 80.0, top));
+    let lines = standing_lines(&world);
+    assert_eq!(lines.len(), 1, "{lines:?}");
+    assert!(
+        lines[0].contains("standing fixture riser") && lines[0].contains("a clearance of 3.000 mm"),
+        "{}",
+        lines[0]
+    );
+}
+
+#[test]
+fn stacked_rotaries_judge_standing_steel_from_the_wcs_origin_and_name_the_face() {
+    let mut m = table_b();
+    let mut c = m.axes.iter().find(|a| a.name == "B").cloned().expect("a B");
+    c.name = "C".into();
+    c.axis = Some([0.0, 0.0, 1.0]);
+    m.axes.push(c);
+    let m = at(m, Some(200.0));
+    let sphere = STICK.hypot(R).hypot(R);
+    let world = doc(m, 3.0 * IN, None);
+    // The face under a table B carrying a C moves: named, never judged as fixed.
+    let report = camcraft_app::posting::verification_report(&world);
+    assert!(report.problems.iter().all(|p| !p.contains("swings the work into")), "{:?}", report.problems);
+    let line = report.not_judged.expect("named, never silent");
+    assert!(line.contains("index swing did not judge") && line.contains("more than one rotary"), "{line}");
+    // Far from the origin: clear.
+    stand(&world, "far", Point3::new(-200.0, -50.0, -50.0), Point3::new(-150.0, 50.0, 50.0));
+    assert!(standing_lines(&world).is_empty(), "{:?}", verification_gate(&world));
+    // Beside the bar along the B line but within the sphere: the C turns
+    // the bar into it, so it is struck by its distance from the origin.
+    stand(&world, "block", Point3::new(-10.0, 15.0, -35.0), Point3::new(10.0, 40.0, -30.0));
+    let d = 15.0_f64.hypot(30.0);
+    assert!(d < sphere + MARGIN_MM, "inside the sphere: {d} vs {sphere}");
+    let lines = standing_lines(&world);
+    assert_eq!(lines.len(), 1, "{lines:?}");
+    assert!(lines[0].starts_with("FLAT: the B0.000 index swings the work into standing fixture block"), "{}", lines[0]);
+    assert!(
+        lines[0].contains("about the WCS origin") && lines[0].contains(&format!("block stands {d:.3} mm")),
+        "{}",
+        lines[0]
+    );
 }

@@ -115,6 +115,9 @@ pub(crate) fn toggle_deviate(state: &mut State) {
             if let Some(vote) = machine_vote(&state.world) {
                 state.status += &vote;
             }
+            if let Some(note) = camcraft_app::stock_sim::carry_engine_note() {
+                state.status += &format!(" - {note}"); // #1168: never silent
+            }
             state.program_sim = Some(sim);
             state.doc_version += 1; // the sheet is a new GPU part
         }
@@ -358,7 +361,11 @@ pub(crate) fn add_operation(state: &mut State, kind: usize) {
         .get(kind)
         .map(|k| camcraft_app::operation::tool_gate::fitting_tools(&state.world, k))
         .unwrap_or_default();
-    let Some(tool) = fitting.last().cloned().or_else(|| state.tool_names().pop()) else {
+    // #532: a kind that mounts no library tool (the wire EDM's) is
+    // created naming none - its door then asks for what it does need.
+    let toolless = camcraft_app::operation::KindInfo::ALL.get(kind).is_some_and(|k| !k.mounts_tool());
+    let picked = if toolless { Some(String::new()) } else { fitting.last().cloned().or_else(|| state.tool_names().pop()) };
+    let Some(tool) = picked else {
         state.status = String::from("cannot add an operation: no tool in the document");
         return;
     };

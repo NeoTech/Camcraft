@@ -16,6 +16,9 @@ real first toolpath, install a [desktop build](@/guide/install.md).
 
 ## The window
 
+Shortcuts on this page are written with Ctrl. On macOS, press Cmd in their place
+(Cmd+N, Cmd+Shift+O and so on): CamCraft binds them to the command key there.
+
 - **The ribbon** across the top holds the commands, in groups:
   - **File:** New (Ctrl+N), Model (open a mesh model, Ctrl+O), Open (a
     project, Ctrl+Shift+O), Save (Ctrl+S), Save As (Ctrl+Shift+S) and Post
@@ -25,8 +28,8 @@ real first toolpath, install a [desktop build](@/guide/install.md).
     and Mill-turning.
   - **Operation groups** for the machine you are on: Milling 2D, Milling
     3D, Drilling and Multi-axis on a mill; Turning on a lathe. Each group
-    opens a list of its operations. Right-click an operation to pin it to
-    the ribbon (up to four pins).
+    opens a list of its operations. Right-click (Control-click or a two-finger
+    click on a Mac) an operation to pin it to the ribbon (up to four pins).
   - **Modify:** Undo (Ctrl+Z), Redo (Ctrl+Y), Run (generate the selected
     operation) and Delete.
   - **Inspect:** Frame (F), Paths (show every toolpath), Simulate and
@@ -67,7 +70,10 @@ why in its tooltip, for example "No tool yet - add one (Setup > Tools)" or
 
 ## Undo
 
-Every change to the document is a command, so Ctrl+Z and Ctrl+Y step
-through all of it: imports, stock, tools, operation settings, setups and
+Every change to the document is a command, so Ctrl+Z and Ctrl+Y (Cmd+Z and Cmd+Y on
+macOS) step through all of it: imports, stock, tools, operation settings, setups and
 theme changes. Moving the view, hovering and the simulation's playback
 position are not part of the history.
+
+Before you import a model, read [Units and coordinates](@/guide/units-and-coordinates.md): an
+STL or OBJ file has no unit, and a 25.4 times error is easy to miss.
