@@ -11,7 +11,7 @@
 //! suite `fanuc_post.rs` already locks); the four stage-B dialects get
 //! one subdirectory each.
 //!
-//! Gate map (M4.4): covers app::cl, app::post, app::posting.
+//! Gate map (M4.4): covers cl::cl, post::post, app::posting.
 
 use camcraft_app::cl::{CycleKind, MoveKind};
 use camcraft_app::post::{cnc, engine};

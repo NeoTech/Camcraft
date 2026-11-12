@@ -108,6 +108,8 @@ pub use camcraft_tools::orientation;
 pub use camcraft_tools::spun;
 // #93 slice 2: the drawn cutter law, and the tool's stored drawn cutter.
 pub use camcraft_tools::cutter_profile;
+// #93 slice 3: the drawn cutter carried onto new numbers, and its neck.
+pub use camcraft_tools::cutter_fit;
 pub mod tool_cutter;
 // #793: the built-in taper holder library.
 pub use camcraft_tools::holder_library;

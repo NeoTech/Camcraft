@@ -13,7 +13,7 @@
 //!   straight wall whose apex the old chords hid is now convicted, so the
 //!   new reading is stricter there, never looser.
 //!
-//! Gate map: covers app::verify (sim::verify::section, law (b)).
+//! Gate map: covers sim::verify (sim::verify::section, law (b)).
 //!
 //! Provenance: chord sagitta `r (1 - cos(step / 2))` and point-to-line
 //! distance from elementary plane geometry; the tangency law is our own
