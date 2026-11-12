@@ -79,7 +79,15 @@ threadHands = true;  // reads PARAM SpindleDirection (#629): the engine refuses 
 //  - Face cycles: G83 (Q peck in whole microns, the 0i-T word; P dwell
 //    in ms), G84 tap, G85 bore, cancelled by G80. A cycle off the
 //    spindle axis and a back-bore are refused - a 2-axis lathe has no
-//    such cycle.
+//    such cycle. The cycle replaces only the chain on its hole (on
+//    centre, at or below R); the first rapid leaving it - the exit to
+//    clearance - ends the group with G80 and posts as the stream says
+//    (#1011, the hop law of #994), so the tool leaves the hole at the
+//    verified exit level, never at R. A cycle read with the tool off
+//    its seat (on centre at R) is seated by the same law (#1026): Z out
+//    to R first when below it, then X onto the centre, then down -
+//    never one diagonal X+Z rapid; one the post cannot seat (its
+//    section's first motion, no R, R not above the bottom) is refused.
 //  - M03 unless the stream states PARAM SpindleDirection reverse (#629,
 //    a thread whose hand needs it): then M04, with a note for the
 //    operator that the threading insert must be mounted for reverse
@@ -99,11 +107,14 @@ threadHands = true;  // reads PARAM SpindleDirection (#629): the engine refuses 
 //    planned mm/min along the part-frame chord - capped so the X/Z part
 //    of the move stays within the machine's stated feed and the C part
 //    within the C rate it states (machine.rotaries[].speeds, deg/min;
-//    unstated, C is not capped). A rapid is a G01 at the
-//    machine's stated maximum feed, never a G00: a G00 with C runs each
-//    axis on its own and follows no verified path. Arcs and cycles in a
-//    C section are refused; the first move must be a rapid (C stands
-//    there before X and Z move).
+//    unstated, C is not capped). A machine that states no C rate has
+//    nothing to cap a C-turning rapid by - whether it states a C travel
+//    (so its path may carry rewind orbits, #33) or not: that rapid is
+//    refused by name, never posted at an uncapped feed (#906, #966).
+//    A rapid is a G01 at the machine's stated maximum feed, never a
+//    G00: a G00 with C runs each axis on its own and follows no
+//    verified path. Arcs and cycles in a C section are refused; the
+//    first move must be a rapid (C stands there before X and Z move).
 
 // ---------------------------------------------------------------- state
 var wcsWord = "G54";
@@ -113,6 +124,8 @@ var spindleWait = false;
 var toolWait = false;
 var tNo = 0;
 var inCycle = false;       // a cycle group is open; its chain is suppressed
+var cycX = 0, cycY = 0, cycR = 0; // the open group's hole XY and R level (world, #1011)
+var seatKnown = false;     // #1026: this section moved, so currentPosition is where the tool is
 var sectionOpen = false;
 var coolant = "";
 var coolantAsk = "flood";  // the section's PARAM Coolant (#112), flood when unstated
@@ -132,6 +145,7 @@ var liveCodes = null;      // the machine's live_tool words for the open section
 var lastC = null;          // the C a C section last commanded
 var lastR = 0, lastZ = 0;  // ... and the station radius / Z it stood at
 var liveCRate = 0;         // the machine's stated C rate (deg/min), 0 = unstated
+var liveCTravel = false;   // the machine states a C travel (#906)
 var C_TOL = 0.005;         // mm a C-turned tip may stand off the station (lattice + milli-degree words)
 
 // ------------------------------------------------------------ helpers
@@ -429,6 +443,7 @@ function liveStart() {
   var rs = m.rotaries || [];
   var hasC = false;
   liveCRate = 0;
+  liveCTravel = false;
   for (var i = 0; i < rs.length; i++) {
     if (String(rs[i].name || "").toUpperCase() !== "C") continue;
     hasC = true;
@@ -437,6 +452,7 @@ function liveStart() {
     var sp = rs[i].speeds || {};
     var cr = Number(sp.normal) > 0 ? Number(sp.normal) : Number(sp.rapid);
     if (cr > 0) liveCRate = cr;
+    if (rs[i].travel !== null && rs[i].travel !== undefined) liveCTravel = true;
   }
   if (rs.length > 0 && !hasC) {
     refuse(coolantWho() + "C-axis live-tool work, but the machine states no C axis among its rotaries");
@@ -489,6 +505,14 @@ function liveMove(p, rapid) {
       return;
     }
     if (!(ltrue > EPS)) { refuse("a C move that turns the part with the tip on the spindle line"); return; }
+    // #906, #966: a rapid's F is the machine's maximum linear feed,
+    // which a turn of C would multiply past anything the file states.
+    // No C rate stated - with a C travel (rewinds may ride here) or
+    // without one (link rapids still turn C) - refuse by name.
+    if (rapid && !(liveCRate > 0) && Math.abs(dc) > 1e-9) {
+      refuse("a C-axis rapid that turns C, but the machine file states " + (liveCTravel ? "a C travel but no C rate" : "no C rate") + " - its feed would be uncapped; state the C axis's speeds");
+      return;
+    }
     // Under a composite F the control drives X/Z at F * lin / lcmd and
     // C at F * |dc| / lcmd: F is capped so neither outruns what the
     // machine states - the linear part by its fastest stated feed, C
@@ -503,7 +527,7 @@ function liveMove(p, rapid) {
   lastC = Number(p.C); lastR = r; lastZ = p.Z;
 }
 
-function onSection() { startPreamble(); }
+function onSection() { seatKnown = false; startPreamble(); }
 function onSectionEnd() { endPreamble(); }
 
 // A WARN record (only a gate-refused program ever carries one) is
@@ -512,11 +536,34 @@ function onSectionEnd() { endPreamble(); }
 function onComment(s) { writeComment(s); }
 
 // ------------------------------------------------------------- motions
+// While a face-cycle group is open, its expanded chain (plunge, pecks,
+// retract to R) is the cycle block's business only. The chain stays on
+// its hole: the hole's XY, at or below its R level. #1011: a rapid that
+// leaves it (the exit up to clearance) ends the group - G80, then the
+// rapid posted as the stream says - so the tool leaves the hole at the
+// level the path was verified at, never at R. A cut leaving the hole is
+// no chain a cycle replaces: refused by name.
+function onHole(p) {
+  return Math.abs(p.X - cycX) <= EPS && Math.abs(p.Y - cycY) <= EPS && p.Z <= cycR + EPS;
+}
+function chainRapid(p) {  // true: the open group's own move, swallowed
+  if (!inCycle) return false;
+  if (onHole(p)) return true;
+  block(["G80"]);
+  inCycle = false;
+  return false;
+}
+function chainCut(p) {  // true: the cut is the cycle's (or refused)
+  if (!inCycle) return false;
+  if (!onHole(p)) refuse("a cutting move leaves its hole inside a face-cycle group");
+  return true;
+}
 function onRapid() {
   startPreamble();
   var p = properties;
+  seatKnown = true;
   if (liveAsk) { liveMove(p, true); return; }
-  if (posed(p) || inCycle || inThread) return;
+  if (posed(p) || inThread || chainRapid(p)) return;
   var r = radiusOf(p.X, p.Y, "rapid");
   if (r === null) return;
   block(["G00", xWord(r), zWord(p.Z)]);
@@ -524,8 +571,9 @@ function onRapid() {
 function onLinear() {
   startPreamble();
   var p = properties;
+  seatKnown = true;
   if (liveAsk) { liveMove(p, false); return; }
-  if (posed(p) || inCycle || inThread) return;
+  if (posed(p) || inThread || chainCut(p)) return;
   var r = radiusOf(p.X, p.Y, "feed move");
   if (r === null) return;
   block(["G01", xWord(r), zWord(p.Z), feedWord(p.FeedRate)]);
@@ -583,8 +631,9 @@ function threadHalfTurn(p) {
 function onCircular() {
   startPreamble();
   var p = properties;
+  seatKnown = true;
   if (liveAsk) { refuse("an arc in a C-axis section - only straight moves ride a C turn"); return; }
-  if (posed(p) || inCycle || inThread) return;
+  if (posed(p) || inThread || chainCut(p)) return;
   if (p.CircularPlane === "XZ" || p.CircularPlane === "YZ") meridianArc(p);
   else threadHalfTurn(p);
 }
@@ -649,9 +698,48 @@ function onThreadCycle() {
 function onThreadCycleEnd() { inThread = false; threadSeen = false; }
 
 // ------------------------------------------------------- canned cycles
-// One positioning rapid to the hole's retract plane, then the face
-// cycle whose initial level that is (the 0i-T cycle returns there).
-// The group's expanded chain is suppressed while the cycle is open.
+// The face cycle is read with the tool seated on its R level on centre
+// (the 0i-T cycle returns to the level it was read at, so that level
+// must be R). The group's expanded chain on its hole is suppressed
+// while the cycle is open; the rapid leaving the hole closes it
+// (#1011, above).
+// #1026, #994's cycleSeat on the lathe: a tool that stands off that
+// seat is seated by the hop law - Z out to R first when it stands
+// below R (nearer the face), then X onto the centre, then Z down to R
+// when it stands above - never one diagonal X+Z rapid. "Away from the
+// work" is +Z: the program's Z is the spindle axis with the face at
+// the free end, and a face cycle drills toward -Z from R (its bottom
+// below R), which the post checks. A cycle with no stated R, whose R
+// is not above its bottom, or that is its section's first motion (no
+// stream position to seat from) and stands off the seat cannot be
+// seated: refused by name, never positioned by a guess.
+function cycleSeat(p, r) {  // true: seated (blocks written as needed)
+  var cp = (typeof currentPosition !== "undefined") ? currentPosition : {};
+  var known = seatKnown && has(cp.X) && has(cp.Y) && has(cp.Z);
+  var onAxis = known && Math.abs(cp.X - orgX) <= EPS && Math.abs(cp.Y - orgY) <= EPS;
+  if (!has(p.R)) {
+    if (onAxis) return true;  // a legacy record: the chain stands on centre
+    refuse("a face cycle with no R level starts off the spindle axis - the post cannot seat it");
+    return false;
+  }
+  var lo = known && cp.Z < p.R - EPS;
+  var hi = known && cp.Z > p.R + EPS;
+  if (onAxis && !lo && !hi) return true;  // already on its seat
+  if (!known) {
+    refuse("a face cycle is its section's first motion - the post cannot tell where the tool stands to seat it on R; approach the hole first");
+    return false;
+  }
+  if (!(has(p.Z) && p.Z < p.R - EPS)) {
+    refuse("a face cycle whose bottom is not below its R level - the post cannot tell which way is clear of the face");
+    return false;
+  }
+  if (inCycle) block(["G80"]);
+  inCycle = false;
+  if (lo) block(["G00", zWord(p.R)]);        // out of the work first
+  if (!onAxis) block(["G00", xWord(r)]);     // onto the centre at the safe level
+  if (hi) block(["G00", zWord(p.R)]);        // down to the seat
+  return true;
+}
 function onCycle() {
   startPreamble();
   var p = properties;
@@ -664,15 +752,7 @@ function onCycle() {
   if (p.CycleType === "TAP") g = "G84";
   else if (p.CycleType === "BORE") g = "G85";
   else if (p.CycleType === "BACKBORE") { refuse("back-boring cycle - no such face cycle on a 2-axis lathe"); return; }
-  if (!inCycle) {
-    // The chain's own approach rapid usually stands here already;
-    // the positioning block is written only when the tool is not.
-    var cp = (typeof currentPosition !== "undefined") ? currentPosition : {};
-    var there = has(cp.X) && has(cp.Y) && has(cp.Z) && has(p.R)
-      && Math.abs(cp.X - orgX) <= EPS && Math.abs(cp.Y - orgY) <= EPS   // on the axis, as the cycle is
-      && Math.abs(cp.Z - p.R) <= EPS;
-    if (!there) block(["G00", xWord(r), zWord(p.R)]);
-  }
+  if (!cycleSeat(p, r)) return;
   var words = [g, zWord(p.Z)];
   if ((p.CycleType === "PECK" || p.CycleType === "DEEP") && has(p.Q) && p.Q > 0) {
     words.push("Q" + Math.round(p.Q * 1000));    // whole microns, no decimal point
@@ -680,6 +760,9 @@ function onCycle() {
   if (ms > 0 && g !== "G84") words.push("P" + ms);
   words.push(feedWord(p.FeedRate));
   block(words);
+  // A legacy record with no R word keeps the whole on-axis chain.
+  cycX = p.X; cycY = p.Y; cycR = has(p.R) ? Number(p.R) : Infinity;
+  seatKnown = true;
   inCycle = true;
 }
 
