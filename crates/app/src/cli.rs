@@ -93,15 +93,26 @@ OPTIONS:
 Exit: 0 stood, 1 session ended with an error, 2 usage.
 ";
 
+/// Every lane that takes `--help`: its name paired with its usage
+/// text. The one list `command_usage` reads and the help test walks,
+/// so a lane added here is checked and a lane added elsewhere is
+/// caught by the test's cross-check against the top-level COMMANDS.
+pub const HELP_LANES: [(&str, &str); 3] = [
+    ("script", SCRIPT_USAGE),
+    ("process", PROCESS_USAGE),
+    ("mcp", MCP_USAGE),
+];
+
+/// The top-level usage text (`camcraft-cli help`).
+pub const TOP_USAGE: &str = USAGE;
+
 /// The usage text for a lane that takes `--help`, or `None` for any
 /// other word. Keeps the flag list next to the parser it describes.
 fn command_usage(cmd: &str) -> Option<&'static str> {
-    match cmd {
-        "script" => Some(SCRIPT_USAGE),
-        "process" => Some(PROCESS_USAGE),
-        "mcp" => Some(MCP_USAGE),
-        _ => None,
-    }
+    HELP_LANES
+        .iter()
+        .find(|(name, _)| *name == cmd)
+        .map(|(_, text)| *text)
 }
 
 /// The process lane's generated job: the verbs a headless project

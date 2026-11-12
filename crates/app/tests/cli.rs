@@ -173,25 +173,79 @@ fn cli_with_stdin(args: &[&str], stdin: &str) -> Output {
     child.wait_with_output().expect("the CLI finishes")
 }
 
+/// The flag and argument names a usage text lists under ARGUMENTS /
+/// OPTIONS: the first column of each entry, split on ", " and spaces.
+fn listed_names(usage: &str) -> Vec<String> {
+    let mut names = Vec::new();
+    let mut inside = false;
+    for line in usage.lines() {
+        if line == "ARGUMENTS:" || line == "OPTIONS:" {
+            inside = true;
+            continue;
+        }
+        if !line.starts_with(' ') {
+            inside = false;
+        }
+        let entry = line.trim_start();
+        if inside && (entry.starts_with('-') || entry.starts_with('<')) {
+            // The first column ends at the first run of two spaces.
+            let col = entry.split("  ").next().unwrap_or(entry);
+            for part in col.split(", ") {
+                if let Some(w) = part.split_whitespace().next() {
+                    names.push(w.to_string());
+                }
+            }
+        }
+    }
+    names
+}
+
 #[test]
 fn every_subcommand_answers_help_and_names_its_flags() {
-    // Each lane's usage names itself and every flag its parser reads.
-    let cases: [(&str, &[&str]); 3] = [
-        ("script", &["<job.js>", "--help", "-h"]),
-        ("process", &["<job.camproj>", "-o", "--out", "--cps", "--help", "-h"]),
-        ("mcp", &["--connect", "<host:port>", "--help", "-h"]),
-    ];
-    for (cmd, names) in cases {
+    // Driven from the lane list the CLI itself dispatches on: a lane
+    // added there is checked here with no edit to this test.
+    for (cmd, usage) in camcraft_app::cli::HELP_LANES {
+        let names = listed_names(usage);
+        assert!(names.contains(&"--help".to_string()), "{cmd} usage lists --help");
         for flag in ["--help", "-h"] {
             let o = cli_str(&[cmd, flag]);
             let text = String::from_utf8_lossy(&o.stdout);
             assert_eq!(code(&o), 0, "{cmd} {flag} exits 0: {text}");
             assert!(text.contains(&format!("camcraft-cli {cmd}")), "{cmd} {flag} names its command: {text}");
-            for name in names {
-                assert!(text.contains(name), "{cmd} {flag} names {name}: {text}");
+            assert_eq!(text, usage, "{cmd} {flag} prints the lane's usage");
+            for name in &names {
+                assert!(text.contains(name.as_str()), "{cmd} {flag} names {name}: {text}");
             }
             assert!(o.stderr.is_empty(), "{cmd} {flag} is quiet on stderr");
         }
+    }
+}
+
+#[test]
+fn every_listed_command_is_a_help_lane() {
+    // A command named in the top-level COMMANDS block without a
+    // HELP_LANES entry fails here; `help`/`version` take no flags.
+    let mut cmds = Vec::new();
+    let mut inside = false;
+    for line in camcraft_app::cli::TOP_USAGE.lines() {
+        if line == "COMMANDS:" {
+            inside = true;
+            continue;
+        }
+        if inside
+            && line.starts_with("    ")
+            && !line.starts_with("     ")
+            && let Some(w) = line.split_whitespace().next()
+        {
+            cmds.push(w.to_string());
+        }
+    }
+    assert!(!cmds.is_empty(), "the COMMANDS block was parsed");
+    for c in cmds {
+        assert!(
+            camcraft_app::cli::HELP_LANES.iter().any(|(n, _)| *n == c),
+            "command {c} is listed but has no HELP_LANES entry"
+        );
     }
 }
 
