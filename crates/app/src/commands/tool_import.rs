@@ -130,15 +130,15 @@ fn change_refusal(world: &World, name: &str, prev: &Tool, next: &Tool) -> Option
         return Some(msg);
     }
     let entity = model::find_by_name(world, name)?;
-    if let Some(body) = crate::tool_body::body_of(world, &entity) {
-        if let Err(e) = crate::tool_body::fits(next, &body) {
-            return Some(format!("tool '{name}': {e}"));
-        }
+    if let Some(body) = crate::tool_body::body_of(world, &entity)
+        && let Err(e) = crate::tool_body::fits(next, &body)
+    {
+        return Some(format!("tool '{name}': {e}"));
     }
-    if let Some(c) = crate::tool_cutter::cutter_of(world, &entity) {
-        if let Err(e) = camcraft_tools::cutter_profile::agrees(next, &c) {
-            return Some(format!("tool '{name}': the drawn cutter profile no longer fits: {e}"));
-        }
+    if let Some(c) = crate::tool_cutter::cutter_of(world, &entity)
+        && let Err(e) = camcraft_tools::cutter_profile::agrees(next, &c)
+    {
+        return Some(format!("tool '{name}': the drawn cutter profile no longer fits: {e}"));
     }
     None
 }
