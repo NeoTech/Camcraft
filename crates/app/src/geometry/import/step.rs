@@ -84,6 +84,7 @@ pub fn parse(data: &[u8]) -> Result<Mesh, ImportError> {
 /// file's length unit (#864). Never NaN, infinite or negative - such a
 /// value is refused as a corrupt import, not carried into a verdict.
 pub fn parse_with_chord(data: &[u8]) -> Result<(Mesh, f64), ImportError> {
+    super::step_depth::check(data)?; // #1075: refuse before ruststep can overflow
     if data.is_empty() {
         return Err(ImportError::Empty);
     }
