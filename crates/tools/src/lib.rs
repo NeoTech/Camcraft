@@ -22,6 +22,10 @@ pub mod holder_library;
 pub mod spun;
 // #93 slice 2: a milling tool's own drawn cutter, checked against its numbers.
 pub mod cutter_profile;
+// #93 slice 3: the drawn cutter edited by its parameters (refit, neck).
+pub mod cutter_fit;
+// #852: a necked tool's drawn shank, as the stack laws judge it.
+pub mod neck;
 // #369: a lathe-held body as the revolved-stock law reads it.
 pub mod lathe_holder;
 // #396: the insert plate a lathe body's judge leaves out.
@@ -32,3 +36,5 @@ pub mod catalog_fields;
 // #890: a tool's cutting data per workpiece material.
 pub mod cutting_rows;
 pub mod tools;
+// #891: turning surface speed, feed per rev and the max-rpm clamp.
+pub mod turning_data;

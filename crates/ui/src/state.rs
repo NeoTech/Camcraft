@@ -47,6 +47,8 @@ mod pockets;
 pub use pockets::PocketScan;
 #[path = "state_setup_post_options.rs"]
 mod setup_post_options;
+#[path = "state_setup_workholding.rs"]
+mod setup_workholding;
 #[path = "state_fixture.rs"]
 mod fixture_view;
 #[path = "state_locate.rs"]
@@ -82,6 +84,9 @@ pub use tool_cutter_ui::ToolCutterUi;
 mod recent_ui;
 #[path = "state_prefs.rs"]
 mod prefs_ui;
+#[path = "state_step_budget.rs"]
+mod step_budget_ui;
+pub use step_budget_ui::StepBudgetUi;
 pub use tool_profile_ui::{ToolColumn, ToolProfileUi, is_spun_kind, parametric_points};
 use flecs_ecs::prelude::World;
 
@@ -128,6 +133,9 @@ pub enum CommandKind {
         pos: [f64; 3],
         yaw_deg: f64,
     },
+    /// #1094: the stock page's "raw stock only" checkbox for a from-model
+    /// stock's source model, one undo unit (`SetStockSourceOnly`).
+    SetRawStockOnly(bool),
     /// Stock that wraps every model's world AABB plus `margin` mm, shaped
     /// like the pane's radio selection at click time (0 box, 1 cylinder).
     StockFit {
@@ -196,6 +204,9 @@ pub enum CommandKind {
         setup: String,
         own: bool,
     },
+    /// #1031: state (`Some`) or clear a setup's workholding maximum rpm
+    /// (`SetSetupWorkholdingRpm`).
+    SetSetupWorkholdingRpm { setup: String, max_rpm: Option<f64> },
     /// The post's user options (issue #34): the undoable
     /// `SetPostOptions` with the picked value.
     SetPostOptions(camcraft_app::schema::PostOptions),
@@ -255,6 +266,15 @@ pub enum CommandKind {
     /// editor's Apply cutter, one `SetToolCutter`.
     SetToolCutter {
         name: String,
+        points: Option<Vec<camcraft_app::spun::SpunPoint>>,
+    },
+    /// #93 slice 3: a milling tool's numbers and its drawn cutter landed
+    /// together (`Some`: the outline carried onto the numbers; `None`:
+    /// the numbers' own) - the outline editor's parameter edits, one
+    /// `ReshapeTool`.
+    ReshapeTool {
+        name: String,
+        tool: Tool,
         points: Option<Vec<camcraft_app::spun::SpunPoint>>,
     },
     /// #793: drop a built-in library holder ("BT30 ER20") into a milling
@@ -516,6 +536,14 @@ pub enum CommandKind {
         at: String,
         yaw_deg: f64,
     },
+    /// #832: change placed jaw block `name`'s figures - one `SetModJaw`.
+    SetModJaw {
+        name: String,
+        params: camcraft_app::modvise::JawParams,
+    },
+    /// #832: re-fit adjustable jaw block `adjustable` to the stock as it
+    /// stands, against the fixed block on its plate - one `RefitModVise`.
+    RefitModVise { adjustable: String },
     /// #789: open the "Add accessory…" dialog over a setup's Fixtures
     /// node (`""` - the implicit setup). View state.
     AccessoryDialog(String),
@@ -966,6 +994,9 @@ pub struct ToolUi {
     /// carry it through `ChangeTool` / `AddTool`, which refuse a bad row
     /// by the tool's name.
     pub cutting: Vec<camcraft_app::tool_cutting_rows::CuttingRow>,
+    /// #891: the turning cutting data (Vc, f/rev, max rpm), None = not
+    /// stated - carried so an Apply never drops it.
+    pub turning: Option<camcraft_app::tools::TurningData>,
 }
 
 impl Default for ToolUi {
@@ -1023,6 +1054,7 @@ impl ToolUi {
             helix_deg: t.catalog.helix_deg.map(|h| h.to_string()).unwrap_or_default(),
             notes: t.catalog.notes.clone().unwrap_or_default(),
             cutting: t.cutting.clone(),
+            turning: t.turning,
         }
     }
 
@@ -1092,6 +1124,7 @@ impl ToolUi {
             orientation: self.orientation,
             catalog: self.catalog(),
             cutting: self.cutting.clone(),
+            turning: self.turning,
         };
         tool.corner_r = tool.tip_corner_r();
         tool
@@ -1537,6 +1570,9 @@ pub struct State {
     /// implicit first setup. Public so tests run the dialog hand-off
     /// without a modal file picker.
     pub import_as_fixture: Option<Option<String>>,
+    /// #1054: the STEP facet budget the next import runs under (an import
+    /// setting, not on the history; the import that uses it is).
+    pub step_budget: StepBudgetUi,
     /// #789: each built-in accessory row's size draft, by name - view
     /// state; Apply lands it through `SetAccessory`.
     pub accessory_sizes: HashMap<String, AccessorySizeDraft>,
@@ -1556,6 +1592,8 @@ pub struct State {
     pub plate_place: HashMap<String, PlatePlaceDraft>,
     /// #820: each plate row's "Add mod vise pair" draft, by plate name.
     pub mod_vise: HashMap<String, ModViseDraft>,
+    /// #832: each jaw block row's figure-edit draft, by block name.
+    pub mod_jaw_edit: HashMap<String, camcraft_app::modvise::JawParams>,
     /// The selected op's struck fixtures, per (version, op, path sig).
     pub struck_cache: camcraft_app::fixture_view::StruckCache,
     /// Properties / Tool Library pane drafts (ephemeral; see [`OpUi`]).
@@ -1862,6 +1900,7 @@ impl State {
             repair_ui: RepairUi::default(),
             pocket_scan: PocketScan::default(),
             import_as_fixture: None,
+            step_budget: StepBudgetUi::default(),
             accessory_sizes: HashMap::new(),
             fixture_mesh_cache: Default::default(),
             fixture_lib: None,
@@ -1869,6 +1908,7 @@ impl State {
             vise_opening: HashMap::new(),
             plate_place: HashMap::new(),
             mod_vise: HashMap::new(),
+            mod_jaw_edit: HashMap::new(),
             struck_cache: Default::default(),
             // The tool draft carries a plausible name from the first
             // frame: an empty Name field made Add look dead (refused
@@ -2825,6 +2865,20 @@ impl State {
                     Err(err) => self.refuse(ErrorScope::Setup, format!("stock not set: {err}")),
                 }
             }
+            CommandKind::SetRawStockOnly(on) => {
+                match camcraft_app::commands::SetStockSourceOnly::new(&self.world, on) {
+                    Ok(command) => {
+                        self.history.execute(&self.world, command);
+                        self.doc_version += 1;
+                        self.status = String::from(if on {
+                            "the stock's source model is raw stock only"
+                        } else {
+                            "the stock's source model is judged as the part"
+                        });
+                    }
+                    Err(err) => self.refuse(ErrorScope::Setup, format!("not changed: {err}")),
+                }
+            }
             CommandKind::SetUnits(next) => match SetUnits::new(&self.world, next) {
                 Ok(command) => {
                     self.history.execute(&self.world, command);
@@ -2846,6 +2900,7 @@ impl State {
             CommandKind::SetupOwnMachine { setup, own } => self.own_machine(&setup, own),
             CommandKind::SetupOwnPost { setup, own } => self.own_post(&setup, own),
             CommandKind::SetupOwnPostOptions { setup, own } => self.own_post_options(&setup, own),
+            CommandKind::SetSetupWorkholdingRpm { setup, max_rpm } => self.set_workholding_rpm(&setup, max_rpm),
             CommandKind::EditMachineDialog => {
                 let (path, m) = machine::of(&self.world);
                 match m {
@@ -3009,6 +3064,7 @@ impl State {
             CommandKind::SetToolBody { name, body } => self.run_set_tool_body(&name, body),
             CommandKind::SetToolProfile { name, points } => self.run_set_tool_profile(&name, points),
             CommandKind::SetToolCutter { name, points } => self.run_set_tool_cutter(&name, points),
+            CommandKind::ReshapeTool { name, tool, points } => self.run_reshape_tool(&name, tool, points),
             CommandKind::SetToolHolder { name, entry, gauge, projection } => {
                 self.run_set_tool_holder(&name, &entry, gauge, projection)
             }
@@ -3628,6 +3684,8 @@ impl State {
             CommandKind::PlaceModVisePair { plate, fixed, adjustable, at, yaw_deg } => {
                 self.place_mod_vise_pair(&plate, &fixed, &adjustable, &at, yaw_deg);
             }
+            CommandKind::SetModJaw { name, params } => self.set_mod_jaw(&name, params),
+            CommandKind::RefitModVise { adjustable } => self.refit_mod_vise(&adjustable),
             CommandKind::SetupSheetDialog => {
                 if let Some(path) = save_sheet_dialog() {
                     self.setup_sheet_path(path);
@@ -3746,11 +3804,12 @@ impl State {
         self.import_started = Some(Instant::now());
         let (tx, rx) = mpsc::channel();
         let worker_path = path.clone();
+        let budget = self.step_budget_for(&path);
         let spawned = std::thread::Builder::new()
             .name("camcraft-import".to_string())
             .spawn(move || {
                 // No World here: pure file + geometry work, Send across.
-                let result = ImportModel::new(&worker_path);
+                let result = ImportModel::within(&worker_path, budget);
                 // A dropped rx means the document changed or we are closing;
                 // the command is simply never applied.
                 if tx.send(result).is_err() {
@@ -3762,7 +3821,7 @@ impl State {
             Err(err) => {
                 // Thread exhaustion must not lose the import: run inline.
                 diag_warn!("import: worker spawn failed ({err}); running inline");
-                let result = ImportModel::new(&path);
+                let result = ImportModel::within(&path, budget);
                 self.finish_import(result);
             }
         }
@@ -3816,8 +3875,8 @@ impl State {
                     return;
                 }
                 if model::find_by_name(&self.world, &name).is_some() {
-                    let coarse = command.coarse_mm;
-                    match UpdateModel::new(&self.world, &name, command.mesh).map(|u| u.with_fidelity(coarse)) {
+                    let (coarse, budget) = (command.coarse_mm, command.facet_budget);
+                    match UpdateModel::new(&self.world, &name, command.mesh).map(|u| u.with_fidelity(coarse).with_budget(budget)) {
                         Ok(upd) => {
                             let summary = upd.changes().describe();
                             self.history.execute(&self.world, upd);

@@ -11,6 +11,8 @@ pub mod commands;
 pub mod cutting;
 // #890: which row of a tool's per-material cutting data the document picks.
 pub mod cutting_rows;
+// #891: turning cutting data - CSS ops, working diameter, the suggestion.
+pub mod cutting_turn;
 pub mod smoothing;
 pub use camcraft_motion::drilling;
 pub mod fixture;
@@ -23,6 +25,7 @@ pub mod fixture_locate;
 pub mod fixture_struck;
 pub mod fixture_view;
 pub mod vise;
+pub mod vise_fit;
 pub mod accessory;
 pub mod plate;
 pub mod modvise;
@@ -72,6 +75,8 @@ pub mod setup_mount;
 // #316: transforms between setups and the setup-relative link.
 pub mod setup_relative;
 pub mod setup_post_options;
+// #1031: a setup's workholding (chuck/collet) rpm limit.
+pub mod setup_workholding;
 pub mod setup_sheet;
 // #320: a setup's stock source - its own, or what the setup before leaves.
 pub mod setup_stock;
@@ -85,6 +90,10 @@ pub use camcraft_sim::solid_rest;
 pub use camcraft_sim::sim;
 pub use camcraft_geometry::geometry::stock;
 pub mod stock_sim;
+// #1094: the model that is only the stock's source is not the part.
+pub mod stock_source;
+// #1094: the geometry fingerprint a raw-stock-only mark is checked by.
+pub mod stock_print;
 pub mod stock_export;
 // #561: a square stock keeps its allowance round a located part.
 pub mod stock_follow;
@@ -105,6 +114,8 @@ pub use camcraft_tools::cutting_rows as tool_cutting_rows;
 pub use camcraft_tools::spun;
 // #93 slice 2: the drawn cutter law, and the tool's stored drawn cutter.
 pub use camcraft_tools::cutter_profile;
+// #93 slice 3: the drawn cutter carried onto new numbers, and its neck.
+pub use camcraft_tools::cutter_fit;
 pub mod tool_cutter;
 // #793: the built-in taper holder library.
 pub use camcraft_tools::holder_library;
@@ -116,6 +127,8 @@ pub mod tool_body_view;
 pub mod tool_body_lathe;
 // #743: the simulated tool as the collision laws read it, revolved.
 pub mod sim_tool_body;
+// #1038: a lathe-held body drawn as modelled in the holder law's frame.
+pub mod sim_lathe_body;
 pub mod units;
 pub use camcraft_sim::verify;
 // #261: the moves a cached path's warnings name.

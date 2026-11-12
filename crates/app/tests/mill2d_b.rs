@@ -12,9 +12,9 @@
 //! handbook geometry written clean-room (the chamfer mill's tangent
 //! generatrix), the vault a stated paraboloid of revolution.
 //!
-//! Gate map (M4.4): covers app::commands, app::geometry, app::machining2d,
-//! app::model, app::operation, app::project, app::schema, app::stock,
-//! app::tools, app::world.
+//! Gate map (M4.4): covers app::commands, app::geometry, motion::machining2d,
+//! app::model, app::operation, app::project, app::schema, geometry::geometry::stock,
+//! tools::tools, app::world.
 
 mod common;
 
@@ -311,6 +311,7 @@ fn taper(diameter: f64, tip_angle: f64, flute_len: f64) -> Tool {
         orientation: None,
         catalog: camcraft_tools::catalog_fields::ToolCatalog::default(),
         cutting: Vec::new(),
+        turning: None,
     }
 }
 

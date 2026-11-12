@@ -6,7 +6,7 @@
 //! Provenance: our own tool surface over this repo's commands and the
 //! script verbs; schemas are JSON Schema as the MCP spec carries them.
 
-use super::{area, edit, features, job, pick, pockets, render};
+use super::{area, edit, features, holders, job, pick, pockets, render};
 use crate::script::{api, Env};
 
 use serde_json::{json, Map, Value};
@@ -23,10 +23,12 @@ pub(super) struct Tool {
 const TOOLS: &[Tool] = &[
     Tool { name: "open_project", description: "Open a .camproj project file, replacing the current document and clearing undo history.", schema: s_path, run: open_project },
     Tool { name: "save_project", description: "Save the document as a .camproj file. Without a path, saves over the file last opened or saved.", schema: s_opt_path, run: save_project },
-    Tool { name: "import_model", description: "Import a mesh model (STL, STEP or OBJ) through the app's importers. A name already used by a model updates that model. A STEP model too large to import at full detail answers with reduced_fidelity: how closely its surfaces are approximated, in mm - gouge checks against it are stricter, and its operations are refused at the post when it is too coarse to check.", schema: s_import, run: import_model },
+    Tool { name: "import_model", description: "Import a mesh model (STL, STEP or OBJ) through the app's importers. A name already used by a model updates that model. A STEP model too large to import at full detail answers with reduced_fidelity: how closely its surfaces are approximated, in mm - gouge checks against it are stricter, and its operations are refused at the post when it is too coarse to check; import it again with a larger facet_budget to clear that.", schema: s_import, run: import_model },
     Tool { name: "get_job", description: "The whole document as JSON: setups, stock, work offsets, models (one imported at reduced fidelity carries reduced_fidelity), tools, and operations with their parameters and status.", schema: s_empty, run: job::get_job },
     Tool { name: "list_operation_types", description: "Every operation kind with its parameter fields, JSON types and default values, and the tool kinds it accepts.", schema: s_empty, run: job::list_operation_types },
     Tool { name: "list_tool_catalog", description: "The built-in tool catalog: names and definitions add_tool can copy into the document.", schema: s_empty, run: job::list_tool_catalog },
+    Tool { name: "list_holder_library", description: "The built-in holder library: BT30, BT40 and CAT40 holders with ER collet or Weldon side-lock noses, and standalone ER11-ER40 chucks - names set_tool_holder takes, with their dimensions and the shanks they clamp.", schema: s_empty, run: holders::list_holder_library },
+    Tool { name: "set_tool_holder", description: "Set a document tool's holder: from the holder library by name (optional gauge_len and projection, mm), from a drawn spun profile (points), or back to the holder cylinder (clear). One undo step; an unknown entry, a shank the holder cannot take or a bad profile is refused by name.", schema: holders::s_set_tool_holder, run: holders::set_tool_holder },
     Tool { name: "add_tool", description: "Add a tool to the document, from the catalog by name or from a full definition (the shape get_job shows). It starts with the machine's default holder unless \"holder\" says otherwise; one undo removes the tool and its holder.", schema: s_add_tool, run: edit::add_tool },
     Tool { name: "export_tool_library", description: "Write the document's tools to a tool library file (.camtools), the same format the Tool library page's Export writes. Refuses a document with no tools or a path that cannot be written.", schema: s_library, run: export_tool_library },
     Tool { name: "import_tool_library", description: "Import a tool library file into the document as one undo step, through the same command as the Tool library page's Import. mode add (default): an identical tool is skipped, a clashing name arrives as \"Name (2)\"; update: a same-named tool takes the file's definition in place (number kept, operations go Stale); replace: update, and tools the file lacks are removed unless an operation uses one (refused by name). A malformed or insane file is refused naming the tool.", schema: s_import_library, run: import_tool_library },
@@ -50,7 +52,7 @@ const TOOLS: &[Tool] = &[
 ];
 
 /// Every row: this table, then the setup furniture's (#181), then the
-/// part placement (#716).
+/// part placement (#716), ..., then operation names and order (#45).
 fn all() -> impl Iterator<Item = &'static Tool> {
     TOOLS
         .iter()
@@ -63,6 +65,8 @@ fn all() -> impl Iterator<Item = &'static Tool> {
         .chain(super::cutter_tools::TOOLS)
         .chain(super::plate_tools::TOOLS)
         .chain(super::modvise_tools::TOOLS)
+        .chain(super::workholding_tools::TOOLS)
+        .chain(super::order_tools::TOOLS)
 }
 
 /// The `tools/list` rows.
@@ -123,11 +127,9 @@ fn save_project(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> 
 }
 
 fn import_model(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
-    let mut args = vec![json!(req_str(a, "path")?)];
-    if let Some(n) = opt_str(a, "name")? {
-        args.push(json!(n));
-    }
-    api::v_import(env, args)
+    let name = opt_str(a, "name")?.map_or(Value::Null, |n| json!(n));
+    let budget = a.get("facet_budget").cloned().unwrap_or(Value::Null);
+    api::v_import(env, vec![json!(req_str(a, "path")?), name, budget])
 }
 
 fn export_tool_library(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
@@ -199,7 +201,8 @@ fn s_import() -> Value {
     obj(
         json!({
             "path": { "type": "string", "description": "An .stl, .step/.stp or .obj file." },
-            "name": { "type": "string", "description": "Model name; defaults to the file stem." }
+            "name": { "type": "string", "description": "Model name; defaults to the file stem." },
+            "facet_budget": { "type": "integer", "minimum": crate::geometry::import::step_budget::MIN, "maximum": crate::geometry::import::step_budget::CEILING, "description": "STEP facet budget: the most triangles a STEP model may be meshed into (default 30000000). Raise it to import a large model at full detail; STEP files only." }
         }),
         &["path"],
     )

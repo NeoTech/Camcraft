@@ -358,6 +358,12 @@ pub struct ToolDto {
     /// the numbers it posted - losing only the table on its next save.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub cutting_data: Vec<super::CuttingRowDto>,
+    /// #891 addition, additive (no version step): the turning cutting
+    /// data (surface speed m/min, feed mm/rev, max-rpm clamp). Absent
+    /// from every older file and written only when stated; absent
+    /// reads as unstated - the turning ops post the tool's rpm (G97).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub turning: Option<camcraft_tools::turning_data::TurningData>,
 }
 
 fn centre_cutting() -> bool {
@@ -466,6 +472,7 @@ impl ToolDto {
             helix_deg: t.catalog.helix_deg,
             notes: t.catalog.notes.clone(),
             cutting_data: t.cutting.iter().map(super::CuttingRowDto::from_row).collect(),
+            turning: t.turning,
         }
     }
 
@@ -517,6 +524,7 @@ impl ToolDto {
             }
             .normalized(),
             cutting: self.cutting_data.iter().map(|r| r.to_row()).collect(),
+            turning: self.turning,
         }
     }
 }

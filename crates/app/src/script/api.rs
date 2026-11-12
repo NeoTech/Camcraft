@@ -21,8 +21,12 @@ use std::path::{Path, PathBuf};
 /// the run owns that law here exactly as the app's menu does.
 pub(crate) fn v_load(env: &mut Env, args: Vec<Value>) -> Result<Value, String> {
     let path = PathBuf::from(arg_str(&args, 0, "a project path")?);
-    crate::project::load(&env.world, &path).map_err(|e| e.to_string())?;
+    // Load in isolation: refusal leaves the current document and its undo/redo intact.
+    let world = crate::world::new_world();
+    crate::project::load(&world, &path).map_err(|e| e.to_string())?;
     env.history = History::default();
+    env.world = world;
+    env.posted = None;
     env.doc_path = Some(path.clone());
     Ok(json!({ "path": path.display().to_string(), "operations": ops_view(env) }))
 }
@@ -43,8 +47,11 @@ pub(crate) fn v_save(env: &mut Env, args: Vec<Value>) -> Result<Value, String> {
     Ok(json!({ "path": path.display().to_string() }))
 }
 
-/// `cam.import(path, name?)` - parse a mesh file and land it as a
-/// model entity, by its file stem unless named otherwise. A name that
+/// `cam.import(path, name?, facetBudget?)` - parse a mesh file and land
+/// it as a model entity, by its file stem unless named otherwise (a null
+/// name keeps the stem). `facetBudget` is the STEP facet budget (#1054):
+/// absent or null is the default; out of bounds, or given for a file that
+/// is not STEP, refuses by name. A name that
 /// already wears a model updates it (the revision counts, the stale
 /// marks follow); a name that belongs to setup furniture refuses -
 /// an import never overwrites the stock solid by accident.
@@ -53,10 +60,11 @@ pub(crate) fn v_import(env: &mut Env, args: Vec<Value>) -> Result<Value, String>
     // The command's own construction door: parse, validate, and the
     // extension refusals (IGES needs a kernel we do not have) are
     // ImportModel's law, not a second copy here.
-    let imp = ImportModel::new(&path).map_err(|e| e.to_string())?;
+    let budget = crate::geometry::import::step_budget::from_json(args.get(2))?;
+    let imp = ImportModel::within(&path, budget).map_err(|e| e.to_string())?;
     let name = arg_opt(&args, 1, "a model name")?.unwrap_or_else(|| imp.name.clone());
     if model::find_by_name(&env.world, &name).is_some() {
-        let cmd = UpdateModel::new(&env.world, &name, imp.mesh).map_err(|e| e.to_string())?.with_fidelity(imp.coarse_mm);
+        let cmd = UpdateModel::new(&env.world, &name, imp.mesh).map_err(|e| e.to_string())?.with_fidelity(imp.coarse_mm).with_budget(imp.facet_budget);
         env.history.execute(&env.world, cmd);
     } else {
         env.history.execute(&env.world, imp.renamed(&name));
@@ -68,6 +76,9 @@ pub(crate) fn v_import(env: &mut Env, args: Vec<Value>) -> Result<Value, String>
     // with the error it carries; a full-fidelity import adds nothing.
     if let Some(chord) = entity.and_then(|e| crate::model_fidelity::chord_of(&env.world, &e)) {
         out["reduced_fidelity"] = crate::model_fidelity::facts(&env.world, chord);
+    }
+    if let Some(b) = entity.and_then(|e| crate::model_fidelity::budget_of(&env.world, &e)) {
+        out["facet_budget"] = json!(b);
     }
     Ok(out)
 }
