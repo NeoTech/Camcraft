@@ -10,10 +10,10 @@
 //! Provenance: point-to-circle distance along the radius, from elementary
 //! plane geometry; the tangency law is our own (sim::verify::section).
 
-use camcraft_app::cl::{Move, MoveKind, Toolpath};
-use camcraft_app::geo2d::{Loop, Point2, Region};
-use camcraft_app::geometry::Point3;
-use camcraft_app::verify::{Mode, ToolGeom, VerifyContext, Warning, verify};
+use camcraft_sim::cl::{Move, MoveKind, Toolpath};
+use camcraft_sim::geo2d::{Loop, Point2, Region};
+use camcraft_sim::geometry::Point3;
+use camcraft_sim::verify::{Mode, ToolGeom, VerifyContext, Warning, verify};
 
 /// The gouge verdict tolerance (`GOUGE_TOL`).
 const TOL: f64 = 0.01;
