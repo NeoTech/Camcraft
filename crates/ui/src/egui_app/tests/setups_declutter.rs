@@ -10,7 +10,7 @@
 use super::*;
 use crate::state::SetupPage;
 
-const MOVED: [&str; 4] = ["Part alignment", "Lay on a plane", "Axes in the plane", "Work offset"];
+const MOVED: [&str; 4] = ["Part alignment", "Lay on a plane", "Part axes", "Work offset"];
 
 fn cube_path() -> std::path::PathBuf {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/models/cube.stl")
