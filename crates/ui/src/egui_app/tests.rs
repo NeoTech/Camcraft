@@ -99,6 +99,8 @@ mod plane_face_lay;
 mod plane_face_pick;
 // #692: one pick rule on the op page, the setup page and a smooth wall.
 mod one_pick_rule;
+// #692: the user-facing pick-through toggle (off by default) reaches the far side.
+mod pick_through;
 // #664: a left Setups page disarms its picks.
 mod setup_picks_disarm;
 // #555: real clicks pick the three points of the plane.
