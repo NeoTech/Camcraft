@@ -1001,6 +1001,15 @@ fn tool_page(ui: &mut Ui, state: &mut State, name: &str) {
             (new, export, import)
         })
         .inner;
+    // #889: whether an import takes each tool's holder body from the file.
+    let mut holders = state.import_tool_holders;
+    if ui
+        .checkbox(&mut holders, "Import tool holders")
+        .on_hover_text("take each tool's holder body from the library file; unticked, tools arrive with their holder cylinder only")
+        .changed()
+    {
+        state.set_import_tool_holders(holders);
+    }
     if new {
         actions::open_tool_editor(state, "");
     }

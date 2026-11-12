@@ -1477,6 +1477,10 @@ pub struct State {
     /// Where the theme and colour-vision preferences (#877) are written
     /// back; `None` (every headless State) keeps them in memory only.
     pub prefs_store: Option<PathBuf>,
+    /// #889: the Tool library page's "Import tool holders" - a per-user
+    /// preference (kept beside the theme), the `holders` parameter of
+    /// the `ImportTools` command an import runs. On by default.
+    pub import_tool_holders: bool,
     /// The dock's closable panels as of this frame (see [`PanelsOpen`]).
     pub panels_open: PanelsOpen,
     /// The View door's pending dock ask (see [`LayoutRequest`]).
@@ -1837,6 +1841,7 @@ impl State {
             recent: camcraft_app::recent::RecentFiles::default(),
             recent_store: None,
             prefs_store: None,
+            import_tool_holders: true,
             panels_open: PanelsOpen { browser: true, properties: true, machines: false },
             layout_request: None,
             tree_menu: None,
