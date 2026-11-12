@@ -2,7 +2,8 @@
 
 use super::types::{FixturePart, Warning};
 
-use crate::cl::{is_vertical, Move, MoveKind, Toolpath};
+use super::upright::is_upright;
+use crate::cl::{Move, MoveKind, Toolpath};
 use crate::geo2d::{Point2, Region};
 use crate::geometry::Point3;
 pub use crate::tools::ToolGeom;
@@ -46,6 +47,51 @@ pub(super) fn orient(a: Point2, b: Point2, c: Point2) -> f64 {
 pub(super) fn proper_cross(a0: Point2, a1: Point2, b0: Point2, b1: Point2) -> bool {
     let (oa, ob) = (orient(a0, a1, b0), orient(a0, a1, b1));
     let (oc, od) = (orient(b0, b1, a0), orient(b0, b1, a1));
+    oa != 0.0
+        && ob != 0.0
+        && oc != 0.0
+        && od != 0.0
+        && ((oa > 0.0) != (ob > 0.0))
+        && ((oc > 0.0) != (od > 0.0))
+}
+
+/// How near two chord end points stand, in XY, to be read as ONE shared
+/// vertex by the crossing law (a), mm: 1e-9 (1 pm). A vertex reached
+/// twice - an orbit closing on its start, a microlift return landing on
+/// a chord end, a ring starting on the last ring's vertex - lands within
+/// a few ulps of itself: f64 rounding of a coordinate of 1e4 mm (a 10 m
+/// workspace) is ~2e-12 mm, a hundred-odd times below this. Cutting
+/// tolerances are microns (the verifier's own is 5e-3 mm), a million
+/// times above it, so a pair this close is one vertex, never two cuts.
+///
+/// It is a point-to-point DISTANCE, compared as one (no raw cross
+/// product), so it holds the same for a 1 um chord and a 1 m chord.
+/// Issue #1129: this law is the reference; the adaptive planner's own
+/// plan check (`motion` `adaptive::guard::crosses`, #1048's `TOUCH`)
+/// asks the same question first and should use or match this constant,
+/// so a plan it accepts is never held by this law for a rounding.
+pub const CROSSING_TOUCH: f64 = 1e-9;
+
+/// Proper crossing for the crossing law (a) (#1129): [`proper_cross`],
+/// with an end point that stands within [`CROSSING_TOUCH`] of one of the
+/// other chord's END points read as on that chord's line (orientation
+/// 0, a touch) - so a shared vertex a rounding apart touches, exactly as
+/// an exactly shared vertex always has.
+///
+/// Deliberately NOT "within the tolerance of the other chord's LINE":
+/// a walk can pass through a chord at a vertex standing a picometre off
+/// that chord's interior, and both of its chords there would then read
+/// as touches - a real crossing of any depth hidden (the #1134 review's
+/// pass-through probe). Away from the other chord's end points the
+/// exact sign stays the law, so such a pass-through still reports.
+/// A non-finite end never compares near, so it keeps the exact reading.
+pub(super) fn proper_cross_touch(a0: Point2, a1: Point2, b0: Point2, b1: Point2) -> bool {
+    let near = |p: Point2, q: Point2| (p.x - q.x).hypot(p.y - q.y) <= CROSSING_TOUCH;
+    let side = |p: Point2, q0: Point2, q1: Point2| {
+        if near(p, q0) || near(p, q1) { 0.0 } else { orient(q0, q1, p) }
+    };
+    let (oa, ob) = (side(b0, a0, a1), side(b1, a0, a1));
+    let (oc, od) = (side(a0, b0, b1), side(a1, b0, b1));
     oa != 0.0
         && ob != 0.0
         && oc != 0.0
@@ -181,7 +227,7 @@ pub fn bands_vs_fixtures_held(
         // measuring exactly when stage B's generators start leaning
         // real stock paths. The prismatic branch is bit-identical to
         // the law's own history: same sums, same comparisons.
-        let lean = m.axis.filter(|a| !is_vertical(a));
+        let lean = m.axis.filter(|a| !is_upright(a));
         let mut struck = None;
         for (part, above, band_r, band_len) in bands.iter().copied().chain(spindle) {
             // Unlike law (c), a band THINNER than the flute still
@@ -301,7 +347,7 @@ pub fn rapids_vs_fixtures_held(
         // report a graze, never hide a crash - the bands law's exact
         // precedent. The prismatic branch stays bit-identical to the
         // law's own history: same `rapid_hits_box`, same sums.
-        match m.axis.filter(|a| !is_vertical(a)) {
+        match m.axis.filter(|a| !is_upright(a)) {
             None => {
                 // The flute disc first, its verdict as ever; then the
                 // rest of the stack (#424) - shank, holder, the housing

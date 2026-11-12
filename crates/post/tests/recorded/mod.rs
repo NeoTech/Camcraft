@@ -23,7 +23,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 /// The recorded cases every post suite runs, in file-stem form.
-pub const CASES: [&str; 9] = [
+pub const CASES: [&str; 11] = [
     "arcs",
     "full_circle",
     "full_circle_raw",
@@ -33,6 +33,8 @@ pub const CASES: [&str; 9] = [
     "probe",
     "empty_section",
     "extreme_coords",
+    "css_then_live",
+    "live_then_stop",
 ];
 
 /// Post bugs these suites found, by (script, case, issue): wrong output
@@ -49,15 +51,23 @@ pub fn known_bug(script: &str, case: &str) -> Option<u32> {
     KNOWN_BUGS.iter().find(|(s, c, _)| *s == script && *c == case).map(|(_, _, n)| *n)
 }
 
-/// The machine a case posts on, by file name under `assets/machines/`:
-/// the rotary case needs one stating its rotaries (a 5-axis head with A
-/// and B), every other case posts machine-less, as the binary does with
+/// The machine file a case posts on: the rotary case needs one stating
+/// its rotaries (`assets/machines/tilthead.mch`, a 5-axis head with A and
+/// B); `css_then_live` (#1173) a mill-turn stating a C axis and the four
+/// live-tool words (`recorded/machines/millturn-live.mch`, the shipped
+/// millturn.mch plus test-bench placeholder words M1001-M1004 - no
+/// builder's codes, which is why it is a test fixture and not a shipped
+/// machine); `live_then_stop` (#1188) the same mill-turn. Every other case posts machine-less, as the binary does with
 /// no `--machine`. The file is handed to the binary in the grammar the
 /// app hands the engine (`post::machine::mirror` of the parsed vendor
 /// file): the binary's `--machine` door reads only that static grammar,
 /// so a vendor tree passed raw would reach the script with no rotaries.
-pub fn machine_of(case: &str) -> Option<&'static str> {
-    (case == "rotary").then_some("tilthead.mch")
+pub fn machine_of(case: &str) -> Option<PathBuf> {
+    match case {
+        "rotary" => Some(repo().join("assets/machines/tilthead.mch")),
+        "css_then_live" | "live_then_stop" => Some(here().join("machines/millturn-live.mch")),
+        _ => None,
+    }
 }
 
 pub fn repo() -> PathBuf {
@@ -90,10 +100,9 @@ pub fn verdict(script: &str, case: &str) -> (&'static str, String) {
     let _ = std::fs::remove_file(&log);
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_post"));
     let mch = tmp(&format!("{tag}.mch"));
-    if let Some(m) = machine_of(case) {
-        let path = repo().join("assets/machines").join(m);
+    if let Some(path) = machine_of(case) {
         let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
-        let parsed = camcraft_post::machine::parse_mch(&text).unwrap_or_else(|e| panic!("{m}: {e}"));
+        let parsed = camcraft_post::machine::parse_mch(&text).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
         let mirrored = camcraft_post::post::machine::mirror(&parsed);
         std::fs::write(&mch, mirrored.to_string()).expect("write the mirrored machine");
         cmd.arg("--machine").arg(&mch);
@@ -191,6 +200,14 @@ macro_rules! post_suite {
         #[test]
         fn extreme_coords() {
             recorded::check($script, "extreme_coords");
+        }
+        #[test]
+        fn css_then_live() {
+            recorded::check($script, "css_then_live");
+        }
+        #[test]
+        fn live_then_stop() {
+            recorded::check($script, "live_then_stop");
         }
     };
 }

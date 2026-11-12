@@ -36,7 +36,7 @@ use camcraft_app::geo2d::{Point2, Region};
 use camcraft_app::geometry::Triangle;
 use camcraft_app::machining2d::{ContourParams, FaceParams, Lead, PocketParams, PocketStrategy, Side, contour, face, pocket};
 use camcraft_app::tools::{Tool, ToolKind};
-use camcraft_app::verify::{Cutter, Mode, SolidLaw, ToolGeom, VerifyContext, Warning, solid_hits, verify};
+use camcraft_app::verify::{Cutter, HoleAxis, Mode, SolidLaw, ToolGeom, VerifyContext, Warning, solid_hits_walled, verify};
 
 fn golden(name: &str) -> String {
     let p = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/golden").join(name);
@@ -69,11 +69,13 @@ fn section_law(t: &Toolpath, region: &Region, part: &[Triangle], tool: &ToolGeom
 }
 
 /// The containment kinds' depth verdict: the solid law with the tool's
-/// own tip, hole walls excused (their region laws read the exact rims,
-/// untouched by the solid law and not judged here).
-fn contain_law(t: &Toolpath, part: &[Triangle], tool: &Tool) -> Vec<Warning> {
+/// own tip, the round walls of the holes it drills excused (their region
+/// laws read the exact rims, untouched by the solid law and not judged
+/// here; #1205 measures each wall about its hole's own axis).
+fn contain_law(t: &Toolpath, part: &[Triangle], tool: &Tool, holes: &[Hole]) -> Vec<Warning> {
     let law = SolidLaw { step: 0.25, allow: 0.01, hole_walls: true };
-    solid_hits(t, part, &Cutter::of(tool), &law)
+    let walls: Vec<HoleAxis> = holes.iter().map(|h| HoleAxis::vertical(h.xy.x, h.xy.y)).collect();
+    solid_hits_walled(t, part, &Cutter::of(tool), &law, &walls)
 }
 
 fn contour_params(d: f64, lead: Lead, side: Side) -> ContourParams {
@@ -231,21 +233,24 @@ fn verdicts() -> Vec<(&'static str, Vec<Warning>)> {
     walls(&rect(0.0, 0.0, 40.0, 20.0), -4.0, 0.0, true, &mut part);
     plate_cell(&rect(0.0, 0.0, 20.0, 20.0), Some((&ha, -4.0)), -4.0, 0.0, &mut part);
     plate_cell(&rect(20.0, 0.0, 40.0, 20.0), Some((&hb, -3.0)), -4.0, 0.0, &mut part);
-    let t = cycle(&[hole(10.0, 10.0, 3.0, -4.0, true), hole(30.0, 10.0, 3.0, -3.0, false)], &dr6, 5.0);
-    check("drill_plate.cl", &t, contain_law(&t, &part, &dr6));
+    let holes = [hole(10.0, 10.0, 3.0, -4.0, true), hole(30.0, 10.0, 3.0, -3.0, false)];
+    let t = cycle(&holes, &dr6, 5.0);
+    check("drill_plate.cl", &t, contain_law(&t, &part, &dr6, &holes));
     let hp = circle((20.0, 10.0), 3.0, 32);
     let mut part = Vec::new();
     plate(&rect(0.0, 0.0, 40.0, 20.0), Some((&hp, -23.0)), -23.0, 0.0, &mut part);
-    let t = cycle(&[hole(20.0, 10.0, 3.0, -23.0, true)], &dr6, 6.0);
-    check("drill_peck.cl", &t, contain_law(&t, &part, &dr6));
+    let holes = [hole(20.0, 10.0, 3.0, -23.0, true)];
+    let t = cycle(&holes, &dr6, 6.0);
+    check("drill_peck.cl", &t, contain_law(&t, &part, &dr6, &holes));
     // The tapped hole: the finished part's thread stands at the tap's
     // own diameter (the golden's 2.5 mm hole record is the tap DRILL's).
     let tap = tool(ToolKind::Tap, 10.0, 0.0, 1.5);
     let ht = circle((15.0, 15.0), 5.0, 32);
     let mut part = Vec::new();
     plate(&rect(0.0, 0.0, 30.0, 30.0), Some((&ht, -12.0)), -20.0, 0.0, &mut part);
-    let t = cycle(&[hole(15.0, 15.0, 2.5, -12.0, false)], &tap, 5.0);
-    check("tap_plate.cl", &t, contain_law(&t, &part, &tap));
+    let holes = [hole(15.0, 15.0, 2.5, -12.0, false)];
+    let t = cycle(&holes, &tap, 5.0);
+    check("tap_plate.cl", &t, contain_law(&t, &part, &tap, &holes));
     out
 }
 
@@ -298,16 +303,30 @@ fn a_lead_on_the_rings_own_circle_is_refused() {
 /// (#862 option (c)); none does today.
 const REFUSED_HEADER: &str = "refused program, posted for syntax conformance";
 
-/// Posted goldens whose program no gate judges, each with why: the
-/// guard below makes every other posted golden's program pass the gate
-/// its kind's post runs, so a new one is either judged or named here.
-/// The slot, trochoid, trace and plasma goldens are judged since #1000
-/// (`posted_gates`).
-const UNJUDGED: &[(&str, &str)] = &[(
-    "arc_planes",
-    "a hand-built posting fixture (arc_planes.rs): no operation kind, part, region or tool record makes it, \
-     so no gate a user's post runs can judge it - #1093",
-)];
+/// How a posted golden's first line and gate verdict settle it (#1093):
+/// the synthetic marker is honest only for a stem no op program makes
+/// (`judged` holds every stem a gate judges), and every other golden must
+/// be judged. There is no list of unjudged goldens.
+fn posted_golden_verdict(first: &str, stem: &str, judged: &[&str]) -> Result<(), String> {
+    let is_judged = judged.contains(&stem);
+    let marked = first.contains(common::SYNTHETIC_MARKER);
+    match (marked, is_judged) {
+        (true, true) => Err(format!("{stem}: carries the synthetic marker but a gate judges its op program")),
+        (true, false) | (false, true) => Ok(()),
+        (false, false) => Err(format!("{stem}: posted, but no gate judges its program and it is not marked synthetic")),
+    }
+}
+
+#[test]
+fn the_synthetic_marker_is_accepted_only_for_a_fixture_with_no_op_program() {
+    let marked = format!("({})", common::SYNTHETIC_MARKER);
+    assert_eq!(posted_golden_verdict(&marked, "arc_planes", &["drill_plate"]), Ok(()));
+    // A marker on a golden an op program makes would hide it from the gate.
+    assert!(posted_golden_verdict(&marked, "drill_plate", &["drill_plate"]).is_err());
+    // An unmarked, unjudged golden fails.
+    assert!(posted_golden_verdict("%", "mystery", &["drill_plate"]).is_err());
+    assert_eq!(posted_golden_verdict("%", "drill_plate", &["drill_plate"]), Ok(()));
+}
 
 #[test]
 fn the_slot_trace_and_plasma_goldens_pass_their_gates() {
@@ -362,13 +381,12 @@ fn every_posted_golden_is_a_program_the_gate_passes() {
                 continue;
             }
             let cl = format!("{stem}.cl");
-            match judged.iter().find(|(n, _)| *n == cl) {
-                Some((_, w)) => assert!(w.is_empty(), "{}: posted, but the gate refuses its program: {w:?}", e.display()),
-                None => assert!(
-                    UNJUDGED.iter().any(|(n, _)| *n == stem),
-                    "{}: posted, but no gate judges its program - judge it in verdicts() / posted_gates or name it in UNJUDGED",
-                    e.display()
-                ),
+            if let Some((_, w)) = judged.iter().find(|(n, _)| *n == cl) {
+                assert!(w.is_empty(), "{}: posted, but the gate refuses its program: {w:?}", e.display());
+            }
+            let names: Vec<&str> = judged.iter().filter_map(|(n, _)| n.strip_suffix(".cl")).collect();
+            if let Err(m) = posted_golden_verdict(&first, stem, &names) {
+                panic!("{}: {m}", e.display());
             }
         }
     }

@@ -121,7 +121,7 @@ fn fidelity_lines(world: &World) -> Vec<String> {
 }
 
 fn refusal(op: &str, mm: &str) -> String {
-    format!("{op}: model 'bar' was imported too coarsely to verify; re-import with a larger budget (surfaces are approximated to within {mm} mm)")
+    format!("{op}: model 'bar' was imported too coarsely to verify; re-import with a larger STEP facet budget (surfaces are approximated to within {mm} mm)")
 }
 
 fn groove_finish(tolerance: f64) -> OpParams {
@@ -338,7 +338,8 @@ fn every_kind_is_either_judged_or_refused_for_a_stated_reason_on_a_reduced_model
     use OpType::*;
     // Still refused: the verdict is a generator's own proof, or its own
     // module's, and does not read the excess yet.
-    let refused = [Swarf, AdvancedSwarf, Trace, Engrave, Chamfer2D, Deburr, Probe, PlasmaProfile];
+    // #532: the wire's kerf law does not read the excess yet either.
+    let refused = [Swarf, AdvancedSwarf, Trace, Engrave, Chamfer2D, Deburr, Probe, PlasmaProfile, WireContour];
     for row in KindInfo::ALL {
         assert_eq!(problem(row.ty, None, None), None, "{:?}: full fidelity is untouched", row.ty);
         let said = problem(row.ty, Some(TIGHT), None);
