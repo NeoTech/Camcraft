@@ -19,6 +19,9 @@ milling. A mill-turn shows both.
 | Multi-axis | 5-Axis Contour, 5-Axis Parallel, Swarf, Adv. Swarf, Rotary Contour, Rotary Parallel, Rotary Offset, Multi-Axis Rough, 5-Axis Flow, Multi-Axis Contour |
 | Turning | Facing, Profile Rough, Profile Finish, Groove Rough, Groove Finish, Part, Threading, Chamfer, Taper, Multi-Pass, Form, Bore |
 
+Each 3D milling kind has its own section, with its settings, defaults
+and common refusals, in [3D milling operations](@/guide/operations-3d.md).
+
 Some kinds carry several strategies. The 3D kinds cover adaptive roughing
 per level, waterline, parallel, scallop, radial, spiral, morph, flow,
 pencil and steep/shallow finishing. Drill covers spot, drill, peck, deep,
