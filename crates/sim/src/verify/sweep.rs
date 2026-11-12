@@ -159,17 +159,19 @@ fn swing_hit(
     let mut bands_at: Vec<(Point2, Point2, f64, f64)> = Vec::new();
     let (mut x0, mut y0) = (f64::INFINITY, f64::INFINITY);
     let (mut x1, mut y1) = (f64::NEG_INFINITY, f64::NEG_INFINITY);
+    let poses = POSE_FRACS.map(|g| {
+        [
+            from_abc[0] + (to_abc[0] - from_abc[0]) * g,
+            from_abc[1] + (to_abc[1] - from_abc[1]) * g,
+            from_abc[2] + (to_abc[2] - from_abc[2]) * g,
+        ]
+    });
     for &t in &PATH_FRACS {
         // XY walks the chord sequence (an arc's sweep is its chords,
         // the discretization every crossing/chord law lives with);
         // Z rides the move's own from-to lerp at the same parameter.
         let p = path_point(m, t, chord_tol);
-        for &g in &POSE_FRACS {
-            let abc = [
-                from_abc[0] + (to_abc[0] - from_abc[0]) * g,
-                from_abc[1] + (to_abc[1] - from_abc[1]) * g,
-                from_abc[2] + (to_abc[2] - from_abc[2]) * g,
-            ];
+        for (k, &abc) in poses.iter().enumerate() {
             let lean = angles_to_axis(abc).filter(|a| !is_upright(a));
             for &(above, band_r, band_len) in bands {
                 // Law (c)'s skip, read the same way: a band within the
@@ -186,6 +188,17 @@ fn swing_hit(
                     }
                     None => (0.0, 0.0, band_r, p.z + above),
                 };
+                // Between this pose and its neighbours the letters lerp;
+                // where that lerp can lean the band further than either
+                // sample, the span's own floor covers it (#1303,
+                // `tilt_span`). Inside the cap the samples already do.
+                let span = |j: usize| super::tilt_span::span_floor(&poses[j], &poses[k], above, band_r, band_len);
+                let floor = [k.checked_sub(1), Some(k + 1).filter(|&j| j < poses.len())]
+                    .into_iter()
+                    .flatten()
+                    .filter_map(span)
+                    .fold(f64::INFINITY, f64::min);
+                let h0 = h0.min(p.z + floor);
                 let pc = Point2::new(p.x + offx, p.y + offy);
                 let tip = Point2::new(p.x, p.y);
                 // #904: law (c)'s growth on a coarse model, read the

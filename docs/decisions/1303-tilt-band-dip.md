@@ -93,18 +93,58 @@ band, or above it for the fixture laws) was what met the material.
   own margins (`r_band + 1e-9`, the fixture hit tolerance); a second
   pad would be a second unexplained number.
 - Raising the dip to the largest tilt of the neighbouring pose samples
-  in (c3): see below, the sampled bottoms already bound the in-between
-  ones.
+  in (c3): inside the cap the sampled bottoms already bound the
+  in-between ones (below); outside it the largest sampled tilt is not
+  a bound at all, so it would not help.
+- For (c3) spans outside the cap, falling back to the whole radius
+  (`rim_sine = 1`, the reading before #1303) - the smallest change, but
+  it does not bound the span either: two samples 100 degrees off +Z
+  whose lerp passes straight down read 18.7 mm under the tip with the
+  whole radius while the band reaches 50 mm under it (the axial part
+  `(above + len)·cos θ` moves too, not only the rim). And "both sampled
+  tilts under 90 degrees" is not the right test: A = B lerping 60 -> 120
+  degrees holds 75.5 degrees at both ends and 90 in the middle. The span
+  floor below covers both.
 
 **Left as is, and known.**
-- Law (c3) still samples the turn (4 stations x 5 pose fractions). The
-  old whole radius happened to cover any in-between tilt in z. It is
-  not needed for that: the letters lerp linearly, `cos θ = cos A·cos B`
-  makes `-ln cos θ` convex in (A, B) inside the upper hemisphere, so an
-  in-between pose is never more tilted than the more tilted of its two
-  neighbouring samples, and the band's bottom
-  (`above·cos θ - R·sin θ`) falls with θ up to 90 degrees. The sideways
-  sampling limit is the one the law always stated.
+- Law (c3) still samples the turn (4 stations x 5 pose fractions).
+  Between two pose samples the letters lerp and `cos θ = cos A·cos B`
+  (C turns about Z and leaves the tilt alone). The old whole radius
+  did NOT cover every in-between tilt in z (counterexample above), and
+  the exact dip needs a stated condition, now enforced in code
+  (`verify::tilt_span::span_floor`, #1303 follow-up on PR #1306):
+  - *Inside the cap* - every A and B letter of both samples strictly
+    inside (-90, 90) degrees, `above >= 0`, `len >= 0`. The lerp stays
+    inside too, `-ln cos A - ln cos B` is convex along it (`-ln cos`
+    has second derivative sec²), so an in-between tilt never exceeds
+    the more tilted sample's, which is under 90 degrees; and the
+    band's bottom `above·cos θ - R·sin θ` falls with θ on [0, 90]. The
+    more tilted sample's own exact reading is the span's lowest, so
+    nothing is added. Every program the existing suites post is here.
+  - *Outside it* - the span's floor is read from the whole range of
+    `cos θ` the lerp can reach: the range of `cos` over each letter's
+    interval (1 if it holds a whole turn's zero, -1 if a half turn),
+    their product's interval `[clo, chi]`, the sine's peak over it
+    (1 when the interval holds 0), and the lowest of the four axial
+    corners `{above, above + len} x {clo, chi}`. Floor =
+    axial - R·sin_max: an interval bound, never above any in-between
+    bottom. Each pose sample reads the lower of its own exact bottom
+    and the floors of the two spans it ends. A non-finite input reads
+    `-inf` (convicts), never clean.
+  - Pinned by the unit tests in `crates/sim/src/verify/tilt_span.rs`:
+    the 100-degree span and the 60 -> 120 span (both dip under their
+    samples, both covered), and 400 random spans checked against a
+    2000-step lerp (inside the cap the samples bound it, outside the
+    floor does). A hand mutation (cap widened to 180 degrees) fails
+    both.
+  - Verdicts that moved: none in the existing suites (`camcraft-sim`,
+    app `tilt_band_dip`, `tool_body_bands`, `tool_body_judged`); the
+    floor only lowers a bottom, so a span outside the cap can only move
+    toward conviction against this PR's earlier head.
+  - Still a sampling limit, as the law always stated: the sideways
+    walk of the column between samples, and an upright sample's skip
+    of a band within the cutter's radius (#903) when the span beside
+    it leans.
 - The fixture law's public verdict on a posed move is still the OR of
   this column and the posed capsule sweep (`posed_steel.rs`), whose
   capsules reach one whole radius past each band end. That sweep still
