@@ -180,6 +180,8 @@ mod fixture_library_tests;
 #[cfg(test)]
 mod fixture_vise_tests;
 #[cfg(test)]
+mod fixture_vise_stock_tests;
+#[cfg(test)]
 mod fixture_self_centering_tests;
 #[cfg(test)]
 mod fixture_plate_tests;

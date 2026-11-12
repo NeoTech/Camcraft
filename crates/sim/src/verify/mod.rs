@@ -187,7 +187,7 @@ mod swept;
 mod types;
 mod workholding;
 
-pub use types::{FixturePart, Mode, VerifyContext, Warning};
+pub use types::{excess_floor, FixturePart, Mode, VerifyContext, Warning};
 #[doc(hidden)]
 pub use crossing::{crossed_pairs, crossed_pairs_all};
 pub use engine::{verify, verify_bodies};
