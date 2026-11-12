@@ -167,7 +167,9 @@ fn settings(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
     super::setup_plane_pick::row(ui, state, name);
     super::setup_points_pick::row(ui, state, name);
     super::setup_axis_pick::rows(ui, state, name);
+    super::wcs_pick_row::row(ui, state, name); // #701
     super::setup_wcs_pick::picker(ui, state, name);
+    super::setup_workholding_row::row(ui, state, name);
     ui.separator();
     if ui.button(format!("Delete {name}")).clicked() {
         state.pending.push_back(CommandKind::DeleteSetup(name.to_owned()));
@@ -194,7 +196,10 @@ fn tool_table(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
         for (tool, ops) in &used {
             let number = tool_numbers::number_of(&state.world, tool).map_or_else(|| "?".to_owned(), |n| n.to_string());
             ui.label(number);
-            ui.label(tool);
+            ui.horizontal(|ui| {
+                super::tool_icons::named_glyph(ui, &state.world, tool);
+                ui.label(tool);
+            });
             let size = model::find_by_name(&state.world, tool)
                 .and_then(|e| model::tool_of(&state.world, &e))
                 .map_or_else(|| "missing".to_owned(), |t| format!("Ø{} {}", t.diameter, kind_name(t.kind)));
@@ -209,7 +214,7 @@ fn tool_table(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
     let names: Vec<String> = used.iter().map(|(t, _)| t.clone()).collect();
     if let Some(why) = tool_numbers::clash(&state.world, &names) {
         let ink = super::colorvision::text_inks(ui, &state.world).error;
-        ui.colored_label(ink, why);
+        super::error_text::error_text(ui, ink, &why);
     }
     if let Some(tool) = open {
         crate::actions::open_tool_editor(state, &tool);

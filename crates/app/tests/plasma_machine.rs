@@ -11,7 +11,7 @@
 //! in the crafted files are our own.
 //!
 //! Gate map (#669): covers post::machine (kind, plasma, parse),
-//! app::machine (check_ops plasma branch, validate, draft), app::posting
+//! app::machine, post::machine (check_ops plasma branch, validate, draft), app::posting
 //! (MACHINES, post_serves, post_offer), app::commands (family gate),
 //! app::project (machine round-trip).
 
