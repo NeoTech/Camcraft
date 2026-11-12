@@ -9,6 +9,8 @@ pub mod cli;
 pub mod clock;
 pub mod commands;
 pub mod cutting;
+// #891: turning cutting data - CSS ops, working diameter, the suggestion.
+pub mod cutting_turn;
 pub mod smoothing;
 pub use camcraft_motion::drilling;
 pub mod fixture;
@@ -47,6 +49,8 @@ pub mod pick;
 pub use camcraft_post::post;
 pub mod path_sig;
 pub mod posting;
+// #530: the op-family door at post.
+mod posting_family;
 // #155: standalone Pause / Home entries in the operation list.
 pub mod program_entry;
 pub use camcraft_motion::plasma;
@@ -73,6 +77,8 @@ pub mod setup_mount;
 // #316: transforms between setups and the setup-relative link.
 pub mod setup_relative;
 pub mod setup_post_options;
+// #1031: a setup's workholding (chuck/collet) rpm limit.
+pub mod setup_workholding;
 pub mod setup_sheet;
 // #320: a setup's stock source - its own, or what the setup before leaves.
 pub mod setup_stock;
