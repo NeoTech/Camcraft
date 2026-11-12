@@ -11,6 +11,8 @@ pub mod commands;
 pub mod cutting;
 // #890: which row of a tool's per-material cutting data the document picks.
 pub mod cutting_rows;
+// #891: turning cutting data - CSS ops, working diameter, the suggestion.
+pub mod cutting_turn;
 pub mod smoothing;
 pub use camcraft_motion::drilling;
 pub mod fixture;
@@ -73,6 +75,8 @@ pub mod setup_mount;
 // #316: transforms between setups and the setup-relative link.
 pub mod setup_relative;
 pub mod setup_post_options;
+// #1031: a setup's workholding (chuck/collet) rpm limit.
+pub mod setup_workholding;
 pub mod setup_sheet;
 // #320: a setup's stock source - its own, or what the setup before leaves.
 pub mod setup_stock;

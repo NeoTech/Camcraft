@@ -36,3 +36,5 @@ pub mod catalog_fields;
 // #890: a tool's cutting data per workpiece material.
 pub mod cutting_rows;
 pub mod tools;
+// #891: turning surface speed, feed per rev and the max-rpm clamp.
+pub mod turning_data;

@@ -661,6 +661,8 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
                 // #864: the flag lands with the facets it describes; an
                 // absent key, or a value that is no coarse chord, is none.
                 crate::model_fidelity::set(world, &entity, dto.coarse_mm);
+                // #1054: validate_kind refused a budget out of bounds.
+                crate::model_fidelity::set_budget(world, &entity, dto.facet_budget);
             }
             EntityKind::Stock => {
                 // validate_kind already refused these; Result, never unwrap.
@@ -807,6 +809,11 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
                     None => None,
                     Some(o) => Some(o.to_options(&dto.name).map_err(corrupt)?),
                 };
+                // #1031: a limit no command would accept is a corrupt file,
+                // never a guessed one.
+                if let Some(why) = sdto.workholding_max_rpm.and_then(crate::setup_workholding::invalid) {
+                    return Err(corrupt(format!("setup '{}': {why}", dto.name)));
+                }
                 entity.entity_view(world).set(SetupDef {
                     stock: sdto.stock,
                     // `wcs_one` left exactly one name on every setup.
@@ -824,6 +831,7 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
                     relative_to: sdto.relative_to.clone(),
                     stock_source,
                     post_options,
+                    workholding_max_rpm: sdto.workholding_max_rpm,
                 });
             }
         }

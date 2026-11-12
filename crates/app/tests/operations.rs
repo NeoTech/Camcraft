@@ -6596,6 +6596,7 @@ fn stub_tool() -> Tool {
         orientation: None,
         catalog: camcraft_tools::catalog_fields::ToolCatalog::default(),
         cutting: Vec::new(),
+        turning: None,
     }
 }
 
@@ -6823,9 +6824,13 @@ fn multiaxis_rough_refuses_a_slot_the_cone_cannot_clear() {
     };
     let (world, _history) = job(true);
     let cmd = GenerateOperation::new(&world, "SLOT");
-    let CommandError::Machining(msg) = cmd
-        .err()
-        .expect("a 10-wide shank must refuse a 9-wide slot")
+    let err = cmd.err().expect("a 10-wide shank must refuse a 9-wide slot");
+    // #1015: the shank refusal hands back the plan before its move as a
+    // ghost, so it arrives as `MachiningGhost`, which reads as `Machining`.
+    assert!(err.ghost().is_some(), "the shank refusal carries its ghost");
+    let (CommandError::Machining(msg)
+    | CommandError::MachiningAt { msg, .. }
+    | CommandError::MachiningGhost { msg, .. }) = err
     else {
         panic!("expected a machining refusal");
     };

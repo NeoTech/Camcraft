@@ -69,6 +69,7 @@ fn thread_mill(diameter: f64, pitch: f64) -> Tool {
         orientation: None,
         catalog: camcraft_tools::catalog_fields::ToolCatalog::default(),
         cutting: Vec::new(),
+        turning: None,
     }
 }
 

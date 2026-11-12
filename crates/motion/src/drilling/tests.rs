@@ -72,6 +72,7 @@ pub(super) fn drill_tool(d: f64) -> Tool {
         orientation: None,
         catalog: camcraft_tools::catalog_fields::ToolCatalog::default(),
         cutting: Vec::new(),
+        turning: None,
     }
 }
 
