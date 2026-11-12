@@ -32,12 +32,10 @@ fn count(file: &str, krate: &str) -> usize {
 #[test]
 fn post_change_selects_the_post_dialect_suites() {
     let got = selected("crates/post/src/post/mod.rs", "app");
-    for must in ["fanuc_post", "conformance"] {
-        assert!(got.iter().any(|b| b == must), "{must} missing from {got:?}");
-    }
-    // #921: the heidenhain suites moved into camcraft-post, so a post change selects them there.
+    assert!(got.iter().any(|b| b == "conformance"), "conformance missing from {got:?}");
+    // #921 / #926: fanuc_post and the heidenhain / doosan suites live in camcraft-post, so a post change selects them there.
     let own = selected("crates/post/src/post/mod.rs", "post");
-    for must in ["heidenhain_cycles", "heidenhain_block_form", "doosan_dnm_post"] {
+    for must in ["fanuc_post", "heidenhain_cycles", "heidenhain_block_form", "doosan_dnm_post"] {
         assert!(own.iter().any(|b| b == must), "{must} missing from {own:?}");
     }
     assert!(count("crates/post/src/post/mod.rs", "app") >= 20, "post change selects too few app suites");
