@@ -55,7 +55,17 @@ pub fn op_hits(
     let wh = crate::verify::Workholding { turning, fixed, axis: fixture::rotary_axis_of(world, op) };
     let geom = tool.geom();
     let holder = crate::tool_body::stack(&geom, body.as_ref());
-    Ok(path_hits(path, (&geom, &holder), &wh, spindle, meshes))
+    let mut hits = path_hits(path, (&geom, &holder), &wh, spindle, meshes);
+    // #1037: a lathe holder body against the same steel - the chuck
+    // revolved, the tailstock standing - by generation's own law.
+    if let Some(lathe) = crate::tool_body_lathe::clearance_of(world, &tool_entity) {
+        for w in operation::lathe_steel_hits(world, op, path, &lathe, (turning, fixed)).map_err(|e| format!("tool {}: {e}", op.tool))? {
+            if !hits.contains(&w) {
+                hits.push(w);
+            }
+        }
+    }
+    Ok(hits)
 }
 
 /// The per-op workholding laws themselves, world-free: the post gate's

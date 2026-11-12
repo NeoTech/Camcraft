@@ -151,7 +151,7 @@ pub(super) fn judge(
 /// A move's meridian pieces: its chord, a thread's helix read at its
 /// constant radius, or a meridian arc's chords; `None` when it leaves
 /// the turning plane.
-fn pieces_of(m: &Move, sm: &SignedMeridian, tol: f64) -> Option<Vec<Seg>> {
+pub(super) fn pieces_of(m: &Move, sm: &SignedMeridian, tol: f64) -> Option<Vec<Seg>> {
     if !sm.in_plane(m.from, tol) || !sm.in_plane(m.to, tol) {
         return None;
     }

@@ -100,6 +100,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         spindle,
         fixtures,
         fixture_names,
+        unread_steel,
         z_ceiling,
         workholding,
         fixture_meshes,
@@ -2587,6 +2588,8 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
     let path = super::turning_stock::noted(path, turn_note);
     // #369: a turning steel with no lathe body says its holder went unjudged.
     let path = super::turning_holder::noted(path, &params, &tool, lathe_body.is_some());
+    // #1037: ...and a bodied one names the fixtures its law cannot read.
+    let path = super::turning_holder_steel::noted(path, &params, lathe_body.is_some(), &unread_steel);
 
     // M3.2 stage B: what the program clamps to. The op's setup context
     // decides - user fixtures bound to it (tagged models, implicit-
@@ -2888,6 +2891,16 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             super::turning_holder::judge(&params, &path, &meridian, lathe_body.as_deref(), &tool, &mut verify_prior, &mut warns)
                 .map_err(GenError::Invalid)?;
             warns.extend(workholding_warnings(&path, (&geom, &holder), &fixture_boxes, &workholding, rotary_axis, spindle, mesh_steel));
+            // ...and the lathe holder against that steel (#1037): the chuck
+            // revolved, the tailstock standing.
+            if let Some(b) = lathe_body.as_deref() {
+                let steel = (&workholding.0[..], &workholding.1[..]);
+                for w in super::turning_holder_steel::steel_hits(&params, &path, &material.facets, b, steel, GOUGE_TOL).map_err(GenError::Invalid)? {
+                    if !warns.contains(&w) {
+                        warns.push(w);
+                    }
+                }
+            }
             // The revolved-blade verdict (M5.2 C): the meridian
             // scan of what the bands leave. No sphere can speak it
             // - a grooved part is undercut BY DESIGN, material
