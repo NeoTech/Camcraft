@@ -34,6 +34,11 @@ pub struct PostedFile {
     pub posted: Posted,
 }
 
+/// A post script as a per-op post resolves it: its label (a post
+/// file's path, for a refusal to name; `None` for a caller's own text)
+/// and its text.
+type Script = (Option<String>, String);
+
 /// Longest sanitised operation name in a file name: a file system
 /// limit is never the reason a post fails.
 const NAME_MAX: usize = 48;
@@ -73,7 +78,7 @@ pub fn post_per_op(world: &World, dir: &Path, program: &str) -> Result<Vec<Poste
     if mounts.is_empty() {
         script_source(world)?;
     }
-    let mut scripts: Vec<(Vec<String>, (Option<String>, String))> = Vec::with_capacity(mounts.len());
+    let mut scripts: Vec<(Vec<String>, Script)> = Vec::with_capacity(mounts.len());
     for m in mounts {
         let (label, text) = script_of(&m.post)?;
         scripts.push((m.setups, (Some(label), text)));
@@ -106,7 +111,7 @@ fn post_per_op_with(
     world: &World,
     dir: &Path,
     program: &str,
-    script: impl Fn(&str) -> Option<(Option<String>, String)>,
+    script: impl Fn(&str) -> Option<Script>,
 ) -> Result<Vec<PostedFile>, String> {
     if !dir.is_dir() {
         return Err(format!("{} is not a folder", dir.display()));
