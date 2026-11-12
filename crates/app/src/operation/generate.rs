@@ -111,6 +111,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         part_solid,
         area,
         wcs_origin,
+        unit,
         spindle_note: _,
         carried_overhang: _,
         op_name: _,
@@ -1849,7 +1850,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // rim, round floor or holed face hands its own centre and
             // radius; the typed ones rule only without a selection.
             let (center, radius) = match &src {
-                SrcRef::Selection(s) if !s.is_empty() => circle_of_region(&region)?,
+                SrcRef::Selection(s) if !s.is_empty() => circle_of_region(&region, unit)?,
                 _ => (*center, *radius),
             };
             let path = machining2d::circular(
@@ -1954,7 +1955,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     tool: &tool,
                     holes: cross,
                 };
-                super::cross_spindle::cross_drill(radial, &material.facets, stock_facets.as_deref(), wcs_origin, &cutter, &tool_name)?
+                super::cross_spindle::cross_drill(radial, &material.facets, stock_facets.as_deref(), wcs_origin, &cutter, &tool_name, unit)?
             } else {
                 // M13.5 A: on a plain lathe the Drill kind is the
                 // turret's axial hole - the doors refuse by name a
@@ -1990,6 +1991,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                             prior,
                             (&tool, cutter.body.as_ref()),
                             &tool_name,
+                            unit,
                         )
                     };
                     if let Err(raw) = reach(None) {
