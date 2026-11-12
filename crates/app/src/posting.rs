@@ -628,6 +628,12 @@ pub fn verification_gate(world: &World) -> Vec<String> {
 pub fn verification_report(world: &World) -> GateReport {
     let mut problems = Vec::new();
 
+    // The fidelity clause (#864), first: an operation judged against a
+    // model imported too coarsely to verify is refused by name - the sim
+    // below then refuses to judge it too, so no gouge verdict is read off
+    // a mesh that cannot carry one.
+    problems.extend(crate::model_fidelity::gate_problems(world));
+
     let sim = sim_clause(world);
     problems.extend(sim.problem);
     // The plasma clause (#672): the 3D stock sim carves nothing for a
