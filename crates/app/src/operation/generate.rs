@@ -3008,7 +3008,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // along every move against the part solid. The Section kinds
             // answer the same law inside `verify` (b2), real tip (M13.7).
             if depth_law == DepthLaw::Contain {
-                contain_into(&mut warns, &path, &material.facets, &cutter, depth_law, stl, material.excess);
+                contain_into(&mut warns, &path, &material.facets, &cutter, depth_law, stl, material.excess, &params);
             }
             // The rotary kinds' bands and rapids (M13): `Mode::Rotary`
             // stood the vertical-column laws down; the radial field
@@ -3123,7 +3123,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // along every move against the part solid. The Section kinds
             // answer the same law inside `verify` (b2), real tip (M13.7).
             if depth_law == DepthLaw::Contain {
-                contain_into(&mut warns, &path, &m_gen.facets, &cutter, depth_law, stl, material.excess);
+                contain_into(&mut warns, &path, &m_gen.facets, &cutter, depth_law, stl, material.excess, &params);
             }
             warns.extend(workholding_warnings(
                 &path_world,
@@ -3248,7 +3248,10 @@ const CONTAIN_STEP: f64 = 0.25;
 /// Append the solid law's warnings that the region laws did not
 /// already report, keeping the list's move order: the tool's own tip
 /// and stack against the part solid at every sampled position, the
-/// containment kinds' tessellated hole rims excused (`SolidLaw`).
+/// containment kinds' tessellated hole rims excused (`SolidLaw`) - the
+/// round walls of the holes the op declares, measured about each hole's
+/// own axis (#1205), never a flat.
+#[allow(clippy::too_many_arguments)]
 fn contain_into(
     warns: &mut Vec<Warning>,
     path: &Toolpath,
@@ -3257,6 +3260,7 @@ fn contain_into(
     law: DepthLaw,
     stl: f64,
     excess: f64,
+    params: &OpParams,
 ) {
     let law = verify::SolidLaw {
         step: CONTAIN_STEP,
@@ -3264,7 +3268,12 @@ fn contain_into(
         allow: verify::excess_floor(GOUGE_TOL, excess).unwrap_or(GOUGE_TOL) + (-stl).max(0.0),
         hole_walls: law == DepthLaw::Contain,
     };
-    for w in verify::solid_hits(path, facets, cutter, &law) {
+    let holes = match params {
+        OpParams::Drill { holes, .. } | OpParams::Bore { holes, .. } | OpParams::Thread { holes, .. } => holes.as_slice(),
+        _ => &[],
+    };
+    let walls: Vec<verify::HoleAxis> = holes.iter().map(|h| verify::HoleAxis::vertical(h.xy.x, h.xy.y)).collect();
+    for w in verify::solid_hits_walled(path, facets, cutter, &law, &walls) {
         if !warns.contains(&w) {
             warns.push(w);
         }

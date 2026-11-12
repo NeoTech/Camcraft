@@ -91,8 +91,12 @@ fn the_kerf_geometry_is_bounded_by_name() {
         (r#"[ { "id": "C1", "gap": 0, "wire_diameter": 0.25 } ]"#, r#""C1" gap: 0 mm must be above 0 mm"#),
         (r#"[ { "id": "C1", "gap": 0.125, "wire_diameter": 0.25 } ]"#, r#""C1" gap: 0.125 mm must be smaller than the wire's radius (0.125 mm)"#),
         (r#"[ { "id": "C1", "gap": 5, "wire_diameter": 0.25 } ]"#, "smaller than the wire's radius"),
-        (r#"[ { "id": "C1", "gap": 0.02, "wire_diameter": 50 } ]"#, r#""C1" wire_diameter: 50 mm is outside (0, 1] mm"#),
-        (r#"[ { "id": "C1", "wire_diameter": 0 } ]"#, "wire_diameter: 0 mm is outside (0, 1] mm"),
+        (r#"[ { "id": "C1", "gap": 0.02, "wire_diameter": 50 } ]"#, r#""C1" wire_diameter: 50 mm is outside [0.02, 1] mm"#),
+        (r#"[ { "id": "C1", "wire_diameter": 0 } ]"#, "wire_diameter: 0 mm is outside [0.02, 1] mm"),
+        // An inch wire typed into a mm file: below the cited 0.02 mm.
+        (r#"[ { "id": "C1", "gap": 0.001, "wire_diameter": 0.010 } ]"#, r#""C1" wire_diameter: 0.01 mm is outside [0.02, 1] mm"#),
+        // The gap is bounded on its own, with no wire stated beside it.
+        (r#"[ { "id": "C1", "gap": 5 } ]"#, r#""C1" gap: 5 mm is outside (0, 0.5] mm"#),
     ] {
         let err = refusal(&wire_with(conds));
         assert!(err.contains(says), "{conds}: {err}");
@@ -101,13 +105,21 @@ fn the_kerf_geometry_is_bounded_by_name() {
         (r#"[ { "id": "E1", "undersize": 0 } ]"#, r#""E1" undersize: 0 mm is outside (0, 1] mm"#),
         (r#"[ { "id": "E1", "undersize": 3 } ]"#, "undersize: 3 mm is outside (0, 1] mm"),
         (r#"[ { "id": "E1", "gap": 0 } ]"#, "gap: 0 mm must be above 0 mm"),
+        (r#"[ { "id": "E1", "gap": 5, "undersize": 0.1 } ]"#, r#""E1" gap: 5 mm is outside (0, 0.5] mm"#),
+        (r#"[ { "id": "E1", "gap": 0.3, "undersize": 0.1 } ]"#, r#""E1" gap: 0.3 mm is larger than the undersize (0.1 mm)"#),
     ] {
         let err = refusal(&sinker_with(conds));
         assert!(err.contains(says), "{conds}: {err}");
     }
-    // The bound is on mm: an inch file's 0.05 in (1.27 mm) wire refuses.
+    // The bounds are on mm: an inch file's 0.05 in (1.27 mm) wire refuses,
+    // its 0.010 in (0.254 mm) wire passes.
     let err = refusal(&inch(&wire_with(r#"[ { "id": "C1", "wire_diameter": 0.05 } ]"#)));
     assert!(err.contains("wire_diameter: 1.27"), "{err}");
+    assert!(parse_mch(&inch(&wire_with(r#"[ { "id": "C1", "gap": 0.001, "wire_diameter": 0.010 } ]"#))).is_ok());
+    // At the edges: the thinnest wire, the widest gap, a gap equal to its undersize.
+    assert!(parse_mch(&wire_with(r#"[ { "id": "C1", "gap": 0.005, "wire_diameter": 0.02 } ]"#)).is_ok());
+    assert!(parse_mch(&wire_with(r#"[ { "id": "C1", "gap": 0.5 } ]"#)).is_ok());
+    assert!(parse_mch(&sinker_with(r#"[ { "id": "E1", "gap": 0.3, "undersize": 0.3 } ]"#)).is_ok());
 }
 
 /// Review #560 request 2: each kind's own condition field.
@@ -191,4 +203,6 @@ fn a_hand_edited_project_machine_with_a_bad_table_is_not_sane() {
     let mut s = parse_mch(SINKER).expect("sinker");
     s.edm = Some(Edm { conditions: vec![Condition { id: "E1".into(), wire_diameter: Some(0.25), ..Condition::default() }], ..Edm::default() });
     assert!(!s.is_sane(), "a wire_diameter on a sinker");
+    s.edm = Some(Edm { conditions: vec![Condition { id: "E1".into(), gap: Some(0.3), undersize: Some(0.1), ..Condition::default() }], ..Edm::default() });
+    assert!(!s.is_sane(), "a sinker gap larger than its undersize");
 }

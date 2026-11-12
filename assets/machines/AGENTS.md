@@ -89,14 +89,14 @@ unstated capability into existence.
   | `id` | - | required. A word with no surrounding spaces, or a whole number ≥ 0 (`330` reads as `"330"`; `1.0`, `1.5`, `-3` refuse). Unique ignoring case and leading zeros: `"C1"`/`"c1"` and `"01"`/`1` are one selector and refuse as a pair. A lookup matches the id exactly as the table writes it. |
   | `name`, `notes` | - | words, free text |
   | `role` | - | `rough`, `skim` or `finish` |
-  | `gap` | length | spark gap per side, > 0. On a wire, smaller than the wire's radius when both are stated. |
-  | `wire_diameter` | length | WIRE only (refused on a sinker). In (0, 1] mm. When the machine states `edm.wire_diameters`, it must be one of them within 0.001 mm; when it states none, any wire in range passes. |
+  | `gap` | length | spark gap per side, in (0, 0.5] mm. On a wire, smaller than the wire's radius when both are stated; on a sinker, no larger than the undersize when both are stated. |
+  | `wire_diameter` | length | WIRE only (refused on a sinker). In [0.02, 1] mm. When the machine states `edm.wire_diameters`, it must be one of them within 0.001 mm; when it states none, any wire in range passes. |
   | `undersize` | length | SINKER only (refused on a wire): the electrode undersize per side, in (0, 1] mm |
 
   Lengths are in the file's length unit, scaled to mm on the way in;
   the bounds and the finite check apply to the mm value. Every
   refusal names the condition id, the key and the unit (`edm condition
-  "C1" wire_diameter: 50 mm is outside (0, 1] mm`). Every field but
+  "C1" wire_diameter: 50 mm is outside [0.02, 1] mm`). Every field but
   `id` is optional (absent = not stated; the op that needs it refuses
   by name, `Edm::condition`). An absent `conditions` and `[]` read the
   same: no table, and every EDM op refuses. `Machine::is_sane` applies
