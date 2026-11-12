@@ -54,6 +54,8 @@ const POSTS: &[(&str, &str, &str)] = &[
     ("Heidenhain", "heidenhain", "heidenhain"),
     ("Mazak", "mazak", "mazak"),
     ("Tormach PathPilot", "tormach", "tormach"),
+    ("grblHAL", "grblhal", "grblhal"),
+    ("TinyG", "tinyg", "tinyg"),
     ("Doosan DNM", "doosan-dnm", "doosan-dnm"),
     ("Makera Carvera", "carvera", "carvera"),
 ];
@@ -62,9 +64,14 @@ const POSTS: &[(&str, &str, &str)] = &[
 /// rather than post, so it has no `.nc` there. Heidenhain (#51) supports
 /// tapping, but this legacy golden lacks spindle speed. Carvera (#707)
 /// cannot tap (no canned cycles or spindle reverse).
+/// #710: grblHAL's core G-code list has no G84 either; TinyG has no
+/// canned cycles at all and posts drilling as plain moves, but a tap
+/// cannot be plain moves.
 const REFUSED: &[(&str, &str, &str)] = &[
     ("heidenhain", "tap_plate", "tapping needs a positive integral spindle speed"),
     ("carvera", "tap_plate", "tapping"),
+    ("grblhal", "tap_plate", "tapping"),
+    ("tinyg", "tap_plate", "tapping"),
 ];
 
 /// The TURNING dialects (M13.5): their goldens are the lathe
@@ -292,8 +299,11 @@ fn the_synthesized_stream_locks_the_tool_and_spindle_words() {
         // #51: Heidenhain supports the full G55 + tap stream.
         // #707: the Carvera refuses the tap the same way (no canned
         // cycles, no spindle reverse); its G55 stands.
+        // #710: grblHAL has no G84, so its golden drops only the tap;
+        // TinyG the same (its drill chains post as plain moves).
         let stream = match *cps_stem {
             "carvera" => synth_stream_with("G55", false),
+            "grblhal" | "tinyg" => synth_stream_with("G55", false),
             _ => synth_stream(),
         };
         let cps = read(&format!("assets/posts/{cps_stem}.cps"));
@@ -383,6 +393,8 @@ const EXTENSIONS: &[(&str, &str)] = &[
     ("heidenhain", "I"),
     ("mazak", "nc"),
     ("tormach", "nc"),
+    ("grblhal", "nc"),
+    ("tinyg", "gcode"),
     ("doosan-dnm", "nc"),
     ("carvera", "nc"),
     ("fanuc-lathe", "nc"),

@@ -25,7 +25,7 @@ use camcraft_app::world::new_world;
 
 const FIXTURE: &str = include_str!("edm/wire-iso-fixture.mch");
 const WIRE: &str = "Generic ISO Wire EDM";
-const GOLDEN: &str = "tests/golden/nc/wire-iso/wire_contour_punch.nc";
+const GOLDEN: &str = "tests/golden/nc/wire-iso/wire_slug_punch.nc";
 
 fn cps(name: &str) -> &'static str {
     BUILTINS.iter().find(|(n, _)| *n == name).map(|(_, s)| *s).expect("registered")

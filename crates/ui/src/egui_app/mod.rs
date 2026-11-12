@@ -179,6 +179,8 @@ pub mod theme_files;
 // digest straight (the imgui panels' fold checks moved there at M-g), and
 // the view cube's pick law straight.
 pub(crate) mod viewcube;
+pub(crate) mod viewport_bar;
+pub(crate) mod viewport_layout;
 pub(crate) mod world;
 
 #[cfg(test)]

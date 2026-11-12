@@ -93,6 +93,7 @@ mod first_setup;
 mod structural;
 // #661: every operation kind wears its own SVG-mastered glyph.
 mod op_icon_table;
+mod tool_icon_wiring;
 // #330: a clicked tilted face is turned flat onto the plane.
 mod plane_face_lay;
 // #554: the plane row's click takes the face, an axis row's the edge.
@@ -141,6 +142,8 @@ mod step_budget;
 mod two_point_marks;
 // #1104: the Setups page lists setups only.
 mod setups_declutter;
+// #1206: each setup's own Machine and Post pages pick its own mount.
+mod setup_mount_pages;
 
 /// What the per-frame state of `Shell` is, minus the GPU half: the fields
 /// `shell_layout` touches, so the harness exercises the window's real body.
