@@ -35,6 +35,7 @@ pub(crate) mod gpu_select;
 pub mod contrast;
 mod boundary;
 mod gcode_highlight;
+mod gcode_view;
 mod debug_info;
 mod status_alert;
 
@@ -82,6 +83,7 @@ mod tool_profile_page;
 mod tool_holder_picker;
 // #93 slice 2: the Profile tab's drawn cutter, neck and shank.
 mod tool_cutter_page;
+mod tool_cutter_params;
 mod setup_wcs_pick;
 // #343: a setup's own node pages (settings, machine, post, fixtures, tools).
 mod setup_pages;
