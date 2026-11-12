@@ -4,9 +4,16 @@
 //! malformed input never enters the history ("validate early").
 
 // M13.2: workpiece material + the feeds-and-speeds suggestion.
+pub mod accessory;
+pub mod builtin_vise;
 pub mod cutting_data;
 pub mod delete_entity;
 pub mod fixture;
+pub mod fixture_move;
+pub mod fixture_plate;
+pub mod mod_vise;
+// #832: edit and re-fit a placed mod vise pair.
+pub mod mod_vise_edit;
 pub mod import_fixture;
 pub mod import_model;
 // #339 slice 6: a fixture library entry placed into a setup.
@@ -26,6 +33,7 @@ pub mod repair_model;
 pub mod ribbon_pins;
 pub mod select_entity;
 pub mod set_stock;
+pub mod stock_source_only;
 pub mod setup;
 pub mod setup_delete;
 // #196: a setup's picked program offset.
@@ -34,19 +42,25 @@ pub mod setup_wcs;
 // #343: a setup's own machine and post.
 pub mod setup_mount;
 pub mod setup_post_options;
+// #821: a setup's stated nose-to-rotary figure (a raised rotary).
+pub mod setup_nose;
+pub mod setup_workholding;
 // #316: a setup placed relative to another (flip / turn presets).
 pub mod setup_relative;
 // #320: a setup's stock source.
 pub mod setup_stock;
 pub mod set_units;
-// M6.1 C: the document's theme choice, `SelectPost`'s twin.
+// M6.1 C / #877: the theme, a user preference (not undoable, not saved
+// with the project - `app::prefs` keeps it).
 pub mod theme;
-// M13.4: the viewer's colour-vision remap, `SetTheme`'s twin.
+// M13.4 / #877: the viewer's colour-vision remap, the theme's twin.
 pub mod color_vision;
 pub mod set_wcs;
 pub mod tool;
 // #368: a tool's modelled body.
 pub mod tool_body;
+// #93 slice 2: a milling tool's drawn cutter outline.
+pub mod tool_cutter;
 // #300: a tool library file imported as one undo unit.
 pub mod tool_import;
 // #221: a tool's controller number.
@@ -55,11 +69,16 @@ pub mod update_model;
 
 use flecs_ecs::prelude::World;
 
+pub use accessory::{AccessoryPlacement, InsertAccessory, SetAccessory};
+pub use builtin_vise::{InsertVise, SetVise, VisePlacement};
 pub use cutting_data::{ApplyCuttingData, SetWorkMaterial};
 pub use delete_entity::DeleteEntity;
 pub use fixture::{
     AddFixtureModel, DeleteFixture, MoveFixture, SetFixtureFixed, TagFixture, UntagFixture,
 };
+pub use fixture_plate::{InsertPlate, PlaceOnPlate, PlatePlacement, SetPlate, SetPlateGrid};
+pub use mod_vise::PlaceModVisePair;
+pub use mod_vise_edit::{RefitModVise, SetModJaw};
 pub use import_fixture::ImportFixture;
 pub use import_model::ImportModel;
 pub use insert_fixture::InsertFixture;
@@ -78,20 +97,24 @@ pub use repair_model::RepairModel;
 pub use ribbon_pins::SetRibbonPins;
 pub use select_entity::SelectEntity;
 pub use set_stock::SetStock;
+pub use stock_source_only::SetStockSourceOnly;
 pub use setup::{ActivateSetup, CreateSetup, DeleteSetup, SetOperationSetup};
 pub use setup_align::AlignPartToSetup;
 pub use setup_wcs::SetSetupWorkOffset;
 pub use setup_mount::{SetSetupMachine, SetSetupPost};
 pub use setup_post_options::SetSetupPostOptions;
+pub use setup_nose::SetSetupNoseToAxis;
+pub use setup_workholding::SetSetupWorkholdingRpm;
 pub use setup_relative::SetSetupRelative;
 pub use setup_stock::SetSetupStockSource;
 pub use set_units::SetUnits;
-pub use theme::{theme_of, theme_set, SetTheme};
-pub use color_vision::{color_vision_of, color_vision_set, SetColorVision};
+pub use theme::{check_theme, theme_of, theme_set};
+pub use color_vision::{color_vision_of, color_vision_set};
 pub use set_wcs::SetWcsOrigin;
-pub use tool::{AddTool, ChangeTool, DeleteTool};
+pub use tool::{AddTool, ChangeTool, DeleteTool, HolderPick};
 pub use tool_body::{LatheBodySpec, SetToolBody, ToolBodySpec};
-pub use tool_import::{ImportReport, ImportTools};
+pub use tool_cutter::{ReshapeTool, SetToolCutter};
+pub use tool_import::{ImportMode, ImportReport, ImportTools};
 pub use tool_number::SetToolNumber;
 pub use update_model::UpdateModel;
 
@@ -103,6 +126,10 @@ pub enum CommandError {
     NameConflict(String),
     #[error("invalid parameters: {0}")]
     Invalid(String),
+    /// A precondition the user can fix, said in plain English with what to
+    /// do next (#1105): shown as is, with no "invalid parameters:" prefix.
+    #[error("{0}")]
+    Needs(String),
     #[error(transparent)]
     Import(#[from] crate::geometry::ImportError),
     #[error("'{0}' import is not supported yet; import a STEP, STL, or OBJ file instead")]
@@ -114,6 +141,12 @@ pub enum CommandError {
     /// `Machining` does.
     #[error("could not generate the toolpath: {msg}")]
     MachiningAt { msg: String, at: crate::geometry::Point3 },
+    /// A [`Machining`](CommandError::Machining) refusal that handed back
+    /// the moves it had built (#261 part 3), world coordinates, with the
+    /// spot it names if any. Display-only: the moves are never cached,
+    /// so the operation still has no toolpath. Reads as `Machining` does.
+    #[error("could not generate the toolpath: {msg}")]
+    MachiningGhost { msg: String, at: Option<crate::geometry::Point3>, ghost: crate::machining2d::Ghost },
 }
 
 impl CommandError {
@@ -122,6 +155,17 @@ impl CommandError {
     pub fn location(&self) -> Option<crate::geometry::Point3> {
         match self {
             CommandError::MachiningAt { at, .. } => Some(*at),
+            CommandError::MachiningGhost { at, .. } => *at,
+            _ => None,
+        }
+    }
+
+    /// The moves a refused generation had built (#261 part 3), for the
+    /// viewport's diagnostic ghost - never a toolpath.
+    #[must_use]
+    pub fn ghost(&self) -> Option<&crate::machining2d::Ghost> {
+        match self {
+            CommandError::MachiningGhost { ghost, .. } => Some(ghost),
             _ => None,
         }
     }

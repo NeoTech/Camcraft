@@ -19,7 +19,7 @@ use egui::{RichText, Ui};
 
 use camcraft_app::{model, setup, setup_mount, tool_numbers};
 
-use crate::state::{CommandKind, SetupPage, State};
+use crate::state::{CommandKind, SetupPage, State, UiTarget};
 
 use super::pages;
 use super::panes::kind_name;
@@ -40,6 +40,7 @@ pub(super) fn page(ui: &mut Ui, state: &mut State, name: &str, page: SetupPage) 
             if editable(ui, state, ctx) {
                 ownership(ui, state, ctx, Mount::Machine);
                 pages::machine_section(ui, state);
+                super::setup_rotary_page::section(ui, state, ctx);
             }
         }
         SetupPage::Post => {
@@ -134,18 +135,27 @@ fn ownership(ui: &mut Ui, state: &mut State, ctx: Option<&str>, which: Mount) {
     ui.separator();
 }
 
+/// The active-setup radio's words (#866: "furniture" was our in-code
+/// word for a setup's stock, WCS and fixtures - never a user's).
+/// The one pointer line to the browser's Fixtures and Tool list nodes, shared
+/// by the Setups page (no setups) and the implicit Settings page (#1197).
+pub(crate) const WORKHOLDING_POINTER: &str = "Fixtures and tools are under Setup in the browser, not on this page.";
+
+pub(crate) const ACTIVE_SETUP_LABEL: &str = "Active setup - new operations go into it, and the Stock and Work offset pages edit it";
+
 /// The setup's settings: which setup is active, where its stock comes
 /// from, how the part sits, and the word its WCS posts as.
 fn settings(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
     let Some(name) = ctx else {
         ui.label("No setups in this document: the one stock and the one WCS act as the first setup.");
+        hint(ui, WORKHOLDING_POINTER);
         if ui.button("Create first setup").clicked() {
             state.pending.push_back(CommandKind::CreateSetup { name: None, datum_from: None });
         }
         return;
     };
     let is_active = setup::active(&state.world).as_deref() == Some(name);
-    if ui.radio(is_active, "Active setup - new operations and furniture join it").clicked() && !is_active {
+    if ui.radio(is_active, ACTIVE_SETUP_LABEL).clicked() && !is_active {
         state.pending.push_back(CommandKind::ActivateSetup(Some(name.to_owned())));
     }
     ui.separator();
@@ -163,11 +173,23 @@ fn settings(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
     super::setup_plane_pick::row(ui, state, name);
     super::setup_points_pick::row(ui, state, name);
     super::setup_axis_pick::rows(ui, state, name);
+    super::wcs_pick_row::row(ui, state, name); // #701
     super::setup_wcs_pick::picker(ui, state, name);
+    super::setup_workholding_row::row(ui, state, name);
     ui.separator();
-    if ui.button(format!("Delete {name}")).clicked() {
-        state.pending.push_back(CommandKind::DeleteSetup(name.to_owned()));
-    }
+    // Workholding is edited on the Fixtures page only (#1197): the one
+    // click to it sits on the Delete line, so the page gains no row.
+    ui.horizontal(|ui| {
+        if ui.button(format!("Delete {name}")).clicked() {
+            state.pending.push_back(CommandKind::DeleteSetup(name.to_owned()));
+        }
+        if ui.button(format!("Open {name} fixtures")).clicked() {
+            // Activate it too, as the browser's Fixtures row does: the
+            // fixture page edits only the active setup.
+            super::browser_pane::focus(state, name);
+            crate::actions::target(state, UiTarget::SetupNode(name.to_owned(), SetupPage::Fixtures));
+        }
+    });
 }
 
 /// The tools this setup's operations use, in program order: number,
@@ -190,7 +212,10 @@ fn tool_table(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
         for (tool, ops) in &used {
             let number = tool_numbers::number_of(&state.world, tool).map_or_else(|| "?".to_owned(), |n| n.to_string());
             ui.label(number);
-            ui.label(tool);
+            ui.horizontal(|ui| {
+                super::tool_icons::named_glyph(ui, &state.world, tool);
+                ui.label(tool);
+            });
             let size = model::find_by_name(&state.world, tool)
                 .and_then(|e| model::tool_of(&state.world, &e))
                 .map_or_else(|| "missing".to_owned(), |t| format!("Ø{} {}", t.diameter, kind_name(t.kind)));
@@ -205,7 +230,7 @@ fn tool_table(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
     let names: Vec<String> = used.iter().map(|(t, _)| t.clone()).collect();
     if let Some(why) = tool_numbers::clash(&state.world, &names) {
         let ink = super::colorvision::text_inks(ui, &state.world).error;
-        ui.colored_label(ink, why);
+        super::error_text::error_text(ui, ink, &why);
     }
     if let Some(tool) = open {
         crate::actions::open_tool_editor(state, &tool);

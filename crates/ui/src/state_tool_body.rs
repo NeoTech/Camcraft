@@ -28,6 +28,12 @@ pub enum BodyPickMode {
     Tip,
     /// The clicked facet's outward normal becomes the tool axis.
     Axis,
+    /// #361, a lathe draft: the clicked facet's outward normal becomes
+    /// the radial direction (away from the spindle axis).
+    Radial,
+    /// #361, a lathe draft: the clicked facet's outward normal becomes
+    /// the spindle direction (the lathe's +Z).
+    Along,
 }
 
 /// The editor's body draft for the tool it is open on.
@@ -45,6 +51,13 @@ pub struct ToolBodyUi {
     /// The model origin's height above the tip, along `axis`.
     pub offset: f64,
     pub pick: BodyPickMode,
+    /// #361: the turning-frame placement, when the draft is a lathe
+    /// body (a lathe steel always; a boring bar by choice). `axis` and
+    /// `offset` then go unread.
+    pub lathe: Option<super::tool_body_lathe_ui::LatheDraft>,
+    /// Note on how the placement was determined (#370: auto-aligned by
+    /// ISO 13399 coordinate systems, or why it fell back to numeric).
+    pub align_note: Option<String>,
     /// The preview's orbit, radians off its default view.
     pub yaw: f32,
     pub pitch: f32,
@@ -120,10 +133,14 @@ impl State {
     pub(crate) fn sync_tool_body_ui(&mut self) {
         let world = self.editor_tool_body();
         let facets = world.as_ref().map(|b| Arc::clone(&b.facets));
-        if self.tool_body_ui.tool == self.tool_ui.name && same(facets.as_ref(), self.tool_body_ui.seen.as_ref()) {
+        if self.tool_body_ui.tool == self.tool_ui.name
+            && same(facets.as_ref(), self.tool_body_ui.seen.as_ref())
+            && !self.body_draft_frame_stale()
+        {
             return;
         }
-        let mut d = ToolBodyUi { tool: self.tool_ui.name.clone(), axis: [0.0, 0.0, 1.0], ..ToolBodyUi::default() };
+        let lathe = self.lathe_draft_for(world.as_ref());
+        let mut d = ToolBodyUi { tool: self.tool_ui.name.clone(), axis: [0.0, 0.0, 1.0], lathe, ..ToolBodyUi::default() };
         if let Some(b) = world {
             d.source = b.source;
             d.facets = b.facets;
@@ -139,21 +156,39 @@ impl State {
         }
     }
 
-    /// Read a STEP / STL / OBJ into the draft (+Z axis, origin at the
+    /// Read a STEP / STL / OBJ into the draft (auto-aligned by ISO 13399
+    /// coordinate systems when present, otherwise +Z axis / origin at
     /// tip until placed). Nothing reaches the world until Apply body.
     pub(crate) fn import_tool_body_from(&mut self, path: &Path) {
         self.sync_tool_body_ui();
-        match tool_body_view::load(path) {
-            Ok((source, facets)) => {
+        match tool_body_view::load_aligned(path) {
+            Ok(loaded) if self.tool_body_ui.lathe.is_some() => self.import_lathe_body(loaded),
+            Ok(loaded) => {
                 let d = &mut self.tool_body_ui;
-                self.status = format!(
-                    "body {source}: {} facets - set the axis and tip, then Apply body",
-                    facets.len()
-                );
-                d.source = source;
-                d.facets = Arc::from(facets);
-                d.axis = [0.0, 0.0, 1.0];
-                d.offset = 0.0;
+                d.source = loaded.source;
+                d.facets = Arc::from(loaded.facets);
+                match loaded.alignment {
+                    Ok((axis, offset)) => {
+                        d.axis = axis;
+                        d.offset = offset;
+                        d.align_note = Some("aligned by ISO 13399 coordinate systems".into());
+                        self.status = format!(
+                            "body {}: {} facets - aligned by ISO 13399 coordinate systems; Apply body",
+                            d.source,
+                            d.facets.len()
+                        );
+                    }
+                    Err(why) => {
+                        d.axis = [0.0, 0.0, 1.0];
+                        d.offset = 0.0;
+                        d.align_note = Some(format!("numeric placement ({why})"));
+                        self.status = format!(
+                            "body {}: {} facets - numeric placement ({why}); set axis and tip, then Apply body",
+                            d.source,
+                            d.facets.len()
+                        );
+                    }
+                }
                 d.pick = BodyPickMode::Off;
                 d.preview = None;
             }
@@ -164,7 +199,7 @@ impl State {
     /// The draft's placement as `SetToolBody` would read it, cached.
     pub(crate) fn tool_body_preview(&mut self) -> Option<&Result<ToolBody, String>> {
         let d = &mut self.tool_body_ui;
-        if d.facets.is_empty() {
+        if d.facets.is_empty() || d.lathe.is_some() {
             return None;
         }
         let key: PreviewKey = (
@@ -179,12 +214,16 @@ impl State {
 
     /// A click on the preview in a pick mode fills the numbers (ephemeral).
     pub(crate) fn apply_body_pick(&mut self, hit: BodyPick) {
+        if self.tool_body_ui.lathe.is_some() {
+            return self.apply_lathe_body_pick(hit);
+        }
         let d = &mut self.tool_body_ui;
         match d.pick {
-            BodyPickMode::Off => return,
+            BodyPickMode::Off | BodyPickMode::Radial | BodyPickMode::Along => return,
             BodyPickMode::Tip => match tool_body_view::tip_offset_at(hit.vertex, d.axis) {
                 Some(o) => {
                     d.offset = o;
+                    d.align_note = Some("manual placement".into());
                     let u = self.units();
                     self.status = format!(
                         "tip picked: offset {} {} along the axis",
@@ -197,6 +236,7 @@ impl State {
             BodyPickMode::Axis => match hit.normal {
                 Some(n) => {
                     d.axis = n;
+                    d.align_note = Some("manual placement".into());
                     self.status = format!(
                         "axis picked: {}",
                         tool_body_view::axis_label(n).map_or_else(|| format!("({:.3}, {:.3}, {:.3})", n[0], n[1], n[2]), str::to_owned)
@@ -234,6 +274,9 @@ impl State {
         if d.facets.is_empty() {
             return;
         }
+        if d.lathe.is_some() {
+            return self.queue_apply_lathe_tool_body();
+        }
         let body = BodyDraft { source: d.source.clone(), facets: Arc::clone(&d.facets), axis: d.axis, offset: d.offset };
         self.pending.push_back(CommandKind::SetToolBody { name: self.tool_ui.name.clone(), body: Some(body) });
     }
@@ -244,7 +287,8 @@ impl State {
         if self.editor_tool_body().is_some() {
             self.pending.push_back(CommandKind::SetToolBody { name: self.tool_ui.name.clone(), body: None });
         } else {
-            self.tool_body_ui = ToolBodyUi { tool: self.tool_ui.name.clone(), axis: [0.0, 0.0, 1.0], ..ToolBodyUi::default() };
+            let lathe = self.lathe_draft_for(None);
+            self.tool_body_ui = ToolBodyUi { tool: self.tool_ui.name.clone(), axis: [0.0, 0.0, 1.0], lathe, ..ToolBodyUi::default() };
         }
     }
 

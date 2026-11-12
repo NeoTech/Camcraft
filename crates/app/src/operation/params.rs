@@ -420,6 +420,7 @@ impl OpParams {
                 entry_ramp,
                 steep_stepover,
                 pencil_reference,
+                fill_openings,
             } => {
                 // v16: the pattern chooses a different kinematic (and
                 // the raster fields only answer to Parallel), so they
@@ -488,6 +489,14 @@ impl OpParams {
                         w(h, *s);
                     }
                     None => h.write_u8(0),
+                }
+                // #1196: the land width changes the surface the path
+                // is planned on. Only a stated width digests (a tag
+                // byte, then the number), so every op without one
+                // keeps the stamp it had - no one-time staleness.
+                if let Some(s) = fill_openings {
+                    h.write_u8(0x4C);
+                    w(h, *s);
                 }
             }
             // The deburr ride digests the one authored number, the
@@ -860,6 +869,47 @@ impl OpParams {
                 });
                 wt(h, *tilt);
             }
+            OpParams::TrochoidalSlot {
+                a,
+                b,
+                width,
+                loop_width,
+                step,
+                max_engagement,
+                ret,
+                smoothing,
+                stock_to_leave,
+                clearance_z,
+                retract_z,
+                top_z,
+                bottom_z,
+                stepdown,
+                feed,
+                return_feed,
+                plunge_feed,
+                climb,
+            } => {
+                wp2(h, *a);
+                wp2(h, *b);
+                for v in [*width, loop_width.unwrap_or(-1.0), *step, *max_engagement, *smoothing, *stock_to_leave] {
+                    w(h, v);
+                }
+                match ret {
+                    crate::machining2d::TrochoidReturn::Microlift { height } => {
+                        h.write_u8(0);
+                        w(h, *height);
+                    }
+                    crate::machining2d::TrochoidReturn::Retract => h.write_u8(1),
+                }
+                wh(h, *clearance_z);
+                wh_opt(h, *retract_z);
+                wh(h, *top_z);
+                wh(h, *bottom_z);
+                for v in [*stepdown, *feed, *return_feed, *plunge_feed] {
+                    w(h, v);
+                }
+                h.write_u8(u8::from(*climb));
+            }
             OpParams::Trace {
                 clearance_z,
                 retract_z,
@@ -1004,6 +1054,7 @@ impl OpParams {
                     CycleChoice::Drill => 2,
                     CycleChoice::Peck => 3,
                     CycleChoice::Tap => 4,
+                    CycleChoice::FloatingTap => 7,
                     CycleChoice::Bore => 5,
                     CycleChoice::BackBore => 6,
                 });
@@ -1386,6 +1437,41 @@ impl OpParams {
                     w(h, v);
                 }
                 h.write_u8(set_wcs.unwrap_or(0xff));
+            }
+            // The wire contour (#532): every stored word. The wire
+            // and the gap are the machine condition's - `current_stamp`
+            // digests them (`wire_op::stamp_condition`).
+            OpParams::WireContour(p) => {
+                wh(h, p.top_z);
+                wh(h, p.bottom_z);
+                h.write(p.condition.as_bytes());
+                h.write_u8(0xff);
+                h.write_u8(u8::from(p.side == super::WireSide::Punch));
+                match p.start {
+                    Some([x, y]) => {
+                        h.write_u8(1);
+                        w(h, x);
+                        w(h, y);
+                    }
+                    None => h.write_u8(0),
+                }
+            }
+            // The sinker burn (#541): every stored number, the datum
+            // and the condition id.
+            OpParams::SinkerBurn(p) => {
+                wh(h, p.clearance_z);
+                wh(h, p.top_z);
+                wh(h, p.floor_z);
+                h.write_u8(match p.datum {
+                    super::SinkerDatum::WorkTop => 0,
+                    super::SinkerDatum::CavityFloor => 1,
+                    super::SinkerDatum::ElectrodeTip => 2,
+                });
+                for v in [p.depth, p.x, p.y, p.feed] {
+                    w(h, v);
+                }
+                h.write(p.condition.as_bytes());
+                h.write_u8(0xff);
             }
             // The plasma profile (#670): every stored number, the
             // optional ones with a presence byte.

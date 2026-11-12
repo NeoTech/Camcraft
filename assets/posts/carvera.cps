@@ -16,6 +16,7 @@ minimumRevision = 1;
 extension = "nc";
 setCodePage = "utf-8";
 capabilities = 1; // reference contract: integer feature mask (bit 1 = milling)
+coolantModes = true; // reads PARAM Coolant (#869): the op's ask is posted, or refused by name
 
 // Determinism law: no timestamps, no randomness - the same stream
 // always posts to the same text (golden files depend on it).
@@ -27,9 +28,13 @@ var spindleWait = false;   // TOOL, SECTION - the preamble writes them
 var toolWait = false;      // when the first motion needs them legal
 var tNo = 0;
 var coolant = "";          // the M-code this section started, if any
+var coolantAsk = "flood";  // the section's PARAM Coolant (#869), flood when unstated
+var coolantOp = "";        // the section's OperationName, for refusals
 var sectionOpen = false;   // preamble written (a legacy .cl carries no SECTION)
 var orgX = 0, orgY = 0, orgZ = 0; // the WCS slot origin (OriginX/Y/Z PARAMs)
 var pendingDwell = null;   // a drilling dwell owed at its hole's bottom
+var smoothTol = 0;          // #616: the section's PARAM Smoothing, mm (0: none asked)
+var smoothMode = "";        // #616: "finish" or "rough"
 
 // ------------------------------------------------------------ helpers
 // The firmware is millimetres only (its G20 "will halt the machine"), so
@@ -63,21 +68,37 @@ function tiltOk(p) {  // this post is 3-axis: a tilted record is refused
   return false;
 }
 
-// The machine file's coolant list: the Carvera's only entry is its air
-// blast (M7 "starts the airflow", M9 stops it). The first Flood entry,
-// else the first entry at all, is the section's on code.
-function coolantCode() {
+// The machine file's coolant list (#869): the op's ask is the code the
+// machine states for it - the Carvera's air blast is its `Air` entry (M7
+// "starts the airflow", M9 stops it). A flood ask takes the Flood entry,
+// failing one the first coded entry of no known family (a shop's own
+// name); a stated codeless Flood is the operator's own valve, silent. A
+// list that states only other kinds (an Air-only Carvera) has no flood
+// code: refused by name - never M7 posted for a flood ask, never M8 for
+// an air ask, never silently dry. An unstated list stays silent.
+var COOLANT_KINDS = ["flood", "mist", "air", "air-blast", "through-spindle", "through-tool"];
+function coolantWho() { return coolantOp ? "operation " + coolantOp + ": " : ""; }
+function coolantName(c) {
+  return String((typeof c === "string") ? c : (c.name || "")).trim().toLowerCase().replace(/[\s_]+/g, "-");
+}
+function coolantFor(ask) {
+  if (ask === "off") return "";
   var cs = (typeof machine !== "undefined" && machine.coolants) || [];
-  var first = "";
+  var flood = !ask || ask === "flood";
+  var want = flood ? ["flood"] : (ask === "mist" ? ["mist"] : (ask === "air" ? ["air", "air-blast"]
+    : (ask === "through-tool" ? ["through-spindle", "through-tool"] : [])));
+  if (want.length === 0) { msg(coolantWho() + "unknown coolant ask " + ask); return ""; }
+  var other = "", named = false;
   for (var i = 0; i < cs.length; i++) {
     var c = cs[i];
     var code = (typeof c === "string") ? "" : (c.mCode || "");
-    var name = (typeof c === "string") ? c : (c.name || "");
-    if (!code) continue;
-    if (name === "Flood") return code;
-    if (!first) first = code;
+    var name = coolantName(c);
+    if (want.indexOf(name) >= 0) { if (code) return code; if (flood) named = true; continue; }
+    if (flood && code && !other && COOLANT_KINDS.indexOf(name) < 0) other = code;
   }
-  return first;
+  if (flood && (other || named || cs.length === 0)) return other;
+  msg(coolantWho() + "the machine states no " + (flood ? "flood" : ask) + " coolant code - pick the operation's coolant from the machine's list (Air for the Carvera's air blast; Off cuts dry) or add it to the machine");
+  return "";
 }
 
 // ------------------------------------------------------------ the plane
@@ -164,6 +185,10 @@ function onRadiusCompensation() {
 }
 
 function onParameter(name, value) {
+  if (name === "Smoothing") { smoothTol = Number(value) || 0; return; }
+  if (name === "SmoothingMode") { smoothMode = String(value || ""); return; }
+  if (name === "Coolant") { coolantAsk = String(value || "flood"); return; }
+  if (name === "OperationName") coolantOp = String(value || "");
   commentParam(name, value);
   if (name === "WorkOffset" && value) wcsWord = String(value);
   else if (name === "OriginX" && has(value)) orgX = Number(value);
@@ -192,6 +217,21 @@ function onToolChange(number, name) {
   }
 }
 
+// #616 / #757: per-operation smoothing. The firmware's supported-codes
+// tables list no path-blending or smoothing word (no G64, G61, G5.1 or
+// similar), so the ask is named once and nothing is written - never a
+// guessed word.
+var smoothNamed = false;
+function smoothOn() {
+  if (!(smoothTol > 0) || smoothNamed) return;
+  note("SMOOTHING NOT WRITTEN - NO CARVERA FORM STATED");
+  smoothNamed = true;
+}
+function smoothOff() {
+  smoothTol = 0;
+  smoothMode = "";
+}
+
 // The preamble closes over everything a raw motion line needs: the work
 // offset, the tool, the spindle, the air. M6 Tn is the firmware's auto
 // tool change (the Air's quick changer prompts the operator through the
@@ -211,8 +251,9 @@ function startPreamble() {
   }
   if (spindleWait && sRpm > 0) block(["M3", "S" + ni(sRpm)]);
   spindleWait = false;
-  coolant = coolantCode();
+  coolant = coolantFor(coolantAsk);
   if (coolant) block([coolant]);
+  smoothOn();
 }
 
 function endPreamble() {
@@ -220,7 +261,10 @@ function endPreamble() {
   owedDwell();
   restorePlane();
   sectionOpen = false;
+  smoothOff();
   if (coolant) block(["M9"]);
+  coolant = "";
+  coolantAsk = "flood";      // the next section states its own ask
   block(["M5"]);
 }
 

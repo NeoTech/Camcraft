@@ -5,7 +5,7 @@
 //! Provenance: our own parser, specced from the observable shape of a
 //! machine file and RS-274/ISO 6983 axis-lettering convention.
 
-use super::def::{AxisLimits, Coolant, Kind, LiveToolCodes, Machine};
+use super::def::{AxisLimits, Coolant, LiveToolCodes, Machine};
 use super::direction::AxisDirection;
 
 /// The number a machine field reads as, with the unstated-limit law:
@@ -126,7 +126,6 @@ fn count_spindles(parts: Option<&serde_json::Value>) -> usize {
         .sum()
 }
 
-/// First part anywhere in the tree with the given `type`, depth-first.
 /// The spindle's speed ranges (#170): `[{ "min_speed", "max_speed" }]`,
 /// rpm. An entry missing either bound, or with them out of order, is
 /// dropped - a range the file cannot state whole names nothing.
@@ -143,13 +142,18 @@ fn parse_ranges(v: Option<&serde_json::Value>) -> Vec<(f64, f64)> {
         .collect()
 }
 
+/// First part anywhere in the tree with the given `type`, depth-first.
 fn find_type<'a>(parts: &'a serde_json::Value, ty: &str) -> Option<&'a serde_json::Value> {
     let arr = parts.as_array()?;
     for p in arr {
         if p.get("type").and_then(|t| t.as_str()) == Some(ty) {
             return Some(p);
         }
-        if let Some(hit) = find_type(p.get("parts")?, ty) {
+        // #785: a leaf part (no `parts`, e.g. a 4th-axis rotary listed
+        // before the head) is passed over, never the end of the search -
+        // a `?` here lost the head, and every spindle and coolant figure
+        // with it, for any file with a leaf ahead of its head.
+        if let Some(hit) = p.get("parts").and_then(|c| find_type(c, ty)) {
             return Some(hit);
         }
     }
@@ -159,8 +163,16 @@ fn find_type<'a>(parts: &'a serde_json::Value, ty: &str) -> Option<&'a serde_jso
 /// Parse a `.mch` machine file. Malformed JSON refuses; a well-formed
 /// file that describes nothing answers with an all-`None` Machine -
 /// an empty machine checks nothing, which is the truth rather than a
-/// silently stricter one.
+/// silently stricter one. The holder library is the caller's (#828):
+/// this door judges `tooling.default_holder` as a word only - the app's
+/// reader passes its library through [`parse_mch_with`].
 pub fn parse_mch(text: &str) -> Result<Machine, String> {
+    parse_mch_with(text, None)
+}
+
+/// [`parse_mch`] with the caller's holder library (#828), so an unknown
+/// default holder, or one off the stated mount, is refused by name.
+pub fn parse_mch_with(text: &str, holders: Option<super::HolderLookup>) -> Result<Machine, String> {
     let v: serde_json::Value =
         serde_json::from_str(text).map_err(|e| format!("machine file: {e}"))?;
     if !v.is_object() {
@@ -174,32 +186,14 @@ pub fn parse_mch(text: &str) -> Result<Machine, String> {
         ..Default::default()
     };
 
-    // The declared kind (M3.3 C): a stated word must be a known one.
-    // A file that declares "drill_press" is not silently demoted to
-    // the inference - the declaration was the point of writing it, so
-    // an unreadable one refuses at the front door.
-    match general.and_then(|g| g.get("kind")) {
-        None | Some(serde_json::Value::Null) => {}
-        Some(serde_json::Value::String(w)) if w.is_empty() => {}
-        Some(serde_json::Value::String(w)) => {
-            let Some(k) = Kind::from_word(w) else {
-                return Err(format!(
-                    "machine file: kind {w:?} is not mill, lathe, mill-turn or plasma"
-                ));
-            };
-            // #669: a declared plasma table keeps the plasma rules at
-            // the door - the first one broken names its key.
-            if k == Kind::Plasma
-                && let Some((key, rule)) = super::plasma::plasma_refusals(&v).into_iter().next()
-            {
-                return Err(format!("machine file: {key}: {rule}"));
-            }
-            m.kind = Some(w.clone());
-        }
-        Some(other) => {
-            return Err(format!("machine file: kind must be a word, not {other}"));
-        }
-    }
+    // The declared kind (M3.3 C) and its per-kind door rules.
+    let declared = super::kind::declared_kind(&v)?;
+    m.kind = declared.as_ref().map(|(_, w)| w.clone());
+
+    // #828: the spindle mount and the default holder, refused by name.
+    let (mount, holder) = super::tooling::parse_tooling(&v, holders).map_err(|e| format!("machine file: {e}"))?;
+    m.spindle_mount = mount;
+    m.default_holder = holder;
 
     let kine = v.pointer("/kinematics/default/parts");
     let f = mm_factor(v.pointer("/kinematics/default/units")).unwrap_or(1.0);
@@ -208,6 +202,10 @@ pub fn parse_mch(text: &str) -> Result<Machine, String> {
     if matches!(length, Some("inch" | "inches")) {
         m.units = Some("inch".to_owned());
     }
+
+    // #530: the EDM section - only an EDM kind states one, and only
+    // its own kind's keys; anything else refuses the file by name.
+    m.edm = super::edm::parse_edm(v.get("edm"), f, declared.map(|(k, _)| k))?;
 
     if let Some(parts) = kine {
         if let Some(head) = find_type(parts, "head") {
@@ -296,6 +294,8 @@ pub fn parse_mch(text: &str) -> Result<Machine, String> {
                 }
             }
             let direction = axis_direction(name, part, *rotary)?;
+            let nose_to_axis = super::swing::nose_to_axis(name, part, *rotary, f)?;
+            let axis_to_table = super::swing::work_length("axis_to_table", name, part, *rotary, f)?;
             if let Some(z) = safe_retract(name, part, *rotary, f)? {
                 m.safe_retract_z = Some(z);
             }
@@ -308,6 +308,9 @@ pub fn parse_mch(text: &str) -> Result<Machine, String> {
                 resolution,
                 axis,
                 direction,
+                turns_part: rotary.then(|| super::swing::turns_part(part, true)),
+                nose_to_axis,
+                axis_to_table,
             });
         }
         axes.sort_by_key(|a| ctrl_coord(ctrl, &a.name));

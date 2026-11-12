@@ -123,7 +123,7 @@ impl PackedBase {
         // playback cut layers only lift cells over it). A refusal keeps
         // the packed lattice as it was - a picture, never a verdict.
         if let Err(e) = lat.renormalize() {
-            eprintln!("camcraft: stock view kept the un-normalized band: {e}");
+            tracing::warn!("stock view kept the un-normalized band: {e}");
         }
         let target = target.and_then(Stock::field).and_then(pack_target);
         Some((PackedBase { meta: lat.meta, mesh: lat.mesh, target }, lat.cut))
@@ -180,6 +180,10 @@ pub(crate) fn display_inputs(
         return Err(format!("the field view needs a positive texel budget, not {texels}"));
     }
     let planned = plan_program(world)?;
+    // #541: the field eye has no box atom - said, never cut as a disc.
+    if let Some(p) = planned.iter().find(|p| p.electrode.is_some()) {
+        return Err(format!("{}: {}", p.name, crate::stock_sim::ELECTRODE_FIELD_REFUSAL));
+    }
     let first = planned.first().and_then(|p| p.setup.clone());
     let eff = crate::setup::effective(world, first.as_deref());
     if planned.iter().any(|p| crate::setup::effective(world, p.setup.as_deref()) != eff) {

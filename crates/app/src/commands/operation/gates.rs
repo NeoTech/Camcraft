@@ -74,6 +74,34 @@ pub(super) fn valid_src(world: &World, setup: Option<&str>, src: &SrcRef) -> Res
     }
 }
 
+/// The tool door for a kind (#532): a kind that mounts a library tool
+/// must name one that exists ([`check_tool`]); a wire EDM kind mounts
+/// none - its wire is the machine's condition - and must name none, so
+/// no second source for the wire's diameter can ride an operation.
+pub(super) fn tool_door(world: &World, params: &OpParams, tool: &str) -> Result<(), CommandError> {
+    if params.kind().info().mounts_tool() {
+        return check_tool(world, tool);
+    }
+    if tool.is_empty() {
+        return Ok(());
+    }
+    Err(CommandError::Invalid(format!(
+        "a {} operation mounts no library tool - the wire is the machine's EDM condition; leave the tool empty (it names '{tool}')",
+        params.kind()
+    )))
+}
+
+/// The wire door (#531, #532): a wire EDM kind's condition must be
+/// stated by the machine its setup mounts, with its wire diameter and
+/// spark gap - refused by name here, at command creation, never first
+/// in the generator.
+pub(super) fn wire_gate(world: &World, setup: Option<&str>, params: &OpParams) -> Result<(), CommandError> {
+    match params {
+        OpParams::WireContour(w) => operation::wire_op::condition_of(world, setup, w).map(|_| ()).map_err(CommandError::Invalid),
+        _ => Ok(()),
+    }
+}
+
 pub(super) fn check_tool(world: &World, tool: &str) -> Result<(), CommandError> {
     match model::find_by_name(world, tool) {
         Some(e) if model::is_tool(world, &e) => Ok(()),
@@ -112,20 +140,45 @@ pub(super) fn family_gate(world: &World, context: Option<&str>, params: &OpParam
             family.work(),
         )));
     }
+    // #532: wire EDM work needs a wire EDM, and a wire EDM cuts only it.
+    if family == Family::WireEdm || machine == crate::machine::Kind::WireEdm {
+        return Err(CommandError::Invalid(format!(
+            "a {} operation is {} work; the setup's machine is a {} - {}",
+            params.kind(),
+            family.work(),
+            machine.label(),
+            if family == Family::WireEdm { "mount a wire EDM first" } else { "a wire EDM cuts only wire EDM operations (a Wire Contour)" },
+        )));
+    }
+    // #1291: an unmounted setup reads as a mill (the kind_of law), so
+    // the words must not call it one - they say no machine is mounted.
+    let mounted = crate::machine::of_setup(world, context).1.is_some();
+    let clause = if mounted {
+        format!("the setup's machine is a {}", machine.word())
+    } else {
+        "the setup has no machine mounted".to_owned()
+    };
     // #670: plasma work needs a plasma table - no mill or lathe (nor a
     // mill-turn) strikes an arc.
     if family == Family::Plasma {
         return Err(CommandError::Invalid(format!(
-            "a {} operation is plasma cutting work; the setup's machine is a {} - mount a plasma table first",
+            "a {} operation is plasma cutting work; {clause} - mount a plasma table first",
+            params.kind(),
+        )));
+    }
+    // #541: sinker work needs a sinker EDM - nothing else feeds an
+    // electrode.
+    if family == Family::Sinker {
+        return Err(CommandError::Invalid(format!(
+            "a {} operation is sinker EDM work; the setup's machine is a {} - mount a sinker EDM first",
             params.kind(),
             machine.word(),
         )));
     }
     Err(CommandError::Invalid(format!(
-        "a {} operation is {} work; the setup's machine is a {} - mount a {} (or a mill-turn) first",
+        "a {} operation is {} work; {clause} - mount a {} (or a mill-turn) first",
         params.kind(),
         family.work(),
-        machine.word(),
         family.machine(),
     )))
 }
@@ -146,7 +199,8 @@ pub(super) fn tool_gate(world: &World, params: &OpParams, tool: &str) -> Result<
 /// params or a source: ordering on resolved values (an op that would cut
 /// upward), then every From: Selection height resolving against the
 /// op's own source - an empty or vanished selection refuses by name
-/// here, never reaches a generator as a silent 0.
+/// here, never reaches a generator as a silent 0 - and a trochoidal
+/// microlift that would feed above the clearance plane (#774).
 pub(super) fn heights_gate(
     world: &World,
     setup: Option<&str>,
@@ -161,6 +215,9 @@ pub(super) fn heights_gate(
             "a {} operation must cut downward: its top height resolves below its bottom height (check the From references)",
             params.kind()
         )));
+    }
+    if let Some(why) = operation::microlift_sane(world, setup, Some(src), params) {
+        return Err(CommandError::Invalid(why));
     }
     Ok(())
 }

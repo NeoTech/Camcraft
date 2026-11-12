@@ -2,7 +2,7 @@
 //! testing rule made concrete. Format, naming and the regeneration
 //! workflow: tests/golden/CLAUDE.md.
 //!
-//! Gate map (M4.4): covers app::cl, app::drilling, app::finishing3d, app::geo2d, app::geometry, app::machining2d, app::tools.
+//! Gate map (M4.4): covers cl::cl, motion::drilling, motion::finishing3d, geometry::geo2d, app::geometry, motion::machining2d, tools::tools, motion::wire_edm.
 
 
 mod common;
@@ -84,7 +84,11 @@ fn contour_disc_hole_matches_golden() {
     // A plate with a 128-gon approximation of a round bore: the rim is
     // polygonal only because import tessellates it, so the fitter must
     // replace the chord runs with arc moves - this golden is the v2
-    // format's committed witness.
+    // format's committed witness. The lead is 2 mm (#862): a 3 mm lead
+    // on the R6 bore lies on the r = 3 cutter-centre ring itself, so the
+    // leads cross the ring and the gate refuses the program - a posted
+    // golden must be a program a user can post (`solid_law_goldens`
+    // pins both the pass and the R3 refusal).
     let mut loops = rect(0.0, 0.0, 40.0, 20.0).loops().to_vec();
     loops.push(circle(Point2::new(20.0, 10.0), 6.0, 128));
     let region = Region::new(loops).unwrap();
@@ -100,7 +104,7 @@ fn contour_disc_hole_matches_golden() {
         plunge_feed: 100.0,
         climb: true,
         side: Side::Auto,
-        lead: Lead::Arc { radius: 3.0 },
+        lead: Lead::Arc { radius: 2.0 },
         tolerance: 0.01,
         tab_count: 0,
         tab_width: 0.0,
@@ -120,7 +124,8 @@ fn contour_tangential_lead_matches_golden() {
     // The same plate-and-bore job, tangential entry instead of quarter:
     // this golden is the byte-witness that the half-arc leads post as
     // single S{±1} arc moves with a 2*radius standoff - rerun
-    // WRITE_GOLDEN=1 only together with a deliberate law change.
+    // WRITE_GOLDEN=1 only together with a deliberate law change. 2 mm,
+    // not 3, so the leads stay clear of the ring and the gate (#862).
     let mut loops = rect(0.0, 0.0, 40.0, 20.0).loops().to_vec();
     loops.push(circle(Point2::new(20.0, 10.0), 6.0, 128));
     let region = Region::new(loops).unwrap();
@@ -136,7 +141,7 @@ fn contour_tangential_lead_matches_golden() {
         plunge_feed: 100.0,
         climb: true,
         side: Side::Auto,
-        lead: Lead::Tangential { radius: 3.0 },
+        lead: Lead::Tangential { radius: 2.0 },
         tolerance: 0.01,
         tab_count: 0,
         tab_width: 0.0,
@@ -469,6 +474,7 @@ fn cycle_tool(kind: ToolKind, diameter: f64, tip_angle: f64, pitch: f64) -> Tool
         tool_material: None,
         flutes: None,
         orientation: None,
+        turning: None,
     }
 }
 
@@ -1016,8 +1022,80 @@ fn plasma_plate_with_holes_matches_golden() {
     // The in-app writer and the golden writer agree byte for byte.
     assert_eq!(camcraft_app::cl::text::to_text(&path).unwrap(), text);
     assert_eq!(camcraft_app::cl::text::from_text(&text).unwrap().plasma, path.plasma);
-    // The superset law: the post's stream reader takes it (the records
-    // are comment lines to it until the plasma post voices them, #671).
-    assert!(camcraft_app::post::cnc::parse(&text).is_ok());
+    // The superset law: the post's stream reader takes it - the `; PLASMA`
+    // / `; TORCH` lines read as its plasma records (#671, plasma_post.rs).
+    let recs = camcraft_app::post::cnc::parse(&text).unwrap();
+    assert!(recs.iter().any(|r| matches!(r, camcraft_app::post::cnc::Record::Plasma(_))));
     write_golden("plasma_plate_with_holes.cl", &text);
+}
+
+#[test]
+fn trochoid_slot_small_matches_golden() {
+    // #220: a D6 in a 10 mm channel, 12 mm long, one level - the bore
+    // helix, the front arcs with their wall leads and fillets, the
+    // microlift retraces and the cap pencil, every arc an arc.
+    let p = camcraft_app::machining2d::TrochoidParams {
+        tool_diameter: 6.0,
+        width: 10.0,
+        loop_width: None,
+        step: 1.5,
+        max_engagement: 90.0,
+        ret: camcraft_app::machining2d::TrochoidReturn::Microlift { height: 0.3 },
+        smoothing: 0.5,
+        stock_to_leave: 0.0,
+        clearance_z: 5.0,
+        retract_z: Some(1.0),
+        top_z: -2.0,
+        bottom_z: -2.0,
+        stepdown: 2.0,
+        feed: 800.0,
+        return_feed: 2000.0,
+        plunge_feed: 200.0,
+        climb: true,
+    };
+    let t = camcraft_app::machining2d::trochoidal_slot(&[Point2::new(0.0, 0.0), Point2::new(12.0, 0.0)], &p).unwrap();
+    assert!(t.has_arcs());
+    write_golden("trochoid_slot_small.cl", &gen_to_cltext(&t));
+}
+
+/// #532: a wire EDM contour - a 40x20 profile with 2 mm corners (3-degree
+/// facets) cut as a die from a start hole at its centre and as a punch
+/// from a threading point outside it, with a SYNTHETIC condition (wire
+/// 0.25 mm, gap 0.04 mm - from no machine's manual): the two wire-centre
+/// paths stand 0.165 mm inside and outside the profile, apart by the
+/// 0.33 mm kerf; every move rides the lower programmed plane and states
+/// no pose and no feed (#290 D2).
+#[test]
+fn wire_contour_die_and_punch_match_golden() {
+    use camcraft_app::wire_edm::{wire_contour, WireParams, WireSide};
+    let (hx, hy, r) = (18.0, 8.0, 2.0);
+    let mut pts = Vec::new();
+    for (cx, cy, a0) in [(hx, hy, 0.0_f64), (-hx, hy, 90.0), (-hx, -hy, 180.0), (hx, -hy, 270.0)] {
+        for s in 0..=30 {
+            let t = (a0 + 3.0 * f64::from(s)).to_radians();
+            pts.push(Point2::new(cx + r * t.cos(), cy + r * t.sin()));
+        }
+    }
+    let profile = Loop::new(pts).unwrap();
+    for (side, start, file) in [
+        (WireSide::Die, Point2::new(0.0, -1.0), "wire_contour_die.cl"),
+        (WireSide::Punch, Point2::new(-30.0, 0.0), "wire_contour_punch.cl"),
+    ] {
+        let p = WireParams {
+            wire_diameter: 0.25,
+            gap: 0.04,
+            condition: "C110".into(),
+            side,
+            start: Some(start),
+            plane_z: 0.0,
+        };
+        let path = wire_contour(std::slice::from_ref(&profile), &[], &p).unwrap();
+        assert!(path.is_prismatic() && path.moves.iter().all(|m| m.kind == MoveKind::Feed && m.feed.is_none()));
+        let text = gen_to_cltext(&path);
+        // The in-app writer and the golden writer agree byte for byte,
+        // and the dump reads back as the same moves at its micron scale.
+        assert_eq!(camcraft_app::cl::text::to_text(&path).unwrap(), text);
+        assert_eq!(camcraft_app::cl::text::from_text(&text).unwrap().moves.len(), path.moves.len());
+        write_golden(file, &text);
+    }
 }

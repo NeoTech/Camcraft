@@ -1,5 +1,7 @@
+(synthetic program, posted for syntax conformance)
 %
 O0001 (VMC 3-AXIS)
+G21
 (OPERATION: Plane arcs - G54)
 G90 G54 G40 G49 G80
 (T01 6MM BALL - D6)

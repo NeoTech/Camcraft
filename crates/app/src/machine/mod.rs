@@ -50,6 +50,10 @@
 // (crates/post/src/machine/); this module keeps only what touches the
 // world - the singleton glue and the program checker.
 pub use camcraft_post::machine::*;
+// #828: the reader, validator and re-judge with the holder library
+// passed in - these shadow the post crate's word-only ones.
+mod holders;
+pub use holders::{holder_lookup, parse_mch, tooling_refusal, tooling_refusals};
 
 // #287: the Machines pane's catalogue, property sheet and validator.
 pub mod library;
@@ -57,7 +61,8 @@ pub mod library;
 // it shares with the cutting check.
 mod judge;
 mod plasma;
-use judge::{c_letter_problem, move_extremes, say, slowest_axis};
+mod wire_edm;
+use judge::{c_letter_problem, move_extremes, pose_problems, say, slowest_axis};
 mod sheet;
 pub mod validate;
 // #383: the machine editor - property grid, draft, user folder and save.
@@ -155,6 +160,9 @@ pub fn check_document(world: &World, machine: &Machine) -> Result<MachineCheck, 
 pub fn check_ops(world: &World, machine: &Machine, program: &[(String, flecs_ecs::prelude::Entity)]) -> Result<MachineCheck, String> {
     if kind(Some(machine)) == Kind::Plasma {
         return plasma::check_plasma_ops(world, machine, program);
+    }
+    if kind(Some(machine)) == Kind::WireEdm {
+        return wire_edm::check_wire_ops(world, machine, program);
     }
     let ops = program.to_vec();
     let mut out = MachineCheck::default();
@@ -291,51 +299,10 @@ pub fn check_ops(world: &World, machine: &Machine, program: &[(String, flecs_ecs
             } else if let Some(a) = mv.axis
                 && !crate::cl::is_vertical(&a)
             {
-                if !can_tilt(machine) {
-                    say(
-                        &mut out,
-                        format!(
-                            "{name}: move {i} tilts the tool; {} states no tilting rotary",
-                            machine.model
-                        ),
-                    );
-                }
-                let [da, db, dc] = crate::cl::axis_to_angles(a);
-                for (letter, ang) in [('A', da), ('B', db), ('C', dc)] {
-                    if ang.abs() <= 1e-9 {
-                        continue; // that letter holds nothing to check
-                    }
-                    // The letter names the rotary that must hold the
-                    // angle. A machine whose tilt lives under another
-                    // letter (an A trunnion asked for a B turn) is
-                    // refused by name too - the in-app check is the
-                    // safe floor; the machine's own post knows how to
-                    // re-express a pose, this gate never does IK.
-                    match machine
-                        .axes
-                        .iter()
-                        .find(|x| x.rotary && x.name.eq_ignore_ascii_case(&letter.to_string()))
-                    {
-                        None => say(
-                            &mut out,
-                            format!(
-                                "{name}: move {i} commands {letter} {ang:.3} deg; {} states no {letter} axis",
-                                machine.model
-                            ),
-                        ),
-                        Some(ax) => {
-                            if let Some((lo, hi)) = ax.travel
-                                && (ang < lo - 1e-9 || ang > hi + 1e-9)
-                            {
-                                say(
-                                    &mut out,
-                                    format!(
-                                        "{name}: move {i} commands {letter} {ang:.3} deg, the travel is {lo:.3}..{hi:.3}"
-                                    ),
-                                );
-                            }
-                        }
-                    }
+                // The letters (or, on a 4th-axis table, the angle about
+                // X, #797) name what the rotaries must hold (`judge`).
+                for msg in pose_problems(machine, i, a) {
+                    say(&mut out, format!("{name}: {msg}"));
                 }
             }
             // Feed: only stated feeds check against stated ceilings.
