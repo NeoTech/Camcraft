@@ -86,7 +86,20 @@ pub enum SliceError {
 /// Cross `facets` with the plane z = `z` and return the material region.
 /// An empty intersection is an empty region, not an error (z missed the
 /// model); bad geometry is always an error, never a partial region.
+///
+/// Chord ends weld on their exact 1 um key first - every mesh that slices
+/// that way keeps exactly the answer it always had. Only a slice that
+/// leaves ends dangling is retried with the micrometre tolerance weld
+/// (#241: an imported mesh's shared corners need not be bit-identical);
+/// a mesh still open under the tolerance is refused as before.
 pub fn slice(facets: &[Triangle], z: f64) -> Result<Region, SliceError> {
+    match slice_with(facets, z, false) {
+        Err(SliceError::Open { .. }) => slice_with(facets, z, true),
+        other => other,
+    }
+}
+
+fn slice_with(facets: &[Triangle], z: f64, tolerant: bool) -> Result<Region, SliceError> {
     if !z.is_finite() {
         return Err(SliceError::Invalid("non-finite slice height".into()));
     }
@@ -106,9 +119,7 @@ pub fn slice(facets: &[Triangle], z: f64) -> Result<Region, SliceError> {
     //    arithmetic and it welds exactly; the zero-length guard drops
     //    vertex grazes (a plane touching a triangle at one point encloses
     //    nothing).
-    // Ends weld within a micrometre, not by a rounded key: an imported
-    // mesh's shared corners need not be bit-identical (#241).
-    let mut welder = super::slice_weld::Welder::default();
+    let mut welder = super::slice_weld::Welder::new(tolerant);
     let mut segs: Vec<[u32; 2]> = Vec::new();
     for t in facets {
         let mut hits: [Point2; 2] = [Point2::default(); 2];

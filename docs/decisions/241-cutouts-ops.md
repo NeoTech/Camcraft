@@ -37,11 +37,18 @@ reproduced:
   shadow oriented CCW). Every facet shadow is material. `union_all`'s own
   doc already names this case ("the contributions of the facets of ONE
   solid legitimately nest").
-- The slicer welds chord ends within 2 µm (Chebyshev). It searches a
-  spatial hash over the neighbouring cells instead of matching a rounded
-  key. The code is in the new `geometry::slice_weld`, so `slice.rs` (already
-  over 400 lines) gets shorter, not longer. A real 0.1 mm gap is still
-  refused as open, and that is pinned.
+- The slicer keeps its exact weld (one rounded 1 µm key per chord end)
+  as the first try. Only when that leaves ends dangling ("open") does it
+  slice again, welding ends within 2 µm (Chebyshev) through a spatial hash
+  over neighbouring cells. Every mesh that sliced before slices exactly
+  as before, and only refused meshes are rescued. The code is in the new
+  `geometry::slice_weld`, so `slice.rs` (already over 400 lines) does not
+  grow by the welder. A real 0.1 mm gap is still refused as open, and that
+  is pinned. A first version used the tolerance weld for every slice.
+  It turned `blind_floor::a_blind_pocket_never_enters_solid_under_any_ladder`
+  red with a Crossing: on that exact mesh, near-tangent chords that the
+  exact key kept apart welded together and moved a level's islands. Hence
+  the fallback-only design.
 - `operation::material::section` already retried 1 µm lower when a slice
   errored. It now does the same when a slice comes back empty. When both
   planes are empty, the refusal names the fix: the Z span the source
@@ -63,7 +70,7 @@ open mesh still refuses, and a plane that misses the part still refuses.
   features. 2 µm is twice the region layer's 1 µm quantization, which is
   already the finest geometry the 2D layer can represent.
 - Box selection of edges (the issue's aside). That is a new UI feature,
-  not part of this correction, so it is filed as its own enhancement.
+  not part of this correction, so it is filed as its own enhancement (#979).
 
 **Cost to change later.** Low. The tolerance and bucket size are two
 constants in `slice_weld.rs`. The fallback is one function, `facet_shadow`.
