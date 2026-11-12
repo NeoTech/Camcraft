@@ -25,7 +25,7 @@ fn cat(name: &str) -> Tool {
 }
 
 fn lib(items: &[(&str, Tool)]) -> Vec<LibraryTool> {
-    items.iter().map(|(n, t)| LibraryTool { name: (*n).into(), tool: t.clone() }).collect()
+    items.iter().map(|(n, t)| LibraryTool::bare(*n, t.clone())).collect()
 }
 
 fn tool_named(w: &World, n: &str) -> Option<Tool> {
