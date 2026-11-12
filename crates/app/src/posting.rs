@@ -454,7 +454,7 @@ fn post_script_body(world: &World, out_path: &Path, cps: &str) -> Result<Posted,
     let machine = mounts::single(world, false)?.machine;
     let streams = op_streams(world)?;
     // #1190: a turning dialect opens only what a lathe may run.
-    crate::lathe_voice::at_post(world, streams.iter().map(|(n, _)| n.as_str()), cps)?;
+    crate::lathe_voice::at_post(world, streams.iter().map(|(n, _)| n.as_str()), cps, None)?;
     let records = join_streams(streams);
     // The verification gate (M2.3 D): the same two program-level
     // judgments the Deviate cell shows, made binding. Evidence is

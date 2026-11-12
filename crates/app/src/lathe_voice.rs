@@ -151,19 +151,36 @@ pub fn on_work_spindle(world: &World, e: &Entity) -> bool {
 /// The door at post: when `cps` is a turning dialect, refuse by name
 /// the first of `ops` (operation entity names, program order) that a
 /// lathe post may not open. A milling dialect passes untouched - there
-/// `M03` is the tool's own spindle.
+/// `M03` is the tool's own spindle. `script` names the post (a path or
+/// a registry name) for the refusal, when the caller knows it.
 ///
 /// A script that does not state its dialect (`WorkVoice::Undeclared`:
-/// no `capabilities` mask naming 1 or 2, #1199) is never read as a mill post where that matters: an
-/// operation whose setup mounts a machine with a work spindle (a lathe
-/// or a mill-turn) is held to the door as if the script were a turning
-/// one, and its refusal says the manifest line is what to add. On any
-/// other machine there is no work spindle to turn, so it passes.
+/// no `capabilities` mask naming 1 or 2, #1199) is not known to be
+/// either kind of post. On a machine with a work spindle (a lathe or a
+/// mill-turn) it posts only C-axis live-tool sections - the one section
+/// both dialects open the same way. Every other section is refused by
+/// name, the refusal saying the manifest line is what to add:
+///
+/// - a milling section, because a turning post would open it on the
+///   work spindle (the lathe door's own reason);
+/// - a section that turns the work (a turning kind, an on-centre
+///   drill), because only a turning post may post it (maintainer,
+///   2026-11-12, #1232) and a user's milling post without the line
+///   would post it as milling: a tool change, `S M3` on the tool
+///   spindle, the work standing still.
+///
+/// On any other machine there is no work spindle to turn, so it passes.
 ///
 /// # Errors
 /// `"<op>: a <kind> operation would be posted on the work spindle - ..."`,
-/// or the script's own load failure.
-pub(crate) fn at_post<'a>(world: &World, ops: impl IntoIterator<Item = &'a str>, cps: &str) -> Result<(), String> {
+/// `"<op>: a <kind> operation turns the work ..."` for an undeclared
+/// script, or the script's own load failure.
+pub(crate) fn at_post<'a>(
+    world: &World,
+    ops: impl IntoIterator<Item = &'a str>,
+    cps: &str,
+    script: Option<&str>,
+) -> Result<(), String> {
     use crate::post::dialect::WorkVoice;
     let voice = crate::post::dialect::work_voice(cps).map_err(|e| format!("post engine: {e}"))?;
     if voice == WorkVoice::ToolSpindle {
@@ -173,25 +190,39 @@ pub(crate) fn at_post<'a>(world: &World, ops: impl IntoIterator<Item = &'a str>,
         let Some(e) = model::find_by_name(world, name) else {
             continue;
         };
-        let undeclared_on = match voice {
-            WorkVoice::WorkSpindle | WorkVoice::ToolSpindle => None,
-            WorkVoice::Undeclared => match work_spindle_machine(world, &e) {
-                Some(kind) => Some(kind),
-                None => continue,
-            },
-        };
-        if let Some(LatheVoice::Refused(why)) = voice_of(world, &e) {
-            let label = model::operation_label(world, name, &e);
-            return Err(match undeclared_on {
-                None => format!("{label}: {why}"),
-                Some(kind) => format!(
-                    "{label}: {why} (the post script does not state whether it is a milling or a turning post - it \
-                     has no `capabilities` line naming 1 or 2 - so on this setup's {} machine it is held to the turning rules; \
-                     if it is a milling post, add `capabilities = 1;` to it, a turning post `capabilities = 2;`)",
-                    kind.label()
-                ),
-            });
+        let section = voice_of(world, &e);
+        let label = || model::operation_label(world, name, &e);
+        if voice == WorkVoice::WorkSpindle {
+            if let Some(LatheVoice::Refused(why)) = section {
+                return Err(format!("{}: {why}", label()));
+            }
+            continue;
         }
+        // Undeclared: only a machine with a work spindle is at stake.
+        let Some(machine) = work_spindle_machine(world, &e) else {
+            continue;
+        };
+        let why = match section {
+            // No path yet (the program gate names it), or C-axis work.
+            None | Some(LatheVoice::LiveTool) => continue,
+            Some(LatheVoice::Refused(why)) => why,
+            Some(LatheVoice::WorkSpindle) => {
+                let kind = model::operation_of(world, &e).map_or_else(|| "turning".to_owned(), |op| op.params.kind().to_string());
+                format!(
+                    "a {kind} operation turns the work, and only a turning post may post it - an unstated script is \
+                     not known to be one, and through a milling post it would come out as milling (a tool change, \
+                     S M3 on the tool spindle, the work standing still)"
+                )
+            }
+        };
+        let named = script.map_or_else(|| "the post script".to_owned(), |s| format!("the post script {s}"));
+        return Err(format!(
+            "{}: {why} ({named} does not state whether it is a milling or a turning post - it has no \
+             `capabilities` line naming 1 or 2 - so on this setup's {} machine it posts only C-axis live-tool \
+             sections; if it is a turning post, add `capabilities = 2;` to it, a milling post `capabilities = 1;`)",
+            label(),
+            machine.label()
+        ));
     }
     Ok(())
 }
