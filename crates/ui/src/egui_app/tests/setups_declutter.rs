@@ -111,8 +111,10 @@ fn a_document_without_setups_keeps_workholding_under_fixtures_only() {
 /// which holds the workholding.
 #[test]
 fn one_setup_keeps_workholding_under_its_fixtures_page() {
+    // Taller than the default pane so the Delete line (where the Fixtures
+    // button sits) is on screen and clickable.
     let mut h = Harness::builder()
-        .with_size(Vec2::new(1280.0, 720.0))
+        .with_size(Vec2::new(1280.0, 1400.0))
         .build_ui_state(frame, ShellUi::blank());
     h.state_mut().state.pending.push_back(CommandKind::CreateSetup { name: None, datum_from: None });
     h.state_mut().state.pending.push_back(CommandKind::ActivateSetup(Some("Setup1".into())));
@@ -122,12 +124,7 @@ fn one_setup_keeps_workholding_under_its_fixtures_page() {
         assert!(!shows(&h, text), "{text:?} is not on the Setups page with one setup");
     }
     open(&mut h, UiTarget::SetupNode("Setup1".into(), SetupPage::Settings));
-    h.get_by_label("Open Setup1 fixtures");
-    // The button sits below the fold of the default pane, so the harness
-    // cannot click it; it is the same `actions::target` call "Open page"
-    // makes, and the Fixtures page it opens is pinned here.
-    h.get_by_label("Open Setup1 fixtures");
-    crate::actions::target(&mut h.state_mut().state, UiTarget::SetupNode("Setup1".into(), SetupPage::Fixtures));
+    h.get_by_label("Open Setup1 fixtures").click();
     h.run_steps(3);
     assert!(shows(&h, "Fixtures - Setup1"), "the Fixtures page of Setup1 is open");
     assert!(shows(&h, "orkholding"), "Setup1's Fixtures page holds the workholding");
