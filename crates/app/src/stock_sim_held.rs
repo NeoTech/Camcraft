@@ -221,3 +221,8 @@ impl Held {
         }
     }
 }
+
+// #541 review: `simulate_box` on every arm (split out by the 400-line law).
+#[cfg(test)]
+#[path = "stock_sim_held_tests.rs"]
+mod tests;
