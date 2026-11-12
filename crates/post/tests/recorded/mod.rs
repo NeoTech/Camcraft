@@ -78,6 +78,42 @@ pub fn here() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/recorded")
 }
 
+/// A recorded input of the suites that moved out of app (#926 slice 2):
+/// `recorded/inputs/<name>` (a `.cnc` stream or a `.cl` path), each
+/// written and guarded by its generator - app's `recorded_post_streams`
+/// (the probe cycles), motion's `vertical_arc_entry` (the contour paths),
+/// post's `inverted_post` (the inverted-axis fixture stream).
+pub fn input(name: &str) -> String {
+    let path = here().join("inputs").join(name);
+    std::fs::read_to_string(&path)
+        .unwrap_or_else(|e| panic!("no recorded input {}: {e}", path.display()))
+        .replace("\r\n", "\n")
+}
+
+/// [`input`] parsed as a `.cnc` record stream.
+pub fn input_records(name: &str) -> Vec<camcraft_post::post::cnc::Record> {
+    camcraft_post::post::cnc::parse(&input(name)).unwrap_or_else(|e| panic!("{name}: {e}"))
+}
+
+/// The conformance and dialect goldens of the moved suites stay where the
+/// rest of their family lives, `crates/app/tests/golden/` (one golden
+/// home is #919's sub-issue 6, not this move): compare `text` with
+/// `<rel>` there, or write it with WRITE_GOLDEN set.
+pub fn app_golden(rel: &str, text: &str) {
+    let path = repo().join("crates/app/tests/golden").join(rel);
+    if std::env::var_os("WRITE_GOLDEN").is_some() {
+        if let Some(dir) = path.parent() {
+            std::fs::create_dir_all(dir).expect("create the golden dir");
+        }
+        std::fs::write(&path, text).expect("write the golden");
+        return;
+    }
+    let want = std::fs::read_to_string(&path).unwrap_or_else(|e| {
+        panic!("cannot read golden {}: {e}; create it with WRITE_GOLDEN=1", path.display())
+    });
+    assert_eq!(want.replace("\r\n", "\n"), text, "golden {} is stale; regenerate with WRITE_GOLDEN=1", path.display());
+}
+
 pub fn stream_path(case: &str) -> PathBuf {
     here().join("streams").join(format!("{case}.cnc"))
 }

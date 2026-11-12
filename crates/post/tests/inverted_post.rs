@@ -1,19 +1,23 @@
 //! Posting for a machine with an inverted axis (#374): conformance
 //! goldens for an inverted-X Fanuc and Haas program (lines, G2/G3 in
 //! G17/G18/G19, I/J/K, G41/G42, a drilled hole, a work-offset origin);
-//! every refusal by name; and a standard machine untouched.
+//! every refusal by name; and a standard machine untouched. Also the
+//! staleness guard of `recorded/inputs/inverted_probe.cnc`, the fixture
+//! stream app's `inverted_axis_display` reads (#926: app no longer carries
+//! a copy of `inverted_support`).
 //!
 //! Regenerate after an intentional change:
-//! `WRITE_GOLDEN=1 cargo test -p camcraft-app --test inverted_post`
+//! `WRITE_GOLDEN=1 cargo test -p camcraft-post --test inverted_post`
 //!
 //! Gate map (M4.4): covers post::invert, post::engine, post::machine, machine::direction, assets/posts.
 
 mod inverted_support;
+mod recorded;
 
-use camcraft_app::cl::{ArcPlane, MoveKind};
-use camcraft_app::machine::{AxisDirection, AxisLimits, Machine};
-use camcraft_app::post::cnc::{self, Record};
-use camcraft_app::post::{engine, invert, probe_rec};
+use camcraft_post::cl::{ArcPlane, MoveKind};
+use camcraft_post::machine::{AxisDirection, AxisLimits, Machine};
+use camcraft_post::post::cnc::{self, Record};
+use camcraft_post::post::{engine, invert, probe_rec};
 use inverted_support::{arc, cps, machine, mv, probe_records, probe_stream, read, repo};
 use serde_json::json;
 
@@ -33,6 +37,22 @@ fn inverted_x_goldens_for_fanuc_and_haas() {
         }
         assert_eq!(out.program, read(&rel), "{rel} is stale; regenerate with WRITE_GOLDEN=1");
     }
+}
+
+/// The fixture stream, as app's `inverted_axis_display` reads it.
+#[test]
+fn the_recorded_inverted_probe_stream_is_current() {
+    let path = recorded::here().join("inputs/inverted_probe.cnc");
+    if std::env::var_os("WRITE_GOLDEN").is_some() {
+        std::fs::write(&path, probe_stream()).expect("write the recorded stream");
+        return;
+    }
+    assert_eq!(
+        recorded::input("inverted_probe.cnc"),
+        probe_stream(),
+        "{} is stale; regenerate with WRITE_GOLDEN=1",
+        path.display()
+    );
 }
 
 #[test]
@@ -86,9 +106,9 @@ fn the_mirror_states_the_inverted_axes_only_when_there_are_any() {
         ],
         ..Default::default()
     };
-    assert!(camcraft_app::post::machine::mirror(&m).get("invertedAxes").is_none());
+    assert!(camcraft_post::post::machine::mirror(&m).get("invertedAxes").is_none());
     m.axes[1].direction = AxisDirection::Inverted;
-    assert_eq!(camcraft_app::post::machine::mirror(&m)["invertedAxes"], json!(["Y"]));
+    assert_eq!(camcraft_post::post::machine::mirror(&m)["invertedAxes"], json!(["Y"]));
 }
 
 #[test]
@@ -155,7 +175,7 @@ fn live_tooling_refuses_by_name() {
 
 #[test]
 fn a_threading_cycle_refuses_by_name() {
-    let t = Record::Thread(Some(camcraft_app::post::cnc_thread::ThreadRec {
+    let t = Record::Thread(Some(camcraft_post::post::cnc_thread::ThreadRec {
         start: [10.0, 0.0, 2.0],
         end: [8.0, 0.0, -10.0],
         major_diameter: 10.0,
@@ -168,7 +188,7 @@ fn a_threading_cycle_refuses_by_name() {
         infeed_angle: 0.0,
         spring_passes: 1,
         pull_out: 0.0,
-        hand: camcraft_app::cl::ThreadHand::Right,
+        hand: camcraft_post::cl::ThreadHand::Right,
     }));
     let e = refused("fanuc", &["X"], &with(vec![t, Record::Thread(None)]));
     assert!(e.contains("a threading cycle is not supported for an inverted axis"), "{e}");
