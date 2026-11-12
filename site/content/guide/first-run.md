@@ -68,6 +68,8 @@ why in its tooltip, for example "No tool yet - add one (Setup > Tools)" or
    and **Deviate** to compare the machined stock with the model.
 8. **Save** the project (`.camproj`) and [post](@/guide/posting.md) it.
 
+More tasks: [Common workflows](@/guide/workflows.md).
+
 ## Undo
 
 Every change to the document is a command, so Ctrl+Z and Ctrl+Y (Cmd+Z and Cmd+Y on
