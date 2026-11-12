@@ -1,7 +1,7 @@
 //! Unit pins of `turning_holder_side` (#1102): the holder law reads a lathe body on the holder's own side of the spindle axis, for a tip at either signed X of the path's meridian.
 
 use super::*;
-use crate::cl::{Move, MoveKind};
+use crate::cl::{Move, MoveKind, Toolpath};
 use crate::geometry::{Point3, Triangle};
 use crate::operation::drill_prior::PriorCell;
 use crate::operation::turning_rapids::Meridian;
@@ -27,6 +27,12 @@ fn the_side_is_where_the_path_reaches_and_a_past_centre_overrun_keeps_it() {
         let e = side_of(xs).err().unwrap_or_default();
         assert!(e.contains("both sides of the spindle axis"), "{xs:?}: {e}");
     }
+    // A near side within the overrun while the far side reaches less
+    // than twice it (a small part, review of PR #1167): the near side
+    // may be the holder's own - refused, never read mirrored.
+    let e = side_of([2.0, -3.0]).err().unwrap_or_default();
+    assert!(e.contains("both sides of the spindle axis"), "{e}");
+    assert_eq!(side_of([6.0, -0.4]), Ok(1.0));
     assert!(side_of([f64::NAN]).is_err());
 }
 
@@ -57,13 +63,21 @@ fn cuboid(lo: [f64; 3], hi: [f64; 3]) -> Vec<[[f64; 3]; 3]> {
 /// first point stands at world X `start`, then rides world X `x` down
 /// from Z 30 to Z 0 beside a Ø12 part (Z -16..16, read as the stock).
 fn hits(body_x: [f64; 2], start: f64, x: f64) -> Result<Vec<(usize, bool)>, String> {
+    let p = Point3::new;
+    let mv = |kind, from, to| Move { rotary: None, kind, from, to, feed: (kind != MoveKind::Rapid).then_some(100.0), arc: None, axis: None };
+    hits_on(body_x, vec![mv(MoveKind::Rapid, p(start, 0.0, 30.0), p(x, 0.0, 30.0)), mv(MoveKind::Feed, p(x, 0.0, 30.0), p(x, 0.0, 0.0))])
+}
+
+fn path_of(moves: Vec<Move>) -> Toolpath {
+    Toolpath { moves, cycles: Vec::new(), notes: Vec::new(), comps: Vec::new(), threads: Vec::new(), probes: Vec::new(), breaks: Vec::new(), plasma: None }
+}
+
+/// [`hits`] on any path `moves` beside the Ø12 part.
+fn hits_on(body_x: [f64; 2], moves: Vec<Move>) -> Result<Vec<(usize, bool)>, String> {
     let body = LatheClearance::of(&cuboid([body_x[0], -3.0, -4.0], [body_x[1], 3.0, 4.0])).map_err(|e| e.to_string())?;
     let tool = crate::tools::catalog().into_iter().find(|(n, _)| *n == "TN-1600-0R8").map(|(_, t)| t).ok_or("catalog TN-1600-0R8")?;
     let params = OpParams::ProfileFinish { tolerance: 0.05, clearance_z: Height::fixed(30.0), top_z: Height::fixed(16.0), bottom_z: Height::fixed(0.0), feed: 150.0, plunge_feed: 80.0 };
-    let p = Point3::new;
-    let mv = |kind, from, to| Move { rotary: None, kind, from, to, feed: (kind != MoveKind::Rapid).then_some(100.0), arc: None, axis: None };
-    let moves = vec![mv(MoveKind::Rapid, p(start, 0.0, 30.0), p(x, 0.0, 30.0)), mv(MoveKind::Feed, p(x, 0.0, 30.0), p(x, 0.0, 0.0))];
-    let path = Toolpath { moves, cycles: Vec::new(), notes: Vec::new(), comps: Vec::new(), threads: Vec::new(), probes: Vec::new(), breaks: Vec::new(), plasma: None };
+    let path = path_of(moves);
     let part = cylinder(6.0, -16.0, 16.0);
     let cx = Meridian { part: &part, stock: None, nose: 0.8, margin: 0.01, z_tol: 1e-6, drills: &[], band: 0.0, body: None, ahead: &[], outward: None };
     let mut warns = Vec::new();
@@ -94,4 +108,64 @@ fn a_rear_tool_past_centre_is_read_on_its_own_side_like_its_front_mirror() {
     // A path on both sides of the axis cannot tell its holder's side.
     let both = hits(clear, -8.0, 8.0).err().unwrap_or_default();
     assert!(both.starts_with("the lathe holder body cannot be judged: the path stands on both sides"), "{both}");
+}
+
+/// A thread pass the way the thread kernel winds it: rapid in at X
+/// `out`, feed to `t`, six ccw half-turn XY arcs about the axis whose
+/// ends alternate between `t` and its antipode, falling 0.75 each, then
+/// a rapid out. `start` is the first point's X.
+fn thread_pass(start: f64, out: f64, t: f64) -> Vec<Move> {
+    use crate::cl::{ArcMove, ArcPlane};
+    use crate::geo2d::Point2;
+    let p = Point3::new;
+    let mv = |kind, from, to| Move { rotary: None, kind, from, to, feed: (kind != MoveKind::Rapid).then_some(100.0), arc: None, axis: None };
+    let mut moves = vec![mv(MoveKind::Rapid, p(start, 0.0, 30.0), p(out, 0.0, 30.0)), mv(MoveKind::Rapid, p(out, 0.0, 30.0), p(out, 0.0, 10.0)), mv(MoveKind::Feed, p(out, 0.0, 10.0), p(t, 0.0, 10.0))];
+    let mut at = p(t, 0.0, 10.0);
+    for i in 1..=6 {
+        let to = p(if i % 2 == 0 { t } else { -t }, 0.0, 10.0 - 0.75 * i as f64);
+        let mut m = mv(MoveKind::Feed, at, to);
+        m.arc = Some(ArcMove { center: Point2::new(0.0, 0.0), ccw: true, plane: ArcPlane::Xy });
+        moves.push(m);
+        at = to;
+    }
+    moves.push(mv(MoveKind::Rapid, at, p(out, 0.0, at.z)));
+    moves
+}
+
+#[test]
+fn a_thread_pass_winding_through_the_antipode_is_judged_not_refused() -> Result<(), String> {
+    // Review of PR #1167: the thread kernel's half-turn arcs end on the
+    // antipode, so a raw from/to reading put the path at +5.5 and -5.5
+    // and refused every threading op with a lathe body. A round arc about
+    // the axis tells no side; the approach does.
+    let (reaching, clear) = ([-12.0, -3.0], [3.0, 12.0]);
+    assert_eq!(hits_on(clear, thread_pass(8.0, 8.0, 5.5)), Ok(vec![]));
+    let front = hits_on(reaching, thread_pass(8.0, 8.0, 5.5))?;
+    assert!(!front.is_empty() && front.iter().all(|&(_, part)| part), "{front:?}");
+    // The rear mirror (first point 0.5 past centre, every other tip at
+    // X < 0): the arcs are read on the holder's side, same verdicts.
+    assert_eq!(hits_on(clear, thread_pass(0.5, -8.0, -5.5)), Ok(vec![]));
+    let rear = hits_on(reaching, thread_pass(0.5, -8.0, -5.5))?;
+    assert_eq!(rear, front);
+    Ok(())
+}
+
+#[test]
+fn the_drawn_body_flips_its_radial_with_the_holder_side() -> Result<(), String> {
+    // body_axes and judge share one side: a rear path draws the body
+    // along the negated radial, a front one along the frame's own.
+    let p = Point3::new;
+    let mv = |from, to| Move { rotary: None, kind: MoveKind::Feed, from, to, feed: Some(100.0), arc: None, axis: None };
+    let part = cylinder(6.0, -16.0, 16.0);
+    let axes = |start: f64, x: f64| crate::operation::turning_holder::body_axes(&part, &path_of(vec![mv(p(start, 0.0, 30.0), p(x, 0.0, 30.0)), mv(p(x, 0.0, 30.0), p(x, 0.0, 0.0))]));
+    let (front, along) = axes(8.0, 8.0)?;
+    let (rear, rear_along) = axes(0.5, -8.0)?;
+    assert!(front[0].abs() > 0.99, "{front:?}");
+    for k in 0..3 {
+        assert!((rear[k] + front[k]).abs() < 1e-9, "{rear:?} vs {front:?}");
+        assert!((rear_along[k] - along[k]).abs() < 1e-9);
+    }
+    // A thread pass draws on its approach's side too, not refused.
+    assert_eq!(crate::operation::turning_holder::body_axes(&part, &path_of(thread_pass(8.0, 8.0, 5.5))).map(|a| a.0), Ok(front));
+    Ok(())
 }

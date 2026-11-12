@@ -45,7 +45,7 @@ use crate::verify::Warning;
 use super::drill_prior::PriorCell;
 use super::kinds::Section;
 use super::turning_credit::{pilots, Pilot};
-use super::turning_holder_side::holder_side;
+use super::turning_holder_side::sided;
 use super::turning_holder_scene::{material, pilot_removed, standing, Annuli, Kerf, Table, PITCH};
 use super::turning_outline::Revolved;
 use super::turning_rapids::{faced_end, kerf_of, Meridian, SignedMeridian};
@@ -85,7 +85,7 @@ pub(super) fn noted(mut path: Toolpath, params: &OpParams, tool: &Tool, has_body
 pub(crate) fn body_axes(part: &[crate::geometry::Triangle], path: &Toolpath) -> Result<([f64; 3], [f64; 3]), String> {
     let frame = Frame::about(part).map_err(|e| format!("no spindle fits the part ({e})"))?;
     let sm = SignedMeridian::of(&frame, path);
-    let side = holder_side(&sm, path)?;
+    let (side, _) = sided_pieces(&sm, path, super::material::Z_TOL)?;
     let (dir, r) = sm.axes();
     Ok(([r.x * side, r.y * side, r.z * side], [dir.x, dir.y, dir.z]))
 }
@@ -117,11 +117,7 @@ pub(super) fn judge(
         None => None,
     };
     let sm = SignedMeridian::of(&frame, path);
-    let side = holder_side(&sm, path).map_err(unjudged)?;
-    let mut pieces = Vec::with_capacity(path.moves.len());
-    for (i, m) in path.moves.iter().enumerate() {
-        pieces.push(pieces_of(m, &sm, cx.z_tol).ok_or_else(|| unjudged(format!("move {i} leaves the turning plane")))?);
-    }
+    let (side, pieces) = sided_pieces(&sm, path, cx.z_tol).map_err(unjudged)?;
     let margin = if cx.margin.is_finite() { cx.margin.max(0.0) } else { 0.0 };
     let mut kerfs: Vec<Kerf> = Vec::new();
     for (i, _) in path.moves.iter().enumerate().filter(|(_, m)| m.kind != MoveKind::Rapid) {
@@ -164,24 +160,36 @@ pub(super) fn judge(
     Ok(())
 }
 
+/// The holder's side of `path` (#1102) and every move's meridian
+/// pieces, a round arc about the axis set on that side. Refuses by name
+/// when a move leaves the turning plane or the side cannot be told.
+fn sided_pieces(sm: &SignedMeridian, path: &Toolpath, tol: f64) -> Result<(f64, Vec<Vec<Seg>>), String> {
+    let mut pieces = Vec::with_capacity(path.moves.len());
+    for (i, m) in path.moves.iter().enumerate() {
+        pieces.push(pieces_of(m, sm, tol).ok_or_else(|| format!("move {i} leaves the turning plane"))?);
+    }
+    sided(pieces)
+}
+
 /// A move's meridian pieces: its chord, a thread's helix read at its
-/// constant radius, or a meridian arc's chords; `None` when it leaves
-/// the turning plane.
-fn pieces_of(m: &Move, sm: &SignedMeridian, tol: f64) -> Option<Vec<Seg>> {
+/// constant radius (flagged `true`: a round arc about the axis, whose
+/// ends stand on both sides and tell no holder side), or a meridian
+/// arc's chords; `None` when it leaves the turning plane.
+fn pieces_of(m: &Move, sm: &SignedMeridian, tol: f64) -> Option<(Vec<Seg>, bool)> {
     if !sm.in_plane(m.from, tol) || !sm.in_plane(m.to, tol) {
         return None;
     }
     if m.arc.is_none() {
-        return Some(vec![(sm.sr(m.from), sm.sr(m.to))]);
+        return Some((vec![(sm.sr(m.from), sm.sr(m.to))], false));
     }
     if let Some(pq) = kerf_of(m, sm, tol) {
-        return Some(vec![pq]);
+        return Some((vec![pq], true));
     }
     let chords = m.segments3(ARC_TOL);
     if chords.iter().any(|(p, q)| !sm.in_plane(*p, tol) || !sm.in_plane(*q, tol)) {
         return None;
     }
-    Some(chords.into_iter().map(|(p, q)| (sm.sr(p), sm.sr(q))).collect())
+    Some((chords.into_iter().map(|(p, q)| (sm.sr(p), sm.sr(q))).collect(), false))
 }
 
 /// The tool's footprint swept from `p` to `q` (meridian (s, rho)), its

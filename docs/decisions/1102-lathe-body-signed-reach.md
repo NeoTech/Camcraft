@@ -5,22 +5,34 @@ the holder's own +x, not along the path's signed-meridian +x. The holder's
 side is a per-path property (`operation::turning_holder_side::holder_side`):
 the side of the axis the path reaches farthest on. The other side may hold
 only a past-centre overrun of at most `PAST_CENTRE` = 2.5 mm (a face pass
-cleaning the centre pip runs past by up to a nose radius; 2.4 mm is the
-largest common ISO turning nose) while the far side runs beyond it. A path
-on both sides beyond that, or a path within 2.5 mm of the axis on both
-sides, is refused by name ("the path stands on both sides of the spindle
+cleaning the centre pip runs past by up to a nose radius; this covers the
+common ISO noses up to 2.4 mm, not a 3.2 mm corner or a round insert -
+those are refused, never misread) while the far side runs beyond twice
+it (5 mm). A path on both sides beyond that, or one whose far side
+reaches less than 5 mm while its near side is off the axis (the near
+side could be the holder's own on a small part), is refused by name ("the path stands on both sides of the spindle
 axis ..."). The side is never guessed. On the holder's side (`+1`) the
 reading is `Reach::radii(X)`, unchanged. On the other side (`-1`) it is
 `Reach::radii(-X)`. The drawn body (`body_axes`, #1038) flips its radial
 by the same side, so the drawn holder is still the judged one.
 
 **Which signed X the generators produce.** Every turning generator places
-its tips with `Frame::point(rho, station)` at `rho >= 0`, and a face pass
-runs to `rho = 0` at most. `SignedMeridian` takes its + side from the
-path's first off-axis point. So a generated path has every tip at X >= 0
-of its own frame, and the law reads it as before (byte-identical: the
-`+1` branch passes `x` untouched). Today no turning op can carry a tip
-at X < 0. That is why this stays P2 (a latent defect plus a guard) and
+its straight moves' tips with `Frame::point(rho, station)` at `rho >= 0`,
+and a face pass runs to `rho = 0` at most. The exception is threading:
+the thread kernel winds each pass in half-turn XY arcs about the axis,
+and every other arc ends on `Frame::antipode`, at -rho. Those ends stand
+on both sides of the axis by construction while the tip rides one
+radius, so a round arc about the axis tells no side: the side is read
+from the path's meridian pieces with such arcs left out (their ends, and
+a meridian arc's chords, which also catches a bulge past its endpoints),
+and the round arcs are read at |rho| on the holder's side - the same
+|rho| reading `kerf_of` already gives them. (The first cut of this PR
+read raw from/to signs and refused every threading op with a lathe body;
+pinned now by `a_thread_pass_winding_through_the_antipode_is_judged_not_refused`.)
+`SignedMeridian` takes its + side from the path's first off-axis point,
+so every other generated tip is at X >= 0 of its own frame, and the law
+reads it as before (byte-identical: the `+1` branch passes `x`
+untouched). Today no turning op carries a straight-move tip at X < 0. That is why this stays P2 (a latent defect plus a guard) and
 was not re-rated P0. A tip at X < 0 arises only when a path's first point
 sits on the other side from where it works, for example a rear tool
 starting a hair past centre. Read along the frame's +x, that body would
