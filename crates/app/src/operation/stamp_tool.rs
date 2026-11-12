@@ -102,5 +102,7 @@ pub(super) fn write(world: &World, tool_name: &str, params: &OpParams, h: &mut s
     // #368: a modelled body's envelope - bytes only when there is one,
     // so no digest without a body moves.
     crate::tool_body::digest(world, &tool_entity, h);
+    // #852: a drawn neck the stack laws read - bytes only with one.
+    crate::tool_cutter::digest(world, &tool_entity, &tool, h);
     Some(())
 }

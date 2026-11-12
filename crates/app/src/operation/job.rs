@@ -31,6 +31,8 @@ pub struct GenJob {
     /// laws' band stack. `tool` already carries the cylinder enclosing
     /// it, for every law that reads one; None is no body.
     pub(super) body: Option<camcraft_tools::holder_profile::HolderProfile>,
+    /// #852: the tool's drawn neck (`tool_cutter::neck_of`); empty = none.
+    pub(super) neck: Vec<camcraft_tools::holder_profile::HolderBand>,
     /// The tool's lathe body (#369): its clearance bands, judged against
     /// the revolved stock on every move of a turning op; None is none.
     pub(super) lathe_body: Option<std::sync::Arc<camcraft_tools::lathe_holder::LatheClearance>>,
@@ -48,6 +50,8 @@ pub struct GenJob {
     pub(super) stock_aabb: Option<(Point3, Point3)>,
     // Sampled mesh stock can miss narrow features; only analytic stock credits this advisory.
     pub(super) analytic_stock: bool,
+    /// #1091 review: the stock's mesh fidelity is known (`model_fidelity::stock_fidelity_known`).
+    pub(super) stock_fidelity_known: bool,
     pub(super) section_z: Option<Result<f64, GenError>>,
     pub(super) picked_region: Option<Result<Region, GenError>>,
     pub(super) contour_sel:
@@ -136,8 +140,8 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
     // condition stands in its place, read (and refused by name) here.
     let wire = super::wire_op::job_wire(world, op)?;
     // Tool: the diameter drives the path, the body drives the reach law.
-    let (tool, body, lathe_body) = match &wire {
-        Some(cond) => (super::wire_op::job_tool(cond), None, None),
+    let (tool, body, lathe_body, neck) = match &wire {
+        Some(cond) => (super::wire_op::job_tool(cond), None, None, Vec::new()),
         None => super::tool_gate::job_tool(world, op)?,
     };
     let setup = op.setup.as_deref();
@@ -147,7 +151,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
     if let Some(why) = crate::setup_align::generation_problem(world, op) {
         return Err(GenError::Invalid(why));
     }
-    let material = material_of(world, setup, &op.src)?;
+    let material = super::material::judged_material(world, setup, &op.src)?;
     let part_solid = part_solid_of(world, setup, &op.src, &material);
     // Setup stock, when it is not the source itself: the swarf column
     // around a smaller model (the head read at `generate` - same call).
@@ -266,7 +270,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         match crate::rest::prior_plan(world, op_name, setup, tool.diameter * 0.5) {
             Ok(p) => p,
             Err(e) => {
-                eprintln!("camcraft: {op_name}: the program ahead is unreadable for the rapid law, raw stock stands: {e}");
+                tracing::warn!(op = %op_name, "the program ahead is unreadable for the rapid law, raw stock stands: {e}");
                 None
             }
         }
@@ -319,6 +323,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         op_name: op_name.to_owned(),
         tool,
         body,
+        neck,
         lathe_body,
         tool_name: op.tool.clone(),
         params: op.params.clone(),
@@ -329,6 +334,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         stock_facets,
         stock_aabb,
         analytic_stock,
+        stock_fidelity_known: crate::model_fidelity::stock_fidelity_known(world, setup),
         section_z,
         picked_region,
         contour_sel,

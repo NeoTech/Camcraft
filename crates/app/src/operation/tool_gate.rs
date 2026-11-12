@@ -223,17 +223,19 @@ pub fn tool_problem_of(world: &World, entity: &Entity) -> Option<String> {
     tool_problem(world, &name, &op)
 }
 
-/// A generation's tool: the tool, its body's envelope, its lathe body.
+/// A generation's tool: the tool, its body's envelope, its lathe body,
+/// its drawn neck (#852; empty = none).
 pub(super) type JobTool = (
     Tool,
     Option<camcraft_tools::holder_profile::HolderProfile>,
     Option<std::sync::Arc<camcraft_tools::lathe_holder::LatheClearance>>,
+    Vec<camcraft_tools::holder_profile::HolderBand>,
 );
 
 /// The library tool a generation cuts with, as `collect_job` reads it:
-/// the tool, its modelled body's envelope (#368) and its lathe body's
-/// clearance (#369) - or the refusal by name. Kinds that mount no
-/// library tool (#532) never come here.
+/// the tool, its modelled body's envelope (#368), its lathe body's
+/// clearance (#369) and its drawn neck (#852) - or the refusal by name.
+/// Kinds that mount no library tool (#532) never come here.
 pub(super) fn job_tool(world: &World, op: &Operation) -> Result<JobTool, crate::machining2d::GenError> {
     use crate::machining2d::GenError;
     let Some(tool_entity) = model::find_by_name(world, &op.tool) else {
@@ -242,6 +244,7 @@ pub(super) fn job_tool(world: &World, op: &Operation) -> Result<JobTool, crate::
     let Some(tool) = model::tool_of(world, &tool_entity) else {
         return Err(GenError::Invalid(format!("'{}' is not a tool", op.tool)));
     };
+    let neck = crate::tool_cutter::neck_of(world, &tool_entity, &tool);
     let (tool, body) = crate::tool_body::judged(world, &tool_entity, tool)
         .map_err(|e| GenError::Invalid(format!("tool '{}': {e}", op.tool)))?;
     // #369: a lathe body is judged only by the turning family's
@@ -254,5 +257,5 @@ pub(super) fn job_tool(world: &World, op: &Operation) -> Result<JobTool, crate::
             op.tool
         )));
     }
-    Ok((tool, body, lathe_body))
+    Ok((tool, body, lathe_body, neck))
 }
