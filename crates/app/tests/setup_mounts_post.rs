@@ -342,7 +342,6 @@ fn an_own_lathe_post_on_a_mill_setup_is_refused_by_name() {
 
 /// A milling post for the lathe setup's turning op.
 #[test]
-#[ignore = "#1232: a turning op through a milling post is posted as a milling program, not refused"]
 fn an_own_milling_post_on_a_lathe_setup_is_refused_by_name() {
     unserved_post_is_refused("Setup2", "Haas", "Facing2");
 }
