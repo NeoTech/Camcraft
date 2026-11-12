@@ -136,6 +136,7 @@ fn thread_mill(diameter: f64) -> Tool {
         tool_material: None,
         flutes: None,
         orientation: None,
+        turning: None,
     }
 }
 
