@@ -10,6 +10,8 @@ use std::path::{Path, PathBuf};
 use resvg::tiny_skia::{Pixmap, Transform};
 use resvg::usvg;
 
+use crate::icon_font;
+
 /// The edge of every committed PNG (AGENTS.md "Assets": 32x32, drawn at 16 px).
 pub const PNG_PX: u32 = 32;
 /// The masters' grid (Tabler's `viewBox="0 0 24 24"`).
@@ -147,13 +149,19 @@ pub fn build(root: &Path) -> Result<usize, String> {
     Ok(n)
 }
 
+/// Characters per label line under a sheet cell, and the most lines a label takes.
+const LABEL_CHARS: u32 = 10;
+const LABEL_LINES: u32 = 3;
+
 /// A contact sheet: every master at `px` on a dark band (light ink) above a light band (dark ink),
 /// `cols` per row, each pixel blown up `zoom` times (nearest) so a reviewer sees what 16 px shows.
+/// Each icon carries its file stem under it (a 3x5 bitmap font), so a review can name what it sees.
 pub fn sheet(root: &Path, px: u32, cols: u32, zoom: u32) -> Result<Pixmap, String> {
     let all = masters(root)?;
-    let cell = px + px / 2;
+    let cell_w = (px + px / 2).max(LABEL_CHARS * icon_font::ADVANCE + 4);
+    let cell_h = px + px / 2 + LABEL_LINES * icon_font::LINE;
     let rows = (all.len() as u32).div_ceil(cols.max(1)).max(1);
-    let (w, band) = (cols * cell, rows * cell);
+    let (w, band) = (cols * cell_w, rows * cell_h);
     let mut base = Pixmap::new(w, band * 2).ok_or("sheet too large")?;
     let fill = |pm: &mut Pixmap, y0: u32, rgb: [u8; 3]| {
         for (i, p) in pm.data_mut().as_chunks_mut::<4>().0.iter_mut().enumerate() {
@@ -169,8 +177,20 @@ pub fn sheet(root: &Path, px: u32, cols: u32, zoom: u32) -> Result<Pixmap, Strin
     for (k, m) in all.iter().enumerate() {
         let bytes = std::fs::read(m).map_err(|e| format!("{}: {e}", m.display()))?;
         let icon = render(&bytes, px)?;
-        let (cx, cy) = ((k as u32 % cols) * cell + px / 4, (k as u32 / cols) * cell + px / 4);
+        let (x0, y0c) = ((k as u32 % cols) * cell_w, (k as u32 / cols) * cell_h);
+        let (cx, cy) = (x0 + (cell_w - px) / 2, y0c + px / 4);
+        let lines = icon_font::label_lines(&stem(m)?, LABEL_CHARS as usize);
         for (y0, _, ink) in bands {
+            for (li, line) in lines.iter().take(LABEL_LINES as usize).enumerate() {
+                let lx = x0 + (cell_w.saturating_sub(line.len() as u32 * icon_font::ADVANCE)) / 2;
+                let ly = y0 + y0c + px + px / 4 + 2 + li as u32 * icon_font::LINE;
+                for (dx, dy) in icon_font::pixels(line) {
+                    let o = (((ly + dy) * w + lx + dx) * 4) as usize;
+                    if let Some(d) = base.data_mut().get_mut(o..o + 3) {
+                        d.copy_from_slice(&ink);
+                    }
+                }
+            }
             for (j, p) in icon.data().as_chunks::<4>().0.iter().enumerate() {
                 let a = u32::from(p[3]);
                 let (x, y) = (cx + j as u32 % px, y0 + cy + j as u32 / px);

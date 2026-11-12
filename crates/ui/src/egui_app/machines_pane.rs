@@ -34,6 +34,7 @@ use super::colorvision::text_inks;
 use super::layout::{group_open, prop_grid};
 use super::theme::Tokens;
 use crate::state::{CommandKind, State};
+use crate::shortcut_keys::chord;
 
 /// The pane's view state.
 #[derive(Default)]
@@ -271,7 +272,7 @@ pub(crate) fn draw(ui: &mut Ui, state: &mut State, pal: &Tokens) {
         let r = ui.add_enabled(why.is_none(), egui::Button::new(USE_FOR_SETUP));
         match &why {
             None => {
-                if r.on_hover_text("Make this the setup's machine (Ctrl+Z undoes it)").clicked() {
+                if r.on_hover_text(format!("Make this the setup's machine ({} undoes it)", chord("Z"))).clicked() {
                     assign = Some(e.source.clone());
                 }
             }

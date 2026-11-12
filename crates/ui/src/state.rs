@@ -14,6 +14,7 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, TryRecvError};
 use camcraft_app::clock::Instant;
 use std::time::Duration;
+use crate::shortcut_keys::chord;
 
 use camcraft_app::commands::{
     ActivateSetup, AlignPartToSetup, SetSetupRelative, SetSetupStockSource, SetSetupWorkOffset, AddTool, HolderPick, ApplyCuttingData, ChangeOperationKind, ChangeTool, CommandError, CreateOperation,
@@ -75,6 +76,9 @@ pub use program_entry::EntryVerb;
 #[path = "state_tool_body.rs"]
 mod tool_body_ui;
 pub use tool_body_ui::{BodyDraft, BodyPickMode, ToolBodyUi, ZOOM_MAX, ZOOM_MIN, clamp_zoom};
+#[path = "state_tool_body_lathe.rs"]
+mod tool_body_lathe_ui;
+pub use tool_body_lathe_ui::{LatheBodyDraft, LatheDraft};
 #[path = "state_tool_profile.rs"]
 mod tool_profile_ui;
 #[path = "state_tool_cutter.rs"]
@@ -82,6 +86,8 @@ mod tool_cutter_ui;
 pub use tool_cutter_ui::ToolCutterUi;
 #[path = "state_recent.rs"]
 mod recent_ui;
+#[path = "state_view.rs"]
+mod view_prefs_ui;
 #[path = "state_prefs.rs"]
 mod prefs_ui;
 #[path = "state_step_budget.rs"]
@@ -204,6 +210,12 @@ pub enum CommandKind {
         setup: String,
         own: bool,
     },
+    /// #821: a setup states its own nose-to-rotary figure, mm, or clears
+    /// it (`SetSetupNoseToAxis`).
+    SetupNoseToAxis {
+        setup: String,
+        value: Option<f64>,
+    },
     /// #1031: state (`Some`) or clear a setup's workholding maximum rpm
     /// (`SetSetupWorkholdingRpm`).
     SetSetupWorkholdingRpm { setup: String, max_rpm: Option<f64> },
@@ -253,6 +265,13 @@ pub enum CommandKind {
     SetToolBody {
         name: String,
         body: Option<BodyDraft>,
+    },
+    /// #361: set a lathe-held tool's body in the turning tool frame -
+    /// the tool editor's Apply body on a lathe draft, one
+    /// `SetToolBody::lathe`. (Clear body stays `SetToolBody` with `None`.)
+    SetLatheToolBody {
+        name: String,
+        body: LatheBodyDraft,
     },
     /// #93: set a milling tool's drawn spun holder (`Some` points) or
     /// return it to its parametric cylinder (`None`) - the tool editor's
@@ -1025,6 +1044,7 @@ impl ToolUi {
                 ToolKind::Taper => 10,
                 ToolKind::Probe => 11,
                 ToolKind::Torch => 12,
+                ToolKind::Electrode => 13,
             },
             diameter: t.diameter,
             corner_r: t.corner_r,
@@ -1070,6 +1090,7 @@ impl ToolUi {
             10 => ToolKind::Taper,
             11 => ToolKind::Probe,
             12 => ToolKind::Torch,
+            13 => ToolKind::Electrode,
             _ => ToolKind::EndMill,
         }
     }
@@ -1419,6 +1440,20 @@ pub struct State {
     /// setup, not decoration. Hiding the world axes is for the moment a
     /// G5x offset sits away from machine zero and two gizmos read as clutter.
     pub show_world_axes: bool,
+    /// Viewport picks may reach the far side of the part (#692): when on,
+    /// a click sends `through: true` and can pick a hidden edge or point.
+    /// Off by default, shown as off. View state like the axes toggle -
+    /// not undoable, not saved; flipped from the viewport's nav column.
+    pub pick_through: bool,
+    /// Do the origin gizmos wear their names (#727 drew them, #645
+    /// asked for the switch)? View state like the camera - never a
+    /// command, never on the history - but unlike the camera it is a
+    /// kept preference: read at startup from the per-user view file
+    /// and written back when the browser checkbox flips it. Default
+    /// ON, the #727 decision; the `X`/`Y`/`Z` axis letters never
+    /// depend on it - only the names (`World`, each offset's entity
+    /// name) do.
+    pub show_gizmo_names: bool,
     /// Show cached toolpaths beyond the selected operation's: with this on,
     /// every generated path draws (dimmed where unselected) instead of only
     /// the one the tree highlights. View state like the camera - not
@@ -1503,6 +1538,9 @@ pub struct State {
     /// Where the recents are written back; `None` (every headless
     /// State) keeps them in memory only.
     pub recent_store: Option<PathBuf>,
+    /// Where the view preferences (#645) are written back; `None`
+    /// (every headless State) keeps them in memory only.
+    pub view_store: Option<PathBuf>,
     /// Where the theme and colour-vision preferences (#877) are written
     /// back; `None` (every headless State) keeps them in memory only.
     pub prefs_store: Option<PathBuf>,
@@ -1627,6 +1665,9 @@ pub struct State {
     /// The setups whose pick rows (plane, axes) were drawn this frame
     /// (#664): any other setup's armed pick is disarmed at frame end.
     pub setup_pick_rows: Vec<String>,
+    /// The Setups page's WCS-from-features role draft (#701); while it
+    /// is collecting, feature picks land in it ahead of everything else.
+    pub wcs_pick: Option<crate::wcs_pick::WcsPick>,
     /// The Boundary group's view state and caches (M11.5 UX): open this
     /// frame, the draft's machined-area preview, the entries' shapes.
     pub boundary_view: crate::boundary_draft::BoundaryView,
@@ -1838,6 +1879,7 @@ impl State {
             points_pick: None,
             axis_rows_shown: false,
             setup_pick_rows: Vec::new(),
+            wcs_pick: None,
             boundary_view: Default::default(),
             incoming_view: Default::default(),
             geo_hover: None,
@@ -1850,6 +1892,8 @@ impl State {
             browser_expanded: [true; 3],
             cam: Camera::default(),
             show_world_axes: true,
+            pick_through: false,
+            show_gizmo_names: true,
             show_all_paths: false,
             display: DisplayMode::default(),
             sim: None,
@@ -1869,6 +1913,7 @@ impl State {
             ribbon_recent_open: None,
             recent: camcraft_app::recent::RecentFiles::default(),
             recent_store: None,
+            view_store: None,
             prefs_store: None,
             import_tool_holders: true,
             panels_open: PanelsOpen { browser: true, properties: true, machines: false },
@@ -2899,6 +2944,7 @@ impl State {
             CommandKind::SetupOwnMachine { setup, own } => self.own_machine(&setup, own),
             CommandKind::SetupOwnPost { setup, own } => self.own_post(&setup, own),
             CommandKind::SetupOwnPostOptions { setup, own } => self.own_post_options(&setup, own),
+            CommandKind::SetupNoseToAxis { setup, value } => self.set_setup_nose(&setup, value),
             CommandKind::SetSetupWorkholdingRpm { setup, max_rpm } => self.set_workholding_rpm(&setup, max_rpm),
             CommandKind::EditMachineDialog => {
                 let (path, m) = machine::of(&self.world);
@@ -3026,6 +3072,7 @@ impl State {
                     Ok(command) => {
                         self.history.execute(&self.world, command);
                         self.doc_version += 1;
+                        self.wcs_pick = None; // #701: a landed frame ends the role draft
                         let active = camcraft_app::setup::active(&self.world);
                         self.status =
                             format!("{} origin set", camcraft_app::setup::wcs_label(&self.world, active.as_deref()));
@@ -3061,6 +3108,7 @@ impl State {
                 }
             }
             CommandKind::SetToolBody { name, body } => self.run_set_tool_body(&name, body),
+            CommandKind::SetLatheToolBody { name, body } => self.run_set_lathe_tool_body(&name, body),
             CommandKind::SetToolProfile { name, points } => self.run_set_tool_profile(&name, points),
             CommandKind::SetToolCutter { name, points } => self.run_set_tool_cutter(&name, points),
             CommandKind::ReshapeTool { name, tool, points } => self.run_reshape_tool(&name, tool, points),
@@ -3309,7 +3357,7 @@ impl State {
                 Ok(command) => {
                     self.history.execute(&self.world, command);
                     self.doc_version += 1;
-                    self.status = format!("cleared the toolpath of {name} - Ctrl+Z restores it");
+                    self.status = format!("cleared the toolpath of {name} - {} restores it", chord("Z"));
                 }
                 Err(err) => {
                     self.refuse(ErrorScope::Operation, format!("toolpath not cleared: {err}"))
@@ -3798,6 +3846,9 @@ impl State {
         let (tx, rx) = mpsc::channel();
         let worker_path = path.clone();
         let budget = self.step_budget_for(&path);
+        if let (Some(b), false) = (budget, self.step_budget.explicit) {
+            self.status = format!("importing {} under its recorded STEP facet budget of {b}…", file_label(&path));
+        }
         let spawned = std::thread::Builder::new()
             .name("camcraft-import".to_string())
             .spawn(move || {

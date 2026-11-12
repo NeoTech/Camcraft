@@ -28,7 +28,10 @@ pub mod machining2d;
 pub mod machining3d;
 pub mod plunge_law;
 pub mod plasma;
+pub mod wire_edm;
 pub mod probing;
+// #541: sinker EDM burn to depth.
+pub mod sinker;
 pub mod quality;
 pub mod multiaxis;
 pub mod turning;

@@ -31,8 +31,9 @@ const STRAIGHT_TOL_MM: f64 = 0.01;
 const STRAIGHT_TOL_REL: f64 = 1e-4;
 
 /// The edge must lean at least this far out of the face's normal (deg) to
-/// give the plane a direction worth trusting.
-const MIN_EDGE_TILT_DEG: f64 = 5.0;
+/// give the plane a direction worth trusting. (#701: the general role
+/// table enforces the same rule between any two axis picks.)
+pub(super) const MIN_EDGE_TILT_DEG: f64 = 5.0;
 
 /// A datum plane: a point on it and its outward unit normal (world).
 type Plane = ([f64; 3], [f64; 3]);
@@ -188,7 +189,7 @@ fn curved_center(world: &World, g: &GeoSel) -> Result<[f64; 3], String> {
         .map_err(|why| format!("{} of '{}': {why}", g.feature, g.entity))
 }
 
-fn vertex(world: &World, g: &GeoSel) -> Result<[f64; 3], String> {
+pub(super) fn vertex(world: &World, g: &GeoSel) -> Result<[f64; 3], String> {
     let FeatureSel::Vertex(id) = g.feature else { return Err(gone(g)) };
     let e = model::find_by_name(world, &g.entity).ok_or_else(|| gone(g))?;
     let features = model::features_of(world, &e).ok_or_else(|| gone(g))?;

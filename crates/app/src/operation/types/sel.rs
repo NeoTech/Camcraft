@@ -281,6 +281,15 @@ pub enum OpType {
     /// probe - the stored kind id never moves - and listed in the 2D
     /// mill section by display order.
     TrochoidalSlot,
+    /// Wire EDM contour (#532): one closed profile cut through the
+    /// workpiece by a vertical wire, offset to a stated punch / die
+    /// side - the wire EDM's family (see [`crate::wire_edm`]).
+    /// Appended: stored kind ids never move.
+    WireContour,
+    /// Sinker EDM burn to depth (#541): one electrode fed down Z to a
+    /// depth read from a stated datum (see [`crate::sinker`]). Appended:
+    /// stored kind ids never move.
+    SinkerBurn,
 }
 
 impl core::fmt::Display for OpType {

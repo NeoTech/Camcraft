@@ -49,10 +49,18 @@ pub mod pick;
 pub use camcraft_post::post;
 pub mod path_sig;
 pub mod posting;
+// #530: the op-family door at post.
+mod posting_family;
+/// Which spindle a lathe post turns for a section, and the door that
+/// keeps a milling operation off the work spindle (#1190).
+pub mod lathe_voice;
 // #155: standalone Pause / Home entries in the operation list.
 pub mod program_entry;
 pub use camcraft_motion::plasma;
+pub use camcraft_motion::wire_edm;
 pub use camcraft_motion::probing;
+// #541: sinker EDM burn to depth.
+pub use camcraft_motion::sinker;
 pub mod project;
 // #35: pocket and slot recognition on the model's faces.
 pub mod recognize;
@@ -63,6 +71,7 @@ pub mod prefs;
 pub mod recent;
 pub mod rest;
 pub mod ribbon;
+pub mod rotary_stack;
 pub mod schema;
 pub mod script;
 pub mod setup;
@@ -122,12 +131,19 @@ pub mod tool_body;
 pub mod tool_body_view;
 // #369: lathe-held tool bodies (the turning tool frame).
 pub mod tool_body_lathe;
+// #369/#396: the turning tool frame and the insert zone, for the UI.
+pub use camcraft_tools::{lathe_holder, lathe_insert_zone};
+// #361: the one door a body file is read through; the lathe placement reads.
+pub mod tool_body_file;
+pub mod tool_body_lathe_view;
 // #743: the simulated tool as the collision laws read it, revolved.
 pub mod sim_tool_body;
 // #1038: a lathe-held body drawn as modelled in the holder law's frame.
 pub mod sim_lathe_body;
 pub mod units;
 pub use camcraft_sim::verify;
+// #645: the viewport view preferences (#727's name toggle), per user.
+pub mod view;
 // #261: the moves a cached path's warnings name.
 pub mod warned_moves;
 pub mod world;
