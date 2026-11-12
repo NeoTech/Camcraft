@@ -35,6 +35,7 @@ pub(crate) mod gpu_select;
 pub mod contrast;
 mod boundary;
 mod gcode_highlight;
+mod gcode_view;
 mod debug_info;
 mod status_alert;
 
