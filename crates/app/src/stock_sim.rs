@@ -135,6 +135,9 @@ pub fn simulate_document(
 ) -> Result<ProgramSim, String> {
     let planned = plan_program(world)?;
     refuse_unjudged(&planned)?;
+    // #864: a part imported coarser than promised tightens the verdict by
+    // its excess; one too coarse for that is refused by name, not judged.
+    let tol = crate::model_fidelity::verdict_tol(world)?;
 
     // Setup changes (#317): a setup that holds the part differently, or
     // is placed relative to the one before it, starts from the body the
@@ -148,8 +151,8 @@ pub fn simulate_document(
         part_facets(world)?
     };
     let (mut dev, display) = match walked.held {
-        carry::Held::Plain(dex) => (deviate(&dex, &model_facets, DEV_TOL).map_err(|e| e.to_string())?, dex),
-        carry::Held::Carried(body) => (body.deviate(&model_facets, DEV_TOL).map_err(|e| e.to_string())?, body.display()),
+        carry::Held::Plain(dex) => (deviate(&dex, &model_facets, tol).map_err(|e| e.to_string())?, dex),
+        carry::Held::Carried(body) => (body.deviate(&model_facets, tol).map_err(|e| e.to_string())?, body.display()),
     };
     // #303: the op owns its break - a chamfer's or deburr's declared
     // bevel is part of the finished part, judged by its own depth.
