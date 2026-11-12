@@ -342,7 +342,13 @@ function startPreamble() {
   // stopped before its first move, whatever the tool change did.
   var probeStop = spindleWait && !(sRpm > 0);
   opNotes();
-  block(["G17", "G90", wcsWord, "G40", "G80"]);
+  // #901: G710 - metric for lengths AND feeds (the family's published
+  // programming manual: G71 switches only geometric data, so F would
+  // still read in the basic system's unit; G710 switches both). Stated
+  // in the opening block before any motion, whatever the control's
+  // basic system or the last program left modal. Where the program's
+  // unit is chosen, and inch output, is #902.
+  block(["G17", "G710", "G90", wcsWord, "G40", "G80"]);
   planeG = 17;              // the preamble states the plane
   if (toolWait) {
     toolNote();
