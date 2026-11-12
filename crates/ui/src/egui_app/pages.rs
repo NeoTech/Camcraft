@@ -987,8 +987,9 @@ fn tool_page(ui: &mut Ui, state: &mut State, name: &str) {
                 .clicked();
             let import = ui
                 .button("Import library…")
-                .on_hover_text("add the tools of a CamCraft tool library file (one undo step; taken names are never overwritten)")
+                .on_hover_text("import the tools of a CamCraft tool library file (one undo step; the mode beside it says what happens to a name the document has)")
                 .clicked();
+            tool_import_mode_combo(ui, &mut state.tool_import_mode);
             (new, export, import)
         })
         .inner;
@@ -1921,4 +1922,23 @@ mod turn_tests {
         assert!(!state.tool_ui.exists);
         assert!(state.pending.is_empty());
     }
+}
+
+/// #899: the Import library mode picker (view state; the import is the command).
+fn tool_import_mode_combo(ui: &mut egui::Ui, mode: &mut camcraft_app::commands::ImportMode) {
+    use camcraft_app::commands::ImportMode;
+    egui::ComboBox::from_id_salt("tool_import_mode")
+        .selected_text(match mode {
+            ImportMode::Add => "Add (rename duplicates)",
+            ImportMode::Update => "Update same-named",
+            ImportMode::Replace => "Replace library",
+        })
+        .show_ui(ui, |ui| {
+            ui.selectable_value(mode, ImportMode::Add, "Add (rename duplicates)")
+                .on_hover_text("an identical tool is skipped, a different tool of a taken name comes in as \"Name (2)\"");
+            ui.selectable_value(mode, ImportMode::Update, "Update same-named")
+                .on_hover_text("a same-named tool takes the file's definition in place (number kept; operations using it go Stale); new names are added");
+            ui.selectable_value(mode, ImportMode::Replace, "Replace library")
+                .on_hover_text("update, and tools the file lacks are removed - refused if an operation uses one");
+        });
 }
