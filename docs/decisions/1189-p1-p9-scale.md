@@ -142,13 +142,17 @@ else:
         if o == "P0":
             rows.append(dict(issue=num, old="P0", new="P1", done=False, phase=2))
         elif o == "P1":
-            if bug and num in main_broken: new = "P2"
+            mcp = "area:mcp" in n or i["title"].startswith("MCP:")
+            if "bug" in n and num in main_broken: new = "P2"
+            elif "bug" in n: new = "P3"
+            elif "enhancement" not in n and mcp: new = "P5"   # label-less MCP item: owed surface, not a defect
+            elif bug and num in main_broken: new = "P2"
             elif bug: new = "P3"
             elif num in requested: new = "P4"
             elif "area:mcp" in n or "area:build" in n or "area:process" in n: new = "P5"
             else: new = "P6"
             if bug and "area:build" in n and num not in main_broken: cand.append(i)
-            if "bug" not in n and "enhancement" not in n: untyped.append(num)
+            if "bug" not in n and "enhancement" not in n and not mcp: untyped.append(num)
             rows.append(dict(issue=num, old="P1", new=new, done=False, phase=1))
         elif o == "P2":
             new = "P7" if bug else ("P6" if num in has_pr else "P8")
@@ -159,7 +163,7 @@ else:
         print(f"  #{r['issue']}: {r['old']} -> {r['new'] or '(removed; P? kept)'}")
     print("\nP? issues that lose a stray number (never given P1..P9):", pq)
     print("Carry two old numbers (NOT in the plan; fix by hand):", multi)
-    print("Old-P1 with neither bug nor enhancement (planned as bugs; check):", untyped)
+    print("Old-P1 with neither bug nor enhancement, not MCP (planned as bugs; check):", untyped)
     print("Old-P1 bugs with area:build planned as P3 (choose --main-broken from these):")
     for i in cand: print(f"  #{i['number']} {i['title']}")
     print("Old-P2 enhancements planned as P6 (open PR linked):",
