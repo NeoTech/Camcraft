@@ -116,6 +116,10 @@ pub enum CommandError {
     NameConflict(String),
     #[error("invalid parameters: {0}")]
     Invalid(String),
+    /// A precondition the user can fix, said in plain English with what to
+    /// do next (#1105): shown as is, with no "invalid parameters:" prefix.
+    #[error("{0}")]
+    Needs(String),
     #[error(transparent)]
     Import(#[from] crate::geometry::ImportError),
     #[error("'{0}' import is not supported yet; import a STEP, STL, or OBJ file instead")]

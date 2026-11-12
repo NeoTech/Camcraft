@@ -21,6 +21,7 @@ pub mod fixture_locate;
 pub mod fixture_struck;
 pub mod fixture_view;
 pub mod vise;
+pub mod vise_fit;
 pub mod accessory;
 pub mod plate;
 pub mod modvise;
