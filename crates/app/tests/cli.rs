@@ -153,3 +153,75 @@ fn a_post_that_refuses_exits_one_and_says_why() {
     assert!(err.contains("post:"), "the verb names itself: {err}");
     assert!(!o.stdout.contains(&b'{'), "a stopped script parks no answer: {}", String::from_utf8_lossy(&o.stdout));
 }
+
+/// Spawns the CLI with `stdin` piped in: a lane that starts serving
+/// (mcp) would answer the JSON-RPC line written here on stdout.
+fn cli_with_stdin(args: &[&str], stdin: &str) -> Output {
+    use std::io::Write;
+    use std::process::Stdio;
+    let mut child = Command::new(env!("CARGO_BIN_EXE_camcraft-cli"))
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("the CLI binary runs");
+    if let Some(mut pipe) = child.stdin.take() {
+        // A lane that exits before reading closes the pipe: not a failure here.
+        let _ = pipe.write_all(stdin.as_bytes());
+    }
+    child.wait_with_output().expect("the CLI finishes")
+}
+
+#[test]
+fn every_subcommand_answers_help_and_names_its_flags() {
+    // Each lane's usage names itself and every flag its parser reads.
+    let cases: [(&str, &[&str]); 3] = [
+        ("script", &["<job.js>", "--help", "-h"]),
+        ("process", &["<job.camproj>", "-o", "--out", "--cps", "--help", "-h"]),
+        ("mcp", &["--connect", "<host:port>", "--help", "-h"]),
+    ];
+    for (cmd, names) in cases {
+        for flag in ["--help", "-h"] {
+            let o = cli_str(&[cmd, flag]);
+            let text = String::from_utf8_lossy(&o.stdout);
+            assert_eq!(code(&o), 0, "{cmd} {flag} exits 0: {text}");
+            assert!(text.contains(&format!("camcraft-cli {cmd}")), "{cmd} {flag} names its command: {text}");
+            for name in names {
+                assert!(text.contains(name), "{cmd} {flag} names {name}: {text}");
+            }
+            assert!(o.stderr.is_empty(), "{cmd} {flag} is quiet on stderr");
+        }
+    }
+}
+
+#[test]
+fn help_flag_answers_anywhere_in_the_argv() {
+    // The project does not exist: the help answer must not read it.
+    let o = cli_str(&["process", "/no/such/project.camproj", "--help"]);
+    assert_eq!(code(&o), 0);
+    assert!(String::from_utf8_lossy(&o.stdout).contains("--cps"), "process help names --cps");
+}
+
+#[test]
+fn mcp_help_does_not_start_the_server() {
+    // A live server would answer this initialize line on stdout.
+    let init = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}\n";
+    let o = cli_with_stdin(&["mcp", "--help"], init);
+    assert_eq!(code(&o), 0);
+    let text = String::from_utf8_lossy(&o.stdout);
+    assert!(!text.contains("jsonrpc"), "help must not speak the protocol: {text}");
+    assert!(text.contains("--connect"), "mcp help names --connect");
+    // Control: the same line, no help, is answered - so the check above can fail.
+    let served = cli_with_stdin(&["mcp"], init);
+    assert!(String::from_utf8_lossy(&served.stdout).contains("jsonrpc"), "a plain mcp answers the line");
+}
+
+#[test]
+fn unknown_flags_still_refuse_with_a_two_and_help_lists_per_command() {
+    assert_eq!(code(&cli_str(&["process", "p.camproj", "--bogus"])), 2);
+    assert_eq!(code(&cli_str(&["script", "--bogus"])), 2);
+    assert_eq!(code(&cli_str(&["mcp", "--bogus"])), 2);
+    let o = cli_str(&["help"]);
+    assert!(String::from_utf8_lossy(&o.stdout).contains("<command> --help"), "top-level help points at per-command help");
+}
