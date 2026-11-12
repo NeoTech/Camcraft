@@ -31,6 +31,8 @@ pub mod plasma;
 pub mod probing;
 // #541: sinker EDM burn to depth.
 pub mod sinker;
+// #543: sinker rough and finish with undersize.
+pub mod sinker_undersize;
 pub mod quality;
 pub mod multiaxis;
 pub mod turning;

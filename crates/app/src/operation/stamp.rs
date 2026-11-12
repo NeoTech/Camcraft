@@ -124,6 +124,22 @@ pub fn current_stamp(
             Ok(g) => w(&mut h, g),
             Err(e) => h.write(e.as_bytes()),
         }
+        // #543: a rough or finish reads its condition's undersize, and a
+        // finish the rough it follows - a re-stated undersize, or a
+        // rough added, removed or re-sized, is a different judgement.
+        if let Some(read) = super::sinker_pass::read_pass(world, op_name, setup, p) {
+            h.write(b"sinker-pass");
+            match read {
+                Ok(r) => {
+                    w(&mut h, r.undersize);
+                    if let Some((name, u)) = r.rough {
+                        h.write(name.as_bytes());
+                        w(&mut h, u);
+                    }
+                }
+                Err(e) => h.write(e.as_bytes()),
+            }
+        }
     }
     // M11.3: a tool that may not plunge into solid changes the entries;
     // a byte only then, so no centre-cutting op's digest moves.

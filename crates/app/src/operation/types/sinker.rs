@@ -9,6 +9,7 @@
 
 use super::height::Height;
 pub use crate::sinker::SinkerDatum;
+pub use crate::sinker_undersize::SinkerPass;
 
 /// The Sinker Burn's parameters.
 #[derive(Clone, Debug, PartialEq)]
@@ -31,6 +32,14 @@ pub struct SinkerBurnOp {
     /// The machine's EDM condition id (#531): its spark gap places the
     /// tip. Required - an unstated condition is refused by name.
     pub condition: String,
+    /// Which pass of the cavity this burn is (#543): a single electrode
+    /// (#541), or the rough or finish of an undersized pair.
+    pub pass: SinkerPass,
+    /// The finished cavity's X and Y size, mm (#543): what a rough or
+    /// finish burn is judged against. Unread for a single burn; a rough
+    /// or finish without it is refused by name.
+    pub cavity_x: f64,
+    pub cavity_y: f64,
 }
 
 impl SinkerBurnOp {
@@ -47,5 +56,9 @@ impl SinkerBurnOp {
             && self.y.is_finite()
             && self.feed.is_finite()
             && self.feed > 0.0
+            && self.cavity_x.is_finite()
+            && self.cavity_x >= 0.0
+            && self.cavity_y.is_finite()
+            && self.cavity_y >= 0.0
     }
 }

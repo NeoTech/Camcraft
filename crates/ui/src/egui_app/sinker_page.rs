@@ -9,8 +9,9 @@
 //! die-sink EDM practice); no vendor text.
 
 use super::fields::*;
-use camcraft_app::operation::{SinkerBurnOp, SinkerDatum};
+use camcraft_app::operation::{SinkerBurnOp, SinkerDatum, SinkerPass};
 
+const PASSES: [&str; 3] = ["Single electrode", "Rough (undersized)", "Finish (to size)"];
 const DATUMS: [&str; 3] = ["Work top (depth down)", "Cavity floor (stand-off up)", "Electrode tip (down from approach)"];
 
 pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut Cx<'_>) {
@@ -18,7 +19,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
     let OpParams::SinkerBurn(p) = params else {
         return;
     };
-    let SinkerBurnOp { clearance_z, top_z, floor_z, datum, depth, x, y, feed, condition } = p;
+    let SinkerBurnOp { clearance_z, top_z, floor_z, datum, depth, x, y, feed, condition, pass, cavity_x, cavity_y } = p;
     if tab == SEC_GEO {
         prop_row(ui, "Burn at X", |ui| num(ui, u, x));
         prop_row(ui, "Burn at Y", |ui| num(ui, u, y));
@@ -44,6 +45,23 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             _ => SinkerDatum::WorkTop,
         };
         prop_row(ui, "Depth", |ui| num(ui, u, depth));
+        // #543: the rough and finish of an undersized pair.
+        let mut pi = match pass {
+            SinkerPass::Single => 0,
+            SinkerPass::Rough => 1,
+            SinkerPass::Finish => 2,
+        };
+        prop_row(ui, "Electrode pass", |ui| combo(ui, "sinker.pass", &mut pi, &PASSES));
+        *pass = match pi {
+            1 => SinkerPass::Rough,
+            2 => SinkerPass::Finish,
+            _ => SinkerPass::Single,
+        };
+        if *pass != SinkerPass::Single {
+            prop_row(ui, "Finished cavity X", |ui| num(ui, u, cavity_x));
+            prop_row(ui, "Finished cavity Y", |ui| num(ui, u, cavity_y));
+            hint(ui, "the condition's undersize sizes the electrode; a finish must burn exactly this size, or it is refused");
+        }
     }
     if tab == SEC_FEEDS {
         prop_row(ui, "Servo feed", |ui| num_feed(ui, u, feed));
