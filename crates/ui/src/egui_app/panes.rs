@@ -734,6 +734,8 @@ pub(super) fn op_icon(kind: OpType) -> Icon {
         OpType::PlasmaProfile => Icon::Contour,
         // #541: a plunge to depth - the drill's pixels.
         OpType::SinkerBurn => Icon::Drill,
+        // #545: a lateral burn of one wall - the contour's pixels.
+        OpType::SinkerSideBurn => Icon::Contour,
         OpType::Pocket3D => Icon::Pocket,
         OpType::Finish3D => Icon::Finish3D,
         OpType::Contour5D => Icon::Contour5D,

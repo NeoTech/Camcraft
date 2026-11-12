@@ -307,10 +307,11 @@ fn the_probe_appends_its_id_and_lists_in_drilling() {
     assert_eq!(KindInfo::ALL.len(), KIND_COUNT);
     assert_eq!(KindInfo::ALL[38].ty, operation::OpType::Probe);
     // #670 appended the plasma profile behind it (39), #220 the trochoid
-    // (40), #541 the sinker burn (41).
+    // (40), #541 the sinker burn (41), #545 the sinker side burn (42).
     assert_eq!(KindInfo::ALL[39].ty, operation::OpType::PlasmaProfile);
     assert_eq!(KindInfo::ALL[40].ty, operation::OpType::TrochoidalSlot);
-    assert_eq!(KindInfo::ALL[KIND_COUNT - 1].ty, operation::OpType::SinkerBurn);
+    assert_eq!(KindInfo::ALL[41].ty, operation::OpType::SinkerBurn);
+    assert_eq!(KindInfo::ALL[KIND_COUNT - 1].ty, operation::OpType::SinkerSideBurn);
     assert_eq!(KindInfo::ALL[13].ty, operation::OpType::Pocket3D, "Pocket3D keeps id 13");
     assert_eq!(KindInfo::ALL[37].ty, operation::OpType::BoringTurning, "the turning tail keeps 37");
     let drilling: Vec<operation::OpType> = Section::Drilling.kinds().into_iter().map(|i| KindInfo::ALL[i].ty).collect();

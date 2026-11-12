@@ -1431,7 +1431,8 @@ impl OpParams {
             }
             // The sinker burn (#541): every stored number, the datum
             // and the condition id.
-            OpParams::SinkerBurn(p) => {
+            // #545: the side burn writes the burn's bytes under its own tag.
+            OpParams::SinkerBurn(p) | OpParams::SinkerSideBurn(super::SinkerSideBurnOp { burn: p, .. }) => {
                 wh(h, p.clearance_z);
                 wh(h, p.top_z);
                 wh(h, p.floor_z);
@@ -1452,6 +1453,12 @@ impl OpParams {
                     w(h, o.radius);
                     h.write_u32(o.vectors);
                     h.write_u32(o.turns);
+                }
+                // #545: then the side's direction, amount and undersize.
+                if let OpParams::SinkerSideBurn(s) = self {
+                    h.write(s.direction.word().as_bytes());
+                    w(h, s.amount);
+                    w(h, s.undersize);
                 }
             }
             // The plasma profile (#670): every stored number, the

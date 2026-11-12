@@ -126,6 +126,14 @@ pub fn current_stamp(
             Err(e) => h.write(e.as_bytes()),
         }
     }
+    // #545: the side burn's gap too, behind its allowance law.
+    if let OpParams::SinkerSideBurn(p) = params {
+        h.write(b"sinker-side-gap");
+        match super::sinker_side_op::side_gap(world, setup, p) {
+            Ok(g) => w(&mut h, g),
+            Err(e) => h.write(e.as_bytes()),
+        }
+    }
     // M11.3: a tool that may not plunge into solid changes the entries;
     // a byte only then, so no centre-cutting op's digest moves.
     if !tool.center_cutting {

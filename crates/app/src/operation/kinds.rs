@@ -143,7 +143,7 @@ fn feed_of(p: &OpParams) -> f64 {
         // A blank plasma feed is the controller's (#670): no number.
         OpParams::PlasmaProfile(p) => p.feed.unwrap_or(0.0),
         // The sinker's servo feed down (#541).
-        OpParams::SinkerBurn(p) => p.feed,
+        OpParams::SinkerBurn(p) | OpParams::SinkerSideBurn(super::SinkerSideBurnOp { burn: p, .. }) => p.feed,
     }
 }
 
@@ -217,7 +217,7 @@ fn plunge_of(p: &OpParams) -> f64 {
         // controller's height and delay (#670).
         OpParams::PlasmaProfile(p) => p.feed.unwrap_or(0.0),
         // The sinker's servo feed down (#541).
-        OpParams::SinkerBurn(p) => p.feed,
+        OpParams::SinkerBurn(p) | OpParams::SinkerSideBurn(super::SinkerSideBurnOp { burn: p, .. }) => p.feed,
     }
 }
 
@@ -291,7 +291,7 @@ fn climb_of(p: &OpParams) -> bool {
         // The wall ride and the helix choose their flank: the climb
         // number says which way the circle runs (M2.4 C).
         OpParams::Bore { climb, .. } | OpParams::Thread { climb, .. } => *climb,
-        OpParams::Probe { .. } | OpParams::PlasmaProfile(_) | OpParams::SinkerBurn(_) => false,
+        OpParams::Probe { .. } | OpParams::PlasmaProfile(_) | OpParams::SinkerBurn(_) | OpParams::SinkerSideBurn(_) => false,
     }
 }
 
@@ -374,7 +374,7 @@ fn stepover_of(p: &OpParams) -> Option<f64> {
         // One ride per exposed edge is the deburr answer: the model's
         // own edges are the pattern, nothing tiles (M2.5 E B).
         | OpParams::Deburr { .. } => None,
-        OpParams::Probe { .. } | OpParams::PlasmaProfile(_) | OpParams::SinkerBurn(_) => None,
+        OpParams::Probe { .. } | OpParams::PlasmaProfile(_) | OpParams::SinkerBurn(_) | OpParams::SinkerSideBurn(_) => None,
     }
 }
 
@@ -451,7 +451,7 @@ fn stepdown_of(p: &OpParams) -> Option<f64> {
         // between the clearance plane and the edge there is no
         // infeed ladder to step (M2.5 E B).
         OpParams::Deburr { .. } => None,
-        OpParams::Probe { .. } | OpParams::PlasmaProfile(_) | OpParams::SinkerBurn(_) => None,
+        OpParams::Probe { .. } | OpParams::PlasmaProfile(_) | OpParams::SinkerBurn(_) | OpParams::SinkerSideBurn(_) => None,
     }
 }
 
@@ -520,7 +520,7 @@ pub fn top_of(p: &OpParams) -> Option<Height> {
         // The plasma cut rides the plate's top (#670).
         OpParams::PlasmaProfile(p) => Some(p.top_z),
         // The work top the sinker's depth may be read from (#541).
-        OpParams::SinkerBurn(p) => Some(p.top_z),
+        OpParams::SinkerBurn(p) | OpParams::SinkerSideBurn(super::SinkerSideBurnOp { burn: p, .. }) => Some(p.top_z),
     }
 }
 
@@ -598,7 +598,7 @@ pub fn bottom_of(p: &OpParams) -> Option<Height> {
         // The plate's bottom: the thickness the small-hole rule reads.
         OpParams::PlasmaProfile(p) => Some(p.bottom_z),
         // The cavity floor datum no burn passes (#541).
-        OpParams::SinkerBurn(p) => Some(p.floor_z),
+        OpParams::SinkerBurn(p) | OpParams::SinkerSideBurn(super::SinkerSideBurnOp { burn: p, .. }) => Some(p.floor_z),
     }
 }
 
@@ -675,7 +675,7 @@ fn retract_of(p: &OpParams) -> Option<Height> {
         // The deburr ride hops every run to the clearance plane -
         // the kernel's own word, no between-run plane authored (M2.5 E B).
         | OpParams::Deburr { .. } => None,
-        OpParams::Probe { .. } | OpParams::PlasmaProfile(_) | OpParams::SinkerBurn(_) => None,
+        OpParams::Probe { .. } | OpParams::PlasmaProfile(_) | OpParams::SinkerBurn(_) | OpParams::SinkerSideBurn(_) => None,
     }
 }
 
@@ -2343,6 +2343,20 @@ impl KindInfo {
             seed: super::sinker_op::seed_sinker_burn,
             tool_kinds: tk::ELECTRODE,
         },
+        KindInfo {
+            ty: OpType::SinkerSideBurn,
+            label: "Sinker Side Burn",
+            caption: "Side Burn",
+            tag: 42,
+            // The burn's plunge plus one lateral move (#545): the
+            // milling laws stand down as for the burn; the side's own
+            // door refuses a move past its allowance by name and the
+            // stock sim's box atom verifies every move (#290 D7).
+            mode: Mode::Engrave,
+            section: Section::Sinker,
+            seed: super::sinker_side_op::seed_sinker_side_burn,
+            tool_kinds: tk::ELECTRODE,
+        },
     ];
 
     /// Whose machine this kind drives - read off the row's section
@@ -2418,6 +2432,7 @@ pub const ALL_LABELS: [&str; KIND_COUNT] = [
     KindInfo::ALL[39].label,
     KindInfo::ALL[40].label,
     KindInfo::ALL[41].label,
+    KindInfo::ALL[42].label,
 ];
 
 impl OpType {
@@ -2483,6 +2498,8 @@ impl OpType {
             OpType::TrochoidalSlot => 40,
             // #541: the sinker burn appends (stored ids never move).
             OpType::SinkerBurn => 41,
+            // #545: the side burn appends (stored ids never move).
+            OpType::SinkerSideBurn => 42,
         }
     }
 

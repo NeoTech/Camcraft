@@ -56,3 +56,47 @@ impl SinkerBurnOp {
             && self.orbit.as_ref().is_none_or(|o| o.check().is_ok())
     }
 }
+
+pub use crate::sinker_side::{SideBurn as SinkerSide, SideDirection as SinkerSideDirection};
+
+/// The Sinker Side Burn's parameters (#545): its own burn (approach,
+/// heights, datum, depth, point, feed and its OWN condition - no
+/// orbit), the axis direction it moves along, the lateral amount it
+/// moves the faced wall by, and its own electrode undersize per side.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SinkerSideBurnOp {
+    /// The plunge to depth the side move starts from (#541's fields).
+    /// Its `orbit` stays `None`: a side burn moves along one axis.
+    pub burn: SinkerBurnOp,
+    pub direction: SinkerSideDirection,
+    /// How far the faced wall moves out, mm.
+    pub amount: f64,
+    /// The electrode's undersize per side against the finished cavity,
+    /// mm: with the condition's spark gap it bounds the amount.
+    pub undersize: f64,
+}
+
+impl SinkerSideBurnOp {
+    /// The side's numbers as the motion crate reads them.
+    #[must_use]
+    pub fn side(&self) -> SinkerSide {
+        SinkerSide { direction: self.direction, amount: self.amount, undersize: self.undersize }
+    }
+
+    /// The structural refusal by name (no world): an orbit, an amount or
+    /// undersize out of range, an amount past the undersize. `None`
+    /// when sound.
+    #[must_use]
+    pub fn refusal(&self) -> Option<String> {
+        if self.burn.orbit.is_some() {
+            return Some("a Sinker Side Burn moves along one axis - it takes no orbit (orbit with a Sinker Burn)".into());
+        }
+        crate::sinker_side::side_refusal(&self.side())
+    }
+
+    /// Structural sanity (no world): the burn's, and no [`Self::refusal`].
+    #[must_use]
+    pub fn is_sane(&self) -> bool {
+        self.burn.is_sane() && self.refusal().is_none()
+    }
+}

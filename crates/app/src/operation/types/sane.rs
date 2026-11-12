@@ -37,6 +37,8 @@ impl OpParams {
             OpParams::PlasmaProfile(p) => p.is_sane(),
             // The sinker door (#541): the parameter set's own sanity.
             OpParams::SinkerBurn(p) => p.is_sane(),
+            // #545: the side burn's own door.
+            OpParams::SinkerSideBurn(p) => p.is_sane(),
             // The probe's door (#108): every distance and feed a real
             // number, the measure no faster than the seek, the back-off
             // inside the approach, a slot G54..G59 when one is named.
