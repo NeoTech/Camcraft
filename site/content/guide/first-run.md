@@ -6,12 +6,13 @@ weight = 2
 
 ## Trying it in the browser first
 
-[CamCraft in the browser](@/app.md) is the same release as this site, built
-for WebAssembly: it opens in a current browser on WebGL2 with nothing to
-install, so you can look around the window described below. It cannot open
-or save files yet, simulation playback does not work there, and it does not
-use WebGPU; for a real first toolpath, install a
-[desktop build](@/guide/install.md).
+When this site's release has a browser version,
+[CamCraft in the browser](@/app.md) opens it with nothing to install (it
+needs a browser with WebGL2: a current Chrome, Firefox, Edge or Safari), so
+you can look around the window described below; if it does not, that page
+says so, and the front page says which it is. The browser version cannot
+open or save files yet and simulation playback does not work in it, so for a
+real first toolpath, install a [desktop build](@/guide/install.md).
 
 ## The window
 

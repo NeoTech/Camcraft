@@ -25,6 +25,24 @@ the workflow (dropped: not visible in local previews, and a second place
 holding site text), and failing the site on a missing app (dropped: the
 issue asks that the docs never wait on the browser build).
 
+**The front page claims only what was deployed** (review of 612a5d89). The
+`site` job appends `app = true|false` to the gitignored `site/version.toml`
+before `zola build`; `true` only when the wasm job succeeded, the artifact
+downloaded (that download is `continue-on-error`) and
+`web/check-app-page.sh` passes on it. The front page then shows "Open
+CamCraft X in your browser", or "The browser version of CamCraft X is not
+available" (same link, to the page that says why), or, with no version
+file, the local-preview line. After the copy into `public/app/` the check
+runs again where the page is served; a failure there is not fatal either:
+the copy is dropped, the flag flips to `false` and Zola builds again (half
+a second), with the same warning annotation. Considered: running the check
+only in the wasm job (dropped: it would not prove the Pages artifact holds
+the files, which the issue's "Done means" asks for), and a second data file
+(dropped: version.toml is already the one file the workflow writes for the
+templates). The first-run page is Markdown and cannot read the flag, so its
+text says the browser version exists "when this site's release has one"
+and points at the front page.
+
 **The front page's note** sits in `templates/index.html`, not in
 `_index.md`, because it names the version (`site/version.toml`), which only
 the templates read. The list of what does not work comes from #31's last

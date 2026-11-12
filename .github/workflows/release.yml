@@ -518,37 +518,55 @@ jobs:
           fi
           printf 'version = "%s"\n' "$ver" > site/version.toml
           cat site/version.toml
-      - name: Build the site
-        # The project Pages URL of whichever repo runs this (a fork's own
-        # Pages included), so every link resolves where it is deployed.
-        shell: bash
-        run: |
-          owner="${GITHUB_REPOSITORY_OWNER,,}"
-          repo="${GITHUB_REPOSITORY#*/}"
-          cd site
-          /tmp/zola build --base-url "https://${owner}.github.io/${repo}"
-          test -s public/index.html
       - uses: actions/download-artifact@v4
+        # #1103: a download that fails only means "no browser build" (the
+        # next step says so); it never withholds the docs.
         if: ${{ needs.wasm.result == 'success' }}
+        continue-on-error: true
         with:
           name: wasm-app
           path: /tmp/wasm-app
-      - name: Browser build at app/
-        # Zola wrote app/ as the "not part of this copy" page; the browser
-        # build replaces it when it built. When it did not, that page stays
-        # and the run says so by name.
+      - name: Is there a browser build to publish
+        # The front page claims the browser build only when it is deployed:
+        # `app = true|false` in site/version.toml tells the templates. No
+        # browser build (wasm job failed, nothing downloaded, or the page
+        # check fails) is a warning by name, never a failed site.
         shell: bash
         env:
           WASM_RESULT: ${{ needs.wasm.result }}
         run: |
-          if [ "$WASM_RESULT" = success ]; then
-            rm -rf site/public/app
-            cp -r /tmp/wasm-app site/public/app
-            bash web/check-app-page.sh site/public/app
-          else
+          app=false
+          if [ "$WASM_RESULT" != success ]; then
             echo "::warning::Browser build missing: the wasm job did not succeed (result: $WASM_RESULT); the site goes out with app/ saying so"
-            test -s site/public/app/index.html
+          elif ! bash web/check-app-page.sh /tmp/wasm-app; then
+            echo "::warning::Browser build missing: the wasm-app artifact did not download or failed web/check-app-page.sh; the site goes out with app/ saying so"
+          else
+            app=true
           fi
+          printf 'app = %s\n' "$app" >> site/version.toml
+          echo "CAMCRAFT_APP=$app" >> "$GITHUB_ENV"
+          cat site/version.toml
+      - name: Build the site
+        # The project Pages URL of whichever repo runs this (a fork's own
+        # Pages included), so every link resolves where it is deployed.
+        # Zola writes app/ as the "not part of this copy" page; with a
+        # browser build, the build's folder replaces it and is checked again
+        # where it will be served. A copy that fails is dropped and the site
+        # is built again saying the browser build is missing.
+        shell: bash
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          repo="${GITHUB_REPOSITORY#*/}"
+          build() { (cd site && /tmp/zola build --base-url "https://${owner}.github.io/${repo}" && test -s public/index.html); }
+          build
+          if [ "$CAMCRAFT_APP" = true ]; then
+            if ! { rm -rf site/public/app && cp -r /tmp/wasm-app site/public/app && bash web/check-app-page.sh site/public/app; }; then
+              echo "::warning::Browser build missing: its copy at app/ failed web/check-app-page.sh; the site goes out with app/ saying so"
+              sed -i 's/^app = true$/app = false/' site/version.toml
+              build
+            fi
+          fi
+          test -s site/public/app/index.html
       - uses: actions/upload-pages-artifact@v5
         with:
           path: site/public

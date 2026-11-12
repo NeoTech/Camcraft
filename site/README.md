@@ -26,6 +26,9 @@ site says it is a local preview. To preview the released look, write one:
 `wasm` job builds the browser shell (`web/build-app-wasm.sh --release`) and
 the `site` job puts that folder at `app/` in its place (#1103);
 `web/check-app-page.sh <folder>` checks it, locally on `target/web` too.
+The workflow adds `app = true` to `version.toml` only when it placed the
+browser build; the front page claims it only then (`app = false`: it says
+the browser version of that release is not available).
 
 The site is built and deployed by the `site` and `pages` jobs of
 `.github/workflows/release.yml`, on a release tag only. Write content from
