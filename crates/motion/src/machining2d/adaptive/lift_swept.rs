@@ -19,19 +19,22 @@ use crate::geo2d::Point2;
 
 use super::lift_split::seg_dist;
 
-/// What a posted cut may stand off its planned chord (mm): the adaptive
-/// arc fit (`arcs::ARC_FIT_TOL / 4`) and the chords an arc is read back
-/// on, each 2.5 um; the output lattice (1e-6) is far under it.
-pub(super) const FIT: f64 = 0.005;
+/// What the cut the verifier reads may stand off its planned chord
+/// (mm): the adaptive arc fit (`arcs::ARC_FIT_TOL / 4`, 2.5 um) and the
+/// chords the verifier flattens a posted arc to (its gouge tolerance,
+/// 10 um, inside the arc); the output lattice (1e-6) is far under it.
+pub(super) const FIT: f64 = 0.0125;
 
-/// The landing disc proved is the cutter's less this (mm): the rim's
-/// last 10 um is tangency with the cut that made the wall, the gouge
-/// tolerance every disc reading of the mill laws grants.
+/// The landing disc proved is the cutter's less this (mm): the gouge
+/// tolerance every disc reading of the mill laws grants the rim
+/// (`verify::rapids`, the footprint of radius `r - gouge_tol`).
 pub(super) const EDGE: f64 = 0.01;
 
-/// The smallest square the proof divides to (mm, its side): its
-/// half-diagonal, 0.7 um, is far inside `EDGE - FIT`, so a landing ON
-/// an earlier cut's own path is proved.
+/// The smallest square the proof divides to (mm, its side; half-diagonal
+/// 0.7 um): what is not proved by then is refused. `FIT` is past `EDGE`,
+/// so a landing ON an earlier cut's own path is not proved by that cut
+/// alone - the stock about it must have been swept by its neighbours
+/// too, as it is anywhere but along a wall.
 const MIN_SIDE: f64 = 0.001;
 
 /// Most squares one proof may open; past it the landing is refused.
@@ -155,29 +158,32 @@ mod tests {
         let mut s = Swept::new(5.0);
         assert!(!s.covers(p(10.0, 7.0), 4.99), "nothing cut: nothing covered");
         s.cut(&[p(10.0, 7.0), p(50.0, 7.0)]);
-        // On the cut's own path, and a few microns off it.
-        assert!(s.covers(p(30.0, 7.0), 5.0 - EDGE));
-        assert!(s.covers(p(30.0, 7.004), 5.0 - EDGE));
-        // Past `EDGE - FIT` off it the far rim stands on uncut stock.
-        assert!(!s.covers(p(30.0, 7.02), 5.0 - EDGE));
-        assert!(!s.covers(p(30.0, 7.075), 5.0 - EDGE));
-        // A second pass takes the strip: covered.
+        // A disc inside the cut's capsule less `FIT` is covered ...
+        assert!(s.covers(p(30.0, 7.0), 5.0 - 0.02));
+        assert!(s.covers(p(30.0, 7.004), 5.0 - 0.02));
+        // ... the footprint on the cut's own path is not, by that cut
+        // alone (the verifier reads an arc's chords up to `FIT` inside),
+        // and off the path its far rim stands on uncut stock.
+        assert!(!s.covers(p(30.0, 7.0), 5.0 - EDGE));
+        assert!(!s.covers(p(30.0, 7.04), 5.0 - EDGE));
+        // A second pass takes the strip: covered between the two.
         s.cut(&[p(50.0, 7.075), p(10.0, 7.075)]);
-        assert!(s.covers(p(30.0, 7.075), 5.0 - EDGE));
         assert!(s.covers(p(30.0, 7.04), 5.0 - EDGE));
+        assert!(!s.covers(p(30.0, 7.2), 5.0 - EDGE));
         // Off the pass's end: the disc reaches past the end cap.
-        assert!(!s.covers(p(9.0, 7.0), 5.0 - EDGE));
+        assert!(!s.covers(p(9.0, 7.04), 5.0 - EDGE));
         assert!(!s.covers(p(f64::NAN, 7.0), 4.0) && !s.covers(p(30.0, 7.0), f64::INFINITY));
     }
 
     /// Issue #1169, the narrow slot's landing: a 14 mm slot cleared by a
-    /// D10 up to y = 8.96, the last lap (y = 9.0) still owed a 0.04 mm
-    /// strip along the wall - thinner than the planner's 0.083 mm cell
-    /// and between two rows of cell centers, so the cells read the
-    /// landing on the lap's lead as clear (the slot of
-    /// `adaptive_hsm::hsm_report_full_resolution` stood 0.075 mm). The return
-    /// over the retract plane rapids down to its lift there: refused on
-    /// the swept stock, allowed once a pass has taken the strip.
+    /// D10 up to y = 8.96, the lap at y = 9.0 still owed a 0.04 mm strip
+    /// along the wall - thinner than the planner's 0.083 mm cell and
+    /// between two rows of cell centers, so the cells read a landing
+    /// over it as clear (the slot of
+    /// `adaptive_hsm::hsm_report_full_resolution` stood 0.075 mm). The
+    /// return over the retract plane rapids down to its lift on the
+    /// piece's lead (y = 8.98, the strip under its rim): refused on the
+    /// swept stock, allowed once the lap has taken the strip.
     #[test]
     fn a_rapid_landing_on_a_sub_cell_wall_strip_is_refused() {
         let reach = rect(0.0, 0.0, 60.0, 14.0);
@@ -189,10 +195,9 @@ mod tests {
         ras.walk(&cut, r, rim, 0.5);
         let mut swept = Swept::new(r);
         swept.cut(&cut);
-        // The last lap's piece, its lead the lap's own line.
-        let lead: Vec<Point2> = (0..=10).map(|k| p(20.0 - 0.3 * k as f64, 9.0)).collect();
-        let piece = Piece { pts: vec![p(17.0, 9.0), p(6.0, 9.0)], lead, tail: Vec::new(), fine: None };
-        let land = p(17.9, 9.0);
+        let lead: Vec<Point2> = (0..=10).map(|k| p(20.0 - 0.3 * k as f64, 8.98)).collect();
+        let piece = Piece { pts: vec![p(17.0, 8.98), p(6.0, 8.98)], lead, tail: Vec::new(), fine: None };
+        let land = p(17.9, 8.98);
         // The planner's cells read the landing as clear (the gap) ...
         assert!(ras.stock_clear(land, rim + ras.h), "the fixture no longer hides the strip from the cells");
         // ... the swept stock does not, and the return is refused.
@@ -200,7 +205,7 @@ mod tests {
         let bite = crate::load::deg_at_rim(0.005, 10.0, rim);
         let law = |swept| LinkLaw { ras: &ras, center: &center, links: &[], swept, r, rim, step: 0.5, bite, orbit: (p(0.0, 0.0), 0.0) };
         assert_eq!(law(&swept).high(&piece), None, "a rapid onto the wall strip");
-        // The strip cut (the lap's own line walked): the same return stands.
+        // The strip cut (the lap at y = 9 walked): the same return stands.
         let mut after = swept.clone();
         after.cut(&[p(55.0, 9.0), p(5.0, 9.0)]);
         let Some(Return { high: true, down, .. }) = law(&after).high(&piece) else { panic!("the landing on cut stock") };
@@ -210,8 +215,8 @@ mod tests {
         let landing = super::super::lift_link::landing;
         assert_eq!(landing(&ras, &swept, &piece, (r, rim)), piece.pts[0], "no point proved: the cells' choice");
         let mut bent = piece.clone();
-        bent.lead.insert(0, p(20.0, 8.96));
-        assert_eq!(landing(&ras, &swept, &bent, (r, rim)), p(20.0, 8.96), "the swept point of the lead");
+        bent.lead.insert(0, p(20.0, 8.9));
+        assert_eq!(landing(&ras, &swept, &bent, (r, rim)), p(20.0, 8.9), "the swept point of the lead");
         assert_eq!(landing(&ras, &after, &bent, (r, rim)), piece.pts[0], "the strip cut: the piece's own start");
     }
 }
