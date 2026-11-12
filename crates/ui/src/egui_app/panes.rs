@@ -676,6 +676,9 @@ pub(super) fn icon_of(c: Cmd, state: &State) -> Option<Icon> {
             camcraft_app::machine::Kind::Lathe => Icon::RotaryContour,
             camcraft_app::machine::Kind::MillTurn => Icon::RotaryParallel,
             camcraft_app::machine::Kind::Mill => Icon::Face,
+            // #530: the wire cuts a contour; the sinker burns a pocket.
+            camcraft_app::machine::Kind::WireEdm => Icon::Contour,
+            camcraft_app::machine::Kind::SinkerEdm => Icon::Pocket,
             // #669: a plasma table cuts 2D profiles - the contour glyph.
             camcraft_app::machine::Kind::Plasma => Icon::Contour,
         }),
