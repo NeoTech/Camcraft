@@ -5,20 +5,27 @@
 //! for the verifier to flag. Proper crossing by the orientation
 //! predicate (O'Rourke, *Computational Geometry in C*, the textbook
 //! segment test), segments bucketed on a uniform grid; ours. Issue
-//! #1048: "on the other chord's line" is read to within [`TOUCH`], not
-//! as an exact zero, so two chords that meet at one vertex reached
-//! twice (a rounding apart) touch, as an exact shared vertex always
-//! did, and do not cross.
+//! #1048: a chord end within [`TOUCH`] of one of the other chord's END
+//! points reads as on that chord's line, so two chords that meet at one
+//! vertex reached twice (a rounding apart) touch, as an exact shared
+//! vertex always did, and do not cross. The same reading as the
+//! verifier's law (a) (`camcraft_sim::verify::CROSSING_TOUCH` and
+//! `proper_cross_touch`, #1129), so a plan this accepts is not held there.
 
 use crate::geo2d::Point2;
 
-/// How near a point stands to a chord's line to count as on it (mm):
-/// 1 pm. Float rounding of a vertex reached twice on a
-/// workspace of 10 m is ~1e-12 mm (f64 at 1e4 mm), a thousand times
-/// below this; cutting tolerances are microns (the verifier's is
-/// 0.005 mm), a million times above it. So a pair this close is one
-/// vertex, never two cuts, and no self-cut of a cutter can hide
-/// inside it.
+/// How near a chord end stands to one of the other chord's END points
+/// to count as that vertex (mm): 1 pm, a point-to-point distance. Kept
+/// equal to the verifier's `camcraft_sim::verify::CROSSING_TOUCH` (no
+/// motion -> sim dependency; change both together). Float rounding of a
+/// vertex reached twice on a 10 m workspace is ~1e-12 mm (f64 at 1e4
+/// mm), a thousand times below this; cutting tolerances are microns.
+/// Only END points are excused: within `TOUCH` of the other chord's
+/// LINE is not a touch, because a walk passing through a chord at a
+/// vertex a picometre off its interior would make both of its chords
+/// there read as touches and hide a crossing of any depth (the #1134
+/// review's pass-through probe). Away from end points the exact sign
+/// stays the law.
 pub(super) const TOUCH: f64 = 1e-9;
 
 fn orient(a: Point2, b: Point2, c: Point2) -> f64 {
@@ -34,26 +41,32 @@ pub(super) fn proper(a: Point2, b: Point2, c: Point2, d: Point2) -> bool {
 }
 
 /// Which side of the line through `ab` the point `p` stands, -1, 0 or
-/// 1, with "on the line" meaning within [`TOUCH`] of it: `|orient|`
-/// compared against `TOUCH * |ab|`, no division.
+/// 1, by the exact sign of the orientation - except that `p` within
+/// [`TOUCH`] of `a` or `b` (a shared vertex a rounding apart) reads 0.
 fn side(a: Point2, b: Point2, p: Point2) -> i8 {
+    let near = |q: Point2| (p.x - q.x).hypot(p.y - q.y) <= TOUCH;
+    if near(a) || near(b) {
+        return 0;
+    }
     let o = orient(a, b, p);
-    if o.abs() <= TOUCH * (b.x - a.x).hypot(b.y - a.y) {
-        0
-    } else if o > 0.0 {
+    if o > 0.0 {
         1
-    } else {
+    } else if o < 0.0 {
         -1
+    } else {
+        0
     }
 }
 
-/// Do chords `ab` and `cd` cross (issue #1048)? The proper-crossing
-/// test with "on the line" read to within [`TOUCH`] instead of an
-/// exact zero: each chord's ends stand strictly on opposite sides of
-/// the other's line. A contact - a shared end point, a vertex on the
-/// other chord, a collinear overlap or retrace - is no crossing, as an
-/// exact one never was; a rounding of it is now read the same way. A
-/// non-finite end always crosses - the safe reading.
+/// Do chords `ab` and `cd` cross (issue #1048)? The exact-sign
+/// proper-crossing test, with a chord end within [`TOUCH`] of one of
+/// the other chord's end points read as on its line: each chord's ends
+/// stand strictly on opposite sides of the other's line. A shared end
+/// point (exact or a rounding apart), an exact vertex on the other
+/// chord, a collinear overlap or retrace is no crossing; a vertex a
+/// rounding PAST the other chord's interior keeps the exact sign, so a
+/// walk passing through there is still reported. A non-finite end
+/// always crosses - the safe reading.
 pub(super) fn crosses(a: Point2, b: Point2, c: Point2, d: Point2) -> bool {
     if ![a, b, c, d].iter().all(|p| p.x.is_finite() && p.y.is_finite()) {
         return true;

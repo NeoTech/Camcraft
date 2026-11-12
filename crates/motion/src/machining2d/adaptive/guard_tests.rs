@@ -1,6 +1,7 @@
 //! Pins of the plan's crossing check (`guard.rs`; issue #1048: a
-//! contact within `TOUCH` - a shared end point a rounding apart above
-//! all - is no crossing, a real crossing is). Ours.
+//! shared end point a rounding apart - within `TOUCH` of the other
+//! chord's END point - is no crossing; a real crossing is, a walk
+//! passing through a chord a picometre off its line included). Ours.
 
 use super::*;
 
@@ -127,20 +128,24 @@ fn a_real_crossing_near_a_shared_point_still_crosses() {
     }
 }
 
-/// Decided (#1048): a contact is no crossing, as an exact one never was
-/// under the exact-sign law - a vertex on another chord's interior
-/// (exactly, or a rounding off it on either side), a collinear overlap,
-/// a chord retraced (the planner retraces a lifted piece's last chords:
-/// `a_channel_is_grown_as_one_spiral_that_never_crosses`). A vertex a
-/// micron past the chord is a real crossing.
+/// Decided (#1048, after the #1134 review): an EXACT contact is no
+/// crossing, as under the exact-sign law - a vertex exactly on another
+/// chord's interior, a collinear overlap, a chord retraced (the planner
+/// retraces a lifted piece's last chords:
+/// `a_channel_is_grown_as_one_spiral_that_never_crosses`), a chord
+/// leaving a shared end a rounding off it. A vertex past another
+/// chord's interior keeps the exact sign: a rounding or a micron past
+/// it crosses; a micron short does not.
 #[test]
 fn a_contact_is_no_crossing_and_a_micron_past_is() {
     let lap = vec![Point2::new(0.0, 0.0), Point2::new(4.0, 0.0)];
     let t = |dy: f64| vec![Point2::new(1.0, 2.0), Point2::new(2.0, dy), Point2::new(3.0, 2.0)];
-    for dy in [0.0, 1e-12, -1e-12, -5e-10] {
+    for dy in [0.0, 1e-12, 5e-10] {
         assert!(first_crossing(&[lap.clone(), t(dy)]).is_none(), "T-touch at {dy}");
     }
-    assert!(first_crossing(&[lap.clone(), t(-1e-6)]).is_some(), "a micron past");
+    for dy in [-1e-12, -5e-10, -1e-6] {
+        assert!(first_crossing(&[lap.clone(), t(dy)]).is_some(), "past the interior by {dy}");
+    }
     assert!(first_crossing(&[lap.clone(), t(1e-6)]).is_none(), "a micron short");
     let (p, q) = (Point2::new(0.0, 0.0), Point2::new(4.0, 0.0));
     assert!(!crosses(p, q, Point2::new(1.0, 0.0), Point2::new(6.0, 0.0)), "collinear overlap");
@@ -148,6 +153,27 @@ fn a_contact_is_no_crossing_and_a_micron_past_is() {
         assert!(!crosses(p, q, off(q, j), off(p, j)), "retraced, {j:?}");
         assert!(!crosses(p, q, off(p, j), Point2::new(2.0, 1e-13)), "along from the shared end, {j:?}");
     }
+}
+
+/// The #1134 review's probe: a walk passing straight through a chord at
+/// a vertex 0.5 pm off the chord's interior (either side), or exactly
+/// on it, must be reported - at small and at metre coordinates. Reading
+/// "within TOUCH of the other chord's LINE" as a touch hid it (both of
+/// the walk's chords there read as touching); only end points are
+/// excused now.
+#[test]
+fn a_walk_through_a_chord_at_a_vertex_a_picometre_off_its_line_still_crosses() {
+    for (ox, oy) in [(0.0, 0.0), (37.25, -12.5), (1000.0, 1000.0), (-998.5, 1001.0)] {
+        let lap = vec![Point2::new(ox, oy), Point2::new(ox + 4.0, oy)];
+        for dy in [-0.5e-9, 0.5e-9] {
+            let walk = vec![Point2::new(ox + 2.0, oy + 1.0), Point2::new(ox + 2.0, oy + dy), Point2::new(ox + 2.0, oy - 1.0)];
+            assert!(first_crossing(&[lap.clone(), walk.clone()]).is_some(), "origin ({ox}, {oy}), vertex {dy} off");
+            assert_eq!(crossing_pairs(&[lap.clone(), walk]), vec![(0, 1)], "origin ({ox}, {oy}), vertex {dy} off");
+        }
+    }
+    // The review's exact reproduction.
+    let probe = [vec![Point2::new(0.0, 0.0), Point2::new(4.0, 0.0)], vec![Point2::new(2.0, 1.0), Point2::new(2.0, -0.5e-9), Point2::new(2.0, -1.0)]];
+    assert!(first_crossing(&probe).is_some());
 }
 
 /// A NaN or infinite point is reported, never skipped.
