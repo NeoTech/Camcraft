@@ -129,7 +129,9 @@ fn want(ty: OpType) -> Want {
         | OpType::MultiAxisContour
         | OpType::Probe
         | OpType::PlasmaProfile
-        | OpType::TrochoidalSlot => Want::Refused,
+        | OpType::TrochoidalSlot
+        // #541: a sinker burn is an EDM op; a lathe never runs it with the work turning.
+        | OpType::SinkerBurn => Want::Refused,
     }
 }
 
@@ -175,7 +177,7 @@ fn every_kind_is_work_spindle_live_tool_or_refused_by_name() {
         // The post's own order: a path stating C is live-tool work.
         assert_eq!(voice(&params, &stating_c(meridian()), ORIGIN), LatheVoice::LiveTool, "{}", info.label);
     }
-    assert_eq!((turns, holes, refused), (12, 1, 28), "the table covers every kind");
+    assert_eq!((turns, holes, refused), (12, 1, 29), "the table covers every kind");
     assert_eq!(turns + holes + refused, KindInfo::ALL.len());
 }
 
