@@ -110,6 +110,51 @@ pub fn excess_of(world: &World, name: &str) -> f64 {
     coarse_source(world, name).map_or(0.0, |(_, c)| excess(c))
 }
 
+/// Whether the excess of `setup`'s stock is known (#1091 reviews): a box
+/// or cylinder has no mesh to be coarse; a from-model copy's chord is read
+/// through its source (`coarse_source`, by NAME), so it is known only
+/// while the model of that name is provably the one the copy was taken
+/// from - its local facets bit for bit the stock's own ([`same_mesh`]).
+/// A gone source, a different model imported under the name, a source
+/// re-meshed without its copy, a stock with no facets: not known. A model
+/// with no `ReducedFidelity` record is known exact - the importer writes
+/// the record for every coarse import, and a re-import in place
+/// (`UpdateModel`) trades copy and record together. Placement is not
+/// compared: the chord is a property of the mesh, and a moved source
+/// carries the same mesh and record. No stock entity: nothing to know.
+/// #1056: once a from-model stock carries its own chord (#1127), read it
+/// here instead of proving the source.
+#[must_use]
+pub fn stock_fidelity_known(world: &World, setup: Option<&str>) -> bool {
+    let Some(stock) = model::find_by_name(world, &crate::setup::stock_entity_name(world, setup)) else {
+        return true;
+    };
+    match model::stock_def_of(world, &stock) {
+        // #1056: the chord lives on the source only - prove it is the source.
+        Some(StockShape::FromModel { source }) => model::find_by_name(world, &source).is_some_and(|src| {
+            match (model::facets_of(world, &stock), model::facets_of(world, &src)) {
+                (Some(copy), Some(now)) => same_mesh(&copy, &now),
+                _ => false,
+            }
+        }),
+        _ => true,
+    }
+}
+
+/// The two facet lists are one mesh: the same `Arc` (a copy `SetStock`
+/// took and nothing replaced), or the same count and every coordinate
+/// equal bit for bit. Empty is never a mesh.
+fn same_mesh(a: &std::sync::Arc<[crate::geometry::Triangle]>, b: &std::sync::Arc<[crate::geometry::Triangle]>) -> bool {
+    if a.is_empty() || a.len() != b.len() {
+        return false;
+    }
+    if std::sync::Arc::ptr_eq(a, b) {
+        return true;
+    }
+    let bits = |t: &crate::geometry::Triangle| [t.a, t.b, t.c].map(|p| [p.x.to_bits(), p.y.to_bits(), p.z.to_bits()]);
+    a.iter().zip(b.iter()).all(|(x, y)| bits(x) == bits(y))
+}
+
 /// A coarse chord error's excess over the importer's promise.
 #[must_use]
 pub fn excess(chord_mm: f64) -> f64 {

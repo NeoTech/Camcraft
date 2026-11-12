@@ -153,6 +153,7 @@ mod air_law;
 // #864: what a kind's gouge laws need of its model's fidelity.
 pub(crate) mod fidelity_law;
 mod top_stock;
+mod stock_top_law;
 pub use top_stock::TOP_STOCK_WARNING;
 mod turning_credit;
 mod turning_feeds;

@@ -34,28 +34,27 @@ source-form distributions.
     OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
     USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-## Original artwork (assets/ui/post.png, assets/ui/sim.png, assets/ui/fixture.png, assets/ui/debug-info.png, every assets/ui/op-*.png and every assets/ui/svg/*.svg)
+## Original artwork (every assets/ui/svg/*.svg and the PNG rasterised from each: the op-*, tool-*, tree-*, badge-* and act-* glyphs)
 
-These glyphs are our own drawings. post.png, sim.png and fixture.png were
-authored for M1.6-M3.2 (no Tabler post-to-G-code or vise glyph exists, and
-the move-simulation mark is a bespoke curve); debug-info.png (#157) was
-drawn by a short script - Tabler has a bug glyph, but these are our pixels.
-The operation glyphs (#661) - one `op-*.png` per operation kind - are
-rasterised by `cargo xtask icons` from their SVG masters in
-assets/ui/svg/, drawn original from what each operation does (a cutter
-and its path) on Tabler's conventions (24-unit grid, 2-unit stroke, round
-caps and joins). They replace the earlier original PNGs (drill, probe,
-finish3d, contour5d, parallel5d, swarf, advancedswarf, rotarycontour,
-rotaryparallel, rotaryoffset, multiaxisrough, flow5d, multiaxiscontour)
-and the Tabler stand-ins the operations borrowed. Nothing in them is taken
-or adapted from HSMWorks, Fusion, SolidCraft or any other product's icons.
-AGENTS.md's "operation-specific glyphs are drawn original when no generic
-set fits"; public-domain subjects, our renderings; no license notice owed,
-and they are not part of the Tabler set below. (The exclusion lists here
-are the only record of which pixels are ours, so both headings name the
-same files.)
+These glyphs are our own drawings. Each has an SVG master in
+assets/ui/svg/, rasterised to its 32 px PNG by `cargo xtask icons`, drawn
+original on Tabler's conventions (24-unit grid, 2-unit stroke, round caps
+and joins): the operation glyphs (`op-*`, #661 slice 1) from what each
+operation does - a cutter and its path; the tool kinds (`tool-*`, #661
+slice 2) from each cutter's silhouette; the browser's setup rows
+(`tree-*`), the operation status badges (`badge-*`) and the CamCraft
+actions (`act-*`). They replace the earlier original PNGs (post, sim,
+fixture, debug-info and the operation originals) and the Tabler glyphs
+that stood in for the stock, model, work offset, generate, frame-all and
+eye rows (box-model, cube, transform, player-play, maximize, eye,
+eye-off). Nothing in them is taken or adapted from HSMWorks, Fusion,
+SolidCraft or any other product's icons. AGENTS.md's "operation-specific
+glyphs are drawn original when no generic set fits"; public-domain
+subjects, our renderings; no license notice owed, and they are not part of
+the Tabler set below. (The exclusion lists here are the only record of
+which pixels are ours, so both headings name the same files.)
 
-## Tabler Icons (UI glyphs, assets/ui/*.png except post.png, sim.png, fixture.png, debug-info.png and the op-*.png operation glyphs, loaded by crates/ui/src/egui_app/icons.rs)
+## Tabler Icons (assets/ui/*.png with no SVG master in assets/ui/svg/ - file-plus, folder-open, file-import, device-floppy, arrow-back-up, arrow-forward-up, trash, tools - loaded by crates/ui/src/egui_app/icons.rs)
 
 Outline glyphs from Tabler Icons (https://tabler-icons.io), version 3.49.0,
 MIT (below): recolored to white at load; shapes otherwise unmodified.
