@@ -274,7 +274,7 @@ pub(crate) fn walk(
 pub(crate) fn judge(world: &flecs_ecs::prelude::World, held: &Held, frame: Option<&str>) -> Result<Deviation, String> {
     let facets = crate::setup_align::parts_facets_in(world, frame);
     // #864: the same tightened tolerance the final verdict is read at.
-    let tol = crate::model_fidelity::verdict_tol(world)?;
+    let tol = crate::model_fidelity::program_tol(world)?;
     match held {
         Held::Plain(d) => crate::stock_sim::deviate(d, &facets, tol),
         Held::Carried(b) => b.deviate(&facets, tol),

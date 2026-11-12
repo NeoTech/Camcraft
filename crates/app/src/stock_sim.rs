@@ -136,8 +136,9 @@ pub fn simulate_document(
     let planned = plan_program(world)?;
     refuse_unjudged(&planned)?;
     // #864: a part imported coarser than promised tightens the verdict by
-    // its excess; one too coarse for that is refused by name, not judged.
-    let tol = crate::model_fidelity::verdict_tol(world)?;
+    // its excess; one too coarse for that is refused by name, not judged -
+    // and so is a program with an op the gate refuses for it (#1056).
+    let tol = crate::model_fidelity::program_tol(world)?;
 
     // Setup changes (#317): a setup that holds the part differently, or
     // is placed relative to the one before it, starts from the body the
