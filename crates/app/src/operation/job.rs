@@ -115,7 +115,7 @@ pub struct GenJob {
     pub(super) carried_overhang: Option<super::carried_stock::Overhang>,
     /// #532: the machine condition a wire EDM kind cuts with (its wire
     /// and gap); `None` for every kind that mounts a library tool.
-    pub(super) wire: Option<super::wire_op::WireCondition>,
+    pub(super) wire: Option<(super::wire_op::WireCondition, Option<super::wire_op::WireCondition>)>,
 }
 
 /// The tripwire phrase for a stored precompute whose arm never collected
@@ -137,7 +137,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
     let wire = super::wire_op::job_wire(world, op)?;
     // Tool: the diameter drives the path, the body drives the reach law.
     let (tool, body, lathe_body) = match &wire {
-        Some(cond) => (super::wire_op::job_tool(cond), None, None),
+        Some((cond, _)) => (super::wire_op::job_tool(cond), None, None),
         None => super::tool_gate::job_tool(world, op)?,
     };
     let setup = op.setup.as_deref();

@@ -78,7 +78,14 @@ pub fn wire_clause(world: &World) -> WireClause {
             Err(why) => out.problems.push(format!("{name}: {why}")),
             Ok(v) => {
                 out.problems.extend(v.findings.iter().map(|f| format!("{name}: wire {}", f.describe())));
-                judged.push(format!("{name} {}", slugs(&v.slugs)));
+                let (how, tail) = if v.held {
+                    ("holds its slug by tabs through the main cut; the tab cut-off ", "")
+                } else if v.captured {
+                    ("", " into the stated capture")
+                } else {
+                    ("", "")
+                };
+                judged.push(format!("{name} {how}{}{tail}", slugs(&v.slugs)));
             }
         }
     }
@@ -132,15 +139,33 @@ pub(super) fn stream(
             .collect(),
         ..Dump::default()
     };
-    let mut records = post::dump(&cache.path, &d);
+    // #539: a tabbed cut posts as two sections - the main cut, which
+    // leaves the tabs and ends at a program stop (the operator secures
+    // the slug), then the tab cut-off with its own condition.
+    let split = crate::operation::wire_verify::cutoff_from(p, &cache.path).map_err(|e| format!("{name}: {e}"))?;
+    let (Some(m), Some(t)) = (split, p.tabs.as_ref()) else {
+        return section(&cache.path, &d, name, &p.condition, p.side.word());
+    };
+    let (head, tail) = cache.path.moves.split_at_checked(m).ok_or_else(|| format!("{name}: the tab cut-off's start is past the path"))?;
+    let main = crate::cl::Toolpath { moves: head.to_vec(), ..crate::cl::Toolpath::default() };
+    let cut = crate::cl::Toolpath { moves: tail.to_vec(), ..crate::cl::Toolpath::default() };
+    let off_name = format!("{display_name} tab cut-off");
+    let mut records = section(&main, &Dump { after: AfterOperation::ProgramStop, ..d.clone() }, name, &p.condition, p.side.word())?;
+    records.extend(section(&cut, &Dump { op_name: &off_name, warnings: Vec::new(), ..d }, name, &t.cutoff_condition, p.side.word())?);
+    Ok(records)
+}
+
+/// One wire section: the dump with the wire words before it opens.
+fn section(path: &crate::cl::Toolpath, d: &Dump, name: &str, condition: &str, side: &str) -> Result<Vec<cnc::Record>, String> {
+    let mut records = post::dump(path, d);
     // The wire words ride before the section opens, like every PARAM.
     let at = records
         .iter()
         .position(|r| matches!(r, cnc::Record::Section { begin: true }))
         .ok_or_else(|| format!("{name}: the wire section has no start"))?;
     let wire = [
-        cnc::Record::Param { name: "EdmCondition".into(), value: json!(p.condition) },
-        cnc::Record::Param { name: "WireSide".into(), value: json!(p.side.word()) },
+        cnc::Record::Param { name: "EdmCondition".into(), value: json!(condition) },
+        cnc::Record::Param { name: "WireSide".into(), value: json!(side) },
     ];
     records.splice(at..at, wire);
     Ok(records)

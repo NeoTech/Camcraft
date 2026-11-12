@@ -34,7 +34,7 @@ fn sections(part: &Region, stock: Option<&Region>) -> Vec<WireSection> {
 }
 
 fn run(side: CutSide, tp: &Toolpath, start: Option<Point2>, part: &Region, stock: Option<&Region>) -> WireVerdict {
-    judge(&WireJob { path: tp, kerf_offset: K, side, start, sections: sections(part, stock) })
+    judge(&WireJob { path: tp, kerf_offset: K, side, start, sections: sections(part, stock), cutoff_from: None, capture: true })
 }
 
 #[test]

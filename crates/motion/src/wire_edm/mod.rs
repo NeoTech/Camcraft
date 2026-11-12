@@ -33,6 +33,9 @@
 
 mod laws;
 mod ring;
+mod tabs;
+
+pub use tabs::{cutoff_split, TabParams, MAX_TABS};
 
 use crate::cl::{MoveKind, PathBuilder, Toolpath};
 use crate::geo2d::{Loop, Point2, Region};
@@ -88,6 +91,8 @@ pub struct WireParams {
     pub start: Option<Point2>,
     /// The lower programmed plane the moves ride.
     pub plane_z: f64,
+    /// The tabs (#539); `None` is off - the default (#290 D6).
+    pub tabs: Option<TabParams>,
 }
 
 fn invalid(why: String) -> GenError {
@@ -177,17 +182,32 @@ pub fn wire_contour(loops: &[Loop], chains: &[Vec<Point2>], p: &WireParams) -> R
     start_side(&profile, &path_ring, start, p)?;
     let z = p.plane_z;
     let mut b = PathBuilder::new(Point3::new(start.x, start.y, z));
-    for q in ring::walk_from(&path_ring, seg, foot) {
+    let tabbed = match &p.tabs {
+        Some(t) => Some(tabs::tabbed(&path_ring, &given, start, p, t)?),
+        None => None,
+    };
+    let pts: Vec<Point2> = match &tabbed {
+        Some(tb) => tb.main.iter().chain(&tb.cutoff).copied().collect(),
+        None => {
+            let mut v = ring::walk_from(&path_ring, seg, foot);
+            v.push(start);
+            v
+        }
+    };
+    for q in pts {
         b.push(MoveKind::Feed, Point3::new(q.x, q.y, z), None);
     }
-    b.push(MoveKind::Feed, Point3::new(start.x, start.y, z), None);
     let mut path = b.finish();
     if path.moves.len() < 4 {
         return Err(invalid("the wire path lays down no cut".into()));
     }
     // The certificate: no move brings the kerf into the product.
     laws::kerf(&path, &given, k, p.plane_z)?;
-    path.notes.extend(notes(p, start, lead));
+    let mut said = notes(p, start, lead);
+    if let Some(tb) = tabbed {
+        said.splice(1..2, tb.notes);
+    }
+    path.notes.extend(said);
     Ok(path)
 }
 

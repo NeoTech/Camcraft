@@ -71,18 +71,21 @@ fn freed_at(
     Ok(out)
 }
 
-/// Run the slug law over every section; the first height that flags
-/// is named, and the lowest height holding material reports its slugs.
-pub(super) fn judge(job: &WireJob<'_>, pts: &[Point2], opening: bool, v: &mut WireVerdict) {
+/// One pass of the slug law over `pts`: the pieces freed at the lowest
+/// height holding material, the first height's flag, and the first
+/// piece freed at any height.
+struct Scan {
+    first: Vec<Slug>,
+    flag: Option<WireFinding>,
+    any: Option<(f64, Point2)>,
+}
+
+fn scan(job: &WireJob<'_>, pts: &[Point2], opening: bool) -> Result<Scan, WireFinding> {
     let unreadable = |why: String| WireFinding::Unreadable(format!("the slug cannot be judged - {why}"));
-    let kerf = match Region::sweep(&[pts.to_vec()], job.kerf_offset) {
-        Ok(r) => r,
-        Err(e) => return v.findings.push(unreadable(e.to_string())),
-    };
-    let fill = match Region::new(kerf.loops().iter().filter(|l| l.area() > 0.0).cloned().collect()) {
-        Ok(r) => r,
-        Err(e) => return v.findings.push(unreadable(e.to_string())),
-    };
+    let kerf = Region::sweep(&[pts.to_vec()], job.kerf_offset).map_err(|e| unreadable(e.to_string()))?;
+    let fill = Region::new(kerf.loops().iter().filter(|l| l.area() > 0.0).cloned().collect())
+        .map_err(|e| unreadable(e.to_string()))?;
+    let mut out = Scan { first: Vec::new(), flag: None, any: None };
     let mut reported = false;
     for s in &job.sections {
         let material = match &s.stock {
@@ -100,16 +103,19 @@ pub(super) fn judge(job: &WireJob<'_>, pts: &[Point2], opening: bool, v: &mut Wi
         let freed = match (material, product) {
             (Ok(m), Ok(p)) => freed_at(&m, &p, &kerf, &fill, s.z),
             (Err(e), _) | (_, Err(e)) => Err(e.to_string()),
-        };
-        let freed = match freed {
-            Ok(f) => f,
-            Err(why) => return v.findings.push(unreadable(why)),
-        };
+        }
+        .map_err(unreadable)?;
         if !reported {
-            v.slugs.clone_from(&freed);
+            out.first.clone_from(&freed);
             reported = true;
         }
-        let flag = match job.side {
+        if out.any.is_none() {
+            out.any = freed.first().map(|f| (s.z, f.at));
+        }
+        if out.flag.is_some() {
+            continue;
+        }
+        out.flag = match job.side {
             _ if freed.is_empty() => Some(WireFinding::NothingFreed { z: s.z }),
             CutSide::Die => freed.iter().find(|f| f.product_area > SLUG_AREA_TOL).map(|f| WireFinding::WrongSlug {
                 z: s.z,
@@ -124,8 +130,41 @@ pub(super) fn judge(job: &WireJob<'_>, pts: &[Point2], opening: bool, v: &mut Wi
                 product_area: 0.0,
             }),
         };
-        if let Some(f) = flag {
-            return v.findings.push(f);
+    }
+    Ok(out)
+}
+
+/// Run the slug law (#534) with the hold law (#539): a tabbed cut's
+/// main cut must free nothing and its whole path frees the stated
+/// piece; an untabbed cut's freed piece must be captured.
+pub(super) fn judge(job: &WireJob<'_>, pts: &[Point2], opening: bool, v: &mut WireVerdict) {
+    if let Some(m) = job.cutoff_from {
+        let Some(main) = pts.get(..=m) else {
+            return v.findings.push(WireFinding::Unreadable(format!("the tab cut-off's start (move {m}) is past the path")));
+        };
+        match scan(job, main, opening) {
+            Err(f) => return v.findings.push(f),
+            Ok(s) => {
+                if let Some((z, at)) = s.any {
+                    return v.findings.push(WireFinding::TabsDoNotHold { z, at });
+                }
+            }
+        }
+        v.held = true;
+    }
+    let s = match scan(job, pts, opening) {
+        Ok(s) => s,
+        Err(f) => return v.findings.push(f),
+    };
+    v.slugs = s.first;
+    if let Some(f) = s.flag {
+        return v.findings.push(f);
+    }
+    if job.cutoff_from.is_none() {
+        if job.capture {
+            v.captured = true;
+        } else if let Some((z, at)) = s.any {
+            v.findings.push(WireFinding::Unsupported { z, side: job.side, at });
         }
     }
 }

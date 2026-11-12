@@ -8,7 +8,7 @@
 
 use super::*;
 
-use crate::operation::{WireContourOp, WireSide};
+use crate::operation::{WireContourOp, WireSide, WireTabs};
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -29,6 +29,25 @@ pub struct WireContourDto {
     /// stated.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub start: Option<[f64; 2]>,
+    /// The tabs (#539); absent is off. Each key inside is optional in
+    /// the file so a missing one is refused by name at generation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tabs: Option<WireTabsDto>,
+    /// The operator states the slug is caught; absent is not (#539).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub capture: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
+pub struct WireTabsDto {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub count: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub width: Option<f64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub at: Vec<[f64; 2]>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub cutoff_condition: String,
 }
 
 impl WireContourDto {
@@ -42,6 +61,13 @@ impl WireContourDto {
                 WireSide::Punch => WireSideDto::Punch,
             },
             start: p.start,
+            tabs: p.tabs.as_ref().map(|t| WireTabsDto {
+                count: t.count,
+                width: t.width,
+                at: t.at.clone(),
+                cutoff_condition: t.cutoff_condition.clone(),
+            }),
+            capture: p.capture,
         }
     }
 
@@ -55,6 +81,53 @@ impl WireContourDto {
                 WireSideDto::Punch => WireSide::Punch,
             },
             start: self.start,
+            tabs: self.tabs.as_ref().map(|t| WireTabs {
+                count: t.count,
+                width: t.width,
+                at: t.at.clone(),
+                cutoff_condition: t.cutoff_condition.clone(),
+            }),
+            capture: self.capture,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::operation::Height;
+
+    fn op(tabs: Option<WireTabs>, capture: bool) -> WireContourOp {
+        WireContourOp {
+            top_z: Height::fixed(12.0),
+            bottom_z: Height::fixed(0.0),
+            condition: "C110".into(),
+            side: WireSide::Die,
+            start: Some([0.0, 0.0]),
+            tabs,
+            capture,
+        }
+    }
+
+    /// #539: an untabbed cut writes no tab or capture key (no existing
+    /// file changes); a tabbed one round-trips every key.
+    #[test]
+    fn the_tab_keys_round_trip_and_are_absent_when_off() {
+        let off = serde_json::to_string(&WireContourDto::from_op(&op(None, false))).expect("json");
+        assert!(!off.contains("tabs") && !off.contains("capture"), "{off}");
+        let tabs = WireTabs { count: Some(2), width: Some(1.0), at: vec![[0.0, 10.0], [0.0, -10.0]], cutoff_condition: "C120".into() };
+        let on = op(Some(tabs), true);
+        let text = serde_json::to_string(&WireContourDto::from_op(&on)).expect("json");
+        let back: WireContourDto = serde_json::from_str(&text).expect("reads");
+        assert_eq!(back.to_params(), OpParams::WireContour(on));
+        // A file stating tabs with a key left out loads, and the
+        // generator refuses the missing key by name.
+        let partial: WireContourDto = serde_json::from_str(
+            r#"{"top_z":{"from":"fixed","value":12.0},"bottom_z":{"from":"fixed","value":0.0},"side":"die","tabs":{"count":2}}"#,
+        )
+        .or_else(|_| serde_json::from_str(&text.replace(r#""width":1.0,"#, "")))
+        .expect("a partial tab statement loads");
+        let OpParams::WireContour(p) = partial.to_params() else { unreachable!() };
+        assert!(p.tabs.is_some_and(|t| t.width.is_none()));
     }
 }

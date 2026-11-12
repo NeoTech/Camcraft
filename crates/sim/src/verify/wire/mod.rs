@@ -35,6 +35,8 @@
 mod dist;
 mod slug;
 #[cfg(test)]
+mod hold_tests;
+#[cfg(test)]
 mod tests;
 
 use crate::cl::Toolpath;
@@ -91,6 +93,13 @@ pub struct WireJob<'a> {
     pub start: Option<Point2>,
     /// The sections through the height the wire passes, low to high.
     pub sections: Vec<WireSection>,
+    /// A tabbed cut (#539): the first move of the tab cut-off. The main
+    /// cut before it must free nothing (the tabs hold the slug); the
+    /// whole path, cut-off included, is judged by the slug law.
+    pub cutoff_from: Option<usize>,
+    /// The operator states the freed piece is caught (#539): an untabbed
+    /// cut may then free it; without it a freed piece is refused.
+    pub capture: bool,
 }
 
 /// Every finding refuses: the wire laws have no warning tier.
@@ -110,6 +119,12 @@ pub enum WireFinding {
     NothingFreed { z: f64 },
     /// The piece freed is not the one the stated side drops.
     WrongSlug { z: f64, side: CutSide, at: Point2, product_area: f64 },
+    /// The cut frees a piece and nothing holds it: no tabs, no capture
+    /// stated (#290 D6, #539).
+    Unsupported { z: f64, side: CutSide, at: Point2 },
+    /// The main cut of a tabbed path already frees a piece: the tabs do
+    /// not hold it (#539).
+    TabsDoNotHold { z: f64, at: Point2 },
 }
 
 impl WireFinding {
@@ -146,6 +161,19 @@ impl WireFinding {
                 "slug: the piece freed near X{:.3} Y{:.3} at Z{z:.3} holds none of the part - a punch's cut frees the punch, but here only waste drops and the part stays in the skeleton",
                 at.x, at.y
             ),
+            WireFinding::Unsupported { z, side, at } => format!(
+                "slug: the {} freed near X{:.3} Y{:.3} at Z{z:.3} drops unsupported when the cut closes - state tabs to hold it until a tab cut-off, or state that the slug is captured",
+                match side {
+                    CutSide::Die => "slug",
+                    CutSide::Punch => "punch",
+                },
+                at.x,
+                at.y
+            ),
+            WireFinding::TabsDoNotHold { z, at } => format!(
+                "slug: the main cut already frees the piece near X{:.3} Y{:.3} at Z{z:.3} - the tabs do not hold it; place them on the cut that encloses it",
+                at.x, at.y
+            ),
         }
     }
 }
@@ -156,6 +184,11 @@ impl WireFinding {
 pub struct WireVerdict {
     pub findings: Vec<WireFinding>,
     pub slugs: Vec<Slug>,
+    /// The tabs hold the slug through the main cut; the cut-off frees
+    /// `slugs` (#539).
+    pub held: bool,
+    /// The freed piece drops into a stated capture (#539).
+    pub captured: bool,
 }
 
 /// The product's section at one height (module head): the model, or

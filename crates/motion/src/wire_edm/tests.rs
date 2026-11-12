@@ -23,6 +23,7 @@ fn params(side: WireSide, start: Option<(f64, f64)>) -> WireParams {
         side,
         start: start.map(|(x, y)| Point2::new(x, y)),
         plane_z: -12.0,
+        tabs: None,
     }
 }
 

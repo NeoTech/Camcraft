@@ -1082,6 +1082,7 @@ fn wire_contour_die_and_punch_match_golden() {
             side,
             start: Some(start),
             plane_z: 0.0,
+            tabs: None,
         };
         let path = wire_contour(std::slice::from_ref(&profile), &[], &p).unwrap();
         assert!(path.is_prismatic() && path.moves.iter().all(|m| m.kind == MoveKind::Feed && m.feed.is_none()));

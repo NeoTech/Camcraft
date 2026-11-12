@@ -16,7 +16,7 @@ use crate::geo2d::{Loop, Point2, Region};
 use crate::machine::{ConditionField, Kind};
 use crate::machining2d::GenError;
 use crate::verify::Warning;
-use crate::wire_edm::{wire_contour, WireParams};
+use crate::wire_edm::{wire_contour, TabParams, WireParams};
 
 use super::kinds::Carried;
 use super::types::{OpParams, WireContourOp, WireSide};
@@ -32,6 +32,8 @@ pub(super) fn seed_wire_contour(c: &Carried) -> OpParams {
         condition: String::new(),
         side: WireSide::Die,
         start: None,
+        tabs: None,
+        capture: false,
     })
 }
 
@@ -93,11 +95,30 @@ pub fn condition_of(world: &World, setup: Option<&str>, op: &WireContourOp) -> R
 ///
 /// # Errors
 /// [`condition_of`]'s refusals, as a generation refusal.
-pub(super) fn job_wire(world: &World, op: &crate::schema::Operation) -> Result<Option<WireCondition>, GenError> {
+pub(super) fn job_wire(world: &World, op: &crate::schema::Operation) -> Result<Option<(WireCondition, Option<WireCondition>)>, GenError> {
     match &op.params {
-        OpParams::WireContour(w) => condition_of(world, op.setup.as_deref(), w).map(Some).map_err(GenError::Invalid),
+        OpParams::WireContour(w) => {
+            let setup = op.setup.as_deref();
+            let main = condition_of(world, setup, w).map_err(GenError::Invalid)?;
+            let cutoff = cutoff_of(world, setup, w).map_err(GenError::Invalid)?;
+            Ok(Some((main, cutoff)))
+        }
         _ => Ok(None),
     }
+}
+
+/// The tab cut-off's condition (#539): `None` when tabs are off or no
+/// cut-off condition is named (the generator refuses the latter by
+/// name); a named one the machine does not state is refused here.
+///
+/// # Errors
+/// The condition lookup's refusal, by name.
+pub fn cutoff_of(world: &World, setup: Option<&str>, op: &WireContourOp) -> Result<Option<WireCondition>, String> {
+    let Some(t) = op.tabs.as_ref().filter(|t| !t.cutoff_condition.trim().is_empty()) else {
+        return Ok(None);
+    };
+    let probe = WireContourOp { condition: t.cutoff_condition.clone(), ..op.clone() };
+    condition_of(world, setup, &probe).map(Some).map_err(|e| format!("the tab cut-off's condition: {e}"))
 }
 
 /// What stands in the job's tool slot for a wire cut: a spindle-less
@@ -125,6 +146,18 @@ pub(super) fn stamp_condition(world: &World, setup: Option<&str>, op: &WireConto
         }
         Err(_) => h.write_u8(0),
     }
+    // #539: the cut-off's condition, only when tabs are on.
+    if op.tabs.is_some() {
+        h.write(b"wire-cutoff");
+        match cutoff_of(world, setup, op) {
+            Ok(Some(c)) => {
+                h.write_u8(1);
+                h.write(&c.wire_diameter.to_bits().to_le_bytes());
+                h.write(&c.gap.to_bits().to_le_bytes());
+            }
+            Ok(None) | Err(_) => h.write_u8(0),
+        }
+    }
 }
 
 /// The condition ids the setup's wire EDM states, in the file's order -
@@ -147,7 +180,12 @@ pub fn conditions_of(world: &World, setup: Option<&str>) -> Vec<String> {
 /// # Errors
 /// A workpiece top or bottom that does not resolve, or a bottom that
 /// does not stand below the top.
-pub fn wire_params(op: &WireContourOp, cond: &WireCondition, hs: &ResolvedHeights) -> Result<WireParams, GenError> {
+pub fn wire_params(
+    op: &WireContourOp,
+    cond: &WireCondition,
+    cutoff: Option<&WireCondition>,
+    hs: &ResolvedHeights,
+) -> Result<WireParams, GenError> {
     let (Some(top), Some(bottom)) = (hs.top, hs.bottom) else {
         return Err(GenError::Invalid("wire contour: the workpiece's top and bottom must both resolve".into()));
     };
@@ -163,6 +201,12 @@ pub fn wire_params(op: &WireContourOp, cond: &WireCondition, hs: &ResolvedHeight
         side: op.side,
         start: op.start.map(|[x, y]| Point2::new(x, y)),
         plane_z: bottom,
+        tabs: op.tabs.as_ref().map(|t| TabParams {
+            count: t.count,
+            width: t.width,
+            at: t.at.iter().map(|[x, y]| Point2::new(*x, *y)).collect(),
+            cutoff: cutoff.map(|c| (c.id.clone(), c.wire_diameter * 0.5 + c.gap)),
+        }),
     })
 }
 
@@ -172,12 +216,13 @@ pub fn wire_params(op: &WireContourOp, cond: &WireCondition, hs: &ResolvedHeight
 /// wire sweep against the part is #534), and the path's notes say so.
 pub(super) fn generate_wire(
     op: &WireContourOp,
-    cond: Result<WireCondition, GenError>,
+    cond: Result<(WireCondition, Option<WireCondition>), GenError>,
     hs: &ResolvedHeights,
     picks: Option<(Vec<Loop>, Vec<Vec<Point2>>)>,
     base: impl FnOnce() -> Result<Region, GenError>,
 ) -> Result<(Toolpath, Vec<Warning>), GenError> {
-    let p = wire_params(op, &cond?, hs)?;
+    let (main, cutoff) = cond?;
+    let p = wire_params(op, &main, cutoff.as_ref(), hs)?;
     let (loops, chains) = match picks {
         Some(geom) => geom,
         None => (base()?.loops().to_vec(), Vec::new()),
