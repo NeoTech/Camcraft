@@ -33,11 +33,16 @@ point (many points per column for the same answer, no depth).
 **Cost / bounds.** Lines are read only where the box convicts, and a
 column whose box depth cannot deepen the worst depth already found is
 skipped, so a fixture that truly penetrates stops after its first
-convicting column. Re-measured after the review rework (release,
-M-series Mac): a 400 k-facet fixture (a 100 k-segment cylinder whose cap
-fans every line and rectangle near the centre meets) takes 16.6 s
-(clears) / 19.4 s (penetrates) with no limit; with the 50 M-visit budget
-both stop at 0.34 s and keep the box verdict, logged. Inside the material nothing is sampled (rectangles are read whole); at a side face or step the resolution is the carried grid's pitch, as before.
+convicting column. Re-measured after the second review (release,
+M-series Mac): 400 k-facet fixtures (a 100 k-segment cylinder whose cap
+fans every line and rectangle near the centre meets, plus a tall block
+so the box flags every column) take up to 13.8 s with no limit. With
+the 50 M-visit budget the time is the budget times the cost of a visit:
+0.33 s when the visits are line reads, 1.6-2.2 s when they are
+rectangle clips (the worst seen); M3 measured 0.74-0.80 s on its own
+construction. A spent budget keeps the box verdict, logged. Inside the
+material nothing is sampled (rectangles are read whole); at a side face
+or step the resolution is the carried grid's pitch, as before.
 
 ### Review rework (M3 review on 279ac89f)
 
@@ -69,8 +74,31 @@ grid line (the cell holding the part's edge reaches past it). Where the
 four corners disagree, only what they share is material there: steel
 within one pitch of a side face or a step, short of the next centre,
 passes - the same resolution the box law has always had at a face. It
-is the only steel this reading lets through, and it lies within a cell
-of a material boundary, never inside the material.
+is the only steel this reading lets through beyond the contact strip
+below: at most one pitch into the material at a side face or a step.
+M3's second review measured main's box law and this reading on the same
+bodies: their side-face verdicts agree at every phase for a fixture
+whose box is its shape. Filed as #1580 (P7; done when contact there is
+resolved finer than a pitch, or the bound is pinned at several phases).
+
+**The contact strip around each column line.** A column is read on its
+centre line and on four lines 0.01 mm beside it, and the rectangles
+between columns start 0.01 mm past the centre, so a strip 0.02 mm wide
+(2 x `CARRIED_CONTACT_TOL`) along each column line is read only by
+those lines. A wall thinner than 0.02 mm lying along a line can pass
+(M3: 0.015 and 0.019 mm held, 0.021 mm refused). This is the contact
+tolerance by design - a jaw face on a column centre is contact - and it
+is bounded by 0.02 mm of steel width, no thicker than the interference
+the tolerance already accepts; no real fixture is a 20-micron wall.
+
+**Slim rectangles keep the box (second review).** Below a 0.02 mm pitch
+the rectangle trimmed by the tolerance inverts. It is now tested as slim
+before the off-footprint test (which an inverted rectangle always met,
+clearing it), so it is not read and keeps the box's depth: M3's 0.003 mm
+post 3 mm in, at a 0.015 mm pitch, is refused at 3.0 as main refuses it.
+The other early-outs of the line and prism readings were re-read: a
+facet index the mesh does not hold now reads as unread, and a clip that
+is not finite reads as steel over the whole slab, so neither can clear.
 
 **Considered and dropped.** A per-cell Z envelope against the cell's
 own column (refuses gripping jaws, as above); falling back to the box

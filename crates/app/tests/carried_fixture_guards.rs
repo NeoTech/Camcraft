@@ -3,7 +3,9 @@
 //! carried bodies, so each guard is reached alone: an unread column line
 //! (spent budget), an unread rectangle between the columns (an
 //! inside-out shell over another), and a feature between the column
-//! lines.
+//! lines. The second review: the rectangle read's contact band and trim
+//! are the tolerance (literals), and a rectangle too slim to trim keeps
+//! the box.
 //! Provenance: our own geometry.
 //!
 //! Gate map (#1530): covers app::fixture_carried (mesh_penetration,
@@ -107,4 +109,49 @@ fn a_face_on_a_column_centre_where_the_material_ends_is_contact() {
     let plate = (p(-1.0, -1.0, -3.0), p(4.0, 4.0, -1.0));
     let (mesh, boxed) = judge(&b, &facets(&[jaw, plate], &[]), MESH_VISIT_BUDGET);
     assert_eq!((mesh, boxed), (None, Some(8.0)));
+}
+
+/// 3 x 3 columns of 1 mm, material Z 0..10, a plate under it (Z -5..0:
+/// contact) and `extra` blocks.
+fn on_plate(extra: &[(Point3, Point3)]) -> (Option<f64>, Option<f64>) {
+    let mut boxes = vec![(p(-1.0, -1.0, -5.0), p(4.0, 4.0, 0.0))];
+    boxes.extend_from_slice(extra);
+    judge(&body(3.0, 0.0, 10.0), &facets(&boxes, &[]), MESH_VISIT_BUDGET)
+}
+
+#[test]
+fn a_rectangle_reads_its_contact_band_at_the_tolerance() {
+    // A block mid-cell (no column line meets it) on the plate: 0.03 mm
+    // into the material is steel, 0.005 mm is contact. Literals, so a
+    // wider band in the rectangle read turns this red (#1530 review P2b).
+    let block = |h: f64| (p(0.9, 0.9, 0.0), p(1.1, 1.1, h));
+    assert_eq!(on_plate(&[block(0.03)]).0, Some(0.03));
+    assert_eq!(on_plate(&[block(0.005)]).0, None);
+}
+
+#[test]
+fn a_rectangle_is_trimmed_by_the_tolerance_only() {
+    // A 0.015 mm post 0.012 mm off a column's centre line (x 1.5): past
+    // the line beside it (1.51), inside the rectangle trimmed by one
+    // tolerance - a wider trim misses it (#1530 review P2c).
+    assert_eq!(on_plate(&[(p(1.512, 0.9, 0.0), p(1.527, 1.1, 3.0))]).0, Some(3.0));
+}
+
+#[test]
+fn a_pitch_too_fine_to_trim_keeps_the_box_between_the_columns() {
+    // At a 0.015 mm pitch the rectangle trimmed by 0.01 mm each side is
+    // inverted: it is not read, the box speaks. A 0.003 mm post 3 mm
+    // into the material mid-cell (no line meets it) is refused, as the
+    // box refuses it (#1530 review request 2).
+    let pitch = 0.015;
+    let b = Body::on_floor(Dexel::block(0.0, 0.0, 20.0 * pitch, 20.0 * pitch, 10.0, pitch).expect("grid"), 0.0);
+    assert!((b.dex.cell - pitch).abs() < 1e-12, "the grid keeps the pitch: {}", b.dex.cell);
+    let c = b.dex.center(9, 9);
+    let (mx, my) = (c.x + pitch * 0.5, c.y + pitch * 0.5);
+    let r = 0.0015;
+    let plate = (p(-1.0, -1.0, -5.0), p(1.0, 1.0, 0.0));
+    let post = (p(mx - r, my - r, 0.0), p(mx + r, my + r, 3.0));
+    let (mesh, boxed) = judge(&b, &facets(&[plate, post], &[]), MESH_VISIT_BUDGET);
+    assert_eq!(boxed, Some(3.0), "the box refuses it");
+    assert_eq!(mesh, Some(3.0), "the mesh never clears what it did not read");
 }

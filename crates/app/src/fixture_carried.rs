@@ -42,8 +42,9 @@
 //!     Where the four disagree (a side face or a step of the carried
 //!     part runs through the rectangle) only what they share is judged:
 //!     a material boundary is known to one pitch, as the box law always
-//!     read it (steel within a cell of a side face, short of the next
-//!     column centre, passes; the decision record states it).
+//!     read it (steel at most one pitch into the material at a side face
+//!     or step, short of the next column centre, passes; the decision
+//!     record states it, #1580 tracks it).
 //!
 //!   A vise is its jaws, not the box that spans the part they grip; a
 //!   nest is its walls and floor. The mesh only acquits: an open,
@@ -240,12 +241,15 @@ fn between_columns(body: &Body, b: &FixtureBox, mesh: &FixtureMesh, budget: &mut
             }
             let (c0, c1) = (dex.center(ix, iy), dex.center(ix + 1, iy + 1));
             let (x0, x1, y0, y1) = (c0.x + t, c1.x - t, c0.y + t, c1.y - t);
-            if x0.max(bx0) > x1.min(bx1) || y0.max(by0) > y1.min(by1) {
+            // A rectangle too slim to read once trimmed (a pitch under
+            // ~0.02 mm inverts it, x0 > x1) is not read: the box speaks.
+            // Tested BEFORE the off-footprint test, which an inverted
+            // rectangle always passes (#1530 review: it cleared a post
+            // the box refuses). `!(..>=..)` also keeps the box on NaN.
+            let slim = !(x1 - x0 >= 1e-3 && y1 - y0 >= 1e-3);
+            if !slim && (x0.max(bx0) > x1.min(bx1) || y0.max(by0) > y1.min(by1)) {
                 continue; // the rectangle is off the footprint: no steel
             }
-            // A rectangle too slim for a line to be read inside it (a
-            // pitch under ~0.02 mm) is not read: the box speaks.
-            let slim = x1 - x0 < 1e-3 || y1 - y0 < 1e-3;
             let reading = if slim { PrismReading::Unread } else { mesh.steel_in_prism((x0, x1), (y0, y1), (lo, hi), t, budget) };
             let d = match reading {
                 PrismReading::Clear => continue,

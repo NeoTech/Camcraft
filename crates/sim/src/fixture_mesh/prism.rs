@@ -73,7 +73,13 @@ fn clipped_z(t: &[V; 3], x0: f64, x1: f64, y0: f64, y1: f64) -> Option<(f64, f64
     }
     let lo = poly.iter().map(|p| p[2]).fold(f64::INFINITY, f64::min);
     let hi = poly.iter().map(|p| p[2]).fold(f64::NEG_INFINITY, f64::max);
-    (lo.is_finite() && hi.is_finite()).then_some((lo, hi))
+    // A clip that is not finite (a NaN through a degenerate edge) meets
+    // the rectangle somewhere unknown: it spans every Z, so the slab
+    // reads as steel - never as a miss that could clear it.
+    if !(lo.is_finite() && hi.is_finite() && poly.iter().all(|p| p.iter().all(|v| v.is_finite()))) {
+        return Some((f64::NEG_INFINITY, f64::INFINITY));
+    }
+    Some((lo, hi))
 }
 
 impl FixtureMesh {
@@ -103,7 +109,12 @@ impl FixtureMesh {
                     return true;
                 };
                 *budget = left;
-                let Some(tri) = self.tris.get(t) else { return false };
+                // A facet index the mesh does not hold is unread, never
+                // skipped: a skipped facet could clear the box.
+                let Some(tri) = self.tris.get(t) else {
+                    unread = true;
+                    return true;
+                };
                 let Some((lo, hi)) = clipped_z(tri, x.0, x.1, y.0, y.1) else { return false };
                 any = true;
                 zmin = zmin.min(lo);

@@ -74,7 +74,10 @@ fn crossings(mesh: &FixtureMesh, x: f64, y: f64, budget: &mut u64) -> Option<Vec
                 return true;
             };
             *budget = left;
-            let Some(tri) = mesh.tris.get(t) else { return false };
+            let Some(tri) = mesh.tris.get(t) else {
+                ambiguous = true; // a facet the mesh does not hold: unread
+                return true;
+            };
             if mesh.flat.get(t).copied().unwrap_or(false) {
                 return false; // no interior to cross
             }

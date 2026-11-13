@@ -12,7 +12,8 @@
 //!
 //! The #1530 review: a post or a lip narrower than the grid pitch,
 //! standing between the column lines, is refused; an open mesh and a
-//! coarse-fidelity fixture keep the box verdict.
+//! coarse-fidelity fixture keep the box verdict. The second review: a
+//! setup turned about Z (not flipped) is judged in its turned frame.
 //!
 //! Gate map (#1530): covers app::fixture_carried (carried_fixture_problems,
 //! mesh_penetration, CARRIED_CONTACT_TOL), sim::fixture_mesh::column
@@ -278,4 +279,57 @@ fn a_coarse_fidelity_fixture_keeps_the_box_verdict() {
     model_fidelity::set(&world, &e, Some(1.0));
     let r = refusals(&world);
     assert!(r.len() == 1 && r[0].contains("fixture 'Soft jaws'") && r[0].contains("5.00 mm deep"), "{r:?}");
+}
+
+/// A 60 x 30 bar in 66 x 36 stock, its sides contoured down to Z 4 (as
+/// the hat), then Setup2 turned 90 degrees about Z (not flipped): the
+/// carried body is the 30 x 60 section Z 4..10 on a 36 x 66 brim Z 0..4.
+fn turned_bar() -> (World, History) {
+    let world = new_world();
+    let mut h = History::default();
+    h.execute(&world, ImportModel::from_mesh("part", cube(Point3::new(-30.0, -15.0, 0.0), Point3::new(30.0, 15.0, 10.0))));
+    let at = Location { pos: Point3::new(0.0, 0.0, 0.0), ..Default::default() };
+    h.execute(&world, SetStock::new(&world, StockShape::Box { dx: 66.0, dy: 36.0, dz: 10.0 }, at).expect("stock"));
+    let tool = catalog().into_iter().find(|(n, _)| *n == TOOL).map(|(_, t)| t).expect("tool");
+    h.execute(&world, AddTool::new(&world, TOOL, tool).expect("add tool"));
+    h.execute(&world, CreateSetup::new(&world, None, None).expect("materialize Setup1"));
+    let op = CreateOperation::new(&world, "Sides", TOOL, SrcRef::Entity("part".into()), contour()).expect("create");
+    h.execute(&world, op);
+    h.execute(&world, GenerateOperation::new(&world, "Sides").expect("generate"));
+    h.execute(&world, CreateSetup::new(&world, None, Some("Setup1")).expect("Setup2"));
+    h.execute(&world, AlignPartToSetup::preset(&world, "Setup2", AlignPreset::TurnZ90).expect("turn"));
+    h.execute(&world, CreateOperation::new(&world, "Top", TOOL, SrcRef::Stock, face(10.0)).expect("create"));
+    h.execute(&world, GenerateOperation::new(&world, "Top").expect("generate"));
+    (world, h)
+}
+
+/// A pocket `hx` x `hy` from the centre, Z 0..10, in a block standing
+/// on a plate (Z -10..0): the brim sits on the plate inside the pocket.
+fn pocket(hx: f64, hy: f64) -> Mesh {
+    let p = |x: f64, y: f64, z: f64| Point3::new(x, y, z);
+    mesh_of(&[
+        (p(-50.0, -50.0, -10.0), p(50.0, 50.0, 0.0)),
+        (p(-50.0, -50.0, 0.0), p(-hx, 50.0, 10.0)),
+        (p(hx, -50.0, 0.0), p(50.0, 50.0, 10.0)),
+        (p(-hx, -50.0, 0.0), p(hx, -hy, 10.0)),
+        (p(-hx, hy, 0.0), p(hx, 50.0, 10.0)),
+    ])
+}
+
+#[test]
+fn a_turned_setup_judges_its_fixture_in_the_turned_frame() {
+    // #1530 review: a rotated (not flipped) setup. The pocket fits the
+    // turned brim (X +-18, Y +-33); read in the unturned frame (X +-33)
+    // its walls would stand in it. One mm short in Y, they do.
+    let (world, mut h) = turned_bar();
+    let body = incoming_body(&world, "Setup2").expect("carried");
+    let (lo, hi) = body.bounds().expect("material");
+    assert!(hi.y - lo.y > hi.x - lo.x + 20.0, "the bar enters turned: {lo:?} {hi:?}");
+    add_jaws(&world, &mut h, pocket(18.05, 33.05));
+    let r = refusals(&world);
+    assert!(r.is_empty(), "the brim sits in the pocket: {r:?}");
+    let (world, mut h) = turned_bar();
+    add_jaws(&world, &mut h, pocket(18.05, 32.0));
+    let r = refusals(&world);
+    assert!(r.len() == 1 && r[0].contains("fixture 'Soft jaws'") && r[0].contains("4.00 mm deep"), "{r:?}");
 }
