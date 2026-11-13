@@ -65,3 +65,15 @@ The rough pass is moves 1-7 (lead-in, five ring moves, lead-out), so move 8 is s
 - Letting the pairs through untested: a silent wrong answer, against the Prime Directive.
 
 **Left open:** skims with a taper, tabs, a burnout or a 4-axis cut are owed work, each to be filed on its own when wanted. The earlier "skims on a punch need tabs" note now reads: a skimmed punch needs a stated capture (main's hold law), since tabs beside skims are refused for now.
+
+### The Sodick wire post refuses skims (merge with main after #1506, 2026-11-13)
+
+**Context:** main gained `sodick-wire.cps` (#617, #1506) while this PR was open. It writes its C condition word once, when the wire is threaded at the section's first cut (`startCut`); a later `PARAM EdmCondition` only reassigned the variable. A skimmed Wire Contour posted through it would have cut every skim on the rough pass's C word, with no refusal: wrong G-code.
+
+**Chosen (SKULL):** the Sodick post refuses, by name, an EdmCondition stated after the section's first cutting move - which is exactly how `announce_skims` states a skim's condition: "Sodick: a condition change between passes (skims) is not supported by this post - post the skims through wire-iso or as separate operations". The section stops writing moves there; the app's post gate turns the message into a refusal, so no file is written. `wire-iso.cps` already selects each skim's condition at its pass and is unchanged; it is the only other shipped wire post (`assets/posts/*wire*.cps`).
+
+**Considered and dropped:**
+- Writing a new C word at each pass: there is no public Sodick source for how the control takes a condition change mid-program (#617), so the words would be guessed.
+- Refusing skims in the app for every non-wire-iso post: the post owns its dialect; a post that can select per pass (wire-iso) must keep doing so.
+
+**Pinned by:** app `sodick_wire_post::skims_are_refused_by_name_never_cut_on_the_rough_condition` (through `post_script`: the named refusal, no file; through the engine: the warning, no skim C word written). Mutation-checked: with the refusal removed the test is red, restored it is green. The Sodick golden `wire_slug_punch.nc` and the recorded refusal goldens are unchanged.
