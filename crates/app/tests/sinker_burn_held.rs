@@ -5,13 +5,16 @@
 //! carried column arm is pinned on the holder, `stock_sim_held_tests`);
 //! on the field engine, and in the field view, a burn is refused by
 //! name, never cut as a disc nor skipped; at post a Sinker Burn is
-//! admitted on its sinker, a milling op remounted onto the sinker is
-//! refused by the family door's text, and a burn remounted onto a mill
-//! never posts.
+//! admitted by the family door on its sinker but refused by the EDM door
+//! (`posting_family::edm_at_post`: no EDM dialect ships until #542) by
+//! every writer, which writes no file; a milling op remounted onto the
+//! sinker is refused by the family door's text, and a burn remounted onto
+//! a mill never posts.
 //!
 //! Gate map (#541 review): covers app::stock_sim_held (Held::simulate_box),
 //! app::stock_sim_carry (carry_turn, the walk's electrode arm),
-//! app::stock_view (display_inputs), app::posting (op_streams),
+//! app::stock_view (display_inputs), app::posting (op_streams,
+//! post_setup), app::posting_mounts, app::posting_per_op,
 //! app::posting_family.
 //! Provenance: our own SYNTHETIC fixtures (`edm/sinker_fixture.rs`); no
 //! vendor material consulted. Lane shape (M4.4): all tests run in seconds.
@@ -27,7 +30,7 @@ use camcraft_app::commands::{
 };
 use camcraft_app::machine::parse_mch;
 use camcraft_app::operation::{Height, OpParams, SinkerDatum, SrcRef};
-use camcraft_app::posting::op_streams;
+use camcraft_app::posting::{op_streams, post_mounts, post_per_op, post_setup};
 use camcraft_app::stock::StockShape;
 use camcraft_app::stock_sim::{
     incoming_body, simulate_document, with_carry_engine, Backend, CARRY_MACHINE_REFUSAL, ELECTRODE_FIELD_REFUSAL,
@@ -90,10 +93,33 @@ fn a_carry_onto_the_sinker_is_refused_by_name_before_any_burn() {
 }
 
 #[test]
-fn the_post_admits_a_burn_on_its_sinker() {
+fn the_family_door_admits_a_burn_on_its_sinker() {
     let (world, _h) = one_setup();
-    let streams = op_streams(&world).expect("a sinker burn posts on its sinker");
+    let streams = op_streams(&world).expect("the family door admits a sinker burn on its sinker");
     assert_eq!(streams.iter().map(|(n, _)| n.as_str()).collect::<Vec<_>>(), ["Burn0"]);
+}
+
+/// The review of #1131: the family door admits the burn, but no EDM
+/// dialect ships yet, so every writer refuses it by name before a byte
+/// is written - never the Fanuc mill program (tool change, G43, the tip
+/// as a Z target) the built-in post would address to the EDM control.
+#[test]
+fn the_post_refuses_a_burn_on_its_sinker_until_an_edm_dialect_ships() {
+    let (world, _h) = one_setup();
+    let dir = std::env::temp_dir().join(format!("camcraft-1131-edm-door-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("scratch dir");
+    let nc = dir.join("burn.nc");
+    let door = "Setup1: no post for a sinker EDM machine yet (#542) - Burn0 is not posted and no file is written";
+    let err = post_setup(&world, &nc).expect_err("a sinker burn never posts through a milling dialect");
+    assert!(err.starts_with(door), "{err}");
+    let err = post_mounts(&world, &nc).expect_err("nor per mount");
+    assert!(err.starts_with(door), "{err}");
+    let err = post_per_op(&world, &dir, "burn").expect_err("nor per op");
+    assert!(err.starts_with(door), "{err}");
+    let written: Vec<_> = std::fs::read_dir(&dir).expect("read scratch").collect();
+    assert!(written.is_empty(), "the EDM door wrote {written:?}");
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
