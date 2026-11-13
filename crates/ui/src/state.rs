@@ -1405,6 +1405,9 @@ pub struct State {
     pub viewport_rect: ([f32; 2], [f32; 2]),
     /// Live viewport drag (orbit/pan), driven by the shell's pointer layer.
     pub drag: Option<DragMode>,
+    /// #979: the live box-select rubber band (press point, current point),
+    /// logical px. View state like `drag` - its release queues one command.
+    pub pick_box: Option<[[f32; 2]; 2]>,
     /// Facet currently under the cursor (`interact` refreshes it from the
     /// shell's pointer events with a filtered raycast; it clears when the
     /// pointer leaves the viewport). View state like the camera and the
@@ -1869,6 +1872,7 @@ impl State {
             selection_version: 0,
             viewport_rect: ([0.0, 0.0], [0.0, 0.0]),
             drag: None,
+            pick_box: None,
             hover: None,
             hover_mesh: None,
             viewport_hot: false,

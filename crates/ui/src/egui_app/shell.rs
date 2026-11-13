@@ -259,7 +259,9 @@ impl TabViewer for ShellTabs<'_> {
 /// The viewport tab: the 3D image, the pointer law, and the screen-space
 /// overlays. M-e moved the law to `crate::interact`, where the retired
 /// imgui shell had it first: a short LMB press picks (Ctrl adds, the
-/// gesture table), an LMB drag past the click-travel threshold orbits, MMB
+/// gesture table), an LMB drag past the click-travel threshold orbits (a
+/// Ctrl/Shift drag in Edge/Face mode with an op open draws a pick box
+/// instead, #979 - `crate::box_pick`), MMB
 /// orbits, RMB pans, wheel dollies toward the cursor. egui's press/drag
 /// bookkeeping differs from winit's raw stream, so the gestures are read
 /// off `ui.input` directly, the same CLICK_TRAVEL_PX law applied by hand;
@@ -483,6 +485,13 @@ fn viewport_panel(
         if state.drag == Some(DragMode::Orbit) {
             state.drag = None;
         }
+        // #979: a pick box's release adds what it holds, as one command.
+        if let Some(mut b) = state.pick_box.take() {
+            if let Some(p) = pos {
+                b[1] = parr(p);
+            }
+            crate::box_pick::finish(state, b);
+        }
         if let (Some(q), Some(p)) = (press, pos)
             && (p - egui::pos2(q[0], q[1])).length() <= interact::CLICK_TRAVEL_PX
             && interact::inside_viewport(state, parr(p))
@@ -503,11 +512,20 @@ fn viewport_panel(
             Some(DragMode::Orbit) => state.cam.orbit(motion.x, motion.y),
             Some(DragMode::Pan) => state.cam.pan(motion.x, motion.y),
             None => {
-                if let (Some(q), Some(p)) = (*left_press, pos)
+                if let Some(b) = state.pick_box.as_mut()
+                    && let Some(p) = pos
+                {
+                    b[1] = parr(p); // #979: the rubber band follows
+                } else if let (Some(q), Some(p)) = (*left_press, pos)
                     && p.distance(egui::pos2(q[0], q[1])) > interact::CLICK_TRAVEL_PX
                 {
-                    state.drag = Some(DragMode::Orbit);
-                    state.cam.orbit(motion.x, motion.y);
+                    // #979: Ctrl/Shift + drag in Edge/Face mode boxes picks.
+                    if crate::box_pick::armed(state, mods) {
+                        state.pick_box = Some([q, parr(p)]);
+                    } else {
+                        state.drag = Some(DragMode::Orbit);
+                        state.cam.orbit(motion.x, motion.y);
+                    }
                 }
             }
         }
@@ -562,6 +580,11 @@ fn viewport_panel(
         }
         for (a, b) in interact::hover_features(state, aspect) {
             ui.painter().line_segment([to_px(a), to_px(b)], egui::Stroke::new(1.0, rgb8(super::ground_ink::overlay(super::ground_ink::Overlay::Hover))));
+        }
+        // #979: the pick box's rubber band - solid for a window, dashed
+        // for a crossing box.
+        if let Some(b) = state.pick_box {
+            crate::box_pick::paint(ui.painter(), b, rgb8(super::ground_ink::overlay(super::ground_ink::Overlay::Hover)));
         }
         // The machined mesh's hovered facet (#25): the hover ink's yellow,
         // a veil over the class colour and its outline.

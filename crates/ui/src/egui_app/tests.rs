@@ -143,6 +143,8 @@ mod model_fidelity;
 mod step_budget;
 // #709 hand check: both points of a two-point axis stay marked.
 mod two_point_marks;
+// #979: the viewport box select.
+mod box_select;
 // #1104: the Setups page lists setups only.
 mod setups_declutter;
 // #1206: each setup's own Machine and Post pages pick its own mount.
