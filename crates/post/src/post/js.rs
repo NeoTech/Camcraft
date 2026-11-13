@@ -30,6 +30,11 @@ var currentPosition = { X: 0, Y: 0, Z: 0 };
 // per operation counts 1, 2, 3... in program order. A dialect that
 // writes an O-word reads it at onOpen.
 var programNumber = 1;
+// The document's program identity (#258): \`number\` is programNumber
+// again; \`numbered\` is true only when the document states a number
+// (a dialect whose default program writes none keeps writing none);
+// \`comment\` is the document's program comment, "" when it states none.
+var program = { number: 1, numbered: false, comment: "" };
 var postOptions = {};
 var machine = { name: "", rapidRate: 0, feedRateMax: 0, spindleMax: 0, coolants: [], rotaries: [], rtcp: false, units: "mm", spindleRanges: [], rigidTapping: true, safeRetractZ: null, model: "" };
 function _flushLine() { if (LINE !== "") { OUT.push(LINE); LINE = ""; } }
@@ -155,6 +160,23 @@ pub const HOOKS: &[&str] = &[
     "onClose",
 ];
 
+/// The program's identity a post writes (#258): its number (the
+/// O-word of a numbering dialect, 1 when the document states none),
+/// whether the document stated that number, and the document's
+/// program comment ("" for none - the dialect writes its own default).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ProgramId {
+    pub number: u32,
+    pub numbered: bool,
+    pub comment: String,
+}
+
+impl Default for ProgramId {
+    fn default() -> Self {
+        Self { number: 1, numbered: false, comment: String::new() }
+    }
+}
+
 /// One loaded post script.
 pub struct Script {
     ctx: Context,
@@ -188,6 +210,10 @@ pub struct Script {
     /// Without it a thread that needs the spindle reversed is refused
     /// by name - the script would cut it the other hand under M03.
     thread_hands: bool,
+    /// The `millSpindleReverse = true` manifest flag (#988): the script
+    /// reads `PARAM MillSpindle reverse` and starts the spindle M04 for
+    /// a left-hand-cut mill. Without it such a section is refused.
+    mill_spindle_reverse: bool,
     /// The `wireEdm = true` manifest flag (#533): the script voices a
     /// wire EDM section (`PARAM EdmCondition`). Without it such a
     /// section is refused by name - a cutting post would write a wire
@@ -214,6 +240,7 @@ impl Script {
             axis_inversion: false,
             probe_axis_inversion: false,
             thread_hands: false,
+            mill_spindle_reverse: false,
             wire_edm: false,
         };
         let mut present = Vec::new();
@@ -239,6 +266,10 @@ impl Script {
             .unwrap_or(false);
         s.floating_tapping = s
             .eval("typeof floatingTapping !== \"undefined\" && floatingTapping === true")
+            .map(|v| is_true(&v))
+            .unwrap_or(false);
+        s.mill_spindle_reverse = s
+            .eval("typeof millSpindleReverse !== \"undefined\" && millSpindleReverse === true")
             .map(|v| is_true(&v))
             .unwrap_or(false);
         s.thread_hands = s
@@ -276,9 +307,11 @@ impl Script {
         Ok(())
     }
 
-    /// Publish the program's number (#111) before `onOpen` reads it.
-    pub fn set_program_number(&mut self, n: u32) -> Result<(), PostError> {
-        self.eval(&format!("programNumber = {n};"))?;
+    /// Publish the program's identity (#258) before `onOpen` reads it:
+    /// the `program` global and `programNumber` beside it.
+    pub fn set_program(&mut self, id: &ProgramId) -> Result<(), PostError> {
+        let obj = serde_json::json!({ "number": id.number, "numbered": id.numbered, "comment": id.comment });
+        self.eval(&format!("program = {obj}; programNumber = {};", id.number))?;
         Ok(())
     }
 
@@ -367,6 +400,11 @@ impl Script {
     /// `PARAM SpindleDirection` and voices a thread's hand (#629).
     pub fn voices_thread_hands(&self) -> bool {
         self.thread_hands
+    }
+
+    /// True when the script declares `millSpindleReverse = true` (#988).
+    pub fn voices_mill_spindle_reverse(&self) -> bool {
+        self.mill_spindle_reverse
     }
 
     /// True when the script declares `wireEdm = true` - it voices a

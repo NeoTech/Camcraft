@@ -19,8 +19,17 @@ the property table there is the vocabulary, this file is the grammar.
 
 Manifest: top-level assignments only — `description`, `vendor`, `legal`,
 `certificationLevel`, `minimumRevision`, `extension`, `setCodePage`,
-`capabilities`, `serves`, `coolantModes`, `liveTooling`, `afterModes`, `axisInversion`, `probeAxisInversion`, `threadHands`. All but `serves` and the last six are
-text the engine reads none of; `serves = ["plasma"];` (#1266; one word or a list of kind words: mill, lathe, mill-turn, plasma, wire_edm, sinker_edm) names the machine kinds a script of the user's own posts to - the app refuses it by name on any other kind, and a script that states none is accepted only on a mill (non-turning dialect), a lathe (turning) or a mill-turn, never on a plasma table or an EDM; shipped posts are judged by registry name and need no `serves`; `threadHands = true` (#629) says the script
+`capabilities`, `serves`, `coolantModes`, `programUnits`, `liveTooling`, `afterModes`, `axisInversion`, `probeAxisInversion`, `threadHands`. All but `serves` and the last six are
+text the engine reads none of; `serves = ["plasma"];` (#1266; one word or a list of kind words: mill, lathe, mill-turn, plasma, wire_edm, sinker_edm) names the machine kinds a script of the user's own posts to - the app refuses it by name on any other kind, and a script that states none is accepted only on a mill (non-turning dialect), a lathe (turning) or a mill-turn, never on a plasma table or an EDM; shipped posts are judged by registry name and need no `serves`; `programUnits = "mm inch"` (#902) says
+the script writes the program in the document's unit -
+`postOptions.Units`, `"mm"` or `"inch"`, absent = mm: the dialect's
+unit word (G21 / G20, the 840D's G710 / G700) before any motion, every
+length / 25.4 at four decimals and every feed in in/min, angles,
+seconds and rpm as they come - and an inch document on a script whose
+`programUnits` lacks `inch` (Carvera and Heidenhain say `"mm"`) is
+refused by name before any hook runs; never read
+`machine.units` for the program's unit, it is only the unit the
+machine file was written in; `threadHands = true` (#629) says the script
 reads `PARAM SpindleDirection` and states a thread's hand (M04 when the
 helix needs the spindle reversed) - without it the engine refuses a
 reverse-spindle thread section by name (fanuc-lathe.cps and tormach-lathe.cps set it); `liveTooling = true` (issue #33) says the
@@ -56,7 +65,7 @@ argument semantics in `docs/CNC-INTERMEDIATE.md`):
 
 | hook | fires |
 |---|---|
-| `onOpen` | once, before all records (write the header here; the global `programNumber` is the program's number - 1 for a whole job, 1, 2, 3... per file when posting one file per operation (#111) - for a dialect with an O-word) |
+| `onOpen` | once, before all records (write the header here; the global `program` is the program's identity (#258): `program.number` - the document's number, 1 when it states none, counting up per file when posting one file per operation (#111; `programNumber` holds it too) - `program.numbered` (the document stated it: a dialect whose default header writes no number keeps writing none) and `program.comment` (the document's program comment, `""` for none - write the machine's name then, as before). Write them in the dialect's own form (O-word, program name, header comment), clean the comment to the dialect's comment-legal characters, and refuse by name what the dialect cannot hold) |
 | `onParameter(name, value)` | per `PARAM`; `onSpindleSpeed` follows the `SpindleSpeed` one |
 | `onToolChange(number, name)` | per `TOOL` |
 | `onSection` / `onSectionEnd` | per operation span (preamble bookends) |
@@ -124,6 +133,14 @@ write (the gate), so the released program never carries one.
   everything the first raw motion line needs (`startPreamble`
   pattern), and serve legacy streams that carry no `SECTION` by
   firing it from the first motion too.
+- **A cycle states its feed; a cut needs a turning spindle (#1357).**
+  A canned cycle whose `FeedRate` is missing or not positive is a
+  `message()` refusal by name ("canned cycle G73 has no feed rate"),
+  never a G7x/G8x with no F that drills at the last modal feed or
+  alarms on zero. `tormach.cps` also refuses a feed, arc or cycle with
+  the spindle stopped (no `S.. M3` since the last `M5`); a touch
+  probe's 0 rpm section is exempt, and spindleless dialects (plasma,
+  wire, sinker) never apply it.
 - **Modal discipline.** G43.4 / retract modes once per program
   or per arm; tool change resets the arm and the angle memory
   (stage D). The cycle group suppresses its expanded chain — one

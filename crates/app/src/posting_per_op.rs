@@ -16,7 +16,7 @@
 //! writes nothing: never a folder with ops 1 and 3 but not 2.
 
 use super::{
-    machine_value_of, op_streams, options_value, post_options, script_of, script_source, viewer_map,
+    machine_value_of, op_streams, script_of, script_source, viewer_map,
     Posted,
 };
 use crate::post::{cnc, engine};
@@ -117,8 +117,6 @@ fn post_per_op_with(
         return Err(format!("{} is not a folder", dir.display()));
     }
     let streams = op_streams(world)?;
-    // No sinker EDM dialect ships yet (#542): refused before any file.
-    crate::posting_family::edm_at_post(world, streams.iter().map(|(n, _)| n.as_str()))?;
     // Each op's setup and script, resolved once - and the lathe door
     // (#1190) before anything else is judged: a turning dialect opens
     // only what a lathe may run.
@@ -157,15 +155,15 @@ fn post_per_op_with(
     if !report.problems.is_empty() {
         return Err(format!("post blocked - {}", report.problems.join("; ")));
     }
-    let options = options_value(post_options(world));
+    let options = super::program_options(world);
     let mut files = Vec::with_capacity(streams.len());
     for (k, ((name, records), (setup, cps))) in streams.iter().zip(resolved).enumerate() {
         let index = k + 1;
-        let number = u32::try_from(index).map_err(|_| "too many operations to number".to_owned())?;
+        let id = super::document_program_id(world, index)?;
         let ext = engine::extension_of(&cps).map_err(|e| format!("post engine: {e}"))?;
         let ext = sanitise(&ext, "nc");
         let mch = machine_value_of(world, setup.as_deref());
-        let out = engine::run_numbered_with(&cps, &mch, &cnc::serialize(records), &options, number)
+        let out = engine::run_program_with(&cps, &mch, &cnc::serialize(records), &options, &id)
             .map_err(|e| format!("{name}: post engine: {e}"))?;
         if !out.warnings.is_empty() {
             return Err(format!(

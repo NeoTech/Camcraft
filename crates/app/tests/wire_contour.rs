@@ -95,6 +95,10 @@ fn wire_op(side: WireSide, start: Option<[f64; 2]>) -> WireContourOp {
         condition: "C110".into(),
         side,
         start,
+        tabs: None,
+        capture: false,
+        taper_deg: 0.0,
+        burnout: None,
         clearance: operation::DEFAULT_CLEARANCE,
     }
 }

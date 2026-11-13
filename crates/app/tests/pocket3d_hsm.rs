@@ -128,21 +128,19 @@ fn bore_path_matches(got: (usize, usize, usize)) -> bool {
         // Measured on issue/980-bore-hsm-plan, three release runs, identical.
         got == (16197, 15458, 1581)
     } else if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
-        // Measured by the contributor's reviewer at 608126a5 on Apple
-        // silicon (https://github.com/NeoTech/Camcraft/pull/1032).
-        got == (16160, 15432, 1571)
+        // Issue #882 (PR #1376): measured by its reviewer at 8cd4c918 on
+        // Apple silicon, release, two runs identical; every level
+        // verifies clean, none falls back. Before: (16160, 15432, 1571).
+        got == (16026, 15382, 1413)
     } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
-        // Measured on issue/1050-developed-band-exit (issues #1050 and
-        // #1169), two release runs, identical. Both issues change the
-        // plan: the disc phase out of the bore is held on a coarse rim
-        // too (smaller first steps), the closing laps are spread, and
-        // abutting pieces ride on (Z 20: 56 microlift returns, 7 rides,
-        // 1 retract hop). Every level still verifies clean and none
-        // falls back. The Windows and macOS triples above were measured
-        // BEFORE those changes and are owed a re-measure on their own
-        // platforms (named in the PR); they are left as measured, not
-        // widened.
-        got == (15561, 14837, 1561)
+        // Issue #882: measured in release and debug, identical. Thinning
+        // the growth opening changes its sub-micron geometry and the
+        // fitted arcs (Z 20: 50 microlift returns, 9 rides, 1 retract
+        // hop). Every level verifies clean, none falls back, and no
+        // planning budget is reached. Before: (15561, 14837, 1561).
+        // Windows remains its previously measured triple; this change
+        // still needs measurement there.
+        got == (16029, 15372, 1427)
     } else {
         // Not measured here yet: measure this platform and add its exact
         // triple above. Until then a band covering both measured ones.

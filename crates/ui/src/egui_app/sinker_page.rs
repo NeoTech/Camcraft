@@ -11,8 +11,11 @@
 //! die-sink EDM practice); no vendor text.
 
 use super::fields::*;
-use camcraft_app::operation::{SinkerBurnOp, SinkerDatum, SinkerOrbit, SinkerOrbitKind, SinkerSideBurnOp, SinkerSideDirection};
+use camcraft_app::operation::{
+    SinkerBurnOp, SinkerDatum, SinkerOrbit, SinkerOrbitKind, SinkerPass, SinkerSideBurnOp, SinkerSideDirection,
+};
 
+const PASSES: [&str; 3] = ["Single electrode", "Rough (undersized)", "Finish (to size)"];
 const DATUMS: [&str; 3] = ["Work top (depth down)", "Cavity floor (stand-off up)", "Electrode tip (down from approach)"];
 const ORBITS: [&str; 4] = ["None (plain plunge)", "Circular", "Vector", "Planetary"];
 const SIDES: [&str; 4] = ["+X wall", "-X wall", "+Y wall", "-Y wall"];
@@ -26,6 +29,28 @@ fn side_rows(ui: &mut Ui, u: Unit, direction: &mut SinkerSideDirection, amount: 
     prop_row(ui, "Wall moves by", |ui| num(ui, u, amount));
     prop_row(ui, "Electrode undersize", |ui| num(ui, u, undersize));
     hint(ui, "per side; the move may not pass the undersize less the condition's spark gap - a move into the part is refused");
+}
+
+/// The pass rows (#543): single electrode, or the rough or finish of an
+/// undersized pair with the finished cavity it is judged against. A
+/// plain Sinker Burn's only - the side burn sizes its own electrode.
+fn pass_rows(ui: &mut Ui, u: Unit, pass: &mut SinkerPass, cavity_x: &mut f64, cavity_y: &mut f64) {
+    let mut pi = match pass {
+        SinkerPass::Single => 0,
+        SinkerPass::Rough => 1,
+        SinkerPass::Finish => 2,
+    };
+    prop_row(ui, "Electrode pass", |ui| combo(ui, "sinker.pass", &mut pi, &PASSES));
+    *pass = match pi {
+        1 => SinkerPass::Rough,
+        2 => SinkerPass::Finish,
+        _ => SinkerPass::Single,
+    };
+    if *pass != SinkerPass::Single {
+        prop_row(ui, "Finished cavity X", |ui| num(ui, u, cavity_x));
+        prop_row(ui, "Finished cavity Y", |ui| num(ui, u, cavity_y));
+        hint(ui, "the condition's undersize sizes the electrode; a finish must burn exactly this size, or it is refused - burn a rough or finish without an orbit");
+    }
 }
 
 /// The orbit rows (#544): the pattern, its radius and its count. A
@@ -69,7 +94,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
     };
     // The wear line reads the draft before its fields are borrowed (#546).
     let wear = camcraft_app::operation::sinker_wear_op::wear_status(world, op_ctx.as_deref(), p);
-    let SinkerBurnOp { clearance_z, top_z, floor_z, datum, depth, x, y, feed, condition, orbit, layer, wear_lost, wear_over } = p;
+    let SinkerBurnOp { clearance_z, top_z, floor_z, datum, depth, x, y, feed, condition, pass, cavity_x, cavity_y, orbit, layer, wear_lost, wear_over } = p;
     if tab == SEC_GEO {
         prop_row(ui, "Burn at X", |ui| num(ui, u, x));
         prop_row(ui, "Burn at Y", |ui| num(ui, u, y));
@@ -98,6 +123,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
         match side {
             Some((direction, amount, undersize)) => side_rows(ui, u, direction, amount, undersize),
             None => {
+                pass_rows(ui, u, pass, cavity_x, cavity_y);
                 orbit_rows(ui, u, orbit);
                 auto_opt(ui, "Layer step", "One layer", layer, "the whole depth at once", 1.0, |ui, v| num(ui, u, v));
                 auto_opt(ui, "Measured wear", "None", wear_lost, "not measured", 0.05, |ui, v| num(ui, u, v));

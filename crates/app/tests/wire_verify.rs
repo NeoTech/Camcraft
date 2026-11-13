@@ -70,7 +70,7 @@ fn doc(dz: f64) -> (World, History) {
 }
 
 fn cut(world: &World, h: &mut History, name: &str, side: WireSide, start: Option<[f64; 2]>) {
-    let op = WireContourOp { top_z: Height::fixed(12.0), bottom_z: Height::fixed(0.0), condition: "C110".into(), side, start, clearance: camcraft_app::operation::DEFAULT_CLEARANCE };
+    let op = WireContourOp { top_z: Height::fixed(12.0), bottom_z: Height::fixed(0.0), condition: "C110".into(), side, start, tabs: None, capture: true, burnout: None, taper_deg: 0.0, clearance: camcraft_app::operation::DEFAULT_CLEARANCE };
     let c = CreateOperation::new(world, name, "", SrcRef::Entity("part".into()), OpParams::WireContour(op)).expect("op");
     h.execute(world, c);
     if start.is_some() {
@@ -90,8 +90,8 @@ fn a_correct_die_and_a_correct_punch_pass_and_name_the_piece_they_free() {
     let line = c.line.expect("the judged line");
     assert!(line.starts_with(posting::WIRE_VERDICT), "{line}");
     let (die, punch) = line.split_once("; Punch1").expect("both judged");
-    assert!(die.contains("Die1 frees") && die.ends_with("(waste)"), "the die's slug is waste: {line}");
-    assert!(punch.contains("frees") && punch.ends_with("(the part)"), "the punch drops: {line}");
+    assert!(die.contains("Die1 frees") && die.ends_with("(waste) into the stated capture"), "the die's slug is waste: {line}");
+    assert!(punch.contains("frees") && punch.ends_with("(the part) into the stated capture"), "the punch drops: {line}");
     let report = posting::verification_report(&world);
     assert!(report.problems.iter().all(|p| !p.contains("wire")), "{:?}", report.problems);
     assert!(report.not_judged.is_some_and(|n| n.contains(posting::WIRE_VERDICT)), "said, not silent");

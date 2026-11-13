@@ -10,6 +10,7 @@
 use super::height::Height;
 pub use crate::sinker::SinkerDatum;
 pub use crate::sinker_orbit::{Orbit as SinkerOrbit, OrbitKind as SinkerOrbitKind};
+pub use crate::sinker_undersize::SinkerPass;
 
 /// The Sinker Burn's parameters.
 #[derive(Clone, Debug, PartialEq)]
@@ -32,6 +33,14 @@ pub struct SinkerBurnOp {
     /// The machine's EDM condition id (#531): its spark gap places the
     /// tip. Required - an unstated condition is refused by name.
     pub condition: String,
+    /// Which pass of the cavity this burn is (#543): a single electrode
+    /// (#541), or the rough or finish of an undersized pair.
+    pub pass: SinkerPass,
+    /// The finished cavity's X and Y size, mm (#543): what a rough or
+    /// finish burn is judged against. Unread for a single burn; a rough
+    /// or finish without it is refused by name.
+    pub cavity_x: f64,
+    pub cavity_y: f64,
     /// #546: the depth of one burn layer, mm; `None` burns the whole
     /// depth as one layer.
     pub layer: Option<f64>,
@@ -62,6 +71,7 @@ impl SinkerBurnOp {
             && self.y.is_finite()
             && self.feed.is_finite()
             && self.feed > 0.0
+            && self.cavity_sane()
             && self.orbit.as_ref().is_none_or(|o| o.check().is_ok())
             && self.compensation_refusal().is_none()
     }
@@ -100,6 +110,41 @@ impl SinkerBurnOp {
             )),
             (Some(l), Some(o)) => crate::sinker_wear::rate_refusal(&format!("measured {l} over {o}"), l / o),
         }
+    }
+
+    /// The finished cavity's numbers: unread (any finite, non-negative
+    /// value) for a single burn; a rough or finish must pass
+    /// [`Self::pass_refusal`].
+    fn cavity_sane(&self) -> bool {
+        let nneg = |v: f64| v.is_finite() && v >= 0.0;
+        nneg(self.cavity_x) && nneg(self.cavity_y) && self.pass_refusal().is_none()
+    }
+
+    /// The rough / finish pass's structural refusal by name (#543, no
+    /// world), so it answers at command creation, not first at generate:
+    /// the finished cavity's X and Y must both be stated (> 0), and the
+    /// pass burns without an orbit - the undersize law sizes the burn as
+    /// electrode plus two spark gaps and does not yet count an orbit's
+    /// radius, which would widen it past that (#1355). `None` for a single burn
+    /// or a sound pass.
+    #[must_use]
+    pub fn pass_refusal(&self) -> Option<String> {
+        if self.pass == SinkerPass::Single {
+            return None;
+        }
+        let pass = self.pass.label();
+        let stated = |v: f64| v.is_finite() && v > 0.0;
+        if !stated(self.cavity_x) || !stated(self.cavity_y) {
+            return Some(format!(
+                "a sinker {pass} is judged against the finished cavity - state its X and Y size (both above 0)"
+            ));
+        }
+        if self.orbit.is_some() {
+            return Some(format!(
+                "a sinker {pass} burns without an orbit: the undersize law does not count an orbit's radius yet (#1355) - burn the {pass} as a plunge"
+            ));
+        }
+        None
     }
 }
 
@@ -145,6 +190,12 @@ impl SinkerSideBurnOp {
     pub fn refusal(&self) -> Option<String> {
         if self.burn.orbit.is_some() {
             return Some("a Sinker Side Burn moves along one axis - it takes no orbit (orbit with a Sinker Burn)".into());
+        }
+        if self.burn.pass != SinkerPass::Single {
+            return Some(
+                "a Sinker Side Burn sizes its electrode by its own undersize - its burn is a single pass (rough and finish are Sinker Burn passes)"
+                    .into(),
+            );
         }
         if self.burn.wear_lost.is_some() || self.burn.wear_over.is_some() {
             return Some(SIDE_WEAR_REFUSAL.into());

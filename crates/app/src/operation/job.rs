@@ -121,10 +121,13 @@ pub struct GenJob {
     pub(super) carried_overhang: Option<super::carried_stock::Overhang>,
     /// #532: the machine condition a wire EDM kind cuts with (its wire
     /// and gap); `None` for every kind that mounts a library tool.
-    pub(super) wire: Option<super::wire_op::WireCondition>,
+    pub(super) wire: Option<(super::wire_op::WireCondition, Option<super::wire_op::WireCondition>)>,
     /// #541: a sinker burn's spark gap, read from its setup's machine
     /// condition (`sinker_op::condition_gap`); `None` for every other kind.
     pub(super) sinker_gap: Option<Result<f64, String>>,
+    /// #543: a rough or finish burn's condition undersize (and the rough
+    /// a finish follows), `sinker_pass::read_pass`; `None` otherwise.
+    pub(super) sinker_pass: Option<Result<super::sinker_pass::PassRead, String>>,
     /// #546: that condition's stated axial wear rate, when it states one.
     pub(super) sinker_wear: Option<f64>,
     /// #740: the document's display unit, read off the world here where
@@ -152,7 +155,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
     let wire = super::wire_op::job_wire(world, op)?;
     // Tool: the diameter drives the path, the body drives the reach law.
     let (tool, body, lathe_body, neck) = match &wire {
-        Some(cond) => (super::wire_op::job_tool(cond), None, None, Vec::new()),
+        Some((cond, _)) => (super::wire_op::job_tool(cond), None, None, Vec::new()),
         None => super::tool_gate::job_tool(world, op)?,
     };
     let setup = op.setup.as_deref();
@@ -332,6 +335,10 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         OpParams::SinkerSideBurn(p) => Some(super::sinker_side_op::side_gap(world, setup, p)),
         _ => None,
     };
+    let sinker_pass = match &op.params {
+        OpParams::SinkerBurn(p) => super::sinker_pass::read_pass(world, op_name, setup, p),
+        _ => None,
+    };
     let sinker_wear = match &op.params {
         OpParams::SinkerBurn(p) => super::sinker_wear_op::condition_wear(world, setup, p),
         _ => None,
@@ -383,6 +390,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         carried_overhang,
         wire,
         sinker_gap,
+        sinker_pass,
         sinker_wear,
         unit: crate::units::of(world),
     })

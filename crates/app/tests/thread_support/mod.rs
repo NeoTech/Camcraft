@@ -8,6 +8,9 @@
 //! minor Ø6.917) and public handbook thread milling; our own fixtures.
 #![allow(dead_code)] // each suite uses its own share
 
+// #985: the boss fixtures of the external-thread suite.
+pub mod boss;
+
 use flecs_ecs::prelude::World;
 
 use camcraft_app::cl::{ThreadHand, Toolpath};
@@ -96,6 +99,8 @@ pub fn thread(radius: f64, pitch: Option<f64>, hand: ThreadHand, climb: bool) ->
         holes: vec![hole(radius)],
         pitch,
         hand,
+        external: false,
+        passes: camcraft_app::machining2d::ThreadPasses::default(),
     }
 }
 
