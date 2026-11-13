@@ -133,6 +133,8 @@ generated on a machine file you write that declares `wire_edm`; posting it
 stops with `a Wire Contour operation posts through a wire EDM post, which
 is not built yet - nothing is posted`. The sinker EDM kind admits no
 operation yet.
+The operation itself, its settings and its refusals are in
+[Wire EDM](@/guide/operations-edm.md).
 
 ## Changing a setup's machine
 
