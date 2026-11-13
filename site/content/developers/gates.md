@@ -53,5 +53,4 @@ suites from those maps.
 
 Nothing runs on push or pull request: Actions minutes are budgeted. GitHub
 runs only `release.yml`, on a pushed release tag, to build and publish the
-release (and this site). The CI and nightly workflows can be started by
-hand.
+release (and this site).
