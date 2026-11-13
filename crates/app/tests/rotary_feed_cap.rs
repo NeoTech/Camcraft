@@ -48,6 +48,7 @@ fn plain_fourth(rate: f64) -> Value {
 /// move with a small turn, and a tilted arc that turns A.
 const STREAM: &str = "\
 TOOL 1 10MM BALL
+PARAM SpindleSpeed 6000
 SECTION
 Rapid X 10000 Y 0 Z 5000 A 0 B 0 C 0
 Feed X 10000 Y 0 Z 0 F 2000000 A 0 B 0 C 0
@@ -187,6 +188,7 @@ fn a_feed_turning_from_an_unknown_angle_is_refused_by_name() {
     // turn it commands - and its rate - is unknown.
     let stream = "\
 TOOL 1 T1
+PARAM SpindleSpeed 6000
 SECTION
 Feed X 10000 Y 0 Z 0 F 2000000 A 30000 B 0 C 0
 ENDSECTION
