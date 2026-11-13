@@ -180,6 +180,7 @@ mod stock_top_law;
 mod tap_core;
 pub use top_stock::TOP_STOCK_WARNING;
 mod turning_credit;
+mod turning_axis;
 mod turning_feeds;
 mod turning_holder;
 pub(crate) use turning_holder::body_axes as lathe_body_axes;
