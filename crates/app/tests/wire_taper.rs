@@ -71,6 +71,7 @@ fn punch_with(text: &str, taper: f64, burnout: Option<f64>) -> (World, Result<()
         // The punch drops into a stated capture (#539's hold law).
         capture: true,
         taper_deg: taper,
+        four_axis: None,
         burnout,
         clearance: camcraft_app::operation::DEFAULT_CLEARANCE,
     };

@@ -11,13 +11,16 @@
 //! box atom), the gate the sinker post's program runs. Every program is
 //! first proved byte-identical to its committed CL golden.
 //!
-//! The wire punch rides `wire` (#534): the wire laws its post runs.
+//! The wire punch rides `wire` (#534): the wire laws its post runs;
+//! the 4-axis punch (#537) rides `wire_4axis`.
 //!
 //! Provenance: our own harness over our own goldens; no vendor material.
 
 pub mod thread;
 mod wire;
+mod wire_4axis;
 pub use wire::{wire_findings, wire_taper_findings, wire_taper_verdict, wire_verdict};
+pub use wire_4axis::{wire_4axis_findings, wire_4axis_verdict};
 
 use flecs_ecs::prelude::World;
 
