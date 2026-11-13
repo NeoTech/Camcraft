@@ -116,6 +116,9 @@ fn burn(e: &ElectrodeBox, pass: SinkerPass, condition: &str) -> OpParams {
         cavity_x: e.cavity.0,
         cavity_y: e.cavity.1,
         orbit: None,
+        layer: None,
+        wear_lost: None,
+        wear_over: None,
     })
 }
 
