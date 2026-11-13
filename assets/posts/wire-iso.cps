@@ -35,7 +35,7 @@ var REQUIRED = ["condition", "comp_off"];
 var AWT_REQUIRED = ["thread", "cut", "tip_disposal"];
 
 // ---------------------------------------------------------------- state
-var inch = false;          // the document's unit is inch (onOpen, #902: postOptions.Units, never the machine file's)
+var inch = false;
 var wcsWord = "";
 var orgX = 0, orgY = 0;
 var opName = "", opKind = "", setupName = "";
@@ -122,7 +122,7 @@ function machineOk() {
 // ISO 6983 tape fence, the unit and absolute positions; the program
 // starts with the wire NOT threaded, which the header says.
 function onOpen() {
-  inch = typeof postOptions !== "undefined" && postOptions.Units === "inch";
+  inch = typeof postOptions !== "undefined" && postOptions && postOptions.Units === "inch"; // #902: the document's unit, never the machine file's
   codesOk = machineOk();
   writeln("%");
   note(clean(machineName()));

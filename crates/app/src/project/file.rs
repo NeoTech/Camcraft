@@ -114,7 +114,7 @@ pub enum ProjectError {
 pub struct ProjectFile {
     pub version: u32,
     /// The document's unit ("mm" | "in"), v8+: the display lens, and
-    /// since v60 (#902) the unit every program posts in. Absent means
+    /// since v59 (#902) the unit every program posts in. Absent means
     /// millimeters - exactly what every pre-v8 file displayed, so the
     /// serde default is itself the whole migration. A millimeter document
     /// omits the field (byte-shape of the pre-v8 files, plus the stamp).

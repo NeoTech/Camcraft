@@ -515,7 +515,6 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
         notes.extend(super::fidelity_migrate::settle(&mut file.entities, from));
         // v59 -> v60 (#902): the document's unit is its programs' unit;
         // an older file opens on the unit it posted in (`units_migrate`).
-        // A v59 file (#1056) still posted in its machine file's unit.
         if from < 60 {
             notes.extend(super::units_migrate::settle(&mut file));
         }

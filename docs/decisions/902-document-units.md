@@ -33,8 +33,7 @@
    G76's Q / R in the inch increment). Both are follow-up issues (#976
    Heidenhain, #977 Fanuc Lathe); a feed
    off by a factor is not a program to post.
-6. **Old projects post byte-identical.** `PROJECT_VERSION` 60 (v59 went to #1056
-   first, which still posted in the machine file's unit). A v59 or
+6. **Old projects post byte-identical.** `PROJECT_VERSION` 59. A v58 or
    older file opens on the unit its programs posted in (the units of
    the machines its setups posted on); if that differs from its saved
    display unit, the display changes and a load note says why. A file

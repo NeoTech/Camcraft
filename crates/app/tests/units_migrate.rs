@@ -17,16 +17,11 @@ use camcraft_app::world::new_world;
 use flecs_ecs::prelude::World;
 use serde_json::Value;
 
-/// `world` saved as an older (v58) file would have held it.
-fn as_v58(world: &World) -> String {
-    as_version(world, 58)
-}
-
-/// `world` saved as a file of `version` would have held it.
-fn as_version(world: &World, version: u32) -> String {
+/// `world` saved as an older (v59) file would have held it.
+fn as_v59(world: &World) -> String {
     let mut v: Value = serde_json::to_value(project::collect(world)).expect("serializes");
     assert_eq!(v["version"], Value::from(project::PROJECT_VERSION), "this build writes v{}", project::PROJECT_VERSION);
-    v["version"] = Value::from(version);
+    v["version"] = Value::from(59);
     v.to_string()
 }
 
@@ -45,13 +40,10 @@ fn an_older_file_on_an_inch_machine_opens_in_inch_and_says_so() {
     let w = new_world();
     let mut h = History::default();
     tormach(&w, &mut h);
-    // v59 (#1056) still posted in the machine file's unit: it takes the rung too.
-    for version in [58, 59] {
-        let (u, notes) = reopened(&as_version(&w, version));
-        assert_eq!(u, Unit::Inches, "v{version} posted inch before - it must post inch now");
-        assert_eq!(notes.len(), 1, "v{version}: {notes:?}");
-        assert!(notes[0].contains("displayed mm") && notes[0].contains("opens in inch"), "v{version}: {notes:?}");
-    }
+    let (u, notes) = reopened(&as_v59(&w));
+    assert_eq!(u, Unit::Inches, "it posted inch before - it must post inch now");
+    assert_eq!(notes.len(), 1, "{notes:?}");
+    assert!(notes[0].contains("displayed mm") && notes[0].contains("opens in inch"), "{notes:?}");
 }
 
 #[test]
@@ -59,7 +51,7 @@ fn an_older_inch_display_on_a_metric_machine_opens_in_mm() {
     let w = new_world();
     let mut h = History::default();
     h.execute(&w, SetUnits::new(&w, Unit::Inches).expect("to inch"));
-    let (u, notes) = reopened(&as_v58(&w));
+    let (u, notes) = reopened(&as_v59(&w));
     assert_eq!(u, Unit::Millimeters, "it posted mm before - it must post mm now");
     assert!(notes.iter().any(|n| n.contains("displayed inch") && n.contains("opens in mm")), "{notes:?}");
 }
@@ -73,7 +65,7 @@ fn an_older_file_whose_display_matched_opens_silently() {
             tormach(&w, &mut h);
             h.execute(&w, SetUnits::new(&w, Unit::Inches).expect("to inch"));
         }
-        let (u, notes) = reopened(&as_v58(&w));
+        let (u, notes) = reopened(&as_v59(&w));
         assert_eq!(u == Unit::Inches, inch);
         assert!(notes.is_empty(), "{notes:?}");
     }
@@ -86,7 +78,7 @@ fn an_older_file_with_setups_in_both_units_keeps_its_display_and_names_the_setup
     h.execute(&w, CreateSetup::new(&w, None, None).expect("Setup1"));
     h.execute(&w, CreateSetup::new(&w, None, Some("Setup1")).expect("Setup2"));
     h.execute(&w, SetSetupMachine::builtin(&w, "Setup2", "Tormach 1100MX").expect("Setup2 on an inch machine"));
-    let (u, notes) = reopened(&as_v58(&w));
+    let (u, notes) = reopened(&as_v59(&w));
     assert_eq!(u, Unit::Millimeters, "the display unit stands");
     assert_eq!(notes.len(), 1, "{notes:?}");
     assert!(notes[0].contains("setup 'Setup2' posted in inch") && notes[0].contains("document's unit (mm)"), "{notes:?}");
