@@ -24,7 +24,9 @@
 //! Prime Directive: the wall is a circle only the model's own recognition
 //! draws (`holes` arrive as params data, like the drill's); a tool too
 //! wide to enter the mouth, a hole with no floor under its entry, and
-//! every non-finite number are refused before any move is built.
+//! every non-finite number are refused before any move is built. A
+//! hole too wide for the dive and the one ring to meet (#1556: a core
+//! left that no pass touches) is refused by name with its numbers.
 
 use std::f64::consts::PI;
 
@@ -185,9 +187,57 @@ impl BoreParams {
                     mouth,
                 ));
             }
+            // #1556, the core door: the ride clears the centre disc
+            // the dive opens (radius `r`) and the ring's band
+            // `[rc - r, rc + r]`; a ring whose inner edge stands past
+            // the dive's leaves the annulus between them uncut - a
+            // free core on a through hole, an island on a blind one -
+            // that no pass touches. Refused by name with the numbers,
+            // never posted as a finished bore.
+            let r = self.tool_diameter * 0.5;
+            let core = rc - 2.0 * r;
+            if core > CORE_TOL {
+                return Err(GenError::invalid_at(
+                    format!(
+                        "the {:.3} mm hole at ({:.3}, {:.3}) is too wide to bore with a {:.3} mm cutter: \
+                         the centre dive and one ring at R{:.3} leave a {:.3} mm core no pass touches \
+                         (free once the hole breaks through). This ride clears holes up to {:.3} mm \
+                         (3 x the tool diameter + 2 x the stock to leave) - clear it with a pocket or \
+                         adaptive operation, or bore it with a larger tool",
+                        h.radius * 2.0,
+                        tidy(h.xy.x),
+                        tidy(h.xy.y),
+                        self.tool_diameter,
+                        rc,
+                        (rc - r) * 2.0,
+                        max_bore_diameter(self.tool_diameter, self.stock_to_leave),
+                    ),
+                    mouth,
+                ));
+            }
         }
         Ok(())
     }
+}
+
+/// #1556: how far the ring's inner edge may stand past the dive's disc
+/// before the gap counts as material (a float-noise allowance, not a
+/// cusp budget: at the limit the two bands meet edge to edge).
+const CORE_TOL: f64 = 1e-6;
+
+/// A coordinate as a refusal prints it: noise under the printed
+/// precision reads 0.000, never -0.000.
+fn tidy(v: f64) -> f64 {
+    if v.abs() < 5e-4 { 0.0 } else { v }
+}
+
+/// #1556: the widest hole [`bore`] clears without leaving a core - the
+/// centre dive (radius `r`) and the one ring (inner edge `rc - r`)
+/// meet when `rc = 2r`, i.e. a hole of `3d + 2 leave`. Detect holes
+/// reads the same number to keep wider bores out of a Bore op.
+#[must_use]
+pub fn max_bore_diameter(tool_diameter: f64, stock_to_leave: f64) -> f64 {
+    3.0 * tool_diameter + 2.0 * stock_to_leave
 }
 
 /// The ride's closed wall circle at `rho`: one entry chord plus the

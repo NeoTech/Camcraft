@@ -82,13 +82,15 @@ use {
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
+mod bore_core_tests;
+#[cfg(test)]
 mod thread_tests;
 #[cfg(test)]
 mod thread_pass_tests;
 
 pub use arcs::{fit_arcs, Seg, ARC_FIT_TOL};
 pub use blend::MIN_BLEND_RADIUS;
-pub use bore::{bore, BoreHole, BoreParams};
+pub use bore::{bore, max_bore_diameter, BoreHole, BoreParams};
 pub use chamfer::{chamfer, ChamferParams};
 pub use circular::{circular, CircularParams};
 pub use contour::{contour, contour_on_bodies, contour_on_part, ContourParams, Lead, Side};

@@ -270,19 +270,20 @@ fn bore_params(holes: Vec<BoreHole>, dia: f64) -> BoreParams {
 
 #[test]
 fn bore_rides_the_wall_circle() {
-    // A 6 mm mill boring a 20 mm hole keeps its CENTER 7 mm from the
+    // A 6 mm mill boring a 16 mm hole keeps its CENTER 5 mm from the
     // axis - the wall circle minus one tool radius, at every cut move.
-    let path = bore(&bore_params(vec![bore_hole([0.0, 0.0], 10.0, false)], 6.0))
-        .expect("a 6 mm mill fits a 20 mm bore");
+    // (#1556: the 20 mm hole this read once left a core - refused now.)
+    let path = bore(&bore_params(vec![bore_hole([0.0, 0.0], 8.0, false)], 6.0))
+        .expect("a 6 mm mill fits a 16 mm bore");
     let cuts: Vec<_> = path.moves.iter().filter(|m| m.kind != MoveKind::Rapid).collect();
     assert!(!cuts.is_empty(), "a bored hole posts cut moves");
     for m in &cuts {
         // Radial sweeps pass through the center by law; ring chords
-        // and arcs stand on rc = 7 (lattice is 1 um).
+        // and arcs stand on rc = 5 (lattice is 1 um).
         let rad = (m.to.x * m.to.x + m.to.y * m.to.y).sqrt();
         let from = (m.from.x * m.from.x + m.from.y * m.from.y).sqrt();
         assert!(
-            (rad - 7.0).abs() < 1e-3 || rad < 7.0 + 1e-3,
+            (rad - 5.0).abs() < 1e-3 || rad < 5.0 + 1e-3,
             "cut point left the bore circle: {:?}", m.to
         );
         let _ = from;
