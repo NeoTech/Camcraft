@@ -80,8 +80,12 @@ function rotaryFeedCap(f, lin, turns, mode, eps) {
 // `letters` from the angles in `prev` ({A, B, C}; a null angle is not
 // known to the post). `arc` judges the chord in the record's plane - at
 // most the length any reading of an arc's F is measured along, so the
-// cap is never too loose. Returns { feed, capped } or { refuse: text }.
-function rotaryFeed(p, prev, letters, mode, arc) {
+// cap is never too loose. `step` (optional, mm) is the post's linear
+// output step (0.001 mm, or 0.0001 in = 0.00254 mm): the length is judged
+// between the points as posted, since the control times the block over
+// what it reads - an inch word rounds a short move's length by up to a
+// few percent. Returns { feed, capped } or { refuse: text }.
+function rotaryFeed(p, prev, letters, mode, arc, step) {
   var f = Number(p.FeedRate);
   var turns = [], i, L, rate, d;
   for (i = 0; i < letters.length; i++) {
@@ -105,7 +109,8 @@ function rotaryFeed(p, prev, letters, mode, arc) {
     if (any) return { refuse: "a feed that turns a rotary from an unstated start point - the stated rotary rate cannot be held" };
     return { feed: f, capped: false };
   }
-  var dx = p.X - sx, dy = p.Y - sy, dz = p.Z - sz, lin;
+  var q = (Number(step) > 0) ? function (v) { return Math.round(Number(v) / step) * step; } : function (v) { return Number(v); };
+  var dx = q(p.X) - q(sx), dy = q(p.Y) - q(sy), dz = q(p.Z) - q(sz), lin;
   if (arc) {
     var pl = p.CircularPlane;
     lin = pl === "XZ" ? Math.sqrt(dx * dx + dz * dz) : (pl === "YZ" ? Math.sqrt(dy * dy + dz * dz) : Math.sqrt(dx * dx + dy * dy));
@@ -115,12 +120,17 @@ function rotaryFeed(p, prev, letters, mode, arc) {
   var g = rotaryFeedCap(f, lin, turns, arc ? "path" : mode);
   return { feed: g, capped: g < f - 1e-9 };
 }
-// A capped F as a word: floored to 0.1 mm/min (rounding up would pass
-// the cap), trailing zeros trimmed; "" when the cap leaves under 0.1.
-function rotaryFeedWord(v) {
-  var t = Math.floor(Number(v) * 10 + 1e-9) / 10;
-  if (!(t >= 0.1)) return "";
-  var s = t.toFixed(1).replace(/0+$/, "").replace(/[.]$/, "");
+// A capped F (`v`, mm/min) as a word in the post's own unit: mm/min
+// floored to 0.1, or with `inch` set in/min floored to 0.001 (finer than
+// 0.1 mm/min, so the inch word is never zero where the mm one is not) -
+// floored, never rounded, so the posted feed never passes the cap in
+// either unit; trailing zeros trimmed. "" when the cap leaves under
+// 0.1 mm/min, judged in mm before converting, the same in both units.
+function rotaryFeedWord(v, inch) {
+  var mm = Number(v);
+  if (!(Math.floor(mm * 10 + 1e-9) / 10 >= 0.1)) return "";
+  var t = inch ? Math.floor(mm / 25.4 * 1000 + 1e-9) / 1000 : Math.floor(mm * 10 + 1e-9) / 10;
+  var s = t.toFixed(inch ? 3 : 1).replace(/0+$/, "").replace(/[.]$/, "");
   return "F" + s;
 }
 "#;

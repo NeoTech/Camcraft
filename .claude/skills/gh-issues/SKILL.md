@@ -16,7 +16,7 @@ Before acting, look for an issue workflow the project already defines - it
 overrides the defaults below. Check, in order: `AGENTS.md`, `CLAUDE.md`,
 `CONTRIBUTING.md`, `.github/ISSUE_TEMPLATE/`, and the label set
 (`gh label list --limit 200`). Typical project rules: a priority label
-scheme (`P0`/`P1`/`P2`), a `claimed`/`blocked` convention, a required claim
+scheme (`P1`..`P9`), a `claimed`/`blocked` convention, a required claim
 comment format, a closing-comment format, a changelog row per fix. Follow
 them exactly, including their comment wording - other agents may parse it.
 `references/claim-workflow.md` describes a complete claim/close law of this
@@ -50,10 +50,12 @@ The default `--state open` still applies, so add `--state all` to include closed
 yourself, don't trust display order:
 
 ```bash
-gh issue list --state open --limit 200 --search "-label:claimed -label:blocked" \
+gh issue list --state open --limit 200 --search "-label:claimed -label:blocked -label:\"P?\"" \
   --json number,title,labels,createdAt --jq '
-  map(. + {p: ([.labels[].name | select(test("^P[0-9]$"))] | first // "P9")})
-  | sort_by(.p, .createdAt) | .[] | "\(.number) \(.p) \(.title)"'
+  map(. + {p: ([.labels[].name | select(test("^P[0-9]$"))] | first // "!")})
+  | sort_by(.p, .createdAt)
+  | (map(select(.p == "!")) | if length > 0 then "TRIAGE THESE FIRST (no priority; set one by the AGENTS.md table before picking):", (.[] | "  \(.number) \(.title)") else empty end),
+    (.[] | select(.p != "!") | "\(.number) \(.p) \(.title)")'
 ```
 
 **Reading one issue fully** - the body is rarely enough; decisions, blockers
@@ -94,7 +96,7 @@ Pass multi-line bodies through a heredoc on stdin - inline `--body "..."`
 breaks on quotes, backticks and `$` (especially on Windows/PowerShell):
 
 ```bash
-gh issue create --title "..." --label bug --label P1 --body-file - <<'EOF'
+gh issue create --title "..." --label bug --label P3 --body-file - <<'EOF'
 What happens: ...
 Expected: ...
 Evidence: ...

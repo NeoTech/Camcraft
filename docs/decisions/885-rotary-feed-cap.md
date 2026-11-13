@@ -50,3 +50,21 @@ every tilted record.
 
 **Cost to change later:** the rule is one prelude function; a post that
 later gains G93 swaps its call for its own inverse-time word.
+
+**Review of PR #951 - the capped F in an inch program.** The capped word
+is written in the post's own unit, like `ff()` writes F: `rotaryFeedWord`
+takes the mm/min cap and the post's `inch` flag. In mm it is floored to
+0.1 mm/min as before; in inch it is floored to 0.001 in/min (0.0254
+mm/min - finer than the mm step, so a cap of at least 0.1 mm/min never
+floors to zero in inch, and the "under 0.1 mm/min" refusal is judged once,
+in mm, before converting, the same in both units). Floored, never rounded,
+in both. Considered: two decimals in inch, as `ff()` writes an uncapped
+inch F - it would need a second, inch-only refusal for caps between 0.1
+and 0.254 mm/min, so the refusal would differ by unit. The cap's linear
+length is also judged between the points as posted (`rotaryFeed`'s
+`step`: 0.001 mm, or 0.0001 in): an inch word rounds a 0.1 mm move to
+0.0039 in (0.09906 mm), and the control times the block over that - the
+cap from the unrounded length posted A about 0.8 % past its stated rate.
+The posts' `feedWord` now caps a record carrying any of A, B or C, not A
+alone; today `tilt()` writes no rotary word on a record without A, so the
+old gate missed nothing, and the wider one holds if that changes.
