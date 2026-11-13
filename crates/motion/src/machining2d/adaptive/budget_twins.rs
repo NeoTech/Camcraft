@@ -35,13 +35,6 @@ const LEN_MARGIN: f64 = 1.15;
 /// vertices, 1.50x).
 const GEOM_MARGIN: f64 = 1.4;
 
-/// The r7 bar's level 5.0, planned inside its first margin attempt, posts
-/// up to this many in-cut breaks past 5 degrees (5.0 to 6.2 deg; the
-/// spiral's own chords at the developed band's end - issue #1050, as the
-/// r6.2 neck's `R62_BREAKS`). Planned from the wider margin it posts
-/// none. The constant goes when #1050 is fixed.
-const BAR_50_BREAKS: usize = 5;
-
 /// One twin's reading: its levels, its notes, and the most any margin
 /// attempt in it spent (vertices, tool radii of revolution).
 struct Twin {
@@ -85,7 +78,7 @@ fn twins(p: &Pocket3DParams) -> Vec<Twin> {
 /// budget, every level under the skin HSM-planned (its proved arcs
 /// posted, no note naming it ring-cut), no planner overload, the load
 /// held; and the budget margins stated above.
-fn assert_same_verdict(what: &str, ts: &[Twin], levels: &[f64], breaks: impl Fn(f64) -> usize) {
+fn assert_same_verdict(what: &str, ts: &[Twin], levels: &[f64]) {
     for t in ts {
         let nm = t.nm;
         println!("{what}, openings {nm} nm deeper: peak attempt {} vertices, {:.0} r", t.verts, t.len_r);
@@ -101,7 +94,7 @@ fn assert_same_verdict(what: &str, ts: &[Twin], levels: &[f64], breaks: impl Fn(
             let Some(r) = t.reads.iter().find(|r| (r.rho - rho).abs() < 1e-6) else { panic!("{what} at {nm} nm: radius {rho} is not cut: {:?}", t.notes) };
             assert!(r.arcs > 0 && !r.ringed(7.0) && !r.named, "{what} at {nm} nm: radius {rho} is HSM-planned: {:?}", t.notes);
             assert!(r.load <= crate::load::DEFAULT_OPTIMAL_LOAD * 1.35, "{what} at {nm} nm: radius {rho}: load {:.1}% D", r.load * 100.0);
-            assert!(r.breaks <= breaks(rho), "{what} at {nm} nm: radius {rho}: {} in-cut breaks past 5 deg", r.breaks);
+            assert_eq!(r.breaks, 0, "{what} at {nm} nm: radius {rho}: in-cut breaks past 5 deg");
         }
         assert!(t.verts > 0 && t.verts as f64 * GEOM_MARGIN <= GEOM_MAX as f64, "{what} at {nm} nm: {} vertices in one attempt", t.verts);
         assert!(t.len_r * LEN_MARGIN <= WORK_MAX, "{what} at {nm} nm: {:.0} r in one attempt", t.len_r);
@@ -117,10 +110,10 @@ fn assert_same_verdict(what: &str, ts: &[Twin], levels: &[f64], breaks: impl Fn(
 #[ignore = "heavy lane: release --ignored (the developed r7 bar planned 5 times on 5 threads, ~1 min release)"]
 fn the_r7_bars_levels_decide_the_same_way_under_sub_micron_perturbations() {
     let ts = twins(&params(PocketStrategy::Adaptive));
-    assert_same_verdict("the r7 bar", &ts, &[6.5, 6.0, 5.5, 5.0], |rho| if (rho - 5.0).abs() < 1e-6 { BAR_50_BREAKS } else { 0 });
-    // The unperturbed bar's level 5.0 is planned from the wider margin:
-    // no break at all (the suite's own pin holds it to the whole law).
-    assert!(ts.iter().filter(|t| t.nm == 0.0).all(|t| t.reads.iter().all(|r| r.breaks == 0)), "the unperturbed bar posts no break");
+    // Issue #1050: level 5.0 posts no in-cut break past 5 degrees from
+    // either margin (planned inside the first it posted up to 5, the
+    // closing laps' fillet kinks, before `adaptive::conform`).
+    assert_same_verdict("the r7 bar", &ts, &[6.5, 6.0, 5.5, 5.0]);
 }
 
 /// The window (`rotary_adaptive`'s 12 long window, 1 mm stepdown): levels
@@ -131,5 +124,5 @@ fn the_r7_bars_levels_decide_the_same_way_under_sub_micron_perturbations() {
 #[ignore = "heavy lane: release --ignored (the developed window planned 5 times on 5 threads, ~1 min release)"]
 fn the_windows_levels_decide_the_same_way_under_sub_micron_perturbations() {
     let p = Pocket3DParams { top_z: 16.0, bottom_z: 4.0, stepdown: 1.0, ..params(PocketStrategy::Adaptive) };
-    assert_same_verdict("the window", &twins(&p), &[6.0, 5.0], |_| 0);
+    assert_same_verdict("the window", &twins(&p), &[6.0, 5.0]);
 }
