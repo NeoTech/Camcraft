@@ -359,3 +359,30 @@ fn a_normal_sized_v_sharper_than_30_degrees_is_refused() {
     let e = plasma_profile(&[l], &[], &part, &params()).err().map(|e| e.to_string()).unwrap_or_default();
     assert!(e.contains("contour C0") && e.contains("bridged"), "{e:?}");
 }
+
+/// #1053 review: the cover law gives a coarse model's excess back out of
+/// [`KERF_TOL`] too. The plate's top edge is judged at a contour drawn
+/// below the cut, so it stands `kerf + tol` from the torch for a `tol`
+/// between the tightened and the plain tolerance: covered at full
+/// fidelity, refused by name on the coarse model.
+#[test]
+fn the_cover_law_reads_the_tightened_tolerance_on_a_coarse_model() {
+    let outline = rect(0.0, 0.0, 100.0, 60.0);
+    let part = Region::new(vec![outline.clone()]).unwrap();
+    let plain = params();
+    let coarse = PlasmaParams { model_excess: 0.007, ..params() };
+    assert!(coarse.kerf_tol() < KERF_TOL, "the coarse model tightens the tolerance");
+    let path = cut_plate(&[outline], &part, &plain);
+    let spans = path.plasma.as_ref().unwrap().torches.clone();
+    // The torch runs kerf/2 outside the outline; the judged top edge
+    // sits `drop` below it, midway between the two reaches.
+    let r = plain.kerf * 0.5;
+    let between = plain.kerf + 0.5 * (KERF_TOL + coarse.kerf_tol());
+    let drop = between - r;
+    let judged = rect(0.0, 0.0, 100.0, 60.0 - drop);
+    let cs = nest::contours(&[judged.clone()], &[], &Region::new(vec![judged]).unwrap()).unwrap();
+    let order = nest::cut_order(&cs);
+    assert!(laws::cover_law(&path, &spans, &cs, &order, (plain.kerf, plain.kerf_tol())).is_ok(), "covered at full fidelity");
+    let why = laws::cover_law(&path, &spans, &cs, &order, (coarse.kerf, coarse.kerf_tol())).expect_err("refused on the coarse model");
+    assert!(why.to_string().contains("plasma profile"), "refused by name: {why}");
+}

@@ -209,7 +209,11 @@ fn push_piece(b: &mut PathBuilder, q: Piece, z: f64, feed: Option<f64>) {
 /// Lay the contours down in `order` and certify the result.
 pub(super) fn cut(cs: &[Contour], order: &[usize], part: &Region, p: &PlasmaParams) -> Result<Toolpath, GenError> {
     let r = p.kerf * 0.5;
-    let forbidden = if part.is_empty() { None } else { Some(part.offset((r - p.kerf_tol()).max(0.0))?) };
+    // One tolerance for both laws (#1053): the kerf law's forbidden band
+    // and the cover law's reach read the same model-aware figure, so
+    // neither can fall back to the plain one alone.
+    let tol = p.kerf_tol();
+    let forbidden = if part.is_empty() { None } else { Some(part.offset((r - tol).max(0.0))?) };
     let mut id_of = vec![0u32; cs.len()];
     for (pos, &k) in order.iter().enumerate() {
         if let Some(slot) = id_of.get_mut(k) {
@@ -281,7 +285,7 @@ pub(super) fn cut(cs: &[Contour], order: &[usize], part: &Region, p: &PlasmaPara
     // #672: no edge may stand beyond the kerf's reach - a slot narrower
     // than the kerf that the offset bridged is refused, not left uncut.
     // #871: the laws judge the whole cut; a refusal hands it back.
-    super::laws::cover_law(&path, &rec.torches, cs, order, (p.kerf, p.kerf_tol())).map_err(|e| e.with_ghost(&path))?;
+    super::laws::cover_law(&path, &rec.torches, cs, order, (p.kerf, tol)).map_err(|e| e.with_ghost(&path))?;
     if let Some(f) = &forbidden {
         super::laws::kerf_law(&path, &rec.torches, f).map_err(|e| e.with_ghost(&path))?;
     } else {
