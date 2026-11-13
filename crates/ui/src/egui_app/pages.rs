@@ -65,7 +65,7 @@ use camcraft_app::tools;
 use camcraft_app::units::{self, Unit};
 
 use crate::actions;
-use crate::state::{CommandKind, ErrorScope, FixtureUi, ModelUi, State, UiTarget};
+use crate::state::{CommandKind, ErrorScope, ModelUi, State, UiTarget};
 
 use super::layout::hint;
 use super::panes::kind_name;
@@ -550,80 +550,7 @@ pub(super) fn sheet_footer(ui: &mut Ui, state: &mut State) {
     });
 }
 
-/// The workholding section of the Setups page (M3.2 stage B): the
-/// solids the collision law sees in this context. A fixture is a plain
-/// model wearing the marker - the rows are that model, placed by the
-/// same `MoveFixture` any part uses - and the machine table is the one
-/// row nobody can edit: it is derived prose, what the `.mch` says the
-/// table is, never an entity. Import rides the model worker (no parse
-/// in a command constructor) and tags on landing.
-pub(super) fn fixtures_section(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
-    let u = state.units();
-    let fixtures = camcraft_app::fixture::tagged(&state.world, ctx);
-    let table = camcraft_app::fixture::table_box(&state.world, ctx);
-    // A draft whose row vanished (deleted or untagged, here or via
-    // undo) retires with it - the pane never edits a ghost.
-    if !state.fixture_ui.name.is_empty()
-        && !fixtures.iter().any(|(n, _)| n == &state.fixture_ui.name)
-    {
-        state.fixture_ui = FixtureUi::default();
-    }
-    state.retire_vise_opening_drafts();
-    state.retire_plate_place_drafts();
-    state.retire_mod_vise_drafts();
-    state.retire_accessory_size_drafts();
-    ui.label(if fixtures.is_empty() && table.is_none() {
-        "No workholding modeled: the collision checks see stock and part only."
-    } else {
-        "Workholding in this setup's collision checks:"
-    });
-    for (name, entity) in fixtures {
-        let loc = model::transform_of(&state.world, &entity).unwrap_or_default();
-        let fixed = camcraft_app::fixture::def_of(&state.world, &entity).is_some_and(|d| d.fixed);
-        super::fixture_rows::row(ui, state, &name, &loc, fixed);
-    }
-    if let Some(t) = table {
-        ui.label(format!(
-            "Machine/Table  span {} x {}  top Z {}  (from the machine file)",
-            units::len(t.max.x - t.min.x, u, 1),
-            units::len(t.max.y - t.min.y, u, 1),
-            units::len(t.max.z, u, 2),
-        ));
-    }
-    ui.horizontal_wrapped(|ui| {
-        if ui.button("Import fixture…").clicked() {
-            state.pending.push_back(CommandKind::ImportFixtureDialog);
-        }
-        // #788: a generic parametric vise, placed in one undoable step.
-        if ui.button("Add built-in vise…").clicked() {
-            state.pending.push_back(CommandKind::BuiltinViseDialog(ctx.unwrap_or_default().to_owned()));
-        }
-        // #789: parallels, blocks, strap clamps, soft jaws.
-        if ui.button("Add accessory…").clicked() {
-            state.pending.push_back(CommandKind::AccessoryDialog(ctx.unwrap_or_default().to_owned()));
-        }
-        // #819: a parametric grid plate, fixtures placed on its holes.
-        if ui.button("Add fixture plate…").clicked() {
-            state.pending.push_back(CommandKind::FixturePlateDialog(ctx.unwrap_or_default().to_owned()));
-        }
-        // The other way in: a model already imported - select its row
-        // in the browser and mark it. Offered only for exactly one
-        // selected model, so the button never guesses its target.
-        let sel: Vec<String> = model::selected_names(&state.world)
-            .into_iter()
-            .filter(|n| {
-                model::find_by_name(&state.world, n)
-                    .is_some_and(|e| model::is_model(&state.world, &e))
-            })
-            .collect();
-        if sel.len() == 1 && ui.button(format!("Mark {} as fixture", sel[0])).clicked() {
-            state.pending.push_back(CommandKind::TagFixture {
-                name: sel[0].clone(),
-                setup: ctx.map(str::to_owned),
-            });
-        }
-    });
-}
+pub(super) use super::fixtures_page::fixtures_section;
 
 // ----------------------------------------------------------------- tool page
 

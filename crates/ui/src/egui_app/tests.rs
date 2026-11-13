@@ -139,6 +139,7 @@ mod view_names;
 mod prefs_door;
 // #509: the Fixtures page rows fit the pane.
 mod fixture_rows;
+mod fixtures_page;
 // #864: a reduced-fidelity model says so on its page.
 mod model_fidelity;
 // #1054: the STEP facet budget on the model page.
