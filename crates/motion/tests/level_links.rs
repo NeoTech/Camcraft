@@ -294,7 +294,7 @@ fn bore_params(links: Links) -> BoreParams {
     BoreParams {
         holes: vec![BoreHole {
             xy: Point2::new(0.0, 0.0),
-            radius: 10.0,
+            radius: 8.0,
             top_z: 0.0,
             floor_z: -6.0,
             through: false,

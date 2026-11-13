@@ -189,7 +189,7 @@ fn a_bore_op_handed_the_wide_bore_by_hand_refuses_at_generate() {
     c.ok("edit_operation", json!({ "name": "B", "params": { "holes": list } }));
     assert_eq!(holes(&mut c).len(), 2, "the edit stored the wide bore");
     let e = c.refused("generate", json!({ "name": "B" }));
-    for want in ["74.300 mm hole at (-50.000, 0.000)", "too wide to bore", "4.000 mm cutter", "66.300 mm core", "up to 12.000 mm"] {
+    for want in ["74.300 mm hole at (-50.000, 0.000)", "too wide to bore", "4.000 mm cutter", "core from 4.000 to 66.300 mm", "up to 12.000 mm"] {
         assert!(e.contains(want), "the refusal names `{want}`: {e}");
     }
     // Nothing generated is nothing to post.

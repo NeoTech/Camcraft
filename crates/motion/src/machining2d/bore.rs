@@ -200,8 +200,9 @@ impl BoreParams {
                 return Err(GenError::invalid_at(
                     format!(
                         "the {:.3} mm hole at ({:.3}, {:.3}) is too wide to bore with a {:.3} mm cutter: \
-                         the centre dive and one ring at R{:.3} leave a {:.3} mm core no pass touches \
-                         (free once the hole breaks through). This ride clears holes up to {:.3} mm \
+                         the centre dive and one ring at R{:.3} leave a core from {:.3} to {:.3} mm \
+                         across that no pass touches (free once the hole breaks through). This ride \
+                         clears holes up to {:.3} mm \
                          (3 x the tool diameter + 2 x the stock to leave) - clear it with a pocket or \
                          adaptive operation, or bore it with a larger tool",
                         h.radius * 2.0,
@@ -209,6 +210,7 @@ impl BoreParams {
                         tidy(h.xy.y),
                         self.tool_diameter,
                         rc,
+                        self.tool_diameter,
                         (rc - r) * 2.0,
                         max_bore_diameter(self.tool_diameter, self.stock_to_leave),
                     ),

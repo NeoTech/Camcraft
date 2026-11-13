@@ -89,7 +89,7 @@ fn bore_refuses_a_bore_that_would_leave_a_free_core() {
     // end mill. The dive and one ring at R35.15 would free a 66.3 mm core.
     let err = bore(&params(hole(37.15, true), 4.0, 0.0)).expect_err("a core is refused, never posted");
     let msg = format!("{err:?}");
-    for want in ["74.300 mm hole", "4.000 mm cutter", "R35.150", "66.300 mm core", "up to 12.000 mm", "pocket"] {
+    for want in ["74.300 mm hole", "4.000 mm cutter", "R35.150", "core from 4.000 to 66.300 mm", "up to 12.000 mm", "pocket"] {
         assert!(msg.contains(want), "refusal names `{want}`: {msg}");
     }
 }
