@@ -2930,6 +2930,9 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 model_excess: material.excess,
                 // #1057: the containment kinds' declared rims, read untightened.
                 rims: &rims,
+                // #1408: a turning nose path's verdict turns the work
+                // about the spindle its kernel fitted.
+                lathe_axis: super::turning_axis::lathe_axis_of(&params, &geom, &material.facets),
             };
             // The picks' touching bodies, read as their union
             // (M13.11); empty for one body.
@@ -3220,6 +3223,8 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     // #864: a source imported coarser than promised.
                     model_excess: material.excess,
                     rims: &rims,
+                    // No envelope runs in a plane's frame (finish_tol None).
+                    lathe_axis: None,
                 },
                 &m_gen.bodies,
             );
