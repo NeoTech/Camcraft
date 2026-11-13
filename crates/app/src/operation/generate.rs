@@ -117,6 +117,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         carried_overhang: _,
         op_name: _,
         wire,
+        wire_ruled,
         sinker_gap,
         sinker_pass,
         sinker_wear,
@@ -189,6 +190,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             wire.ok_or_else(|| unreached("wire condition")),
             &hs,
             picks,
+            wire_ruled,
             || region_for_job(&mut picked_region, &mut section_z, &src, &params, &material, None),
             stock,
         );

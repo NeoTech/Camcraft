@@ -16,7 +16,7 @@ use camcraft_app::{fixture, model, units};
 
 use crate::state::{CommandKind, State};
 
-use super::fields::num;
+use super::fields::num_row;
 use super::layout::prop_row;
 
 /// The "Add mod vise pair…" section of plate `name` (grid `def`).
@@ -35,18 +35,22 @@ pub(super) fn pair_rows(ui: &mut Ui, state: &mut State, name: &str, def: &PlateD
             }
         });
         ui.horizontal(|ui| {
-            ui.label("Fixed jaw at row");
+            let l = ui.label("Fixed jaw at row");
             egui::ComboBox::from_id_salt(("mod-vise-row", name)).selected_text(plate::row_letters(draft.row)).show_ui(ui, |ui| {
                 for r in 0..g.rows {
                     ui.selectable_value(&mut draft.row, r, plate::row_letters(r));
                 }
-            });
-            ui.label("column");
+            })
+            .response
+            .labelled_by(l.id);
+            let l = ui.label("column");
             egui::ComboBox::from_id_salt(("mod-vise-col", name)).selected_text((draft.col + 1).to_string()).show_ui(ui, |ui| {
                 for c in 0..g.cols {
                     ui.selectable_value(&mut draft.col, c, (c + 1).to_string());
                 }
-            });
+            })
+            .response
+            .labelled_by(l.id);
         });
         ui.horizontal(|ui| {
             ui.label("Jaw faces");
@@ -100,7 +104,7 @@ pub(super) fn block_line(ui: &mut Ui, state: &mut State, name: &str) {
             rows.push(("Slide", &mut draft.slide));
         }
         for (label, v) in rows {
-            prop_row(ui, label, |ui| num(ui, u, v));
+            prop_row(ui, label, |ui| num_row(ui, u, v));
         }
         let mut soft = draft.insert == JawInsert::Soft;
         if ui.checkbox(&mut soft, "Soft jaw").changed() {

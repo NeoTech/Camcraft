@@ -107,6 +107,7 @@ mod thread_r_plane;
 // #985: external threads - the boss door, the crest region, the neighbour law.
 mod thread_boss;
 pub mod wire_op;
+mod wire_ruled;
 // #534: the wire laws' inputs, read live at the post.
 pub mod wire_verify;
 // #541: the sinker EDM burn to depth.

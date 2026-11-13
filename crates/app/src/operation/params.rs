@@ -1510,6 +1510,10 @@ impl OpParams {
                     h.write(b"taper");
                     w(h, p.taper_deg);
                 }
+                // #537: likewise only a stated 4-axis cut.
+                if let Some(f) = &p.four_axis {
+                    super::wire_ruled::digest(f, h);
+                }
             }
             // The sinker burn (#541): every stored number, the datum
             // and the condition id.
