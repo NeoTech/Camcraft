@@ -294,7 +294,8 @@ pub(crate) fn anchor_reference(state: &State) -> Option<(Aabb, &'static str)> {
     let active = camcraft_app::setup::active(&state.world);
     let stock = || model::stock_world_aabb_for(&state.world, active.as_deref()).map(|b| (b, "stock box"));
     let solid = || {
-        camcraft_app::setup_align::solid_aabb_in(&state.world, active.as_deref()).map(|b| (b, "model bounds"))
+        // #1538: the parts only - a vise's corner is never G54's.
+        camcraft_app::stock_fit::part_bounds(&state.world, active.as_deref()).map(|b| (b, "model bounds"))
     };
     if state.wcs_ui.anchor_source == 1 {
         solid().or_else(stock)

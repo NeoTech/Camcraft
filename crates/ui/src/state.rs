@@ -32,7 +32,8 @@ use camcraft_app::operation::{
     self, AreaControls, FeatureSel, GeoSel, Height, HeightReference, OpParams, SrcRef,
 };
 use camcraft_app::schema::{ColorVision, Location, Operation as OperationDef, PostRef, ThemeRef, WCS_SLOTS};
-use camcraft_app::stock::{self, StockShape};
+use camcraft_app::stock::StockShape;
+use camcraft_app::stock_fit::FitKind as StockFitKind;
 use camcraft_app::tools::{Tool, ToolKind, catalog};
 use camcraft_app::units::{self, Unit};
 use camcraft_app::{machine, model, posting, project, world::new_world};
@@ -2067,34 +2068,16 @@ impl State {
     /// Place a fitted stock (#198 shared it between the single-margin and
     /// per-side fits): the size and XY/Z placement from the fit, the
     /// stock's own rotation kept, through the undoable `SetStock`.
-    fn apply_stock_fit(&mut self, fitted: Option<(StockShape, Point3)>) {
-        let Some((shape, pos)) = fitted else {
-            self.refuse(
-                ErrorScope::Setup,
-                String::from("stock fit refused: models have no usable extent"),
-            );
-            return;
-        };
-        // Fit replaces size and XY/Z placement; a deliberately
-        // oriented stock keeps its rotation.
-        // The fit replaces the ACTIVE setup's stock, and keeps
-        // that entity's deliberate rotation (M3.2 A: the name is
-        // resolved here; the command re-resolves at construction).
-        let stock_name = camcraft_app::setup::stock_entity_name(
-            &self.world,
-            camcraft_app::setup::active(&self.world).as_deref(),
-        );
-        let rot = model::find_by_name(&self.world, &stock_name)
-            .and_then(|entity| model::transform_of(&self.world, &entity))
-            .map_or_else(|| Location::default().rot, |loc| loc.rot);
-        let location = Location { pos, rot };
-        match SetStock::new(&self.world, shape, location) {
-            Ok(command) => {
+    /// #1538: the fit is `stock_fit`'s - the same parts-only rule and
+    /// the same undoable `SetStock` the MCP `fit_stock` tool runs.
+    fn apply_stock_fit(&mut self, kind: StockFitKind) {
+        match camcraft_app::stock_fit::fit_command(&self.world, kind) {
+            Ok((command, _)) => {
                 self.history.execute(&self.world, command);
                 self.doc_version += 1;
                 self.status = String::from("stock fitted to models");
             }
-            Err(err) => self.refuse(ErrorScope::Setup, format!("stock not fitted: {err}")),
+            Err(err) => self.refuse(ErrorScope::Setup, err),
         }
     }
 
@@ -3071,47 +3054,16 @@ impl State {
                     );
                     return;
                 }
-                // #326: the parts as the active setup holds them - the
-                // stock is square to the setup frame.
-                let fit_setup = camcraft_app::setup::active(&self.world);
-                let Some(bounds) = camcraft_app::setup_align::solid_aabb_in(&self.world, fit_setup.as_deref()) else {
-                    self.refuse(
-                        ErrorScope::Setup,
-                        String::from("nothing to fit: no models in the document"),
-                    );
-                    return;
-                };
-                let fitted = if radio == 1 {
-                    // #230: snug about the part - the models' largest
-                    // radius from the fit's axis plus the margin, not the
-                    // footprint's diagonal (1.41 R for a round part).
-                    let c = [(bounds.min.x + bounds.max.x) * 0.5, (bounds.min.y + bounds.max.y) * 0.5];
-                    camcraft_app::setup_align::solid_radius_about_in(&self.world, fit_setup.as_deref(), c)
-                        .and_then(|r| stock::fit_cylinder_about(&bounds, r, margin))
-                } else {
-                    stock::fit_box(&bounds, margin)
-                };
-                self.apply_stock_fit(fitted);
+                // #326/#1538: the PARTS as the active setup holds them,
+                // never its fixtures - the stock is square to the setup
+                // frame and wraps the part, not the vise.
+                let kind = if radio == 1 { StockFitKind::Cylinder(margin) } else { StockFitKind::Box(margin) };
+                self.apply_stock_fit(kind);
             }
             CommandKind::StockFitSides { sides } => {
-                if !sides.iter().all(|s| s.is_finite() && *s >= 0.0) {
-                    self.refuse(
-                        ErrorScope::Setup,
-                        String::from("stock fit refused: every side's allowance must be zero or more"),
-                    );
-                    return;
-                }
-                // #326: the parts as the active setup holds them - the
-                // stock is square to the setup frame.
-                let fit_setup = camcraft_app::setup::active(&self.world);
-                let Some(bounds) = camcraft_app::setup_align::solid_aabb_in(&self.world, fit_setup.as_deref()) else {
-                    self.refuse(
-                        ErrorScope::Setup,
-                        String::from("nothing to fit: no models in the document"),
-                    );
-                    return;
-                };
-                self.apply_stock_fit(stock::fit_box_sides(&bounds, sides));
+                // #1538: the per-side fit wraps the parts too; a negative
+                // or non-finite allowance is refused by name.
+                self.apply_stock_fit(StockFitKind::Sides(sides));
             }
             CommandKind::SetWcs { pos, roll_deg, pitch_deg, yaw_deg } => {
                 self.dispatch_set_wcs(pos, [roll_deg, pitch_deg, yaw_deg]);
