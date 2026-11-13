@@ -231,6 +231,8 @@ pub const MACHINES: &[(&str, &str)] = &[
     // #707: Makera's desktop mills, from Makera's product spec tables.
     ("Makera Carvera", include_str!("../../../assets/machines/makera-carvera.mch")),
     ("Makera Carvera Air", include_str!("../../../assets/machines/makera-carvera-air.mch")),
+    // #868: the Z1 (manual quick-change, air blast); posted through the Carvera post.
+    ("Makera Z1", include_str!("../../../assets/machines/makera-z1.mch")),
     // #728: Sienci's AltMill routers (SLB-EXT, grblHAL); pair with the "grblHAL" post.
     ("Sienci AltMill 2x4", include_str!("../../../assets/machines/sienci-altmill-2x4.mch")),
     ("Sienci AltMill 4x4", include_str!("../../../assets/machines/sienci-altmill-4x4.mch")),
