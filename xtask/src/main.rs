@@ -35,6 +35,8 @@ mod gate_maps_tests;
 #[cfg(test)]
 mod asset_tests;
 #[cfg(test)]
+mod package_paths_tests;
+#[cfg(test)]
 mod checkout_tests;
 #[cfg(test)]
 mod merge_plan_tests;
