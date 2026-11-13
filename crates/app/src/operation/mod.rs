@@ -107,6 +107,7 @@ mod thread_r_plane;
 // #985: external threads - the boss door, the crest region, the neighbour law.
 mod thread_boss;
 pub mod wire_op;
+mod wire_ruled;
 // #534: the wire laws' inputs, read live at the post.
 pub mod wire_verify;
 // #541: the sinker EDM burn to depth.
@@ -180,6 +181,7 @@ mod stock_top_law;
 mod tap_core;
 pub use top_stock::TOP_STOCK_WARNING;
 mod turning_credit;
+mod turning_axis;
 mod turning_feeds;
 mod turning_holder;
 pub(crate) use turning_holder::body_axes as lathe_body_axes;

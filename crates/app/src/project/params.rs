@@ -1363,6 +1363,8 @@ pub enum CycleChoiceDto {
     Bore,
     BackBore,
     FloatingTap,
+    /// #1445: feed in, feed out (G85). Older files never carry it.
+    Ream,
 }
 
 /// The reference part of a stored height. Serialized as a plain string;

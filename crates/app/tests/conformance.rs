@@ -225,7 +225,7 @@ fn every_builtin_posts_every_golden_byte_exact() {
 /// offset, slot origin), a tool block, a contour (rapid, feed, arc) and
 /// a five-hole drilling group - dwelled drill, a two-hole peck run
 /// (the modal-continuation branch), a deep hole, a tap. Every
-/// dialect-specific word - `S.. M3`, `MOTON`, `T2 M6`, `G43 H2`, `D2`,
+/// dialect-specific word - `S.. M3`, `T2 M6`, `G43 H2`, `D2`,
 /// `G98`/its absence, `P..` - appears here, so the goldens that lock
 /// them exist for all five scripts.
 ///

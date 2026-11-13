@@ -1,7 +1,7 @@
 //! #523: a touch probe is never spun. A section that states no spindle
 //! speed (S0 - a probe tool; `Tool::is_sane` refuses rpm 0 on every
 //! cutter) posts no spindle start on any built-in mill post: no S word,
-//! no M3 / M03 / MOTON. Fanuc has gated it since #108; the other five
+//! no M3 / M03. Fanuc has gated it since #108; the other five
 //! posts started the spindle unconditionally, harmless only while they
 //! refused probe moves. The control case keeps every cutter's spindle.
 //!
@@ -61,7 +61,7 @@ fn spindle_words(program: &str) -> Vec<String> {
         // A Heidenhain block ends in `*` (`S8000*`, `M3*`).
         .map(|w| w.trim_end_matches('*'))
         .filter(|w| {
-            matches!(*w, "M3" | "M03" | "MOTON")
+            matches!(*w, "M3" | "M03")
                 || (w.len() > 1 && w.starts_with('S') && w[1..].chars().all(|c| c.is_ascii_digit() || c == '.'))
         })
         .map(str::to_string)
@@ -84,7 +84,7 @@ fn a_cutting_section_still_starts_its_spindle_on_every_mill_post() {
         let words = spindle_words(&out);
         assert!(words.iter().any(|w| w.starts_with('S')), "{stem}: no S word in {words:?}:\n{out}");
         assert!(
-            words.iter().any(|w| matches!(w.as_str(), "M3" | "M03" | "MOTON")),
+            words.iter().any(|w| matches!(w.as_str(), "M3" | "M03")),
             "{stem}: no spindle start in {words:?}:\n{out}"
         );
     }

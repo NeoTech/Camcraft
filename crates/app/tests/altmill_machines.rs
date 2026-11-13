@@ -11,7 +11,7 @@
 //! See docs/decisions/728-altmill.md.
 //!
 //! Gate map (#728): covers app::posting (MACHINES registry),
-//! post::machine (safeRetractZ, units), app::post (grblhal.cps).
+//! post::machine (safeRetractZ, units), camcraft_post::post (grblhal.cps).
 
 use camcraft_app::machine::{Machine, parse_mch};
 use camcraft_app::post::{engine, machine};

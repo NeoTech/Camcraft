@@ -74,6 +74,7 @@ pub(super) fn params_fields(ui: &mut Ui, state: &mut State, tab: usize) {
                     camcraft_app::cl::CycleKind::FloatingTap => "Tap (floating holder)",
                     camcraft_app::cl::CycleKind::Bore => "Bore",
                     camcraft_app::cl::CycleKind::BackBore => "Back bore",
+                    camcraft_app::cl::CycleKind::Ream => "Ream (feed in, feed out)",
                 };
                 Some(format!(
                     "Auto -> {name} for this tool and a depth of {}",

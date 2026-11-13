@@ -13,6 +13,24 @@ impl OpParams {
     /// commands' generic "not usable".
     #[must_use]
     pub fn named_refusal(&self) -> Option<String> {
+        // #1448: only the untilted 2D contour takes a picked start so far;
+        // every other kind refuses it here rather than ignore it.
+        // #1473: the exit point likewise.
+        for (what, set) in [
+            ("start", self.links().is_some_and(|l| l.approach.start_point.is_some())),
+            ("exit", self.links().is_some_and(|l| l.approach.exit_point.is_some())),
+        ] {
+            if !set {
+                continue;
+            }
+            match self {
+                OpParams::Contour { tilt: None, .. } => {}
+                OpParams::Contour { .. } => {
+                    return Some(format!("a {what} point is not taken on a tilted (3+2) contour yet - clear it or the tilt"));
+                }
+                _ => return Some(format!("a {what} point is taken only by the 2D contour so far - clear it on this operation")),
+            }
+        }
         match self {
             OpParams::SinkerBurn(p) => p.compensation_refusal(),
             OpParams::SinkerSideBurn(p) => p.refusal(),

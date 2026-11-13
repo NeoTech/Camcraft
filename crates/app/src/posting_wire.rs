@@ -145,13 +145,18 @@ pub(super) fn stream(
             .collect(),
         ..Dump::default()
     };
+    // #537: a 4-axis cut's moves lean as a taper's do.
+    let four = p.four_axis.as_ref().map(|f| match f.pairing {
+        operation::WirePairingRule::ArcLength => "arc length",
+        operation::WirePairingRule::SyncPoints => "sync points",
+    });
     // #536: a tapered cut's guide planes, read once from the machine.
-    let taper = if p.taper_deg == 0.0 {
+    let taper = if p.taper_deg == 0.0 && four.is_none() {
         None
     } else {
         let machine = crate::machine::of_setup(world, setup)
             .1
-            .ok_or_else(|| format!("{name}: a tapered wire cut needs its wire EDM machine mounted"))?;
+            .ok_or_else(|| format!("{name}: a leaning wire cut needs its wire EDM machine mounted"))?;
         let guides = crate::machine::wire_edm::guide_planes(&machine, origin[2]).map_err(|e| format!("{name}: {e}"))?;
         Some((p.taper_deg, guides))
     };
@@ -160,19 +165,20 @@ pub(super) fn stream(
     // the slug), then the tab cut-off with its own condition.
     let split = crate::operation::wire_verify::cutoff_from(p, &cache.path).map_err(|e| format!("{name}: {e}"))?;
     let (Some(m), Some(t)) = (split, p.tabs.as_ref()) else {
-        return section(&cache.path, &d, name, &p.condition, p.side.word(), taper);
+        return section(&cache.path, &d, name, &p.condition, p.side.word(), taper, four);
     };
     let (head, tail) = cache.path.moves.split_at_checked(m).ok_or_else(|| format!("{name}: the tab cut-off's start is past the path"))?;
     let main = crate::cl::Toolpath { moves: head.to_vec(), ..crate::cl::Toolpath::default() };
     let cut = crate::cl::Toolpath { moves: tail.to_vec(), ..crate::cl::Toolpath::default() };
     let off_name = format!("{display_name} tab cut-off");
-    let mut records = section(&main, &Dump { after: AfterOperation::ProgramStop, ..d.clone() }, name, &p.condition, p.side.word(), taper)?;
-    records.extend(section(&cut, &Dump { op_name: &off_name, warnings: Vec::new(), ..d }, name, &t.cutoff_condition, p.side.word(), taper)?);
+    let mut records = section(&main, &Dump { after: AfterOperation::ProgramStop, ..d.clone() }, name, &p.condition, p.side.word(), taper, four)?;
+    records.extend(section(&cut, &Dump { op_name: &off_name, warnings: Vec::new(), ..d }, name, &t.cutoff_condition, p.side.word(), taper, four)?);
     Ok(records)
 }
 
 /// One wire section: the dump with the wire words before it opens;
-/// `taper` (#536) is the angle and the guide planes of a tapered cut.
+/// `taper` (#536) is the angle and the guide planes of a leaning cut,
+/// `four` (#537) the pairing rule of a 4-axis cut.
 fn section(
     path: &crate::cl::Toolpath,
     d: &Dump,
@@ -180,6 +186,7 @@ fn section(
     condition: &str,
     side: &str,
     taper: Option<(f64, (f64, f64))>,
+    four: Option<&str>,
 ) -> Result<Vec<cnc::Record>, String> {
     let mut records = post::dump(path, d);
     if let Some((_, guides)) = taper {
@@ -194,10 +201,12 @@ fn section(
         cnc::Record::Param { name: "EdmCondition".into(), value: json!(condition) },
         cnc::Record::Param { name: "WireSide".into(), value: json!(side) },
     ];
-    if let Some((deg, _)) = taper {
+    if let Some((deg, _)) = taper.filter(|(deg, _)| *deg != 0.0) {
         wire.push(cnc::Record::Param { name: "WireTaper".into(), value: json!(deg) });
     }
+    wire.extend(four.map(|rule| cnc::Record::Param { name: "WireFourAxis".into(), value: json!(rule) }));
     records.splice(at..at, wire);
+
     Ok(records)
 }
 

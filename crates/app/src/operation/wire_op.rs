@@ -35,6 +35,7 @@ pub(super) fn seed_wire_contour(c: &Carried) -> OpParams {
         tabs: None,
         capture: false,
         taper_deg: 0.0,
+        four_axis: None,
         burnout: None,
         clearance: super::types::DEFAULT_CLEARANCE,
     })
@@ -157,7 +158,7 @@ pub(super) fn stamp_condition(world: &World, setup: Option<&str>, op: &WireConto
             h.write(&c.gap.to_bits().to_le_bytes());
             // #536: a taper also reads the machine's maximum; a vertical
             // cut's stamp stays what it was.
-            if op.taper_deg != 0.0 {
+            if op.taper_deg != 0.0 || op.four_axis.is_some() {
                 h.write(&c.max_taper_deg.map_or(u64::MAX, f64::to_bits).to_le_bytes());
             }
         }
@@ -255,10 +256,31 @@ pub(super) fn generate_wire(
     cond: Result<(WireCondition, Option<WireCondition>), GenError>,
     hs: &ResolvedHeights,
     picks: Option<(Vec<Loop>, Vec<Vec<Point2>>)>,
+    ruled: Option<Result<super::wire_ruled::RuledPicks, GenError>>,
     base: impl FnOnce() -> Result<Region, GenError>,
     stock: impl FnOnce() -> Option<Region>,
 ) -> Result<(Toolpath, Vec<Warning>), GenError> {
     let (cond, cutoff) = cond?;
+    // #537: two profiles paired into rulings - its own generator, read
+    // from its own picks. A burnout (#540), tabs (#539) and an open run
+    // (#1109) are not cut along rulings: each refused by name, never
+    // cut as something else.
+    if let Some(four) = &op.four_axis {
+        if op.burnout.is_some() {
+            return Err(GenError::Invalid(
+                "wire contour: a 4-axis cut is asked with a no-core burnout - the burnout is cut vertical only; turn the burnout off or cut the two profiles without it".into(),
+            ));
+        }
+        if op.tabs.is_some() {
+            return Err(GenError::Invalid(
+                "wire contour: a 4-axis cut is asked with tabs - tabs are cut on a one-profile contour only; remove the tabs or cut the two profiles without them".into(),
+            ));
+        }
+        let p = wire_params(op, &cond, cutoff.as_ref(), hs, None)?;
+        let picks = ruled.ok_or_else(|| super::job::unreached("wire profiles"))??;
+        return super::wire_ruled::generate(op, four, &cond, &p, hs, &picks).map(|path| (path, Vec::new()));
+    }
+
     let (loops, chains) = match picks {
         Some(geom) => geom,
         None => (base()?.loops().to_vec(), Vec::new()),

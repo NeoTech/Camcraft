@@ -89,7 +89,8 @@ afterwards - the work must not bother them.
   --delta <PR> --reviewed <sha>` reports it (SAME). Hand edits confined to
   rule-settled files (`.claude/PROCESS_VERSION`, `CHANGELOG.md`,
   `RECOMMENDED.md`, `Cargo.lock`, snapshot PNGs taken from main) are read by
-  the merging session itself (MECHANICAL). Only a conflict resolved by hand
+  the merging session itself (MECHANICAL; `PROCESS_VERSION` stays on that
+  list for branches opened before #1153 that still edit it). Only a conflict resolved by hand
   gets a delta review of its remerge-diff (DELTA), and new commits get a
   review of those commits (NEW CODE).
 - **Only collaborators' reviews count** (issue #1320, 2026-11-12, decided in
@@ -287,15 +288,28 @@ go to `CHANGELOG.md`.
     current. What changed and why is in the pinned issue #681 ("Process
     changes"); a fork maintainer subscribes there.
 - **Process changes bump `PROCESS_VERSION` and are announced** (same
-  request). Any PR that changes a process file (the list above) also
-  increments the single integer in `.claude/PROCESS_VERSION`, and when it
-  merges, the merging session adds a comment to the pinned issue #681:
-  `PROCESS_VERSION <n>` · PR #M · what changed · what a fork must do. The
-  reviewer treats a missing bump as a requested change. Two process PRs
-  open at once both bump to the same number; whichever merges second
-  takes the next number when it merges main. At a cut, the release notes
-  get a short "Process changes" section listing the versions since the
-  previous tag.
+  request; the writer changed with #1153, 2026-11-13). A PR that changes a
+  process file (the list above) does NOT touch `.claude/PROCESS_VERSION`:
+  every open process PR bumping the same line made each merge conflict
+  the rest, and two could carry the same number (#1117 and #930 both at
+  17). Its body carries the line `Process change: yes` instead, and the
+  reviewer treats a missing line, or an edit of `PROCESS_VERSION` in the
+  PR, as a requested change. Exempt: the bump PR itself and #1488, which
+  introduced this rule and bumped 62 to 63. The one-line bump PR is
+  MECHANICAL: the merging session reads it, it needs no agent review, and
+  it merges at once. The merging session is the one writer: after
+  a merge batch that merged at least one process PR it runs `cargo xtask
+  process-bump` (one integer, +1, once per batch, however many process PRs
+  were in it) in a worktree off the new `main`, opens a one-line PR
+  `chore(process): PROCESS_VERSION <n>` and merges it, then adds a comment
+  to the pinned issue #681: `PROCESS_VERSION <n>` · PR #M (every process
+  PR of the batch) · what changed · what a fork must do. A fork still
+  compares `.claude/PROCESS_VERSION` with upstream's and pulls the process
+  files when upstream's is higher, so nothing changes for it; the number
+  moves a little after the files do, and a fork that synced in between
+  pulls the same files again at the bump, which is harmless. At a cut, the
+  release notes get a short "Process changes" section listing the
+  versions since the previous tag.
 - **Overlapping issues stack.** Open PRs wait unmerged (a `feat` until its
   cut, a fix until it is reviewed), so an
   issue touching code an open PR changes branches off that PR's branch
@@ -760,7 +774,10 @@ makes every worktree miss. Dev builds carry line tables only (no variable
 debug info; `--config profile.dev.debug=true` restores it for a debugger).
 
 **GitHub Actions minutes are budgeted** (3000/month; Windows bills 2x,
-macOS 10x). Nothing runs on push or PR: the quick and batch tiers run
+macOS 10x). Nothing runs on PR, and a `push` trigger is allowed only on
+`main` and only for a workflow whose jobs run on the self-hosted runner
+(`post-merge.yml`, #1451; user, 2026-11-13: "Can we setup a build test post
+merge using local gh runner?"); the quick and batch tiers otherwise run
 locally through `cargo xtask gate`. GitHub runs `release.yml` for a cut
 tag (the build that publishes the artifact), and `cut.yml` (#1413) runs
 the release tier of a cut on the self-hosted cut runner (below), which
@@ -811,6 +828,14 @@ GitHub-hosted runner. What the machine needs:
   General), and never approve a fork PR's workflow run that adds or
   changes a file under `.github/workflows/` - such a file could name
   `self-hosted`.
+
+**The post-merge gate** (#1451) shares this runner: `post-merge.yml` runs
+`cargo xtask gate batch` on every push to `main` (and `workflow_dispatch`,
+input `ref`), never on a PR trigger. It yields to the cut - it skips itself
+(green, with a notice) while a `cut.yml` run is queued or running or an
+open `release/vX.Y.Z` PR from this repo exists (`.github/scripts/post-merge-skip.sh`) -
+and reports through `.github/scripts/post-merge-report.sh`. Only its report job
+holds `issues: write`.
 
 **The PR test runner** (#1420; maintainer, 2026-11-13: "then that is the
 decision, workflow_dispatch"). `pr-test.yml` runs a PR review's build and
@@ -969,7 +994,19 @@ calendar. `release.yml` builds and publishes on `vX.Y.0` tags only (~30-40
 billed Actions minutes each); PRs run no Actions (no `pull_request`
 trigger), so the PR flow costs no minutes.
 
-**Fixes are tested in the background.** After a fix merges (or, one gate
+**Fixes are tested in the background - by `post-merge.yml` first** (#1451).
+Every push to `main` runs the batch tier on the self-hosted runner without
+anyone dispatching it: a burst of merges tests only the newest head
+(`cancel-in-progress`), a run skips itself while a `cut.yml` run or a
+release PR is open (the cut's release gate covers main then), and one rolling
+issue `main is red (post-merge gate)` is opened or commented on when it fails
+(`P2`, "a gate on main is red"; `P1` only when a failing suite is a
+wrong-output suite - a golden CL/NC or recorded-post-stream suite, named in
+the script's anchored `OUTPUT_SUITES` list) and closed by the next green
+run; only a `source:agent` issue is ever closed by it. A red result is that issue; the main session does not dispatch a gate for
+a merge the workflow covers. **Fallback when the runner is down** (the run
+is queued with no runner, or it was skipped for a cut and the cut was
+abandoned): the old local procedure below. After a fix merges (or, one gate
 per batch since 2026-11-12, after a merge batch of "Refresh only at merge
 time" as a whole, not after each merge), the main
 session dispatches a gate-runner subagent to run the batch tier on

@@ -204,7 +204,7 @@ fn collect_parts(state: &State) -> Vec<GpuPart> {
     let struck = state.fixture_highlight();
     let mut parts: Vec<GpuPart> = model::model_entities(&state.world)
         .into_iter()
-        .filter(|(name, _)| !state.hidden_models.iter().any(|h| h == name))
+        .filter(|(name, _)| !state.hidden_models.iter().any(|h| h == name) && !state.fixture_hidden_by_setup(name))
         .map(|(name, entity)| {
             let verts = world_verts(state, &entity);
             let classes =

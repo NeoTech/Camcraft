@@ -94,6 +94,7 @@ fn punch_doc(machine_text: &str) -> World {
         tabs: None,
         capture: true,
         taper_deg: 0.0,
+        four_axis: None,
         burnout: None,
         clearance: operation::DEFAULT_CLEARANCE,
     };
@@ -122,6 +123,7 @@ fn gouging_die() -> World {
         tabs: None,
         capture: true,
         taper_deg: 0.0,
+        four_axis: None,
         burnout: None,
         clearance: operation::DEFAULT_CLEARANCE,
     };
@@ -310,6 +312,7 @@ fn cutoff_doc(wrong: bool) -> World {
         taper_deg: 0.0,
         burnout: None,
         clearance: operation::DEFAULT_CLEARANCE,
+        four_axis: None,
     };
     let src = SrcRef::Selection(vec![GeoSel { entity: "part".into(), feature: FeatureSel::Chain(chain) }]);
     h.execute(&world, CreateOperation::new(&world, "Cutoff1", "", src, OpParams::WireContour(op)).expect("op"));

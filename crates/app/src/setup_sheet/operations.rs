@@ -204,6 +204,7 @@ fn kind_label(k: CycleKind) -> String {
         CycleKind::FloatingTap => "tap (floating holder)",
         CycleKind::Bore => "bore",
         CycleKind::BackBore => "back-bore",
+        CycleKind::Ream => "ream",
     };
     s.to_string()
 }
@@ -218,5 +219,6 @@ fn choice_label(c: CycleChoice) -> &'static str {
         CycleChoice::FloatingTap => "Tap (floating holder)",
         CycleChoice::Bore => "Bore",
         CycleChoice::BackBore => "BackBore",
+        CycleChoice::Ream => "Ream",
     }
 }

@@ -109,6 +109,7 @@ mod scan;
 mod scan_arc;
 mod scan_hidden;
 mod scan_near;
+mod scan_turned;
 mod tiles;
 mod wall_slack;
 
@@ -134,5 +135,5 @@ pub use field_rotary::{rotary_chords, rotary_chords_law, ChordLaw, RotaryChordSt
 pub use gouge::dist_seg_tri;
 pub use kernel::{measure, part_surface, StockError, StockReport};
 pub use preview::{preview, Preview, PreviewCamera};
-pub use scan::{envelope_scan, envelope_scan_centers, envelope_scan_within, EnvelopeReport};
+pub use scan::{envelope_scan, envelope_scan_centers, envelope_scan_turned, envelope_scan_within, EnvelopeReport};
 pub use scan_hidden::{HiddenRest, ScanBudget};
