@@ -57,19 +57,20 @@ unstated capability into existence.
         "max_orbit_radius": 2.0,                       // sinker, length unit
         "pickup": "...",                               // sinker, the holder system's name
         "conditions": [ { "id": "C110", "gap": 0.02, "wire_diameter": 0.25, "role": "rough" } ],  // either kind (#531)
-        "codes": { "condition": "...{id}...", ... }   // either kind: the control's EDM words (#542)
+        "codes": { "condition": "...{id}...", ... }   // either kind: the control's EDM words (#533, #542)
       }
 
-  `edm.codes` (#542, #290 D5) holds the control's EDM words as
-  templates, role -> text, filled by the post: a sinker's `metric` /
-  `inch` (the unit word), `pickup` (`{tool}`), `reference`
-  (`{offset}`, the electrode's pickup offset), `condition` (`{id}`),
-  `depth` (the servo burn, `{z}` and optionally `{f}`) and `end`; an
-  orbit's word (`edm.orbits[].word`) may hold `{radius}`. Each value is
-  a non-empty string or the file is refused; a code the post needs and
-  the file does not state refuses the post by name. No vendor codes
-  ship - fill them from the control's manual. `codes` is a key of
-  either EDM kind (the wire post, #533, reads its own roles).
+  `edm.codes` (#533, #542, #290 D5) holds the control's EDM words as
+  templates, name -> text, filled by the post (`Machine.edm_codes`,
+  read by `post::machine::edm_codes`): a name is a lowercase word
+  (a-z, 0-9, `_`), a text is printable ASCII of at most 64 characters
+  with no `(` `)`, or the file is refused by the name. A sinker post
+  reads `metric` / `inch` (the unit word), `pickup` (`{tool}`),
+  `reference` (`{offset}`, the electrode's pickup offset), `condition`
+  (`{id}`), `depth` (the servo burn, `{z}` and optionally `{f}`) and
+  `end` (`SINKER_CODES`); the wire post (#533) reads its own names. A
+  code the post needs and the file does not state refuses the post by
+  name. No vendor codes ship - fill them from the control's manual.
 
   Every key is optional and absent means NOT STATED (an op that needs
   it refuses by name). A garbled value refuses the file. The section is
@@ -86,9 +87,9 @@ unstated capability into existence.
   the Machines pane's validator alike); a rotary is allowed. No vendor
   values are shipped. No EDM machine is in the built-in library yet:
   every library machine must have a post (`machine_library`). The
-  sinker's first post shipped with #542 (`sinker-iso.cps`); the empty
-  sinker template joining the library is #1135, and the wire
-  template waits for #533. Until then they are test fixtures
+  sinker's first post shipped with #542 (`sinker-iso.cps`), the wire's
+  with #533 (`wire-iso.cps`); the empty sinker template joining the
+  library is #1135. Until then they are test fixtures
   (`crates/app/tests/edm/`, with `sinker-iso-dialect.mch` the synthetic
   codes the sinker post's goldens are posted against).
 
