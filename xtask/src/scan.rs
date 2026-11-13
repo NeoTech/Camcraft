@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 
 use regex::Regex;
 
+use crate::braces::{self, Lex};
 use crate::plan::ps_cmp;
 
 /// A `#[test]` fn: its name, its 1-based line span (doc/attr lines through the closing brace) and
@@ -27,13 +28,22 @@ pub fn read(path: &Path) -> String {
     std::fs::read_to_string(path).unwrap_or_default()
 }
 
-/// The integration-test suites of `crates/<dir>/tests/*.rs`, by name, in gate order.
+/// The integration-test suites of `tests/*.rs` and `tests/<suite>/main.rs`, by name, in gate order.
 pub fn binaries(root: &Path, dir: &str) -> Vec<String> {
     let mut out: Vec<String> = rs_files(&root.join("crates").join(dir).join("tests"))
         .iter()
         .filter_map(|p| p.file_stem().map(|s| s.to_string_lossy().into_owned()))
         .collect();
+    let tests = root.join("crates").join(dir).join("tests");
+    if let Ok(entries) = std::fs::read_dir(&tests) {
+        for entry in entries.flatten() {
+            if entry.path().is_dir() && entry.path().join("main.rs").is_file() {
+                out.push(entry.file_name().to_string_lossy().into_owned());
+            }
+        }
+    }
     out.sort_by(|a, b| ps_cmp(a, b));
+    out.dedup();
     out
 }
 
@@ -55,7 +65,11 @@ pub fn rs_files(dir: &Path) -> Vec<PathBuf> {
 pub fn rs_files_recursive(dir: &Path) -> Vec<PathBuf> {
     let mut out = rs_files(dir);
     let mut subs: Vec<PathBuf> = match std::fs::read_dir(dir) {
-        Ok(rd) => rd.filter_map(Result::ok).map(|e| e.path()).filter(|p| p.is_dir()).collect(),
+        Ok(rd) => rd
+            .filter_map(Result::ok)
+            .map(|e| e.path())
+            .filter(|p| p.is_dir())
+            .collect(),
         Err(_) => Vec::new(),
     };
     subs.sort_by(|a, b| ps_cmp(&a.to_string_lossy(), &b.to_string_lossy()));
@@ -67,9 +81,10 @@ pub fn rs_files_recursive(dir: &Path) -> Vec<PathBuf> {
 
 /// The `#[test]` fns of a source text.
 pub fn test_fns(text: &str) -> Result<Vec<TestFn>, String> {
-    let test_attr = re(r"(?i)^\s*#\[test\]")?;
+    let test_attr = re(r"(?i)^\s*(?:#\[[^\]]*\]\s*)*#\[test\]")?;
+    let ignore_attr = re(r"(?i)^\s*(?:#\[[^\]]*\]\s*)*#\[ignore(?:\s*=|\s*\])")?;
     let lead = re(r"(?i)^\s*(///|#\[)")?;
-    let fn_re = re(r"(?i)^\s*(pub\s+)?(async\s+)?fn\s+(\w+)")?;
+    let fn_re = re(r"(?i)^\s*(?:#\[[^\]]*\]\s*)*(pub\s+)?(async\s+)?fn\s+(\w+)")?;
     let lines: Vec<&str> = text.lines().collect();
     let n = lines.len();
     let mut out = Vec::new();
@@ -84,35 +99,36 @@ pub fn test_fns(text: &str) -> Result<Vec<TestFn>, String> {
             s -= 1;
         }
         let mut ignored = false;
-        let mut k = i;
+        let mut k = s;
         let mut name = None;
         while k < n {
+            if ignore_attr.is_match(lines[k]) {
+                ignored = true;
+            }
             if let Some(c) = fn_re.captures(lines[k]) {
                 name = c.get(3).map(|m| m.as_str().to_string());
                 break;
-            }
-            if lines[k].to_ascii_lowercase().contains("#[ignore") {
-                ignored = true;
             }
             k += 1;
         }
         let Some(name) = name else { break };
         let (mut depth, mut opened, mut e) = (0i64, false, k);
+        let mut lex = Lex::default();
         while e < n {
-            for ch in lines[e].chars() {
-                if ch == '{' {
-                    depth += 1;
-                    opened = true;
-                } else if ch == '}' {
-                    depth -= 1;
-                }
-            }
+            let (o, c) = braces::count(lines[e], &mut lex);
+            opened |= o > 0;
+            depth += o - c;
             if opened && depth <= 0 {
                 break;
             }
             e += 1;
         }
-        out.push(TestFn { name, start: s + 1, end: e + 1, ignored });
+        out.push(TestFn {
+            name,
+            start: s + 1,
+            end: e + 1,
+            ignored,
+        });
         i = e + 1;
     }
     Ok(out)

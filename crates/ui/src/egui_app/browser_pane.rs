@@ -25,6 +25,14 @@ use super::theme::Tokens;
 /// The browser pane.
 pub fn browser(ui: &mut Ui, state: &mut State, pal: &Tokens, icons: Option<&IconSet>) {
     ui.checkbox(&mut state.show_world_axes, "Show world origin axes");
+    // #645: the #727 gizmo names get the switch the review asked for.
+    // Same local-copy law as "Show all toolpaths": the flip goes
+    // through a State method, which takes the user's choice out to
+    // the view file with it.
+    let mut show_names = state.show_gizmo_names;
+    if ui.checkbox(&mut show_names, "Show origin names").changed() {
+        state.set_gizmo_names(show_names);
+    }
     let mut show_all_paths = state.show_all_paths;
     if ui.checkbox(&mut show_all_paths, "Show all toolpaths").changed() {
         if show_all_paths {
@@ -107,7 +115,7 @@ fn ctx(name: &str) -> Option<&str> {
     (!name.is_empty()).then_some(name)
 }
 
-fn eye(state: &mut State, leaf: &Leaf) {
+pub(super) fn eye(state: &mut State, leaf: &Leaf) {
     match leaf {
         Leaf::Model(n) => State::toggle_visibility(&mut state.hidden_models, n),
         Leaf::Stock(s) => {
@@ -119,6 +127,7 @@ fn eye(state: &mut State, leaf: &Leaf) {
             State::toggle_visibility(&mut state.hidden_offsets, &name);
         }
         Leaf::Op(n) => State::toggle_visibility(&mut state.hidden_paths, n),
+        Leaf::Setup(n) => state.toggle_setup_display(n),
         _ => {}
     }
 }

@@ -13,9 +13,11 @@
 //! changer's count, and the refusals by name - an op that is not a
 //! plasma op, a spindle word, a tilted or turned move. What is NOT:
 //! Z depth and Z travel (the lifter is the control's; the plasma
-//! verification laws, #672, judge the through-cut) and rpm / spindle
-//! power (there is no spindle). Those are SKIPPED with a named note on
-//! the check, never failed and never silent.
+//! verification laws, #672, judge the through-cut at the post gate -
+//! `posting::plasma_clause` - and the generator's kerf and cover laws
+//! at generation) and rpm / spindle power (there is no spindle). Those
+//! are SKIPPED with a named note on the check, never failed and never
+//! silent.
 
 use flecs_ecs::prelude::{Entity, World};
 
@@ -29,7 +31,7 @@ use crate::operation::Family;
 fn cuts_plasma(op: &crate::schema::Operation) -> bool {
     match op.params.kind().info().family() {
         Family::Plasma => true,
-        Family::Mill | Family::Turn => false,
+        Family::Mill | Family::Turn | Family::WireEdm | Family::Sinker => false,
     }
 }
 
@@ -46,7 +48,7 @@ pub(super) fn check_plasma_ops(
 ) -> Result<MachineCheck, String> {
     let mut out = MachineCheck::default();
     out.notes.push(format!(
-        "{}: Z is the torch lifter - cutting depth and Z travel are not judged here (the control sets pierce and cut height)",
+        "{}: Z is the torch lifter - cutting depth and Z travel are not judged here (the control sets pierce and cut height); the through-cut is judged by the plasma laws at the post gate (cut order, cut crossing, kerf crossing, tip-up) and by the kerf and cover laws at generation - the 3D stock sim does not run for a torch",
         machine.model
     ));
     out.notes.push(format!(

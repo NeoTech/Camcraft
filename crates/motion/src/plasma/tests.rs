@@ -33,6 +33,7 @@ fn params() -> PlasmaParams {
         pierce_height: None,
         cut_height: None,
         pierce_delay: None,
+        model_excess: 0.0,
     }
 }
 
@@ -246,4 +247,172 @@ fn the_torch_records_round_trip_through_the_cl_text() {
     // A torch never put out is refused, never guessed.
     let cut = s.replace("; TORCH OFF C2\n", "");
     assert!(text::from_text(&cut).is_err());
+}
+
+/// #672 (#676 decision 12): a slot or notch narrower than the kerf is
+/// bridged by the offset ring - one loop, so the ring law accepts it -
+/// and the cover law refuses it by name instead of leaving the feature
+/// uncut; the same notch twice the kerf wide cuts, and a keyway under
+/// the kerf on a hole is refused the same way.
+#[test]
+fn a_slot_narrower_than_the_kerf_is_refused_not_bridged() {
+    let err = |r: Result<Toolpath, crate::machining2d::GenError>| r.err().map(|e| e.to_string()).unwrap_or_default();
+    let q = Point2::new;
+    // A 100 x 60 plate with a notch `w` wide and 10 deep in its top edge.
+    let notched = |w: f64| {
+        let (l, r) = (50.0 - w * 0.5, 50.0 + w * 0.5);
+        Loop::new(vec![q(0.0, 0.0), q(100.0, 0.0), q(100.0, 60.0), q(r, 60.0), q(r, 50.0), q(l, 50.0), q(l, 60.0), q(0.0, 60.0)]).unwrap()
+    };
+    let narrow = notched(1.0);
+    let part = Region::new(vec![narrow.clone()]).unwrap();
+    let e = err(plasma_profile(&[narrow], &[], &part, &params()));
+    assert!(e.contains("contour C0") && e.contains("bridged") && e.contains("narrower than the kerf"), "{e}");
+    assert!(e.contains("Y5") || e.contains("Y6"), "located in the notch: {e}");
+    assert!(e.contains("about 1.000 mm across") && e.contains("(1.500 mm)"), "names the gap against the kerf: {e}");
+    // 3 mm wide (twice the 1.5 kerf): the torch enters it and every edge is reached.
+    let wide = notched(3.0);
+    let part = Region::new(vec![wide.clone()]).unwrap();
+    let path = cut_plate(&[wide], &part, &params());
+    assert!(path.plasma.is_some_and(|r| r.torches.len() == 1));
+    // A 20 x 20 hole with a 1 x 5 keyway: the inward offset drops the
+    // keyway, the cover law refuses the hole by name.
+    let keyed = Loop::new(vec![
+        q(30.0, 20.0), q(50.0, 20.0), q(50.0, 40.0), q(40.5, 40.0), q(40.5, 45.0), q(39.5, 45.0), q(39.5, 40.0), q(30.0, 40.0),
+    ]).unwrap();
+    let loops = vec![rect(0.0, 0.0, 100.0, 60.0), keyed];
+    let part = Region::new(loops.clone()).unwrap();
+    let e = err(plasma_profile(&loops, &[], &part, &params()));
+    assert!(e.contains("contour C0") && e.contains("bridged"), "{e}");
+    assert!(e.contains("about 1.000 mm across"), "names the keyway's gap: {e}");
+}
+
+/// #791 review: every inside corner leaves a kerf-radius tip the torch
+/// cannot reach - normal for plasma - so a sharp V-notch generates with
+/// its tip left, whatever its opening; the cover law judges only the
+/// material beyond that tip, which is what a bridged slot produces.
+#[test]
+fn a_sharp_inside_corner_generates_with_its_tip_left_not_refused() {
+    let q = Point2::new;
+    // A 100 x 60 plate with a V-notch 20 mm across its top edge, opening `deg`.
+    let vee = |deg: f64| {
+        let depth = 10.0 / (deg.to_radians() * 0.5).tan();
+        Loop::new(vec![q(0.0, 0.0), q(100.0, 0.0), q(100.0, 60.0), q(60.0, 60.0), q(50.0, 60.0 - depth), q(40.0, 60.0), q(0.0, 60.0)])
+            .unwrap()
+    };
+    for deg in [30.0, 45.0, 55.0] {
+        let l = vee(deg);
+        let part = Region::new(vec![l.clone()]).unwrap();
+        let path = plasma_profile(&[l], &[], &part, &params());
+        assert!(path.is_ok(), "{deg}° V-notch: {:?}", path.err().map(|e| e.to_string()));
+        assert!(path.is_ok_and(|p| p.plasma.is_some_and(|r| r.torches.len() == 1)));
+    }
+}
+
+/// #791 delta review: the corner tip zone is capped at one kerf width.
+/// Uncapped it grows without bound as the opening closes, and a deep
+/// narrow V-slot was exempted whole and generated with the feature
+/// uncut; now only 2 r of its tip is left and the rest of its walls is
+/// judged, so each of these is refused by name.
+#[test]
+fn a_deep_narrow_wedge_is_refused_not_exempted_as_a_corner_tip() {
+    let q = Point2::new;
+    // A 100 x 60 plate with a V-slot `deg` wide at its tip and `depth` deep.
+    let wedge = |deg: f64, depth: f64| {
+        let half = depth * (deg.to_radians() * 0.5).tan();
+        Loop::new(vec![q(0.0, 0.0), q(100.0, 0.0), q(100.0, 60.0), q(50.0 + half, 60.0), q(50.0, 60.0 - depth), q(50.0 - half, 60.0), q(0.0, 60.0)])
+            .unwrap()
+    };
+    for (deg, depth) in [(4.0, 20.0), (2.0, 40.0), (10.0, 5.0)] {
+        let l = wedge(deg, depth);
+        let part = Region::new(vec![l.clone()]).unwrap();
+        let e = plasma_profile(&[l], &[], &part, &params()).err().map(|e| e.to_string()).unwrap_or_default();
+        assert!(e.contains("contour C0") && e.contains("bridged"), "{deg}° x {depth} mm wedge: {e:?}");
+    }
+}
+
+/// #801: a picked contour with a zero-width slit - out along a line and
+/// straight back, the third #791 review's probe - normalises to the
+/// plain rectangle in `Region::new` (the region keeps area, and the
+/// slit has none). It is refused by name, never cut as the rectangle;
+/// a collinear vertex the region drops stays legal.
+#[test]
+fn a_zero_width_slit_in_a_picked_contour_is_refused_not_dropped() {
+    let q = Point2::new;
+    let slit = Loop::new(vec![q(0.0, 0.0), q(100.0, 0.0), q(100.0, 60.0), q(50.0, 60.0), q(50.0, 40.0), q(50.0, 60.0), q(0.0, 60.0)]).unwrap();
+    let part = Region::new(vec![slit.clone()]).unwrap();
+    let e = plasma_profile(&[slit], &[], &part, &params()).err().map(|e| e.to_string()).unwrap_or_default();
+    assert!(e.contains("picked contour 1") && e.contains("X50.000 Y40.000") && e.contains("open run"), "{e:?}");
+    let collinear = Loop::new(vec![q(0.0, 0.0), q(50.0, 0.0), q(100.0, 0.0), q(100.0, 60.0), q(0.0, 60.0)]).unwrap();
+    let part = Region::new(vec![collinear.clone()]).unwrap();
+    assert!(plasma_profile(&[collinear], &[], &part, &params()).is_ok());
+}
+
+/// #801 (decision 4a said plainly): an ordinary inside V sharper than
+/// about 30° - a 20 mm mouth at 25° - is refused, not cut with its tip
+/// left; the 2 r cap leaves only 2 r of its tip unjudged.
+#[test]
+fn a_normal_sized_v_sharper_than_30_degrees_is_refused() {
+    let q = Point2::new;
+    let depth = 10.0 / (25f64.to_radians() * 0.5).tan();
+    let l = Loop::new(vec![q(0.0, 0.0), q(100.0, 0.0), q(100.0, 60.0), q(60.0, 60.0), q(50.0, 60.0 - depth), q(40.0, 60.0), q(0.0, 60.0)]).unwrap();
+    let part = Region::new(vec![l.clone()]).unwrap();
+    let e = plasma_profile(&[l], &[], &part, &params()).err().map(|e| e.to_string()).unwrap_or_default();
+    assert!(e.contains("contour C0") && e.contains("bridged"), "{e:?}");
+}
+
+/// The plate with a notch `w` wide and `drop` deep cut into its top edge.
+fn notched(w: f64, drop: f64) -> Loop {
+    let top = 60.0;
+    Loop::new(vec![
+        Point2::new(0.0, 0.0),
+        Point2::new(100.0, 0.0),
+        Point2::new(100.0, top),
+        Point2::new(50.0 + w * 0.5, top),
+        Point2::new(50.0 + w * 0.5, top - drop),
+        Point2::new(50.0 - w * 0.5, top - drop),
+        Point2::new(50.0 - w * 0.5, top),
+        Point2::new(0.0, top),
+    ])
+    .unwrap()
+}
+
+/// #1053 review: the cut hands the cover law the model-aware tolerance.
+/// A notch narrower than the kerf is bridged by the offset, so its floor
+/// stands off the torch by more than a kerf/2; its depth is set (by the
+/// geometry alone, measured off the bridged cut) so the farthest floor
+/// point sits midway between the plain and the tightened reach. The same
+/// plate then cuts at full fidelity and is refused by name on a coarse
+/// model - through `plasma_profile`, the path the program takes.
+#[test]
+fn the_cover_law_reads_the_tightened_tolerance_on_a_coarse_model() {
+    let plain = PlasmaParams { lead_in: 0.0, lead_out: 0.0, overburn: 0.0, ..params() };
+    let coarse = PlasmaParams { model_excess: 0.007, ..plain.clone() };
+    assert!(coarse.kerf_tol() < KERF_TOL, "the coarse model tightens the tolerance");
+    let w = 1.0;
+    let cut_at = |drop: f64, p: &PlasmaParams| {
+        let l = notched(w, drop);
+        plasma_profile(std::slice::from_ref(&l), &[], &Region::new(vec![l.clone()]).unwrap(), p)
+    };
+    // The bridged cut does not depend on the notch's depth (its floor is
+    // far below the bridge); read its chords once.
+    let path = cut_at(0.3, &plain).unwrap();
+    let chords: Vec<(Point2, Point2)> = path.moves.iter().flat_map(|m| m.chords(emit::FIT_TOL)).collect();
+    let far = |drop: f64| {
+        let (x0, x1, y0) = (50.0 - w * 0.5, 50.0 + w * 0.5, 60.0 - drop);
+        (0..=100)
+            .map(|k| Point2::new(x0 + (x1 - x0) * f64::from(k) / 100.0, y0))
+            .map(|q| chords.iter().map(|(a, b)| laws::pt_seg(q, *a, *b)).fold(f64::INFINITY, f64::min))
+            .fold(0.0, f64::max)
+    };
+    let target = plain.kerf + 0.5 * (KERF_TOL + coarse.kerf_tol());
+    let (mut lo, mut hi) = (0.3, 2.0);
+    for _ in 0..60 {
+        let mid = 0.5 * (lo + hi);
+        if far(mid) < target { lo = mid } else { hi = mid }
+    }
+    let drop = 0.5 * (lo + hi);
+    assert!((far(drop) - target).abs() < 1e-6, "the floor sits between the reaches");
+    assert!(cut_at(drop, &plain).is_ok(), "covered at full fidelity: {:?}", cut_at(drop, &plain).err());
+    let why = cut_at(drop, &coarse).expect_err("refused on the coarse model").to_string();
+    assert!(why.contains("never comes within a kerf of the part edge"), "the cover law, by name: {why}");
 }

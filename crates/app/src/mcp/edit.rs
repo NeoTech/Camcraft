@@ -8,10 +8,10 @@
 
 use super::tools::{opt_str, req_str};
 use crate::commands::{
-    AddTool, CommandError, CreateOperation, DeleteOperation, EditOperationLinks, EditOperationParams, SetStock,
+    AddTool, CommandError, HolderPick, CreateOperation, DeleteOperation, EditOperationLinks, EditOperationParams, SetStock,
 };
 use crate::model;
-use crate::operation::{self, Height, HeightReference, KindInfo, OpParams, SrcRef};
+use crate::operation::{self, KindInfo, OpParams, SrcRef};
 use crate::project;
 use crate::script::{inventory, Env};
 use crate::stock::StockShape;
@@ -22,25 +22,11 @@ fn cmd_err(e: CommandError) -> String {
     e.to_string()
 }
 
-/// The draft every new operation is seeded from: a facing pass in
-/// references (25 above the stock top, skimming the top), carried into
-/// the kind through the registry's retype law - the same seed shape the
-/// app's quick-add uses, so an agent's new op and a clicked one agree.
+/// The draft every new operation is seeded from - the app's shared seed
+/// (`operation::seed_params`, #511), so an agent's new op and a clicked
+/// one agree.
 pub(super) fn seed(kind: usize) -> OpParams {
-    let base = OpParams::Face {
-        holes: Default::default(),
-        tilt: None,
-        stepover: 3.0,
-        clearance_z: Height::of(HeightReference::TopOfStock, 25.0),
-        cut_z: Height::of(HeightReference::TopOfStock, 0.0),
-        top_z: None,
-        stepdown: None,
-        feed: 1200.0,
-        plunge_feed: 300.0,
-        climb: true,
-        blend_turns: false,
-    };
-    operation::retype_params(&base, kind)
+    operation::seed_params(kind)
 }
 
 /// A kind by its label ("Pocket", any case) or its file key ("pocket").
@@ -102,7 +88,7 @@ fn patched(base: &OpParams, patch: &Value) -> Result<OpParams, String> {
 /// removal (RFC 7386) and has nothing to keep; an object is checked key
 /// by key against what came back; any other value is a leaf that must
 /// simply be present.
-fn lost(patch: &Map<String, Value>, back: &Map<String, Value>, prefix: &str) -> Option<String> {
+pub(super) fn lost(patch: &Map<String, Value>, back: &Map<String, Value>, prefix: &str) -> Option<String> {
     for (k, v) in patch {
         if v.is_null() {
             continue;
@@ -128,7 +114,7 @@ fn lost(patch: &Map<String, Value>, back: &Map<String, Value>, prefix: &str) -> 
     None
 }
 
-fn merge(target: &mut Value, patch: &Value) {
+pub(super) fn merge(target: &mut Value, patch: &Value) {
     match (target, patch) {
         (Value::Object(t), Value::Object(p)) => {
             for (k, v) in p {
@@ -161,9 +147,23 @@ pub(super) fn add_tool(env: &mut Env, a: &Map<String, Value>) -> Result<Value, S
         Some(n) => n.to_owned(),
         None => default_name.ok_or("\"name\" is required with a definition")?,
     };
-    let cmd = AddTool::new(&env.world, &name, tool).map_err(cmd_err)?;
+    // #828: a stated holder wins ("none" adds it bare); unstated, the
+    // tool starts with the active setup's machine's default holder.
+    let (pick, from) = match opt_str(a, "holder")? {
+        None => (HolderPick::MachineDefault, "machine default"),
+        Some(h) if h.trim().eq_ignore_ascii_case("none") => (HolderPick::Bare, "stated"),
+        Some(h) => (HolderPick::Named(h.to_owned()), "stated"),
+    };
+    let cmd = AddTool::with_holder(&env.world, &name, tool, pick).map_err(cmd_err)?;
+    let holder = cmd.holder().map(str::to_owned);
+    let note = cmd.note();
     env.history.execute(&env.world, cmd);
-    Ok(json!({ "tool": name }))
+    Ok(json!({
+        "tool": name,
+        "holder": holder,
+        "holder_from": holder.as_ref().map(|_| from),
+        "note": note,
+    }))
 }
 
 pub(super) fn set_stock(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
@@ -185,7 +185,11 @@ pub(super) fn set_stock(env: &mut Env, a: &Map<String, Value>) -> Result<Value, 
 
 pub(super) fn add_operation(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
     let kind = kind_index(req_str(a, "kind")?)?;
-    let tool = req_str(a, "tool")?;
+    // A kind that mounts no library tool (the Wire Contour, #1108) takes
+    // none: an absent or empty "tool" is no tool. A tool named anyway
+    // goes to the command, which refuses it in its own words.
+    let mounts = KindInfo::ALL.get(kind).is_none_or(|k| k.mounts_tool());
+    let tool = if mounts { req_str(a, "tool")? } else { opt_str(a, "tool")?.unwrap_or("") };
     let label = KindInfo::ALL.get(kind).map_or("Operation", |k| k.label);
     let name = match opt_str(a, "name")? {
         Some(n) => n.to_owned(),
@@ -203,6 +207,9 @@ pub(super) fn add_operation(env: &mut Env, a: &Map<String, Value>) -> Result<Val
     // The seed helix follows the tool, as the app's quick-add does.
     if let Some(t) = model::find_by_name(&env.world, tool).and_then(|e| model::tool_of(&env.world, &e)) {
         operation::seed_helix_for_tool(&mut params, t.diameter);
+        // #890: the feed from the tool's row for the document material;
+        // an explicit params patch below still wins.
+        crate::cutting_rows::seed_feed_for_tool(&env.world, &mut params, &t);
     }
     if let Some(patch) = a.get("params") {
         params = patched(&params, patch)?;

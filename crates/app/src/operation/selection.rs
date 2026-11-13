@@ -217,7 +217,7 @@ pub(super) fn selection_geometry_in(
         OpParams::Pocket { .. } | OpParams::Adaptive2D { .. } | OpParams::Offset2D { .. }
     );
     // The plasma profile takes open runs as the contour does (#670).
-    let contour = matches!(params, OpParams::Contour { .. } | OpParams::PlasmaProfile(_));
+    let contour = matches!(params, OpParams::Contour { .. } | OpParams::PlasmaProfile(_) | OpParams::WireContour(_));
     let contour_side = match params {
         OpParams::Contour { side, .. } => *side,
         _ => Side::Auto,
@@ -310,6 +310,10 @@ pub(super) fn selection_geometry_in(
                     loc.rot,
                 );
                 if facing && n.z.abs() < FACE_TILT_MAX_DEG.to_radians().cos() {
+                    // #1510: a face level only in a tilted WCS says why.
+                    if let Some(why) = crate::setup_wcs_tilt::setup_problem(world, setup) {
+                        return Err(GenError::Invalid(format!("{label} is not horizontal - a facing pass needs a floor on the machine, and {why}")));
+                    }
                     return Err(GenError::Invalid(format!(
                         "{label} is not horizontal - a facing pass needs a floor; machine its boundary with a 2D Contour instead"
                     )));
@@ -547,7 +551,7 @@ pub(super) fn selection_region(
     // around the part, not a refusal).
     let past_edge = matches!(area.containment, Some(Containment::On | Containment::Outside));
     let region = match pocket_ladder(world, setup, items, params)? {
-        Some((part, planes)) if !past_edge => pocket_region_on_part(loops, &part, &planes)?,
+        Some((part, planes)) if !past_edge => pocket_region_on_part(loops, &part, &planes, crate::units::of(world))?,
         _ => Region::new(loops)?,
     };
     // The area controls run after this, at the seam's call sites (the

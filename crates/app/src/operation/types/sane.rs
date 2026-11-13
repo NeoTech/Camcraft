@@ -5,7 +5,51 @@ use crate::machining2d::PocketStrategy;
 use crate::operation::types::params::OpParams;
 use crate::operation::types::sel::lead_sane;
 
+/// The refusal of pre-drilled entry on a kind that does not read it (#1449).
+pub const PREDRILLED_POCKET_ONLY: &str =
+    "pre-drilled entry is read by the 2D Pocket only so far - turn it off for this operation kind";
+
 impl OpParams {
+    /// Pre-drilled entry asked on a kind other than the 2-D Pocket.
+    fn predrilled_elsewhere(&self) -> bool {
+        !matches!(self, OpParams::Pocket { .. }) && self.links().is_some_and(|l| l.approach.predrilled)
+    }
+
+    /// The by-name refusal behind a failed [`Self::is_sane`], where a
+    /// kind can say it (#546: the sinker burn's wear rate and layer
+    /// step; the side burn's structural refusal, which names a wear rate
+    /// or layer step it does not support yet); `None` keeps the
+    /// commands' generic "not usable".
+    #[must_use]
+    pub fn named_refusal(&self) -> Option<String> {
+        if self.predrilled_elsewhere() {
+            return Some(PREDRILLED_POCKET_ONLY.into());
+        }
+        // #1448: only the untilted 2D contour takes a picked start so far;
+        // every other kind refuses it here rather than ignore it.
+        // #1473: the exit point likewise.
+        for (what, set) in [
+            ("start", self.links().is_some_and(|l| l.approach.start_point.is_some())),
+            ("exit", self.links().is_some_and(|l| l.approach.exit_point.is_some())),
+        ] {
+            if !set {
+                continue;
+            }
+            match self {
+                OpParams::Contour { tilt: None, .. } => {}
+                OpParams::Contour { .. } => {
+                    return Some(format!("a {what} point is not taken on a tilted (3+2) contour yet - clear it or the tilt"));
+                }
+                _ => return Some(format!("a {what} point is taken only by the 2D contour so far - clear it on this operation")),
+            }
+        }
+        match self {
+            OpParams::SinkerBurn(p) => p.compensation_refusal(),
+            OpParams::SinkerSideBurn(p) => p.refusal(),
+            _ => None,
+        }
+    }
+
     /// Shallow sanity for command construction, no world: finite numbers,
     /// positive increments, in-range slots. Ordering needs resolved
     /// heights and runs in [`crate::operation::depth_sane`] wherever a command holds the
@@ -30,11 +74,21 @@ impl OpParams {
         // every ladder kind at once: the ramp angle where it is read, a
         // pitch and a stay-down limit that are zero or positive.
         let links_ok = self.links().is_none_or(|l| l.validate().is_ok());
+        // #1449: pre-drilled entry is read by the 2-D Pocket only - set
+        // on another kind it would be a silently dropped choice.
+        let links_ok = links_ok && !self.predrilled_elsewhere();
         tilt_ok
             && links_ok
             && match self {
             // The plasma door (#670): the parameter set's own sanity.
             OpParams::PlasmaProfile(p) => p.is_sane(),
+            // The wire door (#532): the parameter set's own sanity; the
+            // condition is the command door's world question.
+            OpParams::WireContour(p) => p.is_sane(),
+            // The sinker door (#541): the parameter set's own sanity.
+            OpParams::SinkerBurn(p) => p.is_sane(),
+            // #545: the side burn's own door.
+            OpParams::SinkerSideBurn(p) => p.is_sane(),
             // The probe's door (#108): every distance and feed a real
             // number, the measure no faster than the seek, the back-off
             // inside the approach, a slot G54..G59 when one is named.
@@ -343,6 +397,7 @@ impl OpParams {
                 ramp_angle,
                 steep_stepover,
                 pencil_reference,
+                fill_openings,
                 ..
             } => {
                 // No stepdown to check: the scallop law derives it from
@@ -359,6 +414,9 @@ impl OpParams {
                     // (which bigger is whose law is the kernel's to
                     // refuse by name; sanity only asks for a number).
                     && pencil_reference.is_none_or(pos)
+                    // #1196: the land width is a diameter - finite
+                    // and positive, or absent (no land model).
+                    && fill_openings.is_none_or(pos)
                     && clearance_z.is_sane()
                     && retract_z.is_none_or(|r| r.is_sane())
                     && top_z.is_sane()
@@ -691,6 +749,50 @@ impl OpParams {
                     && pos(*feed)
                     && pos(*plunge_feed)
             }
+            OpParams::TrochoidalSlot {
+                a,
+                b,
+                width,
+                loop_width,
+                step,
+                max_engagement,
+                ret,
+                smoothing,
+                stock_to_leave,
+                clearance_z,
+                retract_z,
+                top_z,
+                bottom_z,
+                stepdown,
+                feed,
+                return_feed,
+                plunge_feed,
+                ..
+            } => {
+                a.x.is_finite()
+                    && a.y.is_finite()
+                    && b.x.is_finite()
+                    && b.y.is_finite()
+                    && pos(*width)
+                    && loop_width.is_none_or(pos)
+                    && pos(*step)
+                    && pos(*max_engagement)
+                    && *max_engagement <= 180.0
+                    && match ret {
+                        crate::machining2d::TrochoidReturn::Microlift { height } => pos(*height),
+                        crate::machining2d::TrochoidReturn::Retract => true,
+                    }
+                    && nneg(*smoothing)
+                    && nneg(*stock_to_leave)
+                    && clearance_z.is_sane()
+                    && retract_z.is_none_or(|r| r.is_sane())
+                    && top_z.is_sane()
+                    && bottom_z.is_sane()
+                    && pos(*stepdown)
+                    && pos(*feed)
+                    && pos(*return_feed)
+                    && pos(*plunge_feed)
+            }
             OpParams::Trace {
                 clearance_z,
                 retract_z,
@@ -896,6 +998,7 @@ impl OpParams {
                 infeed,
                 feed,
                 plunge_feed,
+                infeed_plan,
                 hand: _,
             } => {
                 pos(*tolerance)
@@ -907,6 +1010,11 @@ impl OpParams {
                     && pos(*infeed)
                     && pos(*feed)
                     && pos(*plunge_feed)
+                    // The plan's tool-free numbers (#416); whether the
+                    // flank angle fits the insert is the tool's
+                    // question, asked by name at the threading gate.
+                    && infeed_plan.is_sane()
+                    && infeed_plan.refusal(*depth, *infeed, 180.0).is_none()
             }
             // The contour doors (M5.2 stage E): the twins' heights and
             // feeds, plus each kind's own promise-number, finite.
@@ -1059,17 +1167,42 @@ impl OpParams {
                 feed,
                 plunge_feed,
                 holes,
+                pitch,
+                passes,
                 ..
             } => {
                 clearance_z.is_sane()
                     && retract_z.is_none_or(|r| r.is_sane())
                     && top_z.is_sane()
                     && bottom_z.is_none_or(|b| b.is_sane())
+                    && pitch.is_none_or(pos)
+                    // #988: signs are judged by name at the door.
+                    && passes.finish.is_finite()
+                    && passes.allowance.is_finite()
                     && pos(*infeed)
                     && pos(*feed)
                     && pos(*plunge_feed)
                     && holes.iter().all(|h| h.is_usable())
             }
         }
+    }
+
+    /// The trochoidal slot's microlift bound (#774), on resolved heights:
+    /// the lifted return is a feed move, so it may rise at most the
+    /// clearance plane's height above the cut top - never feed above the
+    /// clearance plane. `None` for every other kind and for Retract.
+    /// Asked by the commands' heights door with `clearance` and `top`
+    /// resolved; the motion layer holds the same law as a backstop.
+    #[must_use]
+    pub fn microlift_refusal(&self, clearance: f64, top: f64) -> Option<String> {
+        let OpParams::TrochoidalSlot { ret: crate::machining2d::TrochoidReturn::Microlift { height }, .. } = self else {
+            return None;
+        };
+        let room = clearance - top;
+        (*height > room + 1e-9).then(|| {
+            format!(
+                "a {height:.3} mm microlift would feed the trochoidal slot's return above the clearance plane - at most {room:.3} mm (the clearance above the top) fits; use the Retract return to hop higher"
+            )
+        })
     }
 }

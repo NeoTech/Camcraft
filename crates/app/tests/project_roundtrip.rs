@@ -1,7 +1,7 @@
 //! M1.1 acceptance: save/load round-trips are byte-identical; a wrong
 //! version or corrupt file is a clean error.
 //!
-//! Gate map (M4.4): covers app::commands, app::drilling, app::finishing3d, app::geometry, app::machine, app::machining2d, app::machining3d, app::model, app::operation, app::posting, app::project, app::schema, app::setup, app::stock, app::tools, app::units, app::world.
+//! Gate map (M4.4): covers app::commands, motion::drilling, motion::finishing3d, app::geometry, app::machine, post::machine, motion::machining2d, motion::machining3d, app::model, app::operation, app::posting, app::project, app::schema, app::setup, geometry::geometry::stock, tools::tools, app::units, app::world.
 
 use std::path::PathBuf;
 
@@ -2983,78 +2983,36 @@ fn the_post_choice_round_trips_and_a_v22_file_means_the_built_in() {
 }
 
 #[test]
-fn the_theme_choice_round_trips_and_a_v40_file_means_dark() {
-    // M6.1 C's persistence law, spelled like the post's: the chosen
-    // theme rides the save as the top-level `theme` key, opening lands
-    // exactly what was chosen, a v40-shaped file (no key) means the
-    // built-in `dark` - what every earlier document wears - and
-    // opening a file without the key CLEARS a stale choice. Landed
-    // values are not re-validated: resolution is the shell's at draw,
-    // so a stranger name or a gone file opens fine here and refuses
-    // by name in the status line there, never silently re-inked.
-    use camcraft_app::commands::{SetTheme, theme_of};
+fn the_project_file_never_carries_the_theme_and_an_old_theme_key_is_ignored() {
+    // #877: the theme is the user's preference, not the document's. A
+    // save writes no `theme` key whatever theme is worn, and opening an
+    // older file that still carries one - any spelling, even a stranger
+    // name or a gone file - loads cleanly and leaves the user's theme
+    // exactly as it was. Without this, a project could override the
+    // preference again.
+    use camcraft_app::commands::{theme_of, theme_set};
     use camcraft_app::schema::ThemeRef;
 
     let world = new_world();
-    let mut history = History::default();
-    history.execute(
-        &world,
-        SetTheme::new(&world, ThemeRef::Named("light".into())).expect("light is a built-in"),
-    );
-    let p = tmp_path("themert");
+    theme_set(&world, &ThemeRef::Named("light".into()));
+    let p = tmp_path("themenone");
     project::save(&world, &p).expect("save");
     let text = std::fs::read_to_string(&p).expect("written");
     let json: serde_json::Value = serde_json::from_str(&text).expect("parses");
-    assert_eq!(json["theme"], serde_json::json!({"named": "light"}), "{text}");
+    assert!(json.get("theme").is_none(), "no theme key: {text}");
 
-    let world2 = new_world();
-    project::load(&world2, &p).expect("load");
-    assert_eq!(theme_of(&world2), ThemeRef::Named("light".into()));
-
-    // `dark` wears no key: the shape every pre-v41 document has.
-    let dark = new_world();
-    let dp = tmp_path("themedark");
-    project::save(&dark, &dp).expect("save");
-    let dt: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(&dp).expect("written")).expect("parses");
-    assert!(dt.get("theme").is_none(), "the default stays mute: {dt}");
-
-    // A bare v40 document migrates to `dark`, verbatim.
-    let world3 = new_world();
-    project::open(&world3, r#"{"version": 40, "entities": []}"#).expect("v40 steps up");
-    assert_eq!(theme_of(&world3), ThemeRef::Dark);
-
-    // The leak guard: opening a no-theme file onto a themed world
-    // lands DARK, not the stale singleton.
-    project::load(&world2, &dp).expect("load onto the themed world");
-    assert_eq!(theme_of(&world2), ThemeRef::Dark, "opening never leaks a stale theme");
-
-    // A stranger lands as written - the loader never re-validates
-    // (SetTheme's constructor and the shell's parse did); the refusal
-    // is the status line's, and rewriting the document silently would
-    // lose what its author chose.
-    project::open(
-        &world2,
+    for old in [
+        r#"{"version": 41, "theme": {"named": "dark"}, "entities": []}"#,
         r#"{"version": 41, "theme": {"named": "solarpunk"}, "entities": []}"#,
-    )
-    .expect("a stranger name reads");
-    assert_eq!(theme_of(&world2), ThemeRef::Named("solarpunk".into()));
-
-    // A File theme rides its path the same way.
-    let file = std::env::temp_dir().join(format!("camcraft_rtt_{}.json", std::process::id()));
-    std::fs::write(&file, "{}").expect("temp theme file");
-    let fp = file.display().to_string();
-    history.execute(&world, SetTheme::new(&world, ThemeRef::File(fp.clone())).expect("file theme"));
-    let fpath = tmp_path("themefile");
-    project::save(&world, &fpath).expect("save");
-    let world4 = new_world();
-    project::load(&world4, &fpath).expect("load");
-    assert_eq!(theme_of(&world4), ThemeRef::File(fp));
-
+        r#"{"version": 41, "theme": {"file": "C:/gone/theme.json"}, "entities": []}"#,
+        r#"{"version": 40, "entities": []}"#,
+    ] {
+        project::open(&world, old).expect("an older file opens");
+        assert_eq!(theme_of(&world), ThemeRef::Named("light".into()), "opening kept the user's theme: {old}");
+    }
+    project::load(&world, &p).expect("load our own save");
+    assert_eq!(theme_of(&world), ThemeRef::Named("light".into()));
     let _ = std::fs::remove_file(&p);
-    let _ = std::fs::remove_file(&dp);
-    let _ = std::fs::remove_file(&fpath);
-    let _ = std::fs::remove_file(&file);
 }
 
 #[test]
@@ -5394,4 +5352,68 @@ fn a_blade_corner_round_trips_and_old_blades_take_the_left_corner() {
     let again = std::fs::read_to_string(&path).expect("reread");
     let _ = std::fs::remove_file(&path);
     assert_eq!(again, text, "byte-identical round trip");
+}
+
+/// #1196: a current-version 3D finish op, with or without the land
+/// model's `fill_openings` key - the one shape both tests below read.
+fn finish3d_text(extra: &str) -> String {
+    format!(
+        r#"{{
+        "version": {v},
+        "entities": [
+            {{"name": "T1", "translation": [0.0, 0.0, 0.0], "kind": "tool",
+             "tool": {{"kind": "ball_nose", "diameter": 6.0, "corner_r": 3.0,
+                      "flute_len": 15.0, "shank_d": 8.0, "shank_len": 40.0,
+                      "holder_d": 44.0, "holder_len": 35.0,
+                      "material_group": "general", "rpm": 9000.0, "feed": 1500.0}}}},
+            {{"name": "F1", "translation": [0.0, 0.0, 0.0], "kind": "operation",
+             "operation": {{"tool": "T1", "src": "stock", "params": {{"finish3d": {{
+                 "tolerance": 0.1,
+                 "clearance_z": {{"reference": "fixed", "offset": 25.0}},
+                 "top_z": {{"reference": "top_of_model", "offset": 0.0}},
+                 "bottom_z": {{"reference": "bottom_of_model", "offset": 0.0}},
+                 "feed": 500.0, "plunge_feed": 100.0, "climb": true{extra}}}}}}}}}
+        ]
+    }}"#,
+        v = project::PROJECT_VERSION
+    )
+}
+
+fn fill_of(world: &flecs_ecs::prelude::World) -> Option<f64> {
+    let e = model::find_by_name(world, "F1").expect("op");
+    let o = model::operation_of(world, &e).expect("operation");
+    let OpParams::Finish3D { fill_openings, .. } = &o.params else {
+        panic!("finish3d params expected, got {:?}", o.params);
+    };
+    *fill_openings
+}
+
+#[test]
+fn finish3d_fill_openings_round_trips_through_save_and_load() {
+    let world = new_world();
+    project::open(&world, &finish3d_text(", \"fill_openings\": 5.0")).expect("the land key must read");
+    assert_eq!(fill_of(&world), Some(5.0));
+    let path = tmp_path("fill_rt");
+    project::save(&world, &path).expect("save");
+    let first = std::fs::read_to_string(&path).expect("read");
+    let world2 = new_world();
+    project::load(&world2, &path).expect("reload");
+    project::save(&world2, &path).expect("resave");
+    let second = std::fs::read_to_string(&path).expect("reread");
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(fill_of(&world2), Some(5.0), "Some(5.0) saves and loads as Some(5.0)");
+    assert!(first.contains("\"fill_openings\": 5.0"), "{first}");
+    assert_eq!(first, second, "the land key round-trips byte-identically");
+}
+
+#[test]
+fn finish3d_file_without_fill_openings_reads_none() {
+    let world = new_world();
+    project::open(&world, &finish3d_text("")).expect("an older finish3d file must read");
+    assert_eq!(fill_of(&world), None, "absent key means no land model");
+    let path = tmp_path("fill_none");
+    project::save(&world, &path).expect("save");
+    let saved = std::fs::read_to_string(&path).expect("read");
+    let _ = std::fs::remove_file(&path);
+    assert!(!saved.contains("fill_openings"), "None is absent, not null: {saved}");
 }

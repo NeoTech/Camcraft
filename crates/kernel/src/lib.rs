@@ -1,8 +1,8 @@
-//! camcraft-kernel - the B-rep kernel seam of M12.1, stages 1-2 (evaluation +
+//! camcraft-kernel - the B-rep kernel seam of M12.1, stages 1-3 (evaluation +
 //! agreement bench). A thin [`Kernel`] trait carries only the operations both
 //! candidate engines can be asked for: primitive construction (box, Z
 //! cylinder), the three booleans (subtract, union, intersect), whole-solid
-//! offset, constant-radius edge blends (round, chamfer), and a [`Measure`]
+//! offset, constant-radius edge blends (round, chamfer), healing, and a [`Measure`]
 //! (volume + bounding box) the bench compares. Nothing else in the workspace
 //! depends on this crate yet; truck stays the live engine.
 //!
@@ -12,17 +12,30 @@
 //! exactly through its mass-property integrator; the truck impl measures its
 //! tessellation. The bench compares those numbers.
 //!
+//! Stage 4 (#916) adds a STEP importer on the solidcore side
+//! ([`solidcore_step`]), bench only: the app still imports through truck.
+//! #940 adds the machining mesh of such a solid ([`machining_mesh`]):
+//! solidcore-tess at a chord in mm, every shortfall a named refusal, the
+//! deviation from the exact surfaces measured ([`mesh_deviation`]).
+//! #1456 reads a Solidcraft design's cached final body ([`solidcraft`]).
+//!
 //! Provenance: our own seam design; solidcore (tangency-labs, Apache-2.0
-//! port of NVIDIA's SMLib) and truck (ricosjp, Apache-2.0) are linked as
+//! port of NVIDIA's SMLib) and its STEP reader are linked at one pinned
+//! commit of the owner's fork (Cargo.toml), truck (ricosjp, Apache-2.0) as
 //! published crates; the mesh volume is the divergence theorem (any
 //! computational-geometry text). Notices in assets/ui/LICENSES.md.
 
 #![forbid(unsafe_code)]
 
 mod error;
+pub mod machining_mesh;
 mod measure;
+pub mod mesh_deviation;
 mod solidcore_blend;
 pub mod solidcore_impl;
+pub mod solidcore_import;
+pub mod solidcore_step;
+pub mod solidcraft;
 #[cfg(feature = "truck")]
 pub mod truck_impl;
 
@@ -86,6 +99,12 @@ pub trait Kernel {
         radius: f64,
         kind: Blend,
     ) -> Result<Self::Solid, KernelError>;
+
+    /// Repairs gaps between a solid's vertices, edges and faces (the fix-up
+    /// an imported model needs) and hands it back only if it is a closed
+    /// solid afterwards. Engines without healing return
+    /// [`KernelError::Unsupported`].
+    fn heal(&mut self, s: Self::Solid) -> Result<Self::Solid, KernelError>;
 
     /// Volume and bounding box of a closed solid.
     fn measure(&mut self, s: &mut Self::Solid) -> Result<Measure, KernelError>;

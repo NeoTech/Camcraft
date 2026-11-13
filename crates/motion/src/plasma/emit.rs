@@ -16,10 +16,10 @@ use crate::machining2d::{fit_arcs, GenError, Seg};
 
 use super::nest::Contour;
 use super::ring::{along, centroid, dist, kerf_ring, longest_mid, nearest, unit, walk_from};
-use super::{header, PlasmaParams, KERF_TOL, SMALL_HOLE_THICKNESS};
+use super::{header, PlasmaParams, SMALL_HOLE_THICKNESS};
 
-/// The arc fit's budget on the kerf ring (mm): inside [`KERF_TOL`].
-const FIT_TOL: f64 = 0.005;
+/// The arc fit's budget on the kerf ring (mm): inside [`super::KERF_TOL`].
+pub(super) const FIT_TOL: f64 = 0.005;
 /// How many times a lead that finds no room is halved before refusing.
 const LEAD_TRIES: u32 = 4;
 
@@ -206,33 +206,14 @@ fn push_piece(b: &mut PathBuilder, q: Piece, z: f64, feed: Option<f64>) {
     }
 }
 
-/// Every lit move of every closed contour keeps its kerf off the part.
-fn kerf_law(path: &Toolpath, spans: &[TorchSpan], forbidden: &Region) -> Result<(), GenError> {
-    for sp in spans.iter().filter(|s| s.role != ContourRole::Open) {
-        for i in sp.on..=sp.off {
-            let Some(m) = path.moves.get(i) else { continue };
-            for (a, b) in m.chords(FIT_TOL) {
-                let k = (dist(a, b) / 0.25).ceil().clamp(1.0, 4096.0) as u32;
-                for j in 0..=k {
-                    let f = f64::from(j) / f64::from(k);
-                    let q = Point2::new(a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f);
-                    if forbidden.contains(q) {
-                        return Err(invalid(format!(
-                            "contour C{}: move {i} would carry the kerf into the part near X{:.3} Y{:.3} - refused",
-                            sp.contour, q.x, q.y
-                        )));
-                    }
-                }
-            }
-        }
-    }
-    Ok(())
-}
-
 /// Lay the contours down in `order` and certify the result.
 pub(super) fn cut(cs: &[Contour], order: &[usize], part: &Region, p: &PlasmaParams) -> Result<Toolpath, GenError> {
     let r = p.kerf * 0.5;
-    let forbidden = if part.is_empty() { None } else { Some(part.offset((r - KERF_TOL).max(0.0))?) };
+    // One tolerance for both laws (#1053): the kerf law's forbidden band
+    // and the cover law's reach read the same model-aware figure, so
+    // neither can fall back to the plain one alone.
+    let tol = p.kerf_tol();
+    let forbidden = if part.is_empty() { None } else { Some(part.offset((r - tol).max(0.0))?) };
     let mut id_of = vec![0u32; cs.len()];
     for (pos, &k) in order.iter().enumerate() {
         if let Some(slot) = id_of.get_mut(k) {
@@ -270,7 +251,8 @@ pub(super) fn cut(cs: &[Contour], order: &[usize], part: &Region, p: &PlasmaPara
             push_piece(&mut b, *q, p.cut_z, feed);
         }
         if b.moves_len() == on {
-            return Err(invalid(format!("contour C{} lays down no cut", id_of[*k])));
+            // #871: part-way refusals hand back the contours cut so far.
+            return Err(invalid(format!("contour C{} lays down no cut", id_of[*k])).with_ghost_moves(b.moves()));
         }
         let off = b.moves_len() - 1;
         if let Some((side, prog)) = &plan.comp {
@@ -284,7 +266,8 @@ pub(super) fn cut(cs: &[Contour], order: &[usize], part: &Region, p: &PlasmaPara
                 return Err(invalid(format!(
                     "contour C{}: the G41/G42 span does not chain onto its cut - cut it with the computer's offset",
                     id_of[*k]
-                )));
+                ))
+                .with_ghost_moves(b.moves()));
             }
             b.push_comp(span);
         }
@@ -299,8 +282,12 @@ pub(super) fn cut(cs: &[Contour], order: &[usize], part: &Region, p: &PlasmaPara
     }
     b.push(MoveKind::Rapid, Point3::new(b.at().x, b.at().y, p.clearance_z), None);
     let mut path = b.finish();
+    // #672: no edge may stand beyond the kerf's reach - a slot narrower
+    // than the kerf that the offset bridged is refused, not left uncut.
+    // #871: the laws judge the whole cut; a refusal hands it back.
+    super::laws::cover_law(&path, &rec.torches, cs, order, (p.kerf, tol)).map_err(|e| e.with_ghost(&path))?;
     if let Some(f) = &forbidden {
-        kerf_law(&path, &rec.torches, f)?;
+        super::laws::kerf_law(&path, &rec.torches, f).map_err(|e| e.with_ghost(&path))?;
     } else {
         notes.push("plasma: no part silhouette to judge - roles read by nesting, the kerf law not run".into());
     }
@@ -320,7 +307,7 @@ pub(super) fn cut(cs: &[Contour], order: &[usize], part: &Region, p: &PlasmaPara
     head.extend(notes);
     path.notes.extend(head);
     if !rec.is_sane(&path.moves) {
-        return Err(invalid("the torch spans do not sit on the moves - refused".into()));
+        return Err(invalid("the torch spans do not sit on the moves - refused".into()).with_ghost(&path));
     }
     path.plasma = Some(rec);
     Ok(path)

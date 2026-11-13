@@ -53,7 +53,7 @@ pub fn side_names() -> &'static [&'static str] {
 /// for a tap, a boring cycle for a bore, depth-vs-diameter otherwise),
 /// so the note next to the combo reads from the op's tool, not a guess.
 pub fn cycle_names() -> &'static [&'static str] {
-    &["Auto", "Spot", "Drill", "Peck", "Tap", "Bore", "Back bore"]
+    &["Auto", "Spot", "Drill", "Peck", "Tap (rigid)", "Bore", "Back bore", "Tap (floating holder)", "Ream (feed in, feed out)"]
 }
 
 /// Combo index for a cycle choice - the inverse of what picking names.
@@ -65,8 +65,27 @@ pub(crate) fn cycle_index(c: &camcraft_app::drilling::CycleChoice) -> usize {
         C::Drill => 2,
         C::Peck => 3,
         C::Tap => 4,
+        C::FloatingTap => 7,
         C::Bore => 5,
         C::BackBore => 6,
+        C::Ream => 8,
+    }
+}
+
+/// The cycle a combo index picks - the inverse of [`cycle_index`]. An
+/// index outside the list reads as Auto, never as a neighbouring cycle.
+pub(crate) fn cycle_from_index(i: usize) -> camcraft_app::drilling::CycleChoice {
+    use camcraft_app::drilling::CycleChoice as C;
+    match i {
+        1 => C::Spot,
+        2 => C::Drill,
+        3 => C::Peck,
+        4 => C::Tap,
+        5 => C::Bore,
+        6 => C::BackBore,
+        7 => C::FloatingTap,
+        8 => C::Ream,
+        _ => C::Auto,
     }
 }
 
@@ -245,6 +264,8 @@ pub fn fold_warnings_located(warnings: &[Warning]) -> Vec<(String, Option<usize>
             Warning::Scallop { .. } => (211, false),
             // A probe's deep search limit (#570): advisory, its own line.
             Warning::ProbeSearch { .. } => (214, false),
+            // A sinker finish out of order (#543): advisory, its own line.
+            Warning::SinkerFinishOrder { .. } => (215, false),
             // A lathe holder's rub (#369) splits part from stock too.
             Warning::HolderHit { part, .. } => (212 + *part as u8, false),
         }
@@ -262,7 +283,8 @@ pub fn fold_warnings_located(warnings: &[Warning]) -> Vec<(String, Option<usize>
             | Warning::Envelope { at, .. }
             | Warning::RestUnjudged { at, .. }
             | Warning::Scallop { at, .. }
-            | Warning::ProbeSearch { at, .. } => *at,
+            | Warning::ProbeSearch { at, .. }
+            | Warning::SinkerFinishOrder { at, .. } => *at,
         }
     }
     let mut lines: Vec<(String, Option<usize>)> = Vec::new();

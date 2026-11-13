@@ -7,7 +7,7 @@
 //! the `.mch` layout of `assets/machines/AGENTS.md`.
 //! Provenance: our own tests, specced from the issue's validation list.
 //!
-//! Gate map (M4.4): covers app::machine, app::machine::library, app::machine::validate, app::machine::sheet, app::posting.
+//! Gate map (M4.4): covers app::machine, post::machine, app::machine, post::machine::library, app::machine, post::machine::validate, app::machine, post::machine::sheet, app::posting.
 
 use std::path::PathBuf;
 
@@ -81,8 +81,9 @@ fn every_shipped_machine_lists_and_validates_clean() {
         assert!(matches!(e.source, MachineSource::Builtin(_)));
         assert!(e.kind.is_some(), "{} has a kind", e.name);
         if e.kind == Some(Kind::Plasma) {
-            // #669: no plasma post ships until #671 - the entry says so.
-            assert!(e.posts.is_empty(), "{}: a cutting post never serves a plasma table", e.name);
+            // #671: the plasma post alone - a cutting post never serves a
+            // plasma table.
+            assert_eq!(e.posts, posting::PLASMA_POSTS, "{}: only the plasma post serves a plasma table", e.name);
         } else {
             assert!(!e.posts.is_empty(), "{} has a post", e.name);
         }

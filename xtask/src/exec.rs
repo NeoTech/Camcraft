@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
+use crate::checkout::{self, Reading};
 use crate::plan::{Plan, Step};
 use crate::scan::re;
 
@@ -17,6 +18,10 @@ pub struct Run {
     log_dir: PathBuf,
     clock: Instant,
     done: Vec<Done>,
+    /// HEAD and the working tree when the gate started (#1201); every later reading is compared with it.
+    guard: Reading,
+    /// The VOID line, once the checkout was seen to move; a void run has no verdict.
+    void: Option<String>,
 }
 
 struct Done {
@@ -29,6 +34,49 @@ struct Done {
 /// The cargo that launched us (`cargo xtask` sets CARGO), else the one on PATH.
 pub fn cargo() -> String {
     std::env::var("CARGO").unwrap_or_else(|_| "cargo".into())
+}
+
+/// The compile-cache environment for a gate's cargo calls (#900): `RUSTC_WRAPPER=sccache` and a cache size
+/// cap, but only when `sccache` is on PATH and the caller has not chosen a wrapper (an existing
+/// `RUSTC_WRAPPER`, even an empty one, wins; `CAMCRAFT_NO_SCCACHE=1` opts out). A machine without sccache
+/// builds exactly as before. Release packaging never goes through this (it builds the shipped binary).
+pub fn cache_env(sccache: Option<&str>, wrapper_set: bool, opted_out: bool, size_set: bool) -> Vec<(&'static str, String)> {
+    let mut env = Vec::new();
+    if let Some(path) = sccache
+        && !wrapper_set
+        && !opted_out
+    {
+        env.push(("RUSTC_WRAPPER", path.to_string()));
+        if !size_set {
+            env.push(("SCCACHE_CACHE_SIZE", "20G".to_string()));
+        }
+    }
+    env
+}
+
+/// Compiler-wrapper variables the release packaging build must not inherit (#935): the shipped binary never
+/// depends on a compile cache, even when the maintainer sets `RUSTC_WRAPPER` machine-wide. Returns the ones
+/// present (`is_set` asks the environment); the release GATE tier may still use the cache, only packaging clears it.
+pub fn packaging_env_clear(is_set: impl Fn(&str) -> bool) -> Vec<&'static str> {
+    ["RUSTC_WRAPPER", "CARGO_BUILD_RUSTC_WRAPPER"].into_iter().filter(|v| is_set(v)).collect()
+}
+
+/// The first `sccache` (or `sccache.exe`) file on PATH, as a path string.
+pub fn find_sccache() -> Option<String> {
+    let path = std::env::var_os("PATH")?;
+    std::env::split_paths(&path)
+        .flat_map(|d| [d.join("sccache"), d.join("sccache.exe")])
+        .find(|p| p.is_file())
+        .map(|p| p.to_string_lossy().into_owned())
+}
+
+fn gate_cache_env() -> Vec<(&'static str, String)> {
+    cache_env(
+        find_sccache().as_deref(),
+        std::env::var_os("RUSTC_WRAPPER").is_some(),
+        std::env::var_os("CAMCRAFT_NO_SCCACHE").is_some_and(|v| v == "1"),
+        std::env::var_os("SCCACHE_CACHE_SIZE").is_some(),
+    )
 }
 
 /// `git -C root <args>`, stdout as text; `Err` when git fails.
@@ -86,7 +134,17 @@ impl Run {
     pub fn new(root: &Path, label: &str, dry: bool) -> Result<Run, String> {
         let log_dir = root.join("gate-logs").join(format!("{label}-{}", stamp(SystemTime::now())));
         std::fs::create_dir_all(&log_dir).map_err(|e| format!("create {}: {e}", log_dir.display()))?;
-        Ok(Run { root: root.to_path_buf(), label: label.into(), dry, log_dir, clock: Instant::now(), done: Vec::new() })
+        let guard = checkout::read(root)?;
+        Ok(Run {
+            root: root.to_path_buf(),
+            label: label.into(),
+            dry,
+            log_dir,
+            clock: Instant::now(),
+            done: Vec::new(),
+            guard,
+            void: None,
+        })
     }
 
     pub fn plan(&mut self, plan: &Plan) -> Result<(), String> {
@@ -94,9 +152,36 @@ impl Run {
             println!("{n}");
         }
         for s in &plan.steps {
+            if self.check(&format!("before {}", s.name)) {
+                break;
+            }
             self.step(s)?;
         }
+        if self.void.is_none() {
+            self.check("at the end");
+        }
         Ok(())
+    }
+
+    /// Compares the checkout with the start reading. Returns true (and prints VOID) once it has moved.
+    fn check(&mut self, at: &str) -> bool {
+        if self.void.is_some() {
+            return true;
+        }
+        let msg = match checkout::read(&self.root) {
+            Ok(now) => checkout::void_message(&self.guard, &now, at),
+            Err(e) => Some(format!(
+                "VOID: could not read the checkout ({e}) during the gate ({at}) - this run is void, not a verdict on any commit"
+            )),
+        };
+        match msg {
+            Some(m) => {
+                println!("{m}");
+                self.void = Some(m);
+                true
+            }
+            None => false,
+        }
     }
 
     fn step(&mut self, s: &Step) -> Result<(), String> {
@@ -110,10 +195,18 @@ impl Run {
             self.done.push(Done { name: s.name.clone(), ok: true, secs: 0, note: "dry run".into() });
             return Ok(());
         }
+        let cache = gate_cache_env();
+        if !cache.is_empty() {
+            println!("     (compile cache: sccache on)");
+            if std::env::var_os("CARGO_TARGET_DIR").is_some() {
+                println!("     note: CARGO_TARGET_DIR is set; sccache hashes it, so hits stop across worktrees - use the worktree's own target/ instead");
+            }
+        }
         let t0 = Instant::now();
         let file = File::create(&log).map_err(|e| format!("create {}: {e}", log.display()))?;
         let err = file.try_clone().map_err(|e| format!("log {}: {e}", log.display()))?;
         let code = Command::new(cargo())
+            .envs(cache)
             .args(&s.args)
             .current_dir(&dir)
             .stdin(Stdio::null())
@@ -139,6 +232,10 @@ impl Run {
         let bad = self.done.iter().filter(|d| !d.ok).count();
         let mins = self.clock.elapsed().as_secs_f64() / 60.0;
         println!("  wall {mins:.1} min, {} step(s), {bad} failed", self.done.len());
+        if self.void.is_some() {
+            println!("== gate VOID ({}) - the checkout moved during the run; no verdict, re-run on a checkout nobody pulls into", self.label);
+            return 1;
+        }
         i32::from(bad > 0)
     }
 }

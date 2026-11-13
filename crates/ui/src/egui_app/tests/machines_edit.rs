@@ -139,6 +139,8 @@ fn a_backwards_travel_is_refused_on_its_field_and_nothing_is_written() {
     let mut h = harness_with_user_dir(Some(dir.clone()));
     h.run();
     open_machines(&mut h);
+    h.state_mut().state.machines_pane.kind_filter = Some(0); // New blank needs a kind (#816)
+    h.run_steps(2);
     press(&mut h, "New blank");
     type_into(&mut h, "X travel min", "100");
     type_into(&mut h, "X travel max", "50");
@@ -229,6 +231,130 @@ fn a_hand_written_user_file_keeps_its_unknown_keys_through_an_edit_and_save() {
     let v = read_json(&path);
     assert_eq!(v.pointer("/kinematics/default/parts/0/travel/max").and_then(|v| v.as_f64()), Some(120.0));
     assert_eq!(v.pointer("/x_shop_notes/probe").and_then(|v| v.as_str()), Some("OMP40"), "unknown key kept");
+    assert_no_commands(&h);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Row labels of the catalogue entries `keep` accepts.
+fn rows_where(
+    h: &Harness<'static, ShellUi>,
+    keep: impl Fn(&camcraft_app::machine::library::MachineEntry) -> bool,
+) -> Vec<String> {
+    let l = h
+        .state()
+        .state
+        .machines_pane
+        .list
+        .as_ref()
+        .expect("the catalogue was read");
+    l.iter()
+        .filter(|e| keep(e))
+        .map(super::super::machines_pane::row_label)
+        .collect()
+}
+
+fn present(h: &Harness<'static, ShellUi>, label: &str) -> bool {
+    h.query_by_label(label).is_some()
+}
+
+fn new_blank_disabled(h: &Harness<'static, ShellUi>) -> bool {
+    use egui_kittest::kittest::NodeT;
+    h.get_by_label("New blank").accesskit_node().is_disabled()
+}
+
+/// Open the kind dropdown (a ComboBox showing `now`) and pick `to`,
+/// with real pointer events like a user.
+fn pick_kind(h: &mut Harness<'static, ShellUi>, now: &str, to: &str) {
+    let at = h
+        .get_by(|n| n.role() == Role::ComboBox && n.value().as_deref() == Some(now))
+        .rect()
+        .center();
+    super::machines_pane::click(h, at);
+    h.run_steps(10);
+    let at = h.get_by_label(to).rect().center();
+    super::machines_pane::click(h, at);
+    h.run_steps(3);
+}
+
+/// Issue #816: the kind dropdown starts on "All" (every row, New blank
+/// shut), a kind filters the list and opens New blank, "All" restores.
+#[test]
+fn the_kind_dropdown_filters_the_list_and_gates_new_blank() {
+    use camcraft_app::machine::Kind;
+    let mut h = harness_with_user_dir(None);
+    h.run();
+    open_machines(&mut h);
+    h.run_steps(3);
+    let all = rows_where(&h, |_| true);
+    let lathes = rows_where(&h, |e| e.kind == Some(Kind::Lathe));
+    let others = rows_where(&h, |e| e.kind != Some(Kind::Lathe));
+    assert!(
+        !lathes.is_empty() && !others.is_empty(),
+        "the library has lathes and non-lathes"
+    );
+    // "All" by default: every row, New blank disabled.
+    assert!(h.state().state.machines_pane.kind_filter.is_none());
+    for r in &all {
+        h.get_by_label(r);
+    }
+    assert!(new_blank_disabled(&h), "New blank is shut under All");
+    // Pick Lathe through the dropdown.
+    pick_kind(&mut h, "All", "lathe");
+    for r in &lathes {
+        assert!(present(&h, r), "lathe row {r} stays");
+    }
+    for r in &others {
+        assert!(!present(&h, r), "row {r} is filtered out");
+    }
+    assert!(
+        !new_blank_disabled(&h),
+        "New blank opens once a kind is picked"
+    );
+    // Back to All restores the full list and shuts New blank.
+    pick_kind(&mut h, "lathe", "All");
+    for r in &all {
+        h.get_by_label(r);
+    }
+    assert!(new_blank_disabled(&h));
+    assert_no_commands(&h);
+}
+
+/// Issue #869: a blank mill's seeded Flood is removed, an Air M7 added
+/// with its code, and the saved file reads back with Air M7 alone - the
+/// added coolant is never dropped. A coolant added without its code is
+/// refused by name and adds nothing.
+#[test]
+fn a_blank_mill_swaps_its_flood_for_air_m7_and_keeps_it_through_save_and_reload() {
+    let dir = user_dir("air");
+    let mut h = harness_with_user_dir(Some(dir.clone()));
+    h.run();
+    open_machines(&mut h);
+    pick_kind(&mut h, "All", "mill");
+    press(&mut h, "New blank");
+    let list = "/kinematics/default/parts/0/parts/3/tool_station/coolants";
+    assert_eq!(draft_at(&h, &format!("{list}/0/name")).and_then(|v| v.as_str().map(str::to_owned)).as_deref(), Some("Flood"));
+    // A name alone is refused by name.
+    type_into(&mut h, "New coolant", "Air");
+    press(&mut h, "Add coolant");
+    h.get_by_label("coolant Air: enter its M code (M7 air or mist, M8 flood) before adding it");
+    assert_eq!(draft_at(&h, list).and_then(|v| v.as_array().map(Vec::len)), Some(1), "nothing added");
+    type_into(&mut h, "New coolant code", "M7");
+    press(&mut h, "Add coolant");
+    press(&mut h, "Remove Coolant Flood");
+    h.get_by_label("Validation: passes");
+    press(&mut h, "Save machine");
+    assert_eq!(prompt(&h), Some(Prompt::SaveAs));
+    press(&mut h, "Write file");
+    let path = dir.join("new-mill.mch");
+    let text = std::fs::read_to_string(&path).expect("the machine was written");
+    let m = camcraft_app::machine::parse_mch(&text).expect("the saved machine reads back");
+    let coolants: Vec<(String, String)> = m.coolants.iter().map(|c| (c.name.clone(), c.m_code.clone())).collect();
+    assert_eq!(coolants, [("Air".to_owned(), "M7".to_owned())], "{text}");
+    assert_eq!(
+        camcraft_app::operation::CoolantMode::machine_default(&m.coolants),
+        camcraft_app::operation::CoolantMode::Air,
+        "an Air-only machine starts its ops on Air"
+    );
     assert_no_commands(&h);
     let _ = std::fs::remove_dir_all(&dir);
 }

@@ -23,12 +23,18 @@
 mod arc_biarc;
 mod arc_cross;
 mod arc_proof;
+mod arc_leads;
 mod arcs;
 mod blend;
 mod bore;
 mod chamfer;
 mod circular;
 mod thread_mill;
+mod thread_passes;
+mod thread_ride;
+mod trochoid_air;
+mod trochoid_loops;
+mod trochoid_slot;
 mod contour;
 mod contour_bore;
 mod contour_chain;
@@ -38,6 +44,7 @@ mod contour_depth;
 mod contour_entry;
 mod contour_link;
 mod contour_params;
+mod contour_start;
 mod contour_step;
 mod descent;
 mod descent_dive;
@@ -47,6 +54,7 @@ mod face_entry;
 mod face_holes;
 mod fillet;
 mod gen_error;
+mod ghost;
 mod fillet_arc;
 mod fillet_tally;
 mod lead_ext;
@@ -56,8 +64,11 @@ mod levels;
 mod microlift;
 mod pocket;
 mod pocket_hsm;
+mod pocket_strategy;
 mod pocket_troch;
+mod predrilled;
 mod adaptive;
+mod rest2d;
 mod ring;
 mod slots;
 mod waterscan;
@@ -70,6 +81,10 @@ use {
 };
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod thread_tests;
+#[cfg(test)]
+mod thread_pass_tests;
 
 pub use arcs::{fit_arcs, Seg, ARC_FIT_TOL};
 pub use blend::MIN_BLEND_RADIUS;
@@ -82,14 +97,22 @@ pub use contour_link::DEFAULT_LEVEL_RAMP_ANGLE;
 pub use crate::links::{Link, Links};
 pub use face::{face, face_led, face_over, FaceParams, GenError, MAX_PASSES};
 pub use face_holes::FaceHoles;
+pub use ghost::Ghost;
 pub use face_entry::{air_lead, AIR_MARGIN};
 pub use fillet::{fillet_corners, Legal};
 pub use fillet_tally::{fillet_floor, FilletTally};
 pub(crate) use levels::cut_levels;
-pub use pocket::{pocket, PocketParams, PocketStrategy};
+pub use pocket::{pocket, pocket_entered, PocketParams, PocketStrategy};
+pub use predrilled::PreHole;
+pub use rest2d::{rest_plan, rest_pocket, RestParams, RestPlan, REST_FILM, REST_MARGIN, REST_REACH};
 pub use ring::{on_boundary, ring_is_circular};
 pub use slots::{chord_clears, slot, trace, SlotParams, TraceParams};
-pub use thread_mill::{thread_mill, ThreadHole, ThreadParams, THREAD_DEPTH_PER_PITCH};
+pub use trochoid_air::lifted_cut;
+pub use trochoid_slot::{
+    plan_trochoidal_slot, trochoidal_slot, TrochoidParams, TrochoidPlan, TrochoidReturn, DEFAULT_MAX_ENGAGEMENT,
+    DEFAULT_MICROLIFT,
+};
+pub use thread_mill::{thread_mill, PassSchedule, ThreadHole, ThreadParams, ThreadPasses, MAX_SPRING_PASSES, EXTERNAL_THREAD_DEPTH_PER_PITCH, THREAD_DEPTH_PER_PITCH};
 pub(crate) use pocket::plan_passes;
 pub(crate) use adaptive::PLAN_SAG;
 // The HSM planner's door, its arc proofs and its microlift link, read

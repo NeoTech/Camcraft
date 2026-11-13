@@ -12,10 +12,13 @@
 //! `D` (islands cut open by `slit`, so the fronts wrap each island as a
 //! C and close on the slit's faces), kept `eps` off the walls with `eps`
 //! shrinking every revolution and filleted by a morphological opening.
-//! Dilation, intersection and opening all preserve inclusion, so the
-//! rings are strictly nested - a gap of at least `min(s, deps)` between
-//! neighbours - and every revolution, a blend between two neighbours,
-//! lies in its own band: none can cross another. In a channel the front
+//! The construction aims for nested rings, with each revolution in the
+//! band between its neighbours. The implemented opening approximates its
+//! input and erodes slightly farther than it dilates, then clips to the
+//! original area. That enforces containment on the geometry lattice; it
+//! does not prove monotonicity or a gap between successive rings. The
+//! existing load, crossing and kink checks remain necessary to accept a
+//! walk, with an unsafe plan refused by name. In a channel the front
 //! is a flat face swept from wall to wall with filleted ends (the
 //! crescent of trochoidal milling, Otkur & Lazoglu 2007, "Trochoidal
 //! milling", Int. J. Mach. Tools Manuf. 47; Ibaraki et al. 2010, the
@@ -74,6 +77,15 @@ const EASE: f64 = 0.15;
 /// the reachable area is now whole.
 type GrowTrial = (f64, Region, Vec<Point2>, Vec<Point2>, Raster, Worst, bool);
 
+/// A grown ring whose truncated walk overloaded: a [`GrowTrial`] without
+/// its stock and reading (both partial, so dropped).
+type Tried = (f64, Region, Vec<Point2>, Vec<Point2>, bool);
+
+/// A later (smaller) step replaces the kept overload only when its whole
+/// revolution reads more than this share less: a near tie keeps the
+/// larger step and the fewer revolutions.
+const SLACK: f64 = 1.02;
+
 /// How a growth plan ended.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Grown {
@@ -96,6 +108,8 @@ impl Planner<'_> {
     /// otherwise).
     pub(super) fn grow(&mut self, ring0: &[Point2], (scale, last): (f64, bool)) -> Result<Grown, GenError> {
         let s = self.s;
+        // One call is one margin attempt: the budget counts it on its own.
+        self.work.attempt();
         let a0 = orbit_radius(&s);
         let Some(dom) = slit::open_islands(self.center, s.seed, a0 + 0.5)? else { return Ok(Grown::Unfit) };
         // The last lap's corners: half the tool radius, or under the
@@ -147,8 +161,8 @@ impl Planner<'_> {
         let mut overloaded = false;
         let mut grown = false;
         for rev_k in 0..MAX_REVS {
-            if self.work.get() > budget::WORK_MAX * s.r {
-                self.refused = Some(budget::over_work(rev_k));
+            if let Some(why) = self.work.over(s.r, rev_k) {
+                self.refused = Some(why);
                 return Ok(Grown::Refused);
             }
             let disc = a < levels[0] - 1e-9;
@@ -167,6 +181,7 @@ impl Planner<'_> {
                 eps - GAP.min(TAIL * (eps - 0.5 * RESERVE))
             };
             let d_eps = d0.offset_fine(-eps_n, ARC_TOL)?;
+            self.work.add_geometry(&[&d_eps]);
             let rho_k = levels[lvl];
             // This level is whole when the cleared area is all of the
             // margin's area the level's fillet reaches from the seed.
@@ -178,15 +193,17 @@ impl Planner<'_> {
                 } else {
                     open(&reg.offset_fine(g, ARC_TOL)?.intersect(&d_eps)?, rho_k)?
                 };
+                p.work.add_geometry(&[&reg, &y]);
                 let Some((yr, b)) = piece(&y, s.seed, s.climb)? else { return Ok(None) };
                 let done = !disc && whole - yr.area() < 1e-4 * whole.max(1.0);
                 // Landed on the ring tangentially (`LAND`): the seam
                 // turns by the ring's chord angle, whatever the next
                 // revolution's step.
                 let (rev, b) = morph_rev(&ring, &b, LAND);
-                p.work.set(p.work.get() + super::front::len(&rev));
+                p.work.add_len(super::front::len(&rev));
                 let mut ras = p.ras.clone();
-                let w = ras.walk_until(&rev, (s.r, p.rim, p.step), limit);
+                // Out of the bore the wall conforms to the rim (`conform`).
+                let w = if disc { p.conform_walk(&mut ras, &rev, limit) } else { ras.walk_until(&rev, (s.r, p.rim, p.step), limit) };
                 Ok(Some((g, yr, b, rev, ras, w, done)))
             };
             let (kept, over) = self.step_search(trial, step)?;
@@ -246,7 +263,18 @@ impl Planner<'_> {
             ));
         }
         self.note_corners(&d0, rho_c);
+        // The laps' fillet-to-wall kinks spread (`conform`).
+        self.smooth_grown(self.laps_from);
         Ok(Grown::Done)
+    }
+
+    /// Append a run to the walk, dropping a repeat of the joint.
+    pub(super) fn push_walk(&mut self, run: &[Point2]) {
+        for &p in run {
+            if self.walk.last().is_none_or(|&l| super::front::dist(l, p) > 1e-6) {
+                self.walk.push(p);
+            }
+        }
     }
 
     /// Walk `run` on the stock whole and keep it.
@@ -260,7 +288,8 @@ impl Planner<'_> {
 
     /// The largest growth step (from `step` grown by [`GROW`] down, by
     /// bisection) whose revolution holds the load; where none does, the
-    /// least overload, walked whole (`true`: named by the caller).
+    /// least overload by [`least_whole`], walked whole (`true`: named by
+    /// the caller).
     fn step_search(
         &self,
         trial: impl Fn(&Planner<'_>, f64, f64) -> Result<Option<GrowTrial>, GenError>,
@@ -268,7 +297,7 @@ impl Planner<'_> {
     ) -> Result<(Option<GrowTrial>, bool), GenError> {
         let mut hi = (step * GROW).min(CAP * self.width(1.0));
         let (mut lo, mut cand) = (0.0f64, hi);
-        let (mut good, mut tries): (Option<GrowTrial>, Vec<(f64, f64)>) = (None, Vec::new());
+        let (mut good, mut tries): (Option<GrowTrial>, Vec<Tried>) = (None, Vec::new());
         for k in 0..STEP_TRIES {
             match trial(self, cand, self.bound)? {
                 Some(t) if t.5.0 <= self.bound => {
@@ -278,9 +307,9 @@ impl Planner<'_> {
                         break;
                     }
                 }
-                Some(t) => {
+                Some((g, yr, b, rev, _, _, done)) => {
                     hi = cand;
-                    tries.push((t.0, t.5.0));
+                    tries.push((g, yr, b, rev, done));
                 }
                 None => hi = cand,
             }
@@ -292,9 +321,19 @@ impl Planner<'_> {
         if good.is_some() {
             return Ok((good, false));
         }
-        let least = tries.iter().map(|t| t.1).fold(f64::INFINITY, f64::min);
-        match tries.iter().find(|t| t.1 <= least * 1.02 + 1e-9) {
-            Some(&(g, _)) => Ok((trial(self, g, f64::INFINITY)?, true)),
+        // Issue #845: the tries stop at their first reading past the
+        // bound, which wherever the overload does not grow with the step
+        // reads the same for every step - the least overload is chosen on
+        // each revolution's WHOLE walk instead. Its length was charged to
+        // the growth budget when the trial built it (`add_len` before the
+        // truncated walk), and no geometry is rebuilt, so the re-walks
+        // add no growth work of their own (decision 845).
+        let walk = (self.s.r, self.rim, self.step);
+        let Some((i, ras, w)) = least_whole(&self.ras, tries.iter().map(|t| t.3.as_slice()), walk) else {
+            return Ok((None, false));
+        };
+        match tries.into_iter().nth(i) {
+            Some((g, yr, b, rev, done)) => Ok((Some((g, yr, b, rev, ras, w, done)), true)),
             None => Ok((None, false)),
         }
     }
@@ -318,3 +357,26 @@ impl Planner<'_> {
         }
     }
 }
+
+/// Of overloaded revolutions (largest step first), the one whose WHOLE
+/// walk on `ras` reads the least: its index, the stock it leaves and its
+/// reading. A later revolution replaces the kept one only when it reads
+/// more than [`SLACK`] less, and each walk is abandoned at the first
+/// reading that can no longer win - so every revolution is walked at most
+/// once more, and usually only part way.
+fn least_whole<'a>(ras: &Raster, revs: impl Iterator<Item = &'a [Point2]>, walk: (f64, f64, f64)) -> Option<(usize, Raster, Worst)> {
+    let mut best: Option<(usize, Raster, Worst)> = None;
+    for (i, rev) in revs.enumerate() {
+        let limit = best.as_ref().map_or(f64::INFINITY, |b| b.2.0 / SLACK);
+        let mut r = ras.clone();
+        let w = r.walk_until(rev, walk, limit);
+        if best.is_none() || w.0 < limit {
+            best = Some((i, r, w));
+        }
+    }
+    best
+}
+
+#[cfg(test)]
+#[path = "grow_tests.rs"]
+mod tests;

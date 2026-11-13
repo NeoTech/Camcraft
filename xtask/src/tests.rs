@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::plan::{self, SLOW_BINARIES, Step};
 use crate::quick::{self, Diff, Quick};
-use crate::{decisions, exec, parse_gate, scan, single};
+use crate::{decisions, exec, parse_gate, scan, single, tier_plan};
 
 struct Fixture(PathBuf);
 
@@ -59,7 +59,8 @@ fn quick_plan(root: &Path, changed: &[&str], untracked: &[&str], hunks: &[(&str,
     let provider = move |f: &str| -> Vec<String> {
         hunks.iter().filter(|(hf, _)| hf == f).map(|(_, h)| h.clone()).collect()
     };
-    let diff = Diff { changed: &changed, untracked: &untracked, hunks: &provider };
+    let before = |file: &str| std::fs::read_to_string(root.join(file)).ok();
+    let diff = Diff { changed: &changed, untracked: &untracked, hunks: &provider, before: &before };
     quick::plan(root, &diff, heavy).expect("quick plan")
 }
 
@@ -173,9 +174,40 @@ fn batch_skips_slow_binaries_and_release_runs_everything() {
     assert_eq!(b[b.len() - 2], "[ui] ui suites (cwd crates/ui) | test -j 6 -p camcraft-ui --no-fail-fast -- --test-threads=6");
     assert!(b[b.len() - 1].starts_with("clippy -D warnings | clippy -j 6 -p camcraft-geometry -p camcraft-cl"));
     let r: Vec<String> = plan::release(&fx.0).steps.iter().map(line).collect();
-    assert_eq!(r.len(), 8 + 1 + 1 + 2 + 1);
+    assert_eq!(r.len(), 8 + 1 + 1 + 2 + 1 + 1);
     assert!(r.iter().any(|s| s.starts_with("kernel suites")));
     assert_eq!(r[12], "[ui] ui snapshot lane (debug --ignored, cwd crates/ui) | test -j 6 -p camcraft-ui --lib --no-fail-fast -- --test-threads=6 --ignored snapshot");
+    assert_eq!(r[13], "[ui] ui gpu_render snapshot lane (debug --ignored) | test -j 6 -p camcraft-ui --test gpu_render --no-fail-fast -- --test-threads=6 --ignored snapshot");
+}
+
+#[test]
+fn release_without_snapshots_drops_only_the_pixel_lanes() {
+    // #1413: cut.yml's Linux runner runs `gate release --no-snapshots`; every other lane stays.
+    let fx = fixture();
+    let full: Vec<String> = plan::release(&fx.0).steps.iter().map(line).collect();
+    let p = plan::release_with(&fx.0, false);
+    let r: Vec<String> = p.steps.iter().map(line).collect();
+    assert_eq!(r, full[..full.len() - 2].to_vec());
+    assert!(r.iter().all(|s| !s.contains("snapshot")), "{r:#?}");
+    assert!(r.iter().any(|s| s.starts_with("app heavy lane")));
+    assert!(p.notes.iter().any(|n| n.contains("--no-snapshots")));
+    let a = |s: &str| s.split_whitespace().map(String::from).collect::<Vec<_>>();
+    assert!(parse_gate(&a("release --no-snapshots --dry-run")).expect("release").no_snapshots);
+    assert!(!parse_gate(&a("release")).expect("release").no_snapshots);
+    assert!(parse_gate(&a("batch --no-snapshots")).is_err());
+}
+
+#[test]
+fn gate_no_snapshots_reaches_the_release_plan() {
+    // #1413 review: `gate()` builds its non-quick plan through `tier_plan`; the flag must reach it.
+    let fx = fixture();
+    let a = |s: &str| s.split_whitespace().map(String::from).collect::<Vec<_>>();
+    let lines = |p: plan::Plan| p.steps.iter().map(line).collect::<Vec<_>>();
+    let off = lines(tier_plan(&fx.0, &parse_gate(&a("release --no-snapshots")).expect("args")));
+    let on = lines(tier_plan(&fx.0, &parse_gate(&a("release")).expect("args")));
+    assert!(off.iter().all(|s| !s.contains("snapshot")), "{off:#?}");
+    assert!(on.iter().any(|s| s.contains("snapshot")), "{on:#?}");
+    assert_eq!(on, lines(plan::release(&fx.0)));
 }
 
 #[test]
@@ -240,4 +272,63 @@ fn log_names_stamps_and_notes_match_the_old_script() {
     assert_eq!(exec::read_log(log, 101).expect("note"), "failed: tests\\ops.rs");
     assert_eq!(exec::read_log("error: could not compile `x`\n", 101).expect("note"), "compile error");
     assert_eq!(exec::read_log("", 0).expect("note"), "");
+}
+
+/// Names, starts and ends of every scanned test fn, for compact assertions.
+fn spans(text: &str) -> Vec<(String, usize, usize)> {
+    scan::test_fns(text).expect("scan").into_iter().map(|t| (t.name, t.start, t.end)).collect()
+}
+
+#[test]
+fn braces_in_string_literals_do_not_swallow_the_next_test() {
+    // The #764 repro shape: refuse("{", ..) opens a brace the old counter never closed.
+    let text = "#[test]\nfn bad() {\n    refuse(\"{\", \"bad JSON\");\n}\n\n#[test]\nfn next() {\n    run();\n}\n";
+    assert_eq!(spans(text), [("bad".into(), 1, 4), ("next".into(), 6, 9)]);
+    // Escapes, and a string spanning lines.
+    let text = "#[test]\nfn a() {\n    let s = \"\\\"{\\\\\";\n    let t = \"x {\n    y\";\n}\n#[test]\nfn b() {}\n";
+    assert_eq!(spans(text), [("a".into(), 1, 6), ("b".into(), 7, 8)]);
+}
+
+#[test]
+fn braces_in_raw_strings_chars_comments_and_lifetimes_are_ignored() {
+    let text = "#[test]\nfn raw() {\n    let a = r#\"{ \"} \"#;\n    let b = r\"{\";\n}\n#[test]\nfn ch() {\n    let c = '}';\n    let d = '\\'';\n    let e = '\\u{7d}';\n}\n#[test]\nfn cm() {\n    // a stray { in a comment\n}\n#[test]\nfn lt<'a>(x: &'a str) {\n    let _ = x;\n}\n#[test]\nfn last() {}\n";
+    assert_eq!(
+        spans(text),
+        [("raw".into(), 1, 5), ("ch".into(), 6, 11), ("cm".into(), 12, 15), ("lt".into(), 16, 19), ("last".into(), 20, 21)]
+    );
+}
+
+#[test]
+fn a_change_in_the_test_after_a_brace_string_is_attributed_to_it() {
+    let fx = fixture();
+    let f = "crates/app/tests/brace.rs";
+    let text = "//! Gate map: covers app::x.\n#[test]\nfn first() {\n    refuse(\"{\");\n}\n\n#[test]\nfn second() {\n    run();\n}\n";
+    let p = fx.0.join(f);
+    std::fs::write(&p, text).expect("write");
+    // Line 9 is inside `second`; it must not be blamed on `first` or run the suite whole.
+    let got: Vec<String> = steps(quick_plan(&fx.0, &[f], &[], &[(f, "@@ -9 +9 @@")], false)).iter().map(line).collect();
+    assert_eq!(got, ["app brace (1 fn) | test -j 6 -p camcraft-app --test brace -- --test-threads=6 --exact second"]);
+}
+
+#[test]
+fn the_compile_cache_is_enabled_only_when_sccache_exists_and_nobody_chose_otherwise() {
+    let on = exec::cache_env(Some("/bin/sccache"), false, false, false);
+    assert_eq!(on, [("RUSTC_WRAPPER", "/bin/sccache".to_string()), ("SCCACHE_CACHE_SIZE", "20G".to_string())]);
+    // A machine without sccache builds exactly as before.
+    assert!(exec::cache_env(None, false, false, false).is_empty());
+    // A wrapper the caller already set, or the opt-out, wins.
+    assert!(exec::cache_env(Some("/bin/sccache"), true, false, false).is_empty());
+    assert!(exec::cache_env(Some("/bin/sccache"), false, true, false).is_empty());
+    // A size the caller chose is not overridden.
+    assert_eq!(exec::cache_env(Some("/bin/sccache"), false, false, true), [("RUSTC_WRAPPER", "/bin/sccache".to_string())]);
+}
+
+#[test]
+fn packaging_build_clears_compiler_wrappers() {
+    // Both wrapper variables set: both are removed from the packaging build's environment (#935).
+    let both = exec::packaging_env_clear(|_| true);
+    assert_eq!(both, ["RUSTC_WRAPPER", "CARGO_BUILD_RUSTC_WRAPPER"]);
+    // Only the one that is set is named; none set, nothing to clear.
+    assert_eq!(exec::packaging_env_clear(|v| v == "CARGO_BUILD_RUSTC_WRAPPER"), ["CARGO_BUILD_RUSTC_WRAPPER"]);
+    assert!(exec::packaging_env_clear(|_| false).is_empty());
 }

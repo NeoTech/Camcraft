@@ -10,6 +10,7 @@ use std::path::Path;
 
 use flecs_ecs::prelude::World;
 
+use camcraft_tools::holder_library;
 use camcraft_tools::spun::{SpunPoint, SpunProfile};
 
 use crate::commands::{Command, CommandError};
@@ -22,6 +23,7 @@ use camcraft_tools::lathe_insert_zone::InsertZone;
 
 /// A body as the caller states it: model-frame facets, where they came
 /// from, and the numeric placement (`tool_body::place`).
+#[derive(Clone, Debug, PartialEq)]
 pub struct ToolBodySpec {
     pub source: String,
     pub facets: Vec<Triangle>,
@@ -30,6 +32,21 @@ pub struct ToolBodySpec {
     pub axis: [f64; 3],
     /// The model origin's height above the tool tip, along that axis.
     pub offset: f64,
+}
+
+impl ToolBodySpec {
+    /// Read a STEP file and align it automatically by its ISO 13399
+    /// coordinate systems (#370). Refuses by name if the file is unreadable,
+    /// holds no facets, or if coordinate systems are absent or ambiguous.
+    pub fn from_step_auto(path: &Path) -> Result<Self, String> {
+        let data = std::fs::read(path).map_err(|e| format!("I/O error: {e}"))?;
+        // #361: the one body-file door (a reduced-fidelity mesh is refused).
+        let file = crate::tool_body_file::read(path)?;
+        let report = crate::geometry::import::step_csys::read_tool_csys(&data)
+            .map_err(|e| format!("coordinate systems unreadable: {e}"))?;
+        let (axis, offset) = report.align_tool_body()?;
+        Ok(ToolBodySpec { source: file.source, facets: file.facets, axis, offset })
+    }
 }
 
 /// A lathe-held body as the caller states it (#369): model-frame
@@ -45,7 +62,37 @@ pub struct LatheBodySpec {
     pub zone: Option<InsertZone>,
 }
 
+/// #793: a built-in library holder drawn for `tool` (named `name` in
+/// the refusals) as its spun-profile body, judged against it - what
+/// [`SetToolBody::library`] lands on an existing tool and (#828)
+/// `AddTool` lands on a new one, so both doors refuse alike.
+pub(crate) fn library_body(
+    tool: &crate::tools::Tool,
+    name: &str,
+    entry: &str,
+    gauge_len: Option<f64>,
+    projection: Option<f64>,
+) -> Result<ToolBody, CommandError> {
+    let invalid = |e: holder_library::LibraryError| CommandError::Invalid(format!("tool '{name}': holder: {e}"));
+    let e = holder_library::find(entry).map_err(invalid)?;
+    e.fits_shank(tool.shank_d).map_err(invalid)?;
+    let nose = projection.unwrap_or(tool.flute_len + tool.shank_len);
+    let points = e.points(nose, gauge_len.unwrap_or(e.gauge_len)).map_err(invalid)?;
+    let spun = SpunProfile::new(points).map_err(|e| CommandError::Invalid(format!("tool '{name}': holder profile: {e}")))?;
+    let body = tool_body::build_spun(spun);
+    tool_body::fits(tool, &body).map_err(|e| CommandError::Invalid(format!("tool '{name}': {e}")))?;
+    Ok(body)
+}
+
+/// A body file through the one door (#361): an importer error stays an
+/// import error; a mesh the door will not take is refused by name.
+fn body_file(path: &Path) -> Result<crate::tool_body_file::BodyFile, CommandError> {
+    let graded = crate::geometry::import::load_model_graded(path)?;
+    crate::tool_body_file::accept(path, graded).map_err(CommandError::Invalid)
+}
+
 /// Set (`Some`) or clear (`None`) a tool's body.
+#[derive(Debug)]
 pub struct SetToolBody {
     name: String,
     prev: Option<ToolBody>,
@@ -96,11 +143,43 @@ impl SetToolBody {
         Ok(SetToolBody { name: name.to_string(), prev: tool_body::body_of(world, &entity), next })
     }
 
+    /// #793: drop a built-in library holder (`camcraft_tools::
+    /// holder_library`, "BT30 ER20") into tool `name`'s holder as a
+    /// drawn spun profile - one undo step, editable afterwards like any
+    /// drawn profile. `gauge_len` (gauge line to nose face) defaults to
+    /// the entry's; `projection` (nose face above the tip) to the
+    /// tool's flute plus shank length. Refused by name: no such tool or
+    /// entry, a shank the collet or bore cannot take, a gauge length
+    /// too short for the flange and nose, and everything a drawn
+    /// profile refuses.
+    pub fn library(
+        world: &World,
+        name: &str,
+        entry: &str,
+        gauge_len: Option<f64>,
+        projection: Option<f64>,
+    ) -> Result<Self, CommandError> {
+        let Some(entity) = model::find_by_name(world, name) else {
+            return Err(CommandError::NotFound(name.to_string()));
+        };
+        let tool = model::tool_of(world, &entity)
+            .ok_or_else(|| CommandError::Invalid(format!("'{name}' is not a tool")))?;
+        let next = Some(library_body(&tool, name, entry, gauge_len, projection)?);
+        Ok(SetToolBody { name: name.to_string(), prev: tool_body::body_of(world, &entity), next })
+    }
+
     /// Read a STEP / STL / OBJ through the model importer and place it.
     pub fn from_file(world: &World, name: &str, path: &Path, axis: [f64; 3], offset: f64) -> Result<Self, CommandError> {
-        let mesh = crate::geometry::import::load_model(path)?;
-        let source = path.file_name().map_or_else(|| path.display().to_string(), |f| f.to_string_lossy().into_owned());
-        Self::new(world, name, Some(ToolBodySpec { source, facets: mesh.facets.to_vec(), axis, offset }))
+        let file = body_file(path)?;
+        Self::new(world, name, Some(ToolBodySpec { source: file.source, facets: file.facets, axis, offset }))
+    }
+
+    /// Read a STEP file, align it automatically by its ISO 13399
+    /// coordinate systems (#370), and place it on tool `name` with no
+    /// manual offsets.
+    pub fn from_step_auto(world: &World, name: &str, path: &Path) -> Result<Self, CommandError> {
+        let spec = ToolBodySpec::from_step_auto(path).map_err(CommandError::Invalid)?;
+        Self::new(world, name, Some(spec))
     }
 
     /// Place and judge a lathe body (#369) against tool `name` now;
@@ -129,9 +208,8 @@ impl SetToolBody {
     /// Read a STEP / STL / OBJ through the model importer and place it
     /// as a lathe body.
     pub fn lathe_from_file(world: &World, name: &str, path: &Path, place: LathePlacement) -> Result<Self, CommandError> {
-        let mesh = crate::geometry::import::load_model(path)?;
-        let source = path.file_name().map_or_else(|| path.display().to_string(), |f| f.to_string_lossy().into_owned());
-        Self::lathe(world, name, Some(LatheBodySpec { source, facets: mesh.facets.to_vec(), place, zone: None }))
+        let file = body_file(path)?;
+        Self::lathe(world, name, Some(LatheBodySpec { source: file.source, facets: file.facets, place, zone: None }))
     }
 
     /// Set (`Some`) or clear (`None`) the insert zone (#396) of tool

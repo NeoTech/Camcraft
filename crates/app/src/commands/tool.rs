@@ -29,22 +29,69 @@ pub(super) fn reserved(world: &World, name: &str) -> Option<CommandError> {
             });
     if taken {
         return Some(CommandError::Invalid(format!(
-            "'{name}' is reserved for setup furniture"
+            "'{name}' is a name reserved for a setup's stock and work offsets"
         )));
     }
     None
 }
 
-/// Create a tool entity with the given definition.
+/// #898: store the catalog facts trimmed (blank = not stated), and
+/// refuse ones that cannot be kept (helix outside 0..=90, too long) by
+/// the tool's name, before anything enters the history.
+fn catalog_gate(name: &str, tool: &mut Tool) -> Result<(), CommandError> {
+    tool.catalog = tool.catalog.normalized();
+    match tool.catalog.refusal() {
+        Some(why) => Err(CommandError::Invalid(format!("tool '{name}': {why}"))),
+        None => Ok(()),
+    }
+}
+
+/// #890: refuse a per-material cutting-data table that cannot be kept
+/// (non-finite or non-positive rpm / feed, a material twice) by the
+/// tool's name, before anything enters the history.
+fn cutting_gate(name: &str, tool: &Tool) -> Result<(), CommandError> {
+    let torch = tool.kind == crate::tools::ToolKind::Torch;
+    match camcraft_tools::cutting_rows::refusal(&tool.cutting, torch) {
+        Some(why) => Err(CommandError::Invalid(format!("tool '{name}': {why}"))),
+        None => Ok(()),
+    }
+}
+
+/// Which holder a new tool starts with (#828).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum HolderPick {
+    /// The active setup's machine's `tooling.default_holder`, when it
+    /// states one and the holder takes the tool; none otherwise.
+    MachineDefault,
+    /// This built-in library holder, stated by the caller - it wins
+    /// over the machine's default, and a refusal refuses the add.
+    Named(String),
+    /// No holder body (the tool's own holder cylinder), as before #828.
+    Bare,
+}
+
+/// Create a tool entity with the given definition - and (#828) the
+/// holder body it starts with, landed in the same undo step.
 pub struct AddTool {
     name: String,
     tool: Tool,
+    /// The library holder's name and its drawn body.
+    holder: Option<(String, ToolBody)>,
+    /// Why the machine's default holder was not applied, when it was not.
+    skipped: Option<String>,
 }
 
 impl AddTool {
-    pub fn new(world: &World, name: &str, tool: Tool) -> Result<Self, CommandError> {
+    pub fn new(world: &World, name: &str, mut tool: Tool) -> Result<Self, CommandError> {
         if let Some(err) = reserved(world, name) {
             return Err(err);
+        }
+        catalog_gate(name, &mut tool)?;
+        cutting_gate(name, &tool)?;
+        // #890: a tool entering a document with a stated material runs
+        // its row for that material (one undo step with the add).
+        if let Some(seeded) = crate::cutting_rows::seeded_for(&tool, crate::cutting::material_of(world)) {
+            tool = seeded;
         }
         // #670: a torch stating a spindle speed is refused by name.
         if let Some(why) = tool.torch_refusal() {
@@ -61,7 +108,60 @@ impl AddTool {
         Ok(AddTool {
             name: name.to_string(),
             tool,
+            holder: None,
+            skipped: None,
         })
+    }
+
+    /// #828: add the tool with the holder `pick` names. A stated
+    /// holder that cannot take the tool refuses the add by name; the
+    /// machine's default that cannot (a shank its collet does not take,
+    /// a lathe-held insert) is left off and said so ([`Self::note`]) -
+    /// the tool lands as it would without the key, never with another
+    /// holder in its place.
+    pub fn with_holder(world: &World, name: &str, tool: Tool, pick: HolderPick) -> Result<Self, CommandError> {
+        let mut cmd = Self::new(world, name, tool)?;
+        match pick {
+            HolderPick::Bare => {}
+            HolderPick::Named(entry) => {
+                let body = super::tool_body::library_body(&cmd.tool, name, &entry, None, None)?;
+                let canonical = camcraft_tools::holder_library::find(&entry).map(|e| e.name()).unwrap_or(entry);
+                cmd.holder = Some((canonical, body));
+            }
+            HolderPick::MachineDefault => {
+                if let Some(entry) = crate::machine::of(world).1.and_then(|m| m.default_holder) {
+                    match super::tool_body::library_body(&cmd.tool, name, &entry, None, None) {
+                        Ok(mut body) => {
+                            // Assumed, not picked: judged floored (#828).
+                            body.machine_default = true;
+                            cmd.holder = Some((entry, body));
+                        }
+                        Err(e) => cmd.skipped = Some(format!("the machine's default holder {entry} was not applied - {e}")),
+                    }
+                }
+            }
+        }
+        Ok(cmd)
+    }
+
+    /// The library holder the tool lands with, if any.
+    #[must_use]
+    pub fn holder(&self) -> Option<&str> {
+        self.holder.as_ref().map(|(n, _)| n.as_str())
+    }
+
+    /// The add's holder line for the status bar and MCP: the holder it
+    /// lands with, or why the machine's default was left off.
+    #[must_use]
+    pub fn note(&self) -> Option<String> {
+        match (&self.holder, &self.skipped) {
+            (Some((n, b)), _) if b.machine_default => {
+                Some(format!("holder {n} (machine default - judged no smaller than the tool's holder cylinder)"))
+            }
+            (Some((n, _)), _) => Some(format!("holder {n}")),
+            (None, Some(why)) => Some(why.clone()),
+            (None, None) => None,
+        }
     }
 }
 
@@ -74,6 +174,9 @@ impl Command for AddTool {
         entity
             .entity_view(world)
             .set(ToolDef { tool: self.tool.clone(), number: None });
+        if let Some((_, body)) = &self.holder {
+            crate::tool_body::set_body(world, &entity, Some(body));
+        }
     }
 
     fn invert(&self, world: &World) {
@@ -94,6 +197,15 @@ pub struct ChangeTool {
 
 impl ChangeTool {
     pub fn new(world: &World, name: &str, next: Tool) -> Result<Self, CommandError> {
+        Self::judged(world, name, next, true)
+    }
+
+    /// Every `new` law; `judge_cutter: false` skips the drawn cutter's
+    /// agreement - only for `ReshapeTool` (#93 slice 3), which lands a
+    /// cutter checked against `next` in the same undo step.
+    pub(crate) fn judged(world: &World, name: &str, mut next: Tool, judge_cutter: bool) -> Result<Self, CommandError> {
+        catalog_gate(name, &mut next)?;
+        cutting_gate(name, &next)?;
         if let Some(why) = next.torch_refusal() {
             return Err(CommandError::Invalid(format!("tool '{name}': {why}")));
         }
@@ -107,6 +219,16 @@ impl ChangeTool {
         };
         let prev = model::tool_of(world, &entity)
             .ok_or_else(|| CommandError::Invalid(format!("'{name}' is not a tool")))?;
+        // #890: an edit of the per-material table that leaves the
+        // running numbers alone loads the document material's row into
+        // them; an edit that states rpm / feed itself keeps its own.
+        if next.cutting != prev.cutting
+            && next.rpm == prev.rpm
+            && next.feed == prev.feed
+            && let Some(seeded) = crate::cutting_rows::seeded_for(&next, crate::cutting::material_of(world))
+        {
+            next = seeded;
+        }
         // The tool law (M10.1 B): a retype that would leave an operation
         // holding a tool its family cannot cut with is refused by name.
         if let Some(msg) =
@@ -119,6 +241,16 @@ impl ChangeTool {
         if let Some(body) = crate::tool_body::body_of(world, &entity) {
             crate::tool_body::fits(&next, &body)
                 .map_err(|e| CommandError::Invalid(format!("tool '{name}': {e}")))?;
+        }
+        // #93 slice 2: a drawn cutter states the numbers it was drawn
+        // to; an edit that leaves it disagreeing is refused by name
+        // (clear it back to the numbers' outline first).
+        if let Some(c) = crate::tool_cutter::cutter_of(world, &entity).filter(|_| judge_cutter) {
+            camcraft_tools::cutter_profile::agrees(&next, &c).map_err(|e| {
+                CommandError::Invalid(format!(
+                    "tool '{name}': the drawn cutter profile no longer fits: {e} - reset the cutter profile to Parametric first"
+                ))
+            })?;
         }
         Ok(ChangeTool {
             name: name.to_string(),
@@ -159,6 +291,8 @@ pub struct DeleteTool {
     number: Option<u32>,
     /// #368: its modelled body, restored with it on undo.
     body: Option<ToolBody>,
+    /// #93: its drawn cutter, restored with it on undo.
+    cutter: Option<camcraft_tools::spun::SpunProfile>,
     location: Location,
 }
 
@@ -174,6 +308,7 @@ impl DeleteTool {
             tool,
             number: model::tool_number_of(world, &entity),
             body: crate::tool_body::body_of(world, &entity),
+            cutter: crate::tool_cutter::cutter_of(world, &entity),
             location: model::transform_of(world, &entity).unwrap_or_default(),
         })
     }
@@ -196,5 +331,6 @@ impl Command for DeleteTool {
             .entity_view(world)
             .set(ToolDef { tool: self.tool.clone(), number: self.number });
         crate::tool_body::set_body(world, &entity, self.body.as_ref());
+        crate::tool_cutter::set_cutter(world, &entity, self.cutter.as_ref());
     }
 }

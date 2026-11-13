@@ -11,7 +11,7 @@
 //! Program tests build `Machine` structs directly; only the reader
 //! tests feed it text.
 //!
-//! Gate map (M4.4): covers app::commands, app::geometry, app::machine, app::model, app::operation, app::post, app::posting, app::schema, app::stock, app::tools, app::world.
+//! Gate map (M4.4): covers app::commands, app::geometry, app::machine, post::machine, app::model, app::operation, post::post, app::posting, app::schema, geometry::geometry::stock, tools::tools, app::world.
 
 use flecs_ecs::prelude::World;
 
@@ -729,6 +729,8 @@ fn every_shipped_machine_mounts_and_speaks_its_declaration() {
         ("Lathe", Kind::Lathe),
         ("Tormach 770MX", Kind::Mill),
         ("Tormach 770MX (ML)", Kind::Mill),
+        // #785: an A about X leans the tool - still a mill, never a mill-turn.
+        ("Tormach 770MX + microARC 4", Kind::Mill),
         ("Tormach 770M", Kind::Mill),
         ("Tormach 1100MX", Kind::Mill),
         ("Tormach 1500MX", Kind::Mill),
@@ -741,6 +743,8 @@ fn every_shipped_machine_mounts_and_speaks_its_declaration() {
         ("Tormach PCNC 1100 (Series 3)", Kind::Mill),
         ("Tormach 770M+", Kind::Mill),
         ("Tormach 1100M+", Kind::Mill),
+        ("grblHAL 3-axis", Kind::Mill),
+        ("TinyG 3-axis", Kind::Mill),
         ("Tormach 24R", Kind::Mill),
         ("Tormach xsTECH Pro", Kind::Mill),
         ("Tormach xsTECH", Kind::Mill),
@@ -750,6 +754,12 @@ fn every_shipped_machine_mounts_and_speaks_its_declaration() {
         ("Tormach 15LX Slant-PRO", Kind::Lathe),
         ("Makera Carvera", Kind::Mill),
         ("Makera Carvera Air", Kind::Mill),
+        ("Makera Z1", Kind::Mill),
+        ("Sienci AltMill 2x4", Kind::Mill),
+        ("Sienci AltMill 4x4", Kind::Mill),
+        ("Sienci AltMill 4x8", Kind::Mill),
+        ("Doosan DNM 5700", Kind::Mill),
+        ("Doosan DNM 5700 + rotary table", Kind::Mill),
     ];
     assert_eq!(MACHINES.len(), expectations.len(), "the pane offers what the tests pin");
     for ((name, text), (want_name, want_kind)) in MACHINES.iter().zip(expectations) {

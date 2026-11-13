@@ -17,7 +17,6 @@ use crate::state::{CommandKind, State};
 
 /// Draw the stock-source choice of setup `name`.
 pub(super) fn picker(ui: &mut Ui, state: &mut State, name: &str) {
-    ui.label("Stock");
     let (Some(prev), Some(now)) = (setup_stock::previous(&state.world, name), setup_stock::effective(&state.world, name))
     else {
         let _ = ui.radio(true, "Its own stock (the Stock node)");
@@ -44,7 +43,15 @@ pub(super) fn picker(ui: &mut Ui, state: &mut State, name: &str) {
     match (&refusal, now) {
         (Some(why), StockSource::FromPrevious) => {
             let ink = super::colorvision::text_inks(ui, &state.world).error;
-            ui.colored_label(ink, format!("The program sim cannot carry the stock: {why}. Pick its own stock to simulate a new block."));
+            // #866: what happened, then what to do - in the page's words.
+            super::error_text::error_text(
+                ui,
+                ink,
+                &format!(
+                    "The stock simulation cannot use what {prev} leaves behind - {why}. To go on, choose \"Its own stock\" \
+                     for this setup, or hold the part here the way {prev} holds it (flipped over X or Y, or turned about Z, also works)."
+                ),
+            );
         }
         (Some(why), StockSource::Own) => {
             ui.label(RichText::new(format!("Cannot take what {prev} leaves behind: {why}")).weak());

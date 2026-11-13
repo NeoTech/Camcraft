@@ -140,10 +140,11 @@ impl OpFrame {
         resolve_params(world, self.setup.as_deref(), src, params)
     }
 
-    /// The op's material, read through the seam (the S-frame read
-    /// `collect_job` always made — one name on it now).
+    /// The op's material as generation judges it (#904 `judged_material`:
+    /// the excess also covers the setup's stock), read through the seam
+    /// (the S-frame read `collect_job` always made — one name on it now).
     pub(super) fn material_of(&self, world: &World, src: &SrcRef) -> Result<Material, GenError> {
-        material_of(world, self.setup.as_deref(), src)
+        super::material::judged_material(world, self.setup.as_deref(), src)
     }
 
     // ---- the composed seam: L-frame math (fully transformed) ----

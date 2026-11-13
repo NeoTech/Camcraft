@@ -87,6 +87,7 @@ fn feed_of(p: &OpParams) -> f64 {
         | OpParams::Circular { feed, .. }
         | OpParams::Pocket3D { feed, .. }
         | OpParams::Slot { feed, .. }
+        | OpParams::TrochoidalSlot { feed, .. }
         | OpParams::Trace { feed, .. }
         | OpParams::Drill { feed, .. }
         | OpParams::Finish3D { feed, .. }
@@ -141,6 +142,10 @@ fn feed_of(p: &OpParams) -> f64 {
         OpParams::Probe { fast_feed, .. } => *fast_feed,
         // A blank plasma feed is the controller's (#670): no number.
         OpParams::PlasmaProfile(p) => p.feed.unwrap_or(0.0),
+        // The wire's rate is the control's generator's (#532): no number.
+        OpParams::WireContour(_) => 0.0,
+        // The sinker's servo feed down (#541).
+        OpParams::SinkerBurn(p) | OpParams::SinkerSideBurn(super::SinkerSideBurnOp { burn: p, .. }) => p.feed,
     }
 }
 
@@ -160,6 +165,7 @@ fn plunge_of(p: &OpParams) -> f64 {
         | OpParams::Circular { plunge_feed, .. }
         | OpParams::Pocket3D { plunge_feed, .. }
         | OpParams::Slot { plunge_feed, .. }
+        | OpParams::TrochoidalSlot { plunge_feed, .. }
         | OpParams::Trace { plunge_feed, .. }
         | OpParams::Drill { plunge_feed, .. }
         | OpParams::Finish3D { plunge_feed, .. }
@@ -212,6 +218,10 @@ fn plunge_of(p: &OpParams) -> f64 {
         // The torch never plunges into solid: it pierces at the
         // controller's height and delay (#670).
         OpParams::PlasmaProfile(p) => p.feed.unwrap_or(0.0),
+        // The wire's rate is the control's generator's (#532): no number.
+        OpParams::WireContour(_) => 0.0,
+        // The sinker's servo feed down (#541).
+        OpParams::SinkerBurn(p) | OpParams::SinkerSideBurn(super::SinkerSideBurnOp { burn: p, .. }) => p.feed,
     }
 }
 
@@ -231,6 +241,7 @@ fn climb_of(p: &OpParams) -> bool {
         | OpParams::Circular { climb, .. }
         | OpParams::Pocket3D { climb, .. }
         | OpParams::Slot { climb, .. }
+        | OpParams::TrochoidalSlot { climb, .. }
         | OpParams::Trace { climb, .. }
         | OpParams::Finish3D { climb, .. }
         | OpParams::Contour5D { climb, .. }
@@ -284,7 +295,7 @@ fn climb_of(p: &OpParams) -> bool {
         // The wall ride and the helix choose their flank: the climb
         // number says which way the circle runs (M2.4 C).
         OpParams::Bore { climb, .. } | OpParams::Thread { climb, .. } => *climb,
-        OpParams::Probe { .. } | OpParams::PlasmaProfile(_) => false,
+        OpParams::Probe { .. } | OpParams::PlasmaProfile(_) | OpParams::WireContour(_) | OpParams::SinkerBurn(_) | OpParams::SinkerSideBurn(_) => false,
     }
 }
 
@@ -304,6 +315,8 @@ fn stepover_of(p: &OpParams) -> Option<f64> {
         // The stamped ladder's spacing is the pocket's plain number.
         | OpParams::MultiAxisRough { stepover, .. }
         | OpParams::Slot { stepover, .. } => Some(*stepover),
+        // The trochoid's forward step is no stepover: a retype seeds.
+        OpParams::TrochoidalSlot { .. } => None,
         // Parallel5D's spacing - and the swarf kinds', which run the
         // same derivation - is an Option the same way Finish3D's
         // raster's is: a derivation by default, so the fold reads the
@@ -365,7 +378,7 @@ fn stepover_of(p: &OpParams) -> Option<f64> {
         // One ride per exposed edge is the deburr answer: the model's
         // own edges are the pattern, nothing tiles (M2.5 E B).
         | OpParams::Deburr { .. } => None,
-        OpParams::Probe { .. } | OpParams::PlasmaProfile(_) => None,
+        OpParams::Probe { .. } | OpParams::PlasmaProfile(_) | OpParams::WireContour(_) | OpParams::SinkerBurn(_) | OpParams::SinkerSideBurn(_) => None,
     }
 }
 
@@ -402,6 +415,7 @@ fn stepdown_of(p: &OpParams) -> Option<f64> {
         // ceiling (M5.2 E).
         | OpParams::MultiPassTurning { stepdown, .. }
         | OpParams::Slot { stepdown, .. }
+        | OpParams::TrochoidalSlot { stepdown, .. }
         // The boring ladder's axial bite is the pocket's rung law
         // spoken on one circle (M2.4 C).
         | OpParams::Bore { stepdown, .. }
@@ -441,7 +455,7 @@ fn stepdown_of(p: &OpParams) -> Option<f64> {
         // between the clearance plane and the edge there is no
         // infeed ladder to step (M2.5 E B).
         OpParams::Deburr { .. } => None,
-        OpParams::Probe { .. } | OpParams::PlasmaProfile(_) => None,
+        OpParams::Probe { .. } | OpParams::PlasmaProfile(_) | OpParams::WireContour(_) | OpParams::SinkerBurn(_) | OpParams::SinkerSideBurn(_) => None,
     }
 }
 
@@ -462,6 +476,7 @@ pub fn top_of(p: &OpParams) -> Option<Height> {
         | OpParams::Circular { top_z, .. }
         | OpParams::Pocket3D { top_z, .. }
         | OpParams::Slot { top_z, .. }
+        | OpParams::TrochoidalSlot { top_z, .. }
         | OpParams::Trace { top_z, .. }
         | OpParams::Drill { top_z, .. }
         | OpParams::Finish3D { top_z, .. }
@@ -508,6 +523,10 @@ pub fn top_of(p: &OpParams) -> Option<Height> {
         OpParams::Probe { .. } => None,
         // The plasma cut rides the plate's top (#670).
         OpParams::PlasmaProfile(p) => Some(p.top_z),
+        // The wire's profile plane: the workpiece's top (#532).
+        OpParams::WireContour(p) => Some(p.top_z),
+        // The work top the sinker's depth may be read from (#541).
+        OpParams::SinkerBurn(p) | OpParams::SinkerSideBurn(super::SinkerSideBurnOp { burn: p, .. }) => Some(p.top_z),
     }
 }
 
@@ -527,6 +546,7 @@ pub fn bottom_of(p: &OpParams) -> Option<Height> {
         | OpParams::Circular { bottom_z, .. }
         | OpParams::Pocket3D { bottom_z, .. }
         | OpParams::Slot { bottom_z, .. }
+        | OpParams::TrochoidalSlot { bottom_z, .. }
         | OpParams::Trace { bottom_z, .. }
         | OpParams::Finish3D { bottom_z, .. }
         | OpParams::Contour5D { bottom_z, .. }
@@ -583,6 +603,10 @@ pub fn bottom_of(p: &OpParams) -> Option<Height> {
         OpParams::Probe { .. } => None,
         // The plate's bottom: the thickness the small-hole rule reads.
         OpParams::PlasmaProfile(p) => Some(p.bottom_z),
+        // The lower programmed plane the wire's moves ride (#532).
+        OpParams::WireContour(p) => Some(p.bottom_z),
+        // The cavity floor datum no burn passes (#541).
+        OpParams::SinkerBurn(p) | OpParams::SinkerSideBurn(super::SinkerSideBurnOp { burn: p, .. }) => Some(p.floor_z),
     }
 }
 
@@ -601,6 +625,7 @@ fn retract_of(p: &OpParams) -> Option<Height> {
         | OpParams::Circular { retract_z, .. }
         | OpParams::Pocket3D { retract_z, .. }
         | OpParams::Slot { retract_z, .. }
+        | OpParams::TrochoidalSlot { retract_z, .. }
         | OpParams::Trace { retract_z, .. }
         | OpParams::Drill { retract_z, .. }
         // Both new rides hop between holes at the authored plane,
@@ -658,7 +683,7 @@ fn retract_of(p: &OpParams) -> Option<Height> {
         // The deburr ride hops every run to the clearance plane -
         // the kernel's own word, no between-run plane authored (M2.5 E B).
         | OpParams::Deburr { .. } => None,
-        OpParams::Probe { .. } | OpParams::PlasmaProfile(_) => None,
+        OpParams::Probe { .. } | OpParams::PlasmaProfile(_) | OpParams::WireContour(_) | OpParams::SinkerBurn(_) | OpParams::SinkerSideBurn(_) => None,
     }
 }
 
@@ -876,6 +901,32 @@ fn seed_slot(c: &Carried) -> OpParams {
     }
 }
 
+/// The trochoidal slot's draft (#220): the Slot's authored line at a
+/// width that leaves a 10 mm cutter room to loop, a 10%-of-D step and
+/// a 90 degree limit; the planner cuts the step if the stock needs it.
+fn seed_trochoidal_slot(c: &Carried) -> OpParams {
+    OpParams::TrochoidalSlot {
+        a: Point2::new(-20.0, 0.0),
+        b: Point2::new(20.0, 0.0),
+        width: 16.0,
+        loop_width: None,
+        step: 1.0,
+        max_engagement: crate::machining2d::DEFAULT_MAX_ENGAGEMENT,
+        ret: crate::machining2d::TrochoidReturn::Microlift { height: crate::machining2d::DEFAULT_MICROLIFT },
+        smoothing: 1.0,
+        stock_to_leave: 0.0,
+        clearance_z: c.clearance,
+        retract_z: None,
+        top_z: c.top,
+        bottom_z: c.bottom,
+        stepdown: c.stepdown,
+        feed: c.feed,
+        return_feed: c.feed * 2.0,
+        plunge_feed: c.plunge,
+        climb: c.climb,
+    }
+}
+
 fn seed_trace(c: &Carried) -> OpParams {
     OpParams::Trace {
         clearance_z: c.clearance,
@@ -934,12 +985,11 @@ fn seed_standalone_bore(c: &Carried) -> OpParams {
     }
 }
 
-/// The thread mill's seed (M2.4 C): the drill's four heights again.
-/// The PITCH is the tool's and rides no params - the tap cycle's
-/// law. The infeed starts small: the validator caps it at the
-/// standard's depth for whatever pitch the mounted tool states,
-/// and the pane lets the author step more per turn if they wish.
-/// Climb opens CCW: the standard read for a right-hand thread.
+/// The thread mill's seed (M2.4 C, #894): the drill's four heights
+/// again. The pitch starts unstated - a multi-form mill's own - and
+/// the hand right. The infeed starts small: the validator caps it at
+/// the standard's depth for the pitch, and the pane lets the author
+/// take more per pass. Climb is the handbook's default.
 fn seed_thread_mill(c: &Carried) -> OpParams {
     OpParams::Thread {
         clearance_z: c.clearance,
@@ -951,6 +1001,12 @@ fn seed_thread_mill(c: &Carried) -> OpParams {
         plunge_feed: c.plunge,
         climb: true,
         holes: Vec::new(),
+        pitch: None,
+        hand: crate::cl::ThreadHand::Right,
+        // #985: holes until the author says bosses.
+        external: false,
+        // #988: the #894 ride - equal passes, M3, right-hand-cut mill.
+        passes: crate::machining2d::ThreadPasses::default(),
     }
 }
 
@@ -1048,6 +1104,9 @@ fn seed_finish3d(c: &Carried) -> OpParams {
         // shallow pattern would ever read it.
         steep_stepover: None,
         pencil_reference: None,
+        // The model is the finished surface until a machinist asks
+        // for the land (#1196).
+        fill_openings: None,
     }
 }
 
@@ -1169,9 +1228,17 @@ fn seed_facing(c: &Carried) -> OpParams {
     OpParams::Facing {
         tolerance: 0.05,
         clearance_z: c.clearance,
-        top_z: c.top,
-        bottom_z: c.bottom,
-        // The one number NOT folded: an infeed is bounded by twice
+        // #1409: the heights are NOT folded either. Face has no floor,
+        // so the fold hands every seed the mill's Bottom of Model
+        // (#214) - and for a Facing that "bottom" is the finished
+        // facing plane: the ladder would climb from the part's floor
+        // and cut the whole part away. A facing removes the allowance
+        // the stock holds above the part, so it runs from the stock's
+        // top down to the part's top; a part already at length has
+        // nothing between the two, and the generator says so.
+        top_z: Height::of(HeightReference::TopOfStock, 0.0),
+        bottom_z: Height::of(HeightReference::TopOfModel, 0.0),
+        // The other number NOT folded: an infeed is bounded by twice
         // the nose's reach (the kernel's law), and the mill default
         // the fold carries would refuse against the house insert's
         // 0.8 mm nose the moment a user created the op. 0.5 is the
@@ -1289,6 +1356,7 @@ fn seed_threading(c: &Carried) -> OpParams {
         infeed: 0.4,
         feed: c.feed,
         plunge_feed: c.plunge,
+        infeed_plan: crate::turning::ThreadInfeed::default(),
         hand: crate::cl::ThreadHand::Right,
     }
 }
@@ -1565,19 +1633,25 @@ pub enum Section {
     Turning,
     /// The plasma table's work (#670): the torch's 2D through-cuts.
     Plasma,
+    /// The wire EDM's work (#532, #290): the wire's through-cuts.
+    WireEdm,
+    /// The sinker EDM's work (#541): an electrode burned down Z.
+    Sinker,
 }
 
 impl Section {
     /// The catalog's order, which is the ribbon's: the sections appear
     /// left to right in exactly this sequence, each one's kinds in the
     /// registry's own order (the row order is the product order).
-    pub const ORDER: [Section; 6] = [
+    pub const ORDER: [Section; 8] = [
         Section::Mill2D,
         Section::Mill3D,
         Section::Drilling,
         Section::MultiAxis,
         Section::Turning,
         Section::Plasma,
+        Section::WireEdm,
+        Section::Sinker,
     ];
 
     #[must_use]
@@ -1589,6 +1663,8 @@ impl Section {
             Section::MultiAxis => "Multi-axis",
             Section::Turning => "Turning",
             Section::Plasma => "Plasma",
+            Section::WireEdm => "Wire EDM",
+            Section::Sinker => "Sinker EDM",
         }
     }
 
@@ -1600,6 +1676,8 @@ impl Section {
         match self {
             Section::Turning => Family::Turn,
             Section::Plasma => Family::Plasma,
+            Section::WireEdm => Family::WireEdm,
+            Section::Sinker => Family::Sinker,
             _ => Family::Mill,
         }
     }
@@ -1658,6 +1736,12 @@ pub enum Family {
     /// The plasma table's torch work (#670): admitted on a plasma
     /// table only - a mill-turn spins steel, it strikes no arc.
     Plasma,
+    /// The wire EDM's work (#532): admitted on a wire EDM only - the
+    /// wire and its spark gap are that machine's condition table.
+    WireEdm,
+    /// The sinker EDM's electrode work (#541): admitted on a sinker
+    /// EDM only.
+    Sinker,
 }
 
 impl Family {
@@ -1674,6 +1758,8 @@ impl Family {
                 | (Family::Mill, Kind::Mill)
                 | (Family::Turn, Kind::Lathe)
                 | (Family::Plasma, Kind::Plasma)
+                | (Family::WireEdm, Kind::WireEdm)
+                | (Family::Sinker, Kind::SinkerEdm)
         )
     }
 
@@ -1684,6 +1770,8 @@ impl Family {
             Family::Mill => "milling",
             Family::Turn => "turning",
             Family::Plasma => "plasma cutting",
+            Family::WireEdm => "wire EDM",
+            Family::Sinker => "sinker EDM",
         }
     }
 
@@ -1694,6 +1782,8 @@ impl Family {
             Family::Mill => "mill",
             Family::Turn => "lathe",
             Family::Plasma => "plasma table",
+            Family::WireEdm => "wire EDM",
+            Family::Sinker => "sinker EDM",
         }
     }
 }
@@ -2263,6 +2353,62 @@ impl KindInfo {
             seed: super::plasma_op::seed_plasma_profile,
             tool_kinds: tk::TORCH,
         },
+        KindInfo {
+            ty: OpType::TrochoidalSlot,
+            label: "Trochoidal slot",
+            caption: "Trochoid",
+            tag: 40,
+            // The slot's authored stadium, hollowed: area laws rule.
+            mode: Mode::Area,
+            section: Section::Mill2D,
+            seed: seed_trochoidal_slot,
+            tool_kinds: tk::FLAT_MILLS,
+        },
+        KindInfo {
+            ty: OpType::WireContour,
+            label: "Wire Contour",
+            caption: "Wire Contour",
+            tag: 41,
+            // The wire burns a kerf through the workpiece: no milling
+            // law has a cutter to judge, so they stand down as for the
+            // centre-line ride; the wire generator certifies its own
+            // kerf and corner laws, and #534 owns the wire verdicts.
+            mode: Mode::Engrave,
+            section: Section::WireEdm,
+            seed: super::wire_op::seed_wire_contour,
+            // No library tool (#532): the wire is the machine's
+            // condition (#531), its one source.
+            tool_kinds: tk::NO_TOOL,
+        },
+        KindInfo {
+            ty: OpType::SinkerBurn,
+            label: "Sinker Burn",
+            caption: "Sinker Burn",
+            tag: 42,
+            // The electrode burns straight down Z: the milling laws
+            // (tangency, reach, depth) have no electrode to judge, so
+            // they stand down as for the centre-line ride; the burn's
+            // own door refuses a depth past the floor datum by name and
+            // the stock sim's box atom verifies the plunge (#290 D7).
+            mode: Mode::Engrave,
+            section: Section::Sinker,
+            seed: super::sinker_op::seed_sinker_burn,
+            tool_kinds: tk::ELECTRODE,
+        },
+        KindInfo {
+            ty: OpType::SinkerSideBurn,
+            label: "Sinker Side Burn",
+            caption: "Side Burn",
+            tag: 43,
+            // The burn's plunge plus one lateral move (#545): the
+            // milling laws stand down as for the burn; the side's own
+            // door refuses a move past its allowance by name and the
+            // stock sim's box atom verifies every move (#290 D7).
+            mode: Mode::Engrave,
+            section: Section::Sinker,
+            seed: super::sinker_side_op::seed_sinker_side_burn,
+            tool_kinds: tk::ELECTRODE,
+        },
     ];
 
     /// Whose machine this kind drives - read off the row's section
@@ -2336,6 +2482,10 @@ pub const ALL_LABELS: [&str; KIND_COUNT] = [
     KindInfo::ALL[37].label,
     KindInfo::ALL[38].label,
     KindInfo::ALL[39].label,
+    KindInfo::ALL[40].label,
+    KindInfo::ALL[41].label,
+    KindInfo::ALL[42].label,
+    KindInfo::ALL[43].label,
 ];
 
 impl OpType {
@@ -2397,6 +2547,14 @@ impl OpType {
             // #670: the plasma profile appends - the plasma table's
             // section, its own run at the tail.
             OpType::PlasmaProfile => 39,
+            // #220: appended after the plasma profile (39) (stored ids never move).
+            OpType::TrochoidalSlot => 40,
+            // #532: the wire contour appends - the wire EDM's section.
+            OpType::WireContour => 41,
+            // #541: the sinker burn appends (stored ids never move).
+            OpType::SinkerBurn => 42,
+            // #545: the side burn appends (stored ids never move).
+            OpType::SinkerSideBurn => 43,
         }
     }
 
@@ -2448,7 +2606,7 @@ pub fn retype_params(cur: &OpParams, kind: usize) -> OpParams {
         Some(r) => r,
         None => {
             debug_assert!(false, "op kind index {kind} is past the table");
-            eprintln!("kinds: unknown op kind index {kind}, seeding a Face");
+            tracing::error!("kinds: unknown op kind index {kind}, seeding a Face");
             &KindInfo::ALL[0]
         }
     };

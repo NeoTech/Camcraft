@@ -173,11 +173,34 @@ pub fn depth_sane(
             (Some(t), Some(c)) => t >= c,
             _ => true,
         },
+        // #1409: a Facing whose top meets its facing plane is a part
+        // already at length - legal to create, and its generate says
+        // "nothing to face" by name, rather than this door calling a
+        // level window an upward cut.
+        OpParams::Facing { .. } => match (r.top, r.bottom) {
+            (Some(t), Some(b)) => t >= b,
+            _ => true,
+        },
         _ => match (r.top, r.bottom) {
             (Some(t), Some(b)) => t > b,
             _ => true,
         },
     }
+}
+
+/// The microlift door (#774): a trochoidal slot's lifted return must
+/// not rise above the clearance plane, read on the resolved heights
+/// ([`OpParams::microlift_refusal`] holds the rule). An unresolved
+/// height is refused elsewhere, by name.
+#[must_use]
+pub fn microlift_sane(
+    world: &World,
+    setup: Option<&str>,
+    src: Option<&SrcRef>,
+    params: &OpParams,
+) -> Option<String> {
+    let r = resolve_params(world, setup, src, params).ok()?;
+    params.microlift_refusal(r.clearance, r.top?)
 }
 
 #[cfg(test)]

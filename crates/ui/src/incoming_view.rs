@@ -79,7 +79,7 @@ pub fn refresh(state: &mut State) {
     }
     let got = setup_stock_view::incoming_shape(&state.world, &key.0);
     if let Err(why) = &got {
-        eprintln!("incoming stock of {}: not drawn - {why}", key.0);
+        diag_warn!("incoming stock of {}: not drawn - {why}", key.0);
     }
     let view = &mut state.incoming_view;
     view.measured = view.measured.saturating_add(1);

@@ -12,6 +12,15 @@ of these conflicts are mechanical: both sides added an entry to the same
 module list, test list, match or file. This skill fixes those, and stops
 and reports when the two sides really clash.
 
+Since 2026-11-12 a conflicting PR is refreshed **only at merge time**
+(AGENTS.md "Refresh only at merge time", issue #1221): it carries
+`conflicts` and is otherwise left alone, by its author's agents, by
+maintenance and by reviewers. Nobody refreshes all of them at session
+start. The merging session (or the author, when asked for one named PR)
+runs this skill on the PR the merge batch is about to merge, in the order
+`cargo xtask merge-plan` gives. Its delta check after a refresh is
+`cargo xtask merge-plan --delta <PR> --reviewed <sha>`.
+
 Repository: NeoTech/Camcraft (`gh repo view --json nameWithOwner`; in a
 fork, `upstream` is NeoTech/Camcraft and `origin` is the fork).
 
@@ -28,13 +37,25 @@ fork, `upstream` is NeoTech/Camcraft and `origin` is the fork).
 - Never force-push and never rebase. Always `git merge` (merge commits keep
   the hashes reviews and comments refer to).
 - Never build in the main checkout. Work in a worktree under
-  `.claude/worktrees/` with its own `CARGO_TARGET_DIR`; remove both when done.
+  `.claude/worktrees/` with its own `target/` (the worktree default, no `CARGO_TARGET_DIR` env var - it defeats the shared compile cache); remove both when done.
+- Build cache: Prefer `cargo xtask gate ...` (it turns the compile cache on); for a direct cargo call set `RUSTC_WRAPPER=sccache` only when `sccache` is on PATH (cargo fails if the wrapper is missing), and never export `CARGO_TARGET_DIR`.
 - A PR flagged ready and labelled `merge-ready` takes no pushes (AGENTS.md
   "Every PR opens as a draft"). A conflicting PR has already lost
   `merge-ready` (the label is `conflicts`), so pushing a merge to it is
   allowed. If the PR is still marked ready (ours or a contributor's), run
-  `gh pr ready <N> --undo` before pushing and say why in a PR comment. A
-  contributor can do this on their own PR; when you can't (someone else's
+  `gh pr ready <N> --undo` before pushing and say why in a PR comment -
+  except a refresh that is only a merge of main with no hand edits
+  (`cargo xtask merge-plan --delta` says SAME; AGENTS.md "Every PR opens as
+  a draft", superseded since 2026-11-12 by the decision "Refresh only at
+  merge time", issue #1221): that one is pushed as it is, and the comment
+  says so.
+- The ready flag after a merge-time refresh is the merging session's: when
+  it refreshes a PR for the batch and `--delta` says SAME, or MECHANICAL
+  after its own read, the merging session flags the PR ready (`gh pr ready
+  <N>`) right before it merges it, with one PR comment naming the class.
+  Nothing is pushed after that flag. A PR under an orange `conflicts` verdict
+  is a draft (review-prs), so this step is what makes it mergeable again.
+  A contributor does the flag on their own PR; when you can't (someone else's
   PR you only have push access to), say in the comment that it should be
   re-flagged ready after the re-check.
 
@@ -49,8 +70,11 @@ gh pr list --repo NeoTech/Camcraft --state open --author "$me" --limit 100 \
 ```
 
 Re-read `mergeable` for each (retry while `UNKNOWN`, up to ~6 tries). Work
-on the ones that are `CONFLICTING` or carry the `conflicts` label. Order
-them so stacks go parent first: if PR B contains PR A's commits (A's head
+only on the PR the merge batch is about to merge - the next PR of wave 2
+in `cargo xtask merge-plan <PRs>` - or the one PR the author named. Never
+every `CONFLICTING` PR at once: an early refresh is undone by the next
+merge to main and costs a delta review (AGENTS.md "Refresh only at merge
+time"). Order stacks parent first: if PR B contains PR A's commits (A's head
 is an ancestor of B's head, `git merge-base --is-ancestor`), fix A first,
 then merge A's fixed branch into B before main.
 
@@ -74,8 +98,8 @@ then merge A's fixed branch into B before main.
      instead if the UI changed.
    - **`CHANGELOG.md` / `RECOMMENDED.md`:** a PR shouldn't touch these
      (the cut writes them). Take main's and drop the PR's edit.
-   - **`.claude/PROCESS_VERSION`:** take the higher number, then add 1 if
-     this PR changes process files and main already used that number.
+   - **`.claude/PROCESS_VERSION`:** take main's; a PR no longer edits it
+     (#1153), so drop any edit of the PR's own.
    - **The same logic changed differently on both sides** (two rewrites of
      one function body, two different fixes of one check, a refactor that
      moved code main edited in place): **stop.** Don't guess. `git merge
@@ -114,27 +138,42 @@ For every open PR labelled `conflicts` (plus any open PR that GitHub now
 reports `CONFLICTING` without the label - add the label to those):
 
 1. Re-read `mergeable` (retry while `UNKNOWN`).
-2. **Still `CONFLICTING`:** keep `conflicts`. If no comment since the label
-   was set asks the author to merge main, post one (once):
+2. **Still `CONFLICTING`:** keep `conflicts` and leave the PR alone. Ask the
+   author only when the PR is in the batch the merging session is about to
+   merge (`cargo xtask merge-plan --label merge-ready` puts it in wave 2);
+   otherwise say nothing, and never ask for a refresh of a PR that is not
+   about to merge (AGENTS.md "Refresh only at merge time"). When asked, and
+   no comment since the label was set already asks the author to merge main,
+   post one (once):
    `This conflicts with main. Please run /resolve-conflicts (or git merge
    upstream/main, keep both sides) and push. The usual cause is that both
    sides added lines in the same place.` If the author's fork refuses
    maintainer pushes and the maintainer wants it merged now, the
    replacement-branch route applies (fix on a branch in our repo, PR with
    their commits kept; GitHub then shows the original PR as merged).
-3. **Now `MERGEABLE`:** remove `conflicts`, then decide what review it needs:
-   - **Head unchanged since the last review** (main moved, the conflict went
-     away by itself): restore `merge-ready` if that review was clean.
-   - **Head moved, and the only new commits are a merge of main whose diff
-     against main is just the PR's own files** (the author's
-     resolve-conflicts push): a **delta review** - a reviewer checks only
-     the merge commit (both sides kept, nothing from main dropped, targeted
-     tests). Clean -> `merge-ready`, with the reviewer marker for the new
-     head. The delta review sets any of the review-prs labels (step 2b):
+3. **Now `MERGEABLE`:** remove `conflicts`, then decide what review it needs.
+   Run `cargo xtask merge-plan --delta <PR> --reviewed <sha>`, where the sha
+   is the last reviewed head: the one in the collaborator-authored
+   `<!-- pr-reviewer: ... -->` marker (AGENTS.md "Only collaborators' reviews
+   count"; a marker by a non-collaborator does not count).
+   - **SAME** (head unchanged, or only merges of main with an empty
+     remerge-diff - AGENTS.md "A clean merge of main keeps its review"): the
+     tree is what merging the reviewed head would give. Restore `merge-ready`
+     with no agent and no delta review.
+   - **MECHANICAL** (hand edits only in rule-settled files: `.claude/
+     PROCESS_VERSION`, `CHANGELOG.md`, `RECOMMENDED.md`, `Cargo.lock`, PNGs
+     taken from main; `PROCESS_VERSION` stays listed for branches opened before
+     #1153 that still edit it): the merging session reads `git show --remerge-diff
+     <merge>` itself, and restores `merge-ready` when it is right.
+   - **DELTA** (a conflict was resolved by hand): a **delta review** - a
+     reviewer checks only the remerge-diff of those merges (both sides kept,
+     nothing from main dropped, targeted tests; rebuild only if logic was
+     merged by hand). Its labels follow the review-prs table (step 2b):
      `needs-rework` if the resolution is wrong, `conflicts` if main moved
-     again, and `needs-maintainer` if the merge brought in a dependency,
+     again, `needs-maintainer` if the merge brought in a dependency,
      `build.rs`, scripts or `.github` change the reviewer only reads.
-   - **Head moved with new code commits:** a full review via `/review-prs`.
+   - **NEW CODE** or **Rewritten** (new code commits, or the history was
+     rewritten): a full review via `/review-prs`.
 4. Report one line per PR: still conflicting (author asked), clean again
    (label restored), sent to delta review, sent to full review.
 
@@ -144,5 +183,6 @@ reports `CONFLICTING` without the label - add the label to those):
   or the maintainer.
 - Contributors running it from a fork use their own `gh` login; the
   maintainer runs it from the canonical repo.
-- Changing this skill is a process change: bump `.claude/PROCESS_VERSION`
-  and announce it on the pinned issue #681.
+- Changing this skill is a process change: the PR body says `Process
+  change: yes`; the merging session bumps `.claude/PROCESS_VERSION` and
+  announces it on the pinned issue #681.

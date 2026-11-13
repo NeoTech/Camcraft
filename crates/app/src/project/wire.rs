@@ -61,6 +61,8 @@ pub fn collect(world: &World) -> ProjectFile {
                 number: model::tool_number_of(world, &entity),
                 body: crate::tool_body::body_of(world, &entity)
                     .map(|b| super::tool_body_wire::ToolBodyDto::from_body(&b)),
+                cutter: crate::tool_cutter::cutter_of(world, &entity)
+                    .map(|c| super::tool_body_wire::spun_to_dto(&c)),
                 ..ToolDto::from_tool(&t)
             });
             // The setup payload only ever rides a setup row (the kind test
@@ -82,6 +84,8 @@ pub fn collect(world: &World) -> ProjectFile {
                         relative_to: d.relative_to.clone(),
                         stock_source: d.stock_source.map(|s| s.word().to_string()),
                         post_options: d.post_options.as_ref().map(SetupPostOptionsDto::from_options),
+                        nose_to_axis: d.nose_to_axis.filter(|v| v.is_finite()),
+                        workholding_max_rpm: d.workholding_max_rpm,
                     })
             } else {
                 None
@@ -94,6 +98,11 @@ pub fn collect(world: &World) -> ProjectFile {
                 .try_get::<&FixtureDef>(|d| FixtureDto {
                     setup: d.setup.clone(),
                     fixed: d.fixed,
+                    vise: d.vise.as_ref().and_then(super::fixture_keys::vise_value),
+                    accessory: d.accessory.as_ref().and_then(super::fixture_keys::accessory_value),
+                    plate: super::plate_dto::plate_value(&d.plate),
+                    on_plate: super::plate_dto::on_plate_value(&d.plate),
+                    mod_jaw: super::modvise_dto::value(d.mod_jaw.as_ref()),
                 });
             let operation = model::operation_of(world, &entity).map(|op| OperationDto {
                 label: model::operation_meta_of(world, &entity).label,
@@ -145,6 +154,13 @@ pub fn collect(world: &World) -> ProjectFile {
                 }
                 _ => model::facets_of(world, &entity).map(|t| facets_to_dto(&t)),
             };
+            // #1094: the mark, as set, with its print (the verdict checks
+            // the print against the loaded model, so a stale one stays void).
+            let mark = entity
+                .entity_view(world)
+                .try_get::<&crate::schema::StockSourceOnly>(|f| f.clone())
+                .filter(|f| matches!(&stock, Some(StockDto::FromModel { source }) if *source == f.source))
+                .map(|f| f.print);
             EntityDto {
                 name,
                 translation: [loc.pos.x, loc.pos.y, loc.pos.z],
@@ -153,7 +169,14 @@ pub fn collect(world: &World) -> ProjectFile {
                 // The counter moves on models and stocks (every facet
                 // landing); everywhere else it reads 0 and omits itself.
                 rev: model::rev_of(world, &entity),
+                coarse_mm: crate::model_fidelity::chord_of(world, &entity)
+                    .filter(|c| !crate::model_fidelity::is_unknown(*c)),
+                fidelity_unknown: crate::model_fidelity::chord_of(world, &entity)
+                    .is_some_and(crate::model_fidelity::is_unknown),
+                facet_budget: crate::model_fidelity::budget_of(world, &entity),
                 kind,
+                raw_stock_only: mark.is_some(),
+                raw_stock_print: mark.as_ref().map(crate::stock_print::to_text),
                 stock,
                 tool,
                 operation,
@@ -210,13 +233,6 @@ pub fn collect(world: &World) -> ProjectFile {
             crate::schema::PostRef::Named(name) => Some(PostDto::Named(name)),
             crate::schema::PostRef::File(path) => Some(PostDto::File(path)),
         },
-        // The default theme matches every pre-v41 document, so it
-        // writes no key (the post's law, worn in the theme's clothes).
-        theme: match crate::commands::theme_of(world) {
-            crate::schema::ThemeRef::Dark => None,
-            crate::schema::ThemeRef::Named(name) => Some(ThemeDto::Named(name)),
-            crate::schema::ThemeRef::File(path) => Some(ThemeDto::File(path)),
-        },
         // An unpinned ribbon writes no key (the theme's law, worn in
         // the pin's clothes - and the default is what every pre-M6.2
         // document is).
@@ -227,8 +243,16 @@ pub fn collect(world: &World) -> ProjectFile {
         skip_stops: crate::setup_post_options::document(world).skip_stops,
         // One combined program writes no key (#111).
         per_op_files: crate::setup_post_options::document(world).per_op,
+        // Nothing stated writes no key (#258).
+        program: {
+            let p = crate::posting::program_info(world);
+            (p != crate::schema::ProgramInfo::default())
+                .then_some(ProgramDto { number: p.number, comment: p.comment })
+        },
         // Off writes no key (#616).
         smoothing: crate::setup_post_options::document(world).smoothing,
+        // Off writes no key (#1386).
+        explain: crate::setup_post_options::document(world).explain,
         entities,
     }
 }

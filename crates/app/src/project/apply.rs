@@ -509,8 +509,17 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
         // (#320): a setup may pick its stock source; absent is #317's
         // implicit rule. v57 -> v58 (#368): a tool may carry a modelled
         // body; absent is the holder cylinder every older tool judged.
-        // None of these rungs needs a rewrite.
+        // None of these rungs needs a rewrite. v58 -> v59 (#1056): every
+        // mesh the file holds no fidelity record for is marked unknown.
+        // v60 -> v61 (#258): the document may state its program number
+        // and comment; absent states neither (O0001, the machine's name).
         notes = super::wcs_one::settle(&mut file, from)?;
+        notes.extend(super::fidelity_migrate::settle(&mut file.entities, from));
+        // v59 -> v60 (#902): the document's unit is its programs' unit;
+        // an older file opens on the unit it posted in (`units_migrate`).
+        if from < 60 {
+            notes.extend(super::units_migrate::settle(&mut file));
+        }
         file.version = PROJECT_VERSION;
     }
     if file.version != PROJECT_VERSION {
@@ -532,6 +541,7 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
         skip_stops: file.skip_stops,
         per_op: file.per_op_files,
         smoothing: file.smoothing,
+        explain: file.explain,
         // #596: an absent key leaves the program's unit modal.
         end_units: match file.post_options.as_ref().and_then(|o| o.end_units.as_deref()) {
             None => crate::schema::EndUnits::Leave,
@@ -540,6 +550,18 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
             Some(other) => return Err(corrupt(format!("unknown end units {other:?}"))),
         },
     };
+    // The program identity (#258): checked by `SetProgramInfo`'s rules,
+    // so a hand-edited value they refuse is a corrupt file, refused
+    // before any world write; absent is nothing stated.
+    let program = file
+        .program
+        .as_ref()
+        .map(|p| crate::schema::ProgramInfo { number: p.number, comment: p.comment.clone() })
+        .unwrap_or_default();
+    if program != crate::posting::normalised_program_info(program.clone()) {
+        return Err(corrupt("program comment must be trimmed and non-empty".to_owned()));
+    }
+    crate::posting::check_program_info(&program).map_err(corrupt)?;
     let doc_units = match file.units.as_deref() {
         None | Some("mm") => Unit::Millimeters,
         Some("in") => Unit::Inches,
@@ -562,6 +584,12 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
                 return Err(corrupt(format!("operation label '{label}' conflicts with another operation")));
             }
         }
+    }
+    // #813: a machine embedded before #804 may hold a table A the
+    // index-swing clause cannot judge; say so by name.
+    notes.extend(super::swing_note::notes(&file));
+    if let Some(r) = file.machine.as_ref().and_then(|m| crate::machine::tooling_refusal(&m.machine)) {
+        return Err(corrupt(format!("machine definition {r}")));
     }
     if let Some(m) = &file.machine
         && !m.machine.is_sane()
@@ -604,6 +632,7 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
     // refusal is the net (`script_source` reads both, and both refuse
     // by name when gone).
     crate::posting::post_options_set(world, post_options);
+    crate::posting::program_info_set(world, program);
     crate::posting::post_set(
         world,
         &match file.post {
@@ -612,25 +641,20 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
             None => crate::schema::PostRef::Builtin,
         },
     );
-    // Opening lands the theme choice too - including the default, so a
-    // stale singleton from the previous document can never leak in (the
-    // post's law, worn in the theme's clothes). Names and paths land as
-    // written; the shell resolves at draw and a stranger refuses by
-    // name in the status line, never silently wearing `dark`'s ink.
-    crate::commands::theme_set(
-        world,
-        &match file.theme {
-            Some(ThemeDto::Named(name)) => crate::schema::ThemeRef::Named(name),
-            Some(ThemeDto::File(path)) => crate::schema::ThemeRef::File(path),
-            None => crate::schema::ThemeRef::Dark,
-        },
-    );
+    // The theme is not the document's (#877): opening leaves the user's
+    // preference as it is, whatever an older file's `theme` key says.
     // Opening lands the pins too - including the empty default, so a
     // stale singleton from the previous document can never leak in
     // (the theme's law, worn in the pin's clothes).
     crate::ribbon::pinned_set(world, &file.pinned);
     // Opening lands the material too - including None (the units law).
     crate::cutting::material_set(world, material);
+    // #1094: a raw-stock-only mark lands only when its source model is in
+    // the file - one naming a missing model is read as unmarked (judged),
+    // so a model imported later under that name never inherits it.
+    let model_names: std::collections::HashSet<String> = file.entities.iter()
+        .filter(|e| e.kind.unwrap_or(EntityKind::Model) == EntityKind::Model)
+        .map(|e| e.name.clone()).collect();
     for dto in file.entities {
         let kind = dto.kind.unwrap_or(EntityKind::Model);
         let entity = model::spawn(world, &dto.name);
@@ -657,6 +681,11 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
                 // not the file's whole history. Staleness never reads
                 // it; the stamp's signature does the work.
                 model::set_rev(world, &entity, dto.rev);
+                // #864: the flag lands with the facets it describes; an
+                // absent key, or a value that is no coarse chord, is none.
+                crate::model_fidelity::set(world, &entity, crate::model_fidelity::loaded(dto.coarse_mm, dto.fidelity_unknown));
+                // #1054: validate_kind refused a budget out of bounds.
+                crate::model_fidelity::set_budget(world, &entity, dto.facet_budget);
             }
             EntityKind::Stock => {
                 // validate_kind already refused these; Result, never unwrap.
@@ -679,9 +708,28 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
                 // writes it, so the load must end where the file left it.
                 // An absent key (0) puts back what that file remembered.
                 model::set_rev(world, &entity, dto.rev);
+                // #1056: a model copy carries its source's flag itself;
+                // a parametric block is meshed here, never coarse.
+                if matches!(shape, StockShape::FromModel { .. }) {
+                    crate::model_fidelity::set(world, &entity, crate::model_fidelity::loaded(dto.coarse_mm, dto.fidelity_unknown));
+                }
                 entity.entity_view(world).set(StockDef {
                     shape: shape.clone(),
                 });
+                // #1094: the mark lands only on a from-model stock, naming
+                // its source; anywhere else it means nothing and is dropped.
+                // The print is the mark's check (third review): no print,
+                // no mark - read as unmarked with a note, never trusted.
+                if let (true, StockShape::FromModel { source }) = (dto.raw_stock_only, &shape) {
+                    let print = dto.raw_stock_print.as_deref().and_then(crate::stock_print::from_text);
+                    match print {
+                        Some(print) if model_names.contains(source) => {
+                            entity.entity_view(world).set(crate::schema::StockSourceOnly { source: source.clone(), print });
+                        }
+                        Some(_) => notes.push(format!("'{}' was marked raw stock only, but its source model '{source}' is not in the file - read as unmarked", dto.name)),
+                        None => notes.push(format!("'{}' was marked raw stock only without the fingerprint of '{source}' it was set on - read as unmarked; tick \"{}\" again if it is raw stock", dto.name, crate::stock_source::RAW_STOCK_ONLY)),
+                    }
+                }
             }
             EntityKind::Wcs => {
                 entity.entity_view(world).add(Wcs);
@@ -700,6 +748,11 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
                 if let Some(b) = &tdto.body {
                     let body = b.to_body(&dto.name).map_err(corrupt)?;
                     crate::tool_body::set_body(world, &entity, Some(&body));
+                }
+                // #93: validate_kind already refused a cutter that disagrees.
+                if let Some(c) = &tdto.cutter {
+                    let spun = super::tool_body_wire::cutter_from_dto(&tdto.to_tool(), c, &dto.name).map_err(corrupt)?;
+                    crate::tool_cutter::set_cutter(world, &entity, Some(&spun));
                 }
             }
             EntityKind::Operation => {
@@ -784,6 +837,11 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
                     None => None,
                     Some(o) => Some(o.to_options(&dto.name).map_err(corrupt)?),
                 };
+                // #1031: a limit no command would accept is a corrupt file,
+                // never a guessed one.
+                if let Some(why) = sdto.workholding_max_rpm.and_then(crate::setup_workholding::invalid) {
+                    return Err(corrupt(format!("setup '{}': {why}", dto.name)));
+                }
                 entity.entity_view(world).set(SetupDef {
                     stock: sdto.stock,
                     // `wcs_one` left exactly one name on every setup.
@@ -801,6 +859,9 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
                     relative_to: sdto.relative_to.clone(),
                     stock_source,
                     post_options,
+                    // #821: absent in every earlier file - states none.
+                    nose_to_axis: sdto.nose_to_axis,
+                    workholding_max_rpm: sdto.workholding_max_rpm,
                 });
             }
         }
@@ -809,11 +870,18 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
         // anything else). Setting it after keeps the geometry-first
         // order of every other load.
         if let Some(f) = &dto.fixture {
-            entity.entity_view(world).set(FixtureDef {
-                setup: f.setup.clone(),
-                fixed: f.fixed,
-            });
+            // #812: a parameter key this build can't read is dropped
+            // with a note, never a failed load.
+            entity.entity_view(world).set(super::fixture_keys::fixture_def(f, &dto.name, &mut notes));
         }
+    }
+    // #1056: a model copy saved before it carried its own flag takes its
+    // source's, so deleting that source later cannot clear it.
+    crate::model_fidelity::adopt_copies(world);
+    // #819: a place on a plate the file does not hold is dropped, never
+    // left for the next plate of that name to pick up.
+    for name in crate::plate::mount::drop_dangling(world) {
+        notes.push(format!("fixture '{name}': plate location dropped on load: no such plate"));
     }
     Ok(notes)
 }

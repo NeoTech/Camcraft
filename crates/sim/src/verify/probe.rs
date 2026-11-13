@@ -5,6 +5,9 @@
 //! [`Tool::profile`] draws; the frame is plain linear algebra. Our own
 //! design; no vendor source.
 
+use camcraft_tools::holder_profile::HolderStack;
+
+use super::body_bands::{BodyBands, NeckBands};
 use crate::geometry::{Point3, Triangle};
 use crate::tools::{Tool, ToolGeom, ToolKind};
 
@@ -23,6 +26,14 @@ pub struct Cutter {
     pub shank_len: f64,
     pub holder_radius: f64,
     pub holder_len: f64,
+    /// A modelled tool body's bands (#835), standing in for the holder
+    /// band: the shape the fixture laws sweep and the simulation draws.
+    /// `None` reads the holder cylinder, as always.
+    pub body: Option<BodyBands>,
+    /// A necked tool's drawn shank bands (#852), standing in for the
+    /// shank band where they are narrower. `None` reads the stated shank
+    /// cylinder, as always.
+    pub neck: Option<NeckBands>,
 }
 
 impl Cutter {
@@ -39,6 +50,39 @@ impl Cutter {
             shank_len: g.shank_len,
             holder_radius: g.holder_radius,
             holder_len: g.holder_len,
+            body: None,
+            neck: None,
+        }
+    }
+
+    /// The same cutter with its holder read as the body's band stack
+    /// `stack` (#835) - `tool_body::stack` of the tool `g` describes.
+    /// A stack that is the plain holder cylinder, or does not fit `g`
+    /// ([`BodyBands::of`]), leaves the cylinder: it can only over-report.
+    #[must_use]
+    /// Its drawn neck (#852) rides the same way ([`NeckBands::of`]).
+    pub fn with_body(self, g: &ToolGeom, stack: &HolderStack) -> Self {
+        Self { body: BodyBands::of(g, stack), neck: NeckBands::of(g, stack), ..self }
+    }
+
+    /// The shank as `(bottom above the tip, radius, length)` bands,
+    /// bottom-up: the drawn neck's bands, or the one stated cylinder.
+    #[must_use]
+    pub fn shank_bands(&self) -> Vec<(f64, f64, f64)> {
+        match &self.neck {
+            Some(n) => n.bands().iter().map(|h| (h.above, h.r, h.len)).collect(),
+            None => vec![(self.flute_len, self.shank_radius, self.shank_len)],
+        }
+    }
+
+    /// What stands above the shank as `(bottom above the tip, radius,
+    /// length)` bands, bottom-up: the body's bands, or the one holder
+    /// cylinder.
+    #[must_use]
+    pub fn holder_bands(&self) -> Vec<(f64, f64, f64)> {
+        match &self.body {
+            Some(b) => b.bands().iter().map(|h| (h.above, h.r, h.len)).collect(),
+            None => vec![(self.flute_len + self.shank_len, self.holder_radius, self.holder_len)],
         }
     }
 
@@ -61,11 +105,22 @@ impl Cutter {
     /// sits inside the square one - else the square stack. A tip that
     /// disagrees with the geometry the other laws read is never
     /// trusted to clear a move: the fallback can only over-report.
+    /// Its body bands (#835) ride along only while they still fit `g`
+    /// ([`BodyBands::of`]'s law); else the holder cylinder stands in.
     #[must_use]
     pub fn judged(g: &ToolGeom, real: Option<Self>) -> Self {
         let flat = Self::flat(g);
         match real {
-            Some(c) if Self { corner_r: 0.0, tip_angle: 0.0, ..c } == flat => c,
+            Some(c) if Self { corner_r: 0.0, tip_angle: 0.0, body: None, neck: None, ..c } == flat => {
+                let fits = c.body.is_some_and(|b| {
+                    let top = g.flute_len + g.shank_len + g.holder_len;
+                    let stack = HolderStack { bands: b.bands().to_vec(), top, neck: Vec::new() };
+                    BodyBands::of(g, &stack).is_some()
+                });
+                // #852: a neck rides only while it still fits `g`.
+                let neck = c.neck.filter(|n| n.fits(g));
+                Self { body: if fits { c.body } else { None }, neck, ..c }
+            }
             _ => flat,
         }
     }
@@ -135,8 +190,17 @@ impl Cutter {
                 v.push(Atom { z0, z1: z0 + len, prof: Prof::Flat(br) });
             }
         };
-        band(fl, self.shank_len, self.shank_radius);
-        band(fl + self.shank_len, self.holder_len, self.holder_radius);
+        for (above, r, len) in self.shank_bands() {
+            band(above, len, r);
+        }
+        match &self.body {
+            Some(b) => {
+                for h in b.bands() {
+                    band(h.above, h.len, h.r);
+                }
+            }
+            None => band(fl + self.shank_len, self.holder_len, self.holder_radius),
+        }
         v
     }
 }
@@ -229,6 +293,19 @@ impl Frame {
 
     pub(super) fn is_upright(&self) -> bool {
         self.a == [0.0, 0.0, 1.0]
+    }
+
+    /// The local XY of the line through `at` along `dir` when it runs
+    /// along this frame's axis (within 1e-9 of parallel, either sense);
+    /// `None` for any other line, or one that is not finite (#1205).
+    pub(super) fn axis_xy(&self, at: Point3, dir: [f64; 3]) -> Option<[f64; 2]> {
+        let len = dot(dir, dir).sqrt();
+        if !(len.is_finite() && len > 0.0 && at.is_finite()) {
+            return None;
+        }
+        let c = dot(dir, self.a) / len;
+        let p = self.local(at);
+        (c.abs() >= 1.0 - 1e-9 && p[0].is_finite() && p[1].is_finite()).then_some([p[0], p[1]])
     }
 }
 

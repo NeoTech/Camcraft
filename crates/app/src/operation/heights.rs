@@ -133,6 +133,7 @@ pub fn region_z(
         | OpParams::Chamfer2D { top_z, .. }
         | OpParams::Circular { top_z, .. }
         | OpParams::Slot { top_z, .. }
+        | OpParams::TrochoidalSlot { top_z, .. }
         | OpParams::Trace { top_z, .. }
         | OpParams::Drill { top_z, .. }
         | OpParams::Pocket3D { top_z, .. }
@@ -172,6 +173,10 @@ pub fn region_z(
         OpParams::Probe { target, .. } => Some(target[2]),
         // The plasma cut rides the plate's top (#670).
         OpParams::PlasmaProfile(p) => resolve_height(world, setup, src, p.top_z),
+        // The wire's profile is read on the workpiece's top (#532).
+        OpParams::WireContour(p) => resolve_height(world, setup, src, p.top_z),
+        // The electrode enters at the work top (#541).
+        OpParams::SinkerBurn(p) | OpParams::SinkerSideBurn(crate::operation::SinkerSideBurnOp { burn: p, .. }) => resolve_height(world, setup, src, p.top_z),
     }
 }
 
@@ -244,6 +249,7 @@ pub fn resolve_params(
         | OpParams::Engrave { clearance_z, retract_z, top_z, bottom_z, .. }
         | OpParams::Circular { clearance_z, retract_z, top_z, bottom_z, .. }
         | OpParams::Slot { clearance_z, retract_z, top_z, bottom_z, .. }
+        | OpParams::TrochoidalSlot { clearance_z, retract_z, top_z, bottom_z, .. }
         | OpParams::Trace { clearance_z, retract_z, top_z, bottom_z, .. }
         | OpParams::Pocket3D { clearance_z, retract_z, top_z, bottom_z, .. }
         | OpParams::Finish3D { clearance_z, retract_z, top_z, bottom_z, .. }
@@ -385,6 +391,22 @@ pub fn resolve_params(
             req("Clearance Z", p.clearance_z)?,
             Some(req("Top of Plate Z", p.top_z)?),
             Some(req("Bottom of Plate Z", p.bottom_z)?),
+            None,
+            None,
+        ),
+        // The wire cut (#532): the workpiece's top and bottom - the two
+        // programmed planes. A wire never lifts out of the work, so no
+        // rapids plane is stated; the slot reads the top.
+        OpParams::WireContour(p) => {
+            let top = req("Top of Workpiece Z", p.top_z)?;
+            (top, Some(top), Some(req("Bottom of Workpiece Z", p.bottom_z)?), None, None)
+        }
+        // The sinker burn (#541): the approach plane, the work top and
+        // the cavity floor datum - no hop plane.
+        OpParams::SinkerBurn(p) | OpParams::SinkerSideBurn(crate::operation::SinkerSideBurnOp { burn: p, .. }) => (
+            req("Clearance Z", p.clearance_z)?,
+            Some(req("Work Top Z", p.top_z)?),
+            Some(req("Cavity Floor Z", p.floor_z)?),
             None,
             None,
         ),

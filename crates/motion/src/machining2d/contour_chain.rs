@@ -43,6 +43,23 @@ pub fn contour_along_chain(
             "a centerline run needs at least two points".into(),
         ));
     }
+    if let Some(q) = p.links.approach.start_point {
+        // #1448: an open run starts at one of its ends; a picked start
+        // there is a later slice - refused by name, never ignored.
+        return Err(GenError::Invalid(format!(
+            "start point ({:.3}, {:.3}): an open chain starts at its end - a picked start is \
+             taken only on closed contours yet; clear the start point",
+            q.x, q.y
+        )));
+    }
+    if let Some(q) = p.links.approach.exit_point {
+        // #1473: likewise an open run leaves at its other end.
+        return Err(GenError::Invalid(format!(
+            "exit point ({:.3}, {:.3}): an open chain leaves at its end - a picked exit is \
+             taken only on closed contours yet; clear the exit point",
+            q.x, q.y
+        )));
+    }
     let poly: Vec<Point2> = if p.climb {
         pts.to_vec()
     } else {
@@ -121,7 +138,8 @@ pub fn contour_along_chain(
 
     let path = b.finish();
     if let Some(why) = crate::approach::refusal(&path) {
-        return Err(GenError::Invalid(why));
+        // #261 part 3: the moves built so far ride the refusal, display-only.
+        return Err(GenError::Invalid(why).with_ghost(&path));
     }
     if !path.all_finite() {
         return Err(GenError::Invalid("path left the finite horizon".into()));

@@ -18,10 +18,12 @@
 //! degenerate facets never weld, faces that refuse a plane or a closed
 //! ring are skipped, and a model with no geometry is a refusal by name.
 
+mod create;
 mod op;
 mod shape;
 mod walls;
 
+pub use create::{plan_operation, Planned};
 pub use op::{op_kind_of, operation_for};
 
 use crate::geo2d::Point2;

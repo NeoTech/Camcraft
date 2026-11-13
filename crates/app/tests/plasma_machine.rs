@@ -11,7 +11,7 @@
 //! in the crafted files are our own.
 //!
 //! Gate map (#669): covers post::machine (kind, plasma, parse),
-//! app::machine (check_ops plasma branch, validate, draft), app::posting
+//! app::machine, post::machine (check_ops plasma branch, validate, draft), app::posting
 //! (MACHINES, post_serves, post_offer), app::commands (family gate),
 //! app::project (machine round-trip).
 
@@ -113,7 +113,7 @@ fn a_plasma_file_stating_a_spindle_is_refused_by_name() {
 fn an_unknown_kind_is_still_refused() {
     let t = plasma(|v| v["general"]["kind"] = "laser".into());
     let err = parse_mch(&t).expect_err("an unknown kind refuses");
-    assert!(err.contains("not mill, lathe, mill-turn or plasma"), "{err}");
+    assert!(err.contains("not mill, lathe, mill-turn, plasma, wire_edm or sinker_edm"), "{err}");
     assert!(keys(&t).contains(&"general.kind".to_owned()));
     // Plasma is declared, never inferred: the same axes undeclared are a mill.
     let undeclared = plasma(|v| v["general"]["kind"] = serde_json::Value::Null);
@@ -160,11 +160,11 @@ fn the_1300pl_states_its_manuals_figures() {
     assert_eq!(m.tool_count, Some(1));
     assert_eq!(m.safe_retract_z, None, "the plasma post retracts with G30 (#671)");
     assert!(m.summary().contains("torch, no spindle"), "{}", m.summary());
-    // No cutting post serves it; none is offered until the plasma post ships.
+    // No cutting post serves it; the plasma post (#671) alone does.
     for (n, _) in posting::BUILTINS {
-        assert!(!posting::post_serves(n, Kind::Plasma), "{n} must not serve a plasma table");
+        assert_eq!(posting::post_serves(n, Kind::Plasma), posting::PLASMA_POSTS.contains(n), "{n}");
     }
-    assert!(posting::PLASMA_POSTS.is_empty(), "#671 ships the first plasma post - update this pin then");
+    assert_eq!(posting::PLASMA_POSTS, &["Tormach PathPilot Plasma"], "#671 ships the first plasma post");
 }
 
 /// A faced document (one mill Face op, generated) - no machine mounted.
@@ -203,6 +203,8 @@ fn the_plasma_check_skips_depth_and_rpm_with_a_note_and_judges_xy() {
     let c = check_document(&world, &shipped_1300pl()).expect("checks");
     assert_eq!(c.notes.len(), 2, "{:?}", c.notes);
     assert!(c.notes.iter().any(|n| n.contains("Z is the torch lifter") && n.contains("not judged")));
+    // #672: the note names where the through-cut IS judged.
+    assert!(c.notes.iter().any(|n| n.contains("plasma laws at the post gate") && n.contains("cut order") && n.contains("stock sim does not run")), "{:?}", c.notes);
     assert!(c.notes.iter().any(|n| n.contains("no spindle") && n.contains("rpm")));
     assert!(c.problems.iter().any(|p| p.contains("Face1: a Face operation is milling work - a plasma table cuts only plasma operations")), "{:?}", c.problems);
     assert!(c.problems.iter().any(|p| p.contains("rpm - a plasma table has no spindle")), "{:?}", c.problems);

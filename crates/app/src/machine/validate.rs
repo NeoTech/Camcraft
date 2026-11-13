@@ -114,6 +114,8 @@ pub fn validate_text(text: &str) -> Vec<Refusal> {
     {
         out.push(Refusal::new("tooling.number_of_tools", format!("{n} must be a whole number above 0")));
     }
+    // #828: the spindle mount and default holder, each refusal by name.
+    out.extend(super::tooling_refusals(&v).into_iter().map(|(key, rule)| Refusal::new(key, rule)));
     required_by_kind(&v, text, &axes, &mut out);
     // Anything the reader still refuses that no rule above named (it
     // should be none - the reader's refusals are covered by name).
@@ -211,6 +213,9 @@ fn spindle(sp: Option<&Value>, out: &mut Vec<Refusal>) {
         if let Some(x) = sp.get(k) {
             positive(&format!("spindle {k}"), x, out);
         }
+    }
+    if let Some(x) = sp.get("rigid_tapping").filter(|x| !x.is_null() && !x.is_boolean()) {
+        out.push(Refusal::new("spindle.rigid_tapping", format!("{x} must be true or false")));
     }
     let lo = sp.get("min_speed").and_then(Value::as_f64);
     let hi = sp.get("max_speed").and_then(Value::as_f64);
@@ -367,6 +372,9 @@ fn required_by_kind(v: &Value, text: &str, axes: &[(String, &Value, bool)], out:
         // #669: a plasma table's Z is the torch lifter - required, as
         // the axis the control raises and probes with.
         Kind::Mill | Kind::MillTurn | Kind::Plasma => &["X", "Y", "Z"],
+        // #530: a wire cuts in X/Y (U/V add taper); a sinker burns in Z.
+        Kind::WireEdm => &["X", "Y"],
+        Kind::SinkerEdm => &["Z"],
     };
     for l in need {
         if !has_linear(l) {
@@ -376,6 +384,10 @@ fn required_by_kind(v: &Value, text: &str, axes: &[(String, &Value, bool)], out:
     // #669: the plasma rules, the same list the reader refuses on.
     if k == Kind::Plasma {
         out.extend(super::plasma_refusals(v).into_iter().map(|(key, rule)| Refusal::new(key, rule)));
+    }
+    // #530: an EDM's head states no spindle, live tool or coolant.
+    if matches!(k, Kind::WireEdm | Kind::SinkerEdm) {
+        out.extend(super::edm_refusals(v).into_iter().map(|(key, rule)| Refusal::new(key, rule)));
     }
     if k == Kind::MillTurn && !axes.iter().any(|(_, _, r)| *r) {
         out.push(Refusal::new("rotary axis", "required for a mill-turn machine (the turning spindle, C)"));

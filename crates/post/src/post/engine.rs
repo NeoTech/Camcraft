@@ -6,7 +6,7 @@
 //! it reads. The control dialect lives in the script, never here.
 
 use super::cnc::{self, Record};
-use super::js::{is_false, Script};
+use super::js::{is_false, ProgramId, Script};
 use super::machine;
 use super::PostError;
 use crate::cl::MoveKind;
@@ -94,15 +94,44 @@ pub fn run_numbered_with(
     options: &Value,
     program: u32,
 ) -> Result<PostOutput, PostError> {
+    let id = ProgramId { number: program, ..ProgramId::default() };
+    run_program_with(cps, mch, stream, options, &id)
+}
+
+/// The whole seam with the document's program identity (#258): the
+/// number, whether it was stated, and the program comment - what the
+/// script reads as its `program` global.
+pub fn run_program_with(
+    cps: &str,
+    mch: &Value,
+    stream: &str,
+    options: &Value,
+    id: &ProgramId,
+) -> Result<PostOutput, PostError> {
     let records = super::normalize_program_order(cnc::parse(stream)?);
     let mut s = Script::load(cps)?;
+    // #902: an inch document on a script that cannot write inch.
+    if let Some(why) = super::units::refusal(&mut s, options)? {
+        return Err(PostError::Refused(why));
+    }
+    // #1386: Explain G-code on a script that states no comment form is
+    // refused by name here, before any hook runs.
+    let explain_form = super::explain::form(&mut s, options)?;
     // #374: an inverted machine axis - the one place the stream is
     // mirrored into the controller's frame, or refused by name.
     let records = super::invert::apply(records, mch, &s)?;
     s.set_machine(&machine::script_props(mch))?;
-    s.set_program_number(program)?;
+    // #542: whether the manifest's `serves` (#1266) names a sinker EDM -
+    // the one script that may voice a sinker section (below).
+    let serves_sinker = s
+        .words_global("serves")?
+        .is_some_and(|w| w.iter().any(|k| crate::machine::Kind::from_word(k) == Some(crate::machine::Kind::SinkerEdm)));
+    s.set_program(id)?;
     if options.is_object() {
         s.set_options(options)?;
+    }
+    if let Some(f) = explain_form {
+        s.arm_explain(f)?;
     }
     s.call("onOpen", "")?;
     let head = s.out_len()?;
@@ -119,6 +148,8 @@ pub fn run_numbered_with(
     // #174: the operations already refused for want of onProbeGuard -
     // one named refusal per operation, not one per positioning move.
     let mut unguarded: Vec<String> = Vec::new();
+    // #671: the plasma header in force and the lit contour.
+    let mut torch = super::cnc_torch::TorchLaw::default();
 
     for (i, r) in records.iter().enumerate() {
         let before = s.out_len()?;
@@ -167,6 +198,22 @@ pub fn run_numbered_with(
                         "{who}is C-axis live-tool work (the spindle turns as C under a radial live tool), but this post script does not declare liveTooling - use a lathe post that voices the C axis"
                     ));
                 }
+                // A wire EDM section (#533) through a script that does not
+                // voice one would post the wire path as a cutting move.
+                if name == "EdmCondition" && !s.voices_wire_edm() {
+                    let op = base.get("OperationName").and_then(Value::as_str).unwrap_or("");
+                    let who = if op.is_empty() { String::new() } else { format!("operation {op}: ") };
+                    warnings.push(format!("{who}is wire EDM work, but this post script does not declare wireEdm - use a wire EDM post"));
+                }
+                // A sinker burn (#542) through a script that does not
+                // serve a sinker would post the burn as a cutting plunge.
+                if name == "SinkerCondition" && !serves_sinker {
+                    let op = base.get("OperationName").and_then(Value::as_str).unwrap_or("");
+                    let who = if op.is_empty() { String::new() } else { format!("operation {op}: ") };
+                    warnings.push(format!(
+                        "{who}is sinker EDM work, but this post script does not serve a sinker EDM (serves = [\"sinker_edm\"]) - use a sinker EDM post"
+                    ));
+                }
                 // A thread whose hand needs the spindle reversed (#629),
                 // posted through a script that cannot voice it, would
                 // come out under M03 - the other hand: refused by name.
@@ -175,6 +222,15 @@ pub fn run_numbered_with(
                     let who = if op.is_empty() { String::new() } else { format!("operation {op}: ") };
                     warnings.push(format!(
                         "{who}cuts a thread that needs the spindle reversed (M04) for its hand, but this post script does not declare threadHands - it would cut the other hand; use a lathe post that states the thread's hand"
+                    ));
+                }
+                // A left-hand-cut mill (#988) through a script that
+                // cannot start M04 would turn the cutter backwards.
+                if name == "MillSpindle" && value.as_str() == Some("reverse") && !s.voices_mill_spindle_reverse() {
+                    let op = base.get("OperationName").and_then(Value::as_str).unwrap_or("");
+                    let who = if op.is_empty() { String::new() } else { format!("operation {op}: ") };
+                    warnings.push(format!(
+                        "{who}runs a left-hand-cut mill that needs the spindle reversed (M04), but this post script does not declare millSpindleReverse - it would turn the cutter backwards"
                     ));
                 }
                 s.set_properties(&merged(&base, &BTreeMap::new(), pos))?;
@@ -205,8 +261,31 @@ pub fn run_numbered_with(
             }
             Record::Section { begin } => {
                 s.call(if *begin { "onSection" } else { "onSectionEnd" }, "")?;
+                if !*begin {
+                    torch.section_end(&mut base, &mut warnings);
+                }
+            }
+            Record::Plasma(p) => {
+                // The plasma header (#671): its properties hold for the
+                // section; `onPlasma` may read them at once.
+                torch.header(&s, &base, &mut warnings);
+                base.extend(p.props());
+                s.set_properties(&merged(&base, &BTreeMap::new(), pos))?;
+                s.call("onPlasma", "")?;
+            }
+            Record::Torch(t) => {
+                // A lifecycle record like COMP: `onCommand` never sees
+                // it, and the law refuses what the stream cannot mean.
+                if torch.torch(t, &base, &mut warnings) && s.hook_exists("onTorchOn") {
+                    s.set_properties(&merged(&base, &t.props(), pos))?;
+                    s.set_current(pos.0, pos.1, pos.2)?;
+                    super::cnc_torch::fire(&mut s, t)?;
+                }
             }
             Record::Move(m) => {
+                if m.kind == MoveKind::Rapid {
+                    torch.rapid(&base, &mut warnings);
+                }
                 let p = m.props();
                 s.set_properties(&merged(&base, &p, pos))?;
                 s.set_current(pos.0, pos.1, pos.2)?;
@@ -229,7 +308,20 @@ pub fn run_numbered_with(
                 pos = (m.x, m.y, m.z);
             }
             Record::Cycle(c) => {
-                s.set_properties(&merged(&base, &c.props(), pos))?;
+                if c.kind == crate::cl::CycleKind::FloatingTap && !s.voices_floating_tapping() {
+                    let op = base.get("OperationName").and_then(Value::as_str).unwrap_or("");
+                    warnings.push(format!("operation {op}: floating-holder tapping is not supported by this post (floatingTapping is not declared)"));
+                }
+                let chain: Vec<_> = records[i + 1..].iter()
+                    .take_while(|r| !matches!(r, Record::Cycle(_) | Record::Section { begin: false }))
+                    .filter_map(|r| match r {
+                        Record::Move(m) if m.kind != MoveKind::Rapid => Some(m),
+                        _ => None,
+                    }).collect();
+                let mut props = c.props();
+                props.insert("ChainFeedRate".into(), json!(chain.first().and_then(|m| m.feed)));
+                props.insert("ChainBottomZ".into(), json!(chain.iter().map(|m| m.z).reduce(f64::min)));
+                s.set_properties(&merged(&base, &props, pos))?;
                 s.set_current(pos.0, pos.1, pos.2)?;
                 if is_false(&s.call("onCommand", &json!("Drilling").to_string())?) {
                     swallowed += 1;
@@ -420,6 +512,7 @@ pub fn run_numbered_with(
         }
     }
 
+    torch.close(&mut base, &mut warnings);
     let before = s.out_len()?;
     s.call("onClose", "")?;
     let after = s.out_len()?;

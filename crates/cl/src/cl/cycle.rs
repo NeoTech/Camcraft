@@ -24,12 +24,21 @@ pub enum CycleKind {
     Deep,
     /// Rigid tapping: feed down and back at pitch·rpm (G84).
     Tap,
+
     /// Boring: feed in, rapid out (G86's mill-side shape; spindle
     /// orientation is the machine's, M1.7's post word).
     Bore,
     /// Back-boring: feed in AND feed out — the retract must not drag
     /// the already-cut back surface, so no rapid on the way home.
     BackBore,
+    /// Tapping with an explicitly selected floating tap holder.
+    FloatingTap,
+    /// Reaming (#1445): feed in to the bottom and feed back out to R at
+    /// the same feed, spindle running, no dwell - RS-274/NGC's G85
+    /// (NIST IR 6556, The NIST RS274NGC Interpreter v3, its G85 cycle;
+    /// LinuxCNC's G-code reference, G85). A rapid out would score the finished
+    /// wall, so the retract is a feed move in the chain too.
+    Ream,
 }
 
 /// One hole's machining intent, standing beside the expanded chain:

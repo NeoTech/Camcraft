@@ -24,9 +24,12 @@
 //! off per contour, each contour's role and the contour it lies in.
 //! Nothing here guesses: a zero-length or self-crossing contour, a hole
 //! the kerf cannot enter, a lead with no room, a lit move whose kerf
-//! would reach the part - each is refused by name, never trimmed.
+//! would reach the part, an edge the kerf never reaches (a slot or
+//! notch narrower than the kerf, bridged by the offset - `laws`, #672)
+//! - each is refused by name, never trimmed.
 
 mod emit;
+mod laws;
 mod nest;
 mod ring;
 
@@ -83,9 +86,29 @@ pub struct PlasmaParams {
     pub pierce_height: Option<f64>,
     pub cut_height: Option<f64>,
     pub pierce_delay: Option<f64>,
+    /// How much coarser than the importer's promise the model the part
+    /// silhouette was read from is, mm (#1053, the #864 reading): the
+    /// kerf and cover laws give it back out of [`KERF_TOL`] while a
+    /// positive tolerance is left ([`PlasmaParams::kerf_tol`]). `0.0`
+    /// for a model that met the promise, and for every plate drawn by
+    /// hand - each law then reads exactly as it always did.
+    pub model_excess: f64,
 }
 
 impl PlasmaParams {
+    /// The kerf and cover laws' tolerance on this model (#1053):
+    /// [`KERF_TOL`] less [`Self::model_excess`] while that stays
+    /// positive, untouched past that - where the program gate refuses
+    /// the operation by name instead (`verify::excess_floor` is the one
+    /// test both read). A facet of a curved edge stands inside the true
+    /// edge by up to its chord error, so the kerf that clears the
+    /// facets by the plain tolerance can reach the real part by the
+    /// excess more than it could at full fidelity.
+    #[must_use]
+    pub fn kerf_tol(&self) -> f64 {
+        crate::verify::excess_floor(KERF_TOL, self.model_excess).unwrap_or(KERF_TOL)
+    }
+
     /// The door: every refusal of the numbers by name, before any
     /// geometry is read.
     pub fn door(&self) -> Result<(), GenError> {

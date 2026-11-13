@@ -1,6 +1,6 @@
-//! #637 step D (review of #656): `CarriedField::column_body`'s refusal
-//! and trim arms - a floor a cut reached, a bad lattice, the clip block
-//! and the incoming floor flag.
+//! #637 steps D and E1 (review of #656): `CarriedField::column_body`'s
+//! arms - a slot cut through, a floor a bounded tool reached (refused), a
+//! bad lattice, the clip block and the incoming floor flag.
 //!
 //! Gate map (#637): covers sim::stock_sim::field_body.
 //! Provenance: our own fixtures.
@@ -46,8 +46,31 @@ fn an_uncut_plate_reads_its_own_top_and_floor() {
 }
 
 #[test]
-fn a_floor_a_cut_reached_refuses_the_carry_by_name() {
-    let e = CarriedField::new(plate(true), id()).column_body(lattice(), false).expect_err("refused");
+fn a_slot_through_the_plate_carries_its_columns_empty() {
+    // #637 E1: the slot (y 4..8) is cut through - its columns are empty,
+    // not refused; the columns beside it stand whole, floor exact.
+    let b = CarriedField::new(plate(true), id()).column_body(lattice(), false).expect("reads");
+    let inside = 20 + 12 * 40; // (10.25, 6.25)
+    let beside = 20 + 7 * 40; // (10.25, 3.75), within a cell of the wall
+    assert!(b.empty_at(inside), "inside the slot");
+    assert!(!b.empty_at(beside), "beside the slot");
+    assert!((b.dex.top_at(beside) - 0.0).abs() < 1e-9 && (b.floor_at(beside) + 6.0).abs() < 1e-9);
+    assert!((b.volume() - (20.0 * 12.0 * 6.0 - 4.0 * 20.0 * 6.0)).abs() < 1e-6, "volume {}", b.volume());
+}
+
+#[test]
+fn a_floor_a_bounded_tool_reached_refuses_the_carry_by_name() {
+    // A truncated taper does not span the world above its tip: the
+    // monotone law does not hold, and the floor it reached is refused.
+    let mut s = Stock::Field(plate(false));
+    let p = |x: f64, y: f64, z: f64| Point3::new(x, y, z);
+    let moves = [
+        Move::new(MoveKind::Rapid, p(-4.0, 6.0, 5.0), p(-4.0, 6.0, -7.0), None),
+        Move::new(MoveKind::Feed, p(-4.0, 6.0, -7.0), p(24.0, 6.0, -7.0), Some(500.0)),
+    ];
+    s.simulate(&[SimOp { moves: &moves, radius: 2.0, ball: false, cone: Some(1.0), corner: None }]).expect("cut");
+    let f = s.field().expect("a field").clone();
+    let e = CarriedField::new(f, id()).column_body(lattice(), false).expect_err("refused");
     assert!(e.contains("cut reached the floor"), "{e}");
 }
 

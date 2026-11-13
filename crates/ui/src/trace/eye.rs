@@ -37,7 +37,7 @@ use egui_wgpu::wgpu;
 use wgpu::util::DeviceExt;
 
 use camcraft_app::stock_sim::preview::{pack_cut, pack_field, pack_target};
-use camcraft_app::stock_sim::{Preview, PreviewCamera, DEV_TOL};
+use camcraft_app::stock_sim::{Preview, PreviewCamera};
 use camcraft_app::stock_view::{CutLayer, FieldView};
 use camcraft_app::geometry::Point3;
 
@@ -103,12 +103,19 @@ impl StockEye {
     /// Build the eye for the viewport's color `format`. The trace pass
     /// may refuse (the CPU then marches); the composite may not - `Err`
     /// means this device keeps the sheet.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat) -> Result<Self, String> {
-        let composite = Composite::new(device, format)?;
-        let trace = match TracePass::new(device) {
+        pollster::block_on(Self::new_async(device, format))
+    }
+
+    /// `new`, awaiting the device instead of blocking on it (#31): the
+    /// browser shell builds the eye this way, after its first frame.
+    pub async fn new_async(device: &wgpu::Device, format: wgpu::TextureFormat) -> Result<Self, String> {
+        let composite = Composite::new_async(device, format).await?;
+        let trace = match TracePass::new_async(device).await {
             Ok(t) => Some(t),
             Err(e) => {
-                eprintln!("stock eye: {e} - the CPU march stands in");
+                diag_warn!("stock eye: {e} - the CPU march stands in");
                 None
             }
         };
@@ -201,7 +208,7 @@ impl StockEye {
                 Ok(None) => {} // a CPU picture is pending: what stands, stands
                 Err(e) => {
                     self.refused = Some(key);
-                    eprintln!("stock eye: {e}");
+                    diag_warn!("stock eye: {e}");
                     return Err(e);
                 }
             }
@@ -259,26 +266,26 @@ impl StockEye {
         let Some(trace) = self.trace.as_mut() else { return false };
         if let Some(p) = &fv.packed {
             let Some(cut) = full_cut(fv) else {
-                eprintln!("stock eye: the playback cut layer would not pack - the CPU march stands in");
+                diag_warn!("stock eye: the playback cut layer would not pack - the CPU march stands in");
                 return false;
             };
             return match trace.upload_layers(device, &p.base.meta, &p.base.mesh, &cut, p.base.target.as_ref()) {
                 Ok(()) => true,
                 Err(e) => {
-                    eprintln!("stock eye: {e} - the CPU march stands in");
+                    diag_warn!("stock eye: {e} - the CPU march stands in");
                     false
                 }
             };
         }
         let Some(stock) = fv.stock.field().and_then(pack_field) else {
-            eprintln!("stock eye: the stock field would not pack - the CPU march stands in");
+            diag_warn!("stock eye: the stock field would not pack - the CPU march stands in");
             return false;
         };
         let target = fv.target.as_ref().and_then(|t| t.field()).and_then(pack_target);
         match trace.upload(device, &stock, target.as_ref()) {
             Ok(()) => true,
             Err(e) => {
-                eprintln!("stock eye: {e} - the CPU march stands in");
+                diag_warn!("stock eye: {e} - the CPU march stands in");
                 false
             }
         }
@@ -301,7 +308,7 @@ impl StockEye {
         let budget = if gpu.is_some() { GPU_PIXELS } else { CPU_PIXELS };
         let (k, tw, th) = fit(key.view, budget);
         let (buf, source) = match gpu {
-            Some(t) => (t.encode(device, queue, encoder, pcam, tw, th, DEV_TOL)?, Arc::clone(fv)),
+            Some(t) => (t.encode(device, queue, encoder, pcam, tw, th, fv.tol)?, Arc::clone(fv)),
             None => {
                 let Some((pv, src)) = self.cpu_picture(fv, pcam, key, (tw, th))? else { return Ok(None) };
                 let buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
