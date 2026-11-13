@@ -207,9 +207,11 @@ fn surface_speed_is_feet_per_minute_and_rpm_never_scales() {
 fn a_peck_counts_the_inch_increment() {
     let peck = cnc::Record::Cycle(cnc::CycleRec {
         kind: CycleKind::Deep, x: 0.0, y: 0.0, r_z: 22.0, bottom_z: 10.0, entry_z: 20.0, peck: 1.0, dwell: 0.5,
-        first_move: 0, feed: Some(100.0),
+        first_move: 1, feed: Some(100.0),
     });
-    let s = section(vec![], vec![peck, mv(MoveKind::Rapid, 0.0, 0.0, 22.0, None)]);
+    // The approach to R first: a cycle that is its section's first motion
+    // cannot be seated (#1026) and is refused.
+    let s = section(vec![], vec![mv(MoveKind::Rapid, 0.0, 0.0, 22.0, None), peck, mv(MoveKind::Rapid, 0.0, 0.0, 22.0, None)]);
     let (mm, inch) = (run(&s, "mm"), run(&s, "inch"));
     assert!(mm.program.contains("G83 Z10 Q1000 P500 F0.1\n"), "{}", mm.program);
     // 1 mm = 394 ten-thousandths; the 500 ms dwell is unchanged.
