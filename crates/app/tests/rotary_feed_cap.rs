@@ -12,7 +12,7 @@
 //! the FANUC 0i-F / 30i-B operator's manuals (feedrate for rotation axes,
 //! tool center point control), behaviour only.
 //!
-//! Gate map (M4.4): covers post::rotary_cap (the prelude's cap), app::post
+//! Gate map (M4.4): covers post::rotary_cap (the prelude's cap), camcraft_post::post
 //! (fanuc.cps, doosan-dnm.cps feed words on tilted blocks).
 //! Lane shape (M4.4): all tests here run in well under a second.
 
