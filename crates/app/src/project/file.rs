@@ -351,6 +351,13 @@ pub struct ToolDto {
     pub helix_deg: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub notes: Option<String>,
+    /// #890 cutting data per workpiece material, additive (no version
+    /// step): written only when the tool states a row, so a tool with
+    /// just its one rpm/feed saves byte for byte as before. An older
+    /// build skips the key and keeps the tool's own rpm/feed - exactly
+    /// the numbers it posted - losing only the table on its next save.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cutting_data: Vec<super::CuttingRowDto>,
     /// #891 addition, additive (no version step): the turning cutting
     /// data (surface speed m/min, feed mm/rev, max-rpm clamp). Absent
     /// from every older file and written only when stated; absent
@@ -467,6 +474,7 @@ impl ToolDto {
             coating: t.catalog.coating.clone(),
             helix_deg: t.catalog.helix_deg,
             notes: t.catalog.notes.clone(),
+            cutting_data: t.cutting.iter().map(super::CuttingRowDto::from_row).collect(),
             turning: t.turning,
         }
     }
@@ -519,6 +527,7 @@ impl ToolDto {
                 notes: self.notes.clone(),
             }
             .normalized(),
+            cutting: self.cutting_data.iter().map(|r| r.to_row()).collect(),
             turning: self.turning,
         }
     }

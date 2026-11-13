@@ -83,6 +83,8 @@ mod tool_body_page;
 mod tool_orientation_row;
 // #898: the tool editor's catalog rows (part number, vendor, ...).
 mod tool_catalog_rows;
+// #890: the tool editor's per-material cutting data.
+mod tool_cutting_rows;
 mod tool_turning_row;
 mod tool_profile_page;
 // #793: the built-in taper holder picker in the Profile section.
