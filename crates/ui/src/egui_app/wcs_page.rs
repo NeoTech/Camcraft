@@ -80,7 +80,7 @@ pub(super) fn even_row(ui: &mut Ui, labels: &[&str], size: Vec2) -> Option<usize
 }
 
 /// The width each of `n` equal cells takes to fill `avail`.
-fn cell_w(ui: &Ui, avail: f32, n: usize) -> f32 {
+pub(super) fn cell_w(ui: &Ui, avail: f32, n: usize) -> f32 {
     let gaps = ui.spacing().item_spacing.x * n.saturating_sub(1) as f32;
     ((avail - gaps) / n.max(1) as f32).max(24.0)
 }

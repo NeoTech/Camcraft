@@ -105,6 +105,7 @@ mod tool_cutter_params;
 mod setup_wcs_pick;
 // #343: a setup's own node pages (settings, machine, post, fixtures, tools).
 mod setup_pages;
+mod setup_settings_page;
 mod setup_post_page;
 mod setup_rotary_page;
 // #509: one fixture's row on the Fixtures page, sized to the pane.

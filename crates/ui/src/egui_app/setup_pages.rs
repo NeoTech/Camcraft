@@ -19,7 +19,7 @@ use egui::{RichText, Ui};
 
 use camcraft_app::{model, setup, setup_mount, tool_numbers};
 
-use crate::state::{CommandKind, SetupPage, State, UiTarget};
+use crate::state::{CommandKind, SetupPage, State};
 
 use super::pages;
 use super::panes::kind_name;
@@ -32,7 +32,7 @@ pub(super) fn page(ui: &mut Ui, state: &mut State, name: &str, page: SetupPage) 
         SetupPage::Settings => {
             ui.heading(title);
             ui.separator();
-            settings(ui, state, ctx);
+            super::setup_settings_page::settings_page(ui, state, ctx);
         }
         SetupPage::Machine => {
             ui.heading(format!("Machine - {title}"));
@@ -142,55 +142,6 @@ fn ownership(ui: &mut Ui, state: &mut State, ctx: Option<&str>, which: Mount) {
 pub(crate) const WORKHOLDING_POINTER: &str = "Fixtures and tools are under Setup in the browser, not on this page.";
 
 pub(crate) const ACTIVE_SETUP_LABEL: &str = "Active setup - new operations go into it, and the Stock and Work offset pages edit it";
-
-/// The setup's settings: which setup is active, where its stock comes
-/// from, how the part sits, and the word its WCS posts as.
-fn settings(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
-    let Some(name) = ctx else {
-        ui.label("No setups in this document: the one stock and the one WCS act as the first setup.");
-        hint(ui, WORKHOLDING_POINTER);
-        if ui.button("Create first setup").clicked() {
-            state.pending.push_back(CommandKind::CreateSetup { name: None, datum_from: None });
-        }
-        return;
-    };
-    let is_active = setup::active(&state.world).as_deref() == Some(name);
-    if ui.radio(is_active, ACTIVE_SETUP_LABEL).clicked() && !is_active {
-        state.pending.push_back(CommandKind::ActivateSetup(Some(name.to_owned())));
-    }
-    ui.separator();
-    super::setup_stock_pick::picker(ui, state, name);
-    ui.separator();
-    if let Some(def) = setup::def_of(&state.world, name) {
-        let mut line = format!("Stock entity {}", def.stock);
-        if !def.datum_from.is_empty() {
-            line.push_str(&format!(", datum from {}", def.datum_from));
-        }
-        ui.label(line);
-    }
-    super::setup_align_pick::picker(ui, state, name);
-    super::setup_relative_pick::picker(ui, state, name);
-    super::setup_plane_pick::row(ui, state, name);
-    super::setup_points_pick::row(ui, state, name);
-    super::setup_axis_pick::rows(ui, state, name);
-    super::wcs_pick_row::row(ui, state, name); // #701
-    super::setup_wcs_pick::picker(ui, state, name);
-    super::setup_workholding_row::row(ui, state, name);
-    ui.separator();
-    // Workholding is edited on the Fixtures page only (#1197): the one
-    // click to it sits on the Delete line, so the page gains no row.
-    ui.horizontal(|ui| {
-        if ui.button(format!("Delete {name}")).clicked() {
-            state.pending.push_back(CommandKind::DeleteSetup(name.to_owned()));
-        }
-        if ui.button(format!("Open {name} fixtures")).clicked() {
-            // Activate it too, as the browser's Fixtures row does: the
-            // fixture page edits only the active setup.
-            super::browser_pane::focus(state, name);
-            crate::actions::target(state, UiTarget::SetupNode(name.to_owned(), SetupPage::Fixtures));
-        }
-    });
-}
 
 /// The tools this setup's operations use, in program order: number,
 /// size, kind, how many operations - and the editor one click away.
