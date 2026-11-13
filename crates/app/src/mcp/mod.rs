@@ -39,6 +39,7 @@ mod box_pick;
 mod pockets;
 mod render;
 mod setup_tools;
+mod tool_edit;
 mod tools;
 mod vise_tools;
 mod accessory_tools;
