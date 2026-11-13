@@ -12,13 +12,19 @@
 //! Z and leaves the tilt alone). The band's lowest point over the tip
 //! is `min(above·cos θ, (above + len)·cos θ) - R·sin θ`
 //! ([`super::tilt_band::lean`]).
-//! - While every letter A and B of BOTH ends stands strictly inside
-//!   (-90, 90) degrees, the whole lerp stays there, `-ln cos A - ln
-//!   cos B` is convex along it, so the in-between tilt never exceeds
-//!   the larger sampled tilt, and that tilt is under 90 degrees. With
+//! - While every letter A and B of BOTH ends stands inside the CLOSED
+//!   [-90, 90] degrees, the whole lerp stays there, `cos A` and `cos B`
+//!   stay `>= 0`, and `ln cos A + ln cos B` is concave along it where
+//!   it is finite, so `cos θ` takes its least value at an end - by
+//!   continuity also when that end stands at exactly 90 (`cos θ = 0`
+//!   there, the least it can be). The in-between tilt never exceeds
+//!   the larger sampled tilt, and that tilt is at most 90 degrees. With
 //!   `above >= 0` and `len >= 0` the bottom `above·cos θ - R·sin θ`
 //!   falls as θ grows on [0, 90], so the more tilted sample's own
 //!   reading is already the span's lowest: [`span_floor`] says `None`.
+//!   The cap was strict before #1404, and a blade-lying swarf link
+//!   (B +90 -> -90) read its horizontal end's `-R` floor pinned to the
+//!   B 45 pose's footprint, 40 mm under the band there: a false refusal.
 //! - Otherwise the in-between axis can stand farther from +Z than both
 //!   samples (two samples 100 degrees off +Z whose lerp passes straight
 //!   down; or A = B lerping 60 -> 120 degrees, both samples 75.5
@@ -49,11 +55,12 @@ fn cos_range(a0: f64, a1: f64) -> (f64, f64) {
     (mn, mx)
 }
 
-/// True when every A and B letter of both ends stands strictly inside
-/// (-90, 90) degrees: the span's in-between tilt is then bounded by its
-/// more tilted end (module law).
+/// True when every A and B letter of both ends stands inside the closed
+/// [-90, 90] degrees: the span's in-between tilt is then bounded by its
+/// more tilted end (module law). Past 90 the lerp can lean further than
+/// both ends, and the interval floor reads it.
 fn in_cap(from: &[f64; 3], to: &[f64; 3]) -> bool {
-    [from[0], from[1], to[0], to[1]].iter().all(|x| x.is_finite() && x.abs() < 90.0)
+    [from[0], from[1], to[0], to[1]].iter().all(|x| x.is_finite() && x.abs() <= 90.0)
 }
 
 /// The lowest z over the tip that the band `above..above + len`
@@ -152,6 +159,21 @@ mod tests {
                 }
                 Some(f) => assert!(f <= low + 1e-9, "case {case}: floor {f} over the lerp's {low}"),
             }
+        }
+        // Ends at exactly +-90 are in the closed cap (#1404); the brute
+        // lerp still never stands under the samples there.
+        for case in 0..400 {
+            let (above, r, len) = (next() * 100.0, 0.01 + next() * 40.0, 0.01 + next() * 120.0);
+            let mut letter = || match (next() * 4.0) as u32 {
+                0 => 90.0,
+                1 => -90.0,
+                _ => (next() - 0.5) * 180.0,
+            };
+            let (p, q) = ([letter(), letter(), letter()], [letter(), letter(), letter()]);
+            assert_eq!(span_floor(&p, &q, above, r, len), None, "case {case}: {p:?} -> {q:?}");
+            let sampled = bottom(p, above, r, len).min(bottom(q, above, r, len));
+            let low = fine_low(p, q, above, r, len);
+            assert!(low >= sampled - 1e-9, "case {case}: the lerp {low} under the samples {sampled}");
         }
         // Unreadable letters read the deepest floor there is.
         assert_eq!(span_floor(&[f64::NAN, 0.0, 0.0], &[0.0; 3], 0.0, 1.0, 1.0), Some(-1.0 - 1.0));
