@@ -275,6 +275,9 @@ pub fn sinker_gouge_cells() -> usize {
         feed: 40.0,
         condition: "S1".into(),
         orbit: None,
+        layer: None,
+        wear_lost: None,
+        wear_over: None,
     });
     h.execute(&world, CreateOperation::new(&world, "Burn1", "E-10x6", SrcRef::Stock, op).expect("a sinker burn"));
     h.execute(&world, GenerateOperation::new(&world, "Burn1").expect("generates"));
