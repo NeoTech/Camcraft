@@ -37,6 +37,8 @@ pub(super) fn write(world: &World, tool_name: &str, params: &OpParams, h: &mut s
         crate::tools::ToolKind::Probe => 11,
         crate::tools::ToolKind::Torch => 12,
         crate::tools::ToolKind::Electrode => 13,
+        crate::tools::ToolKind::ThreadMill => 14,
+        crate::tools::ToolKind::ThreadMillSingle => 15,
     });
     for v in [
         tool.diameter,
@@ -86,6 +88,14 @@ pub(super) fn write(world: &World, tool_name: &str, params: &OpParams, h: &mut s
         // face's angle, so a re-cut cone is a different chamfer even
         // when width, depth and the wall itself never moved.
         crate::tools::ToolKind::Taper => w(h, tool.tip_angle),
+        // The thread mills digest their form (#894): the flank angle
+        // and the pitch range decide which threads the tool may cut
+        // and how many rows ride a revolution (the pitch itself rides
+        // the Thread clause below).
+        crate::tools::ToolKind::ThreadMill | crate::tools::ToolKind::ThreadMillSingle => {
+            w(h, tool.tip_angle);
+            w(h, tool.pitch_min);
+        }
         _ => {}
     }
     // A Thread OP times its helix against the TOOL's pitch (M2.4 C, the

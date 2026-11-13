@@ -29,7 +29,7 @@ use camcraft_app::operation::{self, Height, KindInfo, OpParams, OpStatus, OpType
 use camcraft_app::project;
 use camcraft_app::schema::{Location, Operation};
 use camcraft_app::stock::StockShape;
-use camcraft_app::tools::{catalog, Tool, ToolKind};
+use camcraft_app::tools::{catalog, Tool};
 use camcraft_app::world::new_world;
 
 fn catalog_tool(name: &str) -> Tool {
@@ -45,32 +45,9 @@ fn add_tool(world: &World, history: &mut History, tool: Tool, name: &str) {
     history.execute(world, cmd.expect("tool"));
 }
 
-/// A thread mill: a Tap-form cylinder - the pitch is the ride's
-/// timing, so it stands where the tap cycle reads it.
+/// A multi-form thread mill (#894): the pitch is the tool's own.
 fn thread_mill(diameter: f64, pitch: f64) -> Tool {
-    Tool {
-        kind: ToolKind::Tap,
-        diameter,
-        corner_r: 0.0,
-        tip_angle: 0.0,
-        pitch,
-        nose_radius: 0.0,
-        width: 0.0,
-        flute_len: 25.0,
-        shank_d: diameter,
-        shank_len: 40.0,
-        holder_d: 44.0,
-        holder_len: 35.0,
-        material_group: "steel".into(), center_cutting: true,
-        rpm: 6000.0,
-        feed: 400.0,
-        tool_material: None,
-        flutes: None,
-        orientation: None,
-        catalog: camcraft_tools::catalog_fields::ToolCatalog::default(),
-        cutting: Vec::new(),
-        turning: None,
-    }
+    Tool { material_group: "steel".into(), ..camcraft_app::thread_mill::thread_mill(diameter, pitch, 0.0, 25.0) }
 }
 
 fn job_tool(tag: &str, tool: Tool, tool_name: &str, params: OpParams) -> (World, History, camcraft_app::cl::Toolpath) {
@@ -167,6 +144,8 @@ fn thread(holes: Vec<Hole>) -> OpParams {
         plunge_feed: 150.0,
         climb: true,
         holes,
+        pitch: None,
+        hand: camcraft_app::cl::ThreadHand::Right,
     }
 }
 
@@ -257,9 +236,9 @@ fn a_cutter_with_no_circle_inside_is_refused() {
 #[test]
 fn thread_helices_are_timed_by_the_tools_pitch() {
     // R10 wall, a 6-wide thread mill, pitch 1.5: the finished circle
-    // is rho = R - H + r with H = 0.5413 x 1.5; every feed move
-    // stands between the tangent start (R - r) and that circle -
-    // never past the wall, never short of the thread depth.
+    // is rho = R + H - r with H = 0.5413 x 1.5; every feed move off
+    // the axis stands between the tangent circle (R - r) and that
+    // circle - never past the major diameter.
     let pitch = 1.5;
     let h = 0.5413 * pitch;
     let (r, big) = (3.0, 10.0);
@@ -280,26 +259,25 @@ fn thread_helices_are_timed_by_the_tools_pitch() {
         }
         assert!((rho0 - 1e-9..=rho1).contains(&rho), "off the thread envelope: {m:?}");
     }
-    // The retract law: the finished wall is left the way it was cut
-    // - the recorded ride run backwards at feed. Half-arcs climb (or
-    // fall) by half a pitch each, so a rising pair of feed moves is
-    // the reversed retract speaking; a silent rapid out of a fresh
-    // flank would leave no such pair.
-    let up = feeds.windows(2).any(|w2| w2[1].to.z > w2[0].to.z + pitch * 0.25);
-    assert!(up, "the finished wall is retracted along the helix reversed");
+    // #894: right-hand climb winds UP from the floor, half a pitch
+    // per half-turn (counter-clockwise rising is a right-hand helix).
+    let up = feeds.windows(2).any(|w2| (w2[1].to.z - w2[0].to.z - pitch * 0.5).abs() < 1e-9);
+    assert!(up, "the helix rises half a pitch per half-turn");
+    let far = feeds.iter().map(|m| (m.to.x - 15.0).hypot(m.to.y - 15.0)).fold(0.0, f64::max);
+    assert!((far - (big + h - r)).abs() < 2e-6, "the last pass lands on the major circle: {far}");
 }
 
 #[test]
-fn thread_refuses_a_pitchless_tool_by_name() {
-    // The tap cycle's law spoken before the kernel: a thread mill
-    // that states no pitch cannot time a helix - and the refusal
-    // says so, not a silent fallback to some default.
+fn thread_refuses_a_tool_that_is_no_thread_mill_by_name() {
+    // #894: an operation that still names another kind of cutter (an
+    // old file, a retyped tool) is refused at generate by the tool's
+    // own name - never a helix timed against a pitch it does not have.
     let msg = refuse(
         &door_world(catalog_tool("EM-0800-4FL"), "EM-0800-4FL"),
         "EM-0800-4FL",
         thread(vec![hole(15.0, 15.0, 10.0, 6.0, false)]),
     );
-    assert!(msg.contains("pitch") && msg.contains("thread mill"), "{msg}");
+    assert!(msg.contains("needs a thread mill") && msg.contains("flat end mill"), "{msg}");
 }
 
 #[test]
