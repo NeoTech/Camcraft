@@ -28,7 +28,7 @@ use camcraft_app::commands::{
 use camcraft_app::geometry::{Mesh, Point3, Triangle};
 use camcraft_app::machine::parse_mch;
 use camcraft_app::operation::sinker_wear_op::wear_status;
-use camcraft_app::operation::{Height, OpParams, SinkerBurnOp, SinkerDatum, SrcRef};
+use camcraft_app::operation::{Height, OpParams, SinkerBurnOp, SinkerDatum, SinkerPass, SrcRef};
 use camcraft_app::sinker::SinkerParams;
 use camcraft_app::sinker_wear::{burn_compensated, SinkerWear, WearComp, NOT_COMPENSATED};
 use camcraft_app::stock::StockShape;
@@ -95,6 +95,9 @@ fn burn(layer: Option<f64>, measured: Option<(f64, f64)>) -> OpParams {
         y: 0.0,
         feed: 40.0,
         condition: "S1".into(),
+        pass: SinkerPass::Single,
+        cavity_x: 0.0,
+        cavity_y: 0.0,
         orbit: None,
         layer,
         wear_lost: measured.map(|m| m.0),
@@ -149,6 +152,7 @@ fn sinker_wear_layers_match_golden() {
         electrode_len: 30.0,
         feed: 40.0,
         gap: GAP,
+        stand: None,
         orbit: None,
     };
     let w = SinkerWear { comp: Some(WearComp { rate: RATE, from: "synthetic".into() }), layer: Some(2.0) };

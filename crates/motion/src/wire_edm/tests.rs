@@ -23,6 +23,7 @@ fn params(side: WireSide, start: Option<(f64, f64)>) -> WireParams {
         side,
         start: start.map(|(x, y)| Point2::new(x, y)),
         plane_z: -12.0,
+        tabs: None,
         stock: None,
         clearance: 1.0,
     }
@@ -277,4 +278,42 @@ fn skim_laws_refuse_by_name() {
     let e = check_passes(&open, &[pass("S1", 0.02, false)]).unwrap_err().to_string();
     assert!(e.contains("an open run is cut once"), "{e}");
     assert!(check_passes(&open, &[]).is_ok(), "an open run alone is not refused here");
+    // Tabs (#539) are cut on the rough pass alone: skims beside them are
+    // refused by name.
+    let tabs = TabParams { count: Some(1), width: Some(1.0), at: Vec::new(), cutoff: None };
+    let tabbed = WireParams { tabs: Some(tabs), ..params(WireSide::Die, Some((0.0, 0.0))) };
+    let e = check_passes(&tabbed, &[pass("S1", 0.02, false)]).unwrap_err().to_string();
+    assert!(e.contains("skims are cut on an untabbed profile only"), "{e}");
+}
+
+/// #536: a zero taper is the vertical cut itself; a constant taper
+/// leans every side by exactly its angle, stands the wire upright at
+/// the start hole, and refuses an angle past the machine's maximum and
+/// a side the lean folds over - each by name.
+#[test]
+fn a_taper_leans_every_side_by_its_angle_and_zero_is_the_vertical_cut() {
+    let loops = [rect(-20.0, -10.0, 20.0, 10.0)];
+    let p = params(WireSide::Punch, Some((-30.0, 0.0)));
+    let t = |a: f64, max: Option<f64>| WireTaper { angle_deg: a, top_z: 0.0, max_deg: max, machine: "M".into() };
+    let flat = wire_contour(&loops, &[], &p).unwrap();
+    assert_eq!(wire_contour_tapered(&loops, &[], &p, &t(0.0, None)).unwrap().moves, flat.moves);
+    let path = wire_contour_tapered(&loops, &[], &p, &t(3.0, Some(15.0))).unwrap();
+    let lean = |a: [f64; 3]| a[0].hypot(a[1]).atan2(a[2]).to_degrees();
+    // The lead-in's end: the middle of the left side, leaning 3 degrees
+    // outward (-X) going down - its pose points +X toward the upper guide.
+    let first = path.moves[0].axis.unwrap();
+    assert!((lean(first) - 3.0).abs() < 1e-9 && first[0] > 0.0 && first[1].abs() < 1e-12, "{first:?}");
+    let h = 12.0 * 3.0_f64.to_radians().tan();
+    assert!((path.moves[0].to.x - (-20.0 - K / 3.0_f64.to_radians().cos() - h)).abs() < 1e-6, "{:?}", path.moves[0].to);
+    assert!(path.moves.iter().all(|m| m.to.z == -12.0 && m.feed.is_none()));
+    assert_eq!(path.moves.last().unwrap().axis, Some([0.0, 0.0, 1.0]), "upright at the start hole");
+    let err = wire_contour_tapered(&loops, &[], &p, &t(30.0, Some(15.0))).unwrap_err().to_string();
+    assert!(err.contains("30.000 degree taper") && err.contains("at most 15.000"), "{err}");
+    let err = wire_contour_tapered(&loops, &[], &p, &t(3.0, None)).unwrap_err().to_string();
+    assert!(err.contains("states no edm.max_taper_deg"), "{err}");
+    // A 1 mm punch narrowed 20 degrees downward over 12 mm closes on itself.
+    let small = [rect(-0.5, -0.5, 0.5, 0.5)];
+    let pin = params(WireSide::Punch, Some((-5.0, 0.0)));
+    let err = wire_contour_tapered(&small, &[], &pin, &t(-20.0, Some(30.0))).unwrap_err().to_string();
+    assert!(err.contains("folds the side"), "{err}");
 }

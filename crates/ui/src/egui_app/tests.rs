@@ -79,8 +79,12 @@ fn empty_egui_meshes_are_filtered_before_gpu_submission() {
 }
 
 mod face_origin;
+mod geo_row_hover;
 mod spindle_row;
 mod stock_size;
+mod setup_settings_page;
+mod machine_page;
+mod tool_list_page;
 mod stock_fit_sides;
 mod raw_stock_row;
 mod layout;
@@ -89,9 +93,11 @@ mod machines_edit;
 mod machine_wire_edm;
 mod unsaved;
 mod post_refusal;
+mod program_units;
 mod gcode_viewer;
 mod first_setup;
 mod structural;
+mod cycle_combo;
 // #661: every operation kind wears its own SVG-mastered glyph.
 mod op_icon_table;
 mod tool_icon_wiring;
@@ -115,6 +121,8 @@ mod mcp_live;
 mod setup_post_options;
 // #821: the raised-rotary rows of a setup's Machine page.
 mod setup_rotary;
+// #1494: the setup eye (display only).
+mod setup_eye;
 // #155: Pause / Home entries in the operation list.
 mod program_entry;
 // #371: the tool editor's Body section.
@@ -138,6 +146,7 @@ mod view_names;
 mod prefs_door;
 // #509: the Fixtures page rows fit the pane.
 mod fixture_rows;
+mod fixtures_page;
 // #864: a reduced-fidelity model says so on its page.
 mod model_fidelity;
 // #1054: the STEP facet budget on the model page.

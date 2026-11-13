@@ -107,12 +107,20 @@ fn datum_of(world: &World, picks: &[GeoSel]) -> Result<(Datum, [[f64; 3]; 3]), S
         if !setup_align::is_part(world, &e) {
             return Err(format!("'{}' is not the part - pick points of the model", g.entity));
         }
-        let what = match g.feature {
+        match g.feature {
             FeatureSel::Vertex(_) => continue,
-            FeatureSel::Face(_) | FeatureSel::Patch(_) => "a face",
-            FeatureSel::Chain(_) => "an edge",
-        };
-        return Err(format!("{} of '{}' is {what} - pick three points (corners of the model)", g.feature, g.entity));
+            // #692: a round edge stands for its centre; any other edge is
+            // refused by name.
+            FeatureSel::Chain(_) => {
+                super::centre::centre_point(world, g)?;
+                continue;
+            }
+            FeatureSel::Face(_) | FeatureSel::Patch(_) => {}
+        }
+        return Err(format!(
+            "{} of '{}' is a face - pick three points (corners of the model or circle centres)",
+            g.feature, g.entity
+        ));
     }
     let [g1, g2, g3] = picks else {
         return Err(format!("pick three points - {} picked", picks.len()));

@@ -53,3 +53,15 @@ The rough pass is moves 1-7 (lead-in, five ring moves, lead-out), so move 8 is s
 - Turning the law off for skimmed ops: this breaks the Prime Directive.
 
 **Pinned by:** `sim verify::wire::tests::each_pass_is_judged_at_its_own_kerf` (clean at the own kerf; the single-offset reading reproduces the false gouge at move 8 with depth K - ks; a skim 0.05 mm too near is a 0.05 mm gouge at move 8), `passes_that_cannot_be_told_apart_are_unreadable`, motion `skim_laws_refuse_by_name` (open run), and app `wire_post::a_rough_and_two_skims_post_three_offsets_and_condition_selects`, which now posts through the gate. `wire_contour_punch_skims.nc` is unchanged byte for byte.
+
+### Skims beside main's taper, burnout, tabs and 4-axis cut (merge with main after #1181, 2026-11-13)
+
+**Context:** main gained the constant taper (#536), the no-core burnout (#540), tabs with a cut-off (#539) and the 4-axis cut (#537) while this PR was open. None of them defines what a skim pass does with it: a tapered skim needs its own lean per pass, a burnout's rings are not one profile to walk again, a tabbed cut's skims would re-cut the tabs and the cut-off, and a 4-axis cut is its own generator.
+
+**Chosen:** skims are cut on the vertical, untabbed, one-profile contour only. Every other pair is refused by name, never cut as something else: `wire_op::skims_refusal` at the command door (inside `condition_of`) and again at generation; `check_passes` refuses tabs beside skims in the motion crate; the wire laws read a tabbed path stating skims as unreadable; the wire post refuses a cached path carrying both. A rough-only cut takes main's path exactly, so every golden of main stands byte for byte. The wire laws keep main's `Wire` (lean per vertex) and judge each pass at its own kerf on it: `passes::gouge_at` is `kerf::gouge_at` per pass (the lean's widening included), and the slug law sweeps each pass's section at each height by its own offset. With no skims both are main's law exactly.
+
+**Considered and dropped:**
+- Cutting tapered or tabbed skims now: new behaviour with no law or test behind it, not a merge.
+- Letting the pairs through untested: a silent wrong answer, against the Prime Directive.
+
+**Left open:** skims with a taper, tabs, a burnout or a 4-axis cut are owed work, each to be filed on its own when wanted. The earlier "skims on a punch need tabs" note now reads: a skimmed punch needs a stated capture (main's hold law), since tabs beside skims are refused for now.

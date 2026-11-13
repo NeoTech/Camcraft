@@ -6,15 +6,21 @@
 //! section - with no model, as `depth_law_of` gives them none), and the
 //! plasma plate through the 2D plasma laws the plasma post clause runs
 //! (`posting_plasma::plasma_clause`: its refusals block the post, its
-//! warnings ride the verdict line). Every program is first proved
-//! byte-identical to its committed CL golden.
+//! warnings ride the verdict line). And (#542) the sinker burn through
+//! the program verdict (`stock_sim::simulate_document`, the electrode's
+//! box atom), the gate the sinker post's program runs. Every program is
+//! first proved byte-identical to its committed CL golden.
 //!
-//! The wire punch rides `wire` (#534): the wire laws its post runs.
+//! The wire punch rides `wire` (#534): the wire laws its post runs;
+//! the 4-axis punch (#537) rides `wire_4axis`.
 //!
 //! Provenance: our own harness over our own goldens; no vendor material.
 
+pub mod thread;
 mod wire;
-pub use wire::{wire_findings, wire_verdict};
+mod wire_4axis;
+pub use wire::{wire_findings, wire_taper_findings, wire_taper_verdict, wire_verdict};
+pub use wire_4axis::{wire_4axis_findings, wire_4axis_verdict};
 
 use flecs_ecs::prelude::World;
 
@@ -75,6 +81,7 @@ fn region_law(t: &Toolpath, region: &Region, tool: &ToolGeom, mode: Mode, top: f
     verify(
         t,
         &VerifyContext {
+            lathe_axis: None,
             region,
             stock: None,
             model: None,
@@ -235,4 +242,56 @@ pub fn narrowed_slot_verdict() -> Vec<Warning> {
 pub fn plasma_findings() -> Vec<PlasmaFinding> {
     let t = camcraft_app::cl::text::from_text(&golden("plasma_plate_with_holes.cl")).expect("the plasma golden reads");
     judge(&PlasmaProgram::from_toolpath(&t).expect("the plasma laws read the golden"))
+}
+
+/// The gouge cells of the sinker golden, judged by the gate the
+/// sinker post's program runs (#541/#542): the program verdict
+/// (`stock_sim::simulate_document`), which cuts the burn with the
+/// electrode's box atom and convicts an overburn below the part. The op
+/// is the real Sinker Burn on a sinker, over a block whose cavity is the
+/// electrode grown by the spark gap, 6 mm deep - and its program must be
+/// the CL golden byte for byte.
+pub fn sinker_gouge_cells() -> usize {
+    use camcraft_app::commands::{GenerateOperation, LoadMachine};
+    use camcraft_app::operation::{SinkerBurnOp, SinkerDatum};
+    const GAP: f64 = 0.05;
+    let world = new_world();
+    let mut h = History::default();
+    let mut part = Vec::new();
+    let cavity = rect(12.5 - 5.0 - GAP, -7.5 - 3.0 - GAP, 12.5 + 5.0 + GAP, -7.5 + 3.0 + GAP);
+    plate(&rect(-30.0, -30.0, 30.0, 30.0), Some((&cavity, 14.0)), 0.0, 20.0, &mut part);
+    h.execute(&world, ImportModel::from_mesh("part", Mesh::from_facets(part)));
+    let stock = SetStock::new(&world, StockShape::Box { dx: 60.0, dy: 60.0, dz: 20.0 }, Default::default());
+    h.execute(&world, stock.expect("stock"));
+    let mut mch: serde_json::Value = serde_json::from_str(include_str!("../edm/sinker-edm.mch")).expect("sinker template");
+    mch["edm"]["conditions"] = serde_json::json!([{ "id": "S1", "name": "synthetic rough", "gap": GAP, "undersize": 0.1, "role": "rough" }]);
+    let m = camcraft_app::machine::parse_mch(&mch.to_string()).expect("sinker parses");
+    h.execute(&world, LoadMachine::new(&world, "sinker.mch".into(), Some(m)).expect("mount"));
+    let electrode = camcraft_tools::electrode::electrode_tool(10.0, 6.0, 30.0, 15.0);
+    h.execute(&world, AddTool::new(&world, "E-10x6", electrode).expect("an electrode"));
+    let op = OpParams::SinkerBurn(SinkerBurnOp {
+        clearance_z: Height::fixed(25.0),
+        top_z: Height::fixed(20.0),
+        floor_z: Height::fixed(10.0),
+        datum: SinkerDatum::WorkTop,
+        depth: 6.0,
+        x: 12.5,
+        y: -7.5,
+        feed: 40.0,
+        condition: "S1".into(),
+        pass: camcraft_app::operation::SinkerPass::Single,
+        cavity_x: 0.0,
+        cavity_y: 0.0,
+        orbit: None,
+        layer: None,
+        wear_lost: None,
+        wear_over: None,
+    });
+    h.execute(&world, CreateOperation::new(&world, "Burn1", "E-10x6", SrcRef::Stock, op).expect("a sinker burn"));
+    h.execute(&world, GenerateOperation::new(&world, "Burn1").expect("generates"));
+    let e = model::find_by_name(&world, "Burn1").expect("op");
+    let path = model::toolpath_of(&world, &e).expect("generated").path;
+    assert_eq!(gen_to_cltext(&path), golden("sinker_burn_cavity.cl"), "the Sinker Burn's program is the golden");
+    let sim = camcraft_app::stock_sim::simulate_document(&world).expect("the program verdict judges a sinker burn");
+    sim.dev.gouge_cells
 }

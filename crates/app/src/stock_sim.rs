@@ -351,7 +351,7 @@ pub(crate) fn plan_program(world: &flecs_ecs::prelude::World) -> Result<Vec<Plan
         // A turning insert's cutting feature is its nose (a blade's,
         // half its band - `LathePlan::feature`): the display cell law
         // (`auto_cell`) reads it, not the IC. Every other tool sweeps
-        // its cutting radius - a tap its thread's core (#266).
+        // its cutting radius - a tap its thread's core (#266, #985).
         // A sinker electrode (#541) sweeps its rectangular face grown by
         // the condition's spark gap - the box atom; its radius is the
         // inscribed half size, which only the cell law reads.
@@ -375,7 +375,7 @@ pub(crate) fn plan_program(world: &flecs_ecs::prelude::World) -> Result<Vec<Plan
         let radius = match (lathe, electrode) {
             (Some(plan), _) => plan.feature(),
             (None, Some([hx, hy, _])) => hx.min(hy),
-            (None, None) => crate::operation::tool_law::cutting_radius(&tool).map_err(|e| format!("{name}: {e}"))?,
+            (None, None) => crate::operation::thread_op::sim_radius(&tool, &op.params).map_err(|e| format!("{name}: {e}"))?,
         };
         // #546: a wear-compensated burn is judged as the worn electrode burns it.
         let moves = crate::operation::sinker_wear_op::judged(world, &op, electrode.map(|e| e[2]), cache.path.moves)

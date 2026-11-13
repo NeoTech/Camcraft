@@ -9,7 +9,7 @@
 // used; original work. Structure follows our own tormach.cps (coolant and
 // after-operation handling as in mazak.cps); the goldens lock this file's
 // decisions.
-description = "grblHAL (3-axis mill, G20/G21 from the machine, G73/G81/G82/G83/G86/G89, G2/G3, G98; no G41/G42, no G84, no probing macros)";
+description = "grblHAL (3-axis mill, G20/G21 from the document, G73/G81/G82/G83/G86/G89, G2/G3, G98; no G41/G42, no G84, no probing macros)";
 vendor = "Camcraft";
 legal = "Original clean-room work; public documentation only";
 certificationLevel = 1;
@@ -19,6 +19,7 @@ setCodePage = "utf-8";
 capabilities = 1; // reference contract: integer feature mask (bit 1 = milling)
 coolantModes = true; // reads PARAM Coolant (#112/#150)
 afterModes = true;   // reads PARAM AfterOperation (#110)
+programUnits = "mm inch"; // #902: writes the document's unit (postOptions.Units), G21 / G20
 
 // Determinism law: no timestamps, no randomness - the same stream
 // always posts to the same text (golden files depend on it).
@@ -38,14 +39,14 @@ var afterAsk = "";         // the section's PARAM AfterOperation (#110), none wh
 var coolantOp = "";        // the section's OperationName, for refusals (#150)
 var sectionOpen = false;   // preamble written (a legacy .cl carries no SECTION)
 var orgX = 0, orgY = 0, orgZ = 0; // the WCS slot origin (OriginX/Y/Z PARAMs)
-var inch = false;          // the machine is programmed in inches (onOpen)
+var inch = false;          // the document's unit is inch (onOpen, #902: postOptions.Units)
 var smoothTol = 0;         // #616: the section's PARAM Smoothing, mm (0: none asked)
 var smoothMode = "";       // #616: "finish" or "rough"
 var smoothNamed = false;   // the not-written note, once per program
 
 // ------------------------------------------------------------ helpers
-// The stream speaks mm and mm/min. An inch machine gets every length and
-// feed divided by 25.4 and written at four decimals; a metric one keeps
+// The stream speaks mm and mm/min. An inch document gets every length and
+// feed divided by 25.4 and written at four decimals; an mm one keeps
 // mm at three. Angles and rpm never scale.
 function has(v) { return v !== null && v !== undefined && isFinite(v); }
 function trim(s) {
@@ -53,7 +54,7 @@ function trim(s) {
   return s === "-0" ? "0" : s;
 }
 function len(v) { return inch ? v / 25.4 : v; }
-function fu(v) {  // a length, in the machine's unit
+function fu(v) {  // a length, in the document's unit
   if (!has(v)) return "0";
   return trim(Number(len(v)).toFixed(inch ? 4 : 3));
 }
@@ -75,6 +76,29 @@ function xyz(p) { return [wo("X", p.X, orgX), wo("Y", p.Y, orgY), wo("Z", p.Z, o
 function wo(letter, v, o) { return has(v) ? letter + fu(v - o) : ""; }  // axis word, origin-relative
 function msg(s) {  // counted warning where the host offers message()
   if (typeof message === "function") message(s); else writeln("(" + s + ")");
+}
+
+// #1359 (from #1357): a cut needs a turning spindle. spindleOn is true
+// from the preamble's spindle start (S.. M3) to the next M5 (every
+// section end, and a touch probe's stop). A touch probe's section feeds
+// its stylus with the spindle stopped on purpose: a section is a
+// probe's only when it states 0 rpm (#574) AND its tool is a touch
+// probe (PARAM ToolKind) - a cutter whose speed reads 0 is a stopped
+// spindle, not a probe. A feed, arc or cycle with the spindle stopped
+// anywhere else is refused by name and not posted: a stream that states
+// no spindle speed would otherwise drag a stopped cutter through the
+// part. Once per program.
+var spindleOn = false;
+var probeSection = false;
+var kindProbe = false;    // this section's PARAM ToolKind names a touch probe
+var spindleRefused = false;
+function spindleStopped(what) {  // true: refused, nothing is posted
+  if (spindleOn || probeSection) return false;
+  if (!spindleRefused) {
+    spindleRefused = true;
+    msg(what + " with the spindle stopped - no spindle start (S.. M3) precedes it; state the operation's spindle speed");
+  }
+  return true;
 }
 var tapRefused = false;   // the tapping refusal, once per program
 var tiltRefused = false;  // one named refusal per program, not per line
@@ -186,7 +210,7 @@ function commentParam(name, value) {
   if (name === "SetupName") setupName = clean(value);
   else if (name === "OperationName") opName = clean(value);
   else if (name === "OperationKind") opKind = clean(value).toUpperCase();
-  else if (name === "ToolKind") toolKind = clean(value).toUpperCase();
+  else if (name === "ToolKind") { toolKind = clean(value).toUpperCase(); kindProbe = toolKind === "TOUCH PROBE"; }
   else if (name === "ToolDiameter" && has(value)) toolDia = Number(value);
   else if (name === "ToolCornerRadius" && has(value)) toolCr = Number(value);
 }
@@ -217,7 +241,7 @@ function toolNote() {  // just before the tool change it describes
 // from the program would throw away the length just measured, and the
 // post cannot know a length to restate - so it never touches the offset.
 function onOpen() {
-  inch = typeof machine !== "undefined" && machine.units === "inch";
+  inch = typeof postOptions !== "undefined" && postOptions && postOptions.Units === "inch"; // #902: the document's unit, never the machine file's
   var nm = (typeof machine !== "undefined" && machine.name) || "CAMCRAFT";
   note(clean(nm) || "CAMCRAFT");
   block([inch ? "G20" : "G21", "G17", "G90", "G91.1", "G94", "G40", "G80"]);
@@ -333,7 +357,8 @@ function startPreamble() {
   }
   // A touch probe states 0 rpm: no spindle start and no cutting fluid.
   var touchProbe = spindleWait && !(sRpm > 0);
-  if (spindleWait && sRpm > 0) block(["S" + ni(sRpm), "M3"]);
+  if (spindleWait && sRpm > 0) { block(["S" + ni(sRpm), "M3"]); spindleOn = true; }
+  probeSection = touchProbe && kindProbe;
   spindleWait = false;
   coolant = touchProbe ? "" : coolantFor(coolantAsk);
   if (coolant) block([coolant]);
@@ -368,6 +393,9 @@ function endPreamble() {
   coolant = "";
   coolantAsk = "flood";      // the next section states its own ask
   block(["M5"]);
+  spindleOn = false;
+  probeSection = false;
+  kindProbe = false;         // the next section states its own tool kind
   afterOp();
 }
 
@@ -414,12 +442,14 @@ function onLinear() {
   startPreamble();
   seeZ(properties.Z); seeZ(properties.StartZ);
   if (!tiltOk(properties) || inCycle) return;
+  if (spindleStopped("feed move G1")) return;
   startXY(properties);
   block(["G1"].concat(xyz(properties), [fw(properties.FeedRate)]));
 }
 function onCircular() {
   startPreamble();
   if (!tiltOk(properties) || inCycle) return;
+  if (spindleStopped("arc move " + (properties.CircularDirection === "CW" ? "G2" : "G3"))) return;
   var p = properties;
   seeZ(p.Z); seeZ(p.StartZ);
   startXY(p);
@@ -432,8 +462,7 @@ function onCircular() {
 
 // ------------------------------------------------------- canned cycles
 // grblHAL's core lists G73, G81, G82, G83, G85, G86, G89 with G98/G99;
-// this post writes all of them but G85 (no CamCraft cycle asks for a
-// feed-out bore, so it is never mapped).
+// this post writes all of them (G85 for the ream cycle, #1445).
 // One block per hole, holes of an unchanged cycle continuing modally
 // with bare X Y lines. The dwell P is in SECONDS, as in LinuxCNC (not
 // the milliseconds Fanuc-family controls read). G84 is not in the list
@@ -452,6 +481,7 @@ function onCycle() {
   else if (p.CycleType === "DEEP") g = "G83";
   else if (p.CycleType === "BORE") g = "G86";
   else if (p.CycleType === "BACKBORE") g = "G89";
+  else if (p.CycleType === "REAM") g = "G85";   // #1445: feed in, feed out at F, no dwell
   else if (p.CycleType === "TAP") {
     if (!tapRefused) {
       tapRefused = true;
@@ -459,6 +489,20 @@ function onCycle() {
     }
     return;
   }
+  else {
+    // #1445: a cycle kind this post does not know is refused by name,
+    // never posted as the G81 default (a rapid out it never asked for).
+    msg("canned cycle " + p.CycleType + " is not known to this post - refused, not posted as another cycle");
+    return;
+  }
+  // #1357: a canned cycle feeds at its own F word. Without one the
+  // control drills at whatever feed was last modal (or alarms on a zero
+  // feed), so a cycle the stream gives no positive feed is refused by name.
+  if (!(has(p.FeedRate) && p.FeedRate > 0)) {
+    msg("canned cycle " + g + " has no feed rate - refused: without F the control drills at whatever feed was last modal");
+    return;
+  }
+  if (spindleStopped("canned cycle " + g)) return;
   xyFirst(p.X, p.Y);         // a cycle as the first move: its first hole
   var sig = g + "|" + p.Z + "|" + p.R + "|" + p.Q;
   if (inCycle && sig === cycleSig) {

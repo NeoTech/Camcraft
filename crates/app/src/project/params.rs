@@ -899,6 +899,11 @@ pub enum ParamsDto {
         infeed: f64,
         feed: f64,
         plunge_feed: f64,
+        /// #416 the infeed plan: absent (and written only when not the
+        /// default) is the radial constant-depth ladder every earlier
+        /// file cut - no version step, the approach precedent.
+        #[serde(default, skip_serializing_if = "ThreadInfeedDto::is_default")]
+        infeed_plan: ThreadInfeedDto,
         /// #629: the thread's hand, always written. Absent (every file
         /// before the key) reads right-hand - the hand the drawing
         /// meant; those files posted left-hand by the old bug, and
@@ -1004,6 +1009,24 @@ pub enum ParamsDto {
         plunge_feed: f64,
         climb: bool,
         holes: Vec<HoleDto>,
+        /// #894, additive (no version step): the thread's pitch.
+        /// Absent (every older file) is unstated - a multi-form
+        /// mill's own pitch.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pitch: Option<f64>,
+        /// #894, additive: the thread's hand. Absent reads right-hand.
+        #[serde(default)]
+        hand: ThreadHandDto,
+        /// #985, additive (no version step): external threads - the
+        /// list holds bosses. Absent (every older file) is internal;
+        /// written only when set.
+        #[serde(default, skip_serializing_if = "is_false")]
+        external: bool,
+        /// #988, additive (no version step): pass control - schedule,
+        /// finish and spring passes, allowance, spindle and cutter
+        /// hand. Flattened keys, each absent when at the #894 default.
+        #[serde(flatten)]
+        passes: ThreadPassesDto,
     },
     /// The probe (#108): an additive variant in the v50 grammar.
     Probe(ProbeDto),
@@ -1340,6 +1363,8 @@ pub enum CycleChoiceDto {
     Bore,
     BackBore,
     FloatingTap,
+    /// #1445: feed in, feed out (G85). Older files never carry it.
+    Ream,
 }
 
 /// The reference part of a stored height. Serialized as a plain string;

@@ -995,7 +995,12 @@ pub enum OpParams {
     /// the blank. The V itself (crest width, flank angle) is TOOL
     /// geometry, the blade's width law again; the feeds are mm/min
     /// with the spindle turning one rev per pitch of the
-    /// synchronized pass. `hand` (#629) is the way the thread winds -
+    /// synchronized pass. `infeed` is also the FIRST pass's depth
+    /// when `infeed_plan` ladders by constant area (issue #416), and
+    /// `infeed_plan` says how the passes enter (radial, flank,
+    /// alternating), how deep each goes, the finish allowance and the
+    /// spring passes - its default is the radial constant-depth ladder.
+    /// `hand` (#629) is the way the thread winds -
     /// right-hand unless the drawing says LH; the passes run toward
     /// the chuck either way and the hand sets the helix's sense.
     Threading {
@@ -1008,6 +1013,7 @@ pub enum OpParams {
         infeed: f64,
         feed: f64,
         plunge_feed: f64,
+        infeed_plan: crate::turning::ThreadInfeed,
         hand: crate::cl::ThreadHand,
     },
     /// Chamfer turning (M5.2 stage E): one ride across the cone
@@ -1121,12 +1127,12 @@ pub enum OpParams {
         holes: Vec<Hole>,
         links: Links,
     },
-    /// Helical thread milling (M2.4 C). Pitch is the TOOL's, read at
-    /// generate the way the tap cycle reads it - a thread mill that
-    /// cannot state a pitch is the M1.6 refusal, named. `infeed` is
-    /// the radial step per turn and must stay inside the standard's
-    /// depth `0.5413 x pitch`; the ride lands on the major circle
-    /// whatever it is.
+    /// Helical thread milling (M2.4 C, reworked by #894): internal
+    /// threads in the listed holes - or, `external`, on the listed
+    /// bosses (#985) - with a thread mill
+    /// ([`super::super::thread_op`]). `infeed` is the radial depth per
+    /// pass and must stay inside the standard's depth `0.5413 x
+    /// pitch`; the last pass lands on the major circle whatever it is.
     Thread {
         clearance_z: Height,
         retract_z: Option<Height>,
@@ -1135,9 +1141,28 @@ pub enum OpParams {
         infeed: f64,
         feed: f64,
         plunge_feed: f64,
-        /// CCW for a right-hand thread.
+        /// Climb milling: under a clockwise (M3) spindle the orbit runs
+        /// counter-clockwise inside a hole; an M4 spindle flips it (#988).
         climb: bool,
         holes: Vec<Hole>,
+        /// The thread's pitch, mm (#894). `None` reads a multi-form
+        /// mill's own pitch; a single-form mill needs it stated, inside
+        /// its range.
+        pitch: Option<f64>,
+        /// Right-hand unless the drawing says LH (#894).
+        hand: crate::cl::ThreadHand,
+        /// External threads (#985): the listed features are BOSSES -
+        /// `radius` is each one's major radius, `floor_z` its shoulder -
+        /// and the mill orbits beside them, cutting `0.6134 x pitch`
+        /// deep ([`super::super::thread_boss`]). `false` is every
+        /// thread made before the flag existed: internal, in holes.
+        external: bool,
+        /// Pass control (#988): the radial schedule (equal or constant
+        /// chip area), a finishing pass, spring passes, a fit allowance
+        /// and the spindle direction with the cutter's hand
+        /// ([`crate::machining2d::ThreadPasses`]). The default is the
+        /// #894 ride every older file meant.
+        passes: crate::machining2d::ThreadPasses,
     },
     /// Probing (#108): a spindle touch probe finds a face, an edge, an
     /// outside corner or a bore / boss centre, then sets a work offset

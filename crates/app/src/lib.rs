@@ -63,6 +63,11 @@ pub use camcraft_motion::wire_edm;
 pub use camcraft_motion::probing;
 // #541: sinker EDM burn to depth.
 pub use camcraft_motion::sinker;
+// #543: sinker rough and finish with undersize.
+pub use camcraft_motion::sinker_undersize;
+// #547: electrode generation from part faces.
+pub use camcraft_motion::sinker_cavity;
+pub use camcraft_motion::sinker_electrode;
 pub use camcraft_motion::sinker_wear;
 // #544: sinker EDM orbit patterns.
 pub use camcraft_motion::sinker_orbit;
@@ -120,6 +125,8 @@ pub mod tool_list_export;
 // #221: the number a tool posts as, and the clash law.
 pub mod tool_numbers;
 pub use camcraft_tools::tools;
+// #894: the thread mills' form constants, sanity law and pitch door.
+pub use camcraft_tools::thread_mill;
 // #630: the lathe tool orientation code (LinuxCNC 1-9) and its control point.
 pub use camcraft_tools::orientation;
 pub use camcraft_tools::catalog_fields;

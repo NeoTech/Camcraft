@@ -49,7 +49,7 @@ impl WirePass {
 /// command door's (the numbers are all the machine's).
 ///
 /// # Errors
-/// Skims on an open run, a skim naming no condition, a skim whose wire is not the rough
+/// Skims on an open run or with tabs, a skim naming no condition, a skim whose wire is not the rough
 /// pass's, a pass nearer the profile than the finishing pass, or a
 /// skim farther out than the pass before it.
 pub fn check_passes(rough: &WireParams, skims: &[WirePass]) -> Result<(), GenError> {
@@ -60,6 +60,12 @@ pub fn check_passes(rough: &WireParams, skims: &[WirePass]) -> Result<(), GenErr
         return Err(invalid(format!(
             "the side is {} of travel, an open run, and {} skim pass(es) are stated - an open run is cut once, from the air to its run-out; skims walk a closed profile from its start hole",
             rough.side.word(),
+            skims.len()
+        )));
+    }
+    if rough.tabs.is_some() {
+        return Err(invalid(format!(
+            "tabs are stated with {} skim pass(es) - skims are cut on an untabbed profile only (#538 x #539); remove the tabs or the skims",
             skims.len()
         )));
     }

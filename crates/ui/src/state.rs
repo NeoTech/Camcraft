@@ -21,7 +21,7 @@ use camcraft_app::commands::{
     ClearToolpath, CreateSetup, DeleteEntity, DeleteFixture, DeleteOperation, DeleteSetup, DeleteTool,
     EditOperationLinks, EditOperationParams, GenerateOperation, History, ImportModel,
     MoveFixture, MoveModel, PasteOperation, RegenerateAll, RenameOperation, ReorderOperation, RepairModel, SelectEntity, SetOperationGeometry,
-    SetFixtureFixed, SetOperationSetup, SetStock, SetToolNumber, SetUnits, SetWcsOrigin,
+    SetFixtureFixed, SetOperationSetup, SetStock, SetToolNumber, SetUnits,
     SetWorkMaterial, TagFixture, UntagFixture, ImportFixture,
     UpdateModel, theme_of,
 };
@@ -39,6 +39,8 @@ use camcraft_app::{machine, model, posting, project, world::new_world};
 
 #[path = "state_per_op.rs"]
 mod per_op;
+#[path = "state_program_info.rs"]
+mod program_info;
 #[path = "state_tool_library.rs"]
 mod tool_library_io;
 #[path = "state_setup_mount.rs"]
@@ -86,6 +88,8 @@ mod tool_cutter_ui;
 pub use tool_cutter_ui::ToolCutterUi;
 #[path = "state_recent.rs"]
 mod recent_ui;
+#[path = "state_wcs.rs"]
+mod wcs_ui;
 #[path = "state_view.rs"]
 mod view_prefs_ui;
 #[path = "state_prefs.rs"]
@@ -243,6 +247,9 @@ pub enum CommandKind {
         pitch_deg: f64,
         yaw_deg: f64,
     },
+    /// #739: the active setup's WCS on the centre of a picked circular
+    /// edge (`SetWcsAtCircleCentre`), at the pane's angles.
+    SetWcsCircle { pick: GeoSel, roll_deg: f64, pitch_deg: f64, yaw_deg: f64 },
     /// Tool library: create a tool entity (catalog row or hand-typed page).
     AddTool {
         name: String,
@@ -354,6 +361,12 @@ pub enum CommandKind {
     SetSkipStops(bool),
     /// The post page's Output choice (#111): `true` = one file per op.
     SetPerOpOutput(bool),
+    /// The post page's Program number field (#258), as typed: blank
+    /// clears it, anything else is parsed and refused by name.
+    SetProgramNumber(String),
+    /// The post page's Program comment field (#258), as typed: blank
+    /// clears it.
+    SetProgramComment(String),
     /// The op's context-menu retype (M9.1): change the operation's kind
     /// in place, numbers carried by the one retype law, one undo unit.
     ChangeOperationKind {
@@ -693,6 +706,12 @@ pub struct WcsUi {
     /// clickable markers in the viewport. Transient UI mode, not undoable
     /// (AGENTS.md) - the origin change it triggers is the command.
     pub pick_anchor: bool,
+    /// #739: viewport picking of a circular edge for the "Circle centre"
+    /// anchor (anchor_source 2). Transient like `pick_anchor`.
+    pub pick_circle: bool,
+    /// The last circle the pick read (what the page shows), or the
+    /// refusal it named. Display only; the world stores the origin.
+    pub circle: Option<Result<camcraft_app::pick::Circle, String>>,
     /// Whether the selected slot currently has a placed origin entity. Lets
     /// `sync_setup_ui` zero the readout when an origin is undone without
     /// wiping typing into a never-placed slot.
@@ -979,6 +998,8 @@ pub struct ToolUi {
     pub tip_angle: f64,
     /// Thread pitch, mm per turn; the tap cycle feeds at rpm x pitch.
     pub pitch: f64,
+    /// A single-form thread mill's finest pitch (#894); inert elsewhere.
+    pub pitch_min: f64,
     /// Insert nose radius; the turning kind's cutting ball, inert on
     /// the mills (the app's `Tool` field's law, mirrored).
     pub nose_radius: f64,
@@ -1051,11 +1072,14 @@ impl ToolUi {
                 ToolKind::Probe => 11,
                 ToolKind::Torch => 12,
                 ToolKind::Electrode => 13,
+                ToolKind::ThreadMill => 14,
+                ToolKind::ThreadMillSingle => 15,
             },
             diameter: t.diameter,
             corner_r: t.corner_r,
             tip_angle: t.tip_angle,
             pitch: t.pitch,
+            pitch_min: t.pitch_min,
             nose_radius: t.nose_radius,
             width: t.width,
             flute_len: t.flute_len,
@@ -1098,6 +1122,8 @@ impl ToolUi {
             11 => ToolKind::Probe,
             12 => ToolKind::Torch,
             13 => ToolKind::Electrode,
+            14 => ToolKind::ThreadMill,
+            15 => ToolKind::ThreadMillSingle,
             _ => ToolKind::EndMill,
         }
     }
@@ -1131,6 +1157,7 @@ impl ToolUi {
             corner_r: self.corner_r,
             tip_angle: self.tip_angle,
             pitch: self.pitch,
+            pitch_min: self.pitch_min,
             nose_radius: self.nose_radius,
             width: self.width,
             flute_len: self.flute_len,
@@ -1441,6 +1468,9 @@ pub struct State {
     /// Operations whose cached path stays undrawn (eye toggle per op).
     /// Same rule: the path still exists and posts.
     pub hidden_paths: Vec<String>,
+    /// Setups other than the active one whose eye is on (#1494); the active
+    /// setup is always drawn. View state, never saved: display only.
+    pub shown_setups: Vec<String>,
     pub operation_clipboard: Option<OperationClipboard>,
     /// Expanded state of Setup, Models, Tools, and Operations in the browser.
     pub browser_expanded: [bool; 3],
@@ -1691,6 +1721,11 @@ pub struct State {
     /// hover itself is the precedent) - refreshed every frame, never a
     /// command, never an overlay rebuild.
     pub geo_hover: Option<GeoSel>,
+    /// `geo_hover` as the previous frame left it: the viewport pane draws
+    /// before the properties pane sets the row hover, so the strong row
+    /// highlight (#1507) reads last frame's answer - a one-frame lag, with a
+    /// repaint requested whenever the two differ. Ephemeral, never a command.
+    pub geo_hover_drawn: Option<GeoSel>,
     /// Which named section of the operation page is open (the M1.4 tab
     /// bar, restored after M9.1 B's stack on user feedback). An index into
     /// `egui_app::op_tabs::SECTIONS`. Ephemeral pane state like the drafts
@@ -1895,11 +1930,13 @@ impl State {
             boundary_view: Default::default(),
             incoming_view: Default::default(),
             geo_hover: None,
+            geo_hover_drawn: None,
             op_tab: 0,
             hidden_models: Vec::new(),
             hidden_stocks: Vec::new(),
             hidden_offsets: Vec::new(),
             hidden_paths: Vec::new(),
+            shown_setups: Vec::new(),
             operation_clipboard: None,
             browser_expanded: [true; 3],
             cam: Camera::default(),
@@ -2696,6 +2733,7 @@ impl State {
     pub(crate) fn hidden_in_view(&self, name: &str) -> bool {
         self.hidden_models.iter().any(|n| n == name)
             || self.hidden_stocks.iter().any(|n| n == name)
+            || self.fixture_hidden_by_setup(name)
     }
 
     #[must_use]
@@ -2803,6 +2841,7 @@ impl State {
                 self.project_path = None;
                 self.hidden_stocks.clear();
                 self.hidden_offsets.clear();
+                self.shown_setups.clear();
                 model::clear_named(&self.world);
                 // Units belong to the document, and clear_named cannot
                 // reach a singleton: reset the lens so a fresh blank is
@@ -3056,41 +3095,11 @@ impl State {
                 };
                 self.apply_stock_fit(stock::fit_box_sides(&bounds, sides));
             }
-            CommandKind::SetWcs {
-                pos,
-                roll_deg,
-                pitch_deg,
-                yaw_deg,
-            } => {
-                // The axis-angle builders quietly substitute identity for
-                // non-finite angles; refuse that here rather than silently
-                // dropping a NaN rotation (Prime Directive).
-                if !roll_deg.is_finite() || !pitch_deg.is_finite() || !yaw_deg.is_finite() {
-                    self.refuse(
-                        ErrorScope::Setup,
-                        "WCS not set: rotation angles must be finite".to_owned(),
-                    );
-                    return;
-                }
-                let location = Location {
-                    pos: Point3::new(pos[0], pos[1], pos[2]),
-                    rot: quat_from_euler(
-                        roll_deg.to_radians(),
-                        pitch_deg.to_radians(),
-                        yaw_deg.to_radians(),
-                    ),
-                };
-                match SetWcsOrigin::new(&self.world, location) {
-                    Ok(command) => {
-                        self.history.execute(&self.world, command);
-                        self.doc_version += 1;
-                        self.wcs_pick = None; // #701: a landed frame ends the role draft
-                        let active = camcraft_app::setup::active(&self.world);
-                        self.status =
-                            format!("{} origin set", camcraft_app::setup::wcs_label(&self.world, active.as_deref()));
-                    }
-                    Err(err) => self.refuse(ErrorScope::Setup, format!("WCS not set: {err}")),
-                }
+            CommandKind::SetWcs { pos, roll_deg, pitch_deg, yaw_deg } => {
+                self.dispatch_set_wcs(pos, [roll_deg, pitch_deg, yaw_deg]);
+            }
+            CommandKind::SetWcsCircle { pick, roll_deg, pitch_deg, yaw_deg } => {
+                self.dispatch_set_wcs_circle(&pick, [roll_deg, pitch_deg, yaw_deg]);
             }
             // #828: a new tool starts with the machine's default holder,
             // named in the status line (or why it was left off).
@@ -3267,6 +3276,8 @@ impl State {
                 }
             }
             CommandKind::SetPerOpOutput(per_op) => self.set_per_op_output(per_op),
+            CommandKind::SetProgramNumber(text) => self.set_program_number(&text),
+            CommandKind::SetProgramComment(text) => self.set_program_comment(text),
             CommandKind::ProgramEntry(verb) => self.program_entry_verb(verb),
             CommandKind::SetSkipStops(skip) => {
                 let next = camcraft_app::schema::PostOptions { skip_stops: skip, ..posting::post_options(&self.world) };
@@ -4140,6 +4151,7 @@ impl State {
         self.project_path = None;
         self.hidden_stocks.clear();
         self.hidden_offsets.clear();
+        self.shown_setups.clear();
         model::clear_named(&self.world);
         self.history.clear();
         self.post_view = None; // the old document's program is not this one's
@@ -4214,9 +4226,10 @@ impl State {
                 // describes the document's post (#265).
                 self.post_refusal = None;
                 self.status = format!(
-                    "posted {} op(s), {} lines to {}",
+                    "posted {} op(s), {} lines in {} to {}",
                     posted.ops,
                     posted.lines,
+                    posting::unit_word(self.units()),
                     path.display()
                 );
                 // A program the material sim refused to judge posts
