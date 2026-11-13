@@ -2,7 +2,7 @@
 //! judged height blocks - the wire is read where it stands at that
 //! height, not only on its programmed plane - and the kerf across a
 //! leaning wire reaches `k * sqrt(1 + (t.u)^2)` toward the product, not
-//! the vertical `k`.
+//! the vertical `k`; a pose on a cut stating no taper is refused.
 //! Provenance: our own fixtures.
 
 use super::*;
@@ -73,4 +73,16 @@ fn the_leaning_kerf_reaches_past_the_vertical_one() {
     // Upright, the same path is clear: the reach, not the position, bites.
     let upright = judge_at(&leaning_path(off, None), &[0.0], false);
     assert!(gouges(&upright).is_empty(), "{:?}", upright.findings);
+}
+
+/// A pose on a cut that states no taper is unreadable, never read as a
+/// lean nor dropped: the laws refuse it by name.
+#[test]
+fn a_pose_on_a_cut_with_no_taper_is_refused() {
+    let v = judge_at(&leaning_path(5.0 + K, Some([0.03, 0.0])), &[0.001], false);
+    assert!(
+        matches!(v.findings.as_slice(), [WireFinding::Unreadable(why)] if why.contains("states a pose, and the cut states no taper")),
+        "{:?}",
+        v.findings
+    );
 }
