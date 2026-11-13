@@ -130,9 +130,11 @@ impl PocketParams {
             }
         };
         if self.tiling_step() > reach {
-            return Err(GenError::Invalid(
-                "stepover leaves bands the tool cannot reach".into(),
-            ));
+            let what = if self.strategy.steps_by_load() { "optimal-load step" } else { "stepover" };
+            return Err(GenError::Invalid(format!(
+                "{what} {:.3} mm leaves bands the tool cannot reach (at most {reach:.3} mm for this strategy)",
+                self.tiling_step()
+            )));
         }
         if self.feed <= 0.0 || self.plunge_feed <= 0.0 {
             return Err(GenError::Invalid("feeds must be positive".into()));
@@ -177,12 +179,7 @@ impl PocketParams {
     /// plan and the reach door both ask this one function, mirroring
     /// `Pocket3DParams::tiling_step` (M5.1 H).
     fn tiling_step(&self) -> f64 {
-        match self.strategy {
-            PocketStrategy::Adaptive | PocketStrategy::OffsetRings => {
-                load_step(self.tool_diameter, self.optimal_load)
-            }
-            _ => self.stepover,
-        }
+        if self.strategy.steps_by_load() { load_step(self.tool_diameter, self.optimal_load) } else { self.stepover }
     }
 }
 
