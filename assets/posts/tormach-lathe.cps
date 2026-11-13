@@ -92,8 +92,9 @@ threadHands = true;  // reads PARAM SpindleDirection (#629): M4 when the thread'
 //    PathPilot's own conversational threading), the passes inside it
 //    skipped. Only what the record states is written: R1 for its equal
 //    rungs (LinuxCNC: "R1.0 selects constant depth"), Q0 for its radial
-//    infeed, H its spring passes; no finish allowance (G76 has no word
-//    for one), no pull-out (no E/L taper), an external thread cut from
+//    infeed, H its spring passes; a finishing step only when it is the
+//    equal ladder's own last one (G76 has no word for any other, #417),
+//    no alternating flanks, no pull-out (no E/L taper), an external thread cut from
 //    the +X side. I J K are diameters on the control's resolution
 //    grid, rounded so the last pass never goes deeper than the
 //    record's minor diameter. Anything else is refused by name, never
@@ -584,7 +585,16 @@ function g76Why(p, r0, r1) {
     return "the passes are not equal rungs (minimum depth differs from the first) - only LinuxCNC's constant-depth degression (R1) states the record's ladder exactly";
   }
   if (Math.abs(p.InfeedAngle) > 1e-6) return "infeed angle " + p.InfeedAngle + " - a compound infeed (Q) is not posted on this control yet (radial only, Q0)";
-  if (Math.abs(p.FinishAllowance) > EPS) return "finish allowance - LinuxCNC's G76 has no finish-pass allowance word";
+  if (p.Alternating === true) return "alternating flank infeed - LinuxCNC's G76 infeeds along one line (Q) only";
+  // The record's finishing pass cuts FinishAllowance below the last
+  // roughing pass (#417). R1's equal ladder (J, 2J, ... clamped at K)
+  // has no word for that step: its finishing pass takes the ladder's
+  // own last step, so the record must state exactly that one.
+  var rungs = Math.max(1, Math.ceil(p.ThreadHeight / p.FirstDepth - 1e-9));
+  var lastStep = p.ThreadHeight - (rungs - 1) * p.FirstDepth;
+  if (Math.abs(p.FinishAllowance - lastStep) > 2 * EPS) {
+    return "finish allowance " + p.FinishAllowance + " - LinuxCNC's G76 has no finish-pass word; its finishing pass takes the equal ladder's own last step (" + trim0(lastStep.toFixed(4)) + ")";
+  }
   if (Math.abs(p.PullOut) > EPS) return "pull-out - an angled thread exit (E/L taper) is not posted on this control yet";
   if (!(p.SpringPasses >= 0 && Math.round(p.SpringPasses) === p.SpringPasses)) return "spring passes not a whole count";
   if (!(p.MinorDiameter < p.MajorDiameter)) return "not an external thread (minor diameter at or over the major)";
