@@ -9,7 +9,7 @@
 use super::pick::{pick_list_schema, picks_of};
 use super::tools::{opt_str, req_str, Tool};
 use crate::commands::ElectrodeFromFaces;
-use crate::operation::sinker_faces::condition_undersize;
+use crate::operation::sinker_faces::{condition_undersize, undersize_warning};
 use crate::script::{fnum, Env};
 use crate::setup;
 use crate::sinker_electrode::ElectrodeSpec;
@@ -83,9 +83,10 @@ fn electrode_from_faces(env: &mut Env, a: &Map<String, Value>) -> Result<Value, 
         },
         "frame": "world",
         "note": (e.orbit > 0.0).then(|| format!(
-            "made {:.3} mm smaller per side for an orbit of that radius: at rest it burns under size, and the Sinker Burn's size law judges it without the orbit until orbit patterns land (#544)",
+            "made {:.3} mm smaller per side for an orbit of that radius: burn it as a single Sinker Burn with an orbit of that radius (#544) - a rough or finish takes no orbit until the size law counts it (#1355), and judges this electrode as the wrong size for its condition",
             e.orbit
         )),
+        "warning": undersize_warning(undersize),
     }))
 }
 

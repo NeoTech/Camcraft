@@ -25,3 +25,12 @@
 - Extending `sinker_op::condition` to take an id. A separate small reader keeps #543's file untouched while its PR is open.
 
 **Cost to change later:** low. `cavity_of` already reads any polygonal cavity with vertical planar walls and `derive` already computes its offset outline; #1152 replaces the rectangle test with the body atom and widens the tool record. The MCP tool's arguments do not change.
+
+### Refresh over main and #1136, review of dcaa3a36 (2026-11-12)
+
+**Decided:**
+- **Unreadable facets refuse.** `electrode_from_faces` used to treat `model::world_facets` returning `None` as an empty facet list, which skipped the obstruction check without a word. It now refuses by name ("the part's facets could not be read ..."), as the Prime Directive asks. No public path reaches it, since the picked faces were just resolved from the same model, so it has no pin of its own.
+- **What `standing_in` checks.** It checks only the picked part: a boss, rib or overhang of that part in the cavity's column. Clamps, fixtures and other models over the cavity are left to the stock sim and the fixture/collision checks, which judge the program with every body in place. This keeps it a geometric precondition on the part, not a collision check.
+- **A stated undersize of 0 is warned, not refused.** The tool's reply gains a `warning` when a stated undersize is 0 (a full-size electrode): any spark gap burns its walls past size, and #543's size law refuses any rough or finish of it. A condition never needs the warning: the machine file already refuses a condition undersized below its own gap. The tool only makes a tool record and posts nothing, so the refusal stays where the burn is judged, and the reply says so in advance. Dropped: also reading the active machine's gaps for a stated undersize, because with no condition named there is no single gap to compare against.
+- **Orbit.** #544 has landed, but #543's size law does not count an orbit yet, and #1136 refuses an orbit on a rough or finish (#1355). The electrode is still made `2 x orbit` smaller when one is asked for, and the reply says to burn it as a single Sinker Burn with that orbit. A rough or finish of it is refused by name as the wrong electrode for its condition. #1355 owns the size-law change.
+- **Skill row.** The camcraft-mcp skill row is filed as #1356 (P5, area:mcp).

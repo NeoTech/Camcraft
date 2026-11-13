@@ -120,11 +120,16 @@ pub fn electrode_from_faces(world: &World, picks: &[GeoSel], spec: &ElectrodeSpe
     }
     let cavity = cavity_of(&faces).map_err(words)?;
     let electrode = derive(&cavity, spec).map_err(words)?;
+    // The obstruction check reads the part's facets; a part whose
+    // facets cannot be read is refused by name, never checked against an
+    // empty list (review of #1156: never silence).
     let facets = name
         .as_deref()
         .and_then(|n| model::find_by_name(world, n))
         .and_then(|e| model::world_facets(world, &e))
-        .unwrap_or_default();
+        .ok_or_else(|| {
+            "electrode from faces: the part's facets could not be read, so the cavity's column cannot be checked for a boss, a rib or an overhang - no electrode is made".to_owned()
+        })?;
     if let Some(at) = standing_in(&electrode, &facets) {
         return Err(format!(
             "electrode from faces: the part stands inside the cavity above its floor near ({:.3}, {:.3}, {:.3}) - a boss, a rib or an overhang is in the electrode's way, and an electrode shaped round it is not modelled",
@@ -164,4 +169,17 @@ pub fn condition_undersize(world: &World, setup: Option<&str>, id: &str) -> Resu
         .ok_or_else(|| format!("machine {label} states no EDM section, so no condition {id:?}"))?;
     let c = edm.condition(&label, id, &[ConditionField::Undersize])?;
     c.undersize.ok_or_else(|| format!("machine {label}: EDM condition {id:?} states no undersize"))
+}
+
+/// A warning by name for a stated undersize of 0 (review of #1156): the
+/// electrode is then the cavity's full size, and any spark gap burns
+/// its walls past the finished size - #543's size law refuses a rough
+/// or finish of it. A condition's undersize never needs it: the machine
+/// file already refuses a condition undersized below its own gap.
+/// `None` otherwise.
+#[must_use]
+pub fn undersize_warning(undersize: f64) -> Option<String> {
+    (undersize == 0.0).then(|| {
+        "an undersize of 0 makes the electrode the cavity's full size: any spark gap burns the walls past it, and a Sinker Burn rough or finish of it is refused by the size law (#543) - state the undersize your condition calls for, or read it with \"condition\"".to_owned()
+    })
 }

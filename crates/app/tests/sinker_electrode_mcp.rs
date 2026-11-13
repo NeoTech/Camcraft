@@ -96,6 +96,7 @@ fn the_electrode_is_generated_and_burned_over_mcp_with_the_gui_commands() {
     assert_eq!((got["electrode"]["length"].clone(), got["electrode"]["pickup"].clone()), (json!(16.0), json!(15.0)));
     assert_eq!(got["cavity"]["center"], json!([6.0, -4.0]));
     assert_eq!((got["undersize"].clone(), got["condition"].clone(), got["note"].clone()), (json!(0.02), json!("F1"), Value::Null));
+    assert_eq!(got["warning"], Value::Null, "an undersize equal to the gap burns to size: {got}");
     let mut params = got["burn"].clone();
     params["condition"] = json!("F1");
     params["pass"] = json!("finish");
@@ -106,7 +107,8 @@ fn the_electrode_is_generated_and_burned_over_mcp_with_the_gui_commands() {
     // An orbit is taken off the electrode too, and said.
     let orbit = ok(&mut s, "electrode_from_faces", json!({ "name": "E-O", "picks": picks, "undersize": 0.1, "orbit": 0.25, "stub": 10, "pickup": 0 }));
     assert!(near(num(&orbit["electrode"]["x"]), 19.3) && near(num(&orbit["inset"]), 0.35), "{orbit}");
-    assert!(orbit["note"].as_str().is_some_and(|n| n.contains("#544")), "{orbit}");
+    assert!(orbit["note"].as_str().is_some_and(|n| n.contains("#544") && n.contains("#1355")), "{orbit}");
+
     let tools = |s: &mut Server, id: &mut i64| -> Vec<String> {
         let job = call(s, id, "get_job", json!({})).expect("job");
         job["tools"].as_array().map(|t| t.iter().filter_map(|x| x["name"].as_str().map(str::to_owned)).collect()).unwrap_or_default()
@@ -114,6 +116,14 @@ fn the_electrode_is_generated_and_burned_over_mcp_with_the_gui_commands() {
     assert!(tools(&mut s, &mut id).contains(&"E-O".to_owned()));
     call(&mut s, &mut id, "undo", json!({})).expect("undo");
     assert!(!tools(&mut s, &mut id).contains(&"E-O".to_owned()), "one undo removes the electrode");
+
+    // Review of #1156: a stated undersize of 0 (a full-size electrode)
+    // is warned by name; a condition never needs it, since the machine
+    // file refuses a condition undersized below its own gap.
+    let zero = call(&mut s, &mut id, "electrode_from_faces", json!({ "name": "E-0", "picks": picks, "undersize": 0, "stub": 10, "pickup": 0 })).expect("electrode_from_faces");
+    assert!(zero["warning"].as_str().is_some_and(|w| w.contains("an undersize of 0 makes the electrode the cavity's full size")), "{zero}");
+    let sound = call(&mut s, &mut id, "electrode_from_faces", json!({ "name": "E-S", "picks": picks, "undersize": 0.1, "stub": 10, "pickup": 0 })).expect("electrode_from_faces");
+    assert_eq!(sound["warning"], Value::Null, "a stated undersize with no condition warns only at 0: {sound}");
 
     // Every bad argument is a tool error by name, never a panic.
     let mut bad = |args: Value| call(&mut s, &mut id, "electrode_from_faces", args).expect_err("refused");
