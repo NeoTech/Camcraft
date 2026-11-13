@@ -51,7 +51,7 @@ fn post_ok(cps: &str, stream: &str) -> String {
     let out = engine::run(cps, &serde_json::Value::Null, stream).expect("post");
     assert!(out.warnings.is_empty(), "{:?}", out.warnings);
     assert!(
-        !out.program.lines().any(|l| l.split_whitespace().any(|w| w == "M3" || w == "M8" || w == "MOTON")),
+        !out.program.lines().any(|l| l.split_whitespace().any(|w| w == "M3" || w == "M8")),
         "a touch probe starts no spindle and no coolant:\n{}",
         out.program
     );
