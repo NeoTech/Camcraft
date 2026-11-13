@@ -47,10 +47,11 @@ smallest safe change.
   bore generates and verifies ok). That needs design - freeing a slug is
   sometimes intended - so it is filed as #1565, not bolted on here.
 
-**Side effect.** The motion unit fixture `bore_rides_the_wall_circle`
-bored a Ø20 hole with a 6 mm tool (3.33 d): that ride left a 1 mm-wide
-ring uncut on the floor, so it is refused now and the fixture moved to a
-Ø16 hole. No golden and no app fixture held a hole past the limit.
+**Side effect.** Three motion fixtures (`bore_rides_the_wall_circle`,
+`center_cut_law`'s bore, `level_links`' `bore_params`) bored a Ø20 hole
+with a 6 mm tool (3.33 d): that ride left a ring of floor from Ø6 to Ø8
+uncut, so it is refused now and the fixtures moved to a Ø16 hole. No
+golden and no app fixture held a hole past the limit.
 
 **Cost to change.** Lifting the limit (#1566) means changing
 `max_bore_diameter` and the ride together; detection follows the
