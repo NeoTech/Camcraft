@@ -1,4 +1,4 @@
-## #1505 / #1507 - one pick style, one edge rule
+## #1505 - one pick style, one edge rule
 
 **Decided:**
 - A plain or Ctrl click in Edge mode takes exactly the edge (run) under the
@@ -11,13 +11,12 @@
 - Selected picks and the hover are screen-space strokes over the model with
   a dark halo (`pick_ink`): selected 3 px violet (the existing Pick ink),
   hover 5 px amber (the existing Hover ink). Both inks keep their dark/light
-  ground variants. The hover is the viewport hover and the Geometry row hover
-  (#1507, label or remove button) through the same `hover_features` path.
+  ground variants. The hover here is the viewport hover; the Geometry row
+  hover (#1507) is main's `row_hover_segments` pass, kept as merged.
 
 **Why:** the GPU line pass draws 1 px lines that depth-test against the shaded
 model, so a selected edge vanished into it; one thick haloed stroke reads on
-both grounds. One hover path for viewport and row keeps "what the click would
-take" and "what the remove deletes" drawn the same way.
+both grounds. Main's row hover (371db9c7c) stays the one row-hover path.
 
 **Considered and dropped:** thickening the GPU lines (wgpu lines have no
 width); a Shift-hover preview of the loop (hover is computed without
