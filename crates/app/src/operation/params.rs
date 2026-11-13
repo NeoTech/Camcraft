@@ -1447,6 +1447,11 @@ impl OpParams {
                 h.write(p.condition.as_bytes());
                 h.write_u8(0xff);
                 h.write_u8(u8::from(p.side == super::WireSide::Punch));
+                // #540: written only when set, so no contour's stamp moves.
+                if let Some(c) = p.burnout {
+                    h.write(b"burnout");
+                    w(h, c);
+                }
                 match p.start {
                     Some([x, y]) => {
                         h.write_u8(1);
@@ -1527,6 +1532,8 @@ impl OpParams {
                 plunge_feed,
                 climb,
                 holes,
+                pitch,
+                hand,
             } => {
                 wh(h, *clearance_z);
                 wh(h, *top_z);
@@ -1536,6 +1543,14 @@ impl OpParams {
                     w(h, v);
                 }
                 h.write_u8(u8::from(*climb));
+                // #894: the thread's own pitch and hand. Written for
+                // every Thread op, so each one made before the rework
+                // reads Stale once - its path is a different ride now.
+                w(h, pitch.unwrap_or(0.0));
+                h.write_u8(match hand {
+                    crate::cl::ThreadHand::Right => 0xA1,
+                    crate::cl::ThreadHand::Left => 0xA2,
+                });
                 h.write_u32(holes.len() as u32);
                 for hole in holes {
                     wp2(h, hole.xy);

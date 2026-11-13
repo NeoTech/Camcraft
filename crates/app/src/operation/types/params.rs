@@ -1121,12 +1121,11 @@ pub enum OpParams {
         holes: Vec<Hole>,
         links: Links,
     },
-    /// Helical thread milling (M2.4 C). Pitch is the TOOL's, read at
-    /// generate the way the tap cycle reads it - a thread mill that
-    /// cannot state a pitch is the M1.6 refusal, named. `infeed` is
-    /// the radial step per turn and must stay inside the standard's
-    /// depth `0.5413 x pitch`; the ride lands on the major circle
-    /// whatever it is.
+    /// Helical thread milling (M2.4 C, reworked by #894): internal
+    /// threads in the listed holes with a thread mill
+    /// ([`super::super::thread_op`]). `infeed` is the radial depth per
+    /// pass and must stay inside the standard's depth `0.5413 x
+    /// pitch`; the last pass lands on the major circle whatever it is.
     Thread {
         clearance_z: Height,
         retract_z: Option<Height>,
@@ -1135,9 +1134,16 @@ pub enum OpParams {
         infeed: f64,
         feed: f64,
         plunge_feed: f64,
-        /// CCW for a right-hand thread.
+        /// Climb milling under a clockwise (M3) spindle: the orbit
+        /// runs counter-clockwise inside a hole.
         climb: bool,
         holes: Vec<Hole>,
+        /// The thread's pitch, mm (#894). `None` reads a multi-form
+        /// mill's own pitch; a single-form mill needs it stated, inside
+        /// its range.
+        pitch: Option<f64>,
+        /// Right-hand unless the drawing says LH (#894).
+        hand: crate::cl::ThreadHand,
     },
     /// Probing (#108): a spindle touch probe finds a face, an edge, an
     /// outside corner or a bore / boss centre, then sets a work offset
