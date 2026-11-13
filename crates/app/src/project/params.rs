@@ -899,6 +899,11 @@ pub enum ParamsDto {
         infeed: f64,
         feed: f64,
         plunge_feed: f64,
+        /// #416 the infeed plan: absent (and written only when not the
+        /// default) is the radial constant-depth ladder every earlier
+        /// file cut - no version step, the approach precedent.
+        #[serde(default, skip_serializing_if = "ThreadInfeedDto::is_default")]
+        infeed_plan: ThreadInfeedDto,
         /// #629: the thread's hand, always written. Absent (every file
         /// before the key) reads right-hand - the hand the drawing
         /// meant; those files posted left-hand by the old bug, and

@@ -275,3 +275,25 @@ pub(super) fn area_gate(
         None => Ok(()),
     }
 }
+
+/// The threading plan's door (#416): a Threading op's infeed plan read
+/// against its numbers and the mounted insert's included angle - a
+/// flank angle past the insert's half-angle, a minimum depth past the
+/// first, an allowance as deep as the thread, refused by name before
+/// the shallow `is_sane` door says only "not usable". The tool's angle
+/// is read when the named tool is a threading insert; any other tool is
+/// the tool gate's to refuse. The kernel asks the same question at
+/// Generate (a later tool change meets it there).
+pub(super) fn infeed_plan_gate(world: &World, params: &OpParams, tool: &str) -> Result<(), CommandError> {
+    let OpParams::Threading { depth, infeed, infeed_plan, .. } = params else {
+        return Ok(());
+    };
+    let angle = model::find_by_name(world, tool)
+        .and_then(|e| model::tool_of(world, &e))
+        .filter(|t| t.kind == crate::tools::ToolKind::Thread)
+        .map_or(180.0, |t| t.tip_angle);
+    match infeed_plan.refusal(*depth, *infeed, angle) {
+        Some(why) => Err(CommandError::Invalid(format!("threading: {why}"))),
+        None => Ok(()),
+    }
+}

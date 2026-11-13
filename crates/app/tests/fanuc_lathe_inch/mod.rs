@@ -201,7 +201,7 @@ fn thread(g76: bool) -> (World, PostOptions) {
     let (w, mut hi) = world(stock, -16.0, revolve(&m, 16), &["TD-1732-60"]);
     let p = OpParams::Threading {
         tolerance: 0.05, clearance_z: h(24.0), top_z: h(14.3), bottom_z: h(7.7), pitch, depth,
-        infeed: 0.4, feed: 120.0, plunge_feed: 40.0, hand: ThreadHand::Right,
+        infeed: 0.4, feed: 120.0, plunge_feed: 40.0, hand: ThreadHand::Right, infeed_plan: Default::default(),
     };
     create(&w, &mut hi, "TH1", "TD-1732-60", p);
     let threading = if g76 { ThreadingOutput::G76Cycle } else { ThreadingOutput::G32Passes };
