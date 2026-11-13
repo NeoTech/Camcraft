@@ -28,28 +28,23 @@
 //! none is. The easing laps are split the same way on the stock the
 //! pieces left; the last lap is cut whole. The re-ordered plan is
 //! walked on a fresh stock and kept only if it reads no worse than the
-//! spiral. Ours; the schedule, the pads and the lift are our choices.
+//! spiral ([`keeps`]: no tolerance, issue #982 - a piece is cut on
+//! longer chords only where they leave the stock its own chords leave,
+//! `lift_coarse`, so the two readings differ by stock, never by the
+//! chords). Ours; the schedule, the pads and the lift are our choices.
 
 use crate::geo2d::{Point2, Region};
 
 use super::front::{densify, dist, len};
-use super::guard::crossing_pairs;
+use super::lift_coarse::{coarsen, cut};
 use super::lift_link::{Leg, LinkLaw, Return, extend, free_map, landing, legs};
-use super::lift_split::{Piece, depends, split, thin_turn};
+use super::lift_split::{Piece, depends, split};
 use super::raster::Raster;
 use super::{GenError, Planner, Worst};
 
 /// Return lift above the crossed floor (mm): clear of its grid crumbs
 /// and the cut's cusp, far under any stepdown.
 pub(crate) const MICROLIFT: f64 = 0.3;
-
-/// A front's piece is re-thinned to this sag (mm, the verifier's own
-/// chord tolerance) ...
-const COARSE_SAG: f64 = 0.01;
-
-/// ... and no joint of it turns more than this (degrees): under the
-/// 5-degree in-cut break law with a margin.
-const MAX_TURN_DEG: f64 = 4.0;
 
 /// The nearest ready pieces a straight return is tried to, in order.
 const TRIES: usize = 16;
@@ -164,42 +159,6 @@ fn ride(tail: &[Point2], p: &Piece) -> Option<Vec<Point2>> {
     near(t1, l0).then(|| tail[1..].iter().chain(p.lead[1..].iter()).copied().collect())
 }
 
-/// The fronts' pieces re-thinned to longer chords (the spiral's own sag
-/// keeps rings microns apart at the walls; a biting piece is where its
-/// neighbours stand a step apart) under the break law, each keeping its
-/// fine chords to fall back on - except a piece whose coarser chords
-/// would cross another piece (either version) or the laps after them
-/// (`rest`): it keeps only its fine chords. No two posted pieces cross.
-fn coarsen(pieces: &mut [Piece], rest: &[Point2]) {
-    let n = pieces.len();
-    let coarse: Vec<Vec<Point2>> = pieces.iter().map(|p| thin_turn(&p.pts, MAX_TURN_DEG.to_radians(), COARSE_SAG)).collect();
-    let mut ok: Vec<bool> = coarse.iter().zip(pieces.iter()).map(|(c, p)| c.len() < p.pts.len()).collect();
-    for _ in 0..8 {
-        // Walks: the coarse candidates still standing, every fine piece,
-        // the laps; a candidate may only touch its own fine version.
-        let live: Vec<usize> = (0..n).filter(|&k| ok[k]).collect();
-        let mut walks: Vec<Vec<Point2>> = live.iter().map(|&k| coarse[k].clone()).collect();
-        walks.extend(pieces.iter().map(|p| p.pts.clone()));
-        walks.push(rest.to_vec());
-        let m = live.len();
-        let mut bad = false;
-        for (a, b) in crossing_pairs(&walks) {
-            for (x, y) in [(a, b), (b, a)] {
-                if x < m && y != m + live[x] {
-                    ok[live[x]] = false;
-                    bad = true;
-                }
-            }
-        }
-        if !bad {
-            for k in live {
-                pieces[k].fine = Some(std::mem::replace(&mut pieces[k].pts, coarse[k].clone()));
-            }
-            return;
-        }
-    }
-}
-
 /// Cut `pieces` onto `out` in their order law, nearest ready first, each
 /// reached by a legal microlift - straight, else routed through the
 /// cleared area - where one is (else the ladder's hop); `entry`: the
@@ -288,16 +247,10 @@ fn schedule(out: &mut Lifted, mut pieces: Vec<Piece>, center: &Region, s: &LiftS
                 out.worst = w;
             }
         }
-        // A coarse piece is cut only where it reads within the bound.
+        // On its longer chords only where they read within the bound and
+        // leave the stock its own chords leave (`lift_coarse::cut`).
         let p = &mut pieces[next];
-        if let Some(fine) = p.fine.take() {
-            let mut trial = out.ras.clone();
-            let w = trial.walk_until(&p.pts, (s.r, s.rim, s.step), s.bound);
-            if w.0 > s.bound {
-                p.pts = fine;
-            }
-        }
-        let w = out.ras.walk(&p.pts, s.r, s.rim, s.step);
+        let w = cut(&mut out.ras, p, s);
         if w.0 > out.worst.0 {
             out.worst = w;
         }
@@ -335,7 +288,7 @@ impl Planner<'_> {
         }
         let (worst, left) = (l.worst.0, l.ras.standing() as f64);
         let planned = self.ras.standing() as f64;
-        if worst > self.worst.0.max(self.bound) + 1e-9 || left > planned * (1.0 + CRUMBS) + CRUMB_CELLS {
+        if !keeps(worst, self.worst.0, self.bound) || left > planned * (1.0 + CRUMBS) + CRUMB_CELLS {
             self.plan.notes.push(format!(
                 "adaptive: the microlift plan read {worst:.1} deg over the spiral's {:.1} and left {:.1} mm2 over {:.1} - the spiral is posted as planned",
                 self.worst.0.max(self.bound),
@@ -346,6 +299,15 @@ impl Planner<'_> {
         }
         Ok(Some(l))
     }
+}
+
+/// The acceptance law's reading half (issue #982): the lifted plan is
+/// kept only when its worst reading is not over the spiral's own, or the
+/// bound where the spiral read under it. No tolerance: readings are whole
+/// rim samples, exact in binary, and one sample over is an overload the
+/// spiral did not plan (the `1e-9` is float slack, far under a sample).
+pub(super) fn keeps(lifted: f64, spiral: f64, bound: f64) -> bool {
+    lifted <= spiral.max(bound) + 1e-9
 }
 
 /// Per-level travel (XY mm): cut, floor air, lifted; and the moves posted.

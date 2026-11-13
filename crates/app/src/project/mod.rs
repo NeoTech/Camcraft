@@ -133,6 +133,11 @@ mod plasma_dto;
 mod cutting_rows_dto;
 pub use cutting_rows_dto::{CuttingRowDto, MaterialWord};
 pub use plasma_dto::*;
+mod wire_edm_dto;
+pub use wire_edm_dto::*;
+// #541: the sinker burn's file mirror.
+mod sinker_dto;
+pub use sinker_dto::*;
 mod trochoid_dto;
 pub use trochoid_dto::*;
 mod approach;

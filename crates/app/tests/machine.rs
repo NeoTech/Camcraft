@@ -743,6 +743,8 @@ fn every_shipped_machine_mounts_and_speaks_its_declaration() {
         ("Tormach PCNC 1100 (Series 3)", Kind::Mill),
         ("Tormach 770M+", Kind::Mill),
         ("Tormach 1100M+", Kind::Mill),
+        ("grblHAL 3-axis", Kind::Mill),
+        ("TinyG 3-axis", Kind::Mill),
         ("Tormach 24R", Kind::Mill),
         ("Tormach xsTECH Pro", Kind::Mill),
         ("Tormach xsTECH", Kind::Mill),
