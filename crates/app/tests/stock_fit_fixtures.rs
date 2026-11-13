@@ -2,7 +2,9 @@
 //! 50 x 50 x 6 block with a 5 in vise closed on its stock (and with a
 //! soft jaw, a dowel plate and tagged fixtures) fits the same box, the
 //! same snug cylinder and the same per-side box as the bare block; the
-//! fit is one undoable step; over MCP `fit_stock` does the same.
+//! fit is one undoable step; over MCP `fit_stock` does the same. In a
+//! setup holding the part turned or flipped, every fit wraps the part in
+//! that setup's frame; the stock keeps its deliberate rotation.
 //! Provenance: our own fixtures (the #1529 reproduction: a 50 x 50 x 6
 //! block, Z 4..10, in a 55 x 55 x 11 box stock); no vendor material
 //! consulted.
@@ -10,25 +12,29 @@
 //! Gate map (#1538): covers app::stock_fit (part_bounds,
 //! part_radius_about_in, fitted, fit_command), app::mcp
 //! (stock_fit_tools), app::commands (SetStock, InsertVise,
-//! InsertAccessory, InsertPlate, TagFixture).
+//! InsertAccessory, InsertPlate, TagFixture, AlignPartToSetup,
+//! CreateSetup).
 
 use flecs_ecs::prelude::World;
 use serde_json::{Value, json};
 
 use camcraft_app::accessory::Accessory;
 use camcraft_app::commands::{
-    AccessoryPlacement, History, ImportModel, InsertAccessory, InsertPlate, InsertVise, PlatePlacement, SetStock,
+    AccessoryPlacement, AlignPartToSetup, CreateSetup, History, ImportModel, InsertAccessory, InsertPlate, InsertVise, PlatePlacement, SetStock,
     TagFixture, VisePlacement,
 };
-use camcraft_app::geometry::{Aabb, IDENTITY_Q, Point3, cube};
+use camcraft_app::geometry::{Aabb, IDENTITY_Q, Point3, cube, transform_point};
 use camcraft_app::mcp::Server;
 use camcraft_app::model;
 use camcraft_app::plate;
 use camcraft_app::schema::Location;
+use camcraft_app::setup_align;
+use camcraft_app::setup_turn::TurnPivot;
 use camcraft_app::stock::StockShape;
 use camcraft_app::stock_fit::{self, FitKind};
 use camcraft_app::vise;
 use camcraft_app::world::new_world;
+use camcraft_app::{setup, setup_align::rotation_from_angles};
 
 const MARGIN: f64 = 2.0;
 
@@ -139,8 +145,12 @@ fn fixtures_alone_are_nothing_to_fit_and_a_bad_side_is_refused() {
     h.execute(&world, ImportModel::from_mesh("Clamp", cube(Point3::new(0.0, 0.0, 0.0), Point3::new(10.0, 10.0, 80.0))));
     h.execute(&world, TagFixture::new(&world, "Clamp", None).expect("tag"));
     let err = stock_fit::fit_command(&world, FitKind::Box(MARGIN)).err().expect("refused");
-    assert_eq!(err, "nothing to fit: no models in the document");
+    assert_eq!(err, "nothing to fit: no part models - fixtures are not measured");
     let (bw, _) = bare();
+    for kind in [FitKind::Box(-1.0), FitKind::Cylinder(-1.0)] {
+        let err = stock_fit::fit_command(&bw, kind).err().expect("refused");
+        assert_eq!(err, "stock fit refused: the margin must be zero or more (got -1 mm)", "{kind:?}");
+    }
     let err = stock_fit::fit_command(&bw, FitKind::Sides([1.0, -1.0, 0.0, 0.0, 0.0, 0.0])).err().expect("refused");
     assert!(err.contains("allowance must be zero or more"), "{err}");
 }
@@ -194,6 +204,111 @@ fn mcp_fit_stock_with_a_vise_gives_the_part_box() {
     assert_eq!(sides["stock"], json!({ "box": { "dx": 52.0, "dy": 52.0, "dz": 6.0 } }), "{sides}");
     let bad = call(&mut s, 7, "fit_stock", json!({ "shape": "cone" })).expect_err("refused");
     assert!(bad.contains("\"box\" or \"cylinder\""), "{bad}");
-    call(&mut s, 8, "undo", json!({})).expect("undo");
+    let neg = call(&mut s, 8, "fit_stock", json!({ "margin": -1.0 })).expect_err("refused");
+    assert!(neg.contains("the margin must be zero or more (got -1 mm)"), "{neg}");
+    call(&mut s, 9, "undo", json!({})).expect("undo");
+    let job = call(&mut s, 10, "get_job", json!({})).expect("job");
+    let stock = &job["setups"][0]["stock"];
+    let back = stock["cylinder"]["diameter"].as_f64();
+    assert!(back.is_some_and(|b| near(b, d)), "undo restores the cylinder fit: {stock} in {job}");
     let _ = std::fs::remove_dir_all(stl.parent().expect("dir"));
+}
+
+// ---- in an aligned setup ------------------------------------------------
+
+/// A 40 x 20 x 8 part off the origin (X 10..50, Y 5..25, Z 0..8), its
+/// setup holding it turned by `deg` about the WCS origin through the
+/// Setups page's command - with or without a 5 in vise on its stock.
+/// The part's box in the setup's frame, from the stored alignment.
+fn aligned(deg: [f64; 3], vise: bool) -> (World, History, Aabb) {
+    let world = new_world();
+    let mut h = History::default();
+    h.execute(&world, ImportModel::from_mesh("part", cube(Point3::new(10.0, 5.0, 0.0), Point3::new(50.0, 25.0, 8.0))));
+    h.execute(&world, SetStock::new(&world, StockShape::Box { dx: 44.0, dy: 24.0, dz: 10.0 }, Location::default()).expect("stock"));
+    h.execute(&world, CreateSetup::new(&world, None, None).expect("materialize Setup1"));
+    h.execute(&world, AlignPartToSetup::turn(&world, "Setup1", deg, TurnPivot::WcsOrigin).expect("align"));
+    let a = setup_align::stored(&world, "Setup1").expect("held turned");
+    if vise {
+        let p = vise::size("5 in").expect("5 in").half_open();
+        h.execute(&world, InsertVise::new(&world, &p, None, VisePlacement::FitStock).expect("fits"));
+    }
+    let (lo, hi) = ([10.0, 5.0, 0.0], [50.0, 25.0, 8.0]);
+    let mut b = Aabb { min: Point3::new(f64::MAX, f64::MAX, f64::MAX), max: Point3::new(f64::MIN, f64::MIN, f64::MIN) };
+    for i in 0..8 {
+        let c = |k: usize| if i >> k & 1 == 0 { lo[k] } else { hi[k] };
+        let p = transform_point(Point3::new(c(0), c(1), c(2)), a.pos, a.rot);
+        b.min = Point3::new(b.min.x.min(p.x), b.min.y.min(p.y), b.min.z.min(p.z));
+        b.max = Point3::new(b.max.x.max(p.x), b.max.y.max(p.y), b.max.z.max(p.z));
+    }
+    // The turn must move the part's box, or the pins below prove nothing.
+    let unturned = [10.0, 5.0, 0.0, 50.0, 25.0, 8.0];
+    let got = [b.min.x, b.min.y, b.min.z, b.max.x, b.max.y, b.max.z];
+    assert!(got.iter().zip(unturned).any(|(g, u)| (g - u).abs() > 1.0), "the turn moved nothing: {got:?}");
+    (world, h, b)
+}
+
+const QUARTER: [f64; 3] = [0.0, 0.0, 90.0];
+const FLIP: [f64; 3] = [180.0, 0.0, 0.0];
+
+#[test]
+fn an_aligned_setup_fits_the_box_in_its_frame() {
+    for (deg, footprint) in [(QUARTER, [20.0, 40.0]), (FLIP, [40.0, 20.0])] {
+        for vise in [false, true] {
+            let (world, mut h, p) = aligned(deg, vise);
+            assert!(near(p.max.x - p.min.x, footprint[0]) && near(p.max.y - p.min.y, footprint[1]), "{deg:?}: {p:?}");
+            let (shape, b) = fit(&world, &mut h, FitKind::Box(MARGIN));
+            let StockShape::Box { dx, dy, dz } = shape else { panic!("a box: {shape:?}") };
+            let want = [footprint[0] + 4.0, footprint[1] + 4.0, 12.0];
+            assert!(near(dx, want[0]) && near(dy, want[1]) && near(dz, want[2]), "{deg:?} vise {vise}: {shape:?}");
+            let m = MARGIN;
+            assert_box(&b, [p.min.x - m, p.min.y - m, p.min.z - m], [p.max.x + m, p.max.y + m, p.max.z + m]);
+        }
+    }
+}
+
+#[test]
+fn an_aligned_setup_fits_each_side_in_its_frame() {
+    let sides = [1.0, 2.0, 3.0, 4.0, 0.5, 1.5];
+    for deg in [QUARTER, FLIP] {
+        for vise in [false, true] {
+            let (world, mut h, p) = aligned(deg, vise);
+            let (_, b) = fit(&world, &mut h, FitKind::Sides(sides));
+            let min = [p.min.x - 1.0, p.min.y - 3.0, p.min.z - 0.5];
+            assert_box(&b, min, [p.max.x + 2.0, p.max.y + 4.0, p.max.z + 1.5]);
+        }
+    }
+}
+
+#[test]
+fn an_aligned_setup_fits_the_cylinder_about_the_turned_part() {
+    for deg in [QUARTER, FLIP] {
+        for vise in [false, true] {
+            let (world, mut h, p) = aligned(deg, vise);
+            let (shape, b) = fit(&world, &mut h, FitKind::Cylinder(MARGIN));
+            let StockShape::Cylinder { diameter, height } = shape else { panic!("a cylinder: {shape:?}") };
+            let want = 2.0 * (20f64.hypot(10.0) + MARGIN);
+            assert!(near(diameter, want) && near(height, 12.0), "{deg:?} vise {vise}: d {diameter} h {height}, want d {want}");
+            let (cx, cy) = (0.5 * (p.min.x + p.max.x), 0.5 * (p.min.y + p.max.y));
+            assert!(near(0.5 * (b.min.x + b.max.x), cx) && near(0.5 * (b.min.y + b.max.y), cy), "{deg:?}: {b:?} about ({cx}, {cy})");
+            assert!(near(b.min.z, p.min.z - MARGIN) && near(b.max.z, p.max.z + MARGIN), "{deg:?}: {b:?}");
+        }
+    }
+}
+
+#[test]
+fn the_fit_keeps_the_stocks_rotation() {
+    let (world, mut h) = with_vise();
+    let rot = rotation_from_angles([0.0, 0.0, 30.0]).expect("30 about Z");
+    let turned = Location { pos: Point3::new(27.5, 27.5, 7.0), rot };
+    h.execute(&world, SetStock::new(&world, StockShape::Box { dx: 55.0, dy: 55.0, dz: 11.0 }, turned).expect("stock"));
+    let stock_rot = |w: &World| {
+        let name = setup::stock_entity_name(w, setup::active(w).as_deref());
+        model::find_by_name(w, &name).and_then(|e| model::transform_of(w, &e)).map(|l| l.rot)
+    };
+    assert_eq!(stock_rot(&world), Some(rot));
+    for kind in [FitKind::Box(MARGIN), FitKind::Cylinder(MARGIN), FitKind::Sides([1.0; 6])] {
+        let (cmd, _) = stock_fit::fit_command(&world, kind).expect("fits");
+        h.execute(&world, cmd);
+        assert_eq!(stock_rot(&world), Some(rot), "{kind:?} keeps the stock's rotation");
+    }
 }
