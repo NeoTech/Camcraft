@@ -31,6 +31,7 @@
 //!   only the ray test skips them (they have no interior to cross).
 
 mod bvh;
+mod column;
 mod gjk;
 mod ray;
 
