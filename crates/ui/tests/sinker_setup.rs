@@ -50,6 +50,9 @@ fn electrode() -> Tool {
         center_cutting: true,
         orientation: None,
         turning: None,
+        pitch_min: 0.0,
+        catalog: Default::default(),
+        cutting: Vec::new(),
     }
 }
 
@@ -67,6 +70,10 @@ fn burn() -> OpParams {
         pass: SinkerPass::Single,
         cavity_x: 0.0,
         cavity_y: 0.0,
+        orbit: None,
+        layer: None,
+        wear_lost: None,
+        wear_over: None,
     })
 }
 
