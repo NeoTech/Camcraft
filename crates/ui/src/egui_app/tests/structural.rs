@@ -337,6 +337,35 @@ fn setup_page_alignment_rows_structure() {
     assert!(h.state().state.cylinder_pick.is_none() && h.state().state.origin_pick.is_none(), "no #771 draft is armed by drawing the page");
 }
 
+/// #535: the machine editor of a wire EDM stands the wire section in
+/// its order - keys, codes, conditions - with every absent value saying
+/// "not stated", and the spindle / tooling / coolant groups gone.
+#[test]
+fn wire_machine_editor_structure() {
+    let _g = snapshot_guard();
+    let mut harness = shell_harness();
+    harness.run();
+    let mut m = camcraft_app::machine::parse_mch(include_str!("../../../../app/tests/edm/wire-iso-fixture.mch")).expect("fixture");
+    m.edm = None;
+    m.edm_codes.clear();
+    harness.state_mut().state.machine_editor =
+        Some(crate::egui_app::machine_editor::MachineEditor { path: "wire.mch".to_owned(), machine: m });
+    harness.run_steps(3);
+    let mut last_y = f32::MIN;
+    for label in ["Wire keys", "EDM codes (the control's words)", "Conditions"] {
+        let y = harness.get_by_label(label).rect().center().y;
+        assert!(y > last_y, "{label:?} must follow the section above it");
+        last_y = y;
+    }
+    for label in ["lower guide Z", "upper guide Z", "max taper (deg)", "code condition", "code comp_off", "code thread", "code cut", "code tip_disposal"] {
+        assert!(harness.query_by_label(label).is_some(), "{label:?} row is drawn");
+    }
+    assert!(harness.query_all_by_label("not stated").count() >= 8, "absent values say so");
+    for gone in ["Spindle (rpm)", "Tooling", "Coolants"] {
+        assert!(harness.query_by_label(gone).is_none(), "{gone:?} has no place on a wire EDM");
+    }
+}
+
 /// #1031: a lathe setup's Settings page carries the "Workholding max rpm"
 /// row (a value, Apply, and Clear once a limit is stated); Apply lands one
 /// undoable `SetSetupWorkholdingRpm`. A mill setup shows no row.

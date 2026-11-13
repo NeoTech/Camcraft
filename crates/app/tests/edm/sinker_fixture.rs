@@ -76,7 +76,13 @@ pub fn burn(datum: SinkerDatum, depth: f64, floor: f64) -> OpParams {
         y: 0.0,
         feed: 40.0,
         condition: "S1".into(),
+        pass: camcraft_app::operation::SinkerPass::Single,
+        cavity_x: 0.0,
+        cavity_y: 0.0,
         orbit: None,
+        layer: None,
+        wear_lost: None,
+        wear_over: None,
     })
 }
 
@@ -84,12 +90,18 @@ pub fn burn(datum: SinkerDatum, depth: f64, floor: f64) -> OpParams {
 /// electrode plus the gap), a matching block of stock, the sinker
 /// machine, the electrode.
 pub fn sinker_doc(cavity_depth: f64) -> (World, History) {
+    sinker_doc_on(&sinker_machine(), cavity_depth)
+}
+
+/// [`sinker_doc`] on a given machine file's text (#542: the sinker post's
+/// fixture dialect).
+pub fn sinker_doc_on(mch: &str, cavity_depth: f64) -> (World, History) {
     let world = new_world();
     let mut h = History::default();
     h.execute(&world, ImportModel::from_mesh("part", block_with_cavity(5.0 + GAP, 3.0 + GAP, cavity_depth)));
     let stock = SetStock::new(&world, StockShape::Box { dx: 60.0, dy: 60.0, dz: 20.0 }, Default::default());
     h.execute(&world, stock.expect("stock"));
-    let m = parse_mch(&sinker_machine()).expect("sinker parses");
+    let m = parse_mch(mch).expect("sinker parses");
     h.execute(&world, LoadMachine::new(&world, "sinker.mch".into(), Some(m)).expect("mount"));
     h.execute(&world, AddTool::new(&world, ELECTRODE, electrode()).expect("an electrode is a tool"));
     (world, h)

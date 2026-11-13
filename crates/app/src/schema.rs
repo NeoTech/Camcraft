@@ -81,10 +81,11 @@ pub struct GeoSig {
 /// A model whose mesh stands for its curved surfaces more coarsely than
 /// the STEP importer promises (#864): `chord_mm` is the chord error the
 /// import actually kept, always above `step::CHORD_CAP`. Present ONLY on
-/// such a model - one that met the promise, an STL or OBJ mesh, and
-/// every model of a project saved before this existed carry no component
-/// and read as full fidelity. A stock copied from such a model carries
-/// it too (#1056: the same facets). Written by the import, update and
+/// such a model - one that met the promise and an STL or OBJ mesh carry
+/// no component and read as full fidelity. A stock copied from such a
+/// model carries it too (#1056: the same facets). A mesh of a project
+/// saved before v59 with no recorded chord carries the sentinel
+/// `model_fidelity::UNKNOWN_MM` (#1056: fidelity unknown, refused). Written by the import, update and
 /// stock commands and the project loader, through `model_fidelity::set`.
 #[derive(Component, Debug, Clone, Copy, PartialEq)]
 pub struct ReducedFidelity {
@@ -493,6 +494,11 @@ pub struct PostOptions {
     pub smoothing: bool,
     /// The length unit the control is left in after the program (#596).
     pub end_units: EndUnits,
+    /// Explain G-code (#1386): off (the default) posts no explanations;
+    /// on, a post that declares `explains` appends a short comment to
+    /// each block saying what its words do, and one that does not is
+    /// refused by name.
+    pub explain: bool,
 }
 
 /// The end-units choice of [`PostOptions`] (#596). LinuxCNC's M2 / M30
@@ -511,6 +517,21 @@ pub enum EndUnits {
     Inch,
     /// End in millimetres: an inch program writes G21 before M30.
     Millimeters,
+}
+
+/// The document's program identity (#258), a flecs singleton beside
+/// `PostOptions`: the program number a numbering dialect writes as its
+/// O-word and the program comment (the program's name on a control
+/// that addresses programs by name). Moved only by `SetProgramInfo`
+/// (undoable, validated at creation) or a document load. `None` is "not
+/// stated": every post then writes exactly what it wrote before #258
+/// (O0001 and the machine's name), so the default changes no program.
+#[derive(Component, Debug, Clone, Default, PartialEq, Eq)]
+pub struct ProgramInfo {
+    /// The program number, 1..=9999 when stated.
+    pub number: Option<u32>,
+    /// The program comment / name, non-empty when stated.
+    pub comment: Option<String>,
 }
 
 /// The thread-output choice of [`PostOptions`].
@@ -630,6 +651,7 @@ pub fn register_schema(world: &World) {
     world.component::<PostOptions>();
     world.component::<ThemeRef>();
     world.component::<PostOptions>();
+    world.component::<ProgramInfo>();
     world.component::<ColorVision>();
     world.component::<WorkMaterialDef>();
     world.component::<RibbonPins>();

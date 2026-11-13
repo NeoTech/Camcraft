@@ -77,6 +77,12 @@ pub struct SinkerParams {
     /// the cavity stands this far beyond the electrode's face, so the
     /// tip stops this far above the burn floor.
     pub gap: f64,
+    /// How far above the finished floor the tip stops, when an
+    /// undersize law places it (#543: the electrode's undersize per
+    /// side, `sinker_undersize::judge`); `None` stops it one spark gap
+    /// above (#541). Never less than the gap - that would burn past the
+    /// floor.
+    pub stand: Option<f64>,
     /// The orbit at the burn floor (#544), or none: a straight plunge.
     /// The machine-side laws (a listed pattern, the maximum radius) are
     /// the caller's; the generator checks the numbers.
@@ -84,7 +90,7 @@ pub struct SinkerParams {
 }
 
 /// Slack under which a floor reading counts as "on" the floor, mm.
-const ON_FLOOR: f64 = 1e-6;
+pub(crate) const ON_FLOOR: f64 = 1e-6;
 
 /// The burn floor `depth` reaches from the stated datum: the cavity's
 /// floor as burned (the electrode tip stops one spark gap above it).
@@ -98,10 +104,14 @@ pub fn burn_floor(p: &SinkerParams) -> f64 {
 }
 
 /// Every refusal of the burn, by name, before a move is built; the
-/// burn floor it reaches. The side burn (#545) reads the same door.
+/// burn floor it reaches. The side burn (#545) and the wear-compensated
+/// burn (#546) read the same door.
 pub(crate) fn check(p: &SinkerParams) -> Result<f64, GenError> {
     let nums = [p.x, p.y, p.approach_z, p.top_z, p.floor_z, p.depth, p.electrode_len, p.feed, p.gap];
-    if !nums.iter().all(|v| v.is_finite()) || p.model_floor_z.is_some_and(|z| !z.is_finite()) {
+    if !nums.iter().all(|v| v.is_finite())
+        || p.model_floor_z.is_some_and(|z| !z.is_finite())
+        || p.stand.is_some_and(|s| !s.is_finite())
+    {
         return Err(GenError::Invalid("sinker burn: a position, height or depth is not a finite number".into()));
     }
     if p.depth < 0.0 || (p.depth == 0.0 && p.datum != SinkerDatum::CavityFloor) {
@@ -113,6 +123,14 @@ pub(crate) fn check(p: &SinkerParams) -> Result<f64, GenError> {
     }
     if p.gap < 0.0 {
         return Err(GenError::Invalid(format!("sinker burn: the condition's spark gap {} is negative", p.gap)));
+    }
+    if let Some(s) = p.stand
+        && s < p.gap - ON_FLOOR
+    {
+        return Err(GenError::Invalid(format!(
+            "sinker burn: the tip would stand {s:.3} above the floor, inside its {:.3} spark gap - the floor would burn past size",
+            p.gap
+        )));
     }
     if p.feed <= 0.0 {
         return Err(GenError::Invalid(format!("sinker burn: the servo feed {} must be positive", p.feed)));
@@ -153,22 +171,27 @@ pub(crate) fn check(p: &SinkerParams) -> Result<f64, GenError> {
             p.approach_z, p.top_z
         )));
     }
-    let tip = z + p.gap;
-    // The plunge must go DOWN: a gap that lifts the tip to the approach
+    // The tip stands [`stand`] above the burn floor: one spark gap
+    // (#541), or #543's undersize stand-off (never less than the gap,
+    // refused above). The two refusals below read that stand, so an
+    // undersize cannot lift the tip past them where a gap would not.
+    let lift = stand(p);
+    let what = if p.stand.is_some() { "undersize stand-off" } else { "spark gap" };
+    let tip = z + lift;
+    // The plunge must go DOWN: a stand that lifts the tip to the approach
     // plane would post an upward "burn" feed (review of #1131).
     if tip >= p.approach_z {
         return Err(GenError::Invalid(format!(
-            "sinker burn: the spark gap {:.3} places the tip at or above the approach plane (tip Z {tip:.3}, approach Z {:.3})",
-            p.gap, p.approach_z
+            "sinker burn: the {what} {lift:.3} places the tip at or above the approach plane (tip Z {tip:.3}, approach Z {:.3})",
+            p.approach_z
         )));
     }
-    // A gap not smaller than the burn below the work top leaves the tip
+    // A stand not smaller than the burn below the work top leaves the tip
     // at or above the top: the electrode never enters the work.
     let burn = p.top_z - z;
-    if p.gap >= burn {
+    if lift >= burn {
         return Err(GenError::Invalid(format!(
-            "sinker burn: the spark gap {:.3} is not smaller than the burn's {burn:.3} below the work top - the electrode would never enter the work",
-            p.gap
+            "sinker burn: the {what} {lift:.3} is not smaller than the burn's {burn:.3} below the work top - the electrode would never enter the work"
         )));
     }
     let buried = p.top_z - tip;
@@ -181,10 +204,17 @@ pub(crate) fn check(p: &SinkerParams) -> Result<f64, GenError> {
     Ok(z)
 }
 
-/// Where the electrode tip stops: one spark gap above the burn floor.
+/// How far above the burn floor the tip stops: the stated stand-off
+/// (#543's undersize), else one spark gap (#541).
+#[must_use]
+pub fn stand(p: &SinkerParams) -> f64 {
+    p.stand.unwrap_or(p.gap)
+}
+
+/// Where the electrode tip stops: [`stand`] above the burn floor.
 #[must_use]
 pub fn tip_z(p: &SinkerParams) -> f64 {
-    burn_floor(p) + p.gap
+    burn_floor(p) + stand(p)
 }
 
 /// The burn: approach over the point, feed the tip down to one spark
@@ -195,7 +225,7 @@ pub fn tip_z(p: &SinkerParams) -> f64 {
 pub fn burn_to_depth(p: &SinkerParams) -> Result<Toolpath, GenError> {
     let z = check(p)?;
     let orbit = p.orbit.as_ref().map(orbit_offsets).transpose()?;
-    let tip = z + p.gap;
+    let tip = z + stand(p);
     let mut b = PathBuilder::approached(Point3::new(p.x, p.y, p.approach_z));
     b.push(MoveKind::Feed, Point3::new(p.x, p.y, tip), Some(p.feed));
     if let (Some(o), Some(pts)) = (p.orbit.as_ref(), orbit.as_ref()) {
@@ -232,6 +262,7 @@ mod tests {
             electrode_len: 30.0,
             feed: 40.0,
             gap: 0.0,
+            stand: None,
             orbit: None,
         }
     }

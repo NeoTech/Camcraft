@@ -280,8 +280,15 @@ fn ends(world: &World, pick: &AxisPick, name: &str) -> Result<([f64; 3], [f64; 3
         [] => Err(format!("pick a straight edge or two points for {name}")),
         [g] if matches!(g.feature, FeatureSel::Chain(_)) => straight_edge(world, g, model::transform_of, &role),
         [g] => Err(format!("{} of '{}' is one point - pick a second point for {name}, or a straight edge", g.feature, g.entity)),
-        [p, q] if matches!((p.feature, q.feature), (FeatureSel::Vertex(_), FeatureSel::Vertex(_))) => {
-            let (a, b) = (point(world, p)?, point(world, q)?);
+        // #692: either point may be a round edge's centre.
+        [p, q] => {
+            let pt = |g: &GeoSel| {
+                point(world, g).map_err(|why| match g.feature {
+                    FeatureSel::Chain(_) => format!("pick one straight edge, or two points, for {name}: {why}"),
+                    _ => why,
+                })
+            };
+            let (a, b) = (pt(p)?, pt(q)?);
             let gap = norm(sub(b, a));
             if p == q || !gap.is_finite() || gap <= COINCIDENT_MM {
                 return Err(format!("the two points for {name} coincide - pick two points apart"));
@@ -293,20 +300,29 @@ fn ends(world: &World, pick: &AxisPick, name: &str) -> Result<([f64; 3], [f64; 3
 }
 
 /// Where one axis pick sits, in the DOCUMENT frame (mm), for readouts:
-/// a vertex's point, or a straight edge's (start, end). `None` for a
-/// face, a curved or closed chain, or a pick no longer in the model.
+/// a vertex's point, a straight edge's (start, end), or a round edge's
+/// centre (#692). `None` for a face, a curve that is no circle, or a pick
+/// no longer in the model.
 #[must_use]
 pub fn pick_coords(world: &World, g: &GeoSel) -> Option<Vec<[f64; 3]>> {
     match g.feature {
         FeatureSel::Vertex(_) => point(world, g).ok().map(|p| vec![p]),
-        FeatureSel::Chain(_) => straight_edge(world, g, model::transform_of, "").ok().map(|(a, b)| vec![a, b]),
+        FeatureSel::Chain(_) => straight_edge(world, g, model::transform_of, "")
+            .ok()
+            .map(|(a, b)| vec![a, b])
+            .or_else(|| super::centre::centre_of(world, g).ok().map(|c| vec![c])),
         FeatureSel::Face(_) | FeatureSel::Patch(_) => None,
     }
 }
 
-/// A picked vertex in the document frame.
+/// A picked point in the document frame: a vertex, or (#692) the centre
+/// of a round edge - a straight or non-circular edge refused by name.
 pub(super) fn point(world: &World, g: &GeoSel) -> Result<[f64; 3], String> {
-    let FeatureSel::Vertex(id) = g.feature else { return Err(gone(g)) };
+    let id = match g.feature {
+        FeatureSel::Vertex(id) => id,
+        FeatureSel::Chain(_) => return super::centre::centre_point(world, g),
+        FeatureSel::Face(_) | FeatureSel::Patch(_) => return Err(gone(g)),
+    };
     let e = model::find_by_name(world, &g.entity).ok_or_else(|| gone(g))?;
     let features = model::features_of(world, &e).ok_or_else(|| gone(g))?;
     let vi = feature::resolve_vertex(&features, id).ok_or_else(|| gone(g))?;

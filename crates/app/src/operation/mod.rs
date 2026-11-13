@@ -100,9 +100,24 @@ mod probe;
 pub mod probe_op;
 // #670: the Plasma Profile's seed and generation glue.
 pub mod plasma_op;
+// #894: the thread-milling operation's door, kernel plan and its two verdict readings.
+pub mod thread_op;
+mod thread_entry;
+mod thread_r_plane;
+// #985: external threads - the boss door, the crest region, the neighbour law.
+mod thread_boss;
 pub mod wire_op;
+mod wire_ruled;
+// #534: the wire laws' inputs, read live at the post.
+pub mod wire_verify;
 // #541: the sinker EDM burn to depth.
 pub mod sinker_op;
+// #543: the sinker's rough and finish passes.
+pub mod sinker_pass;
+// #547: picked cavity faces read as a sinker electrode.
+pub mod sinker_faces;
+// #546: the sinker burn's electrode wear compensation.
+pub mod sinker_wear_op;
 // #545: the Sinker Side Burn's seed, laws and generation.
 pub mod sinker_side_op;
 // #171: the Probe op seeded from one picked face, edge, vertex or round wall.
@@ -166,11 +181,15 @@ mod stock_top_law;
 mod tap_core;
 pub use top_stock::TOP_STOCK_WARNING;
 mod turning_credit;
+mod turning_axis;
 mod turning_feeds;
 mod turning_holder;
 pub(crate) use turning_holder::body_axes as lathe_body_axes;
 mod turning_holder_scene;
 mod turning_holder_side;
+mod turning_holder_steel;
+pub use turning_holder_steel::STEEL_UNREAD_NOTE;
+pub(crate) use turning_holder_steel::lathe_steel_hits;
 mod turning_outline;
 mod turning_rapids;
 mod turning_stock;
@@ -178,6 +197,8 @@ pub use air_law::AIR_NOTE;
 pub use generate::*;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_thread_stamp;
 
 pub mod types;
 pub use types::*;

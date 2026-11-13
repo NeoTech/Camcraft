@@ -206,6 +206,8 @@ pub fn parse_mch_with(text: &str, holders: Option<super::HolderLookup>) -> Resul
     // #530: the EDM section - only an EDM kind states one, and only
     // its own kind's keys; anything else refuses the file by name.
     m.edm = super::edm::parse_edm(v.get("edm"), f, declared.map(|(k, _)| k))?;
+    // #533: the control's own words (D5), read beside the section.
+    m.edm_codes = super::edm_codes::parse_codes(v.get("edm"))?;
 
     if let Some(parts) = kine {
         if let Some(head) = find_type(parts, "head") {

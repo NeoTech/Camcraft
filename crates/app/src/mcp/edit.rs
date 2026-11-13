@@ -88,7 +88,7 @@ fn patched(base: &OpParams, patch: &Value) -> Result<OpParams, String> {
 /// removal (RFC 7386) and has nothing to keep; an object is checked key
 /// by key against what came back; any other value is a leaf that must
 /// simply be present.
-fn lost(patch: &Map<String, Value>, back: &Map<String, Value>, prefix: &str) -> Option<String> {
+pub(super) fn lost(patch: &Map<String, Value>, back: &Map<String, Value>, prefix: &str) -> Option<String> {
     for (k, v) in patch {
         if v.is_null() {
             continue;
@@ -114,7 +114,7 @@ fn lost(patch: &Map<String, Value>, back: &Map<String, Value>, prefix: &str) -> 
     None
 }
 
-fn merge(target: &mut Value, patch: &Value) {
+pub(super) fn merge(target: &mut Value, patch: &Value) {
     match (target, patch) {
         (Value::Object(t), Value::Object(p)) => {
             for (k, v) in p {

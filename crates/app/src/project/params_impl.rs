@@ -928,6 +928,7 @@ impl ParamsDto {
                 infeed,
                 feed,
                 plunge_feed,
+                infeed_plan,
                 hand,
             } => ParamsDto::Threading {
                 tolerance: *tolerance,
@@ -939,6 +940,7 @@ impl ParamsDto {
                 infeed: *infeed,
                 feed: *feed,
                 plunge_feed: *plunge_feed,
+                infeed_plan: (*infeed_plan).into(),
                 hand: (*hand).into(),
             },
             // The contour kinds (M5.2 stage E): the promise-number
@@ -1169,7 +1171,15 @@ impl ParamsDto {
                 plunge_feed,
                 climb,
                 holes,
+                pitch,
+                hand,
+                external,
+                passes,
             } => ParamsDto::Thread {
+                external: *external,
+                passes: (*passes).into(),
+                pitch: *pitch,
+                hand: (*hand).into(),
                 clearance_z: (*clearance_z).into(),
                 retract_z: (*retract_z).map(Into::into),
                 top_z: (*top_z).into(),
@@ -2087,6 +2097,7 @@ impl ParamsDto {
                 infeed,
                 feed,
                 plunge_feed,
+                infeed_plan,
                 hand,
             } => OpParams::Threading {
                 tolerance: *tolerance,
@@ -2098,6 +2109,7 @@ impl ParamsDto {
                 infeed: *infeed,
                 feed: *feed,
                 plunge_feed: *plunge_feed,
+                infeed_plan: (*infeed_plan).into(),
                 hand: (*hand).into(),
             },
             // Read back whole, the contour kinds' way too - sane or
@@ -2334,7 +2346,15 @@ impl ParamsDto {
                 plunge_feed,
                 climb,
                 holes,
+                pitch,
+                hand,
+                external,
+                passes,
             } => OpParams::Thread {
+                external: *external,
+                passes: (*passes).into(),
+                pitch: *pitch,
+                hand: (*hand).into(),
                 clearance_z: (*clearance_z).into(),
                 retract_z: retract_z.map(Into::into),
                 top_z: (*top_z).into(),

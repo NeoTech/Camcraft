@@ -173,7 +173,7 @@ go to `CHANGELOG.md`.
   - `P1`-`P3` are fix-now work and are for defects only: "wanted" is never
     a reason for them. Only `P1` and `P2` hold a release cut back
     (maintainer's choice, question dialog, 2026-11-12: "only P1 and P2
-    block a release cut"). A minor/major cut does not start while any `P1` or `P2` issue is open; a `P3` or lower never holds one. A `P3` is worked ahead of planned
+    block a release cut"). A minor/major cut does not start while any `P1` or `P2` issue is open; a `P3` or lower never holds one. The check is made once, when the cut starts (release step 1); a `P1` or `P2` filed after that does not restart the cut (#1424). A `P3` is worked ahead of planned
     work, but a cut does not wait for it.
   - `P4` is set only where the maintainer asked for the work in his own
     words; the issue quotes them.
@@ -760,10 +760,37 @@ debug info; `--config profile.dev.debug=true` restores it for a debugger).
 **GitHub Actions minutes are budgeted** (3000/month; Windows bills 2x,
 macOS 10x). Nothing runs on push or PR: every gate tier runs locally
 through `cargo xtask gate`. GitHub runs only `release.yml` on a pushed tag
-(the build that publishes the artifact). `ci.yml` and `nightly.yml` are
-manual (`workflow_dispatch`) for the rare case a clean-machine run is
-wanted. Never add a `push`, `pull_request` or `schedule` trigger without
+(the build that publishes the artifact; `aur-package.yml` is a job it
+calls). The manual `ci.yml` and `nightly.yml` are gone (user,
+2026-11-13: "so we can remove ci.yml and nightly.yml as a docs change."):
+they were all but unused. A clean-machine gate run on
+GitHub is issue 1413's subject. Never add a `push`, `pull_request` or `schedule` trigger without
 the user's say-so.
+
+**The PR test runner** (#1420; maintainer, 2026-11-13: "then that is the
+decision, workflow_dispatch"). `pr-test.yml` runs a PR review's build and
+tests on the maintainer's self-hosted Linux runner (no billed minutes)
+instead of a 10-20 GB worktree on the reviewer's machine. It has a
+`workflow_dispatch` trigger only (inputs: the PR number and the head SHA
+the reviewer read), a read-only token and no secrets; it checks out
+`refs/pull/<N>/head`, refuses any other head, refuses a diff touching
+`build.rs`, `.github/`, `scripts/`, a `.cargo/` directory at any depth, a
+`Cargo.toml`/`Cargo.lock`, a toolchain file or `xtask/` (listed with
+`--no-renames`), trial-merges with main and runs `cargo xtask gate
+quick --base origin/main` plus clippy on the touched crates (ui suites under
+`xvfb-run` with Mesa's software drivers, the cut runner's setup from issue
+1413). Only the PR-reviewer agent starts it, after reading the diff, and
+only for a collaborator's PR ("Collaborators only", maintainer, 2026-11-13;
+the workflow checks the author's push access itself and refuses otherwise,
+other PRs build locally) when a runner is online and no cut is using it; a "read, not built" PR
+is never sent. With no runner, or a run that is cancelled, times out or
+never starts, the review builds locally or says "not built" - never "pass".
+The job targets its own runner label (`camcraft-pr-test`) under its own OS
+user, HOME, cargo home and sccache dir, never shared with the cut/release
+runner of issue 1413 ("Separate runner/user", same date). The refusal list
+does not stop hostile test code: that is why only collaborators' PRs run.
+Windows-only readings (`cfg(windows)`, per-OS pinned values) still run
+locally for the touched suites.
 
 **Test the change, not everything.** A fix is proved by the test(s) that pin
 it, run one by one: `cargo xtask gate test <name> [--crate c] [--binary b]
@@ -914,7 +941,7 @@ only when no gate or cut is running and it is past ~60 GB. A red result is a new
 gouge, else `P2`, `source:agent`) naming the failing tests and the merge
 that broke them. A red result does not revert the merge by itself; the
 issue is worked in the normal order, and a minor/major cut does not start
-while any `P1` or `P2` issue is open (a `P3` or lower never holds one). The full release tier runs only at a
+while any `P1` or `P2` issue is open (checked once, at the start of the cut; a `P3` or lower never holds one). The full release tier runs only at a
 minor/major cut. A fix-only stretch produces no build; to hand-test one, run
 `cargo xtask release --version <next> --no-tag --skip-gate` (or the wrapper
 `scripts/release.ps1 -Version <next> -NoTag -SkipGate`) locally on a scratch
@@ -940,6 +967,19 @@ a tag"):
    fails otherwise). From step 1 to the tag, nothing else merges to main. Stacked PRs: retarget each child to `main`
    before merging its parent (Issue Law, "Overlapping issues stack"), then
    merge parent-first.
+   **Start condition** (maintainer, 2026-11-13, in chat, after the v0.19.0
+   cut: "We should as a rule not let P1/P2s coming in after cut - force a
+   restart as its a ~2 hour job"; #1424): before this step, the session
+   checks that no `P1` or `P2` issue is open and records the UTC start time
+   and that list (none) in the release PR body. A `P1` or `P2` issue filed
+   after that moment does not restart the cut and does not enter it: the cut
+   finishes on the tree that passed the release gate, the issue is named
+   under "Known issues" (step 2 and the release PR comment, step 3), and its
+   fix merges after the tag and ships in the next minor. Only the maintainer
+   can stop a cut for it; no agent stops or restarts a cut for a late issue.
+   An agent that finds a late `P1` (unsafe or wrong output) tells the
+   maintainer in one line and goes on. Failures of the cut's own release gate
+   are not late issues: they are fixed in the cut as before.
 2. **Release branch.** Sync main (`git pull --ff-only`), then
    `git switch -c release/vX.Y.Z`. The version is the highest bump among
    the commits since the last tag (table above). Run
@@ -948,6 +988,8 @@ a tag"):
    removes them; it goes in the same docs commit). Write `RELEASE_NOTES.md`
    and the `CHANGELOG.md` rows for every PR merged since that tag (one per
    behaviour PR, from its `Changelog:` line, plus any `Unreleased` rows).
+   Any `P1` or `P2` filed after the start (step 1) goes under a "Known
+   issues" section of the release notes, by number and title.
    The release notes also get a short "Process changes" section listing
    each `PROCESS_VERSION` since the previous tag (taken from the pinned
    issue #681). Commit all of it as `docs: X.Y.Z release notes;
@@ -962,7 +1004,9 @@ a tag"):
    `gh pr create --base main --title "chore(release): X.Y.Z"`, reviewed like
    any PR. Record the branch tip first (`tip=$(git rev-parse
    release/vX.Y.Z)` - `--delete-branch` removes the name), then
-   `gh pr merge --merge --delete-branch`.
+   `gh pr merge --merge --delete-branch`. The release PR body carries the
+   start-condition record (step 1); a comment on it names each `P1`/`P2`
+   filed after the start, as "Known issues".
 4. **Tag the release merge commit.** Sync main; `m=$(git rev-parse main)`
    is the release PR's merge commit (nothing else merged since step 1).
    `git diff $tip $m` must be empty - the zip's tree is the tagged tree. Then
@@ -970,6 +1014,18 @@ a tag"):
    If the diff is not empty, do not tag: something reached main mid-cut;
    start the cut again from step 2 on a fresh release branch. Comment
    `shipped in vX.Y.Z` on every issue the cut closed.
+5. **Check the documentation site** (#688). The same tag run regenerates
+   the Zola site in `site/` from the tagged tree and deploys it to GitHub
+   Pages (`release.yml` jobs `site` and `pages`; `pages` waits for
+   `publish`, so the site's download links never point at a missing
+   release). The browser build (`wasm`, #1103) is served under `/app/`;
+   a failed wasm build leaves `/app/` as the "not part of this copy" page
+   and a warning, not a failed cut. Nothing is committed for it and no
+   trigger is added. The cut is done once the run's `pages` job is green
+   and `https://neotech.github.io/Camcraft/` shows "CamCraft X.Y.Z"; a
+   red `pages` job is re-run (Actions "Re-run failed jobs"), never fixed
+   by moving the tag. Preview locally with `zola build` in `site/`
+   (`site/README.md`).
 
 **`main` is protected on GitHub** (user, 2026-11-07: "so we don't get
 unauthorized pushes into main instead they follow the rules"): every change
@@ -986,8 +1042,10 @@ use of the /review-prs into agents.md"). A pull request from a fork gets a
 review by the `PR-reviewer` agent (`.claude/agents/PR-reviewer.md`),
 dispatched by the project skill `/review-prs` (`.claude/skills/review-prs/`) -
 run on demand (`/review-prs`, or `/review-prs <N>` for one PR) and on a loop
-(`/loop 10m /review-prs`, every 10 minutes). The agent trial-merges the PR with current main in
-its own worktree, builds, runs the suites it touches and clippy, checks this
+(`/loop 10m /review-prs`, every 10 minutes). The agent trial-merges the PR with current main
+and builds it, runs the suites it touches and clippy - on the self-hosted
+runner through `pr-test.yml` when one is online ("The PR test runner"), else
+in its own worktree - checks this
 file's laws, and posts a plain review **comment** whose first line is
 `<!-- pr-reviewer: <head sha> -->` (counted only when its author is a collaborator, see "Only collaborators' reviews count"; the marker that stops a second review of
 the same push), and sets the review label (below). It never approves, requests changes, merges or pushes:

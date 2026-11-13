@@ -169,7 +169,10 @@ pub fn collect(world: &World) -> ProjectFile {
                 // The counter moves on models and stocks (every facet
                 // landing); everywhere else it reads 0 and omits itself.
                 rev: model::rev_of(world, &entity),
-                coarse_mm: crate::model_fidelity::chord_of(world, &entity),
+                coarse_mm: crate::model_fidelity::chord_of(world, &entity)
+                    .filter(|c| !crate::model_fidelity::is_unknown(*c)),
+                fidelity_unknown: crate::model_fidelity::chord_of(world, &entity)
+                    .is_some_and(crate::model_fidelity::is_unknown),
                 facet_budget: crate::model_fidelity::budget_of(world, &entity),
                 kind,
                 raw_stock_only: mark.is_some(),
@@ -240,8 +243,16 @@ pub fn collect(world: &World) -> ProjectFile {
         skip_stops: crate::setup_post_options::document(world).skip_stops,
         // One combined program writes no key (#111).
         per_op_files: crate::setup_post_options::document(world).per_op,
+        // Nothing stated writes no key (#258).
+        program: {
+            let p = crate::posting::program_info(world);
+            (p != crate::schema::ProgramInfo::default())
+                .then_some(ProgramDto { number: p.number, comment: p.comment })
+        },
         // Off writes no key (#616).
         smoothing: crate::setup_post_options::document(world).smoothing,
+        // Off writes no key (#1386).
+        explain: crate::setup_post_options::document(world).explain,
         entities,
     }
 }

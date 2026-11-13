@@ -19,7 +19,7 @@ messages below.
 | Lathe | Turning, plus the axial Drill | Fanuc Lathe, Tormach PathPilot Lathe | Turning center 2-axis, Tormach 8L, 15L, 15LX |
 | Mill-turn | milling and turning | every post except plasma | Multitasking 5-axis |
 | Plasma | Plasma Profile only | Tormach PathPilot Plasma | Tormach 1300PL |
-| Wire / sinker EDM | Wire Contour (wire EDM) | none yet | none yet |
+| Wire / sinker EDM | Wire Contour (wire EDM); Sinker Burn, Side Burn (sinker EDM) | none yet | none yet |
 
 The rules are `Family::admits` in `crates/app/src/operation/kinds.rs` and
 `post_serves` in `crates/app/src/posting.rs`. A picker lists posts by this
@@ -127,14 +127,15 @@ rotary axis`.
 
 The kinds exist (`wire_edm`, `sinker_edm`), and the Wire Contour operation
 (`OpType::WireContour`) is admitted on a wire EDM machine. What does not ship
-yet is an EDM post or an EDM machine file: no post serves an EDM kind, so
-nothing can be posted for one. Status: Wire Contour can be created and
+yet is an EDM machine file. Status: Wire Contour can be created and
 generated on a machine file you write that declares `wire_edm`; posting it
 stops with `a Wire Contour operation posts through a wire EDM post, which
-is not built yet - nothing is posted`. The sinker EDM kind admits no
-operation yet.
-The operation itself, its settings and its refusals are in
-[Wire EDM](@/guide/operations-edm.md).
+is not built yet - nothing is posted`. The sinker EDM kind admits Sinker
+Burn and Sinker Side Burn on a machine file you write that declares
+`sinker_edm`; a straight Sinker Burn posts through the "Sinker EDM (ISO)"
+post, which takes every EDM code from the file's `edm.codes`.
+The operations, their settings and their refusals are in
+[Wire and sinker EDM](@/guide/operations-edm.md).
 
 ## Changing a setup's machine
 

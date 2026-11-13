@@ -46,6 +46,7 @@ pub mod colorvision;
 pub mod ground_ink;
 pub mod window_chrome;
 mod post_options;
+mod program_info;
 pub mod cvd;
 mod icons;
 mod op_icons;
@@ -55,6 +56,9 @@ mod load_field;
 // pub(crate) past egui_app: `State::machine_editor` names its draft
 // type (M3.3 stage C), so state.rs has to see through the door.
 pub(crate) mod machine_editor;
+mod machine_edm;
+// #548: the sinker EDM section of the Machine window.
+mod machine_edm_editor;
 mod machine_grid;
 // pub(crate) for the same reason: `State::post_refusal` names its type.
 pub(crate) mod post_refusal;
@@ -73,6 +77,8 @@ mod painted;
 mod tree_badges;
 mod tree_glyphs;
 mod pages;
+// #739: the WCS page, split out of pages.rs.
+mod wcs_page;
 mod step_budget_row;
 // #1094: the stock page's raw-stock-only checkbox.
 mod raw_stock_row;
@@ -81,6 +87,10 @@ mod tool_body_lathe_page;
 mod tool_body_page;
 // #630: the tool editor's lathe orientation row.
 mod tool_orientation_row;
+// #894: the Thread operation's pitch and hand rows.
+mod thread_page;
+// #894: the thread mills' pitch and form rows.
+mod tool_thread_mill_row;
 // #898: the tool editor's catalog rows (part number, vendor, ...).
 mod tool_catalog_rows;
 // #890: the tool editor's per-material cutting data.
@@ -148,6 +158,7 @@ pub(crate) mod os_quit;
 mod params_page;
 mod rotary_page;
 mod turning_more_page;
+mod thread_infeed_page;
 mod turning_page;
 // #107: Save / Don't Save / Cancel over unsaved changes.
 mod unsaved_prompt;
@@ -231,7 +242,11 @@ mod coolant_tests;
 #[cfg(test)]
 mod thread_hand_tests;
 #[cfg(test)]
+mod thread_mill_page_tests;
+#[cfg(test)]
 mod after_op_tests;
+#[cfg(test)]
+mod program_info_tests;
 #[cfg(test)]
 mod colorvision_tests;
 #[cfg(test)]
@@ -255,6 +270,10 @@ mod tool_number_tests;
 #[cfg(test)]
 mod setup_wcs_tests;
 #[cfg(test)]
+mod wcs_page_tests;
+#[cfg(test)]
+mod wcs_circle_tests;
+#[cfg(test)]
 mod setup_align_tests;
 #[cfg(test)]
 mod setup_relative_tests;
@@ -275,6 +294,10 @@ mod wcs_pick_tests;
 mod ball_corner_tests;
 #[cfg(test)]
 mod gate_route_tests;
+#[cfg(test)]
+mod sinker_pass_tests;
+#[cfg(test)]
+mod sinker_machine_tests;
 
 /// Entry for `--ui egui`; returns the process exit code. `--headless`
 /// selects the no-window proof (seeded document, fallback adapter, View3D

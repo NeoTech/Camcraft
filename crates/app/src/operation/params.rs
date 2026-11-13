@@ -1243,6 +1243,7 @@ impl OpParams {
                 infeed,
                 feed,
                 plunge_feed,
+                infeed_plan,
                 hand,
             } => {
                 w(h, *tolerance);
@@ -1251,6 +1252,18 @@ impl OpParams {
                 wh(h, *bottom_z);
                 for v in [*pitch, *depth, *infeed, *feed, *plunge_feed] {
                     w(h, v);
+                }
+                // The infeed plan (#416) moves every pass - bytes only
+                // when it differs from the default, so every earlier
+                // thread keeps its digest (the approach precedent).
+                if *infeed_plan != crate::turning::ThreadInfeed::default() {
+                    h.write_u8(0xD4);
+                    h.write_u8(infeed_plan.method as u8);
+                    h.write_u8(infeed_plan.schedule as u8);
+                    h.write_u32(infeed_plan.spring_passes);
+                    for v in [infeed_plan.flank_angle, infeed_plan.min_depth, infeed_plan.finish_allowance] {
+                        w(h, v);
+                    }
                 }
                 // #629: the hand sets the helix's sense, and the passes
                 // now run toward the chuck - written for BOTH hands, so
@@ -1446,7 +1459,28 @@ impl OpParams {
                 wh(h, p.bottom_z);
                 h.write(p.condition.as_bytes());
                 h.write_u8(0xff);
-                h.write_u8(u8::from(p.side == super::WireSide::Punch));
+                // #1370: the side as its own discriminant - die and punch
+                // keep the bytes they always wrote (0 / 1), so no closed
+                // cut's stamp moves; an open run's left / right (#1109)
+                // and its run-out clearance, read only by an open run,
+                // stand apart.
+                match p.side {
+                    super::WireSide::Die => h.write_u8(0),
+                    super::WireSide::Punch => h.write_u8(1),
+                    super::WireSide::Left => {
+                        h.write_u8(2);
+                        w(h, p.clearance);
+                    }
+                    super::WireSide::Right => {
+                        h.write_u8(3);
+                        w(h, p.clearance);
+                    }
+                }
+                // #540: written only when set, so no contour's stamp moves.
+                if let Some(c) = p.burnout {
+                    h.write(b"burnout");
+                    w(h, c);
+                }
                 match p.start {
                     Some([x, y]) => {
                         h.write_u8(1);
@@ -1454,6 +1488,31 @@ impl OpParams {
                         w(h, y);
                     }
                     None => h.write_u8(0),
+                }
+                // #539: the tabs, only when stated, so no stamp of an
+                // untabbed cut moves. `capture` shapes no move and is
+                // read live at the post.
+                if let Some(t) = &p.tabs {
+                    h.write(b"tabs");
+                    h.write_u32(t.count.unwrap_or(u32::MAX));
+                    w(h, t.width.unwrap_or(f64::NAN));
+                    h.write_usize(t.at.len());
+                    for [x, y] in &t.at {
+                        w(h, *x);
+                        w(h, *y);
+                    }
+                    h.write(t.cutoff_condition.as_bytes());
+                    h.write_u8(0xff);
+                }
+                // #536: only a stated taper is digested, so every
+                // vertical cut's stamp stays what it was.
+                if p.taper_deg != 0.0 {
+                    h.write(b"taper");
+                    w(h, p.taper_deg);
+                }
+                // #537: likewise only a stated 4-axis cut.
+                if let Some(f) = &p.four_axis {
+                    super::wire_ruled::digest(f, h);
                 }
             }
             // The sinker burn (#541): every stored number, the datum
@@ -1473,6 +1532,18 @@ impl OpParams {
                 }
                 h.write(p.condition.as_bytes());
                 h.write_u8(0xff);
+                // #543: the pass and the finished cavity it is judged
+                // against - a byte and the sizes only for a rough or
+                // finish, so a single burn's digest never moves.
+                if p.pass != super::SinkerPass::Single {
+                    h.write_u8(match p.pass {
+                        super::SinkerPass::Single => 0,
+                        super::SinkerPass::Rough => 1,
+                        super::SinkerPass::Finish => 2,
+                    });
+                    w(h, p.cavity_x);
+                    w(h, p.cavity_y);
+                }
                 // #544: the orbit - bytes only when one is stated, so a
                 // plain plunge's digest does not move.
                 if let Some(o) = &p.orbit {
@@ -1480,6 +1551,14 @@ impl OpParams {
                     w(h, o.radius);
                     h.write_u32(o.vectors);
                     h.write_u32(o.turns);
+                }
+                // #546: the layer step and a measured wear, a tagged
+                // byte only when stated - an older burn's digest holds.
+                for (tag, v) in [(1u8, p.layer), (2, p.wear_lost), (3, p.wear_over)] {
+                    if let Some(v) = v {
+                        h.write_u8(tag);
+                        w(h, v);
+                    }
                 }
                 // #545: then the side's direction, amount and undersize.
                 if let OpParams::SinkerSideBurn(s) = self {
@@ -1519,7 +1598,31 @@ impl OpParams {
                 plunge_feed,
                 climb,
                 holes,
+                pitch,
+                hand,
+                external,
+                passes,
             } => {
+                // #985: an external thread is a different ride on the
+                // same list. Written only when set, so every internal
+                // thread keeps the digest it was cached under.
+                if *external {
+                    h.write_u8(0xE7);
+                }
+                // #988: the pass control, written only when it differs
+                // from the #894 ride, so no older thread goes Stale.
+                if *passes != crate::machining2d::ThreadPasses::default() {
+                    h.write_u8(0xE8);
+                    h.write_u8(match passes.schedule {
+                        crate::machining2d::PassSchedule::Equal => 0,
+                        crate::machining2d::PassSchedule::ConstantArea => 1,
+                    });
+                    w(h, passes.finish);
+                    h.write_u32(passes.spring);
+                    w(h, passes.allowance);
+                    h.write_u8(u8::from(passes.spindle_reverse));
+                    h.write_u8(u8::from(passes.cutter_left));
+                }
                 wh(h, *clearance_z);
                 wh(h, *top_z);
                 wh_opt(h, *bottom_z);
@@ -1528,6 +1631,14 @@ impl OpParams {
                     w(h, v);
                 }
                 h.write_u8(u8::from(*climb));
+                // #894: the thread's own pitch and hand. Written for
+                // every Thread op, so each one made before the rework
+                // reads Stale once - its path is a different ride now.
+                w(h, pitch.unwrap_or(0.0));
+                h.write_u8(match hand {
+                    crate::cl::ThreadHand::Right => 0xA1,
+                    crate::cl::ThreadHand::Left => 0xA2,
+                });
                 h.write_u32(holes.len() as u32);
                 for hole in holes {
                     wp2(h, hole.xy);

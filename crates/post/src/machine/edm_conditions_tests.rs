@@ -131,6 +131,21 @@ fn a_condition_states_only_its_kinds_field() {
     assert!(err.contains(r#"edm condition "E1" wire_diameter is a wire field; this is a sinker_edm machine"#), "{err}");
 }
 
+/// Review #1157: `wear` (#546) is a sinker-only field - refused by name
+/// on a wire machine, in the file and in a hand-edited parsed machine.
+#[test]
+fn a_wear_rate_is_a_sinker_field() {
+    let err = refusal(&wire_with(r#"[ { "id": "C1", "wear": 0.1 } ]"#));
+    assert!(err.contains(r#"edm condition "C1" wear is a sinker field; this is a wire_edm machine"#), "{err}");
+    assert!(parse_mch(&sinker_with(r#"[ { "id": "E1", "wear": 0.1 } ]"#)).is_ok());
+    let mut m = parse_mch(&wire_with(r#"[ { "id": "C1", "gap": 0.02 } ]"#)).expect("wire");
+    assert!(m.is_sane());
+    if let Some(c) = m.edm.as_mut().and_then(|e| e.conditions.first_mut()) {
+        c.wear = Some(0.1);
+    }
+    assert!(!m.is_sane(), "a wear rate on a wire");
+}
+
 /// Review #560 request 3: a condition's wire is one the machine takes,
 /// when the machine states its wires (after unit scaling).
 #[test]

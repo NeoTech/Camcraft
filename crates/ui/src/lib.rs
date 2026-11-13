@@ -54,6 +54,7 @@ pub mod trace;
 pub mod unsaved;
 pub mod vertex_pick;
 pub mod viewport;
+pub mod wcs_circle_pick;
 
 #[cfg(test)]
 mod law_tests;
@@ -71,6 +72,8 @@ mod machined_tests;
 mod play_bench_tests;
 #[cfg(test)]
 mod vertex_pick_tests;
+#[cfg(test)]
+mod centre_pick_tests;
 #[cfg(test)]
 mod setup_chip_tests;
 #[cfg(test)]

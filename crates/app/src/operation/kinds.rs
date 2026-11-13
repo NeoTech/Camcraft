@@ -985,12 +985,11 @@ fn seed_standalone_bore(c: &Carried) -> OpParams {
     }
 }
 
-/// The thread mill's seed (M2.4 C): the drill's four heights again.
-/// The PITCH is the tool's and rides no params - the tap cycle's
-/// law. The infeed starts small: the validator caps it at the
-/// standard's depth for whatever pitch the mounted tool states,
-/// and the pane lets the author step more per turn if they wish.
-/// Climb opens CCW: the standard read for a right-hand thread.
+/// The thread mill's seed (M2.4 C, #894): the drill's four heights
+/// again. The pitch starts unstated - a multi-form mill's own - and
+/// the hand right. The infeed starts small: the validator caps it at
+/// the standard's depth for the pitch, and the pane lets the author
+/// take more per pass. Climb is the handbook's default.
 fn seed_thread_mill(c: &Carried) -> OpParams {
     OpParams::Thread {
         clearance_z: c.clearance,
@@ -1002,6 +1001,12 @@ fn seed_thread_mill(c: &Carried) -> OpParams {
         plunge_feed: c.plunge,
         climb: true,
         holes: Vec::new(),
+        pitch: None,
+        hand: crate::cl::ThreadHand::Right,
+        // #985: holes until the author says bosses.
+        external: false,
+        // #988: the #894 ride - equal passes, M3, right-hand-cut mill.
+        passes: crate::machining2d::ThreadPasses::default(),
     }
 }
 
@@ -1223,9 +1228,17 @@ fn seed_facing(c: &Carried) -> OpParams {
     OpParams::Facing {
         tolerance: 0.05,
         clearance_z: c.clearance,
-        top_z: c.top,
-        bottom_z: c.bottom,
-        // The one number NOT folded: an infeed is bounded by twice
+        // #1409: the heights are NOT folded either. Face has no floor,
+        // so the fold hands every seed the mill's Bottom of Model
+        // (#214) - and for a Facing that "bottom" is the finished
+        // facing plane: the ladder would climb from the part's floor
+        // and cut the whole part away. A facing removes the allowance
+        // the stock holds above the part, so it runs from the stock's
+        // top down to the part's top; a part already at length has
+        // nothing between the two, and the generator says so.
+        top_z: Height::of(HeightReference::TopOfStock, 0.0),
+        bottom_z: Height::of(HeightReference::TopOfModel, 0.0),
+        // The other number NOT folded: an infeed is bounded by twice
         // the nose's reach (the kernel's law), and the mill default
         // the fold carries would refuse against the house insert's
         // 0.8 mm nose the moment a user created the op. 0.5 is the
@@ -1343,6 +1356,7 @@ fn seed_threading(c: &Carried) -> OpParams {
         infeed: 0.4,
         feed: c.feed,
         plunge_feed: c.plunge,
+        infeed_plan: crate::turning::ThreadInfeed::default(),
         hand: crate::cl::ThreadHand::Right,
     }
 }

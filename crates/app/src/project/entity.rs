@@ -574,6 +574,12 @@ pub struct EntityDto {
     /// and loads as full fidelity.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub coarse_mm: Option<f64>,
+    /// #1056 (v59): this mesh's fidelity is not known - a model or stock
+    /// copy from a file saved before CamCraft recorded it. Its operations
+    /// are refused at the post until the model is re-imported. Absent is
+    /// false; never written beside `coarse_mm`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub fidelity_unknown: bool,
     /// The STEP facet budget a model was imported under when it is not the
     /// default (#1054, `schema::StepBudget`). Absent everywhere else, so a
     /// file from before the key existed - and every default import - reads

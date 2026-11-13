@@ -1,18 +1,21 @@
 +++
-title = "Wire EDM"
-description = "The Wire Contour operation: the wire EDM machine and conditions it needs, side, start hole, workpiece planes, and the refusals you are most likely to meet."
+title = "Wire and sinker EDM"
+description = "The Wire Contour, Sinker Burn and Sinker Side Burn operations: the EDM machine and conditions they need, their settings and defaults, and the refusals you are most likely to meet."
 weight = 5
 +++
 
-This page is the reference for **Wire Contour**, the one kind in the
-**Wire EDM** group of the [operations](@/guide/operations.md) ribbon. For
+This page is the reference for the EDM kinds of the
+[operations](@/guide/operations.md) ribbon: **Wire Contour**, the one kind
+in the **Wire EDM** group, and **Sinker Burn** and **Sinker Side Burn**
+(captioned **Side Burn**), the two kinds in the **Sinker EDM** group. For
 the tabs themselves and what a click picks, see that page; for what a
 refusal means in general, see [Reading a refusal](@/guide/refusals.md).
 
-Lengths are in mm (inches in an inch document). Sinker EDM has no
-operation yet, so it has no section here.
+Lengths are in mm (inches in an inch document); feeds are in mm/min.
+The wire kinds come first; the sinker kinds follow from
+[Sinker EDM](#sinker-edm).
 
-## The machine, the wire and the post
+## Wire EDM: the machine, the wire and the post
 
 **A wire EDM machine.** Wire Contour needs a setup whose machine file
 declares the kind `wire_edm`. No wire EDM machine file ships, so you
@@ -93,7 +96,7 @@ offset. A corner, slot or neck the wire cannot reach is refused by name,
 never rounded for you; round it in the model or cut with a thinner wire
 (another condition).
 
-## Common refusals
+## Wire Contour refusals
 
 At **Apply** or creation, about the condition:
 
@@ -146,3 +149,225 @@ contour:"):
 
 A message that names a place can be clicked to frame it. For other
 messages, see [Troubleshooting](@/guide/troubleshooting.md).
+
+## Sinker EDM
+
+A sinker (die-sink) EDM burns a cavity by feeding a shaped electrode down
+Z into the work; the electrode's face is copied into the part, a spark gap
+larger. CamCraft ships two sinker kinds: **Sinker Burn**, a plunge to
+depth (with an optional orbit at the floor), and **Sinker Side Burn**, the
+same plunge followed by one sideways move that pushes one wall out.
+
+**A sinker EDM machine.** Both kinds need a setup whose machine file
+declares the kind `sinker_edm`, and that file must state a Z axis ("Z
+axis: required for a sinker EDM machine"). No sinker machine file ships.
+The **Sinker EDM** ribbon group shows only when such a machine is mounted.
+On any other machine the operation is refused ("a Sinker Burn operation
+is sinker EDM work; the setup's machine is a ... - mount a sinker EDM
+first"), and a sinker EDM takes no milling, turning, plasma or wire work.
+
+**The electrode is a library tool.** Unlike the wire, the electrode is a
+tool of the kind **Sinker electrode** in the tool library. It is a
+rectangular, sharp-cornered block; on the tool page:
+
+| Tool field | Means |
+|---|---|
+| Electrode X size | the burning face's size along X |
+| Electrode Y size | the burning face's size along Y |
+| Flute length | the electrode's length below the holder: the deepest it can burn without burying its holder |
+| Shank length | the pickup offset, from the electrode's top face up to the pickup the control measures it from |
+
+An electrode turns no spindle, so its rpm is 0 and it has no corner
+radius. The tool is refused when it says otherwise:
+
+- "a sinker electrode turns no spindle - its rpm must be 0 (it states
+  ...)";
+- "a sinker electrode states its Y size in its width (it states ...); its
+  diameter is the X size";
+- "a sinker electrode's face is sharp-cornered - a corner radius of ...
+  is not modelled".
+
+A sinker operation mounts only a sinker electrode, and no other kind
+mounts one: "No sinker electrode in ...'s tools - a Sinker Burn operation
+cuts with one; add it to the tool library", or "'...' is a ...; a Sinker
+Burn operation cuts with a sinker electrode".
+
+**Conditions.** The machine file lists its conditions under
+`edm.conditions`, as for a wire EDM. A sinker condition states a `gap`
+(the spark gap per side, above 0 and at most 0.5 mm) and may state an
+`undersize` (the electrode undersize per side it wants, at most 1 mm, not
+smaller than the gap); it never states a `wire_diameter` ("wire_diameter
+is a wire field; this is a sinker EDM machine"). The burn reads only the
+gap: the electrode tip stops that far above the burn floor.
+
+**Orbits.** A Sinker Burn may orbit at the floor. The machine file says
+which patterns its control offers, under `edm.orbits` (each a `kind` -
+`circular`, `vector` or `planetary` - and the control's own `word` for
+it), and the largest orbit radius it allows, `edm.max_orbit_radius`.
+Neither is assumed: a machine that lists no orbits takes none, and one
+that states no maximum takes none either.
+
+**Posting.** The "Sinker EDM (ISO)" post serves a sinker EDM, and it is
+the only one that does: any other post stops with "... does not serve
+..., a sinker EDM machine". It writes the motion words itself and takes
+every EDM code from the machine file's `edm.codes` - the unit word
+(`metric` / `inch`), `pickup` (`{tool}`), `reference` (`{offset}`),
+`condition` (`{id}`), `depth` (`{z}`, optionally `{f}`) and `end`. A
+code the machine does not state stops the post by its name. It writes a
+straight Sinker Burn only: a condition the machine's `edm.conditions`
+does not list, an orbit and a Sinker Side Burn are refused by name. Not
+exercised on a real EDM control.
+
+**Verification.** The program verdict cuts the stock with the
+electrode's face, grown by the spark gap, at every move. The stock view
+does not draw a sinker electrode yet and says so: "the stock view has no
+sinker electrode atom yet - the program verdict (the column engine's box
+atom) judges the burn".
+
+## Sinker Burn
+
+**For:** burning a cavity the shape of the electrode's face, straight
+down Z. The electrode rapids to the approach plane above the burn point,
+feeds down to the burn depth (its tip a spark gap above the burn floor),
+optionally orbits there to open the cavity sideways, and rapids back up.
+Choose it for a blind cavity, rib or detail a milling cutter cannot
+reach; one operation is one plunge at one point.
+
+**Picks:** none. The burn point is typed as X and Y; it is the centre of
+the electrode's face.
+
+| Tab | Setting | Default |
+|---|---|---|
+| Geometry | Burn at X / Burn at Y | 0 / 0 |
+| Geometry | EDM condition | (empty) - type the machine's condition id |
+| Heights | Approach plane | the draft's clearance plane |
+| Heights | Work top | model top |
+| Heights | Cavity floor datum | model bottom |
+| Passes | Depth from | Work top (depth down); or Cavity floor (stand-off up); or Electrode tip (down from approach) |
+| Passes | Depth | 5 mm |
+| Passes | Orbit | None (plain plunge); or Circular, Vector, Planetary |
+| Passes | Orbit radius | 0.1 mm when a pattern is first picked |
+| Passes | Vectors (Vector only) | 4, from 1 to 72 |
+| Passes | Turns (Planetary only) | 1, from 1 to 20 |
+| Feeds | Servo feed | 50 mm/min |
+
+There is no Lead in / Lead out tab: the electrode enters straight down.
+
+**Depth.** The depth is read from the datum you choose: down from the
+work top, up from the cavity floor datum (a stand-off left above it; 0
+burns exactly to it), or down from the approach plane. Whichever you
+choose, the burn floor may not pass the cavity floor datum or the model's
+lowest point, and it must lie below the work top.
+
+**Orbit.** A circular orbit runs once round a circle of the orbit radius
+at the burn floor; a vector orbit goes out and back along the given
+number of evenly spaced directions; a planetary orbit spirals out over
+the given number of turns and then runs the circle. Each returns to the
+centre before the retract. The pattern must be one the machine lists and
+the radius within its maximum.
+
+The generated path's notes give the depth and datum, the burn floor and
+tip Z, the spark gap and the cavity floor datum, and the orbit's pattern,
+radius and move count.
+
+## Sinker Side Burn
+
+**For:** moving one wall of a burned cavity outward by a small amount,
+after the plunge. The electrode plunges as a Sinker Burn does, then feeds
+sideways along one axis by the amount you state, comes back to the
+centre, and rapids up. Choose it to finish or size one side of a cavity
+with an electrode made undersize; for an even enlargement on every side,
+orbit a Sinker Burn instead.
+
+**Picks:** none, as for the Sinker Burn.
+
+The Geometry, Heights and Feeds tabs, and **Depth from** and **Depth**
+on Passes, are the Sinker Burn's, with the same defaults. In place of the
+orbit, Passes has:
+
+| Tab | Setting | Default |
+|---|---|---|
+| Passes | Burn wall | +X wall; or -X wall, +Y wall, -Y wall |
+| Passes | Wall moves by | 0.1 mm |
+| Passes | Electrode undersize | 0.2 mm (per side) |
+
+**Allowance.** The electrode is smaller than the finished cavity by its
+undersize on each side; the spark gap already uses part of that. So the
+wall may move by at most the undersize less the condition's gap. A larger
+move would burn into the part and is refused by name, never shortened for
+you. The seed numbers are a draft to edit, not values for your machine.
+
+The generated path's notes give the move and its wall, the burn Z and
+tip Z, the undersize, the spark gap and the allowance left.
+
+## Sinker refusals
+
+At **Apply** or creation, a side burn's numbers (each begins "sinker
+side burn:"):
+
+- "a lateral amount of ... moves no wall - state a positive, finite
+  amount";
+- "an electrode undersize of ... per side is not a finite, non-negative
+  number";
+- "a lateral move of ... toward ... burns into the part - it exceeds the
+  electrode undersize ... per side";
+- once a condition is named, also the condition and allowance refusals listed
+  under Generate below.
+
+At **Generate**, about the machine and the condition (the side burn's
+say "Sinker Side Burn"):
+
+- "a Sinker Burn burns on a sinker EDM; the setup's machine is a ...";
+- "the Sinker Burn names no EDM condition - name one of machine ...'s
+  conditions (its spark gap places the electrode)" - type one on the
+  Geometry tab;
+- "machine ... states no EDM section, so no condition \"...\"" - add an
+  `edm` section with `conditions` to the machine file;
+- "machine ... states no EDM condition \"...\"" - the id is not in the
+  machine file;
+- "machine ...: EDM condition \"...\" states no gap" - add the gap to
+  that condition.
+
+About the orbit (Sinker Burn only):
+
+- "machine ... lists no ... orbit under edm.orbits - burn without an
+  orbit, or pick a pattern the machine offers";
+- "machine ... states no maximum orbit radius (edm.max_orbit_radius) - a
+  ... orbit cannot be checked against it";
+- "the ... orbit radius ... exceeds machine ...'s maximum orbit radius
+  ...";
+- "sinker orbit: a ... orbit of radius ... moves nothing - state a
+  positive radius".
+
+About the depth and the electrode (each begins "sinker burn:"):
+
+- "a depth of ... from the ... burns nothing - state a positive depth";
+- "the servo feed ... must be positive";
+- "the cavity floor datum (...) stands above the work top (...)";
+- "a depth of ... from the ... reaches Z ..., past the cavity floor datum
+  at Z ..." - burn less deep, or lower the datum if the cavity really
+  goes deeper;
+- "a depth of ... from the ... reaches Z ..., past the model's floor at Z
+  ...";
+- "the burn floor Z ... does not enter the work (its top is Z ...)";
+- "the approach plane Z ... must stand above the work top Z ..." - raise
+  the approach plane on the Heights tab;
+- "the spark gap ... is not smaller than the burn's ... below the work
+  top - the electrode would never enter the work" - burn deeper, or pick
+  a condition with a smaller gap;
+- "the burn reaches ... below the work top, but the electrode is only ...
+  long - its holder would enter the work" - use a longer electrode (its
+  Flute length), or burn less deep.
+
+About the side burn's allowance (each begins "sinker side burn:"):
+
+- "the condition's spark gap ... exceeds the electrode undersize ... per
+  side - the plunge alone would burn past the finished wall; pick a
+  condition whose gap the undersize can honour";
+- "a lateral move of ... toward ... burns into the part - the side's
+  allowance is ... (undersize ... less spark gap ...)" - move the wall
+  less, or use a more undersized electrode;
+- "a Sinker Side Burn moves along one axis - it takes no orbit (orbit
+  with a Sinker Burn)".
+
+For other messages, see [Troubleshooting](@/guide/troubleshooting.md).
