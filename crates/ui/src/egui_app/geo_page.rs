@@ -128,7 +128,7 @@ fn chips(ui: &mut Ui, state: &mut State, target: &str) {
             }
             _ => None,
         };
-        let remove = ui
+        let row = ui
             .horizontal(|ui| {
                 // M13.4 stage 2 hook: a picked corner can place the WCS
                 // slot chosen in the WCS pane, through SetWcsOrigin.
@@ -160,12 +160,18 @@ fn chips(ui: &mut Ui, state: &mut State, target: &str) {
                 } else {
                     ui.label(&label)
                 };
-                if resp.hovered() {
-                    state.geo_hover = Some(sel);
+                let x = ui.small_button("×").on_hover_text("remove this pick");
+                // #1507: the label, the remove button and the row's other
+                // buttons all light the pick: "which one am I removing?".
+                if resp.hovered() || x.hovered() {
+                    state.geo_hover = Some(sel.clone());
                 }
-                ui.small_button("×").on_hover_text("remove this pick").clicked()
-            })
-            .inner;
+                x.clicked()
+            });
+        if row.response.hovered() || ui.rect_contains_pointer(row.response.rect) {
+            state.geo_hover = Some(sel);
+        }
+        let remove = row.inner;
         if remove {
             let mut rest: Vec<GeoSel> = state.op_ui.geo.clone();
             if i < rest.len() {

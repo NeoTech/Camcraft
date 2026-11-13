@@ -1721,6 +1721,11 @@ pub struct State {
     /// hover itself is the precedent) - refreshed every frame, never a
     /// command, never an overlay rebuild.
     pub geo_hover: Option<GeoSel>,
+    /// `geo_hover` as the previous frame left it: the viewport pane draws
+    /// before the properties pane sets the row hover, so the strong row
+    /// highlight (#1507) reads last frame's answer - a one-frame lag, with a
+    /// repaint requested whenever the two differ. Ephemeral, never a command.
+    pub geo_hover_drawn: Option<GeoSel>,
     /// Which named section of the operation page is open (the M1.4 tab
     /// bar, restored after M9.1 B's stack on user feedback). An index into
     /// `egui_app::op_tabs::SECTIONS`. Ephemeral pane state like the drafts
@@ -1925,6 +1930,7 @@ impl State {
             boundary_view: Default::default(),
             incoming_view: Default::default(),
             geo_hover: None,
+            geo_hover_drawn: None,
             op_tab: 0,
             hidden_models: Vec::new(),
             hidden_stocks: Vec::new(),
