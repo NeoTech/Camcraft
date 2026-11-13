@@ -22,14 +22,29 @@ fn the_tool_list_page_is_laid_out_in_groups_like_the_wcs_page() {
     assert!(tops.windows(2).all(|w| w[0] < w[1]), "groups stack top to bottom: {tops:?}");
     // The tools table (its Size column) sits in the first group, the
     // readout's table in the second.
-    assert!(rect(&harness, "Size").top() > tops[0] && rect(&harness, "Size").top() < tops[1]);
-    let est = rect(&harness, "Est (min)");
-    assert!(est.top() > tops[1] && est.top() < tops[2], "readout table under its title");
+    assert_header_row(&harness, &["T", "Tool", "Size", "Ops"], tops[0], tops[1]);
+    assert_header_row(&harness, &["Tool", "Ops", "Changes", "Cut", "Rapid", "Est (min)"], tops[1], tops[2]);
     assert!(harness.query_by_label_contains("Setup total: est").is_some(), "total line");
     // The exports come last, in order, one row each.
     let (t, s) = (rect(&harness, "Export tool list…"), rect(&harness, "Export setup sheets…"));
     assert!(t.top() > tops[2] && s.top() > t.top(), "export rows under the Export title: {t:?} {s:?}");
     assert!(t.left() == s.left(), "exports share a left edge");
+}
+
+/// Every header of a table, once each between two group titles, on one
+/// row, in order left to right - so dropping or moving any column is red.
+fn assert_header_row(h: &Harness<'static, ShellUi>, headers: &[&str], lo: f32, hi: f32) {
+    let rects: Vec<egui::Rect> = headers
+        .iter()
+        .map(|l| {
+            let found: Vec<egui::Rect> =
+                h.query_all_by_label(l).map(|n| n.rect()).filter(|r| r.top() > lo && r.top() < hi).collect();
+            assert_eq!(found.len(), 1, "header {l:?} once between {lo} and {hi}: {found:?}");
+            found[0]
+        })
+        .collect();
+    assert!(rects.windows(2).all(|w| (w[0].top() - w[1].top()).abs() < 2.0), "{headers:?} on one row: {rects:?}");
+    assert!(rects.windows(2).all(|w| w[0].left() < w[1].left()), "{headers:?} left to right: {rects:?}");
 }
 
 /// With no operation in the setup, the page says what it said before the
