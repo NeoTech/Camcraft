@@ -216,6 +216,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             pitch,
             hand,
             external,
+            passes,
         } => {
             if tab == SEC_GEO {
                 // #985: holes, or bosses for an external thread.
@@ -240,11 +241,13 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
                 super::thread_page::thread_rows(ui, u, pitch, hand);
                 prop_row(ui, "Radial infeed per pass", |ui| num(ui, u, infeed));
                 hint(ui, super::thread_page::infeed_hint(*external));
+                super::thread_page::pass_rows(ui, u, passes);
             }
             if tab == SEC_FEEDS {
                 prop_row(ui, "Feed", |ui| num_feed(ui, u, feed));
                 prop_row(ui, "Plunge feed", |ui| num_feed(ui, u, plunge_feed));
                 check_row(ui, "Climb milling", climb);
+                super::thread_page::spindle_rows(ui, passes);
             }
         }
         _ => {}

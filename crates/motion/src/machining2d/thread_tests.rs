@@ -22,7 +22,9 @@ fn params(rows: u32, external: bool, hand: ThreadHand, climb: bool) -> ThreadPar
         external,
         hand,
         climb,
+        passes: super::ThreadPasses::default(),
         clearance_z: 10.0,
+        r_z: None,
         retract_z: None,
         feed: 400.0,
         plunge_feed: 120.0,
@@ -228,4 +230,36 @@ fn impossible_threads_are_refused_by_name() {
     let mut thin = params(1, true, ThreadHand::Right, true);
     thin.holes[0].radius = 0.5;
     assert!(err_of(&thin).contains("thinner than"));
+}
+
+#[test]
+fn the_ride_rapids_to_the_r_plane_and_starts_its_feed_there() {
+    // #1212: a raised R plane, inside and beside, as on a drill cycle.
+    for external in [false, true] {
+        let base = params(1, external, ThreadHand::Right, true);
+        // An R plane on the feature's top is the #894 ride, move for move.
+        assert_eq!(ride_of(&ThreadParams { r_z: Some(TOP), ..base.clone() }), ride_of(&base));
+        let p = ThreadParams { r_z: Some(TOP + 3.0), ..base };
+        let path = ride_of(&p);
+        let first_feed = path.moves.iter().position(|m| m.kind == MoveKind::Feed).expect("a feed");
+        let dive = &path.moves[first_feed - 1];
+        assert_eq!((dive.kind, dive.to.z), (MoveKind::Rapid, TOP + 3.0), "the rapid stops on R");
+        assert_eq!(path.moves[first_feed].from.z, TOP + 3.0, "the feed starts on R");
+        assert!(path.moves.iter().filter(|m| m.kind == MoveKind::Rapid).all(|m| m.to.z >= TOP + 3.0 - 1e-9));
+        // The ride back out climbs to R at feed, then links.
+        let out = path.moves.iter().rposition(|m| m.kind == MoveKind::Feed).expect("a feed");
+        assert_eq!(path.moves[out].to.z, TOP + 3.0);
+    }
+}
+
+#[test]
+fn an_r_plane_under_a_top_or_over_the_link_plane_is_refused_by_name() {
+    for (external, what) in [(false, "hole"), (true, "boss")] {
+        let base = params(1, external, ThreadHand::Right, true);
+        let low = err_of(&ThreadParams { r_z: Some(TOP - 0.5), ..base.clone() });
+        assert!(low.contains(&format!("R plane at z -0.5 is below the top of the {what} at (10, 20) at z 0")), "{low}");
+        let high = err_of(&ThreadParams { r_z: Some(11.0), ..base.clone() });
+        assert!(high.contains("stands above the 10 mm retract plane"), "{high}");
+        assert!(err_of(&ThreadParams { r_z: Some(f64::NAN), ..base }).contains("finite"));
+    }
 }

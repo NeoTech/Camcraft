@@ -1060,6 +1060,12 @@ pub fn op_streams(world: &World) -> Result<Vec<(String, Vec<cnc::Record>)>, Stri
         let mut records = post::dump(&posted, &d);
         // #542: a sinker burn's condition and pickup ride the section.
         edm_params::insert(&op.params, &tool, &mut records);
+        // #988: a left-hand-cut thread mill turns M4.
+        if let OpParams::Thread { passes, .. } = &op.params
+            && passes.spindle_reverse
+        {
+            post::ask_reverse_spindle(&mut records);
+        }
         streams.push((name.clone(), records));
     }
     Ok(streams)

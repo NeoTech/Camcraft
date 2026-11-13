@@ -218,6 +218,15 @@ pub fn run_program_with(
                         "{who}cuts a thread that needs the spindle reversed (M04) for its hand, but this post script does not declare threadHands - it would cut the other hand; use a lathe post that states the thread's hand"
                     ));
                 }
+                // A left-hand-cut mill (#988) through a script that
+                // cannot start M04 would turn the cutter backwards.
+                if name == "MillSpindle" && value.as_str() == Some("reverse") && !s.voices_mill_spindle_reverse() {
+                    let op = base.get("OperationName").and_then(Value::as_str).unwrap_or("");
+                    let who = if op.is_empty() { String::new() } else { format!("operation {op}: ") };
+                    warnings.push(format!(
+                        "{who}runs a left-hand-cut mill that needs the spindle reversed (M04), but this post script does not declare millSpindleReverse - it would turn the cutter backwards"
+                    ));
+                }
                 s.set_properties(&merged(&base, &BTreeMap::new(), pos))?;
                 s.call("onParameter", &format!("{}, {}", json!(name), value))?;
                 if name == "SpindleSpeed" {

@@ -1,7 +1,9 @@
 //! The Thread operation page's own rows (#894, #985): the feature list -
 //! holes, or bosses for an external thread - the thread's pitch (left to
 //! a multi-form mill's, or stated for a single-form mill) and its hand,
-//! by name. The rows edit the page draft; Apply rides
+//! by name; the pass control (#988) - the schedule, finishing and spring
+//! passes, the fit allowance, the spindle and the cutter's hand. The
+//! rows edit the page draft; Apply rides
 //! `EditOperationParams`, which refuses a thread the mounted mill cannot
 //! cut, so the edit is gated and undoable.
 //!
@@ -12,6 +14,7 @@ use egui::Ui;
 
 use camcraft_app::cl::ThreadHand;
 use camcraft_app::drilling::Hole;
+use camcraft_app::machining2d::{PassSchedule, ThreadPasses};
 use camcraft_app::units::{self, Unit};
 
 use super::fields::{check_row, field, hint, num, prop_row};
@@ -107,4 +110,32 @@ pub(super) fn thread_rows(ui: &mut Ui, u: Unit, pitch: &mut Option<f64>, hand: &
         ui.radio_value(hand, ThreadHand::Right, "Right hand");
     });
     hint(ui, "climb milling winds a right-hand thread up from the bottom of a hole, a left-hand one down from the top; on a boss the other way round");
+}
+
+/// The Passes tab's pass-control rows (#988): the schedule, a finishing
+/// pass of its own depth, spring passes and the fit allowance.
+pub(super) fn pass_rows(ui: &mut Ui, u: Unit, passes: &mut ThreadPasses) {
+    prop_row(ui, "Pass depths", |ui| {
+        ui.radio_value(&mut passes.schedule, PassSchedule::ConstantArea, "Decreasing");
+        ui.radio_value(&mut passes.schedule, PassSchedule::Equal, "Equal");
+    });
+    hint(ui, "decreasing: every pass takes the same chip area - the infeed is the first, deepest pass");
+    prop_row(ui, "Finishing pass depth", |ui| num(ui, u, &mut passes.finish));
+    prop_row(ui, "Spring passes", |ui| {
+        ui.add(egui::DragValue::new(&mut passes.spring).range(0..=camcraft_app::machining2d::MAX_SPRING_PASSES));
+    });
+    prop_row(ui, "Depth allowance", |ui| num(ui, u, &mut passes.allowance));
+    hint(ui, "0 finishes on the standard depth; a positive allowance leaves that much radially for a tighter fit (at most a quarter of the depth)");
+}
+
+/// The Feeds tab's spindle rows (#988): the spindle direction and the
+/// cutter's hand. Climb follows the spindle; a cutter against its
+/// spindle is refused by name at Apply.
+pub(super) fn spindle_rows(ui: &mut Ui, passes: &mut ThreadPasses) {
+    prop_row(ui, "Spindle", |ui| {
+        ui.radio_value(&mut passes.spindle_reverse, true, "M4 (counter-clockwise)");
+        ui.radio_value(&mut passes.spindle_reverse, false, "M3 (clockwise)");
+    });
+    check_row(ui, "Left-hand-cut thread mill", &mut passes.cutter_left);
+    hint(ui, "a right-hand-cut mill runs M3, a left-hand-cut one M4; climb milling follows the spindle");
 }
