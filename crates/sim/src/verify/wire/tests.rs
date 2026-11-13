@@ -1,6 +1,7 @@
 //! The wire laws on synthetic squares (#534): a clean punch and die
 //! pass, a kerf into the part is a gouge naming its move, a missing or
-//! crowded start hole is refused, and the slug is read for each side.
+//! crowded start hole is refused, and the slug is read for each side;
+//! an open run (#1109) is judged by its kerf and its ends alone.
 //! Provenance: our own fixtures.
 
 use super::*;
@@ -138,4 +139,35 @@ fn a_burnout_frees_nothing_and_a_core_is_refused() {
     let v = judge(&job(&ring));
     assert!(matches!(v.findings.as_slice(), [WireFinding::Core { .. }]), "{:?}", v.findings);
     assert!(v.findings[0].describe().contains("leave no core"), "{}", v.findings[0].describe());
+}
+
+/// #1109: an open run (a cut-off at x = 5 across a 30 mm stock, the part
+/// left of it) - the wire at `x`, from `y0` up to `y1`.
+fn open_run(x: f64, y0: f64, y1: f64) -> Toolpath {
+    let mut b = PathBuilder::new(Point3::new(x, y0, 0.0));
+    b.push(MoveKind::Feed, Point3::new(x, y1, 0.0), None);
+    b.finish()
+}
+
+fn left_part() -> Region {
+    let l = Loop::new(vec![Point2::new(-15.0, -15.0), Point2::new(5.0, -15.0), Point2::new(5.0, 15.0), Point2::new(-15.0, 15.0)]);
+    Region::new(vec![l.expect("loop")]).expect("region")
+}
+
+#[test]
+fn an_open_run_is_judged_by_its_kerf_with_no_start_hole_or_slug() {
+    let (part, stock) = (left_part(), square(15.0));
+    // Clean: the kerf right of travel stands its offset off the part,
+    // both ends in the air past the stock. No start hole is stated.
+    let v = run(CutSide::Open, &open_run(5.0 + K, -15.0 - 2.0 * K, 15.0 + 2.0 * K), None, &part, Some(&stock));
+    assert!(v.findings.is_empty(), "{:?}", v.findings);
+    assert!(v.slugs.is_empty(), "an open run closes no slug: {:?}", v.slugs);
+    assert_eq!(v.skipped, Some(OPEN_SKIP), "the skipped laws are said");
+    // The kerf on the wrong side burns the part: a gouge, never a pass.
+    let v = run(CutSide::Open, &open_run(5.0 - K, -15.0 - 2.0 * K, 15.0 + 2.0 * K), None, &part, Some(&stock));
+    assert!(matches!(v.findings.as_slice(), [WireFinding::Gouge { move_no: 1, .. }]), "{:?}", v.findings);
+    // An end inside the stock: the wire would be threaded in material.
+    let v = run(CutSide::Open, &open_run(5.0 + K, -14.0, 15.0 + 2.0 * K), None, &part, Some(&stock));
+    assert!(matches!(v.findings.as_slice(), [WireFinding::OpenEndInStock { .. }]), "{:?}", v.findings);
+    assert!(v.findings[0].describe().contains("threaded and cut in the air"), "{}", v.findings[0].describe());
 }

@@ -36,7 +36,7 @@ fn outline() -> Loop {
 /// The wire laws' verdict on the punch golden.
 pub fn wire_verdict() -> WireVerdict {
     let start = Point2::new(-30.0, 0.0);
-    let p = WireParams { wire_diameter: 0.25, gap: 0.04, condition: "C110".into(), side: WireSide::Punch, start: Some(start), plane_z: 0.0 };
+    let p = WireParams { wire_diameter: 0.25, gap: 0.04, condition: "C110".into(), side: WireSide::Punch, start: Some(start), plane_z: 0.0, stock: None, clearance: 1.0 };
     let t = wire_contour(&[outline()], &[], &p).expect("the punch generates");
     assert_eq!(gen_to_cltext(&t), golden("wire_contour_punch.cl"), "wire_contour_punch.cl: the regenerated program is the golden");
     let part = Region::new(vec![outline()]).expect("the profile region");

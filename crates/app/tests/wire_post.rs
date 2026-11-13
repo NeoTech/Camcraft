@@ -6,7 +6,10 @@
 //! name; a mill machine, and a cutting post on the wire section, are
 //! refused by name; the registry offers the post for wire EDMs only.
 //! The wire laws (#534) gate it: a clean cut posts its golden, a
-//! gouging one is refused by name with no NC text written.
+//! gouging one is refused by name with no NC text written. An open
+//! cut-off (#1109, kerf left / right of travel) posts its own golden -
+//! threaded at its run-in point in the air, cut off at its run-out point,
+//! no return move - and an open run whose kerf burns the part is refused.
 //! Not exercised on a real EDM control (D10).
 //!
 //! Gate map (#533): covers app::posting (posting_wire, WIRE_POSTS,
@@ -25,7 +28,7 @@ use flecs_ecs::prelude::World;
 use camcraft_app::commands::{CreateOperation, GenerateOperation, History, ImportModel, LoadMachine, SetStock};
 use camcraft_app::geometry::{Mesh, Point3, Triangle};
 use camcraft_app::machine::{parse_mch, Kind};
-use camcraft_app::operation::{Height, OpParams, SrcRef, WireContourOp, WireSide};
+use camcraft_app::operation::{self, Height, OpParams, SrcRef, WireContourOp, WireSide};
 use camcraft_app::post::{self, cnc};
 use camcraft_app::posting::{self, BUILTINS, WIRE_POSTS};
 use camcraft_app::schema::Location;
@@ -35,6 +38,7 @@ use camcraft_app::world::new_world;
 const FIXTURE: &str = include_str!("edm/wire-iso-fixture.mch");
 const WIRE: &str = "Generic ISO Wire EDM";
 const GOLDEN: &str = "tests/golden/nc/wire-iso/wire_slug_punch.nc";
+const OPEN_GOLDEN: &str = "tests/golden/nc/wire-iso/wire_contour_open_cutoff.nc";
 
 fn cps(name: &str) -> &'static str {
     BUILTINS.iter().find(|(n, _)| *n == name).map(|(_, s)| *s).expect("registered")
@@ -88,6 +92,7 @@ fn punch_doc(machine_text: &str) -> World {
         side: WireSide::Punch,
         start: Some([-30.0, 0.0]),
         burnout: None,
+        clearance: operation::DEFAULT_CLEARANCE,
     };
     let c = CreateOperation::new(&world, "Punch1", "", SrcRef::Entity("slug".into()), OpParams::WireContour(op)).expect("op");
     h.execute(&world, c);
@@ -112,6 +117,7 @@ fn gouging_die() -> World {
         side: WireSide::Die,
         start: Some([0.0, 0.0]),
         burnout: None,
+        clearance: operation::DEFAULT_CLEARANCE,
     };
     let c = CreateOperation::new(&world, "Die1", "", SrcRef::Entity("opening".into()), OpParams::WireContour(op)).expect("op");
     h.execute(&world, c);
@@ -256,6 +262,110 @@ fn the_registry_offers_the_wire_post_for_wire_edms_only() {
         assert!(!posting::post_serves(WIRE, k), "{k:?}");
     }
     assert_eq!(posting::post_name(&posting::default_post_for(Kind::WireEdm)), Some(WIRE));
+}
+
+/// #1109: a 60 x 50 x 12 part at the left end of a 100 x 50 x 12 bar,
+/// cut off along the part's top edge at x = 60 by an open run, the kerf
+/// on the offcut's side (`wrong` puts it on the part's). The side is read
+/// from the picked chain's own travel, so the fixture holds whichever way
+/// the feature graph orders the edge.
+fn cutoff_doc(wrong: bool) -> World {
+    use camcraft_app::geometry::feature;
+    use camcraft_app::model;
+    use camcraft_app::operation::{FeatureSel, GeoSel};
+    let world = new_world();
+    let mut h = History::default();
+    let m = parse_mch(FIXTURE).expect("the fixture parses");
+    h.execute(&world, LoadMachine::new(&world, "wire-iso.mch".into(), Some(m)).expect("mount"));
+    h.execute(&world, ImportModel::from_mesh("part", prism(&[(0.0, 0.0), (60.0, 0.0), (60.0, 50.0), (0.0, 50.0)])));
+    let loc = Location { pos: Point3::new(50.0, 25.0, 0.0), ..Location::default() };
+    h.execute(&world, SetStock::new(&world, StockShape::Box { dx: 100.0, dy: 50.0, dz: 12.0 }, loc).expect("stock"));
+    let e = model::find_by_name(&world, "part").expect("model");
+    let f = model::features_of(&world, &e).expect("features");
+    let (chain, up) = feature::chains(&f)
+        .into_iter()
+        .filter(|c| !c.closed)
+        .find_map(|c| {
+            let p = feature::chain_points(&f, &c);
+            let on = p.len() >= 2 && p.iter().all(|q| (q[0] - 60.0).abs() < 1e-9 && (q[2] - 12.0).abs() < 1e-9);
+            on.then(|| (c.id, p[p.len() - 1][1] > p[0][1]))
+        })
+        .expect("the part's top edge at x = 60 is its own open chain");
+    // Travelling +Y the offcut (x > 60) is on the right.
+    let side = if up != wrong { WireSide::Right } else { WireSide::Left };
+    let op = WireContourOp {
+        top_z: Height::fixed(12.0),
+        bottom_z: Height::fixed(0.0),
+        condition: "C110".into(),
+        side,
+        start: None,
+        clearance: operation::DEFAULT_CLEARANCE,
+    };
+    let src = SrcRef::Selection(vec![GeoSel { entity: "part".into(), feature: FeatureSel::Chain(chain) }]);
+    h.execute(&world, CreateOperation::new(&world, "Cutoff1", "", src, OpParams::WireContour(op)).expect("op"));
+    h.execute(&world, GenerateOperation::new(&world, "Cutoff1").expect("the open run generates"));
+    world
+}
+
+/// Done means (#1109 over #533/#534): an open cut-off posts through
+/// the wire post to its golden - threaded at the run-in point outside
+/// the bar, one cut across it, the wire cut at the run-out point, never
+/// a move back to the threading point - judged by the kerf law with the
+/// start-hole and slug laws said skipped; the same run with its kerf on
+/// the part's side is refused at the gate with no NC text written, and
+/// the closed punch's golden is untouched.
+#[test]
+fn an_open_cutoff_posts_its_golden_and_a_gouging_one_is_refused() {
+    let world = cutoff_doc(false);
+    let clause = posting::wire_clause(&world);
+    assert!(clause.problems.is_empty(), "{:?}", clause.problems);
+    let line = clause.line.expect("the open run is judged, not skipped");
+    assert!(line.contains("Cutoff1 open run (") && line.contains("kerf judged") && line.contains("slug laws not applied"), "{line}");
+    let out = std::env::temp_dir().join(format!("camcraft-wire-open-{}.nc", std::process::id()));
+    let posted = posting::post_script(&world, &out, cps(WIRE)).expect("the open cut-off posts");
+    let _ = std::fs::remove_file(&out);
+    let text = posted.program;
+    if std::env::var_os("WRITE_GOLDEN").is_some() {
+        std::fs::write(OPEN_GOLDEN, &text).expect("write golden");
+    }
+    assert_eq!(text, std::fs::read_to_string(OPEN_GOLDEN).expect("golden present"), "the open program drifted from its golden");
+    let lines: Vec<&str> = text.lines().collect();
+    let at = |w: &str| lines.iter().position(|l| *l == w).unwrap_or_else(|| panic!("no {w} in\n{text}"));
+    let (comp, cut) = (at("FX-COMP-OFF"), at("FX-CUT"));
+    let g0: Vec<&&str> = lines.iter().filter(|l| l.starts_with("G0 ")).collect();
+    assert_eq!(g0.len(), 1, "one positioning move, to the run-in point: {text}");
+    let xy = |l: &str| -> (f64, f64) {
+        let w = |c: char| l.split_whitespace().find_map(|t| t.strip_prefix(c)?.parse::<f64>().ok()).unwrap_or(f64::NAN);
+        (w('X'), w('Y'))
+    };
+    let thread = xy(g0[0]);
+    assert!((thread.0 - 60.165).abs() < 1e-9 && (thread.1 < -1.0 || thread.1 > 51.0), "threaded in the air: {text}");
+    let cuts = &lines[comp + 1..cut];
+    assert!(!cuts.is_empty() && cuts.iter().all(|l| l.starts_with("G1 X")), "{text}");
+    let end = cuts.last().map(|l| xy(l)).expect("a cut");
+    assert!((end.1 - thread.1).abs() > 50.0, "the run ends across the bar at its run-out, not back at its start: {text}");
+    assert!(cuts.iter().all(|l| (xy(l).0 - 60.165).abs() < 1e-9), "every cut stands the kerf off the part: {text}");
+    // Without AWT the stops say where the operator threads and cuts.
+    let mut v: serde_json::Value = serde_json::from_str(FIXTURE).expect("json");
+    v["edm"]["awt"] = serde_json::json!(false);
+    let m = parse_mch(&v.to_string()).expect("parses");
+    let manual = post::engine::run(cps(WIRE), &post::machine::mirror(&m), &stream_text(&world)).expect("runs").program;
+    assert!(manual.contains("(THREAD THE WIRE AT THE RUN-IN POINT OUTSIDE THE STOCK)") && manual.contains("(CUT THE WIRE AT THE RUN-OUT POINT)"), "{manual}");
+
+    // The kerf on the part's side: the generator cannot see the part,
+    // the wire laws can - refused at the post, nothing written.
+    let world = cutoff_doc(true);
+    let out = std::env::temp_dir().join(format!("camcraft-wire-open-gouge-{}.nc", std::process::id()));
+    let _ = std::fs::remove_file(&out);
+    let err = posting::post_script(&world, &out, cps(WIRE)).expect_err("an open run that burns the part never posts");
+    let wrote = out.exists();
+    let _ = std::fs::remove_file(&out);
+    assert!(err.starts_with("post blocked") && err.contains("Cutoff1: wire gouge: the kerf of move"), "{err}");
+    assert!(!wrote, "no NC text is written for a refused open run");
+    // The closed punch's golden stands byte for byte beside it.
+    let punch = posting::post_script(&punch_doc(FIXTURE), &out, cps(WIRE)).expect("the punch posts").program;
+    let _ = std::fs::remove_file(&out);
+    assert_eq!(punch, std::fs::read_to_string(GOLDEN).expect("golden present"));
 }
 
 /// Review of #1139: the EDM door at post (`posting_family::edm_at_post`)

@@ -26,6 +26,11 @@
 //! missing or misplaced start hole, an inside corner or a neck the wire
 //! cannot cut - each is refused by name, never trimmed or rounded.
 //!
+//! An OPEN run (#1109) - a cut-off line, a slot or a relief entered
+//! from the stock's edge - is cut by `open`: the kerf on the stated
+//! left or right of the run's travel, threaded outside the stock (no
+//! start hole), see that module's head.
+//!
 //! Seams left for the family (built by none of this): the wire post
 //! (#533) reads the feed moves between the threading point's visits;
 //! verification (#534), taper as a pose per move (#536), skims as
@@ -34,9 +39,11 @@
 
 mod burnout;
 mod laws;
+mod open;
 mod ring;
 
 pub use burnout::{clearance_door, wire_burnout, CORE_AREA_TOL, RING_STEP};
+pub use open::{CLEARANCE_MAX, EDGE_TOL};
 
 use crate::cl::{MoveKind, PathBuilder, Toolpath};
 use crate::geo2d::{Loop, Point2, Region};
@@ -64,6 +71,12 @@ pub enum WireSide {
     Die,
     /// The profile is the product: the wire runs OUTSIDE it.
     Punch,
+    /// An open run (#1109): the wire runs on the LEFT of the run's
+    /// travel (its point order); the right side is kept.
+    Left,
+    /// An open run (#1109): the wire runs on the RIGHT of the run's
+    /// travel; the left side is kept.
+    Right,
 }
 
 impl WireSide {
@@ -73,7 +86,16 @@ impl WireSide {
         match self {
             WireSide::Die => "die",
             WireSide::Punch => "punch",
+            WireSide::Left => "left",
+            WireSide::Right => "right",
         }
+    }
+
+    /// Whether the side is an open run's (left / right of travel) rather
+    /// than a closed profile's (die / punch).
+    #[must_use]
+    pub fn is_open_side(self) -> bool {
+        matches!(self, WireSide::Left | WireSide::Right)
     }
 }
 
@@ -92,6 +114,14 @@ pub struct WireParams {
     pub start: Option<Point2>,
     /// The lower programmed plane the moves ride.
     pub plane_z: f64,
+    /// The stock's outline in XY - the edge an open run is entered
+    /// from (#1109). A closed profile never reads it.
+    pub stock: Option<Region>,
+    /// How far (mm) clear of the stock's edge an open run's kerf is
+    /// threaded and run out (#1109): the wire's centre stands at least
+    /// the kerf offset plus this off the stock. A closed profile never
+    /// reads it.
+    pub clearance: f64,
 }
 
 fn invalid(why: String) -> GenError {
@@ -143,15 +173,24 @@ impl WireParams {
     }
 }
 
-/// Cut the one closed profile in `loops` with the wire. `chains` are
-/// open runs: this operation cuts none (an open profile has no punch
-/// or die side) and refuses them by name.
+/// Cut the one closed profile in `loops` with the wire - or, when
+/// `chains` holds an open run, that run from the stock's edge (#1109,
+/// [`open`]).
 ///
 /// # Errors
 /// Every refusal the module head lists, by name; none is a panic.
 pub fn wire_contour(loops: &[Loop], chains: &[Vec<Point2>], p: &WireParams) -> Result<Toolpath, GenError> {
     p.door()?;
+    if !chains.is_empty() {
+        return open::wire_open(loops, chains, p);
+    }
     let (given, profile) = ring::profile(loops, chains)?;
+    if p.side.is_open_side() {
+        return Err(invalid(format!(
+            "the side is {} of travel, but the profile is closed - a closed profile states its die or punch side (left / right is an open run's kerf side)",
+            p.side.word()
+        )));
+    }
     let k = p.kerf_offset();
     let path_ring = ring::wire_ring(&profile, p.side, k)?;
     // The corner minimum (#290 D8): every point of the profile must be
@@ -163,7 +202,7 @@ pub fn wire_contour(loops: &[Loop], chains: &[Vec<Point2>], p: &WireParams) -> R
             "no start hole is stated - a closed profile is cut from a threading point ({}); the wire cannot be threaded through solid material",
             match p.side {
                 WireSide::Die => "a start hole in the slug, inside the profile",
-                WireSide::Punch => "a start hole or the stock's edge, outside the profile",
+                WireSide::Punch | WireSide::Left | WireSide::Right => "a start hole or the stock's edge, outside the profile",
             }
         )));
     };
@@ -190,7 +229,7 @@ pub fn wire_contour(loops: &[Loop], chains: &[Vec<Point2>], p: &WireParams) -> R
         return Err(invalid("the wire path lays down no cut".into()));
     }
     // The certificate: no move brings the kerf into the product.
-    laws::kerf(&path, &given, k, p.plane_z)?;
+    laws::kerf(&path, &given, true, k, p.plane_z)?;
     path.notes.extend(notes(p, start, lead));
     Ok(path)
 }
@@ -203,6 +242,9 @@ fn start_side(profile: &Region, path_ring: &[Point2], start: Point2, p: &WirePar
     let inside_path = Region::new(vec![Loop::new(path_ring.to_vec())?])?.contains(start);
     let inside_profile = profile.contains(start);
     let why = match (p.side, inside_path, inside_profile) {
+        (WireSide::Left | WireSide::Right, _, _) => {
+            format!("the side is {} of travel - a closed profile states die or punch", p.side.word())
+        }
         (WireSide::Die, true, _) | (WireSide::Punch, false, _) => return Ok(()),
         (WireSide::Die, false, true) | (WireSide::Punch, true, false) => format!(
             "the start hole at X{:.3} Y{:.3} stands closer to the profile than the kerf offset ({k:.4} mm) - the wire would burn the {} there; move it away from the profile",
@@ -233,6 +275,7 @@ fn notes(p: &WireParams, start: Point2, lead: f64) -> Vec<String> {
             match p.side {
                 WireSide::Die => "inside",
                 WireSide::Punch => "outside",
+                WireSide::Left | WireSide::Right => "beside",
             },
             p.kerf_offset(),
             p.wire_diameter * 0.5,
@@ -247,5 +290,7 @@ fn notes(p: &WireParams, start: Point2, lead: f64) -> Vec<String> {
     ]
 }
 
+#[cfg(test)]
+mod open_tests;
 #[cfg(test)]
 mod tests;
