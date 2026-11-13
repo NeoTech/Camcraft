@@ -11,14 +11,17 @@
 //!   wrapped in the PARAMs and section the in-app dump adds.
 //! - The same stream through the engine: every EDM code comes from the
 //!   fixture dialect's `edm.codes` (#290 D5); a missing one refuses by
-//!   name, and the serves law keeps a mill post off a sinker and the
-//!   sinker post off a mill.
+//!   name, as do a condition the machine does not list, an orbit (#544)
+//!   and a Sinker Side Burn (#545); the engine's `SinkerCondition` door
+//!   keeps a mill post off a sinker burn and the script's machine check
+//!   keeps the sinker post off a mill (the app's serves door, #1232,
+//!   refuses both first - `posting_serves`).
 //!
 //! Regenerate after an intentional change, then read the diff:
 //! `WRITE_GOLDEN=1 cargo test -p camcraft-post --test script_sinker_iso`.
 //!
 //! Gate map (M4.4, #542): covers assets/posts/sinker-iso.cps, the post
-//! binary, post::post (engine serves gate, machine_edm, machine
+//! binary, post::post (engine SinkerCondition door, machine
 //! mirror/script_props edm), post::machine (edm codes).
 //! Provenance: our own SYNTHETIC fixture dialect (invented words, no
 //! machine's manual). Not exercised on a real EDM control.
@@ -60,7 +63,7 @@ fn stream_with(extra: &[(&str, Value)]) -> String {
         Record::Param { name: "ToolKind".into(), value: json!("sinker electrode") },
         Record::Param { name: "SpindleSpeed".into(), value: json!(0.0) },
         Record::Param { name: "WorkOffset".into(), value: json!("G54") },
-        Record::Param { name: "EdmCondition".into(), value: json!("S1") },
+        Record::Param { name: "SinkerCondition".into(), value: json!("S1") },
         Record::Param { name: "ElectrodePickup".into(), value: json!(15.0) },
     ];
     for (n, v) in extra {
@@ -111,9 +114,10 @@ fn every_missing_sinker_code_refuses_the_post_by_name() {
     m["edm"]["codes"].as_object_mut().expect("codes").remove("inch");
     let out = post(&m, &stream_with(&[]));
     assert!(out.warnings.iter().any(|w| w.contains("states no edm.codes.inch")), "{:?}", out.warnings);
-    // No codes at all (the library template's empty section).
+    // No codes at all (the library template's section, before its
+    // codes are filled from the manual).
     let mut m = dialect();
-    m["edm"] = json!({});
+    m["edm"].as_object_mut().expect("edm").remove("codes");
     let out = post(&m, &stream_with(&[]));
     assert!(!out.warnings.is_empty() && out.warnings.iter().all(|w| w.contains("states no edm.codes.")), "{:?}", out.warnings);
 }
@@ -125,35 +129,69 @@ fn a_code_naming_a_placeholder_the_post_does_not_fill_refuses_by_name() {
     let out = post(&m, &stream_with(&[]));
     assert!(out.warnings.iter().any(|w| w.contains("edm.codes.depth holds {power}")), "{:?}", out.warnings);
     // A stream with no condition named: refused, never a bare select.
-    let stream = stream_with(&[]).replace("PARAM EdmCondition", "PARAM Unrelated");
+    let stream = stream_with(&[]).replace("PARAM SinkerCondition", "PARAM Unrelated");
     let out = post(&dialect(), &stream);
     assert!(out.warnings.iter().any(|w| w.contains("names no EDM condition")), "{:?}", out.warnings);
 }
 
+/// #544: an orbit is expanded into explicit moves the stock sim judged;
+/// this post writes a straight burn only and never swaps those moves for
+/// the control's orbit word - even one the machine lists - so it refuses
+/// the orbit by name, before any preamble.
 #[test]
-fn a_stated_orbit_posts_the_machines_word_and_an_unlisted_one_refuses() {
-    let out = post(&dialect(), &stream_with(&[("EdmOrbit", json!("circular")), ("EdmOrbitRadius", json!(0.2))]));
-    assert!(out.warnings.is_empty(), "{:?}", out.warnings);
-    assert!(out.program.lines().any(|l| l == "M150 R0.2"), "{}", out.program);
-    let out = post(&dialect(), &stream_with(&[("EdmOrbit", json!("planetary")), ("EdmOrbitRadius", json!(0.2))]));
-    assert!(out.warnings.iter().any(|w| w.contains("lists no planetary orbit")), "{:?}", out.warnings);
+fn an_orbit_is_refused_by_name_even_one_the_machine_lists() {
+    for kind in ["circular", "planetary"] {
+        let out = post(&dialect(), &stream_with(&[("EdmOrbit", json!(kind)), ("EdmOrbitRadius", json!(0.2))]));
+        assert!(out.warnings.iter().any(|w| w.contains(&format!("a {kind} orbit"))), "{kind}: {:?}", out.warnings);
+        assert!(!out.program.contains("M150") && !out.program.contains("M101"), "{kind}: nothing burns\n{}", out.program);
+    }
+}
+
+/// #545: a Sinker Side Burn moves the electrode along X or Y - not a
+/// straight burn - and is refused by name, not as a stray feed.
+#[test]
+fn a_sinker_side_burn_is_refused_by_name() {
+    let stream = stream_with(&[]).replace("PARAM OperationKind Sinker Burn", "PARAM OperationKind Sinker Side Burn");
+    assert!(stream.contains("Sinker Side Burn"), "the stream names the side burn");
+    let out = post(&dialect(), &stream);
+    assert!(out.warnings.iter().any(|w| w.contains("a Sinker Side Burn moves the electrode sideways")), "{:?}", out.warnings);
+    assert!(!out.program.contains("M101"), "nothing burns\n{}", out.program);
+}
+
+/// #531: the condition select names only a condition the machine's
+/// table lists, exactly as the table writes it.
+#[test]
+fn a_condition_the_machine_does_not_list_is_refused_by_name() {
+    for id in ["S2", "s1"] {
+        let stream = stream_with(&[]).replace("PARAM SinkerCondition S1", &format!("PARAM SinkerCondition {id}"));
+        assert!(stream.contains(&format!("PARAM SinkerCondition {id}")), "the stream names {id}");
+        let out = post(&dialect(), &stream);
+        assert!(out.warnings.iter().any(|w| w.contains(&format!("condition {id} is not in"))), "{id}: {:?}", out.warnings);
+        assert!(!out.program.contains("ES") && !out.program.contains("M101"), "{id}: nothing selected\n{}", out.program);
+    }
+    let mut m = dialect();
+    m["edm"].as_object_mut().expect("edm").remove("conditions");
+    let out = post(&m, &stream_with(&[]));
+    assert!(out.warnings.iter().any(|w| w.contains("condition S1 is not in")), "{:?}", out.warnings);
 }
 
 #[test]
 fn a_mill_post_on_a_sinker_and_the_sinker_post_on_a_mill_are_refused() {
     let stream = stream_with(&[]);
-    for stem in ["fanuc", "haas", "tormach-plasma", "fanuc-lathe"] {
+    for stem in ["fanuc", "haas", "tormach-plasma", "fanuc-lathe", "wire-iso"] {
         let cps = read(&format!("assets/posts/{stem}.cps"));
-        let err = engine::run(&cps, &dialect(), &stream).expect_err("a non-EDM post on a sinker");
-        assert!(matches!(err, PostError::Refused(_)), "{stem}: {err:?}");
-        assert!(err.to_string().contains("sinker EDM machine"), "{stem}: {err}");
+        let refused = match engine::run(&cps, &dialect(), &stream) {
+            Ok(out) => out.warnings.iter().any(|w| w.contains("is sinker EDM work")),
+            Err(e) => matches!(e, PostError::Refused(_)),
+        };
+        assert!(refused, "{stem}: a non-sinker post is refused the sinker burn by name");
     }
     let vmc: Value = serde_json::from_str(&read("assets/machines/vmc.mch")).expect("vmc");
-    let err = engine::run(&sinker_cps(), &vmc, &stream).expect_err("the sinker post on a mill");
-    assert!(err.to_string().contains("serves sinker_edm machines only"), "{err}");
+    let out = engine::run(&sinker_cps(), &vmc, &stream).expect("the engine runs, the script refuses");
+    assert!(out.warnings.iter().any(|w| w.contains("is not declared a sinker EDM")), "{:?}", out.warnings);
     // No machine at all is no sinker either.
-    let err = engine::run(&sinker_cps(), &Value::Null, &stream).expect_err("no machine");
-    assert!(matches!(err, PostError::Refused(_)), "{err:?}");
+    let out = engine::run(&sinker_cps(), &Value::Null, &stream).expect("the engine runs, the script refuses");
+    assert!(out.warnings.iter().any(|w| w.contains("is not declared a sinker EDM")), "{:?}", out.warnings);
 }
 
 #[test]

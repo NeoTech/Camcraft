@@ -240,8 +240,9 @@ fn the_sinker_burn_is_driven_over_mcp_with_the_gui_commands() {
     assert!(text.contains("past the cavity floor datum"), "{text}");
     call(&mut s, &mut id, "undo", json!({}));
     call(&mut s, &mut id, "generate", json!({ "name": "Burn1" }));
-    // The review of #1131: no EDM dialect ships yet (#542), so the post
-    // tool refuses the burn by name and writes no file.
+    // The review of #1131: the document's built-in milling post does not
+    // serve a sinker (#1232's door, since #542 ships the sinker post), so
+    // the post tool refuses the burn by name and writes no file.
     let nc = std::env::temp_dir().join(format!("camcraft-1131-mcp-{}.nc", std::process::id()));
     let _ = std::fs::remove_file(&nc);
     id += 1;
@@ -251,7 +252,7 @@ fn the_sinker_burn_is_driven_over_mcp_with_the_gui_commands() {
         .expect("a response");
     let text = reply["result"]["content"][0]["text"].as_str().unwrap_or_default().to_owned();
     assert_eq!(reply["result"]["isError"], json!(true), "{reply}");
-    assert!(text.contains("no post for a sinker EDM machine yet (#542)") && text.contains("Burn1"), "{text}");
+    assert!(text.contains("does not serve") && text.contains("a sinker EDM machine") && text.contains("Burn1"), "{text}");
     assert!(!nc.exists(), "the refused post wrote {}", nc.display());
 }
 
@@ -340,7 +341,7 @@ fn a_mill_post_on_a_sinker_machine_is_still_refused() {
     use camcraft_app::posting;
     for post in ["Fanuc", "Haas", "Tormach PathPilot Plasma"] {
         let err = post_burn(DIALECT, post).expect_err("a non-EDM post on a sinker");
-        assert!(err.contains("sinker EDM machine") && err.contains("does not declare"), "{post}: {err}");
+        assert!(err.contains("a sinker EDM machine") && err.contains("does not serve"), "{post}: {err}");
         assert!(!posting::post_serves(post, Kind::SinkerEdm), "{post}");
     }
     assert_eq!(posting::SINKER_POSTS, &[SINKER_POST]);
@@ -349,4 +350,43 @@ fn a_mill_post_on_a_sinker_machine_is_still_refused() {
         assert!(!posting::post_serves(SINKER_POST, k), "{k:?}");
     }
     assert_eq!(posting::default_post_for(Kind::SinkerEdm), camcraft_app::schema::PostRef::Named(SINKER_POST.into()));
+}
+
+/// Rework onto main's EDM designs: an orbit burn (#544) and a Sinker
+/// Side Burn (#545) carry `SinkerCondition` and the pickup into their
+/// stream, and the orbit its geometry and radius - so the sinker post
+/// refuses each by name (`script_sinker_iso.rs`) instead of reading
+/// their explicit moves as a stray feed.
+#[test]
+fn an_orbit_burn_and_a_side_burn_say_their_sinker_params_in_the_stream() {
+    use camcraft_app::operation::{SinkerBurnOp, SinkerOrbit, SinkerOrbitKind, SinkerSideBurnOp, SinkerSideDirection};
+    use camcraft_app::post::cnc::Record;
+    use serde_json::json;
+    let mut v: serde_json::Value = serde_json::from_str(DIALECT).expect("fixture");
+    v["edm"]["max_orbit_radius"] = json!(1.0);
+    let (world, mut h) = sinker_doc_on(&v.to_string(), 6.0);
+    let OpParams::SinkerBurn(plain) = burn(SinkerDatum::WorkTop, 6.0, 14.0) else { panic!("a burn") };
+    let orbit = SinkerBurnOp { orbit: Some(SinkerOrbit { kind: SinkerOrbitKind::Circular, radius: 0.04, vectors: 8, turns: 2 }), ..plain.clone() };
+    let side = SinkerSideBurnOp { burn: plain, direction: SinkerSideDirection::PlusX, amount: 0.04, undersize: 0.1 };
+    h.execute(&world, CreateOperation::new(&world, "Orbit1", ELECTRODE, SrcRef::Stock, OpParams::SinkerBurn(orbit)).expect("an orbit burn"));
+    h.execute(&world, CreateOperation::new(&world, "Side1", ELECTRODE, SrcRef::Stock, OpParams::SinkerSideBurn(side)).expect("a side burn"));
+    for n in ["Orbit1", "Side1"] {
+        h.execute(&world, GenerateOperation::new(&world, n).unwrap_or_else(|e| panic!("{n} generates: {e}")));
+    }
+    let streams = camcraft_app::posting::op_streams(&world).expect("streams");
+    let param = |op: &str, name: &str| {
+        let recs = &streams.iter().find(|(n, _)| n == op).unwrap_or_else(|| panic!("{op} streams")).1;
+        recs.iter().find_map(|r| match r {
+            Record::Param { name: n, value } if n == name => Some(value.clone()),
+            _ => None,
+        })
+    };
+    for op in ["Orbit1", "Side1"] {
+        assert_eq!(param(op, "SinkerCondition"), Some(json!("S1")), "{op}");
+        assert_eq!(param(op, "EdmCondition"), None, "{op}: the wire section's word is not the sinker's");
+        assert!(param(op, "ElectrodePickup").is_some(), "{op}");
+    }
+    assert_eq!(param("Orbit1", "EdmOrbit"), Some(json!("circular")));
+    assert_eq!(param("Orbit1", "EdmOrbitRadius"), Some(json!(0.04)));
+    assert_eq!(param("Side1", "EdmOrbit"), None);
 }
