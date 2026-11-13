@@ -220,3 +220,42 @@ fn a_cell_holding_a_sampled_pose_reads_its_span_floor() {
     let zq = 0.5 * (floor0 + lo_without);
     assert!(lo_with < zq && lo_without >= zq);
 }
+
+/// Pins the `+ kappa` in the cell's rim dip (#1313 review). B 60 -> 120
+/// with a wide, short band (radius 100, 0.5 long, at the tip): the cell
+/// holding 90 degrees ends at 86.7 and 93.3, so both its end poses dip
+/// the rim by 100·sin 86.7 = 99.83 while the pose between them lies flat
+/// and dips the whole 100. The sag (reach · kappa, half a micrometre on
+/// this reach) cannot cover that; only the rim's own `R · kappa` can.
+/// Every cell's bottom must stand at or under the band's true bottom at
+/// every pose it holds (a dense scan), and a stock post 1.25 µm under the
+/// flat band's rim must be convicted. Without `+ kappa` the cells read
+/// the post's column at -99.92, 0.08 mm clear of it.
+#[test]
+fn a_cell_straddling_a_flat_pose_reads_the_flat_rim() {
+    let (from, to) = ([0.0, 60.0, 0.0], [0.0, 120.0, 0.0]);
+    let band = (0.0, 100.0, 0.5);
+    let tip = Point3::new(0.0, 0.0, 0.0);
+    let mut cells = Vec::new();
+    push_cells(&mut cells, &[(tip, tip)], from, to, band, R, 0.0, &[]);
+    let n = cells.len();
+    assert!(n > 2, "{n} cells");
+    // A stock post over the tip whose top the flat band dips 1.25 µm into.
+    let post = Point2::new(0.0, 0.0);
+    let read = cells.iter().filter_map(|c| c.bottom_over(post, -1.0)).fold(f64::INFINITY, f64::min);
+    assert!(read < -100.0, "the cells read the post's column bottom at {read}: the flat rim is missed");
+    let mut true_lowest = f64::INFINITY;
+    for (j, c) in cells.iter().enumerate() {
+        // The band's true bottom over the tip at a dense scan of the
+        // cell's own turn interval.
+        let lowest = (0..=400)
+            .map(|i| (j as f64 + i as f64 / 400.0) / n as f64)
+            .map(|g| column(axis_at(from, to, g), band.0, band.1, band.2).2)
+            .fold(f64::INFINITY, f64::min);
+        assert!(c.z0 <= lowest + 1e-12, "cell {j}/{n} reads {} over a band reaching {lowest}", c.z0);
+        true_lowest = true_lowest.min(lowest);
+    }
+    // The flat pose dips the whole radius, and the station a hair past
+    // 90 degrees dips under the tip: the band reaches just under -100.
+    assert!(true_lowest < -100.0 && true_lowest > -100.01, "{true_lowest}");
+}

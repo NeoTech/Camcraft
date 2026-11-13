@@ -327,3 +327,7 @@ fn path_point(m: &Move, t: f64, chord_tol: f64) -> Point3 {
     }
     Point3::new(m.to.x, m.to.y, z)
 }
+
+#[cfg(test)]
+#[path = "sweep_tests.rs"]
+mod tests;
