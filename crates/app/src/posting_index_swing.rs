@@ -39,8 +39,20 @@
 //!   turning the work (a trunnion's A and C), each moves the other's
 //!   line, so the sweep is taken from the WCS origin itself - the only
 //!   distance every turn about a line through it keeps.
+//! - **A raised rotary** (#821). A rotary standing on a subplate and
+//!   plates is judged with the EFFECTIVE `nose_to_axis`: the setup's
+//!   stated figure when it has one, else the machine's less the stack's
+//!   thickness (`crate::rotary_stack`). A stack whose thickness is not
+//!   known, or an effective figure at or under zero, refuses by name; so
+//!   does a stated figure above the machine's, or above the machine's
+//!   less the setup's own stack. No stack and no stated figure: judged
+//!   as before, word for word.
 //! - **The margin.** [`MARGIN_MM`] between the tip and the swept radius.
+//! - **What stands still** (#1107): the same swept work against the
+//!   face the rotary stands on and the fixed fixtures is the sibling
+//!   clause `posting_swing_standing.rs`.
 
+use crate::rotary_stack::Rise;
 use crate::{fixture, model, setup, setup_align};
 use flecs_ecs::prelude::World;
 
@@ -104,7 +116,7 @@ pub fn rotary_line(a: &crate::machine::AxisLimits) -> RotaryLine {
 }
 
 /// What the clause makes of a machine's work-turning rotaries.
-enum Verdict {
+pub(super) enum Verdict {
     /// The rotaries whose index can swing the work up: the first one's
     /// letter and unit line, the least stated `nose_to_axis` (or the
     /// first rotary whose one is unstated or garbled), and whether another
@@ -118,7 +130,7 @@ enum Verdict {
 }
 
 /// Why a judged rotary's `nose_to_axis` cannot be used: its letter.
-enum Nose {
+pub(super) enum Nose {
     Unstated(String),
     NotFinite(String),
 }
@@ -126,7 +138,7 @@ enum Nose {
 /// The machine's work-turning rotaries, judged (#818): an unknown or a
 /// leaning line refuses first, then every horizontal one is judged;
 /// vertical ones alone are safe. None when nothing needs judging.
-fn verdict(m: &crate::machine::Machine) -> Option<Verdict> {
+pub(super) fn verdict(m: &crate::machine::Machine) -> Option<Verdict> {
     let turning: Vec<_> = m.axes.iter().filter(|a| a.rotary && a.turns_part == Some(true)).collect();
     let lines: Vec<_> = turning.iter().map(|a| (*a, rotary_line(a))).collect();
     if let Some((a, _)) = lines.iter().find(|(_, l)| *l == RotaryLine::Unknown) {
@@ -159,7 +171,7 @@ fn verdict(m: &crate::machine::Machine) -> Option<Verdict> {
 /// first leaning move's tool axis read as the turn that brings +Z onto
 /// it, `atan2(t . (line x Z), t . Z)` - for X the post's own
 /// `a = atan2(-y, z)`, for Y `b = atan2(x, z)` - else 0.
-fn index_angle(path: &crate::cl::Toolpath, line: [f64; 3]) -> f64 {
+pub(super) fn index_angle(path: &crate::cl::Toolpath, line: [f64; 3]) -> f64 {
     let side = [line[1], -line[0], 0.0]; // line x Z
     path.moves
         .iter()
@@ -180,9 +192,22 @@ fn distance(p: [f64; 3], origin: [f64; 3], line: Option<[f64; 3]>) -> f64 {
     }
 }
 
+/// What the setup's turning bodies sweep (#1107: their span along the
+/// line too, so standing steel beside the work is told from steel under
+/// it).
+#[derive(Clone, Copy, Debug)]
+pub(super) struct Swept {
+    /// The farthest point from `line` (or, None, from `origin`), mm (0
+    /// with nothing stated, infinite for a vertex nobody can place).
+    pub r: f64,
+    /// The bodies' span along `line` from `origin`, `(p - o) . u` (None
+    /// with nothing stated or no line).
+    pub span: Option<(f64, f64)>,
+}
+
 /// The farthest point of the setup's turning bodies from `line` (or,
-/// None, from `origin`), mm (0 with nothing stated).
-fn swept_radius(world: &World, declared: Option<&str>, origin: [f64; 3], line: Option<[f64; 3]>) -> f64 {
+/// None, from `origin`), and their span along it.
+pub(super) fn swept(world: &World, declared: Option<&str>, origin: [f64; 3], line: Option<[f64; 3]>) -> Swept {
     let mut bodies: Vec<flecs_ecs::prelude::Entity> = Vec::new();
     bodies.extend(setup::stock_entity(world, declared));
     bodies.extend(
@@ -197,17 +222,24 @@ fn swept_radius(world: &World, declared: Option<&str>, origin: [f64; 3], line: O
             .filter(|(_, e)| !fixture::def_of(world, e).is_some_and(|d| d.fixed))
             .map(|(_, e)| e),
     );
-    let mut r = 0.0_f64;
+    let mut out = Swept { r: 0.0, span: None };
     for e in bodies {
         for t in setup_align::facets_in(world, &e, declared).unwrap_or_default() {
             for p in [t.a, t.b, t.c] {
                 // A vertex nobody can place sweeps without bound: refused.
                 let d = distance([p.x, p.y, p.z], origin, line);
-                r = if d.is_finite() { r.max(d) } else { f64::INFINITY };
+                out.r = if d.is_finite() { out.r.max(d) } else { f64::INFINITY };
+                if let Some(u) = line {
+                    let a = (p.x - origin[0]) * u[0] + (p.y - origin[1]) * u[1] + (p.z - origin[2]) * u[2];
+                    // A non-finite one already made `r` infinite: every check strikes.
+                    if a.is_finite() {
+                        out.span = Some(out.span.map_or((a, a), |(lo, hi): (f64, f64)| (lo.min(a), hi.max(a))));
+                    }
+                }
             }
         }
     }
-    r
+    out
 }
 
 /// The clause: one problem per op whose index pose cannot be shown to
@@ -243,6 +275,38 @@ pub(super) fn index_swing_problems(world: &World) -> Vec<String> {
             Some(Verdict::Judged { letter, line, nose, stacked }) => (letter, line, nose, stacked),
         };
         let a = model::toolpath_of(world, &e).map_or(0.0, |c| index_angle(&c.path, line));
+        // #821: a rotary raised by a stack is judged from its raised line.
+        let (nose, from) = match crate::rotary_stack::rise(world, op.setup.as_deref()) {
+            Rise::Table => (nose, String::new()),
+            Rise::Stated(v) => {
+                // #821 review: a stated figure never loosens the check
+                // past the machine's own, or past the machine's less the
+                // stack the setup models.
+                let checked = match nose {
+                    Ok(n) if n.is_finite() => crate::rotary_stack::check_stated(world, op.setup.as_deref(), v, n),
+                    _ => Ok(()),
+                };
+                if let Err(why) = checked {
+                    out.push(format!(
+                        "{name}: {why} - the {letter}{a:.3} index swing is not judged (correct the setup's \
+                         nose_to_axis, or the machine file's)"
+                    ));
+                    continue;
+                }
+                (Ok(v), format!(" (the setup's stated nose_to_axis {v:.3} mm)"))
+            }
+            Rise::Stack(s) => (
+                nose.map(|n| n - s.thickness),
+                format!(" (nose_to_axis less the {:.3} mm stack under the rotary: {})", s.thickness, s.describe()),
+            ),
+            Rise::Refused(why) => {
+                out.push(format!(
+                    "{name}: {why} - the {letter}{a:.3} index swing is not judged (state the plate's thickness, or \
+                     the setup's nose_to_axis)"
+                ));
+                continue;
+            }
+        };
         let finite = |n: f64| if n.is_finite() { Ok(n) } else { Err(Nose::NotFinite(letter.clone())) };
         let nose = match nose.and_then(finite) {
             Ok(n) => n,
@@ -263,6 +327,13 @@ pub(super) fn index_swing_problems(world: &World) -> Vec<String> {
                 continue;
             }
         };
+        if !from.is_empty() && nose <= 0.0 {
+            out.push(format!(
+                "{name}: the effective nose_to_axis is {nose:.3} mm{from} - the {letter} centerline is at or above \
+                 the spindle nose, so the {letter}{a:.3} index swing is not judged"
+            ));
+            continue;
+        }
         // A lost tool is the machine clause's refusal, by name, already.
         let Some(tool_e) = model::find_by_name(world, &op.tool) else { continue };
         let Some(tool) = model::tool_of(world, &tool_e) else { continue };
@@ -277,7 +348,7 @@ pub(super) fn index_swing_problems(world: &World) -> Vec<String> {
         let (_, origin) = super::wcs_context(world, op.setup.as_deref());
         // Two rotaries turning the work move each other's lines: only the
         // distance from the WCS origin, on every line, survives both turns.
-        let swept = swept_radius(world, op.setup.as_deref(), origin, (!stacked).then_some(line));
+        let swept = swept(world, op.setup.as_deref(), origin, (!stacked).then_some(line)).r;
         let tip = nose - len;
         let clearance = tip - swept;
         if !(clearance.is_finite() && clearance >= MARGIN_MM) {
@@ -285,7 +356,7 @@ pub(super) fn index_swing_problems(world: &World) -> Vec<String> {
                 "{name}: the {letter}{a:.3} index turns the work under the tool - at the safe Z the tip of \
                  {} ({len:.3} mm long) is {tip:.3} mm above the {letter} centerline, the stock, part and \
                  turning fixtures sweep {swept:.3} mm{}, a clearance of {clearance:.3} mm against the \
-                 {MARGIN_MM:.1} mm needed",
+                 {MARGIN_MM:.1} mm needed{from}",
                 op.tool,
                 if stacked { " (from the WCS origin: more than one rotary turns the work)" } else { "" }
             ));

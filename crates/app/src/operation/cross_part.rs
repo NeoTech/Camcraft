@@ -42,6 +42,12 @@ fn law() -> verify::SolidLaw {
     verify::SolidLaw { step: STEP, allow: GOUGE_TOL, hole_walls: true }
 }
 
+/// The cross holes' axes, whose round walls the solid law excuses
+/// (#1205: measured about each hole's own line, never a flat).
+fn walls(holes: &[CrossHole]) -> Vec<verify::HoleAxis> {
+    holes.iter().map(|h| verify::HoleAxis { at: h.origin, dir: [h.dir.x, h.dir.y, h.dir.z] }).collect()
+}
+
 /// Refuse by name a cross-drill chain (world frame, the part's own)
 /// whose drill enters the finished part's solid. `holes` is the world
 /// hole list the user modelled - a moved-out raw mouth stays on its
@@ -62,7 +68,7 @@ pub(super) fn part_clear(
         return Ok(()); // no part, nothing kept: the other laws own the chain
     }
     let cutter = verify::Cutter::judged(&tool.geom(), Some(*cutter));
-    let Some(w) = verify::solid_hits(t, facets, &cutter, &law()).into_iter().next() else {
+    let Some(w) = verify::solid_hits_walled(t, facets, &cutter, &law(), &walls(holes)).into_iter().next() else {
         return Ok(());
     };
     let (at, what) = match w {
@@ -137,7 +143,7 @@ fn met_at(m: &Move, facets: &[Triangle], cutter: &verify::Cutter, h: &CrossHole)
     };
     let hits = |f: f64| {
         let probe = Toolpath { moves: vec![Move { to: at(f), ..*m }], ..Toolpath::default() };
-        !verify::solid_hits(&probe, facets, cutter, &law()).is_empty()
+        !verify::solid_hits_walled(&probe, facets, cutter, &law(), &walls(std::slice::from_ref(h))).is_empty()
     };
     let (mut lo, mut hi) = (0.0f64, 1.0f64);
     if hits(0.0) {

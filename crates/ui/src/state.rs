@@ -14,6 +14,7 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, TryRecvError};
 use camcraft_app::clock::Instant;
 use std::time::Duration;
+use crate::shortcut_keys::chord;
 
 use camcraft_app::commands::{
     ActivateSetup, AlignPartToSetup, SetSetupRelative, SetSetupStockSource, SetSetupWorkOffset, AddTool, HolderPick, ApplyCuttingData, ChangeOperationKind, ChangeTool, CommandError, CreateOperation,
@@ -47,6 +48,8 @@ mod pockets;
 pub use pockets::PocketScan;
 #[path = "state_setup_post_options.rs"]
 mod setup_post_options;
+#[path = "state_setup_workholding.rs"]
+mod setup_workholding;
 #[path = "state_fixture.rs"]
 mod fixture_view;
 #[path = "state_locate.rs"]
@@ -73,6 +76,9 @@ pub use program_entry::EntryVerb;
 #[path = "state_tool_body.rs"]
 mod tool_body_ui;
 pub use tool_body_ui::{BodyDraft, BodyPickMode, ToolBodyUi, ZOOM_MAX, ZOOM_MIN, clamp_zoom};
+#[path = "state_tool_body_lathe.rs"]
+mod tool_body_lathe_ui;
+pub use tool_body_lathe_ui::{LatheBodyDraft, LatheDraft};
 #[path = "state_tool_profile.rs"]
 mod tool_profile_ui;
 #[path = "state_tool_cutter.rs"]
@@ -80,8 +86,13 @@ mod tool_cutter_ui;
 pub use tool_cutter_ui::ToolCutterUi;
 #[path = "state_recent.rs"]
 mod recent_ui;
+#[path = "state_view.rs"]
+mod view_prefs_ui;
 #[path = "state_prefs.rs"]
 mod prefs_ui;
+#[path = "state_step_budget.rs"]
+mod step_budget_ui;
+pub use step_budget_ui::StepBudgetUi;
 pub use tool_profile_ui::{ToolColumn, ToolProfileUi, is_spun_kind, parametric_points};
 use flecs_ecs::prelude::World;
 
@@ -199,6 +210,15 @@ pub enum CommandKind {
         setup: String,
         own: bool,
     },
+    /// #821: a setup states its own nose-to-rotary figure, mm, or clears
+    /// it (`SetSetupNoseToAxis`).
+    SetupNoseToAxis {
+        setup: String,
+        value: Option<f64>,
+    },
+    /// #1031: state (`Some`) or clear a setup's workholding maximum rpm
+    /// (`SetSetupWorkholdingRpm`).
+    SetSetupWorkholdingRpm { setup: String, max_rpm: Option<f64> },
     /// The post's user options (issue #34): the undoable
     /// `SetPostOptions` with the picked value.
     SetPostOptions(camcraft_app::schema::PostOptions),
@@ -246,6 +266,13 @@ pub enum CommandKind {
         name: String,
         body: Option<BodyDraft>,
     },
+    /// #361: set a lathe-held tool's body in the turning tool frame -
+    /// the tool editor's Apply body on a lathe draft, one
+    /// `SetToolBody::lathe`. (Clear body stays `SetToolBody` with `None`.)
+    SetLatheToolBody {
+        name: String,
+        body: LatheBodyDraft,
+    },
     /// #93: set a milling tool's drawn spun holder (`Some` points) or
     /// return it to its parametric cylinder (`None`) - the tool editor's
     /// Apply profile, one `SetToolBody::spun`.
@@ -258,6 +285,15 @@ pub enum CommandKind {
     /// editor's Apply cutter, one `SetToolCutter`.
     SetToolCutter {
         name: String,
+        points: Option<Vec<camcraft_app::spun::SpunPoint>>,
+    },
+    /// #93 slice 3: a milling tool's numbers and its drawn cutter landed
+    /// together (`Some`: the outline carried onto the numbers; `None`:
+    /// the numbers' own) - the outline editor's parameter edits, one
+    /// `ReshapeTool`.
+    ReshapeTool {
+        name: String,
+        tool: Tool,
         points: Option<Vec<camcraft_app::spun::SpunPoint>>,
     },
     /// #793: drop a built-in library holder ("BT30 ER20") into a milling
@@ -400,10 +436,12 @@ pub enum CommandKind {
         picks: Vec<camcraft_app::operation::GeoSel>,
         lay: camcraft_app::pick::PlaneLay,
     },
-    /// Turn the part in a setup's work plane (#557): a straight edge or
-    /// two points for +Y and/or +X, read by the app. Undoable
-    /// (`AlignPartToSetup`). Never touches the work offset.
-    TurnPartInPlane {
+    /// Align the part from its picked axes (#769, was #557's in-plane
+    /// turn): with both +Y and +X picked, their directions define the
+    /// full 3D frame (+Z by the right-hand rule); one picked axis
+    /// keeps the in-plane turn. Undoable (`AlignPartToSetup`). Never
+    /// touches the work offset.
+    AlignPartFromAxes {
         setup: String,
         axes: camcraft_app::pick::InPlaneAxes,
     },
@@ -941,6 +979,8 @@ pub struct ToolUi {
     pub tip_angle: f64,
     /// Thread pitch, mm per turn; the tap cycle feeds at rpm x pitch.
     pub pitch: f64,
+    /// A single-form thread mill's finest pitch (#894); inert elsewhere.
+    pub pitch_min: f64,
     /// Insert nose radius; the turning kind's cutting ball, inert on
     /// the mills (the app's `Tool` field's law, mirrored).
     pub nose_radius: f64,
@@ -965,6 +1005,21 @@ pub struct ToolUi {
     /// #630: the lathe tool orientation (LinuxCNC 1-9), None = the
     /// kind's default - carried so an Apply never rewrites it.
     pub orientation: Option<u8>,
+    /// #898 catalog facts as typed: blank = not stated. The helix is
+    /// text so a half-typed number is refused by name at Apply, not
+    /// silently dropped.
+    pub part_number: String,
+    pub vendor: String,
+    pub coating: String,
+    pub helix_deg: String,
+    pub notes: String,
+    /// #890 cutting data per workpiece material, as edited; Apply / Add
+    /// carry it through `ChangeTool` / `AddTool`, which refuse a bad row
+    /// by the tool's name.
+    pub cutting: Vec<camcraft_app::tool_cutting_rows::CuttingRow>,
+    /// #891: the turning cutting data (Vc, f/rev, max rpm), None = not
+    /// stated - carried so an Apply never drops it.
+    pub turning: Option<camcraft_app::tools::TurningData>,
 }
 
 impl Default for ToolUi {
@@ -997,11 +1052,15 @@ impl ToolUi {
                 ToolKind::Taper => 10,
                 ToolKind::Probe => 11,
                 ToolKind::Torch => 12,
+                ToolKind::Electrode => 13,
+                ToolKind::ThreadMill => 14,
+                ToolKind::ThreadMillSingle => 15,
             },
             diameter: t.diameter,
             corner_r: t.corner_r,
             tip_angle: t.tip_angle,
             pitch: t.pitch,
+            pitch_min: t.pitch_min,
             nose_radius: t.nose_radius,
             width: t.width,
             flute_len: t.flute_len,
@@ -1016,6 +1075,13 @@ impl ToolUi {
             flutes: t.flutes,
             center_cutting: t.center_cutting,
             orientation: t.orientation,
+            part_number: t.catalog.part_number.clone().unwrap_or_default(),
+            vendor: t.catalog.vendor.clone().unwrap_or_default(),
+            coating: t.catalog.coating.clone().unwrap_or_default(),
+            helix_deg: t.catalog.helix_deg.map(|h| h.to_string()).unwrap_or_default(),
+            notes: t.catalog.notes.clone().unwrap_or_default(),
+            cutting: t.cutting.clone(),
+            turning: t.turning,
         }
     }
 
@@ -1036,8 +1102,28 @@ impl ToolUi {
             10 => ToolKind::Taper,
             11 => ToolKind::Probe,
             12 => ToolKind::Torch,
+            13 => ToolKind::Electrode,
+            14 => ToolKind::ThreadMill,
+            15 => ToolKind::ThreadMillSingle,
             _ => ToolKind::EndMill,
         }
+    }
+
+    /// The catalog facts the draft states: trimmed, blank = not stated.
+    /// A helix that is not a number reads as NaN, which the tool
+    /// commands refuse by name.
+    #[must_use]
+    pub fn catalog(&self) -> camcraft_app::catalog_fields::ToolCatalog {
+        let some = |s: &str| Some(s.to_owned());
+        let helix = self.helix_deg.trim();
+        camcraft_app::catalog_fields::ToolCatalog {
+            part_number: some(&self.part_number),
+            vendor: some(&self.vendor),
+            coating: some(&self.coating),
+            helix_deg: (!helix.is_empty()).then(|| helix.parse::<f64>().unwrap_or(f64::NAN)),
+            notes: some(&self.notes),
+        }
+        .normalized()
     }
 
     /// The tool this draft states. A ball's corner is saved as its ball
@@ -1052,6 +1138,7 @@ impl ToolUi {
             corner_r: self.corner_r,
             tip_angle: self.tip_angle,
             pitch: self.pitch,
+            pitch_min: self.pitch_min,
             nose_radius: self.nose_radius,
             width: self.width,
             flute_len: self.flute_len,
@@ -1066,6 +1153,9 @@ impl ToolUi {
             flutes: self.flutes,
             center_cutting: self.center_cutting,
             orientation: self.orientation,
+            catalog: self.catalog(),
+            cutting: self.cutting.clone(),
+            turning: self.turning,
         };
         tool.corner_r = tool.tip_corner_r();
         tool
@@ -1329,6 +1419,9 @@ pub struct State {
     pub viewport_rect: ([f32; 2], [f32; 2]),
     /// Live viewport drag (orbit/pan), driven by the shell's pointer layer.
     pub drag: Option<DragMode>,
+    /// #979: the live box-select rubber band (press point, current point),
+    /// logical px. View state like `drag` - its release queues one command.
+    pub pick_box: Option<[[f32; 2]; 2]>,
     /// Facet currently under the cursor (`interact` refreshes it from the
     /// shell's pointer events with a filtered raycast; it clears when the
     /// pointer leaves the viewport). View state like the camera and the
@@ -1366,6 +1459,20 @@ pub struct State {
     /// setup, not decoration. Hiding the world axes is for the moment a
     /// G5x offset sits away from machine zero and two gizmos read as clutter.
     pub show_world_axes: bool,
+    /// Viewport picks may reach the far side of the part (#692): when on,
+    /// a click sends `through: true` and can pick a hidden edge or point.
+    /// Off by default, shown as off. View state like the axes toggle -
+    /// not undoable, not saved; flipped from the viewport's nav column.
+    pub pick_through: bool,
+    /// Do the origin gizmos wear their names (#727 drew them, #645
+    /// asked for the switch)? View state like the camera - never a
+    /// command, never on the history - but unlike the camera it is a
+    /// kept preference: read at startup from the per-user view file
+    /// and written back when the browser checkbox flips it. Default
+    /// ON, the #727 decision; the `X`/`Y`/`Z` axis letters never
+    /// depend on it - only the names (`World`, each offset's entity
+    /// name) do.
+    pub show_gizmo_names: bool,
     /// Show cached toolpaths beyond the selected operation's: with this on,
     /// every generated path draws (dimmed where unselected) instead of only
     /// the one the tree highlights. View state like the camera - not
@@ -1450,9 +1557,16 @@ pub struct State {
     /// Where the recents are written back; `None` (every headless
     /// State) keeps them in memory only.
     pub recent_store: Option<PathBuf>,
+    /// Where the view preferences (#645) are written back; `None`
+    /// (every headless State) keeps them in memory only.
+    pub view_store: Option<PathBuf>,
     /// Where the theme and colour-vision preferences (#877) are written
     /// back; `None` (every headless State) keeps them in memory only.
     pub prefs_store: Option<PathBuf>,
+    /// #889: the Tool library page's "Import tool holders" - a per-user
+    /// preference (kept beside the theme), the `holders` parameter of
+    /// the `ImportTools` command an import runs. On by default.
+    pub import_tool_holders: bool,
     /// The dock's closable panels as of this frame (see [`PanelsOpen`]).
     pub panels_open: PanelsOpen,
     /// The View door's pending dock ask (see [`LayoutRequest`]).
@@ -1511,6 +1625,9 @@ pub struct State {
     /// implicit first setup. Public so tests run the dialog hand-off
     /// without a modal file picker.
     pub import_as_fixture: Option<Option<String>>,
+    /// #1054: the STEP facet budget the next import runs under (an import
+    /// setting, not on the history; the import that uses it is).
+    pub step_budget: StepBudgetUi,
     /// #789: each built-in accessory row's size draft, by name - view
     /// state; Apply lands it through `SetAccessory`.
     pub accessory_sizes: HashMap<String, AccessorySizeDraft>,
@@ -1567,6 +1684,9 @@ pub struct State {
     /// The setups whose pick rows (plane, axes) were drawn this frame
     /// (#664): any other setup's armed pick is disarmed at frame end.
     pub setup_pick_rows: Vec<String>,
+    /// The Setups page's WCS-from-features role draft (#701); while it
+    /// is collecting, feature picks land in it ahead of everything else.
+    pub wcs_pick: Option<crate::wcs_pick::WcsPick>,
     /// The Boundary group's view state and caches (M11.5 UX): open this
     /// frame, the draft's machined-area preview, the entries' shapes.
     pub boundary_view: crate::boundary_draft::BoundaryView,
@@ -1766,6 +1886,7 @@ impl State {
             selection_version: 0,
             viewport_rect: ([0.0, 0.0], [0.0, 0.0]),
             drag: None,
+            pick_box: None,
             hover: None,
             hover_mesh: None,
             viewport_hot: false,
@@ -1778,6 +1899,7 @@ impl State {
             points_pick: None,
             axis_rows_shown: false,
             setup_pick_rows: Vec::new(),
+            wcs_pick: None,
             boundary_view: Default::default(),
             incoming_view: Default::default(),
             geo_hover: None,
@@ -1790,6 +1912,8 @@ impl State {
             browser_expanded: [true; 3],
             cam: Camera::default(),
             show_world_axes: true,
+            pick_through: false,
+            show_gizmo_names: true,
             show_all_paths: false,
             display: DisplayMode::default(),
             sim: None,
@@ -1809,7 +1933,9 @@ impl State {
             ribbon_recent_open: None,
             recent: camcraft_app::recent::RecentFiles::default(),
             recent_store: None,
+            view_store: None,
             prefs_store: None,
+            import_tool_holders: true,
             panels_open: PanelsOpen { browser: true, properties: true, machines: false },
             layout_request: None,
             tree_menu: None,
@@ -1838,6 +1964,7 @@ impl State {
             repair_ui: RepairUi::default(),
             pocket_scan: PocketScan::default(),
             import_as_fixture: None,
+            step_budget: StepBudgetUi::default(),
             accessory_sizes: HashMap::new(),
             fixture_mesh_cache: Default::default(),
             fixture_lib: None,
@@ -2837,6 +2964,8 @@ impl State {
             CommandKind::SetupOwnMachine { setup, own } => self.own_machine(&setup, own),
             CommandKind::SetupOwnPost { setup, own } => self.own_post(&setup, own),
             CommandKind::SetupOwnPostOptions { setup, own } => self.own_post_options(&setup, own),
+            CommandKind::SetupNoseToAxis { setup, value } => self.set_setup_nose(&setup, value),
+            CommandKind::SetSetupWorkholdingRpm { setup, max_rpm } => self.set_workholding_rpm(&setup, max_rpm),
             CommandKind::EditMachineDialog => {
                 let (path, m) = machine::of(&self.world);
                 match m {
@@ -2963,6 +3092,7 @@ impl State {
                     Ok(command) => {
                         self.history.execute(&self.world, command);
                         self.doc_version += 1;
+                        self.wcs_pick = None; // #701: a landed frame ends the role draft
                         let active = camcraft_app::setup::active(&self.world);
                         self.status =
                             format!("{} origin set", camcraft_app::setup::wcs_label(&self.world, active.as_deref()));
@@ -2998,8 +3128,10 @@ impl State {
                 }
             }
             CommandKind::SetToolBody { name, body } => self.run_set_tool_body(&name, body),
+            CommandKind::SetLatheToolBody { name, body } => self.run_set_lathe_tool_body(&name, body),
             CommandKind::SetToolProfile { name, points } => self.run_set_tool_profile(&name, points),
             CommandKind::SetToolCutter { name, points } => self.run_set_tool_cutter(&name, points),
+            CommandKind::ReshapeTool { name, tool, points } => self.run_reshape_tool(&name, tool, points),
             CommandKind::SetToolHolder { name, entry, gauge, projection } => {
                 self.run_set_tool_holder(&name, &entry, gauge, projection)
             }
@@ -3015,9 +3147,15 @@ impl State {
             }
             CommandKind::SetWorkMaterial(m) => match SetWorkMaterial::new(&self.world, m) {
                 Ok(command) => {
+                    let (tools, ops) = command.seeded();
                     self.history.execute(&self.world, command);
                     self.doc_version += 1;
-                    self.status = format!("workpiece material: {}", m.map_or("not stated", |m| m.label()));
+                    let mut status = format!("workpiece material: {}", m.map_or("not stated", |m| m.label()));
+                    // #890: say what the tools' material rows moved.
+                    if tools + ops > 0 {
+                        status.push_str(&format!(" - cutting data seeded on {tools} tool(s), {ops} operation(s)"));
+                    }
+                    self.status = status;
                 }
                 Err(err) => self.refuse(ErrorScope::Operation, format!("material not set: {err}")),
             },
@@ -3245,7 +3383,7 @@ impl State {
                 Ok(command) => {
                     self.history.execute(&self.world, command);
                     self.doc_version += 1;
-                    self.status = format!("cleared the toolpath of {name} - Ctrl+Z restores it");
+                    self.status = format!("cleared the toolpath of {name} - {} restores it", chord("Z"));
                 }
                 Err(err) => {
                     self.refuse(ErrorScope::Operation, format!("toolpath not cleared: {err}"))
@@ -3416,8 +3554,8 @@ impl State {
                     }
                 }
             }
-            CommandKind::TurnPartInPlane { setup, axes } => {
-                match AlignPartToSetup::turn_in_plane(&self.world, &setup, &axes) {
+            CommandKind::AlignPartFromAxes { setup, axes } => {
+                match AlignPartToSetup::align_from_axes(&self.world, &setup, &axes) {
                     Ok(command) => {
                         self.history.execute(&self.world, command);
                         self.doc_version += 1;
@@ -3428,12 +3566,12 @@ impl State {
                             d.applied = true;
                         }
                         self.status = format!(
-                            "{setup} part turned in the plane: {}",
+                            "{setup} part aligned from its picks: {}",
                             crate::egui_app::align_text(camcraft_app::setup_align::stored(&self.world, &setup))
                         );
                     }
                     Err(err) => {
-                        self.refuse(ErrorScope::Setup, format!("part not turned in the plane: {err}"));
+                        self.refuse(ErrorScope::Setup, format!("part not aligned from its picks: {err}"));
                     }
                 }
             }
@@ -3733,11 +3871,15 @@ impl State {
         self.import_started = Some(Instant::now());
         let (tx, rx) = mpsc::channel();
         let worker_path = path.clone();
+        let budget = self.step_budget_for(&path);
+        if let (Some(b), false) = (budget, self.step_budget.explicit) {
+            self.status = format!("importing {} under its recorded STEP facet budget of {b}…", file_label(&path));
+        }
         let spawned = std::thread::Builder::new()
             .name("camcraft-import".to_string())
             .spawn(move || {
                 // No World here: pure file + geometry work, Send across.
-                let result = ImportModel::new(&worker_path);
+                let result = ImportModel::within(&worker_path, budget);
                 // A dropped rx means the document changed or we are closing;
                 // the command is simply never applied.
                 if tx.send(result).is_err() {
@@ -3749,7 +3891,7 @@ impl State {
             Err(err) => {
                 // Thread exhaustion must not lose the import: run inline.
                 diag_warn!("import: worker spawn failed ({err}); running inline");
-                let result = ImportModel::new(&path);
+                let result = ImportModel::within(&path, budget);
                 self.finish_import(result);
             }
         }
@@ -3803,8 +3945,8 @@ impl State {
                     return;
                 }
                 if model::find_by_name(&self.world, &name).is_some() {
-                    let coarse = command.coarse_mm;
-                    match UpdateModel::new(&self.world, &name, command.mesh).map(|u| u.with_fidelity(coarse)) {
+                    let (coarse, budget) = (command.coarse_mm, command.facet_budget);
+                    match UpdateModel::new(&self.world, &name, command.mesh).map(|u| u.with_fidelity(coarse).with_budget(budget)) {
                         Ok(upd) => {
                             let summary = upd.changes().describe();
                             self.history.execute(&self.world, upd);
