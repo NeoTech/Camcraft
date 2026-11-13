@@ -92,7 +92,7 @@ pub fn slot_bound_of(world: &World, items: &[GeoSel]) -> Result<SlotBound, GenEr
 pub(super) fn confine_slot(world: &World, src: Option<&SrcRef>, params: &OpParams) -> Result<(), GenError> {
     match (params, src) {
         (OpParams::Slot { a, b, width, .. }, Some(SrcRef::Selection(items))) if !items.is_empty() => {
-            slot_bound_of(world, items)?.confine(*a, *b, *width)
+            slot_bound_of(world, items)?.judge(*a, *b, *width)
         }
         _ => Ok(()),
     }
@@ -138,7 +138,7 @@ pub fn slot_fit_of(world: &World, op: &Operation) -> Option<Result<String, Strin
         Ok(bd) => bd,
         Err(e) => return Some(Err(e.to_string())),
     };
-    if let Err(e) = bound.confine(*a, *b, *width) {
+    if let Err(e) = bound.judge(*a, *b, *width) {
         return Some(Err(e.to_string()));
     }
     let (l, w) = bound.room();

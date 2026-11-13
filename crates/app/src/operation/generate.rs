@@ -1710,7 +1710,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // too wide, too long or placed past them is refused by name,
             // never cut across the wall.
             if let Some(room) = slot_bound.take() {
-                room?.confine(*a, *b, *width)?;
+                room?.judge(*a, *b, *width)?;
             }
             let path = machining2d::slot(
                 *a,

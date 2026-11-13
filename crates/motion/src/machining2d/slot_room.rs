@@ -14,6 +14,10 @@ use crate::geo2d::{Point2, Region};
 
 use super::face::GenError;
 
+#[path = "slot_room_face.rs"]
+mod geom;
+use geom::{face_overshoot, hull};
+
 /// How far a picked edge may stray from its chord, or the second edge
 /// from parallel to the first, mm.
 pub const STRAIGHT_TOL: f64 = 0.01;
@@ -21,10 +25,12 @@ pub const STRAIGHT_TOL: f64 = 0.01;
 /// fit, mm - the gouge law's own tolerance, so a tessellated round end
 /// of a picked face (its chords a sag inside the true arc) is no wall.
 pub const FIT_TOL: f64 = 0.01;
-/// Chords a round end is sampled with for the face law.
-const CAP_SAMPLES: usize = 64;
-/// Spacing of the samples along a slot's straight sides, mm.
-const SIDE_STEP: f64 = 0.5;
+/// The most a face's fitted slot is shrunk to sit inside the face, as a
+/// fraction of the room's width: a tessellated round end's chord sag
+/// (0.039 mm at 8 chords per quarter of an 8 mm radius, 0.5% of the
+/// width) is inscribed; a face whose best slot overshoots by more is no
+/// slot face (an L, a notch) and is refused, never shrunk into one.
+const INSCRIBE_MAX: f64 = 0.05;
 
 /// The slot that fills a bound: endpoints and width, the numbers a
 /// slot operation is authored by.
@@ -73,38 +79,6 @@ fn finite(pts: &[Point2]) -> bool {
 
 fn span(pts: &[Point2], d: Point2) -> (f64, f64) {
     pts.iter().map(|&p| dot(p, d)).fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), v| (lo.min(v), hi.max(v)))
-}
-
-/// Distance from `p` to the segment `a`-`b`.
-fn seg_dist(p: Point2, a: Point2, b: Point2) -> f64 {
-    let (dx, dy) = (b.x - a.x, b.y - a.y);
-    let len2 = dx * dx + dy * dy;
-    let k = if len2 > 0.0 { (((p.x - a.x) * dx + (p.y - a.y) * dy) / len2).clamp(0.0, 1.0) } else { 0.0 };
-    (p.x - (a.x + k * dx)).hypot(p.y - (a.y + k * dy))
-}
-
-/// Andrew's monotone chain; counter-clockwise, no repeated point.
-fn hull(pts: &[Point2]) -> Vec<Point2> {
-    let mut p: Vec<Point2> = pts.to_vec();
-    p.sort_by(|a, b| a.x.total_cmp(&b.x).then(a.y.total_cmp(&b.y)));
-    p.dedup();
-    if p.len() < 3 {
-        return p;
-    }
-    let cross = |o: Point2, a: Point2, b: Point2| (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
-    let mut h: Vec<Point2> = Vec::with_capacity(2 * p.len());
-    for pass in 0..2 {
-        let start = h.len();
-        let it: Box<dyn Iterator<Item = &Point2>> = if pass == 0 { Box::new(p.iter()) } else { Box::new(p.iter().rev()) };
-        for &q in it {
-            while h.len() >= start + 2 && cross(h[h.len() - 2], h[h.len() - 1], q) <= 0.0 {
-                h.pop();
-            }
-            h.push(q);
-        }
-        h.pop();
-    }
-    h
 }
 
 impl SlotBound {
@@ -240,11 +214,26 @@ impl SlotBound {
             )));
         }
         let tm = 0.5 * (self.t0 + self.t1);
-        let fit = SlotFit {
+        let mut fit = SlotFit {
             a: at(self.u, self.n, self.s0 + 0.5 * w, tm),
             b: at(self.u, self.n, self.s1 - 0.5 * w, tm),
             width: w,
         };
+        // A face's tessellated round end stands a chord sag inside the
+        // true arc the frame spans: the slot is inscribed - its radius
+        // drawn in by the measured overshoot, which offsets the whole
+        // capsule inward by it (both ends and both sides) - so the fit
+        // sits inside the chords. Never the tolerance loosened into the
+        // model; a larger overshoot is no slot face and is refused below.
+        if let Room::Face(region) = &self.room {
+            for _ in 0..2 {
+                let out = face_overshoot(region, fit.a, fit.b, 0.5 * fit.width)?;
+                if out <= FIT_TOL || out > INSCRIBE_MAX * w {
+                    break;
+                }
+                fit.width -= 2.0 * out;
+            }
+        }
         self.confine(fit.a, fit.b, fit.width).map_err(|e| {
             GenError::Invalid(format!(
                 "{} holds no straight slot: its best fit, {:.3} mm long and {:.3} mm wide, fails - {}",
@@ -255,6 +244,23 @@ impl SlotBound {
             ))
         })?;
         Ok(fit)
+    }
+
+    /// [`confine`](Self::confine) as the user meets it: a slot that does
+    /// not fit is refused, and when the picks themselves bound no slot
+    /// (so they seeded nothing and the typed numbers stood) the refusal
+    /// also names why - never only the typed slot's length.
+    ///
+    /// # Errors
+    /// The slot does not fit; the picks' own refusal is appended.
+    pub fn judge(&self, a: Point2, b: Point2, width: f64) -> Result<(), GenError> {
+        let Err(e) = self.confine(a, b, width) else {
+            return Ok(());
+        };
+        match self.fit() {
+            Ok(_) => Err(e),
+            Err(f) => Err(GenError::Invalid(format!("{} (the picks seed no slot: {})", bare(&e), bare(&f)))),
+        }
     }
 
     /// The refusal law: the slot from `a` to `b` of `width` must lie
@@ -306,58 +312,6 @@ impl SlotBound {
     }
 }
 
-/// How far the slot `a`-`b` of radius `r` leaves `region`: the deepest
-/// boundary sample outside it, or the deepest the region's own boundary
-/// reaches into the slot (an island, a notch) - whichever is larger.
-fn face_overshoot(region: &Region, a: Point2, b: Point2, r: f64) -> Result<f64, GenError> {
-    let segs: Vec<(Point2, Point2)> = region
-        .loops()
-        .iter()
-        .flat_map(|l| {
-            let p = l.points();
-            (0..p.len()).map(move |i| (p[i], p[(i + 1) % p.len()]))
-        })
-        .collect();
-    let mut out = 0.0_f64;
-    // The region's boundary inside the slot: material standing in it.
-    for &(p, _) in &segs {
-        out = out.max(r - seg_dist(p, a, b));
-    }
-    // The slot's boundary outside the region.
-    let len = (b.x - a.x).hypot(b.y - a.y);
-    let (u, n) = if len > 0.0 {
-        let u = Point2::new((b.x - a.x) / len, (b.y - a.y) / len);
-        (u, Point2::new(-u.y, u.x))
-    } else {
-        (Point2::new(1.0, 0.0), Point2::new(0.0, 1.0))
-    };
-    let side = ((len / SIDE_STEP).ceil() as usize).clamp(1, 1 << 16);
-    let mut samples: Vec<Point2> = Vec::with_capacity(2 * side + 2 * CAP_SAMPLES + 4);
-    for k in 0..=side {
-        let s = len * k as f64 / side as f64;
-        for t in [-r, r] {
-            samples.push(Point2::new(a.x + u.x * s + n.x * t, a.y + u.y * s + n.y * t));
-        }
-    }
-    for (c, sign) in [(a, -1.0), (b, 1.0)] {
-        for k in 0..=CAP_SAMPLES {
-            let th = std::f64::consts::PI * (k as f64 / CAP_SAMPLES as f64 - 0.5);
-            let (cs, sn) = (sign * th.cos(), th.sin());
-            samples.push(Point2::new(c.x + r * (cs * u.x + sn * n.x), c.y + r * (cs * u.y + sn * n.y)));
-        }
-    }
-    for p in samples {
-        if !region.contains(p) {
-            let d = segs.iter().map(|&(s, e)| seg_dist(p, s, e)).fold(f64::INFINITY, f64::min);
-            if !d.is_finite() {
-                return Err(GenError::Invalid("the picked face has no boundary to measure the slot against".into()));
-            }
-            out = out.max(d);
-        }
-    }
-    Ok(out)
-}
-
 /// A refusal's sentence without the error's own prefix.
 fn bare(e: &GenError) -> String {
     let s = e.to_string();
@@ -367,3 +321,7 @@ fn bare(e: &GenError) -> String {
 #[cfg(test)]
 #[path = "slot_room_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "slot_room_pins.rs"]
+mod pins;
