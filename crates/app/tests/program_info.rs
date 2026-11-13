@@ -114,6 +114,38 @@ fn a_stated_number_and_comment_post_in_each_dialect() {
     assert_eq!(sin.lines().nth(1), Some("; PROGRAM 1234 - Bracket A"), "{sin}");
 }
 
+/// An inch document (#902) keeps the stated identity: the same header
+/// as the mm program, then the dialect's inch word, never its mm one.
+#[test]
+fn a_stated_identity_posts_the_same_header_in_an_inch_program() {
+    let both = id(Some(1234), "Bracket A");
+    let inch = serde_json::json!({ "Units": "inch" });
+    for (stem, word, mm) in [
+        ("fanuc", "G20", "G21"),
+        ("fanuc-lathe", "G20", "G21"),
+        ("mazak", "G20", "G21"),
+        ("haas", "G20", "G21"),
+        ("tormach", "G20", "G21"),
+        ("sinumerik", "G700", "G710"),
+    ] {
+        let mch = if stem == "fanuc-lathe" { serde_json::Value::Null } else { mill() };
+        let s = if stem == "fanuc-lathe" { String::new() } else { stream() };
+        let out = engine::run_program_with(&read(&format!("assets/posts/{stem}.cps")), &mch, &s, &inch, &both)
+            .unwrap_or_else(|e| panic!("{stem} inch: {e}"));
+        assert!(out.warnings.is_empty(), "{stem}: {:?}", out.warnings);
+        let p = out.program;
+        let metric = post(stem, &both).unwrap_or_else(|e| panic!("{stem}: {e}"));
+        // The identity lines: `%` + O-word / `%_N_` + comment; PathPilot's
+        // header comment alone (its unit block is the next line).
+        let n = if stem == "tormach" { 1 } else { 2 };
+        let head = |t: &str| t.lines().take(n).map(str::to_owned).collect::<Vec<_>>();
+        assert_eq!(head(&p), head(&metric), "{stem}: the header does not depend on the unit: {p}");
+        let words = |l: &str| l.split_whitespace().map(str::to_owned).collect::<Vec<_>>();
+        assert!(p.lines().any(|l| words(l).iter().any(|w| w == word)), "{stem}: inch word {word}: {p}");
+        assert!(!p.lines().any(|l| words(l).iter().any(|w| w == mm)), "{stem}: no mm word {mm}: {p}");
+    }
+}
+
 /// The number alone: the O-word dialects keep the machine-name comment;
 /// the TNC is named by the number; SINUMERIK has no number word.
 #[test]
