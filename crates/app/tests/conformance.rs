@@ -117,7 +117,7 @@ const PLASMA_POSTS: &[(&str, &str)] = &[("Tormach PathPilot Plasma", "tormach-pl
 
 /// The WIRE EDM dialects (#533): their golden is the wire stream's own
 /// (`wire_post.rs`, `nc/wire-iso/`); a mill golden they refuse by name.
-const WIRE_POSTS: &[(&str, &str)] = &[("Generic ISO Wire EDM", "wire-iso")];
+const WIRE_POSTS: &[(&str, &str)] = &[("Generic ISO Wire EDM", "wire-iso"), ("Sodick Wire EDM (Mark 21)", "sodick-wire")];
 
 /// The SINKER EDM dialects (#542): their golden is the sinker burn's
 /// own (`crates/post/tests/script_sinker_iso.rs`, `nc/sinker-iso/`); a
@@ -463,6 +463,7 @@ const EXTENSIONS: &[(&str, &str)] = &[
     ("tormach-lathe", "nc"),
     ("tormach-plasma", "nc"),
     ("wire-iso", "nc"),
+    ("sodick-wire", "nc"),
     ("sinker-iso", "nc"),
 ];
 

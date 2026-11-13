@@ -51,6 +51,9 @@ pub const BUILTINS: &[(&str, &str)] = &[
     // #533: the generic RS-274 wire EDM post; every EDM code is the
     // machine's `edm.codes` (#290 D5). It serves wire EDMs only.
     ("Generic ISO Wire EDM", include_str!("../../../assets/posts/wire-iso.cps")),
+    // #617: the Sodick 2-axis wire post, its words from Sodick's 1998
+    // operation manual (Mark 21 / EX21); not verified on a control.
+    ("Sodick Wire EDM (Mark 21)", include_str!("../../../assets/posts/sodick-wire.cps")),
     // #542: the generic ISO-style sinker post; every EDM code is the
     // machine's `edm.codes` (#290 D5). It serves sinker EDMs only.
     ("Sinker EDM (ISO)", include_str!("../../../assets/posts/sinker-iso.cps")),
@@ -69,9 +72,10 @@ pub const LATHE_POSTS: &[&str] = &["Fanuc Lathe", "Tormach PathPilot Lathe"];
 pub const PLASMA_POSTS: &[&str] = &["Tormach PathPilot Plasma"];
 
 /// The registry entries that speak WIRE EDM (#533): RS-274 motion with
-/// the control's own codes from the machine file. They serve wire EDMs
-/// only, and no cutting post serves one.
-pub const WIRE_POSTS: &[&str] = &["Generic ISO Wire EDM"];
+/// the control's own codes from the machine file, and (#617) the Sodick
+/// dialect with its manual's words. They serve wire EDMs only, and no
+/// cutting post serves one. The first is the default for a wire EDM.
+pub const WIRE_POSTS: &[&str] = &["Generic ISO Wire EDM", "Sodick Wire EDM (Mark 21)"];
 
 /// The registry entries that speak SINKER EDM (#542): RS-274 motion
 /// with the control's own codes from the machine file, each declaring

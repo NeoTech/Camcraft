@@ -229,6 +229,19 @@ path, so compensation is cancelled, never engaged. Its golden rides
 under `nc/wire-iso/` (`wire_post.rs`); the decision record is
 `docs/decisions/533-wire-iso-post.md`.
 
+`sodick-wire.cps` (#617, "Sodick Wire EDM (Mark 21)") is the second
+`WIRE_POSTS` entry, never the default. Its words are Sodick's own, from
+the 1998 "Wire EDM Machine Operation" manual (Mark 21 / EX21 control):
+`T91` / `T90` thread and cut the wire (`edm.awt`), the operation's
+condition id is the `C` word itself (C and three digits, else refused),
+`G40` rides the first cut, a coordinate always carries its decimal point,
+`M02` ends. It reads no `edm.codes`. It writes a vertical 2-axis cut
+only: taper, 4-axis, a missing G54-G59 and an arc as the first cut are
+refused by name; G92, the tank and flushing T codes and G41 / G42 are
+never written. It was not run on a control; what is unconfirmed is in
+`docs/decisions/617-sodick-wire-post.md`. Its golden rides under
+`nc/sodick-wire/` (`sodick_wire_post.rs`).
+
 ## Adding a post to the app
 
 1. Write the `.cps` here (copy `mazak.cps` as the structural skeleton
