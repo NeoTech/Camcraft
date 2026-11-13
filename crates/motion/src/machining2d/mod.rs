@@ -70,6 +70,7 @@ mod adaptive;
 mod rest2d;
 mod ring;
 mod slots;
+mod slot_room;
 mod waterscan;
 
 #[cfg(test)]
@@ -105,6 +106,7 @@ pub use pocket::{pocket, PocketParams, PocketStrategy};
 pub use rest2d::{rest_plan, rest_pocket, RestParams, RestPlan, REST_FILM, REST_MARGIN, REST_REACH};
 pub use ring::{on_boundary, ring_is_circular};
 pub use slots::{chord_clears, slot, trace, SlotParams, TraceParams};
+pub use slot_room::{SlotBound, SlotFit, FIT_TOL as SLOT_FIT_TOL};
 pub use trochoid_air::lifted_cut;
 pub use trochoid_slot::{
     plan_trochoidal_slot, trochoidal_slot, TrochoidParams, TrochoidPlan, TrochoidReturn, DEFAULT_MAX_ENGAGEMENT,

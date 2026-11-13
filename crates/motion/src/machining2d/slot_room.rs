@@ -1,0 +1,369 @@
+//! Slot fit to a picked selection (#1504): the room a slot may cut in -
+//! the strip two opposite straight edges bound over their shared length,
+//! or a picked face's own region - the slot that fills that room, and
+//! the refusal law for a slot that does not fit it. One law for every
+//! slot kind that is authored by two endpoints and a width (the plain
+//! slot here, the trochoidal slot of #1503).
+//!
+//! Provenance: our own plane geometry - point-to-segment distance and
+//! the minimum-area enclosing rectangle by rotating calipers over the
+//! convex hull (G. Toussaint, "Solving geometric problems with the
+//! rotating calipers", 1983); no vendor material consulted.
+
+use crate::geo2d::{Point2, Region};
+
+use super::face::GenError;
+
+/// How far a picked edge may stray from its chord, or the second edge
+/// from parallel to the first, mm.
+pub const STRAIGHT_TOL: f64 = 0.01;
+/// How far a slot may stand past the room its picks bound and still
+/// fit, mm - the gouge law's own tolerance, so a tessellated round end
+/// of a picked face (its chords a sag inside the true arc) is no wall.
+pub const FIT_TOL: f64 = 0.01;
+/// Chords a round end is sampled with for the face law.
+const CAP_SAMPLES: usize = 64;
+/// Spacing of the samples along a slot's straight sides, mm.
+const SIDE_STEP: f64 = 0.5;
+
+/// The slot that fills a bound: endpoints and width, the numbers a
+/// slot operation is authored by.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SlotFit {
+    pub a: Point2,
+    pub b: Point2,
+    pub width: f64,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+enum Room {
+    /// The strip between two picked edges: the frame's rectangle is all
+    /// the room there is.
+    Edges,
+    /// A picked face (or closed ring): its region, inside the frame's
+    /// minimum-area rectangle.
+    Face(Region),
+}
+
+/// Where a selection lets a slot cut: a rectangle frame - `u` along the
+/// slot, `n` across it, `s` in `[s0, s1]` along and `t` in `[t0, t1]`
+/// across (projections of world XY) - plus, for a face, its region.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SlotBound {
+    room: Room,
+    u: Point2,
+    n: Point2,
+    s0: f64,
+    s1: f64,
+    t0: f64,
+    t1: f64,
+}
+
+fn dot(p: Point2, d: Point2) -> f64 {
+    p.x * d.x + p.y * d.y
+}
+
+fn at(u: Point2, n: Point2, s: f64, t: f64) -> Point2 {
+    Point2::new(u.x * s + n.x * t, u.y * s + n.y * t)
+}
+
+fn finite(pts: &[Point2]) -> bool {
+    pts.iter().all(|p| p.x.is_finite() && p.y.is_finite())
+}
+
+fn span(pts: &[Point2], d: Point2) -> (f64, f64) {
+    pts.iter().map(|&p| dot(p, d)).fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), v| (lo.min(v), hi.max(v)))
+}
+
+/// Distance from `p` to the segment `a`-`b`.
+fn seg_dist(p: Point2, a: Point2, b: Point2) -> f64 {
+    let (dx, dy) = (b.x - a.x, b.y - a.y);
+    let len2 = dx * dx + dy * dy;
+    let k = if len2 > 0.0 { (((p.x - a.x) * dx + (p.y - a.y) * dy) / len2).clamp(0.0, 1.0) } else { 0.0 };
+    (p.x - (a.x + k * dx)).hypot(p.y - (a.y + k * dy))
+}
+
+/// Andrew's monotone chain; counter-clockwise, no repeated point.
+fn hull(pts: &[Point2]) -> Vec<Point2> {
+    let mut p: Vec<Point2> = pts.to_vec();
+    p.sort_by(|a, b| a.x.total_cmp(&b.x).then(a.y.total_cmp(&b.y)));
+    p.dedup();
+    if p.len() < 3 {
+        return p;
+    }
+    let cross = |o: Point2, a: Point2, b: Point2| (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+    let mut h: Vec<Point2> = Vec::with_capacity(2 * p.len());
+    for pass in 0..2 {
+        let start = h.len();
+        let it: Box<dyn Iterator<Item = &Point2>> = if pass == 0 { Box::new(p.iter()) } else { Box::new(p.iter().rev()) };
+        for &q in it {
+            while h.len() >= start + 2 && cross(h[h.len() - 2], h[h.len() - 1], q) <= 0.0 {
+                h.pop();
+            }
+            h.push(q);
+        }
+        h.pop();
+    }
+    h
+}
+
+impl SlotBound {
+    /// The strip between two picked edges (XY polylines in pick order):
+    /// both straight, parallel, apart, and facing each other over a
+    /// shared length. Anything else is refused by name - two edges that
+    /// do not bound a slot are never guessed into one.
+    ///
+    /// # Errors
+    /// An edge that is not straight, edges that are not parallel, lie
+    /// on one line, or share no length.
+    pub fn from_edges(e1: &[Point2], e2: &[Point2]) -> Result<SlotBound, GenError> {
+        if e1.len() < 2 || e2.len() < 2 || !finite(e1) || !finite(e2) {
+            return Err(GenError::Invalid("a slot's picked edges need two points each".into()));
+        }
+        let (p, q) = (e1[0], e1[e1.len() - 1]);
+        let len = (q.x - p.x).hypot(q.y - p.y);
+        if !(len > STRAIGHT_TOL) {
+            return Err(GenError::Invalid("the first picked edge has no length in XY - pick the edges along the slot".into()));
+        }
+        let u = Point2::new((q.x - p.x) / len, (q.y - p.y) / len);
+        let n = Point2::new(-u.y, u.x);
+        let (a0, a1) = span(e1, n);
+        if a1 - a0 > STRAIGHT_TOL {
+            return Err(GenError::Invalid(format!(
+                "the first picked edge is not straight (it bows {:.3} mm off its chord) - a slot is picked by two straight opposite edges or one face",
+                a1 - a0
+            )));
+        }
+        let (b0, b1) = span(e2, n);
+        if b1 - b0 > STRAIGHT_TOL {
+            return Err(GenError::Invalid(format!(
+                "the second picked edge is not straight and parallel to the first (it wanders {:.3} mm across the slot) - pick two opposite sides of the slot",
+                b1 - b0
+            )));
+        }
+        let d = 0.5 * (b0 + b1) - 0.5 * (a0 + a1);
+        if d.abs() <= STRAIGHT_TOL {
+            return Err(GenError::Invalid("the two picked edges lie on one line - pick two opposite sides of the slot".into()));
+        }
+        let (sa0, sa1) = span(e1, u);
+        let (sb0, sb1) = span(e2, u);
+        let (s0, s1) = (sa0.max(sb0), sa1.min(sb1));
+        if s1 - s0 <= STRAIGHT_TOL {
+            return Err(GenError::Invalid(
+                "the two picked edges do not face each other - they share no length along the slot".into(),
+            ));
+        }
+        // The narrowest strip both edges allow (their straightness
+        // spread taken inward).
+        let (t0, t1) = if d > 0.0 { (a1, b0) } else { (b1, a0) };
+        Ok(SlotBound { room: Room::Edges, u, n, s0, s1, t0, t1 })
+    }
+
+    /// A picked face's (or closed ring's) region: the room is the region
+    /// itself, framed by its minimum-area enclosing rectangle with `u`
+    /// along the long side.
+    ///
+    /// # Errors
+    /// An empty or degenerate region.
+    pub fn from_face(region: Region) -> Result<SlotBound, GenError> {
+        let pts: Vec<Point2> = region.loops().iter().flat_map(|l| l.points().iter().copied()).collect();
+        if region.is_empty() || !finite(&pts) || !(region.area().abs() > STRAIGHT_TOL * STRAIGHT_TOL) {
+            return Err(GenError::Invalid("the picked face bounds no area in XY - pick a floor face or two opposite edges".into()));
+        }
+        let h = hull(&pts);
+        let mut best: Option<(f64, Point2)> = None;
+        for i in 0..h.len() {
+            let (a, b) = (h[i], h[(i + 1) % h.len()]);
+            let len = (b.x - a.x).hypot(b.y - a.y);
+            if !(len > 0.0) {
+                continue;
+            }
+            let u = Point2::new((b.x - a.x) / len, (b.y - a.y) / len);
+            let n = Point2::new(-u.y, u.x);
+            let ((s0, s1), (t0, t1)) = (span(&h, u), span(&h, n));
+            let area = (s1 - s0) * (t1 - t0);
+            if best.is_none_or(|(b, _)| area < b) {
+                best = Some((area, u));
+            }
+        }
+        let Some((_, mut u)) = best else {
+            return Err(GenError::Invalid("the picked face bounds no area in XY - pick a floor face or two opposite edges".into()));
+        };
+        let n0 = Point2::new(-u.y, u.x);
+        let ((s0, s1), (t0, t1)) = (span(&h, u), span(&h, n0));
+        if t1 - t0 > s1 - s0 {
+            u = n0;
+        }
+        let n = Point2::new(-u.y, u.x);
+        let ((s0, s1), (t0, t1)) = (span(&h, u), span(&h, n));
+        Ok(SlotBound { room: Room::Face(region), u, n, s0, s1, t0, t1 })
+    }
+
+    fn picks(&self) -> &'static str {
+        match self.room {
+            Room::Edges => "the picked edges",
+            Room::Face(_) => "the picked face",
+        }
+    }
+
+    fn leave(&self) -> &'static str {
+        match self.room {
+            Room::Edges => "leave",
+            Room::Face(_) => "leaves",
+        }
+    }
+
+    /// The room's length along the slot and width across it, mm.
+    #[must_use]
+    pub fn room(&self) -> (f64, f64) {
+        (self.s1 - self.s0, self.t1 - self.t0)
+    }
+
+    /// The slot that fills the room: the full width across, round ends
+    /// tangent to the room's ends. For a face, the slot that fits it -
+    /// a face no straight slot fills (an L, a disk) is refused by name.
+    ///
+    /// # Errors
+    /// A room no longer than it is wide, or a face its best slot leaves.
+    pub fn fit(&self) -> Result<SlotFit, GenError> {
+        let (l, w) = self.room();
+        if !(w > FIT_TOL) {
+            return Err(GenError::Invalid(format!("{} {} no width for a slot", self.picks(), self.leave())));
+        }
+        if l - w <= FIT_TOL {
+            return Err(GenError::Invalid(format!(
+                "{} {} room {:.3} mm long for a {:.3} mm wide slot - a slot needs length past its width for two distinct ends (machine a round pocket as Circular)",
+                self.picks(),
+                self.leave(),
+                l,
+                w
+            )));
+        }
+        let tm = 0.5 * (self.t0 + self.t1);
+        let fit = SlotFit {
+            a: at(self.u, self.n, self.s0 + 0.5 * w, tm),
+            b: at(self.u, self.n, self.s1 - 0.5 * w, tm),
+            width: w,
+        };
+        self.confine(fit.a, fit.b, fit.width).map_err(|e| {
+            GenError::Invalid(format!(
+                "{} holds no straight slot: its best fit, {:.3} mm long and {:.3} mm wide, fails - {}",
+                self.picks(),
+                l,
+                w,
+                bare(&e)
+            ))
+        })?;
+        Ok(fit)
+    }
+
+    /// The refusal law: the slot from `a` to `b` of `width` must lie
+    /// inside the room, within [`FIT_TOL`]. A slot too wide, too long or
+    /// placed past the picks is refused by name with its numbers - never
+    /// generated across a wall.
+    ///
+    /// # Errors
+    /// The slot does not fit, or its numbers are not finite.
+    pub fn confine(&self, a: Point2, b: Point2, width: f64) -> Result<(), GenError> {
+        if !(finite(&[a, b]) && width.is_finite() && width > 0.0) {
+            return Err(GenError::Invalid("slot endpoints and width must be finite, the width positive".into()));
+        }
+        let no = |why: String| Err(GenError::Invalid(format!("the slot does not fit the selection: {why}")));
+        let r = 0.5 * width;
+        let (sa, sb, ta, tb) = (dot(a, self.u), dot(b, self.u), dot(a, self.n), dot(b, self.n));
+        let (l, w) = self.room();
+        let across = (tb - ta).abs() + width;
+        let along = (sb - sa).abs() + width;
+        let picks = self.picks();
+        if across > w + FIT_TOL {
+            let room = match self.room {
+                Room::Edges => format!("{picks} stand only {w:.3} mm apart"),
+                Room::Face(_) => format!("{picks} is only {w:.3} mm wide"),
+            };
+            return no(format!("it is {across:.3} mm wide across the slot, but {room} - narrow it or re-pick"));
+        }
+        if along > l + FIT_TOL {
+            let room = match self.room {
+                Room::Edges => format!("{picks} share only {l:.3} mm"),
+                Room::Face(_) => format!("{picks} is only {l:.3} mm long"),
+            };
+            return no(format!("it is {along:.3} mm long end to end, but {room} - shorten it or re-pick"));
+        }
+        let out = match &self.room {
+            Room::Edges => [(sa, ta), (sb, tb)]
+                .iter()
+                .map(|&(s, t)| (self.s0 - (s - r)).max(s + r - self.s1).max(self.t0 - (t - r)).max(t + r - self.t1))
+                .fold(0.0_f64, f64::max),
+            Room::Face(region) => face_overshoot(region, a, b, r)?,
+        };
+        if out > FIT_TOL {
+            return no(format!(
+                "it runs {out:.3} mm outside {picks} - move its ends A ({:.3}, {:.3}) and B ({:.3}, {:.3}) inside",
+                a.x, a.y, b.x, b.y
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// How far the slot `a`-`b` of radius `r` leaves `region`: the deepest
+/// boundary sample outside it, or the deepest the region's own boundary
+/// reaches into the slot (an island, a notch) - whichever is larger.
+fn face_overshoot(region: &Region, a: Point2, b: Point2, r: f64) -> Result<f64, GenError> {
+    let segs: Vec<(Point2, Point2)> = region
+        .loops()
+        .iter()
+        .flat_map(|l| {
+            let p = l.points();
+            (0..p.len()).map(move |i| (p[i], p[(i + 1) % p.len()]))
+        })
+        .collect();
+    let mut out = 0.0_f64;
+    // The region's boundary inside the slot: material standing in it.
+    for &(p, _) in &segs {
+        out = out.max(r - seg_dist(p, a, b));
+    }
+    // The slot's boundary outside the region.
+    let len = (b.x - a.x).hypot(b.y - a.y);
+    let (u, n) = if len > 0.0 {
+        let u = Point2::new((b.x - a.x) / len, (b.y - a.y) / len);
+        (u, Point2::new(-u.y, u.x))
+    } else {
+        (Point2::new(1.0, 0.0), Point2::new(0.0, 1.0))
+    };
+    let side = ((len / SIDE_STEP).ceil() as usize).clamp(1, 1 << 16);
+    let mut samples: Vec<Point2> = Vec::with_capacity(2 * side + 2 * CAP_SAMPLES + 4);
+    for k in 0..=side {
+        let s = len * k as f64 / side as f64;
+        for t in [-r, r] {
+            samples.push(Point2::new(a.x + u.x * s + n.x * t, a.y + u.y * s + n.y * t));
+        }
+    }
+    for (c, sign) in [(a, -1.0), (b, 1.0)] {
+        for k in 0..=CAP_SAMPLES {
+            let th = std::f64::consts::PI * (k as f64 / CAP_SAMPLES as f64 - 0.5);
+            let (cs, sn) = (sign * th.cos(), th.sin());
+            samples.push(Point2::new(c.x + r * (cs * u.x + sn * n.x), c.y + r * (cs * u.y + sn * n.y)));
+        }
+    }
+    for p in samples {
+        if !region.contains(p) {
+            let d = segs.iter().map(|&(s, e)| seg_dist(p, s, e)).fold(f64::INFINITY, f64::min);
+            if !d.is_finite() {
+                return Err(GenError::Invalid("the picked face has no boundary to measure the slot against".into()));
+            }
+            out = out.max(d);
+        }
+    }
+    Ok(out)
+}
+
+/// A refusal's sentence without the error's own prefix.
+fn bare(e: &GenError) -> String {
+    let s = e.to_string();
+    s.strip_prefix("invalid machining parameters: ").map(str::to_owned).unwrap_or(s)
+}
+
+#[cfg(test)]
+#[path = "slot_room_tests.rs"]
+mod tests;
