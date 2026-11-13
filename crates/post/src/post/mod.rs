@@ -40,6 +40,7 @@ pub mod machine;
 pub mod nose_tip;
 pub mod probe_rec;
 mod program;
+pub mod rotary_cap;
 pub mod units;
 
 pub use after_op::AfterOperation;

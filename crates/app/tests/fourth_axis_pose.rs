@@ -315,30 +315,36 @@ fn the_fanuc_dialect_refuses_a_lone_a_stated_along_minus_x() {
     assert!(plus.program.contains("A-45"), "{}", plus.program);
 }
 
-/// Two tilted feeds at `abc`, for the letter-writing dialects.
+/// A rapid to `abc`, then two tilted feeds there, for the letter-writing
+/// dialects. The rapid places the rotary first: a feed that turns it
+/// from an angle the post never placed is refused by name once the
+/// machine states a rotary rate (#885).
 fn tilted(abc: [f64; 3]) -> String {
-    let mv = |z: f64| {
-        cnc::Record::Move(cnc::MoveRec {
-            kind: camcraft_app::cl::MoveKind::Feed,
-            x: 0.0,
-            y: 0.0,
-            z,
-            feed: Some(300.0),
-            center: None,
-            ccw: false,
-            plane: Default::default(),
-            abc: Some(abc),
-        })
-    };
+    let mv = |z: f64| tilted_move(abc, z, camcraft_app::cl::MoveKind::Feed);
     cnc::serialize(&[
         cnc::Record::Tool { number: 1, name: "EM".into() },
         // #1359: a feed with the spindle stopped is refused by name.
         cnc::Record::Param { name: "SpindleSpeed".into(), value: serde_json::json!(6000) },
         cnc::Record::Section { begin: true },
+        tilted_move(abc, 5.0, camcraft_app::cl::MoveKind::Rapid),
         mv(-5.0),
         mv(-6.0),
         cnc::Record::Section { begin: false },
     ])
+}
+
+fn tilted_move(abc: [f64; 3], z: f64, kind: camcraft_app::cl::MoveKind) -> cnc::Record {
+    cnc::Record::Move(cnc::MoveRec {
+        kind,
+        x: 0.0,
+        y: 0.0,
+        z,
+        feed: (kind == camcraft_app::cl::MoveKind::Feed).then_some(300.0),
+        center: None,
+        ccw: false,
+        plane: Default::default(),
+        abc: Some(abc),
+    })
 }
 
 fn post_file(name: &str) -> String {
