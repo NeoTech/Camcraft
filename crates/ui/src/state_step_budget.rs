@@ -23,11 +23,15 @@ pub struct StepBudgetUi {
     pub draft: String,
     /// The last refusal, shown under the field until a good value lands.
     pub error: Option<String>,
+    /// True once the user committed a budget this session (#1185). Until
+    /// then a re-import of a STEP model runs under the budget recorded
+    /// with that model, not the launch default.
+    pub explicit: bool,
 }
 
 impl Default for StepBudgetUi {
     fn default() -> Self {
-        StepBudgetUi { value: step_budget::DEFAULT, draft: step_budget::DEFAULT.to_string(), error: None }
+        StepBudgetUi { value: step_budget::DEFAULT, draft: step_budget::DEFAULT.to_string(), error: None, explicit: false }
     }
 }
 
@@ -48,7 +52,7 @@ impl State {
     pub fn set_step_budget(&mut self, text: &str) -> Result<u64, String> {
         match parse(text) {
             Ok(n) => {
-                self.step_budget = StepBudgetUi { value: n, draft: n.to_string(), error: None };
+                self.step_budget = StepBudgetUi { value: n, draft: n.to_string(), error: None, explicit: true };
                 self.status = format!("{}: {n} facets for the next STEP import", step_budget::NAME);
                 Ok(n)
             }
@@ -60,11 +64,17 @@ impl State {
         }
     }
 
-    /// The budget an import of `path` asks for: the setting for a STEP
-    /// file when it is not the default, else `None` (the default; STL and
-    /// OBJ are their own mesh and take no budget).
+    /// The budget an import of `path` asks for: the one the user set this
+    /// session when they did (explicit wins, #1185); else the budget the
+    /// model of that name was imported under; else `None` (the default;
+    /// STL and OBJ are their own mesh and take no budget).
     pub(crate) fn step_budget_for(&self, path: &Path) -> Option<u64> {
-        let is_step = matches!(import::format_from_path(path), Ok(import::Format::Step));
-        (is_step && self.step_budget.value != step_budget::DEFAULT).then_some(self.step_budget.value)
+        if !matches!(import::format_from_path(path), Ok(import::Format::Step)) {
+            return None;
+        }
+        if self.step_budget.explicit {
+            return (self.step_budget.value != step_budget::DEFAULT).then_some(self.step_budget.value);
+        }
+        camcraft_app::model_fidelity::reimport_budget(&self.world, path, None)
     }
 }

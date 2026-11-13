@@ -185,10 +185,21 @@ unstated capability into existence.
     microARC 4 file states 10.6 in: the 770MX's 13.75 in spindle nose
     to table (Tormach 770MX spec page) less the microARC 4's 3.15 in
     table to centerline (4th-axis comparison sheet 02/24).
+    The same rotary states `axis_to_table` (#1107): its centerline's
+    height over the face it is bolted to (same unit and scaling). The
+    gate refuses an op whose stock / part / turning fixtures sweep
+    within 5 mm of that face, and judges every fixed fixture over the
+    work's X span by its box's distance from the line; unstated, or
+    steel it cannot read (no facets, a box across the line), is named
+    in the gate's not-judged line. The microARC 4 states 3.15 in.
   - `type: "head"` parts carry the spindle and station, first match
     wins: `spindle { min_speed, max_speed }` rpm, `power` kW (stated,
     not judged — the sheet renders it, no model consumes it),
-    `body_diameter`/`body_length` for the envelope checks; and
+    `body_diameter`/`body_length` for the envelope checks,
+    `rigid_tapping` (#786: `true` | `false`, anything else refuses the
+    file by name; absent is "not limited" - a stated `false` makes the
+    program gate refuse every tap cycle by name, whatever the post; the
+    Tormach mills and routers state it); and
     `tool_station { max_tool_length, max_tool_diameter, coolants }`.
     Separately from first-match, the checker also COUNTS (M5.3 C):
     `Machine.spindles` is how many head parts anywhere in the tree
