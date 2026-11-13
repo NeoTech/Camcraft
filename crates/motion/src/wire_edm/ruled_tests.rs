@@ -252,3 +252,33 @@ fn a_conical_die_runs_inside_both_profiles() {
     let lean = |a: [f64; 3]| a[0].hypot(a[1]).atan2(a[2]);
     assert!(cut.iter().all(|m| m.axis.is_some_and(|a| (lean(a) - angle).abs() < 2e-3)), "every ruling leans the cone's angle");
 }
+
+/// Done means (M3 review of PR #1181, item 6): a pairing whose stated
+/// surface does not fold, but whose wire - paired over the kerf-offset
+/// rings - does, is refused by the fold law on the offset wire, by name.
+/// One sync pair takes the lower profile's left middle to a point near
+/// the smaller upper profile's lower left corner: the stated surface
+/// turns no ruling back, the wire's rounded offset corners do.
+#[test]
+fn a_pairing_whose_offset_wire_folds_is_refused_by_name() {
+    let (up, lo) = (rect(14.0, 7.0), rect(20.0, 10.0));
+    let pairing = sync(&[((-7.0, -7.0), (-20.0, 0.0))]);
+    let why = refusal(&up, &lo, &ruled(pairing));
+    assert!(why.contains("folds near") && why.contains("consecutive rulings cross within the part height"), "{why}");
+    assert!(why.contains("by 1 sync pair(s)") && why.contains("restate the sync points"), "{why}");
+}
+
+/// Done means (M3 review of PR #1181, item 7): a start hole whose lead
+/// brings the leaning wire's kerf into the paired surface is refused by
+/// name. The prism's one sync pair takes the lower left middle to a
+/// point on the upper's bottom edge, so the ruling the lead runs to
+/// leans round the corner, and at the top plane the lead from the
+/// upright start hole cuts across that corner.
+#[test]
+fn a_lead_whose_leaning_kerf_enters_the_paired_surface_is_refused_by_name() {
+    let r = rect(20.0, 10.0);
+    let pairing = sync(&[((-15.0, -10.0), (-20.0, 0.0))]);
+    let why = refusal(&r, &r, &WireRuled { tolerance: 1.0, max_deg: Some(80.0), ..ruled(pairing) });
+    assert!(why.contains("the lead from the start hole would bring the leaning wire's kerf"), "{why}");
+    assert!(why.contains("into the paired surface") && why.contains("move the start hole"), "{why}");
+}

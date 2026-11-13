@@ -332,6 +332,31 @@ fn a_pairing_past_the_machine_or_off_the_planes_is_refused_by_name() {
     assert!(err.contains("the upper profile lies at Z12.000 and the workpiece's top plane at Z10.000"), "{err}");
 }
 
+/// M3's review of PR #1181, items 4 and 5: a 4-axis cut asked with a
+/// no-core burnout is refused at generation by name, and a 4-axis cut
+/// posted on a machine that lacks `taper_on`, `taper_off` or `uv` is
+/// refused by the wire post by name - it never invents an EDM code.
+#[test]
+fn a_burnout_or_a_machine_missing_a_taper_code_refuses_the_4_axis_cut_by_name() {
+    let part = || loft(&square(8.0), &circle(9.6));
+    let (_, made) = punch(FIXTURE, part(), &[H, 0.0], WireContourOp { burnout: Some(1.0), ..wire_op(Some(arc())) });
+    let err = made.expect_err("a 4-axis cut with a burnout");
+    assert!(err.contains("a 4-axis cut is asked with a no-core burnout - the burnout is cut vertical only"), "{err}");
+    let off = "\"taper_off\": \"FX-TAPER-OFF\"";
+    let cut = [
+        ("taper_on", FIXTURE.replace("\"taper_on\": \"FX-TAPER-ON\",", "")),
+        ("taper_off", FIXTURE.replace(&format!("{off},"), "")),
+        ("uv", FIXTURE.replace(&format!("{off},"), off).replace("\"uv\": \"U{u} V{v}\"", "")),
+    ];
+    for (code, text) in cut {
+        assert_ne!(text, FIXTURE, "{code}: the fixture states it");
+        let (world, made) = punch(&text, part(), &[H, 0.0], wire_op(Some(arc())));
+        made.expect("the cut generates; the codes are the post's");
+        let err = post(&world, code).expect_err("a missing taper code never posts");
+        assert!(err.contains("operation Punch1: is a 4-axis cut") && err.contains(&format!("states no edm.codes.{code}")), "{code}: {err}");
+    }
+}
+
 /// Done means: a ruling whose kerf burns into the part blocks the post -
 /// the wire laws read the ruled kerf at every judged height.
 #[test]
