@@ -584,9 +584,9 @@ fn viewport_panel(
         for (a, b) in crate::vertex_pick::picked_point_marks(state, aspect) {
             ui.painter().line_segment([to_px(a), to_px(b)], egui::Stroke::new(2.0, rgb8(super::ground_ink::overlay(super::ground_ink::Overlay::Pick))));
         }
-        for (a, b) in interact::hover_features(state, aspect) {
-            ui.painter().line_segment([to_px(a), to_px(b)], egui::Stroke::new(1.0, rgb8(super::ground_ink::overlay(super::ground_ink::Overlay::Hover))));
-        }
+        // #1505/#1507: selected picks and the viewport hover
+        // as thick, haloed strokes over the model.
+        crate::pick_ink::paint(ui.painter(), state, aspect, to_px, rgb8);
         // #1507: the Geometry-list row hover, strong: a dark halo, then the
         // row-hover ink.
         {

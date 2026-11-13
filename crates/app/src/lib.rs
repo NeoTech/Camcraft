@@ -93,6 +93,8 @@ pub mod setup_align;
 pub mod setup_mount;
 // #316: transforms between setups and the setup-relative link.
 pub mod setup_relative;
+// #1510: a tilted milling WCS is refused at generation.
+pub mod setup_wcs_tilt;
 pub mod setup_post_options;
 // #1031: a setup's workholding (chuck/collet) rpm limit.
 pub mod setup_workholding;

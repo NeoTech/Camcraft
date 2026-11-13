@@ -28,6 +28,7 @@ pub mod boundary_viz;
 pub mod plate_viz;
 pub mod boundary_summary;
 pub mod edge_pick;
+pub mod pick_ink;
 pub mod feature_click;
 pub mod egui_app;
 pub mod feedback;

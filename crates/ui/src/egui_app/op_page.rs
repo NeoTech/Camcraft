@@ -103,6 +103,7 @@ pub(super) fn operation_page(ui: &mut Ui, state: &mut State, name: &str, pal: &T
         // (`State::op_tab`), never a command, never saved.
         let kind = state.op_ui.params.kind();
         let tab = super::op_tabs::tab_bar(ui, kind, &mut state.op_tab, pal);
+        super::geo_page::pick_mode_line(ui, state);
         if tab == SEC_GEO {
             super::geo_page::pick_block(ui, state, &target, live_setup.as_deref());
         }
