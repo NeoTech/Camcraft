@@ -46,6 +46,7 @@ pub mod colorvision;
 pub mod ground_ink;
 pub mod window_chrome;
 mod post_options;
+mod program_info;
 pub mod cvd;
 mod icons;
 mod op_icons;
@@ -74,6 +75,8 @@ mod painted;
 mod tree_badges;
 mod tree_glyphs;
 mod pages;
+// #739: the WCS page, split out of pages.rs.
+mod wcs_page;
 mod step_budget_row;
 // #1094: the stock page's raw-stock-only checkbox.
 mod raw_stock_row;
@@ -239,6 +242,8 @@ mod thread_mill_page_tests;
 #[cfg(test)]
 mod after_op_tests;
 #[cfg(test)]
+mod program_info_tests;
+#[cfg(test)]
 mod colorvision_tests;
 #[cfg(test)]
 mod viewport_ground_tests;
@@ -260,6 +265,10 @@ mod fresh_op_tests;
 mod tool_number_tests;
 #[cfg(test)]
 mod setup_wcs_tests;
+#[cfg(test)]
+mod wcs_page_tests;
+#[cfg(test)]
+mod wcs_circle_tests;
 #[cfg(test)]
 mod setup_align_tests;
 #[cfg(test)]

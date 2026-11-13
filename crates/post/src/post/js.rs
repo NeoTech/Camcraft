@@ -30,6 +30,11 @@ var currentPosition = { X: 0, Y: 0, Z: 0 };
 // per operation counts 1, 2, 3... in program order. A dialect that
 // writes an O-word reads it at onOpen.
 var programNumber = 1;
+// The document's program identity (#258): \`number\` is programNumber
+// again; \`numbered\` is true only when the document states a number
+// (a dialect whose default program writes none keeps writing none);
+// \`comment\` is the document's program comment, "" when it states none.
+var program = { number: 1, numbered: false, comment: "" };
 var postOptions = {};
 var machine = { name: "", rapidRate: 0, feedRateMax: 0, spindleMax: 0, coolants: [], rotaries: [], rtcp: false, units: "mm", spindleRanges: [], rigidTapping: true, safeRetractZ: null, model: "" };
 function _flushLine() { if (LINE !== "") { OUT.push(LINE); LINE = ""; } }
@@ -154,6 +159,23 @@ pub const HOOKS: &[&str] = &[
     "onComment",
     "onClose",
 ];
+
+/// The program's identity a post writes (#258): its number (the
+/// O-word of a numbering dialect, 1 when the document states none),
+/// whether the document stated that number, and the document's
+/// program comment ("" for none - the dialect writes its own default).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ProgramId {
+    pub number: u32,
+    pub numbered: bool,
+    pub comment: String,
+}
+
+impl Default for ProgramId {
+    fn default() -> Self {
+        Self { number: 1, numbered: false, comment: String::new() }
+    }
+}
 
 /// One loaded post script.
 pub struct Script {
@@ -285,9 +307,11 @@ impl Script {
         Ok(())
     }
 
-    /// Publish the program's number (#111) before `onOpen` reads it.
-    pub fn set_program_number(&mut self, n: u32) -> Result<(), PostError> {
-        self.eval(&format!("programNumber = {n};"))?;
+    /// Publish the program's identity (#258) before `onOpen` reads it:
+    /// the `program` global and `programNumber` beside it.
+    pub fn set_program(&mut self, id: &ProgramId) -> Result<(), PostError> {
+        let obj = serde_json::json!({ "number": id.number, "numbered": id.numbered, "comment": id.comment });
+        self.eval(&format!("program = {obj}; programNumber = {};", id.number))?;
         Ok(())
     }
 

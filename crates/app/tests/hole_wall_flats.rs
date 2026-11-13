@@ -148,6 +148,7 @@ fn verdict(model_hole: &[P2], kind: Kind, radius: f64) -> Vec<Warning> {
             pitch: None,
             hand: camcraft_app::cl::ThreadHand::Right,
             external: false,
+            passes: camcraft_app::machining2d::ThreadPasses::default(),
         },
         Kind::Bore => OpParams::Bore {
             links: camcraft_app::links::Links::PLANAR,
@@ -211,6 +212,7 @@ fn thread_solid(model_hole: &[P2], minor: f64) -> usize {
         rows: 25,
         infeed: 0.1,
         external: false,
+        passes: camcraft_app::machining2d::ThreadPasses::default(),
         hand: camcraft_app::cl::ThreadHand::Right,
         clearance_z: 25.0,
         retract_z: None,

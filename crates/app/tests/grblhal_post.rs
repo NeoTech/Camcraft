@@ -48,6 +48,14 @@ fn post(m: &Value, stream: &str) -> String {
     out.program
 }
 
+/// #902: the program's unit is the document's (`postOptions.Units`),
+/// never the machine file's.
+fn post_with(m: &Value, stream: &str, options: &Value) -> String {
+    let out = engine::run_with(&cps(), m, stream, options).unwrap_or_else(|e| panic!("posts: {e}"));
+    assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+    out.program
+}
+
 #[test]
 fn the_registry_and_the_library_ship_it() {
     assert!(BUILTINS.iter().any(|(n, s)| *n == "grblHAL" && *s == cps()), "the post is built in");
@@ -144,10 +152,12 @@ fn an_unknown_or_buried_lift_height_is_refused_by_name() {
     assert_eq!(w.iter().filter(|w| w.contains("Z lift") || w.contains("stock top")).count(), 1, "once: {w:?}");
 }
 #[test]
-fn an_inch_machine_posts_g20_and_inches() {
-    let mut m = generic();
-    m["units"] = json!("inch");
-    let nc = post(&m, STREAM);
+fn an_inch_document_posts_g20_and_inches() {
+    let nc = post_with(&generic(), STREAM, &json!({"Units": "inch"}));
     assert!(nc.lines().nth(1).is_some_and(|l| l.starts_with("G20 ")), "{nc}");
     assert!(nc.contains("G1 X0.3937 Y0 Z-0.0394 F19.69"), "{nc}");
+    // An inch machine file alone no longer makes an inch program.
+    let mut m = generic();
+    m["units"] = json!("inch");
+    assert_eq!(post(&m, STREAM), post(&generic(), STREAM), "the machine file's unit decides nothing");
 }
