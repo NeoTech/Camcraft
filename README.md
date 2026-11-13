@@ -154,8 +154,7 @@ cargo test --release -p camcraft-app -p camcraft-motion -- --ignored   # slow ve
 
 Golden toolpath and G-code outputs live under each crate's `tests/golden/`.
 Gates run locally through `cargo xtask gate` (see Contributing). GitHub
-Actions runs only on a pushed release tag; the CI and nightly workflows in
-`.github/workflows/` are manual.
+Actions runs only on a pushed release tag (`release.yml`).
 
 ## Project documents
 
