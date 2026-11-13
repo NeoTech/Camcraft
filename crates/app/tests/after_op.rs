@@ -155,8 +155,10 @@ fn go_home_retracts_z_then_homes_xy_in_each_dialect() {
 #[test]
 fn a_post_that_cannot_go_home_refuses_by_name() {
     let (world, _h) = two_faces(AfterOperation::GoHome);
-    // #710: grblHAL's G28/G30 positions are controller settings too.
-    for name in ["Heidenhain", "grblHAL"] {
+    // #710: grblHAL's G28/G30 positions are controller settings too;
+    // TinyG's are set at the machine with G28.1 / G30.1 (its stops are
+    // pinned in tinyg_post.rs: a tool change writes an M0 of its own).
+    for name in ["Heidenhain", "grblHAL", "TinyG"] {
         let out = post_with(&world, script(name));
         assert!(
             out.warnings.iter().any(|w| w.contains(name) && w.contains("home")),
