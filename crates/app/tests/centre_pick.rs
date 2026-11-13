@@ -177,6 +177,30 @@ fn three_points_read_a_round_edge_as_its_centre() {
     assert!(near([o.x, o.y, o.z], [0.0; 3], 1e-6), "3-2-1 puts point 1, the hole's centre, on the origin: {o:?}");
 }
 
+/// The readout's coordinates (`pick_coords`): a round edge reports its
+/// centre, a straight one its two ends.
+#[test]
+fn pick_coords_reports_a_round_edge_as_its_centre() {
+    let (world, _h) = plate_world();
+    let c = pick::pick_coords(&world, &run_where(&world, top_rim)).expect("a round edge has coordinates");
+    assert_eq!(c.len(), 1, "one point, the centre: {c:?}");
+    assert!(near(c[0], [CX, CY, TOP], 1e-6), "{c:?}");
+    let ends = pick::pick_coords(&world, &run_where(&world, top_front_side)).expect("a straight edge");
+    assert_eq!(ends.len(), 2, "a straight edge reads as its ends: {ends:?}");
+}
+
+/// The three-points check refuses a straight edge by name before it
+/// counts the picks: two picks, one a straight edge, name the edge - not
+/// "2 picked".
+#[test]
+fn a_straight_edge_is_named_before_the_pick_count() {
+    let (world, _h) = plate_world();
+    let picks = [corner(&world, [CX + HALF, CY + HALF, TOP]), run_where(&world, top_front_side)];
+    let lay = PointsLay { lay: PlaneLay { plane: ArcPlane::Xy, flip: false, place: true }, frame: false };
+    let e = lay_on_points(&world, &picks, lay).expect_err("refused");
+    assert!(e.contains("is an edge with no centre") && e.contains("straight"), "{e}");
+}
+
 /// A rod (radius 10, z 0..10) under a slab (z 12..20) that hides it from
 /// above: neither rim is in sight.
 fn hidden_rod() -> Vec<PickBody> {
