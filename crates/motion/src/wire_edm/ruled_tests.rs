@@ -283,3 +283,17 @@ fn a_lead_whose_leaning_kerf_enters_the_paired_surface_is_refused_by_name() {
     assert!(why.contains("the lead from the start hole would bring the leaning wire's kerf"), "{why}");
     assert!(why.contains("into the paired surface") && why.contains("move the start hole"), "{why}");
 }
+
+/// The crossing law: rulings whose mid-height section is a bow tie
+/// (corners 2 and 3 swapped) are refused by name, a plain one passes.
+#[test]
+fn a_section_that_crosses_itself_is_refused_by_name() {
+    let ring = |c: [(f64, f64); 4]| -> Vec<(Point2, Point2)> {
+        c.iter().map(|&(x, y)| (Point2::new(x - 1.0, y - 1.0), Point2::new(x + 1.0, y + 1.0))).collect()
+    };
+    let bow = ring([(0.0, 0.0), (10.0, 10.0), (10.0, 0.0), (0.0, 10.0)]);
+    let why = ruled_laws::crossing(&bow, 0.0, 12.0).expect_err("a bow tie").to_string();
+    assert!(why.contains("the paired surface crosses itself at Z"), "{why}");
+    let square = ring([(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)]);
+    ruled_laws::crossing(&square, 0.0, 12.0).expect("a simple section passes");
+}

@@ -23,7 +23,7 @@ use camcraft_app::geometry::{Mesh, Point3, Triangle};
 use camcraft_app::machine::parse_mch;
 use camcraft_app::model;
 use camcraft_app::operation::{
-    self, FeatureSel, GeoSel, Height, OpParams, OpStatus, SrcRef, WireContourOp, WireFourAxis, WirePairingRule, WireSide,
+    self, FeatureSel, GeoSel, Height, OpParams, OpStatus, SrcRef, WireContourOp, WireFourAxis, WirePairingRule, WireSide, WireTabs,
     WireSyncPair,
 };
 use camcraft_app::posting::{self, BUILTINS};
@@ -354,6 +354,16 @@ fn a_burnout_or_a_machine_missing_a_taper_code_refuses_the_4_axis_cut_by_name() 
         let err = post(&world, code).expect_err("a missing taper code never posts");
         assert!(err.contains("operation Punch1: is a 4-axis cut") && err.contains(&format!("states no edm.codes.{code}")), "{code}: {err}");
     }
+}
+
+/// M3's review of PR #1181: a 4-axis cut asked with tabs is refused at
+/// generation by name - the ruled generator does not cut tabs.
+#[test]
+fn tabs_beside_a_4_axis_cut_are_refused_by_name() {
+    let tabs = WireTabs { count: Some(1), width: Some(2.0), at: vec![[4.0, 0.0]], cutoff_condition: String::new() };
+    let (_, made) = punch(FIXTURE, loft(&square(8.0), &circle(9.6)), &[H, 0.0], WireContourOp { tabs: Some(tabs), ..wire_op(Some(arc())) });
+    let err = made.expect_err("a 4-axis cut with tabs");
+    assert!(err.contains("a 4-axis cut is asked with tabs - tabs are cut on a one-profile contour only"), "{err}");
 }
 
 /// Done means: a ruling whose kerf burns into the part blocks the post -
