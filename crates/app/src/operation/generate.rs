@@ -2140,8 +2140,14 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // #894 x #1205: only over a round wall - a polygon's flats
             // keep their rim, and the solid law's thread grant stands
             // down too. #985: a boss's MINOR circle, with no silhouette
-            // beside it; `thread_round` stays true for it.
+            // beside it, and only over a round boss: a polygonal one (a
+            // hex stud) is refused by name, since the crest law and the
+            // neighbour law both take its wall for a circle and its
+            // flats would be cut unjudged. `thread_round` stays true.
             let region = if *external {
+                if let Some(why) = super::thread_boss::not_round(&m_gen.facets, &plan) {
+                    return Err(GenError::Invalid(why));
+                }
                 super::thread_boss::crest_region(holes, plan.depth())?
             } else {
                 let region = region_for_job(&mut picked_region, &mut section_z, &src, &params, m_gen, frame.as_ref())?;

@@ -185,6 +185,22 @@ fn a_boss_standing_in_uncut_stock_is_refused_by_name() {
 }
 
 #[test]
+fn a_hex_stud_is_no_round_boss_and_is_refused_by_name() {
+    // A hex stud, corners on the M8's Ø8: its flats stand 0.54 mm inside the
+    // drawn circle, where the crest law (the minor circle) and the
+    // neighbour law (which passes the boss's own wall) would let the teeth
+    // cut them unjudged. Refused, never threaded.
+    let (world, mut history) = stud_world(stud_of(6, 4.0, Vec::new()));
+    let msg = try_thread(&world, &mut history, MULTI, external(vec![boss(4.0)], None, ThreadHand::Right, true));
+    assert!(msg.contains("the boss at (0.000, 0.000) is not round - external thread milling needs a round boss"), "{msg}");
+    assert_eq!(status(&world, "Thread1"), OpStatus::Never, "no path is cached for a refused thread");
+    assert!(!posting::verification_gate(&world).is_empty(), "nothing posts");
+    // The same boss drawn round (96 flats) threads clean.
+    let (world, mut history) = stud_world(stud(4.0, Vec::new()));
+    assert_eq!(try_thread(&world, &mut history, MULTI, external(vec![boss(4.0)], None, ThreadHand::Right, true)), "");
+}
+
+#[test]
 fn moving_the_roughing_after_the_thread_marks_it_stale_and_refuses_it() {
     let (world, mut history) = stud_world(stud(4.0, Vec::new()));
     assert_eq!(try_thread(&world, &mut history, MULTI, external(vec![boss(4.0)], None, ThreadHand::Right, true)), "");

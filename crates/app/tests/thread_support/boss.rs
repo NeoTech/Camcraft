@@ -33,7 +33,12 @@ pub fn quad(a: Point3, b: Point3, c: Point3, d: Point3, f: &mut Vec<Triangle>) {
 /// on it up to `TOP`, walls in 96 flats; `extra` facets ride along (a
 /// rib beside the boss). Outward-wound.
 pub fn stud(radius: f64, extra: Vec<Triangle>) -> Mesh {
-    let n = 96;
+    stud_of(96, radius, extra)
+}
+
+/// [`stud`] with the boss (and base) drawn as `n` flats, corners on
+/// `radius`: 6 is a hex stud, which is no round boss.
+pub fn stud_of(n: usize, radius: f64, extra: Vec<Triangle>) -> Mesh {
     let at = |r: f64, k: usize, z: f64| {
         let a = std::f64::consts::TAU * (k % n) as f64 / n as f64;
         Point3::new(r * a.cos(), r * a.sin(), z)
