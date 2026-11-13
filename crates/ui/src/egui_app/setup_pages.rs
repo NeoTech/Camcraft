@@ -37,8 +37,7 @@ pub(super) fn page(ui: &mut Ui, state: &mut State, name: &str, page: SetupPage) 
             ui.heading(format!("Machine - {title}"));
             ui.separator();
             if editable(ui, state, ctx) {
-                ownership(ui, state, ctx, Mount::Machine);
-                pages::machine_section(ui, state);
+                super::machine_page::machine_page(ui, state, ctx);
                 super::setup_rotary_page::section(ui, state, ctx);
             }
         }
@@ -47,6 +46,10 @@ pub(super) fn page(ui: &mut Ui, state: &mut State, name: &str, page: SetupPage) 
             ui.separator();
             if editable(ui, state, ctx) {
                 ownership(ui, state, ctx, Mount::Post);
+                // No setups: the hint runs straight into the post, as before.
+                if ctx.is_some() {
+                    ui.separator();
+                }
                 pages::post_section(ui, state);
                 ui.separator();
                 super::setup_post_page::options_ownership(ui, state, ctx);
@@ -88,13 +91,13 @@ fn editable(ui: &mut Ui, state: &mut State, ctx: Option<&str>) -> bool {
 }
 
 #[derive(Clone, Copy)]
-enum Mount {
+pub(super) enum Mount {
     Machine,
     Post,
 }
 
 /// The own / follow-the-document choice of a setup's machine or post.
-fn ownership(ui: &mut Ui, state: &mut State, ctx: Option<&str>, which: Mount) {
+pub(super) fn ownership(ui: &mut Ui, state: &mut State, ctx: Option<&str>, which: Mount) {
     let Some(name) = ctx else {
         hint(ui, "A document without setups uses the document's machine and post.");
         return;
@@ -127,7 +130,6 @@ fn ownership(ui: &mut Ui, state: &mut State, ctx: Option<&str>, which: Mount) {
     hint(ui, &format!(
         "Setups with different {word}s post one at a time: a program is written by one post for one machine."
     ));
-    ui.separator();
 }
 
 /// The active-setup radio's words (#866: "furniture" was our in-code

@@ -55,7 +55,6 @@ use egui::{
 };
 
 use camcraft_app::geometry::{quat_from_axis_angle, quat_from_euler, quat_mul, quat_to_euler};
-use camcraft_app::machine;
 use camcraft_app::model;
 use camcraft_app::operation::SrcRef;
 use camcraft_app::posting;
@@ -304,74 +303,6 @@ fn post_offer_banner(ui: &mut Ui, state: &mut State) {
             // only ever names one), so there is nothing to queue.
             PostRef::File(_) => return,
         });
-    }
-}
-
-/// The document's machine (M2.3 C, group completed by M3.3 stage C):
-/// setup furniture read live off the world singleton - no mirror to go
-/// stale. The overview grid is exactly what the file stated; a blank is
-/// "not stated", never an invented ceiling. The library combo picks a shipped
-/// machine BY NAME, "Load other" reaches any `.mch` through the file
-/// law, and "Edit" opens the draft editor; all three land on the
-/// same `LoadMachine` command, so every change here is undoable
-/// furniture, not a field poke. The kind line follows the DECLARED
-/// kind where the machine states one, the axis inventory otherwise.
-pub(super) fn machine_section(ui: &mut Ui, state: &mut State) {
-    let (path, m) = machine::of(&state.world);
-    ui.label("Machine");
-    let names: Vec<&str> = posting::MACHINES.iter().map(|(n, _)| *n).collect();
-    ui.horizontal(|ui| {
-        ui.label("Library");
-        let sel: Option<usize> = names.iter().position(|n| path == posting::builtin_path(n));
-        let text = match sel {
-            Some(i) => names[i].to_owned(),
-            None => "other".to_owned(),
-        };
-        let mut pick: Option<String> = None;
-        egui::ComboBox::from_id_salt("machine_library")
-            .selected_text(text)
-            .show_ui(ui, |ui| {
-                for (i, n) in names.iter().enumerate() {
-                    if ui.selectable_label(sel == Some(i), *n).clicked() {
-                        pick = Some((*n).to_owned());
-                    }
-                }
-            });
-        if let Some(name) = pick {
-            state
-                .pending
-                .push_back(CommandKind::LoadBuiltinMachine(name));
-        }
-    });
-    match &m {
-        Some(m) => {
-            let source = if path.is_empty() {
-                "not stated".to_owned()
-            } else {
-                match names.iter().find(|n| path == posting::builtin_path(n)) {
-                    Some(n) => format!("Built-in: {n}"),
-                    None => path.clone(),
-                }
-            };
-            super::machine_grid::machine_grid(ui, "machine_overview", m, state.units(), &[("Source", source)]);
-            ui.horizontal(|ui| {
-                if ui.button("Load other").clicked() {
-                    state.pending.push_back(CommandKind::LoadMachineDialog);
-                }
-                if ui.button("Edit").clicked() {
-                    state.pending.push_back(CommandKind::EditMachineDialog);
-                }
-                if ui.button("Clear").clicked() {
-                    state.pending.push_back(CommandKind::ClearMachine);
-                }
-            });
-        }
-        None => {
-            ui.label("No machine loaded - the checker states, it cannot judge.");
-            if ui.button("Load machine (.mch)").clicked() {
-                state.pending.push_back(CommandKind::LoadMachineDialog);
-            }
-        }
     }
 }
 

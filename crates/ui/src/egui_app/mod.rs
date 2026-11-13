@@ -40,6 +40,7 @@ mod debug_info;
 mod status_alert;
 
 mod stock_info;
+mod machine_page;
 mod tool_list_page;
 mod stock_page;
 // pub: M13.4's ColorVision layer - the viewport, the traced stock and
