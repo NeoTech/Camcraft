@@ -33,7 +33,10 @@
 mod bvh;
 mod column;
 mod gjk;
+mod prism;
 mod ray;
+
+pub use prism::PrismReading;
 
 use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};

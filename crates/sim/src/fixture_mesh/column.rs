@@ -18,7 +18,8 @@
 //! A line through facet interiors only, transversally, reads the
 //! winding exactly. A line through a facet edge or vertex, or running
 //! in a facet's plane (a vertical wall face), is AMBIGUOUS: the line is
-//! nudged a millionth of the mesh's scale and read again. When every nudge is
+//! nudged (a millionth of the mesh's scale, at most 0.1 micron a step) and
+//! read again. When every nudge is
 //! ambiguous the answer is `None` and the caller judges by the box.
 
 use super::bvh::tri_box;
@@ -34,12 +35,19 @@ const GRAZE_SIN: f64 = 1e-6;
 /// (an axis-aligned grid meets them all) moves off it.
 const NUDGES: [(f64, f64); 5] = [(0.0, 0.0), (3.7, 1.3), (-2.9, 4.1), (1.7, -5.3), (-4.3, -2.3)];
 
-/// One nudge step: a millionth of the mesh's coordinate scale (at least
-/// a nanometre) - large enough to clear [`EDGE_EPS`] on a facet as long
-/// as the mesh, and microns at most on a machine-table-sized mesh, far
-/// below any contact tolerance a caller judges with.
+/// The largest nudge step, mm: the farthest nudge ([`NUDGES`], 5.6
+/// units) then moves a line at most 0.56 micron, whatever the mesh's
+/// distance from the origin - far below any contact tolerance a caller
+/// judges with (#1530 review: a step scaled by the coordinates moved a
+/// line 19 microns at X 5000).
+const NUDGE_CAP: f64 = 1e-4;
+
+/// One nudge step: a millionth of the mesh's coordinate scale, at least
+/// a nanometre and at most [`NUDGE_CAP`] - large enough to clear
+/// [`EDGE_EPS`] on a facet up to about a metre long (a longer one may
+/// stay ambiguous, and the caller keeps its box).
 fn nudge_unit(mesh: &FixtureMesh) -> f64 {
-    (1e3 * mesh.pad).max(1e-6)
+    (1e3 * mesh.pad).clamp(1e-6, NUDGE_CAP)
 }
 
 /// Distance from `q` to segment `ab` in the XY plane.
@@ -116,32 +124,39 @@ fn crossings(mesh: &FixtureMesh, x: f64, y: f64, budget: &mut u64) -> Option<Vec
     (!ambiguous).then_some(out)
 }
 
-/// The Z spans inside the solid along one line: nonzero winding or odd
-/// crossing count (overlapping shells, an inside-out shell), as
-/// [`super::ray`] reads a point.
-fn spans_of(mut xs: Vec<(f64, i32)>) -> Vec<(f64, f64)> {
+/// The Z spans inside the solid along one line: where the winding is
+/// positive. `None` when the winding is inconsistent - it goes negative
+/// (an inside-out shell over another reads its steel as air: #1530
+/// review) or does not end at zero (an odd crossing count) - so the
+/// caller keeps its box rather than read air into steel.
+fn spans_of(mut xs: Vec<(f64, i32)>) -> Option<Vec<(f64, f64)>> {
     xs.sort_by(|p, q| p.0.total_cmp(&q.0));
     let mut out: Vec<(f64, f64)> = Vec::new();
-    let (mut wind, mut count) = (0i64, 0u64);
-    for pair in xs.windows(2) {
-        let (Some(&(z0, s)), Some(&(z1, _))) = (pair.first(), pair.get(1)) else { continue };
+    let mut wind = 0i64;
+    for (i, &(z0, s)) in xs.iter().enumerate() {
         wind += i64::from(s);
-        count += 1;
-        if (wind != 0 || count % 2 == 1) && z1 > z0 {
+        if wind < 0 {
+            return None;
+        }
+        let Some(&(z1, _)) = xs.get(i + 1) else { continue };
+        if wind > 0 && z1 > z0 {
             match out.last_mut() {
                 Some(last) if last.1 >= z0 => last.1 = z1,
                 _ => out.push((z0, z1)),
             }
         }
     }
-    out
+    // A complete reading of a closed mesh always closes at zero; this
+    // guards a reading cut short, behind the budget's own guard.
+    (wind == 0).then_some(out)
 }
 
 impl FixtureMesh {
     /// The Z spans, ascending and disjoint, where the vertical line
     /// through `(x, y)` runs inside the solid; empty where it misses the
-    /// steel. An ambiguous line is nudged a millionth of the mesh's
-    /// scale and read again; `None` when every nudge is ambiguous, the
+    /// steel. An ambiguous line is nudged ([`nudge_unit`]) and read
+    /// again; `None` when every nudge is ambiguous, the
+    /// winding is inconsistent (it goes negative or does not close), the
     /// input is not finite, or `budget` runs out - the caller then judges
     /// by the box. `budget` is the facets the caller lets the query
     /// visit, shared across calls (each visit takes one): a fan of slim
@@ -157,7 +172,9 @@ impl FixtureMesh {
                 return None;
             }
             if let Some(xs) = crossings(self, x + u * dx, y + u * dy, budget) {
-                return Some(spans_of(xs));
+                // An inconsistent winding is the mesh's, not the line's:
+                // no nudge mends it.
+                return spans_of(xs);
             }
         }
         None
