@@ -154,6 +154,7 @@ mod step_budget;
 mod two_point_marks;
 // #979: the viewport box select.
 mod box_select;
+mod edge_click_modifiers;
 // #1104: the Setups page lists setups only.
 mod setups_declutter;
 // #1206: each setup's own Machine and Post pages pick its own mount.

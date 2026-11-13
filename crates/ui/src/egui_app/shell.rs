@@ -578,9 +578,9 @@ fn viewport_panel(
         for (a, b) in crate::vertex_pick::picked_point_marks(state, aspect) {
             ui.painter().line_segment([to_px(a), to_px(b)], egui::Stroke::new(2.0, rgb8(super::ground_ink::overlay(super::ground_ink::Overlay::Pick))));
         }
-        for (a, b) in interact::hover_features(state, aspect) {
-            ui.painter().line_segment([to_px(a), to_px(b)], egui::Stroke::new(1.0, rgb8(super::ground_ink::overlay(super::ground_ink::Overlay::Hover))));
-        }
+        // #1505/#1507: selected picks and the hover (viewport or list row)
+        // as thick, haloed strokes over the model.
+        crate::pick_ink::paint(ui.painter(), state, aspect, to_px, rgb8);
         // #979: the pick box's rubber band - solid for a window, dashed
         // for a crossing box.
         if let Some(b) = state.pick_box {

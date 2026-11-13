@@ -160,10 +160,12 @@ fn chips(ui: &mut Ui, state: &mut State, target: &str) {
                 } else {
                     ui.label(&label)
                 };
-                if resp.hovered() {
+                let x = ui.small_button("×").on_hover_text("remove this pick");
+                // #1507: the label and its remove button both light the pick.
+                if resp.hovered() || x.hovered() {
                     state.geo_hover = Some(sel);
                 }
-                ui.small_button("×").on_hover_text("remove this pick").clicked()
+                x.clicked()
             })
             .inner;
         if remove {
