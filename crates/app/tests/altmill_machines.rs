@@ -45,6 +45,10 @@ fn mirrored(name: &str) -> Value {
     machine::mirror(&shipped(name))
 }
 
+fn post_with(m: &Value, stream: &str, options: &Value) -> engine::PostOutput {
+    engine::run_with(&read("assets/posts/grblhal.cps"), m, stream, options).unwrap_or_else(|e| panic!("posts: {e}"))
+}
+
 fn post(m: &Value, stream: &str) -> engine::PostOutput {
     engine::run(&read("assets/posts/grblhal.cps"), m, stream).unwrap_or_else(|e| panic!("posts: {e}"))
 }
@@ -126,14 +130,12 @@ fn a_spindle_speed_past_the_maximum_is_refused() {
 }
 
 /// The two-tool program on the 4x4, locked byte-exact in mm and in inch
-/// (an inch copy of the file), so a later post change shows up as a diff.
+/// (the document's `Units: inch`, #902), so a later post change shows up as a diff.
 #[test]
 fn the_4x4_two_tool_program_is_locked() {
-    let mut inch = mirrored("Sienci AltMill 4x4");
-    inch["units"] = json!("inch");
     let write = std::env::var_os("WRITE_GOLDEN").is_some();
-    for (m, file) in [(mirrored("Sienci AltMill 4x4"), "altmill_4x4_two_tool"), (inch, "altmill_4x4_two_tool_inch")] {
-        let out = post(&m, STREAM);
+    for (m, file) in [(json!({}), "altmill_4x4_two_tool"), (json!({"Units": "inch"}), "altmill_4x4_two_tool_inch")] {
+        let out = post_with(&mirrored("Sienci AltMill 4x4"), STREAM, &m);
         assert!(out.warnings.is_empty(), "{file}: {:?}", out.warnings);
         let rel = format!("crates/app/tests/golden/nc/grblhal/{file}.nc");
         if write {
