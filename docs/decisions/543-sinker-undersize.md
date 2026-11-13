@@ -22,3 +22,24 @@
 - Applying the undersize to Z through a separate floor stock parameter. One per-side undersize on every face keeps the floor and walls finishing together, as the issue states "per side".
 
 **Cost to change later:** low. `pass` and the cavity are additive keys; an orbiting finish (#544) changes only the `e + 2g` term to `e + 2(g + orbit)` in `judge`.
+
+### Refresh over main (#1131, #544 orbit, #545 side burn merged), 2026-11-12
+
+**Decided:**
+- **Main's tip refusals read the stand-off.** #1131 added two refusals on `tip = z + gap` (tip at or above the approach plane; gap not smaller than the burn). This PR places the tip at `z + stand(p)` (the undersize stand-off for a rough/finish), so both refusals now read `stand(p)`, naming it "undersize stand-off" when one is set and keeping main's "spark gap" text otherwise. Since the stand is never less than the gap, this only refuses more. The side burn's tip uses the same `stand(p)`.
+- **One condition door.** Main's `condition_gap_as(label)` (#545) and this PR's `condition(need)` became `condition_as(world, setup, label, op, need)`; `condition_gap`, `condition_gap_as` and `condition` are thin wrappers, so every refusal text stays as both sides had it.
+- **Validate early (NeoTech review at b93e8fbe):** `SinkerBurnOp::pass_refusal` refuses a rough or finish without both finished cavity sizes above 0 by name at `CreateOperation` / `EditOperationParams` (the sinker gate), and `is_sane` repeats it; generation runs it again for a file-loaded op.
+- **No orbit on a rough or finish yet.** `judge` sizes the burn as `e + 2g`; an orbit widens it by `2r`. Rather than judge an orbited pass wrongly, it is refused by name (creation and generate), and #1355 owns counting the radius. A single burn orbits as #544 shipped.
+- **The side burn's burn is a single pass.** It sizes its electrode by its own undersize (#545), so a rough/finish pass on it is refused by name.
+
+**Considered and dropped:** counting the orbit in `judge` now (it also moves the floor stand - design work for #1355, not a merge); splitting `job.rs` (main is already at 415 lines; this PR adds 8, a split is not trivial and belongs to its own refactor).
+
+### Refresh over main (#1157 wear compensation, #546), 2026-11-13
+
+**Decided (coordinator M5, posted on PR #1136):**
+- **Wear compensation reads the stand-off.** #546's `burn_compensated` placed every layer's tip at `top - d + gap - r*d` and ignored `SinkerParams::stand`. Calling it from a rough or finish would burn to floor + gap and silently through the finish allowance. Both `burn_compensated` and `deepest_tip` now read `sinker::stand(p)` (`s`) where they read the gap.
+- **Compensate the depth actually burned.** `tip = top - d + s - r*max(0, d - (s - gap))` and `deepest = z + s - r*(top - z - s + gap)`. Burning starts one gap above the top, so this is exactly where `worn_tip` (the stock sim's as-burned reading) puts the worn face, on floor + s. The wear bound and the electrode-length check read the same deepest tip. With no stand-off set, `s` is the gap and every move is byte-identical to main.
+- **One door.** The law lives in motion's `burn_compensated`; `generate_sinker` runs `pass_refusal`, `wear_refusal`, the undersize judgement, then `burn_compensated`.
+- **Why:** the planned burn is the burn the sim verifies, and no burn silently enters the allowance a later pass is meant to remove.
+
+**Considered and dropped:** keeping `r*d` (over-deepens by `r*(s - gap)`, which goes into the finish allowance and away from the sim's reading); a separate app-side check (two doors to keep in step on burn depth).

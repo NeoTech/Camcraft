@@ -70,6 +70,7 @@ pub fn half_sizes(t: &Tool) -> (f64, f64) {
 #[must_use]
 pub fn electrode_tool(x: f64, y: f64, length: f64, pickup: f64) -> Tool {
     Tool {
+        pitch_min: 0.0,
         kind: ToolKind::Electrode,
         diameter: x,
         corner_r: 0.0,
@@ -92,6 +93,8 @@ pub fn electrode_tool(x: f64, y: f64, length: f64, pickup: f64) -> Tool {
         center_cutting: true,
         orientation: None,
         turning: None,
+        catalog: crate::catalog_fields::ToolCatalog::default(),
+        cutting: Vec::new(),
     }
 }
 

@@ -24,7 +24,7 @@ use camcraft_app::commands::{
 };
 use camcraft_app::geometry::{Mesh, Point3, Triangle};
 use camcraft_app::machine::parse_mch;
-use camcraft_app::operation::{Height, OpParams, SinkerBurnOp, SinkerDatum, SinkerPass, SrcRef};
+use camcraft_app::operation::{Height, OpParams, SinkerBurnOp, SinkerDatum, SinkerOrbit, SinkerOrbitKind, SinkerPass, SrcRef};
 use camcraft_app::stock::StockShape;
 use camcraft_app::stock_sim::simulate_document;
 use camcraft_app::tools::Tool;
@@ -101,6 +101,10 @@ fn burn(pass: SinkerPass, condition: &str) -> OpParams {
         pass,
         cavity_x: CAV.0,
         cavity_y: CAV.1,
+        layer: None,
+        wear_lost: None,
+        wear_over: None,
+        orbit: None,
     })
 }
 
@@ -167,9 +171,11 @@ fn a_rough_finish_pair_reaches_the_finished_size_in_the_sim() {
         sim.dev.max_gouge_at
     );
 
-    // The pair's CL, rough then finish, is golden.
-    let text = [common::gen_to_cltext(&path_of(&world, "Rough").path), common::gen_to_cltext(&path_of(&world, "Finish").path)].concat();
-    common::write_golden("sinker_rough_finish_pair.cl", &text);
+    // The pair's CL is golden, one stream per file (#1374): a single file
+    // holding two CL headers is not one CL text, so the CL reader's
+    // round trip over every golden (camcraft-cl headless_bin) could not read it back.
+    common::write_golden("sinker_rough_finish_pair_rough.cl", &common::gen_to_cltext(&path_of(&world, "Rough").path));
+    common::write_golden("sinker_rough_finish_pair_finish.cl", &common::gen_to_cltext(&path_of(&world, "Finish").path));
 }
 
 #[test]
@@ -198,17 +204,47 @@ fn a_finish_that_leaves_the_cavity_under_size_is_refused_by_name() {
     let Err(err) = GenerateOperation::new(&world, "Rough") else { panic!("an overburn generated") };
     assert!(err.to_string().contains("past size"), "{err}");
 
-    // No undersize in the condition, no cavity stated: both by name.
+    // No undersize in the condition: by name at generate.
     h.execute(&world, EditOperationParams::new(&world, "Rough", burn(SinkerPass::Rough, "NU")).expect("edit"));
     let Err(err) = GenerateOperation::new(&world, "Rough") else { panic!("no undersize generated") };
     assert!(err.to_string().contains("states no undersize"), "{err}");
-    let mut p = burn(SinkerPass::Rough, "R1");
-    if let OpParams::SinkerBurn(op) = &mut p {
-        op.cavity_y = 0.0;
+}
+
+/// Review of #1136 (validate early): a rough or finish without its
+/// finished cavity size, or with an orbit the undersize law does not
+/// count yet (#1355), is refused by name when the command is built -
+/// create and edit alike - not first at generate.
+#[test]
+fn a_pass_without_its_cavity_or_with_an_orbit_is_refused_at_command_creation() {
+    let (world, mut h) = sinker_doc();
+    let no_cavity = |pass, x: f64, y: f64| {
+        let mut p = burn(pass, "R1");
+        if let OpParams::SinkerBurn(op) = &mut p {
+            op.cavity_x = x;
+            op.cavity_y = y;
+        }
+        p
+    };
+    for (pass, x, y) in [(SinkerPass::Rough, 20.0, 0.0), (SinkerPass::Finish, 0.0, 12.0), (SinkerPass::Rough, f64::NAN, 12.0)] {
+        let Err(err) = CreateOperation::new(&world, "Rough", ROUGH, SrcRef::Stock, no_cavity(pass, x, y)) else {
+            panic!("a {pass:?} with cavity {x} x {y} was created")
+        };
+        assert!(err.to_string().contains("state its X and Y size (both above 0)"), "{err}");
     }
-    h.execute(&world, EditOperationParams::new(&world, "Rough", p).expect("edit"));
-    let Err(err) = GenerateOperation::new(&world, "Rough") else { panic!("no cavity generated") };
-    assert!(err.to_string().contains("is not stated"), "{err}");
+    // A single burn never reads the cavity: 0 x 0 is its draft.
+    add(&world, &mut h, "Single", ROUGH, no_cavity(SinkerPass::Single, 0.0, 0.0));
+    add(&world, &mut h, "Rough", ROUGH, burn(SinkerPass::Rough, "R1"));
+    let Err(err) = EditOperationParams::new(&world, "Rough", no_cavity(SinkerPass::Rough, 20.0, 0.0)) else {
+        panic!("an edit dropped the cavity")
+    };
+    assert!(err.to_string().contains("state its X and Y size"), "{err}");
+
+    let mut orbited = burn(SinkerPass::Rough, "R1");
+    if let OpParams::SinkerBurn(op) = &mut orbited {
+        op.orbit = Some(SinkerOrbit { kind: SinkerOrbitKind::Circular, radius: 0.05, vectors: 4, turns: 1 });
+    }
+    let Err(err) = EditOperationParams::new(&world, "Rough", orbited) else { panic!("an orbited rough was accepted") };
+    assert!(err.to_string().contains("a sinker rough burns without an orbit"), "{err}");
 }
 
 #[test]
@@ -294,4 +330,41 @@ fn the_rough_finish_pair_is_driven_over_mcp_with_the_gui_commands() {
     assert!(text.contains("undersizes its electrode") || text.contains("under size"), "{text}");
     call(&mut s, &mut id, "undo", json!({}));
     call(&mut s, &mut id, "generate", json!({ "name": "Finish" }));
+}
+
+/// The refresh over main's `stamp_tool` / `current_stamp` split: a
+/// rough or finish's stamp digests its condition's undersize and, for a
+/// finish, the rough it follows. A re-stated undersize marks the pass
+/// Stale (the post refuses until regenerated), a re-stated rough
+/// undersize marks the finish Stale too; undo reads Ok again.
+#[test]
+fn a_restated_undersize_marks_the_pass_and_the_finish_after_it_stale() {
+    use camcraft_app::operation::{status_of, OpStatus};
+    let (world, mut h) = sinker_doc();
+    add(&world, &mut h, "Rough", ROUGH, burn(SinkerPass::Rough, "R1"));
+    add(&world, &mut h, "Finish", FINISH, burn(SinkerPass::Finish, "F1"));
+    generate(&world, &mut h, "Rough");
+    generate(&world, &mut h, "Finish");
+    let status = |w: &World, n: &str| status_of(w, &model::find_by_name(w, n).expect("op"));
+    assert_eq!((status(&world, "Rough"), status(&world, "Finish")), (OpStatus::Ok, OpStatus::Ok));
+
+    // The finish's own condition, its undersize re-stated (gap kept).
+    let restate = |i: usize, u: f64| {
+        let mut v: serde_json::Value = serde_json::from_str(&sinker_machine()).expect("json");
+        v["edm"]["conditions"][i]["undersize"] = serde_json::json!(u);
+        parse_mch(&v.to_string()).expect("sinker parses")
+    };
+    h.execute(&world, LoadMachine::new(&world, "sinker.mch".into(), Some(restate(1, 0.03))).expect("remount"));
+    assert_eq!(status(&world, "Finish"), OpStatus::Stale, "a re-stated finish undersize is a different judgement");
+    assert_eq!(status(&world, "Rough"), OpStatus::Ok, "the rough's condition did not change");
+    assert!(h.undo(&world));
+    assert_eq!(status(&world, "Finish"), OpStatus::Ok, "undo restores the undersize the finish was judged with");
+
+    // The rough's undersize re-stated: the rough, and the finish that
+    // follows it (its order warning reads the rough's undersize).
+    h.execute(&world, LoadMachine::new(&world, "sinker.mch".into(), Some(restate(0, 0.25))).expect("remount"));
+    assert_eq!(status(&world, "Rough"), OpStatus::Stale, "a re-stated rough undersize is a different burn");
+    assert_eq!(status(&world, "Finish"), OpStatus::Stale, "the finish follows a different rough");
+    assert!(h.undo(&world));
+    assert_eq!((status(&world, "Rough"), status(&world, "Finish")), (OpStatus::Ok, OpStatus::Ok));
 }

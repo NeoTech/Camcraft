@@ -46,14 +46,17 @@ pub mod colorvision;
 pub mod ground_ink;
 pub mod window_chrome;
 mod post_options;
+mod program_info;
 pub mod cvd;
 mod icons;
 mod op_icons;
+mod tool_icons;
 mod layout;
 mod load_field;
 // pub(crate) past egui_app: `State::machine_editor` names its draft
 // type (M3.3 stage C), so state.rs has to see through the door.
 pub(crate) mod machine_editor;
+mod machine_edm;
 // #548: the sinker EDM section of the Machine window.
 mod machine_edm_editor;
 mod machine_grid;
@@ -71,15 +74,27 @@ mod approach_page;
 mod lead_page;
 mod op_tabs;
 mod painted;
+mod tree_badges;
 mod tree_glyphs;
 mod pages;
+// #739: the WCS page, split out of pages.rs.
+mod wcs_page;
 mod step_budget_row;
 // #1094: the stock page's raw-stock-only checkbox.
 mod raw_stock_row;
 // #371: the tool editor's Body section and its picking preview.
+mod tool_body_lathe_page;
 mod tool_body_page;
 // #630: the tool editor's lathe orientation row.
 mod tool_orientation_row;
+// #894: the Thread operation's pitch and hand rows.
+mod thread_page;
+// #894: the thread mills' pitch and form rows.
+mod tool_thread_mill_row;
+// #898: the tool editor's catalog rows (part number, vendor, ...).
+mod tool_catalog_rows;
+// #890: the tool editor's per-material cutting data.
+mod tool_cutting_rows;
 mod tool_turning_row;
 mod tool_profile_page;
 // #793: the built-in taper holder picker in the Profile section.
@@ -91,6 +106,7 @@ mod setup_wcs_pick;
 // #343: a setup's own node pages (settings, machine, post, fixtures, tools).
 mod setup_pages;
 mod setup_post_page;
+mod setup_rotary_page;
 // #509: one fixture's row on the Fixtures page, sized to the pane.
 mod fixture_rows;
 // #561: the locate-in-fixture mate tools (Fixtures page and Model page).
@@ -103,6 +119,8 @@ mod setup_plane_pick;
 mod setup_axis_pick;
 // #555: the Setups page's lay-on-three-points row.
 mod setup_points_pick;
+// #701: the Setups page's set-WCS-from-features role row.
+mod wcs_pick_row;
 // #316: the setup page's "relative to the previous setup" control.
 mod setup_relative_pick;
 mod setup_workholding_row;
@@ -111,6 +129,10 @@ mod setup_workholding_row;
 // params dispatcher and its kind-family pages, the shared widgets.
 mod fields;
 mod geo_page;
+#[cfg(test)]
+pub(crate) use boundary::hints as boundary_hints;
+#[cfg(test)]
+pub(crate) use geo_page::{click_selects_hint, edge_hint};
 mod heights_page;
 mod holes_page;
 mod pockets_page;
@@ -119,6 +141,7 @@ pub(crate) use pockets_page::row_text as pockets_row_text;
 mod probe_page;
 // #670: the Plasma Profile's page.
 mod plasma_page;
+mod wire_page;
 // #541: the Sinker Burn's fields.
 mod sinker_page;
 mod trochoid_page;
@@ -178,6 +201,8 @@ pub mod theme_files;
 // digest straight (the imgui panels' fold checks moved there at M-g), and
 // the view cube's pick law straight.
 pub(crate) mod viewcube;
+pub(crate) mod viewport_bar;
+pub(crate) mod viewport_layout;
 pub(crate) mod world;
 
 #[cfg(test)]
@@ -192,6 +217,8 @@ mod fixture_ux_tests;
 mod locate_tests;
 #[cfg(test)]
 mod fixture_library_tests;
+#[cfg(test)]
+mod escape_tests;
 #[cfg(test)]
 mod fixture_vise_tests;
 #[cfg(test)]
@@ -213,7 +240,11 @@ mod coolant_tests;
 #[cfg(test)]
 mod thread_hand_tests;
 #[cfg(test)]
+mod thread_mill_page_tests;
+#[cfg(test)]
 mod after_op_tests;
+#[cfg(test)]
+mod program_info_tests;
 #[cfg(test)]
 mod colorvision_tests;
 #[cfg(test)]
@@ -227,6 +258,8 @@ mod ribbon_icon_tests;
 #[cfg(test)]
 mod plasma_ribbon_tests;
 #[cfg(test)]
+mod machine_mode_tests;
+#[cfg(test)]
 mod debug_info_tests;
 #[cfg(test)]
 mod fresh_op_tests;
@@ -234,6 +267,10 @@ mod fresh_op_tests;
 mod tool_number_tests;
 #[cfg(test)]
 mod setup_wcs_tests;
+#[cfg(test)]
+mod wcs_page_tests;
+#[cfg(test)]
+mod wcs_circle_tests;
 #[cfg(test)]
 mod setup_align_tests;
 #[cfg(test)]
@@ -249,6 +286,8 @@ mod setup_plane_tests;
 mod setup_axis_tests;
 #[cfg(test)]
 mod setup_points_tests;
+#[cfg(test)]
+mod wcs_pick_tests;
 #[cfg(test)]
 mod ball_corner_tests;
 #[cfg(test)]

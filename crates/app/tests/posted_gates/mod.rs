@@ -11,7 +11,13 @@
 //! box atom), the gate the sinker post's program runs. Every program is
 //! first proved byte-identical to its committed CL golden.
 //!
+//! The wire punch rides `wire` (#534): the wire laws its post runs.
+//!
 //! Provenance: our own harness over our own goldens; no vendor material.
+
+pub mod thread;
+mod wire;
+pub use wire::{wire_findings, wire_taper_findings, wire_taper_verdict, wire_verdict};
 
 use flecs_ecs::prelude::World;
 
@@ -87,6 +93,7 @@ fn region_law(t: &Toolpath, region: &Region, tool: &ToolGeom, mode: Mode, top: f
             finish_tol: None,
             fixtures: &[],
             spindle: None,
+            rims: &[],
         },
     )
 }
@@ -271,6 +278,10 @@ pub fn sinker_gouge_cells() -> usize {
         pass: camcraft_app::operation::SinkerPass::Single,
         cavity_x: 0.0,
         cavity_y: 0.0,
+        orbit: None,
+        layer: None,
+        wear_lost: None,
+        wear_over: None,
     });
     h.execute(&world, CreateOperation::new(&world, "Burn1", "E-10x6", SrcRef::Stock, op).expect("a sinker burn"));
     h.execute(&world, GenerateOperation::new(&world, "Burn1").expect("generates"));

@@ -31,18 +31,20 @@ pub mod cnc;
 pub mod cnc_thread;
 pub mod cnc_torch;
 mod coolant;
+pub mod dialect;
 pub mod engine;
 pub mod invert;
 pub mod js;
 pub mod machine;
-mod machine_edm;
 pub mod nose_tip;
 pub mod probe_rec;
 mod program;
+pub mod units;
 
 pub use after_op::AfterOperation;
 pub use coolant::CoolantMode;
 pub use engine::{LineInfo, PostOutput, TraceBlock};
+pub use js::ProgramId;
 
 use crate::cl::{MoveKind, Toolpath};
 use cnc::{CycleRec, MoveRec, Record};
@@ -210,6 +212,21 @@ impl<'a> Default for Dump<'a> {
     }
 }
 
+/// Ask for a reverse (M04) spindle on one operation's records (#988: a
+/// left-hand-cut thread mill): the `MillSpindle reverse` PARAM goes in
+/// before the section opens, once. A post script that does not declare
+/// `millSpindleReverse` then refuses the section by name instead of
+/// turning the cutter backwards under M03. (The lathe's
+/// `SpindleDirection` states a turned thread's hand and is not this.)
+pub fn ask_reverse_spindle(records: &mut Vec<Record>) {
+    let said = records.iter().any(|r| matches!(r, Record::Param { name, .. } if name == "MillSpindle"));
+    if said {
+        return;
+    }
+    let at = records.iter().position(|r| matches!(r, Record::Section { begin: true })).unwrap_or(records.len());
+    records.insert(at, Record::Param { name: "MillSpindle".into(), value: json!("reverse") });
+}
+
 /// The generator side: a toolpath plus its resolved context, as
 /// records in driver order. Cycles are interleaved before their
 /// group's first move, so the stream reads in program order whether
@@ -259,7 +276,7 @@ pub fn dump(t: &Toolpath, d: &Dump) -> Vec<Record> {
     // a C turn: the section says so before it opens, so a script can
     // engage C and the live spindle in its preamble - and the engine
     // refuses, by name, a script that does not declare `liveTooling`.
-    if t.moves.iter().any(|m| m.rotary.is_some()) {
+    if dialect::states_live_tool(t) {
         out.push(Record::Param { name: "LiveTool".into(), value: json!("radial") });
     }
     // A thread whose passes need the spindle reversed (#629): the

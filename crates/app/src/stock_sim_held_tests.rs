@@ -28,6 +28,7 @@ fn burn_moves() -> Vec<crate::cl::Move> {
         feed: 40.0,
         gap: GAP,
         stand: None,
+        orbit: None,
     };
     burn_to_depth(&p).expect("burns").moves
 }

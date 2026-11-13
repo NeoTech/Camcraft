@@ -2,7 +2,8 @@
 //! `edm` keys a sinker machine states - the largest orbit radius, the
 //! electrode pickup, the orbit list (CamCraft's geometry and the
 //! control's own word), the generator condition table (#531) and the
-//! `edm.codes` roles the sinker post reads (#542). Absent values read
+//! `edm.codes` roles the sinker post reads (#542, held on the machine as
+//! `Machine::edm_codes`). Absent values read
 //! "not stated", never zero. Every edit is a change to the machine
 //! DRAFT; Apply rides the existing undoable `EditMachineApply`, whose
 //! `LoadMachine` refuses a draft the loader would refuse (`Edm::is_sane`),
@@ -12,6 +13,8 @@
 //!
 //! Provenance: our own UI over our own machine grammar (#290 D4, D5);
 //! general die-sink EDM practice; no vendor text.
+
+use std::collections::BTreeMap;
 
 use egui::{CollapsingHeader, ComboBox, TextEdit, Ui};
 
@@ -36,8 +39,8 @@ pub(super) fn draw(ui: &mut Ui, u: Unit, m: &mut Machine) {
         keys(ui, u, &mut edm);
         orbits(ui, &mut edm);
         conditions(ui, u, &mut edm);
-        codes(ui, &mut edm);
-        for p in problems(&edm) {
+        codes(ui, &mut m.edm_codes);
+        for p in problems(&edm, &m.edm_codes) {
             ui.colored_label(ui.visuals().error_fg_color, format!("Apply will refuse: {p}"));
         }
     });
@@ -163,19 +166,19 @@ fn conditions(ui: &mut Ui, u: Unit, e: &mut Edm) {
     }
 }
 
-fn codes(ui: &mut Ui, e: &mut Edm) {
+fn codes(ui: &mut Ui, codes: &mut BTreeMap<String, String>) {
     pages::field(ui, "Control codes (edm.codes)");
     for (role, placeholders) in SINKER_CODES {
         ui.horizontal(|ui| {
-            let mut on = e.codes.contains_key(role);
+            let mut on = codes.contains_key(role);
             if ui.checkbox(&mut on, format!("Code {role}")).changed() {
                 if on {
-                    e.codes.insert(role.to_owned(), String::new());
+                    codes.insert(role.to_owned(), String::new());
                 } else {
-                    e.codes.remove(role);
+                    codes.remove(role);
                 }
             }
-            match e.codes.get_mut(role) {
+            match codes.get_mut(role) {
                 Some(t) => {
                     let l = ui.label(format!("{role} template"));
                     let hint = if placeholders.is_empty() { "the control's word".to_owned() } else { format!("fills {placeholders}") };
@@ -187,7 +190,7 @@ fn codes(ui: &mut Ui, e: &mut Edm) {
             }
         });
     }
-    let extra: Vec<&str> = e.codes.keys().map(String::as_str).filter(|k| !SINKER_CODES.iter().any(|(r, _)| r == k)).collect();
+    let extra: Vec<&str> = codes.keys().map(String::as_str).filter(|k| !SINKER_CODES.iter().any(|(r, _)| r == k)).collect();
     if !extra.is_empty() {
         ui.label(format!("also states (kept as written): {}", extra.join(", ")));
     }
@@ -199,7 +202,7 @@ fn codes(ui: &mut Ui, e: &mut Edm) {
 /// spelling, a gap > 0, an undersize in (0, 1] mm), its ids compared as
 /// the loader compares them (case and leading zeros ignored), and a
 /// wire-only field on this sinker is named as the loader names it.
-pub(super) fn problems(e: &Edm) -> Vec<String> {
+pub(super) fn problems(e: &Edm, codes: &BTreeMap<String, String>) -> Vec<String> {
     let mut out = Vec::new();
     if e.max_orbit_radius.is_some_and(|r| !(r.is_finite() && r > 0.0)) {
         out.push("max orbit radius must be positive".to_owned());
@@ -229,7 +232,7 @@ pub(super) fn problems(e: &Edm) -> Vec<String> {
             }
         }
     }
-    for (role, t) in &e.codes {
+    for (role, t) in codes {
         if t.trim().is_empty() {
             out.push(format!("code {role:?} is blank - type the control's word or untick it"));
         }

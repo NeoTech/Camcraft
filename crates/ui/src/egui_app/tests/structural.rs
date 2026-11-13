@@ -106,7 +106,7 @@ fn assert_shell_skeleton(h: &Harness<'static, ShellUi>) {
         let q = at(&texts, t);
         assert!(q.x > v.x && q.x < p.x, "view cube face {t:?} belongs to the viewport");
     }
-    for label in ["Show world origin axes", "Show all toolpaths", "Shaded", "Wireframe"] {
+    for label in ["Show world origin axes", "Show origin names", "Show all toolpaths", "Shaded", "Wireframe"] {
         assert!(!disabled(h, label), "viewport control {label:?} must be live");
     }
     // Properties: the seed's page, its sections, and the draft law's
@@ -284,7 +284,7 @@ fn setup_page_alignment_rows_structure() {
     let plane = h.query_by_label_contains("Lay on a plane - pick a face").expect("the plane row shows").rect();
     assert!(h.query_by_label("Pick a face").is_some_and(|n| !n.accesskit_node().is_disabled()), "the plane row picks a face");
     assert!(h.query_by_label("Pick face or edges").is_none(), "#554: the plane row offers no edge pick");
-    let axes = h.query_by_label_contains("Axes in the plane - pick an edge or two points").expect("the axes rows show");
+    let axes = h.query_by_label_contains("Part axes - pick an edge or two points for +Y and +X; +Z follows by the right-hand rule").expect("the axes rows show");
     assert!(plane.min.y < axes.rect().min.y, "the axes rows follow the plane row");
     for label in ["+Y by Edge", "+Y by Two points", "Pick +Y edge", "Flip +Y", "+X by Edge", "+X by Two points", "Pick +X edge", "Flip +X"] {
         assert!(h.query_by_label(label).is_some(), "the axes rows must show {label:?}");
@@ -334,6 +334,35 @@ fn setup_page_alignment_rows_structure() {
         assert!(pane.contains_rect(r), "Apply lies inside the pane: {r:?}");
     }
     assert!(h.state().state.points_pick.is_none(), "nothing is armed by drawing the page");
+}
+
+/// #535: the machine editor of a wire EDM stands the wire section in
+/// its order - keys, codes, conditions - with every absent value saying
+/// "not stated", and the spindle / tooling / coolant groups gone.
+#[test]
+fn wire_machine_editor_structure() {
+    let _g = snapshot_guard();
+    let mut harness = shell_harness();
+    harness.run();
+    let mut m = camcraft_app::machine::parse_mch(include_str!("../../../../app/tests/edm/wire-iso-fixture.mch")).expect("fixture");
+    m.edm = None;
+    m.edm_codes.clear();
+    harness.state_mut().state.machine_editor =
+        Some(crate::egui_app::machine_editor::MachineEditor { path: "wire.mch".to_owned(), machine: m });
+    harness.run_steps(3);
+    let mut last_y = f32::MIN;
+    for label in ["Wire keys", "EDM codes (the control's words)", "Conditions"] {
+        let y = harness.get_by_label(label).rect().center().y;
+        assert!(y > last_y, "{label:?} must follow the section above it");
+        last_y = y;
+    }
+    for label in ["lower guide Z", "upper guide Z", "max taper (deg)", "code condition", "code comp_off", "code thread", "code cut", "code tip_disposal"] {
+        assert!(harness.query_by_label(label).is_some(), "{label:?} row is drawn");
+    }
+    assert!(harness.query_all_by_label("not stated").count() >= 8, "absent values say so");
+    for gone in ["Spindle (rpm)", "Tooling", "Coolants"] {
+        assert!(harness.query_by_label(gone).is_none(), "{gone:?} has no place on a wire EDM");
+    }
 }
 
 /// #1031: a lathe setup's Settings page carries the "Workholding max rpm"
@@ -435,4 +464,99 @@ fn ribbon_labels_whole_and_captions_painted() {
     for pair in caps.windows(2) {
         assert!(pair[0].1.x < pair[1].1.x, "captions run left to right: {pair:?}");
     }
+}
+
+/// #645 re-review: the structural both-states check for the "Show origin
+/// names" switch. The seeded document's G54 offset sits at world zero and
+/// its triad carries the name row; while the switch is on (the #727
+/// default) the painted frame shows that name inside the viewport and
+/// the checkbox click drops it. The big `X`/`Y`/`Z` letters and the
+/// triad's strokes ignore the switch. `view_names.rs` drives the same
+/// checkbox through State and the view file; this pins what the shell
+/// paints. The properties pane's WCS row also reads "G54", so the
+/// painted probe stays inside the viewport, as the view-cube check does.
+/// The re-review also pins the checkbox's AccessKit checked state, in
+/// both states: `toggled()` is AccessKit 0.24's name for it.
+#[test]
+fn origin_names_paint_on_and_quiet_off_letters_and_lines_always() {
+    let _g = snapshot_guard();
+    let mut h = shell_harness();
+    // Redirect the at-once persist away from the real user's view.json -
+    // the flip would otherwise write it out of this test process.
+    let d = std::env::temp_dir().join(format!(
+        "camcraft-view-structural-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&d);
+    std::fs::create_dir_all(&d).expect("make the test folder");
+    h.state_mut().state.view_store = Some(d.join("view.json"));
+    // On: the painted frame shows the offset's name row in the viewport,
+    // and the shared projection law agrees.
+    h.run_steps(2);
+    let texts = painted(&h);
+    let v = at(&texts, "Viewport").x;
+    let p = at(&texts, "Properties").x;
+    let in_viewport = |(t, q): &(String, egui::Pos2)| t == "G54" && q.x > v && q.x < p;
+    let letters = |labels: &[([f32; 2], [f32; 3], String)]| -> Vec<String> {
+        labels
+            .iter()
+            .filter(|(_, _, t)| interact::is_axis_label(t))
+            .map(|(_, _, t)| t.clone())
+            .collect()
+    };
+    let (segs_on, letters_on) = {
+        let st = &h.state().state;
+        assert!(st.show_gizmo_names, "the #727 default is on");
+        assert_eq!(
+            h.get_by_label("Show origin names").accesskit_node().toggled(),
+            Some(egui::accesskit::Toggled::True),
+            "the checkbox reads checked in the default state"
+        );
+        let labels = interact::overlay_labels(st, 1.0);
+        assert!(
+            labels.iter().any(|(_, _, t)| t == "G54"),
+            "on: the offset's name is in the labels: {labels:?}"
+        );
+        assert!(
+            texts.iter().any(in_viewport),
+            "on: the name row is painted in the viewport"
+        );
+        let segs = interact::gizmo_segments(st, 1.0);
+        assert!(!segs.is_empty(), "the triad's strokes draw");
+        let letters = letters(&labels);
+        assert!(!letters.is_empty(), "the axis letters draw");
+        (segs.len(), letters)
+    };
+    // Off: the checkbox clicks the flag through the real widget and the
+    // name row leaves the painted frame; letters and lines stay.
+    h.get_by_label("Show origin names").click();
+    h.run_steps(2);
+    let texts = painted(&h);
+    {
+        let st = &h.state().state;
+        assert!(!st.show_gizmo_names, "the click flipped the flag");
+        assert_eq!(
+            h.get_by_label("Show origin names").accesskit_node().toggled(),
+            Some(egui::accesskit::Toggled::False),
+            "the checkbox reads unchecked after the click"
+        );
+        let labels = interact::overlay_labels(st, 1.0);
+        assert!(
+            labels.iter().all(|(_, _, t)| t != "G54"),
+            "off: no name row anywhere: {labels:?}"
+        );
+        assert!(
+            !texts.iter().any(in_viewport),
+            "off: the painted viewport no longer shows the name row"
+        );
+        // Letters and strokes ignore the switch: the same letters and
+        // the same segments draw either way.
+        assert_eq!(letters(&labels), letters_on, "the letters survive untouched");
+        assert_eq!(
+            interact::gizmo_segments(st, 1.0).len(),
+            segs_on,
+            "the strokes ignore the switch"
+        );
+    }
+    let _ = std::fs::remove_dir_all(&d);
 }

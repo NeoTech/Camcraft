@@ -93,8 +93,11 @@ fn add_condition_then_apply_is_one_undo_step() {
     h.run();
     assert!(h.query_by_label("Condition 2 id").is_some(), "the new row stands in the draft");
     assert_eq!(conditions(&h), 1, "nothing is a command before Apply");
+    // The fields scroll and Apply stands below them (#535): bring it in reach.
+    h.get_by_label("Apply").scroll_to_me();
+    h.run_steps(4);
     h.get_by_label("Apply").click();
-    h.run();
+    h.run_steps(3);
     h.state_mut().drain_actions();
     h.run();
     assert_eq!(conditions(&h), 2, "Apply mounts the edited machine");
@@ -110,8 +113,11 @@ fn a_draft_the_loader_refuses_is_named_and_refused_at_apply() {
     h.get_by_label("Add orbit").click();
     h.run();
     assert!(h.query_all_by_label_contains("Apply will refuse: orbit 2 states no control word").count() >= 1);
+    // The fields scroll and Apply stands below them (#535): bring it in reach.
+    h.get_by_label("Apply").scroll_to_me();
+    h.run_steps(4);
     h.get_by_label("Apply").click();
-    h.run();
+    h.run_steps(3);
     h.state_mut().drain_actions();
     h.run();
     let orbits = machine::of(&h.state().world).1.and_then(|m| m.edm).map_or(0, |e| e.orbits.len());
@@ -124,17 +130,26 @@ type EdmEdit = fn(&mut camcraft_app::machine::Edm);
 
 #[test]
 fn problems_name_each_law_the_loader_keeps() {
+    let none = std::collections::BTreeMap::new();
     let mut e = sinker().edm.expect("edm");
-    assert!(super::machine_edm_editor::problems(&e).is_empty());
+    assert!(super::machine_edm_editor::problems(&e, &none).is_empty());
     e.conditions.push(e.conditions[0].clone());
-    e.codes.insert("depth".into(), " ".into());
     e.pickup = Some(String::new());
-    let p = super::machine_edm_editor::problems(&e).join(" | ");
+    let mut codes = none.clone();
+    codes.insert("depth".into(), " ".into());
+    let p = super::machine_edm_editor::problems(&e, &codes).join(" | ");
     assert!(p.contains("stated twice") && p.contains("\"depth\" is blank") && p.contains("pickup is blank"), "{p}");
     assert!(!e.is_sane(), "the loader's own law agrees");
+    // A blank code alone: the page names it and the machine law refuses it.
+    let mut blank_code = sinker();
+    blank_code.edm_codes = codes.clone();
+    let p = super::machine_edm_editor::problems(blank_code.edm.as_ref().expect("edm"), &blank_code.edm_codes).join(" | ");
+    assert!(p.contains("\"depth\" is blank"), "{p}");
+    assert!(!blank_code.is_sane(), "a blank code is refused at Apply as the file loader refuses it");
     // #560's condition rules: the page names each one the loader keeps,
     // and the loader agrees on every case (one law, two doors).
-    let cases: [(&str, EdmEdit); 7] = [
+    let cases: [(&str, EdmEdit); 8] = [
+        ("max orbit radius", |e| e.max_orbit_radius = Some(0.0)),
         ("gap", |e| e.conditions[0].gap = Some(0.0)),
         ("undersize", |e| e.conditions[0].undersize = Some(0.0)),
         ("undersize", |e| e.conditions[0].undersize = Some(1.5)),
@@ -155,7 +170,7 @@ fn problems_name_each_law_the_loader_keeps() {
     for (word, edit) in cases {
         let mut bad = sinker().edm.expect("edm");
         edit(&mut bad);
-        let p = super::machine_edm_editor::problems(&bad).join(" | ");
+        let p = super::machine_edm_editor::problems(&bad, &none).join(" | ");
         assert!(p.contains(word), "the page names {word:?}: {p}");
         assert!(!bad.is_sane(), "the loader refuses what the page names ({word}): {p}");
     }
@@ -163,7 +178,7 @@ fn problems_name_each_law_the_loader_keeps() {
     let mut wire_field = sinker();
     if let Some(e) = wire_field.edm.as_mut() {
         e.conditions[0].wire_diameter = Some(0.25);
-        let p = super::machine_edm_editor::problems(e).join(" | ");
+        let p = super::machine_edm_editor::problems(e, &none).join(" | ");
         assert!(p.contains("wire field"), "{p}");
     }
     assert!(!wire_field.edm_sane(), "a sinker condition with a wire diameter is refused");
@@ -171,7 +186,7 @@ fn problems_name_each_law_the_loader_keeps() {
     let mut seeded = sinker().edm.expect("edm");
     seeded.conditions[0].gap = Some(0.01);
     seeded.conditions[0].undersize = Some(0.1);
-    assert!(super::machine_edm_editor::problems(&seeded).is_empty() && seeded.is_sane());
+    assert!(super::machine_edm_editor::problems(&seeded, &none).is_empty() && seeded.is_sane());
     let mut only_pickup = sinker().edm.expect("edm");
     only_pickup.pickup = Some(" ".into());
     assert!(!only_pickup.is_sane(), "a blank pickup is refused at Apply as the file loader refuses it");
@@ -192,7 +207,7 @@ fn the_burn_page_reads_the_conditions_gap_and_undersize() {
     let mut h = page(state);
     h.run();
     assert!(h.query_by_label("Burn at X").is_some(), "the Geometry tab is showing");
-    assert!(h.query_by_label("Condition gap").is_some() && h.query_by_label("Electrode undersize").is_some());
+    assert!(h.query_by_label("Condition gap").is_some() && h.query_by_label("Condition undersize").is_some());
     assert!(h.query_all_by_label_contains("0.050 mm").count() >= 1, "the stated gap reads");
     assert!(h.query_all_by_label("not stated").count() >= 1, "the unstated undersize says so");
 }

@@ -5,10 +5,9 @@
 //! (with the control's own word for each), the maximum orbit radius and
 //! the pickup method. The U/V and Z strokes are ordinary kinematics
 //! axes. Every number is optional by the unstated-limits law - absent is
-//! "not stated", never zero. The condition table (#531, `conditions[]`,
-//! either kind) is `edm_conditions`; the control's words (#542,
-//! `codes`, either kind - the wire post #533 joins later) are
-//! `edm_codes`.
+//! "not stated", never zero - and the generator codes are separate
+//! sub-issues (#533, #542); the condition table (#531, `conditions[]`,
+//! either kind) is `edm_conditions`.
 //!
 //! Provenance: the umbrella's design notes (#290, D1-D10) over public
 //! EDM terminology (machine builders' published tutorials and the
@@ -72,18 +71,14 @@ pub struct Edm {
     /// EDM op refuses by name.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub conditions: Vec<Condition>,
-    /// Either kind: the control's EDM words by role (#542, #290 D5):
-    /// templates a post fills (`super::edm_codes`). Empty = none stated,
-    /// and a post needing one refuses by name.
-    #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
-    pub codes: std::collections::BTreeMap<String, String>,
 }
 
 /// The keys only a wire machine states.
 pub const WIRE_KEYS: [&str; 5] = ["lower_guide_z", "upper_guide_z", "max_taper_deg", "wire_diameters", "awt"];
 /// The keys only a sinker machine states.
 pub const SINKER_KEYS: [&str; 3] = ["orbits", "max_orbit_radius", "pickup"];
-/// The keys either EDM kind states.
+/// The keys either EDM kind states (`codes`: the control's own words,
+/// #533, read by `edm_codes::parse_codes`).
 pub const COMMON_KEYS: [&str; 2] = ["conditions", "codes"];
 /// The keys of one orbit entry.
 const ORBIT_KEYS: [&str; 2] = ["kind", "word"];
@@ -123,7 +118,6 @@ impl Edm {
             && self.pickup.as_ref().is_none_or(|p| !p.trim().is_empty())
             && self.orbits.iter().all(|o| ORBIT_KINDS.contains(&o.kind.as_str()) && !o.word.trim().is_empty())
             && self.conditions_sane()
-            && super::edm_codes::codes_sane(&self.codes)
     }
 
     /// Does this section state only keys of `k` (a wire states no
@@ -140,7 +134,7 @@ impl Edm {
         let sinker = !self.orbits.is_empty()
             || self.max_orbit_radius.is_some()
             || self.pickup.is_some()
-            || self.conditions.iter().any(|c| c.undersize.is_some());
+            || self.conditions.iter().any(|c| c.undersize.is_some() || c.wear.is_some());
         match k {
             Kind::WireEdm => !sinker,
             Kind::SinkerEdm => !wire,
@@ -267,7 +261,6 @@ pub(super) fn parse_edm(v: Option<&Value>, f: f64, k: Option<Kind>) -> Result<Op
         Some(x) => return Err(format!("machine file: edm.wire_diameters must be a list, not {x}")),
     }
     e.conditions = super::edm_conditions::parse_conditions(v.get("conditions"), f, k, &e.wire_diameters)?;
-    e.codes = super::edm_codes::parse_codes(v.get("codes"))?;
     match v.get("awt") {
         None | Some(Value::Null) => {}
         Some(Value::Bool(b)) => e.awt = Some(*b),

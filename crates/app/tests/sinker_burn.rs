@@ -57,11 +57,78 @@ fn sinker_burn_cavity_matches_golden() {
         feed: 40.0,
         gap: GAP,
         stand: None,
+        orbit: None,
     };
     let path = burn_to_depth(&p).expect("burns");
     let text = common::gen_to_cltext(&path);
     assert_eq!(camcraft_app::cl::text::to_text(&path).expect("text"), text);
     common::write_golden("sinker_burn_cavity.cl", &text);
+}
+
+/// The review of #1131: the plunge must go DOWN into the work. A spark
+/// gap that lifts the tip to the approach plane would post an upward
+/// "burn" feed; a gap not smaller than the burn below the work top
+/// leaves the electrode outside the work. Both refused by name.
+#[test]
+fn a_spark_gap_that_lifts_the_tip_out_of_the_work_is_refused_by_name() {
+    let mut p = SinkerParams {
+        x: 0.0,
+        y: 0.0,
+        approach_z: 25.0,
+        top_z: 20.0,
+        floor_z: 10.0,
+        model_floor_z: Some(0.0),
+        datum: SinkerDatum::WorkTop,
+        depth: 6.0,
+        electrode_len: 30.0,
+        feed: 40.0,
+        gap: 30.0,
+        stand: None,
+        orbit: None,
+    };
+    let e = burn_to_depth(&p).expect_err("a 30 mm gap feeds the tip up to Z 44");
+    assert!(e.to_string().contains("the spark gap 30.000 places the tip at or above the approach plane"), "{e}");
+    p.gap = 11.0; // tip Z 25: on the approach plane exactly
+    let e = burn_to_depth(&p).expect_err("a tip on the approach plane");
+    assert!(e.to_string().contains("at or above the approach plane"), "{e}");
+    p.gap = 6.0; // tip Z 20: on the work top, the burn is 6
+    let e = burn_to_depth(&p).expect_err("a gap as large as the burn");
+    assert!(e.to_string().contains("the spark gap 6.000 is not smaller than the burn's 6.000 below the work top"), "{e}");
+    p.gap = 5.5; // tip Z 19.5: inside the work
+    let path = burn_to_depth(&p).expect("a gap smaller than the burn burns");
+    assert!(path.moves.iter().all(|m| m.to.z <= 25.0), "nothing climbs past the approach plane");
+}
+
+/// #543 over the review of #1131: a rough or finish places its tip one
+/// undersize stand-off above the floor (never less than the gap), and
+/// the two refusals above read that stand - an undersize cannot lift
+/// the tip past the approach plane or out of the work where a gap of
+/// the same size would be refused.
+#[test]
+fn an_undersize_stand_off_that_lifts_the_tip_out_of_the_work_is_refused_by_name() {
+    let mut p = SinkerParams {
+        x: 0.0,
+        y: 0.0,
+        approach_z: 25.0,
+        top_z: 20.0,
+        floor_z: 10.0,
+        model_floor_z: Some(0.0),
+        datum: SinkerDatum::WorkTop,
+        depth: 6.0,
+        electrode_len: 30.0,
+        feed: 40.0,
+        gap: 0.5,
+        stand: Some(30.0),
+        orbit: None,
+    };
+    let e = burn_to_depth(&p).expect_err("a 30 mm stand-off feeds the tip up to Z 44");
+    assert!(e.to_string().contains("the undersize stand-off 30.000 places the tip at or above the approach plane"), "{e}");
+    p.stand = Some(6.0); // tip Z 20: on the work top, the burn is 6
+    let e = burn_to_depth(&p).expect_err("a stand-off as large as the burn");
+    assert!(e.to_string().contains("the undersize stand-off 6.000 is not smaller than the burn's 6.000 below the work top"), "{e}");
+    p.stand = Some(0.75); // tip Z 14.75: inside the work, above the gap
+    let path = burn_to_depth(&p).expect("a stand-off smaller than the burn burns");
+    assert!(path.moves.iter().any(|m| (m.to.z - 14.75).abs() < 1e-9), "the tip stops one stand-off above the floor");
 }
 
 #[test]
@@ -207,6 +274,52 @@ fn the_sinker_burn_is_driven_over_mcp_with_the_gui_commands() {
     assert!(text.contains("past the cavity floor datum"), "{text}");
     call(&mut s, &mut id, "undo", json!({}));
     call(&mut s, &mut id, "generate", json!({ "name": "Burn1" }));
+    // The review of #1131: the document's built-in milling post does not
+    // serve a sinker (#1232's door, since #542 ships the sinker post), so
+    // the post tool refuses the burn by name and writes no file.
+    let nc = std::env::temp_dir().join(format!("camcraft-1131-mcp-{}.nc", std::process::id()));
+    let _ = std::fs::remove_file(&nc);
+    id += 1;
+    let args = json!({ "output": nc.display().to_string() });
+    let reply = s
+        .handle(&json!({ "jsonrpc": "2.0", "id": id, "method": "tools/call", "params": { "name": "post", "arguments": args } }))
+        .expect("a response");
+    let text = reply["result"]["content"][0]["text"].as_str().unwrap_or_default().to_owned();
+    assert_eq!(reply["result"]["isError"], json!(true), "{reply}");
+    assert!(text.contains("does not serve") && text.contains("a sinker EDM machine") && text.contains("Burn1"), "{text}");
+    assert!(!nc.exists(), "the refused post wrote {}", nc.display());
+}
+
+/// The #1131 refresh against main's wire EDM (`stamp_tool` split): the
+/// burn's stamp still digests the sinker condition's spark gap and the
+/// electrode's face width. A re-stated gap or a re-cut electrode reads
+/// Stale (the post refuses until regenerated); undo reads Ok again.
+#[test]
+fn a_changed_spark_gap_or_electrode_face_marks_the_burn_stale() {
+    use camcraft_app::commands::{ChangeTool, LoadMachine};
+    use camcraft_app::machine::parse_mch;
+    use camcraft_app::operation::{status_of, OpStatus};
+    let (world, mut h) = sinker_doc(6.0);
+    h.execute(&world, CreateOperation::new(&world, "Burn1", ELECTRODE, SrcRef::Stock, burn(SinkerDatum::WorkTop, 6.0, 14.0)).expect("create"));
+    h.execute(&world, GenerateOperation::new(&world, "Burn1").expect("generates"));
+    let status = |w: &World| status_of(w, &model::find_by_name(w, "Burn1").expect("op"));
+    assert_eq!(status(&world), OpStatus::Ok, "fresh after generating");
+
+    // The same sinker, its one condition's gap re-stated.
+    let mut v: serde_json::Value = serde_json::from_str(&sinker_machine()).expect("json");
+    v["edm"]["conditions"][0]["gap"] = serde_json::json!(GAP * 2.0);
+    let m = parse_mch(&v.to_string()).expect("sinker parses");
+    h.execute(&world, LoadMachine::new(&world, "sinker.mch".into(), Some(m)).expect("remount"));
+    assert_eq!(status(&world), OpStatus::Stale, "a re-stated spark gap is a different burn");
+    assert!(h.undo(&world));
+    assert_eq!(status(&world), OpStatus::Ok, "undo restores the gap the burn was cut with");
+
+    // A wider electrode face (same length and diameter) is a different burn.
+    let wider = camcraft_tools::electrode::electrode_tool(10.0, 7.0, 30.0, 15.0);
+    h.execute(&world, ChangeTool::new(&world, ELECTRODE, wider).expect("re-cut the electrode"));
+    assert_eq!(status(&world), OpStatus::Stale, "a re-cut electrode face is a different burn");
+    assert!(h.undo(&world));
+    assert_eq!(status(&world), OpStatus::Ok);
 }
 
 // ---------------------------------------------------------------- #542
@@ -262,7 +375,7 @@ fn a_mill_post_on_a_sinker_machine_is_still_refused() {
     use camcraft_app::posting;
     for post in ["Fanuc", "Haas", "Tormach PathPilot Plasma"] {
         let err = post_burn(DIALECT, post).expect_err("a non-EDM post on a sinker");
-        assert!(err.contains("sinker EDM machine") && err.contains("does not declare"), "{post}: {err}");
+        assert!(err.contains("a sinker EDM machine") && err.contains("does not serve"), "{post}: {err}");
         assert!(!posting::post_serves(post, Kind::SinkerEdm), "{post}");
     }
     assert_eq!(posting::SINKER_POSTS, &[SINKER_POST]);
@@ -271,4 +384,43 @@ fn a_mill_post_on_a_sinker_machine_is_still_refused() {
         assert!(!posting::post_serves(SINKER_POST, k), "{k:?}");
     }
     assert_eq!(posting::default_post_for(Kind::SinkerEdm), camcraft_app::schema::PostRef::Named(SINKER_POST.into()));
+}
+
+/// Rework onto main's EDM designs: an orbit burn (#544) and a Sinker
+/// Side Burn (#545) carry `SinkerCondition` and the pickup into their
+/// stream, and the orbit its geometry and radius - so the sinker post
+/// refuses each by name (`script_sinker_iso.rs`) instead of reading
+/// their explicit moves as a stray feed.
+#[test]
+fn an_orbit_burn_and_a_side_burn_say_their_sinker_params_in_the_stream() {
+    use camcraft_app::operation::{SinkerBurnOp, SinkerOrbit, SinkerOrbitKind, SinkerSideBurnOp, SinkerSideDirection};
+    use camcraft_app::post::cnc::Record;
+    use serde_json::json;
+    let mut v: serde_json::Value = serde_json::from_str(DIALECT).expect("fixture");
+    v["edm"]["max_orbit_radius"] = json!(1.0);
+    let (world, mut h) = sinker_doc_on(&v.to_string(), 6.0);
+    let OpParams::SinkerBurn(plain) = burn(SinkerDatum::WorkTop, 6.0, 14.0) else { panic!("a burn") };
+    let orbit = SinkerBurnOp { orbit: Some(SinkerOrbit { kind: SinkerOrbitKind::Circular, radius: 0.04, vectors: 8, turns: 2 }), ..plain.clone() };
+    let side = SinkerSideBurnOp { burn: plain, direction: SinkerSideDirection::PlusX, amount: 0.04, undersize: 0.1 };
+    h.execute(&world, CreateOperation::new(&world, "Orbit1", ELECTRODE, SrcRef::Stock, OpParams::SinkerBurn(orbit)).expect("an orbit burn"));
+    h.execute(&world, CreateOperation::new(&world, "Side1", ELECTRODE, SrcRef::Stock, OpParams::SinkerSideBurn(side)).expect("a side burn"));
+    for n in ["Orbit1", "Side1"] {
+        h.execute(&world, GenerateOperation::new(&world, n).unwrap_or_else(|e| panic!("{n} generates: {e}")));
+    }
+    let streams = camcraft_app::posting::op_streams(&world).expect("streams");
+    let param = |op: &str, name: &str| {
+        let recs = &streams.iter().find(|(n, _)| n == op).unwrap_or_else(|| panic!("{op} streams")).1;
+        recs.iter().find_map(|r| match r {
+            Record::Param { name: n, value } if n == name => Some(value.clone()),
+            _ => None,
+        })
+    };
+    for op in ["Orbit1", "Side1"] {
+        assert_eq!(param(op, "SinkerCondition"), Some(json!("S1")), "{op}");
+        assert_eq!(param(op, "EdmCondition"), None, "{op}: the wire section's word is not the sinker's");
+        assert!(param(op, "ElectrodePickup").is_some(), "{op}");
+    }
+    assert_eq!(param("Orbit1", "EdmOrbit"), Some(json!("circular")));
+    assert_eq!(param("Orbit1", "EdmOrbitRadius"), Some(json!(0.04)));
+    assert_eq!(param("Side1", "EdmOrbit"), None);
 }

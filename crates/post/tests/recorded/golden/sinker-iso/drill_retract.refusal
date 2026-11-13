@@ -1,2 +1,4 @@
-; sinker-iso.cps refused drill_retract: the post stopped, nothing written
-post: this post serves sinker_edm machines only - the machine is not declared one of them
+; sinker-iso.cps refused drill_retract: 3 warning(s), the program is never released
+warning: the generic sinker post writes sinker EDM blocks - the machine is not declared a sinker EDM
+warning: operation Peck: states 1500 rpm - an electrode turns no spindle, and this post writes no spindle word
+warning: operation Peck: a canned cycle - a sinker burn has none
