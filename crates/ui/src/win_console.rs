@@ -93,7 +93,10 @@ pub fn attach_parent_console() {
             )
         };
         if is_missing(handle) {
-            continue; // no console output possible; the log goes nowhere, as before
+            // Attached but no usable output: the log goes nowhere, so this counts as no
+            // console and a failure still gets its box (#1325).
+            CONSOLE_ATTACHED.store(false, Ordering::SeqCst);
+            continue;
         }
         // SAFETY: plain integer plus a handle we own; the handle stays open for the
         // process lifetime as the new std handle. A failure leaves the old (missing) one.
@@ -129,16 +132,11 @@ pub fn report_exit_failure(code: i32) {
     ));
 }
 
-/// Chain a hook after the current panic hook that shows the panic in a message box when
-/// no console was attached. The hook only formats and calls MessageBoxW: nothing in it
-/// unwraps or indexes, so it cannot panic itself (a panic in a hook would abort).
-pub fn install_panic_hook() {
-    let previous = std::panic::take_hook();
-    std::panic::set_hook(Box::new(move |info| {
-        previous(info);
-        show_error(&format!(
-            "CamCraft stopped unexpectedly.\n\n{info}\n\n\
-             Start camcraft-ui.exe from a terminal (Command Prompt or PowerShell) to see the log."
-        ));
-    }));
+/// A panic escaped `camcraft_ui::run` (caught by `main`'s `catch_unwind`): show it in the
+/// box when no console is attached. Handled panics inside the app never reach here (#1325).
+pub fn report_panic(text: &str) {
+    show_error(&format!(
+        "CamCraft stopped unexpectedly.\n\n{text}\n\n\
+         Start camcraft-ui.exe from a terminal (Command Prompt or PowerShell) to see the log."
+    ));
 }
