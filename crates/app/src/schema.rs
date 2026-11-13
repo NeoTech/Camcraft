@@ -83,8 +83,9 @@ pub struct GeoSig {
 /// import actually kept, always above `step::CHORD_CAP`. Present ONLY on
 /// such a model - one that met the promise, an STL or OBJ mesh, and
 /// every model of a project saved before this existed carry no component
-/// and read as full fidelity. Written by the import and update commands
-/// and the project loader, through `model_fidelity::set`.
+/// and read as full fidelity. A stock copied from such a model carries
+/// it too (#1056: the same facets). Written by the import, update and
+/// stock commands and the project loader, through `model_fidelity::set`.
 #[derive(Component, Debug, Clone, Copy, PartialEq)]
 pub struct ReducedFidelity {
     pub chord_mm: f64,

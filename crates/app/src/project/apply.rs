@@ -685,6 +685,11 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
                 // writes it, so the load must end where the file left it.
                 // An absent key (0) puts back what that file remembered.
                 model::set_rev(world, &entity, dto.rev);
+                // #1056: a model copy carries its source's flag itself;
+                // a parametric block is meshed here, never coarse.
+                if matches!(shape, StockShape::FromModel { .. }) {
+                    crate::model_fidelity::set(world, &entity, dto.coarse_mm);
+                }
                 entity.entity_view(world).set(StockDef {
                     shape: shape.clone(),
                 });
@@ -847,6 +852,9 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
             entity.entity_view(world).set(super::fixture_keys::fixture_def(f, &dto.name, &mut notes));
         }
     }
+    // #1056: a model copy saved before it carried its own flag takes its
+    // source's, so deleting that source later cannot clear it.
+    crate::model_fidelity::adopt_copies(world);
     // #819: a place on a plate the file does not hold is dropped, never
     // left for the next plate of that name to pick up.
     for name in crate::plate::mount::drop_dangling(world) {

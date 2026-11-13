@@ -171,6 +171,7 @@ fn thread_mill() -> Tool {
         flutes: None,
         orientation: None,
         turning: None,
+        catalog: camcraft_tools::catalog_fields::ToolCatalog::default(),
     }
 }
 

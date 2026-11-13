@@ -436,10 +436,12 @@ pub enum CommandKind {
         picks: Vec<camcraft_app::operation::GeoSel>,
         lay: camcraft_app::pick::PlaneLay,
     },
-    /// Turn the part in a setup's work plane (#557): a straight edge or
-    /// two points for +Y and/or +X, read by the app. Undoable
-    /// (`AlignPartToSetup`). Never touches the work offset.
-    TurnPartInPlane {
+    /// Align the part from its picked axes (#769, was #557's in-plane
+    /// turn): with both +Y and +X picked, their directions define the
+    /// full 3D frame (+Z by the right-hand rule); one picked axis
+    /// keeps the in-plane turn. Undoable (`AlignPartToSetup`). Never
+    /// touches the work offset.
+    AlignPartFromAxes {
         setup: String,
         axes: camcraft_app::pick::InPlaneAxes,
     },
@@ -1001,6 +1003,14 @@ pub struct ToolUi {
     /// #630: the lathe tool orientation (LinuxCNC 1-9), None = the
     /// kind's default - carried so an Apply never rewrites it.
     pub orientation: Option<u8>,
+    /// #898 catalog facts as typed: blank = not stated. The helix is
+    /// text so a half-typed number is refused by name at Apply, not
+    /// silently dropped.
+    pub part_number: String,
+    pub vendor: String,
+    pub coating: String,
+    pub helix_deg: String,
+    pub notes: String,
     /// #891: the turning cutting data (Vc, f/rev, max rpm), None = not
     /// stated - carried so an Apply never drops it.
     pub turning: Option<camcraft_app::tools::TurningData>,
@@ -1036,6 +1046,7 @@ impl ToolUi {
                 ToolKind::Taper => 10,
                 ToolKind::Probe => 11,
                 ToolKind::Torch => 12,
+                ToolKind::Electrode => 13,
             },
             diameter: t.diameter,
             corner_r: t.corner_r,
@@ -1055,6 +1066,11 @@ impl ToolUi {
             flutes: t.flutes,
             center_cutting: t.center_cutting,
             orientation: t.orientation,
+            part_number: t.catalog.part_number.clone().unwrap_or_default(),
+            vendor: t.catalog.vendor.clone().unwrap_or_default(),
+            coating: t.catalog.coating.clone().unwrap_or_default(),
+            helix_deg: t.catalog.helix_deg.map(|h| h.to_string()).unwrap_or_default(),
+            notes: t.catalog.notes.clone().unwrap_or_default(),
             turning: t.turning,
         }
     }
@@ -1076,8 +1092,26 @@ impl ToolUi {
             10 => ToolKind::Taper,
             11 => ToolKind::Probe,
             12 => ToolKind::Torch,
+            13 => ToolKind::Electrode,
             _ => ToolKind::EndMill,
         }
+    }
+
+    /// The catalog facts the draft states: trimmed, blank = not stated.
+    /// A helix that is not a number reads as NaN, which the tool
+    /// commands refuse by name.
+    #[must_use]
+    pub fn catalog(&self) -> camcraft_app::catalog_fields::ToolCatalog {
+        let some = |s: &str| Some(s.to_owned());
+        let helix = self.helix_deg.trim();
+        camcraft_app::catalog_fields::ToolCatalog {
+            part_number: some(&self.part_number),
+            vendor: some(&self.vendor),
+            coating: some(&self.coating),
+            helix_deg: (!helix.is_empty()).then(|| helix.parse::<f64>().unwrap_or(f64::NAN)),
+            notes: some(&self.notes),
+        }
+        .normalized()
     }
 
     /// The tool this draft states. A ball's corner is saved as its ball
@@ -1106,6 +1140,7 @@ impl ToolUi {
             flutes: self.flutes,
             center_cutting: self.center_cutting,
             orientation: self.orientation,
+            catalog: self.catalog(),
             turning: self.turning,
         };
         tool.corner_r = tool.tip_corner_r();
@@ -1370,6 +1405,9 @@ pub struct State {
     pub viewport_rect: ([f32; 2], [f32; 2]),
     /// Live viewport drag (orbit/pan), driven by the shell's pointer layer.
     pub drag: Option<DragMode>,
+    /// #979: the live box-select rubber band (press point, current point),
+    /// logical px. View state like `drag` - its release queues one command.
+    pub pick_box: Option<[[f32; 2]; 2]>,
     /// Facet currently under the cursor (`interact` refreshes it from the
     /// shell's pointer events with a filtered raycast; it clears when the
     /// pointer leaves the viewport). View state like the camera and the
@@ -1834,6 +1872,7 @@ impl State {
             selection_version: 0,
             viewport_rect: ([0.0, 0.0], [0.0, 0.0]),
             drag: None,
+            pick_box: None,
             hover: None,
             hover_mesh: None,
             viewport_hot: false,
@@ -3495,8 +3534,8 @@ impl State {
                     }
                 }
             }
-            CommandKind::TurnPartInPlane { setup, axes } => {
-                match AlignPartToSetup::turn_in_plane(&self.world, &setup, &axes) {
+            CommandKind::AlignPartFromAxes { setup, axes } => {
+                match AlignPartToSetup::align_from_axes(&self.world, &setup, &axes) {
                     Ok(command) => {
                         self.history.execute(&self.world, command);
                         self.doc_version += 1;
@@ -3507,12 +3546,12 @@ impl State {
                             d.applied = true;
                         }
                         self.status = format!(
-                            "{setup} part turned in the plane: {}",
+                            "{setup} part aligned from its picks: {}",
                             crate::egui_app::align_text(camcraft_app::setup_align::stored(&self.world, &setup))
                         );
                     }
                     Err(err) => {
-                        self.refuse(ErrorScope::Setup, format!("part not turned in the plane: {err}"));
+                        self.refuse(ErrorScope::Setup, format!("part not aligned from its picks: {err}"));
                     }
                 }
             }

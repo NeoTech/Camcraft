@@ -557,6 +557,7 @@ function onToolChange(number, name) {
 function startPreamble() {
   if (sectionOpen) return;
   sectionOpen = true;
+  var touchProbe = spindleWait && !(sRpm > 0);   // a stated speed of 0 (#523)
   opNotes();
   block(["G90", "G17", wcsWord, "G40", "G49", "G80"]);
   if (toolWait) {
@@ -591,7 +592,9 @@ function startPreamble() {
       chipConveyorStarted = true;
     }
   }
-  coolant = coolantFor(coolantAsk);
+  // #995: a touch probe section starts no coolant, whatever its ask -
+  // fluid on the stylus and the measured faces spoils the reading.
+  coolant = touchProbe ? "" : coolantFor(coolantAsk);
   if (coolant) block([coolant]);
 
   // High-speed smoothing arm (Fanuc AICC G5.1 Q1 Rx)

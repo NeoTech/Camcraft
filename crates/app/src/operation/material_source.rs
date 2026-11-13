@@ -112,6 +112,8 @@ fn source_region(
         }
         // The probe bounds no area (#108): its generation never asks.
         OpParams::Probe { .. } => Err(GenError::Invalid("a probe has no machining region".into())),
+        // The sinker burn bounds no area (#541): its face is the electrode's.
+        OpParams::SinkerBurn(_) | OpParams::SinkerSideBurn(_) => Err(GenError::Invalid("a sinker burn has no machining region".into())),
         // The plasma cut goes THROUGH the plate (#670): what it can cut
         // is the through-silhouette - a blind pocket is no torch's work.
         OpParams::PlasmaProfile(_) => {

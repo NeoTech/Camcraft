@@ -34,6 +34,10 @@ operations; an axis that states a leaning direction (a tilting head or
 trunnion) tilts the cutter, while a C table only turns the part. A program
 that asks for a tilt the machine cannot hold is refused by name.
 
+For setting up 3+2, continuous 4-axis and 5-axis work, which machines and
+posts allow it and what is checked, see
+[4-axis and 5-axis machining](@/guide/multi-axis/_index.md).
+
 Checked against the machine file at post, when it states them: axis travel
 (arc bulges included), feed ceilings, spindle rpm range, spindle power,
 tool length and diameter against the tool table, changer capacity, and
@@ -129,6 +133,8 @@ generated on a machine file you write that declares `wire_edm`; posting it
 stops with `a Wire Contour operation posts through a wire EDM post, which
 is not built yet - nothing is posted`. The sinker EDM kind admits no
 operation yet.
+The operation itself, its settings and its refusals are in
+[Wire EDM](@/guide/operations-edm.md).
 
 ## Changing a setup's machine
 

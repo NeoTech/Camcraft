@@ -107,6 +107,7 @@ fn drill_retract() -> String {
         tool_material: None,
         flutes: None,
         orientation: None,
+        catalog: camcraft_tools::catalog_fields::ToolCatalog::default(),
         turning: None,
     };
     let hole = |x: f64, floor_z: f64| Hole {

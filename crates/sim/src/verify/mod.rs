@@ -189,6 +189,8 @@ mod stack_span;
 mod stock_top;
 mod stock_top_shell;
 mod sweep;
+mod tilt_band;
+mod tilt_span;
 mod swept;
 mod thread_bore;
 mod types;

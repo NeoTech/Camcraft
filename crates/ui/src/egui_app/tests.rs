@@ -143,6 +143,8 @@ mod model_fidelity;
 mod step_budget;
 // #709 hand check: both points of a two-point axis stay marked.
 mod two_point_marks;
+// #979: the viewport box select.
+mod box_select;
 // #1104: the Setups page lists setups only.
 mod setups_declutter;
 // #1206: each setup's own Machine and Post pages pick its own mount.
@@ -2731,6 +2733,8 @@ fn tips_match_the_imgui_table() {
             == camcraft_app::operation::Family::Plasma;
         let is_wire = camcraft_app::operation::KindInfo::ALL[i].family()
             == camcraft_app::operation::Family::WireEdm;
+        let is_sinker = camcraft_app::operation::KindInfo::ALL[i].family()
+            == camcraft_app::operation::Family::Sinker;
         let want = if is_turn {
             "The document's machine is a mill - turning operations do not drive it; mount a lathe or a mill-turn (Setup > Machine)".to_owned()
         } else if is_wire {
@@ -2739,6 +2743,9 @@ fn tips_match_the_imgui_table() {
         } else if is_plasma {
             // #670: the torch's work has no mill-turn to fall back on.
             "The document's machine is a mill - plasma cutting operations do not drive it; mount a plasma table (Setup > Machine)".to_owned()
+        } else if is_sinker {
+            // #541: nor the electrode's.
+            "The document's machine is a mill - sinker EDM operations do not drive it; mount a sinker EDM (Setup > Machine)".to_owned()
         } else if let Some(reason) = tool_law {
             // M10.1 B: the demo's one flat end mill cannot cut every
             // mill kind - those cells say which tool kind is missing.

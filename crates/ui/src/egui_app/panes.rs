@@ -403,7 +403,7 @@ pub(super) fn tip_of(c: Cmd, state: &State) -> String {
                     let f = camcraft_app::operation::KindInfo::ALL[i].family();
                     let (fword, mword) = (f.work(), f.machine());
                     // #670: plasma work has no mill-turn to fall back on.
-                    let or_mt = if matches!(f, camcraft_app::operation::Family::Plasma | camcraft_app::operation::Family::WireEdm) { "" } else { " or a mill-turn" };
+                    let or_mt = if matches!(f, camcraft_app::operation::Family::Plasma | camcraft_app::operation::Family::WireEdm | camcraft_app::operation::Family::Sinker) { "" } else { " or a mill-turn" };
                     format!(
                         "The document's machine is a {} - {fword} operations do not drive it; mount a {mword}{or_mt} (Setup > Machine)",
                         machine.word()
@@ -501,7 +501,7 @@ fn gate_note(c: Cmd, state: &State) -> Option<String> {
         Some(k) => {
             let f = k.family();
             let (fword, mword) = (f.work(), f.machine());
-            let or_mt = if matches!(f, camcraft_app::operation::Family::Plasma | camcraft_app::operation::Family::WireEdm) { "" } else { " or a mill-turn" };
+            let or_mt = if matches!(f, camcraft_app::operation::Family::Plasma | camcraft_app::operation::Family::WireEdm | camcraft_app::operation::Family::Sinker) { "" } else { " or a mill-turn" };
             Some(format!(
                 "cannot add a {} operation: {fword} operations do not drive the document's {} - mount a {mword}{or_mt} (Setup > Machine)",
                 k.label,
@@ -668,6 +668,9 @@ pub(super) fn icon_of(c: Cmd, state: &State) -> Option<Icon> {
             // wire EDM's machine door wears (no new asset; the op page
             // and its own glyph are #535).
             operation::Section::WireEdm => Icon::Contour,
+            // #541: the sinker burns straight down - the drill's glyph
+            // (no new asset).
+            operation::Section::Sinker => Icon::Drill,
         }),
         // The machine door wears its workspace's glyph (#207), from the
         // existing set: the face mill for Milling, the turned bar for

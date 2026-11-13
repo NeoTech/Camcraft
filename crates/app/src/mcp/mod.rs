@@ -33,6 +33,8 @@ mod model_tools;
 mod machine_tools;
 mod order_tools;
 mod pick;
+// #979: the box pick, the viewport's Ctrl+drag box select headless.
+mod box_pick;
 mod pockets;
 mod render;
 mod setup_tools;
