@@ -20,7 +20,7 @@
 mod common;
 
 use camcraft_app::post::{engine, PostError};
-use common::legacy_program::{as_program, with_cycle_feeds};
+use common::legacy_program::as_program;
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 
@@ -307,9 +307,12 @@ fn grbl_family_posts_write_the_mm_program_in_inches() {
         let mch = camcraft_app::post::machine::mirror(&camcraft_app::machine::parse_mch(text).unwrap_or_else(|e| panic!("{machine}: {e}")));
         let mut posted = 0;
         for g in GOLDENS {
-            // #1357: each cycle states its own chain's feed (a cycle with
-            // none is refused by name).
-            let stream = with_cycle_feeds(&read(&format!("crates/app/tests/golden/{g}.cl")));
+            // #1357, #1359: the golden as a real program (tool change,
+            // spindle, each cycle's feed) - a cut with the spindle stopped
+            // is refused by name - with the clearance height a real stream
+            // states, which these posts lift to at a tool change.
+            let stream = as_program(g, &read(&format!("crates/app/tests/golden/{g}.cl")))
+                .replacen("PARAM SetupName", "PARAM ClearancePlane 15\nPARAM SetupName", 1);
             let mm = engine::run_with(&cps, &mch, &stream, &units("mm")).unwrap_or_else(|e| panic!("{stem} on {g}: {e}"));
             let inch = engine::run_with(&cps, &mch, &stream, &units("inch")).unwrap_or_else(|e| panic!("{stem} on {g}: {e}"));
             assert_eq!(mm.warnings, inch.warnings, "{stem} on {g}: the unit changes no verdict");
