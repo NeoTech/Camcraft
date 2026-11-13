@@ -17,7 +17,7 @@ mod common;
 
 use camcraft_app::cl::{CycleKind, MoveKind};
 use camcraft_app::machine::parse_mch;
-use common::legacy_program::{as_program, with_cycle_feeds};
+use common::legacy_program::as_program;
 use camcraft_app::post::{cnc, engine, machine};
 use serde_json::json;
 use std::path::{Path, PathBuf};
@@ -82,19 +82,24 @@ fn golden_input(cps_stem: &str, g: &str) -> (serde_json::Value, String) {
         let m = parse_mch(&read(TORMACH_MCH)).unwrap_or_else(|e| panic!("{TORMACH_MCH}: {e}"));
         return (machine::mirror(&m), as_program(g, &stream));
     }
+    // #1359: every spindle mill dialect refuses a cut with the spindle
+    // stopped, so each posts the golden as the program a real operation
+    // streams (tool change, spindle speed, cycle feeds) - on the generic
+    // VMC, its own goldens' machine.
     let mch = serde_json::from_str(&read("assets/machines/3axis-vmc.mch")).expect("machine json");
-    (mch, with_cycle_feeds(&stream))
+    (mch, as_program(g, &stream))
 }
 
 /// (post stem, golden, named reason): a golden a dialect must REFUSE
-/// rather than post, so it has no `.nc` there. Heidenhain (#51) supports
-/// tapping, but this legacy golden lacks spindle speed. Carvera (#707)
-/// cannot tap (no canned cycles or spindle reverse).
+/// rather than post, so it has no `.nc` there. Carvera (#707) cannot
+/// tap (no canned cycles or spindle reverse). Heidenhain (#51) taps once
+/// the stream states a spindle speed - since #1359 every dialect posts
+/// the golden as a program that does (500 rpm for the M10x1.5 tap), so
+/// it has a tap_plate golden now.
 /// #710: grblHAL's core G-code list has no G84 either; TinyG has no
 /// canned cycles at all and posts drilling as plain moves, but a tap
 /// cannot be plain moves.
 const REFUSED: &[(&str, &str, &str)] = &[
-    ("heidenhain", "tap_plate", "tapping needs a positive integral spindle speed"),
     ("carvera", "tap_plate", "tapping"),
     ("grblhal", "tap_plate", "tapping"),
     ("tinyg", "tap_plate", "tapping"),
@@ -360,7 +365,7 @@ fn the_dialects_actually_differ() {
     // cycles, tool change, spindle, the lot).
     let mch: serde_json::Value =
         serde_json::from_str(&read("assets/machines/3axis-vmc.mch")).expect("machine json");
-    let stream = with_cycle_feeds(&read("crates/app/tests/golden/drill_peck.cl"));
+    let stream = as_program("drill_peck", &read("crates/app/tests/golden/drill_peck.cl"));
     let texts: Vec<(&str, String)> = POSTS
         .iter()
         .map(|(name, stem, _)| {

@@ -14,10 +14,13 @@
 //! Gate map: covers camcraft_post::post (tinyg.cps), camcraft_post::machine (safeRetractZ,
 //! units), app::posting (registry, machine library).
 
+mod common;
+
 use camcraft_app::machine::parse_mch;
 use camcraft_app::post::{engine, machine};
 use camcraft_app::posting::{BUILTINS, MACHINES};
 use serde_json::{Value, json};
+use common::legacy_program::as_program;
 use std::path::Path;
 
 const STREAM: &str = "PARAM ClearancePlane 15\nPARAM StockZTop 0\nPARAM SpindleSpeed 8000\nTOOL 3 EM6\nSECTION\nRapid X 0 Y 0 Z 5000\nFeed X 10000 Y 0 Z -1000 F 500000\nENDSECTION\n\
@@ -103,7 +106,9 @@ fn the_program_speaks_only_what_tinyg_lists() {
         }
     }
     for golden in ["contour_disc_hole", "drill_peck", "pocket_zigzag_plate_with_island", "arc_planes"] {
-        let nc = post(&json!({"safeRetractZ": 0.0}), &read(&format!("crates/app/tests/golden/{golden}.cl")));
+        // #1359: the golden as a real program (tool, spindle) - a cut with
+        // the spindle stopped is refused by name.
+        let nc = post(&json!({"safeRetractZ": 0.0}), &as_program(golden, &read(&format!("crates/app/tests/golden/{golden}.cl"))));
         assert_tinyg_words(&nc);
     }
 }
@@ -135,7 +140,7 @@ fn drilling_posts_as_plain_moves_with_the_dwell_at_the_bottom() {
     // The committed drilling goldens post their chains, never a cycle word.
     let m = json!({"safeRetractZ": 0.0});
     for golden in ["drill_plate", "drill_peck"] {
-        let nc = post(&m, &read(&format!("crates/app/tests/golden/{golden}.cl")));
+        let nc = post(&m, &as_program(golden, &read(&format!("crates/app/tests/golden/{golden}.cl"))));
         assert!(nc.lines().filter(|l| l.starts_with("G1 ")).count() >= 2, "{golden}: the plunges post\n{nc}");
         assert!(!nc.contains("G8") && !nc.contains("G98"), "{golden}: no cycle word\n{nc}");
     }
@@ -307,7 +312,7 @@ fn spindle_delay_is_optional_validated_and_rounds_up_in_seconds() {
 fn full_xy_circles_and_helices_split_without_losing_direction_or_depth() {
     for direction in ["CW", "CCW"] {
         for end_z in [5000, -5000] {
-            let stream = format!("Rapid X 10000 Y 0 Z 5000\nArc {direction} X 10000 Y 0 Z {end_z} F 100000 I 0 J 0\n");
+            let stream = format!("PARAM SpindleSpeed 8000\nRapid X 10000 Y 0 Z 5000\nArc {direction} X 10000 Y 0 Z {end_z} F 100000 I 0 J 0\n");
             let nc = post(&json!({"safeRetractZ": 0.0}), &stream);
             let arcs: Vec<_> = nc.lines().filter(|l| l.starts_with("G2 ") || l.starts_with("G3 ")).collect();
             let code = if direction == "CW" { "G2" } else { "G3" };
@@ -319,7 +324,7 @@ fn full_xy_circles_and_helices_split_without_losing_direction_or_depth() {
 #[test]
 fn rounded_coincident_xy_arc_endpoints_are_refused() {
     // 1 micron separates the endpoints in mm, but both round to zero in inches.
-    let stream = "Rapid X 1 Y 0 Z 5000\nArc CCW X 0 Y 1 Z 5000 F 100000 I 0 J 0\n";
+    let stream = "PARAM SpindleSpeed 8000\nRapid X 1 Y 0 Z 5000\nArc CCW X 0 Y 1 Z 5000 F 100000 I 0 J 0\n";
     let out = engine::run(&cps(), &json!({"safeRetractZ": 0.0, "units": "inch"}), stream).expect("runs");
     assert!(out.warnings.iter().any(|w| w.contains("too small to distinguish")), "{:?}", out.warnings);
 }
@@ -330,7 +335,7 @@ fn vertical_arcs_are_chords_within_five_microns() {
         ("X 10000 Y 0 Z 0", "CW X 0 Y 0 Z 10000 I 0 K 0", ['X', 'Z']),
         ("X 0 Y 10000 Z 0", "CCW X 0 Y 0 Z 10000 J 0 K 0", ['Y', 'Z']),
     ] {
-        let stream = format!("Rapid {start}\nArc {arc} F 100000\n");
+        let stream = format!("PARAM SpindleSpeed 8000\nRapid {start}\nArc {arc} F 100000\n");
         let nc = post(&json!({"safeRetractZ": 20.0}), &stream);
         assert!(!nc.lines().any(|l| l.starts_with("G2 ") || l.starts_with("G3 ")), "{nc}");
         let mut previous = [10.0_f64, 0.0];

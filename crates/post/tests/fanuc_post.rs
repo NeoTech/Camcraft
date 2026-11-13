@@ -54,11 +54,20 @@ fn fanuc_posts_every_golden_byte_exact() {
     let mch: serde_json::Value =
         serde_json::from_str(&read("assets/machines/3axis-vmc.mch")).expect("machine json");
     for name in GOLDENS {
-        // #1357: each cycle states its own chain's feed - conformance.rs
-        // posts the same golden files from the same dressed stream.
-        let stream = legacy_program::with_cycle_feeds(&read(&format!("crates/app/tests/golden/{name}.cl")));
+        // #1357, #1359: the golden as the program a real operation
+        // streams (tool change, spindle speed, each cycle's own chain
+        // feed) - conformance.rs posts the same golden files from the
+        // same dressed stream. A cut with the spindle stopped is refused.
+        let stream = legacy_program::as_program(name, &read(&format!("crates/app/tests/golden/{name}.cl")));
         let out = engine::run(&cps, &mch, &stream)
             .unwrap_or_else(|e| panic!("{name} must post: {e}"));
+        if std::env::var_os("WRITE_GOLDEN").is_some() && *name == "trochoid_slot_small" {
+            // The one golden here conformance.rs does not post (the
+            // golden_cl workflow: the review is the git diff).
+            std::fs::write(repo(&format!("crates/app/tests/golden/nc/{name}.nc")), &out.program)
+                .unwrap_or_else(|e| panic!("{name}.nc: {e}"));
+            continue;
+        }
         let want = read(&format!("crates/app/tests/golden/nc/{name}.nc"));
         assert_eq!(out.program, want, "{name}.nc is stale; regenerate with the CLI (see tests/golden/CLAUDE.md)");
         assert!(out.warnings.is_empty(), "{name}: the gate counts warnings: {:?}", out.warnings);
@@ -182,6 +191,7 @@ fn rtcp_output_arms_once_and_walks_the_angles() {
     });
     let stream = "\
 TOOL 1 10MM BALL
+PARAM SpindleSpeed 6000
 SECTION
 Rapid X 10000 Y 0 Z 5000 A 40000 B 0 C 0
 Feed X 10000 Y 0 Z 0 F 150000 A 40000 B 0 C 0
@@ -221,7 +231,7 @@ fn an_absent_rotary_takes_no_angle_word() {
     let text = read("assets/machines/tilthead.mch");
     let mch = post::machine::mirror(&camcraft_post::machine::parse_mch(&text).expect("tilthead parses"));
     let stream = |c: &str| {
-        format!("TOOL 1 T1\nSECTION\nRapid X 0 Y 0 Z 20000 A 30000 B 0 C {c}\nFeed X 20000 Y 0 Z 0 F 300000 A 0 B 30000 C {c}\nENDSECTION\n")
+        format!("TOOL 1 T1\nPARAM SpindleSpeed 6000\nSECTION\nRapid X 0 Y 0 Z 20000 A 30000 B 0 C {c}\nFeed X 20000 Y 0 Z 0 F 300000 A 0 B 30000 C {c}\nENDSECTION\n")
     };
     let out = engine::run(&cps, &mch, &stream("0")).expect("post");
     assert!(out.warnings.is_empty(), "{:?}", out.warnings);

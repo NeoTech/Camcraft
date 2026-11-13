@@ -243,6 +243,8 @@ fn the_fanuc_dialect_refuses_a_b_on_an_a_only_table() {
         };
         cnc::serialize(&[
             cnc::Record::Tool { number: 1, name: "EM".into() },
+            // #1359: a feed with the spindle stopped is refused by name.
+            cnc::Record::Param { name: "SpindleSpeed".into(), value: serde_json::json!(6000) },
             cnc::Record::Section { begin: true },
             mv(-5.0),
             mv(-6.0),
@@ -288,6 +290,8 @@ fn the_fanuc_dialect_refuses_a_lone_a_stated_along_minus_x() {
     };
     let stream = cnc::serialize(&[
         cnc::Record::Tool { number: 1, name: "EM".into() },
+        // #1359: a feed with the spindle stopped is refused by name.
+        cnc::Record::Param { name: "SpindleSpeed".into(), value: serde_json::json!(6000) },
         cnc::Record::Section { begin: true },
         mv(-5.0),
         mv(-6.0),
@@ -326,6 +330,8 @@ fn tilted(abc: [f64; 3]) -> String {
     };
     cnc::serialize(&[
         cnc::Record::Tool { number: 1, name: "EM".into() },
+        // #1359: a feed with the spindle stopped is refused by name.
+        cnc::Record::Param { name: "SpindleSpeed".into(), value: serde_json::json!(6000) },
         cnc::Record::Section { begin: true },
         mv(-5.0),
         mv(-6.0),
