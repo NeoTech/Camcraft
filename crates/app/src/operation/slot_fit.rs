@@ -138,7 +138,8 @@ mod tests {
         let pocket = rect(25.0, 12.5);
         let (a, b) = (Point2::new(-15.0, 0.0), Point2::new(15.0, 0.0));
         assert!(refuse_unfit_slot("Trochoidal slot", a, b, 16.0, &pocket).is_ok());
-        assert!(refuse_unfit_slot("Trochoidal slot", a, b, 25.0, &pocket).is_ok(), "as wide as the pocket still fits");
+        let (a2, b2) = (Point2::new(-12.5, 0.0), Point2::new(12.5, 0.0));
+        assert!(refuse_unfit_slot("Trochoidal slot", a2, b2, 25.0, &pocket).is_ok(), "exactly the pocket's size still fits");
         let (a, b) = (Point2::new(-20.0, 0.0), Point2::new(20.0, 0.0));
         let e = refuse_unfit_slot("Trochoidal slot", a, b, 16.0, &pocket).expect_err("refused").to_string();
         assert!(e.contains("Trochoidal slot") && e.contains("8.000") && e.contains("5.000") && e.contains("3.000"), "{e}");
