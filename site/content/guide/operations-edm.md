@@ -207,10 +207,16 @@ it), and the largest orbit radius it allows, `edm.max_orbit_radius`.
 Neither is assumed: a machine that lists no orbits takes none, and one
 that states no maximum takes none either.
 
-**No post yet.** No post serves a sinker EDM, so a sinker operation can
-be created and generated but not posted. Posting stops with "...: no post
-for a sinker EDM machine yet (#542) - ... is not posted and no file is
-written; an EDM dialect ships with #542".
+**Posting.** The "Sinker EDM (ISO)" post serves a sinker EDM, and it is
+the only one that does: any other post stops with "... does not serve
+..., a sinker EDM machine". It writes the motion words itself and takes
+every EDM code from the machine file's `edm.codes` - the unit word
+(`metric` / `inch`), `pickup` (`{tool}`), `reference` (`{offset}`),
+`condition` (`{id}`), `depth` (`{z}`, optionally `{f}`) and `end`. A
+code the machine does not state stops the post by its name. It writes a
+straight Sinker Burn only: a condition the machine's `edm.conditions`
+does not list, an orbit and a Sinker Side Burn are refused by name. Not
+exercised on a real EDM control.
 
 **Verification.** The program verdict cuts the stock with the
 electrode's face, grown by the spark gap, at every move. The stock view

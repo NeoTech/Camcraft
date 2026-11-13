@@ -1069,8 +1069,18 @@ fn trochoid_slot_small_matches_golden() {
 // ---------------------------------------------------------------------------
 
 fn thread_ride(rows: u32, external: bool, hand: camcraft_app::cl::ThreadHand, climb: bool, through: bool) -> camcraft_app::cl::Toolpath {
-    use camcraft_app::machining2d::{thread_mill, ThreadHole, ThreadParams};
-    thread_mill(&ThreadParams {
+    camcraft_app::machining2d::thread_mill(&thread_params(rows, external, hand, climb, through)).expect("a valid thread ride")
+}
+
+fn thread_params(
+    rows: u32,
+    external: bool,
+    hand: camcraft_app::cl::ThreadHand,
+    climb: bool,
+    through: bool,
+) -> camcraft_app::machining2d::ThreadParams {
+    use camcraft_app::machining2d::{ThreadHole, ThreadParams};
+    ThreadParams {
         holes: vec![
             ThreadHole { xy: Point2::new(10.0, 10.0), radius: 5.0, top_z: 0.0, floor_z: -8.0, stepped: false, through },
             ThreadHole { xy: Point2::new(40.0, 10.0), radius: 5.0, top_z: 0.0, floor_z: -8.0, stepped: false, through },
@@ -1082,12 +1092,39 @@ fn thread_ride(rows: u32, external: bool, hand: camcraft_app::cl::ThreadHand, cl
         external,
         hand,
         climb,
+        passes: camcraft_app::machining2d::ThreadPasses::default(),
         clearance_z: 10.0,
+        r_z: None,
         retract_z: Some(4.0),
         feed: 300.0,
         plunge_feed: 100.0,
-    })
-    .expect("a valid thread ride")
+    }
+}
+
+#[test]
+fn thread_mill_constant_area_spring_pass_matches_golden() {
+    // #988: right-hand climb in two blind holes with a one-row mill, the
+    // roughing on decreasing passes of constant chip area (first 0.45 mm,
+    // cumulative depth D x sqrt(i/n)), a 0.05 mm finishing pass, one
+    // spring pass on the final radius and a 0.02 mm fit allowance.
+    use camcraft_app::machining2d::{thread_mill, PassSchedule, ThreadPasses};
+    let mut p = thread_params(1, false, camcraft_app::cl::ThreadHand::Right, true, false);
+    p.passes = ThreadPasses { schedule: PassSchedule::ConstantArea, finish: 0.05, spring: 1, allowance: 0.02, ..ThreadPasses::default() };
+    let t = thread_mill(&p).expect("a valid thread ride");
+    assert!(t.is_chained() && t.has_arcs());
+    write_golden("thread_mill_constant_area_spring_pass.cl", &gen_to_cltext(&t));
+}
+
+#[test]
+fn thread_mill_raised_r_plane_matches_golden() {
+    // #1212: the same right-hand climb in two blind holes, the R plane
+    // stated 2 mm over the holes' tops: each rapid stops on it and the
+    // feed down the axis starts there, as on a drill cycle.
+    let mut p = thread_params(1, false, camcraft_app::cl::ThreadHand::Right, true, false);
+    p.r_z = Some(2.0);
+    let t = camcraft_app::machining2d::thread_mill(&p).expect("a valid thread ride");
+    assert!(t.is_chained() && t.has_arcs());
+    write_golden("thread_mill_raised_r_plane.cl", &gen_to_cltext(&t));
 }
 
 #[test]

@@ -189,6 +189,7 @@ fn stamp_follows_every_input() {
         pitch: Some(1.25),
         hand: crate::cl::ThreadHand::Right,
         external,
+        passes: crate::machining2d::ThreadPasses::default(),
     };
     let mut hi = std::hash::DefaultHasher::new();
     let mut he = std::hash::DefaultHasher::new();

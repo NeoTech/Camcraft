@@ -35,7 +35,7 @@ fn sections(part: &Region, stock: Option<&Region>) -> Vec<WireSection> {
 }
 
 fn run(side: CutSide, tp: &Toolpath, start: Option<Point2>, part: &Region, stock: Option<&Region>) -> WireVerdict {
-    judge(&WireJob { path: tp, kerf_offset: K, side, start, sections: sections(part, stock), burnout: false })
+    judge(&WireJob { path: tp, kerf_offset: K, side, start, sections: sections(part, stock), burnout: false, taper: false })
 }
 
 #[test]
@@ -132,7 +132,7 @@ fn a_burnout_frees_nothing_and_a_core_is_refused() {
     }
     b.push(MoveKind::Feed, p(0.0, 0.0), None);
     let burnt = b.finish();
-    let job = |tp| WireJob { path: tp, kerf_offset: K, side: CutSide::Die, start: Some(start), sections: sections(&part, Some(&stock)), burnout: true };
+    let job = |tp| WireJob { path: tp, kerf_offset: K, side: CutSide::Die, start: Some(start), sections: sections(&part, Some(&stock)), burnout: true, taper: false };
     let v = judge(&job(&burnt));
     assert!(v.findings.is_empty() && v.slugs.is_empty(), "{:?}", v);
     let ring = path(5.0 - K, start);

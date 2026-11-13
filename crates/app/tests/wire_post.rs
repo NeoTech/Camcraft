@@ -14,7 +14,7 @@
 //!
 //! Gate map (#533): covers app::posting (posting_wire, WIRE_POSTS,
 //! post_serves, default_post_for, op_streams' wire branch),
-//! app::posting_family (edm_at_post: wire passes, sinker refused), post::engine
+//! app::posting_serves (the serves door: a sinker refused), post::engine
 //! (the wireEdm door), post::machine (edm codes mirror, edm_codes), and
 //! the wire-iso.cps script, and the wire clause's place in the post
 //! gate (posting_wire's wire_clause before NC text, #534).
@@ -91,6 +91,7 @@ fn punch_doc(machine_text: &str) -> World {
         condition: "C110".into(),
         side: WireSide::Punch,
         start: Some([-30.0, 0.0]),
+        taper_deg: 0.0,
         burnout: None,
         clearance: operation::DEFAULT_CLEARANCE,
     };
@@ -116,6 +117,7 @@ fn gouging_die() -> World {
         condition: "C110".into(),
         side: WireSide::Die,
         start: Some([0.0, 0.0]),
+        taper_deg: 0.0,
         burnout: None,
         clearance: operation::DEFAULT_CLEARANCE,
     };
@@ -299,6 +301,7 @@ fn cutoff_doc(wrong: bool) -> World {
         condition: "C110".into(),
         side,
         start: None,
+        taper_deg: 0.0,
         burnout: None,
         clearance: operation::DEFAULT_CLEARANCE,
     };
@@ -369,8 +372,8 @@ fn an_open_cutoff_posts_its_golden_and_a_gouging_one_is_refused() {
     assert_eq!(punch, std::fs::read_to_string(GOLDEN).expect("golden present"));
 }
 
-/// Review of #1139: the EDM door at post (`posting_family::edm_at_post`)
-/// lets a wire setup through to its post, so a wire machine missing a
+/// Review of #1139: nothing at post refuses a wire setup before its
+/// post (the retired EDM door's wire arm passed it), so a wire machine missing a
 /// code the post needs is refused by that code's name through the app's
 /// own `post_script` - and no file is written.
 #[test]
@@ -390,10 +393,11 @@ fn a_wire_setup_missing_a_code_is_refused_by_name_through_post_script() {
     }
 }
 
-/// Review of #1139: lifting the wire arm of the EDM door leaves the
-/// sinker arm closed - a Sinker Burn is refused by name (#542) through
-/// `post_script`, by the wire post and by a cutting post alike, and no
-/// file is written.
+/// Review of #1139: a Sinker Burn is refused by name through
+/// `post_script` by the wire post and by every cutting post alike, and
+/// no file is written. Since #542 the refusal is the serves door's
+/// (#1232); only the sinker post serves the sinker (its own refusals -
+/// this fixture states no `edm.codes` - are `sinker_burn.rs`'s).
 #[test]
 fn a_sinker_setup_is_still_refused_at_post_by_name() {
     let (world, mut h) = sinker_fixture::sinker_doc(6.0);
@@ -402,12 +406,16 @@ fn a_sinker_setup_is_still_refused_at_post_by_name() {
     h.execute(&world, op);
     h.execute(&world, GenerateOperation::new(&world, "Burn0").expect("generates"));
     let out = std::env::temp_dir().join(format!("camcraft-wire-iso-sinker-{}.nc", std::process::id()));
-    for (n, script) in BUILTINS {
+    for (n, script) in BUILTINS.iter().filter(|(n, _)| !posting::SINKER_POSTS.contains(n)) {
         let _ = std::fs::remove_file(&out);
         let err = posting::post_script(&world, &out, script).expect_err("a sinker burn never posts");
         let wrote = out.exists();
         let _ = std::fs::remove_file(&out);
-        assert!(err.contains("no post for a sinker EDM machine yet (#542)") && err.contains("Burn0"), "{n}: {err}");
+        // A turning dialect meets the lathe door (#1190) first; every
+        // other post the serves door.
+        let door = if posting::LATHE_POSTS.contains(n) { "on the work spindle" } else { "does not serve" };
+        assert!(err.contains(door) && err.contains("Burn0"), "{n}: {err}");
+        assert!(posting::LATHE_POSTS.contains(n) || err.contains("a sinker EDM machine"), "{n}: {err}");
         assert!(!wrote, "{n}: the refused sinker post wrote {}", out.display());
     }
 }
