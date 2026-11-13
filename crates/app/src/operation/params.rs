@@ -1721,6 +1721,12 @@ impl OpParams {
                     w(h, q.x);
                     w(h, q.y);
                 }
+                // #1473: the exit point - bytes only when set.
+                if let Some(q) = a.exit_point {
+                    h.write_u8(0xC8);
+                    w(h, q.x);
+                    w(h, q.y);
+                }
                 match a.lead_out {
                     None => h.write_u8(0xFF),
                     Some(Lead::None) => h.write_u8(0),

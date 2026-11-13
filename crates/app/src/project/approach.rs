@@ -72,6 +72,10 @@ pub struct ApproachDto {
     /// set; absent is the automatic seam, every earlier file.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub start_point: Option<[f64; 2]>,
+    /// The user's exit point (#1473), `[x, y]` in mm: written only when
+    /// set; absent leaves at the seam, every earlier file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exit_point: Option<[f64; 2]>,
 }
 
 fn lead_dto(l: Lead) -> LeadDto {
@@ -126,6 +130,7 @@ pub fn approach_to_dto(a: &Approach) -> Option<ApproachDto> {
         control_comp: (a.compensation == Compensation::Control).then_some(true),
         wear_comp: (a.compensation == Compensation::Wear).then_some(true),
         start_point: a.start_point.map(|q| [q.x, q.y]),
+        exit_point: a.exit_point.map(|q| [q.x, q.y]),
     };
     (dto != ApproachDto::default()).then_some(dto)
 }
@@ -169,6 +174,7 @@ pub fn approach_from_dto(d: Option<&ApproachDto>) -> Approach {
             Compensation::Computer
         },
         start_point: d.start_point.map(|[x, y]| crate::geo2d::Point2::new(x, y)),
+        exit_point: d.exit_point.map(|[x, y]| crate::geo2d::Point2::new(x, y)),
         center_cutting: true,
     }
 }
