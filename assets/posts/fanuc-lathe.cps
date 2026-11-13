@@ -850,6 +850,12 @@ function onCycle() {
   if (p.CycleType === "TAP") g = "G84";
   else if (p.CycleType === "BORE") g = "G85";
   else if (p.CycleType === "BACKBORE") { refuse("back-boring cycle - no such face cycle on a 2-axis lathe"); return; }
+  // #1357: the cycle feeds at its own F word; with none the control
+  // drills at whatever feed was last modal - refused by name.
+  if (!(has(p.FeedRate) && p.FeedRate > 0)) {
+    refuse("canned cycle " + g + " has no feed rate - refused: without F the control drills at whatever feed was last modal");
+    return;
+  }
   if (!cycleSeat(p, r)) return;
   var words = [g, zWord(p.Z)];
   if ((p.CycleType === "PECK" || p.CycleType === "DEEP") && has(p.Q) && p.Q > 0) {

@@ -11,6 +11,8 @@
 //! (options_value), app::commands (SetPostOptions), app::project
 //! (post_options end_units), app::schema (EndUnits).
 
+mod common;
+
 use camcraft_app::commands::{History, SetPostOptions};
 use camcraft_app::machine::parse_mch;
 use camcraft_app::post::{engine, machine};
@@ -39,7 +41,9 @@ fn machine_for(mch: &str) -> serde_json::Value {
 /// Post one golden stream through tormach.cps with the given end units.
 fn post(mch: &str, golden: &str, end: Option<EndUnits>) -> String {
     let cps = read("assets/posts/tormach.cps");
-    let stream = read(&format!("crates/app/tests/golden/{golden}.cl"));
+    // #1357: a real program (tool, spindle, cycle feed) - the bare
+    // stream is refused by name now.
+    let stream = common::legacy_program::as_program(golden, &read(&format!("crates/app/tests/golden/{golden}.cl")));
     let m = machine_for(mch);
     // #902: the program's unit is the document's - the inch machine's
     // runs here stand for an inch document, as before #902 they posted.
