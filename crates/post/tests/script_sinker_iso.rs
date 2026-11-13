@@ -12,7 +12,8 @@
 //! - The same stream through the engine: every EDM code comes from the
 //!   fixture dialect's `edm.codes` (#290 D5); a missing one refuses by
 //!   name, as do a condition the machine does not list, an orbit (#544)
-//!   and a Sinker Side Burn (#545); the engine's `SinkerCondition` door
+//!   and a Sinker Side Burn (#545); a wear-layered burn (#546) posts
+//!   each layer as the depth code; the engine's `SinkerCondition` door
 //!   keeps a mill post off a sinker burn and the script's machine check
 //!   keeps the sinker post off a mill (the app's serves door, #1232,
 //!   refuses both first - `posting_serves`).
@@ -56,7 +57,12 @@ fn dialect() -> Value {
 /// The recorded burn wrapped as the in-app dump wraps it: commentary,
 /// the condition and pickup PARAMs, the electrode, the section.
 fn stream_with(extra: &[(&str, Value)]) -> String {
-    let cl = cnc::parse(&read("crates/app/tests/golden/sinker_burn_cavity.cl")).expect("the CL golden parses");
+    stream_of("crates/app/tests/golden/sinker_burn_cavity.cl", extra)
+}
+
+/// [`stream_with`] over another CL golden of the Sinker Burn.
+fn stream_of(cl_golden: &str, extra: &[(&str, Value)]) -> String {
+    let cl = cnc::parse(&read(cl_golden)).expect("the CL golden parses");
     let mut recs = vec![
         Record::Param { name: "OperationName".into(), value: json!("Burn1") },
         Record::Param { name: "OperationKind".into(), value: json!("Sinker Burn") },
@@ -192,6 +198,20 @@ fn a_mill_post_on_a_sinker_and_the_sinker_post_on_a_mill_are_refused() {
     // No machine at all is no sinker either.
     let out = engine::run(&sinker_cps(), &Value::Null, &stream).expect("the engine runs, the script refuses");
     assert!(out.warnings.iter().any(|w| w.contains("is not declared a sinker EDM")), "{:?}", out.warnings);
+}
+
+/// #546 (merged during the rework): a wear-compensated burn is fed in
+/// layers, each straight down Z and deeper than the last - the post
+/// writes each layer as the machine's `depth` code at its compensated Z,
+/// exactly the tips the CL states (`sinker_wear_layers.cl`, pinned by
+/// app's `sinker_wear` suite), and nothing else.
+#[test]
+fn a_wear_layered_burn_posts_each_layer_as_the_depth_code() {
+    let out = post(&dialect(), &stream_of("crates/app/tests/golden/sinker_wear_layers.cl", &[]));
+    assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+    let burns: Vec<&str> = out.program.lines().filter(|l| l.starts_with("M101")).collect();
+    assert_eq!(burns, ["M101 Z18.01", "M101 Z15.97", "M101 Z13.93"], "{}", out.program);
+    assert_eq!(out.program.lines().filter(|l| l.starts_with("G0")).count(), 2, "approach and retract only:\n{}", out.program);
 }
 
 #[test]
