@@ -17,7 +17,7 @@ use std::time::Duration;
 use crate::shortcut_keys::chord;
 
 use camcraft_app::commands::{
-    ActivateSetup, AlignPartToSetup, SetSetupRelative, SetSetupStockSource, SetSetupWorkOffset, AddTool, HolderPick, ApplyCuttingData, ChangeOperationKind, ChangeTool, CommandError, CreateOperation,
+    ActivateSetup, SetSetupRelative, SetSetupStockSource, SetSetupWorkOffset, AddTool, HolderPick, ApplyCuttingData, ChangeOperationKind, ChangeTool, CommandError, CreateOperation,
     ClearToolpath, CreateSetup, DeleteEntity, DeleteFixture, DeleteOperation, DeleteSetup, DeleteTool,
     EditOperationLinks, EditOperationParams, GenerateOperation, History, ImportModel,
     MoveFixture, MoveModel, PasteOperation, RegenerateAll, RenameOperation, ReorderOperation, RepairModel, SelectEntity, SetOperationGeometry,
@@ -57,6 +57,8 @@ mod setup_workholding;
 mod fixture_view;
 #[path = "state_locate.rs"]
 mod locate_ui;
+#[path = "state_align.rs"]
+mod align_ui;
 use locate_ui::with_warning;
 #[path = "state_fixture_library.rs"]
 mod fixture_library;
@@ -423,6 +425,15 @@ pub enum CommandKind {
     /// parts' bounds - the presets'). All zero is "As modelled".
     /// Undoable (`AlignPartToSetup`). Never touches the work offset.
     AlignPart {
+        setup: String,
+        angles: [f64; 3],
+        pivot: camcraft_app::setup_turn::TurnPivot,
+    },
+    /// #738: turn the part BY these angles from where it sits now (the
+    /// Setups page's preset and "Turn by" rows): composed onto every
+    /// earlier move, so it never wipes a face, three-point or axis pick.
+    /// Undoable (`AlignPartToSetup::turn_by`).
+    TurnPart {
         setup: String,
         angles: [f64; 3],
         pivot: camcraft_app::setup_turn::TurnPivot,
@@ -3428,21 +3439,11 @@ impl State {
                     }
                 }
             }
-            CommandKind::AlignPart { setup, angles, pivot } => {
-                match AlignPartToSetup::turn(&self.world, &setup, angles, pivot) {
-                    Ok(command) => {
-                        self.history.execute(&self.world, command);
-                        self.doc_version += 1;
-                        self.status = format!(
-                            "{setup} part alignment: {}",
-                            crate::egui_app::align_text(camcraft_app::setup_align::stored(&self.world, &setup))
-                        );
-                    }
-                    Err(err) => {
-                        self.refuse(ErrorScope::Setup, format!("part alignment not changed: {err}"));
-                    }
-                }
-            }
+            k @ (CommandKind::AlignPart { .. }
+            | CommandKind::TurnPart { .. }
+            | CommandKind::LayPartOnPlane { .. }
+            | CommandKind::LayPartOnPoints { .. }
+            | CommandKind::AlignPartFromAxes { .. }) => self.dispatch_align(k), // #738: state_align.rs
             CommandKind::SetSetupRelative { setup, to, angles } => {
                 let built = match &to {
                     Some(parent) => SetSetupRelative::link(&self.world, &setup, parent, angles),
@@ -3472,61 +3473,6 @@ impl State {
                     }
                     Err(err) => {
                         self.refuse(ErrorScope::Setup, format!("stock source not changed: {err}"));
-                    }
-                }
-            }
-            CommandKind::LayPartOnPlane { setup, picks, lay } => {
-                match AlignPartToSetup::lay_on_plane(&self.world, &setup, &picks, lay) {
-                    Ok(command) => {
-                        self.history.execute(&self.world, command);
-                        self.doc_version += 1;
-                        self.plane_pick = None;
-                        self.status = format!(
-                            "{setup} part laid on {}: {}",
-                            camcraft_app::pick::plane_label(lay.plane),
-                            crate::egui_app::align_text(camcraft_app::setup_align::stored(&self.world, &setup))
-                        );
-                    }
-                    Err(err) => {
-                        self.refuse(ErrorScope::Setup, format!("part not laid on the plane: {err}"));
-                    }
-                }
-            }
-            CommandKind::LayPartOnPoints { setup, picks, lay } => {
-                match AlignPartToSetup::lay_on_points(&self.world, &setup, &picks, lay) {
-                    Ok(command) => {
-                        self.history.execute(&self.world, command);
-                        self.doc_version += 1;
-                        self.points_pick = None;
-                        self.status = format!(
-                            "{setup} part laid on {} through three points: {}",
-                            camcraft_app::pick::plane_label(lay.lay.plane),
-                            crate::egui_app::align_text(camcraft_app::setup_align::stored(&self.world, &setup))
-                        );
-                    }
-                    Err(err) => {
-                        self.refuse(ErrorScope::Setup, format!("part not laid on the three points: {err}"));
-                    }
-                }
-            }
-            CommandKind::AlignPartFromAxes { setup, axes } => {
-                match AlignPartToSetup::align_from_axes(&self.world, &setup, &axes) {
-                    Ok(command) => {
-                        self.history.execute(&self.world, command);
-                        self.doc_version += 1;
-                        // The picks stay (disarmed) so Flip re-applies
-                        // onto what the setup now holds (#557 hand check).
-                        if let Some(d) = self.axis_pick.as_mut().filter(|d| d.setup == setup) {
-                            d.picking = None;
-                            d.applied = true;
-                        }
-                        self.status = format!(
-                            "{setup} part aligned from its picks: {}",
-                            crate::egui_app::align_text(camcraft_app::setup_align::stored(&self.world, &setup))
-                        );
-                    }
-                    Err(err) => {
-                        self.refuse(ErrorScope::Setup, format!("part not aligned from its picks: {err}"));
                     }
                 }
             }

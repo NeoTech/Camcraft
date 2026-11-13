@@ -218,7 +218,7 @@ pub fn take(state: &mut State, pick: GeoSel) {
     d.applied = false;
     let by = d.by(axis);
     let setup = d.setup.clone();
-    let words = format!("{} of '{}'", pick.feature, pick.entity);
+    let words = format!("that pick on '{}'", pick.entity); // #738: no internal id
     let refuse = |what: &str| format!("{setup}: {words} is {what} - {} takes {}", axis.label(), by.noun());
     let status = match (by, pick.feature) {
         (AxisBy::Edge, FeatureSel::Chain(_)) => {
@@ -241,6 +241,19 @@ pub fn take(state: &mut State, pick: GeoSel) {
         (AxisBy::Edge, FeatureSel::Vertex(_)) => refuse("a point"),
     };
     state.status = status;
+}
+
+/// One picked point where it is (#738): "on 'block' (x, y, z) mm", in
+/// the document's units and frame - never its internal id.
+#[must_use]
+pub fn point_words(world: &World, g: &GeoSel, unit: Unit) -> String {
+    match pick::pick_coords(world, g).as_deref() {
+        Some([p]) => {
+            let c: Vec<String> = p.iter().map(|v| units::len(*v, unit, 3)).collect();
+            format!("on '{}' ({}) {}", g.entity, c.join(", "), unit.suffix())
+        }
+        _ => format!("on '{}' (no longer in the model - re-pick it)", g.entity),
+    }
 }
 
 /// The picked row's words (#557 hand check): what was picked and where,
