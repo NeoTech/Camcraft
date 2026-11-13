@@ -53,6 +53,7 @@ enum KindWord {
     Taper,
     Probe,
     Torch,
+    Electrode,
 }
 
 #[derive(Deserialize, Clone, Copy)]
@@ -120,6 +121,7 @@ impl Def {
                 KindWord::Taper => ToolKind::Taper,
                 KindWord::Probe => ToolKind::Probe,
                 KindWord::Torch => ToolKind::Torch,
+                KindWord::Electrode => ToolKind::Electrode,
             },
             diameter: self.diameter,
             corner_r: self.corner_r,
@@ -142,6 +144,8 @@ impl Def {
             flutes: self.flutes,
             center_cutting: self.center_cutting,
             orientation: self.orientation,
+            catalog: crate::catalog_fields::ToolCatalog::default(),
+            cutting: Vec::new(),
             turning: self.turning,
         }
     }

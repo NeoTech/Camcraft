@@ -43,9 +43,9 @@ impl State {
                 let done = format!("part laid on {} through three points", camcraft_app::pick::plane_label(lay.lay.plane));
                 (setup, c, done, "part not laid on the three points", Draft::Points)
             }
-            CommandKind::TurnPartInPlane { setup, axes } => {
-                let c = AlignPartToSetup::turn_in_plane(w, &setup, &axes);
-                (setup, c, "part turned in the plane".to_owned(), "part not turned in the plane", Draft::Axes)
+            CommandKind::AlignPartFromAxes { setup, axes } => {
+                let c = AlignPartToSetup::align_from_axes(w, &setup, &axes);
+                (setup, c, "part aligned from its picks".to_owned(), "part not aligned from its picks", Draft::Axes)
             }
             _ => return, // only the alignment verbs are routed here
         };

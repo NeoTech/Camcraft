@@ -59,7 +59,7 @@ fn cycle_to(bottom: f64) -> Toolpath {
 }
 
 fn axial(bottom: f64, body: Option<&BodyBands>) -> Result<(), String> {
-    axial_reach(&cycle_to(bottom), &[], &slab_and_wall(), None, None, (&drill(), body), "T1").map_err(|e| e.to_string())
+    axial_reach(&cycle_to(bottom), &[], &slab_and_wall(), None, None, (&drill(), body), "T1", Unit::Millimeters).map_err(|e| e.to_string())
 }
 
 #[test]
@@ -86,7 +86,7 @@ fn a_stepped_body_whose_flange_sinks_beside_the_wall_is_still_refused_by_the_axi
     // The nose alone: a hole drilled where the wall stands 4 mm off the
     // axis convicts the r 6 nose (face z -14) though the flange clears.
     let near = boxes(&[([-50.0, -50.0, -40.0], [50.0, 50.0, -30.0]), ([4.0, -20.0, -30.0], [30.0, 20.0, 0.0])]);
-    let e = axial_reach(&cycle_to(-40.0), &[], &near, None, None, (&tool, Some(&stepped(&tool, 46.0))), "T1").err();
+    let e = axial_reach(&cycle_to(-40.0), &[], &near, None, None, (&tool, Some(&stepped(&tool, 46.0))), "T1", Unit::Millimeters).err();
     let e = e.map(|e| e.to_string()).unwrap_or_else(|| panic!("the nose sank beside the near wall"));
     assert!(e.contains("T1's body band (dia. 12.000, 26.000 mm above the tip)"), "{e}");
 }
@@ -153,7 +153,7 @@ fn plunge() -> Toolpath {
 }
 
 fn cross(ear: f64, body: Option<&BodyBands>) -> Result<(), String> {
-    cross_holder(&plunge(), &core_and_ear(ear), None, (0.0, 0.0), &cross_tool(), body, "T1").map_err(|e| e.to_string())
+    cross_holder(&plunge(), &core_and_ear(ear), None, (0.0, 0.0), &cross_tool(), body, "T1", Unit::Millimeters).map_err(|e| e.to_string())
 }
 
 #[test]
