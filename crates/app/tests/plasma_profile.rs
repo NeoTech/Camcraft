@@ -140,6 +140,8 @@ fn the_plasma_family_lives_on_a_plasma_table_only() {
         .err()
         .expect("refused on a mill");
     assert!(format!("{err:?}").contains("plasma cutting work") && format!("{err:?}").contains("mount a plasma table"), "{err:?}");
+    // #1291: this world mounts no machine, so the words say so.
+    assert!(format!("{err:?}").contains("the setup has no machine mounted - mount a plasma table first"), "{err:?}");
     // And on the plasma table, a milling tool is the tool law's refusal.
     let (world, mut h) = plasma_doc();
     let em = catalog().into_iter().find(|(n, _)| *n == "EM-0400-2FL").expect("em");

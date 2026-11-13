@@ -107,11 +107,12 @@ pub struct Coolant {
 }
 
 /// The coolant names the shipped posts read (#150), in editor order:
-/// `Flood` serves a Flood op, `Mist` a Mist op, `Through-spindle` or
+/// `Flood` serves a Flood op, `Mist` a Mist op, `Air` an Air op (#869;
+/// `Air blast` reads too), `Through-spindle` or
 /// `Through-tool` a Through-tool op. The posts compare case-blind with
 /// spaces and underscores read as hyphens ("Through spindle" reads); any
 /// other name is a shop's own flood (the first coded one serves).
-pub const COOLANT_KINDS: [&str; 4] = ["Flood", "Mist", "Through-spindle", "Through-tool"];
+pub const COOLANT_KINDS: [&str; 5] = ["Flood", "Mist", "Air", "Through-spindle", "Through-tool"];
 
 /// A machine, as parsed from a `.mch` file. The identity strings are
 /// display data; every limit is optional by the unstated-limits law.

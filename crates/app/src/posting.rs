@@ -37,6 +37,10 @@ pub const BUILTINS: &[(&str, &str)] = &[
     ("Heidenhain", include_str!("../../../assets/posts/heidenhain.cps")),
     ("Mazak", include_str!("../../../assets/posts/mazak.cps")),
     ("Tormach PathPilot", include_str!("../../../assets/posts/tormach.cps")),
+    // #710: grbl-family controllers (hobby and small-shop routers and mills).
+    ("grblHAL", include_str!("../../../assets/posts/grblhal.cps")),
+    // Synthetos TinyG: the other grbl-family controller, no canned cycles, M0 after each tool change.
+    ("TinyG", include_str!("../../../assets/posts/tinyg.cps")),
     ("Doosan DNM", include_str!("../../../assets/posts/doosan-dnm.cps")),
     ("Makera Carvera", include_str!("../../../assets/posts/carvera.cps")),
     ("Fanuc Lathe", include_str!("../../../assets/posts/fanuc-lathe.cps")),
@@ -178,6 +182,10 @@ pub const MACHINES: &[(&str, &str)] = &[
     // #618: the M+ upgrade kits - the M's figures with the MX's axis speeds.
     ("Tormach 770M+", include_str!("../../../assets/machines/tormach-770m-plus.mch")),
     ("Tormach 1100M+", include_str!("../../../assets/machines/tormach-1100m-plus.mch")),
+    // #710: a generic grbl-family router / mill; pairs with the "grblHAL" post.
+    ("grblHAL 3-axis", include_str!("../../../assets/machines/grblhal-3axis.mch")),
+    // A generic TinyG router / mill; pairs with the "TinyG" post.
+    ("TinyG 3-axis", include_str!("../../../assets/machines/tinyg-3axis.mch")),
     // #620: the PathPilot routers, each from its own manual / spec sheet
     // (the plain xsTECH from its spec sheet and knowledge base: no manual).
     ("Tormach 24R", include_str!("../../../assets/machines/tormach-24r.mch")),
@@ -463,6 +471,9 @@ fn post_script_body(world: &World, out_path: &Path, cps: &str, label: Option<&st
     // #388: the program's one machine (a program over several refuses).
     let mount = mounts::single(world, false)?;
     let streams = op_streams(world)?;
+    // No EDM dialect ships yet (#533, #542): an EDM program is refused
+    // here by name, before any file is written.
+    crate::posting_family::edm_at_post(world, streams.iter().map(|(n, _)| n.as_str()))?;
     // #1190: a turning dialect opens only what a lathe may run.
     crate::lathe_voice::at_post(world, streams.iter().map(|(n, _)| n.as_str()), cps, label)?;
     // #1232: and a post writes only for a machine kind it serves.
@@ -1021,6 +1032,7 @@ impl HeightRefs for OpParams {
             OpParams::Probe { clearance_z, .. } => vec![clearance_z],
             OpParams::PlasmaProfile(p) => vec![&p.clearance_z, &p.top_z, &p.bottom_z],
             OpParams::WireContour(p) => vec![&p.top_z, &p.bottom_z],
+            OpParams::SinkerBurn(p) => vec![&p.clearance_z, &p.top_z, &p.floor_z],
             OpParams::Face {
                 clearance_z,
                 cut_z,

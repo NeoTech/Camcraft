@@ -180,6 +180,10 @@ pub(crate) fn display_inputs(
         return Err(format!("the field view needs a positive texel budget, not {texels}"));
     }
     let planned = plan_program(world)?;
+    // #541: the field eye has no box atom - said, never cut as a disc.
+    if let Some(p) = planned.iter().find(|p| p.electrode.is_some()) {
+        return Err(format!("{}: {}", p.name, crate::stock_sim::ELECTRODE_FIELD_REFUSAL));
+    }
     let first = planned.first().and_then(|p| p.setup.clone());
     let eff = crate::setup::effective(world, first.as_deref());
     if planned.iter().any(|p| crate::setup::effective(world, p.setup.as_deref()) != eff) {

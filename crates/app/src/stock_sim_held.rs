@@ -192,6 +192,19 @@ impl Held {
         .map_err(|e| e.to_string())
     }
 
+    /// Burn a sinker electrode's box atom (#541) into the column grid;
+    /// the field engine has no box atom and refuses by name.
+    pub(crate) fn simulate_box(&mut self, moves: &[crate::cl::Move], hx: f64, hy: f64, gap: f64) -> Result<(), String> {
+        let dex = match self {
+            Held::Plain(Stock::Column(d)) => d,
+            Held::Carried(CarriedStock::Column(b)) => &mut b.dex,
+            Held::Plain(Stock::Field(_)) | Held::Carried(CarriedStock::Field(_)) => {
+                return Err(crate::stock_sim::ELECTRODE_FIELD_REFUSAL.into());
+            }
+        };
+        crate::stock_sim::simulate_box(dex, moves, hx, hy, gap).map_err(|e| e.to_string())
+    }
+
     /// Clip under the entered setup's own stock `grid` (the M3.2 A clip).
     pub(crate) fn clip_under(&mut self, grid: &Dexel) -> Result<(), String> {
         match self {
@@ -246,3 +259,8 @@ impl Held {
         }
     }
 }
+
+// #541 review: `simulate_box` on every arm (split out by the 400-line law).
+#[cfg(test)]
+#[path = "stock_sim_held_tests.rs"]
+mod tests;
