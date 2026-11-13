@@ -180,6 +180,23 @@ fn batch_skips_slow_binaries_and_release_runs_everything() {
 }
 
 #[test]
+fn release_without_snapshots_drops_only_the_pixel_lanes() {
+    // #1413: cut.yml's Linux runner runs `gate release --no-snapshots`; every other lane stays.
+    let fx = fixture();
+    let full: Vec<String> = plan::release(&fx.0).steps.iter().map(line).collect();
+    let p = plan::release_with(&fx.0, false);
+    let r: Vec<String> = p.steps.iter().map(line).collect();
+    assert_eq!(r, full[..full.len() - 2].to_vec());
+    assert!(r.iter().all(|s| !s.contains("snapshot")), "{r:#?}");
+    assert!(r.iter().any(|s| s.starts_with("app heavy lane")));
+    assert!(p.notes.iter().any(|n| n.contains("--no-snapshots")));
+    let a = |s: &str| s.split_whitespace().map(String::from).collect::<Vec<_>>();
+    assert!(parse_gate(&a("release --no-snapshots --dry-run")).expect("release").no_snapshots);
+    assert!(!parse_gate(&a("release")).expect("release").no_snapshots);
+    assert!(parse_gate(&a("batch --no-snapshots")).is_err());
+}
+
+#[test]
 fn single_test_finds_suite_and_lib_fns() {
     let fx = fixture();
     let f = single::Filter { name: "op_area", krate: None, binary: None, exact: true };

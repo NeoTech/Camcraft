@@ -735,9 +735,11 @@ gate <tier>`, from the workspace's `xtask/` crate. `scripts/gate.ps1`
    every debug suite except those tagged slow, the ui suites from
    `crates/ui`, clippy (`cargo xtask gate batch`). No release-mode heavy
    lanes.
-3. **release** (only at a cut, run locally): everything - all debug
-   suites, the `--ignored` heavy lanes in release (`cargo xtask gate
-   release`).
+3. **release** (only at a cut): everything - all debug suites, the
+   `--ignored` heavy lanes in release (`cargo xtask gate release`). Since
+   #1413 it runs on the self-hosted Linux cut runner through `cut.yml`
+   (`cargo xtask gate release --no-snapshots`); the pixel-snapshot lanes
+   stay a local step at the cut ("A cut goes PR review", step 2).
 
 Any tier takes `--dry-run` to print its plan without running it; logs go
 to `gate-logs/<tier>-<timestamp>/`.
@@ -758,12 +760,56 @@ makes every worktree miss. Dev builds carry line tables only (no variable
 debug info; `--config profile.dev.debug=true` restores it for a debugger).
 
 **GitHub Actions minutes are budgeted** (3000/month; Windows bills 2x,
-macOS 10x). Nothing runs on push or PR: every gate tier runs locally
-through `cargo xtask gate`. GitHub runs only `release.yml` on a pushed tag
-(the build that publishes the artifact). `ci.yml` and `nightly.yml` are
-manual (`workflow_dispatch`) for the rare case a clean-machine run is
-wanted. Never add a `push`, `pull_request` or `schedule` trigger without
-the user's say-so.
+macOS 10x). Nothing runs on push or PR: the quick and batch tiers run
+locally through `cargo xtask gate`. GitHub runs `release.yml` for a cut
+tag (the build that publishes the artifact), and `cut.yml` (#1413) runs
+the release tier of a cut on the self-hosted cut runner (below), which
+bills no minutes; `cut.yml` starts `release.yml`, it does not replace it.
+Billed minutes of one cut: `cut.yml` 0 (self-hosted); `release.yml` about
+230 by v0.18.0's job times (Linux jobs ~50, Windows 10 x2, macOS 16 x10) -
+**measured cut: to be filled in from the first `cut.yml` cut's release
+run (Actions -> the run -> Usage)**. `ci.yml` and `nightly.yml` are manual
+(`workflow_dispatch`) for the rare case a clean-machine run is wanted.
+Triggers stay `workflow_dispatch` (plus `release.yml`'s tag push): never
+add a `push`, `pull_request` or `schedule` trigger without the user's
+say-so, and never any trigger a fork PR can fire on a workflow whose jobs
+run on the self-hosted runner (maintainer, 2026-11-13: a public repo's
+fork PR must not run code on the maintainer's machine).
+
+**The cut runner** (#1413; maintainer, 2026-11-13: "That test and cut
+runner should be linux and it can only run on self hosted agents").
+`cut.yml`'s jobs run on `runs-on: [self-hosted, linux]`, never on a
+GitHub-hosted runner. What the machine needs:
+- Linux x86-64, registered to NeoTech/Camcraft at repo level with the
+  labels `self-hosted`, `Linux`, `X64` (an extra name label is fine);
+  sized for 16 cores and ~64 GB RAM, fewer cores work, slower.
+- Disk: at least 100 GB free for the work dir (a clean `target/` with the
+  release heavy lanes is 20-30 GB) plus the sccache cache.
+- The Rust toolchain on the runner service's PATH (`~/.cargo/bin`, a
+  stable rustc that builds the workspace), `git`, `gh`, and the Linux
+  build packages `release.yml`'s linux job installs (`pkg-config`,
+  `libwayland-dev`, `libxkbcommon-dev`, `libx11-dev`). The UI suites open
+  windows: install `xvfb` (the workflow wraps the gate in `xvfb-run -a`
+  when no display is set) and Mesa's software drivers
+  (`mesa-vulkan-drivers`, `libgl1-mesa-dri`) for a GPU-less adapter.
+- sccache: `RUSTC_WRAPPER` set to the sccache binary and
+  `SCCACHE_CACHE_SIZE` (e.g. 40G) in the runner's `.env`. Never set
+  `CARGO_TARGET_DIR` ("Shared compile cache"): each run builds in the
+  workspace's own `target/`, which `actions/checkout` cleans, and the
+  compile cache makes that cheap.
+- Registration: the maintainer creates a token (Settings -> Actions ->
+  Runners -> New self-hosted runner, Linux x64), then in the runner
+  directory `./config.sh --unattended --url
+  https://github.com/NeoTech/Camcraft --token <token> --name <name>
+  --labels <extra labels> --work <work dir>`, and runs it as a service
+  (`./svc.sh install`, or a user systemd unit with linger enabled so it
+  survives logout).
+- Safety: run it as an unprivileged account (no passwordless sudo; the
+  `docker` group is root-equivalent), keep "Require approval for all
+  outside collaborators" on for fork PR workflows (Settings -> Actions ->
+  General), and never approve a fork PR's workflow run that adds or
+  changes a file under `.github/workflows/` - such a file could name
+  `self-hosted`.
 
 **Test the change, not everything.** A fix is proved by the test(s) that pin
 it, run one by one: `cargo xtask gate test <name> [--crate c] [--binary b]
@@ -952,24 +998,52 @@ a tag"):
    each `PROCESS_VERSION` since the previous tag (taken from the pinned
    issue #681). Commit all of it as `docs: X.Y.Z release notes;
    changelog`; then `cargo xtask release --version X.Y.Z --no-tag
-   --installer` (Windows; `scripts/release.ps1 -Version X.Y.Z -NoTag
-   -Installer` is the same command through its wrapper; on macOS and Linux
-   it hands packaging to `scripts/package-*.sh` and refuses `--installer`)
-   - it runs the release gate tier on that tree (pass `--skip-gate` only if
-   this exact tree already passed it), commits the version bump, builds
-   the zip and installer, and makes no tag (it refuses `--no-tag` on main).
-3. **Release PR.** `git push -u origin release/vX.Y.Z`,
-   `gh pr create --base main --title "chore(release): X.Y.Z"`, reviewed like
-   any PR. Record the branch tip first (`tip=$(git rev-parse
-   release/vX.Y.Z)` - `--delete-branch` removes the name), then
-   `gh pr merge --merge --delete-branch`.
-4. **Tag the release merge commit.** Sync main; `m=$(git rev-parse main)`
-   is the release PR's merge commit (nothing else merged since step 1).
-   `git diff $tip $m` must be empty - the zip's tree is the tagged tree. Then
-   `git tag -a vX.Y.Z -m "CamCraft X.Y.Z" $m` and `git push origin vX.Y.Z`.
-   If the diff is not empty, do not tag: something reached main mid-cut;
-   start the cut again from step 2 on a fresh release branch. Comment
-   `shipped in vX.Y.Z` on every issue the cut closed.
+   --skip-gate` commits the version bump (the release gate runs on the cut
+   runner, step 3) and makes no tag (it refuses `--no-tag` on main). Its
+   local zip (and, on Windows with `--installer`, installer) is a
+   hand-test build only - the published zip, installer and packages are
+   built by `release.yml` from the tag - and a packaging failure after its
+   phase 4 does not undo the bump commit. Two checks stay local, on
+   Windows, before the push: the pixel-snapshot lanes (`cargo test -p
+   camcraft-ui --lib -- --ignored snapshot` and `cargo test -p camcraft-ui
+   --test gpu_render -- --ignored snapshot`, CWD `crates/ui`; the goldens
+   were made on Windows and are regenerated here after a look at the
+   `.diff.png`), and, optionally, the Windows arms of per-OS pinned
+   readings (issue 1402's move counts in `crates/app/tests/pocket3d_hsm.rs`
+   and the like: the Linux runner checks only the Linux arm, and a Windows
+   arm nobody runs drifts until the next Windows check). A cut without a
+   Windows machine skips both and says so in the release PR.
+3. **Release gate on the cut runner, then the release PR.** `git push -u
+   origin release/vX.Y.Z`, then start the gate: Actions -> Cut -> Run
+   workflow, `version` X.Y.Z, `stage` gate (`gh workflow run cut.yml -f
+   version=X.Y.Z -f stage=gate`). It checks out `release/vX.Y.Z`, refuses
+   a branch whose `Cargo.toml` or `RELEASE_NOTES.md` does not name X.Y.Z
+   or whose tag exists, runs `cargo xtask gate release --no-snapshots`,
+   uploads `gate-logs/` as an artifact either way, and, green, records the
+   tested commit. Red: nothing is tagged; fix on the release branch, push,
+   and start the gate again. The `dry_run` input prints the plan only (try
+   a new runner with it). While the gate runs, `gh pr create --base main
+   --title "chore(release): X.Y.Z"`, reviewed like any PR; once the gate is
+   green and the PR reviewed, `gh pr merge --merge --delete-branch`. No
+   push to the branch after the green gate: the tag stage refuses a merge
+   whose tree is not the gated tree.
+4. **Tag the release merge commit - on the cut runner.** Start Cut again
+   with `stage` tag (`gh workflow run cut.yml -f version=X.Y.Z -f
+   stage=tag`). It takes `tip`, the commit of the newest green gate run
+   for X.Y.Z, and `m`, main's head; it refuses unless `m` is the release
+   PR's merge of `tip` (`m^2 == tip`: nothing else merged since step 1),
+   `git diff $tip $m` is empty (the gated tree is the tagged tree) and the
+   tag is free. Then it makes `git tag -a vX.Y.Z -m "CamCraft X.Y.Z" $m`,
+   pushes it, and starts the existing `release.yml` on the tag (`gh
+   workflow run release.yml --ref vX.Y.Z`: a tag pushed with the workflow
+   token starts no workflow by itself, and on a tag ref `release.yml`
+   publishes exactly as on a pushed tag). `dry_run` runs every check and
+   tags nothing. A refusal means something reached main mid-cut or the
+   branch moved after the gate: start the cut again from step 2 on a fresh
+   release branch. The local cut (gate locally, then `git tag` and `git
+   push origin vX.Y.Z` by hand, which fires `release.yml` on the push)
+   stays the fallback when the runner is down, with the same empty-diff
+   rule. Comment `shipped in vX.Y.Z` on every issue the cut closed.
 5. **Check the documentation site** (#688). The same tag run regenerates
    the Zola site in `site/` from the tagged tree and deploys it to GitHub
    Pages (`release.yml` jobs `site` and `pages`; `pages` waits for
@@ -1034,9 +1108,10 @@ retargeting any stacked child to `main` first),
 never while a cut is between step 1 and its tag.
 
 **Every cut tag is published.** A release cut is not done until its tag is
-on GitHub: the tag is made on `main` after the release PR merges (step 4)
-and pushed at once - `git push origin vX.Y.0` - which fires `release.yml`
-and attaches the built artifact to a GitHub release. A tag that exists only
+on GitHub: the tag is made on `main` after the release PR merges (step 4),
+by `cut.yml`'s tag stage, which pushes it and starts `release.yml` on it
+(by hand, `git push origin vX.Y.0` fires `release.yml` itself), and
+`release.yml` attaches the built artifact to a GitHub release. A tag that exists only
 locally is an unfinished cut. Never move or re-push an existing tag; a fix
 after a cut merges to `main` and ships in the next minor. Never force-push -
 not `main`, not a branch with an open PR.
