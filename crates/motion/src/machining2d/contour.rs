@@ -115,6 +115,7 @@ fn contour_impl(
     loops.sort_by(|a, b| b.area().abs().total_cmp(&a.area().abs()));
     // #1448: the ring the user's start point re-sequences, or its refusal.
     let pick = contour_start::pick_ring(&loops, p)?;
+    let exit = contour_start::pick_exit(&loops, p)?; // #1473
 
     // The rings every level plans to walk, as closed polylines - the
     // link chords of M8.1's plan law get proven against these. Tabbed
@@ -262,7 +263,10 @@ fn contour_impl(
             // moves - the same segments, so the same chords, never a new
             // crossing - and the lead-out leaves from where that ends.
             let mut window = (poly, walk, entry, lead, lead_off);
-            if ov > 0.0 {
+            if let Some((_, q)) = exit.filter(|&(ei, _)| ei == li) {
+                // #1473: on past the seam to the user's exit point.
+                window = contour_start::exit_at(window, q, p, &legal, &mut lead_notes)?;
+            } else if ov > 0.0 {
                 let (rpoly, rwalk) = retrace(&window.0, &window.1, ov);
                 let (en, li, lo) = seam_leads(&rwalk, &rpoly, p, &legal, &mut lead_notes);
                 let (en, li, lo) = extend_leads(en, li, lo, &rwalk, &rpoly, p, &legal, &mut lead_notes);
