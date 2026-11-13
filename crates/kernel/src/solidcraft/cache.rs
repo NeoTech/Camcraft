@@ -11,7 +11,7 @@
 use serde_json::Value;
 
 use super::sha256::hex_digest;
-use super::{CACHE_FORMATS, CACHE_KERNEL, CACHE_PRODUCER, refused};
+use super::{CACHE_FORMATS, CACHE_KERNEL, CACHE_PRODUCER, MAX_COORD_MM, refused};
 use crate::KernelError;
 
 pub const MANIFEST: &str = "cache/model.json";
@@ -44,6 +44,28 @@ fn list<'a>(v: &'a Value, key: &str, cap: usize) -> Result<&'a Vec<Value>, Kerne
         .and_then(Value::as_array)
         .filter(|l| l.len() <= cap)
         .ok_or_else(|| refused(format!("model cache: '{key}' missing or too long")))
+}
+
+/// Every vertex of the final body lies within `MAX_COORD_MM` of the origin
+/// on each axis, at finite coordinates. The decoder refuses non-finite
+/// numbers, coordinates past 1e12 and tolerances outside (0, 1e3] itself;
+/// this is the reader's own, tighter coordinate bound (#1467), checked
+/// before the kernel builds anything.
+fn check_vertices(b: &solidcore_record::brep::Brep) -> Result<(), KernelError> {
+    for (i, v) in b.vertices.iter().enumerate() {
+        if let Some(x) = v.point.iter().find(|x| !x.is_finite()) {
+            return Err(refused(format!(
+                "the final body's vertex {i} has a non-finite coordinate ({x})"
+            )));
+        }
+        if let Some(x) = v.point.iter().find(|x| x.abs() > MAX_COORD_MM) {
+            return Err(refused(format!(
+                "the final body's vertex {i} lies at {x:e} mm, past the {MAX_COORD_MM:e} mm \
+                 coordinate limit"
+            )));
+        }
+    }
+    Ok(())
 }
 
 /// The cache is one we read and is the evaluation of exactly this document
@@ -186,6 +208,7 @@ pub fn final_body(manifest: &Value, payload: &[u8]) -> Result<FinalBody, KernelE
     }
     let saved = solidcore_record::native::decode(bytes)
         .map_err(|e| refused(format!("the final body does not decode: {e}")))?;
+    check_vertices(&saved.solid)?;
     Ok(FinalBody {
         name: text(mb, "name").to_owned(),
         record: saved.solid,
