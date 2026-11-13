@@ -36,7 +36,8 @@ engine refuses a higher offset by setup name; without the flag the
 script receives the word `G54`..`G59` for offsets 1-6 and the engine
 refuses any offset above 6. A flagged script also defines
 `workOffsetName(n)`, its control's name for offset n (display only).
-Every shipped post sets it; an extended word (`G59.1`, `G505`...) is
+Every shipped post sets it except grblhal.cps and tinyg.cps, which
+still take the word (offsets 1-6 only; follow-up issue); an extended word (`G59.1`, `G505`...) is
 written only where the control's public manual is cited (tormach.cps
 and tormach-lathe.cps: the LinuxCNC G-code reference's G59.1-G59.3);
 `threadHands = true` (#629) says the script
