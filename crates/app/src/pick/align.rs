@@ -31,8 +31,9 @@ const STRAIGHT_TOL_MM: f64 = 0.01;
 const STRAIGHT_TOL_REL: f64 = 1e-4;
 
 /// The edge must lean at least this far out of the face's normal (deg) to
-/// give the plane a direction worth trusting.
-const MIN_EDGE_TILT_DEG: f64 = 5.0;
+/// give the plane a direction worth trusting. (#701: the general role
+/// table enforces the same rule between any two axis picks.)
+pub(super) const MIN_EDGE_TILT_DEG: f64 = 5.0;
 
 /// A datum plane: a point on it and its outward unit normal (world).
 type Plane = ([f64; 3], [f64; 3]);
@@ -143,7 +144,7 @@ fn flat_face(world: &World, g: &GeoSel, pose: PoseOf) -> Result<Option<Plane>, S
 /// A planar face's outward unit normal, placed by `pose`; `None` when the
 /// face is not planar (or the pick is not a face). Refused by name when
 /// the face's body is inside-out, open, non-manifold or mixed (#366).
-pub(super) fn outward_normal(world: &World, g: &GeoSel, pose: PoseOf) -> Result<Option<[f64; 3]>, String> {
+pub(crate) fn outward_normal(world: &World, g: &GeoSel, pose: PoseOf) -> Result<Option<[f64; 3]>, String> {
     let FeatureSel::Face(fid) = g.feature else { return Ok(None) };
     let e = model::find_by_name(world, &g.entity).ok_or_else(|| gone(g))?;
     let features = model::features_of(world, &e).ok_or_else(|| gone(g))?;

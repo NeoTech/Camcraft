@@ -610,6 +610,27 @@
         "feed": 2500.0,
         "center_cutting": false
       }
+    },
+    {
+      "name": "EDM-E10X6",
+      "definition": {
+        "kind": "electrode",
+        "diameter": 10.0,
+        "corner_r": 0.0,
+        "tip_angle": 0.0,
+        "pitch": 0.0,
+        "nose_radius": 0.0,
+        "width": 6.0,
+        "flute_len": 30.0,
+        "shank_d": 10.0,
+        "shank_len": 15.0,
+        "holder_d": 0.0,
+        "holder_len": 0.0,
+        "material_group": "graphite",
+        "rpm": 0.0,
+        "feed": 50.0,
+        "center_cutting": true
+      }
     }
   ]
 }

@@ -111,6 +111,7 @@ pub fn arm(state: &mut State, setup: &str, axis: InPlaneAxis) {
     state.cylinder_pick = None; // #771
     state.origin_pick = None; // #771
     state.points_pick = None; // #555: one draft collects at a time
+    crate::wcs_pick::disarm(state); // #701: one draft collects at a time
     let d = draft_for(state, setup);
     d.picking = Some(axis);
     let by = d.by(axis);
@@ -154,6 +155,9 @@ pub fn disarm_hidden(state: &mut State) {
     }
     if state.origin_pick.as_ref().is_some_and(|d| !shown.contains(&d.setup)) {
         crate::origin_pick::pause(state);
+    }
+    if state.wcs_pick.as_ref().is_some_and(|d| !shown.contains(&d.setup)) {
+        crate::wcs_pick::pause(state); // #701: same law for the role draft
     }
 }
 

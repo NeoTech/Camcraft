@@ -40,6 +40,7 @@ pub fn arm(state: &mut State, setup: &str) {
     state.plane_pick = None; // #330
     state.points_pick = None; // #555
     state.origin_pick = None; // #771
+    crate::wcs_pick::disarm(state); // #701: one draft collects at a time
     match state.cylinder_pick.as_mut().filter(|d| d.setup == setup) {
         Some(d) => d.picking = true,
         None => {
