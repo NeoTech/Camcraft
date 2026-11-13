@@ -19,8 +19,8 @@ the property table there is the vocabulary, this file is the grammar.
 
 Manifest: top-level assignments only — `description`, `vendor`, `legal`,
 `certificationLevel`, `minimumRevision`, `extension`, `setCodePage`,
-`capabilities`, `coolantModes`, `liveTooling`, `afterModes`, `axisInversion`, `probeAxisInversion`, `threadHands`. All but the last six are
-text the engine reads none of; `threadHands = true` (#629) says the script
+`capabilities`, `serves`, `coolantModes`, `liveTooling`, `afterModes`, `axisInversion`, `probeAxisInversion`, `threadHands`. All but `serves` and the last six are
+text the engine reads none of; `serves = ["plasma"];` (#1266; one word or a list of kind words: mill, lathe, mill-turn, plasma, wire_edm, sinker_edm) names the machine kinds a script of the user's own posts to - the app refuses it by name on any other kind, and a script that states none is accepted only on a mill (non-turning dialect), a lathe (turning) or a mill-turn, never on a plasma table or an EDM; shipped posts are judged by registry name and need no `serves`; `threadHands = true` (#629) says the script
 reads `PARAM SpindleDirection` and states a thread's hand (M04 when the
 helix needs the spindle reversed) - without it the engine refuses a
 reverse-spindle thread section by name (fanuc-lathe.cps and tormach-lathe.cps set it); `liveTooling = true` (issue #33) says the
@@ -105,7 +105,11 @@ write (the gate), so the released program never carries one.
   with Z0 at the bottom would rapid down into the part. Unstated and
   not a known-convention machine is a `message()` refusal by name
   (`sinumerik.cps`, #503: no name is a known convention there - only
-  "no machine at all" keeps the old `G53 Z0`).
+  "no machine at all" keeps the old `G53 Z0`). A dialect whose machines
+  often run unhomed (`grblhal.cps`, #710: with `$22=0` machine Z0 is the
+  power-on height) reads an unstated `safe_retract` as "not homed" and
+  lifts in the work offset to the section's `ClearancePlane` instead,
+  refused by name when that height is unknown or not above `StockZTop`.
 - **Refuse, never lie.** A record you cannot honor in this dialect
   gets a counted `message()` naming why (Fanuc's `tilt()` returns null
   after one refusal per program — a per-line refusal is noise, a
@@ -140,7 +144,8 @@ write (the gate), so the released program never carries one.
   to R. A section that states no `RetractPlane` is refused by name
   (#1028). Probe moves seat the next cycle like any other motion.
   A dialect whose documented cycles this post was not specced from
-  (Heidenhain DIN/ISO: G200-G209 with Q parameters, #50) posts the
+  (Heidenhain DIN/ISO: G200-G209 with Q parameters, #50; TinyG, which
+  has no canned cycles at all) posts the
   expanded chain as plain moves instead and refuses what plain moves
   cannot do (tapping) - never a cycle word the manual does not list.
   The arc plane (M11.2 A) is modal too: `CircularPlane` XY/XZ/YZ maps

@@ -10,11 +10,15 @@
 //! Not exercised on a real EDM control (D10).
 //!
 //! Gate map (#533): covers app::posting (posting_wire, WIRE_POSTS,
-//! post_serves, default_post_for, op_streams' wire branch), post::engine
+//! post_serves, default_post_for, op_streams' wire branch),
+//! app::posting_family (edm_at_post: wire passes, sinker refused), post::engine
 //! (the wireEdm door), post::machine (edm codes mirror, edm_codes), and
 //! the wire-iso.cps script, and the wire clause's place in the post
 //! gate (posting_wire's wire_clause before NC text, #534).
 //! Provenance: our own tests over our own synthetic fixture.
+
+#[path = "edm/sinker_fixture.rs"]
+mod sinker_fixture;
 
 use flecs_ecs::prelude::World;
 
@@ -30,7 +34,7 @@ use camcraft_app::world::new_world;
 
 const FIXTURE: &str = include_str!("edm/wire-iso-fixture.mch");
 const WIRE: &str = "Generic ISO Wire EDM";
-const GOLDEN: &str = "tests/golden/nc/wire-iso/wire_contour_punch.nc";
+const GOLDEN: &str = "tests/golden/nc/wire-iso/wire_slug_punch.nc";
 
 fn cps(name: &str) -> &'static str {
     BUILTINS.iter().find(|(n, _)| *n == name).map(|(_, s)| *s).expect("registered")
@@ -250,4 +254,47 @@ fn the_registry_offers_the_wire_post_for_wire_edms_only() {
         assert!(!posting::post_serves(WIRE, k), "{k:?}");
     }
     assert_eq!(posting::post_name(&posting::default_post_for(Kind::WireEdm)), Some(WIRE));
+}
+
+/// Review of #1139: the EDM door at post (`posting_family::edm_at_post`)
+/// lets a wire setup through to its post, so a wire machine missing a
+/// code the post needs is refused by that code's name through the app's
+/// own `post_script` - and no file is written.
+#[test]
+fn a_wire_setup_missing_a_code_is_refused_by_name_through_post_script() {
+    for code in ["condition", "comp_off", "thread", "cut", "tip_disposal"] {
+        let mut v: serde_json::Value = serde_json::from_str(FIXTURE).expect("json");
+        v["edm"]["codes"].as_object_mut().expect("codes").remove(code);
+        let world = punch_doc(&v.to_string());
+        let out = std::env::temp_dir().join(format!("camcraft-wire-iso-missing-{code}-{}.nc", std::process::id()));
+        let _ = std::fs::remove_file(&out);
+        let err = posting::post_script(&world, &out, cps(WIRE)).expect_err("a wire machine missing a code never posts");
+        let wrote = out.exists();
+        let _ = std::fs::remove_file(&out);
+        assert!(err.contains(&format!("edm.codes.{code}")), "{code}: {err}");
+        assert!(!err.contains("#533"), "{code}: the EDM door no longer refuses a wire setup: {err}");
+        assert!(!wrote, "{code}: the refused wire post wrote {}", out.display());
+    }
+}
+
+/// Review of #1139: lifting the wire arm of the EDM door leaves the
+/// sinker arm closed - a Sinker Burn is refused by name (#542) through
+/// `post_script`, by the wire post and by a cutting post alike, and no
+/// file is written.
+#[test]
+fn a_sinker_setup_is_still_refused_at_post_by_name() {
+    let (world, mut h) = sinker_fixture::sinker_doc(6.0);
+    let burn = sinker_fixture::burn(camcraft_app::operation::SinkerDatum::WorkTop, 3.0, 14.0);
+    let op = CreateOperation::new(&world, "Burn0", sinker_fixture::ELECTRODE, SrcRef::Stock, burn).expect("a burn on its sinker");
+    h.execute(&world, op);
+    h.execute(&world, GenerateOperation::new(&world, "Burn0").expect("generates"));
+    let out = std::env::temp_dir().join(format!("camcraft-wire-iso-sinker-{}.nc", std::process::id()));
+    for (n, script) in BUILTINS {
+        let _ = std::fs::remove_file(&out);
+        let err = posting::post_script(&world, &out, script).expect_err("a sinker burn never posts");
+        let wrote = out.exists();
+        let _ = std::fs::remove_file(&out);
+        assert!(err.contains("no post for a sinker EDM machine yet (#542)") && err.contains("Burn0"), "{n}: {err}");
+        assert!(!wrote, "{n}: the refused sinker post wrote {}", out.display());
+    }
 }

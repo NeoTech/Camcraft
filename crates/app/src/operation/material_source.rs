@@ -112,6 +112,8 @@ fn source_region(
         }
         // The probe bounds no area (#108): its generation never asks.
         OpParams::Probe { .. } => Err(GenError::Invalid("a probe has no machining region".into())),
+        // The sinker burn bounds no area (#541): its face is the electrode's.
+        OpParams::SinkerBurn(_) | OpParams::SinkerSideBurn(_) => Err(GenError::Invalid("a sinker burn has no machining region".into())),
         // The plasma cut goes THROUGH the plate (#670): what it can cut
         // is the through-silhouette - a blind pocket is no torch's work.
         OpParams::PlasmaProfile(_) => {
@@ -328,6 +330,23 @@ pub(super) fn rim_is(l: &Loop, h: Hole) -> bool {
     let tol = (0.02 * h.radius).max(0.1);
     pts.iter()
         .all(|p| ((p.x - h.xy.x).hypot(p.y - h.xy.y) - h.radius).abs() <= tol)
+}
+
+/// The declared circles `(centre, radius)` [`region_for`]'s rim loops
+/// draw for a containment kind (#1057): a Z drill's, a bore's or a
+/// thread mill's holes. The verify reads a loop tracing one at the
+/// untightened gouge tolerance (`VerifyContext::rims`). Empty for every
+/// other kind, and for a radial drill (its region has no rims).
+pub(super) fn rims_of(params: &OpParams) -> Vec<(Point2, f64)> {
+    match params {
+        OpParams::Drill { holes, cross, .. } if cross.is_empty() => holes.iter().map(|h| (h.xy, h.radius)).collect(),
+        // Thread is not declared (#1073 review): its region reads the
+        // major circle (#1071, `thread_rims::major_rims`), not the minor
+        // rim, so a minor declaration would trace no loop - the thread mill
+        // stays on the tightened reading, the conservative side.
+        OpParams::Bore { holes, .. } => holes.iter().map(|h| (h.xy, h.radius)).collect(),
+        _ => Vec::new(),
+    }
 }
 
 /// The stock the verify's column law reads as material (`VerifyContext::

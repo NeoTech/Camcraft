@@ -289,6 +289,24 @@ impl Script {
         Ok(v.as_string().map(|s| s.to_std_string_escaped()))
     }
 
+    /// A top-level array of strings (or one string) the script states,
+    /// e.g. the manifest's `serves`; `None` when it states none. Any
+    /// non-string entry makes it `None` too (read as not stated is
+    /// wrong - it is returned as an error by the caller's word check),
+    /// so entries are stringified and the caller validates the words.
+    pub fn words_global(&mut self, name: &str) -> Result<Option<Vec<String>>, PostError> {
+        let v = self.eval(&format!(
+            "(typeof {name} === \"undefined\") ? null : (Array.isArray({name}) ? JSON.stringify({name}.map(function (w) {{ return String(w); }})) : \
+             ((typeof {name} === \"string\") ? JSON.stringify([{name}]) : null))"
+        ))?;
+        let Some(text) = v.as_string().map(|s| s.to_std_string_escaped()) else {
+            return Ok(None);
+        };
+        serde_json::from_str::<Vec<String>>(&text)
+            .map(Some)
+            .map_err(|e| PostError::Script(format!("{name}: {e}")))
+    }
+
     /// A top-level number the script states (the manifest's
     /// `capabilities` mask), or `None` when it states none.
     pub fn number_global(&mut self, name: &str) -> Result<Option<f64>, PostError> {

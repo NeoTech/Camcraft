@@ -216,7 +216,13 @@ pub fn parse_mch_with(text: &str, holders: Option<super::HolderLookup>) -> Resul
             m.spindle_max = rate(sp.and_then(|s| s.get("max_speed")));
             m.spindle_power = rate(sp.and_then(|s| s.get("power")));
             m.spindle_ranges = parse_ranges(sp.and_then(|s| s.get("ranges")));
-            m.rigid_tapping = sp.and_then(|s| s.get("rigid_tapping")).and_then(|b| b.as_bool());
+            // #786: a stated capability gates G84, so a word the reader
+            // cannot read refuses the file - never a silent "not limited".
+            m.rigid_tapping = match sp.and_then(|s| s.get("rigid_tapping")) {
+                None | Some(serde_json::Value::Null) => None,
+                Some(serde_json::Value::Bool(b)) => Some(*b),
+                Some(x) => return Err(format!("machine file: spindle.rigid_tapping must be true or false, not {x}")),
+            };
             let ts = head.get("tool_station");
             m.max_tool_length = scale(rate(ts.and_then(|t| t.get("max_tool_length"))), f);
             m.max_tool_diameter = scale(rate(ts.and_then(|t| t.get("max_tool_diameter"))), f);
@@ -297,6 +303,7 @@ pub fn parse_mch_with(text: &str, holders: Option<super::HolderLookup>) -> Resul
             }
             let direction = axis_direction(name, part, *rotary)?;
             let nose_to_axis = super::swing::nose_to_axis(name, part, *rotary, f)?;
+            let axis_to_table = super::swing::work_length("axis_to_table", name, part, *rotary, f)?;
             if let Some(z) = safe_retract(name, part, *rotary, f)? {
                 m.safe_retract_z = Some(z);
             }
@@ -311,6 +318,7 @@ pub fn parse_mch_with(text: &str, holders: Option<super::HolderLookup>) -> Resul
                 direction,
                 turns_part: rotary.then(|| super::swing::turns_part(part, true)),
                 nose_to_axis,
+                axis_to_table,
             });
         }
         axes.sort_by_key(|a| ctrl_coord(ctrl, &a.name));

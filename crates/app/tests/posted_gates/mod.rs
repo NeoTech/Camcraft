@@ -90,6 +90,7 @@ fn region_law(t: &Toolpath, region: &Region, tool: &ToolGeom, mode: Mode, top: f
             finish_tol: None,
             fixtures: &[],
             spindle: None,
+            rims: &[],
         },
     )
 }
