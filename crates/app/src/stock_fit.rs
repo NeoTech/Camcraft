@@ -56,7 +56,12 @@ pub fn fitted(world: &World, declared: Option<&str>, kind: FitKind) -> Result<(S
     {
         return Err("stock fit refused: every side's allowance must be zero or more".into());
     }
-    let bounds = part_bounds(world, declared).ok_or("nothing to fit: no models in the document")?;
+    if let FitKind::Box(margin) | FitKind::Cylinder(margin) = kind
+        && !(margin.is_finite() && margin >= 0.0)
+    {
+        return Err(format!("stock fit refused: the margin must be zero or more (got {margin} mm)"));
+    }
+    let bounds = part_bounds(world, declared).ok_or_else(|| nothing_to_fit(world))?;
     let fit = match kind {
         FitKind::Box(margin) => stock::fit_box(&bounds, margin),
         FitKind::Cylinder(margin) => {
@@ -66,6 +71,16 @@ pub fn fitted(world: &World, declared: Option<&str>, kind: FitKind) -> Result<(S
         FitKind::Sides(sides) => stock::fit_box_sides(&bounds, sides),
     };
     fit.ok_or_else(|| "stock fit refused: models have no usable extent".into())
+}
+
+/// Why there is nothing to fit: no models at all, or only fixtures -
+/// which are never measured as the part.
+fn nothing_to_fit(world: &World) -> String {
+    if model::model_entities(world).iter().any(|(_, e)| model::is_fixture(world, e)) {
+        "nothing to fit: no part models - fixtures are not measured".into()
+    } else {
+        "nothing to fit: no models in the document".into()
+    }
 }
 
 /// The undoable command that fits the ACTIVE setup's stock: the fitted
