@@ -79,6 +79,7 @@ fn empty_egui_meshes_are_filtered_before_gpu_submission() {
 }
 
 mod face_origin;
+mod geo_row_hover;
 mod spindle_row;
 mod stock_size;
 mod setup_settings_page;

@@ -17,7 +17,7 @@ use crate::interact::{
     CLEARANCE_RGB, CUT_RGB, FEED_RGB, MAX_OVERLAY_VERTICES, PLUNGE_RGB, RAPID_RGB,
     REGION_RGB, RETRACT_RGB, anchor_hit, anchor_points, anchor_reference, capped, chevrons,
     collect_overlay, ftoz, ground_grid_lines, height_plane_lines, height_planes,
-    gizmo_segments, hover_features, is_axis_label, overlay_labels, plane_corner, plane_rect, project_uv, queue_feature_pick,
+    gizmo_segments, hover_features, is_axis_label, row_hover_segments, overlay_labels, plane_corner, plane_rect, project_uv, queue_feature_pick,
     region_lines, selection_feature_lines, shown_regions, toolpath_lines,
 };
 use crate::state::{CommandKind, HoverHit, State};
@@ -1092,8 +1092,8 @@ mod preview_tests {
         let face = GeoSel { entity: "c".into(), feature: FeatureSel::Face(top) };
         let run = GeoSel { entity: "c".into(), feature: FeatureSel::Chain(chain) };
 
-        state.geo_hover = Some(face.clone());
-        let segs = hover_features(&state, 4.0 / 3.0);
+        state.geo_hover_drawn = Some(face.clone());
+        let segs = row_hover_segments(&state, 4.0 / 3.0);
         assert_eq!(segs.len(), 4, "the row's face lights its four sides");
         for (a, b) in &segs {
             for uv in [a, b] {
@@ -1104,25 +1104,23 @@ mod preview_tests {
             }
         }
 
-        // Both pointers on the same feature: once, not twice.
-        state.hover =
-            Some(HoverHit { entity: "c".into(), facet: 0, feature: Some(face.feature) });
-        assert_eq!(hover_features(&state, 4.0 / 3.0).len(), 4, "no double-draw");
-
-        // Two different features: the viewport keeps its, the row adds its.
+        // The row hover is its own strong layer (#1507): the viewport hover
+        // pass never repeats it.
+        assert!(hover_features(&state, 4.0 / 3.0).is_empty(), "the row hover is not in the thin pass");
         state.hover = Some(HoverHit { entity: "c".into(), facet: 0, feature: Some(run.feature) });
-        assert_eq!(hover_features(&state, 4.0 / 3.0).len(), 5, "one edge plus the square");
+        assert_eq!(hover_features(&state, 4.0 / 3.0).len(), 1, "the viewport hover keeps its one edge");
+        assert_eq!(row_hover_segments(&state, 4.0 / 3.0).len(), 4, "and the row its square");
 
         // Stale ids and hidden models draw nothing through the row either -
         // the highlight never promises a pick the click cannot make.
         state.hover = None;
-        state.geo_hover = Some(GeoSel { entity: "c".into(), feature: FeatureSel::Face(7) });
-        assert!(hover_features(&state, 4.0 / 3.0).is_empty(), "a stale face id draws no ghost");
-        state.geo_hover = Some(GeoSel { entity: "nope".into(), feature: face.feature });
-        assert!(hover_features(&state, 4.0 / 3.0).is_empty(), "a gone entity draws nothing");
-        state.geo_hover = Some(face);
+        state.geo_hover_drawn = Some(GeoSel { entity: "c".into(), feature: FeatureSel::Face(7) });
+        assert!(row_hover_segments(&state, 4.0 / 3.0).is_empty(), "a stale face id draws no ghost");
+        state.geo_hover_drawn = Some(GeoSel { entity: "nope".into(), feature: face.feature });
+        assert!(row_hover_segments(&state, 4.0 / 3.0).is_empty(), "a gone entity draws nothing");
+        state.geo_hover_drawn = Some(face);
         state.hidden_models.push("c".into());
-        assert!(hover_features(&state, 4.0 / 3.0).is_empty(), "display-off stays off");
+        assert!(row_hover_segments(&state, 4.0 / 3.0).is_empty(), "display-off stays off");
     }
 }
 
