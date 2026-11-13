@@ -6,6 +6,20 @@ use crate::operation::types::params::OpParams;
 use crate::operation::types::sel::lead_sane;
 
 impl OpParams {
+    /// The by-name refusal behind a failed [`Self::is_sane`], where a
+    /// kind can say it (#546: the sinker burn's wear rate and layer
+    /// step; the side burn's structural refusal, which names a wear rate
+    /// or layer step it does not support yet); `None` keeps the
+    /// commands' generic "not usable".
+    #[must_use]
+    pub fn named_refusal(&self) -> Option<String> {
+        match self {
+            OpParams::SinkerBurn(p) => p.compensation_refusal(),
+            OpParams::SinkerSideBurn(p) => p.refusal(),
+            _ => None,
+        }
+    }
+
     /// Shallow sanity for command construction, no world: finite numbers,
     /// positive increments, in-range slots. Ordering needs resolved
     /// heights and runs in [`crate::operation::depth_sane`] wherever a command holds the
@@ -1120,12 +1134,14 @@ impl OpParams {
                 feed,
                 plunge_feed,
                 holes,
+                pitch,
                 ..
             } => {
                 clearance_z.is_sane()
                     && retract_z.is_none_or(|r| r.is_sane())
                     && top_z.is_sane()
                     && bottom_z.is_none_or(|b| b.is_sane())
+                    && pitch.is_none_or(pos)
                     && pos(*infeed)
                     && pos(*feed)
                     && pos(*plunge_feed)

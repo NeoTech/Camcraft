@@ -1009,6 +1009,14 @@ pub enum ParamsDto {
         plunge_feed: f64,
         climb: bool,
         holes: Vec<HoleDto>,
+        /// #894, additive (no version step): the thread's pitch.
+        /// Absent (every older file) is unstated - a multi-form
+        /// mill's own pitch.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pitch: Option<f64>,
+        /// #894, additive: the thread's hand. Absent reads right-hand.
+        #[serde(default)]
+        hand: ThreadHandDto,
     },
     /// The probe (#108): an additive variant in the v50 grammar.
     Probe(ProbeDto),
