@@ -46,8 +46,9 @@ fi
 # Failing steps: the gate summary's "  FAIL  <secs>s  <step>  <note>" rows.
 fails=$(sed -n '/^== gate summary/,$p' "${OUTPUT:-/dev/null}" 2>/dev/null | grep -E '^ +FAIL ' | head -40 || true)
 [ -n "$fails" ] || fails="(no FAIL row in the gate summary: the gate did not finish or failed to build; see the run)"
-# The FAIL rows' notes read "failed: tests/<name>.rs, ..." (xtask exec.rs read_log).
-suites=$(printf '%s\n' "$fails" | grep -oE 'tests/[A-Za-z0-9_]+\.rs' | sed -e 's#^tests/##' -e 's#\.rs$##' | sort -u || true)
+# The FAIL rows' notes read "failed: tests/<name>.rs, ..." (xtask exec.rs read_log,
+# which prints cargo's "Running <path>"); a directory suite reads tests/<name>/main.rs.
+suites=$(printf '%s\n' "$fails" | grep -oE 'tests/[A-Za-z0-9_]+(/main)?\.rs' | sed -e 's#^tests/##' -e 's#\.rs$##' -e 's#/main$##' | sort -u || true)
 out_hit=$(printf '%s\n' "$suites" | grep -E "$OUTPUT_SUITES" || true)
 
 body=$(printf 'The post-merge batch gate failed on `%s`.\n\nRun: %s\n\nFailing steps:\n```\n%s\n```\n\nThe merge that broke it is among the commits up to this head (`git log` since the last green run). Fix it in the normal order; this issue closes itself on the next green run.\n' \
