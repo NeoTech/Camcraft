@@ -85,6 +85,29 @@ function msg(s) {  // counted warning where the host offers message()
 }
 var tapRefused = false;   // the rigid-tap refusal, once per program
 
+// #1357: a cut needs a turning spindle. spindleOn is true from the
+// preamble's S.. M3 to the next M5 (every section end); a touch probe's
+// section feeds its stylus with the spindle stopped on purpose. A
+// section is a probe's only when it states 0 rpm (#574) AND its tool is
+// a touch probe (PARAM ToolKind) - a cutter whose speed reads 0 is not
+// a probe, it is a stopped spindle. A feed, arc or cycle with the
+// spindle stopped anywhere else is refused by name - a stream that
+// states no spindle speed (a bare legacy .cl) would otherwise post a
+// program that drags a stopped cutter through the part. Once per program.
+var spindleOn = false;
+var probeSection = false;
+var kindProbe = false;    // this section's PARAM ToolKind names a touch probe
+var spindleRefused = false;
+function spindleStopped(what) {  // true: refused, nothing is posted
+  if (spindleOn || probeSection) return false;
+  if (!spindleRefused) {
+    spindleRefused = true;
+    msg(what + inOp() + " with the spindle stopped - no spindle start (S.. M3) precedes it; state the operation's spindle speed");
+  }
+  return true;
+}
+var feedRefused = false;  // #1357: the cycle-feed refusal, once per program
+
 // The .mch tool-station coolant list carries names + M-codes. This post
 // reads no PARAM Coolant (the engine refuses a non-Flood op by name), so
 // every section asks flood: the machine's Flood entry; failing one, the
@@ -188,7 +211,7 @@ function commentParam(name, value) {
   if (name === "SetupName") setupName = clean(value);
   else if (name === "OperationName") opName = clean(value);
   else if (name === "OperationKind") opKind = clean(value).toUpperCase();
-  else if (name === "ToolKind") toolKind = clean(value).toUpperCase();
+  else if (name === "ToolKind") { toolKind = clean(value).toUpperCase(); kindProbe = toolKind === "TOUCH PROBE"; }
   else if (name === "ToolDiameter" && has(value)) toolDia = Number(value);
   else if (name === "ToolCornerRadius" && has(value)) toolCr = Number(value);
 }
@@ -392,8 +415,10 @@ function startPreamble() {
   if (spindleWait && sRpm > 0) {
     block([beltNote(sRpm)]);
     block(["S" + ni(sRpm), "M3"]);
+    spindleOn = true;
   }
-  if (probeStop) block(["M5"]);
+  if (probeStop) { block(["M5"]); spindleOn = false; }
+  probeSection = touchProbe && kindProbe;
   spindleWait = false;
   coolant = touchProbe ? "" : coolantCode();
   if (coolant) block([coolant]);
@@ -413,6 +438,9 @@ function endPreamble() {
   inCycle = false;
   if (coolant) block(["M9"]);
   block(["M5"]);
+  spindleOn = false;
+  probeSection = false;
+  kindProbe = false;         // the next section states its own tool kind
 }
 
 function onSection() { seatKnown = false; startPreamble(); }
@@ -635,6 +663,7 @@ function onRapid() {
 function onLinear() {
   startPreamble();
   if (chainCut() || !indexFor(properties)) return;
+  if (spindleStopped("feed move G1")) return;
   startXY(properties);
   block(["G1"].concat(xyz(properties), [fw(properties.FeedRate)]));
 }
@@ -646,6 +675,7 @@ function onCircular() {
     aRefuse("arc on an indexed A" + inOp() + " - the indexed frame posts lines only");
     return;
   }
+  if (spindleStopped("arc move " + (p.CircularDirection === "CW" ? "G2" : "G3"))) return;
   startXY(p);
   block([
     planeWord(planeOf(p)),
@@ -757,6 +787,18 @@ function onCycle() {
     }
     g = "G84";
   }
+  // #1357: a canned cycle feeds at its own F word. Without one LinuxCNC
+  // alarms on a zero feed ("Cannot feed with zero feed rate") or, after
+  // an earlier F, drills at whatever feed was last modal - so a cycle
+  // the stream gives no positive feed is refused by name.
+  if (!(has(p.FeedRate) && p.FeedRate > 0)) {
+    if (!feedRefused) {
+      feedRefused = true;
+      msg("canned cycle " + g + inOp() + " has no feed rate - refused: without F the control drills at whatever feed was last modal");
+    }
+    return;
+  }
+  if (spindleStopped("canned cycle " + g)) return;
   xyFirst(p.X, p.Y);         // a cycle as the first move: its first hole
   cycleSeat(p);
   var sig = g + "|" + p.Z + "|" + p.R + "|" + p.Q;

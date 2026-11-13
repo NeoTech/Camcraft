@@ -21,6 +21,12 @@ fn read(rel: &str) -> String {
     std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{rel}: {e}"))
 }
 
+// #1359: the legacy goldens as the programs a real operation streams
+// (tool change, spindle speed) - a cut with the spindle stopped is refused.
+#[path = "../../app/tests/common/legacy_program.rs"]
+#[allow(dead_code)]
+mod legacy_program;
+
 fn run(stream: &str) -> engine::PostOutput {
     let mch: serde_json::Value =
         serde_json::from_str(&read("assets/machines/3axis-vmc.mch")).expect("machine json");
@@ -106,7 +112,7 @@ fn check_form(nc: &str, what: &str) -> Vec<String> {
 #[test]
 fn heidenhain_posts_the_manuals_numbered_signed_block_form() {
     for g in GOLDENS {
-        let out = run(&read(&format!("crates/app/tests/golden/{g}.cl")));
+        let out = run(&legacy_program::as_program(g, &read(&format!("crates/app/tests/golden/{g}.cl"))));
         assert!(out.warnings.is_empty(), "{g}: {:?}", out.warnings);
         check_form(&out.program, g);
     }

@@ -1171,7 +1171,9 @@ impl ParamsDto {
                 holes,
                 pitch,
                 hand,
+                external,
             } => ParamsDto::Thread {
+                external: *external,
                 pitch: *pitch,
                 hand: (*hand).into(),
                 clearance_z: (*clearance_z).into(),
@@ -2340,7 +2342,9 @@ impl ParamsDto {
                 holes,
                 pitch,
                 hand,
+                external,
             } => OpParams::Thread {
+                external: *external,
                 pitch: *pitch,
                 hand: (*hand).into(),
                 clearance_z: (*clearance_z).into(),
