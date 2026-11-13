@@ -10,8 +10,8 @@
 //! handbook thread milling; our own fixtures.
 //!
 //! Gate map (M4.4): covers app::operation (thread_boss, thread_entry,
-//! thread_op, material::detect_holes), app::drilling (recognize_bosses),
-//! app::machining2d (thread_mill), app::commands (operation gates),
+//! thread_op, material::detect_holes), camcraft_motion::drilling (recognize_bosses),
+//! camcraft_motion::machining2d (thread_mill), app::commands (operation gates),
 //! app::posting, app::project (params DTO).
 //! Lane shape (M4.4): all tests here run in seconds.
 

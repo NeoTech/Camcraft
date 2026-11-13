@@ -11,9 +11,9 @@
 //! minor Ø6.917) and public handbook thread milling; our own fixtures.
 //!
 //! Gate map (M4.4): covers app::operation (thread_op, tool_law, tool_gate),
-//! app::commands (operation gates), app::machining2d (thread_mill),
+//! app::commands (operation gates), camcraft_motion::machining2d (thread_mill),
 //! app::stock_sim (plan_program), app::posting, app::project (tool and
-//! params DTOs), app::tools.
+//! params DTOs), camcraft_tools::tools.
 //! Lane shape (M4.4): all tests here run in seconds.
 
 mod common;

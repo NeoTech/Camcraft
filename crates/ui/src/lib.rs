@@ -71,6 +71,8 @@ mod play_bench_tests;
 #[cfg(test)]
 mod vertex_pick_tests;
 #[cfg(test)]
+mod centre_pick_tests;
+#[cfg(test)]
 mod setup_chip_tests;
 #[cfg(test)]
 mod pockets_tests;

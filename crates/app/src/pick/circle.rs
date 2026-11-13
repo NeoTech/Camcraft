@@ -13,12 +13,13 @@
 //! distance of a point from a line (standard vector form); our own code
 //! over this repo's feature runs, no vendor material consulted.
 
-use flecs_ecs::prelude::World;
+use flecs_ecs::prelude::{Entity, World};
 
 use crate::geometry::feature::{self, Chain, Features};
 use crate::geometry::{Point3, quat_rotate_point, transform_point};
 use crate::model;
 use crate::operation::{FeatureSel, GeoSel};
+use crate::schema::Location;
 
 use super::feature_arc::{ARC_ABS_TOL, ARC_MIN_EDGES, ARC_REL_TOL, fit_arc};
 use super::feature_graph::FeatureGraph;
@@ -151,6 +152,17 @@ pub fn circle_of_edge(graph: &FeatureGraph, edge: u32) -> Result<Circle, CircleR
 /// a whole tangent chain), in the frame the viewport draws and picks in
 /// (the active setup's, #326) - the frame the WCS origin is set in.
 pub fn circle_centre(world: &World, pick: &GeoSel) -> Result<Circle, CircleRefusal> {
+    circle_centre_in(world, pick, crate::setup_align::view_pose)
+}
+
+/// [`circle_centre`] placed by `pose` instead of the view's: the document
+/// frame (`model::transform_of`) for the alignment picks that read their
+/// points as modelled (#692 centre points).
+pub fn circle_centre_in(
+    world: &World,
+    pick: &GeoSel,
+    pose: impl Fn(&World, &Entity) -> Option<Location>,
+) -> Result<Circle, CircleRefusal> {
     let FeatureSel::Chain(id) = pick.feature else {
         return Err(CircleRefusal::NotAnEdge(format!("{} of '{}'", pick.feature, pick.entity)));
     };
@@ -159,7 +171,7 @@ pub fn circle_centre(world: &World, pick: &GeoSel) -> Result<Circle, CircleRefus
     let graph = graph_of(world, &pick.entity).ok_or_else(gone)?;
     let run = feature::resolve_chain(&graph.features, id).ok_or_else(gone)?;
     let local = circle_of_run(&graph.features, &run)?;
-    let loc = crate::setup_align::view_pose(world, &e).unwrap_or_default();
+    let loc = pose(world, &e).unwrap_or_default();
     let c = transform_point(Point3::new(local.centre[0], local.centre[1], local.centre[2]), loc.pos, loc.rot);
     let n = quat_rotate_point(loc.rot, Point3::new(local.axis[0], local.axis[1], local.axis[2]));
     let len = n.dot(n).sqrt();
