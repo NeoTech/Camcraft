@@ -358,6 +358,13 @@ impl Script {
         Ok(())
     }
 
+    /// Why the script's own word meanings (#1399) cannot be used, or
+    /// `None` when they can (or it states none).
+    pub fn explain_refusal(&mut self) -> Result<Option<String>, PostError> {
+        let v = self.eval("_explainCheck()")?;
+        Ok(v.as_string().map(|s| s.to_std_string_escaped()).filter(|s| !s.is_empty()))
+    }
+
     /// Publish the document's post options once (issue #34).
     pub fn set_options(&mut self, o: &Value) -> Result<(), PostError> {
         self.eval(&format!("postOptions = {o};"))?;

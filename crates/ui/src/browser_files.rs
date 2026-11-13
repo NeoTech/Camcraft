@@ -71,6 +71,20 @@ pub fn button(ui: &mut egui::Ui, why: Option<&str>, label: &str, hover: &str) ->
     }
 }
 
+/// A file button in a page row's slot (the `even_row` layout, #1440):
+/// the same greying as [`button`], sized like the surrounding buttons.
+pub fn button_sized(ui: &mut egui::Ui, why: Option<&str>, label: &str, hover: &str, size: egui::Vec2) -> bool {
+    let r = ui.add_enabled(why.is_none(), egui::Button::new(label).min_size(size));
+    match why {
+        Some(why) => {
+            r.on_disabled_hover_text(why);
+            false
+        }
+        None if hover.is_empty() => r.clicked(),
+        None => r.on_hover_text(hover).clicked(),
+    }
+}
+
 /// Hand `bytes` to the browser as a download named `name`.
 pub fn offer(name: &str, bytes: &[u8], mime: &str) -> Result<(), String> {
     imp::offer(name, bytes, mime)

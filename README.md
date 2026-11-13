@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/logo/camcraft-logo.png" alt="CamCraft logotype" width="160"></p>
+
 # CamCraft
 
 A CAM system that turns 3D models into NC programs (G-code) for CNC milling

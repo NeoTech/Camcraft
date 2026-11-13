@@ -68,3 +68,24 @@ fn the_scan_sees_a_literal_path_and_skips_variable_ones() {
     let got = asset_paths("convert assets/ui/cube.png -resize x; cp -a \"assets/$asset\" y; cp \"$x/assets/z\"");
     assert_eq!(got, vec!["assets/ui/cube.png".to_string()]);
 }
+
+/// #1461: every package carries the logotype (assets/logo/icons, #1459), not the old cube.png.
+#[test]
+fn packages_and_installer_carry_the_logotype_icons() {
+    let root = root();
+    let icons = root.join("assets/logo/icons");
+    for size in [16, 32, 48, 64, 128, 256, 512] {
+        assert!(icons.join(format!("camcraft-{size}.png")).is_file(), "camcraft-{size}.png missing");
+    }
+    for script in ["appimage", "flatpak", "linux", "macos", "snap"] {
+        let text = std::fs::read_to_string(root.join(format!("scripts/package-{script}.sh"))).unwrap_or_default();
+        assert!(text.contains("assets/logo/icons/camcraft-"), "package-{script}.sh does not use the logotype icons");
+        assert!(!text.contains("cube.png"), "package-{script}.sh still packs cube.png");
+    }
+    let iss = std::fs::read_to_string(root.join("scripts/installer/camcraft.iss")).unwrap_or_default();
+    let setup_icon = iss.lines().find_map(|l| l.trim().strip_prefix("SetupIconFile=")).unwrap_or("").trim().replace(char::from(92), "/");
+    assert!(root.join("scripts/installer").join(&setup_icon).is_file(), "installer SetupIconFile {setup_icon:?} is not the logotype .ico");
+    assert!(setup_icon.ends_with("assets/logo/icons/camcraft.ico"), "installer icon is {setup_icon:?}");
+    let build = std::fs::read_to_string(root.join("crates/ui/build.rs")).unwrap_or_default();
+    assert!(build.contains("assets/logo/icons/camcraft.ico"), "the exe build step does not embed the logotype .ico");
+}

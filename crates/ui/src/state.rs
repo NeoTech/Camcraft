@@ -1474,6 +1474,9 @@ pub struct State {
     /// Operations whose cached path stays undrawn (eye toggle per op).
     /// Same rule: the path still exists and posts.
     pub hidden_paths: Vec<String>,
+    /// Setups other than the active one whose eye is on (#1494); the active
+    /// setup is always drawn. View state, never saved: display only.
+    pub shown_setups: Vec<String>,
     pub operation_clipboard: Option<OperationClipboard>,
     /// Expanded state of Setup, Models, Tools, and Operations in the browser.
     pub browser_expanded: [bool; 3],
@@ -1724,6 +1727,11 @@ pub struct State {
     /// hover itself is the precedent) - refreshed every frame, never a
     /// command, never an overlay rebuild.
     pub geo_hover: Option<GeoSel>,
+    /// `geo_hover` as the previous frame left it: the viewport pane draws
+    /// before the properties pane sets the row hover, so the strong row
+    /// highlight (#1507) reads last frame's answer - a one-frame lag, with a
+    /// repaint requested whenever the two differ. Ephemeral, never a command.
+    pub geo_hover_drawn: Option<GeoSel>,
     /// Which named section of the operation page is open (the M1.4 tab
     /// bar, restored after M9.1 B's stack on user feedback). An index into
     /// `egui_app::op_tabs::SECTIONS`. Ephemeral pane state like the drafts
@@ -1929,11 +1937,13 @@ impl State {
             boundary_view: Default::default(),
             incoming_view: Default::default(),
             geo_hover: None,
+            geo_hover_drawn: None,
             op_tab: 0,
             hidden_models: Vec::new(),
             hidden_stocks: Vec::new(),
             hidden_offsets: Vec::new(),
             hidden_paths: Vec::new(),
+            shown_setups: Vec::new(),
             operation_clipboard: None,
             browser_expanded: [true; 3],
             cam: Camera::default(),
@@ -2730,6 +2740,7 @@ impl State {
     pub(crate) fn hidden_in_view(&self, name: &str) -> bool {
         self.hidden_models.iter().any(|n| n == name)
             || self.hidden_stocks.iter().any(|n| n == name)
+            || self.fixture_hidden_by_setup(name)
     }
 
     #[must_use]
@@ -2842,6 +2853,7 @@ impl State {
                 self.project_path = None;
                 self.hidden_stocks.clear();
                 self.hidden_offsets.clear();
+                self.shown_setups.clear();
                 model::clear_named(&self.world);
                 // Units belong to the document, and clear_named cannot
                 // reach a singleton: reset the lens so a fresh blank is
@@ -4157,6 +4169,7 @@ impl State {
         self.project_path = None;
         self.hidden_stocks.clear();
         self.hidden_offsets.clear();
+        self.shown_setups.clear();
         model::clear_named(&self.world);
         self.history.clear();
         self.post_view = None; // the old document's program is not this one's

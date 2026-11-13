@@ -18,6 +18,17 @@ coolantModes = true; // reads PARAM Coolant (#112/#150): the engine refuses non-
 afterModes = true; // reads PARAM AfterOperation (#110): the engine refuses a stop or home ask for a post without it
 liveTooling = true;  // voices PARAM LiveTool sections (issue #33): the engine refuses them for a post without it
 threadHands = true;  // reads PARAM SpindleDirection (#629): the engine refuses a reverse-spindle thread for a post without it
+// Explain G-code (#1399): what this control's words mean where the mill
+// reading differs (Fanuc lathe G-code system A, from the publicly
+// documented 0i-T vocabulary): G98/G99 are the feed modes, G50 with S is
+// the spindle speed limit (G50 without S, the coordinate setting, is left
+// unexplained), and T0101 is tool 1, offset 1. Read only when Explain is on.
+explainWords = {
+  G98: "FEED PER MINUTE",
+  G99: "FEED PER REVOLUTION",
+  G50: { said: "SPINDLE SPEED LIMIT", takes: "S" }
+};
+explainTool = "station-offset";
 programUnits = "mm inch"; // #902 / #977: writes the document's unit (postOptions.Units), G21 / G20
 
 // Determinism law: no timestamps, no randomness - the same stream
@@ -875,6 +886,7 @@ function onCycle() {
   var g = "G83";
   if (p.CycleType === "TAP") g = "G84";
   else if (p.CycleType === "BORE") g = "G85";
+  else if (p.CycleType === "REAM") g = "G85";   // #1445: feed in, feed out at F
   else if (p.CycleType === "BACKBORE") { refuse("back-boring cycle - no such face cycle on a 2-axis lathe"); return; }
   // #1357: the cycle feeds at its own F word; with none the control
   // drills at whatever feed was last modal - refused by name.

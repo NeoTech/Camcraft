@@ -1,7 +1,7 @@
 // Mazak 3X milling post. Provenance: the G-dialect from public
 // RS-274/ISO 6983 documentation and the control family's published
-// operator conventions - two-address motion words, spindle-logic M
-// words MOTON/MOTOFF with the speed on the same block (behavior only,
+// EIA/ISO programming conventions, which follow the Fanuc words (the
+// spindle is S.. M3 / M4 and stopped by M5, #1411; behavior only,
 // per this repo's Clean-Room Protocol); the hook contract from
 // Autodesk's published post docs. No vendor script text; original
 // work. Where a public convention leaves a hole, the house style
@@ -18,14 +18,16 @@ capabilities = 1; // reference contract: integer feature mask (bit 1 = milling)
 coolantModes = true; // reads PARAM Coolant (#112/#150): the engine refuses non-Flood ops for a post without it
 afterModes = true; // reads PARAM AfterOperation (#110): the engine refuses a stop or home ask for a post without it
 programUnits = "mm inch"; // #902: writes the document's unit (postOptions.Units), G21 / G20
+millSpindleReverse = true; // reads PARAM MillSpindle (#988, #1411): M4 for a left-hand-cut mill; the engine refuses a reverse mill spindle for a post without it
 
 // Determinism law: no timestamps, no randomness - the same stream
 // always posts to the same text (golden files depend on it).
 
 // ---------------------------------------------------------------- state
 var wcsWord = "G54";       // from the WorkOffset PARAM
-var sRpm = 0;              // MOTON waits for the section: the stream
+var sRpm = 0;              // S.. M3 waits for the section: the stream
 var spindleWait = false;   // order is PARAMs, TOOL, SECTION
+var spinRev = false;       // PARAM MillSpindle reverse (#988): this section's spindle runs M4
 var toolWait = false;
 var tNo = 0;
 var inCycle = false;       // a cycle group is open; its chain is suppressed
@@ -86,7 +88,7 @@ function msg(s) {  // counted warning where the host offers message()
 }
 
 // #1359 (from #1357): a cut needs a turning spindle. spindleOn is true
-// from the preamble's spindle start (MOTON S..) to the next MOTOFF (every
+// from the preamble's spindle start (S.. M3 / M4) to the next M5 (every
 // section end, and a touch probe's stop). A touch probe's section feeds
 // its stylus with the spindle stopped on purpose: a section is a
 // probe's only when it states 0 rpm (#574) AND its tool is a touch
@@ -103,7 +105,7 @@ function spindleStopped(what) {  // true: refused, nothing is posted
   if (spindleOn || probeSection) return false;
   if (!spindleRefused) {
     spindleRefused = true;
-    msg(what + " with the spindle stopped - no spindle start (MOTON S..) precedes it; state the operation's spindle speed");
+    msg(what + " with the spindle stopped - no spindle start (S.. M3) precedes it; state the operation's spindle speed");
   }
   return true;
 }
@@ -334,7 +336,8 @@ function onParameter(name, value) {
   if (name === "Smoothing") { smoothTol = Number(value) || 0; return; }
   if (name === "SmoothingMode") { smoothMode = String(value || ""); return; }
   commentParam(name, value);
-  if (name === "OperationName") coolantOp = String(value || "");
+  if (name === "OperationName") { coolantOp = String(value || ""); spinRev = false; }
+  if (name === "MillSpindle") { spinRev = String(value || "") === "reverse"; return; }
   if (name === "Coolant") { coolantAsk = String(value || "flood"); return; }
   if (name === "AfterOperation") { afterAsk = String(value || ""); return; }
   if (name === "WorkOffset" && value) wcsWord = String(value);
@@ -358,8 +361,12 @@ function onToolChange(number, name) {
 }
 
 // The preamble closes over everything a raw motion line needs to be a
-// legal program. Spindle logic is an M-word of its own here: MOTON
-// carries the speed on the same block, MOTOFF ends the section.
+// legal program. #1411: the spindle words are the RS-274 / ISO 6983
+// ones - S.. with M3 (clockwise) or M4 (counter-clockwise, a left-hand-
+// cut mill) on one block, M5 to stop - so a G84 right-hand tap meets a
+// spindle stated clockwise. Never the multi-letter MOTON / MOTOFF this
+// post once wrote: no public document gives them, and they are no
+// address-letter-and-number word of the grammar this header names.
 // #616: per-operation smoothing. No Mazak smoothing form is stated from
 // its public documentation yet, so the ask is named once and nothing is
 // written - never a guessed word.
@@ -391,11 +398,11 @@ function startPreamble() {
     toolWait = false;
   }
   if (spindleWait && sRpm > 0) {   // a touch probe (#173) states no spindle
-    block(["MOTON", "S" + ni(sRpm)]);
+    block(["S" + ni(sRpm), spinRev ? "M4" : "M3"]);
     spindleOn = true;
     spindleWait = false;
   }
-  if (probeStop) { block(["MOTOFF"]); spindleOn = false; }
+  if (probeStop) { block(["M5"]); spindleOn = false; }
   probeSection = probeStop && kindProbe;
   // #995: a touch probe section starts no coolant, whatever its ask -
   // fluid on the stylus and the measured faces spoils the reading.
@@ -439,7 +446,7 @@ function endPreamble() {
   if (coolant) block(["M9"]);
   coolant = "";
   coolantAsk = "flood";      // the next section states its own ask
-  block(["MOTOFF"]);
+  block(["M5"]);
   spindleOn = false;
   probeSection = false;
   kindProbe = false;         // the next section states its own tool kind
@@ -575,6 +582,13 @@ function onCycle() {
   else if (p.CycleType === "TAP") g = "G84";
   else if (p.CycleType === "BORE") g = "G86";
   else if (p.CycleType === "BACKBORE") g = "G89";
+  else if (p.CycleType === "REAM") g = "G85";   // #1445: feed in, feed out at F, no dwell
+  else {
+    // #1445: a cycle kind this post does not know is refused by name,
+    // never posted as the G81 default (a rapid out it never asked for).
+    msg("canned cycle " + p.CycleType + " is not known to this post - refused, not posted as another cycle");
+    return;
+  }
   // #1357: a canned cycle feeds at its own F word. Without one the
   // control drills at whatever feed was last modal (or alarms on a zero
   // feed), so a cycle the stream gives no positive feed is refused by name.

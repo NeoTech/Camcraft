@@ -16,7 +16,7 @@ pub(super) use camcraft_app::operation::{self, Height, OpParams, Tilt};
 pub(super) use camcraft_app::units::{self, Unit};
 
 pub(super) use crate::operations::{
-    cycle_index, cycle_names, side_names, strategy_names, strategy3d_names,
+    cycle_from_index, cycle_index, cycle_names, side_names, strategy_names, strategy3d_names,
 };
 pub(super) use crate::state::State;
 
@@ -87,10 +87,10 @@ pub(crate) fn num_narrow(ui: &mut Ui, u: Unit, v: &mut f64) {
 /// Width of a [`num_narrow`] field, logical px.
 const NARROW_W: f32 = 62.0;
 
-fn num_sized(ui: &mut Ui, u: Unit, v: &mut f64, prec: usize, suffix: &str, width: f32) {
+fn num_sized(ui: &mut Ui, u: Unit, v: &mut f64, prec: usize, suffix: &str, width: f32) -> egui::Response {
     let h = ui.spacing().interact_size.y;
     if u == Unit::Millimeters {
-        ui.add_sized([width, h], DragValue::new(v).speed(0.1).suffix(suffix));
+        ui.add_sized([width, h], DragValue::new(v).speed(0.1).suffix(suffix))
     } else {
         let mut d = units::to_display(*v, u);
         let resp = ui.add_sized(
@@ -103,7 +103,14 @@ fn num_sized(ui: &mut Ui, u: Unit, v: &mut f64, prec: usize, suffix: &str, width
         if resp.changed() {
             *v = units::from_display(d, u);
         }
+        resp
     }
+}
+
+/// [`num`] named by the label beside it (#1119): the field's accessible
+/// name is that label's text. Nothing visible changes.
+pub(crate) fn num_by(ui: &mut Ui, u: Unit, v: &mut f64, label: egui::Id) {
+    num_sized(ui, u, v, 4, &format!(" {}", u.suffix()), CTRL_W).labelled_by(label);
 }
 
 /// Feed rates (mm/min stored, in/min shown): same lens, coarser text.
@@ -115,6 +122,36 @@ pub(crate) fn num_feed(ui: &mut Ui, u: Unit, v: &mut f64) {
 pub(crate) fn num_plain(ui: &mut Ui, v: &mut f64) {
     let h = ui.spacing().interact_size.y;
     ui.add_sized([CTRL_W, h], DragValue::new(v).speed(0.1));
+}
+
+/// [`num`] inside a `prop_row`, named by that row's label (#1119).
+pub(crate) fn num_row(ui: &mut Ui, u: Unit, v: &mut f64) {
+    let r = num_sized(ui, u, v, 4, &format!(" {}", u.suffix()), CTRL_W);
+    if let Some(l) = super::layout::row_label_id(ui) {
+        r.labelled_by(l);
+    }
+}
+
+/// [`num_plain`] inside a `prop_row`, named by that row's label (#1119).
+pub(crate) fn num_plain_row(ui: &mut Ui, v: &mut f64) {
+    let h = ui.spacing().interact_size.y;
+    let r = ui.add_sized([CTRL_W, h], DragValue::new(v).speed(0.1));
+    if let Some(l) = super::layout::row_label_id(ui) {
+        r.labelled_by(l);
+    }
+}
+
+/// Give an input with no visible label a plain-English accessible name
+/// (#1119). Screen-reader only: nothing is drawn.
+pub(crate) fn named(r: egui::Response, name: &str) -> egui::Response {
+    r.ctx.accesskit_node_builder(r.id, |b| b.set_label(name));
+    r
+}
+
+/// [`num_plain`] named by the label beside it (#1119).
+pub(crate) fn num_plain_by(ui: &mut Ui, v: &mut f64, label: egui::Id) {
+    let h = ui.spacing().interact_size.y;
+    ui.add_sized([CTRL_W, h], DragValue::new(v).speed(0.1)).labelled_by(label);
 }
 
 /// A lens-free number with its unit as the suffix ("°", "s", "%").

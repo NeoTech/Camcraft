@@ -159,3 +159,36 @@ fn set_part_axes_with_both_axes_aligns_the_full_3d_frame() {
     assert!(msg.contains("along each other"), "{msg}");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// #1347: `set_part_axes` with the same two picks again is no change -
+/// refused by name ("already holds the part that way"), as the GUI's
+/// Apply is, and no undo step is added: one undo is as modelled again.
+#[test]
+fn set_part_axes_again_with_the_same_picks_refuses_as_already_held() {
+    let dir = tmp_dir("again");
+    let part = dir.join("block.stl");
+    write_box_stl(&part, (20.0, 20.0, 15.0));
+    let mut c = Client::new();
+    c.ok("import_model", json!({ "path": part.display().to_string() }));
+    c.ok("add_setup", json!({}));
+    let f = c.ok("list_features", json!({ "model": "block", "kinds": ["vertices"] }));
+    let pick = |at: [f64; 3]| -> Value {
+        let id = f["vertices"]
+            .as_array()
+            .and_then(|vs| vs.iter().find(|v| v["at"] == json!(at)))
+            .and_then(|v| v["id"].as_str())
+            .expect("a vertex")
+            .to_owned();
+        json!({ "model": "block", "id": id })
+    };
+    let (a, b, d) = ([-20.0, -20.0, 0.0], [-20.0, -20.0, 15.0], [20.0, -20.0, 15.0]);
+    let picks = json!({ "y": [pick(a), pick(b)], "x": [pick(b), pick(d)] });
+    let side = c.ok("set_part_axes", picks.clone());
+    assert!(side["alignment"].is_object(), "the first apply turns the part: {side}");
+    let msg = c.refused("set_part_axes", picks);
+    assert!(msg.contains("already holds the part that way"), "{msg}");
+    c.ok("undo", json!({}));
+    let held = c.ok("set_part_axes", json!({ "y": [pick(a), pick(b)], "x": [pick(b), pick(d)] }));
+    assert_eq!(held["alignment"], side["alignment"], "one undo was as modelled: the picks turn the part again");
+    let _ = std::fs::remove_dir_all(&dir);
+}

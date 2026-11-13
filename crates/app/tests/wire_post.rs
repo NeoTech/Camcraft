@@ -94,6 +94,7 @@ fn punch_doc(machine_text: &str) -> World {
         tabs: None,
         capture: true,
         taper_deg: 0.0,
+        four_axis: None,
         burnout: None,
         clearance: operation::DEFAULT_CLEARANCE,
     };
@@ -122,6 +123,7 @@ fn gouging_die() -> World {
         tabs: None,
         capture: true,
         taper_deg: 0.0,
+        four_axis: None,
         burnout: None,
         clearance: operation::DEFAULT_CLEARANCE,
     };
@@ -248,7 +250,7 @@ fn a_mill_machine_and_a_cutting_post_are_refused_by_name() {
     let mill = std::fs::read_to_string("../../assets/machines/3axis-vmc.mch").expect("the vmc");
     let w = warnings(cps(WIRE), &mill, &stream);
     assert!(w.iter().any(|m| m.contains("is not declared kind wire_edm")), "{w:?}");
-    for (n, s) in BUILTINS.iter().filter(|(n, _)| *n != WIRE) {
+    for (n, s) in BUILTINS.iter().filter(|(n, _)| !WIRE_POSTS.contains(n)) {
         let w = warnings(s, FIXTURE, &stream);
         assert!(w.iter().any(|m| m.contains("Punch1") && m.contains("does not declare wireEdm")), "{n}: {w:?}");
     }
@@ -260,7 +262,8 @@ fn a_mill_machine_and_a_cutting_post_are_refused_by_name() {
 
 #[test]
 fn the_registry_offers_the_wire_post_for_wire_edms_only() {
-    assert_eq!(WIRE_POSTS, &[WIRE]);
+    // #617 added the Sodick dialect; the generic post stays first (the default).
+    assert_eq!(WIRE_POSTS.first(), Some(&WIRE));
     for (n, _) in BUILTINS {
         assert_eq!(posting::post_serves(n, Kind::WireEdm), WIRE_POSTS.contains(n), "{n}");
     }
@@ -310,6 +313,7 @@ fn cutoff_doc(wrong: bool) -> World {
         taper_deg: 0.0,
         burnout: None,
         clearance: operation::DEFAULT_CLEARANCE,
+        four_axis: None,
     };
     let src = SrcRef::Selection(vec![GeoSel { entity: "part".into(), feature: FeatureSel::Chain(chain) }]);
     h.execute(&world, CreateOperation::new(&world, "Cutoff1", "", src, OpParams::WireContour(op)).expect("op"));

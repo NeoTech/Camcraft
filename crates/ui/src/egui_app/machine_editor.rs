@@ -73,14 +73,23 @@ pub(crate) fn window(ctx: &egui::Context, state: &mut State) {
                 // #535: a wire EDM has no spindle, tool changer or coolant -
                 // its own section (the wire keys, codes and conditions) stands
                 // in their place.
-                if Kind::WireEdm == machine::kind(Some(&ed.machine)) {
-                    super::machine_edm::section(ui, u, &mut ed.machine);
-                    draw_axes(ui, u, &mut ed.machine);
-                } else {
-                    draw_spindle(ui, u, &mut ed.machine);
-                    draw_axes(ui, u, &mut ed.machine);
-                    draw_tooling(ui, u, &mut ed.machine);
-                    draw_coolants(ui, &mut ed.machine);
+                // #548: a sinker EDM likewise (`Machine::edm_sane`: no
+                // spindle or coolant) - its keys, orbits, conditions and codes.
+                match machine::kind(Some(&ed.machine)) {
+                    Kind::WireEdm => {
+                        super::machine_edm::section(ui, u, &mut ed.machine);
+                        draw_axes(ui, u, &mut ed.machine);
+                    }
+                    Kind::SinkerEdm => {
+                        super::machine_edm_editor::draw(ui, u, &mut ed.machine);
+                        draw_axes(ui, u, &mut ed.machine);
+                    }
+                    _ => {
+                        draw_spindle(ui, u, &mut ed.machine);
+                        draw_axes(ui, u, &mut ed.machine);
+                        draw_tooling(ui, u, &mut ed.machine);
+                        draw_coolants(ui, &mut ed.machine);
+                    }
                 }
                 ui.separator();
                 super::machine_grid::machine_grid(ui, "machine_editor_overview", &ed.machine, u, &[]);
