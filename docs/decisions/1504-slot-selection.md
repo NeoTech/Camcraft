@@ -49,10 +49,54 @@ deeper than the feature). The fit/confine law lives in
   (`selection_geometry`): it refuses open runs for every kind but the
   contour, and a slot is exactly two open runs.
 
-**Tolerances.** `FIT_TOL` = 0.01 mm (the gouge law's own), so a picked
-face's tessellated round end (chords a sag inside the true arc) is no
-wall; `STRAIGHT_TOL` = 0.01 mm for an edge's straightness and the second
-edge's parallelism.
+**Tolerances.** `FIT_TOL` = 0.01 mm (the gouge law's own) for how far a
+slot may stand past its room; `STRAIGHT_TOL` = 0.01 mm for an edge's
+straightness and the second edge's parallelism. Both are pinned from
+both sides (review of PR #1522): 0.02 mm out is refused and 0.005 mm out
+taken, on the edge room and the face room, and an edge bowing 0.02 mm is
+refused while 0.005 mm is taken - loosening either constant to 0.1 turns
+a pin red.
+
+**A tessellated round end is inscribed, not tolerated** (review of PR
+#1522). The first cut relied on `FIT_TOL` to absorb a picked face's
+chord sag, but an 8-chords-per-quarter round end of radius 8 sags
+0.039 mm, so the fitted slot failed its own confine and the pick seeded
+nothing - hidden at `debug`, the user saw only a length refusal for the
+typed slot. Now `fit()` measures the face overshoot of the full fit and
+draws the slot's radius in by it (the capsule offset inward: width and
+length shrink by twice the sag, the endpoints stay), so the fit sits
+inside the chords. The shrink is capped at 5% of the room's width
+(`INSCRIBE_MAX`): a face whose best slot overshoots by more (an L, a
+notch, diamond-pointed ends) is no slot face and is refused by name.
+Considered and dropped: raising `FIT_TOL` to cover coarse STEP
+tessellation (that loosens the tolerance into the model, so a slot
+could stand that far past a real wall); refusing only (the issue asks
+that a face gives the slot that fits it). And when picks still seed
+nothing, the refusal a user sees (page echo, generation, preview) now
+says why: `SlotBound::judge` appends "the picks seed no slot: <reason>"
+to the typed slot's refusal.
+
+**The face law is exact** (review of PR #1522, non-blocking note taken).
+`face_overshoot` sampled the slot's outline every 0.5 mm, so a region
+edge crossing the slot between samples slipped by. It is now two exact
+laws: the wall law (each region boundary segment's distance to the
+slot's centre segment, `r` minus it) and the end law (an end centre
+outside the region leaves it by `r` plus its distance to the boundary).
+A slot that crosses the boundary anywhere meets the wall law; one that
+does not lies wholly inside or wholly outside, which the end law
+decides.
+
+**Re-picking re-seeds** (review note). `SetOperationGeometry` writes the
+fitted a/b/width on every pick command, so re-picking the same edges
+overwrites a slot the user had shortened. Kept by design: a pick is an
+explicit "take the slot from these", the overwrite rides the same
+undoable command (one Ctrl+Z restores the shortened slot), and editing
+the numbers after the pick never re-seeds.
+
+**Out of scope, filed.** A Slot with a whole-model or entity source still
+takes no part law (`DepthLaw::None`): the typed slot through the part
+wall raises no gouge. That predates this PR and is filed as its own
+issue, #1537 (P1).
 
 **Cost to change later.** The seed lives in two commands and one app
 function (`slot_from_picks`); the confine call sits in the job collector,
