@@ -162,6 +162,7 @@ pub(crate) fn excess_aware(params: &OpParams) -> bool {
         Section::Turning => true,
         Section::MultiAxis => !matches!(params, OpParams::Swarf { .. } | OpParams::AdvancedSwarf { .. }),
         // #532: the wire's kerf law is not excess-aware yet either.
-        Section::Plasma | Section::WireEdm => false,
+        // #541: nor the sinker's burn verdict.
+        Section::Plasma | Section::WireEdm | Section::Sinker => false,
     }
 }

@@ -156,7 +156,8 @@ fn swing_hit(
     let pieces = m.segments3(chord_tol);
     let mut cells: Vec<Cell> = Vec::new();
     for &band in bands {
-        push_cells(&mut cells, &pieces, from_abc, to_abc, band, r, grow);
+        let floors = band_floors(from_abc, to_abc, band);
+        push_cells(&mut cells, &pieces, from_abc, to_abc, band, r, grow, &floors);
     }
     if cells.is_empty() {
         return None; // every band upright within the tool's radius: nothing to sweep
@@ -225,14 +226,10 @@ fn backstop_columns(
     chord_tol: f64,
 ) -> Vec<(Point2, Point2, f64, f64)> {
     let mut out = Vec::new();
+    let poses = pose_letters(from_abc, to_abc);
     for &t in &PATH_FRACS {
         let p = path_point(m, t, chord_tol);
-        for &g in &POSE_FRACS {
-            let abc = [
-                from_abc[0] + (to_abc[0] - from_abc[0]) * g,
-                from_abc[1] + (to_abc[1] - from_abc[1]) * g,
-                from_abc[2] + (to_abc[2] - from_abc[2]) * g,
-            ];
+        for (k, &abc) in poses.iter().enumerate() {
             let lean = angles_to_axis(abc).filter(|a| !is_upright(a));
             for &(above, band_r, band_len) in bands {
                 // Law (c)'s skip, read the same way: a band within the
@@ -242,20 +239,53 @@ fn backstop_columns(
                 }
                 let (offx, offy, r_band, h0) = match lean {
                     Some(a) => {
-                        let mid = above + band_len * 0.5;
-                        let spread = (band_len * 0.5) * (a[0] * a[0] + a[1] * a[1]).sqrt();
-                        let za = p.z + above * a[2];
-                        let zb = p.z + (above + band_len) * a[2];
-                        (mid * a[0], mid * a[1], band_r + spread, za.min(zb) - band_r)
+                        // Law (c)'s column, the one helper (#1303): the
+                        // bottom dips by the rim's exact R·sin θ, as the
+                        // turn cells read it (#1313).
+                        let col = super::tilt_band::lean(&a, above, band_r, band_len);
+                        (col.off.0, col.off.1, col.r, p.z + col.lo - col.dip)
                     }
                     None => (0.0, 0.0, band_r, p.z + above),
                 };
+                // Between this pose and its neighbours the letters lerp;
+                // where that lerp can lean the band further than either
+                // sample, the span's own floor covers it (#1303).
+                let h0 = h0.min(p.z + span_floor_at(&poses, k, (above, band_r, band_len)));
                 // #904: law (c)'s growth on a coarse model.
                 out.push((Point2::new(p.x + offx, p.y + offy), Point2::new(p.x, p.y), r_band + grow, h0));
             }
         }
     }
     out
+}
+
+/// The letters at each of [`POSE_FRACS`], lerped from `from` to `to`.
+fn pose_letters(from: [f64; 3], to: [f64; 3]) -> [[f64; 3]; 5] {
+    POSE_FRACS.map(|g| {
+        [from[0] + (to[0] - from[0]) * g, from[1] + (to[1] - from[1]) * g, from[2] + (to[2] - from[2]) * g]
+    })
+}
+
+/// #1303's span floor at the pose `k` of `poses`, over the tip: the
+/// lowest the band can reach between that pose and either neighbour
+/// where the lerp can lean past both samples ([`super::tilt_span`]);
+/// `+inf` inside the cap, where the samples bound the span.
+fn span_floor_at(poses: &[[f64; 3]; 5], k: usize, (above, band_r, band_len): (f64, f64, f64)) -> f64 {
+    let span = |j: usize| super::tilt_span::span_floor(&poses[j], &poses[k], above, band_r, band_len);
+    [k.checked_sub(1), Some(k + 1).filter(|&j| j < poses.len())]
+        .into_iter()
+        .flatten()
+        .filter_map(span)
+        .fold(f64::INFINITY, f64::min)
+}
+
+/// The span floors of one band at the turn fractions [`POSE_FRACS`],
+/// `(g, floor over the tip)`: what the sampled sweep before #1313 read
+/// at those poses. A turn cell holding a fraction reads no higher
+/// ([`push_cells`]), so the cell law convicts all the sampled law did.
+pub(super) fn band_floors(from: [f64; 3], to: [f64; 3], band: (f64, f64, f64)) -> [(f64, f64); 5] {
+    let poses = pose_letters(from, to);
+    std::array::from_fn(|k| (POSE_FRACS[k], span_floor_at(&poses, k, band)))
 }
 
 /// The point `t` along the move: XY by cumulative chord walk, Z on

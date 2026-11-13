@@ -3,7 +3,7 @@
 //! prints the wave plan (merge_plan.rs) or the delta class of one PR since a reviewed head (merge_delta.rs).
 //! Provenance: port of the maintainer's merge-ready planner (plan_merge_order.py), #1221.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use std::process::Command;
 use std::thread;
@@ -16,7 +16,7 @@ use crate::merge_plan::{self, Facts, Mergeable, Pr};
 const UNKNOWN_RETRIES: usize = 6;
 const UNKNOWN_WAIT: Duration = Duration::from_secs(5);
 
-const USAGE: &str = "usage: cargo xtask merge-plan <PR>... | --label <name> | --delta <PR> --reviewed <sha>
+const USAGE: &str = "usage: cargo xtask merge-plan <PR>... | --label <name> [--json] | --delta <PR> --reviewed <sha>
       [--repo owner/name] [--remote origin] [--base main]";
 
 /// Commit identity for the simulated merges (they are never pushed).
@@ -40,6 +40,8 @@ pub struct Args {
     pub repo: Option<String>,
     pub remote: String,
     pub base: String,
+    /// `--json`: print the plan as JSON (merge_plan_out.rs).
+    pub json: bool,
 }
 
 fn take(it: &mut std::slice::Iter<'_, String>, flag: &str) -> Result<String, String> {
@@ -51,6 +53,7 @@ pub fn parse(args: &[String]) -> Result<Args, String> {
     let mut it = args.iter();
     while let Some(arg) = it.next() {
         match arg.as_str() {
+            "--json" => a.json = true,
             "--label" => a.label = Some(take(&mut it, arg)?),
             "--repo" => a.repo = Some(take(&mut it, arg)?),
             "--remote" => a.remote = take(&mut it, arg)?,
@@ -86,7 +89,8 @@ pub fn run(root: &Path, args: &[String]) -> Result<i32, String> {
     let numbers: Vec<u32> = listed.iter().map(|p| p.number).collect();
     let result = plan_for(root, &a, listed);
     cleanup_refs(root, &numbers);
-    print!("{}", merge_plan::render(&result?));
+    let plan = result?;
+    print!("{}", if a.json { merge_plan::to_json(&plan) } else { merge_plan::render(&plan) });
     Ok(0)
 }
 
@@ -218,7 +222,7 @@ struct Sim<'a> {
     root: &'a Path,
     base_sha: String,
     heads: BTreeMap<u32, String>,
-    commits: HashMap<Vec<u32>, String>,
+    commits: BTreeMap<Vec<u32>, String>,
 }
 
 impl Sim<'_> {
@@ -327,7 +331,7 @@ fn plan_for(root: &Path, a: &Args, mut listed: Vec<Listed>) -> Result<merge_plan
     }
     let heads: BTreeMap<u32, String> = listed.iter().map(|p| (p.number, p.head.clone())).collect();
     let facts = Facts { base_name: base.to_string(), base_sha: base_sha.clone(), prs, before, shared };
-    let mut sim = Sim { root, base_sha, heads, commits: HashMap::new() };
+    let mut sim = Sim { root, base_sha, heads, commits: BTreeMap::new() };
     merge_plan::plan(&facts, &mut |onto: &[u32], pr: u32| sim.trial(onto, pr))
 }
 

@@ -65,21 +65,30 @@ pub(super) fn cell_count(reach: f64, rate: f64) -> usize {
 }
 
 /// Law (c)'s column for one band at one pose, tip-relative: (offset,
-/// radius, bottom). The leaning form always - at an upright pose it is
-/// the upright column with its bottom a band radius lower, which is
-/// what the poses beside it read.
+/// radius, bottom). The leaning form always, its bottom dipping by the
+/// rim's R·sin θ (#1303; at an upright pose, by nothing).
 fn column(a: [f64; 3], above: f64, band_r: f64, band_len: f64) -> ((f64, f64), f64, f64) {
     let mid = above + band_len * 0.5;
     let spread = (band_len * 0.5) * a[0].hypot(a[1]);
     let (za, zb) = (above * a[2], (above + band_len) * a[2]);
-    ((mid * a[0], mid * a[1]), band_r + spread, za.min(zb) - band_r)
+    ((mid * a[0], mid * a[1]), band_r + spread, za.min(zb) - super::tilt_band::rim_dip(&a, band_r))
+}
+
+/// The lowest end station over the tip and the rim sine at one pose.
+fn station_and_sine(a: [f64; 3], above: f64, band_len: f64) -> (f64, f64) {
+    ((above * a[2]).min((above + band_len) * a[2]), super::tilt_band::rim_sine(&a))
 }
 
 /// Push the cells of one band `(above, radius, length)` over the tip
 /// `pieces` of a move turning from the letters `from` to `to` (degrees).
 /// `r` is the cutter's radius (a band within it is the flutes' kerf
 /// while the whole cell stays upright, law (c)'s skip) and `grow` the
-/// band growth on a coarse model (#904).
+/// band growth on a coarse model (#904). `floors` are #1303's span
+/// floors `(turn fraction, bottom over the tip)`: a cell holding one of
+/// those fractions stands no higher than it, so a span whose lerp leans
+/// past both its samples is read at least as low as the sampled sweep
+/// read it (the two laws compose by `min`).
+#[allow(clippy::too_many_arguments)]
 pub(super) fn push_cells(
     out: &mut Vec<Cell>,
     pieces: &[(Point3, Point3)],
@@ -88,6 +97,7 @@ pub(super) fn push_cells(
     (above, band_r, band_len): (f64, f64, f64),
     r: f64,
     grow: f64,
+    floors: &[(f64, f64)],
 ) {
     if band_len <= 0.0 || band_r <= 0.0 {
         return;
@@ -107,10 +117,17 @@ pub(super) fn push_cells(
         if upright && band_r <= r {
             continue;
         }
-        let (o0, r0, b0) = column(a0, above, band_r, band_len);
-        let (o1, r1, b1) = column(a1, above, band_r, band_len);
+        let (o0, r0, _) = column(a0, above, band_r, band_len);
+        let (o1, r1, _) = column(a1, above, band_r, band_len);
         // An all-upright cell keeps law (c)'s upright bottom.
-        let b = if upright { above } else { b0.min(b1) } - sag;
+        // The rim dips by R·sin θ (#1303); over the cell the axis's
+        // horizontal part strays from its chord by kappa at most, so
+        // sin θ stays under the larger end's sine plus kappa.
+        let ((l0, s0), (l1, s1)) = (station_and_sine(a0, above, band_len), station_and_sine(a1, above, band_len));
+        let dip = band_r * (s0.max(s1) + kappa).min(1.0);
+        let b = if upright { above } else { l0.min(l1) - dip } - sag;
+        // #1303's span floor at every sampled pose this cell holds.
+        let b = floors.iter().filter(|&&(g, _)| g0 <= g && g <= g1).fold(b, |b, &(_, f)| b.min(f));
         let rad = [r0 + grow + sag + 1e-9, r1 + grow + sag + 1e-9];
         let flanks = flanks(o0, o1, rad);
         for (p, q) in pieces {

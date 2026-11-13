@@ -150,22 +150,47 @@ pub(super) fn family_gate(world: &World, context: Option<&str>, params: &OpParam
             if family == Family::WireEdm { "mount a wire EDM first" } else { "a wire EDM cuts only wire EDM operations (a Wire Contour)" },
         )));
     }
+    // #1291: an unmounted setup reads as a mill (the kind_of law), so
+    // the words must not call it one - they say no machine is mounted.
+    let mounted = crate::machine::of_setup(world, context).1.is_some();
+    let clause = if mounted {
+        format!("the setup's machine is a {}", machine.word())
+    } else {
+        "the setup has no machine mounted".to_owned()
+    };
     // #670: plasma work needs a plasma table - no mill or lathe (nor a
     // mill-turn) strikes an arc.
     if family == Family::Plasma {
         return Err(CommandError::Invalid(format!(
-            "a {} operation is plasma cutting work; the setup's machine is a {} - mount a plasma table first",
+            "a {} operation is plasma cutting work; {clause} - mount a plasma table first",
+            params.kind(),
+        )));
+    }
+    // #541: sinker work needs a sinker EDM - nothing else feeds an
+    // electrode.
+    if family == Family::Sinker {
+        return Err(CommandError::Invalid(format!(
+            "a {} operation is sinker EDM work; the setup's machine is a {} - mount a sinker EDM first",
             params.kind(),
             machine.word(),
         )));
     }
     Err(CommandError::Invalid(format!(
-        "a {} operation is {} work; the setup's machine is a {} - mount a {} (or a mill-turn) first",
+        "a {} operation is {} work; {clause} - mount a {} (or a mill-turn) first",
         params.kind(),
         family.work(),
-        machine.word(),
         family.machine(),
     )))
+}
+
+/// The sinker side burn's door (#545): its numbers, and against a named
+/// condition its allowance, refused by name before the op exists
+/// (`sinker_side_op::creation_refusal`). Every other kind passes.
+pub(super) fn sinker_gate(world: &World, context: Option<&str>, params: &OpParams) -> Result<(), CommandError> {
+    match operation::sinker_side_op::creation_refusal(world, context, params) {
+        Some(msg) => Err(CommandError::Invalid(msg)),
+        None => Ok(()),
+    }
 }
 
 /// The tool law's door (M10.1 B): the named tool must belong to the

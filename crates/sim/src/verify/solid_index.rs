@@ -8,6 +8,7 @@
 use super::probe::{Atom, Frame};
 use super::hole_wall::wall_excuse;
 use super::swept::{Body, pen};
+use super::thread_bore::{excused, ThreadBore};
 use crate::geometry::{Point3, Triangle};
 
 /// Facets whose XY box spans more cells than this ride the always-asked
@@ -132,8 +133,10 @@ impl<'a> SolidIndex<'a> {
     /// share volume with the solid beyond `allow`? `grow` widens every
     /// atom (the arc chords' sagitta); `walls` are the containment
     /// kinds' hole axes in `fr`'s XY, whose round walls' tessellation is
-    /// excused ([`wall_excuse`], #1205) - empty for every other law.
-    pub(super) fn hits(&mut self, fr: &Frame, d: [f64; 3], atoms: &[Atom], allow: f64, grow: f64, walls: &[[f64; 2]]) -> bool {
+    /// excused ([`wall_excuse`], #1205) - empty for every other law;
+    /// `bores` grants a thread mill its threads ([`super::thread_bore`], #1071).
+    #[allow(clippy::too_many_arguments)] // the sweep, its atoms and the two grants
+    pub(super) fn hits(&mut self, fr: &Frame, d: [f64; 3], atoms: &[Atom], allow: f64, grow: f64, walls: &[[f64; 2]], bores: &[ThreadBore]) -> bool {
         let len = atoms.iter().map(|a| a.z1).fold(0.0, f64::max);
         let (p0, p1) = (fr.up(0.0), fr.up(len));
         let e = fr.end(d);
@@ -165,7 +168,9 @@ impl<'a> SolidIndex<'a> {
                     let pen = pen(&body, a, allow, allow, grow, &mut pts);
                     if pen > allow {
                         let ex = wall_excuse(&t, d, a, allow, grow, walls);
-                        if pen > ex + allow {
+                        // #1071: a thread being cut into its own minor wall.
+                        let threaded = upright && excused(bores, &self.facets[f as usize], p0, q0, a.rho_max() + grow, allow);
+                        if pen > ex + allow && !threaded {
                             return true;
                         }
                     }

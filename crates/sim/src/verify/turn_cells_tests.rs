@@ -94,7 +94,7 @@ fn no_band_position_of_a_random_turn_lies_outside_the_cells() {
         let mut missed_before = false;
         for band in BANDS {
             let mut cells = Vec::new();
-            push_cells(&mut cells, &[(p0, p1)], from, to, band, R, 0.0);
+            push_cells(&mut cells, &[(p0, p1)], from, to, band, R, 0.0, &[]);
             assert!(!cells.is_empty() && cells.len() <= MAX_CELLS, "turn {turn}: {} cells", cells.len());
             for it in 0..=8 {
                 let tip = lerp(p0, p1, it as f64 / 8.0);
@@ -143,7 +143,7 @@ fn a_cell_reaches_no_further_than_its_end_columns_plus_the_sag() {
     let holder = (10.0, 10.0, 5.0);
     let tip = Point3::new(0.0, 0.0, 5.0);
     let mut cells = Vec::new();
-    push_cells(&mut cells, &[(Point3::new(0.0, 0.0, 30.0), tip)], [0.0; 3], [0.0, -5.0, 0.0], holder, 3.0, 0.0);
+    push_cells(&mut cells, &[(Point3::new(0.0, 0.0, 30.0), tip)], [0.0; 3], [0.0, -5.0, 0.0], holder, 3.0, 0.0, &[]);
     // Upright the rim stands at x = 10; leaning toward -x it retreats.
     let at = |x: f64| cells.iter().any(|c| c.bottom_over(Point2::new(x, 0.0), 16.0).is_some());
     assert!(at(10.0), "the upright rim is read");
@@ -157,16 +157,18 @@ fn the_kerf_excuses_only_where_the_tip_stands() {
     let band = (5.0, 6.0, 10.0);
     let mut cells = Vec::new();
     let (a, b) = (Point3::new(0.0, 0.0, 0.0), Point3::new(40.0, 0.0, -8.0));
-    push_cells(&mut cells, &[(a, b)], [0.0; 3], [0.0, 1.0, 0.0], band, 4.0, 0.0);
+    push_cells(&mut cells, &[(a, b)], [0.0; 3], [0.0, 1.0, 0.0], band, 4.0, 0.0, &[]);
     let lowest = |q: Point2| cells.iter().filter_map(|c| c.bottom_over(q, 16.0)).fold(f64::INFINITY, f64::min);
     // On the tip's line the band covers q from 6 before to 6 after the
     // tip; the kerf excuses the middle 4. The lowest bottom is read
     // where the tip has run 4 past q (x 20 -> tip at 24, z -4.8).
     let h = lowest(Point2::new(20.0, 0.0));
-    assert!(h.is_finite() && h < 5.0 - 6.0 - 4.8 + 0.2 && h > 5.0 - 6.0 - 5.3, "bottom {h}");
+    // The rim dips by R·sin θ (#1303): under 6·sin 1° at this turn.
+    let dip = 6.0 * 1f64.to_radians().sin();
+    assert!(h.is_finite() && h < 5.0 - 4.8 + 0.2 && h > 5.0 - dip - 5.3, "bottom {h}");
     // A plunge never leaves its kerf: nothing inside it is read.
     let mut still = Vec::new();
-    push_cells(&mut still, &[(a, Point3::new(0.0, 0.0, -8.0))], [0.0; 3], [0.0, 1.0, 0.0], band, 4.0, 0.0);
+    push_cells(&mut still, &[(a, Point3::new(0.0, 0.0, -8.0))], [0.0; 3], [0.0, 1.0, 0.0], band, 4.0, 0.0, &[]);
     assert!(still.iter().all(|c| c.bottom_over(Point2::new(1.0, 0.0), 16.0).is_none()));
 }
 
@@ -176,12 +178,45 @@ fn the_kerf_excuses_only_where_the_tip_stands() {
 fn degenerate_bands_and_letters_do_not_panic() {
     let piece = [(Point3::new(0.0, 0.0, 0.0), Point3::new(1.0, 0.0, 0.0))];
     let mut cells = Vec::new();
-    push_cells(&mut cells, &piece, [0.0; 3], [0.0, 10.0, 0.0], (5.0, 0.0, 10.0), 2.0, 0.0);
-    push_cells(&mut cells, &piece, [0.0; 3], [0.0, 10.0, 0.0], (5.0, 4.0, -1.0), 2.0, 0.0);
+    push_cells(&mut cells, &piece, [0.0; 3], [0.0, 10.0, 0.0], (5.0, 0.0, 10.0), 2.0, 0.0, &[]);
+    push_cells(&mut cells, &piece, [0.0; 3], [0.0, 10.0, 0.0], (5.0, 4.0, -1.0), 2.0, 0.0, &[]);
     assert!(cells.is_empty());
-    push_cells(&mut cells, &piece, [0.0; 3], [f64::NAN, 10.0, 0.0], (5.0, 4.0, 10.0), 2.0, 0.0);
+    push_cells(&mut cells, &piece, [0.0; 3], [f64::NAN, 10.0, 0.0], (5.0, 4.0, 10.0), 2.0, 0.0, &[]);
     assert_eq!(cells.len(), MAX_CELLS);
     assert!(cells.iter().all(|c| c.bottom_over(Point2::new(0.5, 0.0), -1.0).is_some()));
     assert_eq!(cell_count(100.0, 0.0), 1);
     assert_eq!(cell_count(f64::INFINITY, 1.0), MAX_CELLS);
+}
+
+/// #1303 composed with #1313: a span whose letters lerp past a right
+/// angle (A 100 -> 260 passes the tool straight down) reads #1303's
+/// span floor at the sampled poses it ends; a turn cell holding such a
+/// pose reads no higher. Here a column under the far rim of the A 100
+/// column, reached by no more tilted pose, is convicted by the floor
+/// alone - the cells' own bound stands above it - so the merged law
+/// convicts what the sampled sweep did.
+#[test]
+fn a_cell_holding_a_sampled_pose_reads_its_span_floor() {
+    let (from, to) = ([100.0, 0.0, 0.0], [260.0, 0.0, 0.0]);
+    let band = (20.0, 10.0, 50.0);
+    let floors = super::super::sweep::band_floors(from, to, band);
+    let floor0 = floors[0].1;
+    assert!(floor0.is_finite(), "past the cap the span floor reads: {floors:?}");
+    let tip = Point3::new(0.0, 0.0, 0.0);
+    let (mut with, mut without) = (Vec::new(), Vec::new());
+    push_cells(&mut with, &[(tip, tip)], from, to, band, R, 0.0, &floors);
+    push_cells(&mut without, &[(tip, tip)], from, to, band, R, 0.0, &[]);
+    // The far rim of the A 100 column, a millimetre in.
+    let (o, rad, _) = column(axis_at(from, to, 0.0), band.0, band.1, band.2);
+    let l = o.0.hypot(o.1);
+    assert!(l > 1.0, "the A 100 column leans off the tip: {o:?}");
+    let q = Point2::new(o.0 / l * (l + rad - 1.0), o.1 / l * (l + rad - 1.0));
+    let lowest = |cells: &[Cell]| cells.iter().filter_map(|c| c.bottom_over(q, R * R)).fold(f64::INFINITY, f64::min);
+    let (lo_with, lo_without) = (lowest(&with), lowest(&without));
+    assert!(lo_with <= floor0 + 1e-9, "the cell reads {lo_with}, the span floor {floor0}");
+    assert!(lo_without > floor0 + 5.0, "the cells alone read {lo_without}: the floor must be what convicts");
+    // A stock column standing between the two readings: convicted only
+    // with the floor riding the cell.
+    let zq = 0.5 * (floor0 + lo_without);
+    assert!(lo_with < zq && lo_without >= zq);
 }
