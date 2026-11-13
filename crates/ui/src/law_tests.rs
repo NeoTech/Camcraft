@@ -237,6 +237,7 @@ mod gizmo_tests {
         state.pending.push_back(CommandKind::CreateSetup { name: None, datum_from: None });
         state.drain_actions();
         set_origin(&mut state, [50.0, 0.0, 0.0], 0.0);
+        state.toggle_setup_display("Setup1"); // #1494: another setup's triad needs its eye on
         let labels = overlay_labels(&state, 1.0);
         for want in ["G54", "Setup2/WCS"] {
             let label = labels
@@ -277,6 +278,7 @@ mod gizmo_tests {
         state.pending.push_back(CommandKind::CreateSetup { name: None, datum_from: None });
         state.drain_actions();
         set_origin(&mut state, [50.0, 0.0, 0.0], 0.0);
+        state.toggle_setup_display("Setup1"); // #1494: another setup's triad needs its eye on
         assert!(overlay_labels(&state, 1.0).iter().any(|(_, _, text)| text == "G54"));
         State::toggle_visibility(&mut state.hidden_offsets, "G54");
         let texts: Vec<String> =

@@ -420,7 +420,7 @@ fn gizmo_len(state: &State) -> f64 {
 pub(crate) fn gizmos(state: &State) -> Vec<Gizmo> {
     let mut out: Vec<Gizmo> = Vec::new();
     for (name, entity) in model::named_entities(&state.world) {
-        if state.hidden_offsets.contains(&name) || !model::is_wcs(&state.world, &entity) {
+        if state.hidden_offsets.contains(&name) || state.wcs_hidden_by_setup(&name) || !model::is_wcs(&state.world, &entity) {
             continue;
         }
         let Some(stored) = model::transform_of(&state.world, &entity) else {
@@ -953,7 +953,7 @@ pub fn toolpath_lines(state: &State) -> Vec<[f32; 6]> {
     for (name, entity) in camcraft_app::setup::operation_order(&state.world) {
         // Browser-eye hidden: the cache still exists and still posts, it
         // just does not draw (display state, never a geometry change).
-        if state.hidden_paths.contains(&name) {
+        if state.hidden_paths.contains(&name) || state.op_hidden_by_setup(&name) {
             continue;
         }
         let Some(cache) = model::toolpath_of(&state.world, &entity) else {
