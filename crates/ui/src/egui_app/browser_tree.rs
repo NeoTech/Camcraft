@@ -153,7 +153,7 @@ pub(crate) fn browser_rows(state: &State) -> (Vec<painted::Row>, Vec<Leaf>) {
             let is_active = active.as_deref() == Some(name.as_str());
             let selected = matches!(&t, UiTarget::SetupNode(n, SetupPage::Settings) if *n == name);
             let suffix = if is_active { "active".to_owned() } else { String::new() };
-            push_row(&mut rows, &mut leaves, name.clone(), suffix, painted::Kind::Setup(is_active), None, selected, false, 1, Leaf::Setup(name.clone()));
+            push_row(&mut rows, &mut leaves, name.clone(), suffix, painted::Kind::Setup(is_active), None, selected, !state.setup_displayed(&name), 1, Leaf::Setup(name.clone()));
             setup_children(state, &t, &name, 2, &mut rows, &mut leaves);
         }
     }

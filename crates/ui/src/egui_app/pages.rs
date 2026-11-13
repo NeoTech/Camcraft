@@ -50,12 +50,11 @@
 //! (our code) and the egui vendored sources; no HSMWorks material involved.
 
 use egui::{
-    Align2, Color32, DragValue, FontId, Id, Pos2, RichText, ScrollArea,
+    Align2, Color32, DragValue, FontId, Id, Pos2, ScrollArea,
     Sense, Shape, Stroke, TextEdit, Ui, Vec2, Window,
 };
 
 use camcraft_app::geometry::{quat_from_axis_angle, quat_from_euler, quat_mul, quat_to_euler};
-use camcraft_app::machine;
 use camcraft_app::model;
 use camcraft_app::operation::SrcRef;
 use camcraft_app::posting;
@@ -65,7 +64,7 @@ use camcraft_app::tools;
 use camcraft_app::units::{self, Unit};
 
 use crate::actions;
-use crate::state::{CommandKind, ErrorScope, FixtureUi, ModelUi, State, UiTarget};
+use crate::state::{CommandKind, ErrorScope, ModelUi, State, UiTarget};
 
 use super::layout::hint;
 use super::panes::kind_name;
@@ -74,7 +73,7 @@ use super::theme::Tokens;
 // The value widgets graduated to `fields` with the property grid (user
 // review 2026-11-06); the setup pages below and the sibling modules keep
 // reading them through this path.
-pub(crate) use super::fields::{combo, combo_owned, field, num, num_feed, num_plain};
+pub(crate) use super::fields::{combo, field, num, num_feed, num_plain};
 
 /// Tool kind labels, same order as `ToolKind` (mirrors the tool page).
 const TOOL_KINDS: [&str; 16] = [
@@ -135,7 +134,7 @@ pub fn properties(ui: &mut Ui, state: &mut State, pal: &Tokens) {
                 state.sync_setup_ui();
                 ui.heading("Stock");
                 ui.separator();
-                stock_page(ui, state);
+                super::stock_page::stock_page(ui, state);
                 setup_error(ui, state);
             }
             UiTarget::Wcs => {
@@ -184,146 +183,6 @@ fn setup_error(ui: &mut Ui, state: &State) {
         super::error_text::error_text(ui, super::colorvision::text_inks(ui, &state.world).error, &msg);
     }
 }
-// --------------------------------------------------------------- stock page
-
-fn stock_page(ui: &mut Ui, state: &mut State) {
-    // The document's unit (display and posted program, #902) - the
-    // numbers below re-render from the world next pass.
-    super::post_options::units_row(ui, state, "Units");
-    let u = state.units();
-    ui.add_space(3.0);
-    ui.horizontal(|ui| {
-        for (i, name) in ["Box", "Cylinder", "From model"].iter().enumerate() {
-            if ui
-                .radio_value(&mut state.stock_ui.shape, i as i32, *name)
-                .changed()
-            {}
-        }
-    });
-    // #197: the models' size, right above the numbers it informs.
-    match super::stock_info::part_size_lines(&state.world, u) {
-        Some([size, extents]) => {
-            ui.label(size).on_hover_text("The models' bounding box - what Fit to Models wraps, plus the fit margin");
-            ui.label(RichText::new(extents).weak());
-        }
-        None => {
-            ui.label(RichText::new("No models yet - load one to see its size.").weak());
-        }
-    }
-    ui.add_space(3.0);
-    let shape = state.stock_ui.shape;
-    if shape == 1 {
-        field(ui, "Diameter");
-        num(ui, u, &mut state.stock_ui.diameter);
-        field(ui, "Height");
-        num(ui, u, &mut state.stock_ui.height);
-    } else if shape == 2 {
-        // Stock from a model: parts only, as the op Source picker.
-        let models: Vec<String> = model::model_entities(&state.world)
-            .into_iter()
-            .filter(|(_, e)| !model::is_fixture(&state.world, e))
-            .map(|(n, _)| n)
-            .collect();
-        field(ui, "Source");
-        if models.is_empty() {
-            ui.label("No models to take stock from.");
-        } else {
-            let mut idx = models
-                .iter()
-                .position(|m| *m == state.stock_ui.source)
-                .unwrap_or(models.len() - 1);
-            let before = idx;
-            combo_owned(ui, "stk_src", &mut idx, &models);
-            if idx != before {
-                state.stock_ui.source = models[idx.min(models.len() - 1)].clone();
-            }
-        }
-        super::raw_stock_row::raw_stock_row(ui, state);
-    } else {
-        field(ui, "Length (X)");
-        num(ui, u, &mut state.stock_ui.dx);
-        field(ui, "Width (Y)");
-        num(ui, u, &mut state.stock_ui.dy);
-        field(ui, "Height (Z)");
-        num(ui, u, &mut state.stock_ui.dz);
-    }
-    ui.add_space(6.0);
-    field(ui, "X center");
-    num(ui, u, &mut state.stock_ui.x);
-    field(ui, "Y center");
-    num(ui, u, &mut state.stock_ui.y);
-    field(ui, "Z bottom");
-    num(ui, u, &mut state.stock_ui.z);
-    field(ui, "Rotation (yaw deg)");
-    num_plain(ui, &mut state.stock_ui.yaw_deg);
-    ui.add_space(6.0);
-    // #198: a box can be fitted by a separate allowance on each side.
-    let per_side = state.stock_ui.shape == 0 && {
-        ui.checkbox(&mut state.stock_ui.fit_per_side, "Per side")
-            .on_hover_text("Fit to Models pads each face of the box by its own allowance");
-        state.stock_ui.fit_per_side
-    };
-    if per_side {
-        for (i, name) in ["-X", "+X", "-Y", "+Y", "Bottom", "Top"].iter().enumerate() {
-            field(ui, &format!("Fit margin {name}"));
-            num(ui, u, &mut state.stock_ui.fit_sides[i]);
-        }
-    } else {
-        field(ui, "Fit margin");
-        num(ui, u, &mut state.stock_ui.fit_margin);
-    }
-    let sides = state.stock_ui.fit_sides;
-    let shape = state.stock_ui.shape;
-    let (dx, dy, dz) = (state.stock_ui.dx, state.stock_ui.dy, state.stock_ui.dz);
-    let (diameter, height) = (state.stock_ui.diameter, state.stock_ui.height);
-    let source = state.stock_ui.source.clone();
-    let pos = [state.stock_ui.x, state.stock_ui.y, state.stock_ui.z];
-    let yaw = state.stock_ui.yaw_deg;
-    let margin = state.stock_ui.fit_margin;
-    // The stock pane edits the ACTIVE setup's stock entity (M3.2 A):
-    // with no setups in the document this resolves to the old global
-    // "Stock", so the legacy behavior is the degenerate case, not a
-    // branch. sync_setup_ui already mirrored this entity's numbers.
-    let active = camcraft_app::setup::active(&state.world);
-    let stock_name = camcraft_app::setup::stock_entity_name(&state.world, active.as_deref());
-    let has_stock = model::find_by_name(&state.world, &stock_name)
-        .is_some_and(|e| model::is_stock(&state.world, &e));
-    if let Some(s) = active.as_deref() {
-        ui.label(format!("Stock of setup {s}."));
-    }
-    ui.horizontal(|ui| {
-        if ui.button("Apply").clicked() {
-            let s = if shape == 1 {
-                StockShape::Cylinder { diameter, height }
-            } else if shape == 2 {
-                StockShape::FromModel {
-                    source: source.clone(),
-                }
-            } else {
-                StockShape::Box { dx, dy, dz }
-            };
-            state.pending.push_back(CommandKind::SetStock {
-                shape: s,
-                pos,
-                yaw_deg: yaw,
-            });
-        }
-        if ui.button("Fit to Models").clicked() {
-            let cmd = if per_side {
-                CommandKind::StockFitSides { sides }
-            } else {
-                CommandKind::StockFit { margin, shape }
-            };
-            state.pending.push_back(cmd);
-        }
-        if has_stock && ui.button("Delete").clicked() {
-            state
-                .pending
-                .push_back(CommandKind::DeleteByName(stock_name.clone()));
-        }
-    });
-}
-
 /// The document's post script (M3.3 A/B): setup furniture, read live
 /// off the world singleton like the machine section above. The label
 /// is exactly what the post resolves - one truth, so a pane can never
@@ -444,74 +303,6 @@ fn post_offer_banner(ui: &mut Ui, state: &mut State) {
             // only ever names one), so there is nothing to queue.
             PostRef::File(_) => return,
         });
-    }
-}
-
-/// The document's machine (M2.3 C, group completed by M3.3 stage C):
-/// setup furniture read live off the world singleton - no mirror to go
-/// stale. The overview grid is exactly what the file stated; a blank is
-/// "not stated", never an invented ceiling. The library combo picks a shipped
-/// machine BY NAME, "Load other" reaches any `.mch` through the file
-/// law, and "Edit" opens the draft editor; all three land on the
-/// same `LoadMachine` command, so every change here is undoable
-/// furniture, not a field poke. The kind line follows the DECLARED
-/// kind where the machine states one, the axis inventory otherwise.
-pub(super) fn machine_section(ui: &mut Ui, state: &mut State) {
-    let (path, m) = machine::of(&state.world);
-    ui.label("Machine");
-    let names: Vec<&str> = posting::MACHINES.iter().map(|(n, _)| *n).collect();
-    ui.horizontal(|ui| {
-        ui.label("Library");
-        let sel: Option<usize> = names.iter().position(|n| path == posting::builtin_path(n));
-        let text = match sel {
-            Some(i) => names[i].to_owned(),
-            None => "other".to_owned(),
-        };
-        let mut pick: Option<String> = None;
-        egui::ComboBox::from_id_salt("machine_library")
-            .selected_text(text)
-            .show_ui(ui, |ui| {
-                for (i, n) in names.iter().enumerate() {
-                    if ui.selectable_label(sel == Some(i), *n).clicked() {
-                        pick = Some((*n).to_owned());
-                    }
-                }
-            });
-        if let Some(name) = pick {
-            state
-                .pending
-                .push_back(CommandKind::LoadBuiltinMachine(name));
-        }
-    });
-    match &m {
-        Some(m) => {
-            let source = if path.is_empty() {
-                "not stated".to_owned()
-            } else {
-                match names.iter().find(|n| path == posting::builtin_path(n)) {
-                    Some(n) => format!("Built-in: {n}"),
-                    None => path.clone(),
-                }
-            };
-            super::machine_grid::machine_grid(ui, "machine_overview", m, state.units(), &[("Source", source)]);
-            ui.horizontal(|ui| {
-                if ui.button("Load other").clicked() {
-                    state.pending.push_back(CommandKind::LoadMachineDialog);
-                }
-                if ui.button("Edit").clicked() {
-                    state.pending.push_back(CommandKind::EditMachineDialog);
-                }
-                if ui.button("Clear").clicked() {
-                    state.pending.push_back(CommandKind::ClearMachine);
-                }
-            });
-        }
-        None => {
-            ui.label("No machine loaded - the checker states, it cannot judge.");
-            if ui.button("Load machine (.mch)").clicked() {
-                state.pending.push_back(CommandKind::LoadMachineDialog);
-            }
-        }
     }
 }
 
@@ -643,41 +434,6 @@ fn setups_page(ui: &mut Ui, state: &mut State) {
     );
 }
 
-/// The tool list of one setup context (M3.2 stage C): what goes into
-/// the spindle here, in change order, with the shop's time law behind
-/// the estimate. Read-only by law - tools live in the Tool Library and
-/// operations pick them; this page only reports what that wiring
-/// implies, so there is no draft and no command here.
-pub(super) fn tool_list_section(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
-    let u = state.units();
-    let rows = camcraft_app::tool_list::for_setup(&state.world, ctx);
-    if rows.is_empty() {
-        ui.label("Tool list: no generated operation in this setup yet.");
-        return;
-    }
-    ui.label("Tool list for this setup (in change order):");
-    for row in &rows {
-        ui.label(format!(
-            "    {}  {} op{}  {} change{}  cut {}  rapid {}  est {} min",
-            row.tool,
-            row.ops.len(),
-            if row.ops.len() == 1 { "" } else { "s" },
-            row.changes,
-            if row.changes == 1 { "" } else { "s" },
-            units::len(row.cut_mm, u, 2),
-            units::len(row.rapid_mm, u, 2),
-            camcraft_app::setup_sheet::minutes(row.minutes),
-        ));
-    }
-    ui.label(format!(
-        "    setup total: est {} min",
-        camcraft_app::setup_sheet::minutes(camcraft_app::tool_list::setup_minutes(
-            &state.world,
-            ctx,
-        )),
-    ));
-}
-
 /// The setup-sheet export row (M3.2 stage D). Writing a sheet is a
 /// read of the document plus a file write - like posting - so the
 /// button queues the dialog arm and nothing touches the history.
@@ -690,80 +446,7 @@ pub(super) fn sheet_footer(ui: &mut Ui, state: &mut State) {
     });
 }
 
-/// The workholding section of the Setups page (M3.2 stage B): the
-/// solids the collision law sees in this context. A fixture is a plain
-/// model wearing the marker - the rows are that model, placed by the
-/// same `MoveFixture` any part uses - and the machine table is the one
-/// row nobody can edit: it is derived prose, what the `.mch` says the
-/// table is, never an entity. Import rides the model worker (no parse
-/// in a command constructor) and tags on landing.
-pub(super) fn fixtures_section(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
-    let u = state.units();
-    let fixtures = camcraft_app::fixture::tagged(&state.world, ctx);
-    let table = camcraft_app::fixture::table_box(&state.world, ctx);
-    // A draft whose row vanished (deleted or untagged, here or via
-    // undo) retires with it - the pane never edits a ghost.
-    if !state.fixture_ui.name.is_empty()
-        && !fixtures.iter().any(|(n, _)| n == &state.fixture_ui.name)
-    {
-        state.fixture_ui = FixtureUi::default();
-    }
-    state.retire_vise_opening_drafts();
-    state.retire_plate_place_drafts();
-    state.retire_mod_vise_drafts();
-    state.retire_accessory_size_drafts();
-    ui.label(if fixtures.is_empty() && table.is_none() {
-        "No workholding modeled: the collision checks see stock and part only."
-    } else {
-        "Workholding in this setup's collision checks:"
-    });
-    for (name, entity) in fixtures {
-        let loc = model::transform_of(&state.world, &entity).unwrap_or_default();
-        let fixed = camcraft_app::fixture::def_of(&state.world, &entity).is_some_and(|d| d.fixed);
-        super::fixture_rows::row(ui, state, &name, &loc, fixed);
-    }
-    if let Some(t) = table {
-        ui.label(format!(
-            "Machine/Table  span {} x {}  top Z {}  (from the machine file)",
-            units::len(t.max.x - t.min.x, u, 1),
-            units::len(t.max.y - t.min.y, u, 1),
-            units::len(t.max.z, u, 2),
-        ));
-    }
-    ui.horizontal_wrapped(|ui| {
-        if ui.button("Import fixture…").clicked() {
-            state.pending.push_back(CommandKind::ImportFixtureDialog);
-        }
-        // #788: a generic parametric vise, placed in one undoable step.
-        if ui.button("Add built-in vise…").clicked() {
-            state.pending.push_back(CommandKind::BuiltinViseDialog(ctx.unwrap_or_default().to_owned()));
-        }
-        // #789: parallels, blocks, strap clamps, soft jaws.
-        if ui.button("Add accessory…").clicked() {
-            state.pending.push_back(CommandKind::AccessoryDialog(ctx.unwrap_or_default().to_owned()));
-        }
-        // #819: a parametric grid plate, fixtures placed on its holes.
-        if ui.button("Add fixture plate…").clicked() {
-            state.pending.push_back(CommandKind::FixturePlateDialog(ctx.unwrap_or_default().to_owned()));
-        }
-        // The other way in: a model already imported - select its row
-        // in the browser and mark it. Offered only for exactly one
-        // selected model, so the button never guesses its target.
-        let sel: Vec<String> = model::selected_names(&state.world)
-            .into_iter()
-            .filter(|n| {
-                model::find_by_name(&state.world, n)
-                    .is_some_and(|e| model::is_model(&state.world, &e))
-            })
-            .collect();
-        if sel.len() == 1 && ui.button(format!("Mark {} as fixture", sel[0])).clicked() {
-            state.pending.push_back(CommandKind::TagFixture {
-                name: sel[0].clone(),
-                setup: ctx.map(str::to_owned),
-            });
-        }
-    });
-}
+pub(super) use super::fixtures_page::fixtures_section;
 
 // ----------------------------------------------------------------- tool page
 

@@ -67,7 +67,7 @@ pub fn take(state: &mut State, pick: GeoSel) {
     };
     let Some(d) = state.points_pick.as_mut() else { return };
     let setup = d.setup.clone();
-    let words = format!("{} of '{}'", pick.feature, pick.entity);
+    let words = format!("that pick on '{}'", pick.entity); // #738: no internal id
     state.status = match pick.feature {
         FeatureSel::Chain(_) if no_centre.is_some() => {
             format!("{setup}: {} - this row takes three points", no_centre.as_deref().unwrap_or_default())

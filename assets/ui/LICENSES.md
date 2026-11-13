@@ -403,3 +403,7 @@ LICENSE (verbatim):
        WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
        See the License for the specific language governing permissions and
        limitations under the License.
+
+## CamCraft logotype (assets/logo/)
+
+The logotype is the project's own artwork, made by the maintainer; the sizes under `assets/logo/icons/` are generated from it by `cargo xtask logo`.

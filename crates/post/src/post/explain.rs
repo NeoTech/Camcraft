@@ -73,18 +73,70 @@ var _EXPLAIN_WORDS = {
 // Words a control may execute when a comment opens with them (LinuxCNC
 // "Comments" / "Messages" / "Logging"; #594's list), any case.
 var _EXPLAIN_ACTIVE = /^\s*(MSG|DEBUG|PRINT|LOG|LOGOPEN|LOGAPPEND|LOGCLOSE|PROBEOPEN|PROBECLOSE|ABORT|AXIS|PY|PYRUN)\b/i;
+// A post's own meanings (#1399). The table above is the mill reading;
+// a control that reads a word differently says so in its manifest:
+//   explainWords = { G99: "FEED PER REVOLUTION", G7: "" , G50: { said: "SPINDLE SPEED LIMIT", takes: "S" } }
+// a string is the word's meaning on that control ("" leaves it
+// unexplained); { said, takes } is a word whose meaning needs another
+// word of the block - explained only beside that word, whose value it
+// folds in (that word is then not explained on its own), silent without
+// it. explainTool = "station-offset" reads a T word as a two-digit
+// offset number after the tool number (T0101: tool 1, offset 1), the
+// lathe T word; any other T word on such a post is left unexplained.
+function _explainOwn(key) {
+  if (typeof explainWords !== "object" || explainWords === null) return undefined;
+  return Object.prototype.hasOwnProperty.call(explainWords, key) ? explainWords[key] : undefined;
+}
+function _explainStationOffset() {
+  return typeof explainTool !== "undefined" && explainTool === "station-offset";
+}
+// The reason a post's own meanings cannot be used, or "" when they can
+// (read by the engine before any hook runs, so a malformed table is
+// refused by name, never half-applied).
+function _explainCheck() {
+  if (typeof explainTool !== "undefined" && explainTool !== "station-offset")
+    return "explainTool = " + JSON.stringify(explainTool) + " - the only T word reading a post may state is \"station-offset\"";
+  if (typeof explainWords === "undefined") return "";
+  if (typeof explainWords !== "object" || explainWords === null || Array.isArray(explainWords))
+    return "explainWords is not a table of words and their meanings";
+  for (var k in explainWords) {
+    if (!Object.prototype.hasOwnProperty.call(explainWords, k)) continue;
+    var w = /^([GM])([0-9]+(?:\.[0-9]+)?)$/.exec(k);
+    if (!w || (w[1] + String(Number(w[2]))) !== k)
+      return "explainWords names \"" + k + "\" - only G and M words without leading zeros (G99, M8) are explained";
+    var v = explainWords[k];
+    if (typeof v === "string") continue;
+    if (v !== null && typeof v === "object" && typeof v.said === "string" && v.said !== ""
+        && typeof v.takes === "string" && /^[A-Z]$/.test(v.takes) && v.takes !== "G" && v.takes !== "M") continue;
+    return "explainWords gives " + k + " a meaning that is neither a text nor { said, takes } with one value letter";
+  }
+  return "";
+}
 // One word's meaning, or "" when the table has none (never a guess).
-function _explainWord(w) {
+// `vals` holds the block's value words by letter, for { said, takes }.
+function _explainWord(w, vals) {
   var m = /^([A-Za-z])([-+]?(?:[0-9]+\.?[0-9]*|\.[0-9]+))$/.exec(String(w));
   if (!m) return "";
   var letter = m[1].toUpperCase(), n = Number(m[2]);
   if (!isFinite(n)) return "";
   var num = String(n);
   if (letter === "G" || letter === "M") {
+    var own = _explainOwn(letter + num);
+    if (typeof own === "string") return own;
+    if (own !== undefined && own !== null) {
+      var v = vals ? vals[own.takes] : undefined;
+      return v === undefined ? "" : own.said + " " + v;
+    }
     var said = _EXPLAIN_WORDS[letter + num];
     return said === undefined ? "" : said;
   }
-  if (letter === "T") return "TOOL " + num;
+  if (letter === "T") {
+    if (!_explainStationOffset()) return "TOOL " + num;
+    var d = /^([0-9]{1,2})([0-9]{2})$/.exec(m[2]);
+    if (!d) return "";
+    var off = Number(d[2]);
+    return "TOOL " + Number(d[1]) + (off === 0 ? ", NO OFFSET" : ", OFFSET " + off);
+  }
   if (letter === "S") return "SPEED " + num;
   if (letter === "F") return "FEED RATE " + num;
   return "";
@@ -103,13 +155,30 @@ function explain() {
     var parts = String(a).split(/\s+/);
     for (var j = 0; j < parts.length; j++) if (parts[j] !== "") tokens.push(parts[j]);
   }
-  var anchored = false, said = [];
+  // The words before any comment, and the block's value words by letter.
+  var words = [], vals = {};
   for (var k = 0; k < tokens.length; k++) {
-    var t = tokens[k];
-    var c = t.charAt(0);
+    var c = tokens[k].charAt(0);
     if (c === "(" || c === ";") break;  // the rest is already a comment
+    words.push(tokens[k]);
+    var vm = /^([A-Za-z])([-+]?(?:[0-9]+\.?[0-9]*|\.[0-9]+))$/.exec(tokens[k]);
+    var L = vm ? vm[1].toUpperCase() : "";
+    if (vm && L !== "G" && L !== "M" && vals[L] === undefined && isFinite(Number(vm[2]))) vals[L] = String(Number(vm[2]));
+  }
+  // A { said, takes } word present with its value word folds that word in.
+  var folded = {};
+  for (var f = 0; f < words.length; f++) {
+    var gm = /^([GMgm])([0-9]+(?:\.[0-9]*)?)$/.exec(words[f]);
+    if (!gm) continue;
+    var own = _explainOwn(gm[1].toUpperCase() + String(Number(gm[2])));
+    if (own !== undefined && own !== null && typeof own === "object" && vals[own.takes] !== undefined) folded[own.takes] = true;
+  }
+  var anchored = false, said = [];
+  for (var q = 0; q < words.length; q++) {
+    var t = words[q];
     if (/^[GMTSgmts]/.test(t)) anchored = true;
-    var s = _explainWord(t);
+    if (folded[t.charAt(0).toUpperCase()]) continue;
+    var s = _explainWord(t, vals);
     if (s !== "") said.push(s);
   }
   if (!anchored || said.length === 0) return "";
@@ -189,6 +258,11 @@ pub fn form(s: &mut Script, options: &Value) -> Result<Option<Form>, PostError> 
             )))
         }
     };
+    // The post's own meanings (#1399): a malformed table is refused by
+    // name before any hook, never half-applied.
+    if let Some(why) = s.explain_refusal()? {
+        return Err(PostError::Refused(format!("Explain G-code is on, but {who} states {why}")));
+    }
     Ok(Some(Form { semi, max }))
 }
 

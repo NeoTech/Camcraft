@@ -71,8 +71,13 @@ pub(crate) fn ask(state: &State, mods: Mods) -> Ask {
     {
         // #701: a role pick takes one run per edge click too, like a boundary.
         EdgeUnit::Run
-    } else {
+    } else if mods.shift && !mods.command {
+        // Shift takes the whole loop or tangent chain (`edge_pick`).
         EdgeUnit::Chain
+    } else {
+        // #1505: a plain or Ctrl click is exactly the edge under the
+        // cursor, never the tangent chain it happens to lie on.
+        EdgeUnit::Run
     };
     let mode = match state.geo_pick {
         GeoPick::Edge => PickKinds { faces: true, ..PickKinds::EDGES },
