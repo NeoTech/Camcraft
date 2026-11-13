@@ -125,4 +125,14 @@ mod tests {
         assert!(bad.is_err_and(|e| e.contains("mitre, cone")));
         assert!(parse_taper_angle(None).is_ok_and(|t| t.is_none()));
     }
+
+    /// #1164 review (PR #1218): a dialect that is not an object, and a
+    /// garbled side word, refuse the file by name.
+    #[test]
+    fn a_taper_angle_not_an_object_or_a_garbled_side_refuses_the_file() {
+        let err = parse_taper_angle(Some(&serde_json::json!("cone"))).err().unwrap_or_default();
+        assert!(err.contains("edm.taper_angle must be an object"), "{err}");
+        let err = parse_taper_angle(Some(&serde_json::json!({ "positive": "up", "corner": "mitre" }))).err().unwrap_or_default();
+        assert!(err.contains("edm.taper_angle.positive must be one of top_left, top_right, not \"up\""), "{err}");
+    }
 }

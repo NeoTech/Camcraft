@@ -20,7 +20,7 @@ use camcraft_app::commands::{CreateOperation, GenerateOperation, History, Import
 use camcraft_app::geometry::{Mesh, Point3, Triangle};
 use camcraft_app::machine::parse_mch;
 use camcraft_app::model;
-use camcraft_app::operation::{FeatureSel, GeoSel, Height, OpParams, SrcRef, WireContourOp, WireFourAxis, WirePairingRule, WireSide};
+use camcraft_app::operation::{self, FeatureSel, GeoSel, Height, OpParams, SrcRef, WireContourOp, WireFourAxis, WirePairingRule, WireSide};
 use camcraft_app::posting::{self, BUILTINS};
 use camcraft_app::world::new_world;
 
@@ -228,4 +228,23 @@ fn an_incomplete_dialect_and_a_four_axis_angle_cut_are_refused_by_name() {
     let (_, made) = punch(&angle_machine(&rules("mitre")), block(), false, Some(four));
     let err = made.expect_err("a 4-axis cut on an angle-word machine");
     assert!(err.contains("tapers by angle word") && err.contains("4-axis"), "{err}");
+}
+
+/// #1164 review (PR #1218): the machine's angle-word rules are in the
+/// stamp - a corner rule swapped from mitre to cone, or a machine
+/// swapped between U/V and the angle word, leaves no path fresh (a
+/// mitre path judged as a mitre never posts to a control cutting cones).
+#[test]
+fn the_corner_rule_and_the_dialect_each_move_the_stamp() {
+    let stamp = |machine: &str| {
+        let (world, made) = punch(machine, block(), false, None);
+        made.expect("generates");
+        let e = model::find_by_name(&world, "Punch1").expect("op");
+        let op = model::operation_of(&world, &e).expect("op");
+        operation::current_stamp(&world, "", &op.src, &op.params, "", None).expect("a stamp")
+    };
+    let (uv, mitre, cone) = (stamp(UV), stamp(&angle_machine(&rules("mitre"))), stamp(&angle_machine(&rules("cone"))));
+    assert_ne!(mitre, cone, "mitre and cone stamp alike");
+    assert_ne!(uv, mitre, "the U/V and angle-word machines stamp alike");
+    assert_ne!(uv, cone, "the U/V and cone machines stamp alike");
 }

@@ -160,17 +160,7 @@ pub(super) fn stream(
             .ok_or_else(|| format!("{name}: a leaning wire cut needs its wire EDM machine mounted"))?;
         let angle = machine.edm.as_ref().and_then(|e| e.taper_angle);
         let lean = if let Some(a) = angle {
-            // #1164: the control leans the wire from an angle word.
-            if four.is_some() {
-                return Err(format!(
-                    "{name}: a 4-axis cut, and machine {} tapers by angle word (edm.taper_angle) - one angle cannot state different upper and lower profiles",
-                    machine.model
-                ));
-            }
-            let (positive, corner) = a.complete(&machine.model).map_err(|e| format!("{name}: {e}"))?;
-            let top = hs.top.ok_or_else(|| format!("{name}: the workpiece's top does not resolve"))?;
-            let left = positive == crate::machine::AngleSide::TopLeft;
-            Lean::Angle { top, left, corner: corner.word(), plane: top - origin[2] }
+            angle_lean(name, &machine.model, a, four.is_some(), hs.top, origin[2])?
         } else {
             Lean::Guides(crate::machine::wire_edm::guide_planes(&machine, origin[2]).map_err(|e| format!("{name}: {e}"))?)
         };
@@ -243,6 +233,22 @@ fn section(
     wire.extend(four.map(|rule| cnc::Record::Param { name: "WireFourAxis".into(), value: json!(rule) }));
     records.splice(at..at, wire);
     Ok(records)
+}
+
+/// #1164: the lean of an angle-word machine's cut, or its refusal by
+/// name. Generation's door (`wire_op::corner_rule`) and the stamp
+/// refuse these first; this is the post's own guard for a path that
+/// reaches it another way.
+fn angle_lean(name: &str, model: &str, a: crate::machine::TaperAngle, four: bool, top: Option<f64>, origin_z: f64) -> Result<Lean, String> {
+    if four {
+        return Err(format!(
+            "{name}: a 4-axis cut, and machine {model} tapers by angle word (edm.taper_angle) - one angle cannot state different upper and lower profiles"
+        ));
+    }
+    let (positive, corner) = a.complete(model).map_err(|e| format!("{name}: {e}"))?;
+    let top = top.ok_or_else(|| format!("{name}: the workpiece's top does not resolve"))?;
+    let left = positive == crate::machine::AngleSide::TopLeft;
+    Ok(Lean::Angle { top, left, corner: corner.word(), plane: top - origin_z })
 }
 
 /// A tapered section's moves as the guides take them (#536, #290 D2):
@@ -354,3 +360,7 @@ fn angled(records: Vec<cnc::Record>, top: f64, deg: f64, left: bool) -> Result<V
     }
     Ok(out)
 }
+
+#[cfg(test)]
+#[path = "posting_wire_tests.rs"]
+mod tests;

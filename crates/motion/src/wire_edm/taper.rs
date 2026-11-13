@@ -294,3 +294,23 @@ fn leans(ring: &[Point2], d: f64, h: f64, t: &WireTaper) -> Result<Vec<(Point2, 
     }
     Ok(out)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// #1164 review (PR #1218): a ring that reverses on itself is refused
+    /// by name under the cone rule - no half turn is laid about a point.
+    #[test]
+    fn the_cone_rule_refuses_a_ring_that_turns_back_on_itself() {
+        let t = WireTaper { angle_deg: 3.0, top_z: 0.0, max_deg: Some(15.0), machine: "M".into(), corner: WireCorner::Cone };
+        let p = |x: f64, y: f64| Point2::new(x, y);
+        // The lead meets the side (5,0)-(10,0); the ring runs up to
+        // (10,10) and straight back down to (10,5).
+        let ring = [p(5.0, 0.0), p(10.0, 0.0), p(10.0, 10.0), p(10.0, 5.0), p(0.0, 0.0)];
+        let err = cones(&ring, 0.6, 12.0, &t).err().map(|e| e.to_string()).unwrap_or_default();
+        assert!(err.contains("the path turns back on itself at X10.000 Y10.000"), "{err}");
+        let square = [p(5.0, 0.0), p(10.0, 0.0), p(10.0, 10.0), p(0.0, 10.0), p(0.0, 0.0)];
+        assert!(cones(&square, 0.6, 12.0, &t).is_ok(), "the control ring turns no half turn");
+    }
+}
