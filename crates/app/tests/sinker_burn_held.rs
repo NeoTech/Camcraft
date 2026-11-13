@@ -5,9 +5,10 @@
 //! carried column arm is pinned on the holder, `stock_sim_held_tests`);
 //! on the field engine, and in the field view, a burn is refused by
 //! name, never cut as a disc nor skipped; at post a Sinker Burn is
-//! admitted by the family door on its sinker but refused by the EDM door
-//! (`posting_family::edm_at_post`: no EDM dialect ships until #542) by
-//! every writer, which writes no file; a milling op remounted onto the
+//! admitted by the family door on its sinker but refused through the
+//! built-in milling post by the serves door (`posting_serves`, #1232;
+//! the sinker post shipped with #542) by every writer, which writes no
+//! file; a milling op remounted onto the
 //! sinker is refused by the family door's text, and a burn remounted onto
 //! a mill never posts.
 //!
@@ -99,24 +100,26 @@ fn the_family_door_admits_a_burn_on_its_sinker() {
     assert_eq!(streams.iter().map(|(n, _)| n.as_str()).collect::<Vec<_>>(), ["Burn0"]);
 }
 
-/// The review of #1131: the family door admits the burn, but no EDM
-/// dialect ships yet, so every writer refuses it by name before a byte
-/// is written - never the Fanuc mill program (tool change, G43, the tip
-/// as a Z target) the built-in post would address to the EDM control.
+/// The review of #1131: the family door admits the burn, but the
+/// built-in milling post does not serve a sinker, so every writer
+/// refuses it by name before a byte is written - never the Fanuc mill
+/// program (tool change, G43, the tip as a Z target) addressed to the
+/// EDM control. Since #542 ships the sinker post, the refusal is the
+/// serves door's (#1232), which names the post and the sinker.
 #[test]
-fn the_post_refuses_a_burn_on_its_sinker_until_an_edm_dialect_ships() {
+fn the_post_refuses_a_burn_on_its_sinker_through_a_milling_post() {
     let (world, _h) = one_setup();
     let dir = std::env::temp_dir().join(format!("camcraft-1131-edm-door-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("scratch dir");
     let nc = dir.join("burn.nc");
-    let door = "Setup1: no post for a sinker EDM machine yet (#542) - Burn0 is not posted and no file is written";
+    let door = |err: &str| err.contains("Burn0") && err.contains("does not serve") && err.contains("a sinker EDM machine");
     let err = post_setup(&world, &nc).expect_err("a sinker burn never posts through a milling dialect");
-    assert!(err.starts_with(door), "{err}");
+    assert!(door(&err), "{err}");
     let err = post_mounts(&world, &nc).expect_err("nor per mount");
-    assert!(err.starts_with(door), "{err}");
+    assert!(door(&err), "{err}");
     let err = post_per_op(&world, &dir, "burn").expect_err("nor per op");
-    assert!(err.starts_with(door), "{err}");
+    assert!(door(&err), "{err}");
     let written: Vec<_> = std::fs::read_dir(&dir).expect("read scratch").collect();
     assert!(written.is_empty(), "the EDM door wrote {written:?}");
     let _ = std::fs::remove_dir_all(&dir);

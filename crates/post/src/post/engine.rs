@@ -118,6 +118,11 @@ pub fn run_program_with(
     // mirrored into the controller's frame, or refused by name.
     let records = super::invert::apply(records, mch, &s)?;
     s.set_machine(&machine::script_props(mch))?;
+    // #542: whether the manifest's `serves` (#1266) names a sinker EDM -
+    // the one script that may voice a sinker section (below).
+    let serves_sinker = s
+        .words_global("serves")?
+        .is_some_and(|w| w.iter().any(|k| crate::machine::Kind::from_word(k) == Some(crate::machine::Kind::SinkerEdm)));
     s.set_program(id)?;
     if options.is_object() {
         s.set_options(options)?;
@@ -193,6 +198,15 @@ pub fn run_program_with(
                     let op = base.get("OperationName").and_then(Value::as_str).unwrap_or("");
                     let who = if op.is_empty() { String::new() } else { format!("operation {op}: ") };
                     warnings.push(format!("{who}is wire EDM work, but this post script does not declare wireEdm - use a wire EDM post"));
+                }
+                // A sinker burn (#542) through a script that does not
+                // serve a sinker would post the burn as a cutting plunge.
+                if name == "SinkerCondition" && !serves_sinker {
+                    let op = base.get("OperationName").and_then(Value::as_str).unwrap_or("");
+                    let who = if op.is_empty() { String::new() } else { format!("operation {op}: ") };
+                    warnings.push(format!(
+                        "{who}is sinker EDM work, but this post script does not serve a sinker EDM (serves = [\"sinker_edm\"]) - use a sinker EDM post"
+                    ));
                 }
                 // A thread whose hand needs the spindle reversed (#629),
                 // posted through a script that cannot voice it, would
