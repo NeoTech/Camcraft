@@ -131,11 +131,21 @@ fn long_drill() -> Tool {
 /// The world with `params` run by `tool` over the block imported at
 /// `coarse_mm`.
 fn run(coarse_mm: Option<f64>, tool: Tool, params: OpParams) -> flecs_ecs::prelude::World {
+    run_after(coarse_mm, None, tool, params)
+}
+
+/// `run`, with `ahead` (a tool and its params) generated first as "AHEAD".
+fn run_after(coarse_mm: Option<f64>, ahead: Option<(Tool, OpParams)>, tool: Tool, params: OpParams) -> flecs_ecs::prelude::World {
     let world = new_world();
     let mut h = History::default();
     h.execute(&world, ImportModel::from_mesh("part", block()).with_fidelity(coarse_mm));
     let loc = Location { pos: Point3::new(0.0, 0.0, -2.0), ..Default::default() };
     h.execute(&world, SetStock::new(&world, StockShape::Box { dx: 60.0, dy: 60.0, dz: 22.0 }, loc).expect("stock"));
+    if let Some((t, p)) = ahead {
+        h.execute(&world, AddTool::new(&world, "TA", t).expect("tool ahead"));
+        h.execute(&world, CreateOperation::new(&world, "AHEAD", "TA", SrcRef::Entity("part".into()), p).expect("create ahead"));
+        h.execute(&world, GenerateOperation::new(&world, "AHEAD").expect("generate ahead"));
+    }
     h.execute(&world, AddTool::new(&world, "T", tool).expect("tool"));
     h.execute(&world, CreateOperation::new(&world, "OP", "T", SrcRef::Entity("part".into()), params).expect("create"));
     h.execute(&world, GenerateOperation::new(&world, "OP").expect("generate"));
@@ -184,10 +194,13 @@ fn a_thread_mill_on_a_coarse_model_is_never_read_looser_than_at_full_fidelity() 
     // Thread declares no rim (#1073 review) and keeps the tightened
     // reading: clean at full fidelity, and on a coarse model it may only
     // convict more, never less - the conservative side.
-    let full = verdict(None, thread_mill(6.0), thread(5.0));
+    // #992: the mill is not centre-cutting, so the matched bore opens
+    // the hole flat to its floor ahead of the thread.
+    let opened = |coarse| blocking(&run_after(coarse, Some((catalog_tool("EM-0800-4FL"), bore(0.0, 6.0))), thread_mill(6.0), thread(5.0)));
+    let full = opened(None);
     assert!(!gouged(&full), "clean at full fidelity: {full:?}");
     for coarse in [Some(0.011), Some(NEAR_BOUND)] {
-        let w = verdict(coarse, thread_mill(6.0), thread(5.0));
+        let w = opened(coarse);
         assert!(w == full || gouged(&w), "never looser at {coarse:?}: {w:?}");
     }
 }
