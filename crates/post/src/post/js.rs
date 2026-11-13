@@ -188,6 +188,11 @@ pub struct Script {
     /// Without it a thread that needs the spindle reversed is refused
     /// by name - the script would cut it the other hand under M03.
     thread_hands: bool,
+    /// The `wireEdm = true` manifest flag (#533): the script voices a
+    /// wire EDM section (`PARAM EdmCondition`). Without it such a
+    /// section is refused by name - a cutting post would write a wire
+    /// path with no condition, threading or wire words.
+    wire_edm: bool,
 }
 
 impl Script {
@@ -209,6 +214,7 @@ impl Script {
             axis_inversion: false,
             probe_axis_inversion: false,
             thread_hands: false,
+            wire_edm: false,
         };
         let mut present = Vec::new();
         for h in HOOKS {
@@ -247,6 +253,10 @@ impl Script {
             .eval("typeof probeAxisInversion !== \"undefined\" && probeAxisInversion === true")
             .map(|v| is_true(&v))
             .unwrap_or(false);
+        s.wire_edm = s
+            .eval("typeof wireEdm !== \"undefined\" && wireEdm === true")
+            .map(|v| is_true(&v))
+            .unwrap_or(false);
         Ok(s)
     }
 
@@ -277,6 +287,24 @@ impl Script {
     pub fn string_global(&mut self, name: &str) -> Result<Option<String>, PostError> {
         let v = self.eval(&format!("(typeof {name} === \"string\") ? {name} : null"))?;
         Ok(v.as_string().map(|s| s.to_std_string_escaped()))
+    }
+
+    /// A top-level array of strings (or one string) the script states,
+    /// e.g. the manifest's `serves`; `None` when it states none. Any
+    /// non-string entry makes it `None` too (read as not stated is
+    /// wrong - it is returned as an error by the caller's word check),
+    /// so entries are stringified and the caller validates the words.
+    pub fn words_global(&mut self, name: &str) -> Result<Option<Vec<String>>, PostError> {
+        let v = self.eval(&format!(
+            "(typeof {name} === \"undefined\") ? null : (Array.isArray({name}) ? JSON.stringify({name}.map(function (w) {{ return String(w); }})) : \
+             ((typeof {name} === \"string\") ? JSON.stringify([{name}]) : null))"
+        ))?;
+        let Some(text) = v.as_string().map(|s| s.to_std_string_escaped()) else {
+            return Ok(None);
+        };
+        serde_json::from_str::<Vec<String>>(&text)
+            .map(Some)
+            .map_err(|e| PostError::Script(format!("{name}: {e}")))
     }
 
     /// A top-level number the script states (the manifest's
@@ -339,6 +367,12 @@ impl Script {
     /// `PARAM SpindleDirection` and voices a thread's hand (#629).
     pub fn voices_thread_hands(&self) -> bool {
         self.thread_hands
+    }
+
+    /// True when the script declares `wireEdm = true` - it voices a
+    /// wire EDM section (#533).
+    pub fn voices_wire_edm(&self) -> bool {
+        self.wire_edm
     }
 
     /// True when the script declares `liveTooling = true` - it voices

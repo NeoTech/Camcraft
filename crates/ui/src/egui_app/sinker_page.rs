@@ -1,7 +1,8 @@
 //! The operation page: the Sinker Burn's fields (#541) - the burn point
 //! and the machine condition on Geometry, the approach plane, work top
 //! and cavity floor datum on Heights, the datum and depth on Passes, the
-//! servo feed on Feeds. Every value edits the page draft; Apply rides
+//! servo feed on Feeds, the orbit (#544) on Passes - or, for the Side
+//! Burn (#545), its wall, amount and undersize there instead. Every value edits the page draft; Apply rides
 //! the command history (EditOperationParams, undoable). The full sinker
 //! setup and op pages are #548's.
 //!
@@ -9,17 +10,88 @@
 //! die-sink EDM practice); no vendor text.
 
 use super::fields::*;
-use camcraft_app::operation::{SinkerBurnOp, SinkerDatum, SinkerPass};
+use camcraft_app::operation::{
+    SinkerBurnOp, SinkerDatum, SinkerOrbit, SinkerOrbitKind, SinkerPass, SinkerSideBurnOp, SinkerSideDirection,
+};
 
 const PASSES: [&str; 3] = ["Single electrode", "Rough (undersized)", "Finish (to size)"];
 const DATUMS: [&str; 3] = ["Work top (depth down)", "Cavity floor (stand-off up)", "Electrode tip (down from approach)"];
+const ORBITS: [&str; 4] = ["None (plain plunge)", "Circular", "Vector", "Planetary"];
+const SIDES: [&str; 4] = ["+X wall", "-X wall", "+Y wall", "-Y wall"];
+
+/// The side burn's rows (#545): the wall it burns, the amount and the
+/// electrode's undersize per side.
+fn side_rows(ui: &mut Ui, u: Unit, direction: &mut SinkerSideDirection, amount: &mut f64, undersize: &mut f64) {
+    let mut si = SinkerSideDirection::ALL.iter().position(|d| d == direction).unwrap_or(0);
+    prop_row(ui, "Burn wall", |ui| combo(ui, "sinker.side", &mut si, &SIDES));
+    *direction = SinkerSideDirection::ALL.get(si).copied().unwrap_or_default();
+    prop_row(ui, "Wall moves by", |ui| num(ui, u, amount));
+    prop_row(ui, "Electrode undersize", |ui| num(ui, u, undersize));
+    hint(ui, "per side; the move may not pass the undersize less the condition's spark gap - a move into the part is refused");
+}
+
+/// The pass rows (#543): single electrode, or the rough or finish of an
+/// undersized pair with the finished cavity it is judged against. A
+/// plain Sinker Burn's only - the side burn sizes its own electrode.
+fn pass_rows(ui: &mut Ui, u: Unit, pass: &mut SinkerPass, cavity_x: &mut f64, cavity_y: &mut f64) {
+    let mut pi = match pass {
+        SinkerPass::Single => 0,
+        SinkerPass::Rough => 1,
+        SinkerPass::Finish => 2,
+    };
+    prop_row(ui, "Electrode pass", |ui| combo(ui, "sinker.pass", &mut pi, &PASSES));
+    *pass = match pi {
+        1 => SinkerPass::Rough,
+        2 => SinkerPass::Finish,
+        _ => SinkerPass::Single,
+    };
+    if *pass != SinkerPass::Single {
+        prop_row(ui, "Finished cavity X", |ui| num(ui, u, cavity_x));
+        prop_row(ui, "Finished cavity Y", |ui| num(ui, u, cavity_y));
+        hint(ui, "the condition's undersize sizes the electrode; a finish must burn exactly this size, or it is refused - burn a rough or finish without an orbit");
+    }
+}
+
+/// The orbit rows (#544): the pattern, its radius and its count. A
+/// pattern picked fresh starts at a 0.1 mm radius, 4 vectors, 1 turn.
+fn orbit_rows(ui: &mut Ui, u: Unit, orbit: &mut Option<SinkerOrbit>) {
+    let mut oi = match orbit.map(|o| o.kind) {
+        None => 0,
+        Some(SinkerOrbitKind::Circular) => 1,
+        Some(SinkerOrbitKind::Vector) => 2,
+        Some(SinkerOrbitKind::Planetary) => 3,
+    };
+    prop_row(ui, "Orbit", |ui| combo(ui, "sinker.orbit", &mut oi, &ORBITS));
+    let kind = match oi {
+        1 => SinkerOrbitKind::Circular,
+        2 => SinkerOrbitKind::Vector,
+        3 => SinkerOrbitKind::Planetary,
+        _ => {
+            *orbit = None;
+            return;
+        }
+    };
+    let o = orbit.get_or_insert(SinkerOrbit { kind, radius: 0.1, vectors: 4, turns: 1 });
+    o.kind = kind;
+    prop_row(ui, "Orbit radius", |ui| num(ui, u, &mut o.radius));
+    if kind == SinkerOrbitKind::Vector {
+        prop_row(ui, "Vectors", |ui| ui.add(DragValue::new(&mut o.vectors).range(1..=camcraft_app::sinker_orbit::MAX_VECTORS)));
+    }
+    if kind == SinkerOrbitKind::Planetary {
+        prop_row(ui, "Turns", |ui| ui.add(DragValue::new(&mut o.turns).range(1..=camcraft_app::sinker_orbit::MAX_TURNS)));
+    }
+    hint(ui, "the machine must list the pattern and state a maximum orbit radius - otherwise the burn is refused");
+}
 
 pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut Cx<'_>) {
     let (u, tab, op_ctx) = (cx.u, cx.tab, cx.op_ctx);
-    let OpParams::SinkerBurn(p) = params else {
-        return;
+    let (p, side) = match params {
+        OpParams::SinkerBurn(p) => (p, None),
+        // #545: the side burn's plunge reads the burn's rows.
+        OpParams::SinkerSideBurn(SinkerSideBurnOp { burn, direction, amount, undersize }) => (burn, Some((direction, amount, undersize))),
+        _ => return,
     };
-    let SinkerBurnOp { clearance_z, top_z, floor_z, datum, depth, x, y, feed, condition, pass, cavity_x, cavity_y } = p;
+    let SinkerBurnOp { clearance_z, top_z, floor_z, datum, depth, x, y, feed, condition, pass, cavity_x, cavity_y, orbit } = p;
     if tab == SEC_GEO {
         prop_row(ui, "Burn at X", |ui| num(ui, u, x));
         prop_row(ui, "Burn at Y", |ui| num(ui, u, y));
@@ -45,22 +117,12 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             _ => SinkerDatum::WorkTop,
         };
         prop_row(ui, "Depth", |ui| num(ui, u, depth));
-        // #543: the rough and finish of an undersized pair.
-        let mut pi = match pass {
-            SinkerPass::Single => 0,
-            SinkerPass::Rough => 1,
-            SinkerPass::Finish => 2,
-        };
-        prop_row(ui, "Electrode pass", |ui| combo(ui, "sinker.pass", &mut pi, &PASSES));
-        *pass = match pi {
-            1 => SinkerPass::Rough,
-            2 => SinkerPass::Finish,
-            _ => SinkerPass::Single,
-        };
-        if *pass != SinkerPass::Single {
-            prop_row(ui, "Finished cavity X", |ui| num(ui, u, cavity_x));
-            prop_row(ui, "Finished cavity Y", |ui| num(ui, u, cavity_y));
-            hint(ui, "the condition's undersize sizes the electrode; a finish must burn exactly this size, or it is refused");
+        match side {
+            Some((direction, amount, undersize)) => side_rows(ui, u, direction, amount, undersize),
+            None => {
+                pass_rows(ui, u, pass, cavity_x, cavity_y);
+                orbit_rows(ui, u, orbit);
+            }
         }
     }
     if tab == SEC_FEEDS {

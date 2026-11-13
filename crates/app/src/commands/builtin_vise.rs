@@ -25,8 +25,9 @@ use crate::vise_fit;
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum VisePlacement {
     /// The vise frame's origin (the fixed jaw's face, centred, at the
-    /// floor; a self-centering vise's centre between the jaws, #787) at
-    /// this pose, the opening as given.
+    /// floor; a self-centering vise's centre between the jaws, #787, at
+    /// the floor or, with a grip step, at its ledge, #1274) at this pose,
+    /// the opening as given.
     At(Location),
     /// Against the setup's stock: fixed jaw on the stock's +y side,
     /// centred in x, floor under it, the opening the stock's y extent (a

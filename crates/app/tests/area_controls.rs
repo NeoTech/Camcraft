@@ -293,6 +293,7 @@ fn finish_parallel() -> OpParams {
         entry_ramp: false,
         steep_stepover: None,
         pencil_reference: None,
+        fill_openings: None,
     }
 }
 

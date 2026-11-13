@@ -55,11 +55,78 @@ fn sinker_burn_cavity_matches_golden() {
         feed: 40.0,
         gap: GAP,
         stand: None,
+        orbit: None,
     };
     let path = burn_to_depth(&p).expect("burns");
     let text = common::gen_to_cltext(&path);
     assert_eq!(camcraft_app::cl::text::to_text(&path).expect("text"), text);
     common::write_golden("sinker_burn_cavity.cl", &text);
+}
+
+/// The review of #1131: the plunge must go DOWN into the work. A spark
+/// gap that lifts the tip to the approach plane would post an upward
+/// "burn" feed; a gap not smaller than the burn below the work top
+/// leaves the electrode outside the work. Both refused by name.
+#[test]
+fn a_spark_gap_that_lifts_the_tip_out_of_the_work_is_refused_by_name() {
+    let mut p = SinkerParams {
+        x: 0.0,
+        y: 0.0,
+        approach_z: 25.0,
+        top_z: 20.0,
+        floor_z: 10.0,
+        model_floor_z: Some(0.0),
+        datum: SinkerDatum::WorkTop,
+        depth: 6.0,
+        electrode_len: 30.0,
+        feed: 40.0,
+        gap: 30.0,
+        stand: None,
+        orbit: None,
+    };
+    let e = burn_to_depth(&p).expect_err("a 30 mm gap feeds the tip up to Z 44");
+    assert!(e.to_string().contains("the spark gap 30.000 places the tip at or above the approach plane"), "{e}");
+    p.gap = 11.0; // tip Z 25: on the approach plane exactly
+    let e = burn_to_depth(&p).expect_err("a tip on the approach plane");
+    assert!(e.to_string().contains("at or above the approach plane"), "{e}");
+    p.gap = 6.0; // tip Z 20: on the work top, the burn is 6
+    let e = burn_to_depth(&p).expect_err("a gap as large as the burn");
+    assert!(e.to_string().contains("the spark gap 6.000 is not smaller than the burn's 6.000 below the work top"), "{e}");
+    p.gap = 5.5; // tip Z 19.5: inside the work
+    let path = burn_to_depth(&p).expect("a gap smaller than the burn burns");
+    assert!(path.moves.iter().all(|m| m.to.z <= 25.0), "nothing climbs past the approach plane");
+}
+
+/// #543 over the review of #1131: a rough or finish places its tip one
+/// undersize stand-off above the floor (never less than the gap), and
+/// the two refusals above read that stand - an undersize cannot lift
+/// the tip past the approach plane or out of the work where a gap of
+/// the same size would be refused.
+#[test]
+fn an_undersize_stand_off_that_lifts_the_tip_out_of_the_work_is_refused_by_name() {
+    let mut p = SinkerParams {
+        x: 0.0,
+        y: 0.0,
+        approach_z: 25.0,
+        top_z: 20.0,
+        floor_z: 10.0,
+        model_floor_z: Some(0.0),
+        datum: SinkerDatum::WorkTop,
+        depth: 6.0,
+        electrode_len: 30.0,
+        feed: 40.0,
+        gap: 0.5,
+        stand: Some(30.0),
+        orbit: None,
+    };
+    let e = burn_to_depth(&p).expect_err("a 30 mm stand-off feeds the tip up to Z 44");
+    assert!(e.to_string().contains("the undersize stand-off 30.000 places the tip at or above the approach plane"), "{e}");
+    p.stand = Some(6.0); // tip Z 20: on the work top, the burn is 6
+    let e = burn_to_depth(&p).expect_err("a stand-off as large as the burn");
+    assert!(e.to_string().contains("the undersize stand-off 6.000 is not smaller than the burn's 6.000 below the work top"), "{e}");
+    p.stand = Some(0.75); // tip Z 14.75: inside the work, above the gap
+    let path = burn_to_depth(&p).expect("a stand-off smaller than the burn burns");
+    assert!(path.moves.iter().any(|m| (m.to.z - 14.75).abs() < 1e-9), "the tip stops one stand-off above the floor");
 }
 
 #[test]
@@ -205,4 +272,49 @@ fn the_sinker_burn_is_driven_over_mcp_with_the_gui_commands() {
     assert!(text.contains("past the cavity floor datum"), "{text}");
     call(&mut s, &mut id, "undo", json!({}));
     call(&mut s, &mut id, "generate", json!({ "name": "Burn1" }));
+    // The review of #1131: no EDM dialect ships yet (#542), so the post
+    // tool refuses the burn by name and writes no file.
+    let nc = std::env::temp_dir().join(format!("camcraft-1131-mcp-{}.nc", std::process::id()));
+    let _ = std::fs::remove_file(&nc);
+    id += 1;
+    let args = json!({ "output": nc.display().to_string() });
+    let reply = s
+        .handle(&json!({ "jsonrpc": "2.0", "id": id, "method": "tools/call", "params": { "name": "post", "arguments": args } }))
+        .expect("a response");
+    let text = reply["result"]["content"][0]["text"].as_str().unwrap_or_default().to_owned();
+    assert_eq!(reply["result"]["isError"], json!(true), "{reply}");
+    assert!(text.contains("no post for a sinker EDM machine yet (#542)") && text.contains("Burn1"), "{text}");
+    assert!(!nc.exists(), "the refused post wrote {}", nc.display());
+}
+
+/// The #1131 refresh against main's wire EDM (`stamp_tool` split): the
+/// burn's stamp still digests the sinker condition's spark gap and the
+/// electrode's face width. A re-stated gap or a re-cut electrode reads
+/// Stale (the post refuses until regenerated); undo reads Ok again.
+#[test]
+fn a_changed_spark_gap_or_electrode_face_marks_the_burn_stale() {
+    use camcraft_app::commands::{ChangeTool, LoadMachine};
+    use camcraft_app::machine::parse_mch;
+    use camcraft_app::operation::{status_of, OpStatus};
+    let (world, mut h) = sinker_doc(6.0);
+    h.execute(&world, CreateOperation::new(&world, "Burn1", ELECTRODE, SrcRef::Stock, burn(SinkerDatum::WorkTop, 6.0, 14.0)).expect("create"));
+    h.execute(&world, GenerateOperation::new(&world, "Burn1").expect("generates"));
+    let status = |w: &World| status_of(w, &model::find_by_name(w, "Burn1").expect("op"));
+    assert_eq!(status(&world), OpStatus::Ok, "fresh after generating");
+
+    // The same sinker, its one condition's gap re-stated.
+    let mut v: serde_json::Value = serde_json::from_str(&sinker_machine()).expect("json");
+    v["edm"]["conditions"][0]["gap"] = serde_json::json!(GAP * 2.0);
+    let m = parse_mch(&v.to_string()).expect("sinker parses");
+    h.execute(&world, LoadMachine::new(&world, "sinker.mch".into(), Some(m)).expect("remount"));
+    assert_eq!(status(&world), OpStatus::Stale, "a re-stated spark gap is a different burn");
+    assert!(h.undo(&world));
+    assert_eq!(status(&world), OpStatus::Ok, "undo restores the gap the burn was cut with");
+
+    // A wider electrode face (same length and diameter) is a different burn.
+    let wider = camcraft_tools::electrode::electrode_tool(10.0, 7.0, 30.0, 15.0);
+    h.execute(&world, ChangeTool::new(&world, ELECTRODE, wider).expect("re-cut the electrode"));
+    assert_eq!(status(&world), OpStatus::Stale, "a re-cut electrode face is a different burn");
+    assert!(h.undo(&world));
+    assert_eq!(status(&world), OpStatus::Ok);
 }

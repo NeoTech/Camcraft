@@ -65,3 +65,31 @@ fn the_model_page_sets_the_budget_the_next_step_import_runs_under() {
     assert!(h.query_by_label("Imported under a STEP facet budget of 2000 facets").is_some());
     assert!(h.query_all_by_label_contains("Reduced fidelity").next().is_some(), "the undone model is flagged again");
 }
+
+/// #1185: a restart resets the session setting; the re-import still runs
+/// under the budget recorded with the model, and an explicit one wins.
+#[test]
+fn a_reimport_after_a_restart_uses_the_models_recorded_budget() {
+    let mut h = shell_harness();
+    let st = &mut h.state_mut().state;
+    assert_eq!(st.set_step_budget("2000"), Ok(2_000));
+    st.pending.push_back(CommandKind::ImportFile(step_path()));
+    st.settle();
+    let first = flags(st);
+    assert_eq!(first.0, Some(2_000));
+    // A restart: the window's setting is back at its launch default.
+    st.step_budget = crate::state::StepBudgetUi::default();
+    st.pending.push_back(CommandKind::ImportFile(step_path()));
+    st.settle();
+    assert_eq!(flags(st), first, "same recorded budget and same flag");
+    // An explicit new budget wins and is recorded.
+    assert_eq!(st.set_step_budget("5000000"), Ok(5_000_000));
+    st.pending.push_back(CommandKind::ImportFile(step_path()));
+    st.settle();
+    assert_eq!(flags(st), (Some(5_000_000), None));
+    // A fresh session over the 5M model re-imports at 5M, clear.
+    st.step_budget = crate::state::StepBudgetUi::default();
+    st.pending.push_back(CommandKind::ImportFile(step_path()));
+    st.settle();
+    assert_eq!(flags(st), (Some(5_000_000), None));
+}

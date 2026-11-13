@@ -28,7 +28,13 @@ use super::ResolvedHeights;
 /// origin, a 50 mm/min servo feed, and no condition named - the user
 /// names one of the machine's own (#290 D4: none ship).
 pub(super) fn seed_sinker_burn(c: &Carried) -> OpParams {
-    OpParams::SinkerBurn(SinkerBurnOp {
+    OpParams::SinkerBurn(burn_draft(c))
+}
+
+/// The burn's draft numbers ([`seed_sinker_burn`]); the side burn
+/// (#545) starts from the same plunge.
+pub(super) fn burn_draft(c: &Carried) -> SinkerBurnOp {
+    SinkerBurnOp {
         clearance_z: c.clearance,
         top_z: c.top,
         floor_z: c.bottom,
@@ -41,7 +47,8 @@ pub(super) fn seed_sinker_burn(c: &Carried) -> OpParams {
         pass: super::SinkerPass::Single,
         cavity_x: 0.0,
         cavity_y: 0.0,
-    })
+        orbit: None,
+    }
 }
 
 /// The spark gap per side of the burn's condition, read from the op's
@@ -53,37 +60,63 @@ pub(super) fn seed_sinker_burn(c: &Carried) -> OpParams {
 /// # Errors
 /// Each refusal above, in words.
 pub fn condition_gap(world: &World, setup: Option<&str>, op: &SinkerBurnOp) -> Result<f64, String> {
-    let c = condition(world, setup, op, &[ConditionField::Gap])?;
-    let label = crate::setup_mount::machine_label(&crate::machine::of_setup(world, setup));
-    c.gap.ok_or_else(|| format!("machine {label}: EDM condition {:?} states no spark gap", op.condition.trim()))
+    condition_gap_as(world, setup, "Sinker Burn", op)
 }
 
-/// The burn's condition with every field in `need` stated, read from the
-/// op's setup's machine - the one door #541's gap and #543's undersize
-/// share. Refused by name: a setup not on a sinker EDM, no condition
-/// named, no EDM section, or a condition missing or short of a field.
+/// [`condition_gap`] for any sinker kind: `label` names the op kind in
+/// the refusals (#545: the side burn reads the same door).
 ///
 /// # Errors
-/// Each refusal above, in words.
+/// [`condition_gap`]'s refusals.
+pub fn condition_gap_as(world: &World, setup: Option<&str>, label: &str, op: &SinkerBurnOp) -> Result<f64, String> {
+    let c = condition_as(world, setup, label, op, &[ConditionField::Gap])?;
+    let machine = crate::setup_mount::machine_label(&crate::machine::of_setup(world, setup));
+    c.gap.ok_or_else(|| format!("machine {machine}: EDM condition {:?} states no spark gap", op.condition.trim()))
+}
+
+/// The Sinker Burn's condition with every field in `need` stated
+/// ([`condition_as`] under the Sinker Burn's name) - the door #541's gap
+/// and #543's undersize share.
+///
+/// # Errors
+/// [`condition_as`]'s refusals.
 pub fn condition(
     world: &World,
     setup: Option<&str>,
     op: &SinkerBurnOp,
     need: &[ConditionField],
 ) -> Result<crate::machine::Condition, String> {
+    condition_as(world, setup, "Sinker Burn", op, need)
+}
+
+/// The burn's condition with every field in `need` stated, read from the
+/// op's setup's machine; `label` names the op kind in the refusals.
+/// Refused by name: a setup not on a sinker EDM, no condition named, no
+/// EDM section, or a condition missing or short of a field.
+///
+/// # Errors
+/// Each refusal above, in words.
+pub fn condition_as(
+    world: &World,
+    setup: Option<&str>,
+    label: &str,
+    op: &SinkerBurnOp,
+    need: &[ConditionField],
+) -> Result<crate::machine::Condition, String> {
     let kind = crate::machine::kind_of_setup(world, setup);
     if kind != Kind::SinkerEdm {
         return Err(format!(
-            "a Sinker Burn burns on a sinker EDM; the setup's machine is a {}",
+            "a {label} burns on a sinker EDM; the setup's machine is a {}",
             kind.word()
         ));
     }
+    let what = label;
     let mounted = crate::machine::of_setup(world, setup);
     let label = crate::setup_mount::machine_label(&mounted);
     let id = op.condition.trim();
     if id.is_empty() {
         return Err(format!(
-            "the Sinker Burn names no EDM condition - name one of machine {label}'s conditions (its spark gap places the electrode)"
+            "the {what} names no EDM condition - name one of machine {label}'s conditions (its spark gap places the electrode)"
         ));
     }
     let edm = mounted
@@ -92,6 +125,51 @@ pub fn condition(
         .and_then(|m| m.edm.as_ref())
         .ok_or_else(|| format!("machine {label} states no EDM section, so no condition {id:?}"))?;
     edm.condition(&label, id, need).cloned()
+}
+
+/// The orbit's machine law (#544, #290 D6): the setup's sinker lists
+/// the op's pattern under `edm.orbits` and states a maximum orbit
+/// radius the op's radius does not exceed. No orbit passes untouched.
+/// Refused by name: an unlisted pattern, an unstated maximum (absent is
+/// not zero - nor unlimited), a radius past it.
+///
+/// # Errors
+/// Each refusal above, in words.
+pub fn orbit_law(world: &World, setup: Option<&str>, op: &SinkerBurnOp) -> Result<(), String> {
+    let Some(o) = op.orbit.as_ref() else { return Ok(()) };
+    let mounted = crate::machine::of_setup(world, setup);
+    let label = crate::setup_mount::machine_label(&mounted);
+    let kind = o.kind.word();
+    let edm = mounted.1.as_ref().and_then(|m| m.edm.as_ref());
+    if !edm.is_some_and(|e| e.orbits.iter().any(|w| w.kind == kind)) {
+        return Err(format!(
+            "machine {label} lists no {kind} orbit under edm.orbits - burn without an orbit, or pick a pattern the machine offers"
+        ));
+    }
+    let Some(max) = edm.and_then(|e| e.max_orbit_radius) else {
+        return Err(format!(
+            "machine {label} states no maximum orbit radius (edm.max_orbit_radius) - a {kind} orbit cannot be checked against it"
+        ));
+    };
+    if o.radius > max {
+        return Err(format!(
+            "the {kind} orbit radius {:.3} exceeds machine {label}'s maximum orbit radius {max:.3}",
+            o.radius
+        ));
+    }
+    Ok(())
+}
+
+/// What the burn reads from its machine before it generates: the
+/// condition's spark gap ([`condition_gap`]), once the orbit law
+/// ([`orbit_law`]) holds. The job and the staleness stamp read this.
+///
+/// # Errors
+/// Either law's refusal.
+pub fn burn_gap(world: &World, setup: Option<&str>, op: &SinkerBurnOp) -> Result<f64, String> {
+    let gap = condition_gap(world, setup, op)?;
+    orbit_law(world, setup, op)?;
+    Ok(gap)
 }
 
 /// The generator's numbers from the op's, the electrode's and the world's.
@@ -134,6 +212,7 @@ pub fn sinker_params(
         feed: op.feed,
         gap,
         stand: None,
+        orbit: op.orbit,
     })
 }
 
@@ -149,6 +228,9 @@ pub(super) fn generate_sinker(
     pass: Option<Result<PassRead, String>>,
     facets: &[Triangle],
 ) -> Result<(Toolpath, Vec<Warning>), GenError> {
+    if let Some(why) = op.pass_refusal() {
+        return Err(GenError::Invalid(why));
+    }
     let mut p = sinker_params(op, tool, hs, gap, facets)?;
     let read = match (op.pass, pass) {
         (SinkerPass::Single, _) => None,

@@ -1,0 +1,37 @@
+# #1071: a matched thread mill verifies clean; the gouge laws read its major circle
+
+- **Found:** the issue said a stock-sourced thread "never sees this". It does: the same matched thread from the stock source was blocked by 52 gouges and 21 crossing pairs. `mill2d_c` never asserted the warnings, so no thread mill could post from any source.
+- **Chosen (law (b)):** the Thread arm moves each declared hole's rim out to the thread's major circle (declared radius + 0.5413 x pitch, the depth the generator cuts to) after the region is built (`material_source::major_rims`). This covers every source and the area-controlled region alike. A loop that is the hole's minor rim (ours, or the model's own for a through hole) gives way to it; every other wall stays.
+- **Chosen (solid law):** for a thread mill, a hit is excused only when the facet is the thread's own material and the swept cutter stays inside the major cylinder (`sim::verify::thread_bore`). The thread's own material is the minor wall (near-vertical, every vertex on the declared minor circle within max(2 % r, 0.1 mm)), or the face the hole opens through (a facet with a vertex on the minor circle, wholly at or above the hole's entry). A floor, a wall of another radius and a cut past the major circle still convict. These are pinned: a thread past a nearby wall, a thread declared wider than the model's hole, and a thread taken below the model's floor.
+  - Dropped: pushing the mesh's wall vertices out to the major circle. With no vertex ring at the thread's floor, the wall becomes a slant below it, and a matched cutter still convicts.
+  - Dropped: dropping the wall facets. That breaks the solid's ray parity.
+- **Chosen (crossing law):** two chords only touching (an endpoint within 1 nm of the other's line) are no crossing. `proper_cross` excluded a touch only at an exactly zero orientation. The retract runs the ride backwards, so its joints stand a last bit off their twins, and both the touches and the collinear overlap read as crossings. A real crossing keeps every endpoint off the other line; it is pinned down to a 0.001 rad angle.
+  - Dropped: a parallel-only guard (sin < 1e-9). It removed 5 of the 21 pairs; the rest were touches at shared joints.
+- **Left:** the thread flanks are not modelled. The whole minor-to-major annulus is read as removable, which is what a thread mill cuts within its form. #986 owns the form.
+
+## Review round (PR #1099, f122474d)
+
+- **Fixed (blocker):** the grant recognised the model's wall with the drill rim's band, max(2 % r, 0.1 mm), but held the cutter to the DECLARED major circle. A declared hole up to that band wider than, or off the centre of, the model's hole therefore overcut its thread silently (the reviewer measured 0.05-0.30 mm; 37 % of an M3's depth).
+  - Now the band only recognises the wall. The cap reads the hit facet's own radius about the axis (its nearest on-circle vertex) plus the thread depth plus the law's allowance.
+  - `major_rims` grows a through hole's major circle from the model's own rim loop (its nearest vertex to the declared centre) when that stands nearer than the declared circle.
+  - Pinned: r 5.05 / 5.1 declared on r 5, r 15.25 on r 15, centres 0.05 / 0.1 / 0.28 mm off, and a through hole each way all convict. Matched r 15, a matched through hole, and a 5 um off-centre declaration stay clean.
+  - Dropped: only tightening the band to the allowance. The model's tessellation vertices do sit on the circle, but the band is a recognition test; the cap is what measures the cut, so the cap is the fix and the band stays as it was.
+- **Noted (crossing law scope):** `touching` reaches every operation's feed-feed crossing law, not only threads. It excuses a pair when any endpoint lies within 1 nm of the other chord's line. So a real crossing whose vertex lands within 1 nm of another chord, then continues across it, is read as two touches.
+  - The old predicate already missed that same case at an exactly zero orientation (an axis-aligned lattice), so the widening is the 1 nm band and nothing else.
+  - It matches the adaptive planner's own `guard::crosses` (`TOUCH` = 1e-9 mm, #1048), so the plan check and the verifier agree, which #1129 asks for.
+  - Scoping it to retraces only (touching chords also near-collinear) was considered. It was dropped: #1129 wants the general rule, and the planner already applies it everywhere.
+- **Noted (reduced fidelity):** `major_rims` moves the rim by exactly H, with no excess term. On a coarse model the containment solid law, whose allowance reads the excess, is the backstop. The function's doc says so.
+
+## Third review round (434a464a)
+
+- **Chosen:** the wall is measured at the facet's (or rim loop's) NEAREST POINT to the bore axis, not at its nearest vertex. That covers both the solid law's `thread_bore::wall_radius` (the wall and the mouth branches) and `major_rims`. A chord between two on-circle vertices dips inside the circle by its sagitta.
+  - Recognition: the facet's nearest point must itself be on the band, so a D-bore's flat (1 mm in) or a step reaching inside the mouth is never read as the thread's material.
+  - Grading: the wall stands at that nearest point, credited at most `CHORD_CREDIT` toward its nearest vertex.
+  - Pins: `a_flat_whose_corners_stand_on_the_circle_convicts` (a D-bore, an octagon and a 16-gon on r 5, plus a through octagon) and `a_fine_polygon_bore_still_verifies_clean` (48 and 96 sides). Unit tests in `thread_bore.rs`. The D-bore case verified with no warning on the old reading, which was checked.
+- **Chosen:** `CHORD_CREDIT` = the program sim's `DEV_TOL`, 0.01 mm.
+  - Why: a tessellated round hole cannot be told from a polygon by shape alone, only by how far its chords dip. The STEP importer meshes at half that tolerance (`CHORD_CAP`), so a full-fidelity round hole is credited whole. The r 15 96-gon's 8 µm dip is a hand-built mesh coarser than the importer promises, and it is still credited whole. A flat that dips further is graded where it stands, less 0.01 mm.
+  - A reduced-fidelity model's excess still rides the law's allowance, as before.
+  - Dropped: the bare nearest point with no credit. Our own `disk_loop` rim is an inscribed polygon (a dip up to `RIM_SAG_BUDGET`), and a real model's tessellation dips too. Both made every matched thread convict by a few micrometres.
+  - Dropped: crediting only our own polygon's dip, 5 µm at most. A 96-gon at r 15 (8 µm) then convicted.
+- **Moved:** `major_rims`, `thread_bores` and the new `loop_nearest` went to `operation/thread_rims.rs`. `material_source.rs` stays at main's 350 lines.
+- **Not changed (noted by the review):** main's own `chord_dip` hole-wall grant for the containment kinds also credits a coarse polygon's flats. It is off this grant's path and worth its own issue.
