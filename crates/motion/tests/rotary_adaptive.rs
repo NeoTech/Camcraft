@@ -37,9 +37,13 @@ use rotary_adaptive_fixture::{
     assert_refusals_named, bar, control, params, planner_overloads, read_levels, ring_tag, stock, LevelRead, R, TAU,
 };
 
-/// The whole turned bar in an r7 bar stock: three developed levels of
-/// real material (radius 6.5, 6.0, 5.5) go to the HSM planner. About
-/// ten minutes in debug, a minute in release: the heavy lane's.
+/// The whole turned bar in an r7 bar stock: four developed levels of
+/// real material (radius 6.5, 6.0, 5.5, 5.0) are HSM-planned. Level 5.0
+/// was refused past the planning budget until issue #1051: its first
+/// margin attempt runs out of margin and the second was refused for what
+/// the first had spent (`adaptive::budget`, now held per attempt; its
+/// sub-micron twins are pinned in `adaptive::budget::twins`). About ten
+/// minutes in debug, a minute in release: the heavy lane's.
 #[test]
 #[ignore = "heavy lane: release --ignored (three HSM plans over the developed bar, ~10 min debug)"]
 fn adaptive_plans_the_developed_levels_under_the_load_and_kink_laws() {
@@ -75,6 +79,10 @@ fn adaptive_plans_the_developed_levels_under_the_load_and_kink_laws() {
         "a developed level under the skin is HSM-planned, its proved arcs posted: {:?}",
         dev.notes
     );
+    assert!(!dev.notes.iter().any(|n| n.contains("planning budget")), "a level is refused past the budget: {:?}", dev.notes);
+    for rho in [6.5, 6.0, 5.5, 5.0] {
+        assert!(planned.iter().any(|r| (r.rho - rho).abs() < 1e-6 && r.arcs > 0), "radius {rho} is HSM-planned: {:?}", dev.notes);
+    }
     for r in &planned {
         assert!(
             r.load <= DEFAULT_OPTIMAL_LOAD * 1.35,
@@ -151,6 +159,9 @@ fn pull_back(world: &Toolpath, rho_ref: f64) -> Toolpath {
 /// is lifted - every developed level under the skin reaches the HSM
 /// planner, which plans it or refuses it naming its radius, Offset rings
 /// cutting the refused ones - and nothing it plans names an overload.
+/// Since issue #1051 (the planning budget held per margin attempt) both
+/// levels under the skin, 6.0 and 5.0, are HSM-planned; before, they
+/// were refused past the budget, or not, on nanometres.
 /// Still ~3 min in debug (the skin level's two-lap plan): heavy lane.
 #[test]
 #[ignore = "heavy lane: release --ignored (the developed window's HSM plan, ~3 min debug)"]
@@ -177,6 +188,10 @@ fn the_developed_window_reaches_the_planner_and_names_each_refusal() {
         dev.notes
     );
     assert_refusals_named(&reads, 7.0);
+    assert!(!dev.notes.iter().any(|n| n.contains("planning budget")), "a level is refused past the budget: {:?}", dev.notes);
+    for rho in [6.0, 5.0] {
+        assert!(reads.iter().any(|r| (r.rho - rho).abs() < 1e-6 && r.arcs > 0 && !r.ringed(7.0)), "radius {rho} is HSM-planned: {:?}", dev.notes);
+    }
     let over = planner_overloads(&dev.notes);
     assert!(over.is_empty(), "the planner's own load reading broke the law: {over:?}");
     for r in reads.iter().filter(|r| r.arcs > 0) {
@@ -221,19 +236,28 @@ fn a_window_too_narrow_for_the_helix_is_refused_by_name_before_planning() {
     assert_refusals_named(&reads, 7.0);
 }
 
-/// Issue #55, decided final: on the app suites' r6.2 bar the neck's
-/// material levels (5.7, 5.2) stay refused for out-of-cut travel. Each
-/// is a band ~78 x 7.8 (5.2: ~78 x 5.8) round the developed neck; the
-/// spiral re-walks the whole cleared ring every revolution, so only its
-/// microlift returns keep it in cut, and those read 48.0 deg against the
-/// plan's 47.5 bound (a named overload if posted). Unlifted the spiral
-/// rides 8208 mm out of cut for 2529 in cut (5.2: 8828 for 2254), past
-/// the 1.5x budget. The band's own planner is the thin-band work (#44,
-/// #47), not the wrap's: here the refusal is pinned by name, the skin
-/// level still HSM-planned. ~3 min debug: heavy lane.
+/// Issues #55 and #982: on the app suites' r6.2 bar the neck's material
+/// levels (5.7, 5.2) are bands ~78 x 7.8 (5.2: ~78 x 5.8) round the
+/// developed neck. The spiral re-walks the whole cleared ring every
+/// revolution, so only its microlift returns keep it in cut (unlifted it
+/// rides ~8200 mm out of cut for ~2500 in cut, past the 1.5x budget,
+/// and Offset rings cut the band at a full-width load). #55 pinned the
+/// levels refused for travel: the lifted plans read 48.0 deg against the
+/// 47.5 bound. #982 found that reading was a sliver the pieces' longer
+/// chords left for the next piece - and the refusal a coin: with every
+/// ring's opening 16, 62, 250 or 510 nm deeper one level or the other
+/// was HSM-planned anyway. The pieces now take longer chords only where
+/// those leave no sliver, so both levels read the spiral's own 47.5 and
+/// are HSM-planned on microlift returns, with or without the nanometres:
+/// nothing refused for travel, no planner overload named. Issue #1050:
+/// both are held to the whole bar's laws (load within optimal + 35 %,
+/// no in-cut break past 5 degrees) - the bore exit's conforming contact
+/// is held on a coarse rim too and the closing laps' fillet kinks are
+/// spread (`adaptive::conform`); they read 20.3 % D and 3 breaks
+/// before. ~3 min debug: heavy lane.
 #[test]
 #[ignore = "heavy lane: release --ignored (three HSM plans over the r6.2 bar, ~3 min debug)"]
-fn the_r62_neck_levels_are_refused_for_travel_by_name() {
+fn the_r62_neck_levels_are_hsm_planned_on_microlift_returns() {
     let (f, st) = (bar(), stock(6.2, -16.0, 16.0));
     let p = params(PocketStrategy::Adaptive);
     let dev = match rotary_offset_developed(&f, Some(&st), &p) {
@@ -244,17 +268,21 @@ fn the_r62_neck_levels_are_refused_for_travel_by_name() {
     println!("r6.2 notes: {:?}", dev.notes);
     let reads = read_levels(&dev, 6.2, 0.0, p.stepdown);
     for r in &reads {
-        println!("radius {:.3}: {} planar moves ({} arcs), rings {}", r.rho, r.moves, r.arcs, r.ringed(6.2));
-    }
-    for rho in [5.7, 5.2] {
-        let tag = ring_tag(rho);
-        assert!(
-            dev.notes.iter().any(|n| n.contains("out of cut") && n.contains("(over 1.5x)") && n.ends_with(&tag)),
-            "radius {rho}: refused for travel, by name: {:?}",
-            dev.notes
+        println!(
+            "radius {:.3}: {} planar moves ({} arcs), load {:.1}% D, breaks>5 {}, rings {}",
+            r.rho, r.moves, r.arcs, r.load * 100.0, r.breaks, r.ringed(6.2)
         );
-        assert!(reads.iter().any(|r| (r.rho - rho).abs() < 1e-6 && r.ringed(6.2)), "radius {rho} is cut by rings");
     }
+    assert!(!dev.notes.iter().any(|n| n.contains("out of cut")), "a level is refused for travel: {:?}", dev.notes);
+    for rho in [5.7, 5.2] {
+        let Some(r) = reads.iter().find(|r| (r.rho - rho).abs() < 1e-6) else { panic!("radius {rho} is not cut: {:?}", dev.notes) };
+        assert!(r.arcs > 0 && !r.ringed(6.2) && !r.named, "radius {rho} is HSM-planned, its proved arcs posted: {:?}", dev.notes);
+        assert!(r.load <= DEFAULT_OPTIMAL_LOAD * 1.35, "radius {rho}: load {:.1}% D past the optimal + 35 %", r.load * 100.0);
+        assert_eq!(r.breaks, 0, "radius {rho}: in-cut breaks past 5 deg");
+    }
+    // Each neck level says how it is kept in cut.
+    let lifted = dev.notes.iter().filter(|n| n.contains("microlift returns") && n.contains("replace")).count();
+    assert!(lifted >= 2, "both neck levels are cut on microlift returns: {:?}", dev.notes);
     assert!(reads.iter().any(|r| (r.rho - 6.2).abs() < 1e-6 && r.arcs > 0), "the skin level stays HSM-planned");
     assert_refusals_named(&reads, 6.2);
     let over = planner_overloads(&dev.notes);

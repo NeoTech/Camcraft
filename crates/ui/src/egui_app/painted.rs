@@ -193,6 +193,8 @@ pub struct Row {
     /// no PNG - section headers - and for the placeholder rows; the
     /// painted `glyph` is the no-GPU twin of every real icon.
     pub icon: Option<Icon>,
+    /// An op row's status badge (#661), painted small over `icon`.
+    pub badge: Option<Icon>,
     /// Selection band - the WORLD's selection mirrored, never a local flag.
     pub selected: bool,
     pub hidden: bool,
@@ -229,7 +231,7 @@ const EYE_RESERVE: f32 = 24.0;
 
 /// Rows whose viewport visibility the user can toggle get the eye.
 pub(crate) fn has_eye(kind: Kind) -> bool {
-    matches!(kind, Kind::Model | Kind::Fixture | Kind::Stock | Kind::Wcs | Kind::Op)
+    matches!(kind, Kind::Model | Kind::Fixture | Kind::Stock | Kind::Wcs | Kind::Op | Kind::Setup(_))
 }
 
 /// Hit result for one frame of the tree.
@@ -324,17 +326,10 @@ pub fn tree(
         // (#524), as the ribbon tints its icons, never a white wash
         // that vanishes on a light panel.
         let (icon_ink, eye_ink) = row_inks(pal, row.hidden, row.selected);
-        let tex = icons.and_then(|s| row.icon.map(|i| s.texture(i))).flatten();
-        if let Some(tex) = tex {
-            painter.image(
-                tex.id(),
-                Rect::from_center_size(Pos2::new(gx, rr.center().y), Vec2::splat(TREE_INK)),
-                UV_FULL,
-                icon_ink,
-            );
-        }
+        let ground = if row.selected { pal.selection_bg } else if row_resp.hovered() { pal.field_hover } else { ui.visuals().panel_fill };
+        let painted = super::tree_badges::row_glyph(painter, icons, row.icon, row.badge, Pos2::new(gx, rr.center().y), icon_ink, ground);
         let mut shapes = Vec::new();
-        if tex.is_none() {
+        if !painted {
             super::tree_glyphs::glyph(&mut shapes, Pos2::new(gx, rr.center().y), row.kind, pal);
         }
         if let Some(er) = eye_rect {

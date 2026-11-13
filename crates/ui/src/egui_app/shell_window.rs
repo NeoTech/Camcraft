@@ -143,6 +143,8 @@ impl Shell {
         let mut state = State::new();
         // #662: the user's recent projects and models, read once.
         state.load_recent();
+        // #645: the user's view preferences (the #727 name toggle), read once.
+        state.load_view();
         // #877: the user's theme and colour-vision mode, read once.
         state.load_prefs();
         let dock_state = build_dock();
@@ -189,6 +191,7 @@ impl Shell {
     fn init_gpu(&mut self, el: &ActiveEventLoop) {
         let attrs = Window::default_attributes()
             .with_title(self.window_title.clone())
+            .with_window_icon(super::app_icon::window_icon())
             .with_inner_size(LogicalSize::new(1280.0, 800.0));
         let window = match el.create_window(attrs) {
             Ok(w) => Arc::new(w),

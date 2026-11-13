@@ -17,6 +17,10 @@ truck = ["dep:truck-shapeops", "dep:truck-modeling", "dep:truck-meshalgo"]
 
 [dependencies]
 thiserror = { workspace = true }
+# The Solidcraft reader (#1456): deflate for the .sc ZIP container (already
+# in Cargo.lock through png/tiff), JSON for its manifests.
+flate2 = "1.1"
+serde_json = { workspace = true }
 # The SMLib port (tangency-labs, Apache-2.0, pure Rust, forbid(unsafe_code))
 # and its STEP reader, at ONE commit of the owner's fork (#916): the STEP
 # crate is unpublished and depends by path on the kernel beside it, so the

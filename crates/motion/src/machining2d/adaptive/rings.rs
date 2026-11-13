@@ -12,6 +12,9 @@ use super::GenError;
 use super::front::{densify, dist, len, rotate_to, thin};
 use super::near::SegIndex;
 
+#[path = "simplify.rs"]
+mod simplify;
+
 /// Arc flattening of the rings' fillets (mm): about 2.6 degrees a chord
 /// on a 1 mm fillet.
 pub(super) const ARC_TOL: f64 = 2.5e-4;
@@ -33,8 +36,42 @@ pub(super) const SEG: f64 = 0.2;
 /// The morph's nearest-point grid (mm).
 pub(super) const NEAR_CELL: f64 = 0.5;
 
+/// Outline approximation before the opening (mm, issue #882): the
+/// fillets' own arc tolerance. Nanometre chords otherwise make the
+/// erosion do quadratic work on the planner's repeatedly grown rings.
+pub(super) const SIMPLIFY: f64 = ARC_TOL;
+
+/// Extra erosion (mm): the approximation and round-join flattening,
+/// plus 10 nm for the boolean lattice. This margin is the containment
+/// guarantee: Douglas-Peucker keeps the light outline within `SIMPLIFY`
+/// of the original, so eroding it by `rho + INSET` and dilating by
+/// `rho` cannot cross a wall, island, hole, notch or the seam. It must
+/// stay above `SIMPLIFY + ARC_TOL` (pinned by a test); mutation review
+/// on PR #1376 showed `INSET = 0` leaks or leaves slivers, while the
+/// intersection and fallback alone do not hold containment.
+pub(super) const INSET: f64 = SIMPLIFY + ARC_TOL + 1e-5;
+
+/// Open a lighter outline, eroded `INSET` deeper than it is dilated
+/// back - that margin keeps the opening inside the original region.
+/// The exact intersection with the original region is extra protection
+/// on top (defence in depth), not the guarantee.
 pub(super) fn open(r: &Region, rho: f64) -> Result<Region, GenError> {
-    Ok(r.offset_fine(-rho, ARC_TOL)?.offset_fine(rho, ARC_TOL)?)
+    #[cfg(test)]
+    let inset = OPEN_INSET.with(std::cell::Cell::get);
+    #[cfg(not(test))]
+    let inset = 0.0;
+    let light = simplify::within(r, SIMPLIFY);
+    let source = light.as_ref().unwrap_or(r);
+    let opened = source.offset_fine(-(rho + INSET + inset), ARC_TOL)?.offset_fine(rho, ARC_TOL)?;
+    Ok(opened.intersect(r)?)
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Tests only (issue #982): the opening erodes this much (mm) deeper
+    /// than it dilates back - a sub-micron perturbation of every ring, to
+    /// pin that a plan's verdict does not turn on it.
+    pub(super) static OPEN_INSET: std::cell::Cell<f64> = const { std::cell::Cell::new(0.0) };
 }
 
 pub(super) fn one_loop(r: &Region) -> bool {

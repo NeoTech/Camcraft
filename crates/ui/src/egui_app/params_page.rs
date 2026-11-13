@@ -24,6 +24,9 @@ pub(super) struct Cx<'a> {
     /// The Circular op's circle read off its picks (`Some(Ok)`), or the
     /// fit's refusal; `None` while the typed centre and radius rule.
     pub circle_fit: &'a Option<Result<(camcraft_app::geo2d::Point2, f64), String>>,
+    /// #1504: the Slot's room read off its picks (`Some(Ok)` when the
+    /// slot fits it), or the refusal; `None` while the typed slot rules.
+    pub slot_fit: &'a Option<Result<String, String>>,
 }
 
 pub(super) fn params_fields(ui: &mut Ui, state: &mut State, tab: usize) {
@@ -74,6 +77,7 @@ pub(super) fn params_fields(ui: &mut Ui, state: &mut State, tab: usize) {
                     camcraft_app::cl::CycleKind::FloatingTap => "Tap (floating holder)",
                     camcraft_app::cl::CycleKind::Bore => "Bore",
                     camcraft_app::cl::CycleKind::BackBore => "Back bore",
+                    camcraft_app::cl::CycleKind::Ream => "Ream (feed in, feed out)",
                 };
                 Some(format!(
                     "Auto -> {name} for this tool and a depth of {}",
@@ -148,6 +152,23 @@ pub(super) fn params_fields(ui: &mut Ui, state: &mut State, tab: usize) {
 
     // The picks' circle, through the same law generation runs, for the
     // draft's own source (the typed fields stay untouched beneath it).
+    let draft_op = || camcraft_app::schema::Operation {
+        tool: state.op_ui.tool.clone(),
+        src: state.op_ui.src(),
+        params: state.op_ui.params.clone(),
+        stamp: None,
+        setup: op_ctx.clone(),
+        area: Default::default(),
+        coolant: Default::default(),
+        after: Default::default(),
+        suppressed: false,
+    };
+    // #1504: the Slot's picks, through the same law generation runs.
+    let slot_fit = if matches!(&state.op_ui.params, OpParams::Slot { .. }) {
+        operation::slot_fit_of(&state.world, &draft_op())
+    } else {
+        None
+    };
     let circle_fit = if matches!(&state.op_ui.params, OpParams::Circular { .. }) {
         let draft = camcraft_app::schema::Operation {
             tool: state.op_ui.tool.clone(),
@@ -174,6 +195,7 @@ pub(super) fn params_fields(ui: &mut Ui, state: &mut State, tab: usize) {
         engrave,
         detect_holes: false,
         circle_fit: &circle_fit,
+        slot_fit: &slot_fit,
     };
     let world = &state.world;
     let params = &mut state.op_ui.params;
@@ -182,6 +204,8 @@ pub(super) fn params_fields(ui: &mut Ui, state: &mut State, tab: usize) {
     super::holes_page::fields(ui, world, params, &mut cx);
     super::probe_page::fields(ui, world, params, &mut cx);
     super::plasma_page::fields(ui, world, params, &mut cx);
+    super::wire_page::fields(ui, world, params, &mut cx);
+    super::sinker_page::fields(ui, world, params, &mut cx);
     super::trochoid_page::fields(ui, world, params, &mut cx);
     super::mill3d_page::fields(ui, world, params, &mut cx);
     super::multiaxis_page::fields(ui, world, params, &mut cx);
