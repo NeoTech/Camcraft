@@ -30,7 +30,8 @@ fn open(h: &mut Harness<'static, ShellUi>) {
     h.run_steps(3);
 }
 
-/// One setup, a cube marked as its fixture, a built-in vise and a plate.
+/// One setup, a cube marked as its fixture, a built-in vise and a plate
+/// with a dowel grid.
 fn furnished() -> Harness<'static, ShellUi> {
     let mut h = blank_with_setup();
     {
@@ -40,7 +41,15 @@ fn furnished() -> Harness<'static, ShellUi> {
         ));
         st.settle();
         st.pending.push_back(CommandKind::TagFixture { name: "cube".into(), setup: Some("Setup1".into()) });
-        let p = camcraft_app::plate::preset("12 x 12 in").map(camcraft_app::plate::PlatePreset::params).expect("preset");
+        let mut p = camcraft_app::plate::preset("12 x 12 in").map(camcraft_app::plate::PlatePreset::params).expect("preset");
+        // A dowel grid, so the place form can offer its dowel pair.
+        p.dowels = Some(camcraft_app::plate::Dowels {
+            pitch_x: 50.0,
+            pitch_y: 50.0,
+            offset_x: 25.0,
+            offset_y: 25.0,
+            diameter: 10.0,
+        });
         st.pending.push_back(CommandKind::InsertFixturePlate {
             setup: Some("Setup1".into()),
             params: p,
@@ -196,6 +205,11 @@ fn the_fixtures_page_keeps_every_input_named() {
     h.run_steps(2);
     h.query_all_by_label("Place on plate…").next().expect("a Place on plate… verb").click();
     h.run_steps(3);
+    // The dowel inputs draw only for a dowel pair: turn it on so they are
+    // checked too.
+    h.get_by_label("Dowel pair").click();
+    h.run_steps(3);
+    assert!(h.query_all_by_label("Dowels").count() >= 2, "the dowel fields did not draw");
     let (bad, seen) = super::super::fixture_plate_tests::unnamed_inputs(&h);
     assert!(seen >= 6, "only {seen} inputs found: the forms did not open");
     assert!(bad.is_empty(), "unnamed inputs {bad:?}");
