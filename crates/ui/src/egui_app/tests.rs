@@ -98,6 +98,7 @@ mod gcode_viewer;
 mod first_setup;
 mod structural;
 mod cycle_combo;
+mod radial_step_field;
 // #661: every operation kind wears its own SVG-mastered glyph.
 mod op_icon_table;
 mod tool_icon_wiring;
@@ -986,7 +987,8 @@ fn every_field_lives_on_exactly_one_section() {
                     "Heights",
                     vec!["Clearance Z", "Levels", "Top Z", "Bottom Z", "Stepdown"],
                 ),
-                ("Passes", vec!["Stepover", "Stock to leave", "Optimal load (% of D)"]),
+                // #1512: the load sets the step, so no Stepover row.
+                ("Passes", vec!["Stock to leave", "Optimal load (% of D)"]),
                 ("Lead in / Lead out", vec!["Entry", "Level to level", "Between levels", "Between passes"]),
                 ("Feeds", vec!["Feed", "Plunge feed", "Climb milling"]),
             ],
