@@ -180,3 +180,89 @@ fn the_tormach_drill_golden_is_a_runnable_program() {
     assert_eq!(lines.first(), Some(&"(Tormach 770MX)"), "posted for the 770MX");
     assert!(nc.contains("(OPERATION: "), "the operation is named:\n{nc}");
 }
+
+/// A one-section program whose tool and spindle speed the caller states,
+/// with a plain feed move: what a 0-rpm section must not post as a cut.
+fn zero_rpm_section(kind: &str) -> String {
+    format!(
+        "PARAM SpindleSpeed 0
+PARAM ToolKind {kind}
+TOOL 2 6MM END MILL
+SECTION
+Rapid 10000 10000 50000
+Rapid 10000 10000 25000
+Feed 10000 10000 15000 F300000
+Rapid 10000 10000 50000
+ENDSECTION
+"
+    )
+}
+
+#[test]
+fn a_tormach_cutter_section_stating_zero_rpm_is_refused_by_name() {
+    // The M3 review (#1367): the probe exemption read "0 rpm" alone, so a
+    // cutting tool at 0 rpm posted M5 and then G1 F.. with no refusal. A
+    // section is a probe's only when its tool is a touch probe.
+    let cps = read("assets/posts/tormach.cps");
+    for kind in ["end mill", "drill", "ball nose"] {
+        let out = engine::run(&cps, &mx770(), &zero_rpm_section(kind)).expect("runs");
+        assert!(
+            out.warnings.iter().any(|w| w.contains("feed move G1") && w.contains("with the spindle stopped")),
+            "{kind} at 0 rpm cutting must be refused by name, got {:?}\n{}",
+            out.warnings,
+            out.program
+        );
+        assert!(!out.program.lines().any(|l| l.starts_with("G1 ")), "{kind}: no G1 is posted:\n{}", out.program);
+    }
+    // A 0-rpm section that states no tool kind at all is no probe either.
+    let bare = zero_rpm_section("x").replace("PARAM ToolKind x\n", "");
+    let out = engine::run(&cps, &mx770(), &bare).expect("runs");
+    assert!(
+        out.warnings.iter().any(|w| w.contains("with the spindle stopped")),
+        "0 rpm with no tool kind must be refused, got {:?}",
+        out.warnings
+    );
+}
+
+#[test]
+fn a_tormach_touch_probe_section_still_posts() {
+    // The same section on a touch probe: stopped on purpose, and posted.
+    let cps = read("assets/posts/tormach.cps");
+    let out = engine::run(&cps, &mx770(), &zero_rpm_section("touch probe")).expect("runs");
+    assert!(out.warnings.is_empty(), "a probe section posts clean: {:?}\n{}", out.warnings, out.program);
+    let lines: Vec<&str> = out.program.lines().collect();
+    let m5 = lines.iter().position(|l| *l == "M5").expect("the probe states M5");
+    let g1 = lines.iter().position(|l| l.starts_with("G1 ")).expect("the probe's feed posts");
+    assert!(m5 < g1, "M5 before the stylus feeds:\n{}", out.program);
+    assert!(!lines.iter().any(|l| l.ends_with(" M3")), "no spindle start on a probe:\n{}", out.program);
+}
+
+/// A hole drilled after an earlier fed move, whose own cycle and chain
+/// state no feed: a post that falls back to the modal feed would drill
+/// it at F300 from the facing pass. Refused by name instead.
+const EARLIER_F_THEN_NO_FEED: &str = "PARAM SpindleSpeed 1500
+TOOL 4 6MM DRILL
+START 20000 10000 6000
+Feed 30000 10000 6000 F300000
+Rapid 20000 10000 2000
+Plunge 20000 10000 -10000
+Rapid 20000 10000 2000
+Rapid 20000 10000 6000
+; CYCLE Drill X20000 Y10000 RZ2000 BZ-10000 ENTRY0 PECK0 DWELL0 AT2
+";
+
+#[test]
+fn a_cycle_with_no_feed_after_an_earlier_f_is_refused_by_name() {
+    // The M3 review (#1367): restoring Heidenhain's modal-feed fallback
+    // passed every no-feed pin, whose streams had no earlier F.
+    for (stem, why) in [("heidenhain", "positive cutting feed"), ("fanuc", "has no feed rate")] {
+        let cps = read(&format!("assets/posts/{stem}.cps"));
+        let out = engine::run(&cps, &vmc(), EARLIER_F_THEN_NO_FEED).unwrap_or_else(|e| panic!("{stem}: {e}"));
+        assert!(
+            out.warnings.iter().any(|w| w.contains(why)),
+            "{stem}: an unfed cycle after an earlier F must be refused by name ({why}), got {:?}\n{}",
+            out.warnings,
+            out.program
+        );
+    }
+}

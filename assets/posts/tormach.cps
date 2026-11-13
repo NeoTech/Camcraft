@@ -86,13 +86,16 @@ var tapRefused = false;   // the rigid-tap refusal, once per program
 
 // #1357: a cut needs a turning spindle. spindleOn is true from the
 // preamble's S.. M3 to the next M5 (every section end); a touch probe's
-// section (a stated 0 rpm, #574) feeds its stylus with the spindle
-// stopped on purpose. A feed, arc or cycle with the spindle stopped
-// anywhere else is refused by name - a stream that states no spindle
-// speed (a bare legacy .cl) would otherwise post a program that drags
-// a stopped cutter through the part. Once per program.
+// section feeds its stylus with the spindle stopped on purpose. A
+// section is a probe's only when it states 0 rpm (#574) AND its tool is
+// a touch probe (PARAM ToolKind) - a cutter whose speed reads 0 is not
+// a probe, it is a stopped spindle. A feed, arc or cycle with the
+// spindle stopped anywhere else is refused by name - a stream that
+// states no spindle speed (a bare legacy .cl) would otherwise post a
+// program that drags a stopped cutter through the part. Once per program.
 var spindleOn = false;
 var probeSection = false;
+var kindProbe = false;    // this section's PARAM ToolKind names a touch probe
 var spindleRefused = false;
 function spindleStopped(what) {  // true: refused, nothing is posted
   if (spindleOn || probeSection) return false;
@@ -186,7 +189,7 @@ function commentParam(name, value) {
   if (name === "SetupName") setupName = clean(value);
   else if (name === "OperationName") opName = clean(value);
   else if (name === "OperationKind") opKind = clean(value).toUpperCase();
-  else if (name === "ToolKind") toolKind = clean(value).toUpperCase();
+  else if (name === "ToolKind") { toolKind = clean(value).toUpperCase(); kindProbe = toolKind === "TOUCH PROBE"; }
   else if (name === "ToolDiameter" && has(value)) toolDia = Number(value);
   else if (name === "ToolCornerRadius" && has(value)) toolCr = Number(value);
 }
@@ -393,7 +396,7 @@ function startPreamble() {
     spindleOn = true;
   }
   if (probeStop) { block(["M5"]); spindleOn = false; }
-  probeSection = touchProbe;
+  probeSection = touchProbe && kindProbe;
   spindleWait = false;
   coolant = touchProbe ? "" : coolantCode();
   if (coolant) block([coolant]);
@@ -415,6 +418,7 @@ function endPreamble() {
   block(["M5"]);
   spindleOn = false;
   probeSection = false;
+  kindProbe = false;         // the next section states its own tool kind
 }
 
 function onSection() { seatKnown = false; startPreamble(); }

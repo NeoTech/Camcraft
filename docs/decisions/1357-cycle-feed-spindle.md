@@ -11,3 +11,7 @@
   - Regenerated: the drill_peck, drill_plate and tap_plate goldens of fanuc (top level), haas, mazak, sinumerik, doosan-dnm and grblhal (an `F` on each cycle block, nothing else; grblhal has no tap golden), and all 13 `nc/tormach/` legacy goldens (new machine, units and preamble).
   - Tool data per golden comes from the tool diameter `golden_cl.rs` generated it with. The tap's 500 rpm is its 750 mm/min stream feed over its 1.5 mm pitch.
   - Cost to change later: the dressing is one test module, so adding the spindle rule to another dialect later means calling `as_program` for that dialect too and regenerating its goldens.
+- **Chosen (review of PR #1367):** the Tormach touch-probe exemption needs both a stated 0 rpm AND a touch-probe tool (`PARAM ToolKind touch probe`, what `posting.rs` writes for `ToolKind::Probe`). A cutter section that states 0 rpm, or a 0-rpm section with no tool kind at all, is a stopped spindle and its feed, arc or cycle is refused by name.
+  - Why: the M3 safety review found that "0 rpm" alone classed any cutting op at 0 rpm as a probe, so it posted M5 and then `G1 F..` with no refusal. The kind is what the tool is; the speed is only what the stream says.
+  - Dropped: refusing every G1/G2/G3 in a 0-rpm section whatever the tool. A probe op's own stylus feeds can come as plain moves, so a real probe would be refused.
+  - The probe moves themselves (G38.2/G38.3 touches, guards and retreats) never pass the spindle check; only plain feeds, arcs and cycles do.
