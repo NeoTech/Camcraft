@@ -170,6 +170,7 @@ var liveOk = false;        // the C section engaged (codes stated, C on the mach
 var liveCodes = null;      // the machine's live_tool words for the open section
 var lastC = null;          // the C a C section last commanded
 var lastR = 0, lastZ = 0;  // ... and the station radius / Z it stood at
+var lastPC = 0, lastPR = 0, lastPZ = 0; // ... and the same as POSTED (mm, deg; #1398)
 var liveCRate = 0;         // the machine's stated C rate (deg/min), 0 = unstated
 var liveCTravel = false;   // the machine states a C travel (#906)
 var C_TOL = 0.005;         // mm a C-turned tip may stand off the station (lattice + milli-degree words)
@@ -563,16 +564,15 @@ function fm(v) { return trim0(Number(v).toFixed(1)); }  // mm/min, one decimal
 // #1392: a feed held under a machine rate is judged on its POSTED word.
 // fm() rounds to nearest, so a feed within half a step of its cap could
 // post up to 0.05 mm/min over it: then the word is floored to the step
-// at or under the cap. A word over by no more than the cap arithmetic's
-// own float noise (1e-9 relative) is the cap itself and stays as is, so
-// a feed far from (or exactly at) its cap posts unchanged.
+// at or under the cap. A feed far from its cap posts unchanged.
 function capWord(v, cap) {
   var w = fm(v);
   if (!(cap < Infinity)) return w;
-  var tol = 1e-9 * Math.max(1, Math.abs(cap));
-  if (Number(w) <= cap + tol) return w;
-  return fm(Math.floor((cap + tol) * 10) / 10);
+  if (Number(w) <= cap) return w;
+  return fm(Math.floor(cap * 10) / 10);
 }
+// #1398: a length word read back as the control reads it, in mm.
+function posted(s) { return inch ? Number(s) * 25.4 : Number(s); }
 // One straight move of a C section: the tip turned by C onto the station.
 function liveMove(p, rapid) {
   if (!liveOk) return;
@@ -590,6 +590,9 @@ function liveMove(p, rapid) {
     return;
   }
   var r = Math.max(xr, 0);
+  // #1398: the words this move posts (X a diameter, Z origin-relative,
+  // C at 0.001), read back: the caps judge what the control reads.
+  var pr = posted(fu(2 * r)) / 2, pz = posted(fu(p.Z - orgZ)), pc = Number(fc(p.C));
   if (lastC === null) {
     if (!rapid) { refuse("a C-axis section that opens with a cut - the first move must position C"); return; }
     block(["G00", "C" + fc(p.C)]);
@@ -622,12 +625,22 @@ function liveMove(p, rapid) {
     // by its stated rate (unstated: no cap the data can justify). The
     // rule is the prelude's `rotaryFeedCap` (#885), shared by every
     // post that writes a rotary word on a feed.
-    var lin = Math.sqrt(dr * dr + dz * dz);
-    var capF = rotaryFeedCap(Infinity, lin, [[dc, liveCRate]], "composite", EPS);
-    var fc_ = Math.min(rotaryFeedCap(f * lcmd / ltrue, lin, [[dc, liveCRate]], "composite", EPS), capF);
-    block(["G01", xWord(r), zWord(p.Z), "C" + fc(p.C), "F" + capWord(fc_, capF)]);
+    // #1398: the cap is measured between the POSTED words, never the
+    // unrounded points - rounding can lengthen a short move's X/Z part.
+    var qr = pr - lastPR, qz = pz - lastPZ, qc = pc - lastPC;
+    var lin = Math.sqrt(qr * qr + qz * qz);
+    var capF = rotaryFeedCap(Infinity, lin, [[qc, liveCRate]], "composite", EPS);
+    var fc_ = Math.min(rotaryFeedCap(f * lcmd / ltrue, lin, [[qc, liveCRate]], "composite", EPS), capF);
+    var fw = capWord(fc_, capF);
+    // A word under the F step posts F0: refused by name, never written.
+    if (!(Number(fw) >= 0.1)) {
+      refuse(fc_ >= capF ? "a C-axis feed whose machine-rate cap leaves under 0.1 mm/min - the F word would be F0; state a faster C rate or maximum feed" : "a C-axis feed under 0.1 mm/min - the F word would be F0");
+      return;
+    }
+    block(["G01", xWord(r), zWord(p.Z), "C" + fc(p.C), "F" + fw]);
   }
   lastC = Number(p.C); lastR = r; lastZ = p.Z;
+  lastPC = pc; lastPR = pr; lastPZ = pz;
 }
 
 // The bar feeder's advance (the engine's default comment) in the
