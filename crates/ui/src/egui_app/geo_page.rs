@@ -33,6 +33,17 @@ pub fn click_selects_hint() -> String {
     )
 }
 
+/// #1514: the plain "picking on / off" line under the tab bar. On: viewport
+/// clicks edit this operation's picks (the Geometry tab, or a boundary row
+/// armed). Off: every other tab - the selection is locked, clicks do nothing.
+pub(super) fn pick_mode_line(ui: &mut Ui, state: &State) {
+    if crate::interact::op_pick_locked(state) {
+        ui.label(RichText::new("Picking off - selection locked").weak());
+    } else {
+        ui.label(RichText::new("Picking on - clicks edit the selection").strong());
+    }
+}
+
 pub(super) fn pick_block(ui: &mut Ui, state: &mut State, target: &str, live_setup: Option<&str>) {
     group(ui, "Selection", None, |ui| body(ui, state, target, live_setup));
 }

@@ -92,6 +92,26 @@ pub(crate) fn ray_at(state: &State, p: [f32; 2]) -> Option<([f64; 3], [f64; 3])>
     state.cam.ray_through(ndc, f64::from(w / h))
 }
 
+/// #1514: is the open operation's selection locked? Picking is a mode: a
+/// viewport click edits an operation's geometry only while its Geometry
+/// tab shows (`op_tab == 0`) or a pick row is armed (a boundary entry; the
+/// setup-page drafts - locate, points, plane, axis, WCS - are their own
+/// modes and are never locked). On any other tab the click does nothing:
+/// the picked geometry stays and the dialog says "Picking off". Ephemeral
+/// view state derived each time from the tab and the drafts; never a
+/// command (selection changes stay undoable commands).
+pub fn op_pick_locked(state: &State) -> bool {
+    !state.op_ui.name.is_empty()
+        && state.op_tab != 0
+        && state.boundary_pick.is_none()
+        && state.locate_pick.is_none()
+        && state.points_pick.is_none()
+        && !state.wcs_ui.pick_circle
+        && !crate::wcs_pick::collecting(state)
+        && !crate::plane_pick::collecting(state)
+        && !crate::axis_pick::collecting(state)
+}
+
 /// A click inside the viewport, routed by the pick mode: models,
 /// feature faces, or edge chains.
 pub(crate) fn pick_at(state: &mut State, p: [f32; 2], mods: Mods) {
@@ -99,6 +119,12 @@ pub(crate) fn pick_at(state: &mut State, p: [f32; 2], mods: Mods) {
     // markers (a click beside one still picks normally) and the #739
     // circle-centre edge pick.
     if crate::wcs_circle_pick::take_click(state, p) {
+        return;
+    }
+    // #1514: off the Geometry tab the click is swallowed whole - no
+    // geometry change, and no model select that would swap the dialog.
+    if op_pick_locked(state) {
+        state.status = String::from("picking is off - open the Geometry tab to change the selection");
         return;
     }
     match state.geo_pick {
@@ -174,8 +200,12 @@ pub fn queue_boundary_pick(state: &mut State, pick: GeoSel, mods: Mods) {
 /// keeping (the app keeps `left_press` OUTSIDE State, across frames).
 pub(crate) fn update_hover(state: &mut State, p: [f32; 2], held: bool) {
     state.hover_mesh = None; // re-earned below by a mesh hit, or gone
-    let idle_over_viewport =
-        state.drag.is_none() && !held && state.viewport_hot && inside_viewport(state, p);
+    // #1514: a locked selection takes no clicks, so nothing lights as pickable.
+    let idle_over_viewport = state.drag.is_none()
+        && !held
+        && state.viewport_hot
+        && inside_viewport(state, p)
+        && !op_pick_locked(state);
     if !idle_over_viewport {
         state.hover = None;
         return;
@@ -264,7 +294,8 @@ pub(crate) fn anchor_reference(state: &State) -> Option<(Aabb, &'static str)> {
     let active = camcraft_app::setup::active(&state.world);
     let stock = || model::stock_world_aabb_for(&state.world, active.as_deref()).map(|b| (b, "stock box"));
     let solid = || {
-        camcraft_app::setup_align::solid_aabb_in(&state.world, active.as_deref()).map(|b| (b, "model bounds"))
+        // #1538: the parts only - a vise's corner is never G54's.
+        camcraft_app::stock_fit::part_bounds(&state.world, active.as_deref()).map(|b| (b, "model bounds"))
     };
     if state.wcs_ui.anchor_source == 1 {
         solid().or_else(stock)

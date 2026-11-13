@@ -36,6 +36,15 @@ pub enum PocketStrategy {
 }
 
 impl PocketStrategy {
+    /// Whether the passes step by the optimal load (ae/D) rather than by
+    /// the stated stepover. One answer for the tiling step, the parameter
+    /// doors and the Passes page, which shows only the field that spaces
+    /// the passes (#1512): Adaptive and Offset rings read the load and
+    /// never the stepover; Zigzag, Waterline and Auto the other way round.
+    pub fn steps_by_load(self) -> bool {
+        matches!(self, PocketStrategy::Adaptive | PocketStrategy::OffsetRings)
+    }
+
     /// What Auto picks for a cutter-center ring: fitted arcs must carry
     /// at least 90% of the boundary's length AND agree on a center
     /// within a quarter stepover - a family of true circles, not corners

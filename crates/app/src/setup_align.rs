@@ -153,8 +153,22 @@ pub fn solid_aabb_in(world: &World, declared: Option<&str>) -> Option<Aabb> {
     if alignment(world, declared).is_none() {
         return model::solid_world_aabb(world);
     }
+    models_aabb_in(world, declared, |_| true)
+}
+
+/// The PARTS' bounds in a setup's frame - every model but the fixtures
+/// (vises, accessories, plates, tagged meshes) of any setup: what the
+/// Top/Bottom of Model heights stand for (#1529). Fixtures are judged
+/// by the collision laws, never measured as the part.
+#[must_use]
+pub fn part_aabb_in(world: &World, declared: Option<&str>) -> Option<Aabb> {
+    models_aabb_in(world, declared, |e| !model::is_fixture(world, e))
+}
+
+fn models_aabb_in(world: &World, declared: Option<&str>, keep: impl Fn(&Entity) -> bool) -> Option<Aabb> {
     let tris: Vec<Triangle> = model::model_entities(world)
         .into_iter()
+        .filter(|(_, e)| keep(e))
         .filter_map(|(_, e)| facets_in(world, &e, declared))
         .flatten()
         .collect();
