@@ -27,7 +27,14 @@ unit word (G21 / G20, the 840D's G710 / G700) before any motion, every
 length / 25.4 at four decimals and every feed in in/min, angles,
 seconds and rpm as they come - and an inch document on a script whose
 `programUnits` lacks `inch` (Carvera and Heidenhain say `"mm"`) is
-refused by name before any hook runs; never read
+refused by name before any hook runs; `explains = "paren"` or `"semi"`
+(#1386, optionally `commentMax`, the longest comment the control keeps,
+delimiters included, 60 when unstated) says the script's `block()`
+appends `explain(words)` after its words - the PRELUDE helper that
+returns `""` unless the document's Explain G-code option is on, and
+applies the comment guards itself (printable ASCII, no delimiters, the
+active-keyword lead, the length cap) - and Explain on a script that
+states no form is refused by name before any hook runs; never read
 `machine.units` for the program's unit, it is only the unit the
 machine file was written in; `threadHands = true` (#629) says the script
 reads `PARAM SpindleDirection` and states a thread's hand (M04 when the
