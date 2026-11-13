@@ -52,6 +52,7 @@ fn tool() -> ToolGeom {
 fn judge(t: &Toolpath, region: &Region, model: Option<&[Triangle]>) -> Vec<Warning> {
     let g = tool();
     let cx = VerifyContext {
+        lathe_axis: None,
         region,
         stock: None,
         model,

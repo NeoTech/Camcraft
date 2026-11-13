@@ -19,7 +19,7 @@
 //! and the two-block G76 from the public Fanuc 0i-T programming
 //! vocabulary (behaviour only).
 //!
-//! Gate map (M4.4): covers app::post (engine on the lathe dialect, inch),
+//! Gate map (M4.4): covers camcraft_post::post (engine on the lathe dialect, inch),
 //! app::posting (program_options Units), app::commands (SetUnits).
 //! Lane shape (M4.4): all tests here run in seconds.
 

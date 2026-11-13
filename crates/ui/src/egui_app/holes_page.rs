@@ -96,16 +96,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
                 let before = c_idx;
                 prop_row(ui, "Cycle", |ui| combo(ui, "d_cycle", &mut c_idx, cycle_names()));
                 if c_idx != before {
-                    *cycle = match c_idx {
-                        1 => camcraft_app::drilling::CycleChoice::Spot,
-                        2 => camcraft_app::drilling::CycleChoice::Drill,
-                        3 => camcraft_app::drilling::CycleChoice::Peck,
-                        4 => camcraft_app::drilling::CycleChoice::Tap,
-                        7 => camcraft_app::drilling::CycleChoice::FloatingTap,
-                        5 => camcraft_app::drilling::CycleChoice::Bore,
-                        6 => camcraft_app::drilling::CycleChoice::BackBore,
-                        _ => camcraft_app::drilling::CycleChoice::Auto,
-                    };
+                    *cycle = cycle_from_index(c_idx);
                 }
                 if let Some(note) = &cycle_note {
                     consequence(ui, note);

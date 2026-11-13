@@ -44,6 +44,7 @@ mod contour_depth;
 mod contour_entry;
 mod contour_link;
 mod contour_params;
+mod contour_start;
 mod contour_step;
 mod descent;
 mod descent_dive;
@@ -63,10 +64,14 @@ mod levels;
 mod microlift;
 mod pocket;
 mod pocket_hsm;
+mod pocket_strategy;
 mod pocket_troch;
+mod predrilled;
 mod adaptive;
+mod rest2d;
 mod ring;
 mod slots;
+mod slot_room;
 mod waterscan;
 
 #[cfg(test)]
@@ -98,9 +103,12 @@ pub use face_entry::{air_lead, AIR_MARGIN};
 pub use fillet::{fillet_corners, Legal};
 pub use fillet_tally::{fillet_floor, FilletTally};
 pub(crate) use levels::cut_levels;
-pub use pocket::{pocket, PocketParams, PocketStrategy};
+pub use pocket::{pocket, pocket_entered, PocketParams, PocketStrategy};
+pub use predrilled::PreHole;
+pub use rest2d::{rest_plan, rest_pocket, RestParams, RestPlan, REST_FILM, REST_MARGIN, REST_REACH};
 pub use ring::{on_boundary, ring_is_circular};
 pub use slots::{chord_clears, slot, trace, SlotParams, TraceParams};
+pub use slot_room::{SlotBound, SlotFit, FIT_TOL as SLOT_FIT_TOL};
 pub use trochoid_air::lifted_cut;
 pub use trochoid_slot::{
     plan_trochoidal_slot, trochoidal_slot, TrochoidParams, TrochoidPlan, TrochoidReturn, DEFAULT_MAX_ENGAGEMENT,

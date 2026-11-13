@@ -94,6 +94,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         mut picked_region,
         mut contour_sel,
         mut drive_chains,
+        mut slot_bound,
         mut prior,
         verify_prior,
         drills_ahead,
@@ -117,6 +118,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         carried_overhang: _,
         op_name: _,
         wire,
+        wire_ruled,
         sinker_gap,
         sinker_pass,
         sinker_wear,
@@ -189,6 +191,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             wire.ok_or_else(|| unreached("wire condition")),
             &hs,
             picks,
+            wire_ruled,
             || region_for_job(&mut picked_region, &mut section_z, &src, &params, &material, None),
             stock,
         );
@@ -559,7 +562,13 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 m_gen,
                 frame.as_ref(),
             )?;
-            let path = machining2d::pocket(
+            // #1449: the holes the program ahead proves open, when asked.
+            let (holes, hole_notes) = if lk.approach.predrilled {
+                super::predrilled_entry::proved_holes(&drills_ahead, d * 0.5, verify_prior.get(), frame.is_some())
+            } else {
+                (Vec::new(), Vec::new())
+            };
+            let mut path = machining2d::pocket_entered(
                 &region,
                 &PocketParams {
                     links: lk,
@@ -580,7 +589,9 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     optimal_load: *optimal_load,
                     blend_turns: *blend_turns,
                 },
+                &holes,
             )?;
+            super::predrilled_entry::say(&mut path, hole_notes);
             (region, path)
         }
         // The roughing twins (M2.4 A) are the pocket's own machinery
@@ -1695,6 +1706,12 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             helix_radius,
             ..
         } => {
+            // #1504: picks bound the room the slot may cut in - a slot
+            // too wide, too long or placed past them is refused by name,
+            // never cut across the wall.
+            if let Some(room) = slot_bound.take() {
+                room?.judge(*a, *b, *width)?;
+            }
             let path = machining2d::slot(
                 *a,
                 *b,
@@ -1726,7 +1743,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             )?;
             (region, path)
         }
-        OpParams::TrochoidalSlot { a, b, .. } => {
+        OpParams::TrochoidalSlot { a, b, width, .. } => {
             let tp = super::trochoid_op::trochoid_params(
                 &params,
                 d,
@@ -1735,7 +1752,6 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 req_z(hl.top, "Top of Part Z")?,
                 req_z(hl.bottom, "Bottom of Part Z")?,
             )?;
-            let path = machining2d::trochoidal_slot(&[*a, *b], &tp)?;
             let region = region_for_job(
                     &mut picked_region,
                     &mut section_z,
@@ -1744,6 +1760,13 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 m_gen,
                 frame.as_ref(),
             )?;
+            // #1503: with a selection picked, the slot must fit inside
+            // it - refused by name, never cut across a wall into the
+            // model and reported OK.
+            if matches!(src, SrcRef::Selection(_)) {
+                super::slot_fit::refuse_unfit_slot(params.kind().info().label, *a, *b, *width, &region)?;
+            }
+            let path = machining2d::trochoidal_slot(&[*a, *b], &tp)?;
             (region, path)
         }
         OpParams::Trace {
@@ -2928,6 +2951,9 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 model_excess: material.excess,
                 // #1057: the containment kinds' declared rims, read untightened.
                 rims: &rims,
+                // #1408: a turning nose path's verdict turns the work
+                // about the spindle its kernel fitted.
+                lathe_axis: super::turning_axis::lathe_axis_of(&params, &geom, &material.facets),
             };
             // The picks' touching bodies, read as their union
             // (M13.11); empty for one body.
@@ -3218,6 +3244,8 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     // #864: a source imported coarser than promised.
                     model_excess: material.excess,
                     rims: &rims,
+                    // No envelope runs in a plane's frame (finish_tol None).
+                    lathe_axis: None,
                 },
                 &m_gen.bodies,
             );
@@ -3322,8 +3350,12 @@ pub(super) enum DepthLaw {
 /// - The pocket family cuts picked part features (`Section`); a whole-
 ///   model source there is the volume to REMOVE (the region is the
 ///   material, its interior is cut by contract), so no part law applies.
-/// - Slot and Circular cut authored geometry into their source - the
-///   source is the material to remove, not a part to keep.
+/// - Circular cuts authored geometry into its source - the source is
+///   the material to remove, not a part to keep.
+/// - Slot: `Section` whenever its source is the finished part - picked
+///   (#1504, the part's own feature) or the whole model (#1537: a slot
+///   typed through the part's wall gouges what the job keeps). A Stock
+///   source is not part-solid, so the typed slot cuts it unjudged.
 /// - Trace, Engrave and 2D Chamfer enter the part by design (the
 ///   engraving, the broken edge); their own modes stand the gouge law
 ///   down for exactly that reason.
@@ -3334,6 +3366,9 @@ pub(super) fn depth_law_of(params: &OpParams, src: &SrcRef, part_solid: bool) ->
     }
     match params {
         OpParams::Contour { .. } | OpParams::Face { .. } => DepthLaw::Section,
+        // #1504 / #1537: a Slot on the finished part (picked or whole
+        // model) keeps the part around it; only Stock is cut unjudged.
+        OpParams::Slot { .. } => DepthLaw::Section,
         OpParams::Pocket { .. } | OpParams::Adaptive2D { .. } | OpParams::Offset2D { .. }
             if matches!(src, SrcRef::Selection(_)) =>
         {

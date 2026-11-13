@@ -41,7 +41,7 @@ committed golden is a legal post input.
 | `TORCH ON C<id> OUTER\|INNER\|OPEN [PARENT<id>] [SMALL<f×1000>]` / `TORCH OFF C<id>` | the torch struck before the next motion record / put out after the previous one (#671): the `.cl` v5 `; TORCH` records without their `; ` |
 | `START X <i> Y <i> Z <i>` / `END` | legacy `.cl` position lines: consumed silently (END ends the record span) |
 
-`CYCLE` TYPE ∈ SPOT DRILL PECK DEEP TAP FLOATINGTAP BORE BACKBORE. Word meanings
+`CYCLE` TYPE ∈ SPOT DRILL PECK DEEP TAP FLOATINGTAP BORE BACKBORE REAM. Word meanings
 match the `.cl` v3 `; CYCLE` marker the M1.6 goldens use, and one
 parser reads both: X Y center, Z (or `BZ`) bottom, R (or `RZ`)
 retract/feed plane, `ENTRY` entry plane, Q (or `PECK`) peck, P (or
@@ -112,7 +112,7 @@ behavior only):
 | `From` `To` | the `PART TRANSFER` stations, 1-based (present only on transfer events) |
 | `Tolerance` | the `PROBE` ask's deviation budget in mm (present only on probe events; the µm lattice word `PROBE <µm>` is its stream spelling) |
 | `CircularDirection` | `CW` / `CCW` (arcs) |
-| `CycleType` | cycle intent delivered to hooks: `SPOT` `DRILL` `PECK` `DEEP` `TAP` `BORE` `BACKBORE`; `FLOATINGTAP` is normalized to `TAP` here and distinguished by `TappingMode` |
+| `CycleType` | cycle intent delivered to hooks: `SPOT` `DRILL` `PECK` `DEEP` `TAP` `BORE` `BACKBORE` `REAM` (feed in, feed out at the same feed, no dwell: G85); `FLOATINGTAP` is normalized to `TAP` here and distinguished by `TappingMode` |
 | `TappingMode` | `rigid` for legacy `TAP`; `floating` only for the explicit `FLOATINGTAP` stream kind |
 | `EntryZ` `Q` `P` `FeedRate` | cycle entry plane, peck mm, dwell s, cutting feed mm/min (`null` for legacy markers) |
 | `ChainFeedRate` | optional-valued engine property: feed on the first subsequent non-rapid move in the expanded cycle chain, mm/min; `null` if absent; legacy posts may use it when cycle `FeedRate` is `null` |
@@ -122,6 +122,7 @@ behavior only):
 | `EdmCondition` `WireSide` | a wire EDM section (#533): the machine's condition id the cut burns with, and `die` / `punch` (commentary). The moves are the wire-centre path (kerf in them, no feed). A script without `wireEdm = true` is refused the section by name |
 | `SinkerCondition` `ElectrodePickup` `EdmOrbit` `EdmOrbitRadius` | a Sinker Burn or Sinker Side Burn (#542, #545), before its section: the machine condition id the op names (absent when it names none), the electrode's pickup offset mm (the tool's `shank_len`), and for an orbit (#544) its geometry (`circular` / `vector` / `planetary`) and radius mm. The sinker post writes the condition and pickup through the machine's `edm.codes` (#290 D5), refuses a condition the machine's `edm.conditions` does not list, and refuses an orbit and a side burn by name (their explicit moves are not a straight burn). A script whose manifest `serves` does not name `sinker_edm` is refused the section by name |
 | `WireTaper` `WireU` `WireV` | a tapered wire section (#536): the stated taper in degrees (before the section), then before each leaning move the upper guide's offset from the lower one, mm; that move's X Y are the lower guide's. Both are computed from the move's pose and the machine's `edm` guide planes |
+| `WireFourAxis` | a 4-axis wire section (#537): the pairing rule in words (`arc length` or `sync points`), before the section; its leaning moves carry `WireU` `WireV` exactly as a tapered section's do, and no `WireTaper` |
 | `Contour` `ContourRole` `ParentContour` `SmallHole` | a `TORCH` record (#671): the contour id; on `onTorchOn` also `outer` / `inner` / `open`, the enclosing contour's id (absent = none) and the small-hole feed factor (absent = not small) |
 
 ## The hook contract

@@ -117,7 +117,7 @@ const PLASMA_POSTS: &[(&str, &str)] = &[("Tormach PathPilot Plasma", "tormach-pl
 
 /// The WIRE EDM dialects (#533): their golden is the wire stream's own
 /// (`wire_post.rs`, `nc/wire-iso/`); a mill golden they refuse by name.
-const WIRE_POSTS: &[(&str, &str)] = &[("Generic ISO Wire EDM", "wire-iso")];
+const WIRE_POSTS: &[(&str, &str)] = &[("Generic ISO Wire EDM", "wire-iso"), ("Sodick Wire EDM (Mark 21)", "sodick-wire")];
 
 /// The SINKER EDM dialects (#542): their golden is the sinker burn's
 /// own (`crates/post/tests/script_sinker_iso.rs`, `nc/sinker-iso/`); a
@@ -225,7 +225,7 @@ fn every_builtin_posts_every_golden_byte_exact() {
 /// offset, slot origin), a tool block, a contour (rapid, feed, arc) and
 /// a five-hole drilling group - dwelled drill, a two-hole peck run
 /// (the modal-continuation branch), a deep hole, a tap. Every
-/// dialect-specific word - `S.. M3`, `MOTON`, `T2 M6`, `G43 H2`, `D2`,
+/// dialect-specific word - `S.. M3`, `T2 M6`, `G43 H2`, `D2`,
 /// `G98`/its absence, `P..` - appears here, so the goldens that lock
 /// them exist for all five scripts.
 ///
@@ -463,6 +463,7 @@ const EXTENSIONS: &[(&str, &str)] = &[
     ("tormach-lathe", "nc"),
     ("tormach-plasma", "nc"),
     ("wire-iso", "nc"),
+    ("sodick-wire", "nc"),
     ("sinker-iso", "nc"),
 ];
 

@@ -69,13 +69,13 @@ pub fn take(state: &mut State, pick: GeoSel) {
             draft.picks = vec![pick];
             format!("{setup}: face picked for the plane")
         }
+        // #738: the kind in words, never the feature's internal id.
         FeatureSel::Chain(_) => format!(
-            "{setup}: {} of '{}' is an edge - an edge cannot set a plane; pick a flat face \
-             (edges set an axis: Part axes)",
-            pick.feature, pick.entity
+            "{setup}: that pick is an edge - an edge cannot set a plane; pick a flat face \
+             (edges set an axis: Part axes)"
         ),
         FeatureSel::Patch(_) | FeatureSel::Vertex(_) => {
-            format!("{setup}: {} of '{}' is not a flat face - pick a flat face", pick.feature, pick.entity)
+            format!("{setup}: that pick is {} - pick a flat face", crate::pick_words::kind(pick.feature))
         }
     };
 }

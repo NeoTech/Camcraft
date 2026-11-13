@@ -5,7 +5,7 @@
 //! Provenance: our own tests over our own post; the modal-word reading
 //! from the FANUC 0i-F operator's manual (B-64604EN), behaviour only.
 //!
-//! Gate map (M4.4): covers app::post (doosan-dnm.cps rotary words).
+//! Gate map (M4.4): covers camcraft_post::post (doosan-dnm.cps rotary words).
 //! Lane shape (M4.4): all tests here run in well under a second.
 
 use camcraft_app::machine::parse_mch;

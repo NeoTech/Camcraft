@@ -157,6 +157,11 @@ pub struct VerifyContext<'a> {
     /// that traces one at the untightened `gouge_tol`
     /// ([`VerifyContext::loop_tol`]). Empty everywhere else.
     pub rims: &'a [(crate::geo2d::Point2, f64)],
+    /// The spindle a turning nose path cuts about (#1408): given, the
+    /// envelope law (f) reads the hidden half as the turning work sees
+    /// it (`stock_sim::envelope_scan_turned`). `None` - every mill
+    /// path, and a turning one no axis fits - reads as it always did.
+    pub lathe_axis: Option<crate::stock_sim::LatheAxis>,
 }
 
 /// The inert tool of [`VerifyContext::default`].
@@ -194,6 +199,7 @@ impl Default for VerifyContext<'_> {
             spindle: None,
             model_excess: 0.0,
             rims: &[],
+            lathe_axis: None,
         }
     }
 }

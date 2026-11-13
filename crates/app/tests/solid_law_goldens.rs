@@ -32,6 +32,7 @@ mod thread_support;
 use common::gen_to_cltext;
 use posted_gates::thread::thread_verdicts;
 use posted_gates::{narrowed_slot_verdict, plasma_findings, region_verdicts, sinker_gouge_cells, wire_findings, wire_taper_findings, wire_taper_verdict, wire_verdict};
+use posted_gates::{wire_4axis_findings, wire_4axis_verdict};
 use common::solid_part::{cap, circle, mill, plate, plate_cell, rect, region, walls};
 
 use camcraft_app::cl::Toolpath;
@@ -355,6 +356,11 @@ fn the_slot_trace_and_plasma_goldens_pass_their_gates() {
     let taper = wire_taper_verdict();
     assert_eq!(taper.findings, Vec::new(), "wire_taper_punch.cl: the wire laws find nothing");
     assert!(taper.slugs.iter().any(|s| s.product_area > 0.0), "the tapered punch frees the part: {:?}", taper.slugs);
+    // #537: the 4-axis punch, its rulings read as the lean against the
+    // loft's own section at every judged height - clean, and it frees the part.
+    let four = wire_4axis_verdict();
+    assert_eq!(four.findings, Vec::new(), "wire_4axis_punch.cl: the wire laws find nothing");
+    assert!(four.slugs.iter().any(|s| s.product_area > 0.0), "the 4-axis punch frees the part: {:?}", four.slugs);
 }
 
 #[test]
@@ -399,6 +405,7 @@ fn every_posted_golden_is_a_program_the_gate_passes() {
     let cells = sinker_gouge_cells();
     judged.push(("sinker_burn_cavity.cl", if cells == 0 { vec![] } else { vec![format!("program verdict: {cells} gouge cell(s)")] }));
     judged.push(("wire_taper_punch.cl", wire_taper_findings().iter().map(|f| f.describe()).collect()));
+    judged.push(("wire_4axis_punch.cl", wire_4axis_findings().iter().map(|f| f.describe()).collect()));
     let mut dirs = vec![root.join("nc")];
     let mut posted = 0;
     while let Some(dir) = dirs.pop() {
