@@ -25,8 +25,9 @@ pub const STRAIGHT_TOL: f64 = 0.01;
 /// fit, mm - the gouge law's own tolerance, so a tessellated round end
 /// of a picked face (its chords a sag inside the true arc) is no wall.
 pub const FIT_TOL: f64 = 0.01;
-/// The most a face's fitted slot is shrunk to sit inside the face, as a
-/// fraction of the room's width: a tessellated round end's chord sag
+/// The most a face's fitted slot is drawn in PER SIDE to sit inside the
+/// face, as a fraction of the room's width (so the width can lose up to
+/// twice this, 10%): a tessellated round end's chord sag
 /// (0.039 mm at 8 chords per quarter of an 8 mm radius, 0.5% of the
 /// width) is inscribed; a face whose best slot overshoots by more is no
 /// slot face (an L, a notch) and is refused, never shrunk into one.

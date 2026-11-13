@@ -164,3 +164,17 @@ fn degenerate_picks_and_numbers_are_refused_by_name() {
         assert!(e.contains("must be finite, the width positive"), "{a:?} {w}: {e}");
     }
 }
+
+#[test]
+fn the_face_wall_law_refuses_a_thin_wall_across_the_slot() {
+    // #1504 review: a 0.1 mm slit hole across the slot, every vertex of it
+    // farther than r from the centre line - only the segment crossing
+    // test (`seg_seg_dist`) sees it.
+    let reg = Region::new(vec![
+        Loop::new(vec![p(10.0, -5.0), p(20.0, -5.0), p(20.0, 25.0), p(10.0, 25.0)]).expect("outer"),
+        Loop::new(vec![p(10.5, 10.22), p(10.5, 10.32), p(19.5, 10.32), p(19.5, 10.22)]).expect("slit"),
+    ])
+    .expect("region");
+    let e = refused(&SlotBound::from_face(reg).expect("bound"), p(15.0, 0.0), p(15.0, 20.0), 6.0);
+    assert!(e.contains("runs 3.000 mm outside the picked face"), "{e}");
+}

@@ -65,8 +65,9 @@ nothing - hidden at `debug`, the user saw only a length refusal for the
 typed slot. Now `fit()` measures the face overshoot of the full fit and
 draws the slot's radius in by it (the capsule offset inward: width and
 length shrink by twice the sag, the endpoints stay), so the fit sits
-inside the chords. The shrink is capped at 5% of the room's width
-(`INSCRIBE_MAX`): a face whose best slot overshoots by more (an L, a
+inside the chords. The draw-in is capped at 5% of the room's width per
+side, so the width loses at most 10% (`INSCRIBE_MAX`; a 2-chords-per-
+quarter stadium loses 7.6%, still inside the face): a face whose best slot overshoots by more (an L, a
 notch, diamond-pointed ends) is no slot face and is refused by name.
 Considered and dropped: raising `FIT_TOL` to cover coarse STEP
 tessellation (that loosens the tolerance into the model, so a slot
