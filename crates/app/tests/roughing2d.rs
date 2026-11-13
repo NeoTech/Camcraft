@@ -146,6 +146,7 @@ fn adaptive(eng: f64) -> OpParams {
         entry: Entry3D::Plunge,
         helix_radius: 1.0,
         optimal_load: camcraft_app::load::load_of_degrees(eng),
+        method: camcraft_app::machining2d::AdaptiveMethod::Spiral,
         tilt: None,
     }
 }

@@ -100,6 +100,8 @@ mod first_setup;
 mod structural;
 mod cycle_combo;
 mod radial_step_field;
+// #1509: 2D Adaptive's Method choice on the Passes tab.
+mod adaptive_method;
 // #661: every operation kind wears its own SVG-mastered glyph.
 mod op_icon_table;
 mod tool_icon_wiring;

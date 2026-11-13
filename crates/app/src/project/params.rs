@@ -202,6 +202,10 @@ pub enum ParamsDto {
         /// Absent on every older file, which reads `max_engagement`.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         optimal_load: Option<f64>,
+        /// #1509: how the region is cleared. Absent on every older file,
+        /// which reads as `spiral` - the path those files always cut.
+        #[serde(default)]
+        method: AdaptiveMethodDto,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         tilt: Option<TiltDto>,
     },
@@ -1508,6 +1512,17 @@ pub enum LeadDto {
     Perpendicular {
         length: f64,
     },
+}
+
+/// The file mirror of `machining2d::AdaptiveMethod` (#1509); `default`
+/// is the spiral, the only method a file written before the word could
+/// mean.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AdaptiveMethodDto {
+    #[default]
+    Spiral,
+    Trochoidal,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]

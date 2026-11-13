@@ -37,6 +37,7 @@ pub(super) fn roughing2d_pane(
     entry: &mut camcraft_app::machining3d::Entry3D,
     helix_radius: &mut f64,
     optimal_load: Option<&mut f64>,
+    method: Option<&mut camcraft_app::machining2d::AdaptiveMethod>,
     links: &mut camcraft_app::links::Links,
     tilt: &mut Option<Tilt>,
 ) {
@@ -51,6 +52,11 @@ pub(super) fn roughing2d_pane(
         });
     }
     if tab == SEC_PASSES {
+        // #1509: how 2D Adaptive clears its region - the choice the
+        // Adaptive operations own (maintainer, 2026-11-13).
+        if let Some(m) = method {
+            adaptive_method_row(ui, m);
+        }
         // #1512: the adaptive twin steps by its optimal load and never
         // reads the stepover, so only the offset twin shows the field.
         if optimal_load.is_none() {
@@ -72,6 +78,31 @@ pub(super) fn roughing2d_pane(
         prop_row(ui, "Plunge feed", |ui| num_feed(ui, u, plunge_feed));
         check_row(ui, "Climb milling", climb);
     }
+}
+
+/// The names of 2D Adaptive's Method combo, in the combo's order
+/// (`AdaptiveMethod::ALL`).
+pub(crate) fn adaptive_method_names() -> Vec<&'static str> {
+    camcraft_app::machining2d::AdaptiveMethod::ALL.iter().map(|m| m.label()).collect()
+}
+
+/// What the two methods do: the Method row's hover text.
+const METHOD_HINT: &str = "Spiral: a spiral out of the entry bore, then passes that hold the optimal load. Trochoidal: loops along the region's medial line, kept inside the region; the optimal load is the most the loops advance a turn";
+
+/// 2D Adaptive's Method row (#1509): Spiral (the path it always cut)
+/// or Trochoidal; what each does is the row's hover text.
+fn adaptive_method_row(ui: &mut Ui, method: &mut camcraft_app::machining2d::AdaptiveMethod) {
+    use camcraft_app::machining2d::AdaptiveMethod;
+    let names = adaptive_method_names();
+    let before = AdaptiveMethod::ALL.iter().position(|m| m == method).unwrap_or(0);
+    let mut idx = before;
+    prop_row(ui, "Method", |ui| combo(ui, "a_method", &mut idx, &names));
+    if idx != before
+        && let Some(m) = AdaptiveMethod::ALL.get(idx)
+    {
+        *method = *m;
+    }
+    hint(ui, METHOD_HINT);
 }
 
 /// The axis trio both 5-axis kinds carry (M5.1 stage C). The law lives
