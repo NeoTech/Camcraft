@@ -17,6 +17,9 @@ pub(super) fn row(ui: &mut Ui, state: &mut State, entity: &Entity) {
     ui.add_space(6.0);
     let recorded = camcraft_app::model_fidelity::budget_of(&state.world, entity).unwrap_or(step_budget::DEFAULT);
     ui.label(format!("Imported under a {} of {recorded} facets", step_budget::NAME));
+    if !state.step_budget.explicit {
+        ui.label(format!("A re-import keeps {recorded} unless a budget is set below"));
+    }
     let mut commit = false;
     ui.horizontal(|ui| {
         let l = ui.label(format!("{} (next import)", step_budget::NAME));

@@ -310,8 +310,6 @@ pub(super) fn keeps(lifted: f64, spiral: f64, bound: f64) -> bool {
     lifted <= spiral.max(bound) + 1e-9
 }
 
-/// A plan's travel, per level (XY mm): in cut, in air at the floor and
-/// lifted; and the moves it posts.
 /// Per-level travel (XY mm): cut, floor air, lifted; and the moves posted.
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct Travel {
