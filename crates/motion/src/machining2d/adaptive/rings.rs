@@ -12,6 +12,9 @@ use super::GenError;
 use super::front::{densify, dist, len, rotate_to, thin};
 use super::near::SegIndex;
 
+#[path = "simplify.rs"]
+mod simplify;
+
 /// Arc flattening of the rings' fillets (mm): about 2.6 degrees a chord
 /// on a 1 mm fillet.
 pub(super) const ARC_TOL: f64 = 2.5e-4;
@@ -33,12 +36,28 @@ pub(super) const SEG: f64 = 0.2;
 /// The morph's nearest-point grid (mm).
 pub(super) const NEAR_CELL: f64 = 0.5;
 
+/// Outline approximation before the opening (mm, issue #882): the
+/// fillets' own arc tolerance. Nanometre chords otherwise make the
+/// erosion do quadratic work on the planner's repeatedly grown rings.
+pub(super) const SIMPLIFY: f64 = ARC_TOL;
+
+/// Extra erosion (mm): the approximation and round-join flattening,
+/// plus 10 nm for the boolean lattice. This keeps clipping from adding
+/// tiny wall chords in ordinary cases; it is not a topology proof.
+pub(super) const INSET: f64 = SIMPLIFY + ARC_TOL + 1e-5;
+
+/// Open a lighter outline, then clip to the original region. The exact
+/// region intersection is the containment backstop, including holes and
+/// components whose topology normalization could otherwise change.
 pub(super) fn open(r: &Region, rho: f64) -> Result<Region, GenError> {
     #[cfg(test)]
     let inset = OPEN_INSET.with(std::cell::Cell::get);
     #[cfg(not(test))]
     let inset = 0.0;
-    Ok(r.offset_fine(-(rho + inset), ARC_TOL)?.offset_fine(rho, ARC_TOL)?)
+    let light = simplify::within(r, SIMPLIFY);
+    let source = light.as_ref().unwrap_or(r);
+    let opened = source.offset_fine(-(rho + INSET + inset), ARC_TOL)?.offset_fine(rho, ARC_TOL)?;
+    Ok(opened.intersect(r)?)
 }
 
 #[cfg(test)]
