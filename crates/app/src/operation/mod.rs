@@ -194,6 +194,8 @@ pub use air_law::AIR_NOTE;
 pub use generate::*;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_thread_stamp;
 
 pub mod types;
 pub use types::*;

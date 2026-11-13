@@ -1129,6 +1129,7 @@ impl OpParams {
                 plunge_feed,
                 holes,
                 pitch,
+                passes,
                 ..
             } => {
                 clearance_z.is_sane()
@@ -1136,6 +1137,9 @@ impl OpParams {
                     && top_z.is_sane()
                     && bottom_z.is_none_or(|b| b.is_sane())
                     && pitch.is_none_or(pos)
+                    // #988: signs are judged by name at the door.
+                    && passes.finish.is_finite()
+                    && passes.allowance.is_finite()
                     && pos(*infeed)
                     && pos(*feed)
                     && pos(*plunge_feed)

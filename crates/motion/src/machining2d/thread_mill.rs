@@ -43,6 +43,7 @@ use crate::geo2d::Point2;
 use crate::geometry::Point3;
 
 use super::face::GenError;
+pub use super::thread_passes::{PassSchedule, ThreadPasses, MAX_SPRING_PASSES};
 
 pub use camcraft_tools::thread_mill::{
     EXTERNAL_DEPTH_PER_PITCH as EXTERNAL_THREAD_DEPTH_PER_PITCH, INTERNAL_DEPTH_PER_PITCH as THREAD_DEPTH_PER_PITCH,
@@ -80,14 +81,18 @@ pub struct ThreadParams {
     /// Rows of teeth along the axis: 1 rides one turn per thread (a
     /// single-form mill), more finish `rows` threads per revolution.
     pub rows: u32,
-    /// Radial depth per pass; passes are equal and the last lands on
-    /// the full thread depth.
+    /// Radial depth per roughing pass (the first, largest one on a
+    /// constant-area schedule); the last pass lands on the thread depth
+    /// less the allowance.
     pub infeed: f64,
     /// A boss (external thread) instead of a hole.
     pub external: bool,
     pub hand: ThreadHand,
-    /// Climb milling under a clockwise (M3) spindle.
+    /// Climb milling (the orbit sense follows the spindle, #988).
     pub climb: bool,
+    /// Pass schedule, finish and spring passes, allowance, spindle and
+    /// cutter hand (#988); the default is the #894 ride.
+    pub passes: ThreadPasses,
     pub clearance_z: f64,
     /// The plane links between features travel at; `None` = clearance.
     pub retract_z: Option<f64>,
@@ -103,10 +108,12 @@ impl ThreadParams {
         self.pitch * if self.external { EXTERNAL_THREAD_DEPTH_PER_PITCH } else { THREAD_DEPTH_PER_PITCH }
     }
 
-    /// Orbit sense: counter-clockwise seen from +Z when true.
+    /// Orbit sense: counter-clockwise seen from +Z when true. Climb
+    /// under M3 orbits a hole counter-clockwise and a boss clockwise;
+    /// an M4 spindle (a left-hand-cut mill, #988) flips both.
     #[must_use]
     pub fn ccw(&self) -> bool {
-        self.climb != self.external
+        (self.climb != self.external) != self.passes.spindle_reverse
     }
 
     /// Does the helix rise (+Z) as it winds?
@@ -156,6 +163,9 @@ impl ThreadParams {
             return Err(GenError::Invalid(format!(
                 "infeed must sit between 0 and the {h} mm thread depth this pitch stands at"
             )));
+        }
+        if let Some(why) = self.passes.refusal(Some(h), self.infeed) {
+            return Err(GenError::Invalid(why));
         }
         if self.feed <= 0.0 || self.plunge_feed <= 0.0 {
             return bad("feeds must be positive");
@@ -244,10 +254,11 @@ impl HolePlan {
     pub(super) fn of(p: &ThreadParams, x: &ThreadHole) -> Result<Self, GenError> {
         let r = p.tool_diameter * 0.5;
         let h = p.depth();
-        let n = ((h / p.infeed) - 1e-9).ceil().clamp(1.0, 4096.0) as u32;
-        let passes: Vec<Pass> = (1..=n)
-            .map(|i| {
-                let d = h * f64::from(i) / f64::from(n);
+        let passes: Vec<Pass> = p
+            .passes
+            .depths(h, p.infeed)
+            .into_iter()
+            .map(|d| {
                 let (rho, lead_z, scale) = if p.external {
                     let rho = x.radius + r - d;
                     // A quarter arc of the tool's own radius: its axial
