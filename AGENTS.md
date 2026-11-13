@@ -774,7 +774,10 @@ makes every worktree miss. Dev builds carry line tables only (no variable
 debug info; `--config profile.dev.debug=true` restores it for a debugger).
 
 **GitHub Actions minutes are budgeted** (3000/month; Windows bills 2x,
-macOS 10x). Nothing runs on push or PR: the quick and batch tiers run
+macOS 10x). Nothing runs on PR, and a `push` trigger is allowed only on
+`main` and only for a workflow whose jobs run on the self-hosted runner
+(`post-merge.yml`, #1451; user, 2026-11-13: "Can we setup a build test post
+merge using local gh runner?"); the quick and batch tiers otherwise run
 locally through `cargo xtask gate`. GitHub runs `release.yml` for a cut
 tag (the build that publishes the artifact), and `cut.yml` (#1413) runs
 the release tier of a cut on the self-hosted cut runner (below), which
@@ -825,6 +828,14 @@ GitHub-hosted runner. What the machine needs:
   General), and never approve a fork PR's workflow run that adds or
   changes a file under `.github/workflows/` - such a file could name
   `self-hosted`.
+
+**The post-merge gate** (#1451) shares this runner: `post-merge.yml` runs
+`cargo xtask gate batch` on every push to `main` (and `workflow_dispatch`,
+input `ref`), never on a PR trigger. It yields to the cut - it skips itself
+(green, with a notice) while a `cut.yml` run is queued or running or an
+open `release/vX.Y.Z` PR from this repo exists (`.github/scripts/post-merge-skip.sh`) -
+and reports through `.github/scripts/post-merge-report.sh`. Only its report job
+holds `issues: write`.
 
 **The PR test runner** (#1420; maintainer, 2026-11-13: "then that is the
 decision, workflow_dispatch"). `pr-test.yml` runs a PR review's build and
@@ -983,7 +994,19 @@ calendar. `release.yml` builds and publishes on `vX.Y.0` tags only (~30-40
 billed Actions minutes each); PRs run no Actions (no `pull_request`
 trigger), so the PR flow costs no minutes.
 
-**Fixes are tested in the background.** After a fix merges (or, one gate
+**Fixes are tested in the background - by `post-merge.yml` first** (#1451).
+Every push to `main` runs the batch tier on the self-hosted runner without
+anyone dispatching it: a burst of merges tests only the newest head
+(`cancel-in-progress`), a run skips itself while a `cut.yml` run or a
+release PR is open (the cut's release gate covers main then), and one rolling
+issue `main is red (post-merge gate)` is opened or commented on when it fails
+(`P2`, "a gate on main is red"; `P1` only when a failing suite is a
+wrong-output suite - a golden CL/NC or recorded-post-stream suite, named in
+the script's anchored `OUTPUT_SUITES` list) and closed by the next green
+run; only a `source:agent` issue is ever closed by it. A red result is that issue; the main session does not dispatch a gate for
+a merge the workflow covers. **Fallback when the runner is down** (the run
+is queued with no runner, or it was skipped for a cut and the cut was
+abandoned): the old local procedure below. After a fix merges (or, one gate
 per batch since 2026-11-12, after a merge batch of "Refresh only at merge
 time" as a whole, not after each merge), the main
 session dispatches a gate-runner subagent to run the batch tier on
