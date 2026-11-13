@@ -316,7 +316,7 @@ fn the_plane_goes_back_to_g17_before_a_cycle_and_at_section_end() {
             "{stem}: G17 between the G18 arc and the cycle:\n{out}"
         );
         let g19 = at("G19");
-        let m5 = out.lines().enumerate().filter(|(_, l)| l.ends_with("M5") || l.ends_with("MOTOFF")).map(|(i, _)| i).last();
+        let m5 = out.lines().enumerate().filter(|(_, l)| l.ends_with("M5")).map(|(i, _)| i).last();
         assert!(
             backs.iter().any(|&i| Some(i) > g19 && Some(i) < m5),
             "{stem}: G17 before the section's spindle stop:\n{out}"

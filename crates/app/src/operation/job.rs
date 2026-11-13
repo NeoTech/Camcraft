@@ -122,6 +122,9 @@ pub struct GenJob {
     /// #532: the machine condition a wire EDM kind cuts with (its wire
     /// and gap); `None` for every kind that mounts a library tool.
     pub(super) wire: Option<(super::wire_op::WireCondition, Option<super::wire_op::WireCondition>)>,
+    /// #537: a 4-axis wire cut's two picked profiles.
+    pub(super) wire_ruled: Option<Result<super::wire_ruled::RuledPicks, GenError>>,
+
     /// #541: a sinker burn's spark gap, read from its setup's machine
     /// condition (`sinker_op::condition_gap`); `None` for every other kind.
     pub(super) sinker_gap: Option<Result<f64, String>>,
@@ -232,10 +235,13 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         // it, never the part's own section (issue #12).
         (params, src) => whole_model_pocket(world, setup, src, params, frame.as_ref()),
     };
+    let wire_ruled = super::wire_ruled::picks_of(world, op);
     let contour_sel = match (&op.params, &op.src) {
         // The plasma cut reads its picks the contour's way (#670):
         // closed rings AND open runs, each cut as picked.
-        (OpParams::Contour { .. } | OpParams::PlasmaProfile(_) | OpParams::WireContour(_), SrcRef::Selection(items)) => {
+        (OpParams::Contour { .. } | OpParams::PlasmaProfile(_) | OpParams::WireContour(_), SrcRef::Selection(items))
+            if wire_ruled.is_none() =>
+        {
             Some(selection_geometry_impl(world, setup, items, &op.params, None))
         }
         _ => None,
@@ -389,6 +395,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         spindle_note,
         carried_overhang,
         wire,
+        wire_ruled,
         sinker_gap,
         sinker_pass,
         sinker_wear,

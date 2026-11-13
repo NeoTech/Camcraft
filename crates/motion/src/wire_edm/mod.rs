@@ -35,16 +35,22 @@
 //! (#533) reads the feed moves between the threading point's visits;
 //! verification (#534), taper as a pose per move (#536), skims as
 //! further offsets (#538) and tabs (#539) stand on this path; the
-//! no-core burnout of a pocket (#540) is `burnout`.
+//! no-core burnout of a pocket (#540) is `burnout`; the 4-axis cut
+//! between two profiles (#537) is `ruled`.
 
 mod burnout;
 mod laws;
+mod pairing;
 mod open;
 mod ring;
+mod ruled;
+mod ruled_laws;
 mod tabs;
 mod taper;
 
+pub use ruled::{wire_contour_ruled, WirePairing, WireProfile, WireRuled, WireSync, SYNC_TOL};
 pub use tabs::{cutoff_split, TabParams, MAX_TABS};
+
 pub use taper::{wire_contour_tapered, WireTaper};
 
 pub use burnout::{clearance_door, wire_burnout, CORE_AREA_TOL, RING_STEP};
@@ -319,5 +325,7 @@ fn notes(p: &WireParams, start: Point2, lead: f64) -> Vec<String> {
 
 #[cfg(test)]
 mod open_tests;
+#[cfg(test)]
+mod ruled_tests;
 #[cfg(test)]
 mod tests;

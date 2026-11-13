@@ -192,7 +192,7 @@ LinuxCNC G7 / G33 / one-block G76, drilling as plain moves) — each
 addressed BY NAME through `BUILTINS` in `crates/app/src/posting.rs`;
 their dialect goldens ride under `nc/<dialect>/`. The knobs that
 legitimately differ: header delimiters (`%` vs `;` vs bare), the `O`
-word, spindle words (`S.. M3` vs `MOTON S..`), tool-change words
+word, spindle words (`S.. M3` vs Heidenhain's own `M3` block), tool-change words
 (`T.. M6`, +`D..` on Sinumerik), and whether a G98 retract word
 exists to write at all (DIN families retract to R by documented
 default — inventing a word is the same lying as omitting one).

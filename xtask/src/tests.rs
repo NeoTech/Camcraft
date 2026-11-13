@@ -59,7 +59,8 @@ fn quick_plan(root: &Path, changed: &[&str], untracked: &[&str], hunks: &[(&str,
     let provider = move |f: &str| -> Vec<String> {
         hunks.iter().filter(|(hf, _)| hf == f).map(|(_, h)| h.clone()).collect()
     };
-    let diff = Diff { changed: &changed, untracked: &untracked, hunks: &provider };
+    let before = |file: &str| std::fs::read_to_string(root.join(file)).ok();
+    let diff = Diff { changed: &changed, untracked: &untracked, hunks: &provider, before: &before };
     quick::plan(root, &diff, heavy).expect("quick plan")
 }
 
