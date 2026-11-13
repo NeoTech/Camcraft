@@ -86,6 +86,55 @@ fn post(mch: &Value, stream: &str) -> engine::PostOutput {
     engine::run(&sinker_cps(), mch, stream).expect("the sinker post runs")
 }
 
+/// [`post`] for a document in `units` (`postOptions.Units`, #902).
+fn post_in(mch: &Value, stream: &str, units: &str) -> engine::PostOutput {
+    engine::run_with(&sinker_cps(), mch, stream, &json!({ "Units": units })).expect("the sinker post runs")
+}
+
+/// #1382: the program's unit is the document's (#902), never the machine
+/// file's. An inch machine file under an mm document posts the mm golden
+/// byte for byte; an inch document on the mm fixture writes the machine's
+/// inch code and every length and feed / 25.4, the rest equal.
+#[test]
+fn the_sinker_program_posts_in_the_documents_unit_not_the_machine_files() {
+    let golden = read("crates/app/tests/golden/nc/sinker-iso/sinker_burn_cavity.nc");
+    let mut inch_machine = dialect();
+    inch_machine["kinematics"]["default"]["units"]["length"] = json!("inch");
+    inch_machine["units"] = json!("inch");
+    for out in [post(&inch_machine, &stream_with(&[])), post_in(&inch_machine, &stream_with(&[]), "mm")] {
+        assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+        assert_eq!(out.program, golden, "an inch machine file must not make an inch program");
+    }
+    let mm = post_in(&dialect(), &stream_with(&[]), "mm");
+    assert_eq!(mm.program, golden, "Units mm posts what no unit posted");
+    let inch = post_in(&dialect(), &stream_with(&[]), "inch");
+    assert!(inch.warnings.is_empty(), "{:?}", inch.warnings);
+    let (a, b): (Vec<&str>, Vec<&str>) = (mm.program.lines().collect(), inch.program.lines().collect());
+    assert_eq!(a.len(), b.len(), "mm:\n{}\ninch:\n{}", mm.program, inch.program);
+    for (la, lb) in a.iter().zip(&b) {
+        if *la == "G21" {
+            assert_eq!(*lb, "G20", "the inch code replaces the metric one");
+            continue;
+        }
+        let (wa, wb): (Vec<&str>, Vec<&str>) = (la.split_whitespace().collect(), lb.split_whitespace().collect());
+        assert_eq!(wa.len(), wb.len(), "`{la}` vs `{lb}`");
+        for (x, y) in wa.iter().zip(&wb) {
+            let num = |w: &str| w.get(1..).and_then(|s| s.parse::<f64>().ok()).map(|v| (w.as_bytes()[0], v));
+            match (num(x), num(y)) {
+                (Some((lx, vx)), Some((ly, vy))) if lx == ly && b"XYZHF".contains(&lx) && !la.starts_with('(') => {
+                    let want = vx / 25.4;
+                    assert!((vy - want).abs() <= 0.0005 / 25.4 + 0.00005 + 1e-9, "{x} -> {y} (want {want:.5})");
+                }
+                _ => assert_eq!(x, y, "`{la}` vs `{lb}`"),
+            }
+        }
+    }
+    assert!(!b.contains(&"G21"), "no metric code in an inch program:\n{}", inch.program);
+    assert!(b.iter().any(|l| l.starts_with("M100 H0.5906")), "the 15 mm pickup in inches:\n{}", inch.program);
+    // The burn's depth: 14.05 mm is 0.5531 in.
+    assert!(b.contains(&"M101 Z0.5531"), "the burn depth in inches:\n{}", inch.program);
+}
+
 #[test]
 fn the_sinker_burn_posts_to_its_golden_against_the_fixture_dialect() {
     let out = post(&dialect(), &stream_with(&[]));
@@ -114,11 +163,11 @@ fn every_missing_sinker_code_refuses_the_post_by_name() {
         let want = format!("states no edm.codes.{role}");
         assert!(out.warnings.iter().any(|w| w.contains(&want)), "{role}: {:?}", out.warnings);
     }
-    // An inch machine needs the inch word, not the metric one.
+    // An inch document needs the inch word, not the metric one (#902,
+    // #1382: the document's unit, not the machine file's).
     let mut m = dialect();
-    m["kinematics"]["default"]["units"]["length"] = json!("inch");
     m["edm"]["codes"].as_object_mut().expect("codes").remove("inch");
-    let out = post(&m, &stream_with(&[]));
+    let out = post_in(&m, &stream_with(&[]), "inch");
     assert!(out.warnings.iter().any(|w| w.contains("states no edm.codes.inch")), "{:?}", out.warnings);
     // No codes at all (the library template's section, before its
     // codes are filled from the manual).

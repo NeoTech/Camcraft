@@ -28,12 +28,13 @@ setCodePage = "utf-8";
 capabilities = 1;          // reference contract: integer feature mask
 coolantModes = true;       // reads PARAM Coolant - to refuse every ask but Off
 serves = ["sinker_edm"];   // posts for sinker EDMs only (#1266 manifest; the app's serves door, #1232)
+programUnits = "mm inch"; // #902, #1382: writes the document's unit (postOptions.Units) with edm.codes.metric / edm.codes.inch
 
 // Determinism law: no timestamps, no randomness - the same stream always
 // posts to the same text (golden files depend on it).
 
 // ---------------------------------------------------------------- state
-var inch = false;          // the machine is programmed in inches (onOpen)
+var inch = false;          // the document is in inches (postOptions.Units, onOpen)
 var wcsWord = "G54";       // from the WorkOffset PARAM
 var orgX = 0, orgY = 0, orgZ = 0; // the WCS slot origin (OriginX/Y/Z PARAMs)
 var sectionOpen = false;   // preamble written (a legacy .cl has no SECTION)
@@ -47,7 +48,7 @@ var last = { X: null, Y: null, Z: null }; // the modal axis words written
 var refused = {};          // one named refusal per key, not one per line
 
 // ------------------------------------------------------------ helpers
-// The stream speaks mm and mm/min. An inch machine gets every length and
+// The stream speaks mm and mm/min. An inch program gets every length and
 // feed divided by 25.4 and written at four decimals; a metric one keeps
 // mm at three. Every length keeps its decimal point: an ISO control may
 // read a bare integer in its least increment.
@@ -154,7 +155,9 @@ function machineOk() {
 
 // -------------------------------------------------------------- header
 function onOpen() {
-  inch = typeof machine !== "undefined" && machine.units === "inch";
+  // #902, #1382: the document's unit, never the machine file's (that is
+  // only the unit the machine file was written in).
+  inch = typeof postOptions !== "undefined" && postOptions && postOptions.Units === "inch";
   note(clean(machineName()));
   if (!machineOk()) return;
   emit(code(inch ? "inch" : "metric"));
