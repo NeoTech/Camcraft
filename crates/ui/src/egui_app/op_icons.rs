@@ -27,6 +27,7 @@ pub(crate) fn op_icon(kind: OpType) -> Icon {
         OpType::Circular => Icon::Circular,
         OpType::PlasmaProfile => Icon::PlasmaProfile,
         OpType::WireContour => Icon::WireContour,
+        OpType::SinkerBurn => Icon::SinkerBurn,
         OpType::Drill => Icon::Drill,
         OpType::Bore => Icon::Bore,
         OpType::Thread => Icon::Thread,

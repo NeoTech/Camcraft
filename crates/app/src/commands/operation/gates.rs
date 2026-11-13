@@ -166,6 +166,15 @@ pub(super) fn family_gate(world: &World, context: Option<&str>, params: &OpParam
             params.kind(),
         )));
     }
+    // #541: sinker work needs a sinker EDM - nothing else feeds an
+    // electrode.
+    if family == Family::Sinker {
+        return Err(CommandError::Invalid(format!(
+            "a {} operation is sinker EDM work; the setup's machine is a {} - mount a sinker EDM first",
+            params.kind(),
+            machine.word(),
+        )));
+    }
     Err(CommandError::Invalid(format!(
         "a {} operation is {} work; {clause} - mount a {} (or a mill-turn) first",
         params.kind(),

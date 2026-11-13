@@ -91,6 +91,8 @@ pub(crate) use material_region::selection_drives_region;
 mod circle_fit;
 pub use circle_fit::{CIRCLE_FIT_TOL, circle_of_region, circular_fit_of};
 mod material_source;
+// #1071: the thread mill's major-circle rims and solid-law bores.
+mod thread_rims;
 mod footprint;
 pub use footprint::machined_footprint;
 mod probe;
@@ -99,6 +101,8 @@ pub mod probe_op;
 // #670: the Plasma Profile's seed and generation glue.
 pub mod plasma_op;
 pub mod wire_op;
+// #541: the sinker EDM burn to depth.
+pub mod sinker_op;
 // #171: the Probe op seeded from one picked face, edge, vertex or round wall.
 mod probe_pick;
 mod probe_pick_round;
@@ -164,6 +168,7 @@ mod turning_feeds;
 mod turning_holder;
 pub(crate) use turning_holder::body_axes as lathe_body_axes;
 mod turning_holder_scene;
+mod turning_holder_side;
 mod turning_outline;
 mod turning_rapids;
 mod turning_stock;

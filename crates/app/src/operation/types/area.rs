@@ -189,6 +189,7 @@ pub fn area_unsupported(kind: OpType) -> Option<String> {
             format!("a {kind} cuts its picked profile through the workpiece - pick the profile instead of a boundary")
         }
         OpType::Deburr => format!("{kind} breaks the model's own exposed edges - there is no area to bound"),
+        OpType::SinkerBurn => format!("a {kind} burns its electrode's own face - there is no area to bound"),
         // Mesh-driven with a moving tool axis: the model's own shadow.
         OpType::Contour5D
         | OpType::Parallel5D

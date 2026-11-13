@@ -159,6 +159,11 @@ impl SetAccessory {
             )));
         }
         let facets = params.mesh().map_err(|e| CommandError::Invalid(format!("'{name}': {e}")))?;
+        if let Some(m) = &prev.plate.mount
+            && accessory::subplate::figures(&params).is_some()
+        {
+            crate::commands::fixture_plate::still_seated(world, name, m, &params, &facets)?;
+        }
         let update = UpdateModel::new(world, name, Mesh::from_facets(facets))?;
         let next = FixtureDef { accessory: Some(params), ..prev.clone() };
         Ok(Self { name: name.to_owned(), update, prev, next })

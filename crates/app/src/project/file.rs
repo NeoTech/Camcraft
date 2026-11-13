@@ -336,6 +336,21 @@ pub struct ToolDto {
     /// tool sanity law (`validate`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub orientation: Option<u8>,
+    /// #898 catalog facts, additive (no version step): each key is
+    /// written only when stated, so a tool without them saves byte for
+    /// byte as before, and an older build reads a file that has them by
+    /// skipping the keys (it keeps no unknown-key refusal on a tool).
+    /// Display data: nothing a generator or law reads.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub part_number: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vendor: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub coating: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub helix_deg: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notes: Option<String>,
     /// #891 addition, additive (no version step): the turning cutting
     /// data (surface speed m/min, feed mm/rev, max-rpm clamp). Absent
     /// from every older file and written only when stated; absent
@@ -400,6 +415,8 @@ pub enum ToolKindDto {
     /// The plasma torch (#670): additive in the same way - no older
     /// file names it.
     Torch,
+    /// The sinker electrode (#541): additive in the same way.
+    Electrode,
 }
 
 impl ToolDto {
@@ -419,6 +436,7 @@ impl ToolDto {
                 ToolKind::Taper => ToolKindDto::Taper,
                 ToolKind::Probe => ToolKindDto::Probe,
                 ToolKind::Torch => ToolKindDto::Torch,
+                ToolKind::Electrode => ToolKindDto::Electrode,
             },
             diameter: t.diameter,
             corner_r: t.corner_r,
@@ -444,6 +462,11 @@ impl ToolDto {
             body: None,
             cutter: None,
             orientation: t.orientation,
+            part_number: t.catalog.part_number.clone(),
+            vendor: t.catalog.vendor.clone(),
+            coating: t.catalog.coating.clone(),
+            helix_deg: t.catalog.helix_deg,
+            notes: t.catalog.notes.clone(),
             turning: t.turning,
         }
     }
@@ -464,6 +487,7 @@ impl ToolDto {
                 ToolKindDto::Taper => ToolKind::Taper,
                 ToolKindDto::Probe => ToolKind::Probe,
                 ToolKindDto::Torch => ToolKind::Torch,
+                ToolKindDto::Electrode => ToolKind::Electrode,
             },
             diameter: self.diameter,
             corner_r: self.corner_r,
@@ -486,6 +510,15 @@ impl ToolDto {
             flutes: self.flutes,
             center_cutting: self.center_cutting,
             orientation: self.orientation,
+            // Read trimmed, so a hand-edited padded string loads.
+            catalog: camcraft_tools::catalog_fields::ToolCatalog {
+                part_number: self.part_number.clone(),
+                vendor: self.vendor.clone(),
+                coating: self.coating.clone(),
+                helix_deg: self.helix_deg,
+                notes: self.notes.clone(),
+            }
+            .normalized(),
             turning: self.turning,
         }
     }

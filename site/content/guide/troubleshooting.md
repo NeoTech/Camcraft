@@ -4,6 +4,12 @@ description = "Find the message you see, learn what it means and how to fix it."
 weight = 7
 +++
 
+<!-- Maintainers: every `### ` heading holds the message(s) as backticked
+spans. Text between angle brackets and `...` are placeholders. Each
+remaining fragment of 8+ characters must still appear in the sources under
+crates/ - the test crates/app/tests/docs_troubleshooting.rs fails on a stale
+one. Never write a message here that was not copied from the code. -->
+
 This page is organised by what you see. Find the message (or its start; the
 parts in angle brackets are filled in with your operation, tool or numbers),
 read what it means, then follow the fix. For the rules behind the
@@ -145,7 +151,7 @@ space.
 holder and length), a slimmer holder, or a shallower step-down, and
 regenerate.
 
-### `holder body at move <n> rubs the part - <x> mm short of clearance`
+### `holder body at move <n> rubs the <part or uncut stock> - <x> mm short of clearance`
 
 **Means.** The holder comes within less than its clearance of the part or
 uncut stock.
@@ -250,9 +256,135 @@ again.
 **Fix.** Open the setup's Post page and choose a built-in post, or load a
 `.cps` post script with **Load post (.cps)**.
 
+## Importing a model
+
+### `file is empty`
+
+**Means.** The file you chose has no content.
+
+**Fix.** Re-export the model from your CAD program and import the new file.
+
+### `corrupt STL: <reason>` (also `corrupt OBJ: ...`, `corrupt STEP: ...`)
+
+**Means.** The file could not be read as the format its extension claims.
+The reason after the colon says where it went wrong. Nothing was imported.
+
+**Causes.** A file cut short by a failed copy or download; a file renamed
+to another extension; an export that wrote something other than a model.
+
+**Fix.** Re-export from the CAD program, and check the file opens there.
+
+### `unsupported file type: <ext>`
+
+**Means.** CamCraft reads STEP, STL and OBJ files; this extension is none
+of them.
+
+**Fix.** Export the model as STEP (best, it keeps exact surfaces), STL or
+OBJ.
+
+### `'<ext>' import is not supported yet; import a STEP, STL, or OBJ file instead`
+
+**Means.** IGES files (`.iges`, `.igs`) are refused by name: CamCraft has no
+reader for them.
+
+**Fix.** Re-export the model from your CAD program as STEP.
+
+### `model exceeds the import limit`
+
+**Means.** The model has more facets than an import may hold.
+
+**Fix.** Export a coarser mesh, or a STEP file (it is tessellated to a
+budget on import).
+
+### `imported mesh contains non-finite coordinates`
+
+**Means.** The file holds a coordinate that is not a number, so the model
+cannot be trusted.
+
+**Fix.** Repair or re-export the model in the CAD program.
+
+### `the file states two length units (<a> mm and <b> mm per unit)`
+
+**Means.** A STEP file declares more than one length unit and they
+disagree. CamCraft refuses rather than guess your part's scale.
+
+**Fix.** Re-export the STEP file with a single length unit. A file in
+inches that arrives 25.4 times too small or large was exported without a
+stated unit: check the size on the model page and re-export in millimetres.
+
+### `Reduced fidelity: surfaces are approximated to within <tolerance>`
+
+**Means.** The STEP model was tessellated more coarsely than the usual cap
+to stay within the facet budget, and the model page says so.
+
+**Fix.** If you need tighter checks, raise the **STEP facet budget** on the
+model page and import again.
+
+### `<operation>: model '<model>' was imported at reduced fidelity (...) and this kind of operation cannot be verified against it; ...`
+
+**Means.** The operation's safety checks need a finer model than the one
+imported, so the post is blocked rather than passed unjudged. A related
+form ends `imported too coarsely to verify; re-import with a larger STEP
+facet budget`.
+
+**Fix.** Re-import the model with a larger **STEP facet budget**, then
+regenerate.
+
+## Turning
+
+### `Facing needs a turning insert, '<tool>' is a <kind>`
+
+**Means.** A turning operation was given a tool that is not a turning
+insert. The same wording starts for Profile Rough, Profile Finish,
+Chamfering, Taper Turning and Multi-Pass Turning.
+
+**Fix.** Pick a turning insert on the operation's Geometry tab.
+
+### `the part's axis of revolution is not the lathe spindle: ...`
+
+**Means.** The part leans, or sits off the spindle centre line, so turned
+as posted it would cut a taper or an eccentric. The message gives the
+lean and the offset.
+
+**Fix.** Align the part's axis with world Z and move the work offset onto
+the spindle, as the message says, then regenerate.
+
+### `a Plasma Profile operation cannot be posted through a lathe post` (also Probe)
+
+**Means.** A lathe post turns the work at the tool's speed; an operation
+that is not turned would be written wrongly. A message starting
+`a <kind> operation would be posted on the work spindle` is the same
+refusal for a milling operation.
+
+**Fix.** Post it through the post for its own machine, cut it as C-axis
+live tooling where the machine has it, or suppress the operation.
+
+## Plasma
+
+### `a plasma profile mounts a plasma torch, not a <kind> - its diameter is the kerf width`
+
+**Means.** The operation's tool is not a torch.
+
+**Fix.** Pick a torch tool; its diameter is the kerf width.
+
+### `<operation>: the plasma laws have no toolpath to judge - generate it first`
+
+**Means.** A plasma operation has no toolpath, so the cut-order and kerf
+checks had nothing to judge.
+
+**Fix.** Select the operation, click **Generate**, then post again.
+
+### `the 3D stock sim does not run for plasma`
+
+**Means.** Not a failure: the report says a torch is judged by the plasma
+laws (cut order, kerf crossing and the like) and not by the 3D stock
+simulation.
+
+**Fix.** None; if the plasma laws refuse the program the post names the
+problem.
+
 ## Not covered yet
 
-Importing a model at the wrong scale, and more refusals for turning, EDM
-and plasma, are not on this page yet. If you meet a message that is not
-here, [report it](https://github.com/NeoTech/Camcraft/issues) with the text
+Wire and sinker EDM refusals are not on this page yet. If you meet a
+message that is not here, [report it](https://github.com/NeoTech/Camcraft/issues) with the text
 and, if you can, the project file.

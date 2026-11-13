@@ -352,7 +352,9 @@ function startPreamble() {
     spindleWait = false;
   }
   if (probeStop) block(["M5"]);
-  coolant = coolantFor(coolantAsk);
+  // #995: a touch probe section starts no coolant, whatever its ask -
+  // fluid on the stylus and the measured faces spoils the reading.
+  coolant = probeStop ? "" : coolantFor(coolantAsk);
   if (coolant) block([coolant]);
   smoothOn();
 }

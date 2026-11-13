@@ -59,6 +59,10 @@ pub mod program_entry;
 pub use camcraft_motion::plasma;
 pub use camcraft_motion::wire_edm;
 pub use camcraft_motion::probing;
+// #541: sinker EDM burn to depth.
+pub use camcraft_motion::sinker;
+// #544: sinker EDM orbit patterns.
+pub use camcraft_motion::sinker_orbit;
 pub mod project;
 // #35: pocket and slot recognition on the model's faces.
 pub mod recognize;
@@ -69,6 +73,7 @@ pub mod prefs;
 pub mod recent;
 pub mod rest;
 pub mod ribbon;
+pub mod rotary_stack;
 pub mod schema;
 pub mod script;
 pub mod setup;
@@ -112,6 +117,7 @@ pub mod tool_numbers;
 pub use camcraft_tools::tools;
 // #630: the lathe tool orientation code (LinuxCNC 1-9) and its control point.
 pub use camcraft_tools::orientation;
+pub use camcraft_tools::catalog_fields;
 // #93: the drawn spun profile of a milling holder.
 pub use camcraft_tools::spun;
 // #93 slice 2: the drawn cutter law, and the tool's stored drawn cutter.
@@ -127,6 +133,11 @@ pub mod tool_body;
 pub mod tool_body_view;
 // #369: lathe-held tool bodies (the turning tool frame).
 pub mod tool_body_lathe;
+// #369/#396: the turning tool frame and the insert zone, for the UI.
+pub use camcraft_tools::{lathe_holder, lathe_insert_zone};
+// #361: the one door a body file is read through; the lathe placement reads.
+pub mod tool_body_file;
+pub mod tool_body_lathe_view;
 // #743: the simulated tool as the collision laws read it, revolved.
 pub mod sim_tool_body;
 // #1038: a lathe-held body drawn as modelled in the holder law's frame.

@@ -3,7 +3,8 @@
 //! what a rotated setup or a posed operation can leave) is judged
 //! exactly as a vertical move - a holder wider than the cutter no longer
 //! flips to a false collision on float noise - while a real small tilt,
-//! just above the tolerance, still takes the tilted (enclosing) reading.
+//! just above the tolerance, still takes the tilted (enclosing) reading
+//! (which, since #1303, meets the upright one there: no cliff).
 //! And one move reports one ShankHit per verdict, not one per band group.
 //!
 //! Provenance: our own fixtures, specced from the Prime Directive (no
@@ -59,8 +60,9 @@ fn program(axis: Option<[f64; 3]>) -> Toolpath {
 }
 
 /// Upright, the holder's bottom stands 5 mm above the stock top (Z 0):
-/// clean. Its 15 mm radius is wider than the 3 mm cutter, so the tilted
-/// reading (its bottom dropped by its own radius) reaches into stock.
+/// clean. Its 15 mm radius is wider than the 3 mm cutter; tilted, its
+/// rim dips R·sin θ (#1303; the whole radius before, reaching the stock
+/// on any tilt at all).
 fn wide_holder() -> ToolGeom {
     ToolGeom {
         radius: 3.0,
@@ -123,11 +125,20 @@ fn a_wide_holder_reads_the_same_upright_and_at_a_rounding_error_of_tilt() {
     assert_eq!(judge(&program(noise()), &tool), none, "1e-10 degrees is upright steel");
 }
 
+/// Just above the tolerance the tilted reading is taken - and since
+/// #1303 it meets the upright one there: the holder's rim dips by its
+/// exact R·sin θ (1.5e-8 mm at 1.01e-9 rad), not by its whole 15 mm, so
+/// a holder 5 mm clear of the stock stays clear. Before #1303 both of
+/// the small tilts below convicted (a cliff at the tolerance). A tilt
+/// that really brings the rim into the stock still convicts: at 20
+/// degrees the holder's low rim stands 30·cos θ - 15·sin θ - 25 = -1.9
+/// mm, under the stock top.
 #[test]
-fn a_tilt_just_above_the_tolerance_is_still_judged_tilted() {
+fn a_tilt_just_above_the_tolerance_reads_like_upright_and_a_real_dip_convicts() {
     let tool = wide_holder();
-    assert_eq!(judge(&program(just_tilted()), &tool), hits_at_both_moves());
-    assert_eq!(judge(&program(Some(tilt(0.001f64.to_radians()))), &tool), hits_at_both_moves());
+    assert_eq!(judge(&program(just_tilted()), &tool), Vec::new(), "no cliff at the tolerance");
+    assert_eq!(judge(&program(Some(tilt(0.001f64.to_radians()))), &tool), Vec::new());
+    assert_eq!(judge(&program(Some(tilt(20f64.to_radians()))), &tool), hits_at_both_moves());
 }
 
 /// A shank wider than the cutter in a tight pocket convicts upright;
@@ -143,20 +154,25 @@ fn a_noise_tilt_keeps_the_upright_conviction_exactly() {
 }
 
 /// Leaning, the wide shank AND the wide holder both reach the stock:
-/// one move, one ShankHit - not one per band group.
+/// one move, one ShankHit - not one per band group. At 20 degrees, so
+/// the holder's rim really dips under the stock top (#1303: just above
+/// the tolerance only the shank group convicts now).
 #[test]
 fn a_leaning_shank_and_holder_report_one_shank_hit_per_move() {
     let mut tool = wide_holder();
     tool.shank_radius = 5.0;
     let tight = rect(-4.0, -4.0, 6.0, 4.0);
-    let w = judge_in(&program(just_tilted()), &tool, &tight);
+    let w = judge_in(&program(Some(tilt(20f64.to_radians()))), &tool, &tight);
     assert_eq!(w, hits_at_both_moves());
+    // Just above the tolerance the shank group alone convicts, exactly
+    // as upright: the same single report.
+    assert_eq!(judge_in(&program(just_tilted()), &tool, &tight), hits_at_both_moves());
 }
 
 /// The fixture band law (c2) branches on the same tolerance: a clamp
 /// beside the cut whose top stands just under the upright holder's
-/// bottom (Z 30) is clear upright and at noise, and convicts the leaning
-/// holder's enclosing column.
+/// bottom (Z 30) is clear upright and at noise, and convicts a real lean
+/// (3 deg; the clamp is struck from about 2.1 deg on).
 #[test]
 fn the_fixture_band_law_reads_noise_as_upright_and_a_real_tilt_as_tilted() {
     let clamp = [FixtureBox { min: Point3::new(6.0, -8.0, -10.0), max: Point3::new(14.0, 8.0, 29.5) }];
@@ -168,6 +184,6 @@ fn the_fixture_band_law_reads_noise_as_upright_and_a_real_tilt_as_tilted() {
     let up = bands_vs_fixtures(&feed(None), &tool, &clamp, None, 0.01);
     assert!(up.is_empty(), "upright, the holder clears the clamp: {up:?}");
     assert_eq!(bands_vs_fixtures(&feed(noise()), &tool, &clamp, None, 0.01), up);
-    let lean = bands_vs_fixtures(&feed(just_tilted()), &tool, &clamp, None, 0.01);
+    let lean = bands_vs_fixtures(&feed(Some(tilt(3f64.to_radians()))), &tool, &clamp, None, 0.01);
     assert!(!lean.is_empty(), "a real tilt keeps the enclosing reading");
 }
