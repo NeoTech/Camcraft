@@ -5,7 +5,8 @@
 //! proves the wall stands where stated and the next column out is
 //! untouched; a lateral move past the allowance (undersize less the
 //! condition's spark gap) is refused by name at creation and at
-//! generation; the CL is golden.
+//! generation; the CL is golden. A wear rate or layer step (#546) is
+//! refused by name at every door until the side move is compensated.
 //!
 //! Gate map (#545): covers motion::sinker_side, motion::sinker (check),
 //! app::operation (sinker_side_op, kinds row, params digest, sane),
@@ -22,7 +23,8 @@ use flecs_ecs::prelude::World;
 
 use camcraft_app::cl::MoveKind;
 use camcraft_app::commands::{
-    AddTool, CreateOperation, EditOperationParams, GenerateOperation, History, ImportModel, LoadMachine, SetStock,
+    AddTool, CreateOperation, EditOperationParams, GenerateOperation, History, ImportModel, LoadMachine, PasteOperation,
+    SetStock,
 };
 use camcraft_app::geometry::{Mesh, Point3, Triangle};
 use camcraft_app::machine::parse_mch;
@@ -94,6 +96,9 @@ fn side(direction: SinkerSideDirection, amount: f64, undersize: f64, condition: 
             cavity_x: 0.0,
             cavity_y: 0.0,
             orbit: None,
+            layer: None,
+            wear_lost: None,
+            wear_over: None,
         },
         direction,
         amount,
@@ -315,4 +320,62 @@ fn the_side_burn_round_trips_the_file_and_rides_the_mcp_params_door() {
     ok(&call(&mut s, &mut id, "generate", json!({ "name": "Side1" })), "generate after the edit");
     ok(&call(&mut s, &mut id, "undo", json!({})), "undo");
     ok(&call(&mut s, &mut id, "generate", json!({ "name": "Side1" })), "generate after undo");
+}
+
+/// #546 meets #545: electrode wear compensation is not supported on a
+/// Side Burn yet - a measured wear (or a layer step) is refused by name
+/// at create, edit, paste and the project reader, never ignored.
+#[test]
+fn a_side_burn_with_a_wear_rate_is_refused_by_name() {
+    const WEAR: &str = "electrode wear compensation is not supported on a Sinker Side Burn yet - clear the wear rate";
+    let worn = |lost: Option<f64>, over: Option<f64>, layer: Option<f64>| {
+        let mut p = side(SinkerSideDirection::PlusX, AMOUNT, UNDER, "S1");
+        if let OpParams::SinkerSideBurn(s) = &mut p {
+            (s.burn.wear_lost, s.burn.wear_over, s.burn.layer) = (lost, over, layer);
+        }
+        p
+    };
+    let (world, mut h) = finished_doc();
+    let create = |p: OpParams| CreateOperation::new(&world, "Side9", ELECTRODE, SrcRef::Stock, p).map(|_| ());
+    for (lost, over) in [(Some(0.1), Some(5.0)), (Some(0.1), None), (None, Some(5.0))] {
+        let err = create(worn(lost, over, None)).expect_err("a worn side burn");
+        assert!(err.to_string().contains(WEAR), "{lost:?}/{over:?}: {err}");
+    }
+    let err = create(worn(None, None, Some(1.0))).expect_err("a layered side burn");
+    assert!(err.to_string().contains("burning in layers is not supported on a Sinker Side Burn yet"), "{err}");
+
+    let plain = side(SinkerSideDirection::PlusX, AMOUNT, UNDER, "S1");
+    h.execute(&world, CreateOperation::new(&world, "Side1", ELECTRODE, SrcRef::Stock, plain.clone()).expect("plain"));
+    let err = EditOperationParams::new(&world, "Side1", worn(Some(0.1), Some(5.0), None)).map(|_| ()).expect_err("edit");
+    assert!(err.to_string().contains(WEAR), "{err}");
+    let e = model::find_by_name(&world, "Side1").expect("op");
+    let mut copy = model::operation_of(&world, &e).expect("op");
+    copy.params = worn(Some(0.1), Some(5.0), None);
+    let err = PasteOperation::new(&world, "Side2", copy).map(|_| ()).expect_err("paste");
+    assert!(err.to_string().contains(WEAR), "{err}");
+    h.execute(&world, GenerateOperation::new(&world, "Side1").expect("the plain side burn generates"));
+
+    // A hand-edited file stating a wear on the side burn: the reader refuses it by name.
+    let path = std::env::temp_dir().join(format!("camcraft-546-side-{}.ccam", std::process::id()));
+    project::save(&world, &path).expect("save");
+    let text = std::fs::read_to_string(&path).expect("read");
+    let mut v: serde_json::Value = serde_json::from_str(&text).expect("json");
+    fn stamp(v: &mut serde_json::Value) -> bool {
+        match v {
+            serde_json::Value::Object(m) if m.contains_key("undersize") && m.contains_key("amount") => {
+                m.insert("wear_lost".into(), serde_json::json!(0.1));
+                m.insert("wear_over".into(), serde_json::json!(5.0));
+                true
+            }
+            serde_json::Value::Object(m) => m.values_mut().any(stamp),
+            serde_json::Value::Array(a) => a.iter_mut().any(stamp),
+            _ => false,
+        }
+    }
+    assert!(stamp(&mut v), "the side burn's row is in the file");
+    std::fs::write(&path, v.to_string()).expect("write");
+    let back = new_world();
+    let err = project::load(&back, &path).expect_err("the reader refuses it");
+    let _ = std::fs::remove_file(&path);
+    assert!(err.to_string().contains(WEAR), "{err}");
 }

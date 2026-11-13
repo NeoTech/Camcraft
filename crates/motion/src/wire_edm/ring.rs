@@ -31,6 +31,15 @@ pub(super) fn pt_seg(p: Point2, a: Point2, b: Point2) -> f64 {
     (p.x - (a.x + t * dx)).hypot(p.y - (a.y + t * dy))
 }
 
+/// Distance from `p` to the open polyline `run` (#1109).
+pub(super) fn pt_poly(p: Point2, run: &[Point2]) -> f64 {
+    match run {
+        [] => f64::INFINITY,
+        [one] => dist(p, *one),
+        _ => run.windows(2).map(|w| pt_seg(p, w[0], w[1])).fold(f64::INFINITY, f64::min),
+    }
+}
+
 /// Distance from `p` to the closed ring.
 pub(super) fn pt_ring(p: Point2, ring: &[Point2]) -> f64 {
     let n = ring.len();
@@ -81,6 +90,9 @@ pub(super) fn wire_ring(profile: &Region, side: WireSide, k: f64) -> Result<Vec<
     let off = profile.offset_sharp(match side {
         WireSide::Die => -k,
         WireSide::Punch => k,
+        WireSide::Left | WireSide::Right => {
+            return Err(invalid("a closed profile states its die or punch side, not left or right".into()));
+        }
     })?;
     let kerf = 2.0 * k;
     let one = match (off.loops(), side) {
@@ -95,7 +107,7 @@ pub(super) fn wire_ring(profile: &Region, side: WireSide, k: f64) -> Result<Vec<
                 "the profile narrows to a neck under the kerf width ({kerf:.4} mm) - the wire cannot pass it without burning the die"
             )));
         }
-        (_, WireSide::Punch) => {
+        (_, WireSide::Punch | WireSide::Left | WireSide::Right) => {
             return Err(invalid(format!(
                 "the profile has a slot or notch narrower than the kerf width ({kerf:.4} mm) - the wire cannot enter it; widen it or use a thinner wire"
             )));

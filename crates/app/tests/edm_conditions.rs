@@ -49,3 +49,11 @@ fn the_table_rides_the_project_file() {
     assert_eq!(e.conditions[1].gap, Some(0.02));
     assert!(e.condition("back", "C210", &[ConditionField::Gap]).is_ok());
 }
+
+/// Review #1157: a wire machine stating a sinker `wear` rate (#546) is
+/// refused by name, the same as one stating `undersize`.
+#[test]
+fn a_wire_machine_stating_wear_is_refused_by_name() {
+    let e = parse_mch(&with_conditions(r#"[ { "id": "C110", "gap": 0.04, "wear": 0.1 } ]"#)).expect_err("wear on a wire parsed");
+    assert!(e.to_string().contains("wear is a sinker field; this is a wire_edm machine"), "{e}");
+}

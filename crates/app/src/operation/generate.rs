@@ -119,6 +119,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         wire,
         sinker_gap,
         sinker_pass,
+        sinker_wear,
     } = job;
     // The sinker burn (#541) is its own law: one electrode plunged to a
     // depth read from its datum; no milling law has an electrode to
@@ -128,7 +129,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         let gap = sinker_gap
             .ok_or_else(|| GenError::Invalid("sinker burn: its condition was never read".into()))?
             .map_err(GenError::Invalid)?;
-        return super::sinker_op::generate_sinker(op, &tool, &hs, gap, sinker_pass, &material.facets);
+        return super::sinker_op::generate_sinker(op, &tool, &hs, gap, sinker_pass, sinker_wear, &material.facets);
     }
     // The side burn (#545): the burn's plunge plus one lateral move, its
     // allowance refused by name in its own door.
@@ -180,9 +181,17 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
     // the generator certifies its kerf and corner laws (#534 verifies).
     if let OpParams::WireContour(op) = &params {
         let picks = contour_sel.take().transpose()?.map(|(loops, chains, _)| (loops, chains));
-        return super::wire_op::generate_wire(op, wire.ok_or_else(|| unreached("wire condition")), &hs, picks, || {
-            region_for_job(&mut picked_region, &mut section_z, &src, &params, &material, None)
-        });
+        // #1109: an open run is entered from the stock's edge - the
+        // setup's stock outline, read only when a run is picked.
+        let stock = || stock_facets.as_deref().and_then(|f| slice::project(f, FOOTPRINT_SAMPLES).ok()).filter(|r| !r.is_empty());
+        return super::wire_op::generate_wire(
+            op,
+            wire.ok_or_else(|| unreached("wire condition")),
+            &hs,
+            picks,
+            || region_for_job(&mut picked_region, &mut section_z, &src, &params, &material, None),
+            stock,
+        );
     }
     // The program ahead, cut only when a law asks (#89, #96 review).
     let mut verify_prior = super::drill_prior::PriorCell::new(verify_prior);

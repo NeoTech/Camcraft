@@ -107,6 +107,8 @@ pub mod wire_verify;
 pub mod sinker_op;
 // #543: the sinker's rough and finish passes.
 pub mod sinker_pass;
+// #546: the sinker burn's electrode wear compensation.
+pub mod sinker_wear_op;
 // #545: the Sinker Side Burn's seed, laws and generation.
 pub mod sinker_side_op;
 // #171: the Probe op seeded from one picked face, edge, vertex or round wall.

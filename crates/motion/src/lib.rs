@@ -39,6 +39,8 @@ pub mod probing;
 pub mod sinker;
 // #543: sinker rough and finish with undersize.
 pub mod sinker_undersize;
+// #546: sinker electrode wear compensation in Z.
+pub mod sinker_wear;
 // #544: sinker EDM orbit patterns as explicit moves.
 pub mod sinker_orbit;
 // #545: sinker EDM side burning by a lateral electrode move.
