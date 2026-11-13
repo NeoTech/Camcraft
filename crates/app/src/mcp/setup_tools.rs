@@ -9,13 +9,13 @@
 
 use super::tools::{opt_str, req_str, Tool};
 use crate::commands::{
-    ActivateSetup, CommandError, CreateSetup, LoadMachine, SetSetupMachine, SetSetupPost, SetSetupWorkOffset, SetStockSourceOnly,
+    ActivateSetup, CommandError, CreateSetup, DeleteSetup, LoadMachine, SetOperationSetup, SetSetupMachine, SetSetupPost, SetSetupWorkOffset, SetStockSourceOnly,
     SetWcsOrigin,
 };
 use crate::geometry::{Point3, IDENTITY_Q};
 use crate::model;
 use crate::schema::{Location, PostRef, WCS_SLOTS};
-use crate::script::{fnum, Env};
+use crate::script::{api, fnum, inventory, Env};
 use crate::setup;
 
 use serde_json::{json, Map, Value};
@@ -23,6 +23,8 @@ use serde_json::{json, Map, Value};
 pub(super) const TOOLS: &[Tool] = &[
     Tool { name: "add_setup", description: "Declare a new setup and make it active. With datum_from, it starts as a copy of that setup's stock and WCS placement. The first setup on a document without setups adopts the existing stock and G54.", schema: s_add_setup, run: add_setup },
     Tool { name: "activate_setup", description: "Make a declared setup the active one: where new operations, stock and WCS edits go.", schema: s_setup_name, run: activate_setup },
+    Tool { name: "set_operation_setup", description: "Move an operation into another declared setup (setup null: the implicit first position). The stamp is kept, so the operation reads ok or stale by the staleness law. One undo step. Refused by name: an unknown operation or setup, a move to where it already is.", schema: s_set_operation_setup, run: set_operation_setup },
+    Tool { name: "delete_setup", description: "Delete a declared setup with its private stock and WCS; one undo restores them. Refused by name while an operation still machines in it (move or delete it first) or another setup is placed relative to it.", schema: s_setup_name, run: delete_setup },
     Tool { name: "set_wcs", description: "Place the active setup's work coordinate system: an absolute origin, or a point of the stock's bounding box (min/center/max per axis) plus an optional offset. Rotation is a unit quaternion [x, y, z, w]; omitted keeps the current one.", schema: s_set_wcs, run: set_wcs },
     Tool { name: "set_work_offset", description: "Set the work offset (G54 to G59) the post uses for a declared setup's WCS; null clears it (posts G54). Moves no origin.", schema: s_work_offset, run: set_work_offset },
     Tool { name: "set_raw_stock_only", description: "For a stock made from a model (set_stock from_model): say whether that source model is raw stock only - a casting or blank you cut into, not the finished part - so the post's gouge verdict does not judge it (on), or is judged like every model (off, the default). An operation that machines the model judges it again. One undo step.", schema: s_raw_stock_only, run: set_raw_stock_only },
@@ -93,6 +95,30 @@ fn activate_setup(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String
     let cmd = ActivateSetup::new(&env.world, Some(name)).map_err(cmd_err)?;
     env.history.execute(&env.world, cmd);
     Ok(json!({ "active": setup::active(&env.world) }))
+}
+
+fn set_operation_setup(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
+    let op = req_str(a, "operation")?;
+    let target = match a.get("setup") {
+        None => return Err("\"setup\" is required (a declared setup, or null for the first position)".into()),
+        Some(Value::Null) => None,
+        Some(Value::String(s)) => Some(s.as_str()),
+        Some(other) => return Err(format!("\"setup\" must be a string or null, got {other}")),
+    };
+    let cmd = SetOperationSetup::new(&env.world, op, target).map_err(cmd_err)?;
+    env.history.execute(&env.world, cmd);
+    let status = inventory(env)
+        .iter()
+        .find(|(k, e, _)| k == op || model::operation_label(&env.world, k, e) == op)
+        .map(|(_, _, s)| api::st_str(*s));
+    Ok(json!({ "operation": op, "setup": target, "status": status }))
+}
+
+fn delete_setup(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
+    let name = req_str(a, "name")?;
+    let cmd = DeleteSetup::new(&env.world, name).map_err(cmd_err)?;
+    env.history.execute(&env.world, cmd);
+    Ok(json!({ "deleted": name, "active": setup::active(&env.world), "setups": setup::names(&env.world) }))
 }
 
 /// One axis of a `stock_point`: where on the stock box's span it sits.
@@ -290,6 +316,16 @@ fn set_raw_stock_only(env: &mut Env, a: &Map<String, Value>) -> Result<Value, St
 
 fn s_setup_name() -> Value {
     obj(json!({ "name": { "type": "string", "description": "A declared setup's name." } }), &["name"])
+}
+
+fn s_set_operation_setup() -> Value {
+    obj(
+        json!({
+            "operation": { "type": "string", "description": "The operation's name." },
+            "setup": { "type": ["string", "null"], "description": "A declared setup; null moves it to the implicit first position." }
+        }),
+        &["operation", "setup"],
+    )
 }
 
 fn s_set_wcs() -> Value {
