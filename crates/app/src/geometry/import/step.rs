@@ -24,6 +24,7 @@ use std::panic::AssertUnwindSafe;
 use truck_meshalgo::prelude::*;
 use truck_stepio::r#in::Table;
 
+use super::step_refine::PassError;
 use super::{ImportError, MAX_FACETS};
 use crate::geometry::{Mesh, Point3, Triangle};
 
@@ -221,18 +222,27 @@ fn shell_facets(
     // triangles, stop with `TooLarge` as soon as `budget` is crossed. A
     // closure so the heavily-aliased CompressedShell type is inferred
     // instead of spelled out.
-    let triangulate = |tol: f64| -> Result<Vec<Triangle>, ImportError> {
+    let triangulate = |tol: f64| -> Result<Vec<Triangle>, PassError> {
         guarded.reset();
         // A panic is held until the meters are read: a face that ran past
         // its cap is the cause worth naming, not the panic it led to.
         let meshed = std::panic::catch_unwind(AssertUnwindSafe(|| cshell.robust_triangulation(tol).to_polygon()));
-        if let Some((i, kind)) = guarded.tripped() {
-            // Refused even when a coarser pass met: a surface that jumps
-            // converges at any tolerance wider than its gap, and keeping
-            // that mesh would smear the gap into a wall that is not there.
-            tracing::error!("step: face {} of shell #{shell_id} ({kind}) did not converge within {cap} evaluations", i + 1);
+        if let Some(trip) = guarded.tripped() {
+            // A face that may jump is refused even when a coarser pass
+            // met: it converges at any tolerance wider than its gap, and
+            // that mesh smears the gap into a wall that is not there. A
+            // face proven continuous only ran out of evaluations, and
+            // `refine` keeps the coarser mesh if there is one (#1568).
+            let i = trip.index;
+            tracing::warn!(
+                "step: face {} of shell #{shell_id} ({}, continuous: {}) ran past {cap} evaluations at tol {tol:e}",
+                i + 1,
+                trip.kind,
+                trip.continuous
+            );
             let entity = face_ids.as_ref().and_then(|ids| ids.as_slice().get(i).copied());
-            return Err(super::step_guard::refusal(i, kind, cshell.faces.len(), entity, Some(shell_id), cap));
+            let refusal = super::step_guard::refusal(trip, cshell.faces.len(), entity, Some(shell_id), cap);
+            return Err(PassError::Unconverged { continuous: trip.continuous, refusal });
         }
         let meshed = meshed.unwrap_or_else(|panic| std::panic::resume_unwind(panic));
         let positions = meshed.positions();
@@ -259,7 +269,7 @@ fn shell_facets(
                 if n.x != 0.0 || n.y != 0.0 || n.z != 0.0 {
                     facets.push(tri);
                     if facets.len() > budget {
-                        return Err(ImportError::TooLarge);
+                        return Err(PassError::Over);
                     }
                 }
             }

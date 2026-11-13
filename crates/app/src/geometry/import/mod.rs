@@ -9,6 +9,7 @@ pub mod obj;
 pub mod step;
 pub mod step_budget;
 pub mod step_csys;
+mod step_continuity;
 mod step_diag;
 mod step_guard;
 pub mod step_depth;

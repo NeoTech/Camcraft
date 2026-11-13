@@ -25,9 +25,12 @@
 //! keep their specialised division. Past the cap the wrapper answers every
 //! evaluation with one fixed point: no cell is then "far", the subdivision
 //! ends within one more sweep, and the importer refuses the model naming
-//! the face. No thread is spawned and none is left behind.
+//! the face - unless the trip came on a finer pass over a face proven
+//! continuous, which keeps the coarser mesh (#1568). No thread is spawned
+//! and none is left behind.
 
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::ops::Bound;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 
 use truck_stepio::r#in::alias::{
@@ -38,22 +41,39 @@ use truck_topology::compress::{CompressedFace, CompressedShell};
 
 use super::ImportError;
 
-/// Surface evaluations one face may spend in one tessellation pass. A
-/// healthy face at the finest chord the importer asks for needs a few
-/// million (a 1000 x 1000 grid is ~7M with the subdivision's own probes);
-/// a face that never converges reaches it in seconds and is refused.
-pub const FACE_EVAL_CAP: u64 = 25_000_000;
+/// Surface evaluations one face may spend in one tessellation pass.
+///
+/// Measured (#1568; M5's 75-file corpus of testdata and users' models,
+/// release): a healthy face needs far more than its facet count suggests -
+/// a trimmed NURBS face is divided over its whole untrimmed range. Peaks on
+/// one face in one pass: 32050.STEP 23.1 M at the default facet budget,
+/// socket-head screws 16-19 M, and 10208.STEP's face #1073 28.07 M at the
+/// 60 M budget (`step_budget::CEILING`), where it converges - the old 25 M
+/// cap refused it. 150 M is 5.3x that heaviest healthy face, and ends a
+/// runaway face in 10-15 s (the #1536 fixture 10 s, sc_logo.step's face
+/// #836 15 s). It is fixed, not scaled with the facet budget: the budget
+/// does not bound one face's evaluations, a low budget must not lower the
+/// cap, and a broken face's time must not grow with a user setting.
+/// Headroom is not the only line: a REFINEMENT pass that trips on a face
+/// proven continuous keeps the coarser pass's mesh (`step_continuity`), so
+/// such a face is never refused once a pass has met.
+pub const FACE_EVAL_CAP: u64 = 150_000_000;
 
 /// One face's evaluation count for the current pass.
 #[derive(Debug)]
 pub(super) struct Meter {
     used: AtomicU64,
     cap: u64,
+    /// This pass divided the surface over a range outside its own
+    /// parameter range (#1568: sc_logo's face #836 was asked for u from
+    /// -2e51, a trimming bound gone wild), where its continuity is not
+    /// proven - a rational surface extrapolated can meet a pole.
+    outside: AtomicBool,
 }
 
 impl Meter {
     fn new(cap: u64) -> Self {
-        Self { used: AtomicU64::new(0), cap }
+        Self { used: AtomicU64::new(0), cap, outside: AtomicBool::new(false) }
     }
     /// Count one evaluation; `false` once the cap is spent.
     fn spend(&self) -> bool {
@@ -64,6 +84,7 @@ impl Meter {
     }
     fn reset(&self) {
         self.used.store(0, Ordering::Relaxed);
+        self.outside.store(false, Ordering::Relaxed);
     }
 }
 
@@ -141,6 +162,10 @@ impl ParameterDivision2D for Metered {
             // generic algorithm; running it on the wrapper routes every
             // probe through the meter and changes nothing else.
             Surface::BSplineSurface(_) | Surface::NurbsSurface(_) => {
+                let (ur, vr) = self.inner.parameter_range();
+                if !within(range.0, ur) || !within(range.1, vr) {
+                    self.meter.outside.store(true, Ordering::Relaxed);
+                }
                 let division = algo::surface::parameter_division(self, range, tol);
                 // A tripped face is refused after the pass; handing truck
                 // the grid it grew (millions of points down the runaway
@@ -154,6 +179,21 @@ impl ParameterDivision2D for Metered {
             other => other.parameter_division(range, tol),
         }
     }
+}
+
+/// `asked` lies inside `own` (a surface's parameter range), give or take
+/// a millionth of its span for a trimming curve's round-off.
+fn within((lo, hi): (f64, f64), own: ParameterRange) -> bool {
+    let slack = |a: f64, b: f64| 1e-6 * (b - a).abs().max(1.0);
+    let (lo_ok, hi_ok) = match own {
+        (Bound::Included(a) | Bound::Excluded(a), Bound::Included(b) | Bound::Excluded(b)) => {
+            (lo >= a - slack(a, b), hi <= b + slack(a, b))
+        }
+        (Bound::Included(a) | Bound::Excluded(a), Bound::Unbounded) => (lo >= a - slack(a, a), true),
+        (Bound::Unbounded, Bound::Included(b) | Bound::Excluded(b)) => (true, hi <= b + slack(b, b)),
+        (Bound::Unbounded, Bound::Unbounded) => (true, true),
+    };
+    lo.is_finite() && hi.is_finite() && lo_ok && hi_ok
 }
 
 impl SearchParameter<D2> for Metered {
@@ -182,23 +222,37 @@ pub(super) struct Guarded {
     pub shell: StepShell<Metered>,
     meters: Vec<Arc<Meter>>,
     kinds: Vec<&'static str>,
+    continuous: Vec<bool>,
+}
+
+/// A face that ran past the cap in a pass.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct Trip {
+    /// The face's index in the shell (0-based).
+    pub index: usize,
+    pub kind: &'static str,
+    /// Its surface is proven continuous (`step_continuity`): the
+    /// subdivision would have ended, it was only expensive.
+    pub continuous: bool,
 }
 
 impl Guarded {
     pub(super) fn new(shell: StepShell<Surface>, cap: u64) -> Self {
         let mut meters = Vec::with_capacity(shell.faces.len());
         let mut kinds = Vec::with_capacity(shell.faces.len());
+        let mut continuous = Vec::with_capacity(shell.faces.len());
         let faces = shell
             .faces
             .into_iter()
             .map(|f| {
                 kinds.push(kind(&f.surface));
+                continuous.push(super::step_continuity::proven_continuous(&f.surface));
                 let surface = Metered::new(f.surface, cap);
                 meters.push(Arc::clone(&surface.meter));
                 CompressedFace { boundaries: f.boundaries, orientation: f.orientation, surface }
             })
             .collect();
-        Self { shell: CompressedShell { vertices: shell.vertices, edges: shell.edges, faces }, meters, kinds }
+        Self { shell: CompressedShell { vertices: shell.vertices, edges: shell.edges, faces }, meters, kinds, continuous }
     }
 
     /// Start a new pass: every face gets its whole budget again.
@@ -206,10 +260,17 @@ impl Guarded {
         self.meters.iter().for_each(|m| m.reset());
     }
 
-    /// The first face (index, kind) whose pass ran past the cap.
-    pub(super) fn tripped(&self) -> Option<(usize, &'static str)> {
-        let i = self.meters.iter().position(|m| m.tripped())?;
-        Some((i, self.kinds.get(i).copied().unwrap_or("surface")))
+    /// The first face whose pass ran past the cap.
+    pub(super) fn tripped(&self) -> Option<Trip> {
+        let index = self.meters.iter().position(|m| m.tripped())?;
+        Some(Trip {
+            index,
+            kind: self.kinds.get(index).copied().unwrap_or("surface"),
+            // Proven on the surface's own range only: a pass that divided
+            // it outside that range is not covered by the proof.
+            continuous: self.continuous.get(index).copied().unwrap_or(false)
+                && self.meters.get(index).is_some_and(|m| !m.outside.load(Ordering::Relaxed)),
+        })
     }
 }
 
@@ -229,108 +290,29 @@ pub(super) fn face_entities(shell: &truck_stepio::r#in::ShellHolder, faces: usiz
     ids.filter(|ids| ids.len() == faces)
 }
 
-/// The refusal for face `index` (0-based) of a shell of `faces` faces,
-/// naming its STEP entity when the file's face list maps one-to-one.
-pub(super) fn refusal(
-    index: usize,
-    kind: &str,
-    faces: usize,
-    entity: Option<u64>,
-    shell: Option<u64>,
-    cap: u64,
-) -> ImportError {
+/// The refusal for the tripped face of a shell of `faces` faces, naming
+/// its STEP entity when the file's face list maps one-to-one. A face
+/// proven continuous is only reached here from the first, coarsest pass
+/// (a finer one falls back to the coarser mesh), so its text says it is
+/// too dense, not broken.
+pub(super) fn refusal(trip: Trip, faces: usize, entity: Option<u64>, shell: Option<u64>, cap: u64) -> ImportError {
+    let Trip { index, kind, continuous } = trip;
     let face = match entity {
         Some(id) => format!("face #{id} ({kind}, face {} of {faces}", index + 1),
         None => format!("face {} of {faces} ({kind}", index + 1),
     };
     let shell = shell.map(|s| format!(" in shell #{s}")).unwrap_or_default();
+    let why = if continuous {
+        "did not finish within {cap} evaluations at the coarsest tolerance (a continuous surface, too dense to divide)"
+    } else {
+        "did not converge within {cap} evaluations (a discontinuous or degenerate surface)"
+    };
+    let why = why.replace("{cap}", &cap.to_string());
     ImportError::Step(format!(
-        "{face}{shell}) could not be tessellated: its surface subdivision did not converge within {cap} evaluations \
-         (a discontinuous or degenerate surface) - re-export the model, or import an STL"
+        "{face}{shell}) could not be tessellated: its surface subdivision {why} - re-export the model, or import an STL"
     ))
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use truck_stepio::r#in::alias::{BSplineSurface, KnotVec};
-
-    /// Degree 1 in u with the knot 1.0 repeated twice: the left half sits
-    /// at z = 0, the right half at z = 1, so the surface jumps at u = 1.
-    fn discontinuous() -> Surface {
-        let uk = KnotVec::from(vec![0.0, 0.0, 1.0, 1.0, 2.0, 2.0]);
-        let vk = KnotVec::bezier_knot(1);
-        let p = |x: f64, y: f64, z: f64| Point3::new(x, y, z);
-        let cps = vec![
-            vec![p(0.0, 0.0, 0.0), p(0.0, 1.0, 0.0)],
-            vec![p(1.0, 0.0, 0.0), p(1.0, 1.0, 0.0)],
-            vec![p(1.0, 0.0, 1.0), p(1.0, 1.0, 1.0)],
-            vec![p(2.0, 0.0, 1.0), p(2.0, 1.0, 1.0)],
-        ];
-        Surface::BSplineSurface(Box::new(BSplineSurface::new((uk, vk), cps)))
-    }
-
-    fn smooth() -> Surface {
-        let k = KnotVec::bezier_knot(2);
-        let p = |x: f64, y: f64, z: f64| Point3::new(x, y, z);
-        let cps = vec![
-            vec![p(0.0, 0.0, 0.0), p(0.0, 1.0, 0.5), p(0.0, 2.0, 0.0)],
-            vec![p(1.0, 0.0, 0.5), p(1.0, 1.0, 2.0), p(1.0, 2.0, 0.5)],
-            vec![p(2.0, 0.0, 0.0), p(2.0, 1.0, 0.5), p(2.0, 2.0, 0.0)],
-        ];
-        Surface::BSplineSurface(Box::new(BSplineSurface::new((k.clone(), k), cps)))
-    }
-
-    #[test]
-    fn a_discontinuous_bspline_division_stops_at_the_cap_and_trips_the_meter() {
-        let m = Metered::new(discontinuous(), 200_000);
-        let started = std::time::Instant::now();
-        let (u, v) = m.parameter_division(((0.0, 2.0), (0.0, 1.0)), 1e-3);
-        assert!(m.meter.tripped(), "the meter must report the runaway face");
-        assert_eq!((u, v), (vec![0.0, 2.0], vec![0.0, 1.0]), "a tripped face hands truck no grid to triangulate");
-        assert!(started.elapsed().as_secs() < 10, "bounded: {:?}", started.elapsed());
-    }
-
-    #[test]
-    fn a_smooth_bspline_divides_exactly_as_truck_does_and_does_not_trip() {
-        let s = smooth();
-        let m = Metered::new(s.clone(), FACE_EVAL_CAP);
-        let range = ((0.0, 1.0), (0.0, 1.0));
-        for tol in [0.1, 1e-2, 1e-3] {
-            m.meter.reset();
-            assert_eq!(m.parameter_division(range, tol), s.parameter_division(range, tol), "tol {tol}");
-            assert!(!m.meter.tripped());
-        }
-    }
-
-    /// No work outlives a refused pass: truck's rayon tasks are joined
-    /// before `robust_triangulation` returns, no thread is spawned, so the
-    /// runaway face's meter is still once the call is back.
-    #[test]
-    fn nothing_keeps_running_after_a_refused_pass() {
-        use truck_meshalgo::prelude::RobustMeshableShape;
-        let text = include_str!("../../../../../testdata/models/bspline_discontinuous.step");
-        let exchange = truck_stepio::r#in::ruststep::parser::parse(text).expect("fixture parses");
-        let table = truck_stepio::r#in::Table::from_data_section(&exchange.data[0]);
-        let shell = table.shell.values().next().expect("one shell");
-        let cshell = table.to_compressed_shell(shell).expect("converts");
-        // A cap large enough that the pass takes a while: work left running
-        // in the background would still be counting when we look.
-        let g = Guarded::new(cshell, 2_000_000);
-        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| g.shell.robust_triangulation(0.01)));
-        assert_eq!(g.tripped(), Some((5, "B-spline surface")));
-        let spent = |g: &Guarded| g.meters.iter().map(|m| m.used.load(Ordering::Relaxed)).sum::<u64>();
-        let before = spent(&g);
-        std::thread::sleep(std::time::Duration::from_millis(300));
-        assert_eq!(spent(&g), before, "a tessellation is still evaluating after the call returned");
-    }
-
-    #[test]
-    fn the_refusal_names_the_face_its_kind_and_the_cap() {
-        let e = refusal(36, "NURBS surface", 62, Some(1234), Some(17), 99).to_string();
-        assert!(e.contains("face #1234 (NURBS surface, face 37 of 62 in shell #17)"), "{e}");
-        assert!(e.contains("within 99 evaluations"), "{e}");
-        let e = refusal(0, "B-spline surface", 1, None, None, 5).to_string();
-        assert!(e.contains("face 1 of 1 (B-spline surface)"), "{e}");
-    }
-}
+#[path = "step_guard_tests.rs"]
+mod tests;
