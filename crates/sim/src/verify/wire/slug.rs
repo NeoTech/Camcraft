@@ -8,6 +8,7 @@
 //! enclosed region is cut free: a die's slug, or the punch itself).
 //! Our own code.
 
+use super::passes::Pass;
 use super::{CutSide, WireFinding, WireJob, WireVerdict, SLUG_AREA_TOL};
 use crate::geo2d::{Loop, Point2, Region};
 
@@ -71,13 +72,27 @@ fn freed_at(
     Ok(out)
 }
 
+/// The region every pass burns: each pass's path swept by its own
+/// kerf offset (#538), joined.
+fn kerf_region(passes: &[Pass]) -> Result<Region, String> {
+    let mut out: Option<Region> = None;
+    for p in passes {
+        let r = Region::sweep(&[p.pts.clone()], p.k).map_err(|e| e.to_string())?;
+        out = Some(match out {
+            None => r,
+            Some(acc) => acc.union(&r).map_err(|e| e.to_string())?,
+        });
+    }
+    out.ok_or_else(|| "the path has no pass".to_owned())
+}
+
 /// Run the slug law over every section; the first height that flags
 /// is named, and the lowest height holding material reports its slugs.
-pub(super) fn judge(job: &WireJob<'_>, pts: &[Point2], opening: bool, v: &mut WireVerdict) {
+pub(super) fn judge(job: &WireJob<'_>, passes: &[Pass], opening: bool, v: &mut WireVerdict) {
     let unreadable = |why: String| WireFinding::Unreadable(format!("the slug cannot be judged - {why}"));
-    let kerf = match Region::sweep(&[pts.to_vec()], job.kerf_offset) {
+    let kerf = match kerf_region(passes) {
         Ok(r) => r,
-        Err(e) => return v.findings.push(unreadable(e.to_string())),
+        Err(why) => return v.findings.push(unreadable(why)),
     };
     let fill = match Region::new(kerf.loops().iter().filter(|l| l.area() > 0.0).cloned().collect()) {
         Ok(r) => r,

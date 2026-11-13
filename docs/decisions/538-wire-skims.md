@@ -30,3 +30,26 @@
 - **The op page** (#535 / PR #1143) has no skim list editor yet; skims are set through the file and the MCP params door. Follow-up: #1148.
 
 **Not exercised on a real EDM control (D10):** the golden posts against the synthetic fixture `crates/app/tests/edm/wire-iso-fixture.mch`, which gained three synthetic conditions (S21, S31, W20) with invented numbers.
+
+### Skims under #534's wire laws (merge with main, 2026-11-13)
+
+**Context:** once main carried #1144's wire verify, posting the rough + two skims fixture was blocked with `wire gouge: the kerf of move 8 enters the part by 0.0200 mm near X-20.000 Y0.000`. Two readings were possible: (a) the skim offsets really burn into the part, or (b) the law judges every move with the rough pass's kerf.
+
+**Arithmetic (the test's fixture conditions, punch, part's left side at X = -20):**
+
+| Pass | Condition | Wire radius | Gap | Path offset (r + g) | Kerf edge = offset - own half-width |
+|---|---|---|---|---|---|
+| rough | C110 | 0.125 | 0.04 | 0.165 (X-20.165) | 0.000 |
+| skim 1 | S21 | 0.125 | 0.02 | 0.145 (X-20.145) | 0.000 |
+| skim 2 | S31 | 0.125 | 0.01 | 0.135 (X-20.135) | 0.000 |
+
+The rough pass is moves 1-7 (lead-in, five ring moves, lead-out), so move 8 is skim 1's lead-in to X-20.145 Y0. Main's law used one half-width, `kerf_offset = 0.125 + 0.04 = 0.165` (wire_verify.rs), for every move. That gives depth 0.165 - 0.145 = **0.0200 mm**, the reported number exactly. Each pass's kerf really reaches only its own wire radius plus its own spark gap: 0.145 - 0.145 = 0 for skim 1 and 0.135 - 0.135 = 0 for skim 2. Every pass's kerf edge, the final skim's included, lies ON the outline. **Verdict: (b).** The offsets are right and the law was wrong for skims. The finished size is set by the last skim (0.135 = r + g_S31). The 0.03 mm between the rough and the last skim is the stock the skims remove, carried in the gaps of the conditions.
+
+**Chosen:** the wire laws (`sim::verify::wire`) take `skim_offsets`, each skim's own wire radius plus spark gap, from the same condition table the generator reads. The new `passes.rs` splits the path at each return to the threading point, the same rule the post's `announce_skims` uses, and judges each move at its own pass's half-width. That half-width is the real kerf of that pass, never narrower. The threading law takes the widest pass's kerf. The slug law sweeps each pass with its own offset and joins the results. A path that does not return to its threading point once per stated pass is refused as unreadable, never judged at a guessed kerf. An open run that states skims is refused in two places: at the door (`check_passes`: an open run is cut once, so it cannot walk back to a start hole) and in the law.
+
+**Considered and dropped:**
+- Moving the skims outward to clear the rough kerf: this would leave the part 0.03 mm oversize, so the finished size would be wrong.
+- Judging every move at the narrowest (finishing) kerf: this is looser than the rough pass's real kerf and lets a rough-pass gouge through.
+- Turning the law off for skimmed ops: this breaks the Prime Directive.
+
+**Pinned by:** `sim verify::wire::tests::each_pass_is_judged_at_its_own_kerf` (clean at the own kerf; the single-offset reading reproduces the false gouge at move 8 with depth K - ks; a skim 0.05 mm too near is a 0.05 mm gouge at move 8), `passes_that_cannot_be_told_apart_are_unreadable`, motion `skim_laws_refuse_by_name` (open run), and app `wire_post::a_rough_and_two_skims_post_three_offsets_and_condition_selects`, which now posts through the gate. `wire_contour_punch_skims.nc` is unchanged byte for byte.

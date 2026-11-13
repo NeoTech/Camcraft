@@ -272,4 +272,9 @@ fn skim_laws_refuse_by_name() {
     assert!(err(&[thin]).contains("one threading cuts every pass with one wire"));
     assert!(err(&[pass("S", f64::NAN, false)]).contains("spark gap"));
     assert!(check_passes(&p, &[pass("S1", 0.02, false), pass("S2", 0.02, true)]).is_ok(), "equal offsets are allowed");
+    // An open run (#1109) is cut once: skims are refused at the door.
+    let open = params(WireSide::Left, None);
+    let e = check_passes(&open, &[pass("S1", 0.02, false)]).unwrap_err().to_string();
+    assert!(e.contains("an open run is cut once"), "{e}");
+    assert!(check_passes(&open, &[]).is_ok(), "an open run alone is not refused here");
 }

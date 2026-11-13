@@ -49,13 +49,20 @@ impl WirePass {
 /// command door's (the numbers are all the machine's).
 ///
 /// # Errors
-/// A skim naming no condition, a skim whose wire is not the rough
+/// Skims on an open run, a skim naming no condition, a skim whose wire is not the rough
 /// pass's, a pass nearer the profile than the finishing pass, or a
 /// skim farther out than the pass before it.
 pub fn check_passes(rough: &WireParams, skims: &[WirePass]) -> Result<(), GenError> {
     let Some(last) = skims.last() else {
         return Ok(());
     };
+    if rough.side.is_open_side() {
+        return Err(invalid(format!(
+            "the side is {} of travel, an open run, and {} skim pass(es) are stated - an open run is cut once, from the air to its run-out; skims walk a closed profile from its start hole",
+            rough.side.word(),
+            skims.len()
+        )));
+    }
     for (i, s) in skims.iter().enumerate() {
         if s.condition.trim().is_empty() {
             return Err(invalid(format!("skim {} names no EDM condition - every skim burns with a condition of its own", i + 1)));

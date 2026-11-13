@@ -40,6 +40,7 @@
 //! manual or CAM product behaviour was consulted.
 
 mod dist;
+mod passes;
 mod slug;
 #[cfg(test)]
 mod tests;
@@ -99,8 +100,13 @@ pub struct WireSection {
 #[derive(Clone, Debug)]
 pub struct WireJob<'a> {
     pub path: &'a Toolpath,
-    /// Wire radius plus spark gap (mm).
+    /// Wire radius plus spark gap (mm) - the rough (first) pass's.
     pub kerf_offset: f64,
+    /// Each skim pass's own kerf offset (its wire radius plus its own
+    /// spark gap, mm), in cut order (#538); empty is the one pass at
+    /// `kerf_offset`. Every pass starts and ends at the threading
+    /// point, and each move is judged at its own pass's offset.
+    pub skim_offsets: Vec<f64>,
     pub side: CutSide,
     /// The operation's stated start hole; `None` is not stated.
     pub start: Option<Point2>,
@@ -230,9 +236,24 @@ pub fn judge(job: &WireJob<'_>) -> WireVerdict {
         }
     };
     if job.side == CutSide::Open {
+        if !job.skim_offsets.is_empty() {
+            v.findings.push(WireFinding::Unreadable(
+                "an open run states skim passes - an open run is cut once, from the air to its run-out".into(),
+            ));
+            return v;
+        }
         open(job, &polyline, k, &mut v);
         return v;
     }
+    let passes = match passes::split(&polyline, k, &job.skim_offsets) {
+        Ok(p) => p,
+        Err(why) => {
+            v.findings.push(WireFinding::Unreadable(why));
+            return v;
+        }
+    };
+    // The threading point clears the widest kerf any pass burns.
+    let k = passes::widest(&passes);
     let Some(start) = job.start else {
         v.findings.push(WireFinding::NoStart);
         return v;
@@ -254,14 +275,14 @@ pub fn judge(job: &WireJob<'_>) -> WireVerdict {
             worst = Some((clear, s.z));
         }
         if gouge.is_none() {
-            gouge = gouge_at(&p, &polyline, k, s.z);
+            gouge = gouge_at(&p, &passes, s.z);
         }
     }
     if let Some((clear, z)) = worst.filter(|(c, _)| *c < k - KERF_TOL) {
         v.findings.push(WireFinding::Threading { z, at: start, clear, need: k });
     }
     v.findings.extend(gouge);
-    slug::judge(job, &polyline, opening, &mut v);
+    slug::judge(job, &passes, opening, &mut v);
     v
 }
 
@@ -274,7 +295,7 @@ fn open(job: &WireJob<'_>, pts: &[Point2], k: f64, v: &mut WireVerdict) {
     let mut gouge: Option<WireFinding> = None;
     for s in &job.sections {
         if gouge.is_none() {
-            gouge = gouge_at(&Product::Part(&s.part), pts, k, s.z);
+            gouge = gouge_at(&Product::Part(&s.part), &[passes::Pass { pts: pts.to_vec(), first: 0, k }], s.z);
         }
         let Some(stock) = s.stock.as_ref() else { continue };
         for &e in ends.iter().flatten() {
@@ -299,16 +320,19 @@ fn product(s: &WireSection, opening: bool) -> Product<'_> {
 }
 
 /// The first move whose kerf enters the product at this height, with
-/// the count of moves that do.
-fn gouge_at(p: &Product<'_>, pts: &[Point2], k: f64, z: f64) -> Option<WireFinding> {
+/// the count of moves that do; each move at its own pass's kerf.
+fn gouge_at(p: &Product<'_>, passes: &[passes::Pass], z: f64) -> Option<WireFinding> {
     let mut first: Option<(usize, Point2, f64)> = None;
     let mut moves = 0;
-    for (i, w) in pts.windows(2).enumerate() {
-        let (d, at) = dist::clearance(p, w[0], w[1]);
-        if d < k - KERF_TOL {
-            moves += 1;
-            if first.is_none() {
-                first = Some((i + 1, at, k - d));
+    for pass in passes {
+        let k = pass.k;
+        for (i, w) in pass.pts.windows(2).enumerate() {
+            let (d, at) = dist::clearance(p, w[0], w[1]);
+            if d < k - KERF_TOL {
+                moves += 1;
+                if first.is_none() {
+                    first = Some((pass.first + i + 1, at, k - d));
+                }
             }
         }
     }

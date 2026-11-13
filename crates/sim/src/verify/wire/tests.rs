@@ -35,7 +35,7 @@ fn sections(part: &Region, stock: Option<&Region>) -> Vec<WireSection> {
 }
 
 fn run(side: CutSide, tp: &Toolpath, start: Option<Point2>, part: &Region, stock: Option<&Region>) -> WireVerdict {
-    judge(&WireJob { path: tp, kerf_offset: K, side, start, sections: sections(part, stock) })
+    judge(&WireJob { path: tp, kerf_offset: K, skim_offsets: Vec::new(), side, start, sections: sections(part, stock) })
 }
 
 #[test]
@@ -144,4 +144,59 @@ fn an_open_run_is_judged_by_its_kerf_with_no_start_hole_or_slug() {
     let v = run(CutSide::Open, &open_run(5.0 + K, -14.0, 15.0 + 2.0 * K), None, &part, Some(&stock));
     assert!(matches!(v.findings.as_slice(), [WireFinding::OpenEndInStock { .. }]), "{:?}", v.findings);
     assert!(v.findings[0].describe().contains("threaded and cut in the air"), "{}", v.findings[0].describe());
+}
+
+/// #538: a rough pass at `K` and a skim at its own smaller kerf `ks`,
+/// both from the start hole and back to it - the skim's first move is
+/// move 8 (the rough is 7 moves).
+fn skimmed(h: f64, rough_at: f64, skim_at: f64, start: Point2) -> Toolpath {
+    let mut tp = path(h + rough_at, start);
+    tp.moves.extend(path(h + skim_at, start).moves);
+    tp
+}
+
+fn run_skims(side: CutSide, tp: &Toolpath, start: Point2, skims: Vec<f64>) -> WireVerdict {
+    let sections = sections(&square(5.0), Some(&square(15.0)));
+    judge(&WireJob { path: tp, kerf_offset: K, skim_offsets: skims, side, start: Some(start), sections })
+}
+
+/// #538 over #534: each move is judged at its own pass's kerf. A skim
+/// at its own (smaller) offset sits with its kerf edge on the part, as
+/// the rough's does - clean; read at the rough's kerf it would be a
+/// false 0.05 mm gouge at move 8 (what the single-offset law said). A
+/// skim nearer than its own kerf is still a gouge, by its true depth.
+#[test]
+fn each_pass_is_judged_at_its_own_kerf() {
+    let start = Point2::new(-10.0, 0.0);
+    let ks = 0.15;
+    let tp = skimmed(5.0, K, ks, start);
+    let v = run_skims(CutSide::Punch, &tp, start, vec![ks]);
+    assert!(v.findings.is_empty(), "{:?}", v.findings);
+    assert!(v.slugs.len() == 1 && (v.slugs[0].product_area - 100.0).abs() < 1e-3, "the punch drops: {:?}", v.slugs);
+    // The single-offset reading of the same path: every skim move at K.
+    let v = run(CutSide::Punch, &tp, Some(start), &square(5.0), Some(&square(15.0)));
+    let g = v.findings.iter().find(|f| matches!(f, WireFinding::Gouge { .. })).expect("the rough kerf misreads the skim");
+    assert!(matches!(g, WireFinding::Gouge { move_no: 8, depth, .. } if (depth - (K - ks)).abs() < 1e-6), "{g:?}");
+    // A skim path 0.05 mm nearer than its own kerf: a gouge at move 8, 0.05 deep.
+    let v = run_skims(CutSide::Punch, &skimmed(5.0, K, ks - 0.05, start), start, vec![ks]);
+    let g = v.findings.iter().find(|f| matches!(f, WireFinding::Gouge { .. })).expect("a near skim gouges");
+    assert!(matches!(g, WireFinding::Gouge { move_no: 8, depth, .. } if (depth - 0.05).abs() < 1e-6), "{g:?}");
+}
+
+/// #538: a path that does not return to its threading point once per
+/// stated pass, or an open run stating skims, cannot be split into
+/// passes - refused by name, never judged at a guessed kerf.
+#[test]
+fn passes_that_cannot_be_told_apart_are_unreadable() {
+    let start = Point2::new(-10.0, 0.0);
+    let one = path(5.0 + K, start);
+    let v = run_skims(CutSide::Punch, &one, start, vec![0.15]);
+    assert!(matches!(v.findings.as_slice(), [WireFinding::Unreadable(w)] if w.contains("not once per pass")), "{:?}", v.findings);
+    let two = skimmed(5.0, K, 0.15, start);
+    let v = run_skims(CutSide::Punch, &two, start, vec![0.15, 0.12]);
+    assert!(matches!(v.findings.as_slice(), [WireFinding::Unreadable(_)]), "{:?}", v.findings);
+    let v = run_skims(CutSide::Punch, &two, start, vec![f64::NAN]);
+    assert!(matches!(v.findings.as_slice(), [WireFinding::Unreadable(w)] if w.contains("not a positive number")), "{:?}", v.findings);
+    let v = run_skims(CutSide::Open, &open_run(5.0 + K, -20.0, 20.0), start, vec![0.15]);
+    assert!(matches!(v.findings.as_slice(), [WireFinding::Unreadable(w)] if w.contains("open run")), "{:?}", v.findings);
 }

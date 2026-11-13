@@ -42,7 +42,7 @@ pub fn wire_verdict() -> WireVerdict {
     let part = Region::new(vec![outline()]).expect("the profile region");
     let stock = region(&[rect(-40.0, -40.0, 40.0, 40.0)]);
     let sections = [0.01, 6.0, 11.99].into_iter().map(|z| WireSection { z, part: part.clone(), stock: Some(stock.clone()) }).collect();
-    judge(&WireJob { path: &t, kerf_offset: 0.25 * 0.5 + 0.04, side: CutSide::Punch, start: Some(start), sections })
+    judge(&WireJob { path: &t, kerf_offset: 0.25 * 0.5 + 0.04, skim_offsets: Vec::new(), side: CutSide::Punch, start: Some(start), sections })
 }
 
 /// The punch golden's findings at the wire laws, each one blocking.
