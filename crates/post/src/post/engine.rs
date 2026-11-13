@@ -173,6 +173,13 @@ pub fn run_numbered_with(
                         "{who}is C-axis live-tool work (the spindle turns as C under a radial live tool), but this post script does not declare liveTooling - use a lathe post that voices the C axis"
                     ));
                 }
+                // A wire EDM section (#533) through a script that does not
+                // voice one would post the wire path as a cutting move.
+                if name == "EdmCondition" && !s.voices_wire_edm() {
+                    let op = base.get("OperationName").and_then(Value::as_str).unwrap_or("");
+                    let who = if op.is_empty() { String::new() } else { format!("operation {op}: ") };
+                    warnings.push(format!("{who}is wire EDM work, but this post script does not declare wireEdm - use a wire EDM post"));
+                }
                 // A thread whose hand needs the spindle reversed (#629),
                 // posted through a script that cannot voice it, would
                 // come out under M03 - the other hand: refused by name.

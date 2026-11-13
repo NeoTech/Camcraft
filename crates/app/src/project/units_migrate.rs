@@ -1,5 +1,5 @@
-//! The v58 -> v59 rung (#902): the document's unit becomes the unit
-//! every program posts in. Before v59 the display unit was a lens only
+//! The v59 -> v60 rung (#902): the document's unit becomes the unit
+//! every program posts in. Before v60 the display unit was a lens only
 //! and a post took its unit from the machine file (`units.length`), so
 //! an older file opens on the unit its programs posted in - the posted
 //! program is byte-identical, and only the display may change, which a

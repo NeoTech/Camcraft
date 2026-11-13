@@ -33,7 +33,8 @@
    G76's Q / R in the inch increment). Both are follow-up issues (#976
    Heidenhain, #977 Fanuc Lathe); a feed
    off by a factor is not a program to post.
-6. **Old projects post byte-identical.** `PROJECT_VERSION` 59. A v58 or
+6. **Old projects post byte-identical.** `PROJECT_VERSION` 60 (v59 went to #1056
+   first, which still posted in the machine file's unit). A v59 or
    older file opens on the unit its programs posted in (the units of
    the machines its setups posted on); if that differs from its saved
    display unit, the display changes and a load note says why. A file
@@ -63,5 +64,23 @@
 
 **Cost to change later.** Adding inch to a refusing post is that post's
 own work plus `programUnits = "mm inch"` and its goldens. Splitting the
-display and program units later would add one field with this v59 rung
+display and program units later would add one field with this v60 rung
 as its default.
+
+### #981 review - merging main (angle words, grblHAL, TinyG)
+
+**Chosen.** Main's `angleWord` (#997, Fanuc and Doosan DNM) now writes
+through `wa`, the degree formatter, not `w`, which this change made the
+unit-aware length formatter: rotary angles are degrees in either program
+unit. grblHAL and TinyG (both new on main) already scaled every length
+and feed when their `inch` flag was set; the flag now comes from
+`postOptions.Units` instead of `machine.units`, and both declare
+`programUnits = "mm inch"`, like the Tormach mill. Pinned by
+`program_units::rotary_angle_words_are_degrees_in_an_inch_program` and
+`grbl_family_posts_write_the_mm_program_in_inches`.
+
+**Considered and dropped.** Declaring grblHAL and TinyG mm-only (the
+reviewer's other option): both scripts already carry a tested inch path
+(G20, / 25.4, in/min), so refusing an inch document would take away
+output their users had; following the document keeps it, under the one
+rule.
