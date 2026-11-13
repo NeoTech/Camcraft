@@ -51,6 +51,11 @@ fn block() -> Mesh {
 /// The machine `text` mounted and a punch around the block created at
 /// `taper` degrees; the generator's answer returned.
 fn punch(text: &str, taper: f64) -> (World, Result<(), String>) {
+    punch_with(text, taper, None)
+}
+
+/// [`punch`] with a no-core burnout (#540) stated.
+fn punch_with(text: &str, taper: f64, burnout: Option<f64>) -> (World, Result<(), String>) {
     let world = new_world();
     let mut h = History::default();
     let m = parse_mch(text).expect("the fixture parses");
@@ -63,6 +68,7 @@ fn punch(text: &str, taper: f64) -> (World, Result<(), String>) {
         side: WireSide::Punch,
         start: Some([-30.0, 0.0]),
         taper_deg: taper,
+        burnout,
         clearance: camcraft_app::operation::DEFAULT_CLEARANCE,
     };
     let c = CreateOperation::new(&world, "Punch1", "", SrcRef::Entity("block".into()), OpParams::WireContour(op)).expect("op");
@@ -167,4 +173,15 @@ fn a_taper_whose_lower_edge_gouges_the_part_blocks_the_post() {
     made.expect("the generator reads the profile on the top plane only");
     let err = post(&world, "gouge").expect_err("a gouging taper never posts");
     assert!(err.starts_with("post blocked") && err.contains("Punch1: wire gouge"), "{err}");
+}
+
+/// #536 x #540: the burnout's rings are cut vertical, so a taper asked
+/// with a burnout is refused by name - never cut upright silently.
+#[test]
+fn a_taper_with_a_no_core_burnout_is_refused_by_name() {
+    let (_, made) = punch_with(FIXTURE, 3.0, Some(0.5));
+    let err = made.expect_err("a tapered burnout");
+    assert!(err.contains("Punch1") && err.contains("3.000 degree taper is asked with a no-core burnout"), "{err}");
+    let (_, made) = punch_with(FIXTURE, 0.0, Some(0.5));
+    assert!(made.as_ref().map_or_else(|e| !e.contains("taper"), |()| true), "a vertical burnout is not refused for a taper: {made:?}");
 }

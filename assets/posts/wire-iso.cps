@@ -24,6 +24,7 @@ setCodePage = "utf-8";
 capabilities = 1;          // reference contract: integer feature mask
 wireEdm = true;            // voices PARAM EdmCondition (the engine's door)
 afterModes = true;         // reads PARAM AfterOperation (M01 / M00; home refused)
+programUnits = "mm inch"; // #902: writes the document's unit (postOptions.Units), G21 / G20
 
 // Determinism law: no timestamps, no randomness.
 
@@ -133,7 +134,7 @@ function machineOk() {
 // ISO 6983 tape fence, the unit and absolute positions; the program
 // starts with the wire NOT threaded, which the header says.
 function onOpen() {
-  inch = typeof machine !== "undefined" && machine.units === "inch";
+  inch = typeof postOptions !== "undefined" && postOptions && postOptions.Units === "inch"; // #902: the document's unit, never the machine file's
   codesOk = machineOk();
   writeln("%");
   note(clean(machineName()));

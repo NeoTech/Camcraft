@@ -1,4 +1,4 @@
-//! Project save/load: `.camproj`, JSON, version 59 (see `PROJECT_VERSION`).
+//! Project save/load: `.camproj`, JSON, version 60 (see `PROJECT_VERSION`).
 //!
 //! Serialization goes through plain DTO structs (deliberately not flecs
 //! reflection): the file format is our public persistence contract and must
@@ -154,6 +154,8 @@ mod fidelity_migrate;
 use apply::*;
 // #813: the load note for a machine embedded before #804.
 mod swing_note;
+// #902: the v59 -> v60 rung - the document's unit is the program's.
+mod units_migrate;
 mod validate;
 use validate::*;
 mod wcs_migrate;

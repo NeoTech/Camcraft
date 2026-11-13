@@ -92,6 +92,7 @@ fn punch_doc(machine_text: &str) -> World {
         side: WireSide::Punch,
         start: Some([-30.0, 0.0]),
         taper_deg: 0.0,
+        burnout: None,
         clearance: operation::DEFAULT_CLEARANCE,
     };
     let c = CreateOperation::new(&world, "Punch1", "", SrcRef::Entity("slug".into()), OpParams::WireContour(op)).expect("op");
@@ -117,6 +118,7 @@ fn gouging_die() -> World {
         side: WireSide::Die,
         start: Some([0.0, 0.0]),
         taper_deg: 0.0,
+        burnout: None,
         clearance: operation::DEFAULT_CLEARANCE,
     };
     let c = CreateOperation::new(&world, "Die1", "", SrcRef::Entity("opening".into()), OpParams::WireContour(op)).expect("op");
@@ -300,6 +302,7 @@ fn cutoff_doc(wrong: bool) -> World {
         side,
         start: None,
         taper_deg: 0.0,
+        burnout: None,
         clearance: operation::DEFAULT_CLEARANCE,
     };
     let src = SrcRef::Selection(vec![GeoSel { entity: "part".into(), feature: FeatureSel::Chain(chain) }]);

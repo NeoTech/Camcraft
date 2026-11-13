@@ -202,7 +202,16 @@ EndY EndZ`, `MajorDiameter`, `MinorDiameter`, `Lead`, `ThreadHeight`,
 follow as motion records either way, and a script that writes the
 cycle skips them itself. `postOptions` is the document's post-option
 object (`engine::run_with`; `{ Threading: "G32" | "G76" }` from the
-app, `{}` from `run` and the CLI). `onClose`
+app, `{}` from `run` and the CLI). Its `Units` word (#902) is the
+document's unit, `"mm"` or `"inch"` (absent = mm; the CLI's `--units`):
+the unit the whole program is written in - every length / 25.4 and
+every feed in in/min on an inch program, with the dialect's unit word
+before any motion. The stream itself stays mm. A script that writes
+inch declares `programUnits = "mm inch"` in its manifest; an inch
+document on a script that does not is refused by name before any hook
+runs (`post::units`). `machine.units` is only the unit the machine
+file's own numbers were written in; no post takes the program's unit
+from it. `onClose`
 ends the run; its lines belong to no record.
 
 A parsed stream is normalized to program order before the hooks

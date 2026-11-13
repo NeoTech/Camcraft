@@ -16,7 +16,7 @@ use crate::geo2d::{Loop, Point2, Region};
 use crate::machine::{ConditionField, Kind};
 use crate::machining2d::GenError;
 use crate::verify::Warning;
-use crate::wire_edm::{wire_contour_tapered, WireParams, WireTaper};
+use crate::wire_edm::{clearance_door, wire_burnout, wire_contour_tapered, WireParams, WireTaper};
 
 use super::kinds::Carried;
 use super::types::{OpParams, WireContourOp, WireSide};
@@ -33,6 +33,7 @@ pub(super) fn seed_wire_contour(c: &Carried) -> OpParams {
         side: WireSide::Die,
         start: None,
         taper_deg: 0.0,
+        burnout: None,
         clearance: super::types::DEFAULT_CLEARANCE,
     })
 }
@@ -90,7 +91,12 @@ pub fn condition_of(world: &World, setup: Option<&str>, op: &WireContourOp) -> R
     let (Some(gap), Some(wire_diameter)) = (c.gap, c.wire_diameter) else {
         return Err(format!("machine {}: EDM condition {:?} states no gap or no wire diameter", machine.model, c.id));
     };
-    Ok(WireCondition { id: c.id.clone(), wire_diameter, gap, machine: machine.model.clone(), max_taper_deg: edm.max_taper_deg })
+    let cond = WireCondition { id: c.id.clone(), wire_diameter, gap, machine: machine.model.clone(), max_taper_deg: edm.max_taper_deg };
+    // The burnout's clearance against the condition's kerf (#540).
+    if let Some(clear) = op.burnout {
+        clearance_door(clear, cond.wire_diameter * 0.5 + cond.gap)?;
+    }
+    Ok(cond)
 }
 
 /// The condition a wire EDM kind's generation cuts with, read where
@@ -211,6 +217,17 @@ pub(super) fn generate_wire(
         max_deg: cond.max_taper_deg,
         machine: cond.machine.clone(),
     };
-    let path = wire_contour_tapered(&loops, &chains, &p, &taper)?;
+    let path = match op.burnout {
+        // #536 x #540: the burnout's rings are cut vertical; a taper
+        // with them is refused by name, never cut upright silently.
+        Some(_) if op.taper_deg != 0.0 => {
+            return Err(GenError::Invalid(format!(
+                "wire contour: a {:.3} degree taper is asked with a no-core burnout - the burnout is cut vertical only; set the taper to 0 or turn the burnout off",
+                op.taper_deg
+            )))
+        }
+        Some(clearance) => wire_burnout(&loops, &chains, &p, clearance)?,
+        None => wire_contour_tapered(&loops, &chains, &p, &taper)?,
+    };
     Ok((path, Vec::new()))
 }

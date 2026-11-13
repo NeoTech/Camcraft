@@ -99,6 +99,7 @@ pub fn wire_verdict(world: &World, e: &Entity) -> Option<Result<WireVerdict, Str
             start: w.start.map(|[x, y]| Point2::new(x, y)),
             sections,
             taper: w.taper_deg != 0.0,
+            burnout: w.burnout.is_some(),
         }))
     })())
 }
