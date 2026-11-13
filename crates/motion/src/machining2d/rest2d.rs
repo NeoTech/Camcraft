@@ -222,5 +222,5 @@ pub fn rest_pocket(region: &Region, p: &PocketParams, rest: &RestParams) -> Resu
     if !plan.previous_fits {
         notes.push("the previous tool fits nowhere in this pocket: the whole pocket is cut".into());
     }
-    pocket_over(region, &plan.center, p, notes, true)
+    pocket_over(region, &plan.center, p, notes, true, &[])
 }
