@@ -27,7 +27,7 @@ use camcraft_app::commands::{
 };
 use camcraft_app::geometry::{Mesh, Point3, Triangle};
 use camcraft_app::machine::parse_mch;
-use camcraft_app::operation::{Height, OpParams, SinkerBurnOp, SinkerDatum, SinkerOrbit, SinkerOrbitKind, SrcRef};
+use camcraft_app::operation::{Height, OpParams, SinkerBurnOp, SinkerDatum, SinkerOrbit, SinkerOrbitKind, SinkerPass, SrcRef};
 use camcraft_app::sinker::{burn_to_depth, SinkerParams};
 use camcraft_app::stock::StockShape;
 use camcraft_app::stock_sim::{simulate_box, simulate_document, Dexel};
@@ -98,6 +98,9 @@ fn burn(orbit: Option<SinkerOrbit>) -> OpParams {
         y: 0.0,
         feed: 40.0,
         condition: "S1".into(),
+        pass: SinkerPass::Single,
+        cavity_x: 0.0,
+        cavity_y: 0.0,
         orbit,
         layer: None,
         wear_lost: None,
@@ -149,6 +152,7 @@ fn sinker_orbit_circular_matches_golden() {
         electrode_len: 30.0,
         feed: 40.0,
         gap: GAP,
+        stand: None,
         orbit: Some(orbit(SinkerOrbitKind::Circular, 0.2)),
     };
     let path = burn_to_depth(&p).expect("burns");
@@ -340,6 +344,7 @@ fn a_worn_burn_orbits_at_each_compensated_layer_tip() {
         electrode_len: 15.0,
         feed: 40.0,
         gap: GAP,
+        stand: None,
         orbit: Some(o),
     };
     assert_eq!(got, burn_to_depth(&main).expect("burns").moves);

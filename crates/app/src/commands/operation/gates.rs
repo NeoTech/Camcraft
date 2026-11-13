@@ -187,6 +187,13 @@ pub(super) fn family_gate(world: &World, context: Option<&str>, params: &OpParam
 /// condition its allowance, refused by name before the op exists
 /// (`sinker_side_op::creation_refusal`). Every other kind passes.
 pub(super) fn sinker_gate(world: &World, context: Option<&str>, params: &OpParams) -> Result<(), CommandError> {
+    // #543: a rough or finish names what it lacks before `is_sane`'s
+    // generic refusal would.
+    if let OpParams::SinkerBurn(p) = params
+        && let Some(why) = p.pass_refusal()
+    {
+        return Err(CommandError::Invalid(why));
+    }
     match operation::sinker_side_op::creation_refusal(world, context, params) {
         Some(msg) => Err(CommandError::Invalid(msg)),
         None => Ok(()),

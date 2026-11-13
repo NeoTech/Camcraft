@@ -63,6 +63,8 @@ pub use camcraft_motion::wire_edm;
 pub use camcraft_motion::probing;
 // #541: sinker EDM burn to depth.
 pub use camcraft_motion::sinker;
+// #543: sinker rough and finish with undersize.
+pub use camcraft_motion::sinker_undersize;
 pub use camcraft_motion::sinker_wear;
 // #544: sinker EDM orbit patterns.
 pub use camcraft_motion::sinker_orbit;

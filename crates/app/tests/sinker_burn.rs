@@ -54,6 +54,7 @@ fn sinker_burn_cavity_matches_golden() {
         electrode_len: 30.0,
         feed: 40.0,
         gap: GAP,
+        stand: None,
         orbit: None,
     };
     let path = burn_to_depth(&p).expect("burns");
@@ -80,6 +81,7 @@ fn a_spark_gap_that_lifts_the_tip_out_of_the_work_is_refused_by_name() {
         electrode_len: 30.0,
         feed: 40.0,
         gap: 30.0,
+        stand: None,
         orbit: None,
     };
     let e = burn_to_depth(&p).expect_err("a 30 mm gap feeds the tip up to Z 44");
@@ -93,6 +95,38 @@ fn a_spark_gap_that_lifts_the_tip_out_of_the_work_is_refused_by_name() {
     p.gap = 5.5; // tip Z 19.5: inside the work
     let path = burn_to_depth(&p).expect("a gap smaller than the burn burns");
     assert!(path.moves.iter().all(|m| m.to.z <= 25.0), "nothing climbs past the approach plane");
+}
+
+/// #543 over the review of #1131: a rough or finish places its tip one
+/// undersize stand-off above the floor (never less than the gap), and
+/// the two refusals above read that stand - an undersize cannot lift
+/// the tip past the approach plane or out of the work where a gap of
+/// the same size would be refused.
+#[test]
+fn an_undersize_stand_off_that_lifts_the_tip_out_of_the_work_is_refused_by_name() {
+    let mut p = SinkerParams {
+        x: 0.0,
+        y: 0.0,
+        approach_z: 25.0,
+        top_z: 20.0,
+        floor_z: 10.0,
+        model_floor_z: Some(0.0),
+        datum: SinkerDatum::WorkTop,
+        depth: 6.0,
+        electrode_len: 30.0,
+        feed: 40.0,
+        gap: 0.5,
+        stand: Some(30.0),
+        orbit: None,
+    };
+    let e = burn_to_depth(&p).expect_err("a 30 mm stand-off feeds the tip up to Z 44");
+    assert!(e.to_string().contains("the undersize stand-off 30.000 places the tip at or above the approach plane"), "{e}");
+    p.stand = Some(6.0); // tip Z 20: on the work top, the burn is 6
+    let e = burn_to_depth(&p).expect_err("a stand-off as large as the burn");
+    assert!(e.to_string().contains("the undersize stand-off 6.000 is not smaller than the burn's 6.000 below the work top"), "{e}");
+    p.stand = Some(0.75); // tip Z 14.75: inside the work, above the gap
+    let path = burn_to_depth(&p).expect("a stand-off smaller than the burn burns");
+    assert!(path.moves.iter().any(|m| (m.to.z - 14.75).abs() < 1e-9), "the tip stops one stand-off above the floor");
 }
 
 #[test]
