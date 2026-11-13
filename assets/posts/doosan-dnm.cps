@@ -757,13 +757,15 @@ function onRapid() {
 // operator's manual B-64604EN, feedrate for rotation axes). Unstated
 // rates cap nothing. The F word, or null when refused by name.
 function feedWord(p, arc) {
-  if (!has(p.A)) return fw(p.FeedRate);
+  // Any rotary letter on the record, not A alone: a record that turns only
+  // B or C is capped the same way (#951 review).
+  if (!has(p.A) && !has(p.B) && !has(p.C)) return fw(p.FeedRate);
   if (typeof rotaryFeed !== "function") return fw(p.FeedRate);
   var tcp = typeof machine !== "undefined" && machine.rtcp === true;
-  var r = rotaryFeed(p, rotAt, tcp ? ["A", "B", "C"] : ["A"], tcp ? "path" : "composite", arc);
+  var r = rotaryFeed(p, rotAt, tcp ? ["A", "B", "C"] : ["A"], tcp ? "path" : "composite", arc, inch ? 0.00254 : 0.001);
   if (r.refuse) { rotRefuse(r.refuse); return null; }
   if (!r.capped) return fw(p.FeedRate);
-  var word = rotaryFeedWord(r.feed);
+  var word = rotaryFeedWord(r.feed, inch);  // the post's own unit, as ff() writes F
   if (!word) { rotRefuse("a feed that turns a rotary over too short a move - the stated rotary rate leaves under 0.1 mm/min"); return null; }
   return word;
 }

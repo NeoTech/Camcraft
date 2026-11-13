@@ -76,6 +76,14 @@ fn word(l: &str, k: char) -> Option<f64> {
 /// feed block's rates under `reading` against what the machine states.
 /// Returns how many blocks turned A under a feed.
 fn assert_within(program: &str, reading: Reading, a_rate: f64) -> usize {
+    assert_within_in(program, reading, a_rate, 1.0)
+}
+
+/// [`assert_within`] for a program whose lengths and F are in a unit of
+/// `mm` millimetres (25.4 for an inch program): every X Y Z and F word is
+/// read back in mm, the angles as written.
+fn assert_within_in(program: &str, reading: Reading, a_rate: f64, mm: f64) -> usize {
+    let word = |l: &str, k: char| word(l, k).map(|v| if k == 'A' { v } else { v * mm });
     let mut at = [0.0_f64; 4]; // X Y Z A
     let mut turned = 0;
     for l in program.lines() {
@@ -118,6 +126,13 @@ fn brake() -> Value {
 /// Post `cps` (the Doosan one with the brake words stated).
 fn post(cps: &str, mch: &Value, stream: &str) -> engine::PostOutput {
     let opts = if cps.contains("doosan") { brake() } else { json!({}) };
+    engine::run_with(&read(cps), mch, stream, &opts).expect("post")
+}
+
+/// [`post`] in the program unit `units` ("mm" or "inch", #902).
+fn post_units(cps: &str, mch: &Value, stream: &str, units: &str) -> engine::PostOutput {
+    let mut opts = if cps.contains("doosan") { brake() } else { json!({}) };
+    opts["Units"] = json!(units);
     engine::run_with(&read(cps), mch, stream, &opts).expect("post")
 }
 
@@ -200,5 +215,88 @@ ENDSECTION
             vec!["a feed that turns A from an angle the post does not know - the stated A rate cannot be held"],
             "{cps}"
         );
+    }
+}
+
+/// #951 review: in an inch program (G20, F in in/min) the capped F is
+/// written in inch, floored so it never passes the cap - not the mm/min
+/// number, which read as in/min drives A 25.4x past its stated rate. The
+/// mm and the inch program post the same physical feed, block for block.
+#[test]
+fn an_inch_program_posts_the_capped_feed_in_inch() {
+    for (cps, want) in [
+        ("assets/posts/fanuc.cps", ["A30 F0.13", "A60 F39.37", "A70 F4.377"]),
+        ("assets/posts/doosan-dnm.cps", ["A30 F0.13", "A60 F39.37", "A70 F4.377"]),
+    ] {
+        let mch = trunnion(Some(A_RATE));
+        let mm = post_units(cps, &mch, STREAM, "mm");
+        let inch = post_units(cps, &mch, STREAM, "inch");
+        assert!(mm.warnings.is_empty() && inch.warnings.is_empty(), "{cps}: {:?} {:?}", mm.warnings, inch.warnings);
+        assert!(inch.program.contains("G20"), "{cps}: {}", inch.program);
+        assert_eq!(assert_within_in(&inch.program, Reading::Path, A_RATE, 25.4), 5, "{cps}: {}", inch.program);
+        for w in want {
+            assert!(inch.program.contains(w), "{cps}: want {w}: {}", inch.program);
+        }
+        let (fm, fi) = (feeds(&mm.program), feeds(&inch.program));
+        assert_eq!(fm.len(), fi.len(), "{cps}");
+        for (m, i) in fm.iter().zip(&fi) {
+            // Each floored under the same cap: 0.1 mm/min, 0.001 in/min,
+            // and an inch move's posted length a little shorter.
+            assert!((m - i * 25.4).abs() <= 0.15_f64.max(m * 0.01), "{cps}: F{m} mm/min against F{i} in/min");
+        }
+    }
+}
+
+/// #951 review: a feed that turns C (A held) is capped at C's stated
+/// rate like one that turns A - the cap reads every rotary letter.
+#[test]
+fn a_feed_turning_c_alone_holds_the_stated_c_rate() {
+    let c_rate = 500.0;
+    let mch = json!({ "name": "TEST AC TRUNNION", "feedRateMax": FEED_MAX, "kinematics": { "static": { "rotaries": [
+        { "letter": "A", "type": "rotary", "direction": [1.0, 0.0, 0.0], "travel": [-120.0, 120.0], "speeds": { "normal": A_RATE } },
+        { "letter": "C", "type": "rotary", "direction": [0.0, 0.0, 1.0], "speeds": { "normal": c_rate } } ] } } });
+    let stream = "\
+TOOL 1 10MM BALL
+PARAM SpindleSpeed 6000
+SECTION
+Rapid X 10000 Y 0 Z 5000 A 30000 B 0 C 0
+Feed X 10000 Y 0 Z 0 F 2000000 A 30000 B 0 C 0
+Feed X 10100 Y 0 Z 0 F 2000000 A 30000 B 0 C 40000
+ENDSECTION
+";
+    for cps in ["assets/posts/fanuc.cps", "assets/posts/doosan-dnm.cps"] {
+        let out = post(cps, &mch, stream);
+        assert!(out.warnings.is_empty(), "{cps}: {:?}", out.warnings);
+        // 0.1 mm of tip for 40 degrees of C: 500 * 0.1 / 40 = 1.25 -> F1.2.
+        assert!(out.program.contains("C40 F1.2"), "{cps}: {}", out.program);
+    }
+}
+
+/// #951 review: the "under 0.1 mm/min" refusal is judged in mm before the
+/// F is converted, so an inch program posts a slow capped feed the mm one
+/// posts (not refusing it as under 0.1 in/min), and refuses what the mm
+/// one refuses.
+#[test]
+fn the_slow_feed_refusal_is_judged_in_mm_in_both_units() {
+    for cps in ["assets/posts/fanuc.cps", "assets/posts/doosan-dnm.cps"] {
+        // 300 deg/min over 0.1 mm of tip for 30 degrees: 1 mm/min.
+        let mch = trunnion(Some(300.0));
+        let mm = post_units(cps, &mch, STREAM, "mm");
+        let inch = post_units(cps, &mch, STREAM, "inch");
+        assert!(mm.warnings.is_empty() && inch.warnings.is_empty(), "{cps}: {:?} {:?}", mm.warnings, inch.warnings);
+        assert!(mm.program.contains("A30 F1\n") || mm.program.contains("A30 F1\r"), "{cps}: {}", mm.program);
+        // The inch move posts 0.0039 in (0.09906 mm): 0.9906 mm/min.
+        assert!(inch.program.contains("A30 F0.039"), "{cps}: {}", inch.program);
+        // 10 deg/min: 0.033 mm/min, refused by name in both units.
+        let slow = trunnion(Some(10.0));
+        for u in ["mm", "inch"] {
+            let out = post_units(cps, &slow, STREAM, u);
+            assert_eq!(
+                out.warnings,
+                vec!["a feed that turns a rotary over too short a move - the stated rotary rate leaves under 0.1 mm/min"],
+                "{cps} {u}: {}",
+                out.program
+            );
+        }
     }
 }
