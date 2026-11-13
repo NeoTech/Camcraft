@@ -6,7 +6,7 @@
 //! it reads. The control dialect lives in the script, never here.
 
 use super::cnc::{self, Record};
-use super::js::{is_false, Script};
+use super::js::{is_false, ProgramId, Script};
 use super::machine;
 use super::PostError;
 use crate::cl::MoveKind;
@@ -94,6 +94,20 @@ pub fn run_numbered_with(
     options: &Value,
     program: u32,
 ) -> Result<PostOutput, PostError> {
+    let id = ProgramId { number: program, ..ProgramId::default() };
+    run_program_with(cps, mch, stream, options, &id)
+}
+
+/// The whole seam with the document's program identity (#258): the
+/// number, whether it was stated, and the program comment - what the
+/// script reads as its `program` global.
+pub fn run_program_with(
+    cps: &str,
+    mch: &Value,
+    stream: &str,
+    options: &Value,
+    id: &ProgramId,
+) -> Result<PostOutput, PostError> {
     let records = super::normalize_program_order(cnc::parse(stream)?);
     let mut s = Script::load(cps)?;
     // #902: an inch document on a script that cannot write inch.
@@ -104,7 +118,7 @@ pub fn run_numbered_with(
     // mirrored into the controller's frame, or refused by name.
     let records = super::invert::apply(records, mch, &s)?;
     s.set_machine(&machine::script_props(mch))?;
-    s.set_program_number(program)?;
+    s.set_program(id)?;
     if options.is_object() {
         s.set_options(options)?;
     }

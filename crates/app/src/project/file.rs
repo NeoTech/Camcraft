@@ -89,7 +89,12 @@ use super::*;
 /// (`units_migrate`, with a load note when its display changes); an old
 /// reader must refuse a v60 file rather than post an inch document in
 /// the machine file's mm.
-pub const PROJECT_VERSION: u32 = 60;
+/// v61 (#258): the document may state its program number and comment
+/// (`program`). Absent is O0001 and the machine's name - what every
+/// v60 file posted - so a v60 file steps up unchanged. An old reader
+/// must refuse a v61 file rather than post the program as O0001, where
+/// it could overwrite another program in the control's memory.
+pub const PROJECT_VERSION: u32 = 61;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ProjectError {
@@ -180,11 +185,27 @@ pub struct ProjectFile {
     /// `skip_stops`: an absent key is one combined program.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub per_op_files: bool,
+    /// The program number and comment (#258), v61+: absent states
+    /// neither - O0001 and the machine's name, what every older file
+    /// posted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub program: Option<ProgramDto>,
     /// Per-operation smoothing at post (#616), additive like
     /// `skip_stops`: an absent key is off - no smoothing words.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub smoothing: bool,
     pub entities: Vec<EntityDto>,
+}
+
+/// The file mirror of the `ProgramInfo` singleton (#258): each value
+/// absent when not stated. A loaded value is checked by the same rules
+/// `SetProgramInfo` runs; one they refuse is a corrupt file.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
+pub struct ProgramDto {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub number: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub comment: Option<String>,
 }
 
 /// The file mirror of the `PostOptions` singleton (issue #34): each

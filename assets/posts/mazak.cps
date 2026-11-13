@@ -180,12 +180,27 @@ function centerWords(p) {
 }
 
 // -------------------------------------------------------------- header
-// The program's O-word (#111): O0001 for the whole job, and one file
-// per operation counts up (the engine's programNumber); a host that
-// publishes none posts O0001.
+// The document's program identity (#258), from the engine's `program`
+// global: its number (1 when the document states none; one file per
+// operation counts up from it, #111), whether the document stated it,
+// and its program comment ("" for none - the header then names the
+// machine, as before #258). A host that publishes none posts O0001.
+function progNo() {
+  var n = typeof program !== "undefined" ? program.number : (typeof programNumber !== "undefined" ? programNumber : 1);
+  return Math.round(Number(n) || 1);
+}
+function progNumbered() { return typeof program !== "undefined" && program.numbered === true; }
+function progComment() { return clean(typeof program !== "undefined" ? program.comment : ""); }
+// The program's O-word (#111, #258). Mazak's published EIA/ISO
+// programming manuals number an EIA program by its O-word; this post
+// writes the four-digit O0001-O9999 every Fanuc-style EIA control in
+// the family reads (the wider work-number range is not assumed).
+// A number outside the range is refused by name, never clamped onto
+// another program's number.
 function oWord() {
-  var n = typeof programNumber !== "undefined" ? Math.round(Number(programNumber) || 1) : 1;
-  var t = String(Math.max(1, Math.min(n, 9999)));
+  var n = progNo();
+  if (n < 1 || n > 9999) throw new Error("program number " + n + " is outside O0001-O9999, the control's program numbers");
+  var t = String(n);
   while (t.length < 4) t = "0" + t;
   return "O" + t;
 }
@@ -249,9 +264,9 @@ function onOpen() {
   inch = typeof postOptions !== "undefined" && postOptions.Units === "inch";
   var nm = (typeof machine !== "undefined" && machine.name) || "CAMCRAFT";
   writeln("%");
-  // #594: the name is user text from the machine file - cleaned like
-  // every other comment text, so `Tormach 770MX (ML)` never nests.
-  block([oWord(), "(" + (clean(nm) || "CAMCRAFT") + ")"]);
+  // #594: the machine name is user text - cleaned like every other
+  // comment text, so `Tormach 770MX (ML)` never nests.
+  block([oWord(), "(" + (progComment() || clean(nm) || "CAMCRAFT") + ")"]);
   unitBlock();
 }
 
