@@ -6,7 +6,9 @@
 //! the work origin was "out of stroke" and no program posted. Pinned
 //! here: the reported plate contour posts clean on the built-in VMC,
 //! and a clearance genuinely past the stroke still refuses by name.
-//! The same holds for the built-in Doosan DNM 5700 (#1410).
+//! The same holds for the built-in Doosan DNM 5700 (#1410), which is
+//! plain 3-axis since #1433; its rotary-table variant still refuses an
+//! op whose A index it cannot judge.
 //!
 //! Provenance: general machine-tool practice (a slide's stroke, a work
 //! offset placed anywhere along it); every number is our own fixture.
@@ -136,7 +138,7 @@ fn a_clearance_past_the_vmc_column_still_refuses_by_name() {
 }
 
 #[test]
-fn a_plate_contour_on_the_built_in_dnm_passes_the_stroke() {
+fn a_plate_contour_on_the_built_in_dnm_passes_the_stroke_and_posts() {
     // #1410: every move above G54's Z0 was refused on the DNM 5700.
     let world = plate_on(DNM, 26.0);
     let m = mounted_as(&world, DNM);
@@ -147,16 +149,43 @@ fn a_plate_contour_on_the_built_in_dnm_passes_the_stroke() {
     assert_eq!(band(2), Some((-510.0, 510.0)), "Z");
     let c = check_document(&world, &m).expect("a fresh program checks");
     assert!(c.is_ok(), "rapid at Z 26, cuts at Z 0..1 - inside the DNM: {:?}", c.problems);
-    // The gate holds no stroke problem. Its one remaining refusal is the
-    // optional A's unstated nose_to_axis (#1433), a separate law that the
-    // file cannot satisfy with an invented figure.
+    // #1433: the plain DNM states no A, so the index-swing law has
+    // nothing to judge and the gate is clean: the plate posts.
+    assert!(m.axes.iter().all(|a| !a.rotary), "the plain DNM 5700 is 3-axis: {:?}", m.axes);
     let report = posting::verification_report(&world);
-    assert!(!report.problems.iter().any(|p| p.contains("the stroke is")), "{:?}", report.problems);
+    assert!(report.problems.is_empty(), "the gate is clean: {:?}", report.problems);
+    let path = std::env::temp_dir().join(format!("camcraft_dnm_stroke_{}.nc", std::process::id()));
+    let posted = posting::post_setup(&world, &path);
+    let _ = std::fs::remove_file(&path);
+    let posted = posted.unwrap_or_else(|e| panic!("the built-in DNM 5700 must post a plate contour: {e}"));
+    assert!(!posted.program.is_empty());
+}
+
+/// #1433: the catalog's optional A table, its own built-in. No published
+/// figure states its nose_to_axis, so none is invented: the same plate
+/// is still refused, by name, until the setup states one.
+const DNM_ROTARY: &str = "Doosan DNM 5700 + rotary table";
+
+#[test]
+fn the_dnm_rotary_variant_still_refuses_an_unjudgeable_index_by_name() {
+    let world = plate_on(DNM_ROTARY, 26.0);
+    let m = mounted_as(&world, DNM_ROTARY);
+    let a = m.axes.iter().find(|a| a.rotary).expect("the rotary variant states its A");
+    assert!(a.nose_to_axis.is_none(), "no figure is invented for the A table: {a:?}");
+    let c = check_document(&world, &m).expect("a fresh program checks");
+    assert!(c.is_ok(), "the stroke is the plain DNM's: {:?}", c.problems);
+    let report = posting::verification_report(&world);
     assert!(
-        report.problems.iter().all(|p| p.contains("states no nose_to_axis")),
-        "only the A's nose figure blocks the post: {:?}",
+        report.problems.iter().any(|p| p.starts_with("2D Contour1:")
+            && p.contains("Doosan DNM 5700 + rotary table")
+            && p.contains("states no nose_to_axis")),
+        "the A's unstated nose figure refuses by name: {:?}",
         report.problems
     );
+    let path = std::env::temp_dir().join(format!("camcraft_dnm_rotary_{}.nc", std::process::id()));
+    let posted = posting::post_setup(&world, &path);
+    let _ = std::fs::remove_file(&path);
+    assert!(posted.is_err(), "an unjudgeable index never posts");
 }
 
 #[test]

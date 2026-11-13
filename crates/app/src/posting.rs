@@ -235,8 +235,11 @@ pub const MACHINES: &[(&str, &str)] = &[
     ("Sienci AltMill 2x4", include_str!("../../../assets/machines/sienci-altmill-2x4.mch")),
     ("Sienci AltMill 4x4", include_str!("../../../assets/machines/sienci-altmill-4x4.mch")),
     ("Sienci AltMill 4x8", include_str!("../../../assets/machines/sienci-altmill-4x8.mch")),
-    // #614: Doosan DNM 5700 VMC (Fanuc 0i-MF).
-    ("Doosan DNM 5700", include_str!("../../../assets/machines/doosan-dnm.mch")),
+    // #614: Doosan DNM 5700 VMC (Fanuc 0i-MF). #1433: the plain 3-axis
+    // machine, and the catalog's optional A table as its own entry (no
+    // published nose_to_axis, so that one refuses until a setup states it).
+    ("Doosan DNM 5700", include_str!("../../../assets/machines/doosan-dnm-3axis.mch")),
+    ("Doosan DNM 5700 + rotary table", include_str!("../../../assets/machines/doosan-dnm.mch")),
 ];
 
 /// The mount path a built-in library entry records (stage C): the
