@@ -179,6 +179,8 @@ mod plunge_solid;
 mod predrilled_entry;
 #[cfg(test)]
 mod predrilled_entry_tests;
+#[cfg(test)]
+mod authored_law_tests;
 mod rotary_law;
 pub(crate) mod spindle_law;
 pub use spindle_law::{spindle_reading, SpindleReading, SPINDLE_TOL};
