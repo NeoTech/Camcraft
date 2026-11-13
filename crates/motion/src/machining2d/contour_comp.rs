@@ -308,14 +308,14 @@ pub(super) fn push_span(b: &mut PathBuilder, ctx: &SpanCtx, first: usize, last: 
     Ok(())
 }
 
-/// Climb travel keeps the material on the left of the cutter (this
-/// generator's law), so the centre stands right of the part contour -
-/// G42 - in control and in wear alike.
+/// Climb travel keeps the material on the right of the cutter (M3,
+/// #1555), so the centre stands left of the part contour - G41 - in
+/// control and in wear alike; conventional is G42.
 fn side_of(p: &ContourParams) -> CompSide {
     if p.climb {
-        CompSide::Right
-    } else {
         CompSide::Left
+    } else {
+        CompSide::Right
     }
 }
 

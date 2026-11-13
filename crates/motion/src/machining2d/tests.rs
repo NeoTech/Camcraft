@@ -162,8 +162,9 @@ fn signed_walk(pts: &[Point2]) -> f64 {
 fn contour_inside_shrinks_and_flips_travel() {
     // A 20x20 square region eroded by r = 3 gives the sharp inset
     // [23,37]^2 (negative round offset keeps convex corners sharp);
-    // climb under Inside travels the loop reversed, so material stays
-    // on the left of a CCW-normalized ring - the walk is clockwise.
+    // #1555: climb (M3) keeps the material on the RIGHT of travel, and
+    // inside a bore the material stands outside the ring - so climb
+    // walks the stored CCW ring as it is: counter-clockwise.
     let region = Region::new(vec![sq(20.0, 20.0, 40.0, 40.0)]).expect("test square");
     let path = contour(&region, &contour_side(Side::Inside)).expect("inside contour");
     let pts = cut_xy(&path);
@@ -191,26 +192,26 @@ fn contour_inside_shrinks_and_flips_travel() {
             && corner(23.0, 37.0),
         "inset ring corners missing: {pts:?}"
     );
-    assert!(signed_walk(ring) < 0.0, "expected clockwise travel");
+    assert!(signed_walk(ring) > 0.0, "climb inside a bore runs counter-clockwise (M3)");
 }
 
 #[test]
-fn conventional_inside_travels_forward() {
+fn conventional_inside_travels_reversed() {
     // Climb is the process, not a winding: conventional Inside walks
-    // the stored (CCW) ring and keeps material on the left that way.
+    // the stored (CCW) ring reversed, the material on the left (#1555).
     let region = Region::new(vec![sq(20.0, 20.0, 40.0, 40.0)]).expect("test square");
     let mut p = contour_side(Side::Inside);
     p.climb = false;
     let path = contour(&region, &p).expect("inside contour");
     let pts = cut_xy(&path);
-    // M8.2 A: the certified dive leads, the stored CCW ring follows.
+    // M8.2 A: the certified dive leads, the reversed ring follows.
     let (dive, ring) = pts.split_first().expect("a dive and a ring");
     assert!(
         dive.x > 23.0 && dive.x < 37.0 && dive.y > 23.0 && dive.y < 37.0,
         "the dive must land inside the inset, not on its wall: {dive:?}"
     );
     assert!(ring.iter().all(|q| (q.x - 23.0).abs() < 1e-6 || (q.x - 37.0).abs() < 1e-6));
-    assert!(signed_walk(ring) > 0.0, "expected counterclockwise travel");
+    assert!(signed_walk(ring) < 0.0, "conventional inside a bore runs clockwise (M3)");
 }
 
 #[test]
