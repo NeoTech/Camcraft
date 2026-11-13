@@ -135,3 +135,24 @@ fn the_only_setups_machine_page_names_the_documents_machine() {
     assert!(doc.contains("the document's machine"), "{doc}");
     assert!(h.query_by_label(&doc).is_some(), "the page names the document's machine: {doc}");
 }
+
+/// #1527 review: the Post page reads the POST's target, not the
+/// machine's. One setup that owns its machine but follows the document's
+/// post: its Post page names the document's post (a machine-target
+/// mix-up would call the pick Setup1's own).
+#[test]
+fn a_setup_owning_only_its_machine_names_the_documents_post_on_its_post_page() {
+    let mut h = shell_harness();
+    h.state_mut().state.pending.push_back(CommandKind::CreateSetup { name: None, datum_from: None });
+    h.run_steps(2);
+    h.state_mut().state.pending.push_back(CommandKind::SetupOwnMachine { setup: "Setup1".into(), own: true });
+    h.run_steps(2);
+    let st = &h.state().state;
+    assert_eq!(st.machine_target().as_deref(), Some("Setup1"), "status: {}", st.status);
+    crate::actions::target(&mut h.state_mut().state, UiTarget::SetupNode("Setup1".into(), SetupPage::Post));
+    h.run_steps(3);
+    let doc = crate::egui_app::setup_pages::target_line("post", "Setup1", false);
+    assert!(h.query_by_label(&doc).is_some(), "the Post page names the document's post: {doc}");
+    let own = crate::egui_app::setup_pages::target_line("post", "Setup1", true);
+    assert!(h.query_by_label(&own).is_none(), "never the machine's target: {own}");
+}
