@@ -91,6 +91,8 @@ fn source_fields(ui: &mut Ui, state: &mut State) {
         .collect();
     if models.is_empty() {
         ui.label("No models to take stock from.");
+        // The raw-stock row (and its hint) shows with no models too.
+        super::raw_stock_row::raw_stock_row(ui, state);
         return;
     }
     prop_grid(ui, "stock_source_grid", |ui| {

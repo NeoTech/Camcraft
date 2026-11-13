@@ -40,3 +40,25 @@ fn the_stock_page_is_laid_out_in_groups_like_the_wcs_page() {
     // Labels share one column: the fields line up.
     assert_eq!(rect(&harness, "X center").left(), rect(&harness, "Length (X)").left());
 }
+
+/// #1440 review: with no models, the from-model Source group still shows
+/// the raw-stock row (here its hint), as it did before the layout tidy.
+#[test]
+fn the_stock_page_keeps_the_raw_stock_row_with_no_models() {
+    let mut harness = Harness::builder()
+        .with_size(Vec2::new(1280.0, 720.0))
+        .build_ui_state(frame, ShellUi::blank());
+    {
+        let st = &mut harness.state_mut().state;
+        st.stock_ui.shape = 2;
+        st.ui_target = UiTarget::Stock;
+    }
+    harness.run();
+    assert!(harness.query_by_label("No models to take stock from.").is_some(), "no models");
+    assert!(
+        harness
+            .query_by_label("Apply a stock from a model to say whether its source is raw stock only.")
+            .is_some(),
+        "the raw-stock row shows with no models"
+    );
+}
