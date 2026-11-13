@@ -127,14 +127,13 @@ rotary axis`.
 
 The kinds exist (`wire_edm`, `sinker_edm`), and the Wire Contour operation
 (`OpType::WireContour`) is admitted on a wire EDM machine. What does not ship
-yet is an EDM post or an EDM machine file: no post serves an EDM kind, so
-nothing can be posted for one. Status: Wire Contour can be created and
+yet is an EDM machine file. Status: Wire Contour can be created and
 generated on a machine file you write that declares `wire_edm`; posting it
 stops with `a Wire Contour operation posts through a wire EDM post, which
 is not built yet - nothing is posted`. The sinker EDM kind admits Sinker
 Burn and Sinker Side Burn on a machine file you write that declares
-`sinker_edm`; posting them stops with `no post for a sinker EDM machine
-yet (#542)`.
+`sinker_edm`; a straight Sinker Burn posts through the "Sinker EDM (ISO)"
+post, which takes every EDM code from the file's `edm.codes`.
 The operations, their settings and their refusals are in
 [Wire and sinker EDM](@/guide/operations-edm.md).
 

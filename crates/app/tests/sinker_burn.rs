@@ -9,7 +9,9 @@
 //! Gate map (#541): covers app::operation (sinker_op, kinds, params,
 //! stamp), app::commands::operation (family gate), app::stock_sim
 //! (plan_program, carry walk), app::project (sinker DTO), motion::sinker,
-//! sim::stock_sim (dexel_box), tools::electrode.
+//! sim::stock_sim (dexel_box), tools::electrode, and (#542) app::posting
+//! (SINKER_POSTS, post_serves, the sinker stream PARAMs) with the
+//! generic sinker post over the synthetic fixture dialect.
 //! Provenance: our own SYNTHETIC fixtures - the sinker template of #530
 //! with an invented condition (no machine's manual), and a hand-built
 //! block with a rectangular cavity. Not exercised on a real EDM control.
@@ -272,8 +274,9 @@ fn the_sinker_burn_is_driven_over_mcp_with_the_gui_commands() {
     assert!(text.contains("past the cavity floor datum"), "{text}");
     call(&mut s, &mut id, "undo", json!({}));
     call(&mut s, &mut id, "generate", json!({ "name": "Burn1" }));
-    // The review of #1131: no EDM dialect ships yet (#542), so the post
-    // tool refuses the burn by name and writes no file.
+    // The review of #1131: the document's built-in milling post does not
+    // serve a sinker (#1232's door, since #542 ships the sinker post), so
+    // the post tool refuses the burn by name and writes no file.
     let nc = std::env::temp_dir().join(format!("camcraft-1131-mcp-{}.nc", std::process::id()));
     let _ = std::fs::remove_file(&nc);
     id += 1;
@@ -283,7 +286,7 @@ fn the_sinker_burn_is_driven_over_mcp_with_the_gui_commands() {
         .expect("a response");
     let text = reply["result"]["content"][0]["text"].as_str().unwrap_or_default().to_owned();
     assert_eq!(reply["result"]["isError"], json!(true), "{reply}");
-    assert!(text.contains("no post for a sinker EDM machine yet (#542)") && text.contains("Burn1"), "{text}");
+    assert!(text.contains("does not serve") && text.contains("a sinker EDM machine") && text.contains("Burn1"), "{text}");
     assert!(!nc.exists(), "the refused post wrote {}", nc.display());
 }
 
@@ -317,4 +320,107 @@ fn a_changed_spark_gap_or_electrode_face_marks_the_burn_stale() {
     assert_eq!(status(&world), OpStatus::Stale, "a re-cut electrode face is a different burn");
     assert!(h.undo(&world));
     assert_eq!(status(&world), OpStatus::Ok);
+}
+
+// ---------------------------------------------------------------- #542
+// The generic ISO-style sinker post through the real op: every EDM code
+// from the synthetic fixture dialect's `edm.codes` (#290 D5). Not
+// exercised on a real EDM control.
+
+const DIALECT: &str = include_str!("edm/sinker-iso-dialect.mch");
+const SINKER_POST: &str = "Sinker EDM (ISO)";
+
+/// The burn of `a_rectangular_electrode_burns_its_cavity_to_the_stated_depth`
+/// on the fixture dialect, posted with `post`: the program, or the refusal.
+fn post_burn(mch: &str, post: &str) -> Result<String, String> {
+    use camcraft_app::commands::SelectPost;
+    use camcraft_app::schema::PostRef;
+    let (world, mut h) = sinker_doc_on(mch, 6.0);
+    h.execute(&world, CreateOperation::new(&world, "Burn1", ELECTRODE, SrcRef::Stock, burn(SinkerDatum::WorkTop, 6.0, 14.0)).expect("create"));
+    h.execute(&world, GenerateOperation::new(&world, "Burn1").expect("generates"));
+    h.execute(&world, SelectPost::new(&world, PostRef::Named(post.into())).expect("a registry post"));
+    let out = std::env::temp_dir().join(format!("camcraft-542-{}-{post}.nc", std::process::id()));
+    let posted = camcraft_app::posting::post_setup(&world, &out);
+    let _ = std::fs::remove_file(&out);
+    posted.map(|p| p.program)
+}
+
+#[test]
+fn the_sinker_burn_posts_through_the_generic_sinker_post_to_its_golden() {
+    let program = post_burn(DIALECT, SINKER_POST).expect("the sinker post writes the burn");
+    let rel = "tests/golden/nc/sinker-iso/sinker_burn_program.nc";
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(rel);
+    if std::env::var_os("WRITE_GOLDEN").is_some() {
+        std::fs::write(&path, &program).expect("write golden");
+    }
+    assert_eq!(program, std::fs::read_to_string(&path).expect("golden"), "the sinker program moved a byte");
+    // The condition the op names and the electrode's 15 mm pickup offset
+    // ride the stream; the tip stops one gap above the 14 mm floor.
+    for line in ["ES1", "M100 H15.", "M101 Z14.05"] {
+        assert!(program.lines().any(|l| l == line), "{line} in\n{program}");
+    }
+}
+
+#[test]
+fn a_missing_sinker_code_refuses_the_post_by_name() {
+    let mut v: serde_json::Value = serde_json::from_str(DIALECT).expect("fixture");
+    v["edm"]["codes"].as_object_mut().expect("codes").remove("condition");
+    let err = post_burn(&v.to_string(), SINKER_POST).expect_err("no condition code, no program");
+    assert!(err.contains("states no edm.codes.condition"), "{err}");
+}
+
+#[test]
+fn a_mill_post_on_a_sinker_machine_is_still_refused() {
+    use camcraft_app::machine::Kind;
+    use camcraft_app::posting;
+    for post in ["Fanuc", "Haas", "Tormach PathPilot Plasma"] {
+        let err = post_burn(DIALECT, post).expect_err("a non-EDM post on a sinker");
+        assert!(err.contains("a sinker EDM machine") && err.contains("does not serve"), "{post}: {err}");
+        assert!(!posting::post_serves(post, Kind::SinkerEdm), "{post}");
+    }
+    assert_eq!(posting::SINKER_POSTS, &[SINKER_POST]);
+    assert!(posting::post_serves(SINKER_POST, Kind::SinkerEdm));
+    for k in [Kind::Mill, Kind::Lathe, Kind::MillTurn, Kind::Plasma, Kind::WireEdm] {
+        assert!(!posting::post_serves(SINKER_POST, k), "{k:?}");
+    }
+    assert_eq!(posting::default_post_for(Kind::SinkerEdm), camcraft_app::schema::PostRef::Named(SINKER_POST.into()));
+}
+
+/// Rework onto main's EDM designs: an orbit burn (#544) and a Sinker
+/// Side Burn (#545) carry `SinkerCondition` and the pickup into their
+/// stream, and the orbit its geometry and radius - so the sinker post
+/// refuses each by name (`script_sinker_iso.rs`) instead of reading
+/// their explicit moves as a stray feed.
+#[test]
+fn an_orbit_burn_and_a_side_burn_say_their_sinker_params_in_the_stream() {
+    use camcraft_app::operation::{SinkerBurnOp, SinkerOrbit, SinkerOrbitKind, SinkerSideBurnOp, SinkerSideDirection};
+    use camcraft_app::post::cnc::Record;
+    use serde_json::json;
+    let mut v: serde_json::Value = serde_json::from_str(DIALECT).expect("fixture");
+    v["edm"]["max_orbit_radius"] = json!(1.0);
+    let (world, mut h) = sinker_doc_on(&v.to_string(), 6.0);
+    let OpParams::SinkerBurn(plain) = burn(SinkerDatum::WorkTop, 6.0, 14.0) else { panic!("a burn") };
+    let orbit = SinkerBurnOp { orbit: Some(SinkerOrbit { kind: SinkerOrbitKind::Circular, radius: 0.04, vectors: 8, turns: 2 }), ..plain.clone() };
+    let side = SinkerSideBurnOp { burn: plain, direction: SinkerSideDirection::PlusX, amount: 0.04, undersize: 0.1 };
+    h.execute(&world, CreateOperation::new(&world, "Orbit1", ELECTRODE, SrcRef::Stock, OpParams::SinkerBurn(orbit)).expect("an orbit burn"));
+    h.execute(&world, CreateOperation::new(&world, "Side1", ELECTRODE, SrcRef::Stock, OpParams::SinkerSideBurn(side)).expect("a side burn"));
+    for n in ["Orbit1", "Side1"] {
+        h.execute(&world, GenerateOperation::new(&world, n).unwrap_or_else(|e| panic!("{n} generates: {e}")));
+    }
+    let streams = camcraft_app::posting::op_streams(&world).expect("streams");
+    let param = |op: &str, name: &str| {
+        let recs = &streams.iter().find(|(n, _)| n == op).unwrap_or_else(|| panic!("{op} streams")).1;
+        recs.iter().find_map(|r| match r {
+            Record::Param { name: n, value } if n == name => Some(value.clone()),
+            _ => None,
+        })
+    };
+    for op in ["Orbit1", "Side1"] {
+        assert_eq!(param(op, "SinkerCondition"), Some(json!("S1")), "{op}");
+        assert_eq!(param(op, "EdmCondition"), None, "{op}: the wire section's word is not the sinker's");
+        assert!(param(op, "ElectrodePickup").is_some(), "{op}");
+    }
+    assert_eq!(param("Orbit1", "EdmOrbit"), Some(json!("circular")));
+    assert_eq!(param("Orbit1", "EdmOrbitRadius"), Some(json!(0.04)));
+    assert_eq!(param("Side1", "EdmOrbit"), None);
 }

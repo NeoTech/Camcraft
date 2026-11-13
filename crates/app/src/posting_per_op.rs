@@ -117,8 +117,6 @@ fn post_per_op_with(
         return Err(format!("{} is not a folder", dir.display()));
     }
     let streams = op_streams(world)?;
-    // No sinker EDM dialect ships yet (#542): refused before any file.
-    crate::posting_family::edm_at_post(world, streams.iter().map(|(n, _)| n.as_str()))?;
     // Each op's setup and script, resolved once - and the lathe door
     // (#1190) before anything else is judged: a turning dialect opens
     // only what a lathe may run.
