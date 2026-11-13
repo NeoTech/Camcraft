@@ -38,6 +38,7 @@ impl State {
         match SetWcsOrigin::new(&self.world, location) {
             Ok(command) => {
                 self.history.execute(&self.world, command);
+                self.wcs_pick = None; // #701: a landed frame ends the role draft
                 self.wcs_placed_status();
             }
             Err(err) => self.refuse(ErrorScope::Setup, format!("WCS not set: {err}")),
@@ -55,6 +56,7 @@ impl State {
                 self.wcs_ui.circle = Some(Ok(c.clone()));
                 self.wcs_ui.pick_circle = false; // done: the viewport picks normally again
                 self.history.execute(&self.world, command);
+                self.wcs_pick = None; // #701: a landed frame ends the role draft
                 self.wcs_placed_status();
                 let u = self.units();
                 self.status = format!(

@@ -77,7 +77,7 @@ use super::theme::Tokens;
 pub(crate) use super::fields::{combo, combo_owned, field, num, num_feed, num_plain};
 
 /// Tool kind labels, same order as `ToolKind` (mirrors the tool page).
-const TOOL_KINDS: [&str; 13] = [
+const TOOL_KINDS: [&str; 14] = [
     "End mill",
     "Ball nose",
     "Bull nose",
@@ -92,6 +92,8 @@ const TOOL_KINDS: [&str; 13] = [
     "Touch probe",
     // #670: the kerf is its diameter; it turns no spindle.
     "Plasma torch",
+    // #541: diameter = X size, width = Y size; it turns no spindle.
+    "Sinker electrode",
 ];
 
 /// The note gray the model page's notes use ([0.62,0.66,0.72]).
@@ -569,12 +571,10 @@ fn setups_page(ui: &mut Ui, state: &mut State) {
             });
         }
         ui.separator();
-        // A document with no setups still machines steel - the
-        // workholding section and the tool list belong to the implicit
-        // context too.
-        fixtures_section(ui, state, None);
-        ui.separator();
-        tool_list_section(ui, state, None);
+        // Workholding and the tool list of the implicit first setup live
+        // under its Fixtures and Tool list nodes in the browser (#1197),
+        // the same place as in a document with setups.
+        ui.label(super::setup_pages::WORKHOLDING_POINTER);
         sheet_footer(ui, state);
         return;
     }
@@ -869,6 +869,7 @@ fn tool_page(ui: &mut Ui, state: &mut State, name: &str) {
         let taken = model::find_by_name(&state.world, cname).is_some();
         let clicked = ui
             .horizontal(|ui| {
+                super::tool_icons::glyph(ui, super::tool_icons::catalog_row_icon(&ct));
                 ui.label(format!(
                     "{}  Ø{} {}",
                     cname,
@@ -1025,15 +1026,24 @@ pub(crate) fn tool_editor_window(ctx: &egui::Context, state: &mut State) {
                         }
                         // The torch (#670): no spindle, no corner - a
                         // kerf. Leaving it, a spinning kind needs an rpm.
-                        if state.tool_ui.tool_kind() == tools::ToolKind::Torch {
+                        // The sinker electrode (#541) turns none either.
+                        if matches!(state.tool_ui.tool_kind(), tools::ToolKind::Torch | tools::ToolKind::Electrode) {
                             state.tool_ui.rpm = 0.0;
                             state.tool_ui.corner_r = 0.0;
-                        } else if before == 12 && (state.tool_ui.rpm.is_nan() || state.tool_ui.rpm <= 0.0) {
+                        } else if (before == 12 || before == 13) && (state.tool_ui.rpm.is_nan() || state.tool_ui.rpm <= 0.0) {
                             state.tool_ui.rpm = 10000.0;
                         }
                     }
                     let torch = state.tool_ui.tool_kind() == tools::ToolKind::Torch;
-                    if torch {
+                    let electrode = state.tool_ui.tool_kind() == tools::ToolKind::Electrode;
+                    if electrode {
+                        // #541: the burning face's two sides.
+                        field(ui, "Electrode X size");
+                        num(ui, u, &mut state.tool_ui.diameter);
+                        field(ui, "Electrode Y size");
+                        num(ui, u, &mut state.tool_ui.width);
+                        ui.label("flute length = the electrode's length below the holder; shank length = its pickup offset");
+                    } else if torch {
                         // The kerf width IS the torch's diameter (#669 /
                         // #670): every offset reads radius = kerf / 2.
                         field(ui, "Kerf width");
@@ -1104,7 +1114,10 @@ pub(crate) fn tool_editor_window(ctx: &egui::Context, state: &mut State) {
                         field(ui, "Corner radius");
                         ui.label(format!("{} {}", units::len(state.tool_ui.diameter * 0.5, u, 3), u.suffix()));
                         ui.label("half the diameter - a ball nose's whole tip is its ball");
-                    } else if !matches!(state.tool_ui.tool_kind(), tools::ToolKind::Tap | tools::ToolKind::Torch) {
+                    } else if !matches!(
+                        state.tool_ui.tool_kind(),
+                        tools::ToolKind::Tap | tools::ToolKind::Torch | tools::ToolKind::Electrode
+                    ) {
                         field(ui, "Corner radius");
                         num(ui, u, &mut state.tool_ui.corner_r);
                     }
@@ -1123,7 +1136,8 @@ pub(crate) fn tool_editor_window(ctx: &egui::Context, state: &mut State) {
                         TextEdit::singleline(&mut state.tool_ui.material_group)
                             .desired_width(140.0),
                     );
-                    if !torch {
+                    super::tool_catalog_rows::catalog_rows(ui, &mut state.tool_ui);
+                    if !torch && !electrode {
                         field(ui, "Spindle rpm");
                         num_plain(ui, &mut state.tool_ui.rpm);
                     }
