@@ -26,6 +26,7 @@ pub(crate) fn op_icon(kind: OpType) -> Icon {
         OpType::Deburr => Icon::Deburr,
         OpType::Circular => Icon::Circular,
         OpType::PlasmaProfile => Icon::PlasmaProfile,
+        OpType::WireContour => Icon::WireContour,
         OpType::SinkerBurn => Icon::SinkerBurn,
         // #545: a lateral burn of one wall - its own glyph.
         OpType::SinkerSideBurn => Icon::SinkerSideBurn,

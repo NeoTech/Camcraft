@@ -16,6 +16,14 @@ pub(super) fn height_fields(params: &OpParams) -> [(&'static str, &'static str, 
             ("TOP", "Top of Plate Z", Some(p.top_z)),
             ("BOT", "Bottom of Plate Z", Some(p.bottom_z)),
         ],
+        // The wire cut (#532): the two programmed planes; no rapids
+        // plane, no hop.
+        OpParams::WireContour(p) => [
+            ("CLR", "Clearance Z", None),
+            ("RET", "Retract Z", None),
+            ("TOP", "Top of Workpiece Z", Some(p.top_z)),
+            ("BOT", "Bottom of Workpiece Z", Some(p.bottom_z)),
+        ],
         OpParams::SinkerBurn(p) | OpParams::SinkerSideBurn(crate::operation::SinkerSideBurnOp { burn: p, .. }) => [
             ("CLR", "Clearance Z", Some(p.clearance_z)),
             ("RET", "Retract Z", None),

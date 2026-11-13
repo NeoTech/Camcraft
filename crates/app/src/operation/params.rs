@@ -420,6 +420,7 @@ impl OpParams {
                 entry_ramp,
                 steep_stepover,
                 pencil_reference,
+                fill_openings,
             } => {
                 // v16: the pattern chooses a different kinematic (and
                 // the raster fields only answer to Parallel), so they
@@ -488,6 +489,14 @@ impl OpParams {
                         w(h, *s);
                     }
                     None => h.write_u8(0),
+                }
+                // #1196: the land width changes the surface the path
+                // is planned on. Only a stated width digests (a tag
+                // byte, then the number), so every op without one
+                // keeps the stamp it had - no one-time staleness.
+                if let Some(s) = fill_openings {
+                    h.write_u8(0x4C);
+                    w(h, *s);
                 }
             }
             // The deburr ride digests the one authored number, the
@@ -1428,6 +1437,24 @@ impl OpParams {
                     w(h, v);
                 }
                 h.write_u8(set_wcs.unwrap_or(0xff));
+            }
+            // The wire contour (#532): every stored word. The wire
+            // and the gap are the machine condition's - `current_stamp`
+            // digests them (`wire_op::stamp_condition`).
+            OpParams::WireContour(p) => {
+                wh(h, p.top_z);
+                wh(h, p.bottom_z);
+                h.write(p.condition.as_bytes());
+                h.write_u8(0xff);
+                h.write_u8(u8::from(p.side == super::WireSide::Punch));
+                match p.start {
+                    Some([x, y]) => {
+                        h.write_u8(1);
+                        w(h, x);
+                        w(h, y);
+                    }
+                    None => h.write_u8(0),
+                }
             }
             // The sinker burn (#541): every stored number, the datum
             // and the condition id.

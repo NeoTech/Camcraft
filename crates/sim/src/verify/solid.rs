@@ -28,8 +28,10 @@ use super::hole_wall::HoleAxis;
 use super::midpose;
 use super::probe::{Cutter, Frame};
 use super::solid_index::SolidIndex;
+use super::thread_bore::ThreadBore;
 use super::types::Warning;
-use crate::cl::{MoveKind, Toolpath, is_vertical, normalize_axis};
+use super::upright::is_upright;
+use crate::cl::{MoveKind, Toolpath, normalize_axis};
 use crate::geometry::{Point3, Triangle};
 
 /// How the solid law samples and what it excuses.
@@ -93,6 +95,20 @@ pub fn solid_hits(path: &Toolpath, facets: &[Triangle], cutter: &Cutter, law: &S
 /// [`SolidLaw::hole_walls`] excuses. A hole axis that does not run along
 /// a move's tool axis excuses nothing on that move.
 pub fn solid_hits_walled(path: &Toolpath, facets: &[Triangle], cutter: &Cutter, law: &SolidLaw, walls: &[HoleAxis]) -> Vec<Warning> {
+    solid_hits_threaded(path, facets, cutter, law, walls, &[])
+}
+
+/// [`solid_hits_walled`] for a thread mill: `bores` are the holes it
+/// threads, whose minor walls the helix cuts into by design
+/// ([`super::thread_bore`], #1071).
+pub fn solid_hits_threaded(
+    path: &Toolpath,
+    facets: &[Triangle],
+    cutter: &Cutter,
+    law: &SolidLaw,
+    walls: &[HoleAxis],
+    bores: &[ThreadBore],
+) -> Vec<Warning> {
     let walls = if law.hole_walls { walls } else { &[] };
     let first_cut = path.moves.iter().position(|m| m.kind != MoveKind::Rapid);
     if facets.is_empty() {
@@ -120,7 +136,7 @@ pub fn solid_hits_walled(path: &Toolpath, facets: &[Triangle], cutter: &Cutter, 
         if !(m.from.is_finite() && m.to.is_finite()) {
             continue; // the NonFinite law owns it
         }
-        let axis = m.axis.and_then(normalize_axis).filter(|a| !is_vertical(a));
+        let axis = m.axis.and_then(normalize_axis).filter(|a| !is_upright(a));
         let mid = poses
             .get(i)
             .and_then(|&(f, t)| midpose::change(f, t))
@@ -131,15 +147,15 @@ pub fn solid_hits_walled(path: &Toolpath, facets: &[Triangle], cutter: &Cutter, 
             !set.is_empty()
                 && (pieces(m, law.step).into_iter().any(|(a, b, grow)| {
                     let fr = Frame::new(a, axis);
-                    index.hits(&fr, fr.local(b), set, allow, grow, &axes_in(&fr, walls))
+                    index.hits(&fr, fr.local(b), set, allow, grow, &axes_in(&fr, walls), bores)
                 }) || mid.iter().any(|iv| {
                     // The interval's tip travel swept exactly under the
                     // pose held at its midpoint: the pose's own turn
                     // within the interval is the stated sampling limit
                     // (STEP of far-end travel), the same as the fixture
                     // laws' posed sweep.
-                    let fr = Frame::new(iv.p0, normalize_axis(iv.am).filter(|a| !is_vertical(a)));
-                    index.hits(&fr, fr.local(iv.p1), set, allow, grow_mid, &axes_in(&fr, walls))
+                    let fr = Frame::new(iv.p0, normalize_axis(iv.am).filter(|a| !is_upright(a)));
+                    index.hits(&fr, fr.local(iv.p1), set, allow, grow_mid, &axes_in(&fr, walls), bores)
                 }))
         };
         if m.kind == MoveKind::Rapid {

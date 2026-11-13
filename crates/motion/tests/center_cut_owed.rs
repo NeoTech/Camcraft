@@ -234,6 +234,7 @@ fn tool(kind: ToolKind, center_cutting: bool) -> Tool {
         tool_material: None,
         flutes: None,
         orientation: None,
+        catalog: camcraft_tools::catalog_fields::ToolCatalog::default(),
         turning: None,
     }
 }

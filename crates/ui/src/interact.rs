@@ -34,18 +34,29 @@ use crate::egui_app::ground_ink::{Overlay, light_ground, overlay};
 
 /// Keyboard modifiers as the pick law reads them - the winit state or the
 /// egui `Modifiers`, converted at the shell's edge so the law itself names
-/// no windowing library. Ctrl/Shift add to a feature pick, Alt in Edge
-/// mode takes the one segment under the cursor.
+/// no windowing library. `command` is the platform command modifier
+/// (Cmd on macOS, Ctrl elsewhere - the key the shortcuts use, #1238): it
+/// adds to a feature pick or toggles one in Edge mode. Shift adds (and
+/// closes a loop in Edge mode); Alt in Edge mode takes the one segment
+/// under the cursor. Control on macOS is the secondary click, so it is not
+/// the add key there.
 #[derive(Clone, Copy, Default, Debug)]
 pub struct Mods {
-    pub ctrl: bool,
+    pub command: bool,
     pub shift: bool,
     pub alt: bool,
 }
 
 impl From<ModifiersState> for Mods {
     fn from(m: ModifiersState) -> Self {
-        Mods { ctrl: m.control_key(), shift: m.shift_key(), alt: m.alt_key() }
+        let command = if cfg!(target_os = "macos") { m.super_key() } else { m.control_key() };
+        Mods { command, shift: m.shift_key(), alt: m.alt_key() }
+    }
+}
+
+impl From<egui::Modifiers> for Mods {
+    fn from(m: egui::Modifiers) -> Self {
+        Mods { command: m.command, shift: m.shift, alt: m.alt }
     }
 }
 
@@ -150,14 +161,14 @@ fn pick_model(state: &mut State, p: [f32; 2]) {
 /// write, never a command until Apply.
 pub fn queue_boundary_pick(state: &mut State, pick: GeoSel, mods: Mods) {
     let Some(target) = state.boundary_pick else {
-        queue_feature_pick(state, pick, mods.ctrl || mods.shift);
+        queue_feature_pick(state, pick, mods.command || mods.shift);
         return;
     };
     if state.op_ui.name.is_empty() {
         state.status = String::from("open an operation first - geometry picks fill the open one");
         return;
     }
-    let m = crate::boundary_draft::PickMods { toggle: mods.ctrl, close: mods.shift && !mods.ctrl };
+    let m = crate::boundary_draft::PickMods { toggle: mods.command, close: mods.shift && !mods.command };
     crate::boundary_draft::take_pick(state, target, pick, m);
 }
 
@@ -1322,6 +1333,8 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
         // so does the torch between contours (#670).
         | operation::OpParams::Probe { .. }
         | operation::OpParams::PlasmaProfile(_)
+        // The wire never lifts out of the work (#532): no hop plane.
+        | operation::OpParams::WireContour(_) => None,
         // The electrode retracts to its approach plane only (#541).
         | operation::OpParams::SinkerBurn(_)
         | operation::OpParams::SinkerSideBurn(_) => None,
@@ -1453,6 +1466,9 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
         // The plate the torch cuts through: its top (the cut plane) and
         // bottom (#670).
         | operation::OpParams::PlasmaProfile(operation::PlasmaOp { top_z, bottom_z, .. })
+        // The workpiece the wire cuts through: its two programmed
+        // planes (#532).
+        | operation::OpParams::WireContour(operation::WireContourOp { top_z, bottom_z, .. })
         // The work top and the cavity floor datum the burn stops at (#541).
         | operation::OpParams::SinkerBurn(operation::SinkerBurnOp { top_z, floor_z: bottom_z, .. })
         // #545: the side burn's own plunge.

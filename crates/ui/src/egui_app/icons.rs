@@ -87,6 +87,8 @@ icon_table! {
     Deburr => "op-deburr", "icon-deburr";
     Circular => "op-circular", "icon-circular";
     PlasmaProfile => "op-plasma-profile", "icon-plasma-profile";
+    /// The wire between its two guides, through the plate it cuts (#532).
+    WireContour => "op-wire-contour", "icon-wire-contour";
     /// A sinker EDM burn (#541): the electrode plunging into a cavity.
     SinkerBurn => "op-sinker-burn", "icon-sinker-burn";
     /// A sinker EDM side burn (#545): the electrode planing one wall.

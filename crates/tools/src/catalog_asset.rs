@@ -144,6 +144,7 @@ impl Def {
             flutes: self.flutes,
             center_cutting: self.center_cutting,
             orientation: self.orientation,
+            catalog: crate::catalog_fields::ToolCatalog::default(),
             turning: self.turning,
         }
     }
