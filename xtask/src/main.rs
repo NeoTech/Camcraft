@@ -21,6 +21,9 @@ mod icon_font;
 mod icons;
 #[cfg(test)]
 mod icons_tests;
+mod logo;
+#[cfg(test)]
+mod logo_tests;
 mod merge_delta;
 mod merge_plan;
 #[cfg(test)]
@@ -32,6 +35,9 @@ mod merge_plan_tests;
 mod package;
 mod path_mods;
 mod plan;
+mod process_bump;
+#[cfg(test)]
+mod process_bump_tests;
 mod quick;
 mod release;
 mod release_bump;
@@ -53,18 +59,21 @@ const USAGE: &str = "\
 usage:
   cargo xtask gate quick [--base main] [--heavy]   tests the diff touches (test fns where it can)
   cargo xtask gate batch                           every debug suite minus SLOW_BINARIES, ui, clippy
-  cargo xtask gate release                         everything, plus the --ignored heavy lanes and the ui snapshot lane
+  cargo xtask gate release [--no-snapshots]        everything, plus the --ignored heavy lanes and the ui snapshot lane
+                                                   (--no-snapshots: not the Windows-made pixel goldens - cut.yml on Linux, #1413)
   cargo xtask gate test <filter> [--crate c] [--binary b] [--exact]   exactly the matching test(s)
       any gate: --dry-run (or --plan) prints the plan without running it. Logs: gate-logs/<tier>-<timestamp>/.
   cargo xtask icons [--check | --sheet <out.png> [--px N] [--zoom N]]
                                                    rasterise assets/ui/svg/*.svg to the 32 px PNGs (#661), check
                                                    them against their masters, or draw a 16 px contact sheet
+  cargo xtask logo [--check]                       generate assets/logo/icons/ (PNG sizes, camcraft.ico) from the logotype (#1459)
   cargo xtask decisions --version X.Y.Z            gather docs/decisions/*.md into RECOMMENDED.md
   cargo xtask release --version X.Y.Z --no-tag [--title T] [--skip-gate] [--skip-build] [--installer] [--dry-run]
                                                    the release cut on release/vX.Y.Z (scripts/release.ps1's phases)
   cargo xtask merge-plan <PR>... | --label <name> [--json] | --delta <PR> --reviewed <sha>
                                                    the merge order of open PRs (waves, refresh only at merge time)
                                                    or the delta class of a PR since a reviewed head (#1221)
+  cargo xtask process-bump                         PROCESS_VERSION + 1, the one writer of that file (#1153)
   cargo xtask package [--version X.Y.Z] [--out dist] [--bin-dir target/release] [--dry-run]
                                                    stage the Windows portable tree and write camcraft-<ver>-win-x64.zip
                                                    (no bump/commit/build; version defaults to post.exe --version;
@@ -101,6 +110,8 @@ pub struct GateArgs {
     pub exact: bool,
     pub heavy: bool,
     pub dry: bool,
+    /// `gate release --no-snapshots` (#1413): the release plan without the two ui pixel-snapshot lanes.
+    pub no_snapshots: bool,
 }
 
 pub fn parse_gate(args: &[String]) -> Result<GateArgs, String> {
@@ -122,6 +133,7 @@ pub fn parse_gate(args: &[String]) -> Result<GateArgs, String> {
             "--exact" => g.exact = true,
             "--heavy" => g.heavy = true,
             "--dry-run" | "--plan" => g.dry = true,
+            "--no-snapshots" => g.no_snapshots = true,
             s if s.starts_with('-') => return Err(format!("unknown gate option '{s}'\n{USAGE}")),
             s if g.tier.is_empty() => g.tier = s.to_string(),
             s if g.tier == "test" && g.filter.is_none() => g.filter = Some(s.to_string()),
@@ -130,6 +142,9 @@ pub fn parse_gate(args: &[String]) -> Result<GateArgs, String> {
     }
     if g.tier.is_empty() {
         g.tier = "quick".into();
+    }
+    if g.no_snapshots && g.tier != "release" {
+        return Err(format!("--no-snapshots applies to the release tier only, not '{}'", g.tier));
     }
     match g.tier.as_str() {
         "quick" | "batch" | "release" => Ok(g),
@@ -165,7 +180,9 @@ fn run(args: &[String]) -> Result<i32, String> {
             Ok(0)
         }
         Some("icons") => icons::run(&root(), &args[1..]),
+        Some("logo") => logo::run(&root(), &args[1..]),
         Some("merge-plan") => merge_plan_git::run(&root(), &args[1..]),
+        Some("process-bump") => process_bump::run(&root(), &args[1..]),
         Some("package") => {
             let a = package::parse(&args[1..]).map_err(|e| format!("{e}\n{USAGE}"))?;
             Ok(package::run(&root(), &a))
@@ -251,9 +268,17 @@ fn gate(root: &Path, g: &GateArgs) -> Result<i32, String> {
                 }
             }
         }
-        "batch" => plan::batch(root),
-        _ => plan::release(root),
+        _ => tier_plan(root, g),
     };
     run.plan(&plan)?;
     Ok(run.summary())
+}
+
+/// The plan of a non-quick tier, pure (no cargo, no git): `gate()` runs exactly this, so the
+/// `--no-snapshots` wiring is pinned by `tests::gate_no_snapshots_reaches_the_release_plan`.
+pub(crate) fn tier_plan(root: &Path, g: &GateArgs) -> plan::Plan {
+    match g.tier.as_str() {
+        "batch" => plan::batch(root),
+        _ => plan::release_with(root, !g.no_snapshots),
+    }
 }

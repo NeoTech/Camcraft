@@ -34,7 +34,14 @@ appends `explain(words)` after its words - the PRELUDE helper that
 returns `""` unless the document's Explain G-code option is on, and
 applies the comment guards itself (printable ASCII, no delimiters, the
 active-keyword lead, the length cap) - and Explain on a script that
-states no form is refused by name before any hook runs; never read
+states no form is refused by name before any hook runs; a control that
+reads a word differently from the mill table states it (#1399):
+`explainWords = { G99: "FEED PER REVOLUTION", G50: { said: "SPINDLE
+SPEED LIMIT", takes: "S" } }` (a text, `""` to leave the word
+unexplained, or a word explained only beside the value word it folds
+in) and `explainTool = "station-offset"` (a lathe T0101 is tool 1,
+offset 1) - a malformed table is refused by name when Explain is on;
+never read
 `machine.units` for the program's unit, it is only the unit the
 machine file was written in; `threadHands = true` (#629) says the script
 reads `PARAM SpindleDirection` and states a thread's hand (M04 when the
@@ -221,6 +228,20 @@ D5), and a missing one is refused by name. The path is the wire-centre
 path, so compensation is cancelled, never engaged. Its golden rides
 under `nc/wire-iso/` (`wire_post.rs`); the decision record is
 `docs/decisions/533-wire-iso-post.md`.
+
+`sodick-wire.cps` (#617, "Sodick Wire EDM (Mark 21)") is the second
+`WIRE_POSTS` entry, never the default. Its words are Sodick's own, from
+the 1998 "Wire EDM Machine Operation" manual (Mark 21 / EX21 control):
+`T91` / `T90` thread and cut the wire (`edm.awt`), the operation's
+condition id is the `C` word itself (C and three digits, else refused;
+the header and each section tell the operator it must exist in the
+control's condition table), `G40` rides the `G00` to the threading point, a coordinate always carries its decimal point,
+`M02` ends. It reads no `edm.codes`. It writes a vertical 2-axis cut
+only: taper, 4-axis, a missing G54-G59 and an arc as the first cut are
+refused by name; G92, the tank and flushing T codes and G41 / G42 are
+never written. It was not run on a control; what is unconfirmed is in
+`docs/decisions/617-sodick-wire-post.md`. Its golden rides under
+`nc/sodick-wire/` (`sodick_wire_post.rs`).
 
 ## Adding a post to the app
 

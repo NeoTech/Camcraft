@@ -115,8 +115,13 @@ fn descent_from(m: &Motion, prev_z: f64, ramp: bool) -> f64 {
 /// level's solid - it takes the helix, then the ramp, or the operation is
 /// refused by name. `zig` selects the angle-bounded ramp (a level
 /// transition the user set to Ramp) over the entry's single chord.
+/// A proved pre-drilled hole (#1449) is taken ahead of every arm.
 pub(super) fn plan(arm: Entry3D, zig: bool, l: &Lvl, leg: Point2, z: f64, prev_z: f64, m: &Motion) -> Descent {
-    with_arc(arm, zig, l, leg, z, prev_z, m).unwrap_or_else(|| plan_core(arm, zig, l, leg, z, prev_z, m))
+    if let Some(d) = super::predrilled::entry(l, z, m) {
+        return d;
+    }
+    let d = with_arc(arm, zig, l, leg, z, prev_z, m).unwrap_or_else(|| plan_core(arm, zig, l, leg, z, prev_z, m));
+    super::predrilled::unserved(d, z, m)
 }
 
 /// [`plan`] onto the pass start itself, without the horizontal arc.

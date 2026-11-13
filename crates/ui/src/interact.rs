@@ -92,6 +92,26 @@ pub(crate) fn ray_at(state: &State, p: [f32; 2]) -> Option<([f64; 3], [f64; 3])>
     state.cam.ray_through(ndc, f64::from(w / h))
 }
 
+/// #1514: is the open operation's selection locked? Picking is a mode: a
+/// viewport click edits an operation's geometry only while its Geometry
+/// tab shows (`op_tab == 0`) or a pick row is armed (a boundary entry; the
+/// setup-page drafts - locate, points, plane, axis, WCS - are their own
+/// modes and are never locked). On any other tab the click does nothing:
+/// the picked geometry stays and the dialog says "Picking off". Ephemeral
+/// view state derived each time from the tab and the drafts; never a
+/// command (selection changes stay undoable commands).
+pub fn op_pick_locked(state: &State) -> bool {
+    !state.op_ui.name.is_empty()
+        && state.op_tab != 0
+        && state.boundary_pick.is_none()
+        && state.locate_pick.is_none()
+        && state.points_pick.is_none()
+        && !state.wcs_ui.pick_circle
+        && !crate::wcs_pick::collecting(state)
+        && !crate::plane_pick::collecting(state)
+        && !crate::axis_pick::collecting(state)
+}
+
 /// A click inside the viewport, routed by the pick mode: models,
 /// feature faces, or edge chains.
 pub(crate) fn pick_at(state: &mut State, p: [f32; 2], mods: Mods) {
@@ -101,11 +121,29 @@ pub(crate) fn pick_at(state: &mut State, p: [f32; 2], mods: Mods) {
     if crate::wcs_circle_pick::take_click(state, p) {
         return;
     }
-    match state.geo_pick {
-        GeoPick::Model => pick_model(state, p),
-        // #692: every feature click resolves through the one pick rule.
-        GeoPick::Face | GeoPick::Edge | GeoPick::Vertex => crate::feature_click::click(state, p, mods),
+    // #1514: off the Geometry tab the click is swallowed whole - no
+    // geometry change, and no model select that would swap the dialog.
+    if op_pick_locked(state) {
+        state.status = String::from("picking is off - open the Geometry tab to change the selection");
+        return;
     }
+    // #692: every feature click resolves through the one pick rule.
+    if feature_routed(state) {
+        crate::feature_click::click(state, p, mods);
+    } else {
+        pick_model(state, p);
+    }
+}
+
+/// Does a viewport click (and the hover) go through the feature pick
+/// rule rather than the whole-model pick? In a Face, Edge or Vertex mode,
+/// and (#1562) while the Setups page's WCS role draft collects: that row
+/// keeps the toolbar's mode on purpose (it takes faces, edges and points
+/// alike), so in the default Model mode its clicks must still reach
+/// `feature_click`, or the draft never receives a pick. Disarmed or
+/// paused, the mode's own click behaviour is back.
+pub(crate) fn feature_routed(state: &State) -> bool {
+    state.geo_pick != GeoPick::Model || crate::wcs_pick::collecting(state)
 }
 
 /// Raycast at a logical-px point inside the viewport; queues Select
@@ -174,15 +212,19 @@ pub fn queue_boundary_pick(state: &mut State, pick: GeoSel, mods: Mods) {
 /// keeping (the app keeps `left_press` OUTSIDE State, across frames).
 pub(crate) fn update_hover(state: &mut State, p: [f32; 2], held: bool) {
     state.hover_mesh = None; // re-earned below by a mesh hit, or gone
-    let idle_over_viewport =
-        state.drag.is_none() && !held && state.viewport_hot && inside_viewport(state, p);
+    // #1514: a locked selection takes no clicks, so nothing lights as pickable.
+    let idle_over_viewport = state.drag.is_none()
+        && !held
+        && state.viewport_hot
+        && inside_viewport(state, p)
+        && !op_pick_locked(state);
     if !idle_over_viewport {
         state.hover = None;
         return;
     }
     // #692: a feature mode hovers exactly what its click would take - the
     // one pick rule, the armed tool's kinds.
-    if state.geo_pick != GeoPick::Model || state.wcs_ui.pick_circle {
+    if feature_routed(state) || state.wcs_ui.pick_circle {
         crate::feature_click::hover(state, p);
         return;
     }
@@ -264,7 +306,8 @@ pub(crate) fn anchor_reference(state: &State) -> Option<(Aabb, &'static str)> {
     let active = camcraft_app::setup::active(&state.world);
     let stock = || model::stock_world_aabb_for(&state.world, active.as_deref()).map(|b| (b, "stock box"));
     let solid = || {
-        camcraft_app::setup_align::solid_aabb_in(&state.world, active.as_deref()).map(|b| (b, "model bounds"))
+        // #1538: the parts only - a vise's corner is never G54's.
+        camcraft_app::stock_fit::part_bounds(&state.world, active.as_deref()).map(|b| (b, "model bounds"))
     };
     if state.wcs_ui.anchor_source == 1 {
         solid().or_else(stock)
@@ -420,7 +463,7 @@ fn gizmo_len(state: &State) -> f64 {
 pub(crate) fn gizmos(state: &State) -> Vec<Gizmo> {
     let mut out: Vec<Gizmo> = Vec::new();
     for (name, entity) in model::named_entities(&state.world) {
-        if state.hidden_offsets.contains(&name) || !model::is_wcs(&state.world, &entity) {
+        if state.hidden_offsets.contains(&name) || state.wcs_hidden_by_setup(&name) || !model::is_wcs(&state.world, &entity) {
             continue;
         }
         let Some(stored) = model::transform_of(&state.world, &entity) else {
@@ -464,7 +507,7 @@ pub(crate) fn gizmos(state: &State) -> Vec<Gizmo> {
 // ------------------------------------------------- screen-space layers
 
 /// Screen-space segments of the FEATURE under the cursor - in the viewport,
-/// or on a Geometry-list row (`state.geo_hover`) - as viewport-uv
+/// (the Geometry-list row hover is [`row_hover_segments`]) - as viewport-uv
 /// pairs (0..1 within the image, like `overlay_labels` - each shell maps
 /// them through the image rect and draws with its own draw list). A
 /// draw-list producer on purpose: hovering must never rebuild the 3D
@@ -476,19 +519,28 @@ pub(crate) fn gizmos(state: &State) -> Vec<Gizmo> {
 /// nothing - a highlight must never promise a pick the click cannot make.
 pub(crate) fn hover_features(state: &State, aspect: f64) -> Vec<([f32; 2], [f32; 2])> {
     let mut out = Vec::new();
-    let mut viewport: Option<(String, FeatureSel)> = None;
     if let Some(hit) = &state.hover
         && let Some(sel) = hit.feature
     {
         feature_segments(state, &hit.entity, sel, aspect, &mut out);
-        viewport = Some((hit.entity.clone(), sel));
     }
-    // The Geometry list's row hover lights the same feature the same way:
-    // the list answering "which one is that?" without a click. Viewport
-    // hover keeps precedence, and one feature never draws twice.
-    if let Some(g) = &state.geo_hover
-        && !viewport.as_ref().is_some_and(|(e, f)| *e == g.entity && *f == g.feature)
-    {
+    out
+}
+
+/// Stroke width of the Geometry-list row hover (#1507), over a
+/// [`ROW_HOVER_HALO_PX`] dark halo: strong enough to read on the shaded and
+/// the wireframe model in both themes, and apart from the 1 px viewport hover.
+pub(crate) const ROW_HOVER_PX: f32 = 3.5;
+/// The dark halo under the row hover stroke.
+pub(crate) const ROW_HOVER_HALO_PX: f32 = 7.0;
+
+/// Screen-space segments of the feature a Geometry-list row (or its remove
+/// button) is hovered over (`state.geo_hover_drawn`, #1507), drawn strongly by the
+/// shell. Same resolution rules as [`hover_features`]: stale, hidden and
+/// gone draw nothing.
+pub(crate) fn row_hover_segments(state: &State, aspect: f64) -> Vec<([f32; 2], [f32; 2])> {
+    let mut out = Vec::new();
+    if let Some(g) = &state.geo_hover_drawn {
         feature_segments(state, &g.entity, g.feature, aspect, &mut out);
     }
     out
@@ -953,7 +1005,7 @@ pub fn toolpath_lines(state: &State) -> Vec<[f32; 6]> {
     for (name, entity) in camcraft_app::setup::operation_order(&state.world) {
         // Browser-eye hidden: the cache still exists and still posts, it
         // just does not draw (display state, never a geometry change).
-        if state.hidden_paths.contains(&name) {
+        if state.hidden_paths.contains(&name) || state.op_hidden_by_setup(&name) {
             continue;
         }
         let Some(cache) = model::toolpath_of(&state.world, &entity) else {

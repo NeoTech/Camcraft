@@ -15,6 +15,9 @@
 //!   being thrown away.
 //! - Facet collection is capped per shell while extracting, as a last line of
 //!   defense on top of the tolerance schedule.
+//! - Every face's surface evaluations are metered per pass (`step_guard`,
+//!   #1536): a face whose subdivision never converges is refused by name
+//!   instead of hanging inside truck, where nothing else can stop it.
 
 use std::panic::AssertUnwindSafe;
 
@@ -69,6 +72,27 @@ pub fn with_facet_budget<R>(budget: usize, f: impl FnOnce() -> R) -> R {
     out
 }
 
+thread_local! {
+    /// Test-only override of the per-face evaluation cap (#1536's pins
+    /// trip it on a small fixture in well under a second).
+    static EVAL_CAP_OVERRIDE: std::cell::Cell<Option<u64>> = const { std::cell::Cell::new(None) };
+}
+
+/// Run `f` with the per-face evaluation cap lowered to `cap` on this
+/// thread. Never raises it. For tests; cleared on return.
+#[doc(hidden)]
+pub fn with_face_eval_cap<R>(cap: u64, f: impl FnOnce() -> R) -> R {
+    EVAL_CAP_OVERRIDE.with(|c| c.set(Some(cap)));
+    let out = f();
+    EVAL_CAP_OVERRIDE.with(|c| c.set(None));
+    out
+}
+
+fn face_eval_cap() -> u64 {
+    let cap = super::step_guard::FACE_EVAL_CAP;
+    EVAL_CAP_OVERRIDE.with(std::cell::Cell::get).map_or(cap, |c| c.min(cap))
+}
+
 fn facet_budget(asked: usize) -> usize {
     BUDGET_OVERRIDE.with(std::cell::Cell::get).map_or(asked, |b| b.min(asked))
 }
@@ -121,7 +145,7 @@ pub fn parse_with_chord_budget(data: &[u8], budget: usize) -> Result<(Mesh, f64)
     let max_facets = facet_budget(budget);
     let mut facets: Vec<Triangle> = Vec::new();
     let mut chord = 0.0f64;
-    for shell in table.shell.values() {
+    for (shell_id, shell) in &table.shell {
         if facets.len() >= max_facets {
             return Err(ImportError::TooLarge);
         }
@@ -131,7 +155,7 @@ pub fn parse_with_chord_budget(data: &[u8], budget: usize) -> Result<(Mesh, f64)
         // AssertUnwindSafe holds for our purposes: on a panic we discard all
         // outputs and abort the import.
         let per_shell = std::panic::catch_unwind(AssertUnwindSafe(|| {
-            shell_facets(&table, shell, budget, mm_per_unit.unwrap_or(1.0))
+            shell_facets(&table, (*shell_id, shell), budget, mm_per_unit.unwrap_or(1.0))
         }));
         let (tris, tol) = match per_shell {
             Err(_) => {
@@ -171,13 +195,19 @@ pub fn parse_with_chord_budget(data: &[u8], budget: usize) -> Result<(Mesh, f64)
 /// Runs inside `catch_unwind`; returns `Err` only for reasons we control.
 fn shell_facets(
     table: &Table,
-    shell: &truck_stepio::r#in::ShellHolder,
+    (shell_id, shell): (u64, &truck_stepio::r#in::ShellHolder),
     budget: usize,
     mm_per_unit: f64,
 ) -> Result<(Vec<Triangle>, f64), ImportError> {
     let cshell = table
         .to_compressed_shell(shell)
         .map_err(|e| ImportError::Step(format!("shell conversion failed: {e}")))?;
+    // #1536: every face metered, so one whose subdivision never converges
+    // is refused by name instead of hanging the import.
+    let face_ids = super::step_guard::face_entities(shell, cshell.faces.len());
+    let cap = face_eval_cap();
+    let guarded = super::step_guard::Guarded::new(cshell, cap);
+    let cshell = &guarded.shell;
     let mut extent = 0.0f64;
     for p in cshell.vertices.iter() {
         for c in [p.x, p.y, p.z] {
@@ -192,7 +222,19 @@ fn shell_facets(
     // closure so the heavily-aliased CompressedShell type is inferred
     // instead of spelled out.
     let triangulate = |tol: f64| -> Result<Vec<Triangle>, ImportError> {
-        let meshed = cshell.robust_triangulation(tol).to_polygon();
+        guarded.reset();
+        // A panic is held until the meters are read: a face that ran past
+        // its cap is the cause worth naming, not the panic it led to.
+        let meshed = std::panic::catch_unwind(AssertUnwindSafe(|| cshell.robust_triangulation(tol).to_polygon()));
+        if let Some((i, kind)) = guarded.tripped() {
+            // Refused even when a coarser pass met: a surface that jumps
+            // converges at any tolerance wider than its gap, and keeping
+            // that mesh would smear the gap into a wall that is not there.
+            tracing::error!("step: face {} of shell #{shell_id} ({kind}) did not converge within {cap} evaluations", i + 1);
+            let entity = face_ids.as_ref().and_then(|ids| ids.as_slice().get(i).copied());
+            return Err(super::step_guard::refusal(i, kind, cshell.faces.len(), entity, Some(shell_id), cap));
+        }
+        let meshed = meshed.unwrap_or_else(|panic| std::panic::resume_unwind(panic));
         let positions = meshed.positions();
         let mut facets: Vec<Triangle> = Vec::new();
         for face in meshed.face_iter() {
