@@ -33,12 +33,14 @@ pub mod cnc_torch;
 mod coolant;
 pub mod dialect;
 pub mod engine;
+pub mod explain;
 pub mod invert;
 pub mod js;
 pub mod machine;
 pub mod nose_tip;
 pub mod probe_rec;
 mod program;
+pub mod rotary_cap;
 pub mod work_offset;
 pub mod units;
 

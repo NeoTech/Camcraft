@@ -84,6 +84,8 @@ pub enum Overlay {
     Cut,
     Pick,
     Hover,
+    /// The Geometry-list row hover (#1507): a hot magenta, apart from the violet pick and the yellow viewport hover.
+    RowHover,
 }
 
 /// An overlay ink on a ground: the dark consts as they were, or the
@@ -101,6 +103,8 @@ pub fn overlay_ink(o: Overlay, light: bool) -> [f32; 3] {
         (Overlay::Pick, true) => [0.45, 0.15, 0.62],
         (Overlay::Hover, false) => crate::boundary_viz::HOVER_RGB,
         (Overlay::Hover, true) => [0.70, 0.40, 0.00],
+        (Overlay::RowHover, false) => [1.00, 0.25, 0.75],
+        (Overlay::RowHover, true) => [0.85, 0.00, 0.50],
     }
 }
 

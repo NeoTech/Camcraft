@@ -251,6 +251,8 @@ pub fn collect(world: &World) -> ProjectFile {
         },
         // Off writes no key (#616).
         smoothing: crate::setup_post_options::document(world).smoothing,
+        // Off writes no key (#1386).
+        explain: crate::setup_post_options::document(world).explain,
         entities,
     }
 }

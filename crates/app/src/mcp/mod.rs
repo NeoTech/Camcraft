@@ -51,6 +51,8 @@ mod modvise_tools;
 // #547: a sinker electrode generated from a cavity's picked faces.
 mod sinker_tools;
 mod units_tools;
+// #1538: Fit to Models over the parts, never the fixtures.
+mod stock_fit_tools;
 mod tool_number_tools;
 mod wcs_tools;
 mod rotary_tools;

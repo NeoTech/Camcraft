@@ -494,6 +494,11 @@ pub struct PostOptions {
     pub smoothing: bool,
     /// The length unit the control is left in after the program (#596).
     pub end_units: EndUnits,
+    /// Explain G-code (#1386): off (the default) posts no explanations;
+    /// on, a post that declares `explains` appends a short comment to
+    /// each block saying what its words do, and one that does not is
+    /// refused by name.
+    pub explain: bool,
 }
 
 /// The end-units choice of [`PostOptions`] (#596). LinuxCNC's M2 / M30

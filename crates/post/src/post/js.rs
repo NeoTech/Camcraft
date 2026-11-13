@@ -226,7 +226,11 @@ impl Script {
     /// refusal, never a half-defined script.
     pub fn load(cps: &str) -> Result<Self, PostError> {
         let mut ctx = Context::default();
-        let src = format!("{PRELUDE}\n{cps}");
+        let src = format!(
+            "{PRELUDE}\n{}\n{}\n{cps}",
+            super::rotary_cap::ROTARY_CAP,
+            super::explain::EXPLAIN_JS
+        );
         if let Err(e) = ctx.eval(Source::from_bytes(src.as_bytes())) {
             return Err(PostError::Script(format!("{e}")));
         }
@@ -351,6 +355,20 @@ impl Script {
     pub fn number_global(&mut self, name: &str) -> Result<Option<f64>, PostError> {
         let v = self.eval(&format!("(typeof {name} === \"number\") ? {name} : null"))?;
         Ok(v.as_number())
+    }
+
+    /// Arm `explain()` (#1386) with the manifest's comment form; until
+    /// armed the helper says nothing.
+    pub fn arm_explain(&mut self, f: super::explain::Form) -> Result<(), PostError> {
+        self.eval(&format!("_explainForm = {{ semi: {}, max: {} }};", f.semi, f.max))?;
+        Ok(())
+    }
+
+    /// Why the script's own word meanings (#1399) cannot be used, or
+    /// `None` when they can (or it states none).
+    pub fn explain_refusal(&mut self) -> Result<Option<String>, PostError> {
+        let v = self.eval("_explainCheck()")?;
+        Ok(v.as_string().map(|s| s.to_std_string_escaped()).filter(|s| !s.is_empty()))
     }
 
     /// Publish the document's post options once (issue #34).

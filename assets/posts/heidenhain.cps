@@ -545,7 +545,8 @@ function onCycle() {
   var p = properties, type = p.CycleType;
   // Boring keeps the established explicit-chain contract; its spindle
   // orientation/disengagement semantics are not part of #51.
-  if (type === "BORE" || type === "BACKBORE") {
+  // #1445: REAM (feed in, feed out, no dwell) rides the same chain.
+  if (type === "BORE" || type === "BACKBORE" || type === "REAM") {
     if (has(p.P) && p.P > 0) pendingDwell = { z: Number(p.Z), s: Number(p.P) };
     cycleSig = "";
     return;

@@ -115,6 +115,9 @@ pub fn run_program_with(
         return Err(PostError::Refused(why));
     }
     let wo = super::work_offset::Manifest::read(&mut s);
+    // #1386: Explain G-code on a script that states no comment form is
+    // refused by name here, before any hook runs.
+    let explain_form = super::explain::form(&mut s, options)?;
     // #374: an inverted machine axis - the one place the stream is
     // mirrored into the controller's frame, or refused by name.
     let records = super::invert::apply(records, mch, &s)?;
@@ -127,6 +130,9 @@ pub fn run_program_with(
     s.set_program(id)?;
     if options.is_object() {
         s.set_options(options)?;
+    }
+    if let Some(f) = explain_form {
+        s.arm_explain(f)?;
     }
     s.call("onOpen", "")?;
     let head = s.out_len()?;

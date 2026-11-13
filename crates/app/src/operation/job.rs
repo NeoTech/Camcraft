@@ -57,6 +57,8 @@ pub struct GenJob {
     pub(super) contour_sel:
         Option<Result<super::selection::SelectionGeometry, GenError>>,
     pub(super) drive_chains: Option<Result<Vec<Vec<Point3>>, GenError>>,
+    /// #1504: a picked Slot's room, read here; the Slot arm confines to it.
+    pub(super) slot_bound: Option<Result<crate::machining2d::SlotBound, GenError>>,
     pub(super) prior: Option<Result<Arc<crate::rest::PriorState>, GenError>>,
     /// The program ahead of this op in its setup, uncut (issue #96
     /// review): verify's vertical-dive convictions are re-read against
@@ -122,6 +124,9 @@ pub struct GenJob {
     /// #532: the machine condition a wire EDM kind cuts with (its wire
     /// and gap); `None` for every kind that mounts a library tool.
     pub(super) wire: Option<(super::wire_op::WireCondition, Option<super::wire_op::WireCondition>)>,
+    /// #537: a 4-axis wire cut's two picked profiles.
+    pub(super) wire_ruled: Option<Result<super::wire_ruled::RuledPicks, GenError>>,
+
     /// #541: a sinker burn's spark gap, read from its setup's machine
     /// condition (`sinker_op::condition_gap`); `None` for every other kind.
     pub(super) sinker_gap: Option<Result<f64, String>>,
@@ -165,7 +170,17 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
     if let Some(why) = crate::setup_align::generation_problem(world, op) {
         return Err(GenError::Invalid(why));
     }
-    let material = super::material::judged_material(world, setup, &op.src)?;
+    // #1510: a milling WCS whose Z is tilted off the machine's would
+    // cut the part as it lies, not as the WCS shows - refused by name.
+    if let Some(why) = crate::setup_wcs_tilt::generation_problem(world, op) {
+        return Err(GenError::Invalid(why));
+    }
+    // #763: the one machining-frame seam. Built before the first read;
+    // the tilt's own refusal keeps its place below (`checked_frame`,
+    // after the heights resolve) exactly where the old head raised it -
+    // the job's error-order law.
+    let opframe = OpFrame::of(op);
+    let material = opframe.material_of(world, &op.src)?;
     let part_solid = part_solid_of(world, setup, &op.src, &material);
     // Setup stock, when it is not the source itself: the swarf column
     // around a smaller model (the head read at `generate` - same call).
@@ -184,23 +199,11 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
     // The height seam, refused by name before anything else (as the old
     // head refused it, `resolve_params` being the first fallible read
     // after the material).
-    let hs = resolve_params(world, setup, Some(&op.src), &op.params).map_err(GenError::Invalid)?;
+    let hs = opframe.resolve_heights(world, Some(&op.src), &op.params).map_err(GenError::Invalid)?;
 
-    // The 3+2 wrap (M5.1 B), same refusals, same order: non-finite
-    // letters first, then the tilted-selection lock.
-    let frame = match op.params.tilt() {
-        None => None,
-        Some(t) => match t.frame() {
-            Some(f) => Some(f),
-            // Only a non-finite letter could get here (the parameter
-            // door refuses it); naming it beats inventing a plane.
-            None => {
-                return Err(GenError::Invalid(
-                    "the 3+2 index commands no direction - its angles are not finite".into(),
-                ));
-            }
-        },
-    };
+    // The 3+2 wrap (M5.1 B), read through the seam: the same refusal,
+    // the same words, at the same statement - one construction site.
+    let frame = opframe.checked_frame()?;
     // The one refusal the wrap owes (M5.1 B): a picked selection is
     // read as world geometry by the selection walk - projecting a pick
     // onto a tilted plane is not implemented, and a shadow of the pick
@@ -232,12 +235,19 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         // it, never the part's own section (issue #12).
         (params, src) => whole_model_pocket(world, setup, src, params, frame.as_ref()),
     };
+    let wire_ruled = super::wire_ruled::picks_of(world, op);
     let contour_sel = match (&op.params, &op.src) {
         // The plasma cut reads its picks the contour's way (#670):
         // closed rings AND open runs, each cut as picked.
-        (OpParams::Contour { .. } | OpParams::PlasmaProfile(_) | OpParams::WireContour(_), SrcRef::Selection(items)) => {
+        (OpParams::Contour { .. } | OpParams::PlasmaProfile(_) | OpParams::WireContour(_), SrcRef::Selection(items))
+            if wire_ruled.is_none() =>
+        {
             Some(selection_geometry_impl(world, setup, items, &op.params, None))
         }
+        _ => None,
+    };
+    let slot_bound = match (&op.params, &op.src) {
+        (OpParams::Slot { .. }, SrcRef::Selection(items)) if !items.is_empty() => Some(super::slot_pick::slot_bound_of(world, items)),
         _ => None,
     };
     let drive_chains = match &op.params {
@@ -294,7 +304,10 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
     // The axial pilots ahead (#103): a bore pass's approach runs down
     // the hole the drill made, which the facing-only prior cannot read.
     let turned = op.params.kind().info().section == super::kinds::Section::Turning;
-    let drills_ahead = if turned { crate::rest::drills_ahead(world, op_name, setup) } else { Vec::new() };
+    // #1449: a pocket entering down pre-drilled holes reads them too.
+    let predrilled = matches!(op.params, OpParams::Pocket { .. }) && op.params.links().is_some_and(|l| l.approach.predrilled);
+    let drills_ahead =
+        if turned || predrilled { crate::rest::drills_ahead(world, op_name, setup) } else { Vec::new() };
     let turned_ahead = if turned { crate::rest::turned_ahead(world, op_name, setup) } else { Vec::new() };
     let area = area_ctx(world, op, tool.diameter * 0.5, &material, part_solid);
     // #388: the op's own setup's machine, active or not.
@@ -368,6 +381,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         picked_region,
         contour_sel,
         drive_chains,
+        slot_bound,
         prior,
         verify_prior,
         drills_ahead,
@@ -389,6 +403,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         spindle_note,
         carried_overhang,
         wire,
+        wire_ruled,
         sinker_gap,
         sinker_pass,
         sinker_wear,

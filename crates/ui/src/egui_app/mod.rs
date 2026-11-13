@@ -40,6 +40,9 @@ mod debug_info;
 mod status_alert;
 
 mod stock_info;
+mod machine_page;
+mod tool_list_page;
+mod stock_page;
 // pub: M13.4's ColorVision layer - the viewport, the traced stock and
 // the overlay lines read the palette; `cvd` is its maths.
 pub mod colorvision;
@@ -48,6 +51,7 @@ pub mod window_chrome;
 mod post_options;
 mod program_info;
 pub mod cvd;
+mod app_icon;
 mod icons;
 mod op_icons;
 mod tool_icons;
@@ -57,6 +61,8 @@ mod load_field;
 // type (M3.3 stage C), so state.rs has to see through the door.
 pub(crate) mod machine_editor;
 mod machine_edm;
+// #548: the sinker EDM section of the Machine window.
+mod machine_edm_editor;
 mod machine_grid;
 // pub(crate) for the same reason: `State::post_refusal` names its type.
 pub(crate) mod post_refusal;
@@ -103,10 +109,12 @@ mod tool_cutter_params;
 mod setup_wcs_pick;
 // #343: a setup's own node pages (settings, machine, post, fixtures, tools).
 mod setup_pages;
+mod setup_settings_page;
 mod setup_post_page;
 mod setup_rotary_page;
 // #509: one fixture's row on the Fixtures page, sized to the pane.
 mod fixture_rows;
+mod fixtures_page;
 // #561: the locate-in-fixture mate tools (Fixtures page and Model page).
 mod locate_form;
 // #326: the Setups page's part-alignment control.
@@ -241,6 +249,8 @@ mod thread_hand_tests;
 #[cfg(test)]
 mod thread_mill_page_tests;
 #[cfg(test)]
+mod slot_pick_page_tests;
+#[cfg(test)]
 mod after_op_tests;
 #[cfg(test)]
 mod program_info_tests;
@@ -288,11 +298,15 @@ mod setup_points_tests;
 #[cfg(test)]
 mod wcs_pick_tests;
 #[cfg(test)]
+mod wcs_pick_click_tests;
+#[cfg(test)]
 mod ball_corner_tests;
 #[cfg(test)]
 mod gate_route_tests;
 #[cfg(test)]
 mod sinker_pass_tests;
+#[cfg(test)]
+mod sinker_machine_tests;
 
 /// Entry for `--ui egui`; returns the process exit code. `--headless`
 /// selects the no-window proof (seeded document, fallback adapter, View3D

@@ -170,7 +170,10 @@ pub fn area_unsupported(kind: OpType) -> Option<String> {
         | OpType::Trace
         | OpType::Engrave => return None,
         // Authored geometry: the numbers ARE the area.
-        OpType::Slot | OpType::TrochoidalSlot => format!("a {kind} is authored by its two endpoints and width - move those instead of a boundary"),
+        // #1504: a Slot's picks (two opposite edges or a face) seed its
+        // endpoints and width and bound where it may cut.
+        OpType::Slot => format!("a {kind} is authored by its two endpoints and width, seeded from two picked opposite edges or a face and kept inside them - move those instead of a boundary"),
+        OpType::TrochoidalSlot => format!("a {kind} is authored by its two endpoints and width - move those instead of a boundary"),
         OpType::Circular => format!("a {kind} is authored by its centre and radius, typed or fitted to a picked round rim or face - set those instead of a boundary"),
         // The cone's ride is the wall itself: an offset or clipped
         // outline would be ridden where nothing was picked.

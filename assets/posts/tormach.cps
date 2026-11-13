@@ -788,6 +788,7 @@ function onCycle() {
   else if (p.CycleType === "DEEP") g = "G83";
   else if (p.CycleType === "BORE") g = "G86";
   else if (p.CycleType === "BACKBORE") g = "G89";
+  else if (p.CycleType === "REAM") g = "G85";   // #1445: feed in, feed out at F, no dwell
   // Tormach documents G84 for PathPilot: F is the pitch times the rpm
   // (the stream's synthesized tap feed), no P - PathPilot sizes the
   // bottom dwell itself, and the MX mills tap from the spindle encoder.
@@ -802,6 +803,12 @@ function onCycle() {
       return;
     }
     g = "G84";
+  }
+  else {
+    // #1445: a cycle kind this post does not know is refused by name,
+    // never posted as the G81 default (a rapid out it never asked for).
+    msg("canned cycle " + p.CycleType + " is not known to this post - refused, not posted as another cycle");
+    return;
   }
   // #1357: a canned cycle feeds at its own F word. Without one LinuxCNC
   // alarms on a zero feed ("Cannot feed with zero feed rate") or, after
