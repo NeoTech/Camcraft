@@ -1,5 +1,5 @@
-//! #1543 / #1550: the depth law the kinds that cut geometry typed by
-//! hand (Circular, Slot) take per source, unit by unit - a finished-part
+//! #1543 / #1550 / #1593: the depth law the kinds that cut geometry
+//! typed by hand (Circular, Slot, Trochoidal slot) take per source, unit by unit - a finished-part
 //! source, whole model or pick, is judged (`Section`, the one
 //! `authored_law` both kinds call), and a source that is not the part
 //! (the Stock, `part_solid` false) is never judged. Our own fixtures.
@@ -13,6 +13,10 @@ fn circular() -> super::OpParams {
 
 fn slot() -> super::OpParams {
     seed_params(OpType::Slot.ordinal())
+}
+
+fn trochoid() -> super::OpParams {
+    seed_params(OpType::TrochoidalSlot.ordinal())
 }
 
 fn picked() -> SrcRef {
@@ -34,7 +38,7 @@ fn a_picked_circular_is_judged_against_the_part() {
 
 #[test]
 fn a_source_that_is_not_the_part_is_never_judged() {
-    for p in [circular(), slot()] {
+    for p in [circular(), slot(), trochoid()] {
         assert_eq!(depth_law_of(&p, &SrcRef::Stock, false), DepthLaw::None);
         assert_eq!(depth_law_of(&p, &SrcRef::Entity("stock".into()), false), DepthLaw::None);
         assert_eq!(depth_law_of(&p, &picked(), false), DepthLaw::None);
@@ -58,4 +62,36 @@ fn the_shared_authored_law_reads_the_source_alone() {
     assert_eq!(authored_law(&SrcRef::Entity("part".into())), DepthLaw::Section);
     assert_eq!(authored_law(&picked()), DepthLaw::Section);
     assert_eq!(authored_law(&SrcRef::Stock), DepthLaw::None);
+}
+
+#[test]
+fn the_trochoidal_slot_answers_to_the_same_authored_law() {
+    // #1593: its endpoints and width are typed like the Slot's, so a
+    // channel through the wall or under the floor gouges the part,
+    // picked or whole model.
+    assert!(matches!(trochoid(), super::OpParams::TrochoidalSlot { .. }), "the seed is a Trochoidal slot");
+    for src in [SrcRef::Entity("part".into()), picked()] {
+        assert_eq!(depth_law_of(&trochoid(), &src, true), DepthLaw::Section);
+    }
+}
+
+#[test]
+fn the_kinds_that_enter_or_remove_the_part_by_contract_stay_unjudged() {
+    // #1593 audit: the 2D kinds still at `None` on a finished-part
+    // source, each by contract (see `depth_law_of`'s doc): Trace,
+    // Engrave and 2D Chamfer enter the part by design, and a whole-model
+    // pocket family source is the volume to remove. Moving one of them
+    // is a decision, not a drift - this table makes it a visible one
+    // (#1595 owes Engrave and Trace a law of their own).
+    let whole = SrcRef::Entity("part".into());
+    for t in [OpType::Trace, OpType::Engrave, OpType::Chamfer2D] {
+        let p = seed_params(t.ordinal());
+        assert_eq!(depth_law_of(&p, &whole, true), DepthLaw::None, "{t:?} whole");
+        assert_eq!(depth_law_of(&p, &picked(), true), DepthLaw::None, "{t:?} picked");
+    }
+    for t in [OpType::Pocket, OpType::Adaptive2D, OpType::Offset2D] {
+        let p = seed_params(t.ordinal());
+        assert_eq!(depth_law_of(&p, &whole, true), DepthLaw::None, "{t:?} whole");
+        assert_eq!(depth_law_of(&p, &picked(), true), DepthLaw::Section, "{t:?} picked");
+    }
 }
