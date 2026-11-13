@@ -30,6 +30,7 @@ mod bore;
 mod chamfer;
 mod circular;
 mod thread_mill;
+mod thread_passes;
 mod thread_ride;
 mod trochoid_air;
 mod trochoid_loops;
@@ -78,6 +79,8 @@ use {
 mod tests;
 #[cfg(test)]
 mod thread_tests;
+#[cfg(test)]
+mod thread_pass_tests;
 
 pub use arcs::{fit_arcs, Seg, ARC_FIT_TOL};
 pub use blend::MIN_BLEND_RADIUS;
@@ -103,7 +106,7 @@ pub use trochoid_slot::{
     plan_trochoidal_slot, trochoidal_slot, TrochoidParams, TrochoidPlan, TrochoidReturn, DEFAULT_MAX_ENGAGEMENT,
     DEFAULT_MICROLIFT,
 };
-pub use thread_mill::{thread_mill, ThreadHole, ThreadParams, EXTERNAL_THREAD_DEPTH_PER_PITCH, THREAD_DEPTH_PER_PITCH};
+pub use thread_mill::{thread_mill, PassSchedule, ThreadHole, ThreadParams, ThreadPasses, MAX_SPRING_PASSES, EXTERNAL_THREAD_DEPTH_PER_PITCH, THREAD_DEPTH_PER_PITCH};
 pub(crate) use pocket::plan_passes;
 pub(crate) use adaptive::PLAN_SAG;
 // The HSM planner's door, its arc proofs and its microlift link, read

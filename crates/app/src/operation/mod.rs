@@ -103,6 +103,7 @@ pub mod plasma_op;
 // #894: the thread-milling operation's door, kernel plan and its two verdict readings.
 pub mod thread_op;
 mod thread_entry;
+mod thread_r_plane;
 // #985: external threads - the boss door, the crest region, the neighbour law.
 mod thread_boss;
 pub mod wire_op;
@@ -195,6 +196,8 @@ pub use air_law::AIR_NOTE;
 pub use generate::*;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_thread_stamp;
 
 pub mod types;
 pub use types::*;

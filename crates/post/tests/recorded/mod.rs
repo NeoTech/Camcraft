@@ -119,11 +119,43 @@ fn tmp(tag: &str) -> PathBuf {
     std::env::temp_dir().join(format!("camcraft_recorded_{tag}_{}", std::process::id()))
 }
 
+/// The vendor machine file at `path`, parsed and mirrored
+/// (`post::machine::mirror`) into a temp `.mch` tagged `tag` - the
+/// grammar the app hands the engine. The caller removes it.
+fn mirrored(path: &Path, tag: &str) -> PathBuf {
+    let mch = tmp(&format!("{tag}.mch"));
+    let text = std::fs::read_to_string(path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+    let parsed = camcraft_post::machine::parse_mch(&text).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+    let mirrored = camcraft_post::post::machine::mirror(&parsed);
+    std::fs::write(&mch, mirrored.to_string()).expect("write the mirrored machine");
+    mch
+}
+
 /// What the binary did with one stream: the golden's file extension and
 /// its text.
 pub fn verdict(script: &str, case: &str) -> (&'static str, String) {
+    let tag = format!("{}_{case}", script.trim_end_matches(".cps"));
+    let mch = machine_of(case).map(|path| mirrored(&path, &tag));
+    let v = run_binary(script, case, &stream_path(case), mch.as_deref());
+    if let Some(m) = mch {
+        let _ = std::fs::remove_file(m);
+    }
+    v
+}
+
+/// [`verdict`] on any stream file and an EDM vendor machine file (#542,
+/// the sinker burn on its fixture dialect). The file goes to the binary
+/// as written: the binary mirrors a vendor tree itself, through the same
+/// `post::machine::mirror` (#996), while a mirrored EDM machine is no
+/// longer a file the reader takes back (its kind rides the mirror's top
+/// level, not `general.kind`, so its `edm` section is refused).
+pub fn verdict_on(script: &str, case: &str, input: &Path, machine: Option<&Path>) -> (&'static str, String) {
+    run_binary(script, case, input, machine)
+}
+
+/// The post binary on `input`, with `machine` handed to `--machine`.
+fn run_binary(script: &str, case: &str, input: &Path, machine: Option<&Path>) -> (&'static str, String) {
     let cps = repo().join("assets/posts").join(script);
-    let input = stream_path(case);
     assert!(cps.is_file(), "no post script {}", cps.display());
     assert!(input.is_file(), "no recorded stream {}", input.display());
     let tag = format!("{}_{case}", script.trim_end_matches(".cps"));
@@ -132,18 +164,13 @@ pub fn verdict(script: &str, case: &str) -> (&'static str, String) {
     let _ = std::fs::remove_file(&out);
     let _ = std::fs::remove_file(&log);
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_post"));
-    let mch = tmp(&format!("{tag}.mch"));
-    if let Some(path) = machine_of(case) {
-        let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
-        let parsed = camcraft_post::machine::parse_mch(&text).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
-        let mirrored = camcraft_post::post::machine::mirror(&parsed);
-        std::fs::write(&mch, mirrored.to_string()).expect("write the mirrored machine");
-        cmd.arg("--machine").arg(&mch);
+    if let Some(path) = machine {
+        cmd.arg("--machine").arg(path);
     }
-    let r = cmd.arg("--log").arg(&log).arg(&cps).arg(&input).arg(&out).output().expect("run the post binary");
+    let r = cmd.arg("--log").arg(&log).arg(&cps).arg(input).arg(&out).output().expect("run the post binary");
     let program = std::fs::read_to_string(&out).ok();
     let warnings = std::fs::read_to_string(&log).ok();
-    for f in [&out, &log, &mch] {
+    for f in [&out, &log] {
         let _ = std::fs::remove_file(f);
     }
     if !r.status.success() {
@@ -165,6 +192,12 @@ pub fn verdict(script: &str, case: &str) -> (&'static str, String) {
 /// WRITE_GOLDEN set, write the golden instead (and drop the other form).
 pub fn check(script: &str, case: &str) {
     let (ext, text) = verdict(script, case);
+    compare(script, case, ext, &text);
+}
+
+/// Compare one verdict with its golden under `recorded/golden/<post>/`
+/// (or, with WRITE_GOLDEN set, write it and drop the other form).
+pub fn compare(script: &str, case: &str, ext: &str, text: &str) {
     if let Some(issue) = known_bug(script, case) {
         eprintln!("{script} {case}: known post bug #{issue} - posted ({ext}), not compared");
         return;
@@ -174,7 +207,7 @@ pub fn check(script: &str, case: &str) {
     let other = dir.join(format!("{case}.{}", if ext == "nc" { "refusal" } else { "nc" }));
     if std::env::var_os("WRITE_GOLDEN").is_some() {
         std::fs::create_dir_all(&dir).expect("create the golden dir");
-        std::fs::write(&path, &text).expect("write the golden");
+        std::fs::write(&path, text).expect("write the golden");
         let _ = std::fs::remove_file(&other);
         return;
     }

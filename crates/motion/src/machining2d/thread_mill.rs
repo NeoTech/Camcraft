@@ -35,14 +35,17 @@
 //! (a through hole's floor is one pitch below its exit); no rapid runs
 //! below the feature's top - every move in the bore or beside the boss
 //! is a feed; a mill too wide for the hole, a stepped hole, an unstated
-//! pitch, an infeed past the thread depth or a run-out above the link
-//! plane is refused by name.
+//! pitch, an infeed past the thread depth, a run-out above the link
+//! plane or an R plane under a feature's top (#1212: the rapid stops at
+//! the R plane and the feed starts there, as on a drill cycle) is
+//! refused by name.
 
 use crate::cl::ThreadHand;
 use crate::geo2d::Point2;
 use crate::geometry::Point3;
 
 use super::face::GenError;
+pub use super::thread_passes::{PassSchedule, ThreadPasses, MAX_SPRING_PASSES};
 
 pub use camcraft_tools::thread_mill::{
     EXTERNAL_DEPTH_PER_PITCH as EXTERNAL_THREAD_DEPTH_PER_PITCH, INTERNAL_DEPTH_PER_PITCH as THREAD_DEPTH_PER_PITCH,
@@ -80,15 +83,24 @@ pub struct ThreadParams {
     /// Rows of teeth along the axis: 1 rides one turn per thread (a
     /// single-form mill), more finish `rows` threads per revolution.
     pub rows: u32,
-    /// Radial depth per pass; passes are equal and the last lands on
-    /// the full thread depth.
+    /// Radial depth per roughing pass (the first, largest one on a
+    /// constant-area schedule); the last pass lands on the thread depth
+    /// less the allowance.
     pub infeed: f64,
     /// A boss (external thread) instead of a hole.
     pub external: bool,
     pub hand: ThreadHand,
-    /// Climb milling under a clockwise (M3) spindle.
+    /// Climb milling (the orbit sense follows the spindle, #988).
     pub climb: bool,
+    /// Pass schedule, finish and spring passes, allowance, spindle and
+    /// cutter hand (#988); the default is the #894 ride.
+    pub passes: ThreadPasses,
     pub clearance_z: f64,
+    /// The R plane (#1212): where every feature's rapid stops and its
+    /// feed begins, as on a drill cycle. `None` stops at each feature's
+    /// own top (the #894 ride). Never below a feature's top, never above
+    /// the link plane - both refused by name.
+    pub r_z: Option<f64>,
     /// The plane links between features travel at; `None` = clearance.
     pub retract_z: Option<f64>,
     /// Feed at the cutting edge (the thread's own circle), mm/min.
@@ -103,10 +115,12 @@ impl ThreadParams {
         self.pitch * if self.external { EXTERNAL_THREAD_DEPTH_PER_PITCH } else { THREAD_DEPTH_PER_PITCH }
     }
 
-    /// Orbit sense: counter-clockwise seen from +Z when true.
+    /// Orbit sense: counter-clockwise seen from +Z when true. Climb
+    /// under M3 orbits a hole counter-clockwise and a boss clockwise;
+    /// an M4 spindle (a left-hand-cut mill, #988) flips both.
     #[must_use]
     pub fn ccw(&self) -> bool {
-        self.climb != self.external
+        (self.climb != self.external) != self.passes.spindle_reverse
     }
 
     /// Does the helix rise (+Z) as it winds?
@@ -125,6 +139,7 @@ impl ThreadParams {
             .into_iter()
             .all(f64::is_finite);
         finite &= self.retract_z.is_none_or(f64::is_finite);
+        finite &= self.r_z.is_none_or(f64::is_finite);
         finite &= self.holes.iter().all(ThreadHole::all_finite);
         if !finite {
             return bad("parameters must be finite");
@@ -157,6 +172,9 @@ impl ThreadParams {
                 "infeed must sit between 0 and the {h} mm thread depth this pitch stands at"
             )));
         }
+        if let Some(why) = self.passes.refusal(Some(h), self.infeed) {
+            return Err(GenError::Invalid(why));
+        }
         if self.feed <= 0.0 || self.plunge_feed <= 0.0 {
             return bad("feeds must be positive");
         }
@@ -166,6 +184,26 @@ impl ThreadParams {
         }
         if self.link_z() < top || self.link_z() > self.clearance_z {
             return bad("retract plane must stand between the threads' entries and the clearance plane");
+        }
+        if let Some(r) = self.r_z {
+            if r > self.link_z() + 1e-9 {
+                return Err(GenError::Invalid(format!(
+                    "the R plane at z {r} stands above the {} mm retract plane the threads link at - lower the R plane or raise the retract plane",
+                    self.link_z()
+                )));
+            }
+            // #1212: the rapid stops at R, so R under a feature's top
+            // would rapid into it. Refused by name, never clamped.
+            if let Some(x) = self.holes.iter().find(|x| r < x.top_z - 1e-9) {
+                let what = if self.external { "boss" } else { "hole" };
+                return Err(GenError::invalid_at(
+                    format!(
+                        "the R plane at z {r} is below the top of the {what} at ({}, {}) at z {} - the rapid down to R would run into it; raise the R plane (feed starts here) to z {} or above",
+                        x.xy.x, x.xy.y, x.top_z, x.top_z
+                    ),
+                    Point3::new(x.xy.x, x.xy.y, x.top_z),
+                ));
+            }
         }
         self.holes.iter().try_for_each(|x| self.validate_hole(x, h))
     }
@@ -235,8 +273,9 @@ pub(super) struct HolePlan {
     pub lead_max: f64,
     pub lows: Vec<f64>,
     pub turns: u32,
-    /// The highest tip height of the ride; rapids stop here or at the
-    /// feature's top, whichever is higher.
+    /// Where the rapid stops and the feed begins: the R plane (or the
+    /// feature's top when none is stated), or the ride's own highest tip
+    /// height when that stands higher.
     pub rapid_z: f64,
 }
 
@@ -244,10 +283,11 @@ impl HolePlan {
     pub(super) fn of(p: &ThreadParams, x: &ThreadHole) -> Result<Self, GenError> {
         let r = p.tool_diameter * 0.5;
         let h = p.depth();
-        let n = ((h / p.infeed) - 1e-9).ceil().clamp(1.0, 4096.0) as u32;
-        let passes: Vec<Pass> = (1..=n)
-            .map(|i| {
-                let d = h * f64::from(i) / f64::from(n);
+        let passes: Vec<Pass> = p
+            .passes
+            .depths(h, p.infeed)
+            .into_iter()
+            .map(|d| {
                 let (rho, lead_z, scale) = if p.external {
                     let rho = x.radius + r - d;
                     // A quarter arc of the tool's own radius: its axial
@@ -287,7 +327,7 @@ impl HolePlan {
                 Point3::new(x.xy.x, x.xy.y, x.top_z),
             ));
         }
-        Ok(Self { passes, lead_max, lows, turns, rapid_z: x.top_z.max(run_out) })
+        Ok(Self { passes, lead_max, lows, turns, rapid_z: p.r_z.unwrap_or(x.top_z).max(x.top_z).max(run_out) })
     }
 }
 

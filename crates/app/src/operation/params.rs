@@ -1573,12 +1573,27 @@ impl OpParams {
                 pitch,
                 hand,
                 external,
+                passes,
             } => {
                 // #985: an external thread is a different ride on the
                 // same list. Written only when set, so every internal
                 // thread keeps the digest it was cached under.
                 if *external {
                     h.write_u8(0xE7);
+                }
+                // #988: the pass control, written only when it differs
+                // from the #894 ride, so no older thread goes Stale.
+                if *passes != crate::machining2d::ThreadPasses::default() {
+                    h.write_u8(0xE8);
+                    h.write_u8(match passes.schedule {
+                        crate::machining2d::PassSchedule::Equal => 0,
+                        crate::machining2d::PassSchedule::ConstantArea => 1,
+                    });
+                    w(h, passes.finish);
+                    h.write_u32(passes.spring);
+                    w(h, passes.allowance);
+                    h.write_u8(u8::from(passes.spindle_reverse));
+                    h.write_u8(u8::from(passes.cutter_left));
                 }
                 wh(h, *clearance_z);
                 wh(h, *top_z);

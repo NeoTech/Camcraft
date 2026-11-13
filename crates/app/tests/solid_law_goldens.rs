@@ -22,7 +22,8 @@
 //! crossing law), the posted goldens under tests/golden/nc/,
 //! motion::machining2d (contour, face, pocket, slot, trochoid, trace),
 //! motion::drilling (drill), app::operation (region_of), sim::verify::plasma,
-//! sim::verify::wire and app::posting (posting_wire's wire_clause, #534).
+//! sim::verify::wire and app::posting (posting_wire's wire_clause, #534),
+//! and (#542) the sinker golden through app::stock_sim's program verdict.
 
 mod common;
 mod posted_gates;
@@ -30,7 +31,7 @@ mod thread_support;
 
 use common::gen_to_cltext;
 use posted_gates::thread::thread_verdicts;
-use posted_gates::{narrowed_slot_verdict, plasma_findings, region_verdicts, wire_findings, wire_taper_findings, wire_taper_verdict, wire_verdict};
+use posted_gates::{narrowed_slot_verdict, plasma_findings, region_verdicts, sinker_gouge_cells, wire_findings, wire_taper_findings, wire_taper_verdict, wire_verdict};
 use posted_gates::{wire_4axis_findings, wire_4axis_verdict};
 use common::solid_part::{cap, circle, mill, plate, plate_cell, rect, region, walls};
 
@@ -399,6 +400,10 @@ fn every_posted_golden_is_a_program_the_gate_passes() {
     judged.push(("plasma_plate_with_holes.cl", plasma));
     judged.extend(thread_verdicts());
     judged.push(("wire_contour_punch.cl", wire_findings().iter().map(|f| f.describe()).collect()));
+    // The sinker burn through the program verdict its post's gate runs
+    // (the electrode's box atom): any gouge cell blocks.
+    let cells = sinker_gouge_cells();
+    judged.push(("sinker_burn_cavity.cl", if cells == 0 { vec![] } else { vec![format!("program verdict: {cells} gouge cell(s)")] }));
     judged.push(("wire_taper_punch.cl", wire_taper_findings().iter().map(|f| f.describe()).collect()));
     judged.push(("wire_4axis_punch.cl", wire_4axis_findings().iter().map(|f| f.describe()).collect()));
     let mut dirs = vec![root.join("nc")];

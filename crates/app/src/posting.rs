@@ -51,6 +51,9 @@ pub const BUILTINS: &[(&str, &str)] = &[
     // #533: the generic RS-274 wire EDM post; every EDM code is the
     // machine's `edm.codes` (#290 D5). It serves wire EDMs only.
     ("Generic ISO Wire EDM", include_str!("../../../assets/posts/wire-iso.cps")),
+    // #542: the generic ISO-style sinker post; every EDM code is the
+    // machine's `edm.codes` (#290 D5). It serves sinker EDMs only.
+    ("Sinker EDM (ISO)", include_str!("../../../assets/posts/sinker-iso.cps")),
 ];
 
 /// The registry entries that speak TURNING (M13.5): X as a diameter
@@ -70,6 +73,12 @@ pub const PLASMA_POSTS: &[&str] = &["Tormach PathPilot Plasma"];
 /// only, and no cutting post serves one.
 pub const WIRE_POSTS: &[&str] = &["Generic ISO Wire EDM"];
 
+/// The registry entries that speak SINKER EDM (#542): RS-274 motion
+/// with the control's own codes from the machine file, each declaring
+/// `serves = ["sinker_edm"]`. They serve sinker EDMs only, and no
+/// cutting or wire post serves one.
+pub const SINKER_POSTS: &[&str] = &["Sinker EDM (ISO)"];
+
 /// Whether a registry entry can post programs for a machine of this
 /// kind: a lathe post serves lathes and mill-turns, a mill post serves
 /// mills and mill-turns. The picker's listing law, and since #1232 the
@@ -81,17 +90,18 @@ pub fn post_serves(name: &str, kind: crate::machine::Kind) -> bool {
     let lathe_post = LATHE_POSTS.contains(&name);
     let plasma_post = PLASMA_POSTS.contains(&name);
     let wire_post = WIRE_POSTS.contains(&name);
+    let sinker_post = SINKER_POSTS.contains(&name);
     match kind {
-        Kind::Mill => !lathe_post && !plasma_post && !wire_post,
+        Kind::Mill => !lathe_post && !plasma_post && !wire_post && !sinker_post,
         Kind::Lathe => lathe_post,
-        Kind::MillTurn => !plasma_post && !wire_post,
+        Kind::MillTurn => !plasma_post && !wire_post && !sinker_post,
         // #669: a cutting post would write spindle words a torch has not.
         Kind::Plasma => plasma_post,
-        // #533: the wire post serves wire EDMs; no milling or turning
-        // dialect speaks to an EDM control.
+        // #533: the wire post serves wire EDMs; #542: the sinker post
+        // serves sinker EDMs; no milling or turning dialect speaks to an
+        // EDM control, and neither EDM post to the other kind.
         Kind::WireEdm => wire_post,
-        // #530: no sinker post ships yet (#542).
-        Kind::SinkerEdm => false,
+        Kind::SinkerEdm => sinker_post,
     }
 }
 
@@ -110,12 +120,14 @@ pub fn default_post_for(kind: crate::machine::Kind) -> PostRef {
         crate::machine::Kind::Plasma => PLASMA_POSTS
             .first()
             .map_or(PostRef::Builtin, |n| PostRef::Named((*n).to_owned())),
-        // #533: the generic wire post serves wire EDMs; #542: no sinker
-        // post ships yet, and `post_serves` refuses every post for one.
+        // #533: the generic wire post serves wire EDMs; #542: the
+        // generic sinker post serves sinker EDMs.
         crate::machine::Kind::WireEdm => WIRE_POSTS
             .first()
             .map_or(PostRef::Builtin, |n| PostRef::Named((*n).to_owned())),
-        crate::machine::Kind::SinkerEdm => PostRef::Builtin,
+        crate::machine::Kind::SinkerEdm => SINKER_POSTS
+            .first()
+            .map_or(PostRef::Builtin, |n| PostRef::Named((*n).to_owned())),
         crate::machine::Kind::Mill | crate::machine::Kind::MillTurn => PostRef::Builtin,
     }
 }
@@ -152,6 +164,8 @@ pub fn post_offer(world: &World) -> Option<(&'static str, PostRef)> {
         "plasma"
     } else if WIRE_POSTS.contains(&name) {
         "wire EDM"
+    } else if SINKER_POSTS.contains(&name) {
+        "sinker EDM"
     } else {
         "mill"
     };
@@ -438,6 +452,8 @@ mod program_unit;
 pub use program_unit::{program_options, unit_word};
 #[path = "posting_serves.rs"]
 mod serves;
+#[path = "posting_edm.rs"]
+mod edm_params;
 #[path = "posting_nose.rs"]
 pub mod nose;
 #[path = "posting_index_swing.rs"]
@@ -504,10 +520,6 @@ fn post_script_body(world: &World, out_path: &Path, cps: &str, label: Option<&st
     // #388: the program's one machine (a program over several refuses).
     let mount = mounts::single(world, false)?;
     let streams = op_streams(world)?;
-    // No sinker EDM dialect ships yet (#542): a sinker program is
-    // refused here by name, before any file is written (a wire program
-    // passes: its dialect shipped with #533).
-    crate::posting_family::edm_at_post(world, streams.iter().map(|(n, _)| n.as_str()))?;
     // #1190: a turning dialect opens only what a lathe may run.
     crate::lathe_voice::at_post(world, streams.iter().map(|(n, _)| n.as_str()), cps, label)?;
     // #1232: and a post writes only for a machine kind it serves.
@@ -1045,7 +1057,16 @@ pub fn op_streams(world: &World) -> Result<Vec<(String, Vec<cnc::Record>)>, Stri
                 .map(|w| format!("{name}: {w}"))
                 .collect(),
         };
-        streams.push((name.clone(), post::dump(&posted, &d)));
+        let mut records = post::dump(&posted, &d);
+        // #542: a sinker burn's condition and pickup ride the section.
+        edm_params::insert(&op.params, &tool, &mut records);
+        // #988: a left-hand-cut thread mill turns M4.
+        if let OpParams::Thread { passes, .. } = &op.params
+            && passes.spindle_reverse
+        {
+            post::ask_reverse_spindle(&mut records);
+        }
+        streams.push((name.clone(), records));
     }
     Ok(streams)
 }
