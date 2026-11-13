@@ -87,6 +87,12 @@ icon_table! {
     Deburr => "op-deburr", "icon-deburr";
     Circular => "op-circular", "icon-circular";
     PlasmaProfile => "op-plasma-profile", "icon-plasma-profile";
+    /// The wire between its two guides, through the plate it cuts (#532).
+    WireContour => "op-wire-contour", "icon-wire-contour";
+    /// A sinker EDM burn (#541): the electrode plunging into a cavity.
+    SinkerBurn => "op-sinker-burn", "icon-sinker-burn";
+    /// A sinker EDM side burn (#545): the electrode planing one wall.
+    SinkerSideBurn => "op-sinker-side-burn", "icon-sinker-side-burn";
     // Holes and probing:
     Drill => "op-drill", "icon-drill";
     Bore => "op-bore", "icon-bore";
@@ -166,6 +172,7 @@ icon_table! {
     ToolChamferMill => "tool-chamfer-mill", "icon-tool-chamfer-mill";
     ToolProbe => "tool-probe", "icon-tool-probe";
     ToolTorch => "tool-torch", "icon-tool-torch";
+    ToolElectrode => "tool-electrode", "icon-tool-electrode";
     // #894: the thread mills - a neck over a toothed head (multi-form)
     // or over one form tooth (single-form).
     ToolThreadMill => "tool-thread-mill", "icon-tool-thread-mill";

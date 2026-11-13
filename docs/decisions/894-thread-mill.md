@@ -184,3 +184,72 @@ with a real verdict (`the_thread_golden_passes_its_gate`).
 - *Per-hole rather than per-operation*: one Thread op with one polygonal
   hole judges all its holes at full radius - stricter, never looser; per
   hole needs a cutter per move, deferred until an op threads mixed holes.
+
+## The refresh against main at 0ad525d8 (27 files; #1071, #1220, #532/#541, #890/#898, #1093)
+
+Main moved under this PR: it fixed the same Thread verdict on the old kernel
+(#1071, PR #1099: `thread_rims::major_rims`, `verify::thread_bore`,
+`solid_hits_threaded`), split the tool digest out of `stamp.rs` (#532), and
+added the sinker electrode kind, the tool catalog fields and the cutting
+rows. Most of the 27 conflicts were both-sides-added lists and are kept
+both; these are the judgements.
+
+**1. Region law: main's `major_rims` replaces this PR's `crest_region`,
+behind this PR's round-wall gate.** Both moved a threaded hole's rim out to
+the major circle. Main's grows it from the model's own rim loop at its
+nearest point (a chord's middle, credited at most `CHORD_CREDIT` 0.01 mm)
+when that stands nearer than the declared circle; this PR's grew it from
+the declared radius only. Main's circle is never wider, so it is the
+stricter reading. `walls_round` (#894 x #1205) still gates it: a thread
+whose reachable wall is not a fine circle keeps its region's own rim.
+`crest_region` and its unit test are removed (nothing calls it).
+
+**2. Solid law: main's thread grant replaces this PR's `root_cutter`.**
+This PR narrowed the cutter by the thread depth, which credits that depth
+against every facet. Main's law keeps the full cutter and excuses a hit
+only on the thread's own wall or mouth, while the swept piece stays inside
+the major cylinder of the model's own wall (`verify::thread_bore`). Main's
+excuses strictly less: a nearby wall of another feature, a floor, a hole
+declared wider than or off the centre of the model's, and a polygon side
+that dips more than `CHORD_CREDIT` (a 24-gon on r 5 dips 0.043 mm: this
+PR's 0.05 mm `WALL_SAG` test read it round and credited it whole) all
+convict. The two are not stacked: a narrowed cutter under the grant would
+let crests pass the major circle by another thread depth. `root_cutter`
+and its unit test are removed; the verify context reads the full cutter,
+as on main.
+
+**3. The grant reads the thread's own pitch, and only over a round wall
+(`thread_op::bores`).** Main called `thread_bores(&params, tool.pitch)`.
+With this PR's kinds a single-form mill's `pitch` is the coarsest of its
+range, and the thread's pitch is the operation's: a 1 mm thread cut with a
+0.5 to 1.5 mm mill would have been granted a 1.5 mm thread's depth
+(0.27 mm too much). The grant now resolves the pitch the way the kernel
+plan does (`thread_mill::resolve_pitch`), and is empty when `walls_round`
+is false or the pitch does not resolve. Pinned by
+`thread_op::tests::the_thread_grant_reads_the_threads_own_pitch_and_only_over_a_round_wall`.
+
+**4. The crossing stand-down stays.** Main's #1071 made touching chords no
+crossing, which cleared the old kernel's retraces. Tried on the merged
+tree with the stand-down off: this PR's rides still convict (two
+`thread_mill` tests and five of main's `thread_mill_rim` tests fail), since
+successive radial passes' lead arcs do cross in plan at one depth. The
+stand-down is kept as this PR designed it, for Thread only.
+
+**5. Tool kind numbers: main's Electrode keeps 13; the thread mills take 14
+and 15.** In the stamp digest (`stamp_tool.rs`, where the kind-scoped
+`tip_angle` / `pitch_min` clause moved with main's split), the tool page's
+kind list and `state.rs`. Main's numbers are on main already; this PR's
+were never released. Catalog order: `EDM-E10X6`, then the two thread mills.
+
+**6. Main's Thread tests move to a thread mill.** `thread_mill_rim.rs` (11
+tests) and `coarse_rims.rs` built a Tap-kind tool for a Thread operation,
+which this PR's tool law refuses (the breaking change). Their tool is now
+the 6 mm multi-form mill at pitch 1 and their `OpParams::Thread` literals
+state `pitch: None, hand: Right`; no assertion changed, and all of main's
+pins (a wider or off-centre declaration, a D-bore, an octagon, a 16-gon, a
+floor, a nearby wall convict; matched threads stay clean) hold on the new
+kernel.
+
+**Not changed.** No golden moved (the thread goldens regenerate
+byte-identical), no snapshot PNG, no process file; `PROCESS_VERSION` is
+main's.

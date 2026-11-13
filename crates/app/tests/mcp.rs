@@ -610,3 +610,33 @@ fn external_thread_milling_over_the_tools() {
     let job = c.ok("get_job", json!({}));
     assert!(job["operations"][0]["params"]["thread"].get("external").is_none(), "undo restores the internal thread");
 }
+
+/// #1196: the land width rides the MCP params door - one undoable edit,
+/// a nonsense width refused at the door, and the generated path names
+/// what stands as land.
+#[test]
+fn fill_openings_rides_the_params_door_and_undoes() {
+    let dir = tmp_dir("land");
+    let stl = dir.join("block.stl");
+    write_box_stl(&stl);
+    let mut c = Client::new();
+    c.request("initialize", json!({ "protocolVersion": "2025-06-18" }));
+    c.ok("import_model", json!({ "path": stl.display().to_string() }));
+    c.ok("set_stock", json!({ "box": { "dx": 60.0, "dy": 60.0, "dz": 20.0 } }));
+    c.ok("add_tool", json!({ "catalog": "BN-0600" }));
+    let add = c.ok("add_operation", json!({ "kind": "3D Finish", "tool": "BN-0600" }));
+    let op = add["operation"].as_str().expect("op name").to_string();
+    let job = c.ok("get_job", json!({}));
+    assert!(job["operations"][0]["params"]["finish3d"].get("fill_openings").is_none(), "off by default: {job}");
+    let edit = c.ok("edit_operation", json!({ "name": op, "params": { "fill_openings": 5.0 } }));
+    assert_eq!(edit["params"]["finish3d"]["fill_openings"], json!(5.0));
+    let bad = c.refused("edit_operation", json!({ "name": op, "params": { "fill_openings": 0.0 } }));
+    assert!(!bad.is_empty());
+    let generated = c.ok("generate", json!({}));
+    assert_eq!(generated["generated"][0]["status"], json!("ok"), "{generated}");
+    c.ok("undo", json!({}));
+    c.ok("undo", json!({}));
+    let job = c.ok("get_job", json!({}));
+    assert!(job["operations"][0]["params"]["finish3d"].get("fill_openings").is_none(), "undo restores off: {job}");
+    let _ = std::fs::remove_dir_all(&dir);
+}

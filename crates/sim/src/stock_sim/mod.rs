@@ -68,6 +68,8 @@ mod columns;
 mod cut;
 mod dexel;
 mod dexel_arc;
+// #541: the sinker electrode's box atom.
+mod dexel_box;
 mod dexel_bull;
 mod deviate;
 mod edge_break;
@@ -118,6 +120,7 @@ pub use columns::Columns;
 pub use cut::{auto_cell, first_posed, simulate, SimOp, POSED_REFUSAL};
 pub use deviate::{color_classes, deviate, Deviation, DEV_TOL, ProgramSim, SimSurface};
 pub use dexel::{reach, Dexel};
+pub use dexel_box::{simulate_box, BOX_ARC_REFUSAL};
 pub use edge_break::credit_breaks;
 pub use field::SdfField;
 pub use field_body::Lattice;

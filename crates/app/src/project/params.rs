@@ -496,6 +496,11 @@ pub enum ParamsDto {
         /// `stepover`.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pencil_reference: Option<f64>,
+        /// Absent means no land model: the path rides the model's own
+        /// surface, holes and all - what every older file ran (#1196).
+        /// Absent spells None exactly like `stepover`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        fill_openings: Option<f64>,
     },
     /// Declared at v48 with the deburr ride (M2.5 E B). `Deburr`'s
     /// automatic snake_case tag IS the clean word - no rename needed -
@@ -1017,10 +1022,17 @@ pub enum ParamsDto {
     Probe(ProbeDto),
     /// The plasma profile (#670): additive - no older file names it.
     PlasmaProfile(PlasmaDto),
+    /// The wire EDM contour (#532): additive - no older file names it.
+    WireContour(WireContourDto),
     /// The trochoidal slot (#220): an appended variant in the v58 grammar,
     /// like the probe - no format rung (a file holding one cannot have
     /// been written by a build without it).
     TrochoidalSlot(TrochoidDto),
+    /// The sinker burn (#541): an appended variant, like the probe - no
+    /// older file names it.
+    SinkerBurn(SinkerDto),
+    /// The sinker side burn (#545): appended the same way.
+    SinkerSideBurn(SinkerSideDto),
 }
 
 /// The angle an absent `ramp_angle` means: 45°, the ground the
