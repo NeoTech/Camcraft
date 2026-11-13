@@ -4,7 +4,8 @@ use super::laws::{boundary_samples, dist2_seg, law_points};
 use super::rest::Rest;
 use super::types::{Mode, VerifyContext, Warning};
 
-use crate::cl::{MoveKind, Toolpath, is_vertical};
+use super::upright::is_upright;
+use crate::cl::{MoveKind, Toolpath};
 use crate::geo2d::{Point2, Region};
 
 /// (c) Shank/holder reach against rest material, then (c3) its
@@ -93,7 +94,11 @@ pub(super) fn band_reach(
         // never smaller - shifted to the band's mid-height point on the
         // leaning axis, widened by its half-length's horizontal spread,
         // its bottom standing at the lower of the two axis-plane ends
-        // minus the disc radius. The annulus's inner edge stays about
+        // minus the rim's exact dip, R·sin θ ([`super::tilt_band`],
+        // #1303: the band's true lowest point, so the reading meets
+        // the upright one as the tilt goes to nothing - it was the
+        // whole radius, a cliff just above the upright tolerance).
+        // The annulus's inner edge stays about
         // the TIP: the flute's kerf excuses that radius wherever the
         // tip cuts, tilt or no tilt. Over-report a graze, never hide a
         // gouge. The prismatic branch is the law's own history: same
@@ -113,7 +118,10 @@ pub(super) fn band_reach(
                 continue;
             }
             let pts = law_points(m, chord_tol);
-            let lean = m.axis.filter(|a| !is_vertical(a));
+            let lean = m.axis.filter(|a| !is_upright(a));
+            // Law (c)'s own last report for THIS move: the de-duplication
+            // below never merges with a warning an earlier law pushed.
+            let mut reported: Option<bool> = None;
             for group in groups {
                 let mut convicted: Option<bool> = None;
                 for &(above, band_r, band_len) in group {
@@ -131,11 +139,8 @@ pub(super) fn band_reach(
                     let (offx, offy, r_band, h0) = match lean {
                         None => (0.0, 0.0, band_r, m.to.z + above),
                         Some(a) => {
-                            let mid = above + band_len * 0.5;
-                            let spread = (band_len * 0.5) * (a[0] * a[0] + a[1] * a[1]).sqrt();
-                            let za = m.to.z + above * a[2];
-                            let zb = m.to.z + (above + band_len) * a[2];
-                            (mid * a[0], mid * a[1], band_r + spread, za.min(zb) - band_r)
+                            let col = super::tilt_band::lean(&a, above, band_r, band_len);
+                            (col.off.0, col.off.1, col.r, m.to.z + col.lo - col.dip)
                         }
                     };
                     // Z-window skip (M2.5 E): the law convicts only where
@@ -206,7 +211,12 @@ pub(super) fn band_reach(
                     if part {
                         shanked_part.push(i);
                     }
-                    warns.push(Warning::ShankHit { at: i, part });
+                    // One move, one report per verdict (#938): a leaning
+                    // shank and holder both in the part are one event.
+                    if reported != Some(part) {
+                        reported = Some(part);
+                        warns.push(Warning::ShankHit { at: i, part });
+                    }
                 }
             }
         }

@@ -9,13 +9,12 @@
 
 use super::tools::{opt_str, req_str, Tool};
 use crate::commands::{
-    ActivateSetup, CommandError, CreateSetup, LoadMachine, SetProgramInfo, SetSetupMachine, SetSetupWorkOffset,
-    SetStockSourceOnly,
-    SetWcsOrigin,
+    ActivateSetup, CommandError, CreateSetup, LoadMachine, SetProgramInfo, SetSetupMachine, SetSetupPost, SetSetupWorkOffset,
+    SetStockSourceOnly, SetWcsOrigin,
 };
 use crate::geometry::{Point3, IDENTITY_Q};
 use crate::model;
-use crate::schema::{Location, WCS_SLOTS};
+use crate::schema::{Location, PostRef, WCS_SLOTS};
 use crate::script::{fnum, Env};
 use crate::setup;
 
@@ -29,6 +28,7 @@ pub(super) const TOOLS: &[Tool] = &[
     Tool { name: "set_program", description: "State the document's program number (1 to 9999: the O-word O0001-O9999) and program comment (the program's name on Heidenhain and SINUMERIK). An omitted key keeps its value; null clears it (O0001 and the machine's name). One undo step.", schema: s_set_program, run: set_program },
     Tool { name: "set_raw_stock_only", description: "For a stock made from a model (set_stock from_model): say whether that source model is raw stock only - a casting or blank you cut into, not the finished part - so the post's gouge verdict does not judge it (on), or is judged like every model (off, the default). An operation that machines the model judges it again. One undo step.", schema: s_raw_stock_only, run: set_raw_stock_only },
     Tool { name: "load_machine", description: "Mount a machine: a built-in by name or a .mch file, or clear it. With setup, the machine is that setup's own (clear: the setup follows the document's machine again); without, it is the document's.", schema: s_load_machine, run: load_machine },
+    Tool { name: "set_setup_post", description: "Give a declared setup its own post: a built-in post name or a .cps path; null clears it (the setup follows the document's post again). One undo step. This sets the field only - posting judges whether the post serves the setup's machine.", schema: s_setup_post, run: set_setup_post },
 ];
 
 // ---- shared readers (the fixture tools use them too) --------------------
@@ -198,6 +198,30 @@ fn set_program(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
     Ok(json!({ "number": p.number, "comment": p.comment }))
 }
 
+/// #1233: `SetSetupPost` through the session History, as the Setup pane runs it.
+fn set_setup_post(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
+    let next = match a.get("post") {
+        None => return Err("\"post\" is required (a post name or .cps path, or null to clear)".into()),
+        Some(Value::Null) => None,
+        Some(Value::String(s)) if s.trim().is_empty() => return Err("\"post\" must not be empty (null clears it)".into()),
+        Some(Value::String(s)) if s.trim().to_ascii_lowercase().ends_with(".cps") => Some(PostRef::File(s.trim().to_owned())),
+        Some(Value::String(s)) => Some(PostRef::Named(s.trim().to_owned())),
+        Some(other) => return Err(format!("\"post\" must be a string or null, got {other}")),
+    };
+    let name = setup_or_active(env, a)?
+        .ok_or("no setup is declared - add_setup first (the document's post is select_post's)")?;
+    let cmd = SetSetupPost::new(&env.world, &name, next).map_err(cmd_err)?;
+    env.history.execute(&env.world, cmd);
+    let w = &env.world;
+    let own = crate::setup_mount::own_post(w, Some(&name));
+    Ok(json!({
+        "setup": name,
+        "post": own.as_ref().map(crate::posting::post_ref_label),
+        "own_post": own.is_some(),
+        "posts_with": crate::posting::post_ref_label(&crate::setup_mount::post_of(w, Some(&name))),
+    }))
+}
+
 fn load_machine(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
     let builtin = opt_str(a, "builtin")?;
     let path = opt_str(a, "path")?;
@@ -316,6 +340,16 @@ fn s_work_offset() -> Value {
             "setup": { "type": "string", "description": "A declared setup; defaults to the active one." }
         }),
         &["word"],
+    )
+}
+
+fn s_setup_post() -> Value {
+    obj(
+        json!({
+            "post": { "type": ["string", "null"], "description": "A built-in post name or a .cps path; null clears the setup's own post (it follows the document's)." },
+            "setup": { "type": "string", "description": "A declared setup; defaults to the active one." }
+        }),
+        &["post"],
     )
 }
 

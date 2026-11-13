@@ -84,21 +84,28 @@ function msg(s) {  // counted warning where the host offers message()
 }
 var tapRefused = false;   // the rigid-tap refusal, once per program
 
-// The .mch tool-station coolant list carries names + M-codes; the
-// first Flood entry (else the first entry at all) is this machine's
-// cutting-fluid-on code. M9 (stop) is the RS-274 fixed pair.
+// The .mch tool-station coolant list carries names + M-codes. This post
+// reads no PARAM Coolant (the engine refuses a non-Flood op by name), so
+// every section asks flood: the machine's Flood entry; failing one, the
+// first coded entry of no other known family (a shop's own "Brine" is
+// its flood); a stated codeless Flood is the operator's own valve,
+// silent. A list that states only other kinds (Mist, Air - #869) has no
+// flood code: refused by name, never posted as mist or air. An unstated
+// list stays silent. M9 (stop) is the RS-274 fixed pair.
+var COOLANT_KINDS = ["flood", "mist", "air", "air-blast", "through-spindle", "through-tool"];
 function coolantCode() {
   var cs = (typeof machine !== "undefined" && machine.coolants) || [];
-  var first = "";
+  var other = "", floodNamed = false;
   for (var i = 0; i < cs.length; i++) {
     var c = cs[i];
     var code = (typeof c === "string") ? "" : (c.mCode || "");
-    var name = (typeof c === "string") ? c : (c.name || "");
-    if (!code) continue;
-    if (name === "Flood") return code;
-    if (!first) first = code;
+    var name = String((typeof c === "string") ? c : (c.name || "")).trim().toLowerCase().replace(/[\s_]+/g, "-");
+    if (name === "flood") { if (code) return code; floodNamed = true; continue; }
+    if (code && !other && COOLANT_KINDS.indexOf(name) < 0) other = code;
   }
-  return first;
+  if (other || floodNamed || cs.length === 0) return other;
+  msg("the machine states no flood coolant code" + inOp() + " - add a Flood entry to the machine, or post through a post that reads the operation's coolant");
+  return "";
 }
 
 // ------------------------------------------------------------ the plane

@@ -302,6 +302,14 @@ pub struct SetupDto {
     /// Absent follows the document's.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub post_options: Option<SetupPostOptionsDto>,
+    /// #821: the setup's stated nose-to-rotary-centerline figure, mm,
+    /// additive (no version step). Absent states none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nose_to_axis: Option<f64>,
+    /// #1031: the rated maximum rpm of the setup's chuck or collet,
+    /// additive (no version step). Absent - every older file - states none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workholding_max_rpm: Option<f64>,
 }
 
 /// A setup's WCS as files hold it. v54 (#342) writes one entity name
@@ -559,12 +567,20 @@ pub struct EntityDto {
     #[serde(default, skip_serializing_if = "is_unrevised")]
     pub rev: u64,
     /// The chord error (mm) of a model imported coarser than the STEP
-    /// importer promises (#864, `schema::ReducedFidelity`). Absent on
+    /// importer promises (#864, `schema::ReducedFidelity`), and of a
+    /// stock copied from one (#1056: the copy carries it). Absent on
     /// every other entity, so a document without such a model - and every
     /// file from before the key existed - saves byte for byte as it did
     /// and loads as full fidelity.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub coarse_mm: Option<f64>,
+    /// The STEP facet budget a model was imported under when it is not the
+    /// default (#1054, `schema::StepBudget`). Absent everywhere else, so a
+    /// file from before the key existed - and every default import - reads
+    /// as `step_budget::DEFAULT` and saves byte for byte as it did. An old
+    /// reader dropping it loses only the record: the facets are stored.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub facet_budget: Option<u64>,
     /// Absent means Model; only non-model entities carry the tag.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kind: Option<EntityKind>,

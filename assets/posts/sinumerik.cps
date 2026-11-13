@@ -88,7 +88,7 @@ function tiltOk(p) {  // RTCP words are Fanuc-family; this dialect refuses them
 // flood code: refused by name (#150), never posted as mist or dry. An
 // unstated list stays silent (the unstated-limit law). M9 (stop) is
 // the RS-274 fixed pair.
-var COOLANT_KINDS = ["flood", "mist", "through-spindle", "through-tool"];
+var COOLANT_KINDS = ["flood", "mist", "air", "air-blast", "through-spindle", "through-tool"];
 function coolantWho() { return coolantOp ? "operation " + coolantOp + ": " : ""; }
 function coolantCode() {
   var cs = (typeof machine !== "undefined" && machine.coolants) || [];
@@ -106,14 +106,14 @@ function coolantCode() {
 }
 
 // The op's coolant ask (#112): the stream says nothing for flood (every
-// older stream), or carries PARAM Coolant off / mist / through-tool. The
+// older stream), or carries PARAM Coolant off / mist / air (#869) / through-tool. The
 // code is the machine's own entry of that family - the machine is truth;
 // an ask the machine states no code for is refused by name, naming the
 // operation (#150), never silently posted dry.
 function coolantFor(ask) {
   if (ask === "off") return "";
   if (!ask || ask === "flood") return coolantCode();
-  var want = ask === "mist" ? ["mist"] : (ask === "through-tool" ? ["through-spindle", "through-tool"] : []);
+  var want = ask === "mist" ? ["mist"] : (ask === "air" ? ["air", "air-blast"] : (ask === "through-tool" ? ["through-spindle", "through-tool"] : []));
   if (want.length === 0) { msg(coolantWho() + "unknown coolant ask " + ask); return ""; }
   var cs = (typeof machine !== "undefined" && machine.coolants) || [];
   for (var i = 0; i < cs.length; i++) {
@@ -331,7 +331,7 @@ function onParameter(name, value) {
   if (name === "OperationName") coolantOp = String(value || "");
   if (name === "Coolant") { coolantAsk = String(value || "flood"); return; }
   if (name === "AfterOperation") { afterAsk = String(value || ""); return; }
-  if (name === "WorkOffset" && value) wcsWord = String(value);
+  if (name === "WorkOffset" && value) wcsWord = frameWord(String(value));
   else if (name === "OriginX" && has(value)) orgX = Number(value);
   else if (name === "OriginY" && has(value)) orgY = Number(value);
   else if (name === "OriginZ" && has(value)) orgZ = Number(value);
@@ -396,7 +396,9 @@ function startPreamble() {
     spindleWait = false;
   }
   if (probeStop) block(["M5"]);
-  coolant = coolantFor(coolantAsk);
+  // #995: a touch probe section starts no coolant, whatever its ask -
+  // fluid on the stylus and the measured faces spoils the reading.
+  coolant = probeStop ? "" : coolantFor(coolantAsk);
   if (coolant) block([coolant]);
   smoothOn();
 }
@@ -593,8 +595,8 @@ function onCycle() {
 // measure air. A measured trip k is kept in R(50+3k)..R(52+3k) and the
 // deviations in R90.., inside R0..R99 (the R parameters every 840D
 // carries; more are a machine-data option). The back-off is incremental
-// (G91). G58/G59 are axial programmable offsets
-// on this control, not settable frames: setting one is refused by name.
+// (G91). The fifth and sixth work offsets are the settable frames
+// G505/G506 here (frameWord, #934), so a probe sets those frames.
 // Arming the probe is the machine's own.
 var probeBase = 50;
 function axisIx(a) { return a === "X" ? 0 : (a === "Y" ? 1 : 2); }
@@ -648,6 +650,19 @@ function onProbeGuard() {
   block(["MEAS=1", "G1", wo("X", p.X, orgX), wo("Y", p.Y, orgY), wo("Z", p.Z, orgZ), fw(p.Feed)]);
   stopAlarm("$AC_MEA[1]==1", 65002, "PROBE HIT ON POSITIONING");
 }
+// #934: the engine hands the setup's work offset as its generic word
+// (G54..G59, one per controller register). On the 840D the settable
+// zero offsets are G54..G57 and then G505..G599 (840D sl Fundamentals,
+// "settable zero offset"); G58/G59 are axial programmable offsets that
+// select no frame. So offsets 5 and 6 are written G505/G506, and a
+// word naming no settable frame is refused by name, never posted.
+function frameWord(word) {
+  var w = String(word).toUpperCase();
+  if (w === "G58") return "G505";
+  if (w === "G59") return "G506";
+  if (!frameOf(w)) msg("work offset " + w + " - only the settable frames G54..G57 / G505..G599 can be selected on this control");
+  return w;
+}
 function frameOf(word) {  // "G54".."G57" -> 1..4, G505..G599 -> 5..99; 0 none
   var n = Number(String(word).replace(/[^0-9]/g, ""));
   if (n >= 54 && n <= 57) return n - 53;
@@ -673,7 +688,7 @@ function onProbeResult() {
     stopAlarm("ABS(R" + (dev + i) + ")>" + fu(p.Tolerance), 65001, "PROBE " + a.Axis + " OUT OF TOLERANCE");
   }
   if (has(p.SetWorkOffset) && p.SetWorkOffset >= 0) {
-    var want = "G" + (54 + Number(p.SetWorkOffset));
+    var want = frameWord("G" + (54 + Number(p.SetWorkOffset)));
     var to = frameOf(want), from = frameOf(wcsWord);
     if (!to || !from) {
       msg("probing: setting " + want + " from " + wcsWord + " - only the settable frames G54..G57 / G505..G599 can be set on this control");
