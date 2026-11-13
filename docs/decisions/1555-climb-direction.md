@@ -20,6 +20,15 @@ called climb); it now follows the handbook convention:
   chain's lexicographic order, unrelated to the side.
 - 2D Chamfer takes the contour's side: a boss edge (Outside / Auto) runs
   clockwise under climb, a bore edge (Inside) counter-clockwise.
+- A keep-down ring-to-ring link is proved against both rings' leads as
+  well as the planned rings (`contour.rs`, `last_leads`): under climb the
+  straight link between two bosses would cross the next boss's lead-out
+  arc, which the verify flags as a self-crossing. It now lifts there,
+  named ("staying down would have crossed passes"), instead of posting a
+  crossing the gate then holds.
+- `cl::PathBuilder::push_arc_in` no longer splits a vertical arc at a Z
+  extremum that IS its (off-lattice) end: the climb bore's arc entry
+  otherwise grew a 0.2 um sliver arc.
 - Seams do not move: each ring keeps the seam the pre-#1555 default put it
   on (an outside ring's first point, an inside ring's last - the
   tessellated bore's axis-aligned point its arc entry posts on as one
