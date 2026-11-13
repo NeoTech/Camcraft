@@ -760,9 +760,11 @@ debug info; `--config profile.dev.debug=true` restores it for a debugger).
 **GitHub Actions minutes are budgeted** (3000/month; Windows bills 2x,
 macOS 10x). Nothing runs on push or PR: every gate tier runs locally
 through `cargo xtask gate`. GitHub runs only `release.yml` on a pushed tag
-(the build that publishes the artifact). `ci.yml` and `nightly.yml` are
-manual (`workflow_dispatch`) for the rare case a clean-machine run is
-wanted. Never add a `push`, `pull_request` or `schedule` trigger without
+(the build that publishes the artifact; `aur-package.yml` is a job it
+calls). The manual `ci.yml` and `nightly.yml` are gone (user,
+2026-11-13: "so we can remove ci.yml and nightly.yml as a docs change."):
+they were all but unused. A clean-machine gate run on
+GitHub is issue 1413's subject. Never add a `push`, `pull_request` or `schedule` trigger without
 the user's say-so.
 
 **Test the change, not everything.** A fix is proved by the test(s) that pin
