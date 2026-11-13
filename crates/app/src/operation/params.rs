@@ -1714,6 +1714,12 @@ impl OpParams {
                 if a.compensation == crate::links::Compensation::Wear {
                     h.write_u8(0xC6);
                 }
+                // #1448: the user's start point - bytes only when set.
+                if let Some(q) = a.start_point {
+                    h.write_u8(0xC7);
+                    w(h, q.x);
+                    w(h, q.y);
+                }
                 match a.lead_out {
                     None => h.write_u8(0xFF),
                     Some(Lead::None) => h.write_u8(0),
