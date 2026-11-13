@@ -131,6 +131,7 @@ fn thread_mill(diameter: f64) -> Tool {
         holder_len: 35.0,
         material_group: "steel".into(),
         center_cutting: true,
+        cutting: Vec::new(),
         rpm: 6000.0,
         feed: 400.0,
         tool_material: None,
