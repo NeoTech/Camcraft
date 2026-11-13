@@ -1,7 +1,7 @@
 //! The wire EDM contour's stored parameters (#532, part of #290): the
 //! two planes of the workpiece, the machine condition the cut burns
 //! with (by the control's own id), the stated punch / die side and the
-//! start hole - resolved into the motion crate's `wire_edm::WireParams`
+//! start hole, and the skim passes after the rough cut (#538) - resolved into the motion crate's `wire_edm::WireParams`
 //! at generation. The wire's diameter and the spark gap are NOT stored
 //! here: the machine's condition table is their one source (#531).
 //!
@@ -21,6 +21,25 @@ pub const DEFAULT_CLEARANCE: f64 = 1.0;
 /// The longest condition id an operation stores (a control's selector
 /// is a short word; this only bounds a hand-edited file).
 pub const CONDITION_ID_MAX: usize = 64;
+/// The most skim passes an operation stores (#538): far past any
+/// practice; it only bounds a hand-edited file.
+pub const SKIMS_MAX: usize = 16;
+
+/// One skim pass after the rough cut (#538): the machine condition it
+/// burns with (its id; the gap and so the offset are that condition's)
+/// and whether it walks the profile the other way round.
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+pub struct WireSkim {
+    /// The machine's EDM condition id; the empty word is "none chosen",
+    /// refused at the command door by the skim's number.
+    pub condition: String,
+    /// Walk this pass clockwise (the rough pass runs counter-clockwise).
+    pub reverse: bool,
+}
+
+fn sane_id(id: &str) -> bool {
+    id.len() <= CONDITION_ID_MAX && !id.chars().any(char::is_control)
+}
 
 /// The wire contour's parameters.
 #[derive(Clone, Debug, PartialEq)]
@@ -62,6 +81,9 @@ pub struct WireContourOp {
     /// An open run's threading and run-out clearance past the kerf, mm
     /// (#1109); unread for a closed profile.
     pub clearance: f64,
+    /// The skim passes after the rough cut, in cut order (#538); empty
+    /// is the rough pass alone.
+    pub skims: Vec<WireSkim>,
     /// The 4-axis cut (#537): `Some` reads the selection as two closed
     /// profiles - the upper on the top plane, the lower on the bottom
     /// plane - and pairs them into rulings by the stated rule. `None`
@@ -164,8 +186,9 @@ impl WireContourOp {
             && self.burnout.is_none_or(|c| c.is_finite() && c > 0.0 && c < 1e6)
             && self.clearance.is_finite()
             && (0.0..=crate::wire_edm::CLEARANCE_MAX).contains(&self.clearance)
-            && self.condition.len() <= CONDITION_ID_MAX
-            && !self.condition.chars().any(char::is_control)
+            && sane_id(&self.condition)
+            && self.skims.len() <= SKIMS_MAX
+            && self.skims.iter().all(|s| sane_id(&s.condition))
             && self.tabs.as_ref().is_none_or(WireTabs::is_sane)
     }
 }

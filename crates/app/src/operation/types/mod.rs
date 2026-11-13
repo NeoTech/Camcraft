@@ -39,8 +39,7 @@ pub use sinker::{
     SinkerSideBurnOp, SinkerSideDirection,
 };
 pub use wire_edm::{
-    WireContourOp, WireFourAxis, WirePairingRule, WireSide, WireSyncPair, WireTabs, CONDITION_ID_MAX, DEFAULT_CLEARANCE,
-    FOUR_AXIS_TOLERANCE, SYNC_PAIRS_MAX,
+    WireContourOp, WireFourAxis, WirePairingRule, WireSide, WireSkim, WireSyncPair, WireTabs, CONDITION_ID_MAX,
+    DEFAULT_CLEARANCE, FOUR_AXIS_TOLERANCE, SKIMS_MAX, SYNC_PAIRS_MAX,
 };
-
 pub use sel::{FeatureSel, GenStamp, GeoSel, OpStatus, OpType, SrcRef, WCS_SLOTS};
