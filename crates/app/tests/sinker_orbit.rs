@@ -4,7 +4,9 @@
 //! A circular orbit widens the cavity by exactly its radius; no orbit
 //! move leaves its radius; the pattern must be one the machine lists
 //! under `edm.orbits` and the radius within its `edm.max_orbit_radius`
-//! (#290 D6), each refused by name otherwise. The CL is golden.
+//! (#290 D6), each refused by name otherwise. The CL is golden. With
+//! electrode wear compensation (#546) the orbit runs at each layer's
+//! worn tip and never below the deepest compensated tip.
 //!
 //! Gate map (#544): covers motion::sinker_orbit, motion::sinker (the
 //! orbit leg), app::operation (sinker_op orbit law, params digest,
@@ -100,6 +102,9 @@ fn burn(orbit: Option<SinkerOrbit>) -> OpParams {
         cavity_x: 0.0,
         cavity_y: 0.0,
         orbit,
+        layer: None,
+        wear_lost: None,
+        wear_over: None,
     })
 }
 
@@ -293,4 +298,54 @@ fn the_orbit_round_trips_the_file_and_rides_the_mcp_params_door() {
     assert!(r["content"][0]["text"].as_str().unwrap_or_default().contains("lists no planetary orbit"), "{r}");
     ok(&call(&mut s, &mut id, "edit_operation", json!({ "name": "Burn1", "params": { "orbit": null } })), "drop the orbit");
     ok(&call(&mut s, &mut id, "generate", json!({ "name": "Burn1" })), "a plain plunge");
+}
+
+/// #546 meets #544: a worn burn with an orbit expands each layer's orbit
+/// at that layer's compensated Z; no move goes below the deepest
+/// compensated tip, and the stock sim (judging the worn electrode)
+/// finds the cavity clean. With no rate the moves are main's orbit burn.
+#[test]
+fn a_worn_burn_orbits_at_each_compensated_layer_tip() {
+    let (world, mut h) = orbit_doc();
+    let mut p = burn(Some(orbit(SinkerOrbitKind::Circular, 0.2)));
+    if let OpParams::SinkerBurn(b) = &mut p {
+        // 0.12 lost over 6 burned: a rate of 0.02; layers 2 mm deep.
+        (b.wear_lost, b.wear_over, b.layer) = (Some(0.12), Some(6.0), Some(2.0));
+    }
+    let path = generated(&world, &mut h, p);
+    let feeds: Vec<_> = path.iter().filter(|m| m.kind == MoveKind::Feed).collect();
+    let layer_z = [18.0 + GAP - 0.04, 16.0 + GAP - 0.08, 14.0 + GAP - 0.12];
+    let deepest = layer_z[2];
+    assert!(path.iter().all(|m| m.to.z >= deepest - 1e-9), "no move below the deepest compensated tip Z {deepest}");
+    let per = feeds.len() / 3;
+    assert_eq!(feeds.len(), 3 * per, "the same orbit at each of the three layers");
+    for (i, want) in layer_z.iter().enumerate() {
+        let layer = &feeds[i * per..(i + 1) * per];
+        assert!(layer.iter().all(|m| (m.to.z - want).abs() < 1e-9), "layer {i} rides Z {want}");
+        let reach = layer.iter().map(|m| m.to.x.hypot(m.to.y)).fold(0.0, f64::max);
+        assert!((reach - 0.2).abs() < 1e-12, "layer {i} orbits its radius: {reach}");
+    }
+    let sim = simulate_document(&world).expect("judged");
+    assert_eq!(sim.dev.gouge_cells, 0, "the worn orbit gouges at {:?}", sim.dev.max_gouge_at);
+
+    // No rate: the generated orbit is exactly main's orbit burn.
+    let (world, mut h) = orbit_doc();
+    let o = orbit(SinkerOrbitKind::Circular, 0.2);
+    let got = generated(&world, &mut h, burn(Some(o)));
+    let main = SinkerParams {
+        x: 0.0,
+        y: 0.0,
+        approach_z: 25.0,
+        top_z: 20.0,
+        floor_z: 14.0,
+        model_floor_z: Some(0.0),
+        datum: SinkerDatum::WorkTop,
+        depth: 6.0,
+        electrode_len: 15.0,
+        feed: 40.0,
+        gap: GAP,
+        stand: None,
+        orbit: Some(o),
+    };
+    assert_eq!(got, burn_to_depth(&main).expect("burns").moves);
 }

@@ -41,6 +41,15 @@ pub struct SinkerBurnOp {
     /// or finish without it is refused by name.
     pub cavity_x: f64,
     pub cavity_y: f64,
+    /// #546: the depth of one burn layer, mm; `None` burns the whole
+    /// depth as one layer.
+    pub layer: Option<f64>,
+    /// #546: an electrode wear the user measured between burns - the
+    /// electrode length lost (mm) over `wear_over` mm burned. Stated, it
+    /// is the burn's wear rate (before the condition's); both or neither.
+    pub wear_lost: Option<f64>,
+    /// #546: the depth burned while `wear_lost` was lost, mm.
+    pub wear_over: Option<f64>,
     /// The orbit at the burn floor (#544), expanded into explicit moves;
     /// `None` burns a straight plunge. The pattern must be one the
     /// machine lists and the radius within its stated maximum - both
@@ -64,6 +73,43 @@ impl SinkerBurnOp {
             && self.feed > 0.0
             && self.cavity_sane()
             && self.orbit.as_ref().is_none_or(|o| o.check().is_ok())
+            && self.compensation_refusal().is_none()
+    }
+
+    /// The layer step's and the measured wear's refusal, by name (#546) -
+    /// what the commands say at creation instead of "not usable".
+    #[must_use]
+    pub fn compensation_refusal(&self) -> Option<String> {
+        if let Some(s) = self.layer
+            && !(s.is_finite() && s > 0.0)
+        {
+            return Some(format!("sinker burn: the layer step {s} must be a positive depth"));
+        }
+        self.wear_refusal()
+    }
+
+    /// The measured wear as a rate (#546): `wear_lost / wear_over`, or
+    /// `None` when not measured. Only meaningful once
+    /// [`Self::wear_refusal`] passes.
+    #[must_use]
+    pub fn measured_rate(&self) -> Option<f64> {
+        self.wear_lost.zip(self.wear_over).map(|(l, o)| l / o)
+    }
+
+    /// The measured wear's refusal, by name (#546): half stated, not a
+    /// finite length, nothing burned, or a rate of 1 and over.
+    #[must_use]
+    pub fn wear_refusal(&self) -> Option<String> {
+        match (self.wear_lost, self.wear_over) {
+            (None, None) => None,
+            (Some(_), None) | (None, Some(_)) => Some(
+                "sinker burn: a measured electrode wear needs both the length lost and the depth burned while losing it".into(),
+            ),
+            (Some(l), Some(o)) if !(l.is_finite() && l >= 0.0 && o.is_finite() && o > 0.0) => Some(format!(
+                "sinker burn: a measured electrode wear of {l} over {o} burned is not a length lost over a positive depth"
+            )),
+            (Some(l), Some(o)) => crate::sinker_wear::rate_refusal(&format!("measured {l} over {o}"), l / o),
+        }
     }
 
     /// The finished cavity's numbers: unread (any finite, non-negative
@@ -104,6 +150,14 @@ impl SinkerBurnOp {
 
 pub use crate::sinker_side::{SideBurn as SinkerSide, SideDirection as SinkerSideDirection};
 
+/// A Side Burn stating a wear rate, refused by name (#546 meets #545:
+/// the side move is not wear-compensated yet).
+pub const SIDE_WEAR_REFUSAL: &str =
+    "electrode wear compensation is not supported on a Sinker Side Burn yet - clear the wear rate";
+/// A Side Burn stating a layer step (#546's layering), refused by name.
+pub const SIDE_LAYER_REFUSAL: &str =
+    "burning in layers is not supported on a Sinker Side Burn yet - clear the layer step";
+
 /// The Sinker Side Burn's parameters (#545): its own burn (approach,
 /// heights, datum, depth, point, feed and its OWN condition - no
 /// orbit), the axis direction it moves along, the lateral amount it
@@ -128,9 +182,10 @@ impl SinkerSideBurnOp {
         SinkerSide { direction: self.direction, amount: self.amount, undersize: self.undersize }
     }
 
-    /// The structural refusal by name (no world): an orbit, an amount or
-    /// undersize out of range, an amount past the undersize. `None`
-    /// when sound.
+    /// The structural refusal by name (no world): an orbit, a wear rate
+    /// or layer step (#546 - not supported on a side burn yet), an
+    /// amount or undersize out of range, an amount past the undersize.
+    /// `None` when sound.
     #[must_use]
     pub fn refusal(&self) -> Option<String> {
         if self.burn.orbit.is_some() {
@@ -141,6 +196,12 @@ impl SinkerSideBurnOp {
                 "a Sinker Side Burn sizes its electrode by its own undersize - its burn is a single pass (rough and finish are Sinker Burn passes)"
                     .into(),
             );
+        }
+        if self.burn.wear_lost.is_some() || self.burn.wear_over.is_some() {
+            return Some(SIDE_WEAR_REFUSAL.into());
+        }
+        if self.burn.layer.is_some() {
+            return Some(SIDE_LAYER_REFUSAL.into());
         }
         crate::sinker_side::side_refusal(&self.side())
     }

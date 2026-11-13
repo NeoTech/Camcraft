@@ -6,6 +6,8 @@
 
 pub mod align;
 pub mod axis;
+// #739: circle centre from a picked edge (WCS anchor, alignment, probing).
+pub mod circle;
 // #979: window / crossing box selection under the one pick rule.
 pub mod box_pick;
 pub mod face;
@@ -25,6 +27,7 @@ pub use align::{Alignment, align_321};
 pub use axis::{AxisPick, InPlaneAxes, InPlaneAxis, align_from_axes, in_plane_turn_deg, pick_coords, turn_in_plane};
 pub use plane::{PlaneLay, lay_on_plane, plane_label, plane_side};
 pub use points::{PointsLay, lay_on_points, points_side};
+pub use circle::{Circle, CircleRefusal, circle_centre, circle_of_edge, circle_of_run};
 pub use box_pick::{BoxMode, BoxQuery, box_bodies, box_select, box_select_top};
 pub use face::{FaceOrigin, face_origin, facets_centroid};
 pub use roles::{Role, align_roles};

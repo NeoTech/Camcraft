@@ -1,7 +1,8 @@
 //! The operation page: the Sinker Burn's fields (#541) - the burn point
 //! and the machine condition on Geometry, the approach plane, work top
 //! and cavity floor datum on Heights, the datum and depth on Passes, the
-//! servo feed on Feeds, the orbit (#544) on Passes - or, for the Side
+//! servo feed on Feeds, the orbit (#544), the layer step and the
+//! electrode wear compensation (#546) on Passes - or, for the Side
 //! Burn (#545), its wall, amount and undersize there instead. Every value edits the page draft; Apply rides
 //! the command history (EditOperationParams, undoable). The full sinker
 //! setup and op pages are #548's.
@@ -91,7 +92,9 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
         OpParams::SinkerSideBurn(SinkerSideBurnOp { burn, direction, amount, undersize }) => (burn, Some((direction, amount, undersize))),
         _ => return,
     };
-    let SinkerBurnOp { clearance_z, top_z, floor_z, datum, depth, x, y, feed, condition, pass, cavity_x, cavity_y, orbit } = p;
+    // The wear line reads the draft before its fields are borrowed (#546).
+    let wear = camcraft_app::operation::sinker_wear_op::wear_status(world, op_ctx.as_deref(), p);
+    let SinkerBurnOp { clearance_z, top_z, floor_z, datum, depth, x, y, feed, condition, pass, cavity_x, cavity_y, orbit, layer, wear_lost, wear_over } = p;
     if tab == SEC_GEO {
         prop_row(ui, "Burn at X", |ui| num(ui, u, x));
         prop_row(ui, "Burn at Y", |ui| num(ui, u, y));
@@ -122,6 +125,11 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             None => {
                 pass_rows(ui, u, pass, cavity_x, cavity_y);
                 orbit_rows(ui, u, orbit);
+                auto_opt(ui, "Layer step", "One layer", layer, "the whole depth at once", 1.0, |ui, v| num(ui, u, v));
+                auto_opt(ui, "Measured wear", "None", wear_lost, "not measured", 0.05, |ui, v| num(ui, u, v));
+                auto_opt(ui, "Measured over", "None", wear_over, "not measured", 5.0, |ui, v| num(ui, u, v));
+                hint(ui, &wear);
+                hint(ui, "the electrode wear measured between burns (length lost over depth burned) wins over the condition's stated rate; with neither the burn is not compensated");
             }
         }
     }

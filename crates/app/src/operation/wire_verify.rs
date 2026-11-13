@@ -51,10 +51,11 @@ pub fn wire_verdict(world: &World, e: &Entity) -> Option<Result<WireVerdict, Str
     let OpParams::WireContour(w) = &op.params else { return None };
     Some((|| {
         let setup = op.setup.as_deref();
-        // A cut with no start hole never generates; said by the law's
-        // own name, not as a missing path.
-        if w.start.is_none() {
-            return Ok(WireVerdict { findings: vec![WireFinding::NoStart], slugs: Vec::new() });
+        // A closed cut with no start hole never generates; said by the
+        // law's own name, not as a missing path. An open run (#1109,
+        // left / right) states none: it is threaded outside the stock.
+        if w.start.is_none() && !w.side.is_open_side() {
+            return Ok(WireVerdict { findings: vec![WireFinding::NoStart], ..WireVerdict::default() });
         }
         let cache = model::toolpath_of(world, e).ok_or("the wire laws have no toolpath to judge - generate it first")?;
         let cond = super::wire_op::condition_of(world, setup, w)?;
@@ -89,6 +90,7 @@ pub fn wire_verdict(world: &World, e: &Entity) -> Option<Result<WireVerdict, Str
         let side = match w.side {
             WireSide::Die => CutSide::Die,
             WireSide::Punch => CutSide::Punch,
+            WireSide::Left | WireSide::Right => CutSide::Open,
         };
         Ok(judge(&WireJob {
             path: &cache.path,
@@ -96,6 +98,7 @@ pub fn wire_verdict(world: &World, e: &Entity) -> Option<Result<WireVerdict, Str
             side,
             start: w.start.map(|[x, y]| Point2::new(x, y)),
             sections,
+            burnout: w.burnout.is_some(),
         }))
     })())
 }

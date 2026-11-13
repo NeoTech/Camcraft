@@ -46,6 +46,8 @@ pub mod sinker_electrode;
 mod sinker_electrode_tests;
 #[cfg(test)]
 mod sinker_electrode_fuzz;
+// #546: sinker electrode wear compensation in Z.
+pub mod sinker_wear;
 // #544: sinker EDM orbit patterns as explicit moves.
 pub mod sinker_orbit;
 // #545: sinker EDM side burning by a lateral electrode move.

@@ -70,6 +70,8 @@ fn wire_doc() -> (World, History) {
         condition: "C110".into(),
         side: WireSide::Die,
         start: Some([0.0, 0.0]),
+        burnout: None,
+        clearance: camcraft_app::operation::DEFAULT_CLEARANCE,
     };
     let create = CreateOperation::new(&world, "Die1", "", SrcRef::Entity("slug".into()), OpParams::WireContour(op));
     h.execute(&world, create.expect("die"));

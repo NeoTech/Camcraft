@@ -62,7 +62,7 @@ pub(super) fn req_model(env: &Env, name: &str) -> Result<Entity, String> {
 }
 
 /// One `{model, id}` pick, the model checked to be a part.
-fn pick_of(env: &Env, v: &Value) -> Result<GeoSel, String> {
+pub(super) fn pick_of(env: &Env, v: &Value) -> Result<GeoSel, String> {
     let Value::Object(m) = v else {
         return Err(format!("a pick is an object {{\"model\", \"id\"}}, got {v}"));
     };

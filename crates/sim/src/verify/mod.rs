@@ -164,6 +164,7 @@ mod engine;
 mod excess;
 mod finish;
 mod hidden;
+mod hidden_span;
 mod hole_wall;
 mod laws;
 mod mesh_posed;
@@ -195,6 +196,8 @@ mod tilt_band;
 mod tilt_span;
 mod swept;
 mod thread_bore;
+mod turn_cells;
+mod turn_hidden;
 mod types;
 mod upright;
 mod workholding;
@@ -220,7 +223,7 @@ pub use workholding::{
 pub use body_bands::{BodyBands, NeckBands, BODY_BANDS_CAP};
 pub use probe::Cutter;
 pub use rotary::{rotary_hits, RotaryAxis, RotaryLaw};
-pub use hole_wall::{HoleAxis, WALL_SAG};
+pub use hole_wall::{HoleAxis, WALL_SAG, hole_is_round};
 pub use solid::{SolidLaw, solid_hits, solid_hits_threaded, solid_hits_walled};
 pub use mesh_steel::{mesh_refined, steel_stack, MeshSteel, SteelBand};
 #[doc(hidden)]

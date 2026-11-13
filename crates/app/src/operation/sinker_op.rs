@@ -13,8 +13,9 @@ use crate::cl::Toolpath;
 use crate::geometry::Triangle;
 use crate::machine::{ConditionField, Kind};
 use crate::machining2d::GenError;
-use crate::sinker::{burn_to_depth, SinkerDatum, SinkerParams};
+use crate::sinker::{SinkerDatum, SinkerParams};
 use crate::sinker_undersize::{inverted, judge, SinkerPass, Undersize};
+use crate::sinker_wear::burn_compensated;
 use crate::tools::{Tool, ToolKind};
 use crate::verify::Warning;
 
@@ -48,6 +49,9 @@ pub(super) fn burn_draft(c: &Carried) -> SinkerBurnOp {
         cavity_x: 0.0,
         cavity_y: 0.0,
         orbit: None,
+        layer: None,
+        wear_lost: None,
+        wear_over: None,
     }
 }
 
@@ -220,15 +224,22 @@ pub fn sinker_params(
 /// undersize law (`sinker_undersize::judge`), which also places the tip
 /// one undersize above the finished floor; a finish whose undersize is
 /// not smaller than the rough's it follows is warned by name.
+/// The burn is then wear-compensated in Z when a rate is stated (#546:
+/// measured on the op, else the condition's `cond_wear`), from the
+/// stand-off the undersize placed.
 pub(super) fn generate_sinker(
     op: &SinkerBurnOp,
     tool: &Tool,
     hs: &ResolvedHeights,
     gap: f64,
     pass: Option<Result<PassRead, String>>,
+    cond_wear: Option<f64>,
     facets: &[Triangle],
 ) -> Result<(Toolpath, Vec<Warning>), GenError> {
     if let Some(why) = op.pass_refusal() {
+        return Err(GenError::Invalid(why));
+    }
+    if let Some(why) = op.wear_refusal() {
         return Err(GenError::Invalid(why));
     }
     let mut p = sinker_params(op, tool, hs, gap, facets)?;
@@ -249,7 +260,8 @@ pub(super) fn generate_sinker(
         };
         p.stand = Some(judge(&u, op.condition.trim())?);
     }
-    let path = burn_to_depth(&p)?;
+    let w = super::sinker_wear_op::sinker_wear(op, cond_wear);
+    let path = burn_compensated(&p, &w)?;
     let mut warns = Vec::new();
     if let Some(PassRead { undersize, rough: Some((_, rough)) }) = read
         && op.pass == SinkerPass::Finish

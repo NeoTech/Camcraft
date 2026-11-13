@@ -15,7 +15,16 @@
 //!   are what drops free when the cut closes. A die keeps the material
 //!   outside the cut, so its freed piece must hold none of the product;
 //!   a punch's freed piece IS the product. A cut that frees nothing, or
-//!   frees the wrong side, is refused by name.
+//!   frees the wrong side, is refused by name. A no-core burnout (#540)
+//!   reads the other way: it must free nothing - a freed piece is a
+//!   core left to drop, refused.
+//!
+//! An OPEN run (#1109, side left / right of travel) is threaded in the
+//! air outside the stock and leaves it at a run-out point: it has no
+//! start hole and closes no slug, so the threading and slug laws do not
+//! apply and say so ([`OPEN_SKIP`]). The kerf law judges it against the
+//! part as for any cut, and its ends - where the wire is threaded and
+//! cut - must stand clear of the stock by the kerf offset.
 //!
 //! The product's section by the stated side: a punch's product is the
 //! model. A die's product is the model too when the start hole stands
@@ -51,6 +60,10 @@ pub const KERF_TOL: f64 = 1e-4;
 /// part.
 pub const SLUG_AREA_TOL: f64 = 1e-3;
 
+/// Why an open run's verdict holds no threading or slug finding: said
+/// on the report line, never silent.
+pub const OPEN_SKIP: &str = "start-hole and slug laws not applied (an open run is threaded in the air outside the stock and closes no slug)";
+
 /// Which side of the cut is kept - stated by the operation, never read
 /// from the geometry.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -59,6 +72,9 @@ pub enum CutSide {
     Die,
     /// The enclosed piece is the product: it drops when the cut closes.
     Punch,
+    /// An open run (#1109): the kerf on the stated left or right of
+    /// travel, the model is the product, nothing is enclosed.
+    Open,
 }
 
 impl CutSide {
@@ -67,6 +83,7 @@ impl CutSide {
         match self {
             CutSide::Die => "die",
             CutSide::Punch => "punch",
+            CutSide::Open => "open",
         }
     }
 }
@@ -91,6 +108,9 @@ pub struct WireJob<'a> {
     pub start: Option<Point2>,
     /// The sections through the height the wire passes, low to high.
     pub sections: Vec<WireSection>,
+    /// A no-core burnout (#540): the cut must free nothing - any piece
+    /// it frees is a core that drops, refused.
+    pub burnout: bool,
 }
 
 /// Every finding refuses: the wire laws have no warning tier.
@@ -104,12 +124,17 @@ pub enum WireFinding {
     StartMoved { stated: Point2, path: Point2 },
     /// The product stands nearer the threading point than the kerf.
     Threading { z: f64, at: Point2, clear: f64, need: f64 },
+    /// An open run's end (where the wire is threaded or cut) stands in
+    /// the stock or nearer it than the kerf.
+    OpenEndInStock { z: f64, at: Point2, clear: f64, need: f64 },
     /// The kerf of move `move_no` (1-based) enters the product.
     Gouge { move_no: usize, z: f64, at: Point2, depth: f64, moves: usize },
     /// The closed cut frees no material.
     NothingFreed { z: f64 },
     /// The piece freed is not the one the stated side drops.
     WrongSlug { z: f64, side: CutSide, at: Point2, product_area: f64 },
+    /// A burnout (#540) frees a piece: a core is left to drop.
+    Core { z: f64, at: Point2, area: f64 },
 }
 
 impl WireFinding {
@@ -131,6 +156,12 @@ impl WireFinding {
                 at.y,
                 if *clear <= 0.0 { "at the threading point itself".to_owned() } else { format!("{clear:.4} mm from it") }
             ),
+            WireFinding::OpenEndInStock { z, at, clear, need } => format!(
+                "the open run's end at X{:.3} Y{:.3} is not clear of the stock at Z{z:.3}: the stock stands {} - the wire is threaded and cut in the air, {need:.4} mm clear all round (regenerate the run against the stock as it stands)",
+                at.x,
+                at.y,
+                if *clear <= 0.0 { "at the point itself".to_owned() } else { format!("{clear:.4} mm from it") }
+            ),
             WireFinding::Gouge { move_no, z, at, depth, moves } => format!(
                 "gouge: the kerf of move {move_no} enters the part by {depth:.4} mm near X{:.3} Y{:.3} at Z{z:.3} ({moves} move(s) gouge)",
                 at.x, at.y
@@ -142,8 +173,16 @@ impl WireFinding {
                 "slug: the piece freed near X{:.3} Y{:.3} at Z{z:.3} holds {product_area:.3} mm² of the part - a die keeps the material outside the cut, but here the part drops",
                 at.x, at.y
             ),
+            WireFinding::Core { z, at, area } => format!(
+                "core: the burnout frees a piece of {area:.3} mm² near X{:.3} Y{:.3} at Z{z:.3} - a burnout must leave no core to drop",
+                at.x, at.y
+            ),
             WireFinding::WrongSlug { z, side: CutSide::Punch, at, .. } => format!(
                 "slug: the piece freed near X{:.3} Y{:.3} at Z{z:.3} holds none of the part - a punch's cut frees the punch, but here only waste drops and the part stays in the skeleton",
+                at.x, at.y
+            ),
+            WireFinding::WrongSlug { z, side: CutSide::Open, at, .. } => format!(
+                "slug: an open run frees a piece near X{:.3} Y{:.3} at Z{z:.3} - an open run closes no slug",
                 at.x, at.y
             ),
         }
@@ -156,6 +195,9 @@ impl WireFinding {
 pub struct WireVerdict {
     pub findings: Vec<WireFinding>,
     pub slugs: Vec<Slug>,
+    /// The laws not applied to this cut and why ([`OPEN_SKIP`] for an
+    /// open run); `None` when every law ran.
+    pub skipped: Option<&'static str>,
 }
 
 /// The product's section at one height (module head): the model, or
@@ -198,6 +240,10 @@ pub fn judge(job: &WireJob<'_>) -> WireVerdict {
             return v;
         }
     };
+    if job.side == CutSide::Open {
+        open(job, &polyline, k, &mut v);
+        return v;
+    }
     let Some(start) = job.start else {
         v.findings.push(WireFinding::NoStart);
         return v;
@@ -228,6 +274,31 @@ pub fn judge(job: &WireJob<'_>) -> WireVerdict {
     v.findings.extend(gouge);
     slug::judge(job, &polyline, opening, &mut v);
     v
+}
+
+/// An open run (#1109, module head): the kerf law against the part at
+/// every height, both ends clear of the stock; no threading, no slug.
+fn open(job: &WireJob<'_>, pts: &[Point2], k: f64, v: &mut WireVerdict) {
+    v.skipped = Some(OPEN_SKIP);
+    let ends = [pts.first(), pts.last()];
+    let mut worst: Option<(f64, f64, Point2)> = None;
+    let mut gouge: Option<WireFinding> = None;
+    for s in &job.sections {
+        if gouge.is_none() {
+            gouge = gouge_at(&Product::Part(&s.part), pts, k, s.z);
+        }
+        let Some(stock) = s.stock.as_ref() else { continue };
+        for &e in ends.iter().flatten() {
+            let (clear, _) = dist::clearance(&Product::Part(stock), *e, *e);
+            if worst.is_none_or(|(c, _, _)| clear < c) {
+                worst = Some((clear, s.z, *e));
+            }
+        }
+    }
+    if let Some((clear, z, at)) = worst.filter(|(c, _, _)| *c < k - KERF_TOL) {
+        v.findings.push(WireFinding::OpenEndInStock { z, at, clear, need: k });
+    }
+    v.findings.extend(gouge);
 }
 
 fn product(s: &WireSection, opening: bool) -> Product<'_> {
