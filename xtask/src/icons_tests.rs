@@ -56,3 +56,19 @@ fn committed_icon_pngs_match_their_svg_masters() {
     let bad = icons::check(&root).expect("check runs");
     assert!(bad.is_empty(), "icon PNGs out of step - run `cargo xtask icons`:\n{}", bad.join("\n"));
 }
+
+/// The contact sheet names each icon (#661 slice 2): stems wrap at '-' into lines the narrow cell
+/// holds, keeping the family prefix (`op-drill` and `tool-drill` must not read alike), and every
+/// character of the stems' alphabet draws something.
+#[test]
+fn sheet_labels_wrap_stems_and_keep_the_family() {
+    use crate::icon_font::{label_lines, pixels};
+    assert_eq!(label_lines("tool-threading-insert", 10), ["tool", "threading", "insert"]);
+    assert_eq!(label_lines("op-drill", 10), ["op-drill"]);
+    assert_eq!(label_lines("tool-drill", 10), ["tool-drill"]);
+    assert_eq!(label_lines("op-trochoidal-slot", 10), ["op", "trochoidal", "slot"]);
+    for c in "abcdefghijklmnopqrstuvwxyz0123456789-".chars() {
+        assert!(!pixels(&c.to_string()).is_empty(), "'{c}' draws nothing");
+    }
+    assert_ne!(pixels("o"), pixels("0"), "letter o and digit 0 differ");
+}

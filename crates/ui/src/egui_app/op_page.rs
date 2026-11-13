@@ -20,6 +20,7 @@ use camcraft_app::verify::Warning;
 
 use crate::operations::{fold_warnings, unresolved_note};
 use crate::state::{CommandKind, ErrorScope, State};
+use crate::shortcut_keys::chord;
 
 use super::colorvision::text_inks;
 use super::fields::combo_owned;
@@ -154,7 +155,7 @@ fn header_rows(ui: &mut Ui, state: &mut State, target: &str, live: Option<&Opera
     } else {
         let mut t_idx = tools.iter().position(|t| *t == state.op_ui.tool).unwrap_or(0);
         let before = t_idx;
-        combo_owned(ui, "op_tool", &mut t_idx, &tools);
+        ui.horizontal(|ui| { super::tool_icons::named_glyph(ui, &state.world, &state.op_ui.tool); super::tool_icons::tool_combo(ui, &state.world, "op_tool", &mut t_idx, &tools); });
         if t_idx != before
             && let Some(t) = tools.get(t_idx)
         {
@@ -354,20 +355,23 @@ fn actions(ui: &mut Ui, state: &mut State, target: &str, live: Option<&Operation
         // Enabled, but the door will refuse: a safety line, not help.
         ui.colored_label(inks.warn, why);
     }
+    let commit_hint = format!("Commit the edited parameters ({} undoes)", chord("Z"));
+    let clear_hint = format!("Remove the generated path and keep the operation ({} restores it)", chord("Z"));
+    let delete_hint = format!("Delete the operation and its toolpath ({} restores both)", chord("Z"));
     let bar = [
         Action { label: "Generate", kind: ActionKind::Primary, enabled: true, hint: Some("Compute the toolpath (applies pending edits first)"), why_not: None },
         Action {
             label: "Apply",
             kind: ActionKind::Secondary,
             enabled: !unchanged,
-            hint: apply_hint.as_deref().or(Some("Commit the edited parameters (Ctrl+Z undoes)")),
+            hint: apply_hint.as_deref().or(Some(commit_hint.as_str())),
             why_not: apply_hint.as_deref(),
         },
         Action {
             label: "Clear toolpath",
             kind: ActionKind::Secondary,
             enabled: has_path,
-            hint: Some("Remove the generated path and keep the operation (Ctrl+Z restores it)"),
+            hint: Some(clear_hint.as_str()),
             why_not: Some("Nothing generated yet - there is no toolpath to clear"),
         },
         Action {
@@ -381,7 +385,7 @@ fn actions(ui: &mut Ui, state: &mut State, target: &str, live: Option<&Operation
             label: "Delete operation",
             kind: ActionKind::Destructive,
             enabled: exists,
-            hint: Some("Delete the operation and its toolpath (Ctrl+Z restores both)"),
+            hint: Some(delete_hint.as_str()),
             why_not: Some("The operation is gone"),
         },
     ];

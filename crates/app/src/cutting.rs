@@ -161,6 +161,14 @@ pub struct TurnPlan {
 pub fn suggest(world: &World, name: &str) -> Result<Suggestion, String> {
     let e = model::find_by_name(world, name).ok_or_else(|| format!("no operation named '{name}'"))?;
     let op = model::operation_of(world, &e).ok_or_else(|| format!("'{name}' is not an operation"))?;
+    // #1110: a kind that mounts no library tool (a wire cut) has no tool
+    // for the table to read - said so, not "tool  is not in the library".
+    if !op.params.kind().info().mounts_tool() {
+        return Err(format!(
+            "a {} mounts no library tool - its cut is the machine's EDM condition, and the cutting-data table speaks for milling tools only",
+            op.params.kind()
+        ));
+    }
     let tool = model::find_by_name(world, &op.tool)
         .and_then(|t| model::tool_of(world, &t))
         .ok_or_else(|| format!("tool {} is not in the library", op.tool))?;
