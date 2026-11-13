@@ -1,4 +1,4 @@
-//! The thread-milling operation's app half (#894): the door that judges tool and thread against each other by name, the kernel plan, and the two readings the gouge laws take of a thread mill - its crests against the thread's major circle, its tooth roots against the part.
+//! The thread-milling operation's app half (#894): the door that judges tool and thread against each other by name, the kernel plan, and the gate on the readings the gouge laws take of a thread mill - a round wall, and the thread's own pitch.
 //!
 //! Provenance: ISO 724 / ISO 965-1 thread depths and public machine-tool
 //! handbook thread milling, as `camcraft_tools::thread_mill` and
@@ -7,23 +7,21 @@
 //!
 //! A thread is cut INTO the wall the model shows (CAD draws a tapped
 //! hole at its minor diameter), so the tool's full cylinder against the
-//! part would read every thread as a gouge. The two readings split the
-//! tool where the thread splits it: the tooth crests may reach the
-//! major circle and no further (the tangency law, against
-//! [`crest_region`]), and the body under the teeth may not enter the
-//! part at all (the solid law, with [`root_cutter`]).
+//! part would read every thread as a gouge. The two readings are #1071's
+//! (`thread_rims`, `verify::thread_bore`): the tooth crests may reach the
+//! major circle of the model's own wall and no further (the tangency law,
+//! against `thread_rims::major_rims`), and the solid law excuses only the
+//! thread's own wall and mouth, inside that major cylinder ([`bores`]).
+//! Both apply only over a round wall ([`walls_round`], #1205).
 
 use camcraft_tools::thread_mill as form;
 
-use crate::drilling::Hole;
-use crate::geo2d::Region;
 use crate::machining2d::{self, GenError, ThreadHole, ThreadParams};
 use crate::tools::Tool;
 use crate::geometry::Triangle;
-use crate::verify::{self, Cutter, Warning};
+use crate::verify::{self, Warning};
 
 use super::heights::ResolvedHeights;
-use super::material_source::{disk_loop, rim_is};
 use super::types::OpParams;
 
 /// The thread's radial depth for `pitch`, mm: internal threads only in
@@ -131,21 +129,6 @@ pub(super) fn kernel_params(tool: &Tool, params: &OpParams, hl: &ResolvedHeights
     })
 }
 
-/// The crest law's region: `region` with each threaded hole's rim moved
-/// out from the minor circle to the major one (`depth` further), so the
-/// tangency verdict convicts a tooth crest that passes the thread's own
-/// major diameter and nothing short of it.
-pub(super) fn crest_region(region: Region, holes: &[Hole], depth: f64) -> Result<Region, GenError> {
-    if holes.is_empty() {
-        return Ok(region);
-    }
-    let mut loops: Vec<_> = region.loops().iter().filter(|l| !holes.iter().any(|x| rim_is(l, *x))).cloned().collect();
-    for x in holes {
-        loops.push(disk_loop(x.xy, x.radius + depth)?);
-    }
-    Ok(Region::new(loops)?)
-}
-
 /// Whether every threaded hole of `plan` is a round wall in the part
 /// (#894 x #1205): its wall facets the crests can reach (to the major
 /// circle, plus [`verify::WALL_SAG`]) over the thread's span read as a
@@ -162,24 +145,25 @@ pub(super) fn walls_round(facets: &[Triangle], plan: &ThreadParams) -> bool {
     })
 }
 
-/// The root law's cutter: `cutter` narrowed by the thread depth for a
-/// Thread operation, so the solid law holds the body under the teeth
-/// out of the part - radially at the minor wall, and at the tip with no
-/// allowance at all. Every other operation, and a tool whose pitch does
-/// not resolve (refused before any path exists), keeps its cutter, and
-/// so does a thread whose holes are not all round walls (`round` false,
-/// [`walls_round`]): its teeth are judged at full radius.
+/// The solid law's thread grant for this operation (#1071 x #894): the
+/// bores `thread_rims::thread_bores` reads, at the pitch the THREAD is
+/// cut at - a single-form mill's own `pitch` is only its coarsest, and
+/// granting that depth would excuse a cut past the real major circle.
+/// Empty - no grant, the teeth judged at full radius against every
+/// facet - for another kind, for a pitch that does not resolve (refused
+/// before any path exists), and for a thread whose holes are not all
+/// round walls (`round` false, [`walls_round`]).
 #[must_use]
-pub(super) fn root_cutter(cutter: Cutter, tool: &Tool, params: &OpParams, round: bool) -> Cutter {
+pub(super) fn bores(tool: &Tool, params: &OpParams, round: bool) -> Vec<verify::ThreadBore> {
     let OpParams::Thread { pitch, .. } = params else {
-        return cutter;
+        return Vec::new();
     };
     if !round {
-        return cutter;
+        return Vec::new();
     }
     match form::resolve_pitch(tool, *pitch) {
-        Ok(p) if cutter.radius > depth_of(p) => Cutter { radius: cutter.radius - depth_of(p), ..cutter },
-        _ => cutter,
+        Ok(p) => super::thread_rims::thread_bores(params, p),
+        Err(_) => Vec::new(),
     }
 }
 
@@ -189,7 +173,7 @@ pub(super) fn root_cutter(cutter: Cutter, tool: &Tool, params: &OpParams, round:
 /// moves "crossing in XY at shared depth" is the operation itself, not
 /// a path defect. What a harmful move would be - a crest past the major
 /// circle, the body in the part, a rapid in stock - the crest law, the
-/// root law and the rapid law still judge. Every other kind keeps it.
+/// solid law and the rapid law still judge. Every other kind keeps it.
 pub(super) fn stand_down_crossings(params: &OpParams, warns: &mut Vec<Warning>) {
     if matches!(params, OpParams::Thread { .. }) {
         warns.retain(|w| !matches!(w, Warning::Crossing { .. }));
@@ -200,6 +184,7 @@ pub(super) fn stand_down_crossings(params: &OpParams, warns: &mut Vec<Warning>) 
 mod tests {
     use super::*;
     use crate::cl::ThreadHand;
+    use crate::drilling::Hole;
     use crate::geo2d::Point2;
     use crate::operation::Height;
 
@@ -229,39 +214,23 @@ mod tests {
     }
 
     #[test]
-    fn the_crest_region_moves_each_rim_out_to_the_major_circle() {
-        let square = crate::geo2d::Loop::new(vec![
-            Point2::new(-20.0, -20.0),
-            Point2::new(20.0, -20.0),
-            Point2::new(20.0, 20.0),
-            Point2::new(-20.0, 20.0),
-        ])
-        .expect("a square");
-        let minor = disk_loop(Point2::new(5.0, 5.0), 4.0).expect("rim");
-        let region = Region::new(vec![square, minor]).expect("plate with a hole");
-        let crest = crest_region(region, &[hole(4.0)], 0.8).expect("crest region");
-        let radii: Vec<f64> = crest
-            .loops()
-            .iter()
-            .filter(|l| l.points().len() > 8)
-            .map(|l| l.points().iter().map(|p| (p.x - 5.0).hypot(p.y - 5.0)).fold(0.0, f64::max))
-            .collect();
-        assert_eq!(radii.len(), 1, "the minor rim is replaced, not kept beside the major one");
-        assert!((radii[0] - 4.8).abs() < 2e-6, "{radii:?}");
-    }
-
-    #[test]
-    fn the_root_cutter_narrows_a_thread_mill_by_the_thread_depth_and_nothing_else() {
+    fn the_thread_grant_reads_the_threads_own_pitch_and_only_over_a_round_wall() {
+        // A multi-form mill: its own pitch, the major circle 0.5413 x 1.5 out.
         let tool = form::thread_mill(6.0, 1.5, 0.0, 12.0);
-        let cutter = Cutter::of(&tool);
-        let root = root_cutter(cutter, &tool, &thread(None), true);
-        assert!((root.radius - (3.0 - 0.5413 * 1.5)).abs() < 1e-12);
-        assert_eq!(root.flute_len, cutter.flute_len);
-        // An unresolvable pitch (refused before a path exists) keeps the full cutter.
-        assert_eq!(root_cutter(cutter, &tool, &thread(Some(1.0)), true).radius, 3.0);
-        assert_eq!(root_cutter(cutter, &tool, &other_kind(), true).radius, 3.0);
-        // A hole that is no round wall (#1205): the teeth at full radius.
-        assert_eq!(root_cutter(cutter, &tool, &thread(None), false).radius, 3.0);
+        let b = bores(&tool, &thread(None), true);
+        assert_eq!(b.len(), 1);
+        assert!((b[0].major - b[0].minor - 0.5413 * 1.5).abs() < 1e-12, "{b:?}");
+        // A single-form mill cutting a 1 mm pitch inside its 0.5 to 1.5
+        // range: the grant is the 1 mm thread's depth, not the coarsest's.
+        let single = Tool { kind: crate::tools::ToolKind::ThreadMillSingle, pitch_min: 0.5, flute_len: 2.0, ..tool.clone() };
+        let b = bores(&single, &thread(Some(1.0)), true);
+        assert_eq!(b.len(), 1);
+        assert!((b[0].major - b[0].minor - 0.5413).abs() < 1e-12, "{b:?}");
+        // An unresolvable pitch, another kind, and a hole that is no round
+        // wall (#1205) get no grant: the teeth at full radius.
+        assert!(bores(&tool, &thread(Some(1.0)), true).is_empty());
+        assert!(bores(&tool, &other_kind(), true).is_empty());
+        assert!(bores(&tool, &thread(None), false).is_empty());
     }
 
     #[test]

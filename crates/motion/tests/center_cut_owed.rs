@@ -235,6 +235,8 @@ fn tool(kind: ToolKind, center_cutting: bool) -> Tool {
         flutes: None,
         orientation: None,
         pitch_min: 0.0,
+        catalog: camcraft_tools::catalog_fields::ToolCatalog::default(),
+        cutting: Vec::new(),
         turning: None,
     }
 }

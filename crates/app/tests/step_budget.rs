@@ -150,6 +150,14 @@ fn mcp_import_model_takes_the_budget_and_get_job_reports_it() {
     let part = job["models"].as_array().and_then(|m| m.iter().find(|m| m["name"] == json!("part"))).expect("listed");
     assert_eq!(part["facet_budget"], json!(RAISED));
 
+    // #1185: a re-import with no budget keeps the one recorded with the model.
+    let again = c.ok("import_model", json!({ "path": path, "name": "part" }));
+    assert_eq!(again["facet_budget"], json!(RAISED), "{again}");
+    let low2 = c.ok("import_model", json!({ "path": path, "name": "lowpart", "facet_budget": LOW }));
+    let kept = c.ok("import_model", json!({ "path": path, "name": "lowpart" }));
+    assert_eq!(kept["facet_budget"], low2["facet_budget"], "{kept}");
+    assert!(kept.get("reduced_fidelity").is_some(), "same flag as the first import: {kept}");
+
     for bad in [json!(5), json!(step_budget::CEILING + 1), json!(-1), json!(2000.5), json!("2000")] {
         let r = c.call("import_model", json!({ "path": path, "name": "x", "facet_budget": bad }));
         assert_eq!(r["isError"], json!(true), "{bad}: {r}");

@@ -6,7 +6,9 @@
 pub mod def;
 mod direction;
 pub mod edm;
+pub mod edm_codes;
 mod edm_conditions;
+mod edm_named;
 mod kind;
 mod no_spindle;
 mod parse;

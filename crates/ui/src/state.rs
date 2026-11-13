@@ -14,6 +14,7 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, TryRecvError};
 use camcraft_app::clock::Instant;
 use std::time::Duration;
+use crate::shortcut_keys::chord;
 
 use camcraft_app::commands::{
     ActivateSetup, AlignPartToSetup, SetSetupRelative, SetSetupStockSource, SetSetupWorkOffset, AddTool, HolderPick, ApplyCuttingData, ChangeOperationKind, ChangeTool, CommandError, CreateOperation,
@@ -75,6 +76,9 @@ pub use program_entry::EntryVerb;
 #[path = "state_tool_body.rs"]
 mod tool_body_ui;
 pub use tool_body_ui::{BodyDraft, BodyPickMode, ToolBodyUi, ZOOM_MAX, ZOOM_MIN, clamp_zoom};
+#[path = "state_tool_body_lathe.rs"]
+mod tool_body_lathe_ui;
+pub use tool_body_lathe_ui::{LatheBodyDraft, LatheDraft};
 #[path = "state_tool_profile.rs"]
 mod tool_profile_ui;
 #[path = "state_tool_cutter.rs"]
@@ -206,6 +210,12 @@ pub enum CommandKind {
         setup: String,
         own: bool,
     },
+    /// #821: a setup states its own nose-to-rotary figure, mm, or clears
+    /// it (`SetSetupNoseToAxis`).
+    SetupNoseToAxis {
+        setup: String,
+        value: Option<f64>,
+    },
     /// #1031: state (`Some`) or clear a setup's workholding maximum rpm
     /// (`SetSetupWorkholdingRpm`).
     SetSetupWorkholdingRpm { setup: String, max_rpm: Option<f64> },
@@ -255,6 +265,13 @@ pub enum CommandKind {
     SetToolBody {
         name: String,
         body: Option<BodyDraft>,
+    },
+    /// #361: set a lathe-held tool's body in the turning tool frame -
+    /// the tool editor's Apply body on a lathe draft, one
+    /// `SetToolBody::lathe`. (Clear body stays `SetToolBody` with `None`.)
+    SetLatheToolBody {
+        name: String,
+        body: LatheBodyDraft,
     },
     /// #93: set a milling tool's drawn spun holder (`Some` points) or
     /// return it to its parametric cylinder (`None`) - the tool editor's
@@ -419,10 +436,12 @@ pub enum CommandKind {
         picks: Vec<camcraft_app::operation::GeoSel>,
         lay: camcraft_app::pick::PlaneLay,
     },
-    /// Turn the part in a setup's work plane (#557): a straight edge or
-    /// two points for +Y and/or +X, read by the app. Undoable
-    /// (`AlignPartToSetup`). Never touches the work offset.
-    TurnPartInPlane {
+    /// Align the part from its picked axes (#769, was #557's in-plane
+    /// turn): with both +Y and +X picked, their directions define the
+    /// full 3D frame (+Z by the right-hand rule); one picked axis
+    /// keeps the in-plane turn. Undoable (`AlignPartToSetup`). Never
+    /// touches the work offset.
+    AlignPartFromAxes {
         setup: String,
         axes: camcraft_app::pick::InPlaneAxes,
     },
@@ -986,6 +1005,18 @@ pub struct ToolUi {
     /// #630: the lathe tool orientation (LinuxCNC 1-9), None = the
     /// kind's default - carried so an Apply never rewrites it.
     pub orientation: Option<u8>,
+    /// #898 catalog facts as typed: blank = not stated. The helix is
+    /// text so a half-typed number is refused by name at Apply, not
+    /// silently dropped.
+    pub part_number: String,
+    pub vendor: String,
+    pub coating: String,
+    pub helix_deg: String,
+    pub notes: String,
+    /// #890 cutting data per workpiece material, as edited; Apply / Add
+    /// carry it through `ChangeTool` / `AddTool`, which refuse a bad row
+    /// by the tool's name.
+    pub cutting: Vec<camcraft_app::tool_cutting_rows::CuttingRow>,
     /// #891: the turning cutting data (Vc, f/rev, max rpm), None = not
     /// stated - carried so an Apply never drops it.
     pub turning: Option<camcraft_app::tools::TurningData>,
@@ -1021,8 +1052,9 @@ impl ToolUi {
                 ToolKind::Taper => 10,
                 ToolKind::Probe => 11,
                 ToolKind::Torch => 12,
-                ToolKind::ThreadMill => 13,
-                ToolKind::ThreadMillSingle => 14,
+                ToolKind::Electrode => 13,
+                ToolKind::ThreadMill => 14,
+                ToolKind::ThreadMillSingle => 15,
             },
             diameter: t.diameter,
             corner_r: t.corner_r,
@@ -1043,6 +1075,12 @@ impl ToolUi {
             flutes: t.flutes,
             center_cutting: t.center_cutting,
             orientation: t.orientation,
+            part_number: t.catalog.part_number.clone().unwrap_or_default(),
+            vendor: t.catalog.vendor.clone().unwrap_or_default(),
+            coating: t.catalog.coating.clone().unwrap_or_default(),
+            helix_deg: t.catalog.helix_deg.map(|h| h.to_string()).unwrap_or_default(),
+            notes: t.catalog.notes.clone().unwrap_or_default(),
+            cutting: t.cutting.clone(),
             turning: t.turning,
         }
     }
@@ -1064,10 +1102,28 @@ impl ToolUi {
             10 => ToolKind::Taper,
             11 => ToolKind::Probe,
             12 => ToolKind::Torch,
-            13 => ToolKind::ThreadMill,
-            14 => ToolKind::ThreadMillSingle,
+            13 => ToolKind::Electrode,
+            14 => ToolKind::ThreadMill,
+            15 => ToolKind::ThreadMillSingle,
             _ => ToolKind::EndMill,
         }
+    }
+
+    /// The catalog facts the draft states: trimmed, blank = not stated.
+    /// A helix that is not a number reads as NaN, which the tool
+    /// commands refuse by name.
+    #[must_use]
+    pub fn catalog(&self) -> camcraft_app::catalog_fields::ToolCatalog {
+        let some = |s: &str| Some(s.to_owned());
+        let helix = self.helix_deg.trim();
+        camcraft_app::catalog_fields::ToolCatalog {
+            part_number: some(&self.part_number),
+            vendor: some(&self.vendor),
+            coating: some(&self.coating),
+            helix_deg: (!helix.is_empty()).then(|| helix.parse::<f64>().unwrap_or(f64::NAN)),
+            notes: some(&self.notes),
+        }
+        .normalized()
     }
 
     /// The tool this draft states. A ball's corner is saved as its ball
@@ -1097,6 +1153,8 @@ impl ToolUi {
             flutes: self.flutes,
             center_cutting: self.center_cutting,
             orientation: self.orientation,
+            catalog: self.catalog(),
+            cutting: self.cutting.clone(),
             turning: self.turning,
         };
         tool.corner_r = tool.tip_corner_r();
@@ -1361,6 +1419,9 @@ pub struct State {
     pub viewport_rect: ([f32; 2], [f32; 2]),
     /// Live viewport drag (orbit/pan), driven by the shell's pointer layer.
     pub drag: Option<DragMode>,
+    /// #979: the live box-select rubber band (press point, current point),
+    /// logical px. View state like `drag` - its release queues one command.
+    pub pick_box: Option<[[f32; 2]; 2]>,
     /// Facet currently under the cursor (`interact` refreshes it from the
     /// shell's pointer events with a filtered raycast; it clears when the
     /// pointer leaves the viewport). View state like the camera and the
@@ -1825,6 +1886,7 @@ impl State {
             selection_version: 0,
             viewport_rect: ([0.0, 0.0], [0.0, 0.0]),
             drag: None,
+            pick_box: None,
             hover: None,
             hover_mesh: None,
             viewport_hot: false,
@@ -2902,6 +2964,7 @@ impl State {
             CommandKind::SetupOwnMachine { setup, own } => self.own_machine(&setup, own),
             CommandKind::SetupOwnPost { setup, own } => self.own_post(&setup, own),
             CommandKind::SetupOwnPostOptions { setup, own } => self.own_post_options(&setup, own),
+            CommandKind::SetupNoseToAxis { setup, value } => self.set_setup_nose(&setup, value),
             CommandKind::SetSetupWorkholdingRpm { setup, max_rpm } => self.set_workholding_rpm(&setup, max_rpm),
             CommandKind::EditMachineDialog => {
                 let (path, m) = machine::of(&self.world);
@@ -3065,6 +3128,7 @@ impl State {
                 }
             }
             CommandKind::SetToolBody { name, body } => self.run_set_tool_body(&name, body),
+            CommandKind::SetLatheToolBody { name, body } => self.run_set_lathe_tool_body(&name, body),
             CommandKind::SetToolProfile { name, points } => self.run_set_tool_profile(&name, points),
             CommandKind::SetToolCutter { name, points } => self.run_set_tool_cutter(&name, points),
             CommandKind::ReshapeTool { name, tool, points } => self.run_reshape_tool(&name, tool, points),
@@ -3083,9 +3147,15 @@ impl State {
             }
             CommandKind::SetWorkMaterial(m) => match SetWorkMaterial::new(&self.world, m) {
                 Ok(command) => {
+                    let (tools, ops) = command.seeded();
                     self.history.execute(&self.world, command);
                     self.doc_version += 1;
-                    self.status = format!("workpiece material: {}", m.map_or("not stated", |m| m.label()));
+                    let mut status = format!("workpiece material: {}", m.map_or("not stated", |m| m.label()));
+                    // #890: say what the tools' material rows moved.
+                    if tools + ops > 0 {
+                        status.push_str(&format!(" - cutting data seeded on {tools} tool(s), {ops} operation(s)"));
+                    }
+                    self.status = status;
                 }
                 Err(err) => self.refuse(ErrorScope::Operation, format!("material not set: {err}")),
             },
@@ -3313,7 +3383,7 @@ impl State {
                 Ok(command) => {
                     self.history.execute(&self.world, command);
                     self.doc_version += 1;
-                    self.status = format!("cleared the toolpath of {name} - Ctrl+Z restores it");
+                    self.status = format!("cleared the toolpath of {name} - {} restores it", chord("Z"));
                 }
                 Err(err) => {
                     self.refuse(ErrorScope::Operation, format!("toolpath not cleared: {err}"))
@@ -3484,8 +3554,8 @@ impl State {
                     }
                 }
             }
-            CommandKind::TurnPartInPlane { setup, axes } => {
-                match AlignPartToSetup::turn_in_plane(&self.world, &setup, &axes) {
+            CommandKind::AlignPartFromAxes { setup, axes } => {
+                match AlignPartToSetup::align_from_axes(&self.world, &setup, &axes) {
                     Ok(command) => {
                         self.history.execute(&self.world, command);
                         self.doc_version += 1;
@@ -3496,12 +3566,12 @@ impl State {
                             d.applied = true;
                         }
                         self.status = format!(
-                            "{setup} part turned in the plane: {}",
+                            "{setup} part aligned from its picks: {}",
                             crate::egui_app::align_text(camcraft_app::setup_align::stored(&self.world, &setup))
                         );
                     }
                     Err(err) => {
-                        self.refuse(ErrorScope::Setup, format!("part not turned in the plane: {err}"));
+                        self.refuse(ErrorScope::Setup, format!("part not aligned from its picks: {err}"));
                     }
                 }
             }
@@ -3802,6 +3872,9 @@ impl State {
         let (tx, rx) = mpsc::channel();
         let worker_path = path.clone();
         let budget = self.step_budget_for(&path);
+        if let (Some(b), false) = (budget, self.step_budget.explicit) {
+            self.status = format!("importing {} under its recorded STEP facet budget of {b}…", file_label(&path));
+        }
         let spawned = std::thread::Builder::new()
             .name("camcraft-import".to_string())
             .spawn(move || {
