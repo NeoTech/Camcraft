@@ -35,7 +35,7 @@
 # camcraft-ui_bg.wasm - serve that folder over http to run the shell.
 #
 # Usage: web/build-app-wasm.sh [--release]
-# Needs: clang with the wasm32 target, curl, tar, sha256sum, rustup target
+# Needs: clang with the wasm32 target, curl, tar, sha256sum (or shasum), rustup target
 # wasm32-unknown-unknown.
 set -euo pipefail
 
@@ -52,6 +52,29 @@ FLECS_SYS_VER="0.2.1"
 # Windows (Git Bash) clang and cargo want C:/ paths; elsewhere a no-op.
 native_path() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s' "$1"; fi; }
 die() { echo "build-app-wasm: $*" >&2; exit 1; }
+# Portable across GNU (Linux, Git Bash) and BSD (macOS) tools: BSD sed reads
+# the next argument as the `-i` suffix, so `sed -i` is never used. The edit
+# goes through a temp file and a move instead.
+# Returns 1 (after naming the file) when sed or the move fails; each caller
+# stops the script on that with `|| die`. A plain `&&` list would not do:
+# bash ignores set -e inside it, so a failing sed would pass silently.
+sed_in_place() {
+    if ! sed "$1" "$2" > "$2.tmp"; then
+        echo "build-app-wasm: sed failed on $2" >&2
+        rm -f "$2.tmp"
+        return 1
+    fi
+    if ! mv "$2.tmp" "$2"; then
+        echo "build-app-wasm: could not replace $2" >&2
+        rm -f "$2.tmp"
+        return 1
+    fi
+}
+# sha256sum is GNU; stock macOS ships shasum instead.
+sha256_of() {
+    if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1
+    else shasum -a 256 "$1" | cut -d' ' -f1; fi
+}
 
 TOOLS="$ROOT/target/wasm-tools"
 mkdir -p "$TOOLS"
@@ -77,7 +100,7 @@ if [[ ! -d "$SYSROOT/include/wasm32-wasip1" ]]; then
     curl -fsSL -o "$tarball" \
         "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-${WASI_SDK}/${WASI_SYSROOT}.tar.gz" \
         || die "cannot download $WASI_SYSROOT"
-    got="$(sha256sum "$tarball" | cut -d' ' -f1)"
+    got="$(sha256_of "$tarball")"
     [[ "$got" == "$WASI_SHA256" ]] || die "$WASI_SYSROOT sha256 $got, expected $WASI_SHA256"
     tar xzf "$tarball" -C "$TOOLS" || die "cannot unpack $tarball"
 fi
@@ -101,21 +124,21 @@ cp -r "$FLECS_SRC" "$PATCHED/flecs_ecs"
 cp -r "$FLECS_SYS_SRC" "$PATCHED/flecs_ecs_sys"
 
 B="$PATCHED/flecs_ecs_sys/src/bindings.rs"
-sed -i 's/^use libc::FILE;$/pub type FILE = core::ffi::c_void;/' "$B"
-sed -i 's/"C-unwind"/"C"/g' "$B"
+sed_in_place 's/^use libc::FILE;$/pub type FILE = core::ffi::c_void;/' "$B" || die "cannot patch $B (libc::FILE)"
+sed_in_place 's/"C-unwind"/"C"/g' "$B" || die "cannot patch $B (C-unwind)"
 grep -q '^pub type FILE = core::ffi::c_void;$' "$B" || die "patch point moved: libc::FILE in bindings.rs"
 ! grep -q '"C-unwind"' "$B" || die "patch point moved: C-unwind in bindings.rs"
 M="$PATCHED/flecs_ecs/src/addons/meta/meta_fn_types.rs"
 [[ "$(head -2 "$M")" == $'#[cfg(not(target_family = "wasm"))]\nuse crate::core::{Entity, WorldRef};' ]] \
     || die "patch point moved: the WorldRef import in meta_fn_types.rs"
-sed -i '1d' "$M"
+sed_in_place '1d' "$M" || die "cannot patch $M (WorldRef import)"
 
 # --- 3. the build ---------------------------------------------------------
 NSYS="$(native_path "$SYSROOT")"
 export CFLAGS_wasm32_unknown_unknown="-isystem $NSYS/include/wasm32-wasip1 -D__wasi__ -D__COSMOCC__"
 export CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUSTFLAGS="-C link-arg=-L$NSYS/lib/wasm32-wasip1 -C link-arg=-lc"
 cd "$ROOT"
-cargo build -p camcraft-app --target wasm32-unknown-unknown "${PROFILE_ARGS[@]}" \
+cargo build -p camcraft-app --target wasm32-unknown-unknown ${PROFILE_ARGS[@]+"${PROFILE_ARGS[@]}"} \
     --config "patch.crates-io.flecs_ecs.path='$(native_path "$PATCHED/flecs_ecs")'" \
     --config "patch.crates-io.flecs_ecs_sys.path='$(native_path "$PATCHED/flecs_ecs_sys")'"
 
@@ -131,7 +154,7 @@ echo "build-app-wasm: linked $OUT"
 # (shell_window, egui-winit, rfd) is cfg'd out. The camcraft-ui *binary* is
 # not linked for wasm32 any more: it has no command line to serve there and
 # its `main` only refuses by name.
-cargo rustc -p camcraft-ui --lib --crate-type cdylib --target wasm32-unknown-unknown "${PROFILE_ARGS[@]}"     --config "patch.crates-io.flecs_ecs.path='$(native_path "$PATCHED/flecs_ecs")'"     --config "patch.crates-io.flecs_ecs_sys.path='$(native_path "$PATCHED/flecs_ecs_sys")'"
+cargo rustc -p camcraft-ui --lib --crate-type cdylib --target wasm32-unknown-unknown ${PROFILE_ARGS[@]+"${PROFILE_ARGS[@]}"}     --config "patch.crates-io.flecs_ecs.path='$(native_path "$PATCHED/flecs_ecs")'"     --config "patch.crates-io.flecs_ecs_sys.path='$(native_path "$PATCHED/flecs_ecs_sys")'"
 UI_OUT="$(dirname "$OUT")/camcraft_ui.wasm"
 [[ -f "$UI_OUT" ]] || die "build reported success but $UI_OUT is missing"
 echo "build-app-wasm: linked $UI_OUT"

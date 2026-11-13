@@ -211,6 +211,7 @@ pub enum CycleKindDto {
     Bore,
     BackBore,
     FloatingTap,
+    Ream,
 }
 
 impl CycleDto {
@@ -225,6 +226,7 @@ impl CycleDto {
                 CycleKind::FloatingTap => CycleKindDto::FloatingTap,
                 CycleKind::Bore => CycleKindDto::Bore,
                 CycleKind::BackBore => CycleKindDto::BackBore,
+                CycleKind::Ream => CycleKindDto::Ream,
             },
             xy: [lattice(c.xy.x), lattice(c.xy.y)],
             r_z: lattice(c.r_z),
@@ -247,6 +249,7 @@ impl CycleDto {
                 CycleKindDto::FloatingTap => CycleKind::FloatingTap,
                 CycleKindDto::Bore => CycleKind::Bore,
                 CycleKindDto::BackBore => CycleKind::BackBore,
+                CycleKindDto::Ream => CycleKind::Ream,
             },
             xy: Point2::new(self.xy[0], self.xy[1]),
             r_z: self.r_z,

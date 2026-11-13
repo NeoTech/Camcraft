@@ -359,7 +359,7 @@ fn run_dnm(m: &Machine, abc: [f64; 3]) -> engine::PostOutput {
 }
 
 fn dnm() -> Machine {
-    let text = MACHINES.iter().find(|(n, _)| *n == "Doosan DNM 5700").map(|(_, t)| *t).expect("shipped");
+    let text = MACHINES.iter().find(|(n, _)| *n == "Doosan DNM 5700 + rotary table").map(|(_, t)| *t).expect("shipped");
     ok(parse_mch(text), "parses")
 }
 

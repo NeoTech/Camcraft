@@ -1057,6 +1057,7 @@ impl OpParams {
                     CycleChoice::FloatingTap => 7,
                     CycleChoice::Bore => 5,
                     CycleChoice::BackBore => 6,
+                    CycleChoice::Ream => 8,
                 });
                 // The hole list is params data, so it digests: recognition
                 // output, a typed edit, or a moved model (whose re-
@@ -1713,6 +1714,12 @@ impl OpParams {
                 // G41/G42 - its own byte, again only when on.
                 if a.compensation == crate::links::Compensation::Wear {
                     h.write_u8(0xC6);
+                }
+                // #1448: the user's start point - bytes only when set.
+                if let Some(q) = a.start_point {
+                    h.write_u8(0xC7);
+                    w(h, q.x);
+                    w(h, q.y);
                 }
                 match a.lead_out {
                     None => h.write_u8(0xFF),

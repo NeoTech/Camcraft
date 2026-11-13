@@ -192,13 +192,22 @@ pub fn align_from_axes(world: &World, setup: &str, axes: &InPlaneAxes) -> Result
     let q = quat_from_axes(colx, coly, colz).ok_or("the picks do not make a finite frame - re-pick them")?;
     // The rotation that takes the picked frame onto the world axes.
     let rot = quat_conjugate(q);
-    // Turn about the centre of the parts' bounds, as the setup holds
-    // them, so the part stays on its spot of the table.
-    let c = setup_align::part_centre(world).ok_or("there is no part to align - import a model first")?;
-    let c = transform_point(c, held.pos, held.rot);
-    let rc = quat_rotate_point(rot, c);
-    let turn = Location { pos: Point3::new(c.x - rc.x, c.y - rc.y, c.z - rc.z), rot };
-    let out = setup_align::compose(turn, held);
+    // #1347: picks the held alignment already lands make no turn - the
+    // held alignment comes back as it is (the command then refuses
+    // "already holds the part that way"), never re-composed with float
+    // noise into a no-op change. Only a turn below the landing tolerance
+    // counts as none; the landing proof below still checks it.
+    let out = if is_no_turn(rot) {
+        held
+    } else {
+        // Turn about the centre of the parts' bounds, as the setup holds
+        // them, so the part stays on its spot of the table.
+        let c = setup_align::part_centre(world).ok_or("there is no part to align - import a model first")?;
+        let c = transform_point(c, held.pos, held.rot);
+        let rc = quat_rotate_point(rot, c);
+        let turn = Location { pos: Point3::new(c.x - rc.x, c.y - rc.y, c.z - rc.z), rot };
+        setup_align::compose(turn, held)
+    };
     // Prove the landing before the command stores anything: through
     // the new alignment the primary runs along its axis exactly, the
     // secondary within the skew it came with - never a silently wrong
@@ -220,6 +229,14 @@ pub fn align_from_axes(world: &World, setup: &str, axes: &InPlaneAxes) -> Result
         return Err("the picks do not make a finite alignment - re-pick them".into());
     }
     Ok(out)
+}
+
+/// Is the unit quaternion `rot` ([x, y, z, w]) a turn of less than a
+/// quarter of [`LAND_TOL`] (radians), either sign? Its vector part is
+/// sin(angle / 2); a NaN reads as a turn.
+fn is_no_turn(rot: [f64; 4]) -> bool {
+    let half_sin = norm([rot[0], rot[1], rot[2]]);
+    half_sin <= LAND_TOL / 8.0
 }
 
 /// One axis pick's direction (unit, the flip honored), read through

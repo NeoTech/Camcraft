@@ -34,7 +34,14 @@ appends `explain(words)` after its words - the PRELUDE helper that
 returns `""` unless the document's Explain G-code option is on, and
 applies the comment guards itself (printable ASCII, no delimiters, the
 active-keyword lead, the length cap) - and Explain on a script that
-states no form is refused by name before any hook runs; never read
+states no form is refused by name before any hook runs; a control that
+reads a word differently from the mill table states it (#1399):
+`explainWords = { G99: "FEED PER REVOLUTION", G50: { said: "SPINDLE
+SPEED LIMIT", takes: "S" } }` (a text, `""` to leave the word
+unexplained, or a word explained only beside the value word it folds
+in) and `explainTool = "station-offset"` (a lathe T0101 is tool 1,
+offset 1) - a malformed table is refused by name when Explain is on;
+never read
 `machine.units` for the program's unit, it is only the unit the
 machine file was written in; `threadHands = true` (#629) says the script
 reads `PARAM SpindleDirection` and states a thread's hand (M04 when the

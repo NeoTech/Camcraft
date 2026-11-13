@@ -81,6 +81,7 @@ fn region_law(t: &Toolpath, region: &Region, tool: &ToolGeom, mode: Mode, top: f
     verify(
         t,
         &VerifyContext {
+            lathe_axis: None,
             region,
             stock: None,
             model: None,

@@ -16,7 +16,7 @@ pub(super) use camcraft_app::operation::{self, Height, OpParams, Tilt};
 pub(super) use camcraft_app::units::{self, Unit};
 
 pub(super) use crate::operations::{
-    cycle_index, cycle_names, side_names, strategy_names, strategy3d_names,
+    cycle_from_index, cycle_index, cycle_names, side_names, strategy_names, strategy3d_names,
 };
 pub(super) use crate::state::State;
 

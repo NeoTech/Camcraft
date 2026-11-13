@@ -295,3 +295,41 @@ fn the_note_says_so_when_nothing_was_filled() {
     let n = narrow.note(3.0);
     assert!(n.contains("no closed opening narrower than 3 mm found") && !n.contains("flown over"), "{n}");
 }
+
+/// The land model's churn (#1286 follow-up): its roof is not flat - it
+/// falls a little over every opening - so the closing's lid levels are
+/// not equal across one lid. Emitting each cell its own level tiled
+/// the lid as steps, and a ball crossing a step edge seats on neither
+/// plane: support goes None there and every step costs a retract and
+/// a plunge (166 feeds near the bolt holes on the report's model,
+/// against 22 with the fill off). The lid of a closed opening must be
+/// ONE plane: here a pocket under a shallow descending roof, whose
+/// lid cells close a hair apart, must come out coplanar.
+#[test]
+fn a_pocket_under_a_descending_roof_gets_one_flat_lid() {
+    let xs: Vec<f64> = (0..=20).map(|i| 2.0 * i as f64).collect();
+    let ys = [0.0, 9.0, 11.0, 20.0];
+    let plate = block(&xs, &ys, &|i, j| {
+        Some(if i == 5 && j == 1 {
+            4.0
+        } else {
+            8.0 - 0.01 * 2.0 * i as f64
+        })
+    });
+    let filled = fill_openings(&plate, 5.0, TOL).expect("fill");
+    assert_eq!(filled.openings, 1, "the pocket is closed under its roof, stepped or not");
+    let mut zs: Vec<f64> = filled.facets[plate.len()..]
+        .iter()
+        .flat_map(|f| [f.a.z, f.b.z, f.c.z])
+        .collect();
+    zs.sort_by(|a, b| a.total_cmp(b));
+    zs.dedup_by(|a, b| (*a - *b).abs() < 1e-9);
+    assert_eq!(zs.len(), 1, "one lid, one plane - the steps at {zs:?} are what churns the ball");
+    assert!(zs[0] > 7.7 && zs[0] < TOP, "the plane rides the lid's highest closing, not below its roof and not above it, at {}", zs[0]);
+    let land = parallel(&filled.facets, &fp(FinishPattern::Parallel)).expect("land path");
+    assert!(
+        !tips(&land).into_iter().any(|q| (q.x - 11.0).abs() < 1.0 && (q.y - 10.0).abs() < 1.0 && q.z < TOP - 1.0),
+        "the land never descends into the pocket"
+    );
+    assert!(deepest_bite(&land, &plate) <= TOL, "the land verifies on the real roof");
+}

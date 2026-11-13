@@ -49,7 +49,7 @@ fn doosan_dnm_posts_basic_milling_clean() {
     let p = out.program;
 
     // Header & preamble
-    assert!(p.starts_with("%\nO0001 (Doosan DNM 5700)\n"));
+    assert!(p.starts_with("%\nO0001 (Doosan DNM 5700 + rotary table)\n"));
     assert!(p.contains("G90 G17 G54 G40 G49 G80"));
 
     // Linear motion & feed
