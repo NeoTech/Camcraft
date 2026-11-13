@@ -278,6 +278,7 @@ fn a_tool_without_turning_data_posts_g97_and_threading_never_runs_css() {
         infeed: 0.1,
         feed: 100.0,
         plunge_feed: 50.0,
+        infeed_plan: Default::default(),
         hand: Default::default(),
     };
     assert!(!cutting_turn::css_op(&thread), "a synchronized pass needs a constant rpm");
