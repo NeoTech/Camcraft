@@ -22,6 +22,6 @@ case, and the Entity case moved to
 **Considered and dropped:** doing Circular in the same arm. Circular with
 a whole-model source is the same question, but its existing tests and uses
 (bosses, circular pockets on a whole model) need their own read; filed as a
-separate issue so this P1 stays minimal.
+separate issue (#1543) so this P1 stays minimal.
 
 **Cost to change later:** one match arm.
