@@ -77,7 +77,13 @@ use super::*;
 /// `tool_body_wire`). Absent is the holder cylinder every v57 file
 /// judged; an old reader must refuse a v58 file rather than drop the
 /// body and judge the smaller cylinder in its place.
-pub const PROJECT_VERSION: u32 = 58;
+/// v59 (#1056): a mesh whose fidelity the file does not know carries
+/// `fidelity_unknown`. A v58 file recorded none before #911 and cannot be
+/// told apart from a later one, so every mesh of an older file without a
+/// recorded chord loads marked (`fidelity_migrate`) and its operations are
+/// refused at the post until the model is re-imported. An old reader must
+/// refuse a v59 file rather than drop the mark and post them unchecked.
+pub const PROJECT_VERSION: u32 = 59;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ProjectError {
