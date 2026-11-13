@@ -9,13 +9,14 @@
 //!
 //! Gate map (#1529): covers app::operation (heights), app::setup_align
 //! (part_aabb_in), app::commands (InsertVise, InsertAccessory,
-//! InsertPlate, TagFixture, CreateSetup), app::posting (verification).
+//! InsertPlate, TagFixture, CreateSetup, AlignPartToSetup), app::posting
+//! (verification).
 
 use flecs_ecs::prelude::World;
 
 use camcraft_app::accessory::Accessory;
 use camcraft_app::commands::{
-    AccessoryPlacement, AddTool, CreateOperation, CreateSetup, GenerateOperation, History, ImportModel,
+    AccessoryPlacement, AddTool, AlignPartToSetup, CreateOperation, CreateSetup, GenerateOperation, History, ImportModel,
     InsertAccessory, InsertPlate, InsertVise, PlatePlacement, SetStock, TagFixture, VisePlacement,
 };
 use camcraft_app::geometry::{IDENTITY_Q, Point3, cube};
@@ -173,10 +174,62 @@ fn a_soft_jaw_a_plate_and_a_tagged_mesh_fixture_are_not_the_model() {
 fn the_collision_check_still_sees_the_vise() {
     // The contour taken 3 mm under the part runs to Z 1, past the jaw
     // tops at Z 2: the moving jaw stands against the -y wall's pass.
+    // The no-vise control: the same pass with no fixture posts clean.
+    let (bare, mut hb) = document(Height::of(HeightReference::BottomOfModel, -3.0));
+    generated(&bare, &mut hb);
+    let clean = posting::verification_gate(&bare);
+    assert!(clean.is_empty(), "no vise, nothing to strike: {clean:?}");
     let (world, mut h) = document(Height::of(HeightReference::BottomOfModel, -3.0));
     vise_below(&world, &mut h, None);
     let (_, low) = generated(&world, &mut h);
     assert!((low - (PART_BOTTOM - 3.0)).abs() < 1e-6, "{low}");
     let problems = posting::verification_gate(&world);
     assert!(problems.iter().any(|p| p.starts_with("Op:") && p.contains("strikes a fixture")), "{problems:?}");
+}
+
+#[test]
+fn the_collision_check_passes_the_bare_contour_with_the_vise_under_the_part() {
+    // The no-vise control of the pin above: at Bottom of Model the
+    // contour stops at Z 4, clear of the jaw tops at Z 2, so generate and
+    // post agree - the verification gate holds nothing.
+    let (world, mut h) = default_document();
+    vise_below(&world, &mut h, None);
+    let (_, low) = generated(&world, &mut h);
+    assert!((low - PART_BOTTOM).abs() < 1e-6, "{low}");
+    let problems = posting::verification_gate(&world);
+    assert!(problems.is_empty(), "{problems:?}");
+}
+
+#[test]
+fn a_tilted_setup_reads_the_part_in_its_own_frame_with_a_vise_present() {
+    // Setup1 tilted 90 degrees about X stands the block on its side: the
+    // 50 mm side is now the Z span (-18..32), not the world's 4..10. The
+    // vise changes nothing in that frame.
+    let (world, mut h) = default_document();
+    h.execute(&world, CreateSetup::new(&world, None, None).expect("Setup1"));
+    h.execute(&world, AlignPartToSetup::angles(&world, "Setup1", [90.0, 0.0, 0.0]).expect("align"));
+    let tilted = model_refs(&world, Some("Setup1"));
+    let (Some(top), Some(bottom)) = tilted else { panic!("both references resolve: {tilted:?}") };
+    assert!((top - bottom - 50.0).abs() < 1e-6, "the 50 mm side stands up: {bottom}..{top}");
+    assert!((top - 32.0).abs() < 1e-6 && (bottom + 18.0).abs() < 1e-6, "Z -18..32: {bottom}..{top}");
+    vise_below(&world, &mut h, Some("Setup1"));
+    assert_eq!(model_refs(&world, Some("Setup1")), tilted, "the vise is not the tilted part");
+}
+
+#[test]
+fn with_only_fixtures_left_the_model_heights_refuse_no_model_loaded() {
+    // The block tagged a fixture plus a vise: no part is left, so both
+    // references stay unresolved - never a fallback to the fixtures' box.
+    let (world, mut h) = default_document();
+    vise_below(&world, &mut h, None);
+    h.execute(&world, TagFixture::new(&world, "block", None).expect("tag"));
+    assert_eq!(model_refs(&world, None), (None, None));
+    for r in [HeightReference::TopOfModel, HeightReference::BottomOfModel] {
+        assert_eq!(operation::missing_source(&world, None, None, r), Some("no model loaded"), "{r:?}");
+    }
+    let err = match GenerateOperation::new(&world, "Op") {
+        Ok(_) => panic!("generate must refuse with no part"),
+        Err(e) => format!("{e}"),
+    };
+    assert!(err.contains("unresolved: no model loaded"), "{err}");
 }
