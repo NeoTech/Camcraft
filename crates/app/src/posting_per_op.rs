@@ -117,6 +117,8 @@ fn post_per_op_with(
         return Err(format!("{} is not a folder", dir.display()));
     }
     let streams = op_streams(world)?;
+    // No EDM dialect ships yet (#533, #542): refused before any file.
+    crate::posting_family::edm_at_post(world, streams.iter().map(|(n, _)| n.as_str()))?;
     // Each op's setup and script, resolved once - and the lathe door
     // (#1190) before anything else is judged: a turning dialect opens
     // only what a lathe may run.
@@ -129,7 +131,7 @@ fn post_per_op_with(
             .and_then(|op| op.setup);
         let effective = crate::setup::effective(world, setup.as_deref()).unwrap_or_default();
         let (label, cps) = script(&effective).ok_or_else(|| format!("{name}: no post resolved for its setup"))?;
-        crate::lathe_voice::at_post(world, [name.as_str()], &cps)?;
+        crate::lathe_voice::at_post(world, [name.as_str()], &cps, label.as_deref())?;
         match by_setup.iter_mut().find(|(s, ..)| *s == effective) {
             Some((_, ops, ..)) => ops.push(name.as_str()),
             None => by_setup.push((effective, vec![name.as_str()], label, cps.clone())),
@@ -139,7 +141,7 @@ fn post_per_op_with(
     let mut unserved = Vec::new();
     for (setup, ops, label, cps) in &by_setup {
         let machine = crate::setup_mount::machine_of(world, Some(setup.as_str()).filter(|s| !s.is_empty()));
-        unserved.extend(super::serves::refusal(std::slice::from_ref(setup), ops, &machine, cps, label.as_deref())?);
+        unserved.extend(super::serves::refusal(world, std::slice::from_ref(setup), ops, &machine, cps, label.as_deref())?);
     }
     // #1174: the workholding clause reads each op's own script's dialect
     // (keyed by effective setup name, as `script` is); unreadable reads

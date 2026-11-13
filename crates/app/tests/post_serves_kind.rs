@@ -304,3 +304,51 @@ fn a_users_own_script_is_judged_by_the_kinds_it_states() {
     assert!(why.contains("plazma"), "{why}");
     let _ = written(&dir);
 }
+
+/// The #388 program with Setup2 re-mounted on a mill-turn and Facing2
+/// regenerated there, posting through `post` (`None`: the document's).
+fn mill_and_mill_turn(post: Option<&str>) -> (World, History) {
+    let (world, mut h) = mill_and_lathe("Fanuc Lathe");
+    let m = Machine { model: "Bench mill-turn".into(), kind: Some("mill-turn".into()), ..lathe() };
+    h.execute(&world, SetSetupMachine::new(&world, "Setup2", Some(("bench-mill-turn.mch".into(), Some(m)))).expect("mill-turn"));
+    generate(&world, &mut h, "Facing2");
+    // The remount may already have left Setup2 on that post.
+    if let Ok(c) = SetSetupPost::new(&world, "Setup2", post.map(|p| PostRef::Named(p.into()))) {
+        h.execute(&world, c);
+    }
+    (world, h)
+}
+
+#[test]
+fn a_turning_section_on_a_mill_turn_through_a_milling_post_is_refused_by_name() {
+    // Maintainer, 2026-11-12 ("Refuse it"): a facing op on a mill-turn
+    // through Haas (its own post) or Fanuc (the document's, the shipped
+    // Mill-turn's default) posted the issue's output - a turning insert
+    // on the tool spindle at S3000, the facing pass as Y moves.
+    for (post, name) in [(Some("Haas"), "Haas"), (None, "Fanuc")] {
+        let (world, mut h) = mill_and_mill_turn(post);
+        let refused = |why: &str| {
+            for word in ["Setup2", "Facing2", name, "is not a turning post", "Bench mill-turn"] {
+                assert!(why.contains(word), "{name}: {word:?} missing from: {why}");
+            }
+            assert!(!why.contains("Face1"), "{name}: the mill setup is served: {why}");
+        };
+        let dir = scratch(&format!("mt-mounts-{name}"));
+        refused(&posting::post_mounts(&world, &dir.join("job.nc")).expect_err("per mount"));
+        assert_eq!(written(&dir), Vec::<String>::new(), "{name}: nothing is written, Setup1's file included");
+        let dir = scratch(&format!("mt-per-op-{name}"));
+        refused(&posting::post_per_op(&world, &dir, "job").expect_err("per op"));
+        assert_eq!(written(&dir), Vec::<String>::new(), "{name}");
+        h.execute(&world, EditOperationParams::with_suppressed(&world, "Face1", true).expect("suppress"));
+        h.execute(&world, ActivateSetup::new(&world, Some("Setup2")).expect("activate"));
+        let dir = scratch(&format!("mt-single-{name}"));
+        refused(&posting::post_setup(&world, &dir.join("job.nc")).map(|_| ()).expect_err("single file"));
+        assert_eq!(written(&dir), Vec::<String>::new(), "{name}");
+    }
+    // Through a turning post the same mill-turn section posts.
+    let (world, _h) = mill_and_mill_turn(Some("Fanuc Lathe"));
+    let dir = scratch("mt-served");
+    let files = posting::post_mounts(&world, &dir.join("job.nc")).expect("a turning post serves it");
+    assert!(files[1].posted.program.contains("G18"), "{}", files[1].posted.program);
+    let _ = written(&dir);
+}

@@ -89,6 +89,16 @@ pub enum ToolKind {
     /// refused by name, [`Tool::torch_refusal`]). Only the plasma
     /// operations mount it.
     Torch,
+    /// Sinker EDM electrode (#541): a rectangular solid burned straight
+    /// down Z. `diameter` is its X size and `width` its Y size (both
+    /// across the burning face), `flute_len` its length below the
+    /// holder (the deepest burn it can make without burying its
+    /// pickup), and `shank_len` the pickup offset - the distance from
+    /// the electrode's top face up to the pickup reference the control
+    /// measures from. It turns no spindle: `rpm` is 0 by law and a
+    /// corner radius is refused ([`Tool::torch_refusal`]). Only the
+    /// sinker operations mount it. See [`crate::electrode`].
+    Electrode,
 }
 
 impl core::fmt::Display for ToolKind {
@@ -107,6 +117,7 @@ impl core::fmt::Display for ToolKind {
             ToolKind::Taper => "chamfer mill",
             ToolKind::Probe => "touch probe",
             ToolKind::Torch => "plasma torch",
+            ToolKind::Electrode => "sinker electrode",
         };
         f.write_str(s)
     }
@@ -201,6 +212,9 @@ pub struct Tool {
     /// names the touched-off corner of the tip edge (#641,
     /// [`crate::orientation::blade_corner`]); inert on every other kind.
     pub orientation: Option<u8>,
+    /// Part number, vendor, coating, helix and notes (#898): catalog
+    /// facts no generator or law reads.
+    pub catalog: crate::catalog_fields::ToolCatalog,
     /// Turning cutting data (#891, [`crate::turning_data`]): surface
     /// speed, feed per rev and the tool's max-rpm clamp. `None` = not
     /// stated - the turning ops then post the constant `rpm` (G97) as
@@ -253,10 +267,16 @@ impl Tool {
             && self.holder_len >= 0.0
             // A torch turns no spindle (#670): its rpm is 0 by law, and
             // every spinning kind states a positive one.
-            && (if self.kind == ToolKind::Torch { self.rpm == 0.0 } else { self.rpm > 0.0 })
+            // A sinker electrode turns none either (#541).
+            && (if matches!(self.kind, ToolKind::Torch | ToolKind::Electrode) {
+                self.rpm == 0.0
+            } else {
+                self.rpm > 0.0
+            })
             && self.feed > 0.0
             && self.flutes.is_none_or(|z| (1..=32).contains(&z))
             && self.orientation.is_none_or(crate::orientation::is_valid)
+            && self.catalog.refusal().is_none()
             // #891: stated turning data is sane, and the constant rpm
             // the tool states never runs over its own max-rpm clamp.
             && self.turning.is_none_or(|t| t.is_sane() && t.max_rpm.is_none_or(|m| self.rpm <= m))
@@ -322,6 +342,9 @@ impl Tool {
                 // A torch's kerf is a cut width, never a corner: no
                 // corner radius rides it (#670).
                 ToolKind::Torch => self.corner_r == 0.0,
+                // A sinker electrode (#541): a rectangular face with a
+                // stated Y size, sharp-cornered (no corner rides it).
+                ToolKind::Electrode => crate::electrode::is_sane(self),
                 _ => true,
             }
     }
@@ -331,6 +354,11 @@ impl Tool {
     /// `None` for every other kind and for a torch at rpm 0.
     #[must_use]
     pub fn torch_refusal(&self) -> Option<String> {
+        // #541: the sinker electrode's door rides the same seam - the
+        // AddTool / ChangeTool / library refusals already call this.
+        if self.kind == ToolKind::Electrode {
+            return crate::electrode::refusal(self);
+        }
         (self.kind == ToolKind::Torch && self.rpm != 0.0).then(|| {
             format!(
                 "a plasma torch turns no spindle - its rpm must be 0 (it states {}); the kerf width is the torch's diameter",
@@ -434,7 +462,8 @@ impl Tool {
             // meridian, which the turning verdicts read off `Tool`,
             // not off this cylinder.
             ToolKind::EndMill | ToolKind::Tap | ToolKind::Bore | ToolKind::Turning
-            | ToolKind::Groove | ToolKind::Thread | ToolKind::Form | ToolKind::Torch => add_pt(&mut p, 0.0, r),
+            | ToolKind::Groove | ToolKind::Thread | ToolKind::Form | ToolKind::Torch
+            | ToolKind::Electrode => add_pt(&mut p, 0.0, r),
             // The chamfer mill's cone is the same picture read the
             // other way in purpose - apex at the tip center opening
             // upward to the full radius - so it shares the drill's
@@ -522,6 +551,7 @@ pub fn probe_tool(ball_d: f64, stylus_len: f64) -> Tool {
         flutes: None,
         center_cutting: false,
         orientation: None,
+        catalog: crate::catalog_fields::ToolCatalog::default(),
         turning: None,
     }
 }
@@ -552,6 +582,7 @@ pub fn torch_tool(kerf: f64) -> Tool {
         flutes: None,
         center_cutting: false,
         orientation: None,
+        catalog: crate::catalog_fields::ToolCatalog::default(),
         turning: None,
     }
 }

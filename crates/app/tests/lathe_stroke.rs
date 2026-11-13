@@ -94,8 +94,9 @@ fn job_load(clearance: f64, load: impl FnOnce(&World) -> LoadMachine) -> World {
     h.execute(&world, stock.expect("bar stock"));
     let cmd = load(&world);
     h.execute(&world, cmd);
-    // #1232: a lathe posts only through a turning dialect.
-    if camcraft_app::machine::kind_of(&world) == camcraft_app::machine::Kind::Lathe {
+    // #1232: a turning job posts only through a turning dialect, on a
+    // lathe as on a mill-turn.
+    if matches!(camcraft_app::machine::kind_of(&world), camcraft_app::machine::Kind::Lathe | camcraft_app::machine::Kind::MillTurn) {
         let post = camcraft_app::schema::PostRef::Named("Fanuc Lathe".into());
         h.execute(&world, camcraft_app::commands::SelectPost::new(&world, post).expect("lathe post"));
     }

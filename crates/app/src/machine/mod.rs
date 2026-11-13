@@ -61,6 +61,7 @@ pub mod library;
 // it shares with the cutting check.
 mod judge;
 mod plasma;
+mod wire_edm;
 use judge::{c_letter_problem, move_extremes, pose_problems, say, slowest_axis};
 mod sheet;
 pub mod validate;
@@ -159,6 +160,9 @@ pub fn check_document(world: &World, machine: &Machine) -> Result<MachineCheck, 
 pub fn check_ops(world: &World, machine: &Machine, program: &[(String, flecs_ecs::prelude::Entity)]) -> Result<MachineCheck, String> {
     if kind(Some(machine)) == Kind::Plasma {
         return plasma::check_plasma_ops(world, machine, program);
+    }
+    if kind(Some(machine)) == Kind::WireEdm {
+        return wire_edm::check_wire_ops(world, machine, program);
     }
     let ops = program.to_vec();
     let mut out = MachineCheck::default();

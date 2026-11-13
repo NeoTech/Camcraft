@@ -37,6 +37,10 @@ pub const BUILTINS: &[(&str, &str)] = &[
     ("Heidenhain", include_str!("../../../assets/posts/heidenhain.cps")),
     ("Mazak", include_str!("../../../assets/posts/mazak.cps")),
     ("Tormach PathPilot", include_str!("../../../assets/posts/tormach.cps")),
+    // #710: grbl-family controllers (hobby and small-shop routers and mills).
+    ("grblHAL", include_str!("../../../assets/posts/grblhal.cps")),
+    // Synthetos TinyG: the other grbl-family controller, no canned cycles, M0 after each tool change.
+    ("TinyG", include_str!("../../../assets/posts/tinyg.cps")),
     ("Doosan DNM", include_str!("../../../assets/posts/doosan-dnm.cps")),
     ("Makera Carvera", include_str!("../../../assets/posts/carvera.cps")),
     ("Fanuc Lathe", include_str!("../../../assets/posts/fanuc-lathe.cps")),
@@ -178,6 +182,10 @@ pub const MACHINES: &[(&str, &str)] = &[
     // #618: the M+ upgrade kits - the M's figures with the MX's axis speeds.
     ("Tormach 770M+", include_str!("../../../assets/machines/tormach-770m-plus.mch")),
     ("Tormach 1100M+", include_str!("../../../assets/machines/tormach-1100m-plus.mch")),
+    // #710: a generic grbl-family router / mill; pairs with the "grblHAL" post.
+    ("grblHAL 3-axis", include_str!("../../../assets/machines/grblhal-3axis.mch")),
+    // A generic TinyG router / mill; pairs with the "TinyG" post.
+    ("TinyG 3-axis", include_str!("../../../assets/machines/tinyg-3axis.mch")),
     // #620: the PathPilot routers, each from its own manual / spec sheet
     // (the plain xsTECH from its spec sheet and knowledge base: no manual).
     ("Tormach 24R", include_str!("../../../assets/machines/tormach-24r.mch")),
@@ -401,6 +409,8 @@ mod serves;
 pub mod nose;
 #[path = "posting_index_swing.rs"]
 pub mod index_swing;
+#[path = "posting_swing_standing.rs"]
+pub mod swing_standing;
 pub(crate) use wcs_rotation::{offset_frame, OffsetFrame};
 pub use mounts::{
     machine_checks, machine_value_for, machine_value_of, post_mounts, post_mounts_script, post_of_setup, PostedMount,
@@ -461,11 +471,14 @@ fn post_script_body(world: &World, out_path: &Path, cps: &str, label: Option<&st
     // #388: the program's one machine (a program over several refuses).
     let mount = mounts::single(world, false)?;
     let streams = op_streams(world)?;
+    // No EDM dialect ships yet (#533, #542): an EDM program is refused
+    // here by name, before any file is written.
+    crate::posting_family::edm_at_post(world, streams.iter().map(|(n, _)| n.as_str()))?;
     // #1190: a turning dialect opens only what a lathe may run.
-    crate::lathe_voice::at_post(world, streams.iter().map(|(n, _)| n.as_str()), cps)?;
+    crate::lathe_voice::at_post(world, streams.iter().map(|(n, _)| n.as_str()), cps, label)?;
     // #1232: and a post writes only for a machine kind it serves.
     let names: Vec<&str> = streams.iter().map(|(n, _)| n.as_str()).collect();
-    let unserved = serves::refusal(&mount.setups, &names, &mount.machine, cps, label)?;
+    let unserved = serves::refusal(world, &mount.setups, &names, &mount.machine, cps, label)?;
     let machine = mount.machine;
     let records = join_streams(streams);
     // The verification gate (M2.3 D): the same two program-level
@@ -696,6 +709,10 @@ pub fn verification_report_by(world: &World, voice: &dyn Fn(Option<&str>) -> pos
     // #804: before a work-turning A indexes, the retracted tool tip
     // clears what the stock, parts and turning fixtures sweep about it.
     problems.extend(index_swing::index_swing_problems(world));
+    // #1107: ... and the work it sweeps clears the face the rotary
+    // stands on and the fixed fixtures over its length.
+    let standing = swing_standing::standing_problems(world);
+    problems.extend(standing.problems);
 
     // The workholding clause (M3.2 B, live-gate law): the same fixture
     // bands and rapid laws generation reports early, re-run HERE against
@@ -722,6 +739,13 @@ pub fn verification_report_by(world: &World, voice: &dyn Fn(Option<&str>) -> pos
         (Some(s), Some(p)) => Some(format!("{s}; {p}")),
         (None, Some(p)) => Some(format!("{NOT_JUDGED}: {p}")),
         (s, None) => s,
+    };
+    // #1107: standing steel the swing clause could not read, named.
+    let swing = (!standing.not_judged.is_empty())
+        .then(|| format!("{}: {}", swing_standing::SWING_NOT_JUDGED, standing.not_judged.join("; ")));
+    let not_judged = match (not_judged, swing) {
+        (Some(s), Some(w)) => Some(format!("{s}; {w}")),
+        (s, w) => s.or(w),
     };
     GateReport { problems, not_judged }
 }
@@ -841,7 +865,8 @@ pub fn op_streams(world: &World) -> Result<Vec<(String, Vec<cnc::Record>)>, Stri
         return Err(msg);
     }
 
-    // #530: the family door again, at post (`posting_family`).
+    // #530: the family door again, at post (`posting_family`), and
+    // #532's refusal of a kind whose post is not built yet.
     crate::posting_family::family_at_post(world, &ops)?;
 
     // #155: Pause / Home entries fold into the gap they stand in; #389:
@@ -1006,6 +1031,8 @@ impl HeightRefs for OpParams {
         match self {
             OpParams::Probe { clearance_z, .. } => vec![clearance_z],
             OpParams::PlasmaProfile(p) => vec![&p.clearance_z, &p.top_z, &p.bottom_z],
+            OpParams::WireContour(p) => vec![&p.top_z, &p.bottom_z],
+            OpParams::SinkerBurn(p) | OpParams::SinkerSideBurn(crate::operation::SinkerSideBurnOp { burn: p, .. }) => vec![&p.clearance_z, &p.top_z, &p.floor_z],
             OpParams::Face {
                 clearance_z,
                 cut_z,
