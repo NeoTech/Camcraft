@@ -171,9 +171,11 @@ fn a_rough_finish_pair_reaches_the_finished_size_in_the_sim() {
         sim.dev.max_gouge_at
     );
 
-    // The pair's CL, rough then finish, is golden.
-    let text = [common::gen_to_cltext(&path_of(&world, "Rough").path), common::gen_to_cltext(&path_of(&world, "Finish").path)].concat();
-    common::write_golden("sinker_rough_finish_pair.cl", &text);
+    // The pair's CL is golden, one stream per file (#1374): a single file
+    // holding two CL headers is not one CL text, so the CL reader's
+    // round trip over every golden (camcraft-cl headless_bin) could not read it back.
+    common::write_golden("sinker_rough_finish_pair_rough.cl", &common::gen_to_cltext(&path_of(&world, "Rough").path));
+    common::write_golden("sinker_rough_finish_pair_finish.cl", &common::gen_to_cltext(&path_of(&world, "Finish").path));
 }
 
 #[test]
