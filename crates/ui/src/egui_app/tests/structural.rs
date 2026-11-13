@@ -560,3 +560,20 @@ fn origin_names_paint_on_and_quiet_off_letters_and_lines_always() {
     }
     let _ = std::fs::remove_dir_all(&d);
 }
+
+/// #1450: a file hovering the window puts the plain "Drop to load model"
+/// hint over the viewport; without one the hint is absent.
+#[test]
+fn the_drop_hint_shows_only_while_a_file_hovers() {
+    let mut h = shell_harness();
+    h.run();
+    assert!(!painted(&h).iter().any(|(t, _)| t == super::super::file_drop::HINT), "no hint at rest");
+    h.input_mut().hovered_files.push(egui::HoveredFile::default());
+    h.run_steps(2);
+    let texts = painted(&h);
+    let p = at(&texts, super::super::file_drop::HINT);
+    assert!(p.x > 0.0 && p.y > 0.0, "the hint sits over the viewport: {p:?}");
+    h.input_mut().hovered_files.clear();
+    h.run_steps(2);
+    assert!(!painted(&h).iter().any(|(t, _)| t == super::super::file_drop::HINT), "the hint goes when the drag leaves");
+}

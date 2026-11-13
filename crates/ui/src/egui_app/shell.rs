@@ -97,6 +97,8 @@ pub(crate) fn shell_layout(
     // chip hovers then own it until the pointer moves on.
     state.geo_hover = None;
     panes::shortcuts(ui, state);
+    // #1450: a model file dropped on the window goes through Model's import.
+    super::file_drop::take_drop(ui, state);
     // The live theme, read once per pass: the strips and every pane below
     // share one token table, so the widget path and the painted ink cannot
     // disagree on a retheme (M6.1 A). `ribbon_h` tracks the cell box.
@@ -405,6 +407,7 @@ fn viewport_panel(
     // global pointer coords imgui's viewport_rect fed the raw-event path.
     let ([rx0, ry0], [rx1, ry1]) = (parr(resp.rect.min), parr(resp.rect.max));
     state.viewport_rect = ([rx0, ry0], [rx1, ry1]);
+    super::file_drop::paint_hint(ui, resp.rect);
     let hot = resp.hovered();
     state.viewport_hot = hot;
     let (rw, rh) = (rx1 - rx0, ry1 - ry0);
