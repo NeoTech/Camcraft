@@ -215,19 +215,36 @@ fn a_slot_through_the_pocket_wall_is_refused_and_one_below_the_floor_holds_the_p
 #[test]
 fn with_nothing_picked_the_typed_endpoints_rule_as_before() {
     let (world, mut h) = job();
-    // Across the whole part, through the pocket's walls: the source is
-    // the material to remove, the typed numbers rule, and no pick law
-    // or part law applies - the old behaviour, unchanged.
+    // Across the whole part, through the pocket's walls at x 15, nothing
+    // picked: the typed numbers rule (no pick law), and the model gouge
+    // check decides. A Stock source is the material to remove - the
+    // typed slot is cut as typed, unjudged.
     let typed = slot((-20.0, 0.0), (20.0, 0.0), 12.0, 10.0);
-    for (name, src) in [("E1", SrcRef::Entity("part".into())), ("K1", SrcRef::Stock)] {
-        h.execute(&world, CreateOperation::new(&world, name, TOOL, src, typed.clone()).expect("create"));
-        assert_eq!(ends(&op(&world, name).params), (Point2::new(-20.0, 0.0), Point2::new(20.0, 0.0), 12.0));
-        let (t, warns) = generate(&world, name).unwrap_or_else(|e| panic!("{name}: {e}"));
-        assert!(warns.iter().all(|w| !matches!(w, Warning::Gouge { .. })), "{name}: {warns:?}");
-        let reach = t.moves.iter().filter(|m| m.kind == MoveKind::Feed).map(|m| m.to.x.abs()).fold(0.0, f64::max);
-        assert!(reach >= 20.0 - EPS, "{name}: the typed slot is cut as typed, through the pocket wall at x 15: {reach}");
-        assert!(operation::region_of(&world, &op(&world, name)).is_some());
-    }
+    h.execute(&world, CreateOperation::new(&world, "K1", TOOL, SrcRef::Stock, typed.clone()).expect("create"));
+    assert_eq!(ends(&op(&world, "K1").params), (Point2::new(-20.0, 0.0), Point2::new(20.0, 0.0), 12.0));
+    let (t, warns) = generate(&world, "K1").unwrap_or_else(|e| panic!("K1: {e}"));
+    assert!(warns.iter().all(|w| !matches!(w, Warning::Gouge { .. })), "K1: {warns:?}");
+    let reach = t.moves.iter().filter(|m| m.kind == MoveKind::Feed).map(|m| m.to.x.abs()).fold(0.0, f64::max);
+    assert!(reach >= 20.0 - EPS, "K1: the typed slot is cut as typed, through the pocket wall at x 15: {reach}");
+    assert!(operation::region_of(&world, &op(&world, "K1")).is_some());
+}
+
+#[test]
+fn a_whole_part_slot_through_the_wall_is_convicted_and_holds_the_post() {
+    // #1537: the source names the finished part, so the part around the
+    // slot is kept - a typed slot through the pocket's wall at x 15 is a
+    // blocking gouge, not a silent cut.
+    let (world, mut h) = job();
+    let typed = slot((-20.0, 0.0), (20.0, 0.0), 12.0, 10.0);
+    h.execute(&world, CreateOperation::new(&world, "E1", TOOL, SrcRef::Entity("part".into()), typed).expect("create"));
+    assert_eq!(ends(&op(&world, "E1").params), (Point2::new(-20.0, 0.0), Point2::new(20.0, 0.0), 12.0));
+    let (_, warns) = generate(&world, "E1").expect("generates, convicted");
+    assert!(warns.iter().any(|w| matches!(w, Warning::Gouge { .. }) && w.blocks_post()), "through the wall is a gouge: {warns:?}");
+    // The same law passes a whole-part slot that stays inside the pocket.
+    let inside = slot((-5.0, 0.0), (5.0, 0.0), 12.0, 10.0);
+    h.execute(&world, CreateOperation::new(&world, "E2", TOOL, SrcRef::Entity("part".into()), inside).expect("create"));
+    let (_, warns) = generate(&world, "E2").expect("generates");
+    assert!(warns.iter().all(|w| !w.blocks_post()), "inside the pocket verifies clean: {warns:?}");
 }
 
 struct Client {
