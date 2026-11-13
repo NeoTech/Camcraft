@@ -21,7 +21,7 @@ use camcraft_app::commands::{
     ClearToolpath, CreateSetup, DeleteEntity, DeleteFixture, DeleteOperation, DeleteSetup, DeleteTool,
     EditOperationLinks, EditOperationParams, GenerateOperation, History, ImportModel,
     MoveFixture, MoveModel, PasteOperation, RegenerateAll, RenameOperation, ReorderOperation, RepairModel, SelectEntity, SetOperationGeometry,
-    SetFixtureFixed, SetOperationSetup, SetStock, SetToolNumber, SetUnits,
+    SetFixtureFixed, SetOperationSetup, SetStock, SetToolNumber, SetUnits, SetWcsOrigin,
     SetWorkMaterial, TagFixture, UntagFixture, ImportFixture,
     UpdateModel, theme_of,
 };
@@ -471,6 +471,25 @@ pub enum CommandKind {
     AlignPartFromAxes {
         setup: String,
         axes: camcraft_app::pick::InPlaneAxes,
+    },
+    /// Align the part from a picked cylinder (#771): one curved-wall
+    /// pick names a bore's or cylinder's axis; it lands on the chosen
+    /// world axis, turned by an angle about it. Undoable
+    /// (`AlignPartToSetup`). Never touches the work offset.
+    AlignPartCylinder {
+        setup: String,
+        pick: camcraft_app::operation::GeoSel,
+        target: camcraft_app::pick::TargetAxis,
+        angle_deg: f64,
+        flip: bool,
+    },
+    /// Place a named setup's WCS origin (#771): a picked vertex, or a
+    /// box reading - the parts' bounds or the setup's stock. The
+    /// rotation is kept: the frame comes from the plane side. Undoable
+    /// (`SetWcsOrigin`).
+    PlaceSetupOrigin {
+        setup: String,
+        at: camcraft_app::commands::OriginAt,
     },
     /// Lay the part on a G17 / G18 / G19 plane through three picked
     /// points (#555), read by the app through the face pick's apply
@@ -1717,6 +1736,12 @@ pub struct State {
     /// The Setups page's three-points draft (#555); `Some` routes Vertex
     /// picks into it (and refuses faces and edges by name).
     pub points_pick: Option<crate::points_pick::PointsPick>,
+    /// The Setups page's cylinder-angle draft (#771); while it is
+    /// collecting, Face picks land in it ahead of everything else.
+    pub cylinder_pick: Option<crate::cylinder_pick::CylinderPick>,
+    /// The Setups page's orientation-point draft (#771); while it is
+    /// collecting, Vertex picks land in it ahead of everything else.
+    pub origin_pick: Option<crate::origin_pick::OriginPick>,
     /// The axes-in-the-plane rows were drawn this frame (#557): a
     /// feature click with no axis armed says what to do, never falls
     /// through to the operation pick.
@@ -1943,6 +1968,8 @@ impl State {
             locate_form_drawn: false,
             axis_pick: None,
             points_pick: None,
+            cylinder_pick: None,
+            origin_pick: None,
             axis_rows_shown: false,
             setup_pick_rows: Vec::new(),
             wcs_pick: None,
@@ -2095,6 +2122,12 @@ impl State {
     /// Record a refusal: status strip for everyone, tagged message for the
     /// pane that caused it. An operation-scope refusal is stamped with the
     /// page it was raised on, so it retires with that state.
+    /// A refused file drop (#1450): said on the status line, the document untouched.
+    pub(crate) fn refuse_drop(&mut self, msg: String) {
+        diag_warn!("{msg}");
+        self.status = msg;
+    }
+
     fn refuse(&mut self, scope: ErrorScope, msg: String) {
         self.status.clone_from(&msg);
         // The page's draft as the next frame will show it: a document
@@ -3461,7 +3494,8 @@ impl State {
             | CommandKind::TurnPart { .. }
             | CommandKind::LayPartOnPlane { .. }
             | CommandKind::LayPartOnPoints { .. }
-            | CommandKind::AlignPartFromAxes { .. }) => self.dispatch_align(k), // #738: state_align.rs
+            | CommandKind::AlignPartFromAxes { .. }
+            | CommandKind::AlignPartCylinder { .. }) => self.dispatch_align(k), // #738: state_align.rs
             CommandKind::SetSetupRelative { setup, to, angles } => {
                 let built = match &to {
                     Some(parent) => SetSetupRelative::link(&self.world, &setup, parent, angles),
@@ -3491,6 +3525,29 @@ impl State {
                     }
                     Err(err) => {
                         self.refuse(ErrorScope::Setup, format!("stock source not changed: {err}"));
+                    }
+                }
+            }
+            CommandKind::PlaceSetupOrigin { setup, at } => {
+                match camcraft_app::commands::place_setup_origin(&self.world, &setup, &at) {
+                    Ok(location) => match SetWcsOrigin::for_setup(&self.world, Some(&setup), location) {
+                        Ok(command) => {
+                            let label = camcraft_app::setup::wcs_label(&self.world, Some(&setup));
+                            self.history.execute(&self.world, command);
+                            self.doc_version += 1;
+                            self.status = format!(
+                                "{setup} {label} origin placed: {:.3} {:.3} {:.3} (rotation kept)",
+                                location.pos.x,
+                                location.pos.y,
+                                location.pos.z
+                            );
+                        }
+                        Err(err) => {
+                            self.refuse(ErrorScope::Setup, format!("origin not placed: {err}"));
+                        }
+                    },
+                    Err(err) => {
+                        self.refuse(ErrorScope::Setup, format!("origin not placed: {err}"));
                     }
                 }
             }

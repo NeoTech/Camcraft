@@ -49,6 +49,15 @@ fn open(h: &mut H, setup: &str) {
     h.run_steps(3);
 }
 
+/// #771: the plane orientation dropdown's current entry is `from`; pick
+/// `to` (the other methods' rows wait behind it).
+fn plane_method(h: &mut H, from: &str, to: &str) {
+    h.get_by(|n| n.role() == egui::accesskit::Role::ComboBox && n.value().as_deref() == Some(from)).click();
+    h.run_steps(3);
+    h.get_by_label(to).click();
+    h.run_steps(3);
+}
+
 fn rect(h: &H, label: &str) -> egui::Rect {
     let all: Vec<egui::Rect> = h.query_all_by_label(label).map(|n| n.rect()).collect();
     assert_eq!(all.len(), 1, "{label:?} drawn exactly once: {all:?}");
@@ -106,24 +115,43 @@ fn the_setup_page_is_laid_out_in_groups_like_the_wcs_page() {
     gone(&h, FIRST_GROUP);
     assert_group(&h, GROUPS[0], GROUPS[1], &[ACTIVE_SETUP_LABEL]);
     assert_group(&h, GROUPS[1], GROUPS[2], &["Its own stock (the Stock node)", "What Setup1 leaves behind"]);
+    // #771: the two dropdowns head the group; Axes (the default) shows its rows.
     assert_group(
         &h,
         GROUPS[2],
         GROUPS[3],
         &[
-            ORIENT_HELP, ALIGN, TURN, ABOUT, RELATIVE, TURN_PREV, PLANE, "Pick a face", "Face down", "Face to plane level", POINTS,
-            "Pick three points", "Points down", "Point 1 to plane level", "3-2-1 frame", AXES, "      +Y", "+Y by Edge",
-            "+Y by Two points", "Pick +Y edge", "Flip +Y", "      +X", "+X by Edge", "+X by Two points", "Pick +X edge", "Flip +X",
+            ORIENT_HELP, "Plane orientation", AXES, "      +Y", "+Y by Edge", "+Y by Two points", "Pick +Y edge", "Flip +Y", "      +X",
+            "+X by Edge", "+X by Two points", "Pick +X edge", "Flip +X", "Orientation point", RELATIVE, TURN_PREV,
         ],
     );
+    for gone_label in [ALIGN, PLANE, POINTS] {
+        gone(&h, gone_label);
+    }
+    // The other methods draw their own rows behind the dropdown.
+    plane_method(&mut h, "Axes", "Face");
+    assert_group(&h, GROUPS[2], GROUPS[3], &["Plane orientation", PLANE, "Pick a face", "Face down", "Face to plane level", RELATIVE]);
+    plane_method(&mut h, "Face", "Points");
+    assert_group(
+        &h,
+        GROUPS[2],
+        GROUPS[3],
+        &["Plane orientation", POINTS, "Pick three points", "Points down", "Point 1 to plane level", "3-2-1 frame", RELATIVE],
+    );
+    plane_method(&mut h, "Points", "Manual");
+    assert_group(&h, GROUPS[2], GROUPS[3], &["Plane orientation", ALIGN, TURN, ABOUT, RELATIVE]);
+    plane_method(&mut h, "Manual", "Axes");
     assert_group(&h, GROUPS[3], GROUPS[4], &[FEATURES, "Pick for WCS", OFFSET]);
     // The page's old reading order holds: "Set WCS from features" above the G54-G59 picker.
     assert!(top(&h, FEATURES) < top(&h, OFFSET), "features row before the work offset picker");
     assert_between(&h, GROUPS[4], foot(&h), &["Delete Setup2", "Open Setup2 fixtures"]);
     // Stock follows its source: a fresh setup's own stock entity, stated at the foot.
     assert!(foot(&h) > top(&h, "Open Setup2 fixtures"), "the readout is under the groups");
-    // Both align Apply buttons (part alignment, relative) are drawn.
+    // The relative Apply is drawn; the alignment one waits behind Manual (#771).
+    assert_eq!(h.query_all_by_label("Apply").count(), 1, "relative has Apply");
+    plane_method(&mut h, "Axes", "Manual");
     assert_eq!(h.query_all_by_label("Apply").count(), 2, "alignment and relative each have Apply");
+    plane_method(&mut h, "Manual", "Axes");
     // The setup actions are two equal buttons on one row, left to right.
     let (del, open_fx) = (rect(&h, "Delete Setup2"), rect(&h, "Open Setup2 fixtures"));
     assert!((del.top() - open_fx.top()).abs() < 1.0 && del.right() < open_fx.left(), "{del:?} {open_fx:?}");
@@ -144,7 +172,10 @@ fn the_first_setups_page_has_no_previous_setup_rows() {
     for absent in [RELATIVE, TURN_PREV, "What Setup1 leaves behind"] {
         gone(&h, absent);
     }
+    assert_eq!(h.query_all_by_label("Apply").count(), 0, "no Apply: Axes waits for a pick, the relative row is absent");
+    plane_method(&mut h, "Axes", "Manual");
     assert_eq!(h.query_all_by_label("Apply").count(), 1, "only the alignment Apply");
+    plane_method(&mut h, "Manual", "Axes");
     assert_between(&h, GROUPS[4], foot(&h), &["Delete Setup1", "Open Setup1 fixtures"]);
 }
 
@@ -216,9 +247,11 @@ fn a_lathe_setup_draws_the_workholding_group() {
 fn the_armed_pick_rows_stay_inside_their_groups() {
     let mut h = setups(2, "Setup2");
     open(&mut h, "Setup2");
+    plane_method(&mut h, "Axes", "Face");
     h.get_by_label("Pick a face").click();
     h.run_steps(3);
     assert_group(&h, GROUPS[2], GROUPS[3], &[PLANE, "Stop picking", "Face down", "      Picked: nothing picked yet", "Apply face"]);
+    plane_method(&mut h, "Face", "Points");
     h.get_by_label("Pick three points").click();
     h.run_steps(3);
     assert_group(
@@ -233,10 +266,11 @@ fn the_armed_pick_rows_stay_inside_their_groups() {
     h.get_by_label("Pick for WCS").click();
     h.run_steps(3);
     assert_group(&h, GROUPS[3], GROUPS[4], &[FEATURES, "Stop picking", "      Picked: nothing picked yet"]);
-    // Apply is drawn three times (alignment, relative, WCS); the WCS one is
-    // the lowest, inside "Work offset", under its picked line.
+    // Apply is drawn twice (relative, WCS; the alignment one waits behind
+    // the Manual entry, #771); the WCS one is the lowest, inside "Work
+    // offset", under its picked line.
     let applies: Vec<f32> = h.query_all_by_label("Apply").map(|n| n.rect().top()).collect();
-    assert_eq!(applies.len(), 3, "{applies:?}");
+    assert_eq!(applies.len(), 2, "{applies:?}");
     let wcs = applies.iter().copied().fold(f32::MIN, f32::max);
     assert!(wcs > top(&h, "      Picked: nothing picked yet") - 4.0 && wcs < top(&h, GROUPS[4]), "WCS Apply in its group");
 }
