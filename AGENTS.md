@@ -970,6 +970,18 @@ a tag"):
    If the diff is not empty, do not tag: something reached main mid-cut;
    start the cut again from step 2 on a fresh release branch. Comment
    `shipped in vX.Y.Z` on every issue the cut closed.
+5. **Check the documentation site** (#688). The same tag run regenerates
+   the Zola site in `site/` from the tagged tree and deploys it to GitHub
+   Pages (`release.yml` jobs `site` and `pages`; `pages` waits for
+   `publish`, so the site's download links never point at a missing
+   release). The browser build (`wasm`, #1103) is served under `/app/`;
+   a failed wasm build leaves `/app/` as the "not part of this copy" page
+   and a warning, not a failed cut. Nothing is committed for it and no
+   trigger is added. The cut is done once the run's `pages` job is green
+   and `https://neotech.github.io/Camcraft/` shows "CamCraft X.Y.Z"; a
+   red `pages` job is re-run (Actions "Re-run failed jobs"), never fixed
+   by moving the tag. Preview locally with `zola build` in `site/`
+   (`site/README.md`).
 
 **`main` is protected on GitHub** (user, 2026-11-07: "so we don't get
 unauthorized pushes into main instead they follow the rules"): every change
