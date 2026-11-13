@@ -10,9 +10,10 @@
 //! purpose - the stream dump and the post take the prismatic code path
 //! on it, bit for bit, so goldens never learn float drift. A verdict is
 //! a different question: a pose a rotated setup leaves 1e-10° off the
-//! column is upright steel to within a picometre, and the tilted reach
-//! laws' enclosing columns (a band's bottom dropped by its whole
-//! radius) would flip such a move to a false collision on noise.
+//! column is upright steel to within a picometre. (The tilted reach
+//! laws' enclosing columns dropped a band's bottom by its whole radius
+//! then, a cliff on noise; since #1303 they dip by the rim's exact
+//! R·sin θ, and the two readings meet at the tolerance.)
 
 /// The largest tilt off +Z (radians) the verifier still judges as an
 /// upright tool. At 1e-9 rad a 1 m tool stack moves at most 1e-6 mm

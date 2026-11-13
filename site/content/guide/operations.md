@@ -18,6 +18,9 @@ milling. A mill-turn shows both.
 | Drilling | Drill, Bore, Probe |
 | Multi-axis | 5-Axis Contour, 5-Axis Parallel, Swarf, Adv. Swarf, Rotary Contour, Rotary Parallel, Rotary Offset, Multi-Axis Rough, 5-Axis Flow, Multi-Axis Contour |
 | Turning | Facing, Profile Rough, Profile Finish, Groove Rough, Groove Finish, Part, Threading, Chamfer, Taper, Multi-Pass, Form, Bore |
+| Plasma | Plasma Profile |
+| Wire EDM | Wire Contour |
+| Sinker EDM | Sinker Burn, Side Burn |
 
 Each 3D milling kind has its own section, with its settings, defaults
 and common refusals, in [3D milling operations](@/guide/operations-3d.md).
@@ -113,8 +116,9 @@ can be clicked to frame it.
   material is left or where the program cut into the part. **Frame rest**
   and **Frame gouge** take the view to the worst spot of each.
 
-The multi-axis kinds, Probe and Plasma Profile each have their own
-reference, with settings, defaults and common refusals:
+The multi-axis kinds, Probe, Plasma Profile and the EDM kinds (Wire
+Contour, Sinker Burn, Sinker Side Burn) each have their own reference, with settings, defaults and common refusals:
 [Multi-axis operations](@/guide/operations-multiaxis.md),
-[Probing](@/guide/operations-probing.md) and
-[Plasma cutting](@/guide/operations-plasma.md).
+[Probing](@/guide/operations-probing.md),
+[Plasma cutting](@/guide/operations-plasma.md) and
+[Wire and sinker EDM](@/guide/operations-edm.md).

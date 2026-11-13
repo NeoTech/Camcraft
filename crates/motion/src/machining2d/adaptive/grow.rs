@@ -12,10 +12,13 @@
 //! `D` (islands cut open by `slit`, so the fronts wrap each island as a
 //! C and close on the slit's faces), kept `eps` off the walls with `eps`
 //! shrinking every revolution and filleted by a morphological opening.
-//! Dilation, intersection and opening all preserve inclusion, so the
-//! rings are strictly nested - a gap of at least `min(s, deps)` between
-//! neighbours - and every revolution, a blend between two neighbours,
-//! lies in its own band: none can cross another. In a channel the front
+//! The construction aims for nested rings, with each revolution in the
+//! band between its neighbours. The implemented opening approximates its
+//! input and erodes slightly farther than it dilates, then clips to the
+//! original area. That enforces containment on the geometry lattice; it
+//! does not prove monotonicity or a gap between successive rings. The
+//! existing load, crossing and kink checks remain necessary to accept a
+//! walk, with an unsafe plan refused by name. In a channel the front
 //! is a flat face swept from wall to wall with filleted ends (the
 //! crescent of trochoidal milling, Otkur & Lazoglu 2007, "Trochoidal
 //! milling", Int. J. Mach. Tools Manuf. 47; Ibaraki et al. 2010, the
@@ -105,6 +108,8 @@ impl Planner<'_> {
     /// otherwise).
     pub(super) fn grow(&mut self, ring0: &[Point2], (scale, last): (f64, bool)) -> Result<Grown, GenError> {
         let s = self.s;
+        // One call is one margin attempt: the budget counts it on its own.
+        self.work.attempt();
         let a0 = orbit_radius(&s);
         let Some(dom) = slit::open_islands(self.center, s.seed, a0 + 0.5)? else { return Ok(Grown::Unfit) };
         // The last lap's corners: half the tool radius, or under the
@@ -197,7 +202,8 @@ impl Planner<'_> {
                 let (rev, b) = morph_rev(&ring, &b, LAND);
                 p.work.add_len(super::front::len(&rev));
                 let mut ras = p.ras.clone();
-                let w = ras.walk_until(&rev, (s.r, p.rim, p.step), limit);
+                // Out of the bore the wall conforms to the rim (`conform`).
+                let w = if disc { p.conform_walk(&mut ras, &rev, limit) } else { ras.walk_until(&rev, (s.r, p.rim, p.step), limit) };
                 Ok(Some((g, yr, b, rev, ras, w, done)))
             };
             let (kept, over) = self.step_search(trial, step)?;
@@ -257,6 +263,8 @@ impl Planner<'_> {
             ));
         }
         self.note_corners(&d0, rho_c);
+        // The laps' fillet-to-wall kinks spread (`conform`).
+        self.smooth_grown(self.laps_from);
         Ok(Grown::Done)
     }
 

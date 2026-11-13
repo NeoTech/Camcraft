@@ -163,7 +163,7 @@ pub(super) fn judge(
 /// The holder's side of `path` (#1102) and every move's meridian
 /// pieces, a round arc about the axis set on that side. Refuses by name
 /// when a move leaves the turning plane or the side cannot be told.
-fn sided_pieces(sm: &SignedMeridian, path: &Toolpath, tol: f64) -> Result<(f64, Vec<Vec<Seg>>), String> {
+pub(super) fn sided_pieces(sm: &SignedMeridian, path: &Toolpath, tol: f64) -> Result<(f64, Vec<Vec<Seg>>), String> {
     let mut pieces = Vec::with_capacity(path.moves.len());
     for (i, m) in path.moves.iter().enumerate() {
         pieces.push(pieces_of(m, sm, tol).ok_or_else(|| format!("move {i} leaves the turning plane"))?);
@@ -175,7 +175,7 @@ fn sided_pieces(sm: &SignedMeridian, path: &Toolpath, tol: f64) -> Result<(f64, 
 /// constant radius (flagged `true`: a round arc about the axis, whose
 /// ends stand on both sides and tell no holder side), or a meridian
 /// arc's chords; `None` when it leaves the turning plane.
-fn pieces_of(m: &Move, sm: &SignedMeridian, tol: f64) -> Option<(Vec<Seg>, bool)> {
+pub(super) fn pieces_of(m: &Move, sm: &SignedMeridian, tol: f64) -> Option<(Vec<Seg>, bool)> {
     if !sm.in_plane(m.from, tol) || !sm.in_plane(m.to, tol) {
         return None;
     }

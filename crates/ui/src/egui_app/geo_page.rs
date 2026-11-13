@@ -27,9 +27,21 @@ pub fn edge_hint() -> String {
 /// The "Click selects" hover: what each modifier does to a viewport pick.
 pub fn click_selects_hint() -> String {
     format!(
-        "Click in the viewport - {} adds; in Edge mode Shift takes the whole loop and Alt one edge.",
-        command_key()
+        "Click in the viewport - {key} adds; in Edge mode Shift takes the whole loop and Alt one edge. \
+         {key}+drag adds every visible edge (Edge) or face (Face) in a box - hidden ones too with Pick through on: drag right for what lies inside it, left for what it touches.",
+        key = command_key()
     )
+}
+
+/// #1514: the plain "picking on / off" line under the tab bar. On: viewport
+/// clicks edit this operation's picks (the Geometry tab, or a boundary row
+/// armed). Off: every other tab - the selection is locked, clicks do nothing.
+pub(super) fn pick_mode_line(ui: &mut Ui, state: &State) {
+    if crate::interact::op_pick_locked(state) {
+        ui.label(RichText::new("Picking off - selection locked").weak());
+    } else {
+        ui.label(RichText::new("Picking on - clicks edit the selection").strong());
+    }
 }
 
 pub(super) fn pick_block(ui: &mut Ui, state: &mut State, target: &str, live_setup: Option<&str>) {
@@ -127,7 +139,7 @@ fn chips(ui: &mut Ui, state: &mut State, target: &str) {
             }
             _ => None,
         };
-        let remove = ui
+        let row = ui
             .horizontal(|ui| {
                 // M13.4 stage 2 hook: a picked corner can place the WCS
                 // slot chosen in the WCS pane, through SetWcsOrigin.
@@ -159,12 +171,18 @@ fn chips(ui: &mut Ui, state: &mut State, target: &str) {
                 } else {
                     ui.label(&label)
                 };
-                if resp.hovered() {
-                    state.geo_hover = Some(sel);
+                let x = ui.small_button("×").on_hover_text("remove this pick");
+                // #1507: the label, the remove button and the row's other
+                // buttons all light the pick: "which one am I removing?".
+                if resp.hovered() || x.hovered() {
+                    state.geo_hover = Some(sel.clone());
                 }
-                ui.small_button("×").on_hover_text("remove this pick").clicked()
-            })
-            .inner;
+                x.clicked()
+            });
+        if row.response.hovered() || ui.rect_contains_pointer(row.response.rect) {
+            state.geo_hover = Some(sel);
+        }
+        let remove = row.inner;
         if remove {
             let mut rest: Vec<GeoSel> = state.op_ui.geo.clone();
             if i < rest.len() {

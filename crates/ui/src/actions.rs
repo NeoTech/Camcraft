@@ -192,14 +192,16 @@ fn follow_playhead(state: &mut State, judged: bool) -> Result<(), String> {
     let sc = crate::egui_app::shell::cached_script(state);
     let t = state.sim.as_ref().map_or(0.0, |s| s.t);
     let play = state.field_play.as_ref().ok_or("playback was not built")?;
-    let k = match progress(&sc, t) {
-        None => 0,
+    // The move under the playhead shows cut as far as the tool is
+    // drawn on it (#1516), not only once it completes.
+    let (k, f) = match progress(&sc, t) {
+        None => (0, 0.0),
         Some(p) => play
             .index()
-            .index_at(&p)
+            .position_at(&p, sc.travelled(t))
             .ok_or_else(|| format!("{} is on the timeline but not in the posting plan", p.op))?,
     };
-    play.request(k);
+    play.request_at(k, f);
     if let Some(frame) = play.take() {
         state.field_view = Some(Ok(frame?.view));
     }
@@ -381,11 +383,21 @@ pub(crate) fn add_operation(state: &mut State, kind: usize) {
         n += 1;
     };
     let mut params = quick_params(kind);
+    // #535: a quick-add wire contour takes the machine's first stated
+    // condition (the door refuses an op naming none); with none stated
+    // the door's refusal names the table to fill.
+    if let camcraft_app::operation::OpParams::WireContour(w) = &mut params
+        && let Some(first) = camcraft_app::operation::wire_op::conditions_of(&state.world, None).into_iter().next()
+    {
+        w.condition = first;
+    }
     // M11.3: the seed helix radius follows the op's tool (0.4 x radius).
     if let Some(t) = camcraft_app::model::find_by_name(&state.world, &tool)
         .and_then(|e| camcraft_app::model::tool_of(&state.world, &e))
     {
         camcraft_app::operation::seed_helix_for_tool(&mut params, t.diameter);
+        // #890: and its feed, from the tool's row for the document material.
+        camcraft_app::cutting_rows::seed_feed_for_tool(&state.world, &mut params, &t);
     }
     state.pending.push_back(CommandKind::CreateOperation {
         name: name.clone(),

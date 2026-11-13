@@ -211,6 +211,7 @@ pub enum CycleKindDto {
     Bore,
     BackBore,
     FloatingTap,
+    Ream,
 }
 
 impl CycleDto {
@@ -225,6 +226,7 @@ impl CycleDto {
                 CycleKind::FloatingTap => CycleKindDto::FloatingTap,
                 CycleKind::Bore => CycleKindDto::Bore,
                 CycleKind::BackBore => CycleKindDto::BackBore,
+                CycleKind::Ream => CycleKindDto::Ream,
             },
             xy: [lattice(c.xy.x), lattice(c.xy.y)],
             r_z: lattice(c.r_z),
@@ -247,6 +249,7 @@ impl CycleDto {
                 CycleKindDto::FloatingTap => CycleKind::FloatingTap,
                 CycleKindDto::Bore => CycleKind::Bore,
                 CycleKindDto::BackBore => CycleKind::BackBore,
+                CycleKindDto::Ream => CycleKind::Ream,
             },
             xy: Point2::new(self.xy[0], self.xy[1]),
             r_z: self.r_z,
@@ -567,12 +570,19 @@ pub struct EntityDto {
     #[serde(default, skip_serializing_if = "is_unrevised")]
     pub rev: u64,
     /// The chord error (mm) of a model imported coarser than the STEP
-    /// importer promises (#864, `schema::ReducedFidelity`). Absent on
+    /// importer promises (#864, `schema::ReducedFidelity`), and of a
+    /// stock copied from one (#1056: the copy carries it). Absent on
     /// every other entity, so a document without such a model - and every
     /// file from before the key existed - saves byte for byte as it did
     /// and loads as full fidelity.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub coarse_mm: Option<f64>,
+    /// #1056 (v59): this mesh's fidelity is not known - a model or stock
+    /// copy from a file saved before CamCraft recorded it. Its operations
+    /// are refused at the post until the model is re-imported. Absent is
+    /// false; never written beside `coarse_mm`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub fidelity_unknown: bool,
     /// The STEP facet budget a model was imported under when it is not the
     /// default (#1054, `schema::StepBudget`). Absent everywhere else, so a
     /// file from before the key existed - and every default import - reads

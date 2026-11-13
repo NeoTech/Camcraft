@@ -13,6 +13,11 @@ use super::height::Height;
 
 pub use crate::wire_edm::WireSide;
 
+/// The run-out clearance (mm) a new wire cut is seeded with (#1109): an
+/// open run is threaded and run out this far clear of the stock's edge,
+/// past the kerf. A closed profile never reads it.
+pub const DEFAULT_CLEARANCE: f64 = 1.0;
+
 /// The longest condition id an operation stores (a control's selector
 /// is a short word; this only bounds a hand-edited file).
 pub const CONDITION_ID_MAX: usize = 64;
@@ -30,11 +35,117 @@ pub struct WireContourOp {
     /// empty word is "none chosen", refused at the command door.
     pub condition: String,
     /// Which side of the profile is the product - stated by the user,
-    /// never inferred from the geometry (#290 D8).
+    /// never inferred from the geometry (#290 D8): die / punch for a
+    /// closed profile, the kerf's left / right of travel for an open
+    /// run (#1109).
     pub side: WireSide,
     /// The start hole / threading point, world XY mm; `None` is not
     /// stated, and a closed profile is refused at generation without it.
     pub start: Option<[f64; 2]>,
+    /// The tabs (#539); `None` is off, the default (#290 D6).
+    pub tabs: Option<WireTabs>,
+    /// The operator states the freed piece is caught (a slug catcher, a
+    /// magnet, the machine's slug retention), so it may drop when the
+    /// cut closes. `false` - the default - refuses a cut whose slug
+    /// would drop unheld (#534's slug law, #539).
+    pub capture: bool,
+    /// The constant taper (#536), degrees from vertical: 0 is a
+    /// vertical cut; positive widens the profile downward from the top
+    /// plane (a die's relief, a drafted punch's base), negative narrows
+    /// it. The machine's `edm.max_taper_deg` bounds it at generation.
+    pub taper_deg: f64,
+    /// No-core burnout (#540): `Some(clearance)` burns the pocket's
+    /// whole interior out by offset rings, the wire centre at least
+    /// `clearance` mm from the walls (never under the kerf offset);
+    /// `None` cuts the profile alone.
+    pub burnout: Option<f64>,
+    /// An open run's threading and run-out clearance past the kerf, mm
+    /// (#1109); unread for a closed profile.
+    pub clearance: f64,
+    /// The 4-axis cut (#537): `Some` reads the selection as two closed
+    /// profiles - the upper on the top plane, the lower on the bottom
+    /// plane - and pairs them into rulings by the stated rule. `None`
+    /// is the one-profile cut.
+    pub four_axis: Option<WireFourAxis>,
+}
+
+/// How the two profiles of a 4-axis cut are paired (#537) - stated,
+/// never inferred.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WirePairingRule {
+    /// By normalised arc length, each profile walked counter-clockwise
+    /// from its point nearest the start hole.
+    ArcLength,
+    /// By the stated sync pairs, normalised arc length between them.
+    SyncPoints,
+}
+
+/// One sync pair, world XY mm: a point of the upper profile and the
+/// point of the lower profile the same ruling passes through. A side
+/// left `None` is an unpaired sync point - storable (a pick in
+/// progress), refused by name at generation.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct WireSyncPair {
+    pub upper: Option<[f64; 2]>,
+    pub lower: Option<[f64; 2]>,
+}
+
+/// The most sync pairs an operation stores (bounds a hand-edited file).
+pub const SYNC_PAIRS_MAX: usize = 4096;
+/// The 4-axis tolerance a new cut starts with, mm.
+pub const FOUR_AXIS_TOLERANCE: f64 = 0.05;
+
+/// The 4-axis cut's stored parameters (#537).
+#[derive(Clone, Debug, PartialEq)]
+pub struct WireFourAxis {
+    pub pairing: WirePairingRule,
+    /// The sync pairs; read only when the pairing is by sync points.
+    pub sync: Vec<WireSyncPair>,
+    /// The most (mm) the wire may stand off the profiles past the kerf
+    /// offset to keep its kerf out of a twisted ruled surface
+    /// (`motion::wire_edm::ruled`).
+    pub tolerance: f64,
+}
+
+impl Default for WireFourAxis {
+    fn default() -> Self {
+        WireFourAxis { pairing: WirePairingRule::ArcLength, sync: Vec::new(), tolerance: FOUR_AXIS_TOLERANCE }
+    }
+}
+
+impl WireFourAxis {
+    fn is_sane(&self) -> bool {
+        let pt = |q: Option<[f64; 2]>| q.is_none_or(|s| s.iter().all(|v| v.is_finite() && v.abs() < 1e9));
+        self.tolerance.is_finite()
+            && (0.0..=10.0).contains(&self.tolerance)
+            && self.sync.len() <= SYNC_PAIRS_MAX
+            && self.sync.iter().all(|s| pt(s.upper) && pt(s.lower))
+    }
+}
+
+/// The tabs as stated (#539). Every field is required when tabs are
+/// on; a missing one is refused by name at generation, never defaulted.
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct WireTabs {
+    pub count: Option<u32>,
+    /// The bridge's width along the profile, mm.
+    pub width: Option<f64>,
+    /// One position per tab, world XY mm, on the profile.
+    pub at: Vec<[f64; 2]>,
+    /// The machine condition the tab cut-off burns with, by its id; the
+    /// empty word is none named.
+    pub cutoff_condition: String,
+}
+
+impl WireTabs {
+    #[must_use]
+    pub fn is_sane(&self) -> bool {
+        self.width.is_none_or(|w| w.is_finite() && w.abs() < 1e9)
+            && self.at.len() <= 1024
+            && self.at.iter().all(|p| p.iter().all(|v| v.is_finite() && v.abs() < 1e9))
+            && self.cutoff_condition.len() <= CONDITION_ID_MAX
+            && !self.cutoff_condition.chars().any(char::is_control)
+    }
 }
 
 impl WireContourOp {
@@ -47,7 +158,14 @@ impl WireContourOp {
         self.top_z.is_sane()
             && self.bottom_z.is_sane()
             && self.start.is_none_or(|s| s.iter().all(|v| v.is_finite() && v.abs() < 1e9))
+            && self.taper_deg.is_finite()
+            && self.taper_deg.abs() < 90.0
+            && self.four_axis.as_ref().is_none_or(WireFourAxis::is_sane)
+            && self.burnout.is_none_or(|c| c.is_finite() && c > 0.0 && c < 1e6)
+            && self.clearance.is_finite()
+            && (0.0..=crate::wire_edm::CLEARANCE_MAX).contains(&self.clearance)
             && self.condition.len() <= CONDITION_ID_MAX
             && !self.condition.chars().any(char::is_control)
+            && self.tabs.as_ref().is_none_or(WireTabs::is_sane)
     }
 }

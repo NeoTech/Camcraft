@@ -94,7 +94,11 @@ pub(super) fn band_reach(
         // never smaller - shifted to the band's mid-height point on the
         // leaning axis, widened by its half-length's horizontal spread,
         // its bottom standing at the lower of the two axis-plane ends
-        // minus the disc radius. The annulus's inner edge stays about
+        // minus the rim's exact dip, R·sin θ ([`super::tilt_band`],
+        // #1303: the band's true lowest point, so the reading meets
+        // the upright one as the tilt goes to nothing - it was the
+        // whole radius, a cliff just above the upright tolerance).
+        // The annulus's inner edge stays about
         // the TIP: the flute's kerf excuses that radius wherever the
         // tip cuts, tilt or no tilt. Over-report a graze, never hide a
         // gouge. The prismatic branch is the law's own history: same
@@ -135,11 +139,8 @@ pub(super) fn band_reach(
                     let (offx, offy, r_band, h0) = match lean {
                         None => (0.0, 0.0, band_r, m.to.z + above),
                         Some(a) => {
-                            let mid = above + band_len * 0.5;
-                            let spread = (band_len * 0.5) * (a[0] * a[0] + a[1] * a[1]).sqrt();
-                            let za = m.to.z + above * a[2];
-                            let zb = m.to.z + (above + band_len) * a[2];
-                            (mid * a[0], mid * a[1], band_r + spread, za.min(zb) - band_r)
+                            let col = super::tilt_band::lean(&a, above, band_r, band_len);
+                            (col.off.0, col.off.1, col.r, m.to.z + col.lo - col.dip)
                         }
                     };
                     // Z-window skip (M2.5 E): the law convicts only where
@@ -233,6 +234,7 @@ pub(super) fn band_reach(
         // generator ever touched hold every pose at home and convict
         // nothing, exactly as before this law existed.
         if cx.mode != Mode::Engrave {
+            let columns = super::hidden_span::Columns::new(None);
             let sweeps = super::sweep::mid_turn_sweeps(
                 path,
                 &bands,
@@ -244,7 +246,7 @@ pub(super) fn band_reach(
                 &in_stock,
                 &|q: Point2| rest.surface_steps(q),
                 &part_at,
-                &|pc, tip, r_in, r_out, h, upto| rest.hidden_in_annulus(pc, tip, r_in, r_out, h, upto),
+                &|bx, h, probes, heights, upto| rest.hidden_in_cover(bx, h, probes, heights, upto, &columns),
             );
             warns.extend(
                 sweeps

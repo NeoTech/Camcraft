@@ -19,8 +19,10 @@ mod align_tools;
 mod area;
 mod body_tools;
 mod bridge;
+mod coolant_tools;
 // #93 slice 2: a milling tool's drawn cutter outline.
 mod cutter_tools;
+mod cutting_tools;
 mod edit;
 mod features;
 mod fixture_tools;
@@ -33,14 +35,25 @@ mod model_tools;
 mod machine_tools;
 mod order_tools;
 mod pick;
+// #979: the box pick, the viewport's Ctrl+drag box select headless.
+mod box_pick;
 mod pockets;
 mod render;
 mod setup_tools;
+mod tool_delete;
+mod tool_edit;
 mod tools;
+mod wcs_circle;
 mod vise_tools;
 mod accessory_tools;
 mod plate_tools;
 mod modvise_tools;
+// #547: a sinker electrode generated from a cavity's picked faces.
+mod sinker_tools;
+mod units_tools;
+// #1538: Fit to Models over the parts, never the fixtures.
+mod stock_fit_tools;
+mod tool_number_tools;
 mod wcs_tools;
 mod rotary_tools;
 mod workholding_tools;

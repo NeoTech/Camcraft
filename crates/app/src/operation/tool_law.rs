@@ -38,10 +38,11 @@ pub const CENTERLINE: &[ToolKind] = &[
 /// the break, read off `tip_angle` - the chamfer mill and nothing else.
 pub const CONE: &[ToolKind] = &[ToolKind::Taper];
 
-/// The helical thread mill: the ride is timed by the TOOL's pitch, and
-/// the only kind that carries one is the tap form (`Tool::pitch` is
-/// inert elsewhere) - the thread-mill cylinder is modeled as a Tap.
-pub const THREAD_MILL: &[ToolKind] = &[ToolKind::Tap];
+/// The helical thread mill (#894): the multi-form and single-form
+/// thread-mill kinds and nothing else. A Tap is a rigid tap - one
+/// helical orbit of it is a crash - so the Tap-as-thread-mill reading
+/// of M2.4 C is gone; an operation that still mounts one names it.
+pub const THREAD_MILL: &[ToolKind] = &[ToolKind::ThreadMill, ToolKind::ThreadMillSingle];
 
 /// The drilling cycles, Z or cross (live tooling on a mill-turn): the
 /// cycle the tool expands into - a drill drills (plain/peck/deep and a
@@ -122,12 +123,18 @@ pub const NO_TOOL: &[ToolKind] = &[];
 /// coarse to leave a core is refused by name.
 pub fn cutting_radius(tool: &crate::tools::Tool) -> Result<f64, String> {
     let radius = tool.diameter * 0.5;
-    if tool.kind != ToolKind::Tap {
+    // A thread mill sweeps its tooth roots the same way (#894): the
+    // teeth cut only the thread band, at its coarsest pitch.
+    if !matches!(tool.kind, ToolKind::Tap | ToolKind::ThreadMill | ToolKind::ThreadMillSingle) {
         return Ok(radius);
     }
     let core = radius - crate::machining2d::THREAD_DEPTH_PER_PITCH * tool.pitch;
     if !(core.is_finite() && core > 0.0) {
-        return Err(format!("tap leaves no thread core (diameter {}, pitch {})", tool.diameter, tool.pitch));
+        return Err(format!("{} leaves no thread core (diameter {}, pitch {})", tool.kind, tool.diameter, tool.pitch));
     }
     Ok(core)
 }
+
+/// The sinker electrode (#541): the sinker operations mount nothing
+/// else, and no cutting kind mounts an electrode.
+pub const ELECTRODE: &[ToolKind] = &[ToolKind::Electrode];

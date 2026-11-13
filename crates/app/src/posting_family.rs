@@ -11,15 +11,16 @@
 use flecs_ecs::prelude::*;
 
 use crate::model;
+use crate::operation::OpParams;
 
 /// Refuse the first program op whose family its setup's machine does
 /// not admit, naming the op, its kind and the machine kind - or whose
-/// kind mounts no library tool (#532: the wire EDM's, whose post is not
-/// built yet).
+/// kind mounts no library tool and has no post section of its own
+/// (#532/#533: only the Wire Contour's, `posting_wire`, is built).
 ///
 /// # Errors
 /// `"<op>: a <kind> operation cannot run on its setup's <machine> machine - ..."`,
-/// or `"<op>: a <kind> operation posts through a wire EDM post, which is not built yet - ..."`.
+/// or `"<op>: a <kind> operation has no post section yet - nothing is posted"`.
 pub(crate) fn family_at_post(world: &World, ops: &[(String, Entity)]) -> Result<(), String> {
     for (name, e) in ops {
         if let Some(op) = model::operation_of(world, e) {
@@ -31,12 +32,14 @@ pub(crate) fn family_at_post(world: &World, ops: &[(String, Entity)]) -> Result<
                     machine.label()
                 ));
             }
-            // #532: a wire EDM kind posts through a wire EDM post, and
-            // none is built yet - refused by name, never posted in a
-            // cutting dialect (and before any tool is read: it has none).
-            if !op.params.kind().info().mounts_tool() {
+            // #532/#533: an op that mounts no tool posts only as its own
+            // kind's section - the Wire Contour's (`posting_wire`), whose
+            // condition word only a wire EDM post voices; any other
+            // tool-less kind is refused by name, never posted (and before
+            // any tool is read: it has none).
+            if !op.params.kind().info().mounts_tool() && !matches!(op.params, OpParams::WireContour(_)) {
                 return Err(format!(
-                    "{name}: a {} operation posts through a wire EDM post, which is not built yet - nothing is posted",
+                    "{name}: a {} operation has no post section yet - nothing is posted",
                     op.params.kind()
                 ));
             }

@@ -102,19 +102,20 @@ pub(super) fn probe_params(params: &OpParams, tool: &Tool, clearance_z: f64) -> 
     })
 }
 
-/// Generate a probe op's path and judge it against `facets` (the model).
+/// Generate a probe op's path and judge it against `facets` (the model),
+/// whose mesh is `excess` coarser than the importer promises (#1053).
 /// `stack` is the tool's modelled body (#842), `None` without one.
 pub(super) fn generate_probe(
     params: &OpParams,
     tool: &Tool,
     stack: Option<&HolderStack>,
     clearance_z: f64,
-    facets: &[Triangle],
+    (facets, excess): (&[Triangle], f64),
 ) -> Result<(Toolpath, Vec<Warning>), GenError> {
     let p = probe_params(params, tool, clearance_z)?;
     let path = probe_cycle(&p)?;
-    let mut warns = stylus_hits(&path, tool.diameter * 0.5, facets);
-    warns.extend(stylus_reach_hits(&path, tool, stack, facets, &warns));
+    let mut warns = stylus_hits_excess(&path, tool.diameter * 0.5, facets, excess);
+    warns.extend(stylus_reach_hits_excess(&path, tool, stack, facets, &warns, excess));
     warns.extend(search_advisory(&path, p.overtravel));
     Ok((path, warns))
 }
@@ -126,7 +127,27 @@ pub(super) fn generate_probe(
 /// warning per offending move.
 #[must_use]
 pub fn stylus_hits(path: &Toolpath, ball_r: f64, facets: &[Triangle]) -> Vec<Warning> {
-    let floor = ball_r - STYLUS_SLACK;
+    stylus_hits_excess(path, ball_r, facets, 0.0)
+}
+
+/// The slack the protected-move law grants on a model whose mesh is
+/// `excess` coarser than the importer promises (#1053, the #864
+/// reading): [`STYLUS_SLACK`] less the excess while that stays
+/// positive, untouched past that - where the program gate refuses the
+/// operation by name (`fidelity_law::floor_of` reads the same slack).
+/// A facet of a convex face stands inside the true face by up to its
+/// chord error, so a ball the facets keep the plain slack off can stand
+/// that much nearer the real part.
+#[must_use]
+pub fn stylus_slack(excess: f64) -> f64 {
+    super::fidelity_law::tightened(STYLUS_SLACK, excess)
+}
+
+/// [`stylus_hits`] on a model `excess` coarser than promised (#1053):
+/// the slack gives the excess back ([`stylus_slack`]).
+#[must_use]
+pub fn stylus_hits_excess(path: &Toolpath, ball_r: f64, facets: &[Triangle], excess: f64) -> Vec<Warning> {
+    let floor = ball_r - stylus_slack(excess);
     let centre = |q: Point3| Point3::new(q.x, q.y, q.z + ball_r);
     path.moves
         .iter()
@@ -219,7 +240,21 @@ pub fn stylus_reach_hits(
     facets: &[Triangle],
     ball: &[Warning],
 ) -> Vec<Warning> {
-    let law = SolidLaw { step: 0.5, allow: STYLUS_SLACK, hole_walls: false };
+    stylus_reach_hits_excess(path, tool, stack, facets, ball, 0.0)
+}
+
+/// [`stylus_reach_hits`] on a model `excess` coarser than promised
+/// (#1053): the stem and body bands are granted [`stylus_slack`].
+#[must_use]
+pub fn stylus_reach_hits_excess(
+    path: &Toolpath,
+    tool: &Tool,
+    stack: Option<&HolderStack>,
+    facets: &[Triangle],
+    ball: &[Warning],
+    excess: f64,
+) -> Vec<Warning> {
+    let law = SolidLaw { step: 0.5, allow: stylus_slack(excess), hole_walls: false };
     let convicted = |at: usize| ball.iter().any(|w| matches!(*w, Warning::Gouge { at: b } if b == at));
     solid_hits(path, facets, &stylus_cutter(tool, stack), &law)
         .into_iter()

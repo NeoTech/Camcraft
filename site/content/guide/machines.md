@@ -19,7 +19,7 @@ messages below.
 | Lathe | Turning, plus the axial Drill | Fanuc Lathe, Tormach PathPilot Lathe | Turning center 2-axis, Tormach 8L, 15L, 15LX |
 | Mill-turn | milling and turning | every post except plasma | Multitasking 5-axis |
 | Plasma | Plasma Profile only | Tormach PathPilot Plasma | Tormach 1300PL |
-| Wire / sinker EDM | Wire Contour (wire EDM) | none yet | none yet |
+| Wire / sinker EDM | Wire Contour (wire EDM); Sinker Burn, Side Burn (sinker EDM) | none yet | none yet |
 
 The rules are `Family::admits` in `crates/app/src/operation/kinds.rs` and
 `post_serves` in `crates/app/src/posting.rs`. A picker lists posts by this
@@ -33,6 +33,10 @@ Multi-axis). Rotary axes in the file unlock the rotary and multi-axis
 operations; an axis that states a leaning direction (a tilting head or
 trunnion) tilts the cutter, while a C table only turns the part. A program
 that asks for a tilt the machine cannot hold is refused by name.
+
+For setting up 3+2, continuous 4-axis and 5-axis work, which machines and
+posts allow it and what is checked, see
+[4-axis and 5-axis machining](@/guide/multi-axis/_index.md).
 
 Checked against the machine file at post, when it states them: axis travel
 (arc bulges included), feed ceilings, spindle rpm range, spindle power,
@@ -123,12 +127,15 @@ rotary axis`.
 
 The kinds exist (`wire_edm`, `sinker_edm`), and the Wire Contour operation
 (`OpType::WireContour`) is admitted on a wire EDM machine. What does not ship
-yet is an EDM post or an EDM machine file: no post serves an EDM kind, so
-nothing can be posted for one. Status: Wire Contour can be created and
+yet is an EDM machine file. Status: Wire Contour can be created and
 generated on a machine file you write that declares `wire_edm`; posting it
 stops with `a Wire Contour operation posts through a wire EDM post, which
-is not built yet - nothing is posted`. The sinker EDM kind admits no
-operation yet.
+is not built yet - nothing is posted`. The sinker EDM kind admits Sinker
+Burn and Sinker Side Burn on a machine file you write that declares
+`sinker_edm`; a straight Sinker Burn posts through the "Sinker EDM (ISO)"
+post, which takes every EDM code from the file's `edm.codes`.
+The operations, their settings and their refusals are in
+[Wire and sinker EDM](@/guide/operations-edm.md).
 
 ## Changing a setup's machine
 

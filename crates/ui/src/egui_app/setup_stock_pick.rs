@@ -17,7 +17,6 @@ use crate::state::{CommandKind, State};
 
 /// Draw the stock-source choice of setup `name`.
 pub(super) fn picker(ui: &mut Ui, state: &mut State, name: &str) {
-    ui.label("Stock");
     let (Some(prev), Some(now)) = (setup_stock::previous(&state.world, name), setup_stock::effective(&state.world, name))
     else {
         let _ = ui.radio(true, "Its own stock (the Stock node)");

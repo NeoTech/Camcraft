@@ -10,7 +10,9 @@
 //! still blocks the post. Both a part-sourced and a stock-sourced Bore.
 //! The casting stays in the tree, marked raw stock only (#1094); a
 //! coarse casting's excess is read, and one whose source is deleted - its
-//! chord unknown (#1056) - is never acquitted.
+//! chord unknown (#1056) - is never acquitted: the stock copy carries
+//! the coarse chord since #1127, so the fidelity refusal blocks that post
+//! first, by name, and the rapid law blocks the exact twin (#1336).
 //!
 //! Provenance: our own fixtures (`ladder_entry_height.rs`'s blind hole
 //! under a stepped casting), specced from the Prime Directive and the
@@ -261,9 +263,15 @@ fn an_open_stock_mesh_proves_nothing_and_the_dive_stays_convicted() {
 #[test]
 fn a_coarse_stock_whose_source_is_gone_is_never_acquitted() {
     // PR #1098 third review: a casting imported at chord 2.5 mm, then
-    // deleted - the stock copy no longer knows its chord (#1056). The dive
-    // ends 2 mm over the mesh, and the real surface may stand 2.5 mm above
-    // it: the flat cap's conviction stands, and the post is blocked by it.
+    // deleted. The dive ends 2 mm over the mesh, and the real surface may
+    // stand 2.5 mm above it: the flat cap's conviction stands. Since #1127
+    // (#1056) the stock copy carries the casting's chord itself, so the
+    // fidelity clause - first in the gate by design (#864), and the
+    // refusal that silences the sim's lines (#1056 point 3) - blocks the
+    // post by the casting's name. The rapid law's conviction still rides
+    // the op's warnings, and the same program without the coarse refusal
+    // (the exact casting, deleted) is blocked by the rapid law by name
+    // (#1336).
     for src in [Src::Part, Src::Stock] {
         let gone = Casting { coarse: Some(2.5), deleted: true, ..Casting::default() };
         let ((at, _, z), warns, posted) = run_on(src, FAR, gone);
@@ -271,12 +279,25 @@ fn a_coarse_stock_whose_source_is_gone_is_never_acquitted() {
         assert!(warns.contains(&Warning::RapidInStock { at }), "{src:?}: acquitted on an unknown chord: {warns:?}");
         match posted {
             Ok(()) => panic!("{src:?}: a dive into a coarse stock of unknown chord posted"),
-            Err(e) => assert!(e.contains(&format!("rapid move {at} ")), "{src:?}: not blocked by the rapid law: {e}"),
+            Err(e) => assert!(
+                e.contains("post blocked")
+                    && e.contains("model 'casting'")
+                    && e.contains(camcraft_app::model_fidelity::TOO_COARSE),
+                "{src:?}: not blocked by the coarse-import refusal: {e}"
+            ),
         }
-        // The same casting exact and deleted is unknown too: kept.
+        // The same casting exact and deleted is unknown too: kept, and
+        // with no fidelity refusal ahead of it the rapid law blocks.
         let exact_gone = Casting { deleted: true, ..Casting::default() };
-        let ((at, _, _), warns, _) = run_on(src, FAR, exact_gone);
+        let ((at, _, _), warns, posted) = run_on(src, FAR, exact_gone);
         assert!(warns.contains(&Warning::RapidInStock { at }), "{src:?}: {warns:?}");
+        match posted {
+            Ok(()) => panic!("{src:?}: a dive into an exact stock of unknown source posted"),
+            Err(e) => assert!(
+                e.contains("post blocked") && e.contains(&format!("rapid move {at} ")),
+                "{src:?}: not blocked by the rapid law: {e}"
+            ),
+        }
     }
 }
 

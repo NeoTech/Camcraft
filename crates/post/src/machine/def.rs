@@ -206,6 +206,11 @@ pub struct Machine {
     /// None: unstated.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub edm: Option<super::edm::Edm>,
+    /// The EDM control's own words, `edm.codes` (#533, #290 D5): name ->
+    /// the text the control reads. Empty = none stated; a post that
+    /// needs one refuses by its name.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub edm_codes: std::collections::BTreeMap<String, String>,
     /// The holder system the spindle takes (#828): `tooling.spindle_mount`,
     /// one of [`super::SPINDLE_MOUNTS`]. Unstated reads `None`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -281,6 +286,7 @@ impl Machine {
                 _ => true,
             }
             && self.edm.as_ref().is_none_or(super::edm::Edm::is_sane)
+            && super::edm_codes::codes_sane(&self.edm_codes)
     }
 
     /// The one-line identity for the Setup pane and the stage E sheet.

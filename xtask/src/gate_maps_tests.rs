@@ -16,7 +16,7 @@ fn root() -> PathBuf {
 fn selected(file: &str, krate: &str) -> Vec<String> {
     let changed = vec![file.to_string()];
     let hunks = |_: &str| -> Vec<String> { Vec::new() };
-    let diff = Diff { changed: &changed, untracked: &[], hunks: &hunks };
+    let diff = Diff { changed: &changed, untracked: &[], hunks: &hunks, before: &|_| None };
     let Ok(Quick::Plan(p)) = quick::plan(&root(), &diff, false) else { panic!("{file} did not plan") };
     let step: Option<&Step> = p.steps.iter().find(|s| s.name == format!("{krate} suites"));
     let Some(step) = step else { return Vec::new() };
@@ -64,6 +64,19 @@ fn motion_machining2d_change_selects_the_machining2d_suites() {
     let got = selected("crates/motion/src/machining2d/mod.rs", "app");
     assert!(got.iter().any(|b| b == "golden_cl"), "golden_cl missing from {got:?}");
     assert!(count("crates/motion/src/machining2d/mod.rs", "app") >= 20, "machining2d selects too few");
+}
+
+/// #1068: the operations suite generates every operation through the app layer, so it pins the
+/// motion generators end to end - a change to one of them must select it.
+#[test]
+fn motion_generator_change_selects_the_operations_suite() {
+    let map = scan::gate_map(&scan::read(&root().join("crates/app/tests/operations.rs")))
+        .expect("operations.rs gate map");
+    for m in ["machining2d", "machining3d", "drilling", "finishing3d", "multiaxis", "plunge_law"] {
+        assert!(map.contains(&format!("motion::{m}")), "operations.rs must name motion::{m}: {map}");
+    }
+    let got = selected("crates/motion/src/multiaxis/mod.rs", "app");
+    assert!(got.iter().any(|b| b == "operations"), "operations missing from {got:?}");
 }
 
 /// No app suite may name a module that lives in another crate as `app::<module>`.
