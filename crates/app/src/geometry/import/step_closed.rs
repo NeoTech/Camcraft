@@ -32,10 +32,10 @@ pub(super) fn closed_shells(section: &DataSection) -> HashSet<u64> {
         for r in recs {
             if r.name == "CLOSED_SHELL" {
                 closed.insert(id);
-            } else if r.name == "MANIFOLD_SOLID_BREP" {
-                if let Some(Parameter::Ref(Name::Entity(outer))) = super::step_units::args(r).get(1) {
-                    closed.insert(*outer);
-                }
+            } else if r.name == "MANIFOLD_SOLID_BREP"
+                && let Some(Parameter::Ref(Name::Entity(outer))) = super::step_units::args(r).get(1)
+            {
+                closed.insert(*outer);
             }
         }
     }
@@ -61,10 +61,12 @@ pub(super) fn open_edges(tris: &[Triangle], weld: f64) -> (usize, Option<(Point3
                 for dz in -1..=1i64 {
                     let key = (cx.saturating_add(dx), cy.saturating_add(dy), cz.saturating_add(dz));
                     for &i in grid.get(&key).map(Vec::as_slice).unwrap_or(&[]) {
-                        if let Some(q) = ids.get(i) {
-                            if (q.x - p.x).abs() <= weld && (q.y - p.y).abs() <= weld && (q.z - p.z).abs() <= weld {
-                                return i;
-                            }
+                        if let Some(q) = ids.get(i)
+                            && (q.x - p.x).abs() <= weld
+                            && (q.y - p.y).abs() <= weld
+                            && (q.z - p.z).abs() <= weld
+                        {
+                            return i;
                         }
                     }
                 }
