@@ -44,6 +44,7 @@ mod contour_depth;
 mod contour_entry;
 mod contour_link;
 mod contour_params;
+mod contour_start;
 mod contour_step;
 mod descent;
 mod descent_dive;
