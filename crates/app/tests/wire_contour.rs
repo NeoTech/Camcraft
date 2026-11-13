@@ -225,9 +225,10 @@ fn a_die_and_a_punch_on_one_profile_stand_apart_by_exactly_the_kerf() {
     let (_, m) = machine::of_setup(&world, None);
     let c = check_document(&world, &m.expect("the wire EDM")).expect("checks");
     assert!(c.problems.is_empty(), "{:?}", c.problems);
-    assert!(c.notes.iter().any(|n| n.contains("wire verification is not built yet")), "{:?}", c.notes);
+    assert!(c.notes.iter().any(|n| n.contains("judged at the post by the wire laws")), "{:?}", c.notes);
     // #533: each streams as a wire section, its condition riding for
-    // the wire post (which alone voices it - `wire_post.rs`).
+    // the wire post (which alone voices it - `wire_post.rs`); the wire
+    // laws (#534) stand between the stream and NC text (`wire_verify.rs`).
     let streams = posting::op_streams(&world).expect("the wire sections stream");
     let cond = |r: &camcraft_app::post::cnc::Record| {
         matches!(r, camcraft_app::post::cnc::Record::Param { name, value } if name == "EdmCondition" && value == "C110")
