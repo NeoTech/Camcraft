@@ -148,6 +148,7 @@ fn thread(x: f64, radius: f64) -> OpParams {
         pitch: None,
         hand: camcraft_app::cl::ThreadHand::Right,
         external: false,
+        passes: camcraft_app::machining2d::ThreadPasses::default(),
     }
 }
 
@@ -249,7 +250,7 @@ fn a_thread_taken_below_the_models_hole_floor_convicts() {
     let OpParams::Thread { clearance_z, retract_z, top_z, bottom_z, infeed, feed, plunge_feed, climb, pitch, hand, .. } = thread(0.0, 5.0) else {
         unreachable!("a thread op")
     };
-    let p = OpParams::Thread { clearance_z, retract_z, top_z, bottom_z, infeed, feed, plunge_feed, climb, holes: vec![h], pitch, hand, external: false };
+    let p = OpParams::Thread { clearance_z, retract_z, top_z, bottom_z, infeed, feed, plunge_feed, climb, holes: vec![h], pitch, hand, external: false, passes: camcraft_app::machining2d::ThreadPasses::default() };
     let w = verdict(drilled_block(5.0), p);
     assert!(gouged(&w), "{w:?}");
 }
