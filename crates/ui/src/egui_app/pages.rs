@@ -50,7 +50,7 @@
 //! (our code) and the egui vendored sources; no HSMWorks material involved.
 
 use egui::{
-    Align2, Color32, ComboBox, DragValue, FontId, Id, Pos2, RichText, ScrollArea,
+    Align2, Color32, DragValue, FontId, Id, Pos2, RichText, ScrollArea,
     Sense, Shape, Stroke, TextEdit, Ui, Vec2, Window,
 };
 
@@ -65,8 +65,7 @@ use camcraft_app::tools;
 use camcraft_app::units::{self, Unit};
 
 use crate::actions;
-use crate::interact;
-use crate::state::{CommandKind, ErrorScope, FixtureUi, ModelUi, State, UiTarget, quat_yaw_deg};
+use crate::state::{CommandKind, ErrorScope, FixtureUi, ModelUi, State, UiTarget};
 
 use super::layout::hint;
 use super::panes::kind_name;
@@ -78,7 +77,7 @@ use super::theme::Tokens;
 pub(crate) use super::fields::{combo, combo_owned, field, num, num_feed, num_plain};
 
 /// Tool kind labels, same order as `ToolKind` (mirrors the tool page).
-const TOOL_KINDS: [&str; 14] = [
+const TOOL_KINDS: [&str; 16] = [
     "End mill",
     "Ball nose",
     "Bull nose",
@@ -95,6 +94,9 @@ const TOOL_KINDS: [&str; 14] = [
     "Plasma torch",
     // #541: diameter = X size, width = Y size; it turns no spindle.
     "Sinker electrode",
+    // #894: rows of teeth at one pitch / one row over a pitch range.
+    "Thread mill",
+    "Single-form thread mill",
 ];
 
 /// The note gray the model page's notes use ([0.62,0.66,0.72]).
@@ -142,7 +144,7 @@ pub fn properties(ui: &mut Ui, state: &mut State, pal: &Tokens) {
                 let active = camcraft_app::setup::active(&state.world);
                 ui.heading(camcraft_app::setup::wcs_label(&state.world, active.as_deref()));
                 ui.separator();
-                wcs_page(ui, state);
+                super::wcs_page::wcs_page(ui, state);
                 // #343: the WCS node's dialog names its post word too.
                 if let Some(name) = active.as_deref() {
                     ui.separator();
@@ -185,18 +187,10 @@ fn setup_error(ui: &mut Ui, state: &State) {
 // --------------------------------------------------------------- stock page
 
 fn stock_page(ui: &mut Ui, state: &mut State) {
+    // The document's unit (display and posted program, #902) - the
+    // numbers below re-render from the world next pass.
+    super::post_options::units_row(ui, state, "Units");
     let u = state.units();
-    // The document's unit lens, straight off the world singleton - the
-    // click queues SetUnits; the numbers below re-render from the world
-    // next pass, so there is no mirror to keep in step.
-    ui.horizontal(|ui| {
-        ui.label("Units");
-        for cand in [Unit::Millimeters, Unit::Inches] {
-            if ui.radio(u == cand, cand.label()).clicked() && u != cand {
-                state.pending.push_back(CommandKind::SetUnits(cand));
-            }
-        }
-    });
     ui.add_space(3.0);
     ui.horizontal(|ui| {
         for (i, name) in ["Box", "Cylinder", "From model"].iter().enumerate() {
@@ -342,6 +336,8 @@ pub(super) fn post_section(ui: &mut Ui, state: &mut State) {
     let current = posting::post_of(&state.world);
     ui.label("Post");
     ui.label(posting::post_label(&state.world));
+    // #902: the unit the program is written in - the document's own.
+    super::post_options::units_row(ui, state, "Program units");
     post_offer_banner(ui, state);
     ui.horizontal(|ui| {
         // The registry by name; the combo OFFERS only the dialects
@@ -517,163 +513,7 @@ pub(super) fn machine_section(ui: &mut Ui, state: &mut State) {
     }
 }
 
-// ------------------------------------------------------------------ wcs page
-
-fn wcs_page(ui: &mut Ui, state: &mut State) {
-    let u = state.units();
-    field(ui, "X origin");
-    num(ui, u, &mut state.wcs_ui.x);
-    field(ui, "Y origin");
-    num(ui, u, &mut state.wcs_ui.y);
-    field(ui, "Z origin");
-    num(ui, u, &mut state.wcs_ui.z);
-    field(ui, "Tilt about X (roll)");
-    num_plain(ui, &mut state.wcs_ui.roll_deg);
-    field(ui, "Tilt about Y (pitch)");
-    num_plain(ui, &mut state.wcs_ui.pitch_deg);
-    field(ui, "Turn about Z (yaw)");
-    num_plain(ui, &mut state.wcs_ui.yaw_deg);
-    ui.add_space(6.0);
-    ui.label("Quarter-turns about world axes (apply immediately):");
-    const TURNS: [(&str, usize, f64); 6] = [
-        ("X+", 0, 1.0),
-        ("X-", 0, -1.0),
-        ("Y+", 1, 1.0),
-        ("Y-", 1, -1.0),
-        ("Z+", 2, 1.0),
-        ("Z-", 2, -1.0),
-    ];
-    for row in [0usize, 3] {
-        ui.horizontal(|ui| {
-            for (label, axis, sign) in TURNS[row..row + 3].iter() {
-                if ui.button(format!("Turn {label}")).clicked() {
-                    turn_wcs(state, *axis, *sign);
-                }
-            }
-        });
-    }
-    ui.horizontal(|ui| {
-        if ui.button("Level").clicked() {
-            state.wcs_ui.roll_deg = 0.0;
-            state.wcs_ui.pitch_deg = 0.0;
-            state.wcs_ui.yaw_deg = 0.0;
-            apply_wcs_drafts(state);
-        }
-        if ui.button("Set Origin").clicked() {
-            apply_wcs_drafts(state);
-        }
-    });
-
-    ui.add_space(6.0);
-    // Box-point anchoring (feedback 5, revised): the reference box is an
-    // explicit choice - stock or model - and the nine points of the chosen
-    // level can be clicked in the viewport as markers instead of hunting
-    // through the button grid. The buttons and the markers share
-    // `interact::anchor_points`, so what you click, what highlights, and
-    // what places are the same points by construction. This section is the
-    // imgui pane's origin picker (setup.rs, de272ca/067f3aa), restored:
-    // `interact.rs` kept the markers and the viewport pick law through the
-    // M-g retirement, but the widgets here died un-ported, leaving the pick
-    // mode unreachable (the crosses only render while `pick_anchor` is
-    // set). Behavior specced from published CAM setup practice; the grid
-    // and its math are ours.
-    const SOURCES: [&str; 2] = ["Stock box", "Model bounds"];
-    field(ui, "Anchor on");
-    ComboBox::from_id_salt("wcs_src")
-        .selected_text(SOURCES[state.wcs_ui.anchor_source.min(1)])
-        .show_ui(ui, |ui| {
-            for (i, s) in SOURCES.iter().enumerate() {
-                ui.selectable_value(&mut state.wcs_ui.anchor_source, i, *s);
-            }
-        });
-    match interact::anchor_reference(state) {
-        Some((_, what)) => {
-            let chosen = SOURCES[state.wcs_ui.anchor_source.min(1)];
-            if !chosen.eq_ignore_ascii_case(what) {
-                ui.label(format!("No {chosen} defined - anchoring on {what}."));
-            }
-            ui.horizontal(|ui| {
-                for (i, name) in ["Bottom", "Middle", "Top"].iter().enumerate() {
-                    ui.radio_value(&mut state.wcs_ui.anchor_z, i, *name);
-                }
-            });
-            ui.checkbox(&mut state.wcs_ui.pick_anchor, "Pick markers in viewport");
-            if state.wcs_ui.pick_anchor {
-                ui.label("Click a yellow marker in the viewport to set the origin.");
-            }
-            let pts = interact::anchor_points(state);
-            for row in 0..3usize {
-                ui.horizontal(|ui| {
-                    for col in 0..3usize {
-                        let k = row * 3 + col;
-                        let code = pts.get(k).map_or("?", |(_, name)| *name);
-                        let label = if state.wcs_ui.anchor_xy == k {
-                            format!("[{code}]")
-                        } else {
-                            code.to_owned()
-                        };
-                        if ui.button(label).clicked()
-                            && let Some((pos, _)) = pts.get(k)
-                        {
-                            state.wcs_ui.anchor_xy = k;
-                            state.wcs_ui.x = pos[0];
-                            state.wcs_ui.y = pos[1];
-                            state.wcs_ui.z = pos[2];
-                            apply_wcs_drafts(state);
-                        }
-                    }
-                });
-            }
-        }
-        None => {
-            ui.label("Import a model or set stock to anchor the origin on a point.");
-        }
-    }
-
-    ui.add_space(6.0);
-    // #342: the setup's one WCS, and the work offset its post writes. The
-    // dropdown that picks it is drawn under this page (#343), so the note
-    // names what this page shows, not where the choice lives.
-    let wcs_ctx = camcraft_app::setup::active(&state.world);
-    let label = camcraft_app::setup::wcs_label(&state.world, wcs_ctx.as_deref());
-    let line = match camcraft_app::setup::wcs_entity(&state.world, wcs_ctx.as_deref())
-        .and_then(|e| model::transform_of(&state.world, &e))
-    {
-        Some(loc) => format!(
-            "{label}: {}, {}, {}  yaw {:.1}",
-            units::len(loc.pos.x, u, 2),
-            units::len(loc.pos.y, u, 2),
-            units::len(loc.pos.z, u, 2),
-            quat_yaw_deg(loc.rot)
-        ),
-        None => format!("{label}: not placed (at the origin)"),
-    };
-    ui.label(line);
-    ui.label("Work offset: the G54-G59 slot this setup posts. It does not move the origin.");
-}
-
-fn apply_wcs_drafts(state: &mut State) {
-    state.pending.push_back(CommandKind::SetWcs {
-        pos: [state.wcs_ui.x, state.wcs_ui.y, state.wcs_ui.z],
-        roll_deg: state.wcs_ui.roll_deg,
-        pitch_deg: state.wcs_ui.pitch_deg,
-        yaw_deg: state.wcs_ui.yaw_deg,
-    });
-}
-
-fn turn_wcs(state: &mut State, axis: usize, sign: f64) {
-    let q = quat_from_euler(
-        state.wcs_ui.roll_deg.to_radians(),
-        state.wcs_ui.pitch_deg.to_radians(),
-        state.wcs_ui.yaw_deg.to_radians(),
-    );
-    let turn = quat_from_axis_angle(axis, sign * 90.0f64.to_radians());
-    let (r, p, y) = quat_to_euler(quat_mul(turn, q));
-    state.wcs_ui.roll_deg = r.to_degrees();
-    state.wcs_ui.pitch_deg = p.to_degrees();
-    state.wcs_ui.yaw_deg = y.to_degrees();
-    apply_wcs_drafts(state);
-}
+// The WCS page lives in `wcs_page` (#739 split it out at the 400-line law).
 
 /// Queue the Model page's placement draft as a `MoveModel` (M5.2 G) -
 /// the `apply_wcs_drafts` shape, one command kind over.
@@ -1181,6 +1021,8 @@ pub(crate) fn tool_editor_window(ctx: &egui::Context, state: &mut State) {
                         {
                             state.tool_ui.tip_angle = 90.0;
                         }
+                        // The thread mills (#894): a form and a pitch.
+                        super::tool_thread_mill_row::seed(&mut state.tool_ui);
                         // The torch (#670): no spindle, no corner - a
                         // kerf. Leaving it, a spinning kind needs an rpm.
                         // The sinker electrode (#541) turns none either.
@@ -1236,6 +1078,8 @@ pub(crate) fn tool_editor_window(ctx: &egui::Context, state: &mut State) {
                     }
                     // #630: which point of the nose the lathe posts write.
                     super::tool_orientation_row::orientation_row(ui, state);
+                    // #894: a thread mill's pitch (range) and form angle.
+                    super::tool_thread_mill_row::thread_mill_rows(ui, state);
                     // #891: a lathe steel's surface speed, feed per rev, clamp.
                     super::tool_turning_row::turning_rows(ui, state);
                     if state.tool_ui.kind == 7 {
@@ -1273,7 +1117,7 @@ pub(crate) fn tool_editor_window(ctx: &egui::Context, state: &mut State) {
                         ui.label("half the diameter - a ball nose's whole tip is its ball");
                     } else if !matches!(
                         state.tool_ui.tool_kind(),
-                        tools::ToolKind::Tap | tools::ToolKind::Torch | tools::ToolKind::Electrode
+                        tools::ToolKind::Tap | tools::ToolKind::Torch | tools::ToolKind::Electrode | tools::ToolKind::ThreadMill | tools::ToolKind::ThreadMillSingle
                     ) {
                         field(ui, "Corner radius");
                         num(ui, u, &mut state.tool_ui.corner_r);
@@ -1655,86 +1499,10 @@ fn tool_import_mode_combo(ui: &mut egui::Ui, mode: &mut camcraft_app::commands::
 
 #[cfg(test)]
 mod turn_tests {
-    //! The turn/Level buttons are commands of their own now: the world -
-    //! and with it the viewport gizmo - moves on the press. Moved verbatim
-    //! from the retired imgui setup.rs at M-g; the code under test is
-    //! pages.rs's own `turn_wcs`/`apply_wcs_drafts`.
+    //! The page tests that stayed with pages.rs; the WCS turn tests moved
+    //! with `turn_wcs` to `wcs_page_tests` (#739).
 
     use super::*;
-    use camcraft_app::geometry::{Point3, transform_point};
-
-    fn place(state: &mut State, pos: [f64; 3], yaw_deg: f64) {
-        state.pending.push_back(CommandKind::SetWcs {
-            pos,
-            roll_deg: 0.0,
-            pitch_deg: 0.0,
-            yaw_deg,
-        });
-        state.drain_actions();
-    }
-
-    fn location(state: &State, slot: &str) -> camcraft_app::schema::Location {
-        let entity = model::find_by_name(&state.world, slot).expect("offset entity");
-        model::transform_of(&state.world, &entity).expect("location")
-    }
-
-    #[test]
-    fn a_turn_moves_the_world_not_just_the_drafts() {
-        let mut state = State::new();
-        place(&mut state, [10.0, 0.0, 0.0], 0.0);
-        state.sync_setup_ui();
-        turn_wcs(&mut state, 0, 1.0); // X+ quarter about the world X
-        state.drain_actions();
-        let loc = location(&state, "G54");
-        assert_eq!([loc.pos.x, loc.pos.y, loc.pos.z], [10.0, 0.0, 0.0]);
-        // Right-hand +90 about X takes +Z to -Y.
-        let p = transform_point(Point3::new(0.0, 0.0, 1.0), loc.pos, loc.rot);
-        assert!(
-            [(p.x - 10.0), (p.y + 1.0), p.z]
-                .iter()
-                .all(|v| v.abs() < 1e-9),
-            "{p:?}"
-        );
-    }
-
-    #[test]
-    fn four_turns_about_one_axis_return_to_the_start() {
-        let mut state = State::new();
-        place(&mut state, [0.0, 0.0, 0.0], 30.0);
-        state.sync_setup_ui();
-        for _ in 0..4 {
-            turn_wcs(&mut state, 2, 1.0);
-        }
-        state.drain_actions();
-        let loc = location(&state, "G54");
-        // Same rotation as the 30-degree start: quaternion equal up to sign.
-        let start = quat_from_euler(0.0, 0.0, 30.0f64.to_radians());
-        let dot: f64 = start.iter().zip(loc.rot).map(|(a, b)| a * b).sum();
-        assert!(
-            (dot.abs() - 1.0).abs() < 1e-9,
-            "closed the circle: {:?}",
-            loc.rot
-        );
-    }
-
-    #[test]
-    fn turning_an_unplaced_wcs_applies_the_typed_position() {
-        let mut state = State::new();
-        state.wcs_ui.x = 5.0;
-        turn_wcs(&mut state, 1, -1.0); // Y- quarter
-        state.drain_actions();
-        let loc = location(&state, "G54");
-        assert_eq!([loc.pos.x, loc.pos.y, loc.pos.z], [5.0, 0.0, 0.0]);
-        // Right-hand -90 about Y takes +X to +Z: the drafts, not just a
-        // rotation, rode along.
-        let p = transform_point(Point3::new(1.0, 0.0, 0.0), loc.pos, loc.rot);
-        assert!(
-            [(p.x - 5.0), p.y, (p.z - 1.0)]
-                .iter()
-                .all(|v| v.abs() < 1e-9),
-            "{p:?}"
-        );
-    }
 
     /// M1.4: opening the editor is pure view state - the named path
     /// re-fetches the draft from the world (every field starts at the

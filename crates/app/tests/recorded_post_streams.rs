@@ -110,6 +110,7 @@ fn drill_retract() -> String {
         catalog: camcraft_tools::catalog_fields::ToolCatalog::default(),
         cutting: Vec::new(),
         turning: None,
+        pitch_min: 0.0,
     };
     let hole = |x: f64, floor_z: f64| Hole {
         xy: Point2::new(x, 10.0),

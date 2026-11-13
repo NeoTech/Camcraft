@@ -42,6 +42,10 @@ pub struct WireContourDto {
     /// stated.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub start: Option<[f64; 2]>,
+    /// No-core burnout's wall clearance, mm (#540); absent cuts the
+    /// profile alone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub burnout_clearance: Option<f64>,
     /// An open run's run-out clearance, mm (#1109); absent is the
     /// seed's, so a closed cut's file reads and writes as before.
     #[serde(default = "default_clearance", skip_serializing_if = "is_default_clearance")]
@@ -61,6 +65,7 @@ impl WireContourDto {
                 WireSide::Right => WireSideDto::Right,
             },
             start: p.start,
+            burnout_clearance: p.burnout,
             clearance: p.clearance,
         }
     }
@@ -77,6 +82,7 @@ impl WireContourDto {
                 WireSideDto::Right => WireSide::Right,
             },
             start: self.start,
+            burnout: self.burnout_clearance,
             clearance: self.clearance,
         })
     }

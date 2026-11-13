@@ -17,6 +17,7 @@ coolantModes = true; // reads PARAM Coolant (#112/#150): the engine refuses non-
 afterModes = true; // reads PARAM AfterOperation (#110): the engine refuses a stop or home ask for a post without it
 axisInversion = true; // verified on the engine's mirrored stream for an inverted X/Y (#374): goldens + equivalence test
 probeAxisInversion = true; // probing blocks verified on the mirrored stream (#392): macro interpreter on a simulated inverted machine
+programUnits = "mm inch"; // #902: writes the document's unit (postOptions.Units), G21 / G20
 
 // Determinism law: no timestamps, no randomness - the same stream
 // always posts to the same text (golden files depend on it).
@@ -49,13 +50,25 @@ var orgX = 0, orgY = 0, orgZ = 0; // the WCS slot origin (OriginX/Y/Z PARAMs)
 
 // ------------------------------------------------------------ helpers
 function has(v) { return v !== null && v !== undefined && isFinite(v); }
-function fu(v) {  // mm at three decimals, trailing zeros trimmed
-  if (!has(v)) return "0";
-  var s = Number(v).toFixed(3);
+// #902: the program's unit is the document's (postOptions.Units, "mm"
+// or "inch"; absent = mm), never the machine file's. The stream speaks
+// mm and mm/min: an inch program writes every length / 25.4 at four
+// decimals and every feed in in/min at two; angles, seconds and rpm
+// carry no length and are written as they come.
+var inch = false;
+function trimNum(s) {
   if (s.indexOf(".") >= 0) s = s.replace(/0+$/, "").replace(/\.$/, "");
   return s === "-0" ? "0" : s;
 }
-function ff(v) { return has(v) && v > 0 ? String(Math.round(v)) : "0"; }
+function fu(v) {  // a length: mm at three decimals, or inch at four
+  if (!has(v)) return "0";
+  return trimNum(Number(inch ? v / 25.4 : v).toFixed(inch ? 4 : 3));
+}
+function ff(v) {  // a feed: whole mm/min, or in/min at two decimals
+  if (!(has(v) && v > 0)) return "0";
+  return inch ? trimNum((v / 25.4).toFixed(2)) : String(Math.round(v));
+}
+function eps() { return inch ? "0.0001" : "0.001"; } // one output step, the probe checks' band
 function ni(v) { return has(v) ? String(Math.round(v)) : "0"; } // integer word
 function w(letter, v) { return has(v) ? letter + fu(v) : ""; }
 function fw(v) { return has(v) ? "F" + ff(v) : ""; }
@@ -250,17 +263,18 @@ function invertedNotes() {
   }
 }
 
-// #901: the unit this post writes - millimetres - stated in a block of
-// its own before any motion, so a control left in inch by power-on or
-// the last program never reads mm numbers as inches (RS-274 / ISO 6983:
-// G20 inch, G21 mm; the family's published operator manual: G21 also
-// checks the control's unit setting and alarms on a mismatch). Where the
-// program's unit is chosen, and inch output, is #902.
+// #901: the unit this post writes stated in a block of its own before
+// any motion, so a control left in the other unit by power-on or the
+// last program never misreads the numbers (RS-274 / ISO 6983: G20 inch,
+// G21 mm; the family's published operator manual: G20 / G21 also check
+// the control's unit setting and alarm on a mismatch). #902: the unit
+// is the document's.
 function unitBlock() {
-  block(["G21"]);
+  block([inch ? "G20" : "G21"]);
 }
 
 function onOpen() {
+  inch = typeof postOptions !== "undefined" && postOptions.Units === "inch";
   var nm = (typeof machine !== "undefined" && machine.name) || "CAMCRAFT";
   writeln("%");
   // #594: the name is user text from the machine file - cleaned like
@@ -371,7 +385,7 @@ function startPreamble() {
     toolWait = false;
   }
   if (spindleWait && sRpm > 0) {   // a touch probe (#173) states no spindle
-    block(["S" + ff(sRpm), "M3"]);
+    block(["S" + ni(sRpm), "M3"]);
     spindleOn = true;
     spindleWait = false;
   }
@@ -622,7 +636,7 @@ function onProbeMove() {
   block(["G31", wo("X", p.X, orgX), wo("Y", p.Y, orgY), wo("Z", p.Z, orgZ), fw(p.Feed)]);
   var ai = travelAxis(p);
   var tgt = [p.X - orgX, p.Y - orgY, p.Z - orgZ][ai];
-  block(["IF[ABS[" + minusU("#" + (5061 + ai), tgt) + "]LT0.001]THEN#3000=2(PROBE NO CONTACT)"]);
+  block(["IF[ABS[" + minusU("#" + (5061 + ai), tgt) + "]LT" + eps() + "]THEN#3000=2(PROBE NO CONTACT)"]);
   if (has(p.Measure) && p.Measure >= 0) {
     var b = probeBase + 3 * p.Measure;
     block(["#" + b + "=#5061"]);
@@ -653,7 +667,7 @@ function onProbeGuard() {
   var to = [p.X, p.Y, p.Z], from = [p.StartX, p.StartY, p.StartZ], org = [orgX, orgY, orgZ];
   for (var ai = 0; ai < 3; ai++) {
     if (has(from[ai]) && Math.abs(to[ai] - from[ai]) < 1e-6) continue;  // an axis that holds still
-    block(["IF[ABS[" + minusU("#" + (5061 + ai), to[ai] - org[ai]) + "]GT0.001]THEN#3000=3(PROBE HIT ON POSITIONING)"]);
+    block(["IF[ABS[" + minusU("#" + (5061 + ai), to[ai] - org[ai]) + "]GT" + eps() + "]THEN#3000=3(PROBE HIT ON POSITIONING)"]);
   }
 }
 function slotOf(word) {  // "G55" -> 1

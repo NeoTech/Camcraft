@@ -9,7 +9,7 @@
 // used; original work. Structure follows our own tormach.cps (coolant and
 // after-operation handling as in mazak.cps); the goldens lock this file's
 // decisions.
-description = "grblHAL (3-axis mill, G20/G21 from the machine, G73/G81/G82/G83/G86/G89, G2/G3, G98; no G41/G42, no G84, no probing macros)";
+description = "grblHAL (3-axis mill, G20/G21 from the document, G73/G81/G82/G83/G86/G89, G2/G3, G98; no G41/G42, no G84, no probing macros)";
 vendor = "Camcraft";
 legal = "Original clean-room work; public documentation only";
 certificationLevel = 1;
@@ -19,6 +19,7 @@ setCodePage = "utf-8";
 capabilities = 1; // reference contract: integer feature mask (bit 1 = milling)
 coolantModes = true; // reads PARAM Coolant (#112/#150)
 afterModes = true;   // reads PARAM AfterOperation (#110)
+programUnits = "mm inch"; // #902: writes the document's unit (postOptions.Units), G21 / G20
 
 // Determinism law: no timestamps, no randomness - the same stream
 // always posts to the same text (golden files depend on it).
@@ -38,14 +39,14 @@ var afterAsk = "";         // the section's PARAM AfterOperation (#110), none wh
 var coolantOp = "";        // the section's OperationName, for refusals (#150)
 var sectionOpen = false;   // preamble written (a legacy .cl carries no SECTION)
 var orgX = 0, orgY = 0, orgZ = 0; // the WCS slot origin (OriginX/Y/Z PARAMs)
-var inch = false;          // the machine is programmed in inches (onOpen)
+var inch = false;          // the document's unit is inch (onOpen, #902: postOptions.Units)
 var smoothTol = 0;         // #616: the section's PARAM Smoothing, mm (0: none asked)
 var smoothMode = "";       // #616: "finish" or "rough"
 var smoothNamed = false;   // the not-written note, once per program
 
 // ------------------------------------------------------------ helpers
-// The stream speaks mm and mm/min. An inch machine gets every length and
-// feed divided by 25.4 and written at four decimals; a metric one keeps
+// The stream speaks mm and mm/min. An inch document gets every length and
+// feed divided by 25.4 and written at four decimals; an mm one keeps
 // mm at three. Angles and rpm never scale.
 function has(v) { return v !== null && v !== undefined && isFinite(v); }
 function trim(s) {
@@ -53,7 +54,7 @@ function trim(s) {
   return s === "-0" ? "0" : s;
 }
 function len(v) { return inch ? v / 25.4 : v; }
-function fu(v) {  // a length, in the machine's unit
+function fu(v) {  // a length, in the document's unit
   if (!has(v)) return "0";
   return trim(Number(len(v)).toFixed(inch ? 4 : 3));
 }
@@ -240,7 +241,7 @@ function toolNote() {  // just before the tool change it describes
 // from the program would throw away the length just measured, and the
 // post cannot know a length to restate - so it never touches the offset.
 function onOpen() {
-  inch = typeof machine !== "undefined" && machine.units === "inch";
+  inch = typeof postOptions !== "undefined" && postOptions && postOptions.Units === "inch"; // #902: the document's unit, never the machine file's
   var nm = (typeof machine !== "undefined" && machine.name) || "CAMCRAFT";
   note(clean(nm) || "CAMCRAFT");
   block([inch ? "G20" : "G21", "G17", "G90", "G91.1", "G94", "G40", "G80"]);

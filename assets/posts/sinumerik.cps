@@ -15,6 +15,7 @@ setCodePage = "utf-8";
 capabilities = 1; // reference contract: integer feature mask (bit 1 = milling)
 coolantModes = true; // reads PARAM Coolant (#112/#150): the engine refuses non-Flood ops for a post without it
 afterModes = true; // reads PARAM AfterOperation (#110): the engine refuses a stop or home ask for a post without it
+programUnits = "mm inch"; // #902: writes the document's unit (postOptions.Units), G710 / G700
 
 // Determinism law: no timestamps, no randomness - the same stream
 // always posts to the same text (golden files depend on it).
@@ -48,13 +49,24 @@ var nLine = 0;             // the numbered-block dialect: every written
 
 // ------------------------------------------------------------ helpers
 function has(v) { return v !== null && v !== undefined && isFinite(v); }
-function fu(v) {  // mm at three decimals, trailing zeros trimmed
-  if (!has(v)) return "0";
-  var s = Number(v).toFixed(3);
+// #902: the program's unit is the document's (postOptions.Units, "mm"
+// or "inch"; absent = mm), never the machine file's. The stream speaks
+// mm and mm/min: an inch program writes every length / 25.4 at four
+// decimals and every feed in in/min at two; angles, seconds and rpm
+// carry no length and are written as they come.
+var inch = false;
+function trimNum(s) {
   if (s.indexOf(".") >= 0) s = s.replace(/0+$/, "").replace(/\.$/, "");
   return s === "-0" ? "0" : s;
 }
-function ff(v) { return has(v) && v > 0 ? String(Math.round(v)) : "0"; }
+function fu(v) {  // a length: mm at three decimals, or inch at four
+  if (!has(v)) return "0";
+  return trimNum(Number(inch ? v / 25.4 : v).toFixed(inch ? 4 : 3));
+}
+function ff(v) {  // a feed: whole mm/min, or in/min at two decimals
+  if (!(has(v) && v > 0)) return "0";
+  return inch ? trimNum((v / 25.4).toFixed(2)) : String(Math.round(v));
+}
 function ni(v) { return has(v) ? String(Math.round(v)) : "0"; }
 function w(letter, v) { return has(v) ? letter + fu(v) : ""; }
 function fw(v) { return has(v) ? "F" + ff(v) : ""; }
@@ -240,6 +252,7 @@ function toolNote() {  // just before the tool change it describes
 }
 
 function onOpen() {
+  inch = typeof postOptions !== "undefined" && postOptions.Units === "inch";
   var nm = (typeof machine !== "undefined" && machine.name) || "CAMCRAFT";
   // #594: the name is user text from the machine file - cleaned like
   // every other comment text, one rule for every comment line.
@@ -373,9 +386,10 @@ function startPreamble() {
   // programming manual: G71 switches only geometric data, so F would
   // still read in the basic system's unit; G710 switches both). Stated
   // in the opening block before any motion, whatever the control's
-  // basic system or the last program left modal. Where the program's
-  // unit is chosen, and inch output, is #902.
-  block(["G17", "G710", "G90", wcsWord, "G40", "G80"]);
+  // basic system or the last program left modal. #902: the unit is the
+  // document's - an inch program states G700, inch for lengths and
+  // feeds alike, by the same law.
+  block(["G17", inch ? "G700" : "G710", "G90", wcsWord, "G40", "G80"]);
   planeG = 17;              // the preamble states the plane
   if (toolWait) {
     toolNote();
@@ -383,7 +397,7 @@ function startPreamble() {
     toolWait = false;
   }
   if (spindleWait && sRpm > 0) {   // a touch probe (#173) states no spindle
-    block(["S" + ff(sRpm), "M3"]);
+    block(["S" + ni(sRpm), "M3"]);
     spindleOn = true;
     spindleWait = false;
   }

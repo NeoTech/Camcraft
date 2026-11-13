@@ -513,6 +513,11 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
         // mesh the file holds no fidelity record for is marked unknown.
         notes = super::wcs_one::settle(&mut file, from)?;
         notes.extend(super::fidelity_migrate::settle(&mut file.entities, from));
+        // v59 -> v60 (#902): the document's unit is its programs' unit;
+        // an older file opens on the unit it posted in (`units_migrate`).
+        if from < 60 {
+            notes.extend(super::units_migrate::settle(&mut file));
+        }
         file.version = PROJECT_VERSION;
     }
     if file.version != PROJECT_VERSION {

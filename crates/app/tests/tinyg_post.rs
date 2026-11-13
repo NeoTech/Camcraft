@@ -62,6 +62,14 @@ fn post(m: &Value, stream: &str) -> String {
     out.program
 }
 
+/// #902: the program's unit is the document's (`postOptions.Units`),
+/// never the machine file's.
+fn post_with(m: &Value, stream: &str, options: &Value) -> String {
+    let out = engine::run_with(&cps(), m, stream, options).unwrap_or_else(|e| panic!("posts: {e}"));
+    assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+    out.program
+}
+
 /// Every word of every non-comment line is a letter TinyG accepts, and
 /// every G or M code is one its wiki lists.
 fn assert_tinyg_words(nc: &str) {
@@ -233,13 +241,15 @@ fn hostile_names_never_carry_a_control_character_into_the_program() {
 }
 
 #[test]
-fn an_inch_machine_posts_g20_and_inches() {
-    let mut m = generic();
-    m["units"] = json!("inch");
-    let nc = post(&m, STREAM);
+fn an_inch_document_posts_g20_and_inches() {
+    let nc = post_with(&generic(), STREAM, &json!({"Units": "inch"}));
     assert!(nc.lines().nth(1).is_some_and(|l| l.starts_with("G20 ")), "{nc}");
     assert!(nc.contains("G1 X0.3937 Y0 Z-0.0394 F19.69"), "{nc}");
     assert!(nc.contains("G4 P1.5"), "a dwell is seconds in either unit\n{nc}");
+    // An inch machine file alone no longer makes an inch program.
+    let mut m = generic();
+    m["units"] = json!("inch");
+    assert_eq!(post(&m, STREAM), post(&generic(), STREAM), "the machine file's unit decides nothing");
 }
 
 #[test]
@@ -260,18 +270,18 @@ fn a_smoothing_ask_is_named_once_and_writes_no_tolerance_word() {
 }
 
 #[test]
-fn feeds_that_round_to_zero_are_refused_in_each_machine_unit() {
+fn feeds_that_round_to_zero_are_refused_in_each_document_unit() {
     for (inch, bad, good, word) in [(false, 499, 500, "F1"), (true, 126, 128, "F0.01")] {
-        let mut m = generic();
-        if inch { m["units"] = json!("inch"); }
+        let m = generic();
+        let units = json!({"Units": if inch { "inch" } else { "mm" }});
         for rate in [0, bad] {
             let stream = STREAM.replacen("F 500000", &format!("F {rate}"), 1);
-            let out = engine::run(&cps(), &m, &stream).expect("runs");
+            let out = engine::run_with(&cps(), &m, &stream, &units).expect("runs");
             assert!(out.warnings.iter().any(|w| w.contains("feed") && w.contains("rounding")), "{:?}", out.warnings);
             assert!(!out.program.split_whitespace().any(|w| w == "F0"), "{}", out.program);
         }
         let stream = STREAM.replacen("F 500000", &format!("F {good}"), 1);
-        assert!(post(&m, &stream).split_whitespace().any(|w| w == word));
+        assert!(post_with(&m, &stream, &units).split_whitespace().any(|w| w == word));
     }
     // Hostile JS inputs cannot be represented by the integer CL grammar.
     for value in ["-1", "NaN", "Infinity", "-Infinity"] {
@@ -284,16 +294,16 @@ fn feeds_that_round_to_zero_are_refused_in_each_machine_unit() {
 #[test]
 fn spindle_delay_is_optional_validated_and_rounds_up_in_seconds() {
     for inch in [false, true] {
-        let mut m = generic();
-        if inch { m["units"] = json!("inch"); }
-        let baseline = post(&m, STREAM);
-        for options in [Value::Null, json!({"SpindleDwellSeconds": 0})] {
+        let m = generic();
+        let unit = if inch { "inch" } else { "mm" };
+        let baseline = post_with(&m, STREAM, &json!({"Units": unit}));
+        for options in [json!({"Units": unit}), json!({"Units": unit, "SpindleDwellSeconds": 0})] {
             let out = engine::run_with(&cps(), &m, STREAM, &options).expect("runs");
             assert!(out.warnings.is_empty());
             assert_eq!(out.program, baseline);
         }
         for (delay, word) in [(0.0001, "0.001"), (0.0011, "0.002"), (1.5, "1.5"), (4294.0, "4294")] {
-            let out = engine::run_with(&cps(), &m, STREAM, &json!({"SpindleDwellSeconds": delay})).expect("runs");
+            let out = engine::run_with(&cps(), &m, STREAM, &json!({"Units": unit, "SpindleDwellSeconds": delay})).expect("runs");
             assert!(out.warnings.is_empty(), "{:?}", out.warnings);
             for rpm in [8000, 6000] {
                 assert!(out.program.contains(&format!("S{rpm} M3\nG4 P{word}\n")), "{}", out.program);
@@ -325,7 +335,7 @@ fn full_xy_circles_and_helices_split_without_losing_direction_or_depth() {
 fn rounded_coincident_xy_arc_endpoints_are_refused() {
     // 1 micron separates the endpoints in mm, but both round to zero in inches.
     let stream = "PARAM SpindleSpeed 8000\nRapid X 1 Y 0 Z 5000\nArc CCW X 0 Y 1 Z 5000 F 100000 I 0 J 0\n";
-    let out = engine::run(&cps(), &json!({"safeRetractZ": 0.0, "units": "inch"}), stream).expect("runs");
+    let out = engine::run_with(&cps(), &json!({"safeRetractZ": 0.0}), stream, &json!({"Units": "inch"})).expect("runs");
     assert!(out.warnings.iter().any(|w| w.contains("too small to distinguish")), "{:?}", out.warnings);
 }
 
