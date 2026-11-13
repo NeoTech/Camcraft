@@ -115,12 +115,16 @@ function rotaryFeed(p, prev, letters, mode, arc) {
   var g = rotaryFeedCap(f, lin, turns, arc ? "path" : mode);
   return { feed: g, capped: g < f - 1e-9 };
 }
-// A capped F as a word: floored to 0.1 mm/min (rounding up would pass
-// the cap), trailing zeros trimmed; "" when the cap leaves under 0.1.
-function rotaryFeedWord(v) {
-  var t = Math.floor(Number(v) * 10 + 1e-9) / 10;
-  if (!(t >= 0.1)) return "";
-  var s = t.toFixed(1).replace(/0+$/, "").replace(/[.]$/, "");
+// A capped F (mm/min) as a word in the program's unit: mm/min floored to
+// 0.1, or in/min floored to 0.01 when `inch` (rounding up would pass the
+// cap); trailing zeros trimmed. "" when the cap leaves under 0.1 mm/min,
+// judged in mm before converting, or floors to nothing in the unit.
+function rotaryFeedWord(v, inch) {
+  var mm = Number(v);
+  if (!(mm >= 0.1)) return "";
+  var t = inch ? Math.floor(mm / 25.4 * 100 + 1e-9) / 100 : Math.floor(mm * 10 + 1e-9) / 10;
+  if (!(t > 0)) return "";
+  var s = t.toFixed(inch ? 2 : 1).replace(/0+$/, "").replace(/[.]$/, "");
   return "F" + s;
 }
 "#;

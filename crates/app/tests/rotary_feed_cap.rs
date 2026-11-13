@@ -202,3 +202,41 @@ ENDSECTION
         );
     }
 }
+
+/// The A-turning feed words of `program`, in the program's own unit.
+fn a_feeds(program: &str) -> Vec<f64> {
+    program
+        .lines()
+        .filter(|l| (l.contains("G01") || l.contains("G02") || l.contains("G03")) && word(l, 'A').is_some())
+        .filter_map(|l| word(l, 'F'))
+        .collect()
+}
+
+#[test]
+fn a_capped_rotary_feed_is_posted_in_the_programs_unit() {
+    // The review's blocker: an inch program posted the capped F in mm/min
+    // (25.4x the cap). Mm and inch must post the same physical feed.
+    for cps in ["assets/posts/fanuc.cps", "assets/posts/doosan-dnm.cps"] {
+        let mch = trunnion(Some(A_RATE));
+        let opts = if cps.contains("doosan") { let mut o = brake(); o["Units"] = json!("inch"); o } else { json!({ "Units": "inch" }) };
+        let mm = post(cps, &mch, STREAM);
+        let inch = engine::run_with(&read(cps), &mch, STREAM, &opts).expect("post");
+        assert!(inch.warnings.is_empty(), "{cps}: {:?}", inch.warnings);
+        assert!(inch.program.contains("G20"), "{cps}: {}", inch.program);
+        let (m, i) = (a_feeds(&mm.program), a_feeds(&inch.program));
+        assert_eq!(m.len(), i.len(), "{cps}: {}", inch.program);
+        let mut capped = 0;
+        for (fm, fi) in m.iter().zip(&i) {
+            if (fm - 2000.0).abs() < 1e-9 {
+                continue; // under the rate: the op's F, converted by ff()
+            }
+            capped += 1;
+            let back = fi * 25.4;
+            // The mm word is itself floored to 0.1, so the true cap is within 0.1 above it; the inch word floors to 0.01 in/min (0.254 mm).
+            assert!(back <= fm + 0.1 + 1e-6 && back >= fm - 0.26, "{cps}: mm F{fm} posted as inch F{fi}: {}", inch.program);
+        }
+        assert!(capped >= 3, "{cps}: {}", inch.program);
+        assert!(inch.program.contains("A30 F0.13"), "{cps}: {}", inch.program);
+        assert!(inch.program.contains("A60 F39.37"), "{cps}: {}", inch.program);
+    }
+}

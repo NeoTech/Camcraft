@@ -763,7 +763,7 @@ function feedWord(p, arc) {
   var r = rotaryFeed(p, rotAt, tcp ? ["A", "B", "C"] : ["A"], tcp ? "path" : "composite", arc);
   if (r.refuse) { rotRefuse(r.refuse); return null; }
   if (!r.capped) return fw(p.FeedRate);
-  var word = rotaryFeedWord(r.feed);
+  var word = rotaryFeedWord(r.feed, inch);
   if (!word) { rotRefuse("a feed that turns a rotary over too short a move - the stated rotary rate leaves under 0.1 mm/min"); return null; }
   return word;
 }
