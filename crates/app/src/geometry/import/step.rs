@@ -18,6 +18,11 @@
 //! - Every face's surface evaluations are metered per pass (`step_guard`,
 //!   #1536): a face whose subdivision never converges is refused by name
 //!   instead of hanging inside truck, where nothing else can stop it.
+//! - A boundary point on a collapsed patch side (the pole of a corner
+//!   blend) keeps its parameters inside the knot domain (`step_pole`,
+//!   #1548), and an edge on a `SURFACE_CURVE` is read from its 3D curve
+//!   (`step_edge3d`, #1548): a rounded-edge solid then meshes closed
+//!   instead of being refused or losing faces.
 
 use std::panic::AssertUnwindSafe;
 
@@ -137,7 +142,13 @@ pub fn parse_with_chord_budget(data: &[u8], budget: usize) -> Result<(Mesh, f64)
     // read as millimetres. No stated unit keeps millimetres.
     let mm_per_unit = super::step_units::mm_per_unit(section)
         .map_err(|e| ImportError::Step(format!("length unit: {e}")))?;
-    let table = Table::from_data_section(section);
+    let mut table = Table::from_data_section(section);
+    // #1548: edges are read from their 3D curves, never rebuilt from a
+    // pcurve in truck's own parametrisation of the neighbouring surface.
+    let repointed = super::step_edge3d::prefer_3d(&mut table);
+    if repointed > 0 {
+        tracing::debug!("step: {repointed} surface-curve edges read from their 3D curve");
+    }
     if table.shell.is_empty() {
         return Err(ImportError::Step("no shells found".into()));
     }
