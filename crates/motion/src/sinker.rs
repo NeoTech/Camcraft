@@ -97,8 +97,9 @@ pub fn burn_floor(p: &SinkerParams) -> f64 {
     }
 }
 
-/// Every refusal of the burn, by name, before a move is built.
-fn check(p: &SinkerParams) -> Result<f64, GenError> {
+/// Every refusal of the burn, by name, before a move is built; the
+/// burn floor it reaches. The side burn (#545) reads the same door.
+pub(crate) fn check(p: &SinkerParams) -> Result<f64, GenError> {
     let nums = [p.x, p.y, p.approach_z, p.top_z, p.floor_z, p.depth, p.electrode_len, p.feed, p.gap];
     if !nums.iter().all(|v| v.is_finite()) || p.model_floor_z.is_some_and(|z| !z.is_finite()) {
         return Err(GenError::Invalid("sinker burn: a position, height or depth is not a finite number".into()));

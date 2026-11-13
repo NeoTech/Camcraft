@@ -39,6 +39,8 @@ pub mod probing;
 pub mod sinker;
 // #544: sinker EDM orbit patterns as explicit moves.
 pub mod sinker_orbit;
+// #545: sinker EDM side burning by a lateral electrode move.
+pub mod sinker_side;
 pub mod quality;
 pub mod multiaxis;
 pub mod turning;

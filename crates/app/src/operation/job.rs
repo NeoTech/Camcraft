@@ -323,6 +323,8 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         .map(|(lo, hi)| wcs_origin[2] + lo.max(hi));
     let sinker_gap = match &op.params {
         OpParams::SinkerBurn(p) => Some(super::sinker_op::burn_gap(world, setup, p)),
+        // #545: the side burn's gap, once its allowance holds under it.
+        OpParams::SinkerSideBurn(p) => Some(super::sinker_side_op::side_gap(world, setup, p)),
         _ => None,
     };
     let machine_rotaries = mounted.map(|m| {

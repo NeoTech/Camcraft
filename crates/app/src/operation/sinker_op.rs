@@ -26,7 +26,13 @@ use super::ResolvedHeights;
 /// origin, a 50 mm/min servo feed, and no condition named - the user
 /// names one of the machine's own (#290 D4: none ship).
 pub(super) fn seed_sinker_burn(c: &Carried) -> OpParams {
-    OpParams::SinkerBurn(SinkerBurnOp {
+    OpParams::SinkerBurn(burn_draft(c))
+}
+
+/// The burn's draft numbers ([`seed_sinker_burn`]); the side burn
+/// (#545) starts from the same plunge.
+pub(super) fn burn_draft(c: &Carried) -> SinkerBurnOp {
+    SinkerBurnOp {
         clearance_z: c.clearance,
         top_z: c.top,
         floor_z: c.bottom,
@@ -37,7 +43,7 @@ pub(super) fn seed_sinker_burn(c: &Carried) -> OpParams {
         feed: 50.0,
         condition: String::new(),
         orbit: None,
-    })
+    }
 }
 
 /// The spark gap per side of the burn's condition, read from the op's
@@ -49,19 +55,29 @@ pub(super) fn seed_sinker_burn(c: &Carried) -> OpParams {
 /// # Errors
 /// Each refusal above, in words.
 pub fn condition_gap(world: &World, setup: Option<&str>, op: &SinkerBurnOp) -> Result<f64, String> {
+    condition_gap_as(world, setup, "Sinker Burn", op)
+}
+
+/// [`condition_gap`] for any sinker kind: `label` names the op kind in
+/// the refusals (#545: the side burn reads the same door).
+///
+/// # Errors
+/// [`condition_gap`]'s refusals.
+pub fn condition_gap_as(world: &World, setup: Option<&str>, label: &str, op: &SinkerBurnOp) -> Result<f64, String> {
     let kind = crate::machine::kind_of_setup(world, setup);
     if kind != Kind::SinkerEdm {
         return Err(format!(
-            "a Sinker Burn burns on a sinker EDM; the setup's machine is a {}",
+            "a {label} burns on a sinker EDM; the setup's machine is a {}",
             kind.word()
         ));
     }
+    let what = label;
     let mounted = crate::machine::of_setup(world, setup);
     let label = crate::setup_mount::machine_label(&mounted);
     let id = op.condition.trim();
     if id.is_empty() {
         return Err(format!(
-            "the Sinker Burn names no EDM condition - name one of machine {label}'s conditions (its spark gap places the electrode)"
+            "the {what} names no EDM condition - name one of machine {label}'s conditions (its spark gap places the electrode)"
         ));
     }
     let edm = mounted

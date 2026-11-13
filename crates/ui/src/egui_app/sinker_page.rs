@@ -1,7 +1,8 @@
 //! The operation page: the Sinker Burn's fields (#541) - the burn point
 //! and the machine condition on Geometry, the approach plane, work top
 //! and cavity floor datum on Heights, the datum and depth on Passes, the
-//! servo feed on Feeds, the orbit (#544) on Passes. Every value edits the page draft; Apply rides
+//! servo feed on Feeds, the orbit (#544) on Passes - or, for the Side
+//! Burn (#545), its wall, amount and undersize there instead. Every value edits the page draft; Apply rides
 //! the command history (EditOperationParams, undoable). The full sinker
 //! setup and op pages are #548's.
 //!
@@ -9,10 +10,22 @@
 //! die-sink EDM practice); no vendor text.
 
 use super::fields::*;
-use camcraft_app::operation::{SinkerBurnOp, SinkerDatum, SinkerOrbit, SinkerOrbitKind};
+use camcraft_app::operation::{SinkerBurnOp, SinkerDatum, SinkerOrbit, SinkerOrbitKind, SinkerSideBurnOp, SinkerSideDirection};
 
 const DATUMS: [&str; 3] = ["Work top (depth down)", "Cavity floor (stand-off up)", "Electrode tip (down from approach)"];
 const ORBITS: [&str; 4] = ["None (plain plunge)", "Circular", "Vector", "Planetary"];
+const SIDES: [&str; 4] = ["+X wall", "-X wall", "+Y wall", "-Y wall"];
+
+/// The side burn's rows (#545): the wall it burns, the amount and the
+/// electrode's undersize per side.
+fn side_rows(ui: &mut Ui, u: Unit, direction: &mut SinkerSideDirection, amount: &mut f64, undersize: &mut f64) {
+    let mut si = SinkerSideDirection::ALL.iter().position(|d| d == direction).unwrap_or(0);
+    prop_row(ui, "Burn wall", |ui| combo(ui, "sinker.side", &mut si, &SIDES));
+    *direction = SinkerSideDirection::ALL.get(si).copied().unwrap_or_default();
+    prop_row(ui, "Wall moves by", |ui| num(ui, u, amount));
+    prop_row(ui, "Electrode undersize", |ui| num(ui, u, undersize));
+    hint(ui, "per side; the move may not pass the undersize less the condition's spark gap - a move into the part is refused");
+}
 
 /// The orbit rows (#544): the pattern, its radius and its count. A
 /// pattern picked fresh starts at a 0.1 mm radius, 4 vectors, 1 turn.
@@ -47,8 +60,11 @@ fn orbit_rows(ui: &mut Ui, u: Unit, orbit: &mut Option<SinkerOrbit>) {
 
 pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut Cx<'_>) {
     let (u, tab, op_ctx) = (cx.u, cx.tab, cx.op_ctx);
-    let OpParams::SinkerBurn(p) = params else {
-        return;
+    let (p, side) = match params {
+        OpParams::SinkerBurn(p) => (p, None),
+        // #545: the side burn's plunge reads the burn's rows.
+        OpParams::SinkerSideBurn(SinkerSideBurnOp { burn, direction, amount, undersize }) => (burn, Some((direction, amount, undersize))),
+        _ => return,
     };
     let SinkerBurnOp { clearance_z, top_z, floor_z, datum, depth, x, y, feed, condition, orbit } = p;
     if tab == SEC_GEO {
@@ -76,7 +92,10 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             _ => SinkerDatum::WorkTop,
         };
         prop_row(ui, "Depth", |ui| num(ui, u, depth));
-        orbit_rows(ui, u, orbit);
+        match side {
+            Some((direction, amount, undersize)) => side_rows(ui, u, direction, amount, undersize),
+            None => orbit_rows(ui, u, orbit),
+        }
     }
     if tab == SEC_FEEDS {
         prop_row(ui, "Servo feed", |ui| num_feed(ui, u, feed));

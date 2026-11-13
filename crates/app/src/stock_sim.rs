@@ -362,6 +362,14 @@ pub(crate) fn plan_program(world: &flecs_ecs::prelude::World) -> Result<Vec<Plan
                     .map_err(|e| format!("{name}: {e}"))?;
                 Some([hx, hy, gap])
             }
+            // #545: the side burn sweeps the same box atom along its
+            // lateral move.
+            crate::operation::OpParams::SinkerSideBurn(sb) if tool.kind == crate::tools::ToolKind::Electrode => {
+                let (hx, hy) = camcraft_tools::electrode::half_sizes(&tool);
+                let gap = crate::operation::sinker_side_op::side_gap(world, op.setup.as_deref(), sb)
+                    .map_err(|e| format!("{name}: {e}"))?;
+                Some([hx, hy, gap])
+            }
             _ => None,
         };
         let radius = match (lathe, electrode) {

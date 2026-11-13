@@ -1336,7 +1336,8 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
         // The wire never lifts out of the work (#532): no hop plane.
         | operation::OpParams::WireContour(_) => None,
         // The electrode retracts to its approach plane only (#541).
-        | operation::OpParams::SinkerBurn(_) => None,
+        | operation::OpParams::SinkerBurn(_)
+        | operation::OpParams::SinkerSideBurn(_) => None,
     };
     if let Some(hop) = hop
         && let (Some(r), Some(c)) = (hop.z_in(world, setup, src), draft.clearance().z_in(world, setup, src))
@@ -1470,6 +1471,11 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
         | operation::OpParams::WireContour(operation::WireContourOp { top_z, bottom_z, .. })
         // The work top and the cavity floor datum the burn stops at (#541).
         | operation::OpParams::SinkerBurn(operation::SinkerBurnOp { top_z, floor_z: bottom_z, .. })
+        // #545: the side burn's own plunge.
+        | operation::OpParams::SinkerSideBurn(operation::SinkerSideBurnOp {
+            burn: operation::SinkerBurnOp { top_z, floor_z: bottom_z, .. },
+            ..
+        })
         | operation::OpParams::Deburr { top_z, bottom_z, .. } => {
             if let Some(z) = top_z.z_in(world, setup, src) {
                 out.push(HeightPlane {

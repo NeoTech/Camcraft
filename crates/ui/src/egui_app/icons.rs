@@ -91,6 +91,8 @@ icon_table! {
     WireContour => "op-wire-contour", "icon-wire-contour";
     /// A sinker EDM burn (#541): the electrode plunging into a cavity.
     SinkerBurn => "op-sinker-burn", "icon-sinker-burn";
+    /// A sinker EDM side burn (#545): the electrode planing one wall.
+    SinkerSideBurn => "op-sinker-side-burn", "icon-sinker-side-burn";
     // Holes and probing:
     Drill => "op-drill", "icon-drill";
     Bore => "op-bore", "icon-bore";

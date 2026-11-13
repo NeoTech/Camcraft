@@ -63,6 +63,8 @@ pub use camcraft_motion::probing;
 pub use camcraft_motion::sinker;
 // #544: sinker EDM orbit patterns.
 pub use camcraft_motion::sinker_orbit;
+// #545: sinker EDM side burning.
+pub use camcraft_motion::sinker_side;
 pub mod project;
 // #35: pocket and slot recognition on the model's faces.
 pub mod recognize;

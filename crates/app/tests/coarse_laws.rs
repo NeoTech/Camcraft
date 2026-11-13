@@ -341,7 +341,9 @@ fn every_kind_is_either_judged_or_refused_for_a_stated_reason_on_a_reduced_model
     // #532: the wire's kerf law does not read the excess yet either.
     // SinkerBurn (#541): the burn is verified against the model's floor and
     // walls, so a reduced model is refused like plasma until it reads the excess.
-    let refused = [Swarf, AdvancedSwarf, Trace, Engrave, Chamfer2D, Deburr, Probe, PlasmaProfile, WireContour, SinkerBurn];
+    // SinkerSideBurn (#545): its lateral move is judged against the same
+    // walls - refused on a reduced model for the same reason.
+    let refused = [Swarf, AdvancedSwarf, Trace, Engrave, Chamfer2D, Deburr, Probe, PlasmaProfile, WireContour, SinkerBurn, SinkerSideBurn];
     for row in KindInfo::ALL {
         assert_eq!(problem(row.ty, None, None), None, "{:?}: full fidelity is untouched", row.ty);
         let said = problem(row.ty, Some(TIGHT), None);

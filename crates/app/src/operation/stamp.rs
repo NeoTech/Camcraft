@@ -56,6 +56,14 @@ pub fn current_stamp(
             Err(e) => h.write(e.as_bytes()),
         }
     }
+    // #545: the side burn's gap too, behind its allowance law.
+    if let OpParams::SinkerSideBurn(p) = params {
+        h.write(b"sinker-side-gap");
+        match super::sinker_side_op::side_gap(world, setup, p) {
+            Ok(g) => w(&mut h, g),
+            Err(e) => h.write(e.as_bytes()),
+        }
+    }
     params.stamp_with(world, setup, Some(src), &mut h);
     // #326: the setup's part alignment is a moved input for every op of
     // the setup (the parts it machines, verifies against or measures

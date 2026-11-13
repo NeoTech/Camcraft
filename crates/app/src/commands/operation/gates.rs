@@ -183,6 +183,16 @@ pub(super) fn family_gate(world: &World, context: Option<&str>, params: &OpParam
     )))
 }
 
+/// The sinker side burn's door (#545): its numbers, and against a named
+/// condition its allowance, refused by name before the op exists
+/// (`sinker_side_op::creation_refusal`). Every other kind passes.
+pub(super) fn sinker_gate(world: &World, context: Option<&str>, params: &OpParams) -> Result<(), CommandError> {
+    match operation::sinker_side_op::creation_refusal(world, context, params) {
+        Some(msg) => Err(CommandError::Invalid(msg)),
+        None => Ok(()),
+    }
+}
+
 /// The tool law's door (M10.1 B): the named tool must belong to the
 /// kind's family per the `tool_kinds` table, and when the active
 /// setup's tools hold nothing that fits, the refusal says so by kind
