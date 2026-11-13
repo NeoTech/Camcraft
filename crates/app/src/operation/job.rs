@@ -57,6 +57,8 @@ pub struct GenJob {
     pub(super) contour_sel:
         Option<Result<super::selection::SelectionGeometry, GenError>>,
     pub(super) drive_chains: Option<Result<Vec<Vec<Point3>>, GenError>>,
+    /// #1504: a picked Slot's room, read here; the Slot arm confines to it.
+    pub(super) slot_bound: Option<Result<crate::machining2d::SlotBound, GenError>>,
     pub(super) prior: Option<Result<Arc<crate::rest::PriorState>, GenError>>,
     /// The program ahead of this op in its setup, uncut (issue #96
     /// review): verify's vertical-dive convictions are re-read against
@@ -244,6 +246,10 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         }
         _ => None,
     };
+    let slot_bound = match (&op.params, &op.src) {
+        (OpParams::Slot { .. }, SrcRef::Selection(items)) if !items.is_empty() => Some(super::slot_pick::slot_bound_of(world, items)),
+        _ => None,
+    };
     let drive_chains = match &op.params {
         OpParams::MultiAxisContour { .. } => Some(drive_chains_of(world, op)),
         _ => None,
@@ -375,6 +381,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         picked_region,
         contour_sel,
         drive_chains,
+        slot_bound,
         prior,
         verify_prior,
         drills_ahead,

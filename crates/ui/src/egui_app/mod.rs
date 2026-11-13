@@ -249,6 +249,8 @@ mod thread_hand_tests;
 #[cfg(test)]
 mod thread_mill_page_tests;
 #[cfg(test)]
+mod slot_pick_page_tests;
+#[cfg(test)]
 mod after_op_tests;
 #[cfg(test)]
 mod program_info_tests;
@@ -295,6 +297,8 @@ mod setup_axis_tests;
 mod setup_points_tests;
 #[cfg(test)]
 mod wcs_pick_tests;
+#[cfg(test)]
+mod wcs_pick_click_tests;
 #[cfg(test)]
 mod ball_corner_tests;
 #[cfg(test)]

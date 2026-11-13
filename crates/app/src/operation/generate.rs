@@ -94,6 +94,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         mut picked_region,
         mut contour_sel,
         mut drive_chains,
+        mut slot_bound,
         mut prior,
         verify_prior,
         drills_ahead,
@@ -1705,6 +1706,12 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             helix_radius,
             ..
         } => {
+            // #1504: picks bound the room the slot may cut in - a slot
+            // too wide, too long or placed past them is refused by name,
+            // never cut across the wall.
+            if let Some(room) = slot_bound.take() {
+                room?.judge(*a, *b, *width)?;
+            }
             let path = machining2d::slot(
                 *a,
                 *b,
@@ -3343,8 +3350,12 @@ pub(super) enum DepthLaw {
 /// - The pocket family cuts picked part features (`Section`); a whole-
 ///   model source there is the volume to REMOVE (the region is the
 ///   material, its interior is cut by contract), so no part law applies.
-/// - Slot and Circular cut authored geometry into their source - the
-///   source is the material to remove, not a part to keep.
+/// - Circular cuts authored geometry into its source - the source is
+///   the material to remove, not a part to keep.
+/// - Slot: `Section` whenever its source is the finished part - picked
+///   (#1504, the part's own feature) or the whole model (#1537: a slot
+///   typed through the part's wall gouges what the job keeps). A Stock
+///   source is not part-solid, so the typed slot cuts it unjudged.
 /// - Trace, Engrave and 2D Chamfer enter the part by design (the
 ///   engraving, the broken edge); their own modes stand the gouge law
 ///   down for exactly that reason.
@@ -3355,6 +3366,9 @@ pub(super) fn depth_law_of(params: &OpParams, src: &SrcRef, part_solid: bool) ->
     }
     match params {
         OpParams::Contour { .. } | OpParams::Face { .. } => DepthLaw::Section,
+        // #1504 / #1537: a Slot on the finished part (picked or whole
+        // model) keeps the part around it; only Stock is cut unjudged.
+        OpParams::Slot { .. } => DepthLaw::Section,
         OpParams::Pocket { .. } | OpParams::Adaptive2D { .. } | OpParams::Offset2D { .. }
             if matches!(src, SrcRef::Selection(_)) =>
         {
