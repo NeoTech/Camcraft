@@ -66,8 +66,9 @@ var homedAt = -1;          // linesWritten() just after a trip home (#504): onCl
 var coolantOp = "";        // the section's OperationName, for refusals (#150)
 var sectionOpen = false;   // preamble written (a legacy .cl carries no SECTION)
 var tcpmOn = false;        // G43.4 armed (stage D RTCP): re-armed at tool change
-var lastA = 0, lastB = 0, lastC = 0; // angle words the last block commanded (deg)
+var lastA = null, lastB = null, lastC = null; // angle words the last block commanded (deg); null: none written yet, so the next A is written (#950)
 var tiltRefused = false;   // a refusal the gate counts once, not per line
+var rotAt = { A: null, B: null, C: null }; // #885: the angles the control holds (null: not known) - never reset, a tool change turns nothing
 var compG = "";            // G41/G42/G40 pending for the next straight block (M13.11)
 var compD = "";            // the D word riding the engage block
 var compOn = false;        // compensation is engaged (G41/G42 written, no G40 yet)
@@ -591,7 +592,7 @@ function onToolChange(number, name) {
   tNo = number;
   toolWait = true;
   tcpmOn = false;
-  lastA = 0; lastB = 0; lastC = 0;
+  lastA = null; lastB = null; lastC = null; // #950: never assume A0 - the first A after this is written
   rotaryAClamped = true;
 }
 
@@ -689,7 +690,7 @@ function endPreamble() {
   kindProbe = false;         // the next section states its own tool kind
   afterOp();
   tcpmOn = false;
-  lastA = 0; lastB = 0; lastC = 0;
+  lastA = null; lastB = null; lastC = null; // #950: never assume A0 - the first A after this is written
 }
 
 function onSection() { seatKnown = false; startPreamble(); }
@@ -741,9 +742,42 @@ function onRapid() {
     ensureRotaryUnclamped();
   }
   block(["G00"].concat(xyz(properties), tw));
+  heldAngles(properties, tw);
   if (aChanged) {
     lastA = properties.A;
     ensureRotaryClamped();
+  }
+}
+// #885: a feed that turns a rotary is capped at the rates the machine
+// states, read the way the control reads F (the prelude's rotaryFeed):
+// under G43.4 F is the tool tip's speed relative to the work, the
+// rotaries carried along (FANUC 30i-B operator's manual, tool center
+// point control); without it the Fanuc 0i-F times a combined block over
+// one composite length that counts the A degrees as mm (FANUC 0i-F
+// operator's manual B-64604EN, feedrate for rotation axes). Unstated
+// rates cap nothing. The F word, or null when refused by name.
+function feedWord(p, arc) {
+  // Any rotary letter on the record, not A alone: a record that turns only
+  // B or C is capped the same way (#951 review).
+  if (!has(p.A) && !has(p.B) && !has(p.C)) return fw(p.FeedRate);
+  if (typeof rotaryFeed !== "function") return fw(p.FeedRate);
+  var tcp = typeof machine !== "undefined" && machine.rtcp === true;
+  var r = rotaryFeed(p, rotAt, tcp ? ["A", "B", "C"] : ["A"], tcp ? "path" : "composite", arc, inch ? 0.00254 : 0.001, [orgX, orgY, orgZ], inch);
+  if (r.refuse) { rotRefuse(r.refuse); return null; }
+  if (!r.capped) return fw(p.FeedRate);
+  var word = rotaryFeedWord(r.feed, inch);  // the post's own unit, as ff() writes F
+  if (!word) { rotRefuse("a feed that turns a rotary over too short a move - the stated rotary rate leaves under 0.1 mm/min"); return null; }
+  return word;
+}
+var rotRefused = {};  // #885: each rate refusal counted once per program, not per line
+function rotRefuse(s) { if (!rotRefused[s]) { rotRefused[s] = true; msg(s); } }
+// The angles the control holds after a block: only the letters the block
+// actually wrote (`tw`, the tilt words) - a word held back as modal
+// leaves the control where the last written one put it.
+function heldAngles(p, tw) {
+  for (var i = 0; i < tw.length; i++) {
+    var L = String(tw[i]).charAt(0);
+    if ((L === "A" || L === "B" || L === "C") && has(p[L])) rotAt[L] = Number(p[L]);
   }
 }
 function onLinear() {
@@ -753,13 +787,16 @@ function onLinear() {
   var tw = tilt(properties);
   if (tw === null || chainCut()) return;
   if (spindleStopped("feed move G01")) return;
+  var fwd = feedWord(properties, false);
+  if (fwd === null) return;
   if (aChanged) {
     ensureRotaryUnclamped();
     lastA = properties.A;
   }
   var cg = compG, cd = compD;
   compG = ""; compD = "";
-  block([compPlaneWord(cg), "G01", cg].concat(xyz(properties), [cd], tw, [fw(properties.FeedRate)]));
+  block([compPlaneWord(cg), "G01", cg].concat(xyz(properties), [cd], tw, [fwd]));
+  heldAngles(properties, tw);
 }
 function onCircular() {
   startPreamble();
@@ -769,17 +806,20 @@ function onCircular() {
   var tw = tilt(properties);
   if (tw === null || chainCut()) return;
   if (spindleStopped("arc move " + (properties.CircularDirection === "CW" ? "G02" : "G03"))) return;
+  var p = properties;
+  var fwd = feedWord(p, true);
+  if (fwd === null) return;
   if (aChanged) {
     ensureRotaryUnclamped();
     lastA = properties.A;
   }
-  var p = properties;
   if (compPlaneRefuse(planeOf(p))) return;
   block([
     planeWord(planeOf(p)),
     p.CircularDirection === "CW" ? "G02" : "G03",
     wo("X", p.X, orgX), wo("Y", p.Y, orgY), wo("Z", p.Z, orgZ),
-  ].concat(centerWords(p)).concat(tw, [fw(p.FeedRate)]));
+  ].concat(centerWords(p)).concat(tw, [fwd]));
+  heldAngles(properties, tw);
 }
 
 // ------------------------------------------------------- canned cycles

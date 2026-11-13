@@ -43,13 +43,7 @@ pub fn refusal(s: &mut Script, options: &Value) -> Result<Option<String>, PostEr
     if writes_inch {
         return Ok(None);
     }
-    // The post by the name its manifest's description gives (the text
-    // before its parenthesised summary), so the refusal says whose it is.
-    let who = s
-        .string_global("description")?
-        .and_then(|d| d.split(" (").next().map(|n| n.trim().to_owned()))
-        .filter(|n| !n.is_empty())
-        .map_or_else(|| "this post".to_owned(), |n| format!("the {n} post"));
+    let who = post_name(s)?;
     let what = match stated.as_deref() {
         Some(u) => format!("writes {} programs only (programUnits = \"{u}\")", u.trim()),
         None => "does not declare programUnits = \"mm inch\" (it does not write inch programs)".to_owned(),
@@ -57,6 +51,17 @@ pub fn refusal(s: &mut Script, options: &Value) -> Result<Option<String>, PostEr
     Ok(Some(format!(
         "the document's unit is inch, but {who} {what} - set the document's units to mm, or pick a post that writes inch"
     )))
+}
+
+/// The post by the name its manifest's description gives (the text
+/// before its parenthesised summary), so a refusal says whose it is:
+/// "the Tormach PathPilot post", or "this post" when it states none.
+pub fn post_name(s: &mut Script) -> Result<String, PostError> {
+    Ok(s
+        .string_global("description")?
+        .and_then(|d| d.split(" (").next().map(|n| n.trim().to_owned()))
+        .filter(|n| !n.is_empty())
+        .map_or_else(|| "this post".to_owned(), |n| format!("the {n} post")))
 }
 
 #[cfg(test)]

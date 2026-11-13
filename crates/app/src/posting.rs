@@ -326,6 +326,11 @@ pub fn options_value(o: PostOptions) -> Value {
     if o.smoothing {
         v["Smoothing"] = serde_json::json!(true);
     }
+    // #1386: stated only when on, like Smoothing - off, the object is
+    // byte-identical to before and no post explains anything.
+    if o.explain {
+        v["Explain"] = serde_json::json!(true);
+    }
     let end = match o.end_units {
         EndUnits::Leave => None,
         EndUnits::Inch => Some("inch"),

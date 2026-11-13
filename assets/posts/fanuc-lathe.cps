@@ -619,14 +619,12 @@ function liveMove(p, rapid) {
     // Under a composite F the control drives X/Z at F * lin / lcmd and
     // C at F * |dc| / lcmd: F is capped so neither outruns what the
     // machine states - the linear part by its fastest stated feed, C
-    // by its stated rate (unstated: no cap the data can justify).
-    var fc_ = f * lcmd / ltrue;
+    // by its stated rate (unstated: no cap the data can justify). The
+    // rule is the prelude's `rotaryFeedCap` (#885), shared by every
+    // post that writes a rotary word on a feed.
     var lin = Math.sqrt(dr * dr + dz * dz);
-    var fmax = Number(machine.feedRateMax);
-    var capF = Infinity;
-    if (fmax > 0 && lin > EPS) capF = Math.min(capF, fmax * lcmd / lin);
-    if (liveCRate > 0 && Math.abs(dc) > 1e-9) capF = Math.min(capF, liveCRate * lcmd / Math.abs(dc));
-    fc_ = Math.min(fc_, capF);
+    var capF = rotaryFeedCap(Infinity, lin, [[dc, liveCRate]], "composite", EPS);
+    var fc_ = Math.min(rotaryFeedCap(f * lcmd / ltrue, lin, [[dc, liveCRate]], "composite", EPS), capF);
     block(["G01", xWord(r), zWord(p.Z), "C" + fc(p.C), "F" + capWord(fc_, capF)]);
   }
   lastC = Number(p.C); lastR = r; lastZ = p.Z;
