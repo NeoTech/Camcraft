@@ -64,4 +64,4 @@ v59 refuses its operations once, until each model is re-imported (an STL
 or OBJ model too, though its mesh is exact). A "vouch for this mesh"
 command (undoable, with its MCP tool) that clears the mark for a model
 whose source file is gone or known exact would remove that cost without a
-format change; it is filed as a follow-up rather than built here.
+format change; it is filed as #1339 rather than built here.
