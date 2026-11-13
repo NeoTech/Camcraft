@@ -187,8 +187,9 @@ pub(crate) fn floor_of(params: &OpParams) -> f64 {
 /// the multi-axis ball kinds, and - #1053 - probe and plasma.
 ///
 /// Not yet: swarf (its flank proof is the generator's), the cone and
-/// engrave rides (no tolerance holds them to the model) and the cross
-/// drill (its standoffs read the mesh with no slack). On a reduced-
+/// engrave rides (no tolerance holds them to the model), the cross
+/// drill (its standoffs read the mesh with no slack), the wire (#532)
+/// and the sinker (#541). On a reduced-
 /// fidelity model those are refused at the program gate rather than
 /// judged loosely.
 pub(crate) fn excess_aware(params: &OpParams) -> bool {
@@ -206,5 +207,8 @@ pub(crate) fn excess_aware(params: &OpParams) -> bool {
         Section::Turning => true,
         Section::MultiAxis => !matches!(params, OpParams::Swarf { .. } | OpParams::AdvancedSwarf { .. }),
         Section::Plasma => true,
+        // #532: the wire's kerf law is not excess-aware yet either.
+        // #541: nor the sinker's burn verdict.
+        Section::WireEdm | Section::Sinker => false,
     }
 }

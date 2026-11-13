@@ -85,6 +85,14 @@ impl KindInfo {
     pub fn accepts(&self, kind: ToolKind) -> bool {
         self.tool_kinds.contains(&kind)
     }
+
+    /// Whether this kind cuts with a tool from the library at all. A
+    /// wire EDM kind does not (#532, [`NO_TOOL`]): its operation names
+    /// no tool, and every tool door reads this word first.
+    #[must_use]
+    pub fn mounts_tool(&self) -> bool {
+        !self.tool_kinds.is_empty()
+    }
 }
 
 /// The touch probe (#108): the Probe operation mounts nothing else, and
@@ -95,6 +103,12 @@ pub const PROBE: &[ToolKind] = &[ToolKind::Probe];
 /// and no cutting kind mounts a torch.
 pub const TORCH: &[ToolKind] = &[ToolKind::Torch];
 
+/// No library tool (#532): a wire EDM kind mounts none - the wire's
+/// diameter and spark gap are the machine's condition (#531), and a
+/// tool beside it would be a second source for the same number. The
+/// one empty set; [`KindInfo::mounts_tool`] is how the doors ask.
+pub const NO_TOOL: &[ToolKind] = &[];
+
 /// The radius a mill tool removes with certainty (#266): half its
 /// diameter, except a Tap-kind tool (tap or thread mill), whose sure
 /// removal is its thread's MINOR cylinder, `d / 2 - THREAD_DEPTH_PER_PITCH
@@ -102,9 +116,10 @@ pub const TORCH: &[ToolKind] = &[ToolKind::Torch];
 /// models a tapped hole at that minor size and the thread band outside
 /// it is meant to be cut, so judging a tap at its full diameter called
 /// every such hole a gouge. Into solid metal the core still gouges.
-/// The program sim sweeps this radius (`stock_sim::plan_program`); the
-/// generator's verify still judges a tap at its full diameter. A pitch
-/// too coarse to leave a core is refused by name.
+/// The program sim sweeps this radius (`stock_sim::plan_program`), and
+/// the generator's verify re-reads a Z tap cycle's `Gouge` convictions
+/// at it (`tap_core`); its rapids keep the full diameter. A pitch too
+/// coarse to leave a core is refused by name.
 pub fn cutting_radius(tool: &crate::tools::Tool) -> Result<f64, String> {
     let radius = tool.diameter * 0.5;
     if tool.kind != ToolKind::Tap {
@@ -116,3 +131,7 @@ pub fn cutting_radius(tool: &crate::tools::Tool) -> Result<f64, String> {
     }
     Ok(core)
 }
+
+/// The sinker electrode (#541): the sinker operations mount nothing
+/// else, and no cutting kind mounts an electrode.
+pub const ELECTRODE: &[ToolKind] = &[ToolKind::Electrode];

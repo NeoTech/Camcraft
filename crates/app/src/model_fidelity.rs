@@ -26,20 +26,29 @@
 //!   model: a refusal is the only verdict that cannot be looser. #904
 //!   took turning, the rotary kinds and the multi-axis ball kinds off
 //!   that list; `fidelity_law`'s header says which law judges which.
+//! - A stock copied from a model carries the model's flag itself (#1056):
+//!   it holds the same facets, so deleting or renaming the model never
+//!   makes the laws stop tightening on them. The copy is written by
+//!   `SetStock`, `UpdateModel`'s propagation, the setup clones and the
+//!   loader, and saved with the project. A stock from a file that predates
+//!   its own flag still reads its source's, and adopts it on load.
+//! - When the gate refuses an operation here, the program sim and the
+//!   eye's colours read no verdict either ([`program_tol`]): the named
+//!   refusal is the one line said, never a gouge read off the same mesh.
 
 use flecs_ecs::core::EntityViewGet;
 use flecs_ecs::prelude::{Entity, World};
 
-use crate::geometry::import::step;
+use crate::geometry::import::{step, step_budget};
 use crate::model;
 use crate::operation::{fidelity_law, SrcRef};
-use crate::schema::{Operation, ReducedFidelity};
+use crate::schema::{Operation, ReducedFidelity, StepBudget};
 use crate::stock::StockShape;
 use crate::stock_sim::DEV_TOL;
 use crate::verify::excess_floor;
 
 /// What every refusal here says, in the user's words.
-pub const TOO_COARSE: &str = "imported too coarsely to verify; re-import with a larger budget";
+pub const TOO_COARSE: &str = "imported too coarsely to verify; re-import with a larger STEP facet budget";
 
 /// The chord error a reduced-fidelity model was imported at, mm; `None`
 /// for a model at full fidelity. A stored value that is not a coarse
@@ -63,18 +72,88 @@ pub fn set(world: &World, entity: &Entity, coarse_mm: Option<f64>) {
     }
 }
 
-/// The reduced-fidelity model behind the entity `name`: itself, or - for
-/// a stock that is a copy of a model - the model it copies (same facets).
+/// The STEP facet budget the model was imported under when it is not the
+/// default (#1054); `None` reads as the default. A stored value outside
+/// the bounds (a hand-edited file) reads as the default too.
+#[must_use]
+pub fn budget_of(world: &World, entity: &Entity) -> Option<u64> {
+    entity
+        .entity_view(world)
+        .try_get::<&StepBudget>(|b| b.facets)
+        .filter(|b| step_budget::check(*b).is_ok())
+        .and_then(|b| step_budget::recorded(Some(b)))
+}
+
+/// The budget a re-import of `path` carries when the caller gave none
+/// (#1185): for a STEP file landing on a model that already exists under
+/// `name` (default: the file's stem, as the importers name it), the budget
+/// that model was imported under, so a restart or a fresh session never
+/// silently re-meshes it at the default. `None` is the default budget.
+#[must_use]
+pub fn reimport_budget(world: &World, path: &std::path::Path, name: Option<&str>) -> Option<u64> {
+    if !matches!(crate::geometry::import::format_from_path(path), Ok(crate::geometry::import::Format::Step)) {
+        return None;
+    }
+    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("model");
+    let entity = model::find_by_name(world, name.unwrap_or(stem))?;
+    budget_of(world, &entity)
+}
+
+/// Write or clear the recorded budget. Like [`set`]: for the import and
+/// update commands, their undo and the project loader only.
+pub fn set_budget(world: &World, entity: &Entity, budget: Option<u64>) {
+    let view = entity.entity_view(world);
+    match step_budget::recorded(budget) {
+        Some(facets) => {
+            view.set(StepBudget { facets });
+        }
+        None => {
+            view.remove(world.component::<StepBudget>());
+        }
+    }
+}
+
+/// The reduced-fidelity model behind the entity `name`: itself (a model,
+/// or a stock copy carrying its source's flag, #1056), or - for a stock
+/// copy from a file that predates that - the model it copies.
 fn coarse_source(world: &World, name: &str) -> Option<(String, f64)> {
     let entity = model::find_by_name(world, name)?;
-    if let Some(c) = chord_of(world, &entity) {
-        return Some((name.to_string(), c));
-    }
-    let Some(StockShape::FromModel { source }) = model::stock_def_of(world, &entity) else {
-        return None;
+    let copied = match model::stock_def_of(world, &entity) {
+        Some(StockShape::FromModel { source }) => Some(source),
+        _ => None,
     };
+    // A refusal names the model the facets came from, also once it is
+    // gone: that is what a person re-imports.
+    if let Some(c) = chord_of(world, &entity) {
+        return Some((copied.unwrap_or_else(|| name.to_string()), c));
+    }
+    let source = copied?;
     let src = model::find_by_name(world, &source)?;
     chord_of(world, &src).map(|c| (source, c))
+}
+
+/// The chord error a stock copied from `source` lands with (#1056): the
+/// source's own, or what a stock it is itself copied from carries.
+#[must_use]
+pub fn chord_behind(world: &World, source: &str) -> Option<f64> {
+    coarse_source(world, source).map(|(_, c)| c)
+}
+
+/// The loader's last pass (#1056): a `FromModel` stock from a file that
+/// predates the copy's own flag takes its source's, so deleting that
+/// source later keeps the stock judged as coarse as its facets are.
+pub fn adopt_copies(world: &World) {
+    for (_, e) in model::named_entities(world) {
+        if chord_of(world, &e).is_some() {
+            continue;
+        }
+        if let Some(StockShape::FromModel { source }) = model::stock_def_of(world, &e)
+            && let Some(src) = model::find_by_name(world, &source)
+            && let Some(c) = chord_of(world, &src)
+        {
+            set(world, &e, Some(c));
+        }
+    }
 }
 
 /// How much of a verdict tolerance the named entity's mesh has used up,
@@ -82,6 +161,51 @@ fn coarse_source(world: &World, name: &str) -> Option<(String, f64)> {
 #[must_use]
 pub fn excess_of(world: &World, name: &str) -> f64 {
     coarse_source(world, name).map_or(0.0, |(_, c)| excess(c))
+}
+
+/// Whether the excess of `setup`'s stock is known (#1091 reviews): a box
+/// or cylinder has no mesh to be coarse; a from-model copy's chord is read
+/// through its source (`coarse_source`, by NAME), so it is known only
+/// while the model of that name is provably the one the copy was taken
+/// from - its local facets bit for bit the stock's own ([`same_mesh`]).
+/// A gone source, a different model imported under the name, a source
+/// re-meshed without its copy, a stock with no facets: not known. A model
+/// with no `ReducedFidelity` record is known exact - the importer writes
+/// the record for every coarse import, and a re-import in place
+/// (`UpdateModel`) trades copy and record together. Placement is not
+/// compared: the chord is a property of the mesh, and a moved source
+/// carries the same mesh and record. No stock entity: nothing to know.
+/// #1056: once a from-model stock carries its own chord (#1127), read it
+/// here instead of proving the source.
+#[must_use]
+pub fn stock_fidelity_known(world: &World, setup: Option<&str>) -> bool {
+    let Some(stock) = model::find_by_name(world, &crate::setup::stock_entity_name(world, setup)) else {
+        return true;
+    };
+    match model::stock_def_of(world, &stock) {
+        // #1056: the chord lives on the source only - prove it is the source.
+        Some(StockShape::FromModel { source }) => model::find_by_name(world, &source).is_some_and(|src| {
+            match (model::facets_of(world, &stock), model::facets_of(world, &src)) {
+                (Some(copy), Some(now)) => same_mesh(&copy, &now),
+                _ => false,
+            }
+        }),
+        _ => true,
+    }
+}
+
+/// The two facet lists are one mesh: the same `Arc` (a copy `SetStock`
+/// took and nothing replaced), or the same count and every coordinate
+/// equal bit for bit. Empty is never a mesh.
+fn same_mesh(a: &std::sync::Arc<[crate::geometry::Triangle]>, b: &std::sync::Arc<[crate::geometry::Triangle]>) -> bool {
+    if a.is_empty() || a.len() != b.len() {
+        return false;
+    }
+    if std::sync::Arc::ptr_eq(a, b) {
+        return true;
+    }
+    let bits = |t: &crate::geometry::Triangle| [t.a, t.b, t.c].map(|p| [p.x.to_bits(), p.y.to_bits(), p.z.to_bits()]);
+    a.iter().zip(b.iter()).all(|(x, y)| bits(x) == bits(y))
 }
 
 /// A coarse chord error's excess over the importer's promise.
@@ -104,7 +228,7 @@ pub fn facts(world: &World, chord_mm: f64) -> serde_json::Value {
         "approximation_mm": chord_mm,
         "promised_mm": step::CHORD_CAP,
         "note": format!(
-            "{}. Gouge checks against this model are stricter; if it is too coarse to check, its operations are refused at the post. Re-import with a larger budget to clear this.",
+            "{}. Gouge checks against this model are stricter; if it is too coarse to check, its operations are refused at the post. Re-import with a larger STEP facet budget to clear this.",
             summary(world, chord_mm)
         ),
     })
@@ -142,7 +266,7 @@ pub fn op_problem(world: &World, name: &str, op: &Operation) -> Option<String> {
     let said = format!("surfaces are approximated to within {}", within(world, chord));
     if !fidelity_law::excess_aware(&op.params) {
         return Some(format!(
-            "{name}: model '{model}' was imported at reduced fidelity ({said}) and this kind of operation cannot be verified against it; re-import with a larger budget"
+            "{name}: model '{model}' was imported at reduced fidelity ({said}) and this kind of operation cannot be verified against it; re-import with a larger STEP facet budget"
         ));
     }
     excess_floor(fidelity_law::floor_of(&op.params), excess(chord))
@@ -172,6 +296,23 @@ pub fn gate_problems(world: &World) -> Vec<String> {
         out.push(why);
     }
     out
+}
+
+/// The tolerance the program sim and the eye's colours judge at (#1056):
+/// `Err` with the gate's own refusal line when an operation of the
+/// program is refused here - so the refusal is what is said, never a
+/// gouge line read off a mesh the gate already called too coarse (an op
+/// whose own floor is below the sim's, or one judged against a coarse
+/// stock the parts do not show) - else [`verdict_tol`].
+pub fn program_tol(world: &World) -> Result<f64, String> {
+    if let Ok(ops) = crate::posting::program_ops(world) {
+        for (name, e) in &ops {
+            if let Some(why) = model::operation_of(world, e).and_then(|op| op_problem(world, name, &op)) {
+                return Err(why);
+            }
+        }
+    }
+    verdict_tol(world)
 }
 
 /// The program sim's verdict tolerance for this document: `DEV_TOL`, less

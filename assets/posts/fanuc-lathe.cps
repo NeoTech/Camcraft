@@ -42,7 +42,15 @@ threadHands = true;  // reads PARAM SpindleDirection (#629): the engine refuses 
 //  - G97 constant rpm, from the stream's SpindleSpeed; G96 constant
 //    surface speed ONLY when the stream states a SurfaceSpeed (m/min)
 //    PARAM - the post never invents a surface speed from an rpm. G50
-//    clamps the rpm once per program to the machine's stated maximum.
+//    clamps the rpm once per program to the machine's stated maximum,
+//    and again before a G96 section whose tool states a lower max rpm
+//    (PARAM MaxSpindleSpeed, #891). A G96 with neither clamp stated is
+//    refused by name - unclamped CSS runs away toward the centre.
+//    A section that posted G96 cancels it at its end (G97 after M05,
+//    #1173), so every section opens under G97 unless it states G96
+//    itself: a live tool's, a drill's or a thread's S is read as rpm,
+//    whatever kind of section follows, and the program never ends -
+//    or hands the next program - a constant-surface-speed mode.
 //  - G99 feed per revolution: F = mm/min / rpm, so the cut speed the
 //    generator planned is the cut speed the control runs. No rpm, no
 //    per-rev feed - refused by name.
@@ -120,6 +128,9 @@ threadHands = true;  // reads PARAM SpindleDirection (#629): the engine refuses 
 var wcsWord = "G54";
 var sRpm = 0;              // S/M3 waits for the section (PARAMs, TOOL, SECTION order)
 var sCss = 0;              // SurfaceSpeed PARAM (m/min), 0 = none stated
+var sMax = 0;              // MaxSpindleSpeed PARAM (#891): the tool's own rpm ceiling, 0 = none
+var clampS = 0;            // the G50 S in force (#891), 0 = none posted yet
+var cssOn = false;         // this section posted G96: its end cancels it (#1173)
 var spindleWait = false;
 var toolWait = false;
 var tNo = 0;
@@ -213,7 +224,7 @@ function posed(p) {
 // flood code: refused by name (#150), never posted as mist or dry. An
 // unstated list stays silent (the unstated-limit law). M9 (stop) is
 // the RS-274 fixed pair.
-var COOLANT_KINDS = ["flood", "mist", "through-spindle", "through-tool"];
+var COOLANT_KINDS = ["flood", "mist", "air", "air-blast", "through-spindle", "through-tool"];
 function coolantWho() { return coolantOp ? "operation " + coolantOp + ": " : ""; }
 function coolantCode() {
   var cs = (typeof machine !== "undefined" && machine.coolants) || [];
@@ -231,14 +242,14 @@ function coolantCode() {
 }
 
 // The op's coolant ask (#112): the stream says nothing for flood (every
-// older stream), or carries PARAM Coolant off / mist / through-tool. The
+// older stream), or carries PARAM Coolant off / mist / air (#869) / through-tool. The
 // code is the machine's own entry of that family - the machine is truth;
 // an ask the machine states no code for is refused by name, naming the
 // operation (#150), never silently posted dry.
 function coolantFor(ask) {
   if (ask === "off") return "";
   if (!ask || ask === "flood") return coolantCode();
-  var want = ask === "mist" ? ["mist"] : (ask === "through-tool" ? ["through-spindle", "through-tool"] : []);
+  var want = ask === "mist" ? ["mist"] : (ask === "air" ? ["air", "air-blast"] : (ask === "through-tool" ? ["through-spindle", "through-tool"] : []));
   if (want.length === 0) { msg(coolantWho() + "unknown coolant ask " + ask); return ""; }
   var cs = (typeof machine !== "undefined" && machine.coolants) || [];
   for (var i = 0; i < cs.length; i++) {
@@ -340,6 +351,7 @@ function onParameter(name, value) {
   else if (name === "OriginY" && has(value)) orgY = Number(value);
   else if (name === "OriginZ" && has(value)) orgZ = Number(value);
   else if (name === "SurfaceSpeed" && has(value)) sCss = Number(value);
+  else if (name === "MaxSpindleSpeed" && has(value)) sMax = Number(value);
   else if (name === "SpindleDirection") spinRev = String(value || "") === "reverse";
 }
 
@@ -357,6 +369,17 @@ function onToolChange(number, name) {
   toolWait = true;
 }
 
+// The rpm ceiling a G96 section runs under (#891): the lower of the
+// machine's stated spindle maximum and the tool's own (PARAM
+// MaxSpindleSpeed); 0 when neither is stated - and then no G96 posts.
+function cssCap() {
+  var mm = (typeof machine !== "undefined" && machine.spindleMax > 0) ? machine.spindleMax : 0;
+  var tm = sMax > 0 ? sMax : 0;
+  if (mm > 0 && tm > 0) return Math.min(mm, tm);
+  return mm > 0 ? mm : tm;
+}
+var UNCLAMPED = "constant surface speed (G96) with no rpm clamp - the machine states no spindle maximum and the tool no max rpm; an unclamped G96 runs away toward the centre";
+
 // The preamble closes over everything a raw motion line needs to be a
 // legal program: offset, tool + wear offset, spindle, coolant.
 function startPreamble() {
@@ -371,6 +394,7 @@ function startPreamble() {
   }
   if (!clampDone && typeof machine !== "undefined" && machine.spindleMax > 0) {
     block(["G50", "S" + ff(machine.spindleMax)]);
+    clampS = machine.spindleMax;
     clampDone = true;
   }
   if (liveAsk) {
@@ -378,8 +402,27 @@ function startPreamble() {
   } else if (spindleWait) {
     var m = spinRev ? "M04" : "M03";
     if (spinRev) note("SPINDLE M04 - THREAD HAND NEEDS REVERSE ROTATION - MOUNT THE INSERT FOR M04");
-    if (sCss > 0) block(["G96", "S" + ff(sCss), m]);
-    else block(["G97", "S" + ff(sRpm), m]);
+    if (sCss > 0) {
+      var cap = cssCap();
+      if (!(cap > 0)) refuse(UNCLAMPED);
+      else {
+        if (cap !== clampS) { block(["G50", "S" + ff(cap)]); clampS = cap; }   // a tool rated under the machine (#891)
+        block(["G96", "S" + ff(sCss), m]);
+        cssOn = true;
+      }
+    } else {
+      // A tool's lower clamp is lifted back to the machine's before a
+      // constant-rpm section, so the program's S means what it says.
+      // With no machine maximum there is nothing to lift back to, and
+      // the tool's G50 stays in force into the G97 section - harmless,
+      // since G50 S caps the spindle only under G96 (#891, pinned by
+      // lathe_post_css's no-machine-max carry-over test).
+      if (clampS > 0 && typeof machine !== "undefined" && machine.spindleMax > 0 && clampS !== machine.spindleMax) {
+        block(["G50", "S" + ff(machine.spindleMax)]);
+        clampS = machine.spindleMax;
+      }
+      block(["G97", "S" + ff(sRpm), m]);
+    }
     spindleWait = false;
   }
   coolant = coolantFor(coolantAsk);
@@ -414,7 +457,11 @@ function endPreamble() {
   coolant = "";
   coolantAsk = "flood";      // the next section states its own ask
   sCss = 0;                  // and its own spindle mode: no stale G96 (#772)
+  sMax = 0;                  // and its own clamp (#891)
   if (liveAsk) {
+    // The live tool and the C axis are released before the op's stop or
+    // trip home (#1188): the operator never meets a driven tool still
+    // turning, and the home move never drags an engaged C.
     if (liveOk) {
       block([liveCodes.spindleOff]);
       block([liveCodes.cAxisOff]);
@@ -422,11 +469,13 @@ function endPreamble() {
     }
     liveAsk = false; liveOk = false; liveCodes = null; lastC = null;
     spindleWait = false;
-    return;
+  } else {
+    block(["M05"]);
+    if (cssOn) block(["G97"]); // #1173: no section opens under a G96 it did not state
+    cssOn = false;
+    spinRev = false;           // the next section states its own
   }
-  block(["M05"]);
-  spinRev = false;           // the next section states its own
-  afterOp();
+  afterOp();                 // #1188: every section ends with its own ask, live or not
 }
 
 // --------------------------------------------- C-axis live tooling (#33)
