@@ -47,39 +47,3 @@ pub(crate) fn family_at_post(world: &World, ops: &[(String, Entity)]) -> Result<
     }
     Ok(())
 }
-
-/// The EDM door at post (review of #1131): no sinker EDM dialect ships
-/// yet (#542), so an op whose setup's machine is a sinker EDM is refused
-/// by name before any file is written - never handed to a milling post
-/// that would address the EDM control with a tool change, a length
-/// offset and the electrode tip as a Z target. A wire EDM passes this
-/// door since its dialect shipped (#533, `wire-iso.cps`): its own
-/// refusals come from `post_serves` (no cutting post is offered for a
-/// wire machine), the engine's `wireEdm` door (no cutting script posts a
-/// wire path) and the wire post itself (each missing `edm.codes.<x>`
-/// refused by name). Shared by every writer: the one-file post, the
-/// per-mount and the per-op writers, each beside its lathe door.
-///
-/// # Errors
-/// `"<setup>: no post for a sinker EDM machine yet (#542) - ..."`.
-pub(crate) fn edm_at_post<'a>(world: &World, names: impl IntoIterator<Item = &'a str>) -> Result<(), String> {
-    use crate::machine::Kind;
-    for name in names {
-        let Some(op) = model::find_by_name(world, name).and_then(|e| model::operation_of(world, &e)) else {
-            continue;
-        };
-        let machine = crate::machine::kind_of_setup(world, op.setup.as_deref());
-        let issue = match machine {
-            Kind::SinkerEdm => "#542",
-            // #533: the wire dialect ships; its refusals live in the post.
-            Kind::WireEdm | Kind::Mill | Kind::Lathe | Kind::MillTurn | Kind::Plasma => continue,
-        };
-        let setup = crate::setup::effective(world, op.setup.as_deref()).unwrap_or_else(|| "the setup".to_owned());
-        return Err(format!(
-            "{setup}: no post for a {} machine yet ({issue}) - {name} is not posted and no file is written; \
-             a sinker EDM dialect ships with {issue}",
-            machine.label()
-        ));
-    }
-    Ok(())
-}

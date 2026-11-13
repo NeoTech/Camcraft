@@ -174,7 +174,9 @@ fn feeds(world: &World) -> (f64, f64) {
 /// out.
 fn post(cps: &str, world: &World) -> engine::PostOutput {
     let records = posting::stream_records(world).expect("every op generated");
-    let mut out = engine::run(cps, &posting::machine_value(world), &cnc::serialize(&records))
+    // #902: the document's unit reaches the script as postOptions.Units.
+    let options = posting::program_options(world);
+    let mut out = engine::run_with(cps, &posting::machine_value(world), &cnc::serialize(&records), &options)
         .expect("the lathe script runs");
     let warns: Vec<String> = records
         .iter()
@@ -367,6 +369,8 @@ fn with_no_machine_max_the_tools_g50_carries_into_a_later_g97() {
 fn an_inch_tormach_posts_vc_in_ft_per_min_and_d_in_rpm() {
     let inch = Machine { units: Some("inch".into()), ..lathe(Some(12000.0)) };
     let (world, mut h) = faced_on(css(Some(3000.0)), inch);
+    // #902: the document's unit, not the machine file's, makes the program inch.
+    h.execute(&world, camcraft_app::commands::SetUnits::new(&world, camcraft_app::units::Unit::Inches).expect("inch document"));
     generate(&world, &mut h);
     let t = post(TORMACH, &world);
     assert!(t.warnings.is_empty(), "{:?}", t.warnings);

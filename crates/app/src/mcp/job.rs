@@ -139,6 +139,8 @@ pub(super) fn get_job(env: &mut Env, _a: &Map<String, Value>) -> Result<Value, S
     let ops: Vec<Value> = inventory(env).iter().map(|(k, e, s)| op_full(env, k, e, *s)).collect();
     Ok(json!({
         "document": env.doc_path.as_ref().map(|p| p.display().to_string()),
+        // #902: the document's unit - display and posted program.
+        "units": super::units_tools::word(w),
         "active_setup": setup::active(w),
         "work_material": super::cutting_tools::material_view(env),
         "setups": setups_view(env),
@@ -226,6 +228,7 @@ pub(super) fn finding(op: &str, w: &Warning) -> Value {
         Warning::RestUnjudged { at, .. } => ("rest_unjudged", *at),
         Warning::Scallop { at, .. } => ("scallop", *at),
         Warning::ProbeSearch { at, .. } => ("probe_search", *at),
+        Warning::SinkerFinishOrder { at, .. } => ("sinker_finish_order", *at),
     };
     json!({
         "op": op,

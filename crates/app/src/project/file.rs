@@ -83,7 +83,18 @@ use super::*;
 /// recorded chord loads marked (`fidelity_migrate`) and its operations are
 /// refused at the post until the model is re-imported. An old reader must
 /// refuse a v59 file rather than drop the mark and post them unchecked.
-pub const PROJECT_VERSION: u32 = 59;
+/// v60 (#902): the document's unit (`units`) is the unit every program
+/// posts in, not only a display lens; a machine file's unit no longer
+/// chooses it. An older file opens on the unit its programs posted in
+/// (`units_migrate`, with a load note when its display changes); an old
+/// reader must refuse a v60 file rather than post an inch document in
+/// the machine file's mm.
+/// v61 (#258): the document may state its program number and comment
+/// (`program`). Absent is O0001 and the machine's name - what every
+/// v60 file posted - so a v60 file steps up unchanged. An old reader
+/// must refuse a v61 file rather than post the program as O0001, where
+/// it could overwrite another program in the control's memory.
+pub const PROJECT_VERSION: u32 = 61;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ProjectError {
@@ -107,7 +118,8 @@ pub enum ProjectError {
 #[derive(Serialize, Deserialize)]
 pub struct ProjectFile {
     pub version: u32,
-    /// The document's display unit ("mm" | "in"), v8+. Absent means
+    /// The document's unit ("mm" | "in"), v8+: the display lens, and
+    /// since v59 (#902) the unit every program posts in. Absent means
     /// millimeters - exactly what every pre-v8 file displayed, so the
     /// serde default is itself the whole migration. A millimeter document
     /// omits the field (byte-shape of the pre-v8 files, plus the stamp).
@@ -173,11 +185,27 @@ pub struct ProjectFile {
     /// `skip_stops`: an absent key is one combined program.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub per_op_files: bool,
+    /// The program number and comment (#258), v61+: absent states
+    /// neither - O0001 and the machine's name, what every older file
+    /// posted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub program: Option<ProgramDto>,
     /// Per-operation smoothing at post (#616), additive like
     /// `skip_stops`: an absent key is off - no smoothing words.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub smoothing: bool,
     pub entities: Vec<EntityDto>,
+}
+
+/// The file mirror of the `ProgramInfo` singleton (#258): each value
+/// absent when not stated. A loaded value is checked by the same rules
+/// `SetProgramInfo` runs; one they refuse is a corrupt file.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
+pub struct ProgramDto {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub number: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub comment: Option<String>,
 }
 
 /// The file mirror of the `PostOptions` singleton (issue #34): each

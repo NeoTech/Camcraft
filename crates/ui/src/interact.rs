@@ -95,20 +95,10 @@ pub(crate) fn ray_at(state: &State, p: [f32; 2]) -> Option<([f64; 3], [f64; 3])>
 /// A click inside the viewport, routed by the pick mode: models,
 /// feature faces, or edge chains.
 pub(crate) fn pick_at(state: &mut State, p: [f32; 2], mods: Mods) {
-    // Anchor picking wins over entity picking: in pick mode a click ON a
-    // marker places the origin there (same command the pane grid
-    // queues); a click beside one still picks normally, so the viewport
-    // never stops behaving like the viewport.
-    if state.wcs_ui.pick_anchor
-        && let Some((k, pos)) = anchor_hit(state, p, 12.0)
-    {
-        state.wcs_ui.anchor_xy = k;
-        state.pending.push_back(CommandKind::SetWcs {
-            pos,
-            roll_deg: state.wcs_ui.roll_deg,
-            pitch_deg: state.wcs_ui.pitch_deg,
-            yaw_deg: state.wcs_ui.yaw_deg,
-        });
+    // The WCS page's picks win over entity picking while armed: anchor
+    // markers (a click beside one still picks normally) and the #739
+    // circle-centre edge pick.
+    if crate::wcs_circle_pick::take_click(state, p) {
         return;
     }
     match state.geo_pick {
@@ -192,7 +182,7 @@ pub(crate) fn update_hover(state: &mut State, p: [f32; 2], held: bool) {
     }
     // #692: a feature mode hovers exactly what its click would take - the
     // one pick rule, the armed tool's kinds.
-    if state.geo_pick != GeoPick::Model {
+    if state.geo_pick != GeoPick::Model || state.wcs_ui.pick_circle {
         crate::feature_click::hover(state, p);
         return;
     }

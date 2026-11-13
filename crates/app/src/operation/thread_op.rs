@@ -1,4 +1,4 @@
-//! The thread-milling operation's app half (#894): the door that judges tool and thread against each other by name, the kernel plan, and the gate on the readings the gouge laws take of a thread mill - a round wall, and the thread's own pitch.
+//! The thread-milling operation's app half (#894, external threads #985): the door that judges tool and thread against each other by name, the kernel plan, and the gate on the readings the gouge laws take of a thread mill - a round wall, the thread's own pitch, and on a boss the tooth roots.
 //!
 //! Provenance: ISO 724 / ISO 965-1 thread depths and public machine-tool
 //! handbook thread milling, as `camcraft_tools::thread_mill` and
@@ -12,22 +12,26 @@
 //! major circle of the model's own wall and no further (the tangency law,
 //! against `thread_rims::major_rims`), and the solid law excuses only the
 //! thread's own wall and mouth, inside that major cylinder ([`bores`]).
-//! Both apply only over a round wall ([`walls_round`], #1205).
+//! Both apply only over a round wall ([`walls_round`], #1205). An
+//! external thread (#985) mirrors it on a boss, which CAD draws at its
+//! major diameter: the crests may reach in to the minor circle
+//! ([`super::thread_boss`], a round boss only), and the roots stay off
+//! the drawn wall ([`root_cutter`]); a boss gets no bore grant.
 
 use camcraft_tools::thread_mill as form;
 
 use crate::machining2d::{self, GenError, ThreadHole, ThreadParams};
 use crate::tools::Tool;
 use crate::geometry::Triangle;
-use crate::verify::{self, Warning};
+use crate::verify::{self, Cutter, Warning};
 
 use super::heights::ResolvedHeights;
 use super::types::OpParams;
 
-/// The thread's radial depth for `pitch`, mm: internal threads only in
-/// this slice.
-fn depth_of(pitch: f64) -> f64 {
-    machining2d::THREAD_DEPTH_PER_PITCH * pitch
+/// The thread's radial depth for `pitch`, mm: ISO 724's in a hole, the
+/// ISO 965-1 design root on a boss.
+fn depth_of(pitch: f64, external: bool) -> f64 {
+    pitch * if external { machining2d::EXTERNAL_THREAD_DEPTH_PER_PITCH } else { machining2d::THREAD_DEPTH_PER_PITCH }
 }
 
 /// The door (#894): why `tool` cannot cut the thread `params` states, by
@@ -38,7 +42,7 @@ fn depth_of(pitch: f64) -> f64 {
 /// is not stated yet (the generator names that one).
 #[must_use]
 pub fn door(tool: &Tool, params: &OpParams) -> Option<String> {
-    let OpParams::Thread { pitch, infeed, holes, .. } = params else {
+    let OpParams::Thread { pitch, infeed, holes, external, bottom_z, passes, top_z, .. } = params else {
         return None;
     };
     if !form::is_thread_mill(tool.kind) {
@@ -47,7 +51,13 @@ pub fn door(tool: &Tool, params: &OpParams) -> Option<String> {
     if let Some(why) = form::form_refusal(tool) {
         return Some(why);
     }
-    let no_air = || {
+    // What the features ask of the tool: air inside a hole; on a boss
+    // (#985), a core under the thread and a mill that reaches its foot.
+    let no_air = |depth: Option<f64>| {
+        if *external {
+            // A stated bottom is resolved at generate, which asks again.
+            return super::thread_boss::door(tool, holes, depth, bottom_z.is_none().then_some(None));
+        }
         holes.iter().find(|x| tool.diameter * 0.5 >= x.radius).map(|x| {
             format!(
                 "a {} mm thread mill has no air to enter the {} mm drill hole at ({}, {}) - the mill must be smaller than the thread's minor diameter",
@@ -65,10 +75,15 @@ pub fn door(tool: &Tool, params: &OpParams) -> Option<String> {
         // operation starts that way, and the generator refuses it by
         // name until the pitch is stated. Everything that needs no
         // pitch is still judged here.
-        Err(_) if pitch.is_none() => return no_air(),
+        Err(_) if pitch.is_none() => {
+            return passes
+                .refusal(None, *infeed)
+                .or_else(|| no_air(None))
+                .or_else(|| super::thread_r_plane::door(*top_z, holes, *external));
+        }
         Err(why) => return Some(why),
     };
-    let h = depth_of(pitch);
+    let h = depth_of(pitch, *external);
     if tool.diameter * 0.5 <= h {
         return Some(format!(
             "a {} mm thread mill is no wider than twice the {h} mm thread depth of a {pitch} mm pitch - its teeth leave no core",
@@ -80,13 +95,17 @@ pub fn door(tool: &Tool, params: &OpParams) -> Option<String> {
             "the radial infeed of {infeed} mm is more than the {h} mm thread depth a {pitch} mm pitch stands at"
         ));
     }
-    no_air()
+    // #988: the pass control against this thread's depth.
+    if let Some(why) = passes.refusal(Some(h), *infeed) {
+        return Some(why);
+    }
+    no_air(Some(h)).or_else(|| super::thread_r_plane::door(*top_z, holes, *external))
 }
 
 /// The kernel's parameters for this operation and tool, heights
 /// resolved; every door refusal is the generator's refusal too.
 pub(super) fn kernel_params(tool: &Tool, params: &OpParams, hl: &ResolvedHeights) -> Result<ThreadParams, GenError> {
-    let OpParams::Thread { infeed, feed, plunge_feed, climb, holes, pitch, hand, .. } = params else {
+    let OpParams::Thread { infeed, feed, plunge_feed, climb, holes, pitch, hand, external, passes, .. } = params else {
         return Err(GenError::Invalid("not a thread-milling operation".into()));
     };
     if !form::is_thread_mill(tool.kind) {
@@ -101,6 +120,12 @@ pub(super) fn kernel_params(tool: &Tool, params: &OpParams, hl: &ResolvedHeights
     if let Some(why) = door(tool, params) {
         return Err(GenError::Invalid(why));
     }
+    // #985: the reach beside a boss again, now against the resolved bottom.
+    if *external
+        && let Some(why) = super::thread_boss::door(tool, holes, Some(depth_of(pitch, true)), Some(hl.bottom))
+    {
+        return Err(GenError::Invalid(why));
+    }
     Ok(ThreadParams {
         holes: holes
             .iter()
@@ -109,20 +134,25 @@ pub(super) fn kernel_params(tool: &Tool, params: &OpParams, hl: &ResolvedHeights
                 radius: x.radius,
                 top_z: x.entry_z,
                 floor_z: hl.bottom.unwrap_or(x.floor_z),
-                stepped: x.stepped,
+                // A boss has no fold and no exit: the words are a hole's.
+                stepped: x.stepped && !*external,
                 // A stated bottom is the author's own floor; only the
                 // hole's own exit takes the run-through allowance.
-                through: x.through && hl.bottom.is_none(),
+                through: x.through && hl.bottom.is_none() && !*external,
             })
             .collect(),
         pitch,
         tool_diameter: tool.diameter,
         rows: form::rows(tool),
         infeed: *infeed,
-        external: false,
+        external: *external,
         hand: *hand,
         climb: *climb,
+        passes: *passes,
         clearance_z: hl.clearance,
+        // #1212: the stated R plane is where every rapid stops and the
+        // feed begins; the kernel refuses it under a feature's top.
+        r_z: hl.top,
         retract_z: hl.retract,
         feed: *feed,
         plunge_feed: *plunge_feed,
@@ -155,16 +185,54 @@ pub(super) fn walls_round(facets: &[Triangle], plan: &ThreadParams) -> bool {
 /// round walls (`round` false, [`walls_round`]).
 #[must_use]
 pub(super) fn bores(tool: &Tool, params: &OpParams, round: bool) -> Vec<verify::ThreadBore> {
-    let OpParams::Thread { pitch, .. } = params else {
+    let OpParams::Thread { pitch, external, .. } = params else {
         return Vec::new();
     };
-    if !round {
+    // A boss is no bore (#985): its crests answer to the minor circle
+    // and its roots to the narrowed cutter, never to a grant.
+    if !round || *external {
         return Vec::new();
     }
     match form::resolve_pitch(tool, *pitch) {
         Ok(p) => super::thread_rims::thread_bores(params, p),
         Err(_) => Vec::new(),
     }
+}
+
+/// The solid law's cutter for an external thread (#985): `cutter`
+/// narrowed by the external depth at the thread's own pitch, so the
+/// body under the teeth - roots, tip, shank and holder - is held off the
+/// whole part, the boss's drawn (major) wall and its shoulder included.
+/// Every other operation, an internal thread (its grant is [`bores`]:
+/// the two are never stacked) and a pitch that does not resolve
+/// (refused before any path exists) keep the full cutter.
+#[must_use]
+pub(super) fn root_cutter(cutter: Cutter, tool: &Tool, params: &OpParams) -> Cutter {
+    let OpParams::Thread { pitch, external: true, .. } = params else {
+        return cutter;
+    };
+    match form::resolve_pitch(tool, *pitch) {
+        Ok(p) if cutter.radius > depth_of(p, true) => Cutter { radius: cutter.radius - depth_of(p, true), ..cutter },
+        _ => cutter,
+    }
+}
+
+/// The radius the program simulation sweeps for `tool` under `params`:
+/// the tool's own certain removal (`tool_law::cutting_radius`), except
+/// an external Thread operation (#985), whose tooth roots stand the
+/// external depth in at the thread's own pitch - exactly on the boss's
+/// drawn wall on the last pass, where the internal depth at the tool's
+/// coarsest pitch would read 0.07 x pitch of the boss as cut away.
+pub fn sim_radius(tool: &Tool, params: &OpParams) -> Result<f64, String> {
+    if let OpParams::Thread { pitch, external: true, .. } = params
+        && let Ok(p) = form::resolve_pitch(tool, *pitch)
+    {
+        let root = tool.diameter * 0.5 - depth_of(p, true);
+        if root.is_finite() && root > 0.0 {
+            return Ok(root);
+        }
+    }
+    super::tool_law::cutting_radius(tool)
 }
 
 /// The crossing law stands down for a Thread operation: every radial
@@ -205,6 +273,8 @@ mod tests {
             holes: vec![hole(4.0)],
             pitch,
             hand: ThreadHand::Right,
+            external: false,
+            passes: crate::machining2d::ThreadPasses::default(),
         }
     }
 
@@ -231,6 +301,25 @@ mod tests {
         assert!(bores(&tool, &thread(Some(1.0)), true).is_empty());
         assert!(bores(&tool, &other_kind(), true).is_empty());
         assert!(bores(&tool, &thread(None), false).is_empty());
+    }
+
+    #[test]
+    fn an_external_thread_narrows_the_roots_by_the_external_depth() {
+        let tool = form::thread_mill(6.0, 1.5, 0.0, 12.0);
+        let mut boss = thread(None);
+        if let OpParams::Thread { external, .. } = &mut boss {
+            *external = true;
+        }
+        let root = 3.0 - 0.6134 * 1.5;
+        assert!((root_cutter(Cutter::of(&tool), &tool, &boss).radius - root).abs() < 1e-12);
+        // A boss is no bore: no grant beside the narrowed roots.
+        assert!(bores(&tool, &boss, true).is_empty());
+        // An internal thread keeps the full cutter (its grant is `bores`).
+        assert_eq!(root_cutter(Cutter::of(&tool), &tool, &thread(None)).radius, 3.0);
+        assert!((sim_radius(&tool, &boss).expect("root") - root).abs() < 1e-12);
+        // An internal thread keeps the tool's own certain removal.
+        assert!((sim_radius(&tool, &thread(None)).expect("core") - (3.0 - 0.5413 * 1.5)).abs() < 1e-12);
+        assert_eq!(sim_radius(&tool, &other_kind()), Ok(3.0 - 0.5413 * 1.5));
     }
 
     #[test]

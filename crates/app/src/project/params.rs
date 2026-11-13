@@ -1017,6 +1017,16 @@ pub enum ParamsDto {
         /// #894, additive: the thread's hand. Absent reads right-hand.
         #[serde(default)]
         hand: ThreadHandDto,
+        /// #985, additive (no version step): external threads - the
+        /// list holds bosses. Absent (every older file) is internal;
+        /// written only when set.
+        #[serde(default, skip_serializing_if = "is_false")]
+        external: bool,
+        /// #988, additive (no version step): pass control - schedule,
+        /// finish and spring passes, allowance, spindle and cutter
+        /// hand. Flattened keys, each absent when at the #894 default.
+        #[serde(flatten)]
+        passes: ThreadPassesDto,
     },
     /// The probe (#108): an additive variant in the v50 grammar.
     Probe(ProbeDto),
