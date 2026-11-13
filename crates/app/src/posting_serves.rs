@@ -15,8 +15,9 @@
 //! the user's own by the dialect its manifest declares (the
 //! `capabilities` mask, [`crate::post::dialect::work_voice`]): a lathe
 //! takes only a script that declares turning, a mill or a plasma table
-//! refuses one that declares turning, and no script serves an EDM (no
-//! EDM dialect ships, #533). A refusal names the setup, its operations,
+//! refuses one that declares turning, and no user script serves an EDM
+//! (only the registry's wire posts serve a wire EDM, #533; no sinker
+//! dialect ships, #542). A refusal names the setup, its operations,
 //! the post and the machine's kind - nothing is posted.
 //!
 //! A user's script states the kinds it serves in its manifest

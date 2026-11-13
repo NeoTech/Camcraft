@@ -213,6 +213,8 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             plunge_feed,
             climb,
             holes,
+            pitch,
+            hand,
         } => {
             if tab == SEC_GEO {
                 field(ui, "Holes");
@@ -237,6 +239,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
                 if ui.button("Detect holes").clicked() {
                     cx.detect_holes = true;
                 }
+                hint(ui, "each hole's diameter is the thread's MINOR diameter (the tap-drill size CAD draws)");
             }
             if tab == SEC_HEIGHTS {
                 height_editor(
@@ -254,8 +257,9 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
                 });
             }
             if tab == SEC_PASSES {
+                super::thread_page::thread_rows(ui, u, pitch, hand);
                 prop_row(ui, "Radial infeed per pass", |ui| num(ui, u, infeed));
-                hint(ui, "rings from the tangent start to the finished wall; the pitch is the TOOL's number, not a parameter here");
+                hint(ui, "equal radial passes, each a full helix; the last lands on the thread depth (0.5413 x pitch)");
             }
             if tab == SEC_FEEDS {
                 prop_row(ui, "Feed", |ui| num_feed(ui, u, feed));

@@ -26,7 +26,7 @@ use camcraft_app::model;
 use camcraft_app::operation::{Height, OpParams, SrcRef};
 use camcraft_app::schema::Location;
 use camcraft_app::stock::StockShape;
-use camcraft_app::tools::{catalog, Tool, ToolKind};
+use camcraft_app::tools::{catalog, Tool};
 use camcraft_app::machining2d::{thread_mill, ThreadHole, ThreadParams};
 use camcraft_app::verify::{Cutter, HoleAxis, SolidLaw, Warning, WALL_SAG, solid_hits_walled};
 use camcraft_app::world::new_world;
@@ -34,9 +34,43 @@ use camcraft_app::world::new_world;
 /// A 30 x 30 x [0, 20] plate with the polygon hole `hole` from the top,
 /// blind at Z 8.
 fn part(hole: &[P2]) -> Mesh {
+    part_to(hole, 8.0)
+}
+
+/// The plate with its hole blind at `floor`.
+fn part_to(hole: &[P2], floor: f64) -> Mesh {
     let mut f = Vec::new();
-    plate(&rect(-15.0, -15.0, 15.0, 15.0), Some((hole, 8.0)), 0.0, 20.0, &mut f);
+    plate(&rect(-15.0, -15.0, 15.0, 15.0), Some((hole, floor)), 0.0, 20.0, &mut f);
     Mesh::from_facets(f)
+}
+
+/// #992: the thread's tap-drill hole is modelled deeper than the
+/// thread (floor 10), so a drill's 118-degree point stays under the mill.
+const TAP_FLOOR: f64 = 4.0;
+
+/// #992: a thread mill is not centre-cutting - a Drill operation ahead
+/// opens the declared hole of `radius` to `TAP_FLOOR`, at the minor
+/// diameter rounded to the tenth below.
+fn drill_ahead(world: &flecs_ecs::prelude::World, h: &mut History, radius: f64) {
+    let d = ((radius * 2.0 - 0.02) * 10.0).floor() / 10.0;
+    let tool = Tool { diameter: d, shank_d: d, flute_len: 30.0, ..catalog_tool("DR-0600") };
+    h.execute(world, AddTool::new(world, "TAP-DRILL", tool).expect("tap drill"));
+    let hole = Hole { xy: Point2::new(0.0, 0.0), radius: d * 0.5, entry_z: 20.0, floor_z: TAP_FLOOR, through: false, stepped: false };
+    let params = OpParams::Drill {
+        clearance_z: Height::fixed(25.0),
+        retract_z: None,
+        top_z: Height::fixed(20.0),
+        bottom_z: None,
+        cycle: CycleChoice::Drill,
+        peck: 0.0,
+        dwell: 0.0,
+        feed: 120.0,
+        plunge_feed: 80.0,
+        holes: vec![hole],
+        cross: Vec::new(),
+    };
+    h.execute(world, CreateOperation::new(world, "TAP", "TAP-DRILL", SrcRef::Entity("part".into()), params).expect("create drill"));
+    h.execute(world, GenerateOperation::new(world, "TAP").expect("generate drill"));
 }
 
 /// A regular `n`-gon with its corners on r `r` about the origin.
@@ -57,32 +91,10 @@ fn catalog_tool(name: &str) -> Tool {
     catalog().into_iter().find(|(n, _)| *n == name).map(|(_, t)| t).expect("catalog entry")
 }
 
-/// A 6 mm thread mill of pitch 1 (the tap cycle's law: the pitch is the
-/// tool's).
+/// A 6 mm multi-form thread mill of pitch 1 (#894: the pitch is the
+/// tool's own).
 fn thread_tool() -> Tool {
-    Tool {
-        kind: ToolKind::Tap,
-        diameter: 6.0,
-        corner_r: 0.0,
-        tip_angle: 0.0,
-        pitch: 1.0,
-        nose_radius: 0.0,
-        width: 0.0,
-        flute_len: 25.0,
-        shank_d: 6.0,
-        shank_len: 40.0,
-        holder_d: 44.0,
-        holder_len: 35.0,
-        material_group: "steel".into(),
-        center_cutting: true,
-        rpm: 6000.0,
-        feed: 400.0,
-        tool_material: None,
-        flutes: None,
-        orientation: None,
-        turning: None,
-        catalog: camcraft_tools::catalog_fields::ToolCatalog::default(),
-    }
+    Tool { material_group: "steel".into(), ..camcraft_app::thread_mill::thread_mill(6.0, 1.0, 0.0, 25.0) }
 }
 
 fn hole(radius: f64) -> Hole {
@@ -101,7 +113,11 @@ enum Kind {
 fn verdict(model_hole: &[P2], kind: Kind, radius: f64) -> Vec<Warning> {
     let world = new_world();
     let mut h = History::default();
-    h.execute(&world, ImportModel::from_mesh("part", part(model_hole)));
+    let mesh = match kind {
+        Kind::Thread => part_to(model_hole, TAP_FLOOR),
+        _ => part(model_hole),
+    };
+    h.execute(&world, ImportModel::from_mesh("part", mesh));
     let loc = Location { pos: Point3::new(0.0, 0.0, -2.0), ..Default::default() };
     h.execute(&world, SetStock::new(&world, StockShape::Box { dx: 40.0, dy: 40.0, dz: 22.0 }, loc).expect("stock"));
     let (tool_name, tool) = match kind {
@@ -113,6 +129,9 @@ fn verdict(model_hole: &[P2], kind: Kind, radius: f64) -> Vec<Warning> {
             ("DR-0600", d)
         }
     };
+    if matches!(kind, Kind::Thread) {
+        drill_ahead(&world, &mut h, radius);
+    }
     h.execute(&world, AddTool::new(&world, tool_name, tool).expect("tool"));
     let holes = vec![hole(radius)];
     let params = match kind {
@@ -126,6 +145,8 @@ fn verdict(model_hole: &[P2], kind: Kind, radius: f64) -> Vec<Warning> {
             plunge_feed: 150.0,
             climb: true,
             holes,
+            pitch: None,
+            hand: camcraft_app::cl::ThreadHand::Right,
         },
         Kind::Bore => OpParams::Bore {
             links: camcraft_app::links::Links::PLANAR,
@@ -182,10 +203,14 @@ fn ngon_at_cap(r: f64, over: bool) -> (Vec<P2>, f64) {
 /// declared hole of `minor` radius; the gouges are the solid law's.
 fn thread_solid(model_hole: &[P2], minor: f64) -> usize {
     let path = thread_mill(&ThreadParams {
-        holes: vec![ThreadHole { xy: Point2::new(0.0, 0.0), radius: minor, top_z: 20.0, floor_z: 10.0, stepped: false }],
+        holes: vec![ThreadHole { xy: Point2::new(0.0, 0.0), radius: minor, top_z: 20.0, floor_z: 10.0, stepped: false, through: false }],
         pitch: 1.0,
         tool_diameter: 6.0,
+        // #894: a 25 mm multi-form mill of pitch 1 carries 25 rows.
+        rows: 25,
         infeed: 0.1,
+        external: false,
+        hand: camcraft_app::cl::ThreadHand::Right,
         clearance_z: 25.0,
         retract_z: None,
         feed: 400.0,
@@ -256,3 +281,13 @@ fn the_wall_excuse_ends_at_its_stated_sagitta() {
     assert!(gouges(&w) > 0, "{} sides, sag {s_out}: {w:?}", flat.len());
 }
 
+
+#[test]
+fn a_thread_op_in_a_finely_faceted_round_hole_stays_clean() {
+    // #894 x #1205: the crest allowance past the model wall holds where
+    // the hole is a tessellated circle - a 96-gon at the minor r 4.4
+    // (sagitta 0.002 mm) - so the thread's own cut is no gouge there,
+    // while the octagon above convicts.
+    let w = verdict(&ngon(4.4, 96), Kind::Thread, 4.4);
+    assert_eq!(gouges(&w), 0, "{w:?}");
+}

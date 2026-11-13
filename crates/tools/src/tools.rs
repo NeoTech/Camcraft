@@ -99,6 +99,17 @@ pub enum ToolKind {
     /// corner radius is refused ([`Tool::torch_refusal`]). Only the
     /// sinker operations mount it. See [`crate::electrode`].
     Electrode,
+    /// Multi-form thread mill (#894, [`crate::thread_mill`]): rows of
+    /// teeth ground at ONE `pitch`, so a single helical revolution cuts
+    /// every thread the cutting length (`flute_len`) spans. `diameter`
+    /// is the cutter's across the tooth crests, `tip_angle` the form's
+    /// INCLUDED flank angle (60 for ISO metric and unified threads).
+    ThreadMill,
+    /// Single-form thread mill (#894): one row of teeth, so it cuts any
+    /// pitch from `pitch_min` to `pitch` (its coarsest) by riding one
+    /// helical turn per thread. `diameter` and `tip_angle` read as on
+    /// the multi-form; `flute_len` is the tooth's own axial height.
+    ThreadMillSingle,
 }
 
 impl core::fmt::Display for ToolKind {
@@ -118,6 +129,8 @@ impl core::fmt::Display for ToolKind {
             ToolKind::Probe => "touch probe",
             ToolKind::Torch => "plasma torch",
             ToolKind::Electrode => "sinker electrode",
+            ToolKind::ThreadMill => "thread mill",
+            ToolKind::ThreadMillSingle => "single-form thread mill",
         };
         f.write_str(s)
     }
@@ -159,8 +172,14 @@ pub struct Tool {
     /// and draws flat.
     pub tip_angle: f64,
     /// Thread pitch in mm per turn (ISO coarse for the catalog taps).
-    /// Inert unless kind is Tap, where the cycle feeds at rpm x pitch.
+    /// Inert unless kind is Tap, where the cycle feeds at rpm x pitch,
+    /// or a thread mill (#894): the multi-form's one pitch, the
+    /// single-form's coarsest.
     pub pitch: f64,
+    /// The finest pitch a single-form thread mill cuts, mm (#894): with
+    /// `pitch` it is the tool's pitch range. Inert (0.0) on every other
+    /// kind.
+    pub pitch_min: f64,
     /// Insert nose radius in mm (the ISO corner circle ground into the
     /// tip): 0.8 is common roughing stock. Inert unless kind is
     /// Turning, where it is the circle the facing verdict sweeps, or
@@ -215,6 +234,9 @@ pub struct Tool {
     /// Part number, vendor, coating, helix and notes (#898): catalog
     /// facts no generator or law reads.
     pub catalog: crate::catalog_fields::ToolCatalog,
+    /// Cutting data per workpiece material (#890): `rpm` / `feed` above
+    /// stay the running numbers and the fallback; empty = none stated.
+    pub cutting: Vec<crate::cutting_rows::CuttingRow>,
     /// Turning cutting data (#891, [`crate::turning_data`]): surface
     /// speed, feed per rev and the tool's max-rpm clamp. `None` = not
     /// stated - the turning ops then post the constant `rpm` (G97) as
@@ -240,6 +262,7 @@ impl Tool {
             self.corner_r,
             self.tip_angle,
             self.pitch,
+            self.pitch_min,
             self.nose_radius,
             self.width,
             self.flute_len,
@@ -258,6 +281,7 @@ impl Tool {
             && self.corner_r <= self.diameter * 0.5
             && self.tip_angle < 180.0
             && self.pitch >= 0.0
+            && self.pitch_min >= 0.0
             && self.nose_radius >= 0.0
             && self.width >= 0.0
             && self.flute_len > 0.0
@@ -277,6 +301,7 @@ impl Tool {
             && self.flutes.is_none_or(|z| (1..=32).contains(&z))
             && self.orientation.is_none_or(crate::orientation::is_valid)
             && self.catalog.refusal().is_none()
+            && crate::cutting_rows::refusal(&self.cutting, self.kind == ToolKind::Torch).is_none()
             // #891: stated turning data is sane, and the constant rpm
             // the tool states never runs over its own max-rpm clamp.
             && self.turning.is_none_or(|t| t.is_sane() && t.max_rpm.is_none_or(|m| self.rpm <= m))
@@ -345,6 +370,9 @@ impl Tool {
                 // A sinker electrode (#541): a rectangular face with a
                 // stated Y size, sharp-cornered (no corner rides it).
                 ToolKind::Electrode => crate::electrode::is_sane(self),
+                // The thread mills' own law (#894): a pitch (range), a
+                // form angle and a core left under the teeth.
+                ToolKind::ThreadMill | ToolKind::ThreadMillSingle => crate::thread_mill::is_sane(self),
                 _ => true,
             }
     }
@@ -463,7 +491,10 @@ impl Tool {
             // not off this cylinder.
             ToolKind::EndMill | ToolKind::Tap | ToolKind::Bore | ToolKind::Turning
             | ToolKind::Groove | ToolKind::Thread | ToolKind::Form | ToolKind::Torch
-            | ToolKind::Electrode => add_pt(&mut p, 0.0, r),
+            | ToolKind::Electrode
+            // A thread mill draws as the cylinder its tooth crests
+            // sweep (#894) - the envelope the reach laws read.
+            | ToolKind::ThreadMill | ToolKind::ThreadMillSingle => add_pt(&mut p, 0.0, r),
             // The chamfer mill's cone is the same picture read the
             // other way in purpose - apex at the tip center opening
             // upward to the full radius - so it shares the drill's
@@ -537,6 +568,7 @@ pub fn probe_tool(ball_d: f64, stylus_len: f64) -> Tool {
         corner_r: ball_d * 0.5,
         tip_angle: 0.0,
         pitch: 0.0,
+        pitch_min: 0.0,
         nose_radius: 0.0,
         width: 0.0,
         flute_len: stylus_len,
@@ -552,6 +584,7 @@ pub fn probe_tool(ball_d: f64, stylus_len: f64) -> Tool {
         center_cutting: false,
         orientation: None,
         catalog: crate::catalog_fields::ToolCatalog::default(),
+        cutting: Vec::new(),
         turning: None,
     }
 }
@@ -568,6 +601,7 @@ pub fn torch_tool(kerf: f64) -> Tool {
         corner_r: 0.0,
         tip_angle: 0.0,
         pitch: 0.0,
+        pitch_min: 0.0,
         nose_radius: 0.0,
         width: 0.0,
         flute_len: 10.0,
@@ -583,6 +617,7 @@ pub fn torch_tool(kerf: f64) -> Tool {
         center_cutting: false,
         orientation: None,
         catalog: crate::catalog_fields::ToolCatalog::default(),
+        cutting: Vec::new(),
         turning: None,
     }
 }

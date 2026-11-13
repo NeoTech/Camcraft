@@ -77,7 +77,13 @@ use super::*;
 /// `tool_body_wire`). Absent is the holder cylinder every v57 file
 /// judged; an old reader must refuse a v58 file rather than drop the
 /// body and judge the smaller cylinder in its place.
-pub const PROJECT_VERSION: u32 = 58;
+/// v59 (#1056): a mesh whose fidelity the file does not know carries
+/// `fidelity_unknown`. A v58 file recorded none before #911 and cannot be
+/// told apart from a later one, so every mesh of an older file without a
+/// recorded chord loads marked (`fidelity_migrate`) and its operations are
+/// refused at the post until the model is re-imported. An old reader must
+/// refuse a v59 file rather than drop the mark and post them unchecked.
+pub const PROJECT_VERSION: u32 = 59;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ProjectError {
@@ -281,6 +287,11 @@ pub struct ToolDto {
     pub tip_angle: f64,
     #[serde(default)]
     pub pitch: f64,
+    /// #894 addition, additive (no version step): a single-form thread
+    /// mill's finest pitch. Absent from every older file and written
+    /// only when set; absent is the inert 0.0 every other kind means.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub pitch_min: f64,
     /// M5.2 addition (v33): absent from any older file, serde-defaults
     /// to the inert 0.0 every mill kind already meant - the `tip_angle`
     /// / `pitch` law restated.
@@ -351,12 +362,24 @@ pub struct ToolDto {
     pub helix_deg: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub notes: Option<String>,
+    /// #890 cutting data per workpiece material, additive (no version
+    /// step): written only when the tool states a row, so a tool with
+    /// just its one rpm/feed saves byte for byte as before. An older
+    /// build skips the key and keeps the tool's own rpm/feed - exactly
+    /// the numbers it posted - losing only the table on its next save.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cutting_data: Vec<super::CuttingRowDto>,
     /// #891 addition, additive (no version step): the turning cutting
     /// data (surface speed m/min, feed mm/rev, max-rpm clamp). Absent
     /// from every older file and written only when stated; absent
     /// reads as unstated - the turning ops post the tool's rpm (G97).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub turning: Option<camcraft_tools::turning_data::TurningData>,
+}
+
+#[allow(clippy::trivially_copy_pass_by_ref)]
+fn is_zero(v: &f64) -> bool {
+    *v == 0.0
 }
 
 fn centre_cutting() -> bool {
@@ -417,6 +440,11 @@ pub enum ToolKindDto {
     Torch,
     /// The sinker electrode (#541): additive in the same way.
     Electrode,
+    /// The thread mills (#894): additive words - no older file names
+    /// them. The single-form kind reads the `pitch_min` key beside
+    /// `pitch`.
+    ThreadMill,
+    ThreadMillSingle,
 }
 
 impl ToolDto {
@@ -437,11 +465,14 @@ impl ToolDto {
                 ToolKind::Probe => ToolKindDto::Probe,
                 ToolKind::Torch => ToolKindDto::Torch,
                 ToolKind::Electrode => ToolKindDto::Electrode,
+                ToolKind::ThreadMill => ToolKindDto::ThreadMill,
+                ToolKind::ThreadMillSingle => ToolKindDto::ThreadMillSingle,
             },
             diameter: t.diameter,
             corner_r: t.corner_r,
             tip_angle: t.tip_angle,
             pitch: t.pitch,
+            pitch_min: t.pitch_min,
             nose_radius: t.nose_radius,
             width: t.width,
             flute_len: t.flute_len,
@@ -467,6 +498,7 @@ impl ToolDto {
             coating: t.catalog.coating.clone(),
             helix_deg: t.catalog.helix_deg,
             notes: t.catalog.notes.clone(),
+            cutting_data: t.cutting.iter().map(super::CuttingRowDto::from_row).collect(),
             turning: t.turning,
         }
     }
@@ -488,11 +520,14 @@ impl ToolDto {
                 ToolKindDto::Probe => ToolKind::Probe,
                 ToolKindDto::Torch => ToolKind::Torch,
                 ToolKindDto::Electrode => ToolKind::Electrode,
+                ToolKindDto::ThreadMill => ToolKind::ThreadMill,
+                ToolKindDto::ThreadMillSingle => ToolKind::ThreadMillSingle,
             },
             diameter: self.diameter,
             corner_r: self.corner_r,
             tip_angle: self.tip_angle,
             pitch: self.pitch,
+            pitch_min: self.pitch_min,
             nose_radius: self.nose_radius,
             width: self.width,
             flute_len: self.flute_len,
@@ -519,6 +554,7 @@ impl ToolDto {
                 notes: self.notes.clone(),
             }
             .normalized(),
+            cutting: self.cutting_data.iter().map(|r| r.to_row()).collect(),
             turning: self.turning,
         }
     }

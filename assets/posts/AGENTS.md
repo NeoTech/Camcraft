@@ -184,6 +184,20 @@ and any machine not declared `kind: plasma` (`machine.kind`). Its
 goldens ride under `nc/tormach-plasma/` (`plasma_post.rs`), not the
 milling matrix.
 
+## The wire EDM post
+
+`wire-iso.cps` (#533, "Generic ISO Wire EDM") is the one
+`posting::WIRE_POSTS` entry: it serves `kind: wire_edm` machines only
+(`machine.kind`) and declares `wireEdm = true` - the engine refuses a
+wire section (`PARAM EdmCondition`) through any script without it. It
+writes only RS-274 / ISO 6983 motion and program words; every EDM code
+(condition select, compensation cancel, AWT thread / cut, wire-tip
+disposal) is the machine's `edm.codes` text (`machine.edm.codes`, #290
+D5), and a missing one is refused by name. The path is the wire-centre
+path, so compensation is cancelled, never engaged. Its golden rides
+under `nc/wire-iso/` (`wire_post.rs`); the decision record is
+`docs/decisions/533-wire-iso-post.md`.
+
 ## Adding a post to the app
 
 1. Write the `.cps` here (copy `mazak.cps` as the structural skeleton

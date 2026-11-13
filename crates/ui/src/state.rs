@@ -990,6 +990,8 @@ pub struct ToolUi {
     pub tip_angle: f64,
     /// Thread pitch, mm per turn; the tap cycle feeds at rpm x pitch.
     pub pitch: f64,
+    /// A single-form thread mill's finest pitch (#894); inert elsewhere.
+    pub pitch_min: f64,
     /// Insert nose radius; the turning kind's cutting ball, inert on
     /// the mills (the app's `Tool` field's law, mirrored).
     pub nose_radius: f64,
@@ -1022,6 +1024,10 @@ pub struct ToolUi {
     pub coating: String,
     pub helix_deg: String,
     pub notes: String,
+    /// #890 cutting data per workpiece material, as edited; Apply / Add
+    /// carry it through `ChangeTool` / `AddTool`, which refuse a bad row
+    /// by the tool's name.
+    pub cutting: Vec<camcraft_app::tool_cutting_rows::CuttingRow>,
     /// #891: the turning cutting data (Vc, f/rev, max rpm), None = not
     /// stated - carried so an Apply never drops it.
     pub turning: Option<camcraft_app::tools::TurningData>,
@@ -1058,11 +1064,14 @@ impl ToolUi {
                 ToolKind::Probe => 11,
                 ToolKind::Torch => 12,
                 ToolKind::Electrode => 13,
+                ToolKind::ThreadMill => 14,
+                ToolKind::ThreadMillSingle => 15,
             },
             diameter: t.diameter,
             corner_r: t.corner_r,
             tip_angle: t.tip_angle,
             pitch: t.pitch,
+            pitch_min: t.pitch_min,
             nose_radius: t.nose_radius,
             width: t.width,
             flute_len: t.flute_len,
@@ -1082,6 +1091,7 @@ impl ToolUi {
             coating: t.catalog.coating.clone().unwrap_or_default(),
             helix_deg: t.catalog.helix_deg.map(|h| h.to_string()).unwrap_or_default(),
             notes: t.catalog.notes.clone().unwrap_or_default(),
+            cutting: t.cutting.clone(),
             turning: t.turning,
         }
     }
@@ -1104,6 +1114,8 @@ impl ToolUi {
             11 => ToolKind::Probe,
             12 => ToolKind::Torch,
             13 => ToolKind::Electrode,
+            14 => ToolKind::ThreadMill,
+            15 => ToolKind::ThreadMillSingle,
             _ => ToolKind::EndMill,
         }
     }
@@ -1137,6 +1149,7 @@ impl ToolUi {
             corner_r: self.corner_r,
             tip_angle: self.tip_angle,
             pitch: self.pitch,
+            pitch_min: self.pitch_min,
             nose_radius: self.nose_radius,
             width: self.width,
             flute_len: self.flute_len,
@@ -1152,6 +1165,7 @@ impl ToolUi {
             center_cutting: self.center_cutting,
             orientation: self.orientation,
             catalog: self.catalog(),
+            cutting: self.cutting.clone(),
             turning: self.turning,
         };
         tool.corner_r = tool.tip_corner_r();
@@ -3114,9 +3128,15 @@ impl State {
             }
             CommandKind::SetWorkMaterial(m) => match SetWorkMaterial::new(&self.world, m) {
                 Ok(command) => {
+                    let (tools, ops) = command.seeded();
                     self.history.execute(&self.world, command);
                     self.doc_version += 1;
-                    self.status = format!("workpiece material: {}", m.map_or("not stated", |m| m.label()));
+                    let mut status = format!("workpiece material: {}", m.map_or("not stated", |m| m.label()));
+                    // #890: say what the tools' material rows moved.
+                    if tools + ops > 0 {
+                        status.push_str(&format!(" - cutting data seeded on {tools} tool(s), {ops} operation(s)"));
+                    }
+                    self.status = status;
                 }
                 Err(err) => self.refuse(ErrorScope::Operation, format!("material not set: {err}")),
             },
