@@ -173,6 +173,10 @@ icon_table! {
     ToolProbe => "tool-probe", "icon-tool-probe";
     ToolTorch => "tool-torch", "icon-tool-torch";
     ToolElectrode => "tool-electrode", "icon-tool-electrode";
+    // #894: the thread mills - a neck over a toothed head (multi-form)
+    // or over one form tooth (single-form).
+    ToolThreadMill => "tool-thread-mill", "icon-tool-thread-mill";
+    ToolThreadMillSingle => "tool-thread-mill-single", "icon-tool-thread-mill-single";
 }
 
 /// Upload edge: 2x the token's `glyph_px` (20 display px at the dark

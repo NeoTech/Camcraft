@@ -22,6 +22,7 @@ mod bridge;
 mod coolant_tools;
 // #93 slice 2: a milling tool's drawn cutter outline.
 mod cutter_tools;
+mod cutting_tools;
 mod edit;
 mod features;
 mod fixture_tools;
@@ -46,6 +47,7 @@ mod accessory_tools;
 mod plate_tools;
 mod modvise_tools;
 mod units_tools;
+mod tool_number_tools;
 mod wcs_tools;
 mod rotary_tools;
 mod workholding_tools;
