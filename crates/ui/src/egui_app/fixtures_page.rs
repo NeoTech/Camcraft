@@ -2,7 +2,7 @@
 //! laid out like the WCS page (#1440, after #739): two titled groups -
 //! the workholding the collision checks see (each fixture's row, the
 //! machine table) and the ways to add more - with the adds as equal
-//! buttons filling the pane, two to a row. The page is layout only: the
+//! buttons filling the pane, one to a row. The page is layout only: the
 //! rows keep `fixture_rows`, every edit still lands through its command
 //! (`MoveFixture`, `SetFixtureFixed`, `UntagFixture`, `DeleteFixture`,
 //! `SetVise`, ...), and the adds only queue the dialog arms and
@@ -73,24 +73,27 @@ fn holding(
     }
 }
 
-/// The adds as equal buttons, two to a row. The mark button joins only
-/// with exactly one model selected, on its own row, so the rows above it
-/// never move.
+/// The adds as equal buttons, one to a row: the pane is narrow, and two
+/// to a row clipped "Add built-in vise..." and "Add fixture plate...".
+/// The mark button joins only with exactly one model selected, last, so
+/// the rows above it never move.
 fn adds(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
     let setup = ctx.unwrap_or_default().to_owned();
-    let size = Vec2::new(cell_w(ui, 2), BUTTON_H);
-    match super::wcs_page::even_row(ui, &["Import fixture…", "Add built-in vise…"], size) {
-        Some(0) => state.pending.push_back(CommandKind::ImportFixtureDialog),
-        // #788: a generic parametric vise, placed in one undoable step.
-        Some(_) => state.pending.push_back(CommandKind::BuiltinViseDialog(setup.clone())),
-        None => {}
-    }
-    match super::wcs_page::even_row(ui, &["Add accessory…", "Add fixture plate…"], size) {
-        // #789: parallels, blocks, strap clamps, soft jaws.
-        Some(0) => state.pending.push_back(CommandKind::AccessoryDialog(setup.clone())),
-        // #819: a parametric grid plate, fixtures placed on its holes.
-        Some(_) => state.pending.push_back(CommandKind::FixturePlateDialog(setup)),
-        None => {}
+    let size = Vec2::new(ui.available_width().max(24.0), BUTTON_H);
+    let labels = ["Import fixture…", "Add built-in vise…", "Add accessory…", "Add fixture plate…"];
+    for (i, label) in labels.iter().enumerate() {
+        if super::wcs_page::even_row(ui, &[label], size).is_none() {
+            continue;
+        }
+        state.pending.push_back(match i {
+            0 => CommandKind::ImportFixtureDialog,
+            // #788: a generic parametric vise, placed in one undoable step.
+            1 => CommandKind::BuiltinViseDialog(setup.clone()),
+            // #789: parallels, blocks, strap clamps, soft jaws.
+            2 => CommandKind::AccessoryDialog(setup.clone()),
+            // #819: a parametric grid plate, fixtures placed on its holes.
+            _ => CommandKind::FixturePlateDialog(setup.clone()),
+        });
     }
     // The other way in: a model already imported - select its row in the
     // browser and mark it. Offered only for exactly one selected model,
@@ -101,15 +104,8 @@ fn adds(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
         .collect();
     if let [name] = sel.as_slice() {
         let label = format!("Mark {name} as fixture");
-        let size = Vec2::new(cell_w(ui, 1), BUTTON_H);
         if super::wcs_page::even_row(ui, &[label.as_str()], size).is_some() {
             state.pending.push_back(CommandKind::TagFixture { name: name.clone(), setup: ctx.map(str::to_owned) });
         }
     }
-}
-
-/// The width each of `n` equal buttons takes to fill the pane.
-fn cell_w(ui: &Ui, n: usize) -> f32 {
-    let gaps = ui.spacing().item_spacing.x * n.saturating_sub(1) as f32;
-    ((ui.available_width() - gaps) / n.max(1) as f32).max(24.0)
 }

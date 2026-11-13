@@ -1,5 +1,5 @@
 //! #1440: the Fixtures page follows the WCS page's layout - titled
-//! groups, the adds as equal buttons, two to a row - and keeps what it
+//! groups, the adds as equal buttons, one to a row - and keeps what it
 //! showed before: the empty message, each fixture's row and verbs, the
 //! machine table line, the conditional Mark button, and every input's
 //! accessible name (#1119 / #1432). Provenance: our own page law.
@@ -68,17 +68,13 @@ fn rect(h: &Harness<'static, ShellUi>, l: &str) -> egui::Rect {
 
 const ADDS: [&str; 4] = ["Import fixture…", "Add built-in vise…", "Add accessory…", "Add fixture plate…"];
 
-/// The four adds are equal, two to a row, one left edge per column, all
-/// under the Add workholding title.
+/// The four adds are equal, one to a row in order, on one left edge,
+/// all under the Add workholding title.
 fn assert_adds(h: &Harness<'static, ShellUi>, title_top: f32) {
     let r: Vec<egui::Rect> = ADDS.iter().map(|l| rect(h, l)).collect();
     assert!(r.iter().all(|b| b.top() > title_top), "adds under their title: {r:?}");
-    assert_eq!(r[0].top(), r[1].top(), "import and vise on one row");
-    assert_eq!(r[2].top(), r[3].top(), "accessory and plate on one row");
-    assert!(r[2].top() > r[0].bottom(), "two rows, one under the other");
-    assert!(r[0].left() < r[1].left() && r[2].left() < r[3].left(), "left to right in order");
-    assert_eq!(r[0].left(), r[2].left(), "one left column");
-    assert_eq!(r[1].left(), r[3].left(), "one right column");
+    assert!(r.windows(2).all(|w| w[1].top() >= w[0].bottom()), "one row each, in order: {r:?}");
+    assert!(r.iter().all(|b| b.left() == r[0].left()), "one left edge: {r:?}");
     assert!(r.iter().all(|b| (b.width() - r[0].width()).abs() < 3.0), "equal buttons: {r:?}");
 }
 
@@ -180,6 +176,7 @@ fn the_fixtures_page_offers_mark_for_exactly_one_selected_model() {
     let mark = rect(&h, "Mark block as fixture");
     assert!(mark.top() > rect(&h, "Add fixture plate…").bottom(), "Mark under the adds");
     assert_eq!(mark.left(), rect(&h, "Import fixture…").left(), "Mark starts at the left edge");
+    assert!((mark.width() - rect(&h, "Import fixture…").width()).abs() < 3.0, "Mark is as wide as the adds");
     h.get_by_label("Mark block as fixture").click();
     h.run_steps(3);
     assert!(
