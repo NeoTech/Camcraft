@@ -475,6 +475,7 @@ fn cycle_tool(kind: ToolKind, diameter: f64, tip_angle: f64, pitch: f64) -> Tool
         flutes: None,
         orientation: None,
         catalog: camcraft_tools::catalog_fields::ToolCatalog::default(),
+        cutting: Vec::new(),
         turning: None,
     }
 }
@@ -1017,6 +1018,7 @@ fn plasma_plate_with_holes_matches_golden() {
         pierce_height: Some(3.8),
         cut_height: None,
         pierce_delay: Some(0.5),
+        model_excess: 0.0,
     };
     let path = plasma_profile(&loops, &[], &part, &p).unwrap();
     let text = gen_to_cltext(&path);

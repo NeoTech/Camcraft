@@ -63,7 +63,7 @@
 
 **Cost to change later.** Adding inch to a refusing post is that post's
 own work plus `programUnits = "mm inch"` and its goldens. Splitting the
-display and program units later would add one field with this v59 rung
+display and program units later would add one field with this v60 rung
 as its default.
 
 ### #981 review - merging main (angle words, grblHAL, TinyG)

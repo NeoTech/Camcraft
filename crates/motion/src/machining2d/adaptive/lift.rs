@@ -39,6 +39,7 @@ use super::front::{densify, dist, len};
 use super::lift_coarse::{coarsen, cut};
 use super::lift_link::{Leg, LinkLaw, Return, extend, free_map, landing, legs};
 use super::lift_split::{Piece, depends, split};
+use super::lift_swept::Swept;
 use super::raster::Raster;
 use super::{GenError, Planner, Worst};
 
@@ -103,6 +104,9 @@ pub(super) struct Lifted {
     pub highs: usize,
     /// Every return so far, leg by leg.
     links: Vec<Vec<Leg>>,
+    /// What the pieces cut so far swept, exactly: a rapid's landing is
+    /// proved on it (`lift_swept`, issue #1169).
+    swept: Swept,
 }
 
 /// Split `walk` at its air stretches and re-order the pieces with lifted
@@ -118,7 +122,7 @@ pub(super) fn lift(walk: &[Point2], ras0: &Raster, center: &Region, s: &LiftSpec
         return Ok(None);
     }
     coarsen(&mut pieces, &walk[ease..]);
-    let mut out = Lifted { passes: Vec::new(), joins: Vec::new(), worst: (0.0, w0), ras: ras0.clone(), dropped: 0.0, lift: 0.0, hops: 0, rides: 0, highs: 0, links: Vec::new() };
+    let mut out = Lifted { passes: Vec::new(), joins: Vec::new(), worst: (0.0, w0), ras: ras0.clone(), dropped: 0.0, lift: 0.0, hops: 0, rides: 0, highs: 0, links: Vec::new(), swept: Swept::new(s.r) };
     schedule(&mut out, pieces, center, s, true);
     if out.hops > HOP_CAP {
         return Ok(Some(out));
@@ -143,12 +147,19 @@ pub(super) fn lift(walk: &[Point2], ras0: &Raster, center: &Region, s: &LiftSpec
     Ok(Some(out))
 }
 
-/// The ride from where a piece with air `tail` ended onto `p`, when the
-/// spiral runs on to it there: the tail (and `p`'s lead) - the walk's own
-/// air, cut at the floor; `None` where it does not.
-fn ride(tail: &[Point2], p: &Piece) -> Option<Vec<Point2>> {
-    let (&t0, &t1) = (tail.first()?, tail.last()?);
+/// The ride from `at`, where a piece with air `tail` ended, onto `p`,
+/// when the spiral runs on to it there: the tail (and `p`'s lead) - the
+/// walk's own air, cut at the floor; `None` where it does not. A piece
+/// starting where the tool stands (the growth's last piece handing over
+/// to the first easing lap, both in cut) is the walk itself running on:
+/// ridden with no air between, never a retract and a plunge on one spot
+/// (issue #1169: the reader counts that plunge a descent into stock).
+pub(super) fn ride(at: Point2, tail: &[Point2], p: &Piece) -> Option<Vec<Point2>> {
     let near = |a: Point2, b: Point2| dist(a, b) <= 1e-9;
+    if near(at, p.pts[0]) {
+        return Some(Vec::new());
+    }
+    let (&t0, &t1) = (tail.first()?, tail.last()?);
     if near(t0, p.pts[0]) {
         return Some(Vec::new());
     }
@@ -179,14 +190,14 @@ fn schedule(out: &mut Lifted, mut pieces: Vec<Piece>, center: &Region, s: &LiftS
                 let mut ready: Vec<usize> = (0..pieces.len()).filter(|&j| !done[j] && deps[j].iter().all(|&i| done[i])).collect();
                 ready.sort_by(|&a, &b| dist(at, pieces[a].pts[0]).total_cmp(&dist(at, pieces[b].pts[0])).then(a.cmp(&b)));
                 let Some(&first) = ready.first() else { break };
-                let law = LinkLaw { ras: &out.ras, center, links: &out.links, r: s.r, rim: s.rim, step: s.step, bite: s.bite, orbit: s.orbit };
+                let law = LinkLaw { ras: &out.ras, center, links: &out.links, swept: &out.swept, r: s.r, rim: s.rim, step: s.step, bite: s.bite, orbit: s.orbit };
                 let mut pick = ready.iter().take(TRIES).find_map(|&j| law.find(at, &tail, &pieces[j], None).map(|r| (j, r)));
                 // Else the walk's own order: its next piece (always ready),
                 // ridden on to through the spiral's own air where it runs
                 // on from here, else reached over the retract plane or by
                 // a routed return.
                 let low = ready.iter().copied().min().unwrap_or(first);
-                let rode = if pick.is_none() { ride(&tail, &pieces[low]).map(|r| (low, r)) } else { None };
+                let rode = if pick.is_none() { ride(at, &tail, &pieces[low]).map(|r| (low, r)) } else { None };
                 if pick.is_none() && rode.is_none() {
                     pick = law.high(&pieces[low]).map(|r| (low, r));
                     if pick.is_some() {
@@ -223,7 +234,7 @@ fn schedule(out: &mut Lifted, mut pieces: Vec<Piece>, center: &Region, s: &LiftS
                     }
                     (None, None) => {
                         // The hop plunges where the rim reads no stock.
-                        let st = landing(&out.ras, &pieces[first], s.rim);
+                        let st = landing(&out.ras, &out.swept, &pieces[first], (s.r, s.rim));
                         extend(&mut pieces[first], st);
                         out.hops += 1;
                         out.joins.push(None);
@@ -243,6 +254,7 @@ fn schedule(out: &mut Lifted, mut pieces: Vec<Piece>, center: &Region, s: &LiftS
             run.extend_from_slice(path);
             run.push(pieces[next].pts[0]);
             let w = out.ras.walk(&run, s.r, s.rim, s.step);
+            out.swept.cut(&run);
             if w.0 > out.worst.0 {
                 out.worst = w;
             }
@@ -254,6 +266,7 @@ fn schedule(out: &mut Lifted, mut pieces: Vec<Piece>, center: &Region, s: &LiftS
         if w.0 > out.worst.0 {
             out.worst = w;
         }
+        out.swept.cut(&p.pts);
         match (ride_on, out.passes.last_mut()) {
             (Some(path), Some(last)) => {
                 last.extend(path);

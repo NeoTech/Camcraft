@@ -10,7 +10,7 @@
 //!
 //! Gate map (M4.4): covers app::mcp (units_tools, job get_job units),
 //! app::commands (SetUnits), app::posting (program_options),
-//! app::project (v59 units).
+//! app::project (v60 units).
 
 use camcraft_app::mcp::Server;
 

@@ -260,6 +260,51 @@ fn an_edm_mount_refuses_a_cutting_program_by_name() {
     }
 }
 
+fn lathe_post() -> &'static str {
+    posting::BUILTINS.iter().find(|(n, _)| *n == "Fanuc Lathe").map(|(_, t)| *t).expect("Fanuc Lathe ships")
+}
+
+/// #1266: a user's own script states the kinds it serves (`serves`).
+#[test]
+fn a_users_own_script_is_judged_by_the_kinds_it_states() {
+    let (world, mut h) = mill_and_lathe("Fanuc Lathe");
+    // Setup2 (lathe) alone: a milling script that states `serves = ["mill"]`
+    // and a plasma script (`serves = ["plasma"]`) are refused by name.
+    h.execute(&world, EditOperationParams::with_suppressed(&world, "Face1", true).expect("suppress"));
+    h.execute(&world, ActivateSetup::new(&world, Some("Setup2")).expect("activate"));
+    let dir = scratch("serves-lathe");
+    let one = dir.join("job.nc");
+    for kind in ["mill", "plasma"] {
+        let own = format!("serves = [\"{kind}\"];\n{}", haas());
+        let why = posting::post_script(&world, &one, &own).expect_err("states another kind");
+        names_it(&why, "Setup2", "Facing2", "the given post script", "turning");
+    }
+    // A turning script that states nothing still posts on the lathe.
+    let undeclared = format!("{}\n// the user's own copy\n", lathe_post());
+    posting::post_script(&world, &one, &undeclared).expect("a turning dialect serves a lathe undeclared");
+    // ... and one that states `lathe` posts too.
+    let stated = format!("serves = \"lathe\";\n{}", lathe_post());
+    posting::post_script(&world, &one, &stated).expect("serves lathe");
+    let _ = written(&dir);
+
+    // Setup1 (mill) alone: a plasma script is refused by name, a mill one posts.
+    h.execute(&world, EditOperationParams::with_suppressed(&world, "Face1", false).expect("unsuppress"));
+    h.execute(&world, EditOperationParams::with_suppressed(&world, "Facing2", true).expect("suppress"));
+    h.execute(&world, ActivateSetup::new(&world, Some("Setup1")).expect("activate"));
+    let dir = scratch("serves-mill");
+    let one = dir.join("job.nc");
+    let plasma = format!("serves = [\"plasma\"];\n{}", haas());
+    let why = posting::post_script(&world, &one, &plasma).expect_err("a plasma script on a mill");
+    names_it(&why, "Setup1", "Face1", "the given post script", "milling");
+    let mill = format!("serves = [\"mill\"];\n{}", haas());
+    posting::post_script(&world, &one, &mill).expect("serves mill");
+    // A typo'd kind is a clean refusal, never read as stated.
+    let typo = format!("serves = [\"plazma\"];\n{}", haas());
+    let why = posting::post_script(&world, &one, &typo).expect_err("no such kind");
+    assert!(why.contains("plazma"), "{why}");
+    let _ = written(&dir);
+}
+
 /// The #388 program with Setup2 re-mounted on a mill-turn and Facing2
 /// regenerated there, posting through `post` (`None`: the document's).
 fn mill_and_mill_turn(post: Option<&str>) -> (World, History) {

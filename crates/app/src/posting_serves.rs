@@ -15,9 +15,17 @@
 //! the user's own by the dialect its manifest declares (the
 //! `capabilities` mask, [`crate::post::dialect::work_voice`]): a lathe
 //! takes only a script that declares turning, a mill or a plasma table
-//! refuses one that declares turning, and no script serves an EDM (no
-//! EDM dialect ships, #533). A refusal names the setup, its operations,
+//! refuses one that declares turning, and no user script serves an EDM
+//! (only the registry's wire posts serve a wire EDM, #533; no sinker
+//! dialect ships, #542). A refusal names the setup, its operations,
 //! the post and the machine's kind - nothing is posted.
+//!
+//! A user's script states the kinds it serves in its manifest
+//! (`serves = ["plasma"];`, #1266): it then posts to exactly those
+//! kinds. One that states none is accepted only where its dialect
+//! proves it (turning serves a lathe and a mill-turn, a non-turning
+//! one a mill and a mill-turn); a plasma table and an EDM are refused
+//! for it, and the refusal says to declare `serves`.
 //!
 //! And per section (maintainer, 2026-11-12, on a mill-turn): a section
 //! that turns the work - a turning op or an on-centre drill, as
@@ -31,7 +39,7 @@
 use flecs_ecs::prelude::World;
 
 use crate::machine::{Kind, Machine};
-use crate::post::dialect::{work_voice, WorkVoice};
+use crate::post::dialect::{declared_serves, work_voice, WorkVoice};
 
 /// The registry name of a script text, when it is a shipped post's.
 fn registry_name(cps: &str) -> Option<&'static str> {
@@ -43,15 +51,17 @@ fn serves(cps: &str, kind: Kind) -> Result<bool, String> {
     if let Some(name) = registry_name(cps) {
         return Ok(super::post_serves(name, kind));
     }
+    if let Some(kinds) = declared_serves(cps).map_err(|e| format!("post engine: {e}"))? {
+        return Ok(kinds.contains(&kind));
+    }
     let turning = work_voice(cps).map_err(|e| format!("post engine: {e}"))? == WorkVoice::WorkSpindle;
     Ok(match kind {
         Kind::Lathe => turning,
         Kind::MillTurn => true,
-        // A user's plasma script declares the milling bit as the shipped
-        // one does - the mask cannot tell it from a milling script, so
-        // only a turning one is refused here.
-        Kind::Mill | Kind::Plasma => !turning,
-        Kind::WireEdm | Kind::SinkerEdm => false,
+        Kind::Mill => !turning,
+        // The mask cannot tell a plasma script from a milling one, so an
+        // undeclared script is not proven to serve a torch or a wire.
+        Kind::Plasma | Kind::WireEdm | Kind::SinkerEdm => false,
     })
 }
 
@@ -109,10 +119,15 @@ pub(super) fn refusal(
     }
     Ok(Some(format!(
         "{who} ({}): {post} does not serve {}, a {} machine - it would write a program that machine cannot run; \
-         give the setup a post that serves {}, or suppress its operations",
+         give the setup a post that serves {}, or suppress its operations{}",
         ops.join(", "),
         crate::setup_mount::machine_label(machine),
         kind.label(),
-        kind.label()
+        kind.label(),
+        if registry_name(cps).is_some() {
+            String::new()
+        } else {
+            format!(" (a script of your own states the kinds it serves: serves = [\"{}\"];)", kind.word())
+        }
     )))
 }

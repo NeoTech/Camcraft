@@ -171,6 +171,8 @@ mod mesh_steel;
 mod midpose;
 // #672: the plasma through-cut laws (cut order, kerf crossing, tip-up).
 pub mod plasma;
+// #534: the wire EDM 2.5D laws (kerf, threading, slug).
+pub mod wire;
 mod posed_steel;
 mod prior;
 mod body_bands;
@@ -193,6 +195,7 @@ mod tilt_band;
 mod tilt_span;
 mod swept;
 mod thread_bore;
+mod turn_cells;
 mod types;
 mod upright;
 mod workholding;

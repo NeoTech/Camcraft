@@ -236,19 +236,6 @@ fn a_window_too_narrow_for_the_helix_is_refused_by_name_before_planning() {
     assert_refusals_named(&reads, 7.0);
 }
 
-/// The r6.2 neck levels' dexel load may stand this far over the optimal
-/// (ae/D, as a factor): both read 20.3 % D on the 0.1 mm measuring stock,
-/// at the first turn out of the entry's bore (55.5 deg; the planner's
-/// own stock reads 47.5 there and names no overload) - half a point past
-/// the whole bar's `1.35`. Issue #982 measured it; the bore exit on a
-/// developed band is the follow-up's (named in the decision file).
-const R62_LOAD_FACTOR: f64 = 1.40;
-
-/// ... and radius 5.2 posts this many in-cut breaks past 5 degrees (5.1,
-/// 5.5 and 5.5 deg at the band's west end, the spiral's own chords);
-/// radius 5.7 posts none.
-const R62_BREAKS: usize = 3;
-
 /// Issues #55 and #982: on the app suites' r6.2 bar the neck's material
 /// levels (5.7, 5.2) are bands ~78 x 7.8 (5.2: ~78 x 5.8) round the
 /// developed neck. The spiral re-walks the whole cleared ring every
@@ -262,8 +249,12 @@ const R62_BREAKS: usize = 3;
 /// was HSM-planned anyway. The pieces now take longer chords only where
 /// those leave no sliver, so both levels read the spiral's own 47.5 and
 /// are HSM-planned on microlift returns, with or without the nanometres:
-/// nothing refused for travel, no planner overload named. ~3 min debug:
-/// heavy lane.
+/// nothing refused for travel, no planner overload named. Issue #1050:
+/// both are held to the whole bar's laws (load within optimal + 35 %,
+/// no in-cut break past 5 degrees) - the bore exit's conforming contact
+/// is held on a coarse rim too and the closing laps' fillet kinks are
+/// spread (`adaptive::conform`); they read 20.3 % D and 3 breaks
+/// before. ~3 min debug: heavy lane.
 #[test]
 #[ignore = "heavy lane: release --ignored (three HSM plans over the r6.2 bar, ~3 min debug)"]
 fn the_r62_neck_levels_are_hsm_planned_on_microlift_returns() {
@@ -283,16 +274,11 @@ fn the_r62_neck_levels_are_hsm_planned_on_microlift_returns() {
         );
     }
     assert!(!dev.notes.iter().any(|n| n.contains("out of cut")), "a level is refused for travel: {:?}", dev.notes);
-    for (rho, breaks) in [(5.7, 0), (5.2, R62_BREAKS)] {
+    for rho in [5.7, 5.2] {
         let Some(r) = reads.iter().find(|r| (r.rho - rho).abs() < 1e-6) else { panic!("radius {rho} is not cut: {:?}", dev.notes) };
         assert!(r.arcs > 0 && !r.ringed(6.2) && !r.named, "radius {rho} is HSM-planned, its proved arcs posted: {:?}", dev.notes);
-        assert!(
-            r.load <= DEFAULT_OPTIMAL_LOAD * R62_LOAD_FACTOR,
-            "radius {rho}: load {:.1}% D past {:.1}% x {R62_LOAD_FACTOR}",
-            r.load * 100.0,
-            DEFAULT_OPTIMAL_LOAD * 100.0
-        );
-        assert!(r.breaks <= breaks, "radius {rho}: {} in-cut breaks past 5 deg (pinned at {breaks})", r.breaks);
+        assert!(r.load <= DEFAULT_OPTIMAL_LOAD * 1.35, "radius {rho}: load {:.1}% D past the optimal + 35 %", r.load * 100.0);
+        assert_eq!(r.breaks, 0, "radius {rho}: in-cut breaks past 5 deg");
     }
     // Each neck level says how it is kept in cut.
     let lifted = dev.notes.iter().filter(|n| n.contains("microlift returns") && n.contains("replace")).count();

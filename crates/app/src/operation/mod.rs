@@ -101,6 +101,8 @@ pub mod probe_op;
 // #670: the Plasma Profile's seed and generation glue.
 pub mod plasma_op;
 pub mod wire_op;
+// #534: the wire laws' inputs, read live at the post.
+pub mod wire_verify;
 // #541: the sinker EDM burn to depth.
 pub mod sinker_op;
 // #545: the Sinker Side Burn's seed, laws and generation.
@@ -171,6 +173,9 @@ mod turning_holder;
 pub(crate) use turning_holder::body_axes as lathe_body_axes;
 mod turning_holder_scene;
 mod turning_holder_side;
+mod turning_holder_steel;
+pub use turning_holder_steel::STEEL_UNREAD_NOTE;
+pub(crate) use turning_holder_steel::lathe_steel_hits;
 mod turning_outline;
 mod turning_rapids;
 mod turning_stock;

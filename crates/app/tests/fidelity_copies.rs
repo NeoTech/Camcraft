@@ -246,3 +246,76 @@ fn the_eyes_colours_are_gated_at_the_tightened_verdict_tolerance() {
     let fv = stock_view::field_view_with(&faced(None), 2_000.0).expect("view");
     assert_eq!(fv.tol, DEV_TOL);
 }
+
+/// What the gate says of the Face op once "bar" is of unknown fidelity.
+const UNKNOWN_REFUSAL: &str = "OP: model 'bar' was saved before CamCraft recorded mesh fidelity (project v58 or older), so a gouge check against it cannot be trusted; re-import the model to verify its operations";
+
+#[test]
+fn a_project_saved_before_fidelity_was_recorded_loads_unknown_and_refuses_until_reimported() {
+    // #1056 point 2: a v58 file cannot say whether its meshes met the
+    // importer's promise (pre-#911 saves recorded nothing), and the chord
+    // cannot be re-measured without the B-rep. Every mesh without a
+    // recorded chord loads "fidelity unknown"; a recorded one is kept.
+    let dir = std::env::temp_dir();
+    let file = |tag: &str| dir.join(format!("camcraft-1056-unknown-{tag}-{}.camproj", std::process::id()));
+    let (world, _h) = copied(Some(TIGHT));
+    let (a, b, c) = (file("a"), file("b"), file("c"));
+    project::save(&world, &a).expect("save");
+    let mut doc: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&a).expect("read")).expect("json");
+    assert_eq!(doc["version"], serde_json::json!(project::PROJECT_VERSION));
+    assert!(!std::fs::read_to_string(&a).expect("read").contains("fidelity_unknown"), "a known document writes no mark");
+    doc["version"] = serde_json::json!(58);
+    std::fs::write(&b, serde_json::to_string_pretty(&doc).expect("json")).expect("write");
+
+    let old = new_world();
+    let notes = project::load_noted(&old, &b).expect("a v58 file loads");
+    // "bar" (no record) is unknown; "blank" and its stock copy keep the
+    // chord the #911-era file recorded.
+    let bar = model::find_by_name(&old, "bar").expect("bar");
+    let chord = model_fidelity::chord_of(&old, &bar).expect("bar is flagged");
+    assert!(model_fidelity::is_unknown(chord), "never read as full fidelity");
+    assert_eq!(stock_chord(&old, "blank"), Some(TIGHT));
+    assert_eq!(stock_chord(&old, "Stock"), Some(TIGHT));
+    assert!(notes.iter().any(|n| n.starts_with("'bar': saved before CamCraft recorded mesh fidelity")), "{notes:?}");
+    assert!(!notes.iter().any(|n| n.starts_with("'blank'") || n.starts_with("'Stock'")), "{notes:?}");
+    // Refused by name at the post, and the sim and the eye judge nothing.
+    assert_eq!(op_problem(&old).as_deref(), Some(UNKNOWN_REFUSAL));
+    let report = posting::verification_report(&old);
+    assert_eq!(report.problems, vec![UNKNOWN_REFUSAL.to_string()], "{:?}", report.problems);
+    assert_eq!(model_fidelity::program_tol(&old), Err(UNKNOWN_REFUSAL.to_string()));
+    assert!(model_fidelity::verdict_tol(&old).is_err_and(|e| e.starts_with("model 'bar' was saved before")));
+    assert!(model_fidelity::summary(&old, chord).starts_with("Fidelity unknown: "));
+    assert_eq!(model_fidelity::facts(&old, chord)["fidelity_unknown"], serde_json::json!(true));
+
+    // A re-save keeps the mark (never turns into "fine"), at v59.
+    project::save(&old, &c).expect("re-save");
+    let text = std::fs::read_to_string(&c).expect("read");
+    let resaved: serde_json::Value = serde_json::from_str(&text).expect("json");
+    let row = resaved["entities"].as_array().expect("entities").iter().find(|e| e["name"] == "bar").expect("bar row");
+    assert_eq!(row["fidelity_unknown"], serde_json::json!(true));
+    assert!(row.get("coarse_mm").is_none(), "the sentinel is never written as a chord");
+    let again = new_world();
+    assert_eq!(project::load_noted(&again, &c).expect("load").len(), 0, "a v59 file is not migrated again");
+    assert_eq!(op_problem(&again).as_deref(), Some(UNKNOWN_REFUSAL));
+
+    // Only a fresh import clears it; its undo puts the mark back.
+    let mut h = History::default();
+    h.execute(&again, UpdateModel::new(&again, "bar", brick()).expect("re-import"));
+    assert_eq!(model::find_by_name(&again, "bar").and_then(|e| model_fidelity::chord_of(&again, &e)), None);
+    assert_eq!(op_problem(&again), None);
+    h.undo(&again);
+    assert_eq!(op_problem(&again).as_deref(), Some(UNKNOWN_REFUSAL));
+
+    // Both marks at once is a corrupt file, refused before any write.
+    let mut both = resaved.clone();
+    for e in both["entities"].as_array_mut().expect("entities") {
+        if e["name"] == "bar" {
+            e["coarse_mm"] = serde_json::json!(TIGHT);
+        }
+    }
+    std::fs::write(&b, serde_json::to_string_pretty(&both).expect("json")).expect("write");
+    assert!(project::load(&new_world(), &b).is_err_and(|e| e.to_string().contains("unknown fidelity at once")));
+    for p in [a, b, c] {
+        let _ = std::fs::remove_file(p);
+    }
+}

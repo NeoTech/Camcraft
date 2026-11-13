@@ -19,6 +19,7 @@ mod align_tools;
 mod area;
 mod body_tools;
 mod bridge;
+mod coolant_tools;
 // #93 slice 2: a milling tool's drawn cutter outline.
 mod cutter_tools;
 mod edit;
@@ -38,6 +39,7 @@ mod box_pick;
 mod pockets;
 mod render;
 mod setup_tools;
+mod tool_edit;
 mod tools;
 mod vise_tools;
 mod accessory_tools;

@@ -104,6 +104,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         spindle,
         fixtures,
         fixture_names,
+        unread_steel,
         z_ceiling,
         workholding,
         fixture_meshes,
@@ -153,7 +154,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         let stack = body.as_ref().map(|_| &holder);
         let enclosed = stack.is_some_and(|s| super::probe_op::stylus_cutter(&tool, Some(s)).body.is_none());
         let note = super::body_judged::probe_note(&tool, body.as_ref().filter(|_| enclosed));
-        return super::probe_op::generate_probe(&params, &tool, stack, hs.clearance, &material.facets).map(|(mut p, w)| {
+        return super::probe_op::generate_probe(&params, &tool, stack, hs.clearance, (&material.facets, material.excess)).map(|(mut p, w)| {
             p.notes.extend(note);
             (p, w)
         });
@@ -169,7 +170,8 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             &hs,
             picks,
             || region_for_job(&mut picked_region, &mut section_z, &src, &params, &material, None),
-            &material.facets,
+            // #1053: the kerf law gives a coarse model's excess back.
+            (&material.facets, material.excess),
         );
     }
     // The wire cut (#532) is its own law too: one closed profile at
@@ -2688,6 +2690,8 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
     let path = super::turning_stock::noted(path, turn_note);
     // #369: a turning steel with no lathe body says its holder went unjudged.
     let path = super::turning_holder::noted(path, &params, &tool, lathe_body.is_some());
+    // #1037: ...and a bodied one names the fixtures its law cannot read.
+    let path = super::turning_holder_steel::noted(path, &params, lathe_body.is_some(), &unread_steel);
 
     // M3.2 stage B: what the program clamps to. The op's setup context
     // decides - user fixtures bound to it (tagged models, implicit-
@@ -2824,6 +2828,8 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
     // at each level it cuts - a blind bore's ring below its floor is in
     // steel the flat region never shows.
     let depth_law = depth_law_of(&params, &src, part_solid);
+    // #1057: the containment kinds' declared rims, read untightened.
+    let rims = if depth_law == DepthLaw::Contain { super::material_source::rims_of(&params) } else { Vec::new() };
     match &frame {
         None => {
             let ctx = VerifyContext {
@@ -2916,6 +2922,8 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 spindle: None,
                 // #864: a source imported coarser than promised.
                 model_excess: material.excess,
+                // #1057: the containment kinds' declared rims, read untightened.
+                rims: &rims,
             };
             // The picks' touching bodies, read as their union
             // (M13.11); empty for one body.
@@ -2986,6 +2994,16 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             super::turning_holder::judge(&params, &path, &meridian, lathe_body.as_deref(), &tool, &mut verify_prior, &mut warns)
                 .map_err(GenError::Invalid)?;
             warns.extend(workholding_warnings(&path, (&geom, &holder), &fixture_boxes, &workholding, rotary_axis, spindle, mesh_steel));
+            // ...and the lathe holder against that steel (#1037): the chuck
+            // revolved, the tailstock standing.
+            if let Some(b) = lathe_body.as_deref() {
+                let steel = (&workholding.0[..], &workholding.1[..]);
+                for w in super::turning_holder_steel::steel_hits(&params, &path, &material.facets, b, steel, GOUGE_TOL).map_err(GenError::Invalid)? {
+                    if !warns.contains(&w) {
+                        warns.push(w);
+                    }
+                }
+            }
             // The revolved-blade verdict (M5.2 C): the meridian
             // scan of what the bands leave. No sphere can speak it
             // - a grooved part is undercut BY DESIGN, material
@@ -3186,6 +3204,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     spindle: None,
                     // #864: a source imported coarser than promised.
                     model_excess: material.excess,
+                    rims: &rims,
                 },
                 &m_gen.bodies,
             );

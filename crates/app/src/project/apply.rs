@@ -509,11 +509,13 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
         // (#320): a setup may pick its stock source; absent is #317's
         // implicit rule. v57 -> v58 (#368): a tool may carry a modelled
         // body; absent is the holder cylinder every older tool judged.
-        // None of these rungs needs a rewrite.
+        // None of these rungs needs a rewrite. v58 -> v59 (#1056): every
+        // mesh the file holds no fidelity record for is marked unknown.
         notes = super::wcs_one::settle(&mut file, from)?;
-        // v58 -> v59 (#902): the document's unit is its programs' unit;
+        notes.extend(super::fidelity_migrate::settle(&mut file.entities, from));
+        // v59 -> v60 (#902): the document's unit is its programs' unit;
         // an older file opens on the unit it posted in (`units_migrate`).
-        if from < 59 {
+        if from < 60 {
             notes.extend(super::units_migrate::settle(&mut file));
         }
         file.version = PROJECT_VERSION;
@@ -665,7 +667,7 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
                 model::set_rev(world, &entity, dto.rev);
                 // #864: the flag lands with the facets it describes; an
                 // absent key, or a value that is no coarse chord, is none.
-                crate::model_fidelity::set(world, &entity, dto.coarse_mm);
+                crate::model_fidelity::set(world, &entity, crate::model_fidelity::loaded(dto.coarse_mm, dto.fidelity_unknown));
                 // #1054: validate_kind refused a budget out of bounds.
                 crate::model_fidelity::set_budget(world, &entity, dto.facet_budget);
             }
@@ -693,7 +695,7 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
                 // #1056: a model copy carries its source's flag itself;
                 // a parametric block is meshed here, never coarse.
                 if matches!(shape, StockShape::FromModel { .. }) {
-                    crate::model_fidelity::set(world, &entity, dto.coarse_mm);
+                    crate::model_fidelity::set(world, &entity, crate::model_fidelity::loaded(dto.coarse_mm, dto.fidelity_unknown));
                 }
                 entity.entity_view(world).set(StockDef {
                     shape: shape.clone(),

@@ -1,5 +1,5 @@
 //! Round 4's laws (Gate map (M11.4 C): covers
-//! motion::machining2d::adaptive::{lift, lift_link, lift_split, route,
+//! motion::machining2d::adaptive::{lift, lift_link, lift_split, lift_swept, route,
 //! star::wide_enough}): a microlift return is legal only over cleared
 //! stock, inside the area, off the orbit, never crossing another return
 //! on its plane - and a crossing one climbs to the next lift; the width
@@ -33,9 +33,12 @@ fn channel() -> (Raster, Region) {
     (ras, rect(5.0, 5.0, 55.0, 35.0))
 }
 
+/// No swept stock: these laws are the cells' (`lift_swept` has its own).
+static NO_SWEEP: std::sync::LazyLock<super::lift_swept::Swept> = std::sync::LazyLock::new(|| super::lift_swept::Swept::new(5.0));
+
 fn law<'a>(ras: &'a Raster, center: &'a Region, links: &'a [Vec<super::lift_link::Leg>], orbit: (Point2, f64)) -> LinkLaw<'a> {
     let rim = crate::quality::rim_for(10.0, 0.1);
-    LinkLaw { ras, center, links, r: 5.0, rim, step: 0.5, bite: crate::load::deg_at_rim(0.005, 10.0, rim), orbit }
+    LinkLaw { ras, center, links, swept: &NO_SWEEP, r: 5.0, rim, step: 0.5, bite: crate::load::deg_at_rim(0.005, 10.0, rim), orbit }
 }
 
 fn ret(lift: f64, down: Point2) -> Return {
@@ -188,4 +191,16 @@ fn the_lifted_plan_is_kept_only_at_or_under_the_spiral_reading() {
     assert!(!keeps(48.0, 47.5, bound), "one sample over the bound");
     assert!(keeps(49.0, 49.0, bound), "the spiral's own named overload");
     assert!(!keeps(49.5, 49.0, bound), "one sample over that overload");
+}
+
+/// Issue #1169: a piece starting where the tool stands (the growth's
+/// last piece handing over to the first easing lap) is ridden on to at
+/// the floor - no retract and plunge on one spot; one starting anywhere
+/// else, with no air tail leading to it, is not.
+#[test]
+fn a_piece_starting_where_the_tool_stands_is_ridden_on_to() {
+    let at = Point2::new(5.135, 7.3118);
+    let piece = |from: Point2| Piece { pts: vec![from, Point2::new(5.135, 6.8)], lead: Vec::new(), tail: Vec::new(), fine: None };
+    assert_eq!(super::lift::ride(at, &[], &piece(at)), Some(Vec::new()));
+    assert_eq!(super::lift::ride(at, &[], &piece(Point2::new(5.135, 7.2))), None);
 }
