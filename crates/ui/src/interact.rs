@@ -127,11 +127,23 @@ pub(crate) fn pick_at(state: &mut State, p: [f32; 2], mods: Mods) {
         state.status = String::from("picking is off - open the Geometry tab to change the selection");
         return;
     }
-    match state.geo_pick {
-        GeoPick::Model => pick_model(state, p),
-        // #692: every feature click resolves through the one pick rule.
-        GeoPick::Face | GeoPick::Edge | GeoPick::Vertex => crate::feature_click::click(state, p, mods),
+    // #692: every feature click resolves through the one pick rule.
+    if feature_routed(state) {
+        crate::feature_click::click(state, p, mods);
+    } else {
+        pick_model(state, p);
     }
+}
+
+/// Does a viewport click (and the hover) go through the feature pick
+/// rule rather than the whole-model pick? In a Face, Edge or Vertex mode,
+/// and (#1562) while the Setups page's WCS role draft collects: that row
+/// keeps the toolbar's mode on purpose (it takes faces, edges and points
+/// alike), so in the default Model mode its clicks must still reach
+/// `feature_click`, or the draft never receives a pick. Disarmed or
+/// paused, the mode's own click behaviour is back.
+pub(crate) fn feature_routed(state: &State) -> bool {
+    state.geo_pick != GeoPick::Model || crate::wcs_pick::collecting(state)
 }
 
 /// Raycast at a logical-px point inside the viewport; queues Select
@@ -212,7 +224,7 @@ pub(crate) fn update_hover(state: &mut State, p: [f32; 2], held: bool) {
     }
     // #692: a feature mode hovers exactly what its click would take - the
     // one pick rule, the armed tool's kinds.
-    if state.geo_pick != GeoPick::Model || state.wcs_ui.pick_circle {
+    if feature_routed(state) || state.wcs_ui.pick_circle {
         crate::feature_click::hover(state, p);
         return;
     }

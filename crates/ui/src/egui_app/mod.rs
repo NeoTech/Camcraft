@@ -296,6 +296,8 @@ mod setup_points_tests;
 #[cfg(test)]
 mod wcs_pick_tests;
 #[cfg(test)]
+mod wcs_pick_click_tests;
+#[cfg(test)]
 mod ball_corner_tests;
 #[cfg(test)]
 mod gate_route_tests;
