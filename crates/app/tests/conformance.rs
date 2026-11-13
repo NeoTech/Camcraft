@@ -13,8 +13,12 @@
 //!
 //! Gate map (M4.4): covers cl::cl, post::post, app::posting.
 
+mod common;
+
 use camcraft_app::cl::{CycleKind, MoveKind};
-use camcraft_app::post::{cnc, engine};
+use camcraft_app::machine::parse_mch;
+use common::legacy_program::{as_program, with_cycle_feeds};
+use camcraft_app::post::{cnc, engine, machine};
 use serde_json::json;
 use std::path::{Path, PathBuf};
 
@@ -59,6 +63,28 @@ const POSTS: &[(&str, &str, &str)] = &[
     ("Doosan DNM", "doosan-dnm", "doosan-dnm"),
     ("Makera Carvera", "carvera", "carvera"),
 ];
+
+/// #1357: the Tormach goldens are runnable programs - posted for a real
+/// Tormach (the 770MX, an inch machine) from the golden dressed with the
+/// setup, operation and tool records, tool change and spindle speed a
+/// real operation's stream carries. PathPilot ran the bare stream with
+/// T0, the spindle stopped and a G73 with no F (a "zero feed rate"
+/// alarm); the post now refuses that stream by name.
+const TORMACH_MCH: &str = "assets/machines/tormach-770mx.mch";
+
+/// What each dialect's golden is posted from: its machine and its
+/// stream. Every dialect's cycles state their own chain's feed (a canned
+/// cycle with no feed is refused by name, #1357); the Tormach goldens are
+/// whole programs on the 770MX (above).
+fn golden_input(cps_stem: &str, g: &str) -> (serde_json::Value, String) {
+    let stream = read(&format!("crates/app/tests/golden/{g}.cl"));
+    if cps_stem == "tormach" {
+        let m = parse_mch(&read(TORMACH_MCH)).unwrap_or_else(|e| panic!("{TORMACH_MCH}: {e}"));
+        return (machine::mirror(&m), as_program(g, &stream));
+    }
+    let mch = serde_json::from_str(&read("assets/machines/3axis-vmc.mch")).expect("machine json");
+    (mch, with_cycle_feeds(&stream))
+}
 
 /// (post stem, golden, named reason): a golden a dialect must REFUSE
 /// rather than post, so it has no `.nc` there. Heidenhain (#51) supports
@@ -115,15 +141,17 @@ fn every_lathe_post_refuses_every_mill_golden_by_name() {
 
 #[test]
 fn every_builtin_posts_every_golden_byte_exact() {
-    let mch: serde_json::Value =
-        serde_json::from_str(&read("assets/machines/3axis-vmc.mch")).expect("machine json");
     let write = std::env::var_os("WRITE_GOLDEN").is_some();
     let mut written = 0usize;
     for (name, cps_stem, sub) in POSTS {
         let cps = read(&format!("assets/posts/{cps_stem}.cps"));
         for g in GOLDENS {
-            let stream = read(&format!("crates/app/tests/golden/{g}.cl"));
-            let out = engine::run(&cps, &mch, &stream)
+            let (mch, stream) = golden_input(cps_stem, g);
+            // #902: the program's unit is the document's. The Tormach
+            // goldens stand for an inch document on the 770MX (what they
+            // were run as in PathPilot); the rest for an mm one.
+            let units = if *cps_stem == "tormach" { json!({ "Units": "inch" }) } else { serde_json::Value::Null };
+            let out = engine::run_with(&cps, &mch, &stream, &units)
                 .unwrap_or_else(|e| panic!("{name} on {g}: must post: {e}"));
             if let Some((_, _, why)) = REFUSED.iter().find(|(s, gg, _)| s == cps_stem && gg == g) {
                 assert!(
@@ -336,7 +364,7 @@ fn the_dialects_actually_differ() {
     // cycles, tool change, spindle, the lot).
     let mch: serde_json::Value =
         serde_json::from_str(&read("assets/machines/3axis-vmc.mch")).expect("machine json");
-    let stream = read("crates/app/tests/golden/drill_peck.cl");
+    let stream = with_cycle_feeds(&read("crates/app/tests/golden/drill_peck.cl"));
     let texts: Vec<(&str, String)> = POSTS
         .iter()
         .map(|(name, stem, _)| {

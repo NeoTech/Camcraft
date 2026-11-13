@@ -21,6 +21,11 @@
 //! Gate map (M4.4): covers cl::cl, cl::text, post::post.
 
 mod recorded;
+// #1357: the legacy goldens dressed the way app's tests post them (a
+// cycle's own chain feed; a real program's tool and spindle).
+#[path = "../../app/tests/common/legacy_program.rs"]
+#[allow(dead_code)]
+mod legacy_program;
 
 use camcraft_post::cl::{ArcPlane, CycleKind, MoveKind, PathBuilder, Toolpath};
 use camcraft_post::geo2d::Point2;
@@ -321,7 +326,7 @@ fn no_xy_only_golden_posts_a_plane_word() {
     // this is its plain-language face: an XY-only program states no
     // G18/G19, and every committed golden is XY-only.
     for g in ["contour_disc_hole", "contour_tangential_lead", "face_square_40x40", "drill_peck"] {
-        let s = read(&format!("crates/app/tests/golden/{g}.cl"));
+        let s = legacy_program::as_program(g, &read(&format!("crates/app/tests/golden/{g}.cl")));
         for (_, stem, _) in POSTS {
             let out = post(stem, &s);
             assert!(!out.contains("G18") && !out.contains("G19"), "{stem} on {g}");

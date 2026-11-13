@@ -12,6 +12,11 @@
 //! arithmetic, #377), assets/posts/fanuc.cps.
 
 mod recorded;
+// #1357: the legacy goldens dressed the way app's tests post them (a
+// cycle's own chain feed; a real program's tool and spindle).
+#[path = "../../app/tests/common/legacy_program.rs"]
+#[allow(dead_code)]
+mod legacy_program;
 
 use camcraft_post::post::{self, cnc, engine};
 use std::path::{Path, PathBuf};
@@ -49,7 +54,9 @@ fn fanuc_posts_every_golden_byte_exact() {
     let mch: serde_json::Value =
         serde_json::from_str(&read("assets/machines/3axis-vmc.mch")).expect("machine json");
     for name in GOLDENS {
-        let stream = read(&format!("crates/app/tests/golden/{name}.cl"));
+        // #1357: each cycle states its own chain's feed - conformance.rs
+        // posts the same golden files from the same dressed stream.
+        let stream = legacy_program::with_cycle_feeds(&read(&format!("crates/app/tests/golden/{name}.cl")));
         let out = engine::run(&cps, &mch, &stream)
             .unwrap_or_else(|e| panic!("{name} must post: {e}"));
         let want = read(&format!("crates/app/tests/golden/nc/{name}.nc"));
