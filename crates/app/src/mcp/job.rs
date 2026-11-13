@@ -106,6 +106,7 @@ pub(super) fn get_job(env: &mut Env, _a: &Map<String, Value>) -> Result<Value, S
     Ok(json!({
         "document": env.doc_path.as_ref().map(|p| p.display().to_string()),
         "active_setup": setup::active(w),
+        "work_material": super::cutting_tools::material_view(env),
         "setups": setups_view(env),
         "models": models,
         "tools": tools,
