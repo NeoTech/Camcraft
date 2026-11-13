@@ -61,8 +61,9 @@ impl State {
     }
 
     /// The active setup when another setup exists: a write to the
-    /// document's mount would reach it too.
-    fn shared_mount_target(&self) -> Option<String> {
+    /// document's mount would reach it too. Post options (#1526) take the
+    /// same law (`State::post_options_target`).
+    pub(super) fn shared_mount_target(&self) -> Option<String> {
         let active = setup::active(&self.world)?;
         (setup::names(&self.world).len() > 1).then_some(active)
     }

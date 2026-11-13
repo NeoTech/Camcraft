@@ -161,6 +161,7 @@ mod setups_declutter;
 mod setup_mount_pages;
 // #1515: a pick on one setup never re-mounts another.
 mod setup_machine_bleed;
+mod setup_post_options_bleed;
 
 /// What the per-frame state of `Shell` is, minus the GPU half: the fields
 /// `shell_layout` touches, so the harness exercises the window's real body.
