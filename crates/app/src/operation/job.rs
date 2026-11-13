@@ -81,6 +81,8 @@ pub struct GenJob {
     pub(super) fixtures: Vec<crate::fixture::FixtureBox>,
     /// `fixtures`' names, index for index (#339 slice 5 refusals).
     pub(super) fixture_names: Vec<String>,
+    /// Tagged fixtures no box could be read for (#1037), by name.
+    pub(super) unread_steel: Vec<String>,
     /// The highest world Z the tip reaches (WCS origin + stated Z top).
     pub(super) z_ceiling: Option<f64>,
     /// `fixtures` split by whether the steel turns with the part
@@ -309,6 +311,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
     let is_mill = machine_kind == crate::machine::Kind::Mill;
     let (fixture_names, fixtures) = crate::fixture::named_boxes_for(world, setup).into_iter().unzip();
     let workholding = crate::fixture::workholding_for(world, setup);
+    let unread_steel = crate::fixture::unreadable_for(world, setup);
     let fixture_meshes = crate::fixture::meshes_for(world, setup);
     let rotary_axis = crate::fixture::rotary_axis_of(world, op);
     let mounted = crate::machine::of_setup(world, setup).1;
@@ -362,6 +365,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         spindle,
         fixtures,
         fixture_names,
+        unread_steel,
         z_ceiling,
         workholding,
         fixture_meshes,
