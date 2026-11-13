@@ -36,6 +36,9 @@ pub(super) fn write(world: &World, tool_name: &str, params: &OpParams, h: &mut s
         crate::tools::ToolKind::Taper => 10,
         crate::tools::ToolKind::Probe => 11,
         crate::tools::ToolKind::Torch => 12,
+        crate::tools::ToolKind::Electrode => 13,
+        crate::tools::ToolKind::ThreadMill => 14,
+        crate::tools::ToolKind::ThreadMillSingle => 15,
     });
     for v in [
         tool.diameter,
@@ -65,6 +68,8 @@ pub(super) fn write(world: &World, tool_name: &str, params: &OpParams, h: &mut s
         crate::tools::ToolKind::Drill => w(h, tool.tip_angle),
         crate::tools::ToolKind::Tap => w(h, tool.pitch),
         crate::tools::ToolKind::Groove => w(h, tool.width),
+        // The electrode's Y size is its face (#541).
+        crate::tools::ToolKind::Electrode => w(h, tool.width),
         // The threading insert digests BOTH its profile numbers
         // (M5.2 D): the crest width and the flanks' angle are the
         // wave's footprint - a recut V is a different thread even
@@ -83,6 +88,14 @@ pub(super) fn write(world: &World, tool_name: &str, params: &OpParams, h: &mut s
         // face's angle, so a re-cut cone is a different chamfer even
         // when width, depth and the wall itself never moved.
         crate::tools::ToolKind::Taper => w(h, tool.tip_angle),
+        // The thread mills digest their form (#894): the flank angle
+        // and the pitch range decide which threads the tool may cut
+        // and how many rows ride a revolution (the pitch itself rides
+        // the Thread clause below).
+        crate::tools::ToolKind::ThreadMill | crate::tools::ToolKind::ThreadMillSingle => {
+            w(h, tool.tip_angle);
+            w(h, tool.pitch_min);
+        }
         _ => {}
     }
     // A Thread OP times its helix against the TOOL's pitch (M2.4 C, the
@@ -102,5 +115,7 @@ pub(super) fn write(world: &World, tool_name: &str, params: &OpParams, h: &mut s
     // #368: a modelled body's envelope - bytes only when there is one,
     // so no digest without a body moves.
     crate::tool_body::digest(world, &tool_entity, h);
+    // #852: a drawn neck the stack laws read - bytes only with one.
+    crate::tool_cutter::digest(world, &tool_entity, &tool, h);
     Some(())
 }

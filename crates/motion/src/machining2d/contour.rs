@@ -20,8 +20,8 @@ use super::ring::Ring;
 use super::face::GenError;
 use super::fillet::{Legal, fillet_corners};
 use super::fillet_tally::{FilletTally, fillet_floor};
-use super::lead_ext::{axis_reseat, extend_leads, push_lead_down, retrace};
-use super::lead_fit::reseat;
+use super::contour_start;
+use super::lead_ext::{extend_leads, push_lead_down, retrace};
 
 pub use super::contour_params::{ContourParams, Lead, Side};
 
@@ -113,6 +113,8 @@ fn contour_impl(
     let flat = p.levels()?;
     let mut loops: Vec<&Loop> = center.loops().iter().collect();
     loops.sort_by(|a, b| b.area().abs().total_cmp(&a.area().abs()));
+    // #1448: the ring the user's start point re-sequences, or its refusal.
+    let pick = contour_start::pick_ring(&loops, p)?;
 
     // The rings every level plans to walk, as closed polylines - the
     // link chords of M8.1's plan law get proven against these. Tabbed
@@ -215,12 +217,11 @@ fn contour_impl(
         // start their windows are measured from.
         // M11.3 C: an axis-aligned start first (an arc entry tangent to
         // it posts as a true G18/G19), then the lead room's own reseat.
+        // A control-compensated ring seams mid-run (contour_comp). #1448:
+        // the user's start point re-sequences its ring instead.
         let ap = &p.links.approach;
-        let pts = if !tabbed && ap.axis_start { axis_reseat(&pts, ap.axis_tol).unwrap_or(pts) } else { pts };
-        // A control-compensated ring seams mid-run (contour_comp).
-        let pts = if prog.is_some() && !tabbed { contour_comp::seam_mid_run(&pts) } else { pts };
-        let pts = if tabbed { pts } else { reseat(&pts, p, &legal, &mut lead_notes).unwrap_or(pts) };
-        let ring = Ring::new(pts);
+        let picked = pick.filter(|&(pi, _)| pi == li).map(|(_, q)| q);
+        let ring = Ring::new(contour_start::seat(pts, picked, tabbed, prog.is_some(), p, &legal, &mut lead_notes));
         // The overlap past the start on closed rings (M11.3 C): not on
         // tabbed levels (their windows are the tab law's) and not under a
         // keep-down level link (the next level descends from the seam).
@@ -254,6 +255,9 @@ fn contour_impl(
             // extensions ride the same room (lead_ext).
             let (entry, lead, lead_off) = seam_leads(&walk, &poly, p, &legal, &mut lead_notes);
             let (entry, lead, lead_off) = extend_leads(entry, lead, lead_off, &walk, &poly, p, &legal, &mut lead_notes);
+            if picked.is_some() {
+                contour_start::lead_held(p, poly[0], &lead)?;
+            }
             // The overlap (M11.3 C): the walk retraces its own first
             // moves - the same segments, so the same chords, never a new
             // crossing - and the lead-out leaves from where that ends.
@@ -383,9 +387,12 @@ fn contour_impl(
                         e2.x,
                         e2.y,
                         lead_notes.join("; ")
-                    )));
+                    ))
+                    .with_ghost_moves(b.moves()));
                 }
-                contour_comp::push_span(&mut b, &SpanCtx { prog, p }, walk_at - 1, out_at)?;
+                // #871: a part-way refusal hands back the rings so far.
+                contour_comp::push_span(&mut b, &SpanCtx { prog, p }, walk_at - 1, out_at)
+                    .map_err(|e| e.with_ghost_moves(b.moves()))?;
             }
         }
     }

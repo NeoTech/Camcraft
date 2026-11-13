@@ -97,7 +97,12 @@ pub(super) fn tool_door(world: &World, params: &OpParams, tool: &str) -> Result<
 /// in the generator.
 pub(super) fn wire_gate(world: &World, setup: Option<&str>, params: &OpParams) -> Result<(), CommandError> {
     match params {
-        OpParams::WireContour(w) => operation::wire_op::condition_of(world, setup, w).map(|_| ()).map_err(CommandError::Invalid),
+        OpParams::WireContour(w) => {
+            if let Some(why) = operation::wire_op::tabs_taper_refusal(w) {
+                return Err(CommandError::Invalid(why));
+            }
+            operation::wire_op::condition_of(world, setup, w).map(|_| ()).map_err(CommandError::Invalid)
+        }
         _ => Ok(()),
     }
 }
@@ -150,22 +155,54 @@ pub(super) fn family_gate(world: &World, context: Option<&str>, params: &OpParam
             if family == Family::WireEdm { "mount a wire EDM first" } else { "a wire EDM cuts only wire EDM operations (a Wire Contour)" },
         )));
     }
+    // #1291: an unmounted setup reads as a mill (the kind_of law), so
+    // the words must not call it one - they say no machine is mounted.
+    let mounted = crate::machine::of_setup(world, context).1.is_some();
+    let clause = if mounted {
+        format!("the setup's machine is a {}", machine.word())
+    } else {
+        "the setup has no machine mounted".to_owned()
+    };
     // #670: plasma work needs a plasma table - no mill or lathe (nor a
     // mill-turn) strikes an arc.
     if family == Family::Plasma {
         return Err(CommandError::Invalid(format!(
-            "a {} operation is plasma cutting work; the setup's machine is a {} - mount a plasma table first",
+            "a {} operation is plasma cutting work; {clause} - mount a plasma table first",
+            params.kind(),
+        )));
+    }
+    // #541: sinker work needs a sinker EDM - nothing else feeds an
+    // electrode.
+    if family == Family::Sinker {
+        return Err(CommandError::Invalid(format!(
+            "a {} operation is sinker EDM work; the setup's machine is a {} - mount a sinker EDM first",
             params.kind(),
             machine.word(),
         )));
     }
     Err(CommandError::Invalid(format!(
-        "a {} operation is {} work; the setup's machine is a {} - mount a {} (or a mill-turn) first",
+        "a {} operation is {} work; {clause} - mount a {} (or a mill-turn) first",
         params.kind(),
         family.work(),
-        machine.word(),
         family.machine(),
     )))
+}
+
+/// The sinker side burn's door (#545): its numbers, and against a named
+/// condition its allowance, refused by name before the op exists
+/// (`sinker_side_op::creation_refusal`). Every other kind passes.
+pub(super) fn sinker_gate(world: &World, context: Option<&str>, params: &OpParams) -> Result<(), CommandError> {
+    // #543: a rough or finish names what it lacks before `is_sane`'s
+    // generic refusal would.
+    if let OpParams::SinkerBurn(p) = params
+        && let Some(why) = p.pass_refusal()
+    {
+        return Err(CommandError::Invalid(why));
+    }
+    match operation::sinker_side_op::creation_refusal(world, context, params) {
+        Some(msg) => Err(CommandError::Invalid(msg)),
+        None => Ok(()),
+    }
 }
 
 /// The tool law's door (M10.1 B): the named tool must belong to the
@@ -174,8 +211,24 @@ pub(super) fn family_gate(world: &World, context: Option<&str>, params: &OpParam
 /// and setup name. Runs at construction, before any entity exists, so
 /// every surface (UI, CLI, scripts, undo replay) meets the same wall.
 pub(super) fn tool_gate(world: &World, params: &OpParams, tool: &str) -> Result<(), CommandError> {
-    match operation::tool_gate::tool_refusal(world, params.kind().info(), tool) {
-        Some(msg) => Err(CommandError::Invalid(msg)),
+    if let Some(msg) = operation::tool_gate::tool_refusal(world, params.kind().info(), tool) {
+        return Err(CommandError::Invalid(msg));
+    }
+    thread_gate(world, params, tool)
+}
+
+/// The thread door (#894): a thread mill against the thread the
+/// operation states - a pitch outside the tool's range, a form it is not
+/// ground to, an infeed past the thread depth, a mill wider than a
+/// hole's minor diameter - refused by name when the operation is made,
+/// edited or re-tooled. Open for every other kind and for a tool that
+/// is no thread mill (the tool law names that one).
+pub(super) fn thread_gate(world: &World, params: &OpParams, tool: &str) -> Result<(), CommandError> {
+    match model::find_by_name(world, tool).and_then(|e| model::tool_of(world, &e)) {
+        Some(def) => match operation::thread_op::door(&def, params) {
+            Some(msg) => Err(CommandError::Invalid(msg)),
+            None => Ok(()),
+        },
         None => Ok(()),
     }
 }
@@ -219,6 +272,28 @@ pub(super) fn area_gate(
 ) -> Result<(), CommandError> {
     match operation::selection_refusal(world, setup, src, params) {
         Some(why) => Err(CommandError::Invalid(why)),
+        None => Ok(()),
+    }
+}
+
+/// The threading plan's door (#416): a Threading op's infeed plan read
+/// against its numbers and the mounted insert's included angle - a
+/// flank angle past the insert's half-angle, a minimum depth past the
+/// first, an allowance as deep as the thread, refused by name before
+/// the shallow `is_sane` door says only "not usable". The tool's angle
+/// is read when the named tool is a threading insert; any other tool is
+/// the tool gate's to refuse. The kernel asks the same question at
+/// Generate (a later tool change meets it there).
+pub(super) fn infeed_plan_gate(world: &World, params: &OpParams, tool: &str) -> Result<(), CommandError> {
+    let OpParams::Threading { depth, infeed, infeed_plan, .. } = params else {
+        return Ok(());
+    };
+    let angle = model::find_by_name(world, tool)
+        .and_then(|e| model::tool_of(world, &e))
+        .filter(|t| t.kind == crate::tools::ToolKind::Thread)
+        .map_or(180.0, |t| t.tip_angle);
+    match infeed_plan.refusal(*depth, *infeed, angle) {
+        Some(why) => Err(CommandError::Invalid(format!("threading: {why}"))),
         None => Ok(()),
     }
 }

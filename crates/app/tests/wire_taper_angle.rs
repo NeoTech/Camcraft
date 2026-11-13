@@ -105,7 +105,12 @@ fn punch(machine: &str, mesh: Mesh, pick: bool, four_axis: Option<WireFourAxis>)
         condition: "C110".into(),
         side: WireSide::Punch,
         start: Some([-30.0, 0.0]),
+        tabs: None,
+        // The punch drops into a stated capture (#539's hold law).
+        capture: true,
         taper_deg: if four_axis.is_some() { 0.0 } else { 3.0 },
+        burnout: None,
+        clearance: camcraft_app::operation::DEFAULT_CLEARANCE,
         four_axis,
     };
     let c = CreateOperation::new(&world, "Punch1", "", src, OpParams::WireContour(op)).expect("op");

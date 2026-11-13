@@ -51,10 +51,11 @@ pub fn wire_verdict(world: &World, e: &Entity) -> Option<Result<WireVerdict, Str
     let OpParams::WireContour(w) = &op.params else { return None };
     Some((|| {
         let setup = op.setup.as_deref();
-        // A cut with no start hole never generates; said by the law's
-        // own name, not as a missing path.
-        if w.start.is_none() {
-            return Ok(WireVerdict { findings: vec![WireFinding::NoStart], slugs: Vec::new() });
+        // A closed cut with no start hole never generates; said by the
+        // law's own name, not as a missing path. An open run (#1109,
+        // left / right) states none: it is threaded outside the stock.
+        if w.start.is_none() && !w.side.is_open_side() {
+            return Ok(WireVerdict { findings: vec![WireFinding::NoStart], ..WireVerdict::default() });
         }
         let cache = model::toolpath_of(world, e).ok_or("the wire laws have no toolpath to judge - generate it first")?;
         let cond = super::wire_op::condition_of(world, setup, w)?;
@@ -89,15 +90,38 @@ pub fn wire_verdict(world: &World, e: &Entity) -> Option<Result<WireVerdict, Str
         let side = match w.side {
             WireSide::Die => CutSide::Die,
             WireSide::Punch => CutSide::Punch,
+            WireSide::Left | WireSide::Right => CutSide::Open,
         };
+        let start = w.start.map(|[x, y]| Point2::new(x, y));
+        let cutoff_from = cutoff_from(w, &cache.path)?;
         Ok(judge(&WireJob {
             path: &cache.path,
             kerf_offset: cond.wire_diameter * 0.5 + cond.gap,
             side,
-            start: w.start.map(|[x, y]| Point2::new(x, y)),
+            start,
             sections,
+            cutoff_from,
+            capture: w.capture,
             // #537: a 4-axis cut's poses are its rulings.
             taper: w.taper_deg != 0.0 || w.four_axis.is_some(),
+
+            burnout: w.burnout.is_some(),
         }))
     })())
+}
+
+/// Where a tabbed cut's tab cut-off begins in its path (#539): `None`
+/// for an untabbed cut.
+///
+/// # Errors
+/// A tabbed op whose path does not hold the cut-off its tabs state
+/// (generated before the tabs were set, or not a tabbed path).
+pub fn cutoff_from(w: &super::types::WireContourOp, path: &crate::cl::Toolpath) -> Result<Option<usize>, String> {
+    let Some(t) = &w.tabs else { return Ok(None) };
+    let (Some(n), Some([x, y])) = (t.count, w.start) else {
+        return Err("the tabs are not fully stated - the tab count and the start hole place the cut-off".into());
+    };
+    crate::wire_edm::cutoff_split(path, Point2::new(x, y), n as usize).map(Some).ok_or_else(|| {
+        format!("the path does not hold the tab cut-off its {n} tab(s) state - regenerate it")
+    })
 }

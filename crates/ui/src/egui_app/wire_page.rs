@@ -17,7 +17,13 @@
 use super::fields::*;
 use camcraft_app::operation::{WireContourOp, WireFourAxis, WirePairingRule, WireSide, WireSyncPair};
 
-const SIDES: [&str; 2] = ["Die - the wire runs inside the profile", "Punch - the wire runs outside the profile"];
+const SIDES: [&str; 4] = [
+    "Die - the wire runs inside the profile",
+    "Punch - the wire runs outside the profile",
+    "Left - an open run's kerf left of travel",
+    "Right - an open run's kerf right of travel",
+];
+const SIDE_OF: [WireSide; 4] = [WireSide::Die, WireSide::Punch, WireSide::Left, WireSide::Right];
 const PAIRINGS: [&str; 2] = ["By arc length from the start hole", "By sync points"];
 
 /// The 4-axis block (#537): the rule, the tolerance and the sync pairs.
@@ -63,11 +69,13 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
     let OpParams::WireContour(p) = params else {
         return;
     };
-    let WireContourOp { top_z, bottom_z, condition, side, start, taper_deg, four_axis } = p;
+    let WireContourOp { top_z, bottom_z, condition, side, start, burnout, clearance, taper_deg, four_axis, .. } = p;
+
     if tab == SEC_GEO {
-        let mut si = usize::from(*side == WireSide::Punch);
+        let mut si = SIDE_OF.iter().position(|s| s == side).unwrap_or(0);
         prop_row(ui, "Side", |ui| combo(ui, "wire.side", &mut si, &SIDES));
-        *side = if si == 1 { WireSide::Punch } else { WireSide::Die };
+        *side = SIDE_OF.get(si).copied().unwrap_or(WireSide::Die);
+        prop_row(ui, "Run-out clearance", |ui| num(ui, u, clearance));
         let mut stated = start.is_some();
         check_row(ui, "Start hole stated", &mut stated);
         match (stated, start.as_mut()) {
@@ -79,6 +87,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             (false, _) => *start = None,
         }
         hint(ui, "pick the one closed profile to cut; the wire is threaded at the start hole - inside the profile for a die, outside it for a punch");
+        hint(ui, "or pick one open run reaching the stock's edge at both ends (a cut-off, a slot): left / right puts the kerf beside its travel, threaded outside the stock the run-out clearance off its edge");
         // #536: a constant taper, degrees from vertical.
         prop_row(ui, "Taper angle", |ui| {
             ui.add(DragValue::new(taper_deg).speed(0.1).range(-45.0..=45.0).suffix("°"));
@@ -115,5 +124,17 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             *condition = idx.checked_sub(1).and_then(|i| ids.get(i)).cloned().unwrap_or_default();
         }
         hint(ui, "the machine's EDM condition states the wire diameter and the spark gap; the path stands wire radius + gap off the profile");
+        // #540: no-core burnout - the pocket's interior burnt out by
+        // offset rings, the wire at least the clearance from the walls.
+        let mut on = burnout.is_some();
+        check_row(ui, "Burn out the pocket (no core)", &mut on);
+        match (on, burnout.as_mut()) {
+            (true, Some(c)) => {
+                prop_row(ui, "Wall clearance", |ui| num(ui, u, c));
+            }
+            (true, None) => *burnout = Some(0.5),
+            (false, _) => *burnout = None,
+        }
+        hint(ui, "a burnout leaves no slug to drop; the wall clearance may not be under the kerf offset (wire radius + gap)");
     }
 }

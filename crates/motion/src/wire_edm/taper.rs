@@ -30,11 +30,12 @@
 //! laid as posed moves at most `CONE_STEP_DEG` apart (the chord stands
 //! within `|d| (1 - cos 1 deg)` of the arc, 1.5e-4 of the lean offset).
 //!
-//! Refused by name, never trimmed: a taper the machine does not state a
+//! Refused by name, never trimmed: a taper on an open run (#1109,
+//! which has no ring to lean), a taper the machine does not state a
 //! maximum for, an angle (or a corner's lean) above that maximum, a
 //! corner too sharp to lean, and a side the lean folds over.
 
-use super::{notes, wire_contour, WireParams};
+use super::{notes, wire_contour, WireParams, WireSide};
 use crate::cl::{MoveKind, PathBuilder, Toolpath};
 use crate::geo2d::{Loop, Point2};
 use crate::geometry::Point3;
@@ -110,6 +111,15 @@ impl WireTaper {
 pub fn wire_contour_tapered(loops: &[Loop], chains: &[Vec<Point2>], p: &WireParams, t: &WireTaper) -> Result<Toolpath, GenError> {
     if t.angle_deg == 0.0 {
         return wire_contour(loops, chains, p);
+    }
+    // An open run (#1109) has no ring to lean: reading its polyline as
+    // one would close it with a chord back across the part. Refused by
+    // name before anything is leaned.
+    if !chains.is_empty() || matches!(p.side, WireSide::Left | WireSide::Right) {
+        return Err(invalid(format!(
+            "a {:.3} degree taper is asked on an open run - a taper is cut only around one closed profile (die or punch); cut the open run vertical (taper 0)",
+            t.angle_deg
+        )));
     }
     t.door()?;
     let h = t.top_z - p.plane_z;

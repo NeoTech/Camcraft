@@ -22,6 +22,9 @@ fn params() -> WireParams {
         side: WireSide::Punch,
         start: Some(Point2::new(-30.0, 0.0)),
         plane_z: 0.0,
+        tabs: None,
+        stock: None,
+        clearance: 1.0,
     }
 }
 
@@ -249,4 +252,48 @@ fn a_conical_die_runs_inside_both_profiles() {
     let cut = &path.moves[..path.moves.len() - 1];
     let lean = |a: [f64; 3]| a[0].hypot(a[1]).atan2(a[2]);
     assert!(cut.iter().all(|m| m.axis.is_some_and(|a| (lean(a) - angle).abs() < 2e-3)), "every ruling leans the cone's angle");
+}
+
+/// Done means (M3 review of PR #1181, item 6): a pairing whose stated
+/// surface does not fold, but whose wire - paired over the kerf-offset
+/// rings - does, is refused by the fold law on the offset wire, by name.
+/// One sync pair takes the lower profile's left middle to a point near
+/// the smaller upper profile's lower left corner: the stated surface
+/// turns no ruling back, the wire's rounded offset corners do.
+#[test]
+fn a_pairing_whose_offset_wire_folds_is_refused_by_name() {
+    let (up, lo) = (rect(14.0, 7.0), rect(20.0, 10.0));
+    let pairing = sync(&[((-7.0, -7.0), (-20.0, 0.0))]);
+    let why = refusal(&up, &lo, &ruled(pairing));
+    assert!(why.contains("folds near") && why.contains("consecutive rulings cross within the part height"), "{why}");
+    assert!(why.contains("by 1 sync pair(s)") && why.contains("restate the sync points"), "{why}");
+}
+
+/// Done means (M3 review of PR #1181, item 7): a start hole whose lead
+/// brings the leaning wire's kerf into the paired surface is refused by
+/// name. The prism's one sync pair takes the lower left middle to a
+/// point on the upper's bottom edge, so the ruling the lead runs to
+/// leans round the corner, and at the top plane the lead from the
+/// upright start hole cuts across that corner.
+#[test]
+fn a_lead_whose_leaning_kerf_enters_the_paired_surface_is_refused_by_name() {
+    let r = rect(20.0, 10.0);
+    let pairing = sync(&[((-15.0, -10.0), (-20.0, 0.0))]);
+    let why = refusal(&r, &r, &WireRuled { tolerance: 1.0, max_deg: Some(80.0), ..ruled(pairing) });
+    assert!(why.contains("the lead from the start hole would bring the leaning wire's kerf"), "{why}");
+    assert!(why.contains("into the paired surface") && why.contains("move the start hole"), "{why}");
+}
+
+/// The crossing law: rulings whose mid-height section is a bow tie
+/// (corners 2 and 3 swapped) are refused by name, a plain one passes.
+#[test]
+fn a_section_that_crosses_itself_is_refused_by_name() {
+    let ring = |c: [(f64, f64); 4]| -> Vec<(Point2, Point2)> {
+        c.iter().map(|&(x, y)| (Point2::new(x - 1.0, y - 1.0), Point2::new(x + 1.0, y + 1.0))).collect()
+    };
+    let bow = ring([(0.0, 0.0), (10.0, 10.0), (10.0, 0.0), (0.0, 10.0)]);
+    let why = ruled_laws::crossing(&bow, 0.0, 12.0).expect_err("a bow tie").to_string();
+    assert!(why.contains("the paired surface crosses itself at Z"), "{why}");
+    let square = ring([(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)]);
+    ruled_laws::crossing(&square, 0.0, 12.0).expect("a simple section passes");
 }
