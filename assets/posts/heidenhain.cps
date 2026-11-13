@@ -22,6 +22,11 @@ capabilities = 1; // reference contract: integer feature mask (bit 1 = milling)
 coolantModes = true; // reads PARAM Coolant (#112/#150): the engine refuses non-Flood ops for a post without it
 afterModes = true; // reads PARAM AfterOperation (#110): the engine refuses a stop or home ask for a post without it
 floatingTapping = true; // #51: G206 requires the operation's explicit floating-holder choice
+// #902: millimetres only for now - the engine refuses an inch document by
+// name. The TNC runs inch (G70), but the feed unit its inch programs and
+// cycle Q feeds take was not confirmed from the public manual this post
+// is specced from, and a feed off by a factor is no program to post.
+programUnits = "mm";
 
 // Determinism law: no timestamps, no randomness - the same stream
 // always posts to the same text (golden files depend on it).

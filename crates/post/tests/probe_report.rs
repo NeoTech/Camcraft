@@ -46,7 +46,7 @@ const CORNER: &str = "corner";
 
 fn tormach(p: &str, set_wcs: Option<u8>) -> String {
     let m = machine::mirror(&parse_mch(MX770).expect("770MX parses"));
-    engine::run(TORMACH, &m, &stream(p, set_wcs)).expect("post").program
+    engine::run_with(TORMACH, &m, &stream(p, set_wcs), &doc_units(&m)).expect("post").program
 }
 
 /// A machine with no machine file posts in mm (G21).
@@ -111,4 +111,16 @@ fn fanuc_has_no_non_stopping_message_so_writes_no_report() {
     let y_test = line_starting(&prog, "IF[ABS[#191]GT");
     assert_eq!(g10, y_test + 1, "the offset write follows the last tolerance test directly:\n{prog}");
     assert!(!prog.contains("DEBUG") && !prog.contains("#3006"), "no report and no stop on a good probe:\n{prog}");
+}
+
+/// #902: the program's unit is the document's, never the machine file's.
+/// These runs on an inch machine file stand for the inch document they
+/// posted before #902 (the file's own unit, through either door).
+fn doc_units(m: &serde_json::Value) -> serde_json::Value {
+    let word = m
+        .get("units")
+        .and_then(serde_json::Value::as_str)
+        .or_else(|| m.pointer("/kinematics/default/units/length").and_then(serde_json::Value::as_str));
+    let inch = matches!(word, Some("inch" | "inches"));
+    serde_json::json!({ "Units": if inch { "inch" } else { "mm" } })
 }
