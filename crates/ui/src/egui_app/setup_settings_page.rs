@@ -33,7 +33,7 @@ pub(super) const FIRST_GROUP: &str = "First setup";
 /// What the page says with no setups.
 pub(super) const NO_SETUPS: &str = "No setups in this document: the one stock and the one WCS act as the first setup.";
 /// The one line under "Part orientation" saying what the group does.
-pub(super) const ORIENT_HELP: &str = "Turn or lay the part for this setup; each way has its own Apply.";
+pub(super) const ORIENT_HELP: &str = "How the part sits in this setup; each way has its own Apply.";
 
 /// The width the pane shows from here: the page's long lines widen
 /// `available_width` past the visible pane, and buttons sized by it ran off
@@ -42,8 +42,20 @@ fn pane_w(ui: &Ui) -> f32 {
     (ui.clip_rect().right() - ui.cursor().left()).min(ui.available_width()).max(24.0)
 }
 
+/// The groups' body indent. The pick rows are already as wide as the narrow
+/// properties pane (#330: Apply, "Point 1 to plane level" and the workholding
+/// buttons must stay inside it), so the default indent would push them out.
+const INDENT: f32 = 2.0;
+
 /// The page body for setup `ctx` (`None` - the implicit context).
 pub(super) fn settings_page(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
+    ui.scope(|ui| {
+        ui.spacing_mut().indent = INDENT;
+        groups(ui, state, ctx);
+    });
+}
+
+fn groups(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
     let Some(name) = ctx else {
         group(ui, FIRST_GROUP, None, |ui| {
             ui.label(NO_SETUPS);
