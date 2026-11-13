@@ -26,7 +26,7 @@ use camcraft_app::model;
 use camcraft_app::operation::{Height, OpParams, SrcRef};
 use camcraft_app::schema::Location;
 use camcraft_app::stock::StockShape;
-use camcraft_app::tools::{catalog, Tool, ToolKind};
+use camcraft_app::tools::{catalog, Tool};
 use camcraft_app::machining2d::{thread_mill, ThreadHole, ThreadParams};
 use camcraft_app::verify::{Cutter, HoleAxis, SolidLaw, Warning, WALL_SAG, solid_hits_walled};
 use camcraft_app::world::new_world;
@@ -57,33 +57,10 @@ fn catalog_tool(name: &str) -> Tool {
     catalog().into_iter().find(|(n, _)| *n == name).map(|(_, t)| t).expect("catalog entry")
 }
 
-/// A 6 mm thread mill of pitch 1 (the tap cycle's law: the pitch is the
-/// tool's).
+/// A 6 mm multi-form thread mill of pitch 1 (#894: the pitch is the
+/// tool's own).
 fn thread_tool() -> Tool {
-    Tool {
-        kind: ToolKind::Tap,
-        diameter: 6.0,
-        corner_r: 0.0,
-        tip_angle: 0.0,
-        pitch: 1.0,
-        nose_radius: 0.0,
-        width: 0.0,
-        flute_len: 25.0,
-        shank_d: 6.0,
-        shank_len: 40.0,
-        holder_d: 44.0,
-        holder_len: 35.0,
-        material_group: "steel".into(),
-        center_cutting: true,
-        rpm: 6000.0,
-        feed: 400.0,
-        tool_material: None,
-        flutes: None,
-        orientation: None,
-        turning: None,
-        catalog: camcraft_tools::catalog_fields::ToolCatalog::default(),
-        cutting: Vec::new(),
-    }
+    Tool { material_group: "steel".into(), ..camcraft_app::thread_mill::thread_mill(6.0, 1.0, 0.0, 25.0) }
 }
 
 fn hole(radius: f64) -> Hole {
@@ -127,6 +104,8 @@ fn verdict(model_hole: &[P2], kind: Kind, radius: f64) -> Vec<Warning> {
             plunge_feed: 150.0,
             climb: true,
             holes,
+            pitch: None,
+            hand: camcraft_app::cl::ThreadHand::Right,
         },
         Kind::Bore => OpParams::Bore {
             links: camcraft_app::links::Links::PLANAR,
@@ -183,10 +162,14 @@ fn ngon_at_cap(r: f64, over: bool) -> (Vec<P2>, f64) {
 /// declared hole of `minor` radius; the gouges are the solid law's.
 fn thread_solid(model_hole: &[P2], minor: f64) -> usize {
     let path = thread_mill(&ThreadParams {
-        holes: vec![ThreadHole { xy: Point2::new(0.0, 0.0), radius: minor, top_z: 20.0, floor_z: 10.0, stepped: false }],
+        holes: vec![ThreadHole { xy: Point2::new(0.0, 0.0), radius: minor, top_z: 20.0, floor_z: 10.0, stepped: false, through: false }],
         pitch: 1.0,
         tool_diameter: 6.0,
+        // #894: a 25 mm multi-form mill of pitch 1 carries 25 rows.
+        rows: 25,
         infeed: 0.1,
+        external: false,
+        hand: camcraft_app::cl::ThreadHand::Right,
         clearance_z: 25.0,
         retract_z: None,
         feed: 400.0,
@@ -257,3 +240,13 @@ fn the_wall_excuse_ends_at_its_stated_sagitta() {
     assert!(gouges(&w) > 0, "{} sides, sag {s_out}: {w:?}", flat.len());
 }
 
+
+#[test]
+fn a_thread_op_in_a_finely_faceted_round_hole_stays_clean() {
+    // #894 x #1205: the crest allowance past the model wall holds where
+    // the hole is a tessellated circle - a 96-gon at the minor r 4.4
+    // (sagitta 0.002 mm) - so the thread's own cut is no gouge there,
+    // while the octagon above convicts.
+    let w = verdict(&ngon(4.4, 96), Kind::Thread, 4.4);
+    assert_eq!(gouges(&w), 0, "{w:?}");
+}

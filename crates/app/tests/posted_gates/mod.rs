@@ -13,6 +13,7 @@
 //!
 //! Provenance: our own harness over our own goldens; no vendor material.
 
+pub mod thread;
 mod wire;
 pub use wire::{wire_findings, wire_verdict};
 

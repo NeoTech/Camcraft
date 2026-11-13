@@ -100,6 +100,8 @@ mod probe;
 pub mod probe_op;
 // #670: the Plasma Profile's seed and generation glue.
 pub mod plasma_op;
+// #894: the thread-milling operation's door, kernel plan and its two verdict readings.
+pub mod thread_op;
 pub mod wire_op;
 // #534: the wire laws' inputs, read live at the post.
 pub mod wire_verify;

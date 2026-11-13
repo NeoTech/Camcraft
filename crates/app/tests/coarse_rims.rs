@@ -26,7 +26,7 @@ use camcraft_app::operation::{Height, OpParams, SrcRef};
 use camcraft_app::posting;
 use camcraft_app::schema::Location;
 use camcraft_app::stock::StockShape;
-use camcraft_app::tools::{catalog, Tool, ToolKind};
+use camcraft_app::tools::{catalog, Tool};
 use camcraft_app::verify::Warning;
 use camcraft_app::world::new_world;
 
@@ -107,6 +107,8 @@ fn thread(radius: f64) -> OpParams {
         plunge_feed: 150.0,
         climb: true,
         holes: vec![hole(0.0, radius)],
+        pitch: None,
+        hand: camcraft_app::cl::ThreadHand::Right,
     }
 }
 
@@ -114,32 +116,10 @@ fn catalog_tool(name: &str) -> Tool {
     catalog().into_iter().find(|(n, _)| *n == name).map(|(_, t)| t).expect("catalog tool")
 }
 
-/// A Tap-form thread mill (`mill2d_c`'s), long enough for the hole.
+/// A multi-form thread mill (`mill2d_c`'s, #894's kind), long enough for
+/// the hole.
 fn thread_mill(diameter: f64) -> Tool {
-    Tool {
-        kind: ToolKind::Tap,
-        diameter,
-        corner_r: 0.0,
-        tip_angle: 0.0,
-        pitch: 1.0,
-        nose_radius: 0.0,
-        width: 0.0,
-        flute_len: 25.0,
-        shank_d: diameter,
-        shank_len: 40.0,
-        holder_d: 44.0,
-        holder_len: 35.0,
-        material_group: "steel".into(),
-        center_cutting: true,
-        rpm: 6000.0,
-        feed: 400.0,
-        tool_material: None,
-        flutes: None,
-        orientation: None,
-        turning: None,
-        catalog: camcraft_tools::catalog_fields::ToolCatalog::default(),
-        cutting: Vec::new(),
-    }
+    Tool { material_group: "steel".into(), ..camcraft_app::thread_mill::thread_mill(diameter, 1.0, 0.0, 25.0) }
 }
 
 fn long_drill() -> Tool {

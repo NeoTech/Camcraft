@@ -54,6 +54,8 @@ enum KindWord {
     Probe,
     Torch,
     Electrode,
+    ThreadMill,
+    ThreadMillSingle,
 }
 
 #[derive(Deserialize, Clone, Copy)]
@@ -74,6 +76,9 @@ struct Def {
     tip_angle: f64,
     #[serde(default)]
     pitch: f64,
+    /// A single-form thread mill's finest pitch (#894).
+    #[serde(default)]
+    pitch_min: f64,
     #[serde(default)]
     nose_radius: f64,
     #[serde(default)]
@@ -122,11 +127,14 @@ impl Def {
                 KindWord::Probe => ToolKind::Probe,
                 KindWord::Torch => ToolKind::Torch,
                 KindWord::Electrode => ToolKind::Electrode,
+                KindWord::ThreadMill => ToolKind::ThreadMill,
+                KindWord::ThreadMillSingle => ToolKind::ThreadMillSingle,
             },
             diameter: self.diameter,
             corner_r: self.corner_r,
             tip_angle: self.tip_angle,
             pitch: self.pitch,
+            pitch_min: self.pitch_min,
             nose_radius: self.nose_radius,
             width: self.width,
             flute_len: self.flute_len,
