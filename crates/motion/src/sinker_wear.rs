@@ -11,10 +11,16 @@
 //! `wear` in the `.mch`, or a wear they measured), never assumed.
 //!
 //! The law: with a rate `r`, a layer whose nominal floor lies `d` below
-//! the work top has its tip programmed `r * d` deeper. No burn is ever
-//! programmed below the stated floor plus the gap minus `r` times the
-//! stated depth into the work - an over-deep move refuses by name. With
-//! no rate stated the burn is not compensated, and says so.
+//! the work top has its tip programmed `r` times the depth that layer
+//! actually burns deeper. The tip stands `s` above the floor
+//! (`sinker::stand`: the spark gap, or #543's undersize stand-off) and
+//! burning starts one gap above the top, so a layer burns `d - (s - gap)`
+//! (never less than nothing): `tip = top - d + s - r * (d - (s - gap))`,
+//! exactly where [`worn_tip`] reads the worn face back onto `floor + s`.
+//! No burn is ever programmed below that tip at the full depth - an
+//! over-deep move refuses by name. With no rate stated the burn is not
+//! compensated, and says so; with no stand-off set `s` is the gap and
+//! the law is #546's `r * d`.
 //!
 //! The orbit (#544) runs at the worn tip: each layer's orbit is expanded
 //! at that layer's compensated Z, judged against the same deepest-tip
@@ -25,7 +31,7 @@
 use crate::cl::{MoveKind, PathBuilder, Toolpath};
 use crate::geometry::Point3;
 use crate::machining2d::GenError;
-use crate::sinker::{check, SinkerParams, ON_FLOOR};
+use crate::sinker::{check, stand, SinkerParams, ON_FLOOR};
 use crate::sinker_orbit::orbit_offsets;
 
 /// What an uncompensated burn says of itself, on its page and its path.
@@ -78,12 +84,22 @@ pub fn summary(comp: Option<&WearComp>) -> String {
 }
 
 /// The deepest Z the compensated tip may be programmed to: the stated
-/// burn floor plus the gap, less the rate times the depth burned into
-/// the work.
+/// burn floor plus the stand-off (`sinker::stand`), less the rate times
+/// the depth burned into the work - from one gap above the top down to
+/// the stand-off above the floor (#543 meets #546).
 #[must_use]
 pub fn deepest_tip(p: &SinkerParams, rate: f64) -> f64 {
     let z = crate::sinker::burn_floor(p);
-    z + p.gap - rate * (p.top_z - z)
+    let s = stand(p);
+    z + s - rate * burned(p.top_z - z, s, p.gap)
+}
+
+/// The depth a tip `d` below the top plus the stand-off `s` actually
+/// burns into the work: burning starts one gap above the top, so it is
+/// `d - (s - gap)`, never less than nothing (a tip above the work burns
+/// and wears nothing, as [`worn_tip`] reads it).
+fn burned(d: f64, s: f64, gap: f64) -> f64 {
+    (d - (s - gap)).max(0.0)
 }
 
 /// Where a programmed tip `t` burns with an electrode worn by `rate`:
@@ -136,6 +152,7 @@ pub fn burn_compensated(p: &SinkerParams, w: &SinkerWear) -> Result<Toolpath, Ge
             "sinker burn: a layer step of {step} cuts the {total:.3} burn into more than {MAX_LAYERS} layers - state a larger step"
         )));
     }
+    let s = stand(p);
     let deepest = deepest_tip(p, rate);
     let buried = p.top_z - deepest;
     if buried > p.electrode_len + ON_FLOOR {
@@ -148,7 +165,7 @@ pub fn burn_compensated(p: &SinkerParams, w: &SinkerWear) -> Result<Toolpath, Ge
     let mut prev = f64::INFINITY;
     for i in 1..=(layers as usize) {
         let d = (i as f64 * step).min(total);
-        let tip = (p.top_z - d) + p.gap - rate * d;
+        let tip = (p.top_z - d) + s - rate * burned(d, s, p.gap);
         // The bound and the order, re-read on every move: never past the
         // compensated floor, never back up between layers.
         if tip < deepest - ON_FLOOR || !tip.is_finite() {
@@ -237,6 +254,38 @@ mod tests {
         for (t, n) in z.iter().zip([18.05, 16.05, 14.05]) {
             assert!((worn_tip(*t, 20.0, 0.05, 0.02) - n).abs() < 1e-9);
         }
+    }
+
+    // #543 meets #546: a rough's undersize stand-off `s` (0.3 over a 0.05
+    // gap) is where the compensated tip stops - never the gap.
+    fn stood() -> SinkerParams {
+        SinkerParams { stand: Some(0.3), ..params() }
+    }
+
+    #[test]
+    fn sinker_wear_stand_off_without_a_rate_stops_at_floor_plus_stand() {
+        let p = stood();
+        let path = burn_compensated(&p, &SinkerWear::default()).expect("burns");
+        assert_eq!(feeds(&path), [14.3], "floor 14 + stand-off 0.3");
+        assert_eq!(path.moves, burn_to_depth(&p).expect("burns").moves);
+    }
+
+    #[test]
+    fn sinker_wear_stand_off_with_a_rate_wears_onto_floor_plus_stand() {
+        // 0.1 layers: the first few stand above the work and wear nothing.
+        let p = stood();
+        let w = SinkerWear { comp: Some(WearComp { rate: 0.02, from: "test".into() }), layer: Some(0.1) };
+        let path = burn_compensated(&p, &w).expect("burns");
+        let z = feeds(&path);
+        assert_eq!(z.len(), 60);
+        for (i, t) in z.iter().enumerate() {
+            let d = ((i + 1) as f64 * 0.1).min(6.0);
+            let worn = worn_tip(*t, 20.0, 0.05, 0.02);
+            assert!((worn - (20.0 - d + 0.3)).abs() < 1e-9, "layer {d}: worn {worn} programmed {t}");
+        }
+        let deepest = deepest_tip(&p, 0.02);
+        assert!((z[59] - deepest).abs() < 1e-9 && (worn_tip(deepest, 20.0, 0.05, 0.02) - 14.3).abs() < 1e-9);
+        assert!(path.moves.iter().all(|m| m.to.z >= deepest - 1e-9));
     }
 
     #[test]
