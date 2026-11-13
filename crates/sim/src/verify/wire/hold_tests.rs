@@ -89,3 +89,28 @@ fn tabs_hold_the_slug_until_the_cut_off_frees_it() {
     let f = v.findings.iter().find(|f| matches!(f, WireFinding::TabsDoNotHold { .. })).expect("not held");
     assert!(f.describe().contains("the tabs do not hold it"), "{}", f.describe());
 }
+
+/// The main cut's boundary is exact (M3 on PR #1158): its last move is
+/// judged with it, the cut-off's first move is not. Case A's main cut
+/// closes the gap on its LAST move, so the tabs hold nothing; case B's
+/// main cut stops one move short and the cut-off's FIRST move closes
+/// it, so the tabs hold. Reading one point less misses A's closing
+/// move; one point more takes B's cut-off move into the main cut.
+#[test]
+fn the_main_cut_ends_on_its_own_last_move() {
+    let o = Point2::new(0.0, 0.0);
+    // A: lead in, round the square, the last main move shuts the left side.
+    let main = [(-H, 0.0), (-H, -H), (H, -H), (H, H), (-H, H), (-H, 0.0)];
+    let mut pts = main.to_vec();
+    pts.push((0.0, 0.0));
+    let v = job(&walk(o, &pts), Some(main.len()), false);
+    let f = v.findings.iter().find(|f| matches!(f, WireFinding::TabsDoNotHold { .. }));
+    assert!(f.is_some() && !v.held, "the last main move closes the cut: {v:?}");
+    // B: the main cut leaves the left side's upper half; the cut-off shuts it.
+    let main = [(-H, 0.0), (-H, -H), (H, -H), (H, H), (-H, H)];
+    let mut pts = main.to_vec();
+    pts.extend([(-H, 0.0), (0.0, 0.0)]);
+    let v = job(&walk(o, &pts), Some(main.len()), false);
+    assert!(v.findings.is_empty(), "the cut-off's first move is not the main cut's: {:?}", v.findings);
+    assert!(v.held && v.slugs.len() == 1, "{v:?}");
+}
