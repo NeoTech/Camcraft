@@ -635,7 +635,7 @@ function feedWord(p, arc) {
   // B or C is capped the same way (#951 review).
   if (!has(p.A) && !has(p.B) && !has(p.C)) return fw(p.FeedRate);
   if (typeof rotaryFeed !== "function") return fw(p.FeedRate);
-  var r = rotaryFeed(p, rotAt, ["A", "B", "C"], "path", arc, inch ? 0.00254 : 0.001);
+  var r = rotaryFeed(p, rotAt, ["A", "B", "C"], "path", arc, inch ? 0.00254 : 0.001, [orgX, orgY, orgZ], inch);
   if (r.refuse) { rotRefuse(r.refuse); return null; }
   if (!r.capped) return fw(p.FeedRate);
   var word = rotaryFeedWord(r.feed, inch);  // the post's own unit, as ff() writes F

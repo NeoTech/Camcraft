@@ -84,8 +84,15 @@ function rotaryFeedCap(f, lin, turns, mode, eps) {
 // output step (0.001 mm, or 0.0001 in = 0.00254 mm): the length is judged
 // between the points as posted, since the control times the block over
 // what it reads - an inch word rounds a short move's length by up to a
-// few percent. Returns { feed, capped } or { refuse: text }.
-function rotaryFeed(p, prev, letters, mode, arc, step) {
+// few percent. `org` (optional, [x, y, z] mm) is the work origin the post
+// subtracts before it writes: the step is applied to the origin-relative
+// coordinates, the words actually posted - on a world grid an origin off
+// the output grid shifts where a short move rounds, and a move that posts
+// one step can read as none. `inch` (optional) says the post writes F in
+// in/min at 0.01: a feed left uncapped is judged by the word `ff()` then
+// writes, and capped when that rounds above the limit. Returns
+// { feed, capped } or { refuse: text }.
+function rotaryFeed(p, prev, letters, mode, arc, step, org, inch) {
   var f = Number(p.FeedRate);
   var turns = [], i, L, rate, d;
   for (i = 0; i < letters.length; i++) {
@@ -109,16 +116,30 @@ function rotaryFeed(p, prev, letters, mode, arc, step) {
     if (any) return { refuse: "a feed that turns a rotary from an unstated start point - the stated rotary rate cannot be held" };
     return { feed: f, capped: false };
   }
+  var o = (org && org.length >= 3) ? [Number(org[0]) || 0, Number(org[1]) || 0, Number(org[2]) || 0] : [0, 0, 0];
   var q = (Number(step) > 0) ? function (v) { return Math.round(Number(v) / step) * step; } : function (v) { return Number(v); };
-  var dx = q(p.X) - q(sx), dy = q(p.Y) - q(sy), dz = q(p.Z) - q(sz), lin;
+  var dx = q(p.X - o[0]) - q(sx - o[0]), dy = q(p.Y - o[1]) - q(sy - o[1]), dz = q(p.Z - o[2]) - q(sz - o[2]), lin;
   if (arc) {
     var pl = p.CircularPlane;
     lin = pl === "XZ" ? Math.sqrt(dx * dx + dz * dz) : (pl === "YZ" ? Math.sqrt(dy * dy + dz * dz) : Math.sqrt(dx * dx + dy * dy));
   } else {
     lin = Math.sqrt(dx * dx + dy * dy + dz * dz);
   }
-  var g = rotaryFeedCap(f, lin, turns, arc ? "path" : mode);
-  return { feed: g, capped: g < f - 1e-9 };
+  var m = arc ? "path" : mode;
+  var g = rotaryFeedCap(f, lin, turns, m);
+  if (g < f - 1e-9) return { feed: g, capped: true };
+  // Not capped as asked: but the word the post writes is f rounded to its
+  // F step, which can land above the limit when the limit is within half
+  // a step of f. Judge the posted word, never f.
+  var lim = rotaryFeedCap(Infinity, lin, turns, m);
+  if (isFinite(lim) && lim > 0 && rotaryFeedPosted(f, inch) > lim * (1 + 1e-12) + 1e-9) return { feed: lim, capped: true };
+  return { feed: g, capped: false };
+}
+// The mm/min `ff()` writes for `v`: whole mm/min, or in/min at two
+// decimals (read back in mm/min).
+function rotaryFeedPosted(v, inch) {
+  var n = Number(v);
+  return inch ? Number((n / 25.4).toFixed(2)) * 25.4 : Math.round(n);
 }
 // A capped F (`v`, mm/min) as a word in the post's own unit: mm/min
 // floored to 0.1, or with `inch` set in/min floored to 0.001 (finer than
