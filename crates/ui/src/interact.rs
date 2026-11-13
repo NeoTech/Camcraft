@@ -34,18 +34,29 @@ use crate::egui_app::ground_ink::{Overlay, light_ground, overlay};
 
 /// Keyboard modifiers as the pick law reads them - the winit state or the
 /// egui `Modifiers`, converted at the shell's edge so the law itself names
-/// no windowing library. Ctrl/Shift add to a feature pick, Alt in Edge
-/// mode takes the one segment under the cursor.
+/// no windowing library. `command` is the platform command modifier
+/// (Cmd on macOS, Ctrl elsewhere - the key the shortcuts use, #1238): it
+/// adds to a feature pick or toggles one in Edge mode. Shift adds (and
+/// closes a loop in Edge mode); Alt in Edge mode takes the one segment
+/// under the cursor. Control on macOS is the secondary click, so it is not
+/// the add key there.
 #[derive(Clone, Copy, Default, Debug)]
 pub struct Mods {
-    pub ctrl: bool,
+    pub command: bool,
     pub shift: bool,
     pub alt: bool,
 }
 
 impl From<ModifiersState> for Mods {
     fn from(m: ModifiersState) -> Self {
-        Mods { ctrl: m.control_key(), shift: m.shift_key(), alt: m.alt_key() }
+        let command = if cfg!(target_os = "macos") { m.super_key() } else { m.control_key() };
+        Mods { command, shift: m.shift_key(), alt: m.alt_key() }
+    }
+}
+
+impl From<egui::Modifiers> for Mods {
+    fn from(m: egui::Modifiers) -> Self {
+        Mods { command: m.command, shift: m.shift, alt: m.alt }
     }
 }
 
@@ -84,20 +95,10 @@ pub(crate) fn ray_at(state: &State, p: [f32; 2]) -> Option<([f64; 3], [f64; 3])>
 /// A click inside the viewport, routed by the pick mode: models,
 /// feature faces, or edge chains.
 pub(crate) fn pick_at(state: &mut State, p: [f32; 2], mods: Mods) {
-    // Anchor picking wins over entity picking: in pick mode a click ON a
-    // marker places the origin there (same command the pane grid
-    // queues); a click beside one still picks normally, so the viewport
-    // never stops behaving like the viewport.
-    if state.wcs_ui.pick_anchor
-        && let Some((k, pos)) = anchor_hit(state, p, 12.0)
-    {
-        state.wcs_ui.anchor_xy = k;
-        state.pending.push_back(CommandKind::SetWcs {
-            pos,
-            roll_deg: state.wcs_ui.roll_deg,
-            pitch_deg: state.wcs_ui.pitch_deg,
-            yaw_deg: state.wcs_ui.yaw_deg,
-        });
+    // The WCS page's picks win over entity picking while armed: anchor
+    // markers (a click beside one still picks normally) and the #739
+    // circle-centre edge pick.
+    if crate::wcs_circle_pick::take_click(state, p) {
         return;
     }
     match state.geo_pick {
@@ -150,14 +151,14 @@ fn pick_model(state: &mut State, p: [f32; 2]) {
 /// write, never a command until Apply.
 pub fn queue_boundary_pick(state: &mut State, pick: GeoSel, mods: Mods) {
     let Some(target) = state.boundary_pick else {
-        queue_feature_pick(state, pick, mods.ctrl || mods.shift);
+        queue_feature_pick(state, pick, mods.command || mods.shift);
         return;
     };
     if state.op_ui.name.is_empty() {
         state.status = String::from("open an operation first - geometry picks fill the open one");
         return;
     }
-    let m = crate::boundary_draft::PickMods { toggle: mods.ctrl, close: mods.shift && !mods.ctrl };
+    let m = crate::boundary_draft::PickMods { toggle: mods.command, close: mods.shift && !mods.command };
     crate::boundary_draft::take_pick(state, target, pick, m);
 }
 
@@ -181,7 +182,7 @@ pub(crate) fn update_hover(state: &mut State, p: [f32; 2], held: bool) {
     }
     // #692: a feature mode hovers exactly what its click would take - the
     // one pick rule, the armed tool's kinds.
-    if state.geo_pick != GeoPick::Model {
+    if state.geo_pick != GeoPick::Model || state.wcs_ui.pick_circle {
         crate::feature_click::hover(state, p);
         return;
     }
@@ -1324,6 +1325,9 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
         | operation::OpParams::PlasmaProfile(_)
         // The wire never lifts out of the work (#532): no hop plane.
         | operation::OpParams::WireContour(_) => None,
+        // The electrode retracts to its approach plane only (#541).
+        | operation::OpParams::SinkerBurn(_)
+        | operation::OpParams::SinkerSideBurn(_) => None,
     };
     if let Some(hop) = hop
         && let (Some(r), Some(c)) = (hop.z_in(world, setup, src), draft.clearance().z_in(world, setup, src))
@@ -1455,6 +1459,13 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
         // The workpiece the wire cuts through: its two programmed
         // planes (#532).
         | operation::OpParams::WireContour(operation::WireContourOp { top_z, bottom_z, .. })
+        // The work top and the cavity floor datum the burn stops at (#541).
+        | operation::OpParams::SinkerBurn(operation::SinkerBurnOp { top_z, floor_z: bottom_z, .. })
+        // #545: the side burn's own plunge.
+        | operation::OpParams::SinkerSideBurn(operation::SinkerSideBurnOp {
+            burn: operation::SinkerBurnOp { top_z, floor_z: bottom_z, .. },
+            ..
+        })
         | operation::OpParams::Deburr { top_z, bottom_z, .. } => {
             if let Some(z) = top_z.z_in(world, setup, src) {
                 out.push(HeightPlane {

@@ -52,15 +52,15 @@ merge.
 
 ## Steps
 
-1. **Skip check.** `owner=$(gh repo view NeoTech/Camcraft --json owner --jq .owner.login)` (the base repository of the PR; a fork's own owner is not the owner of the review), then
+1. **Skip check.** `collabs=$(gh api repos/NeoTech/Camcraft/collaborators --jq '.[] | select(.permissions.push) | .login')` (collaborators of the base repository the PR targets; a fork's own owner is not one by being the fork's owner), then
    `gh pr view <N> --json headRefOid,reviews,comments,state,isDraft,author,headRepositoryOwner`.
    If the PR is closed, merged or a draft, report "skipped: <why>" and stop. If a
-   review or comment whose author is `$owner` already contains
+   review or comment whose author is in `$collabs` already contains
    `<!-- pr-reviewer: <headRefOid> -->` for the current head SHA, report
-   "skipped: already reviewed at <sha7>" and stop. Only the owner's account's
-   marker counts (AGENTS.md "Only the owner's reviews count"); another
-   account's marker is ignored.
-   If the new commits since the owner's last marker are only merges of main
+   "skipped: already reviewed at <sha7>" and stop. Only a collaborator's
+   marker counts (AGENTS.md "Only collaborators' reviews count"); a
+   non-collaborator's marker is ignored.
+   If the new commits since the last collaborator marker are only merges of main
    with an empty remerge-diff, the review of that marker stands (AGENTS.md "A
    clean merge of main keeps its review"): run
    `cargo xtask merge-plan --delta <N> --reviewed <marker sha>`; on SAME report
@@ -95,6 +95,12 @@ merge.
      whose `invert` restores the previous value; validation at command
      creation.
    - Layering ui -> app -> flecs; components only in `crates/app/src/schema.rs`.
+   - Placement (AGENTS.md "Code shape" and "Testing"): (a) a new test file
+     sits in the lowest crate that provides what it imports, its Gate map
+     names that crate; (b) no new `camcraft-*` dependency line without a
+     `docs/decisions/` entry listing the items, why the caller cannot pass
+     them in, and what rebuilds; (c) new code in `crates/app/src` reads or
+     writes the ECS world, project file, a command, MCP or the CLI.
    - Program order / rest-machining / posting / project round-trip laws if it
      touches them; project-format bumps need a forward migration and are a
      breaking change (`!` or `BREAKING CHANGE:`).
@@ -134,7 +140,9 @@ merge.
    Be courteous to the contributor; no `@name` pings except the PR author when
    asking them something.
 7. **Label** per the `review-prs` skill, step 2b: read `gh pr view <N> --json
-   mergeable` (re-read once on `UNKNOWN`), then set exactly one state label
+   mergeable` (re-read once on `UNKNOWN`), then, unless the PR is a disagreement
+   (AGENTS.md "Only collaborators' reviews count": leave both labels as they are,
+   say so in the report), set exactly one state label
    and remove the others - clean + `MERGEABLE` → `merge-ready`; clean +
    `CONFLICTING` → `conflicts`; blockers → `needs-rework` (plus `conflicts`
    if it conflicts); "Not built" with no blockers → `needs-maintainer`. On

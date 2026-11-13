@@ -16,7 +16,7 @@
 //! writes nothing: never a folder with ops 1 and 3 but not 2.
 
 use super::{
-    machine_value_of, op_streams, options_value, post_options, script_of, script_source, viewer_map,
+    machine_value_of, op_streams, script_of, script_source, viewer_map,
     Posted,
 };
 use crate::post::{cnc, engine};
@@ -33,6 +33,11 @@ pub struct PostedFile {
     /// The program as posted, the same evidence a whole-job post gives.
     pub posted: Posted,
 }
+
+/// A post script as a per-op post resolves it: its label (a post
+/// file's path, for a refusal to name; `None` for a caller's own text)
+/// and its text.
+type Script = (Option<String>, String);
 
 /// Longest sanitised operation name in a file name: a file system
 /// limit is never the reason a post fails.
@@ -73,13 +78,13 @@ pub fn post_per_op(world: &World, dir: &Path, program: &str) -> Result<Vec<Poste
     if mounts.is_empty() {
         script_source(world)?;
     }
-    let mut scripts: Vec<(Vec<String>, String, String)> = Vec::with_capacity(mounts.len());
+    let mut scripts: Vec<(Vec<String>, Script)> = Vec::with_capacity(mounts.len());
     for m in mounts {
-        let (name, text) = script_of(&m.post)?;
-        scripts.push((m.setups, name, text));
+        let (label, text) = script_of(&m.post)?;
+        scripts.push((m.setups, (Some(label), text)));
     }
     post_per_op_with(world, dir, program, |setup| {
-        scripts.iter().find(|(s, _, _)| s.contains(&setup.to_owned())).map(|(_, n, t)| (Some(n.clone()), t.clone()))
+        scripts.iter().find(|(s, _)| s.contains(&setup.to_owned())).map(|(_, t)| t.clone())
     })
 }
 
@@ -99,14 +104,14 @@ pub fn post_per_op_script(
 }
 
 /// The per-op post with each op's script chosen by its effective setup
-/// name (`""` for the implicit setup), as its name for a refusal (when
-/// known) and its text; the machine is always the op's own setup's
-/// (#388).
+/// name (`""` for the implicit setup) with its label (a post file's
+/// path, for a refusal to name); the machine is always the op's own
+/// setup's (#388).
 fn post_per_op_with(
     world: &World,
     dir: &Path,
     program: &str,
-    script: impl Fn(&str) -> Option<(Option<String>, String)>,
+    script: impl Fn(&str) -> Option<Script>,
 ) -> Result<Vec<PostedFile>, String> {
     if !dir.is_dir() {
         return Err(format!("{} is not a folder", dir.display()));
@@ -116,6 +121,8 @@ fn post_per_op_with(
     // (#1190) before anything else is judged: a turning dialect opens
     // only what a lathe may run.
     let mut resolved = Vec::with_capacity(streams.len());
+    // #1232: each setup's ops, for the post-serves-kind door below.
+    let mut by_setup: Vec<(String, Vec<&str>, Option<String>, String)> = Vec::new();
     for (name, _) in &streams {
         let setup = crate::model::find_by_name(world, name)
             .and_then(|e| crate::model::operation_of(world, &e))
@@ -123,7 +130,16 @@ fn post_per_op_with(
         let effective = crate::setup::effective(world, setup.as_deref()).unwrap_or_default();
         let (label, cps) = script(&effective).ok_or_else(|| format!("{name}: no post resolved for its setup"))?;
         crate::lathe_voice::at_post(world, [name.as_str()], &cps, label.as_deref())?;
+        match by_setup.iter_mut().find(|(s, ..)| *s == effective) {
+            Some((_, ops, ..)) => ops.push(name.as_str()),
+            None => by_setup.push((effective, vec![name.as_str()], label, cps.clone())),
+        }
         resolved.push((setup, cps));
+    }
+    let mut unserved = Vec::new();
+    for (setup, ops, label, cps) in &by_setup {
+        let machine = crate::setup_mount::machine_of(world, Some(setup.as_str()).filter(|s| !s.is_empty()));
+        unserved.extend(super::serves::refusal(world, std::slice::from_ref(setup), ops, &machine, cps, label.as_deref())?);
     }
     // #1174: the workholding clause reads each op's own script's dialect
     // (keyed by effective setup name, as `script` is); unreadable reads
@@ -134,19 +150,20 @@ fn post_per_op_with(
             crate::post::dialect::work_voice(&c).unwrap_or(crate::post::dialect::WorkVoice::Undeclared)
         })
     };
-    let report = crate::posting::verification_report_by(world, &voice);
+    let mut report = crate::posting::verification_report_by(world, &voice);
+    report.problems.splice(0..0, unserved);
     if !report.problems.is_empty() {
         return Err(format!("post blocked - {}", report.problems.join("; ")));
     }
-    let options = options_value(post_options(world));
+    let options = super::program_options(world);
     let mut files = Vec::with_capacity(streams.len());
     for (k, ((name, records), (setup, cps))) in streams.iter().zip(resolved).enumerate() {
         let index = k + 1;
-        let number = u32::try_from(index).map_err(|_| "too many operations to number".to_owned())?;
+        let id = super::document_program_id(world, index)?;
         let ext = engine::extension_of(&cps).map_err(|e| format!("post engine: {e}"))?;
         let ext = sanitise(&ext, "nc");
         let mch = machine_value_of(world, setup.as_deref());
-        let out = engine::run_numbered_with(&cps, &mch, &cnc::serialize(records), &options, number)
+        let out = engine::run_program_with(&cps, &mch, &cnc::serialize(records), &options, &id)
             .map_err(|e| format!("{name}: post engine: {e}"))?;
         if !out.warnings.is_empty() {
             return Err(format!(

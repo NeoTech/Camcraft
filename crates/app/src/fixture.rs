@@ -161,7 +161,10 @@ pub fn named_boxes_for(world: &World, declared: Option<&str>) -> Vec<(String, Fi
 fn steel_box(world: &World, e: &Entity) -> Option<FixtureBox> {
     let b = model::entity_world_aabb(world, e)?;
     // Full fidelity: the box itself, bit for bit (no `+ 0.0`).
-    let Some(g) = crate::model_fidelity::chord_of(world, e) else {
+    // #1056: unknown fidelity has no honest growth; the gate refuses the
+    // program by name (`model_fidelity::gate_problems`), so the plain box
+    // stands in rather than one that collides with everything.
+    let Some(g) = crate::model_fidelity::chord_of(world, e).filter(|g| !crate::model_fidelity::is_unknown(*g)) else {
         return Some(FixtureBox { min: b.min, max: b.max });
     };
     Some(FixtureBox {
@@ -187,6 +190,14 @@ pub fn workholding_for(world: &World, declared: Option<&str>) -> (Vec<FixtureBox
     }
     fixed.extend(table_box(world, declared));
     (turning, fixed)
+}
+
+/// The tagged models of the `declared` setup context no collision box
+/// can be read for (no finite geometry), by name (#1037): steel every
+/// box law passes over, so a law that must not pass it silently names it.
+#[must_use]
+pub fn unreadable_for(world: &World, declared: Option<&str>) -> Vec<String> {
+    tagged(world, declared).into_iter().filter(|(_, e)| steel_box(world, e).is_none()).map(|(n, _)| n).collect()
 }
 
 /// Every tagged model's world mesh, paired with the very box

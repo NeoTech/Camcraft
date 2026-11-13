@@ -30,6 +30,9 @@ pub(crate) fn tool_icon(kind: ToolKind) -> Icon {
         ToolKind::Taper => Icon::ToolChamferMill,
         ToolKind::Probe => Icon::ToolProbe,
         ToolKind::Torch => Icon::ToolTorch,
+        ToolKind::Electrode => Icon::ToolElectrode,
+        ToolKind::ThreadMill => Icon::ToolThreadMill,
+        ToolKind::ThreadMillSingle => Icon::ToolThreadMillSingle,
     }
 }
 

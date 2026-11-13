@@ -58,6 +58,9 @@ impl Ask {
 /// else the pick mode (Edge falls back to the face between the edges). A
 /// boundary and an axis take one run per edge click; Alt one segment.
 pub(crate) fn ask(state: &State, mods: Mods) -> Ask {
+    if state.wcs_ui.pick_circle {
+        return crate::wcs_circle_pick::CIRCLE_ASK; // #739: the WCS circle-centre pick
+    }
     let chain = if mods.alt {
         EdgeUnit::Segment
     } else if state.boundary_pick.is_some()
@@ -188,7 +191,7 @@ pub(crate) fn click(state: &mut State, p: [f32; 2], mods: Mods) {
     if crate::axis_pick::hint_stray(state) {
         return; // #557: the axes rows are open, nothing armed
     }
-    let append = mods.ctrl || mods.shift;
+    let append = mods.command || mods.shift;
     match (found.target, state.boundary_pick.is_some()) {
         (PickTarget::Point(_), true) => {
             // A point bounds nothing: refused by name, never drafted.

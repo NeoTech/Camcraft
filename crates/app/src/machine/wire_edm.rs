@@ -8,8 +8,11 @@
 //!
 //! What is judged: the X/Y travel of every move against the stated
 //! strokes, and the refusals by name - an op that is not wire EDM work,
-//! a move that states a pose (a taper: #536 judges the angle and the
-//! U/V reach it needs). What is NOT: the wire sweep against the part,
+//! and for a tapered cut (#536) every pose: its lean against the stated
+//! maximum, and the upper guide's offset from the lower one (U/V,
+//! from the stated guide planes) against the U and V strokes - no
+//! guide planes, no U/V axis, or a lean or offset past what is stated
+//! is refused by name. What is NOT: the wire sweep against the part,
 //! the slug, the start hole's clearance (wire verification, #534), and
 //! any tool number, rpm or feed - a wire EDM has no changer and no
 //! spindle, and the control's generator sets the rate. Those are
@@ -19,6 +22,7 @@
 use flecs_ecs::prelude::{Entity, World};
 
 use super::{move_extremes, say, Machine, MachineCheck};
+use crate::geometry::Point3;
 use crate::model;
 use crate::operation::Family;
 
@@ -26,7 +30,7 @@ use crate::operation::Family;
 pub(super) fn check_wire_ops(world: &World, machine: &Machine, ops: &[(String, Entity)]) -> Result<MachineCheck, String> {
     let mut out = MachineCheck::default();
     out.notes.push(format!(
-        "{}: a wire EDM - only the X/Y travel is judged here; the wire's sweep against the part, the slug and the start hole are not (wire verification is not built yet)",
+        "{}: a wire EDM - only the X/Y travel is judged here; the wire's sweep against the part, the slug and the start hole are judged at the post by the wire laws (#534)",
         machine.model
     ));
     out.notes.push(format!(
@@ -47,10 +51,18 @@ pub(super) fn check_wire_ops(world: &World, machine: &Machine, ops: &[(String, E
         let cache = model::toolpath_of(world, e).ok_or_else(|| format!("{name}: lost its toolpath"))?;
         let (_, origin) = crate::posting::wcs_context(world, op.setup.as_deref());
         for (i, mv) in cache.path.moves.iter().enumerate() {
-            if mv.rotary.is_some() || mv.axis.is_some_and(|a| !crate::cl::is_vertical(&a)) {
-                say(&mut out, format!("{name}: move {i} states a wire pose - a tapered cut is not judged on this machine yet"));
+            if mv.rotary.is_some() {
+                say(&mut out, format!("{name}: move {i} turns a rotary axis - a wire EDM cut has none"));
             }
-            for p in move_extremes(mv) {
+            let mut reach = move_extremes(mv);
+            if let Some(a) = mv.axis.filter(|a| !crate::cl::is_vertical(a)) {
+                match judge_pose(machine, mv.to, a, origin[2]) {
+                    // The X/Y the post writes for a lean: the lower guide's.
+                    Ok(lower) => reach.push(Point3::new(lower[0], lower[1], mv.to.z)),
+                    Err(why) => say(&mut out, format!("{name}: move {i} {why}")),
+                }
+            }
+            for p in reach {
                 for (k, w) in [p.x, p.y].iter().enumerate() {
                     let Some(ax) = machine.axis(k) else { continue };
                     let Some((lo, hi)) = ax.travel else { continue };
@@ -66,4 +78,75 @@ pub(super) fn check_wire_ops(world: &World, machine: &Machine, ops: &[(String, E
         }
     }
     Ok(out)
+}
+
+/// The machine's guide planes in the work frame: stated in machine Z,
+/// moved by the work offset's Z (`origin_z`).
+///
+/// # Errors
+/// Either plane unstated, named.
+pub fn guide_planes(machine: &Machine, origin_z: f64) -> Result<(f64, f64), String> {
+    match machine.edm.as_ref().map(|e| (e.lower_guide_z, e.upper_guide_z)) {
+        Some((Some(lo), Some(hi))) if lo.is_finite() && hi.is_finite() && hi > lo => Ok((lo + origin_z, hi + origin_z)),
+        _ => Err(format!(
+            "machine {} states no edm.lower_guide_z and edm.upper_guide_z - a tapered wire's guide positions are read from them",
+            machine.model
+        )),
+    }
+}
+
+/// The wire of a move ending at `to` with pose `axis` (#290 D2: the
+/// unit direction toward the upper guide) on the two guide planes
+/// `(lower, upper)`: the lower guide's X Y and the upper guide's offset
+/// from it (U V).
+///
+/// # Errors
+/// A pose that is not a leaning-up direction.
+pub fn guide_points(to: Point3, axis: [f64; 3], (lo, hi): (f64, f64)) -> Result<([f64; 2], [f64; 2]), String> {
+    if !(axis.iter().all(|c| c.is_finite()) && axis[2] > 0.0175) {
+        return Err("states a pose the wire cannot hold (leaning past 89 degrees, or not a direction)".into());
+    }
+    let (tx, ty) = (axis[0] / axis[2], axis[1] / axis[2]);
+    let lower = [to.x + tx * (lo - to.z), to.y + ty * (lo - to.z)];
+    let span = hi - lo;
+    Ok((lower, [tx * span, ty * span]))
+}
+
+/// One pose against the machine: its lean against the stated maximum,
+/// the workpiece's plane between the guides, and the U/V offset against
+/// the U and V strokes.
+fn judge_pose(machine: &Machine, to: Point3, axis: [f64; 3], origin_z: f64) -> Result<[f64; 2], String> {
+    let lean = axis[0].hypot(axis[1]).atan2(axis[2]).to_degrees();
+    let edm = machine.edm.as_ref();
+    match edm.and_then(|e| e.max_taper_deg) {
+        None => return Err(format!("leans the wire {lean:.3} degrees, and machine {} states no edm.max_taper_deg", machine.model)),
+        Some(max) if lean > max + 1e-9 => {
+            return Err(format!("leans the wire {lean:.3} degrees, past machine {}'s {max:.3} degree maximum taper", machine.model));
+        }
+        Some(_) => {}
+    }
+    let (lo, hi) = guide_planes(machine, origin_z)?;
+    if !(lo..=hi).contains(&to.z) {
+        return Err(format!(
+            "rides Z{:.3}, outside the guides' reach (Z{:.3} .. Z{:.3}) - the wire's programmed plane must stand between its guides",
+            to.z - origin_z,
+            lo - origin_z,
+            hi - origin_z
+        ));
+    }
+    let (lower, uv) = guide_points(to, axis, (lo, hi))?;
+    for (letter, w) in [("U", uv[0]), ("V", uv[1])] {
+        let Some(ax) = machine.axes.iter().find(|a| a.name.eq_ignore_ascii_case(letter)) else {
+            return Err(format!(
+                "needs the upper guide {w:.3} mm off in {letter}, and machine {} states no {letter} axis",
+                machine.model
+            ));
+        };
+        if let Some((min, max)) = ax.travel
+            && !(min..=max).contains(&w)
+        {
+            return Err(format!("needs {letter}{w:.3}, outside the {letter} stroke {min:.3}..{max:.3} (the upper guide's travel band)"));
+        }
+    }
+    Ok(lower)
 }

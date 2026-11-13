@@ -56,8 +56,21 @@ unstated capability into existence.
         "orbits": [ { "kind": "circular", "word": "..." } ],  // sinker: circular|vector|planetary + the control's word
         "max_orbit_radius": 2.0,                       // sinker, length unit
         "pickup": "...",                               // sinker, the holder system's name
-        "conditions": [ { "id": "C110", "gap": 0.02, "wire_diameter": 0.25, "role": "rough" } ]  // either kind (#531)
+        "conditions": [ { "id": "C110", "gap": 0.02, "wire_diameter": 0.25, "role": "rough" } ],  // either kind (#531)
+        "codes": { "condition": "...{id}...", ... }   // either kind: the control's EDM words (#533, #542)
       }
+
+  `edm.codes` (#533, #542, #290 D5) holds the control's EDM words as
+  templates, name -> text, filled by the post (`Machine.edm_codes`,
+  read by `post::machine::edm_codes`): a name is a lowercase word
+  (a-z, 0-9, `_`), a text is printable ASCII of at most 64 characters
+  with no `(` `)`, or the file is refused by the name. A sinker post
+  reads `metric` / `inch` (the unit word), `pickup` (`{tool}`),
+  `reference` (`{offset}`, the electrode's pickup offset), `condition`
+  (`{id}`), `depth` (the servo burn, `{z}` and optionally `{f}`) and
+  `end` (`SINKER_CODES`); the wire post (#533) reads its own names. A
+  code the post needs and the file does not state refuses the post by
+  name. No vendor codes ship - fill them from the control's manual.
 
   Every key is optional and absent means NOT STATED (an op that needs
   it refuses by name). A garbled value refuses the file. The section is
@@ -73,10 +86,12 @@ unstated capability into existence.
   coolant list (`post::machine::edm_refusals`, read by the reader and
   the Machines pane's validator alike); a rotary is allowed. No vendor
   values are shipped. No EDM machine is in the built-in library yet:
-  every library machine must have a post (`machine_library`), so the
-  empty wire / sinker templates join it with their kind's first post
-  (#533 / #542). Until then they are test fixtures
-  (`crates/app/tests/edm/`).
+  every library machine must have a post (`machine_library`). The
+  sinker's first post shipped with #542 (`sinker-iso.cps`), the wire's
+  with #533 (`wire-iso.cps`); the empty sinker template joining the
+  library is #1135. Until then they are test fixtures
+  (`crates/app/tests/edm/`, with `sinker-iso-dialect.mch` the synthetic
+  codes the sinker post's goldens are posted against).
 
 - `edm.conditions[]` (#531): the generator conditions the user states
   from their machine's manual. None ship. CamCraft reads only the
@@ -185,10 +200,21 @@ unstated capability into existence.
     microARC 4 file states 10.6 in: the 770MX's 13.75 in spindle nose
     to table (Tormach 770MX spec page) less the microARC 4's 3.15 in
     table to centerline (4th-axis comparison sheet 02/24).
+    The same rotary states `axis_to_table` (#1107): its centerline's
+    height over the face it is bolted to (same unit and scaling). The
+    gate refuses an op whose stock / part / turning fixtures sweep
+    within 5 mm of that face, and judges every fixed fixture over the
+    work's X span by its box's distance from the line; unstated, or
+    steel it cannot read (no facets, a box across the line), is named
+    in the gate's not-judged line. The microARC 4 states 3.15 in.
   - `type: "head"` parts carry the spindle and station, first match
     wins: `spindle { min_speed, max_speed }` rpm, `power` kW (stated,
     not judged — the sheet renders it, no model consumes it),
-    `body_diameter`/`body_length` for the envelope checks; and
+    `body_diameter`/`body_length` for the envelope checks,
+    `rigid_tapping` (#786: `true` | `false`, anything else refuses the
+    file by name; absent is "not limited" - a stated `false` makes the
+    program gate refuse every tap cycle by name, whatever the post; the
+    Tormach mills and routers state it); and
     `tool_station { max_tool_length, max_tool_diameter, coolants }`.
     Separately from first-match, the checker also COUNTS (M5.3 C):
     `Machine.spindles` is how many head parts anywhere in the tree

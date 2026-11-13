@@ -474,6 +474,9 @@ fn cycle_tool(kind: ToolKind, diameter: f64, tip_angle: f64, pitch: f64) -> Tool
         tool_material: None,
         flutes: None,
         orientation: None,
+        pitch_min: 0.0,
+        catalog: camcraft_tools::catalog_fields::ToolCatalog::default(),
+        cutting: Vec::new(),
         turning: None,
     }
 }
@@ -1016,6 +1019,7 @@ fn plasma_plate_with_holes_matches_golden() {
         pierce_height: Some(3.8),
         cut_height: None,
         pierce_delay: Some(0.5),
+        model_excess: 0.0,
     };
     let path = plasma_profile(&loops, &[], &part, &p).unwrap();
     let text = gen_to_cltext(&path);
@@ -1058,6 +1062,99 @@ fn trochoid_slot_small_matches_golden() {
     write_golden("trochoid_slot_small.cl", &gen_to_cltext(&t));
 }
 
+// ---------------------------------------------------------------------------
+// #894 - thread milling. The exact ride - lead arcs, helix, radial passes,
+// levels - for both tool forms, both hands and a boss must not move
+// unnoticed.
+// ---------------------------------------------------------------------------
+
+fn thread_ride(rows: u32, external: bool, hand: camcraft_app::cl::ThreadHand, climb: bool, through: bool) -> camcraft_app::cl::Toolpath {
+    camcraft_app::machining2d::thread_mill(&thread_params(rows, external, hand, climb, through)).expect("a valid thread ride")
+}
+
+fn thread_params(
+    rows: u32,
+    external: bool,
+    hand: camcraft_app::cl::ThreadHand,
+    climb: bool,
+    through: bool,
+) -> camcraft_app::machining2d::ThreadParams {
+    use camcraft_app::machining2d::{ThreadHole, ThreadParams};
+    ThreadParams {
+        holes: vec![
+            ThreadHole { xy: Point2::new(10.0, 10.0), radius: 5.0, top_z: 0.0, floor_z: -8.0, stepped: false, through },
+            ThreadHole { xy: Point2::new(40.0, 10.0), radius: 5.0, top_z: 0.0, floor_z: -8.0, stepped: false, through },
+        ],
+        pitch: 1.5,
+        tool_diameter: 6.0,
+        rows,
+        infeed: 0.45,
+        external,
+        hand,
+        climb,
+        passes: camcraft_app::machining2d::ThreadPasses::default(),
+        clearance_z: 10.0,
+        r_z: None,
+        retract_z: Some(4.0),
+        feed: 300.0,
+        plunge_feed: 100.0,
+    }
+}
+
+#[test]
+fn thread_mill_constant_area_spring_pass_matches_golden() {
+    // #988: right-hand climb in two blind holes with a one-row mill, the
+    // roughing on decreasing passes of constant chip area (first 0.45 mm,
+    // cumulative depth D x sqrt(i/n)), a 0.05 mm finishing pass, one
+    // spring pass on the final radius and a 0.02 mm fit allowance.
+    use camcraft_app::machining2d::{thread_mill, PassSchedule, ThreadPasses};
+    let mut p = thread_params(1, false, camcraft_app::cl::ThreadHand::Right, true, false);
+    p.passes = ThreadPasses { schedule: PassSchedule::ConstantArea, finish: 0.05, spring: 1, allowance: 0.02, ..ThreadPasses::default() };
+    let t = thread_mill(&p).expect("a valid thread ride");
+    assert!(t.is_chained() && t.has_arcs());
+    write_golden("thread_mill_constant_area_spring_pass.cl", &gen_to_cltext(&t));
+}
+
+#[test]
+fn thread_mill_raised_r_plane_matches_golden() {
+    // #1212: the same right-hand climb in two blind holes, the R plane
+    // stated 2 mm over the holes' tops: each rapid stops on it and the
+    // feed down the axis starts there, as on a drill cycle.
+    let mut p = thread_params(1, false, camcraft_app::cl::ThreadHand::Right, true, false);
+    p.r_z = Some(2.0);
+    let t = camcraft_app::machining2d::thread_mill(&p).expect("a valid thread ride");
+    assert!(t.is_chained() && t.has_arcs());
+    write_golden("thread_mill_raised_r_plane.cl", &gen_to_cltext(&t));
+}
+
+#[test]
+fn thread_mill_internal_single_form_matches_golden() {
+    // Right-hand climb in two blind holes with a one-row mill: bottom-up,
+    // counter-clockwise, one turn per thread, two radial passes.
+    let t = thread_ride(1, false, camcraft_app::cl::ThreadHand::Right, true, false);
+    assert!(t.is_chained() && t.has_arcs());
+    write_golden("thread_mill_internal_single_form.cl", &gen_to_cltext(&t));
+}
+
+#[test]
+fn thread_mill_internal_multi_form_left_hand_matches_golden() {
+    // Left-hand conventional through holes with a three-row mill: two
+    // levels of one clockwise revolution each, rising, the tip running one
+    // pitch past the exit.
+    let t = thread_ride(3, false, camcraft_app::cl::ThreadHand::Left, false, true);
+    assert!(t.is_chained() && t.has_arcs());
+    write_golden("thread_mill_internal_multi_form_left_hand.cl", &gen_to_cltext(&t));
+}
+
+#[test]
+fn thread_mill_external_single_form_matches_golden() {
+    // Right-hand climb round two bosses: clockwise, top-down, quarter-arc
+    // leads from one tool radius outside the centre circle.
+    let t = thread_ride(1, true, camcraft_app::cl::ThreadHand::Right, true, false);
+    assert!(t.is_chained() && t.has_arcs());
+    write_golden("thread_mill_external_single_form.cl", &gen_to_cltext(&t));
+}
+
 /// #532: a wire EDM contour - a 40x20 profile with 2 mm corners (3-degree
 /// facets) cut as a die from a start hole at its centre and as a punch
 /// from a threading point outside it, with a SYNTHETIC condition (wire
@@ -1088,6 +1185,9 @@ fn wire_contour_die_and_punch_match_golden() {
             side,
             start: Some(start),
             plane_z: 0.0,
+            tabs: None,
+            stock: None,
+            clearance: 1.0,
         };
         let path = wire_contour(std::slice::from_ref(&profile), &[], &p).unwrap();
         assert!(path.is_prismatic() && path.moves.iter().all(|m| m.kind == MoveKind::Feed && m.feed.is_none()));
@@ -1098,4 +1198,31 @@ fn wire_contour_die_and_punch_match_golden() {
         assert_eq!(camcraft_app::cl::text::from_text(&text).unwrap().moves.len(), path.moves.len());
         write_golden(file, &text);
     }
+}
+
+/// #1109: an open wire run - a cut-off across a 100 x 50 plate at
+/// x = 60, kerf right of travel, SYNTHETIC condition (wire 0.25 mm, gap
+/// 0.04 mm): the wire stands 0.165 mm right of the line, threaded 1 mm
+/// past the kerf below the plate and run out 1 mm past it above.
+#[test]
+fn wire_open_cutoff_matches_golden() {
+    use camcraft_app::wire_edm::{wire_contour, WireParams, WireSide};
+    let plate = vec![Point2::new(0.0, 0.0), Point2::new(100.0, 0.0), Point2::new(100.0, 50.0), Point2::new(0.0, 50.0)];
+    let p = WireParams {
+        wire_diameter: 0.25,
+        gap: 0.04,
+        condition: "C110".into(),
+        side: WireSide::Right,
+        start: None,
+        plane_z: 0.0,
+        stock: Some(Region::new(vec![Loop::new(plate).unwrap()]).unwrap()),
+        clearance: 1.0,
+        tabs: None,
+    };
+    let line = vec![Point2::new(60.0, 0.0), Point2::new(60.0, 50.0)];
+    let path = wire_contour(&[], &[line], &p).unwrap();
+    assert!(path.is_prismatic() && path.moves.iter().all(|m| m.kind == MoveKind::Feed && m.feed.is_none()));
+    let text = gen_to_cltext(&path);
+    assert_eq!(camcraft_app::cl::text::to_text(&path).unwrap(), text);
+    write_golden("wire_open_cutoff.cl", &text);
 }

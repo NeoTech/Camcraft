@@ -81,6 +81,8 @@ pub struct GenJob {
     pub(super) fixtures: Vec<crate::fixture::FixtureBox>,
     /// `fixtures`' names, index for index (#339 slice 5 refusals).
     pub(super) fixture_names: Vec<String>,
+    /// Tagged fixtures no box could be read for (#1037), by name.
+    pub(super) unread_steel: Vec<String>,
     /// The highest world Z the tip reaches (WCS origin + stated Z top).
     pub(super) z_ceiling: Option<f64>,
     /// `fixtures` split by whether the steel turns with the part
@@ -119,7 +121,19 @@ pub struct GenJob {
     pub(super) carried_overhang: Option<super::carried_stock::Overhang>,
     /// #532: the machine condition a wire EDM kind cuts with (its wire
     /// and gap); `None` for every kind that mounts a library tool.
-    pub(super) wire: Option<super::wire_op::WireCondition>,
+    pub(super) wire: Option<(super::wire_op::WireCondition, Option<super::wire_op::WireCondition>)>,
+    /// #541: a sinker burn's spark gap, read from its setup's machine
+    /// condition (`sinker_op::condition_gap`); `None` for every other kind.
+    pub(super) sinker_gap: Option<Result<f64, String>>,
+    /// #543: a rough or finish burn's condition undersize (and the rough
+    /// a finish follows), `sinker_pass::read_pass`; `None` otherwise.
+    pub(super) sinker_pass: Option<Result<super::sinker_pass::PassRead, String>>,
+    /// #546: that condition's stated axial wear rate, when it states one.
+    pub(super) sinker_wear: Option<f64>,
+    /// #740: the document's display unit, read off the world here where
+    /// it can be. The drill-reach refusals run on worker threads with
+    /// no World to read, so they spell their depths through this lens.
+    pub(super) unit: crate::units::Unit,
 }
 
 /// The tripwire phrase for a stored precompute whose arm never collected
@@ -141,7 +155,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
     let wire = super::wire_op::job_wire(world, op)?;
     // Tool: the diameter drives the path, the body drives the reach law.
     let (tool, body, lathe_body, neck) = match &wire {
-        Some(cond) => (super::wire_op::job_tool(cond), None, None, Vec::new()),
+        Some((cond, _)) => (super::wire_op::job_tool(cond), None, None, Vec::new()),
         None => super::tool_gate::job_tool(world, op)?,
     };
     let setup = op.setup.as_deref();
@@ -302,6 +316,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
     let is_mill = machine_kind == crate::machine::Kind::Mill;
     let (fixture_names, fixtures) = crate::fixture::named_boxes_for(world, setup).into_iter().unzip();
     let workholding = crate::fixture::workholding_for(world, setup);
+    let unread_steel = crate::fixture::unreadable_for(world, setup);
     let fixture_meshes = crate::fixture::meshes_for(world, setup);
     let rotary_axis = crate::fixture::rotary_axis_of(world, op);
     let mounted = crate::machine::of_setup(world, setup).1;
@@ -314,6 +329,20 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         .and_then(|m| m.axis(2))
         .and_then(crate::machine::AxisLimits::program_travel)
         .map(|(lo, hi)| wcs_origin[2] + lo.max(hi));
+    let sinker_gap = match &op.params {
+        OpParams::SinkerBurn(p) => Some(super::sinker_op::burn_gap(world, setup, p)),
+        // #545: the side burn's gap, once its allowance holds under it.
+        OpParams::SinkerSideBurn(p) => Some(super::sinker_side_op::side_gap(world, setup, p)),
+        _ => None,
+    };
+    let sinker_pass = match &op.params {
+        OpParams::SinkerBurn(p) => super::sinker_pass::read_pass(world, op_name, setup, p),
+        _ => None,
+    };
+    let sinker_wear = match &op.params {
+        OpParams::SinkerBurn(p) => super::sinker_wear_op::condition_wear(world, setup, p),
+        _ => None,
+    };
     let machine_rotaries = mounted.map(|m| {
         let rot: Vec<_> = m.axes.iter().filter(|a| a.rotary).cloned().collect();
         (m.model, rot)
@@ -349,6 +378,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         spindle,
         fixtures,
         fixture_names,
+        unread_steel,
         z_ceiling,
         workholding,
         fixture_meshes,
@@ -359,6 +389,10 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         spindle_note,
         carried_overhang,
         wire,
+        sinker_gap,
+        sinker_pass,
+        sinker_wear,
+        unit: crate::units::of(world),
     })
 }
 
