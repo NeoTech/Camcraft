@@ -233,3 +233,81 @@ fn an_inch_machine_file_no_longer_makes_an_inch_program() {
     let inch = engine::run_with(&cps, &mch, &stream, &units("inch")).expect("posts");
     assert!(inch.program.contains("G20") && !inch.program.contains("G21"), "{}", inch.program);
 }
+
+fn mounted(rel: &str) -> Value {
+    camcraft_app::post::machine::mirror(&camcraft_app::machine::parse_mch(&read(rel)).unwrap_or_else(|e| panic!("{rel}: {e}")))
+}
+
+/// The A/B/C words of a program, in order (comments dropped).
+fn angle_words(program: &str) -> Vec<String> {
+    program
+        .lines()
+        .flat_map(words)
+        .filter(|w| matches!(number(w), Some(('A' | 'B' | 'C', _))))
+        .collect()
+}
+
+/// #981 review: a rotary angle is degrees in either program unit. Fanuc
+/// and Doosan DNM write their angle words through `angleWord` (main's
+/// #997 gate on a stated rotary); it must use the degree formatter, never
+/// the length one this change made unit-aware - an inch program dividing
+/// A/B/C by 25.4 would turn the table 25.4 times short. Covers the RTCP
+/// arm and modal walk on the A+B tilthead (both posts) and Doosan's
+/// 4th-axis index path.
+#[test]
+fn rotary_angle_words_are_degrees_in_an_inch_program() {
+    let rtcp = "TOOL 1 T1\nSECTION\nRapid X 0 Y 0 Z 20000 A 37500 B 0 C 0\nFeed X 20000 Y 0 Z 0 F 300000 A 0 B 12250 C 0\nFeed X 25400 Y 5000 Z 0 F 300000 A -45000 B 12250 C 0\nENDSECTION\n";
+    let index = "TOOL 1 T1\nSECTION\nRapid X 0 Y 0 Z 10000 A 90000\nFeed X 50000 Y 0 Z -1000 F 400000 A 90000\nRapid X 50000 Y 0 Z 10000 A 127500\nFeed X 0 Y 0 Z -1000 F 400000 A 127500\nENDSECTION\n";
+    let cases: [(&str, &str, &str, &[&str]); 3] = [
+        ("fanuc", "assets/machines/tilthead.mch", rtcp, &["A37.5", "B0", "A0", "B12.25", "A-45"]),
+        ("doosan-dnm", "assets/machines/tilthead.mch", rtcp, &["A37.5", "B0", "A0", "B12.25", "A-45"]),
+        ("doosan-dnm", "assets/machines/doosan-dnm.mch", index, &["A90", "A127.5"]),
+    ];
+    for (stem, mch_rel, stream, want) in cases {
+        let cps = read(&format!("assets/posts/{stem}.cps"));
+        let mch = mounted(mch_rel);
+        let run = |u: &str| {
+            let out = engine::run_with(&cps, &mch, stream, &json!({ "Units": u, "rotaryBrake": true }))
+                .unwrap_or_else(|e| panic!("{stem} on {mch_rel}: {e}"));
+            assert!(out.warnings.is_empty(), "{stem} on {mch_rel} ({u}): {:?}", out.warnings);
+            out.program
+        };
+        let (mm, inch) = (run("mm"), run("inch"));
+        assert!(inch.contains("G20") && !mm.contains("G20"), "{stem}: the inch program is inch:\n{inch}");
+        assert_eq!(angle_words(&mm), *want, "{stem} on {mch_rel}: mm angle words\n{mm}");
+        assert_eq!(angle_words(&inch), *want, "{stem} on {mch_rel}: an inch program's angles are degrees, unscaled\n{inch}");
+        // And the rest of the program is the mm program in inches, word by word.
+        same_program_in_inch(stem, mch_rel, &mm, &inch, ("G21", "G20"));
+    }
+}
+
+/// #981 review: grblHAL and TinyG (new on main) take the program's unit
+/// from the document too, and their inch program is their mm program in
+/// inches word by word, on every mill golden.
+#[test]
+fn grbl_family_posts_write_the_mm_program_in_inches() {
+    for (stem, machine) in [("grblhal", "grblHAL 3-axis"), ("tinyg", "TinyG 3-axis")] {
+        let cps = read(&format!("assets/posts/{stem}.cps"));
+        let text = camcraft_app::posting::MACHINES
+            .iter()
+            .find(|(n, _)| *n == machine)
+            .map(|(_, t)| *t)
+            .unwrap_or_else(|| panic!("the library ships {machine}"));
+        let mch = camcraft_app::post::machine::mirror(&camcraft_app::machine::parse_mch(text).unwrap_or_else(|e| panic!("{machine}: {e}")));
+        let mut posted = 0;
+        for g in GOLDENS {
+            let stream = read(&format!("crates/app/tests/golden/{g}.cl"));
+            let mm = engine::run_with(&cps, &mch, &stream, &units("mm")).unwrap_or_else(|e| panic!("{stem} on {g}: {e}"));
+            let inch = engine::run_with(&cps, &mch, &stream, &units("inch")).unwrap_or_else(|e| panic!("{stem} on {g}: {e}"));
+            assert_eq!(mm.warnings, inch.warnings, "{stem} on {g}: the unit changes no verdict");
+            if !mm.warnings.is_empty() {
+                continue; // refused in either unit alike (e.g. a tap)
+            }
+            posted += 1;
+            same_program_in_inch(stem, g, &mm.program, &inch.program, ("G21", "G20"));
+            let plain = engine::run(&cps, &mch, &stream).unwrap_or_else(|e| panic!("{stem} on {g}: {e}"));
+            assert_eq!(plain.program, mm.program, "{stem} on {g}: Units mm must post what no unit posted");
+        }
+        assert!(posted >= 5, "{stem}: most goldens post ({posted})");
+    }
+}
