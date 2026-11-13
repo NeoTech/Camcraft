@@ -1,0 +1,174 @@
+//! The Sinker Burn operation's seed, condition read and generation
+//! (#541): the op's stored numbers resolved against the world (heights,
+//! the electrode's length, the setup machine's spark gap) and
+//! `sinker::burn_to_depth` run over them.
+//!
+//! Provenance: our own glue over the motion crate's sinker generator,
+//! whose module head cites its public sources (general die-sink EDM
+//! practice); the condition table is #531's user data (#290 D4).
+
+use flecs_ecs::prelude::World;
+
+use crate::cl::Toolpath;
+use crate::geometry::Triangle;
+use crate::machine::{ConditionField, Kind};
+use crate::machining2d::GenError;
+use crate::sinker::{burn_to_depth, SinkerDatum, SinkerParams};
+use crate::tools::{Tool, ToolKind};
+use crate::verify::Warning;
+
+use super::kinds::Carried;
+use super::types::{OpParams, SinkerBurnOp};
+use super::ResolvedHeights;
+
+/// The sinker draft: the carried heights (work top, and the model's
+/// bottom as the floor datum), a 5 mm burn from the work top at the
+/// origin, a 50 mm/min servo feed, and no condition named - the user
+/// names one of the machine's own (#290 D4: none ship).
+pub(super) fn seed_sinker_burn(c: &Carried) -> OpParams {
+    OpParams::SinkerBurn(SinkerBurnOp {
+        clearance_z: c.clearance,
+        top_z: c.top,
+        floor_z: c.bottom,
+        datum: SinkerDatum::WorkTop,
+        depth: 5.0,
+        x: 0.0,
+        y: 0.0,
+        feed: 50.0,
+        condition: String::new(),
+        orbit: None,
+    })
+}
+
+/// The spark gap per side of the burn's condition, read from the op's
+/// setup's machine (#531's door). Refused by name: a setup not on a
+/// sinker EDM, no condition named, or a condition that is missing or
+/// states no gap. Only the sinker's own field (the gap) is asked for -
+/// never a wire field.
+///
+/// # Errors
+/// Each refusal above, in words.
+pub fn condition_gap(world: &World, setup: Option<&str>, op: &SinkerBurnOp) -> Result<f64, String> {
+    let kind = crate::machine::kind_of_setup(world, setup);
+    if kind != Kind::SinkerEdm {
+        return Err(format!(
+            "a Sinker Burn burns on a sinker EDM; the setup's machine is a {}",
+            kind.word()
+        ));
+    }
+    let mounted = crate::machine::of_setup(world, setup);
+    let label = crate::setup_mount::machine_label(&mounted);
+    let id = op.condition.trim();
+    if id.is_empty() {
+        return Err(format!(
+            "the Sinker Burn names no EDM condition - name one of machine {label}'s conditions (its spark gap places the electrode)"
+        ));
+    }
+    let edm = mounted
+        .1
+        .as_ref()
+        .and_then(|m| m.edm.as_ref())
+        .ok_or_else(|| format!("machine {label} states no EDM section, so no condition {id:?}"))?;
+    let c = edm.condition(&label, id, &[ConditionField::Gap])?;
+    c.gap.ok_or_else(|| format!("machine {label}: EDM condition {id:?} states no spark gap"))
+}
+
+/// The orbit's machine law (#544, #290 D6): the setup's sinker lists
+/// the op's pattern under `edm.orbits` and states a maximum orbit
+/// radius the op's radius does not exceed. No orbit passes untouched.
+/// Refused by name: an unlisted pattern, an unstated maximum (absent is
+/// not zero - nor unlimited), a radius past it.
+///
+/// # Errors
+/// Each refusal above, in words.
+pub fn orbit_law(world: &World, setup: Option<&str>, op: &SinkerBurnOp) -> Result<(), String> {
+    let Some(o) = op.orbit.as_ref() else { return Ok(()) };
+    let mounted = crate::machine::of_setup(world, setup);
+    let label = crate::setup_mount::machine_label(&mounted);
+    let kind = o.kind.word();
+    let edm = mounted.1.as_ref().and_then(|m| m.edm.as_ref());
+    if !edm.is_some_and(|e| e.orbits.iter().any(|w| w.kind == kind)) {
+        return Err(format!(
+            "machine {label} lists no {kind} orbit under edm.orbits - burn without an orbit, or pick a pattern the machine offers"
+        ));
+    }
+    let Some(max) = edm.and_then(|e| e.max_orbit_radius) else {
+        return Err(format!(
+            "machine {label} states no maximum orbit radius (edm.max_orbit_radius) - a {kind} orbit cannot be checked against it"
+        ));
+    };
+    if o.radius > max {
+        return Err(format!(
+            "the {kind} orbit radius {:.3} exceeds machine {label}'s maximum orbit radius {max:.3}",
+            o.radius
+        ));
+    }
+    Ok(())
+}
+
+/// What the burn reads from its machine before it generates: the
+/// condition's spark gap ([`condition_gap`]), once the orbit law
+/// ([`orbit_law`]) holds. The job and the staleness stamp read this.
+///
+/// # Errors
+/// Either law's refusal.
+pub fn burn_gap(world: &World, setup: Option<&str>, op: &SinkerBurnOp) -> Result<f64, String> {
+    let gap = condition_gap(world, setup, op)?;
+    orbit_law(world, setup, op)?;
+    Ok(gap)
+}
+
+/// The generator's numbers from the op's, the electrode's and the world's.
+///
+/// # Errors
+/// A tool that is not a sound electrode, or heights that do not resolve.
+pub fn sinker_params(
+    op: &SinkerBurnOp,
+    tool: &Tool,
+    hs: &ResolvedHeights,
+    gap: f64,
+    facets: &[Triangle],
+) -> Result<SinkerParams, GenError> {
+    if tool.kind != ToolKind::Electrode {
+        return Err(GenError::Invalid(format!(
+            "a Sinker Burn mounts a sinker electrode, not a {}",
+            tool.kind
+        )));
+    }
+    if let Some(why) = tool.torch_refusal() {
+        return Err(GenError::Invalid(why));
+    }
+    let (Some(top), Some(floor)) = (hs.top, hs.bottom) else {
+        return Err(GenError::Invalid("sinker burn: the work top and the cavity floor must both resolve".into()));
+    };
+    let model_floor = facets
+        .iter()
+        .flat_map(|t| [t.a.z, t.b.z, t.c.z])
+        .fold(f64::INFINITY, f64::min);
+    Ok(SinkerParams {
+        x: op.x,
+        y: op.y,
+        approach_z: hs.clearance,
+        top_z: top,
+        floor_z: floor,
+        model_floor_z: model_floor.is_finite().then_some(model_floor),
+        datum: op.datum,
+        depth: op.depth,
+        electrode_len: tool.flute_len,
+        feed: op.feed,
+        gap,
+        orbit: op.orbit,
+    })
+}
+
+/// Generate the burn.
+pub(super) fn generate_sinker(
+    op: &SinkerBurnOp,
+    tool: &Tool,
+    hs: &ResolvedHeights,
+    gap: f64,
+    facets: &[Triangle],
+) -> Result<(Toolpath, Vec<Warning>), GenError> {
+    let p = sinker_params(op, tool, hs, gap, facets)?;
+    Ok((burn_to_depth(&p)?, Vec::new()))
+}

@@ -57,7 +57,12 @@ pub mod lathe_voice;
 // #155: standalone Pause / Home entries in the operation list.
 pub mod program_entry;
 pub use camcraft_motion::plasma;
+pub use camcraft_motion::wire_edm;
 pub use camcraft_motion::probing;
+// #541: sinker EDM burn to depth.
+pub use camcraft_motion::sinker;
+// #544: sinker EDM orbit patterns.
+pub use camcraft_motion::sinker_orbit;
 pub mod project;
 // #35: pocket and slot recognition on the model's faces.
 pub mod recognize;
@@ -68,6 +73,7 @@ pub mod prefs;
 pub mod recent;
 pub mod rest;
 pub mod ribbon;
+pub mod rotary_stack;
 pub mod schema;
 pub mod script;
 pub mod setup;
@@ -111,6 +117,7 @@ pub mod tool_numbers;
 pub use camcraft_tools::tools;
 // #630: the lathe tool orientation code (LinuxCNC 1-9) and its control point.
 pub use camcraft_tools::orientation;
+pub use camcraft_tools::catalog_fields;
 // #93: the drawn spun profile of a milling holder.
 pub use camcraft_tools::spun;
 // #93 slice 2: the drawn cutter law, and the tool's stored drawn cutter.

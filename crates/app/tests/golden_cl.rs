@@ -2,7 +2,7 @@
 //! testing rule made concrete. Format, naming and the regeneration
 //! workflow: tests/golden/CLAUDE.md.
 //!
-//! Gate map (M4.4): covers cl::cl, motion::drilling, motion::finishing3d, geometry::geo2d, app::geometry, motion::machining2d, tools::tools.
+//! Gate map (M4.4): covers cl::cl, motion::drilling, motion::finishing3d, geometry::geo2d, app::geometry, motion::machining2d, tools::tools, motion::wire_edm.
 
 
 mod common;
@@ -474,6 +474,7 @@ fn cycle_tool(kind: ToolKind, diameter: f64, tip_angle: f64, pitch: f64) -> Tool
         tool_material: None,
         flutes: None,
         orientation: None,
+        catalog: camcraft_tools::catalog_fields::ToolCatalog::default(),
         turning: None,
     }
 }
@@ -1056,4 +1057,46 @@ fn trochoid_slot_small_matches_golden() {
     let t = camcraft_app::machining2d::trochoidal_slot(&[Point2::new(0.0, 0.0), Point2::new(12.0, 0.0)], &p).unwrap();
     assert!(t.has_arcs());
     write_golden("trochoid_slot_small.cl", &gen_to_cltext(&t));
+}
+
+/// #532: a wire EDM contour - a 40x20 profile with 2 mm corners (3-degree
+/// facets) cut as a die from a start hole at its centre and as a punch
+/// from a threading point outside it, with a SYNTHETIC condition (wire
+/// 0.25 mm, gap 0.04 mm - from no machine's manual): the two wire-centre
+/// paths stand 0.165 mm inside and outside the profile, apart by the
+/// 0.33 mm kerf; every move rides the lower programmed plane and states
+/// no pose and no feed (#290 D2).
+#[test]
+fn wire_contour_die_and_punch_match_golden() {
+    use camcraft_app::wire_edm::{wire_contour, WireParams, WireSide};
+    let (hx, hy, r) = (18.0, 8.0, 2.0);
+    let mut pts = Vec::new();
+    for (cx, cy, a0) in [(hx, hy, 0.0_f64), (-hx, hy, 90.0), (-hx, -hy, 180.0), (hx, -hy, 270.0)] {
+        for s in 0..=30 {
+            let t = (a0 + 3.0 * f64::from(s)).to_radians();
+            pts.push(Point2::new(cx + r * t.cos(), cy + r * t.sin()));
+        }
+    }
+    let profile = Loop::new(pts).unwrap();
+    for (side, start, file) in [
+        (WireSide::Die, Point2::new(0.0, -1.0), "wire_contour_die.cl"),
+        (WireSide::Punch, Point2::new(-30.0, 0.0), "wire_contour_punch.cl"),
+    ] {
+        let p = WireParams {
+            wire_diameter: 0.25,
+            gap: 0.04,
+            condition: "C110".into(),
+            side,
+            start: Some(start),
+            plane_z: 0.0,
+        };
+        let path = wire_contour(std::slice::from_ref(&profile), &[], &p).unwrap();
+        assert!(path.is_prismatic() && path.moves.iter().all(|m| m.kind == MoveKind::Feed && m.feed.is_none()));
+        let text = gen_to_cltext(&path);
+        // The in-app writer and the golden writer agree byte for byte,
+        // and the dump reads back as the same moves at its micron scale.
+        assert_eq!(camcraft_app::cl::text::to_text(&path).unwrap(), text);
+        assert_eq!(camcraft_app::cl::text::from_text(&text).unwrap().moves.len(), path.moves.len());
+        write_golden(file, &text);
+    }
 }

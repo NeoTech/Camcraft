@@ -93,12 +93,15 @@ mod first_setup;
 mod structural;
 // #661: every operation kind wears its own SVG-mastered glyph.
 mod op_icon_table;
+mod tool_icon_wiring;
 // #330: a clicked tilted face is turned flat onto the plane.
 mod plane_face_lay;
 // #554: the plane row's click takes the face, an axis row's the edge.
 mod plane_face_pick;
 // #692: one pick rule on the op page, the setup page and a smooth wall.
 mod one_pick_rule;
+// #692: the user-facing pick-through toggle (off by default) reaches the far side.
+mod pick_through;
 // #664: a left Setups page disarms its picks.
 mod setup_picks_disarm;
 // #555: real clicks pick the three points of the plane.
@@ -109,6 +112,8 @@ mod setup_tree;
 mod mcp_live;
 // #389: per-setup post options and the tool-list export.
 mod setup_post_options;
+// #821: the raised-rotary rows of a setup's Machine page.
+mod setup_rotary;
 // #155: Pause / Home entries in the operation list.
 mod program_entry;
 // #371: the tool editor's Body section.
@@ -138,8 +143,12 @@ mod model_fidelity;
 mod step_budget;
 // #709 hand check: both points of a two-point axis stay marked.
 mod two_point_marks;
+// #979: the viewport box select.
+mod box_select;
 // #1104: the Setups page lists setups only.
 mod setups_declutter;
+// #1206: each setup's own Machine and Post pages pick its own mount.
+mod setup_mount_pages;
 
 /// What the per-frame state of `Shell` is, minus the GPU half: the fields
 /// `shell_layout` touches, so the harness exercises the window's real body.
@@ -2666,13 +2675,23 @@ fn tips_match_the_imgui_table() {
     let empty = State::new();
     use camcraft_app::operation::Section;
     let pin = "\tRight-click to pin/unpin";
+    // The command keys are the platform's: Cmd on macOS, Ctrl elsewhere.
+    use crate::shortcut_keys::chord;
+    let new_doc = format!("New document\t{}", chord("N"));
+    let model_open = format!("Open a mesh model\t{}", chord("O"));
+    let project_open = format!("Open a project\t{}", chord("Shift+O"));
+    let save = format!("Save the project\t{}", chord("S"));
+    let save_as = format!("Save the project under a new name\t{}", chord("Shift+S"));
+    let post = format!("Post NC program (validation gate), then review it\t{}", chord("P"));
+    let undo = format!("Undo\t{}", chord("Z"));
+    let redo = format!("Redo\t{}", chord("Y"));
     let rows: &[(Cmd, &str)] = &[
-        (Cmd::New, "New document\tCtrl+N"),
-        (Cmd::Model, "Open a mesh model\tCtrl+O"),
-        (Cmd::Project, "Open a project\tCtrl+Shift+O"),
-        (Cmd::Save, "Save the project\tCtrl+S"),
-        (Cmd::SaveAs, "Save the project under a new name\tCtrl+Shift+S"),
-        (Cmd::Post, "Post NC program (validation gate), then review it\tCtrl+P"),
+        (Cmd::New, new_doc.as_str()),
+        (Cmd::Model, model_open.as_str()),
+        (Cmd::Project, project_open.as_str()),
+        (Cmd::Save, save.as_str()),
+        (Cmd::SaveAs, save_as.as_str()),
+        (Cmd::Post, post.as_str()),
         (Cmd::Setups, "Setups: create, activate and delete the document's setups"),
         (Cmd::Stock, "Stock definition"),
         (Cmd::Origin, "Work offset (WCS)"),
@@ -2681,8 +2700,8 @@ fn tips_match_the_imgui_table() {
             Cmd::Machine,
             "Switch the workspace: Milling, Turning, Mill-turning or Plasma cutting (mounts the kind's built-in machine, undoable)",
         ),
-        (Cmd::Undo, "Undo\tCtrl+Z"),
-        (Cmd::Redo, "Redo\tCtrl+Y"),
+        (Cmd::Undo, undo.as_str()),
+        (Cmd::Redo, redo.as_str()),
         (Cmd::Run, "Generate the selected operation"),
         (Cmd::Delete, "Delete the selection\tDel"),
         (Cmd::Frame, "Frame all\tF"),
@@ -2712,11 +2731,21 @@ fn tips_match_the_imgui_table() {
         );
         let is_plasma = camcraft_app::operation::KindInfo::ALL[i].family()
             == camcraft_app::operation::Family::Plasma;
+        let is_wire = camcraft_app::operation::KindInfo::ALL[i].family()
+            == camcraft_app::operation::Family::WireEdm;
+        let is_sinker = camcraft_app::operation::KindInfo::ALL[i].family()
+            == camcraft_app::operation::Family::Sinker;
         let want = if is_turn {
             "The document's machine is a mill - turning operations do not drive it; mount a lathe or a mill-turn (Setup > Machine)".to_owned()
+        } else if is_wire {
+            // #532: nor has the wire's work a mill-turn to fall back on.
+            "The document's machine is a mill - wire EDM operations do not drive it; mount a wire EDM (Setup > Machine)".to_owned()
         } else if is_plasma {
             // #670: the torch's work has no mill-turn to fall back on.
             "The document's machine is a mill - plasma cutting operations do not drive it; mount a plasma table (Setup > Machine)".to_owned()
+        } else if is_sinker {
+            // #541: nor the electrode's.
+            "The document's machine is a mill - sinker EDM operations do not drive it; mount a sinker EDM (Setup > Machine)".to_owned()
         } else if let Some(reason) = tool_law {
             // M10.1 B: the demo's one flat end mill cannot cut every
             // mill kind - those cells say which tool kind is missing.

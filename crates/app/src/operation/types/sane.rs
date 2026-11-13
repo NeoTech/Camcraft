@@ -35,6 +35,11 @@ impl OpParams {
             && match self {
             // The plasma door (#670): the parameter set's own sanity.
             OpParams::PlasmaProfile(p) => p.is_sane(),
+            // The wire door (#532): the parameter set's own sanity; the
+            // condition is the command door's world question.
+            OpParams::WireContour(p) => p.is_sane(),
+            // The sinker door (#541): the parameter set's own sanity.
+            OpParams::SinkerBurn(p) => p.is_sane(),
             // The probe's door (#108): every distance and feed a real
             // number, the measure no faster than the seek, the back-off
             // inside the approach, a slot G54..G59 when one is named.
@@ -343,6 +348,7 @@ impl OpParams {
                 ramp_angle,
                 steep_stepover,
                 pencil_reference,
+                fill_openings,
                 ..
             } => {
                 // No stepdown to check: the scallop law derives it from
@@ -359,6 +365,9 @@ impl OpParams {
                     // (which bigger is whose law is the kernel's to
                     // refuse by name; sanity only asks for a number).
                     && pencil_reference.is_none_or(pos)
+                    // #1196: the land width is a diameter - finite
+                    // and positive, or absent (no land model).
+                    && fill_openings.is_none_or(pos)
                     && clearance_z.is_sane()
                     && retract_z.is_none_or(|r| r.is_sane())
                     && top_z.is_sane()

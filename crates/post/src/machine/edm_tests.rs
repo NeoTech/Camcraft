@@ -6,7 +6,7 @@
 use super::*;
 use crate::machine::parse_mch;
 
-const WIRE: &str = r#"{
+pub(crate) const WIRE: &str = r#"{
   "general": { "model": "WIRE (TEST)", "kind": "wire_edm" },
   "kinematics": { "default": {
     "units": { "length": "mm", "angle": "degrees" },
@@ -16,7 +16,7 @@ const WIRE: &str = r#"{
   "edm": {}
 }"#;
 
-const SINKER: &str = r#"{
+pub(crate) const SINKER: &str = r#"{
   "general": { "model": "SINKER (TEST)", "kind": "sinker_edm" },
   "kinematics": { "default": {
     "units": { "length": "mm", "angle": "degrees" },
@@ -32,13 +32,13 @@ const MILL: &str = r#"{
     { "id": "z", "name": "Z", "type": "linear", "parts": [ { "id": "head", "type": "head" } ] } ] } }
 }"#;
 
-fn with_edm(base: &str, edm: &str) -> String {
+pub(crate) fn with_edm(base: &str, edm: &str) -> String {
     let mut v: Value = serde_json::from_str(base).expect("template json");
     v["edm"] = serde_json::from_str(edm).expect("edm json");
     v.to_string()
 }
 
-fn inch(text: &str) -> String {
+pub(crate) fn inch(text: &str) -> String {
     let mut v: Value = serde_json::from_str(text).expect("json");
     v["kinematics"]["default"]["units"]["length"] = "inch".into();
     v.to_string()
