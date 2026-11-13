@@ -77,7 +77,7 @@ fn freed_at(
 fn kerf_region(passes: &[Pass]) -> Result<Region, String> {
     let mut out: Option<Region> = None;
     for p in passes {
-        let r = Region::sweep(&[p.pts.clone()], p.k).map_err(|e| e.to_string())?;
+        let r = Region::sweep(std::slice::from_ref(&p.pts), p.k).map_err(|e| e.to_string())?;
         out = Some(match out {
             None => r,
             Some(acc) => acc.union(&r).map_err(|e| e.to_string())?,
