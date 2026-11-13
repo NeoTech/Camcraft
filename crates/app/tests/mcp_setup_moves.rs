@@ -94,9 +94,8 @@ fn move_an_operation_delete_the_emptied_setup_and_undo_redo_both() {
     assert_eq!(del["setups"], json!(["Back"]), "{del}");
     assert_eq!(c.shape().0, vec!["Back".to_owned()]);
     c.ok("undo", json!({}));
-    let mut restored = c.shape().0;
-    restored.sort();
-    assert_eq!(restored, vec!["Back".to_owned(), "Front".to_owned()], "undo restores the setup");
+    // Setups list in name order, so undo puts Front back where it was (#1362).
+    assert_eq!(c.shape().0, vec!["Back".to_owned(), "Front".to_owned()], "undo restores the setup in place");
     c.ok("redo", json!({}));
     assert_eq!(c.shape().0, vec!["Back".to_owned()]);
     c.ok("undo", json!({}));
