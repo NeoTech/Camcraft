@@ -93,6 +93,7 @@ fn punch_doc(machine_text: &str) -> World {
         start: Some([-30.0, 0.0]),
         tabs: None,
         capture: true,
+        taper_deg: 0.0,
         burnout: None,
         clearance: operation::DEFAULT_CLEARANCE,
     };
@@ -120,6 +121,7 @@ fn gouging_die() -> World {
         start: Some([0.0, 0.0]),
         tabs: None,
         capture: true,
+        taper_deg: 0.0,
         burnout: None,
         clearance: operation::DEFAULT_CLEARANCE,
     };
@@ -305,6 +307,7 @@ fn cutoff_doc(wrong: bool) -> World {
         start: None,
         tabs: None,
         capture: false,
+        taper_deg: 0.0,
         burnout: None,
         clearance: operation::DEFAULT_CLEARANCE,
     };

@@ -16,7 +16,7 @@ use crate::geo2d::{Loop, Point2, Region};
 use crate::machine::{ConditionField, Kind};
 use crate::machining2d::GenError;
 use crate::verify::Warning;
-use crate::wire_edm::{clearance_door, wire_burnout, wire_contour, TabParams, WireParams};
+use crate::wire_edm::{clearance_door, wire_burnout, wire_contour_tapered, TabParams, WireParams, WireTaper};
 
 use super::kinds::Carried;
 use super::types::{OpParams, WireContourOp, WireSide};
@@ -34,6 +34,7 @@ pub(super) fn seed_wire_contour(c: &Carried) -> OpParams {
         start: None,
         tabs: None,
         capture: false,
+        taper_deg: 0.0,
         burnout: None,
         clearance: super::types::DEFAULT_CLEARANCE,
     })
@@ -47,6 +48,10 @@ pub struct WireCondition {
     pub wire_diameter: f64,
     /// The spark gap per side, mm.
     pub gap: f64,
+    /// The machine's name and its stated maximum taper (#536), for the
+    /// taper's door.
+    pub machine: String,
+    pub max_taper_deg: Option<f64>,
 }
 
 /// The condition door (#531, #532): the op's condition on the machine
@@ -88,7 +93,7 @@ pub fn condition_of(world: &World, setup: Option<&str>, op: &WireContourOp) -> R
     let (Some(gap), Some(wire_diameter)) = (c.gap, c.wire_diameter) else {
         return Err(format!("machine {}: EDM condition {:?} states no gap or no wire diameter", machine.model, c.id));
     };
-    let cond = WireCondition { id: c.id.clone(), wire_diameter, gap };
+    let cond = WireCondition { id: c.id.clone(), wire_diameter, gap, machine: machine.model.clone(), max_taper_deg: edm.max_taper_deg };
     // The burnout's clearance against the condition's kerf (#540).
     if let Some(clear) = op.burnout {
         clearance_door(clear, cond.wire_diameter * 0.5 + cond.gap)?;
@@ -150,6 +155,11 @@ pub(super) fn stamp_condition(world: &World, setup: Option<&str>, op: &WireConto
             h.write_u8(0xff);
             h.write(&c.wire_diameter.to_bits().to_le_bytes());
             h.write(&c.gap.to_bits().to_le_bytes());
+            // #536: a taper also reads the machine's maximum; a vertical
+            // cut's stamp stays what it was.
+            if op.taper_deg != 0.0 {
+                h.write(&c.max_taper_deg.map_or(u64::MAX, f64::to_bits).to_le_bytes());
+            }
         }
         Err(_) => h.write_u8(0),
     }
@@ -241,9 +251,23 @@ pub(super) fn generate_wire(
     };
     let stock = if chains.is_empty() { None } else { stock() };
     let p = wire_params(op, &cond, cutoff.as_ref(), hs, stock)?;
+    let taper = WireTaper {
+        angle_deg: op.taper_deg,
+        top_z: hs.top.unwrap_or(p.plane_z),
+        max_deg: cond.max_taper_deg,
+        machine: cond.machine.clone(),
+    };
     let path = match op.burnout {
+        // #536 x #540: the burnout's rings are cut vertical; a taper
+        // with them is refused by name, never cut upright silently.
+        Some(_) if op.taper_deg != 0.0 => {
+            return Err(GenError::Invalid(format!(
+                "wire contour: a {:.3} degree taper is asked with a no-core burnout - the burnout is cut vertical only; set the taper to 0 or turn the burnout off",
+                op.taper_deg
+            )))
+        }
         Some(clearance) => wire_burnout(&loops, &chains, &p, clearance)?,
-        None => wire_contour(&loops, &chains, &p)?,
+        None => wire_contour_tapered(&loops, &chains, &p, &taper)?,
     };
     Ok((path, Vec::new()))
 }

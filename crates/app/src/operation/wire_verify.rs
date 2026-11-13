@@ -102,6 +102,7 @@ pub fn wire_verdict(world: &World, e: &Entity) -> Option<Result<WireVerdict, Str
             sections,
             cutoff_from,
             capture: w.capture,
+            taper: w.taper_deg != 0.0,
             burnout: w.burnout.is_some(),
         }))
     })())

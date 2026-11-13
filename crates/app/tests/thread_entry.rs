@@ -110,3 +110,56 @@ fn moving_the_drill_after_the_thread_marks_it_stale_and_refuses_it() {
     assert!(history.undo(&world));
     assert_eq!(status(&world, "Thread1"), OpStatus::Ok);
 }
+
+/// #1212: the Thread operation's own R plane (`top_z`), as `params` with it moved to `r`.
+fn with_r(mut params: camcraft_app::operation::OpParams, r: f64) -> camcraft_app::operation::OpParams {
+    if let camcraft_app::operation::OpParams::Thread { top_z, .. } = &mut params {
+        *top_z = camcraft_app::operation::Height::fixed(r);
+    }
+    params
+}
+
+#[test]
+fn the_operations_r_plane_is_where_the_rapid_stops_and_the_feed_starts() {
+    let (world, mut history) = multi_world();
+    drill_ahead(&world, &mut history, tap_drill_for(R_M8), DRILL_FLOOR);
+    let path = make(&world, &mut history, MULTI, with_r(thread(R_M8, None, ThreadHand::Right, true), TOP + 2.0));
+    let first = path.moves.iter().position(|m| m.kind == camcraft_app::cl::MoveKind::Feed).expect("a feed");
+    assert_eq!(path.moves[first - 1].to.z, TOP + 2.0, "the rapid stops on the stated R plane, not the hole's top");
+    assert_eq!(path.moves[first].from.z, TOP + 2.0);
+    assert_clean(&world);
+}
+
+#[test]
+fn an_r_plane_under_the_holes_top_is_refused_when_the_operation_is_made() {
+    let (world, _history) = multi_world();
+    let params = with_r(thread(R_M8, None, ThreadHand::Right, true), TOP - 1.0);
+    let msg = CreateOperation::new(&world, "Thread1", MULTI, SrcRef::Entity("disc".into()), params).err().map(|e| e.to_string()).unwrap_or_default();
+    assert!(msg.contains("the R plane at z 19 is below the top of the hole at (0, 0) at z 20"), "{msg}");
+}
+
+#[test]
+fn an_r_plane_that_ends_the_rapid_in_the_stock_left_ahead_is_refused_by_name() {
+    // The block stands 2 mm over the hole's mouth and a Ø5 drill ahead opens only part of the Ø6 mill's
+    // disc: the thread's R plane on the hole's top (z 20) would end its rapid in the ring left at z 22.
+    let world = camcraft_app::world::new_world();
+    let mut history = History::default();
+    let at = camcraft_app::schema::Location { pos: camcraft_app::geometry::Point3::new(0.0, 0.0, BOTTOM), ..Default::default() };
+    let stock = camcraft_app::commands::SetStock::new(&world, camcraft_app::stock::StockShape::Box { dx: 40.0, dy: 40.0, dz: TOP + 2.0 - BOTTOM }, at);
+    history.execute(&world, stock.expect("box stock"));
+    history.execute(&world, camcraft_app::commands::AddTool::new(&world, MULTI, catalog_tool(MULTI)).expect("tool"));
+    history.execute(&world, camcraft_app::commands::ImportModel::from_mesh("disc", disc_with_hole(R_M8)));
+    // The drill's own R plane on the stock top, so its cycle rapids over the stock, not into it.
+    history.execute(&world, camcraft_app::commands::AddTool::new(&world, DRILL, tap_drill(5.0)).expect("drill"));
+    let mut dr = drill(2.5, DRILL_FLOOR);
+    if let camcraft_app::operation::OpParams::Drill { top_z, clearance_z, .. } = &mut dr {
+        *top_z = camcraft_app::operation::Height::fixed(TOP + 2.0);
+        *clearance_z = camcraft_app::operation::Height::fixed(TOP + 10.0);
+    }
+    let op = CreateOperation::new(&world, "Drill1", DRILL, SrcRef::Entity("disc".into()), dr).expect("create drill");
+    history.execute(&world, op);
+    history.execute(&world, GenerateOperation::new(&world, "Drill1").expect("generate drill"));
+    let msg = try_thread(&world, &mut history);
+    assert!(msg.contains("the rapid down to the R plane ends at z 20.000") && msg.contains("standing at z 22.000"), "{msg}");
+    assert!(msg.contains("raise the R plane (feed starts here) to z 22.000"), "{msg}");
+}

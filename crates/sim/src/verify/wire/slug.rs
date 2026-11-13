@@ -8,7 +8,7 @@
 //! enclosed region is cut free: a die's slug, or the punch itself).
 //! Our own code.
 
-use super::{CutSide, WireFinding, WireJob, WireVerdict, SLUG_AREA_TOL};
+use super::{CutSide, Wire, WireFinding, WireJob, WireVerdict, SLUG_AREA_TOL};
 use crate::geo2d::{Loop, Point2, Region};
 
 /// A piece the closed cut frees at one height.
@@ -71,20 +71,24 @@ fn freed_at(
     Ok(out)
 }
 
-/// One pass of the slug law over `pts`: the pieces freed at the lowest
-/// height holding material, the first height's flag, and the first
-/// piece freed at any height.
+/// One pass of the slug law over `wire`: the pieces freed at the
+/// lowest height holding material, the first height's flag, and the
+/// first piece freed at any height.
 struct Scan {
     first: Vec<Slug>,
     flag: Option<WireFinding>,
     any: Option<(f64, Point2)>,
 }
 
-fn scan(job: &WireJob<'_>, pts: &[Point2], opening: bool) -> Result<Scan, WireFinding> {
+fn scan(job: &WireJob<'_>, wire: &Wire, opening: bool) -> Result<Scan, WireFinding> {
     let unreadable = |why: String| WireFinding::Unreadable(format!("the slug cannot be judged - {why}"));
-    let kerf = Region::sweep(&[pts.to_vec()], job.kerf_offset).map_err(|e| unreadable(e.to_string()))?;
-    let fill = Region::new(kerf.loops().iter().filter(|l| l.area() > 0.0).cloned().collect())
-        .map_err(|e| unreadable(e.to_string()))?;
+    // The kerf at one height: the wire's own section there (#536 - a
+    // vertical wire's is the same at every height).
+    let kerf_at = |z: f64| -> Result<(Region, Region), String> {
+        let kerf = Region::sweep(&[wire.at(z)], job.kerf_offset).map_err(|e| e.to_string())?;
+        let fill = Region::new(kerf.loops().iter().filter(|l| l.area() > 0.0).cloned().collect()).map_err(|e| e.to_string())?;
+        Ok((kerf, fill))
+    };
     let mut out = Scan { first: Vec::new(), flag: None, any: None };
     let mut reported = false;
     for s in &job.sections {
@@ -100,6 +104,7 @@ fn scan(job: &WireJob<'_>, pts: &[Point2], opening: bool) -> Result<Scan, WireFi
         if material.as_ref().is_ok_and(Region::is_empty) {
             continue;
         }
+        let (kerf, fill) = kerf_at(s.z).map_err(unreadable)?;
         let freed = match (material, product) {
             (Ok(m), Ok(p)) => freed_at(&m, &p, &kerf, &fill, s.z),
             (Err(e), _) | (_, Err(e)) => Err(e.to_string()),
@@ -140,12 +145,12 @@ fn scan(job: &WireJob<'_>, pts: &[Point2], opening: bool) -> Result<Scan, WireFi
 /// Run the slug law (#534) with the hold law (#539): a tabbed cut's
 /// main cut must free nothing and its whole path frees the stated
 /// piece; an untabbed cut's freed piece must be captured.
-pub(super) fn judge(job: &WireJob<'_>, pts: &[Point2], opening: bool, v: &mut WireVerdict) {
+pub(super) fn judge(job: &WireJob<'_>, wire: &Wire, opening: bool, v: &mut WireVerdict) {
     if let Some(m) = job.cutoff_from {
-        let Some(main) = pts.get(..=m) else {
+        let Some(main) = wire.prefix(m + 1) else {
             return v.findings.push(WireFinding::Unreadable(format!("the tab cut-off's start (move {m}) is past the path")));
         };
-        match scan(job, main, opening) {
+        match scan(job, &main, opening) {
             Err(f) => return v.findings.push(f),
             Ok(s) => {
                 if let Some((z, at)) = s.any {
@@ -155,7 +160,7 @@ pub(super) fn judge(job: &WireJob<'_>, pts: &[Point2], opening: bool, v: &mut Wi
         }
         v.held = true;
     }
-    let s = match scan(job, pts, opening) {
+    let s = match scan(job, wire, opening) {
         Ok(s) => s,
         Err(f) => return v.findings.push(f),
     };

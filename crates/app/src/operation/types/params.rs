@@ -1135,8 +1135,8 @@ pub enum OpParams {
         infeed: f64,
         feed: f64,
         plunge_feed: f64,
-        /// Climb milling under a clockwise (M3) spindle: the orbit
-        /// runs counter-clockwise inside a hole.
+        /// Climb milling: under a clockwise (M3) spindle the orbit runs
+        /// counter-clockwise inside a hole; an M4 spindle flips it (#988).
         climb: bool,
         holes: Vec<Hole>,
         /// The thread's pitch, mm (#894). `None` reads a multi-form
@@ -1151,6 +1151,12 @@ pub enum OpParams {
         /// deep ([`super::super::thread_boss`]). `false` is every
         /// thread made before the flag existed: internal, in holes.
         external: bool,
+        /// Pass control (#988): the radial schedule (equal or constant
+        /// chip area), a finishing pass, spring passes, a fit allowance
+        /// and the spindle direction with the cutter's hand
+        /// ([`crate::machining2d::ThreadPasses`]). The default is the
+        /// #894 ride every older file meant.
+        passes: crate::machining2d::ThreadPasses,
     },
     /// Probing (#108): a spindle touch probe finds a face, an edge, an
     /// outside corner or a bore / boss centre, then sets a work offset

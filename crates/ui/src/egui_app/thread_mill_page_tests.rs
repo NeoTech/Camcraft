@@ -45,6 +45,7 @@ fn opened() -> State {
         pitch: None,
         hand: ThreadHand::Right,
         external: false,
+        passes: camcraft_app::machining2d::ThreadPasses::default(),
     };
     state.history.execute(
         &state.world,
@@ -141,4 +142,47 @@ fn a_listed_feature_can_be_removed_from_the_draft() {
         OpParams::Thread { holes, .. } => assert_eq!(holes.iter().map(|h| h.xy.x).collect::<Vec<_>>(), vec![40.0]),
         other => panic!("a thread draft expected, got {other:?}"),
     }
+}
+
+fn passes(state: &State) -> camcraft_app::machining2d::ThreadPasses {
+    match model::find_by_name(&state.world, "Op").and_then(|e| model::operation_of(&state.world, &e)).map(|o| o.params) {
+        Some(OpParams::Thread { passes, .. }) => passes,
+        other => panic!("a thread op expected, got {other:?}"),
+    }
+}
+
+/// #988: the Passes tab picks the decreasing schedule, the Feeds tab
+/// the M4 spindle with a left-hand-cut mill; each Apply is one undo step.
+#[test]
+fn the_pass_control_rows_edit_the_draft_and_apply_undoes() {
+    use camcraft_app::machining2d::PassSchedule;
+    let mut harness = page(opened());
+    harness.run();
+    for label in ["Decreasing", "Equal", "Finishing pass depth", "Spring passes", "Depth allowance"] {
+        assert!(harness.query_by_label(label).is_some(), "the Passes tab shows {label}");
+    }
+    harness.get_by_label("Decreasing").click();
+    harness.run();
+    harness.get_by_label("Apply").click();
+    harness.run();
+    harness.state_mut().drain_actions();
+    assert_eq!(passes(harness.state()).schedule, PassSchedule::ConstantArea, "Apply committed the schedule");
+
+    let st = harness.state_mut();
+    st.op_tab = super::op_tabs::SEC_FEEDS;
+    harness.run();
+    harness.get_by_label("M4 (counter-clockwise)").click();
+    harness.run();
+    harness.get_by_label("Left-hand-cut thread mill").click();
+    harness.run();
+    harness.get_by_label("Apply").click();
+    harness.run();
+    harness.state_mut().drain_actions();
+    let got = passes(harness.state());
+    assert!(got.spindle_reverse && got.cutter_left, "Apply committed the spindle and the cutter: {got:?}");
+    let st = harness.state_mut();
+    st.pending.push_back(CommandKind::Undo);
+    st.drain_actions();
+    let got = passes(harness.state());
+    assert!(!got.spindle_reverse && !got.cutter_left, "Ctrl+Z restores M3: {got:?}");
 }

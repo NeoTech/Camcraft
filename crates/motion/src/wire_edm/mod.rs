@@ -42,8 +42,10 @@ mod laws;
 mod open;
 mod ring;
 mod tabs;
+mod taper;
 
 pub use tabs::{cutoff_split, TabParams, MAX_TABS};
+pub use taper::{wire_contour_tapered, WireTaper};
 
 pub use burnout::{clearance_door, wire_burnout, CORE_AREA_TOL, RING_STEP};
 pub use open::{CLEARANCE_MAX, EDGE_TOL};

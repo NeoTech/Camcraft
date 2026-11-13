@@ -75,6 +75,7 @@ fn die(tabs: Option<WireTabs>, capture: bool) -> WireContourOp {
         start: Some([0.0, 0.0]),
         tabs,
         capture,
+        taper_deg: 0.0,
         burnout: None,
         clearance: camcraft_app::operation::DEFAULT_CLEARANCE,
     }

@@ -2159,6 +2159,8 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // #992: the mill is not centre-cutting - each hole must be
             // open in the stock the program ahead leaves, or refused.
             // #985: beside a boss, the stock around it must be gone.
+            // #1212: first, no rapid down to the R plane ends in stock.
+            super::thread_r_plane::judge(&path, d * 0.5, verify_prior.get())?;
             if *external {
                 super::thread_entry::judge_bosses(holes, &path, d * 0.5, verify_prior.get())?;
             } else {

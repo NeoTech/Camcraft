@@ -72,6 +72,7 @@ fn wire_doc() -> (World, History) {
         start: Some([0.0, 0.0]),
         tabs: None,
         capture: true,
+        taper_deg: 0.0,
         burnout: None,
         clearance: camcraft_app::operation::DEFAULT_CLEARANCE,
     };

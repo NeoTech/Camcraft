@@ -1005,6 +1005,8 @@ fn seed_thread_mill(c: &Carried) -> OpParams {
         hand: crate::cl::ThreadHand::Right,
         // #985: holes until the author says bosses.
         external: false,
+        // #988: the #894 ride - equal passes, M3, right-hand-cut mill.
+        passes: crate::machining2d::ThreadPasses::default(),
     }
 }
 

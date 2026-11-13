@@ -49,6 +49,10 @@ pub struct WireContourDto {
     /// The operator states the slug is caught; absent is not (#539).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub capture: bool,
+    /// The constant taper, degrees (#536); absent is a vertical cut, so
+    /// every file written before it reads unchanged.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub taper_deg: f64,
     /// No-core burnout's wall clearance, mm (#540); absent cuts the
     /// profile alone.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -71,6 +75,11 @@ pub struct WireTabsDto {
     pub cutoff_condition: String,
 }
 
+#[allow(clippy::trivially_copy_pass_by_ref)]
+fn is_zero(v: &f64) -> bool {
+    *v == 0.0
+}
+
 impl WireContourDto {
     pub(super) fn from_op(p: &WireContourOp) -> Self {
         WireContourDto {
@@ -91,6 +100,7 @@ impl WireContourDto {
                 cutoff_condition: t.cutoff_condition.clone(),
             }),
             capture: p.capture,
+            taper_deg: p.taper_deg,
             burnout_clearance: p.burnout,
             clearance: p.clearance,
         }
@@ -115,6 +125,7 @@ impl WireContourDto {
                 cutoff_condition: t.cutoff_condition.clone(),
             }),
             capture: self.capture,
+            taper_deg: self.taper_deg,
             burnout: self.burnout_clearance,
             clearance: self.clearance,
         })
@@ -135,6 +146,7 @@ mod tests {
             start: Some([0.0, 0.0]),
             tabs,
             capture,
+            taper_deg: 0.0,
             burnout: None,
             clearance: crate::operation::DEFAULT_CLEARANCE,
         }

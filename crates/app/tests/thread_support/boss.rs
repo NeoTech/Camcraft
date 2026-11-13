@@ -78,6 +78,7 @@ pub fn external(bosses: Vec<Hole>, pitch: Option<f64>, hand: ThreadHand, climb: 
         pitch,
         hand,
         external: true,
+        passes: camcraft_app::machining2d::ThreadPasses::default(),
     }
 }
 
