@@ -116,7 +116,9 @@ fn the_setup_page_is_laid_out_in_groups_like_the_wcs_page() {
             "+Y by Two points", "Pick +Y edge", "Flip +Y", "      +X", "+X by Edge", "+X by Two points", "Pick +X edge", "Flip +X",
         ],
     );
-    assert_group(&h, GROUPS[3], GROUPS[4], &[OFFSET, FEATURES, "Pick for WCS"]);
+    assert_group(&h, GROUPS[3], GROUPS[4], &[FEATURES, "Pick for WCS", OFFSET]);
+    // The page's old reading order holds: "Set WCS from features" above the G54-G59 picker.
+    assert!(top(&h, FEATURES) < top(&h, OFFSET), "features row before the work offset picker");
     assert_between(&h, GROUPS[4], foot(&h), &["Delete Setup2", "Open Setup2 fixtures"]);
     // Stock follows its source: a fresh setup's own stock entity, stated at the foot.
     assert!(foot(&h) > top(&h, "Open Setup2 fixtures"), "the readout is under the groups");

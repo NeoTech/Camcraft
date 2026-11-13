@@ -85,8 +85,9 @@ fn groups(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
         super::setup_axis_pick::rows(ui, state, name);
     });
     group(ui, GROUPS[3], None, |ui| {
-        super::setup_wcs_pick::picker(ui, state, name);
+        // Main's reading order: set the WCS from features, then name its slot.
         super::wcs_pick_row::row(ui, state, name); // #701
+        super::setup_wcs_pick::picker(ui, state, name);
     });
     if super::setup_workholding_row::shown(state, name) {
         group(ui, HOLDING_GROUP, None, |ui| super::setup_workholding_row::row(ui, state, name));
