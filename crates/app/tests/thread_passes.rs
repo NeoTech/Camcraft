@@ -4,9 +4,9 @@
 //! mill climbs the other way round, posts M4 through the Fanuc post and
 //! is refused by name by a post that cannot reverse the spindle; the
 //! door refuses a cutter against its spindle, a negative or oversized
-//! allowance and a finish that leaves nothing to rough when the
+//! allowance and a negative finish or one that leaves nothing to rough when the
 //! operation is made or edited; edits undo; the keys round-trip through
-//! the project file.
+//! the project file; an M3 thread after an M4 one posts M3 again.
 //!
 //! Provenance: ISO 724 thread sizes (M8 x 1.25: minor Ø6.647), Smid's
 //! constant-area threading passes; our own fixtures.
@@ -22,7 +22,7 @@ mod thread_support;
 use flecs_ecs::prelude::World;
 
 use camcraft_app::cl::ThreadHand;
-use camcraft_app::commands::{CreateOperation, EditOperationParams};
+use camcraft_app::commands::{CreateOperation, EditOperationParams, GenerateOperation};
 use camcraft_app::machining2d::{PassSchedule, ThreadPasses};
 use camcraft_app::model;
 use camcraft_app::operation::{OpParams, SrcRef};
@@ -108,6 +108,28 @@ fn a_left_hand_cut_mill_under_m4_climbs_clockwise_and_posts_m4() {
 }
 
 #[test]
+fn an_m3_thread_after_an_m4_thread_posts_m3_again() {
+    // The Fanuc post's spindle direction is per section: an M4 thread
+    // followed by an M3 one on the same mill must turn M3 again, not
+    // carry the reverse over (the `spinRev` reset on OperationName).
+    let (world, mut history) = world_with(R_M8, &[(MULTI, catalog_tool(MULTI))]);
+    let rev = ThreadPasses { spindle_reverse: true, cutter_left: true, ..ThreadPasses::default() };
+    make(&world, &mut history, MULTI, with_passes(rev));
+    let op = CreateOperation::new(&world, "Thread2", MULTI, SrcRef::Entity("disc".into()), with_passes(ThreadPasses::default()));
+    history.execute(&world, op.expect("create the M3 thread"));
+    history.execute(&world, GenerateOperation::new(&world, "Thread2").expect("generate the M3 thread"));
+    let out = post_with(&world, include_str!("../../../assets/posts/fanuc.cps"));
+    assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+    let spindle: Vec<&str> =
+        out.program.lines().filter(|l| l.split_whitespace().any(|w| w == "M3" || w == "M4")).collect();
+    // (The fixture's drill ahead posts its own M3 first.)
+    let has = |l: &str, code: &str| l.split_whitespace().any(|w| w == code);
+    let m4 = spindle.iter().position(|l| has(l, "M4"));
+    let next = m4.and_then(|i| spindle.get(i + 1));
+    assert!(next.is_some_and(|l| has(l, "M3")), "the thread after the M4 one turns M3 again: {spindle:?}\n{}", out.program);
+}
+
+#[test]
 fn impossible_pass_control_is_refused_when_the_operation_is_made() {
     let (world, _history) = world_with(R_M8, &[(MULTI, catalog_tool(MULTI))]);
     let msg = refusal(&world, with_passes(ThreadPasses { spindle_reverse: true, ..ThreadPasses::default() }));
@@ -118,6 +140,8 @@ fn impossible_pass_control_is_refused_when_the_operation_is_made() {
     assert!(msg.contains("would not gauge"), "{msg}");
     let msg = refusal(&world, with_passes(ThreadPasses { finish: 0.7, ..ThreadPasses::default() }));
     assert!(msg.contains("leaves nothing to rough"), "{msg}");
+    let msg = refusal(&world, with_passes(ThreadPasses { finish: -0.05, ..ThreadPasses::default() }));
+    assert!(msg.contains("finishing pass depth cannot be negative"), "{msg}");
 }
 
 #[test]
