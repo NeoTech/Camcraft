@@ -158,3 +158,7 @@ fn nearest_on(p: Point2, a: Point2, b: Point2) -> Point2 {
     let t = if dd > 0.0 && dd.is_finite() { (((p.x - a.x) * dx + (p.y - a.y) * dy) / dd).clamp(0.0, 1.0) } else { 0.0 };
     Point2::new(a.x + t * dx, a.y + t * dy)
 }
+
+#[cfg(test)]
+#[path = "predrilled_tests.rs"]
+mod tests;
