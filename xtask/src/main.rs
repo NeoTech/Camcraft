@@ -53,7 +53,8 @@ const USAGE: &str = "\
 usage:
   cargo xtask gate quick [--base main] [--heavy]   tests the diff touches (test fns where it can)
   cargo xtask gate batch                           every debug suite minus SLOW_BINARIES, ui, clippy
-  cargo xtask gate release                         everything, plus the --ignored heavy lanes and the ui snapshot lane
+  cargo xtask gate release [--no-snapshots]        everything, plus the --ignored heavy lanes and the ui snapshot lane
+                                                   (--no-snapshots: not the Windows-made pixel goldens - cut.yml on Linux, #1413)
   cargo xtask gate test <filter> [--crate c] [--binary b] [--exact]   exactly the matching test(s)
       any gate: --dry-run (or --plan) prints the plan without running it. Logs: gate-logs/<tier>-<timestamp>/.
   cargo xtask icons [--check | --sheet <out.png> [--px N] [--zoom N]]
@@ -101,6 +102,8 @@ pub struct GateArgs {
     pub exact: bool,
     pub heavy: bool,
     pub dry: bool,
+    /// `gate release --no-snapshots` (#1413): the release plan without the two ui pixel-snapshot lanes.
+    pub no_snapshots: bool,
 }
 
 pub fn parse_gate(args: &[String]) -> Result<GateArgs, String> {
@@ -122,6 +125,7 @@ pub fn parse_gate(args: &[String]) -> Result<GateArgs, String> {
             "--exact" => g.exact = true,
             "--heavy" => g.heavy = true,
             "--dry-run" | "--plan" => g.dry = true,
+            "--no-snapshots" => g.no_snapshots = true,
             s if s.starts_with('-') => return Err(format!("unknown gate option '{s}'\n{USAGE}")),
             s if g.tier.is_empty() => g.tier = s.to_string(),
             s if g.tier == "test" && g.filter.is_none() => g.filter = Some(s.to_string()),
@@ -130,6 +134,9 @@ pub fn parse_gate(args: &[String]) -> Result<GateArgs, String> {
     }
     if g.tier.is_empty() {
         g.tier = "quick".into();
+    }
+    if g.no_snapshots && g.tier != "release" {
+        return Err(format!("--no-snapshots applies to the release tier only, not '{}'", g.tier));
     }
     match g.tier.as_str() {
         "quick" | "batch" | "release" => Ok(g),
@@ -251,9 +258,17 @@ fn gate(root: &Path, g: &GateArgs) -> Result<i32, String> {
                 }
             }
         }
-        "batch" => plan::batch(root),
-        _ => plan::release(root),
+        _ => tier_plan(root, g),
     };
     run.plan(&plan)?;
     Ok(run.summary())
+}
+
+/// The plan of a non-quick tier, pure (no cargo, no git): `gate()` runs exactly this, so the
+/// `--no-snapshots` wiring is pinned by `tests::gate_no_snapshots_reaches_the_release_plan`.
+pub(crate) fn tier_plan(root: &Path, g: &GateArgs) -> plan::Plan {
+    match g.tier.as_str() {
+        "batch" => plan::batch(root),
+        _ => plan::release_with(root, !g.no_snapshots),
+    }
 }
