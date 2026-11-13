@@ -151,5 +151,8 @@ pub fn solid(a: &Accessory) -> Result<Vec<Triangle>, String> {
             t.extend(stud(stud_offset, 0.0, stud_diameter, top, top + stud_height));
             t
         }
+        Accessory::ThreeJawChuck(c) => c.solid(3),
+        Accessory::FourJawChuck(c) => c.solid(4),
+        Accessory::ColletChuck(c) => c.solid(),
     })
 }
