@@ -260,7 +260,8 @@ pub enum Warning {
         at: usize,
         fixture_part: FixturePart,
     },
-    /// Defensive: a non-finite coordinate (generators gate this out).
+    /// Defensive: a non-finite coordinate, or a tool axis that is
+    /// non-finite or of zero length (#1312; generators gate both out).
     NonFinite { at: usize },
     /// A 3-D finish's measured ball envelope misses the model:
     /// `gouge_mm` below it (worst), `rest_mm` above it (worst),
@@ -357,7 +358,7 @@ impl core::fmt::Display for Warning {
                     FixturePart::Flute => "flute",
                 }
             ),
-            Warning::NonFinite { at } => write!(f, "move {at} has a non-finite coordinate"),
+            Warning::NonFinite { at } => write!(f, "move {at} has a non-finite coordinate or tool axis"),
             Warning::Envelope {
                 at,
                 gouge_mm,

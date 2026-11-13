@@ -47,11 +47,14 @@ pub struct SimClause {
 }
 
 /// Run the program sim and read its outcome for the gate. A void
-/// raw-stock-only mark (#1094) rides the visible, non-blocking line.
+/// raw-stock-only mark (#1094) and a verdict judged off the shipped
+/// carry engine (#1168) ride the visible, non-blocking line.
 #[must_use]
 pub fn sim_clause(world: &World) -> SimClause {
     let mut clause = judge_clause(world);
-    if let Some(note) = crate::stock_source::void_note(world) {
+    // #1168: a verdict the field engine judged says so, never silently.
+    let notes = [crate::stock_source::void_note(world), crate::stock_sim::carry_engine_note()];
+    for note in notes.into_iter().flatten() {
         clause.not_judged = Some(match clause.not_judged.take() {
             Some(line) => format!("{line}; note: {note}"),
             None => format!("note: {note}"),

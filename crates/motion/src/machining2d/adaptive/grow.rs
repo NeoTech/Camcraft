@@ -105,6 +105,8 @@ impl Planner<'_> {
     /// otherwise).
     pub(super) fn grow(&mut self, ring0: &[Point2], (scale, last): (f64, bool)) -> Result<Grown, GenError> {
         let s = self.s;
+        // One call is one margin attempt: the budget counts it on its own.
+        self.work.attempt();
         let a0 = orbit_radius(&s);
         let Some(dom) = slit::open_islands(self.center, s.seed, a0 + 0.5)? else { return Ok(Grown::Unfit) };
         // The last lap's corners: half the tool radius, or under the

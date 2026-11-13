@@ -137,6 +137,7 @@ fn thread_mill(diameter: f64) -> Tool {
         flutes: None,
         orientation: None,
         turning: None,
+        catalog: camcraft_tools::catalog_fields::ToolCatalog::default(),
     }
 }
 
@@ -196,14 +197,18 @@ fn a_matched_bore_is_clean_near_the_refusal_bound() {
 }
 
 #[test]
-fn a_thread_mill_reads_the_same_near_the_bound_as_at_full_fidelity() {
-    // A 6 mm thread mill in an M10 (5 mm radius) hole. Its helix runs a
-    // thread depth past the declared rim by design, which law (b) reads
-    // as a gouge at full fidelity too (#1071, apart from #1057); what
-    // this pins is that the model's excess adds nothing to that verdict.
+fn a_thread_mill_on_a_coarse_model_is_never_read_looser_than_at_full_fidelity() {
+    // A 6 mm thread mill in an M10 (5 mm radius) hole. Its region reads
+    // the thread's major circle (#1071), not the declared minor rim, so
+    // Thread declares no rim (#1073 review) and keeps the tightened
+    // reading: clean at full fidelity, and on a coarse model it may only
+    // convict more, never less - the conservative side.
     let full = verdict(None, thread_mill(6.0), thread(5.0));
-    assert_eq!(verdict(Some(0.011), thread_mill(6.0), thread(5.0)), full);
-    assert_eq!(verdict(Some(NEAR_BOUND), thread_mill(6.0), thread(5.0)), full);
+    assert!(!gouged(&full), "clean at full fidelity: {full:?}");
+    for coarse in [Some(0.011), Some(NEAR_BOUND)] {
+        let w = verdict(coarse, thread_mill(6.0), thread(5.0));
+        assert!(w == full || gouged(&w), "never looser at {coarse:?}: {w:?}");
+    }
 }
 
 #[test]

@@ -18,7 +18,7 @@ which is why 0.03 mm read clean.
 
 **What was decided.** `VerifyContext` carries `rims: &[(Point2, f64)]`,
 the declared circles of a containment kind (filled in `generate` from the
-Drill (Z holes), Bore and Thread params when the depth law is `Contain`,
+Drill (Z holes) and Bore params when the depth law is `Contain`,
 empty everywhere else). Law (b) - both the law-point reading and the
 Boundary whole-move wall reading - reads a region loop that traces one of
 those circles (every vertex within 2 um of it: the 1 um lattice snap) at
@@ -57,10 +57,16 @@ on a model flagged 0.0149 mm).
   A coarse model's own hole silhouette is such a polygon; only the
   operation knows which circles it declared.
 
-**Left open.** A thread mill on a model-sourced hole is convicted on every
-helix move at full fidelity too - its helix runs the thread depth past the
-declared rim by design. Not a fidelity bug; filed as #1071. The #1057 pin
-for it is that the excess no longer changes its verdict.
+**Left open: Thread declares no rim** (#1073 review). Since #1071 the
+thread's region reads the major circle (`thread_rims::major_rims`), not the
+declared minor rim, so a minor declaration traced no loop and the thread
+mill stayed tightened anyway. Thread is therefore left out of `rims_of`: a
+thread mill on a coarse model keeps the tightened reading, the conservative
+side - it may convict near the refusal bound where full fidelity is clean.
+Declaring the major circle would need the tool's pitch and the region's
+measured minor (`major_rims` shrinks it to a flat model rim); that is a
+follow-up, not this fix. Pinned by
+`coarse_rims::a_thread_mill_on_a_coarse_model_is_never_read_looser_than_at_full_fidelity`.
 
 **Cost to change later.** One field with an empty default; dropping it
 restores the old reading.
