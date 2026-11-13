@@ -46,6 +46,7 @@ fn wire_op(side: WireSide, start: Option<[f64; 2]>) -> WireContourOp {
         top_z: Height::fixed(12.0),
         bottom_z: Height::fixed(0.0),
         condition: "C110".into(),
+        taper_deg: 0.0,
         side,
         start,
         burnout: None,
@@ -164,7 +165,7 @@ fn an_open_runs_side_and_clearance_each_mark_its_path_stale() {
     assert_eq!(status(&back, "Cutoff1"), OpStatus::Stale, "a new run-out clearance is a different program");
     // Through the commands: the edit reads Stale, undo brings the path back.
     let flipped = if p0.side == WireSide::Left { WireSide::Right } else { WireSide::Left };
-    edit(&world, &mut h, "Cutoff1", WireContourOp { side: flipped, ..p0.clone() });
+    edit(&world, &mut h, "Cutoff1", WireContourOp { taper_deg: 0.0, side: flipped, ..p0.clone() });
     assert_eq!(status(&world, "Cutoff1"), OpStatus::Stale);
     assert!(h.undo(&world));
     assert_eq!(status(&world, "Cutoff1"), OpStatus::Ok);
@@ -186,12 +187,12 @@ fn the_four_sides_stamp_apart_and_a_closed_cut_ignores_the_clearance() {
     }
     for s in [WireSide::Die, WireSide::Punch] {
         let a = stamp_of(&world, wire_op(s, Some([-10.0, 25.0])));
-        let b = stamp_of(&world, WireContourOp { clearance: 3.0, ..wire_op(s, Some([-10.0, 25.0])) });
+        let b = stamp_of(&world, WireContourOp { taper_deg: 0.0, clearance: 3.0, ..wire_op(s, Some([-10.0, 25.0])) });
         assert_eq!(a, b, "{s:?} reads no clearance");
     }
     for s in [WireSide::Left, WireSide::Right] {
         let a = stamp_of(&world, wire_op(s, None));
-        let b = stamp_of(&world, WireContourOp { clearance: 3.0, ..wire_op(s, None) });
+        let b = stamp_of(&world, WireContourOp { taper_deg: 0.0, clearance: 3.0, ..wire_op(s, None) });
         assert_ne!(a, b, "{s:?} reads its clearance");
     }
 }
@@ -202,7 +203,7 @@ fn the_four_sides_stamp_apart_and_a_closed_cut_ignores_the_clearance() {
 fn an_unrelated_edit_and_a_round_trip_leave_the_cuts_ok() {
     let (world, mut h) = doc();
     let punch = params(&world, "Punch1");
-    edit(&world, &mut h, "Punch1", WireContourOp { start: Some([-12.0, 25.0]), ..punch });
+    edit(&world, &mut h, "Punch1", WireContourOp { taper_deg: 0.0, start: Some([-12.0, 25.0]), ..punch });
     assert_eq!(status(&world, "Punch1"), OpStatus::Stale, "the punch's own edit is its own");
     assert_eq!(status(&world, "Cutoff1"), OpStatus::Ok, "another op's edit never touches the open run");
     assert!(h.undo(&world));
