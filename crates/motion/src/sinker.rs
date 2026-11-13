@@ -20,6 +20,7 @@
 use crate::cl::{MoveKind, PathBuilder, Toolpath};
 use crate::geometry::Point3;
 use crate::machining2d::GenError;
+use crate::sinker_orbit::{orbit_offsets, Orbit};
 
 /// Where a burn's depth is measured from.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -76,6 +77,10 @@ pub struct SinkerParams {
     /// the cavity stands this far beyond the electrode's face, so the
     /// tip stops this far above the burn floor.
     pub gap: f64,
+    /// The orbit at the burn floor (#544), or none: a straight plunge.
+    /// The machine-side laws (a listed pattern, the maximum radius) are
+    /// the caller's; the generator checks the numbers.
+    pub orbit: Option<Orbit>,
 }
 
 /// Slack under which a floor reading counts as "on" the floor, mm.
@@ -182,13 +187,22 @@ pub fn tip_z(p: &SinkerParams) -> f64 {
 }
 
 /// The burn: approach over the point, feed the tip down to one spark
-/// gap above the burn floor at the servo feed, retract up the same
-/// axis. The moves are the electrode TIP's path (the face centre).
+/// gap above the burn floor at the servo feed, orbit there when one is
+/// stated (#544: every orbit move explicit, at the same feed, back to
+/// the centre), retract up the same axis. The moves are the electrode
+/// TIP's path (the face centre).
 pub fn burn_to_depth(p: &SinkerParams) -> Result<Toolpath, GenError> {
     let z = check(p)?;
+    let orbit = p.orbit.as_ref().map(orbit_offsets).transpose()?;
     let tip = z + p.gap;
     let mut b = PathBuilder::approached(Point3::new(p.x, p.y, p.approach_z));
     b.push(MoveKind::Feed, Point3::new(p.x, p.y, tip), Some(p.feed));
+    if let (Some(o), Some(pts)) = (p.orbit.as_ref(), orbit.as_ref()) {
+        for &(dx, dy) in pts {
+            b.push(MoveKind::Feed, Point3::new(p.x + dx, p.y + dy, tip), Some(p.feed));
+        }
+        b.note(format!("sinker orbit: {} of radius {:.3} at the burn floor, {} moves", o.kind.word(), o.radius, pts.len()));
+    }
     b.push(MoveKind::Rapid, Point3::new(p.x, p.y, p.approach_z), None);
     b.note(format!(
         "sinker burn: {} from the {} to Z {z:.3}, tip at Z {tip:.3} (spark gap {:.3}; cavity floor datum Z {:.3})",
@@ -217,6 +231,7 @@ mod tests {
             electrode_len: 30.0,
             feed: 40.0,
             gap: 0.0,
+            orbit: None,
         }
     }
 

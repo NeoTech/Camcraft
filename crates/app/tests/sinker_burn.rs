@@ -54,6 +54,7 @@ fn sinker_burn_cavity_matches_golden() {
         electrode_len: 30.0,
         feed: 40.0,
         gap: GAP,
+        orbit: None,
     };
     let path = burn_to_depth(&p).expect("burns");
     let text = common::gen_to_cltext(&path);
@@ -79,6 +80,7 @@ fn a_spark_gap_that_lifts_the_tip_out_of_the_work_is_refused_by_name() {
         electrode_len: 30.0,
         feed: 40.0,
         gap: 30.0,
+        orbit: None,
     };
     let e = burn_to_depth(&p).expect_err("a 30 mm gap feeds the tip up to Z 44");
     assert!(e.to_string().contains("the spark gap 30.000 places the tip at or above the approach plane"), "{e}");

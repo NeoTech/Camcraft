@@ -9,6 +9,7 @@
 
 use super::height::Height;
 pub use crate::sinker::SinkerDatum;
+pub use crate::sinker_orbit::{Orbit as SinkerOrbit, OrbitKind as SinkerOrbitKind};
 
 /// The Sinker Burn's parameters.
 #[derive(Clone, Debug, PartialEq)]
@@ -31,6 +32,11 @@ pub struct SinkerBurnOp {
     /// The machine's EDM condition id (#531): its spark gap places the
     /// tip. Required - an unstated condition is refused by name.
     pub condition: String,
+    /// The orbit at the burn floor (#544), expanded into explicit moves;
+    /// `None` burns a straight plunge. The pattern must be one the
+    /// machine lists and the radius within its stated maximum - both
+    /// read at generation, refused by name.
+    pub orbit: Option<SinkerOrbit>,
 }
 
 impl SinkerBurnOp {
@@ -47,5 +53,6 @@ impl SinkerBurnOp {
             && self.y.is_finite()
             && self.feed.is_finite()
             && self.feed > 0.0
+            && self.orbit.as_ref().is_none_or(|o| o.check().is_ok())
     }
 }

@@ -48,9 +48,10 @@ pub fn current_stamp(
     // read from the setup machine's condition - a re-stated gap (or a
     // condition gone) is a different burn, marked Stale through here.
     // (The electrode itself - kind and face width - is `stamp_tool`'s.)
+    // #544: so is a re-stated orbit list or maximum orbit radius.
     if let OpParams::SinkerBurn(p) = params {
         h.write(b"sinker-gap");
-        match super::sinker_op::condition_gap(world, setup, p) {
+        match super::sinker_op::burn_gap(world, setup, p) {
             Ok(g) => w(&mut h, g),
             Err(e) => h.write(e.as_bytes()),
         }

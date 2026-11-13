@@ -36,6 +36,7 @@ pub(super) fn seed_sinker_burn(c: &Carried) -> OpParams {
         y: 0.0,
         feed: 50.0,
         condition: String::new(),
+        orbit: None,
     })
 }
 
@@ -70,6 +71,51 @@ pub fn condition_gap(world: &World, setup: Option<&str>, op: &SinkerBurnOp) -> R
         .ok_or_else(|| format!("machine {label} states no EDM section, so no condition {id:?}"))?;
     let c = edm.condition(&label, id, &[ConditionField::Gap])?;
     c.gap.ok_or_else(|| format!("machine {label}: EDM condition {id:?} states no spark gap"))
+}
+
+/// The orbit's machine law (#544, #290 D6): the setup's sinker lists
+/// the op's pattern under `edm.orbits` and states a maximum orbit
+/// radius the op's radius does not exceed. No orbit passes untouched.
+/// Refused by name: an unlisted pattern, an unstated maximum (absent is
+/// not zero - nor unlimited), a radius past it.
+///
+/// # Errors
+/// Each refusal above, in words.
+pub fn orbit_law(world: &World, setup: Option<&str>, op: &SinkerBurnOp) -> Result<(), String> {
+    let Some(o) = op.orbit.as_ref() else { return Ok(()) };
+    let mounted = crate::machine::of_setup(world, setup);
+    let label = crate::setup_mount::machine_label(&mounted);
+    let kind = o.kind.word();
+    let edm = mounted.1.as_ref().and_then(|m| m.edm.as_ref());
+    if !edm.is_some_and(|e| e.orbits.iter().any(|w| w.kind == kind)) {
+        return Err(format!(
+            "machine {label} lists no {kind} orbit under edm.orbits - burn without an orbit, or pick a pattern the machine offers"
+        ));
+    }
+    let Some(max) = edm.and_then(|e| e.max_orbit_radius) else {
+        return Err(format!(
+            "machine {label} states no maximum orbit radius (edm.max_orbit_radius) - a {kind} orbit cannot be checked against it"
+        ));
+    };
+    if o.radius > max {
+        return Err(format!(
+            "the {kind} orbit radius {:.3} exceeds machine {label}'s maximum orbit radius {max:.3}",
+            o.radius
+        ));
+    }
+    Ok(())
+}
+
+/// What the burn reads from its machine before it generates: the
+/// condition's spark gap ([`condition_gap`]), once the orbit law
+/// ([`orbit_law`]) holds. The job and the staleness stamp read this.
+///
+/// # Errors
+/// Either law's refusal.
+pub fn burn_gap(world: &World, setup: Option<&str>, op: &SinkerBurnOp) -> Result<f64, String> {
+    let gap = condition_gap(world, setup, op)?;
+    orbit_law(world, setup, op)?;
+    Ok(gap)
 }
 
 /// The generator's numbers from the op's, the electrode's and the world's.
@@ -111,6 +157,7 @@ pub fn sinker_params(
         electrode_len: tool.flute_len,
         feed: op.feed,
         gap,
+        orbit: op.orbit,
     })
 }
 

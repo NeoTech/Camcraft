@@ -34,6 +34,6 @@ pub use camcraft_post::post::AfterOperation;
 pub use height::{Height, HeightReference};
 pub use params::{OpParams, Tilt};
 pub use plasma::{PlasmaComp, PlasmaOp};
+pub use sinker::{SinkerBurnOp, SinkerDatum, SinkerOrbit, SinkerOrbitKind};
 pub use wire_edm::{WireContourOp, WireSide, CONDITION_ID_MAX};
-pub use sinker::{SinkerBurnOp, SinkerDatum};
 pub use sel::{FeatureSel, GenStamp, GeoSel, OpStatus, OpType, SrcRef, WCS_SLOTS};

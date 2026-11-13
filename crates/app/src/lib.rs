@@ -61,6 +61,8 @@ pub use camcraft_motion::wire_edm;
 pub use camcraft_motion::probing;
 // #541: sinker EDM burn to depth.
 pub use camcraft_motion::sinker;
+// #544: sinker EDM orbit patterns.
+pub use camcraft_motion::sinker_orbit;
 pub mod project;
 // #35: pocket and slot recognition on the model's faces.
 pub mod recognize;

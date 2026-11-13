@@ -32,6 +32,8 @@ pub mod wire_edm;
 pub mod probing;
 // #541: sinker EDM burn to depth.
 pub mod sinker;
+// #544: sinker EDM orbit patterns as explicit moves.
+pub mod sinker_orbit;
 pub mod quality;
 pub mod multiaxis;
 pub mod turning;

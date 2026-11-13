@@ -1472,6 +1472,14 @@ impl OpParams {
                 }
                 h.write(p.condition.as_bytes());
                 h.write_u8(0xff);
+                // #544: the orbit - bytes only when one is stated, so a
+                // plain plunge's digest does not move.
+                if let Some(o) = &p.orbit {
+                    h.write(o.kind.word().as_bytes());
+                    w(h, o.radius);
+                    h.write_u32(o.vectors);
+                    h.write_u32(o.turns);
+                }
             }
             // The plasma profile (#670): every stored number, the
             // optional ones with a presence byte.
