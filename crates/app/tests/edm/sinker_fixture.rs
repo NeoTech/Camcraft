@@ -76,6 +76,7 @@ pub fn burn(datum: SinkerDatum, depth: f64, floor: f64) -> OpParams {
         y: 0.0,
         feed: 40.0,
         condition: "S1".into(),
+        orbit: None,
         layer: None,
         wear_lost: None,
         wear_over: None,

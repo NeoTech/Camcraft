@@ -56,6 +56,13 @@ fn every_tool_kind() -> Vec<ToolKind> {
 #[test]
 fn every_kind_names_a_tool_set() {
     for row in KindInfo::ALL {
+        // #532: a wire EDM kind mounts no library tool - its wire is the
+        // machine's condition - and is the one family with an empty set.
+        if row.family() == camcraft_app::operation::Family::WireEdm {
+            assert!(row.tool_kinds.is_empty() && !row.mounts_tool(), "{:?} mounts a tool", row.ty);
+            continue;
+        }
+        assert!(row.mounts_tool(), "{:?} names no tool kind", row.ty);
         assert!(!row.tool_kinds.is_empty(), "{:?} names no tool kind", row.ty);
         for (i, k) in row.tool_kinds.iter().enumerate() {
             assert!(

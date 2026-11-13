@@ -9,6 +9,7 @@
 
 use super::height::Height;
 pub use crate::sinker::SinkerDatum;
+pub use crate::sinker_orbit::{Orbit as SinkerOrbit, OrbitKind as SinkerOrbitKind};
 
 /// The Sinker Burn's parameters.
 #[derive(Clone, Debug, PartialEq)]
@@ -40,6 +41,11 @@ pub struct SinkerBurnOp {
     pub wear_lost: Option<f64>,
     /// #546: the depth burned while `wear_lost` was lost, mm.
     pub wear_over: Option<f64>,
+    /// The orbit at the burn floor (#544), expanded into explicit moves;
+    /// `None` burns a straight plunge. The pattern must be one the
+    /// machine lists and the radius within its stated maximum - both
+    /// read at generation, refused by name.
+    pub orbit: Option<SinkerOrbit>,
 }
 
 impl SinkerBurnOp {
@@ -56,6 +62,7 @@ impl SinkerBurnOp {
             && self.y.is_finite()
             && self.feed.is_finite()
             && self.feed > 0.0
+            && self.orbit.as_ref().is_none_or(|o| o.check().is_ok())
             && self.compensation_refusal().is_none()
     }
 
@@ -93,5 +100,64 @@ impl SinkerBurnOp {
             )),
             (Some(l), Some(o)) => crate::sinker_wear::rate_refusal(&format!("measured {l} over {o}"), l / o),
         }
+    }
+}
+
+pub use crate::sinker_side::{SideBurn as SinkerSide, SideDirection as SinkerSideDirection};
+
+/// A Side Burn stating a wear rate, refused by name (#546 meets #545:
+/// the side move is not wear-compensated yet).
+pub const SIDE_WEAR_REFUSAL: &str =
+    "electrode wear compensation is not supported on a Sinker Side Burn yet - clear the wear rate";
+/// A Side Burn stating a layer step (#546's layering), refused by name.
+pub const SIDE_LAYER_REFUSAL: &str =
+    "burning in layers is not supported on a Sinker Side Burn yet - clear the layer step";
+
+/// The Sinker Side Burn's parameters (#545): its own burn (approach,
+/// heights, datum, depth, point, feed and its OWN condition - no
+/// orbit), the axis direction it moves along, the lateral amount it
+/// moves the faced wall by, and its own electrode undersize per side.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SinkerSideBurnOp {
+    /// The plunge to depth the side move starts from (#541's fields).
+    /// Its `orbit` stays `None`: a side burn moves along one axis.
+    pub burn: SinkerBurnOp,
+    pub direction: SinkerSideDirection,
+    /// How far the faced wall moves out, mm.
+    pub amount: f64,
+    /// The electrode's undersize per side against the finished cavity,
+    /// mm: with the condition's spark gap it bounds the amount.
+    pub undersize: f64,
+}
+
+impl SinkerSideBurnOp {
+    /// The side's numbers as the motion crate reads them.
+    #[must_use]
+    pub fn side(&self) -> SinkerSide {
+        SinkerSide { direction: self.direction, amount: self.amount, undersize: self.undersize }
+    }
+
+    /// The structural refusal by name (no world): an orbit, a wear rate
+    /// or layer step (#546 - not supported on a side burn yet), an
+    /// amount or undersize out of range, an amount past the undersize.
+    /// `None` when sound.
+    #[must_use]
+    pub fn refusal(&self) -> Option<String> {
+        if self.burn.orbit.is_some() {
+            return Some("a Sinker Side Burn moves along one axis - it takes no orbit (orbit with a Sinker Burn)".into());
+        }
+        if self.burn.wear_lost.is_some() || self.burn.wear_over.is_some() {
+            return Some(SIDE_WEAR_REFUSAL.into());
+        }
+        if self.burn.layer.is_some() {
+            return Some(SIDE_LAYER_REFUSAL.into());
+        }
+        crate::sinker_side::side_refusal(&self.side())
+    }
+
+    /// Structural sanity (no world): the burn's, and no [`Self::refusal`].
+    #[must_use]
+    pub fn is_sane(&self) -> bool {
+        self.burn.is_sane() && self.refusal().is_none()
     }
 }

@@ -21,3 +21,21 @@
 - Assuming a default rate when none is stated. It would be a silent guess.
 
 **Cost to change later:** low. The math is one module (`motion::sinker_wear`). The op keys are additive. The sim mapping is a single function.
+
+### 2026-11-13 - merge with orbit and side burn
+
+Merging main brought the sinker orbit (#544) and the Sinker Side Burn (#545) onto the same `SinkerBurnOp` this PR extends. The author decided how they combine (the maintainer's merge session stopped on it as a safety choice):
+
+**Chosen:**
+- **The orbit runs at the worn tip.** `sinker_wear::burn_compensated` expands the orbit after each layer's plunge, at that layer's compensated Z. Every orbit move sits at a tip the deepest-compensated-tip bound has just admitted, so wear never lets an orbit cut past the finished floor. The electrode-length law reads the compensated (deeper) tip, orbit or not. Main's nominal refusals (`sinker::check`, keyed on `tip = z + gap`) still run first and all survive. With no rate and one layer, the moves are exactly main's `burn_to_depth` (pinned in motion and app tests); the CL goldens are unchanged.
+- **A Side Burn with wear is refused by name for now:** "electrode wear compensation is not supported on a Sinker Side Burn yet - clear the wear rate", and the same for a layer step. The refusal lives in `SinkerSideBurnOp::refusal`, so it is read at create, edit, paste and change-kind (`sinker_gate`), the project reader (`named_refusal`), and the generator (`generate_sinker_side`). A condition's stated `wear` is not applied to a side burn: its plunge stays uncompensated as on main, which can only under-burn, never over-burn. Follow-up: #1340.
+- **The `sinker-wear` stamp term** stays beside main's other sinker digests (`sinker-gap`, `sinker-side-gap`) in `current_stamp`, after main's `stamp_tool` move, written only when a condition states a rate.
+- **The sim reads both ends of a move as the worn electrode.** `sinker_wear_op::as_burned` now maps each move's `from` Z as well as its `to` Z through `worn_tip`. The box atom sweeps `from` -> `to`; a plunge starts above the work (unmapped either way), but an orbit's level move starts at the programmed tip, so mapping `to` alone burned the orbit `rate * d` past the floor in the sim and convicted a correct worn orbit as a gouge.
+- **Keep both elsewhere:** `SinkerBurnOp` holds main's `orbit` and this PR's `layer` / `wear_lost` / `wear_over`; `is_sane` checks both the orbit and the compensation. The DTO keeps main's key order (orbit first, then the three additive wear keys). The params digest writes the orbit bytes, then the tagged wear bytes, then the side's, each only when stated, so no existing digest moves.
+
+**Why:** the orbit sweeps the floor of the cavity; at the nominal tip it would land `rate * d` short of the floor the plunge reaches, and judging it against the nominal tip would let a worn orbit pass a bound it no longer keeps. Refusing wear on a side burn is safer than guessing how side wear changes the allowance law.
+
+**Considered and dropped:**
+- An orbit only at the last layer. Each layer's floor would then be left uncut to the orbit's radius until the end, and the sim would judge a different cavity than a real layered orbit burn.
+- An orbit at the nominal tip. It under-burns the floor and keys the bound on the wrong tip.
+- Applying the wear to a side burn's plunge only. The lateral move's allowance would then be judged against a burn it does not describe.

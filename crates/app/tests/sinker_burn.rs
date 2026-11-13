@@ -54,6 +54,7 @@ fn sinker_burn_cavity_matches_golden() {
         electrode_len: 30.0,
         feed: 40.0,
         gap: GAP,
+        orbit: None,
     };
     let path = burn_to_depth(&p).expect("burns");
     let text = common::gen_to_cltext(&path);
@@ -79,6 +80,7 @@ fn a_spark_gap_that_lifts_the_tip_out_of_the_work_is_refused_by_name() {
         electrode_len: 30.0,
         feed: 40.0,
         gap: 30.0,
+        orbit: None,
     };
     let e = burn_to_depth(&p).expect_err("a 30 mm gap feeds the tip up to Z 44");
     assert!(e.to_string().contains("the spark gap 30.000 places the tip at or above the approach plane"), "{e}");
@@ -249,4 +251,36 @@ fn the_sinker_burn_is_driven_over_mcp_with_the_gui_commands() {
     assert_eq!(reply["result"]["isError"], json!(true), "{reply}");
     assert!(text.contains("no post for a sinker EDM machine yet (#542)") && text.contains("Burn1"), "{text}");
     assert!(!nc.exists(), "the refused post wrote {}", nc.display());
+}
+
+/// The #1131 refresh against main's wire EDM (`stamp_tool` split): the
+/// burn's stamp still digests the sinker condition's spark gap and the
+/// electrode's face width. A re-stated gap or a re-cut electrode reads
+/// Stale (the post refuses until regenerated); undo reads Ok again.
+#[test]
+fn a_changed_spark_gap_or_electrode_face_marks_the_burn_stale() {
+    use camcraft_app::commands::{ChangeTool, LoadMachine};
+    use camcraft_app::machine::parse_mch;
+    use camcraft_app::operation::{status_of, OpStatus};
+    let (world, mut h) = sinker_doc(6.0);
+    h.execute(&world, CreateOperation::new(&world, "Burn1", ELECTRODE, SrcRef::Stock, burn(SinkerDatum::WorkTop, 6.0, 14.0)).expect("create"));
+    h.execute(&world, GenerateOperation::new(&world, "Burn1").expect("generates"));
+    let status = |w: &World| status_of(w, &model::find_by_name(w, "Burn1").expect("op"));
+    assert_eq!(status(&world), OpStatus::Ok, "fresh after generating");
+
+    // The same sinker, its one condition's gap re-stated.
+    let mut v: serde_json::Value = serde_json::from_str(&sinker_machine()).expect("json");
+    v["edm"]["conditions"][0]["gap"] = serde_json::json!(GAP * 2.0);
+    let m = parse_mch(&v.to_string()).expect("sinker parses");
+    h.execute(&world, LoadMachine::new(&world, "sinker.mch".into(), Some(m)).expect("remount"));
+    assert_eq!(status(&world), OpStatus::Stale, "a re-stated spark gap is a different burn");
+    assert!(h.undo(&world));
+    assert_eq!(status(&world), OpStatus::Ok, "undo restores the gap the burn was cut with");
+
+    // A wider electrode face (same length and diameter) is a different burn.
+    let wider = camcraft_tools::electrode::electrode_tool(10.0, 7.0, 30.0, 15.0);
+    h.execute(&world, ChangeTool::new(&world, ELECTRODE, wider).expect("re-cut the electrode"));
+    assert_eq!(status(&world), OpStatus::Stale, "a re-cut electrode face is a different burn");
+    assert!(h.undo(&world));
+    assert_eq!(status(&world), OpStatus::Ok);
 }

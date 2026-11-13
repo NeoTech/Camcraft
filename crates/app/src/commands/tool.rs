@@ -35,6 +35,17 @@ pub(super) fn reserved(world: &World, name: &str) -> Option<CommandError> {
     None
 }
 
+/// #898: store the catalog facts trimmed (blank = not stated), and
+/// refuse ones that cannot be kept (helix outside 0..=90, too long) by
+/// the tool's name, before anything enters the history.
+fn catalog_gate(name: &str, tool: &mut Tool) -> Result<(), CommandError> {
+    tool.catalog = tool.catalog.normalized();
+    match tool.catalog.refusal() {
+        Some(why) => Err(CommandError::Invalid(format!("tool '{name}': {why}"))),
+        None => Ok(()),
+    }
+}
+
 /// Which holder a new tool starts with (#828).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum HolderPick {
@@ -60,10 +71,11 @@ pub struct AddTool {
 }
 
 impl AddTool {
-    pub fn new(world: &World, name: &str, tool: Tool) -> Result<Self, CommandError> {
+    pub fn new(world: &World, name: &str, mut tool: Tool) -> Result<Self, CommandError> {
         if let Some(err) = reserved(world, name) {
             return Err(err);
         }
+        catalog_gate(name, &mut tool)?;
         // #670: a torch stating a spindle speed is refused by name.
         if let Some(why) = tool.torch_refusal() {
             return Err(CommandError::Invalid(format!("tool '{name}': {why}")));
@@ -174,7 +186,8 @@ impl ChangeTool {
     /// Every `new` law; `judge_cutter: false` skips the drawn cutter's
     /// agreement - only for `ReshapeTool` (#93 slice 3), which lands a
     /// cutter checked against `next` in the same undo step.
-    pub(crate) fn judged(world: &World, name: &str, next: Tool, judge_cutter: bool) -> Result<Self, CommandError> {
+    pub(crate) fn judged(world: &World, name: &str, mut next: Tool, judge_cutter: bool) -> Result<Self, CommandError> {
+        catalog_gate(name, &mut next)?;
         if let Some(why) = next.torch_refusal() {
             return Err(CommandError::Invalid(format!("tool '{name}': {why}")));
         }

@@ -95,6 +95,7 @@ fn burn(layer: Option<f64>, measured: Option<(f64, f64)>) -> OpParams {
         y: 0.0,
         feed: 40.0,
         condition: "S1".into(),
+        orbit: None,
         layer,
         wear_lost: measured.map(|m| m.0),
         wear_over: measured.map(|m| m.1),
@@ -148,6 +149,7 @@ fn sinker_wear_layers_match_golden() {
         electrode_len: 30.0,
         feed: 40.0,
         gap: GAP,
+        orbit: None,
     };
     let w = SinkerWear { comp: Some(WearComp { rate: RATE, from: "synthetic".into() }), layer: Some(2.0) };
     let path = burn_compensated(&p, &w).expect("burns");

@@ -88,6 +88,10 @@ pub fn as_burned(
     Ok(moves
         .into_iter()
         .map(|mut m| {
+            // Both ends: the box atom sweeps `from` -> `to`, so an
+            // orbit's level move (#544) burns at its unmapped start Z
+            // unless the start is read as the worn electrode too.
+            m.from.z = worn_tip(m.from.z, top, gap, c.rate);
             m.to.z = worn_tip(m.to.z, top, gap, c.rate);
             m
         })

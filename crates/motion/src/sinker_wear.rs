@@ -15,11 +15,18 @@
 //! programmed below the stated floor plus the gap minus `r` times the
 //! stated depth into the work - an over-deep move refuses by name. With
 //! no rate stated the burn is not compensated, and says so.
+//!
+//! The orbit (#544) runs at the worn tip: each layer's orbit is expanded
+//! at that layer's compensated Z, judged against the same deepest-tip
+//! bound and the same electrode-length law as the plunge - wear never
+//! lets an orbit move go below the compensated floor. With no rate and
+//! one layer the moves are exactly `sinker::burn_to_depth`'s.
 
 use crate::cl::{MoveKind, PathBuilder, Toolpath};
 use crate::geometry::Point3;
 use crate::machining2d::GenError;
 use crate::sinker::{check, SinkerParams, ON_FLOOR};
+use crate::sinker_orbit::orbit_offsets;
 
 /// What an uncompensated burn says of itself, on its page and its path.
 pub const NOT_COMPENSATED: &str = "electrode wear: not compensated (no wear rate stated)";
@@ -93,15 +100,19 @@ pub fn worn_tip(t: f64, top: f64, gap: f64, rate: f64) -> f64 {
 }
 
 /// The burn in layers, each tip deepened by the wear the rate states
-/// (none when no rate is stated); approach, the layer feeds, retract.
+/// (none when no rate is stated); approach, the layer feeds - each
+/// followed by the orbit at that layer's compensated tip when one is
+/// stated - retract.
 ///
 /// # Errors
-/// Every refusal of `sinker::burn_to_depth`, a rate that is not an axial
-/// wear rate, a layer step that is not a positive finite number or cuts
-/// more than [`MAX_LAYERS`] layers, a compensated burn deeper than the
-/// electrode is long, or a move past the compensated bound.
+/// Every refusal of `sinker::burn_to_depth` (the orbit's included), a
+/// rate that is not an axial wear rate, a layer step that is not a
+/// positive finite number or cuts more than [`MAX_LAYERS`] layers, a
+/// compensated burn deeper than the electrode is long, or a move (plunge
+/// or orbit) past the compensated bound.
 pub fn burn_compensated(p: &SinkerParams, w: &SinkerWear) -> Result<Toolpath, GenError> {
     let z = check(p)?;
+    let orbit = p.orbit.as_ref().map(orbit_offsets).transpose()?;
     let rate = match &w.comp {
         Some(c) => match rate_refusal(&c.from, c.rate) {
             Some(why) => return Err(GenError::Invalid(why)),
@@ -148,7 +159,20 @@ pub fn burn_compensated(p: &SinkerParams, w: &SinkerWear) -> Result<Toolpath, Ge
         if tip < prev {
             b.push(MoveKind::Feed, Point3::new(p.x, p.y, tip), Some(p.feed));
             prev = tip;
+            // The orbit at this layer's worn tip (#544 meets #546): every
+            // move at `tip`, which the bound above has just admitted.
+            for &(dx, dy) in orbit.iter().flatten() {
+                b.push(MoveKind::Feed, Point3::new(p.x + dx, p.y + dy, tip), Some(p.feed));
+            }
         }
+    }
+    if let (Some(o), Some(pts)) = (p.orbit.as_ref(), orbit.as_ref()) {
+        b.note(format!(
+            "sinker orbit: {} of radius {:.3} at each layer's compensated tip, {} moves per layer",
+            o.kind.word(),
+            o.radius,
+            pts.len()
+        ));
     }
     b.push(MoveKind::Rapid, Point3::new(p.x, p.y, p.approach_z), None);
     b.note(format!(
@@ -180,6 +204,7 @@ mod tests {
             electrode_len: 30.0,
             feed: 40.0,
             gap: 0.05,
+            orbit: None,
         }
     }
 
@@ -229,6 +254,51 @@ mod tests {
         p.electrode_len = 8.0;
         let w = SinkerWear { comp: Some(WearComp { rate: 0.5, from: "t".into() }), layer: None };
         let e = burn_compensated(&p, &w).expect_err("holder");
+        assert!(e.to_string().contains("with wear compensation"), "{e}");
+    }
+
+    fn orbit() -> crate::sinker_orbit::Orbit {
+        crate::sinker_orbit::Orbit { kind: crate::sinker_orbit::OrbitKind::Circular, radius: 0.2, vectors: 4, turns: 1 }
+    }
+
+    #[test]
+    fn sinker_wear_orbit_runs_at_each_worn_layer_tip_above_the_deepest() {
+        let p = SinkerParams { orbit: Some(orbit()), ..params() };
+        let w = SinkerWear { comp: Some(WearComp { rate: 0.02, from: "test".into() }), layer: Some(2.0) };
+        let path = burn_compensated(&p, &w).expect("burns");
+        let deepest = deepest_tip(&p, 0.02);
+        let layer_z = [18.05 - 0.04, 16.05 - 0.08, 14.05 - 0.12];
+        let n = crate::sinker_orbit::orbit_offsets(&orbit()).expect("orbit").len();
+        let fs: Vec<_> = path.moves.iter().filter(|m| m.kind == MoveKind::Feed).collect();
+        assert_eq!(fs.len(), 3 * (1 + n), "a plunge and a full orbit per layer");
+        for (i, want) in layer_z.iter().enumerate() {
+            for m in &fs[i * (1 + n)..(i + 1) * (1 + n)] {
+                assert!((m.to.z - want).abs() < 1e-9, "layer {i}: {} vs {want}", m.to.z);
+            }
+        }
+        // No move, plunge or orbit, below the deepest compensated tip; the
+        // last layer's orbit sits on it.
+        assert!(path.moves.iter().all(|m| m.to.z >= deepest - 1e-9), "{deepest}");
+        assert!((layer_z[2] - deepest).abs() < 1e-9);
+        assert!(fs.iter().any(|m| (m.to.x - 0.2).abs() < 1e-9), "the orbit reaches its radius");
+    }
+
+    #[test]
+    fn sinker_wear_off_with_an_orbit_is_mains_orbit_burn() {
+        let p = SinkerParams { orbit: Some(orbit()), ..params() };
+        let off = burn_compensated(&p, &SinkerWear::default()).expect("burns");
+        let plain = burn_to_depth(&p).expect("burns");
+        assert_eq!(off.moves, plain.moves);
+    }
+
+    #[test]
+    fn sinker_wear_orbit_keys_the_electrode_law_on_the_worn_tip() {
+        // Nominal tip buried 5.95 (fits a 6.0 electrode); worn at 0.05 it
+        // is programmed 6.25 below the top - refused, orbit or not.
+        let p = SinkerParams { orbit: Some(orbit()), electrode_len: 6.0, ..params() };
+        assert!(burn_to_depth(&p).is_ok(), "the nominal burn fits");
+        let w = SinkerWear { comp: Some(WearComp { rate: 0.05, from: "t".into() }), layer: None };
+        let e = burn_compensated(&p, &w).expect_err("worn tip buries the holder");
         assert!(e.to_string().contains("with wear compensation"), "{e}");
     }
 }
