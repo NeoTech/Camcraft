@@ -9,8 +9,8 @@
 //! Provenance: our own tests over our own commands, machine file and posts;
 //! RS-274's A as a rotation about X, and our `cl::pose` law.
 //!
-//! Gate map (M4.4): covers app::machine (judge: the pose gate),
-//! app::posting (post_setup), app::post (tormach.cps, fanuc.cps).
+//! Gate map (M4.4): covers app::machine, post::machine (judge: the pose gate),
+//! app::posting (post_setup), post::post (tormach.cps, fanuc.cps).
 
 use camcraft_app::commands::{
     AddTool, CreateOperation, GenerateOperation, History, ImportModel, LoadMachine, SelectPost,
@@ -98,6 +98,8 @@ fn build() -> World {
     let world = camcraft_app::world::new_world();
     let mut h = History::default();
     h.execute(&world, ok(LoadMachine::builtin(&world, ARC4), "machine"));
+    // #902: the inch program these numbers read is an inch document's.
+    h.execute(&world, ok(camcraft_app::commands::SetUnits::new(&world, camcraft_app::units::Unit::Inches), "inch document"));
     h.execute(&world, ok(SelectPost::new(&world, PostRef::Named("Tormach PathPilot".into())), "post"));
     let stock = SetStock::new(
         &world,
@@ -243,6 +245,8 @@ fn the_fanuc_dialect_refuses_a_b_on_an_a_only_table() {
         };
         cnc::serialize(&[
             cnc::Record::Tool { number: 1, name: "EM".into() },
+            // #1359: a feed with the spindle stopped is refused by name.
+            cnc::Record::Param { name: "SpindleSpeed".into(), value: serde_json::json!(6000) },
             cnc::Record::Section { begin: true },
             mv(-5.0),
             mv(-6.0),
@@ -288,6 +292,8 @@ fn the_fanuc_dialect_refuses_a_lone_a_stated_along_minus_x() {
     };
     let stream = cnc::serialize(&[
         cnc::Record::Tool { number: 1, name: "EM".into() },
+        // #1359: a feed with the spindle stopped is refused by name.
+        cnc::Record::Param { name: "SpindleSpeed".into(), value: serde_json::json!(6000) },
         cnc::Record::Section { begin: true },
         mv(-5.0),
         mv(-6.0),
@@ -326,6 +332,8 @@ fn tilted(abc: [f64; 3]) -> String {
     };
     cnc::serialize(&[
         cnc::Record::Tool { number: 1, name: "EM".into() },
+        // #1359: a feed with the spindle stopped is refused by name.
+        cnc::Record::Param { name: "SpindleSpeed".into(), value: serde_json::json!(6000) },
         cnc::Record::Section { begin: true },
         mv(-5.0),
         mv(-6.0),
