@@ -21,7 +21,8 @@
 //! through a Z window that is the union (a superset) of the two
 //! endpoints' windows. This law names what meets steel in between.
 
-use crate::cl::{Move, MoveKind, Toolpath, angles_to_axis, axis_to_angles, is_vertical, normalize_axis};
+use super::upright::is_upright;
+use crate::cl::{Move, MoveKind, Toolpath, angles_to_axis, axis_to_angles, normalize_axis};
 use crate::geo2d::Point2;
 use crate::geometry::Point3;
 
@@ -67,12 +68,14 @@ const POSE_FRACS: [f64; 5] = [0.0, 0.25, 0.5, 0.75, 1.0];
 /// answer. The memo cannot move a verdict: it is the same float, the
 /// same bool, and the max-severity rule (part outranks stock outranks
 /// clean) does not care what order the pairs are seen in.
+/// `gouge_tol` is the kerf slack about the tip and `grow` the band
+/// growth, both as law (c) reads them on a coarse model (#904).
 #[allow(clippy::too_many_arguments)]
 pub(super) fn mid_turn_sweeps(
     path: &Toolpath,
     bands: &[(f64, f64, f64)],
     r: f64,
-    gouge_tol: f64,
+    (gouge_tol, grow): (f64, f64),
     chord_tol: f64,
     shanked: &[usize],
     samples: &[Point2],
@@ -106,7 +109,7 @@ pub(super) fn mid_turn_sweeps(
             && held != next
             && !shanked.contains(&i)
             && let Some(part) = swing_hit(
-                m, i + 1, held, next, bands, r, gouge_tol, chord_tol, samples, &mut reach, in_stock, surface, part_at, hidden,
+                m, i + 1, held, next, bands, r, (gouge_tol, grow), chord_tol, samples, &mut reach, in_stock, surface, part_at, hidden,
             )
         {
             warns.push(Warning::SweepHit { at: i, part });
@@ -139,7 +142,7 @@ fn swing_hit(
     to_abc: [f64; 3],
     bands: &[(f64, f64, f64)],
     r: f64,
-    gouge_tol: f64,
+    (gouge_tol, grow): (f64, f64),
     chord_tol: f64,
     samples: &[Point2],
     reach: &mut std::collections::HashMap<(u64, u64), (bool, Steps, bool)>,
@@ -156,18 +159,20 @@ fn swing_hit(
     let mut bands_at: Vec<(Point2, Point2, f64, f64)> = Vec::new();
     let (mut x0, mut y0) = (f64::INFINITY, f64::INFINITY);
     let (mut x1, mut y1) = (f64::NEG_INFINITY, f64::NEG_INFINITY);
+    let poses = POSE_FRACS.map(|g| {
+        [
+            from_abc[0] + (to_abc[0] - from_abc[0]) * g,
+            from_abc[1] + (to_abc[1] - from_abc[1]) * g,
+            from_abc[2] + (to_abc[2] - from_abc[2]) * g,
+        ]
+    });
     for &t in &PATH_FRACS {
         // XY walks the chord sequence (an arc's sweep is its chords,
         // the discretization every crossing/chord law lives with);
         // Z rides the move's own from-to lerp at the same parameter.
         let p = path_point(m, t, chord_tol);
-        for &g in &POSE_FRACS {
-            let abc = [
-                from_abc[0] + (to_abc[0] - from_abc[0]) * g,
-                from_abc[1] + (to_abc[1] - from_abc[1]) * g,
-                from_abc[2] + (to_abc[2] - from_abc[2]) * g,
-            ];
-            let lean = angles_to_axis(abc).filter(|a| !is_vertical(a));
+        for (k, &abc) in poses.iter().enumerate() {
+            let lean = angles_to_axis(abc).filter(|a| !is_upright(a));
             for &(above, band_r, band_len) in bands {
                 // Law (c)'s skip, read the same way: a band within the
                 // cutter's radius is the flutes' kerf only upright (#903).
@@ -176,16 +181,29 @@ fn swing_hit(
                 }
                 let (offx, offy, r_band, h0) = match lean {
                     Some(a) => {
-                        let mid = above + band_len * 0.5;
-                        let spread = (band_len * 0.5) * (a[0] * a[0] + a[1] * a[1]).sqrt();
-                        let za = p.z + above * a[2];
-                        let zb = p.z + (above + band_len) * a[2];
-                        (mid * a[0], mid * a[1], band_r + spread, za.min(zb) - band_r)
+                        // Law (c)'s column, the one helper (#1303): the
+                        // bottom dips by the rim's exact R·sin θ.
+                        let col = super::tilt_band::lean(&a, above, band_r, band_len);
+                        (col.off.0, col.off.1, col.r, p.z + col.lo - col.dip)
                     }
                     None => (0.0, 0.0, band_r, p.z + above),
                 };
+                // Between this pose and its neighbours the letters lerp;
+                // where that lerp can lean the band further than either
+                // sample, the span's own floor covers it (#1303,
+                // `tilt_span`). Inside the cap the samples already do.
+                let span = |j: usize| super::tilt_span::span_floor(&poses[j], &poses[k], above, band_r, band_len);
+                let floor = [k.checked_sub(1), Some(k + 1).filter(|&j| j < poses.len())]
+                    .into_iter()
+                    .flatten()
+                    .filter_map(span)
+                    .fold(f64::INFINITY, f64::min);
+                let h0 = h0.min(p.z + floor);
                 let pc = Point2::new(p.x + offx, p.y + offy);
                 let tip = Point2::new(p.x, p.y);
+                // #904: law (c)'s growth on a coarse model, read the
+                // same way - the band reaches `grow` further.
+                let r_band = r_band + grow;
                 states.push((pc, tip, (r_band + 1e-9) * (r_band + 1e-9), h0));
                 bands_at.push((pc, tip, r_band, h0));
                 x0 = x0.min(pc.x - r_band);

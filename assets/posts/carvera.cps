@@ -249,9 +249,12 @@ function startPreamble() {
     block(["M6", "T" + ni(tNo)]);
     toolWait = false;
   }
+  var touchProbe = spindleWait && !(sRpm > 0);   // a stated speed of 0
   if (spindleWait && sRpm > 0) block(["M3", "S" + ni(sRpm)]);
   spindleWait = false;
-  coolant = coolantFor(coolantAsk);
+  // #995: a touch probe section starts no coolant (nor air), whatever
+  // its ask - the Carvera posts no probing, but the law holds here too.
+  coolant = touchProbe ? "" : coolantFor(coolantAsk);
   if (coolant) block([coolant]);
   smoothOn();
 }

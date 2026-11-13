@@ -13,7 +13,7 @@ use crate::schema::{Location, Operation, OperationMeta, Toolpath};
 use crate::setup;
 use crate::verify::Warning;
 
-use super::gates::{area_gate, check_tool, family_gate, heights_gate, tool_gate, valid_src};
+use super::gates::{area_gate, family_gate, heights_gate, sinker_gate, tool_door, tool_gate, valid_src, wire_gate};
 
 /// Create an operation entity. Deliberately does not generate: a new
 /// operation reads "never generated" until `GenerateOperation` runs, the
@@ -78,13 +78,14 @@ impl CreateOperation {
         if model::find_by_name(world, name).is_some() {
             return Err(CommandError::NameConflict(name.to_string()));
         }
-        check_tool(world, tool)?;
+        tool_door(world, &params, tool)?;
         // The new operation JOINS the active setup (M3.2 A) - declared at
         // creation, never inferred later, so undo replays membership
         // exactly. With no setups the name is `None`: the implicit-setup
         // law makes that the first/legacy context byte-identically.
         let setup = crate::setup::active(world);
         valid_src(world, setup.as_deref(), &src)?;
+        sinker_gate(world, setup.as_deref(), &params)?;
         if !params.is_sane() {
             return Err(CommandError::Invalid(format!(
                 "operation parameters are not usable for a {} operation",
@@ -100,6 +101,7 @@ impl CreateOperation {
             return Err(CommandError::Invalid(msg));
         }
         family_gate(world, setup.as_deref(), &params)?;
+        wire_gate(world, setup.as_deref(), &params)?;
         tool_gate(world, &params, tool)?;
         area_gate(world, setup.as_deref(), &src, &params)?;
         let (reordered, order) = append_position(world, setup.as_deref())?;
@@ -168,8 +170,9 @@ impl PasteOperation {
             return Err(CommandError::NotFound(setup_name.clone()));
         }
         let context = operation.setup.as_deref();
-        check_tool(world, &operation.tool)?;
+        tool_door(world, &operation.params, &operation.tool)?;
         valid_src(world, context, &operation.src)?;
+        sinker_gate(world, context, &operation.params)?;
         if !operation.params.is_sane() {
             return Err(CommandError::Invalid("copied operation parameters are not usable".into()));
         }
@@ -178,6 +181,7 @@ impl PasteOperation {
             return Err(CommandError::Invalid(msg));
         }
         family_gate(world, context, &operation.params)?;
+        wire_gate(world, context, &operation.params)?;
         tool_gate(world, &operation.params, &operation.tool)?;
         area_gate(world, context, &operation.src, &operation.params)?;
         operation.stamp = None;
