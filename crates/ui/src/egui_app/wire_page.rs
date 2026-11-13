@@ -16,18 +16,25 @@
 use super::fields::*;
 use camcraft_app::operation::{WireContourOp, WireSide};
 
-const SIDES: [&str; 2] = ["Die - the wire runs inside the profile", "Punch - the wire runs outside the profile"];
+const SIDES: [&str; 4] = [
+    "Die - the wire runs inside the profile",
+    "Punch - the wire runs outside the profile",
+    "Left - an open run's kerf left of travel",
+    "Right - an open run's kerf right of travel",
+];
+const SIDE_OF: [WireSide; 4] = [WireSide::Die, WireSide::Punch, WireSide::Left, WireSide::Right];
 
 pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut Cx<'_>) {
     let (u, tab, op_ctx) = (cx.u, cx.tab, cx.op_ctx);
     let OpParams::WireContour(p) = params else {
         return;
     };
-    let WireContourOp { top_z, bottom_z, condition, side, start, taper_deg } = p;
+    let WireContourOp { top_z, bottom_z, condition, side, start, clearance, taper_deg } = p;
     if tab == SEC_GEO {
-        let mut si = usize::from(*side == WireSide::Punch);
+        let mut si = SIDE_OF.iter().position(|s| s == side).unwrap_or(0);
         prop_row(ui, "Side", |ui| combo(ui, "wire.side", &mut si, &SIDES));
-        *side = if si == 1 { WireSide::Punch } else { WireSide::Die };
+        *side = SIDE_OF.get(si).copied().unwrap_or(WireSide::Die);
+        prop_row(ui, "Run-out clearance", |ui| num(ui, u, clearance));
         let mut stated = start.is_some();
         check_row(ui, "Start hole stated", &mut stated);
         match (stated, start.as_mut()) {
@@ -39,6 +46,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             (false, _) => *start = None,
         }
         hint(ui, "pick the one closed profile to cut; the wire is threaded at the start hole - inside the profile for a die, outside it for a punch");
+        hint(ui, "or pick one open run reaching the stock's edge at both ends (a cut-off, a slot): left / right puts the kerf beside its travel, threaded outside the stock the run-out clearance off its edge");
         // #536: a constant taper, degrees from vertical.
         prop_row(ui, "Taper angle", |ui| {
             ui.add(DragValue::new(taper_deg).speed(0.1).range(-45.0..=45.0).suffix("°"));

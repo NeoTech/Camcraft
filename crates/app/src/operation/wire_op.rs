@@ -33,6 +33,7 @@ pub(super) fn seed_wire_contour(c: &Carried) -> OpParams {
         side: WireSide::Die,
         start: None,
         taper_deg: 0.0,
+        clearance: super::types::DEFAULT_CLEARANCE,
     })
 }
 
@@ -152,12 +153,18 @@ pub fn conditions_of(world: &World, setup: Option<&str>) -> Vec<String> {
 }
 
 /// The generator's numbers from the op's, the condition's and the
-/// world's.
+/// world's. `stock` is the setup's stock outline in XY - the edge an
+/// open run is entered from (#1109).
 ///
 /// # Errors
 /// A workpiece top or bottom that does not resolve, or a bottom that
 /// does not stand below the top.
-pub fn wire_params(op: &WireContourOp, cond: &WireCondition, hs: &ResolvedHeights) -> Result<WireParams, GenError> {
+pub fn wire_params(
+    op: &WireContourOp,
+    cond: &WireCondition,
+    hs: &ResolvedHeights,
+    stock: Option<Region>,
+) -> Result<WireParams, GenError> {
     let (Some(top), Some(bottom)) = (hs.top, hs.bottom) else {
         return Err(GenError::Invalid("wire contour: the workpiece's top and bottom must both resolve".into()));
     };
@@ -173,12 +180,15 @@ pub fn wire_params(op: &WireContourOp, cond: &WireCondition, hs: &ResolvedHeight
         side: op.side,
         start: op.start.map(|[x, y]| Point2::new(x, y)),
         plane_z: bottom,
+        stock,
+        clearance: op.clearance,
     })
 }
 
 /// Generate: `picks` is the picked profile (closed rings, open runs)
 /// when the source is a selection; otherwise `base` - the model's
-/// through-silhouette - is the profile. No verification runs yet (the
+/// through-silhouette - is the profile. `stock` is read only for an
+/// open run (#1109). No verification runs yet (the
 /// wire sweep against the part is #534), and the path's notes say so.
 pub(super) fn generate_wire(
     op: &WireContourOp,
@@ -186,18 +196,20 @@ pub(super) fn generate_wire(
     hs: &ResolvedHeights,
     picks: Option<(Vec<Loop>, Vec<Vec<Point2>>)>,
     base: impl FnOnce() -> Result<Region, GenError>,
+    stock: impl FnOnce() -> Option<Region>,
 ) -> Result<(Toolpath, Vec<Warning>), GenError> {
     let cond = cond?;
-    let p = wire_params(op, &cond, hs)?;
+    let (loops, chains) = match picks {
+        Some(geom) => geom,
+        None => (base()?.loops().to_vec(), Vec::new()),
+    };
+    let stock = if chains.is_empty() { None } else { stock() };
+    let p = wire_params(op, &cond, hs, stock)?;
     let taper = WireTaper {
         angle_deg: op.taper_deg,
         top_z: hs.top.unwrap_or(p.plane_z),
         max_deg: cond.max_taper_deg,
         machine: cond.machine.clone(),
-    };
-    let (loops, chains) = match picks {
-        Some(geom) => geom,
-        None => (base()?.loops().to_vec(), Vec::new()),
     };
     let path = wire_contour_tapered(&loops, &chains, &p, &taper)?;
     Ok((path, Vec::new()))

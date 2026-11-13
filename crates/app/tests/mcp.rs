@@ -10,6 +10,7 @@
 //! app::operation (detect_holes, #312), app::mcp::pockets (detect_pockets, #35).
 
 mod common;
+mod mcp_open;
 
 use camcraft_app::mcp::{self, Server};
 
@@ -324,6 +325,38 @@ fn tool_library_import_skips_duplicates_and_renames_clashes() {
 }
 
 #[test]
+fn tool_library_import_modes_update_and_replace_over_mcp() {
+    let dir = tmp_dir("toollib-modes");
+    let lib = dir.join("shop.camtools");
+    let mut src = Client::new();
+    let (a, b) = two_catalog_tools(&mut src);
+    src.ok("add_tool", json!({ "catalog": a }));
+    src.ok("add_tool", json!({ "catalog": b }));
+    src.ok("export_tool_library", json!({ "path": lib.display().to_string() }));
+
+    // The destination holds `a` under the same name but a different tool,
+    // plus `Extra`: update puts the file's `a` in place, replace also
+    // drops `Extra` (no operation uses it).
+    let mut dst = Client::new();
+    dst.ok("add_tool", json!({ "catalog": b, "name": a }));
+    dst.ok("add_tool", json!({ "catalog": a, "name": "Extra" }));
+    let imp = dst.ok("import_tool_library", json!({ "path": lib.display().to_string(), "mode": "update" }));
+    assert_eq!(imp["mode"], json!("update"), "{imp}");
+    assert_eq!(imp["updated"], json!([a]), "{imp}");
+    assert_eq!(imp["added"], json!([b]), "{imp}");
+    assert_eq!(imp["renamed"], json!([]));
+    let rep = dst.ok("import_tool_library", json!({ "path": lib.display().to_string(), "mode": "replace" }));
+    assert_eq!(rep["removed"], json!(["Extra"]), "{rep}");
+    let job = dst.ok("get_job", json!({}));
+    assert_eq!(job["tools"], src.ok("get_job", json!({}))["tools"], "the document now holds the file's set");
+    dst.ok("undo", json!({}));
+    assert!(job_tool_names(&mut dst).contains(&"Extra".to_owned()), "undo brings Extra back");
+    let msg = dst.refused("import_tool_library", json!({ "path": lib.display().to_string(), "mode": "merge" }));
+    assert!(msg.contains("unknown import mode"), "{msg}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn tool_library_malformed_files_are_refused_by_name() {
     let dir = tmp_dir("toollib-bad");
     let mut c = Client::new();
@@ -486,4 +519,89 @@ fn an_oversized_line_is_a_parse_error_and_is_skipped() {
     assert_eq!(lines[0]["error"]["code"], json!(-32700));
     assert!(lines[0]["error"]["message"].as_str().is_some_and(|m| m.contains("longer than")), "{}", lines[0]);
     assert_eq!(lines[1]["id"], json!(7));
+}
+
+/// #894: thread milling is drivable with the tools that exist - a
+/// thread mill from the catalog or by definition, the Thread
+/// operation's pitch and hand as params, the door's refusals by name,
+/// undo, and (#992) generate's refusal of a hole nothing drilled.
+#[test]
+fn thread_milling_over_the_tools() {
+    let dir = tmp_dir("thread");
+    let stl = dir.join("block.stl");
+    write_box_stl(&stl);
+    let mut c = Client::new();
+    c.request("initialize", json!({ "protocolVersion": "2025-06-18" }));
+    c.ok("import_model", json!({ "path": stl.display().to_string() }));
+    c.ok("set_stock", json!({ "box": { "dx": 60.0, "dy": 60.0, "dz": 20.0 } }));
+    c.ok("add_tool", json!({ "catalog": "TMS-0600-P050-150" }));
+    c.ok("add_tool", json!({ "catalog": "TAP-M6" }));
+    let job = c.ok("get_job", json!({}));
+    let single = job["tools"].as_array().and_then(|t| t.iter().find(|t| t["name"] == json!("TMS-0600-P050-150"))).cloned();
+    let single = single.expect("the thread mill is in the document");
+    assert_eq!(single["definition"]["kind"], json!("thread_mill_single"), "{single}");
+    assert_eq!(single["definition"]["pitch_min"], json!(0.5));
+    // A multi-form mill by definition: the catalog's shape with another pitch.
+    let mut multi = single["definition"].clone();
+    multi["kind"] = json!("thread_mill");
+    multi["pitch"] = json!(1.0);
+    multi["flute_len"] = json!(10.0);
+    multi.as_object_mut().expect("an object").remove("pitch_min");
+    c.ok("add_tool", json!({ "name": "TM-P100", "definition": multi }));
+
+    let hole = json!({ "xy": [30.0, 30.0], "radius": 3.45875, "entry_z": 20.0, "floor_z": 8.0, "through": false });
+    // A tap is not a thread mill; a single-form mill's pitch must sit inside its range.
+    let msg = c.refused("add_operation", json!({ "kind": "Thread", "tool": "TAP-M6" }));
+    assert!(msg.contains("thread mill"), "{msg}");
+    let add = c.ok("add_operation", json!({
+        "kind": "Thread", "tool": "TMS-0600-P050-150",
+        "params": { "pitch": 1.0, "hand": "left", "holes": [hole] }
+    }));
+    let name = add["operation"].as_str().expect("the operation's name").to_owned();
+    let msg = c.refused("edit_operation", json!({ "name": name, "params": { "pitch": 2.5 } }));
+    assert!(msg.contains("outside this single-form thread mill's 0.5 to 1.5 mm range"), "{msg}");
+    let edit = c.ok("edit_operation", json!({ "name": name, "params": { "pitch": 1.25, "hand": "right" } }));
+    assert_eq!(edit["params"]["thread"]["pitch"], json!(1.25));
+    assert_eq!(edit["params"]["thread"]["hand"], json!("right"));
+    // The multi-form mill cuts only its own pitch: the swap is refused while the thread states 1.25.
+    let msg = c.refused("set_tool", json!({ "operation": name, "tool": "TM-P100" }));
+    assert!(msg.contains("only its own 1 mm pitch"), "{msg}");
+    c.ok("undo", json!({}));
+    let job = c.ok("get_job", json!({}));
+    assert_eq!(job["operations"][0]["params"]["thread"]["pitch"], json!(1.0), "undo restores the pitch");
+    assert_eq!(job["operations"][0]["params"]["thread"]["hand"], json!("left"));
+    // #992: nothing ahead opened the hole (the block is solid there) - a thread mill is not
+    // centre-cutting, so generate refuses the thread by name.
+    let msg = c.refused("generate", json!({ "name": name }));
+    assert!(msg.contains("the hole at (30.000, 30.000) is not drilled yet"), "{msg}");
+}
+
+/// #1196: the land width rides the MCP params door - one undoable edit,
+/// a nonsense width refused at the door, and the generated path names
+/// what stands as land.
+#[test]
+fn fill_openings_rides_the_params_door_and_undoes() {
+    let dir = tmp_dir("land");
+    let stl = dir.join("block.stl");
+    write_box_stl(&stl);
+    let mut c = Client::new();
+    c.request("initialize", json!({ "protocolVersion": "2025-06-18" }));
+    c.ok("import_model", json!({ "path": stl.display().to_string() }));
+    c.ok("set_stock", json!({ "box": { "dx": 60.0, "dy": 60.0, "dz": 20.0 } }));
+    c.ok("add_tool", json!({ "catalog": "BN-0600" }));
+    let add = c.ok("add_operation", json!({ "kind": "3D Finish", "tool": "BN-0600" }));
+    let op = add["operation"].as_str().expect("op name").to_string();
+    let job = c.ok("get_job", json!({}));
+    assert!(job["operations"][0]["params"]["finish3d"].get("fill_openings").is_none(), "off by default: {job}");
+    let edit = c.ok("edit_operation", json!({ "name": op, "params": { "fill_openings": 5.0 } }));
+    assert_eq!(edit["params"]["finish3d"]["fill_openings"], json!(5.0));
+    let bad = c.refused("edit_operation", json!({ "name": op, "params": { "fill_openings": 0.0 } }));
+    assert!(!bad.is_empty());
+    let generated = c.ok("generate", json!({}));
+    assert_eq!(generated["generated"][0]["status"], json!("ok"), "{generated}");
+    c.ok("undo", json!({}));
+    c.ok("undo", json!({}));
+    let job = c.ok("get_job", json!({}));
+    assert!(job["operations"][0]["params"]["finish3d"].get("fill_openings").is_none(), "undo restores off: {job}");
+    let _ = std::fs::remove_dir_all(&dir);
 }

@@ -113,6 +113,8 @@ pub(super) fn judge(job: &WireJob<'_>, wire: &Wire, opening: bool, v: &mut WireV
             reported = true;
         }
         let flag = match job.side {
+            // An open run closes no slug (#1109): `judge` never asks.
+            CutSide::Open => None,
             _ if freed.is_empty() => Some(WireFinding::NothingFreed { z: s.z }),
             CutSide::Die => freed.iter().find(|f| f.product_area > SLUG_AREA_TOL).map(|f| WireFinding::WrongSlug {
                 z: s.z,

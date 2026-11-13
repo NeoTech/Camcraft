@@ -25,7 +25,7 @@ use camcraft_app::world::new_world;
 
 const FIXTURE: &str = include_str!("edm/wire-iso-fixture.mch");
 const WIRE: &str = "Generic ISO Wire EDM";
-const VERTICAL: &str = "tests/golden/nc/wire-iso/wire_contour_punch.nc";
+const VERTICAL: &str = "tests/golden/nc/wire-iso/wire_slug_punch.nc";
 const NC: &str = "tests/golden/nc/wire-iso/wire_taper_punch.nc";
 const CL: &str = "tests/golden/wire_taper_punch.cl";
 
@@ -63,6 +63,7 @@ fn punch(text: &str, taper: f64) -> (World, Result<(), String>) {
         side: WireSide::Punch,
         start: Some([-30.0, 0.0]),
         taper_deg: taper,
+        clearance: camcraft_app::operation::DEFAULT_CLEARANCE,
     };
     let c = CreateOperation::new(&world, "Punch1", "", SrcRef::Entity("block".into()), OpParams::WireContour(op)).expect("op");
     h.execute(&world, c);
