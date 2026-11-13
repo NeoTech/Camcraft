@@ -56,7 +56,7 @@ manual, behaviour only; the citation sits beside the code in the .cps):
 post (#388) numbers each mount's file with the document's number, as it
 wrote O0001 for each before.
 
-**Project v59.** The new `program` key is a version step, not additive:
+**Project v60.** The new `program` key is a version step, not additive:
 an older reader would drop it and post O0001, which on the control can
 overwrite a different program held under that number. v58 files step up
 unchanged (absent = nothing stated).

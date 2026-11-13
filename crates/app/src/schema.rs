@@ -81,10 +81,11 @@ pub struct GeoSig {
 /// A model whose mesh stands for its curved surfaces more coarsely than
 /// the STEP importer promises (#864): `chord_mm` is the chord error the
 /// import actually kept, always above `step::CHORD_CAP`. Present ONLY on
-/// such a model - one that met the promise, an STL or OBJ mesh, and
-/// every model of a project saved before this existed carry no component
-/// and read as full fidelity. A stock copied from such a model carries
-/// it too (#1056: the same facets). Written by the import, update and
+/// such a model - one that met the promise and an STL or OBJ mesh carry
+/// no component and read as full fidelity. A stock copied from such a
+/// model carries it too (#1056: the same facets). A mesh of a project
+/// saved before v59 with no recorded chord carries the sentinel
+/// `model_fidelity::UNKNOWN_MM` (#1056: fidelity unknown, refused). Written by the import, update and
 /// stock commands and the project loader, through `model_fidelity::set`.
 #[derive(Component, Debug, Clone, Copy, PartialEq)]
 pub struct ReducedFidelity {

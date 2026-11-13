@@ -77,12 +77,18 @@ use super::*;
 /// `tool_body_wire`). Absent is the holder cylinder every v57 file
 /// judged; an old reader must refuse a v58 file rather than drop the
 /// body and judge the smaller cylinder in its place.
-/// v59 (#258): the document may state its program number and comment
+/// v59 (#1056): a mesh whose fidelity the file does not know carries
+/// `fidelity_unknown`. A v58 file recorded none before #911 and cannot be
+/// told apart from a later one, so every mesh of an older file without a
+/// recorded chord loads marked (`fidelity_migrate`) and its operations are
+/// refused at the post until the model is re-imported. An old reader must
+/// refuse a v59 file rather than drop the mark and post them unchecked.
+/// v60 (#258): the document may state its program number and comment
 /// (`program`). Absent is O0001 and the machine's name - what every
-/// v58 file posted - so a v58 file steps up unchanged. An old reader
-/// must refuse a v59 file rather than post the program as O0001, where
+/// v59 file posted - so a v59 file steps up unchanged. An old reader
+/// must refuse a v60 file rather than post the program as O0001, where
 /// it could overwrite another program in the control's memory.
-pub const PROJECT_VERSION: u32 = 59;
+pub const PROJECT_VERSION: u32 = 60;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ProjectError {
@@ -172,7 +178,7 @@ pub struct ProjectFile {
     /// `skip_stops`: an absent key is one combined program.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub per_op_files: bool,
-    /// The program number and comment (#258), v59+: absent states
+    /// The program number and comment (#258), v60+: absent states
     /// neither - O0001 and the machine's name, what every older file
     /// posted.
     #[serde(default, skip_serializing_if = "Option::is_none")]

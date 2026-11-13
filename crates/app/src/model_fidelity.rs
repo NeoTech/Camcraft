@@ -35,6 +35,13 @@
 //! - When the gate refuses an operation here, the program sim and the
 //!   eye's colours read no verdict either ([`program_tol`]): the named
 //!   refusal is the one line said, never a gouge read off the same mesh.
+//! - A mesh whose fidelity is NOT KNOWN (#1056: every mesh of a project
+//!   saved before v59 without a recorded chord, `project::fidelity_migrate`)
+//!   carries the sentinel chord [`UNKNOWN_MM`]: no tolerance survives it,
+//!   so every operation judged against it, and the program verdict, are
+//!   refused by name ([`UNKNOWN_NOTE`]), never tightened by a guess. It
+//!   rides every path the flag rides (copies, clones, undo, save) and only
+//!   a fresh import clears it.
 
 use flecs_ecs::core::EntityViewGet;
 use flecs_ecs::prelude::{Entity, World};
@@ -49,6 +56,28 @@ use crate::verify::excess_floor;
 
 /// What every refusal here says, in the user's words.
 pub const TOO_COARSE: &str = "imported too coarsely to verify; re-import with a larger STEP facet budget";
+
+/// The chord a mesh of unknown fidelity carries (#1056), mm: far past any
+/// verdict tolerance, so every law refuses rather than tightens, and small
+/// enough that no arithmetic on it overflows to a non-finite "no excess".
+/// Never shown as a number: [`is_unknown`] picks the words instead.
+pub const UNKNOWN_MM: f64 = 1.0e12;
+
+/// What a refusal or note says of a mesh of unknown fidelity.
+pub const UNKNOWN_NOTE: &str = "saved before CamCraft recorded mesh fidelity (project v58 or older), so a gouge check against it cannot be trusted; re-import the model to verify its operations";
+
+/// Whether a stored chord is the unknown-fidelity sentinel.
+#[must_use]
+pub fn is_unknown(chord_mm: f64) -> bool {
+    chord_mm >= UNKNOWN_MM
+}
+
+/// The flag a loaded entity lands with: its recorded chord, or the
+/// sentinel when the file marks its fidelity unknown.
+#[must_use]
+pub fn loaded(coarse_mm: Option<f64>, unknown: bool) -> Option<f64> {
+    if unknown { Some(UNKNOWN_MM) } else { coarse_mm }
+}
 
 /// The chord error a reduced-fidelity model was imported at, mm; `None`
 /// for a model at full fidelity. A stored value that is not a coarse
@@ -217,6 +246,9 @@ pub fn excess(chord_mm: f64) -> f64 {
 /// The plain-words line the model page and the import report show.
 #[must_use]
 pub fn summary(world: &World, chord_mm: f64) -> String {
+    if is_unknown(chord_mm) {
+        return format!("Fidelity unknown: {UNKNOWN_NOTE}");
+    }
     format!("Reduced fidelity: surfaces are approximated to within {}", within(world, chord_mm))
 }
 
@@ -224,6 +256,13 @@ pub fn summary(world: &World, chord_mm: f64) -> String {
 /// the importer's promise, and the sentence a person would be shown.
 #[must_use]
 pub fn facts(world: &World, chord_mm: f64) -> serde_json::Value {
+    if is_unknown(chord_mm) {
+        return serde_json::json!({
+            "fidelity_unknown": true,
+            "promised_mm": step::CHORD_CAP,
+            "note": format!("Fidelity unknown: this model was {UNKNOWN_NOTE}. Its operations are refused at the post until then."),
+        });
+    }
     serde_json::json!({
         "approximation_mm": chord_mm,
         "promised_mm": step::CHORD_CAP,
@@ -263,6 +302,9 @@ fn op_coarse(world: &World, op: &Operation) -> Option<(String, f64)> {
 #[must_use]
 pub fn op_problem(world: &World, name: &str, op: &Operation) -> Option<String> {
     let (model, chord) = op_coarse(world, op)?;
+    if is_unknown(chord) {
+        return Some(format!("{name}: model '{model}' was {UNKNOWN_NOTE}"));
+    }
     let said = format!("surfaces are approximated to within {}", within(world, chord));
     if !fidelity_law::excess_aware(&op.params) {
         return Some(format!(
@@ -295,6 +337,14 @@ pub fn gate_problems(world: &World) -> Vec<String> {
     {
         out.push(why);
     }
+    // #1056: a fixture of unknown fidelity has no honest collision box (a
+    // coarse one is grown by its chord, `fixture::steel_box`).
+    out.extend(
+        model::model_entities(world)
+            .into_iter()
+            .filter(|(_, e)| model::is_fixture(world, e) && chord_of(world, e).is_some_and(is_unknown))
+            .map(|(n, _)| format!("fixture '{n}' was {UNKNOWN_NOTE}")),
+    );
     out
 }
 
@@ -328,6 +378,9 @@ pub fn verdict_tol(world: &World) -> Result<f64, String> {
     let Some((name, chord)) = worst else {
         return Ok(DEV_TOL);
     };
+    if is_unknown(chord) {
+        return Err(format!("model '{name}' was {UNKNOWN_NOTE}"));
+    }
     excess_floor(DEV_TOL, excess(chord)).ok_or_else(|| {
         format!("model '{name}' was {TOO_COARSE} (surfaces are approximated to within {})", within(world, chord))
     })

@@ -153,7 +153,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         let stack = body.as_ref().map(|_| &holder);
         let enclosed = stack.is_some_and(|s| super::probe_op::stylus_cutter(&tool, Some(s)).body.is_none());
         let note = super::body_judged::probe_note(&tool, body.as_ref().filter(|_| enclosed));
-        return super::probe_op::generate_probe(&params, &tool, stack, hs.clearance, &material.facets).map(|(mut p, w)| {
+        return super::probe_op::generate_probe(&params, &tool, stack, hs.clearance, (&material.facets, material.excess)).map(|(mut p, w)| {
             p.notes.extend(note);
             (p, w)
         });
@@ -169,7 +169,8 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             &hs,
             picks,
             || region_for_job(&mut picked_region, &mut section_z, &src, &params, &material, None),
-            &material.facets,
+            // #1053: the kerf law gives a coarse model's excess back.
+            (&material.facets, material.excess),
         );
     }
     // The wire cut (#532) is its own law too: one closed profile at
