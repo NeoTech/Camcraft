@@ -462,8 +462,7 @@ function onCircular() {
 
 // ------------------------------------------------------- canned cycles
 // grblHAL's core lists G73, G81, G82, G83, G85, G86, G89 with G98/G99;
-// this post writes all of them but G85 (no CamCraft cycle asks for a
-// feed-out bore, so it is never mapped).
+// this post writes all of them (G85 for the ream cycle, #1445).
 // One block per hole, holes of an unchanged cycle continuing modally
 // with bare X Y lines. The dwell P is in SECONDS, as in LinuxCNC (not
 // the milliseconds Fanuc-family controls read). G84 is not in the list
@@ -482,11 +481,18 @@ function onCycle() {
   else if (p.CycleType === "DEEP") g = "G83";
   else if (p.CycleType === "BORE") g = "G86";
   else if (p.CycleType === "BACKBORE") g = "G89";
+  else if (p.CycleType === "REAM") g = "G85";   // #1445: feed in, feed out at F, no dwell
   else if (p.CycleType === "TAP") {
     if (!tapRefused) {
       tapRefused = true;
       msg("rigid tapping (G84) is not in grblHAL's G-code set - use a tapping head with a plain drill cycle, or thread milling");
     }
+    return;
+  }
+  else {
+    // #1445: a cycle kind this post does not know is refused by name,
+    // never posted as the G81 default (a rapid out it never asked for).
+    msg("canned cycle " + p.CycleType + " is not known to this post - refused, not posted as another cycle");
     return;
   }
   // #1357: a canned cycle feeds at its own F word. Without one the

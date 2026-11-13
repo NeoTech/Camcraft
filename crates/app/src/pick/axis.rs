@@ -192,13 +192,22 @@ pub fn align_from_axes(world: &World, setup: &str, axes: &InPlaneAxes) -> Result
     let q = quat_from_axes(colx, coly, colz).ok_or("the picks do not make a finite frame - re-pick them")?;
     // The rotation that takes the picked frame onto the world axes.
     let rot = quat_conjugate(q);
-    // Turn about the centre of the parts' bounds, as the setup holds
-    // them, so the part stays on its spot of the table.
-    let c = setup_align::part_centre(world).ok_or("there is no part to align - import a model first")?;
-    let c = transform_point(c, held.pos, held.rot);
-    let rc = quat_rotate_point(rot, c);
-    let turn = Location { pos: Point3::new(c.x - rc.x, c.y - rc.y, c.z - rc.z), rot };
-    let out = setup_align::compose(turn, held);
+    // #1347: picks the held alignment already lands make no turn - the
+    // held alignment comes back as it is (the command then refuses
+    // "already holds the part that way"), never re-composed with float
+    // noise into a no-op change. Only a turn below the landing tolerance
+    // counts as none; the landing proof below still checks it.
+    let out = if is_no_turn(rot) {
+        held
+    } else {
+        // Turn about the centre of the parts' bounds, as the setup holds
+        // them, so the part stays on its spot of the table.
+        let c = setup_align::part_centre(world).ok_or("there is no part to align - import a model first")?;
+        let c = transform_point(c, held.pos, held.rot);
+        let rc = quat_rotate_point(rot, c);
+        let turn = Location { pos: Point3::new(c.x - rc.x, c.y - rc.y, c.z - rc.z), rot };
+        setup_align::compose(turn, held)
+    };
     // Prove the landing before the command stores anything: through
     // the new alignment the primary runs along its axis exactly, the
     // secondary within the skew it came with - never a silently wrong
@@ -220,6 +229,14 @@ pub fn align_from_axes(world: &World, setup: &str, axes: &InPlaneAxes) -> Result
         return Err("the picks do not make a finite alignment - re-pick them".into());
     }
     Ok(out)
+}
+
+/// Is the unit quaternion `rot` ([x, y, z, w]) a turn of less than a
+/// quarter of [`LAND_TOL`] (radians), either sign? Its vector part is
+/// sin(angle / 2); a NaN reads as a turn.
+fn is_no_turn(rot: [f64; 4]) -> bool {
+    let half_sin = norm([rot[0], rot[1], rot[2]]);
+    half_sin <= LAND_TOL / 8.0
 }
 
 /// One axis pick's direction (unit, the flip honored), read through
@@ -280,8 +297,15 @@ fn ends(world: &World, pick: &AxisPick, name: &str) -> Result<([f64; 3], [f64; 3
         [] => Err(format!("pick a straight edge or two points for {name}")),
         [g] if matches!(g.feature, FeatureSel::Chain(_)) => straight_edge(world, g, model::transform_of, &role),
         [g] => Err(format!("{} of '{}' is one point - pick a second point for {name}, or a straight edge", g.feature, g.entity)),
-        [p, q] if matches!((p.feature, q.feature), (FeatureSel::Vertex(_), FeatureSel::Vertex(_))) => {
-            let (a, b) = (point(world, p)?, point(world, q)?);
+        // #692: either point may be a round edge's centre.
+        [p, q] => {
+            let pt = |g: &GeoSel| {
+                point(world, g).map_err(|why| match g.feature {
+                    FeatureSel::Chain(_) => format!("pick one straight edge, or two points, for {name}: {why}"),
+                    _ => why,
+                })
+            };
+            let (a, b) = (pt(p)?, pt(q)?);
             let gap = norm(sub(b, a));
             if p == q || !gap.is_finite() || gap <= COINCIDENT_MM {
                 return Err(format!("the two points for {name} coincide - pick two points apart"));
@@ -293,20 +317,29 @@ fn ends(world: &World, pick: &AxisPick, name: &str) -> Result<([f64; 3], [f64; 3
 }
 
 /// Where one axis pick sits, in the DOCUMENT frame (mm), for readouts:
-/// a vertex's point, or a straight edge's (start, end). `None` for a
-/// face, a curved or closed chain, or a pick no longer in the model.
+/// a vertex's point, a straight edge's (start, end), or a round edge's
+/// centre (#692). `None` for a face, a curve that is no circle, or a pick
+/// no longer in the model.
 #[must_use]
 pub fn pick_coords(world: &World, g: &GeoSel) -> Option<Vec<[f64; 3]>> {
     match g.feature {
         FeatureSel::Vertex(_) => point(world, g).ok().map(|p| vec![p]),
-        FeatureSel::Chain(_) => straight_edge(world, g, model::transform_of, "").ok().map(|(a, b)| vec![a, b]),
+        FeatureSel::Chain(_) => straight_edge(world, g, model::transform_of, "")
+            .ok()
+            .map(|(a, b)| vec![a, b])
+            .or_else(|| super::centre::centre_of(world, g).ok().map(|c| vec![c])),
         FeatureSel::Face(_) | FeatureSel::Patch(_) => None,
     }
 }
 
-/// A picked vertex in the document frame.
+/// A picked point in the document frame: a vertex, or (#692) the centre
+/// of a round edge - a straight or non-circular edge refused by name.
 pub(super) fn point(world: &World, g: &GeoSel) -> Result<[f64; 3], String> {
-    let FeatureSel::Vertex(id) = g.feature else { return Err(gone(g)) };
+    let id = match g.feature {
+        FeatureSel::Vertex(id) => id,
+        FeatureSel::Chain(_) => return super::centre::centre_point(world, g),
+        FeatureSel::Face(_) | FeatureSel::Patch(_) => return Err(gone(g)),
+    };
     let e = model::find_by_name(world, &g.entity).ok_or_else(|| gone(g))?;
     let features = model::features_of(world, &e).ok_or_else(|| gone(g))?;
     let vi = feature::resolve_vertex(&features, id).ok_or_else(|| gone(g))?;

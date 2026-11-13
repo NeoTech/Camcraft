@@ -18,7 +18,7 @@ use camcraft_app::vise_fit::VisePreview;
 
 use crate::state::{CommandKind, ViseDraft};
 
-use super::fields::{num, num_plain};
+use super::fields::{num_by, num_plain_by};
 
 const LIP_TIP: &str = "A dovetail jaw: a lip standing above the jaw top at each clamping face. 0 for none. A jaw is a dovetail or a grip jaw, not both.";
 const GRIP_DEPTH_TIP: &str = "A grip jaw: how far below the jaw top the step's ledge sits - the stock rests on the ledge and is gripped over this depth only (typically 3 mm). 0 for no step; set the dovetail lip to 0 to use it.";
@@ -144,10 +144,11 @@ pub(crate) fn body(ui: &mut Ui, u: Unit, d: &mut ViseDraft) -> Option<ViseAct> {
         }
         for (label, tip, v) in rows {
             let l = ui.label(label);
+            let id = l.id;
             if let Some(tip) = tip {
                 l.on_hover_text(tip);
             }
-            num(ui, u, v);
+            num_by(ui, u, v, id);
             ui.end_row();
         }
     });
@@ -165,17 +166,17 @@ pub(crate) fn body(ui: &mut Ui, u: Unit, d: &mut ViseDraft) -> Option<ViseAct> {
     }
     if !fitting(d) {
         egui::Grid::new("builtin-vise-place").num_columns(2).show(ui, |ui| {
-            ui.label("Jaw opening");
-            num(ui, u, &mut d.params.opening);
+            let l = ui.label("Jaw opening");
+            num_by(ui, u, &mut d.params.opening, l.id);
             ui.end_row();
             let axes = if centred { ["Centre X", "Centre Y", "Floor Z"] } else { ["Fixed jaw X", "Fixed jaw Y", "Floor Z"] };
             for (k, axis) in axes.iter().enumerate() {
-                ui.label(*axis);
-                num(ui, u, &mut d.pos[k]);
+                let l = ui.label(*axis);
+                num_by(ui, u, &mut d.pos[k], l.id);
                 ui.end_row();
             }
-            ui.label("Turn about Z (yaw)");
-            num_plain(ui, &mut d.yaw_deg);
+            let l = ui.label("Turn about Z (yaw)");
+            num_plain_by(ui, &mut d.yaw_deg, l.id);
             ui.end_row();
         });
     }

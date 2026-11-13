@@ -14,7 +14,7 @@
 //! Provenance: our own tests over our own posts; G20 / G21 are RS-274 /
 //! ISO 6983, G700 / G710 the 840D family's published programming manual.
 //!
-//! Gate map (M4.4): covers app::post (every assets/posts/*.cps unit
+//! Gate map (M4.4): covers camcraft_post::post (every assets/posts/*.cps unit
 //! handling), app::posting (program_options), post::units.
 
 mod common;

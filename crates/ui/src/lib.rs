@@ -27,6 +27,7 @@ pub mod boundary_viz;
 pub mod plate_viz;
 pub mod boundary_summary;
 pub mod edge_pick;
+pub mod pick_ink;
 pub mod feature_click;
 pub mod egui_app;
 pub mod feedback;
@@ -37,6 +38,7 @@ pub mod headless_gpu;
 pub mod interact;
 pub mod locate_pick;
 pub mod machined;
+mod setup_display;
 pub mod mcp_host;
 pub mod operations;
 pub mod path_lines;
@@ -73,6 +75,8 @@ mod machined_tests;
 mod play_bench_tests;
 #[cfg(test)]
 mod vertex_pick_tests;
+#[cfg(test)]
+mod centre_pick_tests;
 #[cfg(test)]
 mod setup_chip_tests;
 #[cfg(test)]

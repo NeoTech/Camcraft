@@ -25,13 +25,13 @@ use serde_json::{Map, Value, json};
 pub(super) const TOOLS: &[Tool] = &[
     Tool {
         name: "set_part_axes",
-        description: "Align the part from picked axes, as the Setups page's \"Part axes\" rows do. Picks are list_features ids: one edge chain, or two vertices (first to second); flip_y / flip_x reverse a pick. One axis (+Y or +X): the part turns in the setup's work plane (its XY) so the pick, projected into the plane, runs along that axis (turn_deg reports the turn). Both axes: their 3D directions define the full frame (frame \"full_3d\") - primary (default \"y\") lands exactly, the other is made square to it, and +Z lands on the right-hand cross of the picks, so a left-handed pair is honoured literally (the part lands on its head), not refused. The part turns about its bounds' centre, composed onto the setup's current part alignment; the work offset is untouched; one undo step. Refused by name: a face, a curved edge, coincident points, a single pick along Z, X and Y picks running (nearly) along each other.",
+        description: "Align the part from picked axes, as the Setups page's \"Part axes\" rows do. Picks are list_features ids: one edge chain, or two points (first to second) - a point is a vertex id, or the chain id of a circular edge (a hole rim, a boss edge) for its centre; flip_y / flip_x reverse a pick. One axis (+Y or +X): the part turns in the setup's work plane (its XY) so the pick, projected into the plane, runs along that axis (turn_deg reports the turn). Both axes: their 3D directions define the full frame (frame \"full_3d\") - primary (default \"y\") lands exactly, the other is made square to it, and +Z lands on the right-hand cross of the picks, so a left-handed pair is honoured literally (the part lands on its head), not refused. The part turns about its bounds' centre, composed onto the setup's current part alignment; the work offset is untouched; one undo step. Refused by name: a face, a curved edge as the one pick, an edge in a point pair that is not circular (straight, or no circle within tolerance), coincident points, a single pick along Z, X and Y picks running (nearly) along each other.",
         schema: s_set_part_axes,
         run: set_part_axes,
     },
     Tool {
         name: "lay_part_on_points",
-        description: "Lay the part on a setup's G17 (XY), G18 (ZX) or G19 (YZ) plane through three picked points (list_features vertex ids). The plane through them is turned so its outside (the side away from the part's material) faces the plane's axis (+Z for G17), or the opposite way with flip (G17 + flip: the points rest on the table, part above), and point 1 is set onto the plane's level (place, default true). frame (3-2-1) also turns the part so point 1 -> 2 runs along +X (+Y for G19) and moves point 1 to the setup origin. Absolute like the face pick; one undo step; the work offset is untouched. Refused by name: not three vertices, points closer than 0.001 mm, (nearly) collinear points (under 1 degree of spread), a pick off the part, no model.",
+        description: "Lay the part on a setup's G17 (XY), G18 (ZX) or G19 (YZ) plane through three picked points (list_features vertex ids, or the chain id of a circular edge - a hole rim, a boss edge - for its centre). The plane through them is turned so its outside (the side away from the part's material) faces the plane's axis (+Z for G17), or the opposite way with flip (G17 + flip: the points rest on the table, part above), and point 1 is set onto the plane's level (place, default true). frame (3-2-1) also turns the part so point 1 -> 2 runs along +X (+Y for G19) and moves point 1 to the setup origin. Absolute like the face pick; one undo step; the work offset is untouched. Refused by name: not three points, a face, an edge that is not circular (straight, or no circle within tolerance), points closer than 0.001 mm, (nearly) collinear points (under 1 degree of spread), a pick off the part, no model.",
         schema: s_lay_part_on_points,
         run: lay_part_on_points,
     },
@@ -88,8 +88,8 @@ fn s_set_part_axes() -> Value {
     obj(
         json!({
             "setup": { "type": "string", "description": "A declared setup; defaults to the active one." },
-            "y": pick_list_schema("+Y: one straight edge chain, or two vertices (first to second)."),
-            "x": pick_list_schema("+X: one straight edge chain, or two vertices (first to second)."),
+            "y": pick_list_schema("+Y: one straight edge chain, or two points (first to second): vertex ids or circular edge chain ids (their centres)."),
+            "x": pick_list_schema("+X: one straight edge chain, or two points (first to second): vertex ids or circular edge chain ids (their centres)."),
             "flip_y": { "type": "boolean", "description": "Take the +Y pick the other way." },
             "flip_x": { "type": "boolean", "description": "Take the +X pick the other way." },
             "primary": { "type": "string", "enum": ["y", "x"], "description": "With both axes given, the one landed exactly; the other is made square to it (default y)." }
@@ -183,7 +183,7 @@ fn s_lay_part_on_points() -> Value {
     obj(
         json!({
             "setup": { "type": "string", "description": "A declared setup; defaults to the active one." },
-            "points": pick_list_schema("Exactly three vertices (points 1, 2, 3)."),
+            "points": pick_list_schema("Exactly three points (points 1, 2, 3): vertex ids, or circular edge chain ids for their centres."),
             "plane": { "type": "string", "enum": ["g17", "g18", "g19"], "description": "The plane to lay on (default g17)." },
             "flip": { "type": "boolean", "description": "Face the points' outside the opposite way (-Z for G17: rest the points on the table)." },
             "place": { "type": "boolean", "description": "Set point 1 onto the plane's level (default true); false keeps the part where it is." },

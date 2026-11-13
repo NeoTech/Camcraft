@@ -12,7 +12,7 @@
 //! constant-area threading passes; our own fixtures.
 //!
 //! Gate map (M4.4): covers app::operation (thread_op), app::commands
-//! (operation gates), app::machining2d (thread_mill, thread_passes),
+//! (operation gates), camcraft_motion::machining2d (thread_mill, thread_passes),
 //! app::posting, app::project (params DTOs), post::dump.
 //! Lane shape (M4.4): all tests here run in seconds.
 

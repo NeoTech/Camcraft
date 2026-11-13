@@ -51,7 +51,11 @@ pub(super) fn roughing2d_pane(
         });
     }
     if tab == SEC_PASSES {
-        prop_row(ui, "Stepover", |ui| num(ui, u, stepover));
+        // #1512: the adaptive twin steps by its optimal load and never
+        // reads the stepover, so only the offset twin shows the field.
+        if optimal_load.is_none() {
+            prop_row(ui, "Stepover", |ui| num(ui, u, stepover));
+        }
         prop_row(ui, "Stock to leave", |ui| num(ui, u, stock_to_leave));
         match optimal_load {
             Some(m) => super::load_field::optimal_load_field(ui, m),

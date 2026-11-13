@@ -87,7 +87,7 @@ fn script(name: &str) -> &'static str {
 fn first_end_and_second_tool(lines: &[&str]) -> (usize, usize) {
     let stop = lines
         .iter()
-        .position(|l| has_word(l, "M5") || has_word(l, "MOTOFF"))
+        .position(|l| has_word(l, "M5"))
         .expect("the first section stops its spindle");
     let tool_word = |w: &str| {
         w.starts_with("TOOL") || (w.starts_with('T') && w[1..].starts_with(|c: char| c.is_ascii_digit() || c == '='))

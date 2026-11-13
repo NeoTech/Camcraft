@@ -102,7 +102,9 @@ pub fn wire_verdict(world: &World, e: &Entity) -> Option<Result<WireVerdict, Str
             sections,
             cutoff_from,
             capture: w.capture,
-            taper: w.taper_deg != 0.0,
+            // #537: a 4-axis cut's poses are its rulings.
+            taper: w.taper_deg != 0.0 || w.four_axis.is_some(),
+
             burnout: w.burnout.is_some(),
         }))
     })())
