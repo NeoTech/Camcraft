@@ -6,7 +6,7 @@
 //! it reads. The control dialect lives in the script, never here.
 
 use super::cnc::{self, Record};
-use super::js::{is_false, Script};
+use super::js::{is_false, ProgramId, Script};
 use super::machine;
 use super::PostError;
 use crate::cl::MoveKind;
@@ -94,8 +94,26 @@ pub fn run_numbered_with(
     options: &Value,
     program: u32,
 ) -> Result<PostOutput, PostError> {
+    let id = ProgramId { number: program, ..ProgramId::default() };
+    run_program_with(cps, mch, stream, options, &id)
+}
+
+/// The whole seam with the document's program identity (#258): the
+/// number, whether it was stated, and the program comment - what the
+/// script reads as its `program` global.
+pub fn run_program_with(
+    cps: &str,
+    mch: &Value,
+    stream: &str,
+    options: &Value,
+    id: &ProgramId,
+) -> Result<PostOutput, PostError> {
     let records = super::normalize_program_order(cnc::parse(stream)?);
     let mut s = Script::load(cps)?;
+    // #902: an inch document on a script that cannot write inch.
+    if let Some(why) = super::units::refusal(&mut s, options)? {
+        return Err(PostError::Refused(why));
+    }
     // #374: an inverted machine axis - the one place the stream is
     // mirrored into the controller's frame, or refused by name.
     let records = super::invert::apply(records, mch, &s)?;
@@ -105,7 +123,7 @@ pub fn run_numbered_with(
     let serves_sinker = s
         .words_global("serves")?
         .is_some_and(|w| w.iter().any(|k| crate::machine::Kind::from_word(k) == Some(crate::machine::Kind::SinkerEdm)));
-    s.set_program_number(program)?;
+    s.set_program(id)?;
     if options.is_object() {
         s.set_options(options)?;
     }

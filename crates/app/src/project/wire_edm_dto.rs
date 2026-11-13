@@ -42,10 +42,23 @@ pub struct WireContourDto {
     /// stated.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub start: Option<[f64; 2]>,
+    /// The constant taper, degrees (#536); absent is a vertical cut, so
+    /// every file written before it reads unchanged.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub taper_deg: f64,
+    /// No-core burnout's wall clearance, mm (#540); absent cuts the
+    /// profile alone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub burnout_clearance: Option<f64>,
     /// An open run's run-out clearance, mm (#1109); absent is the
     /// seed's, so a closed cut's file reads and writes as before.
     #[serde(default = "default_clearance", skip_serializing_if = "is_default_clearance")]
     pub clearance: f64,
+}
+
+#[allow(clippy::trivially_copy_pass_by_ref)]
+fn is_zero(v: &f64) -> bool {
+    *v == 0.0
 }
 
 impl WireContourDto {
@@ -61,6 +74,8 @@ impl WireContourDto {
                 WireSide::Right => WireSideDto::Right,
             },
             start: p.start,
+            taper_deg: p.taper_deg,
+            burnout_clearance: p.burnout,
             clearance: p.clearance,
         }
     }
@@ -77,6 +92,8 @@ impl WireContourDto {
                 WireSideDto::Right => WireSide::Right,
             },
             start: self.start,
+            taper_deg: self.taper_deg,
+            burnout: self.burnout_clearance,
             clearance: self.clearance,
         })
     }

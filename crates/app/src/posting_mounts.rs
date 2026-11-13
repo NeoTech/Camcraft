@@ -22,7 +22,7 @@
 
 use super::per_op::{sanitise, write_all};
 use super::{
-    file_stem, join_streams, op_streams, options_value, post_options, script_of, verification_report, viewer_map,
+    file_stem, join_streams, op_streams, script_of, verification_report, viewer_map,
     wcs_slot, Posted,
 };
 use crate::machine::{check_ops, Machine, MachineCheck};
@@ -231,7 +231,10 @@ fn post_each(world: &World, out_path: &Path, cps: Option<&str>, mounts: Vec<Moun
     }
     let dir = out_path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
     let program = out_path.file_stem().and_then(|s| s.to_str()).unwrap_or("program");
-    let options = options_value(post_options(world));
+    let options = super::program_options(world);
+    // #258: each mount's file is a whole program of its own, numbered as
+    // the single-file post numbers it (the document's number, or O0001).
+    let id = super::document_program_id(world, 1)?;
     let mut files = Vec::with_capacity(mounts.len());
     for (k, (mount, (_, cps))) in mounts.into_iter().zip(scripts).enumerate() {
         let own: Vec<(String, Vec<cnc::Record>)> = streams
@@ -240,7 +243,7 @@ fn post_each(world: &World, out_path: &Path, cps: Option<&str>, mounts: Vec<Moun
             .cloned()
             .collect();
         let records = join_streams(own);
-        let out = engine::run_with(&cps, &machine_value_for(&mount.machine), &cnc::serialize(&records), &options)
+        let out = engine::run_program_with(&cps, &machine_value_for(&mount.machine), &cnc::serialize(&records), &options, &id)
             .map_err(|e| format!("{}: post engine: {e}", mount.label()))?;
         if !out.warnings.is_empty() {
             return Err(format!(

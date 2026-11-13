@@ -1446,7 +1446,28 @@ impl OpParams {
                 wh(h, p.bottom_z);
                 h.write(p.condition.as_bytes());
                 h.write_u8(0xff);
-                h.write_u8(u8::from(p.side == super::WireSide::Punch));
+                // #1370: the side as its own discriminant - die and punch
+                // keep the bytes they always wrote (0 / 1), so no closed
+                // cut's stamp moves; an open run's left / right (#1109)
+                // and its run-out clearance, read only by an open run,
+                // stand apart.
+                match p.side {
+                    super::WireSide::Die => h.write_u8(0),
+                    super::WireSide::Punch => h.write_u8(1),
+                    super::WireSide::Left => {
+                        h.write_u8(2);
+                        w(h, p.clearance);
+                    }
+                    super::WireSide::Right => {
+                        h.write_u8(3);
+                        w(h, p.clearance);
+                    }
+                }
+                // #540: written only when set, so no contour's stamp moves.
+                if let Some(c) = p.burnout {
+                    h.write(b"burnout");
+                    w(h, c);
+                }
                 match p.start {
                     Some([x, y]) => {
                         h.write_u8(1);
@@ -1454,6 +1475,12 @@ impl OpParams {
                         w(h, y);
                     }
                     None => h.write_u8(0),
+                }
+                // #536: only a stated taper is digested, so every
+                // vertical cut's stamp stays what it was.
+                if p.taper_deg != 0.0 {
+                    h.write(b"taper");
+                    w(h, p.taper_deg);
                 }
             }
             // The sinker burn (#541): every stored number, the datum
@@ -1473,6 +1500,18 @@ impl OpParams {
                 }
                 h.write(p.condition.as_bytes());
                 h.write_u8(0xff);
+                // #543: the pass and the finished cavity it is judged
+                // against - a byte and the sizes only for a rough or
+                // finish, so a single burn's digest never moves.
+                if p.pass != super::SinkerPass::Single {
+                    h.write_u8(match p.pass {
+                        super::SinkerPass::Single => 0,
+                        super::SinkerPass::Rough => 1,
+                        super::SinkerPass::Finish => 2,
+                    });
+                    w(h, p.cavity_x);
+                    w(h, p.cavity_y);
+                }
                 // #544: the orbit - bytes only when one is stated, so a
                 // plain plunge's digest does not move.
                 if let Some(o) = &p.orbit {
@@ -1527,7 +1566,16 @@ impl OpParams {
                 plunge_feed,
                 climb,
                 holes,
+                pitch,
+                hand,
+                external,
             } => {
+                // #985: an external thread is a different ride on the
+                // same list. Written only when set, so every internal
+                // thread keeps the digest it was cached under.
+                if *external {
+                    h.write_u8(0xE7);
+                }
                 wh(h, *clearance_z);
                 wh(h, *top_z);
                 wh_opt(h, *bottom_z);
@@ -1536,6 +1584,14 @@ impl OpParams {
                     w(h, v);
                 }
                 h.write_u8(u8::from(*climb));
+                // #894: the thread's own pitch and hand. Written for
+                // every Thread op, so each one made before the rework
+                // reads Stale once - its path is a different ride now.
+                w(h, pitch.unwrap_or(0.0));
+                h.write_u8(match hand {
+                    crate::cl::ThreadHand::Right => 0xA1,
+                    crate::cl::ThreadHand::Left => 0xA2,
+                });
                 h.write_u32(holes.len() as u32);
                 for hole in holes {
                     wp2(h, hole.xy);

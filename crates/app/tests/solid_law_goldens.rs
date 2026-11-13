@@ -27,9 +27,11 @@
 
 mod common;
 mod posted_gates;
+mod thread_support;
 
 use common::gen_to_cltext;
-use posted_gates::{narrowed_slot_verdict, plasma_findings, region_verdicts, sinker_gouge_cells, wire_findings, wire_verdict};
+use posted_gates::thread::thread_verdicts;
+use posted_gates::{narrowed_slot_verdict, plasma_findings, region_verdicts, sinker_gouge_cells, wire_findings, wire_taper_findings, wire_taper_verdict, wire_verdict};
 use common::solid_part::{cap, circle, mill, plate, plate_cell, rect, region, walls};
 
 use camcraft_app::cl::Toolpath;
@@ -221,6 +223,7 @@ fn verdicts() -> Vec<(&'static str, Vec<Warning>)> {
         flutes: None,
         center_cutting: true,
         orientation: None,
+        pitch_min: 0.0,
         catalog: camcraft_tools::catalog_fields::ToolCatalog::default(),
         cutting: Vec::new(),
         turning: None,
@@ -347,6 +350,24 @@ fn the_slot_trace_and_plasma_goldens_pass_their_gates() {
     let wire = wire_verdict();
     assert_eq!(wire.findings, Vec::new(), "wire_contour_punch.cl: the wire laws find nothing");
     assert!(wire.slugs.iter().any(|s| s.product_area > 0.0), "the punch frees the part: {:?}", wire.slugs);
+    // #536: the tapered punch through the same laws, its poses read as
+    // the wire's lean at every judged height - clean, and it frees the part.
+    let taper = wire_taper_verdict();
+    assert_eq!(taper.findings, Vec::new(), "wire_taper_punch.cl: the wire laws find nothing");
+    assert!(taper.slugs.iter().any(|s| s.product_area > 0.0), "the tapered punch frees the part: {:?}", taper.slugs);
+}
+
+#[test]
+fn the_thread_golden_passes_its_gate() {
+    // #894: the thread-mill golden through the real operation and the
+    // post's gate - the crest region, the root solid law over its round
+    // (96-flat) hole and the verification gate find nothing; #985: the
+    // external golden on its boss, judged by the external laws, too.
+    let got = thread_verdicts();
+    assert_eq!(got.len(), 2, "every thread golden is judged");
+    for (name, w) in got {
+        assert_eq!(w, Vec::<String>::new(), "{name}");
+    }
 }
 
 #[test]
@@ -371,11 +392,13 @@ fn every_posted_golden_is_a_program_the_gate_passes() {
     let mut judged: Vec<(&str, Vec<String>)> = verdicts().into_iter().chain(region_verdicts()).map(|(n, w)| (n, blocking(w))).collect();
     let plasma = plasma_findings().iter().filter(|f| f.refuses()).map(|f| f.describe()).collect();
     judged.push(("plasma_plate_with_holes.cl", plasma));
+    judged.extend(thread_verdicts());
     judged.push(("wire_contour_punch.cl", wire_findings().iter().map(|f| f.describe()).collect()));
     // The sinker burn through the program verdict its post's gate runs
     // (the electrode's box atom): any gouge cell blocks.
     let cells = sinker_gouge_cells();
     judged.push(("sinker_burn_cavity.cl", if cells == 0 { vec![] } else { vec![format!("program verdict: {cells} gouge cell(s)")] }));
+    judged.push(("wire_taper_punch.cl", wire_taper_findings().iter().map(|f| f.describe()).collect()));
     let mut dirs = vec![root.join("nc")];
     let mut posted = 0;
     while let Some(dir) = dirs.pop() {

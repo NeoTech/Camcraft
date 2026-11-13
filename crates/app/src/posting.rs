@@ -231,6 +231,10 @@ pub const MACHINES: &[(&str, &str)] = &[
     // #707: Makera's desktop mills, from Makera's product spec tables.
     ("Makera Carvera", include_str!("../../../assets/machines/makera-carvera.mch")),
     ("Makera Carvera Air", include_str!("../../../assets/machines/makera-carvera-air.mch")),
+    // #728: Sienci's AltMill routers (SLB-EXT, grblHAL); pair with the "grblHAL" post.
+    ("Sienci AltMill 2x4", include_str!("../../../assets/machines/sienci-altmill-2x4.mch")),
+    ("Sienci AltMill 4x4", include_str!("../../../assets/machines/sienci-altmill-4x4.mch")),
+    ("Sienci AltMill 4x8", include_str!("../../../assets/machines/sienci-altmill-4x8.mch")),
     // #614: Doosan DNM 5700 VMC (Fanuc 0i-MF).
     ("Doosan DNM 5700", include_str!("../../../assets/machines/doosan-dnm.mch")),
 ];
@@ -436,6 +440,16 @@ mod wcs_rotation;
 mod wcs_slot;
 #[path = "posting_mounts.rs"]
 mod mounts;
+#[path = "posting_program.rs"]
+mod program;
+pub use program::{
+    document_program_id, parse_number as parse_program_number, program_id, program_info, program_info_set,
+    PROGRAM_COMMENT_MAX, PROGRAM_NUMBER_MAX,
+};
+pub(crate) use program::{check as check_program_info, normalised as normalised_program_info};
+#[path = "posting_units.rs"]
+mod program_unit;
+pub use program_unit::{program_options, unit_word};
 #[path = "posting_serves.rs"]
 mod serves;
 #[path = "posting_edm.rs"]
@@ -529,7 +543,8 @@ fn post_script_body(world: &World, out_path: &Path, cps: &str, label: Option<&st
         return Err(format!("post blocked - {}", report.problems.join("; ")));
     }
     let stream = cnc::serialize(&records);
-    let out = engine::run_with(cps, &machine_value_for(&machine), &stream, &options_value(post_options(world)))
+    let id = document_program_id(world, 1)?;
+    let out = engine::run_program_with(cps, &machine_value_for(&machine), &stream, &program_options(world), &id)
         .map_err(|e| format!("post engine: {e}"))?;
     if !out.warnings.is_empty() {
         return Err(format!(

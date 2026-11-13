@@ -8,7 +8,7 @@
 //! enclosed region is cut free: a die's slug, or the punch itself).
 //! Our own code.
 
-use super::{CutSide, WireFinding, WireJob, WireVerdict, SLUG_AREA_TOL};
+use super::{CutSide, Wire, WireFinding, WireJob, WireVerdict, SLUG_AREA_TOL};
 use crate::geo2d::{Loop, Point2, Region};
 
 /// A piece the closed cut frees at one height.
@@ -73,15 +73,14 @@ fn freed_at(
 
 /// Run the slug law over every section; the first height that flags
 /// is named, and the lowest height holding material reports its slugs.
-pub(super) fn judge(job: &WireJob<'_>, pts: &[Point2], opening: bool, v: &mut WireVerdict) {
+pub(super) fn judge(job: &WireJob<'_>, wire: &Wire, opening: bool, v: &mut WireVerdict) {
     let unreadable = |why: String| WireFinding::Unreadable(format!("the slug cannot be judged - {why}"));
-    let kerf = match Region::sweep(&[pts.to_vec()], job.kerf_offset) {
-        Ok(r) => r,
-        Err(e) => return v.findings.push(unreadable(e.to_string())),
-    };
-    let fill = match Region::new(kerf.loops().iter().filter(|l| l.area() > 0.0).cloned().collect()) {
-        Ok(r) => r,
-        Err(e) => return v.findings.push(unreadable(e.to_string())),
+    // The kerf at one height: the wire's own section there (#536 - a
+    // vertical wire's is the same at every height).
+    let kerf_at = |z: f64| -> Result<(Region, Region), String> {
+        let kerf = Region::sweep(&[wire.at(z)], job.kerf_offset).map_err(|e| e.to_string())?;
+        let fill = Region::new(kerf.loops().iter().filter(|l| l.area() > 0.0).cloned().collect()).map_err(|e| e.to_string())?;
+        Ok((kerf, fill))
     };
     let mut reported = false;
     for s in &job.sections {
@@ -97,6 +96,10 @@ pub(super) fn judge(job: &WireJob<'_>, pts: &[Point2], opening: bool, v: &mut Wi
         if material.as_ref().is_ok_and(Region::is_empty) {
             continue;
         }
+        let (kerf, fill) = match kerf_at(s.z) {
+            Ok(k) => k,
+            Err(why) => return v.findings.push(unreadable(why)),
+        };
         let freed = match (material, product) {
             (Ok(m), Ok(p)) => freed_at(&m, &p, &kerf, &fill, s.z),
             (Err(e), _) | (_, Err(e)) => Err(e.to_string()),
@@ -112,6 +115,7 @@ pub(super) fn judge(job: &WireJob<'_>, pts: &[Point2], opening: bool, v: &mut Wi
         let flag = match job.side {
             // An open run closes no slug (#1109): `judge` never asks.
             CutSide::Open => None,
+            _ if job.burnout => freed.first().map(|f| WireFinding::Core { z: s.z, at: f.at, area: f.area }),
             _ if freed.is_empty() => Some(WireFinding::NothingFreed { z: s.z }),
             CutSide::Die => freed.iter().find(|f| f.product_area > SLUG_AREA_TOL).map(|f| WireFinding::WrongSlug {
                 z: s.z,

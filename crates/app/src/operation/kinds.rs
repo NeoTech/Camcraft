@@ -985,12 +985,11 @@ fn seed_standalone_bore(c: &Carried) -> OpParams {
     }
 }
 
-/// The thread mill's seed (M2.4 C): the drill's four heights again.
-/// The PITCH is the tool's and rides no params - the tap cycle's
-/// law. The infeed starts small: the validator caps it at the
-/// standard's depth for whatever pitch the mounted tool states,
-/// and the pane lets the author step more per turn if they wish.
-/// Climb opens CCW: the standard read for a right-hand thread.
+/// The thread mill's seed (M2.4 C, #894): the drill's four heights
+/// again. The pitch starts unstated - a multi-form mill's own - and
+/// the hand right. The infeed starts small: the validator caps it at
+/// the standard's depth for the pitch, and the pane lets the author
+/// take more per pass. Climb is the handbook's default.
 fn seed_thread_mill(c: &Carried) -> OpParams {
     OpParams::Thread {
         clearance_z: c.clearance,
@@ -1002,6 +1001,10 @@ fn seed_thread_mill(c: &Carried) -> OpParams {
         plunge_feed: c.plunge,
         climb: true,
         holes: Vec::new(),
+        pitch: None,
+        hand: crate::cl::ThreadHand::Right,
+        // #985: holes until the author says bosses.
+        external: false,
     }
 }
 

@@ -42,6 +42,16 @@ pub struct WireContourOp {
     /// The start hole / threading point, world XY mm; `None` is not
     /// stated, and a closed profile is refused at generation without it.
     pub start: Option<[f64; 2]>,
+    /// The constant taper (#536), degrees from vertical: 0 is a
+    /// vertical cut; positive widens the profile downward from the top
+    /// plane (a die's relief, a drafted punch's base), negative narrows
+    /// it. The machine's `edm.max_taper_deg` bounds it at generation.
+    pub taper_deg: f64,
+    /// No-core burnout (#540): `Some(clearance)` burns the pocket's
+    /// whole interior out by offset rings, the wire centre at least
+    /// `clearance` mm from the walls (never under the kerf offset);
+    /// `None` cuts the profile alone.
+    pub burnout: Option<f64>,
     /// An open run's threading and run-out clearance past the kerf, mm
     /// (#1109); unread for a closed profile.
     pub clearance: f64,
@@ -57,6 +67,9 @@ impl WireContourOp {
         self.top_z.is_sane()
             && self.bottom_z.is_sane()
             && self.start.is_none_or(|s| s.iter().all(|v| v.is_finite() && v.abs() < 1e9))
+            && self.taper_deg.is_finite()
+            && self.taper_deg.abs() < 90.0
+            && self.burnout.is_none_or(|c| c.is_finite() && c > 0.0 && c < 1e6)
             && self.clearance.is_finite()
             && (0.0..=crate::wire_edm::CLEARANCE_MAX).contains(&self.clearance)
             && self.condition.len() <= CONDITION_ID_MAX

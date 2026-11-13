@@ -15,8 +15,9 @@
 //!
 //! Provenance: our own harness over our own goldens; no vendor material.
 
+pub mod thread;
 mod wire;
-pub use wire::{wire_findings, wire_verdict};
+pub use wire::{wire_findings, wire_taper_findings, wire_taper_verdict, wire_verdict};
 
 use flecs_ecs::prelude::World;
 
