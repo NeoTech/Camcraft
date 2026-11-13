@@ -173,7 +173,7 @@ go to `CHANGELOG.md`.
   - `P1`-`P3` are fix-now work and are for defects only: "wanted" is never
     a reason for them. Only `P1` and `P2` hold a release cut back
     (maintainer's choice, question dialog, 2026-11-12: "only P1 and P2
-    block a release cut"). A minor/major cut does not start while any `P1` or `P2` issue is open; a `P3` or lower never holds one. A `P3` is worked ahead of planned
+    block a release cut"). A minor/major cut does not start while any `P1` or `P2` issue is open; a `P3` or lower never holds one. The check is made once, when the cut starts (release step 1); a `P1` or `P2` filed after that does not restart the cut (#1424). A `P3` is worked ahead of planned
     work, but a cut does not wait for it.
   - `P4` is set only where the maintainer asked for the work in his own
     words; the issue quotes them.
@@ -916,7 +916,7 @@ only when no gate or cut is running and it is past ~60 GB. A red result is a new
 gouge, else `P2`, `source:agent`) naming the failing tests and the merge
 that broke them. A red result does not revert the merge by itself; the
 issue is worked in the normal order, and a minor/major cut does not start
-while any `P1` or `P2` issue is open (a `P3` or lower never holds one). The full release tier runs only at a
+while any `P1` or `P2` issue is open (checked once, at the start of the cut; a `P3` or lower never holds one). The full release tier runs only at a
 minor/major cut. A fix-only stretch produces no build; to hand-test one, run
 `cargo xtask release --version <next> --no-tag --skip-gate` (or the wrapper
 `scripts/release.ps1 -Version <next> -NoTag -SkipGate`) locally on a scratch
@@ -942,6 +942,19 @@ a tag"):
    fails otherwise). From step 1 to the tag, nothing else merges to main. Stacked PRs: retarget each child to `main`
    before merging its parent (Issue Law, "Overlapping issues stack"), then
    merge parent-first.
+   **Start condition** (maintainer, 2026-11-13, in chat, after the v0.19.0
+   cut: "We should as a rule not let P1/P2s coming in after cut - force a
+   restart as its a ~2 hour job"; #1424): before this step, the session
+   checks that no `P1` or `P2` issue is open and records the UTC start time
+   and that list (none) in the release PR body. A `P1` or `P2` issue filed
+   after that moment does not restart the cut and does not enter it: the cut
+   finishes on the tree that passed the release gate, the issue is named
+   under "Known issues" (step 2 and the release PR comment, step 3), and its
+   fix merges after the tag and ships in the next minor. Only the maintainer
+   can stop a cut for it; no agent stops or restarts a cut for a late issue.
+   An agent that finds a late `P1` (unsafe or wrong output) tells the
+   maintainer in one line and goes on. Failures of the cut's own release gate
+   are not late issues: they are fixed in the cut as before.
 2. **Release branch.** Sync main (`git pull --ff-only`), then
    `git switch -c release/vX.Y.Z`. The version is the highest bump among
    the commits since the last tag (table above). Run
@@ -950,6 +963,8 @@ a tag"):
    removes them; it goes in the same docs commit). Write `RELEASE_NOTES.md`
    and the `CHANGELOG.md` rows for every PR merged since that tag (one per
    behaviour PR, from its `Changelog:` line, plus any `Unreleased` rows).
+   Any `P1` or `P2` filed after the start (step 1) goes under a "Known
+   issues" section of the release notes, by number and title.
    The release notes also get a short "Process changes" section listing
    each `PROCESS_VERSION` since the previous tag (taken from the pinned
    issue #681). Commit all of it as `docs: X.Y.Z release notes;
@@ -964,7 +979,9 @@ a tag"):
    `gh pr create --base main --title "chore(release): X.Y.Z"`, reviewed like
    any PR. Record the branch tip first (`tip=$(git rev-parse
    release/vX.Y.Z)` - `--delete-branch` removes the name), then
-   `gh pr merge --merge --delete-branch`.
+   `gh pr merge --merge --delete-branch`. The release PR body carries the
+   start-condition record (step 1); a comment on it names each `P1`/`P2`
+   filed after the start, as "Known issues".
 4. **Tag the release merge commit.** Sync main; `m=$(git rev-parse main)`
    is the release PR's merge commit (nothing else merged since step 1).
    `git diff $tip $m` must be empty - the zip's tree is the tagged tree. Then
