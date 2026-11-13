@@ -225,3 +225,27 @@ fn the_typed_turn_pivots_on_the_wcs_origin_by_real_clicks_and_undoes() {
     assert!(near(held_at(h.state(), [0.0, 0.0, 4.0]), [0.0, 0.0, 4.0]), "the centre stays put");
     assert_eq!(camcraft_app::setup::work_offset(&h.state().world, "Setup1"), None, "the work offset is untouched");
 }
+
+/// #1538: with a 5 in vise closed on the stock, the "model bounds"
+/// anchors are the 50 x 50 x 6 part's corners, not the vise's, and a
+/// G54 set from the SW anchor lands on the part's corner.
+#[test]
+fn model_bounds_anchors_are_the_parts_never_the_vise() {
+    use camcraft_app::commands::{InsertVise, SetStock, VisePlacement};
+    use camcraft_app::schema::Location;
+    use camcraft_app::stock::StockShape;
+    let mut state = State::new();
+    let part = ImportModel::from_mesh("block", cube(Point3::new(2.5, 2.5, 4.0), Point3::new(52.5, 52.5, 10.0)));
+    state.history.execute(&state.world, part);
+    let stock = SetStock::new(&state.world, StockShape::Box { dx: 55.0, dy: 55.0, dz: 11.0 }, Location::default());
+    state.history.execute(&state.world, stock.expect("stock"));
+    let p = camcraft_app::vise::size("5 in").expect("5 in").half_open();
+    let vise = InsertVise::new(&state.world, &p, None, VisePlacement::FitStock).expect("vise");
+    state.history.execute(&state.world, vise);
+    let [sw, ne, c] = model_anchors(&mut state);
+    assert_eq!((sw, ne, c), ([2.5, 2.5, 4.0], [52.5, 52.5, 4.0], [27.5, 27.5, 4.0]), "the part's corners");
+    run(&mut state, CommandKind::SetWcs { pos: sw, roll_deg: 0.0, pitch_deg: 0.0, yaw_deg: 0.0 });
+    let g54 = camcraft_app::model::find_by_name(&state.world, "G54").expect("the WCS");
+    let at = camcraft_app::model::transform_of(&state.world, &g54).expect("placed").pos;
+    assert_eq!([at.x, at.y, at.z], [2.5, 2.5, 4.0], "G54 on the part's SW corner");
+}
