@@ -39,6 +39,10 @@ pub const MAX_SC_BYTES: usize = 256 << 20;
 pub const MAX_PART_BYTES: usize = 256 << 20;
 /// Largest `cache/model.json` (Solidcraft's manifest bound).
 pub const MAX_MANIFEST_BYTES: usize = 32 << 20;
+/// The farthest a final body's vertex may lie from the origin on any axis,
+/// in mm (1 km: past every machine envelope; a body beyond it is damage,
+/// not a part). The decoder's own bound is 1e12 (#1467).
+pub const MAX_COORD_MM: f64 = 1.0e6;
 /// Largest `container.json`.
 const MAX_CONTAINER_BYTES: usize = 4096;
 
