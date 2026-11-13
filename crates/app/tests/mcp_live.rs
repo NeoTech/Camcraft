@@ -407,8 +407,25 @@ fn a_trickling_client_is_dropped_on_the_idle_schedule() {
     let after = t.elapsed();
     stop.store(true, std::sync::atomic::Ordering::Relaxed);
     trickle.join().expect("trickle thread");
-    got.expect("an idle note, not silence - the trickling client was never dropped");
-    assert!(line.contains("notifications/message") && line.contains("idle"), "{line}");
+    // The server closes a socket that still holds the trickler's unread
+    // bytes, which TCP answers with a reset: the reset can overtake the
+    // best-effort idle note, so a reset, abort, broken pipe or EOF
+    // after the deadline IS the drop (#1366). A read timeout (still
+    // connected) or a note without "idle" is not.
+    match got {
+        Ok(0) => {}
+        Ok(_) => assert!(line.contains("notifications/message") && line.contains("idle"), "{line}"),
+        Err(e) => assert!(
+            matches!(
+                e.kind(),
+                std::io::ErrorKind::ConnectionReset
+                    | std::io::ErrorKind::ConnectionAborted
+                    | std::io::ErrorKind::BrokenPipe
+                    | std::io::ErrorKind::UnexpectedEof
+            ),
+            "the trickling client was never dropped: {e:?}"
+        ),
+    }
     assert!(after >= Duration::from_millis(350), "dropped before the window: {after:?}");
     assert!(after < Duration::from_millis(1500), "dropped late, not on the idle schedule: {after:?}");
 
