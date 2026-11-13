@@ -1,9 +1,9 @@
 {
   "general": {
-    "model": "Doosan DNM 5700",
+    "model": "Doosan DNM 5700 + rotary table",
     "vendor": "DN Solutions",
     "kind": "mill",
-    "description": "DN Solutions DNM 5700 VMC (Fanuc 0i-MF). Specs: DN Solutions DNM 4500/5700/6700 Catalog (X/Y/Z: 1020/570/510mm, rapid 36/36/30 m/min, 12000 RPM spindle 18.5kW, rigid tapping, 30-tool ATC, optional 4th-axis rotary table)"
+    "description": "DN Solutions DNM 5700 VMC (Fanuc 0i-MF). Specs: DN Solutions DNM 4500/5700/6700 Catalog (X/Y/Z: 1020/570/510mm, rapid 36/36/30 m/min, 12000 RPM spindle 18.5kW, rigid tapping, 30-tool ATC) with the optional 4th-axis rotary table. The catalog states no nose-to-axis figure for the table, so none is stated here: every op on this machine refuses by name until the setup states its own nose_to_axis (#1433)"
   },
   "kinematics": {
     "default": {
