@@ -36,6 +36,7 @@ pub mod headless_gpu;
 pub mod interact;
 pub mod locate_pick;
 pub mod machined;
+mod setup_display;
 pub mod mcp_host;
 pub mod operations;
 pub mod path_lines;
