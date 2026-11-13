@@ -340,3 +340,65 @@ fn a_capped_rotary_feed_is_posted_in_the_programs_unit() {
         assert!(inch.program.contains("A60 F39.37"), "{cps}: {}", inch.program);
     }
 }
+
+/// #951 review: the cap judges the move between the points the post
+/// writes - origin-relative, rounded to the output step - not the world
+/// ones. With the work origin off the output grid (any metric origin, in
+/// inch) a one-thou move posts one step while its world coordinates
+/// round to none, so the cap read "tip still" and let F stand over a
+/// 0.0001 in tip move.
+#[test]
+fn a_work_offset_off_the_output_grid_does_not_hide_a_short_move_from_the_cap() {
+    let stream = "\
+TOOL 1 10MM BALL
+PARAM SpindleSpeed 6000
+PARAM OriginX 1
+SECTION
+Rapid X 10000 Y 0 Z 5000 A 0 B 0 C 0
+Feed X 10000 Y 0 Z 0 F 2000000 A 0 B 0 C 0
+Feed X 10001 Y 0 Z 0 F 2000000 A 5000 B 0 C 0
+ENDSECTION
+";
+    for cps in ["assets/posts/fanuc.cps", "assets/posts/doosan-dnm.cps"] {
+        let mch = trunnion(Some(A_RATE));
+        let inch = post_units(cps, &mch, stream, "inch");
+        assert!(inch.warnings.is_empty(), "{cps}: {:?}", inch.warnings);
+        assert!(inch.program.contains("G20"), "{cps}: {}", inch.program);
+        // The origin-relative X posts as one 0.0001 in step: 5 degrees
+        // over it caps F far under the 2000 mm/min the op asked.
+        assert_eq!(assert_within_in(&inch.program, Reading::Path, A_RATE, 25.4), 1, "{cps}: {}", inch.program);
+        let f = a_feeds(&inch.program)[0] * 25.4;
+        assert!(f < 100.0, "{cps}: F {f} mm/min is no cap: {}", inch.program);
+    }
+}
+
+/// #951 review: an F the cap leaves alone is still judged by the word
+/// `ff()` writes, which rounds to a whole mm/min: 999.6 over 2.999 mm
+/// with 3 degrees of A is exactly at the 1000 deg/min limit, and the
+/// rounded F1000 would run A at 1000.33. The word posted never passes it.
+#[test]
+fn a_rounded_uncapped_feed_never_posts_above_the_cap() {
+    let stream = "\
+TOOL 1 10MM BALL
+PARAM SpindleSpeed 6000
+SECTION
+Rapid X 10000 Y 0 Z 5000 A 0 B 0 C 0
+Feed X 10000 Y 0 Z 0 F 999600 A 0 B 0 C 0
+Feed X 12999 Y 0 Z 0 F 999600 A 3000 B 0 C 0
+ENDSECTION
+";
+    for cps in ["assets/posts/fanuc.cps", "assets/posts/doosan-dnm.cps"] {
+        for u in ["mm", "inch"] {
+            let mch = trunnion(Some(A_RATE));
+            let out = post_units(cps, &mch, stream, u);
+            assert!(out.warnings.is_empty(), "{cps} {u}: {:?}", out.warnings);
+            let mm = if u == "inch" { 25.4 } else { 1.0 };
+            // The limit over the length as posted (the X words read back),
+            // strict: no tolerance beyond float noise.
+            let xs: Vec<f64> = out.program.lines().filter(|l| l.contains("G01")).filter_map(|l| word(l, 'X')).collect();
+            let f = a_feeds(&out.program)[0] * mm;
+            let lim = A_RATE * ((xs[1] - xs[0]) * mm) / 3.0;
+            assert!(f <= lim + 1e-6, "{cps} {u}: F{f} over the cap {lim}: {}", out.program);
+        }
+    }
+}
