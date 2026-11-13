@@ -136,6 +136,44 @@ fn the_machine_page_buttons_still_queue_their_commands() {
     assert!(h.query_by_label("Load other").is_some());
 }
 
+/// "Load other" and "Edit" each queue their OWN dialog (undrained, so
+/// the rfd modal never opens).
+#[test]
+fn load_other_and_edit_queue_their_own_dialogs() {
+    let mut h = Harness::builder()
+        .with_size(Vec2::new(1280.0, 720.0))
+        .build_ui_state(frame_undrained, ShellUi::seeded());
+    let st = &mut h.state_mut().state;
+    st.pending.push_back(CommandKind::CreateSetup { name: None, datum_from: None });
+    st.pending.push_back(CommandKind::LoadBuiltinMachine("Tormach 770MX".into()));
+    st.drain_actions();
+    crate::actions::target(st, UiTarget::SetupNode("Setup1".into(), SetupPage::Machine));
+    st.drain_actions();
+    h.run_steps(3);
+    for (label, want_load) in [("Load other", true), ("Edit", false)] {
+        h.state_mut().state.pending.clear();
+        h.get_by_label(label).click();
+        h.run_steps(2);
+        let q: Vec<_> = h.state().state.pending.iter().collect();
+        let load = q.iter().any(|c| matches!(c, CommandKind::LoadMachineDialog));
+        let edit = q.iter().any(|c| matches!(c, CommandKind::EditMachineDialog));
+        assert_eq!((load, edit), (want_load, !want_load), "{label} queued {q:?}");
+    }
+}
+
+/// With no setups the Post page's hint runs straight into the post
+/// rows: no separator between them (upstream's layout).
+#[test]
+fn the_post_page_without_setups_has_no_extra_separator() {
+    let mut h = shell_harness();
+    crate::actions::target(&mut h.state_mut().state, UiTarget::SetupNode(String::new(), SetupPage::Post));
+    h.run_steps(3);
+    let hint = rect(&h, "A document without setups uses the document's machine and post.");
+    let post = rect(&h, "Post");
+    let gap = post.top() - hint.bottom();
+    assert!(gap < 6.0, "hint and post rows sit one item spacing apart, got {gap}");
+}
+
 /// A rotary machine's raised-rotary rows still come last, under the
 /// actions.
 #[test]

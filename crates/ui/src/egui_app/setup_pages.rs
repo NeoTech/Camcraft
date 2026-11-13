@@ -47,7 +47,10 @@ pub(super) fn page(ui: &mut Ui, state: &mut State, name: &str, page: SetupPage) 
             ui.separator();
             if editable(ui, state, ctx) {
                 ownership(ui, state, ctx, Mount::Post);
-                ui.separator();
+                // No setups: the hint runs straight into the post, as before.
+                if ctx.is_some() {
+                    ui.separator();
+                }
                 pages::post_section(ui, state);
                 ui.separator();
                 super::setup_post_page::options_ownership(ui, state, ctx);
