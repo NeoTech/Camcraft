@@ -12,10 +12,10 @@ use crate::geometry::Point3;
 /// meets it when `p` is in the ask's box and footprint (the kerf
 /// excluded by the footprint's own test) and the ask's plane `h` stands
 /// under its top.
-fn hidden_post(p: Point2, top: f64) -> impl Fn((Point2, Point2), f64, &dyn Fn() -> Vec<Point2>, &dyn Fn(Point2) -> bool, usize) -> bool {
-    move |(lo, hi), h, _probes, covers, _upto| {
+fn hidden_post(p: Point2, top: f64) -> Box<Hidden<'static>> {
+    Box::new(move |(lo, hi), h, _probes, covers, _upto| {
         p.x >= lo.x && p.x <= hi.x && p.y >= lo.y && p.y <= hi.y && covers(p) && h < top
-    }
+    })
 }
 
 /// A 100 -> 260 passes the tool straight down (A 180, the middle sampled
