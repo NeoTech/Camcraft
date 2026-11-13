@@ -51,6 +51,10 @@ pub(super) struct Cell {
     r: [f64; 2],
     z0: f64,
     z1: f64,
+    /// How far above its lowest (`z0`/`z1`) the column's bottom can
+    /// stand in this cell at one tip position: the bottom's whole range
+    /// over the cell's poses ([`Cell::heights_over`], #1316).
+    rise: f64,
     /// The hull's flat flanks between the two end discs, as half-planes
     /// `n . x <= bound` in tip-relative XY; `None` when one disc holds
     /// the other (the hull is that disc).
@@ -158,6 +162,13 @@ pub(super) fn push_cells_with(
         let b = if upright { above } else { l0.min(l1) - dip } - sag;
         // #1303's span floor at every sampled pose this cell holds.
         let b = floors.iter().filter(|&&(g, _)| g0 <= g && g <= g1).fold(b, |b, &(_, f)| b.min(f));
+        // The highest the bottom stands at any pose of the cell: each
+        // end station is `axis.z` times a length within `reach`, so it
+        // strays from the chord of its end values by `sag` at most, and
+        // the rim's dip only lowers it. Unbounded when not a number.
+        let ends = |len: f64| (len * a0[2]).max(len * a1[2]);
+        let b_hi = if upright { above } else { ends(above).min(ends(above + band_len)) } + sag;
+        let rise = if b_hi - b >= 0.0 { b_hi - b } else { f64::INFINITY };
         let rad = [r0 + grow + sag + 1e-9, r1 + grow + sag + 1e-9];
         let flanks = flanks(o0, o1, rad);
         for (p, q) in pieces {
@@ -174,6 +185,7 @@ pub(super) fn push_cells_with(
                 r: rad,
                 z0: p.z + b,
                 z1: q.z + b,
+                rise,
                 flanks,
                 interval: j,
                 lo: Point2::new(p.x + x_lo, p.y + y_lo),
@@ -284,6 +296,34 @@ impl Cell {
     /// edge; negative for no kerf). The kerf's own rim counts as
     /// covered: closed toward conviction.
     pub(super) fn bottom_over(&self, q: Point2, kerf2: f64) -> Option<f64> {
+        let z = |s: f64| self.z0 + (self.z1 - self.z0) * s;
+        let low = |(a, b): (f64, f64)| z(a).min(z(b));
+        match self.stretches(q, kerf2) {
+            [Some(a), Some(b)] => Some(low(a).min(low(b))),
+            [a, b] => a.or(b).map(low),
+        }
+    }
+
+    /// Every height the band's column bottom takes over `q` in this
+    /// cell, as one closed range per stretch of the chord that stands
+    /// the column over `q` outside the kerf: from the lowest bottom
+    /// there ([`Self::bottom_over`]'s reading) to the highest any pose
+    /// of the cell holds it (`rise` above). `hit` is asked each range;
+    /// the first `true` ends the walk and is returned. The overhang
+    /// backstop's reading (#1316): hidden stock is not monotone in the
+    /// plane, so it is asked over the whole range, never at one end.
+    pub(super) fn heights_over(&self, q: Point2, kerf2: f64, hit: &mut dyn FnMut(f64, f64) -> bool) -> bool {
+        let z = |s: f64| self.z0 + (self.z1 - self.z0) * s;
+        self.stretches(q, kerf2)
+            .into_iter()
+            .flatten()
+            .any(|(a, b)| hit(z(a).min(z(b)), z(a).max(z(b)) + self.rise))
+    }
+
+    /// The stretches `(s0, s1)` of the chord (tip at `t0 + s * d`) that
+    /// stand the column over `q` outside the kerf: the one before the
+    /// tip's kerf passes over `q` and the one after it.
+    fn stretches(&self, q: Point2, kerf2: f64) -> [Option<(f64, f64)>; 2] {
         // The tip stands at t0 + s*d; seen from it, q walks backwards.
         let p = (q.x - self.t0.x, q.y - self.t0.y);
         let back = (-self.d.0, -self.d.1);
@@ -299,18 +339,12 @@ impl Cell {
         if let Some(planes) = &self.flanks {
             join(clip(p, back, planes));
         }
-        let (lo, hi) = over?;
-        let z = |s: f64| self.z0 + (self.z1 - self.z0) * s;
+        let Some((lo, hi)) = over else {
+            return [None, None];
+        };
         match span(p, back, kerf2) {
-            None => Some(z(lo).min(z(hi))),
-            Some((k0, k1)) => {
-                let before = (k0 > lo).then(|| z(lo).min(z(k0)));
-                let after = (k1 < hi).then(|| z(k1).min(z(hi)));
-                match (before, after) {
-                    (Some(a), Some(b)) => Some(a.min(b)),
-                    (a, b) => a.or(b),
-                }
-            }
+            None => [Some((lo, hi)), None],
+            Some((k0, k1)) => [(k0 > lo).then_some((lo, k0)), (k1 < hi).then_some((k1, hi))],
         }
     }
 }

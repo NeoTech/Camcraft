@@ -99,3 +99,68 @@ fn a_swing_that_stops_short_of_the_hidden_stock_is_clean() {
     let w = swing(15.0, true);
     assert!(w.is_empty(), "{w:?}");
 }
+
+/// A C-shaped part, open toward +Y: a floor X [45, 58], Y [-14, 6],
+/// Z [0, `floor_top`], a web behind it (Y [-14, -10]) up to Z 100 and a
+/// ledge over both, Z [100, 102]. Between floor and ledge, at Y (-10, 6),
+/// stands stock the ledge hides from above - hidden at the planes inside
+/// the cavity only: a plane under `floor_top` reads the floor's part
+/// material there. `floor_top = 100` is the same block with no cavity.
+fn c_part(floor_top: f64) -> Vec<Triangle> {
+    let mut f: Vec<Triangle> = cube(Point3::new(45.0, -14.0, 0.0), Point3::new(58.0, 6.0, floor_top)).facets.to_vec();
+    if floor_top < 100.0 {
+        f.extend(cube(Point3::new(45.0, -14.0, floor_top), Point3::new(58.0, -10.0, 100.0)).facets.iter().cloned());
+    }
+    f.extend(cube(Point3::new(45.0, -14.0, 100.0), Point3::new(58.0, 6.0, 102.0)).facets.iter().cloned());
+    f
+}
+
+/// The band stack's reports for one move that turns from home to B 80
+/// while the tip walks from the origin to (0, 80, -40): the holder is
+/// over the C's cavity only in the first eighth of the walk (tip Z above
+/// -5.5, around B 23..38, its bottom at Z 69..90), and ends 40 mm lower
+/// and 74 mm away. Every ask of the backstop holds the whole walk, so
+/// its lowest plane (Z 34..53 where it is over the C) is the far, deep
+/// end's.
+fn walk_past(floor_top: f64) -> Vec<Warning> {
+    let stock = rect(-40.0, -40.0, 160.0, 100.0);
+    let facets = c_part(floor_top);
+    let tool = long_reach();
+    let cx = VerifyContext {
+        region: &stock,
+        stock: Some(&stock),
+        model: Some(&facets),
+        tool: &tool,
+        mode: Mode::Area,
+        stock_top_z: 120.0,
+        clearance_z: 130.0,
+        gouge_tol: 0.01,
+        z_tol: 1e-3,
+        ..Default::default()
+    };
+    let mut m = Move::new(MoveKind::Feed, Point3::new(0.0, 0.0, 0.0), Point3::new(0.0, 80.0, -40.0), Some(300.0));
+    m.axis = angles_to_axis([0.0, 80.0, 0.0]);
+    assert!(m.axis.is_some());
+    verify(&path(vec![m]), &cx)
+        .into_iter()
+        .filter(|w| matches!(w, Warning::ShankHit { .. } | Warning::SweepHit { .. }))
+        .collect()
+}
+
+#[test]
+fn stock_hidden_in_a_cavity_above_the_asks_lowest_plane_is_convicted() {
+    // #1324 review: the hidden law is not monotone in the plane. Floor
+    // top at Z 60: every ask over the C reads its lowest plane inside
+    // the floor (part material, nothing hidden) - the holder crossed the
+    // cavity's stock 20..40 mm higher, at the start of the walk.
+    let w = walk_past(60.0);
+    assert_eq!(w, vec![Warning::SweepHit { at: 0, part: false }], "{w:?}");
+}
+
+#[test]
+fn the_same_walk_past_a_block_with_no_cavity_is_clean() {
+    // The floor filled up to the ledge: nothing hidden at any height
+    // (under the part's own bottom apart, which the holder never nears).
+    let w = walk_past(100.0);
+    assert!(w.is_empty(), "{w:?}");
+}

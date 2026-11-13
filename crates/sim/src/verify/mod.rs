@@ -164,6 +164,7 @@ mod engine;
 mod excess;
 mod finish;
 mod hidden;
+mod hidden_span;
 mod hole_wall;
 mod laws;
 mod mesh_posed;

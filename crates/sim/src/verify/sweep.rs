@@ -35,10 +35,11 @@ use super::types::Warning;
 const POSE_FRACS: [f64; 5] = [0.0, 0.25, 0.5, 0.75, 1.0];
 
 /// The overhang backstop's ask ([`super::hidden`]'s `hidden_in_cover`):
-/// (box, plane, footprint probes - built on demand -, footprint
-/// membership, judged move).
+/// (box, lowest plane, footprint probes - built on demand -, the
+/// footprint's membership and the heights its bottom takes over a
+/// point, judged move).
 pub(super) type Hidden<'a> =
-    dyn Fn((Point2, Point2), f64, &dyn Fn() -> Vec<Point2>, &dyn Fn(Point2) -> bool, usize) -> bool + 'a;
+    dyn Fn((Point2, Point2), f64, &dyn Fn() -> Vec<Point2>, &super::hidden::Heights<'_>, usize) -> bool + 'a;
 
 /// The reachable-set sweep of one path: for every cut move that
 /// CHANGES the commanded pose (the modal law threaded through the
@@ -202,11 +203,13 @@ fn swing_hit(
     // under a ledge is in no column sample; asked only when the column
     // law found nothing, so it adds convictions, never removes one.
     // Since #1316 it reads the same reachable set, on its own coarser
-    // cells and a stated plane budget ([`super::turn_hidden`]).
+    // cells and a stated plane budget ([`super::turn_hidden`]) - and
+    // every column over the whole range of heights the band's bottom
+    // takes there, because hidden stock is not monotone in the plane.
     if worst.is_none()
         && backstop_asks(&pieces, from_abc, to_abc, bands, r, grow)
             .iter()
-            .any(|a| hidden((a.lo, a.hi), a.plane, &|| a.probes(), &|q| a.covers(q, kerf2), upto))
+            .any(|a| hidden((a.lo, a.hi), a.plane, &|| a.probes(), &|q, hit| a.heights(q, kerf2, hit), upto))
     {
         worst = Some(false);
     }
