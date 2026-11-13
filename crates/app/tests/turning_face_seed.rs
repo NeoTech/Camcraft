@@ -8,7 +8,8 @@
 //! stock, 2 mm of allowance above the part.
 //!
 //! Gate map (M4.4): covers app::operation::kinds (seed_facing),
-//! app::operation::seed, app::mcp::job (add_operation/generate/verify).
+//! app::operation::seed, app::operation::heights_sel (depth_sane, Facing
+//! arm), app::mcp::job (add_operation/edit_operation/generate/verify).
 //! Lane shape (M4.4): all tests here run in seconds.
 
 use camcraft_app::mcp::Server;
@@ -155,4 +156,73 @@ fn the_facing_seed_runs_from_the_stock_top_to_the_part_top() {
     };
     assert_eq!((top_z.reference, top_z.offset), (HeightReference::TopOfStock, 0.0));
     assert_eq!((bottom_z.reference, bottom_z.offset), (HeightReference::TopOfModel, 0.0));
+}
+
+/// Edit `F1`'s window to Fixed `top` / `bottom` over the MCP
+/// `edit_operation` door (the same `EditOperationParams` +
+/// `heights_gate` the GUI property panel runs).
+fn edit_window(c: &mut Client, top: f64, bottom: f64) -> (bool, String) {
+    let (err, body) = c.call(
+        "edit_operation",
+        json!({ "name": "F1", "params": {
+            "top_z": { "reference": "fixed", "offset": top },
+            "bottom_z": { "reference": "fixed", "offset": bottom },
+        } }),
+    );
+    (err, body.to_string())
+}
+
+#[test]
+fn an_inverted_facing_window_is_refused_at_the_door() {
+    // #1409 relaxed the Facing arm of `depth_sane` to `t >= b` so an
+    // at-length part reaches generate's "nothing to face"; a top
+    // below the facing plane must still refuse by name, before any
+    // geometry runs.
+    let dir = tmp_dir("inverted");
+    let mut c = facing_job(&dir, 48.0, 50.0);
+    let (err, said) = edit_window(&mut c, 47.0, 48.0);
+    assert!(err, "a top below the facing plane is no window: {said}");
+    assert!(said.contains("must cut downward"), "{said}");
+
+    // The create door says the same: stock 46 under a 48 part seeds
+    // top 46 (Top of Stock) over a plane at 48 (Top of Model).
+    let short = tmp_dir("inverted-create");
+    let stl = short.join("cyl.stl");
+    write_bar_stl(&stl, 10.0, 48.0);
+    let mut s = Client::new();
+    s.ok("load_machine", json!({ "path": repo("assets/machines/lathe.mch") }));
+    s.ok("import_model", json!({ "path": stl.display().to_string() }));
+    s.ok("set_stock", json!({ "cylinder": { "diameter": 20.0, "height": 46.0 } }));
+    s.ok("add_tool", json!({ "catalog": "TN-1600-0R8" }));
+    let (err, body) = s.call(
+        "add_operation",
+        json!({ "kind": "facing", "tool": "TN-1600-0R8", "name": "F1", "source": "cyl" }),
+    );
+    let said = body.to_string();
+    assert!(err, "stock shorter than the part has no window: {said}");
+    assert!(said.contains("must cut downward"), "{said}");
+    let _ = std::fs::remove_dir_all(&dir);
+    let _ = std::fs::remove_dir_all(&short);
+}
+
+#[test]
+fn a_level_facing_window_passes_the_door_and_the_slightest_inversion_does_not() {
+    // The Facing arm of `depth_sane` (operation/heights_sel.rs) is an
+    // exact `t >= b` - it carries NO tolerance. So:
+    // - 48 / 48 (level, the at-length part) passes the door; generate
+    //   then refuses it as "nothing to face" (pinned above);
+    // - 48 / 48 + 1e-9 is a top below the plane by a nanometre and
+    //   already refuses. 1e-9 is far below any machine resolution yet
+    //   exactly representable as a difference near 48 (f64 spacing
+    //   there is ~7e-15), so a guard that grew any epsilon above 1e-9
+    //   (or went back to "always true") turns this red.
+    let dir = tmp_dir("level");
+    let mut c = facing_job(&dir, 48.0, 50.0);
+    let (err, said) = edit_window(&mut c, 48.0, 48.0);
+    assert!(!err, "a level Facing window is legal at the door: {said}");
+
+    let (err, said) = edit_window(&mut c, 48.0, 48.0 + 1e-9);
+    assert!(err, "a top 1e-9 below the facing plane is inverted: {said}");
+    assert!(said.contains("must cut downward"), "{said}");
+    let _ = std::fs::remove_dir_all(&dir);
 }
