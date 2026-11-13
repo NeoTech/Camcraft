@@ -28,6 +28,9 @@ coolantModes = true; // reads PARAM Coolant (#112/#150)
 afterModes = true;   // reads PARAM AfterOperation (#110)
 threadHands = true;  // reads PARAM SpindleDirection (#629): M4 when the thread's hand needs it
 programUnits = "mm inch"; // #902: writes the document's unit (postOptions.Units), G21 / G20
+// Explain G-code (#1399): T0101 is tool 1, offset 1 (the PathPilot lathe
+// T word above), never "tool 101". Read only when Explain is on.
+explainTool = "station-offset";
 // liveTooling is NOT declared: PathPilot's lathe tables list no C axis
 // and no live-tool words, so the engine refuses a C-axis section by
 // name before this script ever sees it.
