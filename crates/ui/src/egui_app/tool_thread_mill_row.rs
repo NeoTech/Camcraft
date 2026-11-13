@@ -77,7 +77,7 @@ mod tests {
     #[test]
     fn picking_a_thread_mill_kind_seeds_a_sane_tool_and_round_trips() {
         let end_mill = catalog().into_iter().find(|(n, _)| *n == "EM-0600-4FL").map(|(_, t)| t).expect("catalog");
-        for (index, kind) in [(13, ToolKind::ThreadMill), (14, ToolKind::ThreadMillSingle)] {
+        for (index, kind) in [(14, ToolKind::ThreadMill), (15, ToolKind::ThreadMillSingle)] {
             let mut draft = ToolUi::from_tool("TM", &end_mill, false);
             draft.kind = index;
             assert_eq!(draft.tool_kind(), kind);
