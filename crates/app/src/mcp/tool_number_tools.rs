@@ -16,7 +16,7 @@ use crate::tool_numbers;
 pub(super) const TOOLS: &[Tool] = &[Tool {
     name: "set_tool_number",
     description: "Give a document tool its controller number (the T.. / H.. a post writes, which must match the machine's tool table), or pass number: null to go back to its list position. Returns the tool's own number and the number it posts as (get_job's tool rows show both). One undoable step. Refused by name: an unknown or non-tool name, a number outside 1-99999, a number another tool already has, and a no-op.",
-    schema: schema,
+    schema,
     run: set_tool_number,
 }];
 

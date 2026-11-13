@@ -129,7 +129,9 @@ pub(super) fn get_job(env: &mut Env, _a: &Map<String, Value>) -> Result<Value, S
             let mut row = super::tool_number_tools::number_view(env, n);
             row["definition"] = project::tool_to_json(&t);
             row["name"] = json!(n);
-            row.as_object_mut().map(|o| o.remove("tool"));
+            if let Some(o) = row.as_object_mut() {
+                o.remove("tool");
+            }
             row["holder"] = super::holders::holder_view(w, n);
             row
         }))
