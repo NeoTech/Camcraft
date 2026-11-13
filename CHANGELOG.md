@@ -10,6 +10,7 @@ v0.8.1).
 
 | Commit | Date | Change | Version |
 |---|---|---|---|
+| 3f6ecb4a5 | 2026-11-13 | The mid-turn sweep no longer refuses a blade-lying swarf link that turns B through vertical: a horizontal end's dip is no longer pinned onto the in-between poses (#1404, PR #1406) | 0.19.0 |
 | 38699549e | 2026-11-13 | Explain G-code post option - opt-in plain-English comments on G-code blocks for posts that declare a comment form; posts that do not are refused by name (#1386, PR #1394) | 0.19.0 |
 | 96d0f3661 | 2026-11-13 | doosan-dnm post writes the first A word of every operation (A0 included) instead of assuming the table stands at A0, so an A0 operation after a tilted one no longer cuts at the old angle (#950, PR #1396) | 0.19.0 |
 | 3de5be389 | 2026-11-13 | Posts cap the feed of a block that turns a rotary at the machine's stated rotary rate and linear feed (fanuc, doosan-dnm, fanuc-lathe through one shared rule), refusing by name when the starting angle is unknown (#885, PR #1395) | 0.19.0 |

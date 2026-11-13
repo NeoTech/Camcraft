@@ -126,6 +126,8 @@ since 0.18.0.
   machine's stated rotary rate and linear feed (Fanuc, Doosan DNM, Fanuc Lathe;
   #885), and the Doosan DNM post writes the first A word of every operation, so
   an A0 operation after a tilted one no longer cuts at the old angle (#950).
+- Swarf: the mid-turn sweep no longer refuses a blade-lying link that turns B
+  through vertical (#1404).
 - Verification: a tool cutting into a flat is a gouge; a necked tool is judged at
   its drawn neck; non-finite or zero tool axes are refused; crossing checks read
   a shared vertex a rounding apart as a touch; the hole-wall excuse and tilted
