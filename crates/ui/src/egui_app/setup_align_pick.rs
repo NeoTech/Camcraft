@@ -36,9 +36,8 @@ const FLOW_TIP: &str = "Align the part in steps, top to bottom: start from a pre
 pub(super) fn picker(ui: &mut Ui, state: &mut State, setup: &str) {
     let current = setup_align::stored(&state.world, setup);
     let mut queued: Option<CommandKind> = None;
-    ui.label("    Part alignment - each move starts from where the part sits now").on_hover_text(FLOW_TIP);
     ui.horizontal(|ui| {
-        ui.label("      Start from a preset");
+        ui.label("    Part alignment").on_hover_text(FLOW_TIP);
         ComboBox::from_id_salt(("setup_align", setup))
             .selected_text(align_text(current))
             .show_ui(ui, |ui| {
@@ -71,7 +70,7 @@ pub(super) fn picker(ui: &mut Ui, state: &mut State, setup: &str) {
     let (mut draft, mut pivot): ([f64; 3], TurnPivot) =
         ui.data_mut(|d| *d.get_temp_mut_or_insert_with(id, || ([0.0; 3], TurnPivot::default())));
     ui.horizontal(|ui| {
-        ui.label("      Turn by");
+        ui.label("      Turn");
         for (axis, v) in ["X", "Y", "Z"].into_iter().zip(draft.iter_mut()) {
             ui.label(axis);
             ui.add(DragValue::new(v).speed(1.0).range(-360.0..=360.0).suffix("°"));

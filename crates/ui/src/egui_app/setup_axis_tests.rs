@@ -273,8 +273,7 @@ fn the_picked_rows_name_points_and_edges_in_document_units() {
     let a = corner(h.state(), [0.0, 0.0, 0.0]);
     crate::axis_pick::take(h.state_mut(), a);
     h.run();
-    // #738: the count and the kind first, then where.
-    assert!(h.query_by_label_contains("+X: 1 point selected (pick 1 more) - on 'part' (0.000, 0.000, 0.000) mm").is_some());
+    assert!(h.query_by_label_contains("+X: 1 of 2 points on 'part' (0.000, 0.000, 0.000) mm").is_some());
     let b = corner(h.state(), [0.0, 20.0, 0.0]);
     crate::axis_pick::take(h.state_mut(), b);
     h.get_by_label("+Y by Edge").click();
@@ -286,9 +285,9 @@ fn the_picked_rows_name_points_and_edges_in_document_units() {
         h.query_all_by_label_contains(head).find_map(|n| n.accesskit_node().label().or_else(|| n.accesskit_node().value())).unwrap_or_default()
     };
     let pts = label(&h, "+X: 2 points");
-    assert_eq!(pts, "        +X: 2 points selected - on 'part' (0.000, 0.000, 0.000) -> (0.000, 20.000, 0.000) mm");
-    let e = label(&h, "+Y: 1 edge");
-    assert!(e.contains("1 edge selected - on 'part', 20.000 mm long, along ("), "{e}");
+    assert_eq!(pts, "        +X: 2 points on 'part' (0.000, 0.000, 0.000) -> (0.000, 20.000, 0.000) mm");
+    let e = label(&h, "+Y: edge");
+    assert!(e.contains("edge on 'part', 20.000 mm long, along ("), "{e}");
     for t in [&pts, &e] {
         assert!(!t.contains("0x") && !t.contains("vertex") && !t.contains("chain"), "no feature id: {t}");
     }
@@ -296,7 +295,7 @@ fn the_picked_rows_name_points_and_edges_in_document_units() {
     h.run();
     let pts = label(&h, "+X: 2 points");
     assert!(pts.ends_with("(0.00000, 0.00000, 0.00000) -> (0.00000, 0.78740, 0.00000) in"), "{pts}");
-    let e = label(&h, "+Y: 1 edge");
+    let e = label(&h, "+Y: edge");
     assert!(e.contains("0.78740 in long"), "{e}");
 }
 

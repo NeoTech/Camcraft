@@ -256,7 +256,7 @@ fn a_preset_after_a_face_lay_composes_and_as_modelled_is_the_one_reset() {
         .with_size(Vec2::new(600.0, 400.0))
         .build_ui_state(frame, state);
     h.run();
-    assert!(h.query_by_label_contains("each move starts from where the part sits now").is_some(), "the header says the flow");
+    assert!(h.query_by_label_contains("Part alignment").is_some(), "the row keeps its header (the flow is its tooltip)");
     let now = held(h.state());
     h.get_by(|n| n.role() == Role::ComboBox && n.value().as_deref() == Some(now.as_str())).click();
     h.run();

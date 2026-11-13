@@ -256,16 +256,14 @@ pub fn point_words(world: &World, g: &GeoSel, unit: Unit) -> String {
     }
 }
 
-/// The picked row's words (#557 hand check, #738): how many of what are
-/// selected, then where, in the document's units - never an internal
-/// feature id. Points read "1 point selected (pick 1 more) - on 'block'
-/// (x, y, z) mm" / "2 points selected - on 'block' (..) -> (..) mm"; an
-/// edge reads "1 edge selected - on 'block', 50.000 mm long, along (dx,
-/// dy, dz)". Coordinates are the document frame (as modelled).
+/// The picked row's words (#557 hand check): what was picked and where,
+/// in the document's units - never an internal feature id. Points read
+/// "1 of 2 points on 'block' (x, y, z) mm" / "2 points on 'block' (..)
+/// -> (..) mm"; an edge reads "edge on 'block', 50.000 mm long, along
+/// (dx, dy, dz)". Coordinates are the document frame (as modelled).
 #[must_use]
 pub fn picks_text(world: &World, picks: &[GeoSel], unit: Unit) -> String {
-    let Some(first) = picks.first() else { return "nothing selected".to_owned() };
-    let head = crate::pick_words::selected(picks);
+    let Some(first) = picks.first() else { return "nothing picked".to_owned() };
     let mut names: Vec<&str> = Vec::new();
     for g in picks {
         if !names.contains(&g.entity.as_str()) {
@@ -290,15 +288,15 @@ pub fn picks_text(world: &World, picks: &[GeoSel], unit: Unit) -> String {
                 } else {
                     String::new()
                 };
-                format!("{head} - on {on}, {} {suffix} long{dir}", units::len(l, unit, 3))
+                format!("edge on {on}, {} {suffix} long{dir}", units::len(l, unit, 3))
             }
-            _ => format!("{head} - on {on} (no longer straight or in the model - re-pick it)"),
+            _ => format!("edge on {on} (no longer straight or in the model - re-pick it)"),
         },
         _ => {
             let pts: Vec<String> = coords.iter().filter_map(|c| c.first()).map(at).collect();
             let head = match picks.len() {
-                1 => format!("{head} (pick 1 more) - on {on}"),
-                _ => format!("{head} - on {on}"),
+                1 => format!("1 of 2 points on {on}"),
+                n => format!("{n} points on {on}"),
             };
             if pts.is_empty() { head } else { format!("{head} {} {suffix}", pts.join(" -> ")) }
         }

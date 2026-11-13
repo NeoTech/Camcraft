@@ -99,7 +99,8 @@ pub(super) fn row(ui: &mut Ui, state: &mut State, setup: &str) {
         let side = pick::plane_side(&state.world, &picks).ok();
         // #738: the count and the kind, never the face's internal id, on
         // a line of its own (#330: Apply stays in the narrow pane).
-        ui.label(RichText::new(format!("      {}", pick_words::selected(&picks))).weak());
+        let text = if picks.is_empty() { "nothing picked yet".to_owned() } else { pick_words::selected(&picks) };
+        ui.label(RichText::new(format!("      Picked: {text}")).weak());
         ui.horizontal(|ui| {
             ui.label("     ");
             let tip = match &check {

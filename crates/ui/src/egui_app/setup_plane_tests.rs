@@ -206,7 +206,7 @@ fn the_pick_status_counts_the_face_and_never_shows_an_id() {
     h.run();
     h.get_by_label("Pick a face").click();
     h.run();
-    assert!(h.query_by_label_contains("nothing selected").is_some(), "an empty draft says so");
+    assert!(h.query_by_label_contains("nothing picked yet").is_some(), "an empty draft says so");
     let wall = front_wall(h.state());
     crate::plane_pick::take(h.state_mut(), wall);
     h.run();
