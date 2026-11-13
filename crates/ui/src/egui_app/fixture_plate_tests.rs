@@ -158,7 +158,7 @@ fn an_imported_fixture_offers_detect_plate_grid() {
 /// the label its row shows (`labelled_by`) or a plain name. Returns the
 /// role and drawn value of each input that has neither, and how many
 /// inputs were looked at.
-fn unnamed_inputs<S>(h: &Harness<'static, S>) -> (Vec<String>, usize) {
+pub(super) fn unnamed_inputs<S>(h: &Harness<'static, S>) -> (Vec<String>, usize) {
     use egui::accesskit::Role;
     use egui_kittest::kittest::NodeT;
     let (mut bad, mut seen) = (Vec::new(), 0);

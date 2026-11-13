@@ -30,6 +30,11 @@ pub enum AccessoryPlacement {
     /// `vise`, so the stock's top stands `above` mm over the jaws - the
     /// parallels' height is set to fit and the vise drops to suit.
     UnderStockInVise { vise: String, above: f64 },
+    /// Lathe chucks only (#1442): closed on the setup's round stock,
+    /// standing on its axis - the grip (or collet bore) set to the
+    /// stock's diameter, the face at its underside (a collet chuck's
+    /// nose face its nose length above, the stock that deep in it).
+    OnStock,
 }
 
 /// Place accessory `params` into setup context `setup` (`None` - the
@@ -44,7 +49,10 @@ impl InsertAccessory {
     /// Refused when the accessory breaks its law (named), the setup is
     /// gone, the pose is not a finite rigid frame, or (fitting parallels)
     /// the vise is not a built-in vise, the setup has no stock, the
-    /// stock already stands that high, or the pair does not fit the jaws.
+    /// stock already stands that high, or the pair does not fit the jaws;
+    /// (fitting a chuck on the stock) the accessory is not a chuck, the
+    /// setup has no stock, the stock is not round about a vertical axis,
+    /// or the chuck cannot close on it.
     pub fn new(
         world: &World,
         params: &Accessory,
@@ -54,6 +62,7 @@ impl InsertAccessory {
         let (params, pick, lift) = match placement {
             AccessoryPlacement::At(loc) => (params.clone(), loc, None),
             AccessoryPlacement::UnderStockInVise { vise, above } => fit_under_stock(world, params, setup, &vise, above)?,
+            AccessoryPlacement::OnStock => fit_on_stock(world, params, setup)?,
         };
         let facets = params.mesh().map_err(CommandError::Invalid)?;
         let entry = FixtureEntry {
@@ -118,6 +127,25 @@ fn fit_under_stock(
     let fitted = Accessory::Parallels { height: fit.height, thickness, length, spacing: fit.spacing };
     let lift = MoveFixture::locating(world, vise, fit.vise)?;
     Ok((fitted, fit.parallels, Some(lift)))
+}
+
+/// A lathe chuck closed on the setup's round stock, and its pose.
+fn fit_on_stock(
+    world: &World,
+    params: &Accessory,
+    setup: Option<&str>,
+) -> Result<(Accessory, Location, Option<MoveFixture>), CommandError> {
+    if !accessory::chuck::is_chuck(params) {
+        return Err(CommandError::Invalid(format!(
+            "only a lathe chuck fits on the stock, not a {}",
+            params.label().to_lowercase()
+        )));
+    }
+    let stock = model::stock_world_aabb_for(world, setup)
+        .ok_or_else(|| CommandError::Needs(crate::vise_fit::no_stock_message(setup, "the chuck on")))?;
+    let (fit, at) = accessory::chuck::fit_to_stock(params, &stock)
+        .map_err(|e| CommandError::Invalid(format!("{} on the stock: {e}", params.label())))?;
+    Ok((fit, Location { pos: at, rot: IDENTITY_Q }, None))
 }
 
 impl Command for InsertAccessory {
