@@ -201,10 +201,8 @@ fn section(
         cnc::Record::Param { name: "EdmCondition".into(), value: json!(condition) },
         cnc::Record::Param { name: "WireSide".into(), value: json!(side) },
     ];
-    if let Some((deg, _)) = taper {
-        if deg != 0.0 {
-            wire.push(cnc::Record::Param { name: "WireTaper".into(), value: json!(deg) });
-        }
+    if let Some((deg, _)) = taper.filter(|(deg, _)| *deg != 0.0) {
+        wire.push(cnc::Record::Param { name: "WireTaper".into(), value: json!(deg) });
     }
     wire.extend(four.map(|rule| cnc::Record::Param { name: "WireFourAxis".into(), value: json!(rule) }));
     records.splice(at..at, wire);
