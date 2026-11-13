@@ -18,6 +18,7 @@
 
 mod pocket_support;
 
+use camcraft_app::geometry::feature;
 use camcraft_app::commands::{AddTool, CreateOperation, GenerateOperation, History, ImportModel, SetStock};
 use camcraft_app::geo2d::Point2;
 use camcraft_app::machining2d::TrochoidReturn;
@@ -65,21 +66,50 @@ fn trochoid(a: f64, b: f64) -> OpParams {
 /// `a` to `b` along X - on the pocket floor face when `pick`, else on
 /// the whole model.
 fn job(a: f64, b: f64, pick: bool) -> (World, History) {
+    job_on(a, b, if pick { Pick::Floor } else { Pick::Model })
+}
+
+enum Pick {
+    Floor,
+    Rim,
+    Model,
+}
+
+fn job_on(a: f64, b: f64, pick: Pick) -> (World, History) {
     let world = new_world();
     let mut h = History::default();
     h.execute(&world, ImportModel::from_mesh("part", part()));
     h.execute(&world, SetStock::new(&world, StockShape::Box { dx: 90.0, dy: 70.0, dz: 20.0 }, Default::default()).expect("stock"));
     let t = catalog().into_iter().find(|(n, _)| *n == TOOL).map(|(_, t)| t).expect("catalog");
     h.execute(&world, AddTool::new(&world, TOOL, t).expect("tool"));
-    let src = if pick {
-        let p = recognize::pockets_of(&world, "part").expect("recognised").into_iter().next().expect("the pocket");
-        assert!((p.area - 1250.0).abs() < 1e-6, "the screenshot's 1250 mm2 floor: {}", p.area);
-        SrcRef::Selection(vec![GeoSel { entity: "part".into(), feature: FeatureSel::Face(p.floor) }])
-    } else {
-        SrcRef::Entity("part".into())
+    let src = match pick {
+        Pick::Floor => {
+            let p = recognize::pockets_of(&world, "part").expect("recognised").into_iter().next().expect("the pocket");
+            assert!((p.area - 1250.0).abs() < 1e-6, "the screenshot's 1250 mm2 floor: {}", p.area);
+            SrcRef::Selection(vec![GeoSel { entity: "part".into(), feature: FeatureSel::Face(p.floor) }])
+        }
+        Pick::Rim => SrcRef::Selection(floor_rim(&world)),
+        Pick::Model => SrcRef::Entity("part".into()),
     };
     h.execute(&world, CreateOperation::new(&world, "T1", TOOL, src, trochoid(a, b)).expect("create"));
     (world, h)
+}
+
+/// The pocket floor's rim at z 10: its four edge chains (the 50 x 25
+/// outline, picked edge by edge).
+fn floor_rim(world: &World) -> Vec<GeoSel> {
+    let e = model::find_by_name(world, "part").expect("model");
+    let f = model::features_of(world, &e).expect("features");
+    let rim: Vec<_> = feature::chains(&f)
+        .into_iter()
+        .filter(|c| {
+            let p = feature::chain_points(&f, c);
+            p.iter().all(|q| (q[2] - 10.0).abs() < 1e-6 && q[0].abs() <= 25.0 + 1e-6 && q[1].abs() <= 12.5 + 1e-6)
+        })
+        .map(|c| GeoSel { entity: "part".into(), feature: FeatureSel::Chain(c.id) })
+        .collect();
+    assert_eq!(rim.len(), 4, "the rim's four edges");
+    rim
 }
 
 fn nc(tag: &str) -> std::path::PathBuf {
@@ -116,6 +146,26 @@ fn a_slot_that_fits_its_selection_generates_and_posts_clean() {
     let out = nc("fits");
     posting::post_setup(&world, &out).expect("a fitting slot posts");
     let _ = std::fs::remove_file(&out);
+}
+
+#[test]
+fn a_slot_a_hundredth_past_the_end_wall_is_refused_and_the_exact_fit_generates() {
+    // 16 mm wide, B at x 17.01: the cutter reaches 25.01, 0.01 mm into
+    // the end wall - refused through generate; at 17.0 it is tangent.
+    let (world, _h) = job(-17.0, 17.01, true);
+    let err = GenerateOperation::new(&world, "T1").map(|_| ()).expect_err("0.01 mm past is refused").to_string();
+    assert!(err.contains("does not fit its selection") && err.contains("0.010"), "{err}");
+    let (world, mut h) = job(-17.0, 17.0, true);
+    h.execute(&world, GenerateOperation::new(&world, "T1").expect("the exact fit generates"));
+}
+
+#[test]
+fn an_edge_chain_pick_confines_the_slot_like_the_floor_face() {
+    let (world, _h) = job_on(-20.0, 20.0, Pick::Rim);
+    let err = GenerateOperation::new(&world, "T1").map(|_| ()).expect_err("refused").to_string();
+    assert!(err.contains("does not fit its selection") && err.contains("3.000"), "{err}");
+    let (world, mut h) = job_on(-12.0, 12.0, Pick::Rim);
+    h.execute(&world, GenerateOperation::new(&world, "T1").expect("a fitting slot on the rim generates"));
 }
 
 #[test]

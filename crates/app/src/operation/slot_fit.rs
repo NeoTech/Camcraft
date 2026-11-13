@@ -157,4 +157,41 @@ mod tests {
         .expect("ring");
         assert!(refuse_unfit_slot("Slot", Point2::new(-20.0, 0.0), Point2::new(20.0, 0.0), 4.0, &ring).is_err());
     }
+
+    // Near misses (#1503 review): 0.01 mm past a wall is refused and the
+    // exact fit beside it passes, so FIT_TOL cannot loosen to 0.01 mm or
+    // more without a red test.
+    #[test]
+    fn a_slot_a_hundredth_past_the_end_wall_is_refused_and_the_exact_fit_passes() {
+        let pocket = rect(25.0, 12.5);
+        // 16 mm wide: the cutter edge reaches x = 17 + 8 = 25, the wall.
+        let exact = refuse_unfit_slot("Slot", Point2::new(-17.0, 0.0), Point2::new(17.0, 0.0), 16.0, &pocket);
+        assert!(exact.is_ok(), "{exact:?}");
+        let e = refuse_unfit_slot("Slot", Point2::new(-17.0, 0.0), Point2::new(17.01, 0.0), 16.0, &pocket).expect_err("0.01 mm past B's wall");
+        assert!(e.to_string().contains("0.010"), "{e}");
+    }
+
+    #[test]
+    fn a_slot_a_hundredth_too_wide_for_its_region_is_refused_and_the_exact_width_passes() {
+        let pocket = rect(25.0, 12.5);
+        let (a, b) = (Point2::new(-5.0, 0.0), Point2::new(5.0, 0.0));
+        let exact = refuse_unfit_slot("Slot", a, b, 25.0, &pocket);
+        assert!(exact.is_ok(), "{exact:?}");
+        let e = refuse_unfit_slot("Slot", a, b, 25.02, &pocket).expect_err("0.01 mm too wide each side");
+        assert!(e.to_string().contains("0.010"), "{e}");
+    }
+
+    #[test]
+    fn a_centre_line_a_hundredth_too_close_to_a_hole_is_refused_and_the_exact_clearance_passes() {
+        let ring = Region::new(vec![
+            rect(25.0, 12.5).loops()[0].clone(),
+            Loop::new(vec![Point2::new(-2.0, -2.0), Point2::new(-2.0, 2.0), Point2::new(2.0, 2.0), Point2::new(2.0, -2.0)]).expect("hole"),
+        ])
+        .expect("ring");
+        // 4 mm wide above the 4 x 4 hole: y = 4 leaves exactly 2 mm.
+        let exact = refuse_unfit_slot("Slot", Point2::new(-20.0, 4.0), Point2::new(20.0, 4.0), 4.0, &ring);
+        assert!(exact.is_ok(), "{exact:?}");
+        let e = refuse_unfit_slot("Slot", Point2::new(-20.0, 3.99), Point2::new(20.0, 3.99), 4.0, &ring).expect_err("0.01 mm into the hole");
+        assert!(e.to_string().contains("0.010"), "{e}");
+    }
 }
