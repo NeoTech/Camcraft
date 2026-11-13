@@ -17,7 +17,10 @@
 //! Gate map (M4.4): covers app::post (every assets/posts/*.cps unit
 //! handling), app::posting (program_options), post::units.
 
+mod common;
+
 use camcraft_app::post::{engine, PostError};
+use common::legacy_program::as_program;
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 
@@ -148,14 +151,19 @@ fn every_inch_post_writes_the_mm_program_in_inches() {
     let write = std::env::var_os("WRITE_GOLDEN").is_some();
     for (stem, mm_word, inch_word) in INCH_POSTS {
         let cps = read(&format!("assets/posts/{stem}.cps"));
+        let mut posted = 0;
         for g in GOLDENS {
-            let stream = read(&format!("crates/app/tests/golden/{g}.cl"));
+            // #1357: the golden as the program a real operation streams
+            // (tool, spindle, each cycle's feed) - a bare legacy stream is
+            // refused by name (a cycle with no feed, a stopped spindle).
+            let stream = as_program(g, &read(&format!("crates/app/tests/golden/{g}.cl")));
             let mm = post(&cps, &stream, "mm").unwrap_or_else(|e| panic!("{stem} on {g}: {e}"));
             let inch = post(&cps, &stream, "inch").unwrap_or_else(|e| panic!("{stem} on {g}: {e}"));
             assert_eq!(mm.warnings, inch.warnings, "{stem} on {g}: the unit changes no verdict");
             if !mm.warnings.is_empty() {
-                continue; // refused in either unit alike (e.g. a legacy tap without rpm)
+                continue; // refused in either unit alike
             }
+            posted += 1;
             same_program_in_inch(stem, g, &mm.program, &inch.program, (mm_word, inch_word));
             // The mm program is the one an unstated unit posts: byte-identical.
             let plain = engine::run(&cps, &vmc(), &stream).unwrap_or_else(|e| panic!("{stem} on {g}: {e}"));
@@ -171,6 +179,9 @@ fn every_inch_post_writes_the_mm_program_in_inches() {
                 }
             }
         }
+        // Every golden posts: a refusal here would skip the comparison
+        // (and the committed inch golden) silently.
+        assert_eq!(posted, GOLDENS.len(), "{stem}: every golden posts");
     }
 }
 
@@ -255,8 +266,9 @@ fn angle_words(program: &str) -> Vec<String> {
 /// 4th-axis index path.
 #[test]
 fn rotary_angle_words_are_degrees_in_an_inch_program() {
-    let rtcp = "TOOL 1 T1\nSECTION\nRapid X 0 Y 0 Z 20000 A 37500 B 0 C 0\nFeed X 20000 Y 0 Z 0 F 300000 A 0 B 12250 C 0\nFeed X 25400 Y 5000 Z 0 F 300000 A -45000 B 12250 C 0\nENDSECTION\n";
-    let index = "TOOL 1 T1\nSECTION\nRapid X 0 Y 0 Z 10000 A 90000\nFeed X 50000 Y 0 Z -1000 F 400000 A 90000\nRapid X 50000 Y 0 Z 10000 A 127500\nFeed X 0 Y 0 Z -1000 F 400000 A 127500\nENDSECTION\n";
+    // A real stream states its spindle (a cut with it stopped is refused).
+    let rtcp = "TOOL 1 T1\nPARAM SpindleSpeed 6000\nSECTION\nRapid X 0 Y 0 Z 20000 A 37500 B 0 C 0\nFeed X 20000 Y 0 Z 0 F 300000 A 0 B 12250 C 0\nFeed X 25400 Y 5000 Z 0 F 300000 A -45000 B 12250 C 0\nENDSECTION\n";
+    let index = "TOOL 1 T1\nPARAM SpindleSpeed 6000\nSECTION\nRapid X 0 Y 0 Z 10000 A 90000\nFeed X 50000 Y 0 Z -1000 F 400000 A 90000\nRapid X 50000 Y 0 Z 10000 A 127500\nFeed X 0 Y 0 Z -1000 F 400000 A 127500\nENDSECTION\n";
     let cases: [(&str, &str, &str, &[&str]); 3] = [
         ("fanuc", "assets/machines/tilthead.mch", rtcp, &["A37.5", "B0", "A0", "B12.25", "A-45"]),
         ("doosan-dnm", "assets/machines/tilthead.mch", rtcp, &["A37.5", "B0", "A0", "B12.25", "A-45"]),
@@ -295,7 +307,12 @@ fn grbl_family_posts_write_the_mm_program_in_inches() {
         let mch = camcraft_app::post::machine::mirror(&camcraft_app::machine::parse_mch(text).unwrap_or_else(|e| panic!("{machine}: {e}")));
         let mut posted = 0;
         for g in GOLDENS {
-            let stream = read(&format!("crates/app/tests/golden/{g}.cl"));
+            // #1357, #1359: the golden as a real program (tool change,
+            // spindle, each cycle's feed) - a cut with the spindle stopped
+            // is refused by name - with the clearance height a real stream
+            // states, which these posts lift to at a tool change.
+            let stream = as_program(g, &read(&format!("crates/app/tests/golden/{g}.cl")))
+                .replacen("PARAM SetupName", "PARAM ClearancePlane 15\nPARAM SetupName", 1);
             let mm = engine::run_with(&cps, &mch, &stream, &units("mm")).unwrap_or_else(|e| panic!("{stem} on {g}: {e}"));
             let inch = engine::run_with(&cps, &mch, &stream, &units("inch")).unwrap_or_else(|e| panic!("{stem} on {g}: {e}"));
             assert_eq!(mm.warnings, inch.warnings, "{stem} on {g}: the unit changes no verdict");

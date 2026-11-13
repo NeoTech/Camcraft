@@ -109,6 +109,8 @@ mod wire_ruled;
 pub mod wire_verify;
 // #541: the sinker EDM burn to depth.
 pub mod sinker_op;
+// #543: the sinker's rough and finish passes.
+pub mod sinker_pass;
 // #546: the sinker burn's electrode wear compensation.
 pub mod sinker_wear_op;
 // #545: the Sinker Side Burn's seed, laws and generation.

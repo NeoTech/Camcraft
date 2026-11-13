@@ -119,6 +119,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         wire,
         wire_ruled,
         sinker_gap,
+        sinker_pass,
         sinker_wear,
     } = job;
     // The sinker burn (#541) is its own law: one electrode plunged to a
@@ -129,7 +130,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         let gap = sinker_gap
             .ok_or_else(|| GenError::Invalid("sinker burn: its condition was never read".into()))?
             .map_err(GenError::Invalid)?;
-        return super::sinker_op::generate_sinker(op, &tool, &hs, gap, sinker_wear, &material.facets);
+        return super::sinker_op::generate_sinker(op, &tool, &hs, gap, sinker_pass, sinker_wear, &material.facets);
     }
     // The side burn (#545): the burn's plunge plus one lateral move, its
     // allowance refused by name in its own door.

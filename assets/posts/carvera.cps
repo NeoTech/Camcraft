@@ -64,6 +64,29 @@ function xyz(p) { return [wo("X", p.X, orgX), wo("Y", p.Y, orgY), wo("Z", p.Z, o
 function msg(s) {  // counted warning where the host offers message()
   if (typeof message === "function") message(s); else writeln("(" + s + ")");
 }
+
+// #1359 (from #1357): a cut needs a turning spindle. spindleOn is true
+// from the preamble's spindle start (M3 S..) to the next M5 (every
+// section end, and a touch probe's stop). A touch probe's section feeds
+// its stylus with the spindle stopped on purpose: a section is a
+// probe's only when it states 0 rpm (#574) AND its tool is a touch
+// probe (PARAM ToolKind) - a cutter whose speed reads 0 is a stopped
+// spindle, not a probe. A feed, arc or cycle with the spindle stopped
+// anywhere else is refused by name and not posted: a stream that states
+// no spindle speed would otherwise drag a stopped cutter through the
+// part. Once per program.
+var spindleOn = false;
+var probeSection = false;
+var kindProbe = false;    // this section's PARAM ToolKind names a touch probe
+var spindleRefused = false;
+function spindleStopped(what) {  // true: refused, nothing is posted
+  if (spindleOn || probeSection) return false;
+  if (!spindleRefused) {
+    spindleRefused = true;
+    msg(what + " with the spindle stopped - no spindle start (M3 S..) precedes it; state the operation's spindle speed");
+  }
+  return true;
+}
 var tiltRefused = false;  // one named refusal per program, not per line
 function tiltOk(p) {  // this post is 3-axis: a tilted record is refused
   if (!has(p.A)) return true;
@@ -149,7 +172,7 @@ function commentParam(name, value) {
   if (name === "SetupName") setupName = clean(value);
   else if (name === "OperationName") opName = clean(value);
   else if (name === "OperationKind") opKind = clean(value).toUpperCase();
-  else if (name === "ToolKind") toolKind = clean(value).toUpperCase();
+  else if (name === "ToolKind") { toolKind = clean(value).toUpperCase(); kindProbe = toolKind === "TOUCH PROBE"; }
   else if (name === "ToolDiameter" && has(value)) toolDia = Number(value);
   else if (name === "ToolCornerRadius" && has(value)) toolCr = Number(value);
 }
@@ -250,7 +273,8 @@ function startPreamble() {
     toolWait = false;
   }
   var touchProbe = spindleWait && !(sRpm > 0);   // a stated speed of 0
-  if (spindleWait && sRpm > 0) block(["M3", "S" + ni(sRpm)]);
+  probeSection = touchProbe && kindProbe;
+  if (spindleWait && sRpm > 0) { block(["M3", "S" + ni(sRpm)]); spindleOn = true; }
   spindleWait = false;
   // #995: a touch probe section starts no coolant (nor air), whatever
   // its ask - the Carvera posts no probing, but the law holds here too.
@@ -269,6 +293,9 @@ function endPreamble() {
   coolant = "";
   coolantAsk = "flood";      // the next section states its own ask
   block(["M5"]);
+  spindleOn = false;
+  probeSection = false;
+  kindProbe = false;         // the next section states its own tool kind
 }
 
 function onSection() { startPreamble(); }
@@ -304,6 +331,7 @@ function onRapid() {
 function onLinear() {
   startPreamble();
   if (!tiltOk(properties)) return;
+  if (spindleStopped("feed move G1")) return;
   startXY(properties);
   block(["G1"].concat(xyz(properties), [fw(properties.FeedRate)]));
   dwellAtBottom(properties.Z);
@@ -311,6 +339,7 @@ function onLinear() {
 function onCircular() {
   startPreamble();
   if (!tiltOk(properties)) return;
+  if (spindleStopped("arc move " + (properties.CircularDirection === "CW" ? "G2" : "G3"))) return;
   var p = properties;
   startXY(p);
   block([

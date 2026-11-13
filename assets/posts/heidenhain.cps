@@ -48,7 +48,6 @@ var smoothActive = false;   // #616: this section wrote its smoothing words
 var modalWait = false;  // G40 G90 rides the section's first motion block
 var pendingDwell = null; // {z, s}: the open hole's dwell, owed at its bottom
 var inCycle = false, cycleSig = "", cycleX = 0, cycleY = 0, cycleR = 0;
-var modalFeed = null;
 var orgX = 0, orgY = 0, orgZ = 0;
 var pgmName = "CAMCRAFT";
 var blockNo = 0;
@@ -100,6 +99,29 @@ function xyz(p) { return [wo("X", p.X, orgX), wo("Y", p.Y, orgY), wo("Z", p.Z, o
 function wo(letter, v, o) { return has(v) ? sgn(letter, v - o) : ""; }
 function msg(s) {  // counted warning where the host offers message()
   if (typeof message === "function") message(s); else writeln("; " + s);
+}
+
+// #1359 (from #1357): a cut needs a turning spindle. spindleOn is true
+// from the preamble's spindle start (M3) to the next M5 (every
+// section end, and a touch probe's stop). A touch probe's section feeds
+// its stylus with the spindle stopped on purpose: a section is a
+// probe's only when it states 0 rpm (#574) AND its tool is a touch
+// probe (PARAM ToolKind) - a cutter whose speed reads 0 is a stopped
+// spindle, not a probe. A feed, arc or cycle with the spindle stopped
+// anywhere else is refused by name and not posted: a stream that states
+// no spindle speed would otherwise drag a stopped cutter through the
+// part. Once per program.
+var spindleOn = false;
+var probeSection = false;
+var kindProbe = false;    // this section's PARAM ToolKind names a touch probe
+var spindleRefused = false;
+function spindleStopped(what) {  // true: refused, nothing is posted
+  if (spindleOn || probeSection) return false;
+  if (!spindleRefused) {
+    spindleRefused = true;
+    msg(what + " with the spindle stopped - no spindle start (M3) precedes it; state the operation's spindle speed");
+  }
+  return true;
 }
 var tiltRefused = false;  // stage D: one named refusal per program, not per line
 function tiltOk(p) {  // RTCP words are Fanuc-family; this dialect refuses them
@@ -183,7 +205,7 @@ function commentParam(name, value) {
   if (name === "SetupName") setupName = clean(value);
   else if (name === "OperationName") opName = clean(value);
   else if (name === "OperationKind") opKind = clean(value).toUpperCase();
-  else if (name === "ToolKind") toolKind = clean(value).toUpperCase();
+  else if (name === "ToolKind") { toolKind = clean(value).toUpperCase(); kindProbe = toolKind === "TOUCH PROBE"; }
   else if (name === "ToolDiameter" && has(value)) toolDia = Number(value);
   else if (name === "ToolCornerRadius" && has(value)) toolCr = Number(value);
 }
@@ -332,8 +354,10 @@ function startPreamble() {
   }
   if (spindleWait && sRpm > 0) {   // a touch probe (#523) states no spindle
     block(["M3"]);
+    spindleOn = true;
   }
-  if (probeStop) block(["M5"]);
+  if (probeStop) { block(["M5"]); spindleOn = false; }
+  probeSection = probeStop && kindProbe;
   spindleWait = false;
   // #995: a touch probe section starts no coolant, whatever its ask -
   // fluid on the stylus and the measured faces spoils the reading.
@@ -373,6 +397,9 @@ function endPreamble() {
   coolant = "";
   coolantAsk = "flood";      // the next section states its own ask
   block(["M5"]);
+  spindleOn = false;
+  probeSection = false;
+  kindProbe = false;         // the next section states its own tool kind
   afterOp();
 }
 
@@ -396,7 +423,7 @@ function onLinear() {
     if (!sameHole(properties) || properties.Z > cycleR + 1e-6) msg("native drilling cycle has an inconsistent expanded cutting chain");
     return;
   }
-  if (has(properties.FeedRate)) modalFeed = Number(properties.FeedRate);
+  if (spindleStopped("feed move G01")) return;
   motion("G01", xyz(properties).concat([fw(properties.FeedRate)]));
   dwellAtBottom(properties.Z);
 }
@@ -456,6 +483,7 @@ function onCircular() {
   startPreamble();
   if (!tiltOk(properties)) return;
   if (inCycle) { msg("native drilling cycle cannot replace an arc cutting chain"); return; }
+  if (spindleStopped("arc move " + (properties.CircularDirection === "CW" ? "G02" : "G03"))) return;
   var p = properties;
   if (p.CircularPlane === "XZ" || p.CircularPlane === "YZ") {
     verticalArc(p);
@@ -524,7 +552,9 @@ function onCycle() {
   var clearance = p.R - p.EntryZ, depth = p.Z - p.EntryZ;
   var surface = p.EntryZ - orgZ;
   var dwell = has(p.P) ? Number(p.P) : 0;
-  var feed = has(p.FeedRate) ? Number(p.FeedRate) : (has(p.ChainFeedRate) ? Number(p.ChainFeedRate) : modalFeed);
+  // #1357: the cycle's own feed, else its own hole chain's - never the
+  // last modal feed of some other move; with neither it is refused below.
+  var feed = has(p.FeedRate) ? Number(p.FeedRate) : (has(p.ChainFeedRate) ? Number(p.ChainFeedRate) : null);
   if (clearance < 0 || clearance > 99999.9999 || depth >= 0 || depth < -99999.9999 || Math.abs(surface) > 99999.9999) {
     cycleBad("needs a nonnegative R clearance and a negative surface-relative depth within the manual's range"); return;
   }
@@ -588,6 +618,9 @@ function onCycle() {
       qword(257, p.Q), qword(256, Math.min(1, p.Q)), qword(211, dwell),
       qword(379, 0), qword(253, feed), "Q208=FMAX", qword(395, 0));
   } else if (g === "G200") words.push(qword(211, dwell), qword(395, 0));
+  // #1359: checked last, so a tap's own named refusals (rpm, pitch)
+  // still speak; inCycle stays set, so the hole's chain is swallowed too.
+  if (spindleStopped("drilling cycle " + g)) return;
   var sig = words.join("|");
   if (sig !== cycleSig) { block(words); cycleSig = sig; }
   // G40/G90 accompanies explicit hole positioning, never a cycle definition.
