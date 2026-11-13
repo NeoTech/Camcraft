@@ -9,7 +9,12 @@
 //! warnings ride the verdict line). Every program is first proved
 //! byte-identical to its committed CL golden.
 //!
+//! The wire punch rides `wire` (#534): the wire laws its post runs.
+//!
 //! Provenance: our own harness over our own goldens; no vendor material.
+
+mod wire;
+pub use wire::{wire_findings, wire_verdict};
 
 use flecs_ecs::prelude::World;
 
@@ -85,6 +90,7 @@ fn region_law(t: &Toolpath, region: &Region, tool: &ToolGeom, mode: Mode, top: f
             finish_tol: None,
             fixtures: &[],
             spindle: None,
+            rims: &[],
         },
     )
 }

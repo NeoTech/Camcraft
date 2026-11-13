@@ -55,6 +55,7 @@ mod load_field;
 // pub(crate) past egui_app: `State::machine_editor` names its draft
 // type (M3.3 stage C), so state.rs has to see through the door.
 pub(crate) mod machine_editor;
+mod machine_edm;
 mod machine_grid;
 // pub(crate) for the same reason: `State::post_refusal` names its type.
 pub(crate) mod post_refusal;
@@ -83,6 +84,8 @@ mod tool_body_page;
 mod tool_orientation_row;
 // #898: the tool editor's catalog rows (part number, vendor, ...).
 mod tool_catalog_rows;
+// #890: the tool editor's per-material cutting data.
+mod tool_cutting_rows;
 mod tool_turning_row;
 mod tool_profile_page;
 // #793: the built-in taper holder picker in the Profile section.

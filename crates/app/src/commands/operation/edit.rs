@@ -108,6 +108,9 @@ impl EditOperationParams {
                 prev.params.kind()
             )));
         }
+        if let Some(why) = params.named_refusal() {
+            return Err(CommandError::Invalid(why));
+        }
         sinker_gate(world, prev.setup.as_deref(), &params)?;
         if !params.is_sane() {
             return Err(CommandError::Invalid(format!(
@@ -271,6 +274,13 @@ impl EditOperationLinks {
             // source-only edit never trips over a legacy mismatch.
             if tool != prev.tool {
                 tool_gate(world, &next.params, tool)?;
+                // #890: the new tool's row for the document material
+                // seeds the op's milling feed (same undo step).
+                if let Some(t) = model::find_by_name(world, tool).and_then(|e| model::tool_of(world, &e))
+                    && let Some(p) = crate::cutting_rows::reseeded_params(&next.params, &t, crate::cutting::material_of(world))
+                {
+                    next.params = p;
+                }
             }
             next.tool = tool.to_string();
         }

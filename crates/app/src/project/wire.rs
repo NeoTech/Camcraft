@@ -169,7 +169,10 @@ pub fn collect(world: &World) -> ProjectFile {
                 // The counter moves on models and stocks (every facet
                 // landing); everywhere else it reads 0 and omits itself.
                 rev: model::rev_of(world, &entity),
-                coarse_mm: crate::model_fidelity::chord_of(world, &entity),
+                coarse_mm: crate::model_fidelity::chord_of(world, &entity)
+                    .filter(|c| !crate::model_fidelity::is_unknown(*c)),
+                fidelity_unknown: crate::model_fidelity::chord_of(world, &entity)
+                    .is_some_and(crate::model_fidelity::is_unknown),
                 facet_budget: crate::model_fidelity::budget_of(world, &entity),
                 kind,
                 raw_stock_only: mark.is_some(),

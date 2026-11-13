@@ -206,6 +206,8 @@ pub fn parse_mch_with(text: &str, holders: Option<super::HolderLookup>) -> Resul
     // #530: the EDM section - only an EDM kind states one, and only
     // its own kind's keys; anything else refuses the file by name.
     m.edm = super::edm::parse_edm(v.get("edm"), f, declared.map(|(k, _)| k))?;
+    // #533: the control's own words (D5), read beside the section.
+    m.edm_codes = super::edm_codes::parse_codes(v.get("edm"))?;
 
     if let Some(parts) = kine {
         if let Some(head) = find_type(parts, "head") {
@@ -214,7 +216,13 @@ pub fn parse_mch_with(text: &str, holders: Option<super::HolderLookup>) -> Resul
             m.spindle_max = rate(sp.and_then(|s| s.get("max_speed")));
             m.spindle_power = rate(sp.and_then(|s| s.get("power")));
             m.spindle_ranges = parse_ranges(sp.and_then(|s| s.get("ranges")));
-            m.rigid_tapping = sp.and_then(|s| s.get("rigid_tapping")).and_then(|b| b.as_bool());
+            // #786: a stated capability gates G84, so a word the reader
+            // cannot read refuses the file - never a silent "not limited".
+            m.rigid_tapping = match sp.and_then(|s| s.get("rigid_tapping")) {
+                None | Some(serde_json::Value::Null) => None,
+                Some(serde_json::Value::Bool(b)) => Some(*b),
+                Some(x) => return Err(format!("machine file: spindle.rigid_tapping must be true or false, not {x}")),
+            };
             let ts = head.get("tool_station");
             m.max_tool_length = scale(rate(ts.and_then(|t| t.get("max_tool_length"))), f);
             m.max_tool_diameter = scale(rate(ts.and_then(|t| t.get("max_tool_diameter"))), f);

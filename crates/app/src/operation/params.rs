@@ -1481,6 +1481,14 @@ impl OpParams {
                     h.write_u32(o.vectors);
                     h.write_u32(o.turns);
                 }
+                // #546: the layer step and a measured wear, a tagged
+                // byte only when stated - an older burn's digest holds.
+                for (tag, v) in [(1u8, p.layer), (2, p.wear_lost), (3, p.wear_over)] {
+                    if let Some(v) = v {
+                        h.write_u8(tag);
+                        w(h, v);
+                    }
+                }
                 // #545: then the side's direction, amount and undersize.
                 if let OpParams::SinkerSideBurn(s) = self {
                     h.write(s.direction.word().as_bytes());

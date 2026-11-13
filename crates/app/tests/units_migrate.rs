@@ -1,4 +1,4 @@
-//! #902, the v58 -> v59 rung: before v59 a document's unit was a
+//! #902, the v59 -> v60 rung: before v60 a document's unit was a
 //! display lens and a post took its unit from the machine file, so an
 //! older project opens on the unit its programs posted in - its posted
 //! program is byte-identical - and says so when its display changes. A
@@ -7,7 +7,7 @@
 //!
 //! Provenance: our own persistence contract; no vendor material.
 //!
-//! Gate map (M4.4): covers app::project (units_migrate, apply's v59
+//! Gate map (M4.4): covers app::project (units_migrate, apply's v60
 //! rung, file PROJECT_VERSION).
 
 use camcraft_app::commands::{CreateSetup, History, LoadMachine, SetSetupMachine, SetUnits};
@@ -19,9 +19,14 @@ use serde_json::Value;
 
 /// `world` saved as an older (v58) file would have held it.
 fn as_v58(world: &World) -> String {
+    as_version(world, 58)
+}
+
+/// `world` saved as a file of `version` would have held it.
+fn as_version(world: &World, version: u32) -> String {
     let mut v: Value = serde_json::to_value(project::collect(world)).expect("serializes");
     assert_eq!(v["version"], Value::from(project::PROJECT_VERSION), "this build writes v{}", project::PROJECT_VERSION);
-    v["version"] = Value::from(58);
+    v["version"] = Value::from(version);
     v.to_string()
 }
 
@@ -40,10 +45,13 @@ fn an_older_file_on_an_inch_machine_opens_in_inch_and_says_so() {
     let w = new_world();
     let mut h = History::default();
     tormach(&w, &mut h);
-    let (u, notes) = reopened(&as_v58(&w));
-    assert_eq!(u, Unit::Inches, "it posted inch before - it must post inch now");
-    assert_eq!(notes.len(), 1, "{notes:?}");
-    assert!(notes[0].contains("displayed mm") && notes[0].contains("opens in inch"), "{notes:?}");
+    // v59 (#1056) still posted in the machine file's unit: it takes the rung too.
+    for version in [58, 59] {
+        let (u, notes) = reopened(&as_version(&w, version));
+        assert_eq!(u, Unit::Inches, "v{version} posted inch before - it must post inch now");
+        assert_eq!(notes.len(), 1, "v{version}: {notes:?}");
+        assert!(notes[0].contains("displayed mm") && notes[0].contains("opens in inch"), "v{version}: {notes:?}");
+    }
 }
 
 #[test]
@@ -85,7 +93,7 @@ fn an_older_file_with_setups_in_both_units_keeps_its_display_and_names_the_setup
 }
 
 #[test]
-fn a_v59_file_keeps_its_unit_whatever_the_machine() {
+fn a_v60_file_keeps_its_unit_whatever_the_machine() {
     let w = new_world();
     let mut h = History::default();
     tormach(&w, &mut h); // an inch machine file, an mm document
@@ -95,6 +103,6 @@ fn a_v59_file_keeps_its_unit_whatever_the_machine() {
     h.undo(&w);
     let text = serde_json::to_string(&project::collect(&w)).expect("serializes");
     let (u, notes) = reopened(&text);
-    assert_eq!(u, Unit::Millimeters, "v59: the document's unit, never the machine file's");
+    assert_eq!(u, Unit::Millimeters, "v60: the document's unit, never the machine file's");
     assert!(notes.is_empty(), "{notes:?}");
 }

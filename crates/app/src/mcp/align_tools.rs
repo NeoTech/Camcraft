@@ -1,7 +1,8 @@
-//! The MCP part-alignment tools: turn the part in a setup's work plane
-//! from picks (#557) - a straight edge, or two points, for +Y and/or +X -
-//! through the same undoable `AlignPartToSetup::turn_in_plane` the Setups
-//! page's "Part axes" rows queue; and lay it on a plane through
+//! The MCP part-alignment tools: align the part from axis picks - a
+//! straight edge, or two points, for +Y and/or +X - through the same
+//! undoable `AlignPartToSetup::align_from_axes` the Setups page's "Part
+//! axes" rows queue: one axis turns it in the work plane (#557), both
+//! define the full 3D frame (#769, #1329); and lay it on a plane through
 //! three picked points (#555), through `AlignPartToSetup::lay_on_points`
 //! like the "Lay on a plane - pick three points" row. Every refusal is
 //! the command's own text, returned as a tool error.
@@ -23,7 +24,7 @@ use serde_json::{Map, Value, json};
 pub(super) const TOOLS: &[Tool] = &[
     Tool {
         name: "set_part_axes",
-        description: "Turn the part in a setup's work plane (its XY) so a picked straight edge, or two picked points, runs along +Y and/or +X. Picks are list_features ids: one edge chain, or two vertices (first to second). The direction is projected into the plane; flip_y / flip_x reverse it; with both axes given, primary (default \"y\") is kept exactly and the other is only checked. Composes onto the setup's current part alignment; one undo step. Refused by name: a face, a curved edge, coincident points, a direction along Z, parallel or left-handed X and Y.",
+        description: "Align the part from picked axes, as the Setups page's \"Part axes\" rows do. Picks are list_features ids: one edge chain, or two vertices (first to second); flip_y / flip_x reverse a pick. One axis (+Y or +X): the part turns in the setup's work plane (its XY) so the pick, projected into the plane, runs along that axis (turn_deg reports the turn). Both axes: their 3D directions define the full frame (frame \"full_3d\") - primary (default \"y\") lands exactly, the other is made square to it, and +Z lands on the right-hand cross of the picks, so a left-handed pair is honoured literally (the part lands on its head), not refused. The part turns about its bounds' centre, composed onto the setup's current part alignment; the work offset is untouched; one undo step. Refused by name: a face, a curved edge, coincident points, a single pick along Z, X and Y picks running (nearly) along each other.",
         schema: s_set_part_axes,
         run: set_part_axes,
     },
@@ -58,13 +59,19 @@ fn set_part_axes(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String>
         Some(other) => return Err(format!("\"primary\" must be \"y\" or \"x\", got \"{other}\"")),
     };
     let axes = InPlaneAxes { y: axis_of(env, a, "y", "flip_y")?, x: axis_of(env, a, "x", "flip_x")?, primary };
-    let turn = in_plane_turn_deg(&env.world, &setup, &axes)?;
-    let cmd = AlignPartToSetup::turn_in_plane(&env.world, &setup, &axes).map_err(cmd_err)?;
+    // Both axes: the full 3D frame (#769) - no in-plane turn angle, and
+    // a left-handed pair is honoured, as the GUI does. One axis: the
+    // in-plane turn (#557), whose angle is reported.
+    let full_3d = axes.y.as_ref().is_some_and(|p| !p.picks.is_empty())
+        && axes.x.as_ref().is_some_and(|p| !p.picks.is_empty());
+    let turn = if full_3d { None } else { Some(in_plane_turn_deg(&env.world, &setup, &axes)?) };
+    let cmd = AlignPartToSetup::align_from_axes(&env.world, &setup, &axes).map_err(cmd_err)?;
     env.history.execute(&env.world, cmd);
     let held = setup_align::stored(&env.world, &setup);
     Ok(json!({
         "setup": setup,
-        "turn_deg": fnum(turn),
+        "frame": if full_3d { "full_3d" } else { "in_plane" },
+        "turn_deg": turn.map(fnum),
         "alignment": held.as_ref().map(loc_view),
         "description": setup_align::describe(held),
     }))
@@ -78,7 +85,7 @@ fn s_set_part_axes() -> Value {
             "x": pick_list_schema("+X: one straight edge chain, or two vertices (first to second)."),
             "flip_y": { "type": "boolean", "description": "Take the +Y pick the other way." },
             "flip_x": { "type": "boolean", "description": "Take the +X pick the other way." },
-            "primary": { "type": "string", "enum": ["y", "x"], "description": "With both axes given, the one kept exactly (default y)." }
+            "primary": { "type": "string", "enum": ["y", "x"], "description": "With both axes given, the one landed exactly; the other is made square to it (default y)." }
         }),
         &[],
     )

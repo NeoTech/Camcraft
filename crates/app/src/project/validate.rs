@@ -23,6 +23,16 @@ pub(super) fn validate_kind(dto: &EntityDto, kind: EntityKind) -> Result<(), Pro
         }
         crate::geometry::import::step_budget::check(b).map_err(|e| corrupt(format!("'{}': {e}", dto.name)))?;
     }
+    // #1056: the unknown-fidelity mark rides a mesh row only, and never
+    // beside a recorded chord - one entity cannot both know and not know.
+    if dto.fidelity_unknown {
+        if !matches!(kind, EntityKind::Model | EntityKind::Stock) {
+            return Err(corrupt(format!("'{}' marks a mesh fidelity unknown but is not a model or stock", dto.name)));
+        }
+        if dto.coarse_mm.is_some() {
+            return Err(corrupt(format!("'{}' records a chord error and an unknown fidelity at once", dto.name)));
+        }
+    }
     match kind {
         EntityKind::Entry => {}
         EntityKind::Model => {
@@ -221,6 +231,9 @@ pub(super) fn validate_kind(dto: &EntityDto, kind: EntityKind) -> Result<(), Pro
                 )));
             }
             let params = op.params.to_params();
+            if let Some(why) = params.named_refusal() {
+                return Err(corrupt(format!("'{}': {why}", dto.name)));
+            }
             if !params.is_sane() {
                 return Err(corrupt(format!(
                     "operation parameters are not usable for a {} operation '{}'",

@@ -95,6 +95,7 @@ fn wire_op(side: WireSide, start: Option<[f64; 2]>) -> WireContourOp {
         condition: "C110".into(),
         side,
         start,
+        clearance: operation::DEFAULT_CLEARANCE,
     }
 }
 
@@ -225,10 +226,15 @@ fn a_die_and_a_punch_on_one_profile_stand_apart_by_exactly_the_kerf() {
     let (_, m) = machine::of_setup(&world, None);
     let c = check_document(&world, &m.expect("the wire EDM")).expect("checks");
     assert!(c.problems.is_empty(), "{:?}", c.problems);
-    assert!(c.notes.iter().any(|n| n.contains("wire verification is not built yet")), "{:?}", c.notes);
-    // No wire post exists yet: the program is refused by name, never posted.
-    let err = posting::op_streams(&world).expect_err("no wire post");
-    assert!(err.contains("Die1") && err.contains("wire EDM post"), "{err}");
+    assert!(c.notes.iter().any(|n| n.contains("judged at the post by the wire laws")), "{:?}", c.notes);
+    // #533: each streams as a wire section, its condition riding for
+    // the wire post (which alone voices it - `wire_post.rs`); the wire
+    // laws (#534) stand between the stream and NC text (`wire_verify.rs`).
+    let streams = posting::op_streams(&world).expect("the wire sections stream");
+    let cond = |r: &camcraft_app::post::cnc::Record| {
+        matches!(r, camcraft_app::post::cnc::Record::Param { name, value } if name == "EdmCondition" && value == "C110")
+    };
+    assert!(streams.iter().any(|(n, rs)| n == "Die1" && rs.iter().any(cond)), "{streams:?}");
 }
 
 /// Done means: the too-tight corner and the missing start hole are
@@ -330,4 +336,33 @@ fn the_op_round_trips_and_its_side_is_never_defaulted() {
         panic!("not a wire contour");
     };
     assert_eq!(w.start, None);
+}
+
+/// #1109: the open run's fields - the kerf side left / right of travel
+/// and the run-out clearance - ride EditOperationParams (undoable) and
+/// the JSON door the file and the MCP patch share; a closed profile
+/// with a left / right side is refused by name at generation, and an
+/// insane clearance at the command door.
+#[test]
+fn the_open_run_fields_ride_the_commands_and_the_json_door() {
+    let (world, mut h) = wire_doc();
+    let p0 = wire_op(WireSide::Die, Some([0.0, 0.0]));
+    h.execute(&world, create(&world, "W", "slug", p0.clone()).expect("op"));
+    let p1 = WireContourOp { side: WireSide::Right, clearance: 2.5, ..p0.clone() };
+    h.execute(&world, EditOperationParams::new(&world, "W", OpParams::WireContour(p1.clone())).expect("edit"));
+    let params = |w: &World| model::find_by_name(w, "W").and_then(|e| model::operation_of(w, &e)).map(|o| o.params);
+    assert_eq!(params(&world), Some(OpParams::WireContour(p1.clone())));
+    let why = GenerateOperation::new(&world, "W").err().expect("refused").to_string();
+    assert!(why.contains("profile is closed") && why.contains("die or punch"), "{why}");
+    assert!(h.undo(&world));
+    assert_eq!(params(&world), Some(OpParams::WireContour(p0.clone())));
+    let bad = WireContourOp { clearance: f64::NAN, ..p1.clone() };
+    assert!(EditOperationParams::new(&world, "W", OpParams::WireContour(bad)).is_err(), "a NaN clearance is refused");
+    let json = project::params_to_json(&OpParams::WireContour(p1.clone()));
+    assert_eq!(json["wire_contour"]["side"], "right");
+    assert_eq!(json["wire_contour"]["clearance"], 2.5);
+    assert_eq!(project::params_from_json(&json).expect("reads back"), OpParams::WireContour(p1));
+    // A closed cut's file names no clearance: it reads and writes as before.
+    let closed = project::params_to_json(&OpParams::WireContour(p0));
+    assert!(closed["wire_contour"].get("clearance").is_none(), "{closed}");
 }

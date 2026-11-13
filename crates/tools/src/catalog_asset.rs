@@ -145,6 +145,7 @@ impl Def {
             center_cutting: self.center_cutting,
             orientation: self.orientation,
             catalog: crate::catalog_fields::ToolCatalog::default(),
+            cutting: Vec::new(),
             turning: self.turning,
         }
     }
