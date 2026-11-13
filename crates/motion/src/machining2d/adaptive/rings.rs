@@ -42,13 +42,19 @@ pub(super) const NEAR_CELL: f64 = 0.5;
 pub(super) const SIMPLIFY: f64 = ARC_TOL;
 
 /// Extra erosion (mm): the approximation and round-join flattening,
-/// plus 10 nm for the boolean lattice. This keeps clipping from adding
-/// tiny wall chords in ordinary cases; it is not a topology proof.
+/// plus 10 nm for the boolean lattice. This margin is the containment
+/// guarantee: Douglas-Peucker keeps the light outline within `SIMPLIFY`
+/// of the original, so eroding it by `rho + INSET` and dilating by
+/// `rho` cannot cross a wall, island, hole, notch or the seam. It must
+/// stay above `SIMPLIFY + ARC_TOL` (pinned by a test); mutation review
+/// on PR #1376 showed `INSET = 0` leaks or leaves slivers, while the
+/// intersection and fallback alone do not hold containment.
 pub(super) const INSET: f64 = SIMPLIFY + ARC_TOL + 1e-5;
 
-/// Open a lighter outline, then clip to the original region. The exact
-/// region intersection is the containment backstop, including holes and
-/// components whose topology normalization could otherwise change.
+/// Open a lighter outline, eroded `INSET` deeper than it is dilated
+/// back - that margin keeps the opening inside the original region.
+/// The exact intersection with the original region is extra protection
+/// on top (defence in depth), not the guarantee.
 pub(super) fn open(r: &Region, rho: f64) -> Result<Region, GenError> {
     #[cfg(test)]
     let inset = OPEN_INSET.with(std::cell::Cell::get);

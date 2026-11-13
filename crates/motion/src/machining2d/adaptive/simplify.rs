@@ -18,9 +18,12 @@
 //!
 //! Each dropped vertex is within `tol` of the chord replacing its run.
 //! This is a boundary approximation, not a proof that nested loops keep
-//! their topology after normalization. `rings::open` erodes a little
-//! further to avoid reintroducing tiny wall chords, then intersects the
-//! opened result with the original region as the containment backstop.
+//! their topology after normalization. Containment comes from
+//! `rings::open`'s extra erosion `INSET` (> `tol` + `ARC_TOL`): eroding
+//! by `rho + INSET` and dilating by `rho` cannot cross a wall, island,
+//! hole, notch or the seam of a loop that stays within `tol` of the
+//! original. Its intersection with the original region, and the loop
+//! and hole-count fallback here, are extra protection on top.
 //! Ours; no vendor material consulted.
 
 use crate::geo2d::{Loop, Point2, Region};
@@ -77,8 +80,8 @@ fn thin_loop(pts: &[Point2], tol: f64) -> Vec<Point2> {
 
 /// A lighter approximation of `r`, or `None` if nothing is dropped or
 /// normalization rejects it. A changed loop count or hole count also
-/// falls back to the original; these checks do not prove containment.
-/// The caller must clip the opened result to the original region.
+/// falls back to the original; that check keeps the topology, not
+/// containment, which rides on the caller's `INSET` erosion margin.
 pub(super) fn within(r: &Region, tol: f64) -> Option<Region> {
     if !(tol.is_finite() && tol > 0.0) {
         return None;

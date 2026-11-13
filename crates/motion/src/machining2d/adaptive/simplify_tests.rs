@@ -66,6 +66,16 @@ fn keyhole() -> Region {
     k
 }
 
+/// PR #1376 review: the opening's extra erosion is the containment
+/// guarantee, so it must exceed the thinning tolerance plus the
+/// round-join flattening. A later tidy must not shrink it on the
+/// strength of the intersection that only backs it up.
+#[test]
+fn the_opening_inset_exceeds_thinning_plus_flattening() {
+    let (inset, margin) = (std::hint::black_box(INSET), SIMPLIFY + ARC_TOL);
+    assert!(inset > margin, "INSET {inset} mm must exceed SIMPLIFY + ARC_TOL = {margin} mm");
+}
+
 #[test]
 fn a_fine_circle_thins_to_the_tolerance_and_never_past_it() {
     let fine = region(vec![circle(0.0, 0.0, 10.0, 6000)]);

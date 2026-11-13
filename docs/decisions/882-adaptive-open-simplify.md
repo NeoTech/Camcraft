@@ -24,8 +24,11 @@ checks catch obvious topology changes; they are not a containment proof.
 
 Erode the candidate by `rho + INSET` and dilate by `rho`, then intersect
 with the original area. `INSET` is `SIMPLIFY + ARC_TOL + 0.00001 mm`,
-or 0.51 um, to avoid creating tiny clipped wall chords in ordinary
-cases. The test-only `OPEN_INSET` perturbation remains additive. The
+or 0.51 um. This margin is the containment guarantee: Douglas-Peucker
+keeps the light outline within `SIMPLIFY` of the original, so eroding by
+`rho + INSET` and dilating by `rho` cannot cross a wall, island, hole,
+notch or the seam. The intersection and the loop/hole-count fallback are
+extra protection on top. A unit test pins `INSET > SIMPLIFY + ARC_TOL`. The test-only `OPEN_INSET` perturbation remains additive. The
 load, travel and geometry budget constants are unchanged.
 
 **Why.** The held investigation found that repeated offsets and openings
@@ -34,10 +37,12 @@ remove the expensive geometry produced during growth. The opening's
 cost rises roughly quadratically with its input vertex count. Reducing
 that count before each opening targets the repeated work.
 
-**Safety argument and limits.** A per-chord simplification tolerance and
-an erosion allowance alone are not a general proof for arbitrary polygon
-topology. The candidate's exact boolean intersection is intended to
-prevent the opening from adding area outside its input, subject to the
+**Safety argument and limits.** The erosion margin `INSET` is what keeps
+the opening inside its input. The PR #1376 review's mutation checks
+showed it: dropping the intersection, the loop/hole-count fallback, or
+both, passes every test, while `INSET = 0` (with or without the
+intersection) leaks or leaves slivers and fails three tests. The exact
+boolean intersection is kept as defence in depth, subject to the
 geometry engine's integer-lattice semantics. Independent tests check
 the entire polygon difference, including holes, close components, narrow
 necks, sharp notches, cyclic seams and degenerate outlines. Containment
@@ -48,8 +53,9 @@ this branch's measurements.
 
 In particular, mathematical opening is monotone, but independently
 simplified approximate inputs need not preserve nesting. No nesting or
-load guarantee is inferred from the exact-opening theorem. Clipping is
-the containment backstop; the existing final path guards and measured
+load guarantee is inferred from the exact-opening theorem. The `INSET`
+margin is the containment guarantee and clipping backs it up; the
+existing final path guards and measured
 load/crossing/kink checks remain necessary.
 
 **Measured evidence.** Independent verifier,
@@ -206,8 +212,9 @@ the baseline; none of these acceptance laws is relaxed by this candidate.
 - Re-pinning a fixture to worse output, weakening a safety threshold or
   raising the geometry budget to hide a regression: disallowed. The load,
   crossing and kink laws remain acceptance requirements.
-- Relying on Douglas-Peucker plus inset as a complete containment proof:
-  insufficient for arbitrary topology; retain an exact boolean backstop.
+- Dropping the exact intersection once `INSET` was shown to carry
+  containment: it costs little and guards a lattice corner case the
+  argument does not cover, so it stays as defence in depth.
 
 **Cost to change later.** The production change is local to
 `adaptive/rings.rs` and the new private `adaptive/simplify.rs` module.
