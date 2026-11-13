@@ -44,13 +44,16 @@ fn pane_w(ui: &Ui) -> f32 {
 
 /// The groups' body indent. The pick rows are already as wide as the narrow
 /// properties pane (#330: Apply, "Point 1 to plane level" and the workholding
-/// buttons must stay inside it), so the default indent would push them out.
-const INDENT: f32 = 2.0;
+/// buttons must stay inside it), so the default indent would push them out. Both are set once for the page.
+const INDENT: f32 = 12.0;
+/// ... and the gap between a row's items, tightened to pay for it.
+const ITEM_GAP: f32 = 4.0;
 
 /// The page body for setup `ctx` (`None` - the implicit context).
 pub(super) fn settings_page(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
     ui.scope(|ui| {
         ui.spacing_mut().indent = INDENT;
+        ui.spacing_mut().item_spacing.x = ITEM_GAP;
         groups(ui, state, ctx);
     });
 }
