@@ -231,11 +231,15 @@ merge ready").
 A PR that changes a process file (`AGENTS.md`, `.claude/agents/`,
 `.claude/skills/`, `xtask/`, `.cargo/config.toml`, `scripts/gate.ps1`,
 `scripts/gate.sh`, `scripts/release.ps1`, `scripts/collect-decisions.ps1`,
-`scripts/collect-decisions.sh`) must increment
-the integer in `.claude/PROCESS_VERSION` (AGENTS.md "Process changes bump
-`PROCESS_VERSION`"). The reviewer checks this; a missing bump is a
-requested change (`needs-rework`). When such a PR merges, whoever merges
-it comments on the pinned issue #681 (Process changes):
+`scripts/collect-decisions.sh`) says `Process change: yes` in its body and
+does not edit `.claude/PROCESS_VERSION` (AGENTS.md "Process changes bump
+`PROCESS_VERSION`", #1153). The reviewer checks this; a missing line or an
+edit of that file is a requested change (`needs-rework`). Exempt: the bump
+PR itself (`chore(process): PROCESS_VERSION <n>`: MECHANICAL, read by the
+merging session, no agent review, merges at once) and #1488, which introduced
+the rule. The merging
+session bumps the number once per merge batch (`cargo xtask process-bump`)
+and comments on the pinned issue #681 (Process changes):
 `PROCESS_VERSION <n>` · PR #M · what changed · what a fork must do (usually
 "pull the process files", the command in the issue body). That comment is
 how fork maintainers subscribed to #681 hear about it.
