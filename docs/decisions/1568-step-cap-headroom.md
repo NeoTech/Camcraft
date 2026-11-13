@@ -15,11 +15,28 @@
 - "Proven continuous" (`step_continuity.rs`) is read from the surface's
   definition, never from its mesh: planes, cylinders, cones, spheres and
   tori; a B-spline whose every interior knot multiplicity is at most its
-  degree, with finite control points; a NURBS that also has every weight
-  finite and positive. Swept surfaces are not proven. **And** the pass
-  must have divided the face only inside the surface's own parameter
-  range (a millionth of its span of slack); a division asked outside it
-  voids the proof for that pass.
+  degree, with finite control points and knots; a NURBS that also has
+  every weight finite, positive and at least 1e-9 of the net's largest
+  weight (review of PR #1578: a weight of 1e-300 is positive but nearly a
+  pole, whose narrow spike a coarser mesh checked at one point per cell
+  can miss; real CAD weights stay within a few decades of each other).
+  Swept surfaces are not proven. **And** no pass of the import may have
+  divided the face outside the surface's own parameter range (a
+  millionth of its span of slack). The flag is sticky across passes
+  (review): truck derives each pass's range from that pass's tolerance,
+  so the coarser pass whose mesh the fallback keeps may be the one that
+  went wild while the finer pass that tripped stayed in range.
+- When several faces trip in one pass, the pass counts as continuous only
+  if EVERY tripped face is proven and in range (review: reporting only the
+  first tripped face let a proven face's trip mask a jump face's, and the
+  fallback would have kept the jump's smear). The refusal names the first
+  tripped face that is not proven.
+- When the fallback keeps a coarser mesh, the log says why ("a finer pass
+  ran past a face's evaluation cap - a larger facet budget will not
+  help") instead of "bounded by memory". The user-facing reduced-fidelity
+  refusal still advises a larger facet budget, because the import records
+  only the chord, not its cause; carrying the cause there needs a stored
+  field and a project-format change, filed as a follow-up.
 - A continuous face that trips on its first pass is refused with its own
   wording ("did not finish ... at the coarsest tolerance (a continuous
   surface, too dense to divide)"), not called discontinuous.

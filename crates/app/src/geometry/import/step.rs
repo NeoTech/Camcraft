@@ -310,8 +310,15 @@ fn shell_facets(
     // it actually kept (#864).
     let kept = super::step_refine::refine(extent, tol_target, budget, triangulate)?;
     if kept.tol > wanted {
+        // The cause, so the advice fits it: a larger facet budget does
+        // nothing for a face that ran out of evaluations (#1568 review).
+        let why = if kept.eval_capped {
+            "a finer pass ran past a face's evaluation cap (a larger facet budget will not help)"
+        } else {
+            "bounded by memory or by the kernel's least tolerance"
+        };
         tracing::warn!(
-            "step: tessellated at reduced fidelity (tol {:e} mm, target {:e} mm, {} facets) - bounded by memory or by the kernel's least tolerance",
+            "step: tessellated at reduced fidelity (tol {:e} mm, target {:e} mm, {} facets) - {why}",
             kept.tol * k,
             wanted * k,
             kept.facets.len()

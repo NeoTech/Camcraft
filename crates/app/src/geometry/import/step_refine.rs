@@ -30,6 +30,10 @@ pub(super) enum PassError {
 pub(super) struct Kept<T> {
     pub facets: Vec<T>,
     pub tol: f64,
+    /// Refinement stopped because a finer pass ran out of evaluations on a
+    /// continuous face (#1568), not at the target or the facet budget - so
+    /// a larger facet budget would not refine it.
+    pub eval_capped: bool,
 }
 
 /// Run the schedule. `extent` is the shell's half-size (its largest
@@ -58,7 +62,7 @@ pub(super) fn refine<T>(
     let mut tol = (extent * 0.25).max(tol_target);
     let mut kept = loop {
         match triangulate(tol) {
-            Ok(facets) => break Kept { facets, tol },
+            Ok(facets) => break Kept { facets, tol, eval_capped: false },
             // Face count alone can overflow the budget; coarsen up to a
             // bounded cap. tol grows strictly each retry, so this ends.
             Err(PassError::Over) => {
@@ -80,7 +84,7 @@ pub(super) fn refine<T>(
         }
         let next = (kept.tol * 0.5).max(tol_target);
         match triangulate(next) {
-            Ok(facets) => kept = Kept { facets, tol: next },
+            Ok(facets) => kept = Kept { facets, tol: next, eval_capped: false },
             // Should not happen (the projection bounds it); if the
             // tessellator's density does not follow the tol^-2 law, keep
             // the last mesh that fit - with ITS tolerance (#864).
@@ -90,6 +94,7 @@ pub(super) fn refine<T>(
                     "step: a finer pass (tol {next:e}) ran out of evaluations on a continuous face; kept the converged mesh at tol {:e} ({refusal})",
                     kept.tol
                 );
+                kept.eval_capped = true;
                 break;
             }
             Err(PassError::Unconverged { continuous: false, refusal }) => return Err(refusal),
@@ -121,6 +126,7 @@ mod tests {
         })
         .unwrap();
         assert_eq!(kept.tol, 0.25, "the kept mesh's own tolerance, not the halved one");
+        assert!(!kept.eval_capped, "stopped by the budget, not by a face's evaluation cap");
         assert_eq!(kept.facets.len(), 4);
         assert_eq!(seen, vec![1.0, 0.5, 0.25, 0.125]);
     }
@@ -160,6 +166,7 @@ mod tests {
     fn a_finer_pass_tripping_on_a_continuous_face_keeps_the_coarser_mesh() {
         let kept = refine(4.0, 0.001, 1_000_000, |t| tripping(t, 0.3, true)).expect("the coarser mesh is kept");
         assert_eq!(kept.tol, 0.5, "the kept mesh's own tolerance");
+        assert!(kept.eval_capped, "the kept mesh says why it stopped: a larger budget would not refine it");
     }
 
     #[test]

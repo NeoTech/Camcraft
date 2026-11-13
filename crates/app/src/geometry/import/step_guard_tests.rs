@@ -107,7 +107,8 @@ fn a_division_outside_the_surface_range_is_flagged() {
     let _ = m.parameter_division(((-2e51, 1.0), (0.0, 1.0)), 0.1);
     assert!(m.meter.outside.load(Ordering::Relaxed), "the wild range must be flagged");
     m.meter.reset();
-    assert!(!m.meter.outside.load(Ordering::Relaxed), "a new pass starts clean");
+    assert!(m.meter.outside.load(Ordering::Relaxed), "the flag outlives the pass (the kept pass may be the wild one)");
+    assert_eq!(m.meter.used.load(Ordering::Relaxed), 0, "a new pass gets its whole budget");
     assert!(within((-1e-9, 1.0 + 1e-9), (Bound::Included(0.0), Bound::Included(1.0))), "round-off is not wild");
 }
 
@@ -145,4 +146,107 @@ fn the_refusal_names_the_face_its_kind_and_the_cap() {
     // A continuous face is never called broken.
     let e = refusal(trip(0, "NURBS surface", true), 1, None, None, 5).to_string();
     assert!(e.contains("too dense") && !e.contains("discontinuous"), "{e}");
+}
+
+/// `within` refuses a non-finite division range even against an unbounded
+/// parameter range, where no comparison would catch it. (B-spline and NURBS
+/// ranges, the only ones it is asked about, are bounded, so in the importer
+/// the comparisons already refuse it; this pins the function's contract.)
+#[test]
+fn a_non_finite_division_range_is_never_within() {
+    let open = (Bound::Unbounded, Bound::Unbounded);
+    assert!(within((-1e9, 1e9), open));
+    assert!(!within((f64::NEG_INFINITY, 1.0), open));
+    assert!(!within((0.0, f64::NAN), open));
+}
+
+/// A rational degree-(2,2) patch with positive weights - the shape of
+/// sc_logo's face #836 - as a one-face shell, proven continuous.
+fn rational_patch_shell(cap: u64) -> Guarded {
+    use truck_stepio::r#in::alias::{NurbsSurface, Vector4};
+    let k = KnotVec::bezier_knot(2);
+    let cps = (0..3)
+        .map(|i| {
+            (0..3)
+                .map(|j| {
+                    let w = if i == 1 && j == 1 { 2.0 } else { 1.0 };
+                    Vector4::new(i as f64 * w, j as f64 * w, ((i + j) % 2) as f64 * w, w)
+                })
+                .collect()
+        })
+        .collect();
+    let surface = Surface::NurbsSurface(Box::new(NurbsSurface::new(BSplineSurface::new((k.clone(), k), cps))));
+    let face = CompressedFace { boundaries: vec![], orientation: true, surface };
+    Guarded::new(CompressedShell { vertices: vec![], edges: vec![], faces: vec![face] }, cap)
+}
+
+/// #1568 review item 3: the range clause is what keeps sc_logo.step
+/// refused. A proven rational patch that trips inside its own range is a
+/// continuous trip; the same patch divided over a wild range (u from
+/// -2e51) trips as NOT continuous, so its coarser mesh is never kept.
+#[test]
+fn a_trip_on_a_proven_face_divided_outside_its_range_is_not_continuous() {
+    let g = rational_patch_shell(1);
+    let _ = g.shell.faces[0].surface.parameter_division(((0.0, 1.0), (0.0, 1.0)), 0.1);
+    assert_eq!(g.tripped(), Some(Trip { index: 0, kind: "NURBS surface", continuous: true }), "in range: proven");
+    let g = rational_patch_shell(1);
+    let _ = g.shell.faces[0].surface.parameter_division(((-2e51, 1.0), (0.0, 1.0)), 0.1);
+    assert_eq!(g.tripped(), Some(Trip { index: 0, kind: "NURBS surface", continuous: false }), "out of range");
+}
+
+/// #1568 review item 2: a pass that divided the face outside its range
+/// voids the proof for every later pass of that import - the coarser,
+/// wild pass is the mesh a fallback would keep.
+#[test]
+fn an_earlier_pass_outside_the_range_voids_a_later_trip() {
+    let g = rational_patch_shell(1);
+    let face = &g.shell.faces[0].surface;
+    let _ = face.parameter_division(((-2e51, 1.0), (0.0, 1.0)), 0.1);
+    g.reset();
+    assert_eq!(g.tripped(), None, "a new pass starts with its whole budget");
+    let _ = face.parameter_division(((0.0, 1.0), (0.0, 1.0)), 0.05);
+    assert_eq!(g.tripped(), Some(Trip { index: 0, kind: "NURBS surface", continuous: false }));
+}
+
+fn fixture_shell(cap: u64) -> Guarded {
+    let text = include_str!("../../../../../testdata/models/bspline_discontinuous.step");
+    let exchange = truck_stepio::r#in::ruststep::parser::parse(text).expect("fixture parses");
+    let table = truck_stepio::r#in::Table::from_data_section(&exchange.data[0]);
+    let shell = table.shell.values().next().expect("one shell");
+    Guarded::new(table.to_compressed_shell(shell).expect("converts"), cap)
+}
+
+/// #1568 review item 1: two faces run out in one refinement pass - face 1
+/// a plane (proven) and face 6 the jump. The pass is not continuous, the
+/// trip names the jump, and the schedule refuses instead of keeping the
+/// coarser pass (which smears the jump into a wall).
+#[test]
+fn a_proven_and_a_jumping_face_tripping_in_one_pass_refuse_naming_the_jump() {
+    let g = fixture_shell(10);
+    let trip_faces = |faces: &[usize]| {
+        g.reset();
+        for &i in faces {
+            g.meters[i].used.store(11, Ordering::Relaxed);
+        }
+    };
+    trip_faces(&[0]);
+    assert_eq!(g.tripped(), Some(Trip { index: 0, kind: "elementary surface", continuous: true }), "the plane alone");
+    trip_faces(&[0, 5]);
+    assert_eq!(g.tripped(), Some(Trip { index: 5, kind: "B-spline surface", continuous: false }));
+    // Through the schedule, as `step::shell_facets` maps a pass: the first
+    // pass meets, the second trips on both faces - refused, by the jump.
+    let mut pass = 0;
+    let r = super::super::step_refine::refine(4.0, 0.001, 1_000_000, |_tol| {
+        pass += 1;
+        if pass == 1 {
+            g.reset();
+            return Ok(vec![0u8; 10]);
+        }
+        trip_faces(&[0, 5]);
+        let trip = g.tripped().expect("tripped");
+        let refusal = refusal(trip, g.meters.len(), None, None, 10);
+        Err(super::super::step_refine::PassError::Unconverged { continuous: trip.continuous, refusal })
+    });
+    let err = r.expect_err("a smeared jump is never kept").to_string();
+    assert!(err.contains("face 6 of") && err.contains("did not converge"), "{err}");
 }

@@ -64,10 +64,13 @@ pub const FACE_EVAL_CAP: u64 = 150_000_000;
 pub(super) struct Meter {
     used: AtomicU64,
     cap: u64,
-    /// This pass divided the surface over a range outside its own
-    /// parameter range (#1568: sc_logo's face #836 was asked for u from
-    /// -2e51, a trimming bound gone wild), where its continuity is not
-    /// proven - a rational surface extrapolated can meet a pole.
+    /// Some pass of this import divided the surface over a range outside
+    /// its own parameter range (#1568: sc_logo's face #836 was asked for u
+    /// from -2e51, a trimming bound gone wild), where its continuity is not
+    /// proven - a rational surface extrapolated can meet a pole. Sticky
+    /// across passes: truck derives the range from each pass's tolerance,
+    /// so the coarser pass whose mesh a fallback would keep may be the one
+    /// that went wild while the finer pass that tripped stayed in range.
     outside: AtomicBool,
 }
 
@@ -82,9 +85,9 @@ impl Meter {
     fn tripped(&self) -> bool {
         self.used.load(Ordering::Relaxed) > self.cap
     }
+    /// A new pass: the whole budget again. `outside` stays set.
     fn reset(&self) {
         self.used.store(0, Ordering::Relaxed);
-        self.outside.store(false, Ordering::Relaxed);
     }
 }
 
@@ -260,17 +263,27 @@ impl Guarded {
         self.meters.iter().for_each(|m| m.reset());
     }
 
-    /// The first face whose pass ran past the cap.
+    /// The face to report for a pass in which faces ran past the cap. The
+    /// pass counts as continuous only if EVERY tripped face is proven and
+    /// was never divided outside its range; otherwise the first face that
+    /// is not is reported, so the refusal names the face that may jump
+    /// (#1568 review: a proven face tripping beside one that may jump must
+    /// not let the fallback keep the jump's smear).
     pub(super) fn tripped(&self) -> Option<Trip> {
-        let index = self.meters.iter().position(|m| m.tripped())?;
-        Some(Trip {
+        let mut trips = self.meters.iter().enumerate().filter(|(_, m)| m.tripped()).map(|(i, _)| self.trip(i));
+        let first = trips.next()?;
+        Some(if first.continuous { trips.find(|t| !t.continuous).unwrap_or(first) } else { first })
+    }
+
+    fn trip(&self, index: usize) -> Trip {
+        Trip {
             index,
             kind: self.kinds.get(index).copied().unwrap_or("surface"),
-            // Proven on the surface's own range only: a pass that divided
-            // it outside that range is not covered by the proof.
+            // Proven on the surface's own range only: a face any pass
+            // divided outside that range is not covered by the proof.
             continuous: self.continuous.get(index).copied().unwrap_or(false)
                 && self.meters.get(index).is_some_and(|m| !m.outside.load(Ordering::Relaxed)),
-        })
+        }
     }
 }
 
