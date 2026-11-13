@@ -151,7 +151,9 @@ pub fn side_burn(p: &SinkerParams, s: &SideBurn) -> Result<Toolpath, GenError> {
     }
     let z = check(p)?;
     let room = allowance(s, p.gap).map_err(GenError::Invalid)?;
-    let tip = z + p.gap;
+    // The plunge's tip as the burn door placed it (one spark gap; a
+    // side burn's op never states #543's stand-off).
+    let tip = z + crate::sinker::stand(p);
     let (ux, uy) = s.direction.unit();
     let side = Point3::new(p.x + ux * s.amount, p.y + uy * s.amount, tip);
     let mut b = PathBuilder::approached(Point3::new(p.x, p.y, p.approach_z));
@@ -187,6 +189,7 @@ mod tests {
             electrode_len: 30.0,
             feed: 40.0,
             gap: 0.05,
+            stand: None,
             orbit: None,
         }
     }

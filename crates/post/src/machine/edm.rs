@@ -115,6 +115,7 @@ impl Edm {
             && self.max_taper_deg.is_none_or(|a| a.is_finite() && a > 0.0 && a < 90.0)
             && self.wire_diameters.iter().all(|d| d.is_finite() && *d > 0.0)
             && pos(self.max_orbit_radius)
+            && self.pickup.as_ref().is_none_or(|p| !p.trim().is_empty())
             && self.orbits.iter().all(|o| ORBIT_KINDS.contains(&o.kind.as_str()) && !o.word.trim().is_empty())
             && self.conditions_sane()
     }
@@ -133,7 +134,7 @@ impl Edm {
         let sinker = !self.orbits.is_empty()
             || self.max_orbit_radius.is_some()
             || self.pickup.is_some()
-            || self.conditions.iter().any(|c| c.undersize.is_some());
+            || self.conditions.iter().any(|c| c.undersize.is_some() || c.wear.is_some());
         match k {
             Kind::WireEdm => !sinker,
             Kind::SinkerEdm => !wire,

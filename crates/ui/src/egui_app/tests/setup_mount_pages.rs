@@ -8,7 +8,7 @@ use crate::state::SetupPage;
 use camcraft_app::operation::{Height, OpParams, SrcRef};
 
 /// Two setups, Setup2 active, its page `page` open.
-fn two_setups(h: &mut Harness<'static, ShellUi>, page: SetupPage) {
+pub(super) fn two_setups(h: &mut Harness<'static, ShellUi>, page: SetupPage) {
     h.state_mut().state.pending.push_back(CommandKind::CreateSetup { name: None, datum_from: None });
     h.state_mut().state.pending.push_back(CommandKind::CreateSetup { name: None, datum_from: None });
     h.run_steps(2);
@@ -30,7 +30,7 @@ fn the_setup_machine_page_takes_its_own_machine() {
 }
 
 /// Open the ComboBox showing `now` and pick `to`, with real pointer events.
-fn pick(h: &mut Harness<'static, ShellUi>, now: &str, to: &str) {
+pub(super) fn pick(h: &mut Harness<'static, ShellUi>, now: &str, to: &str) {
     let at = h
         .get_by(|n| n.role() == egui::accesskit::Role::ComboBox && n.value().as_deref() == Some(now))
         .rect()
@@ -56,7 +56,7 @@ fn the_setup_post_page_takes_its_own_post_through_the_picker() {
 }
 
 /// The Machine page's Library ComboBox text for the active setup's machine.
-fn library_label(h: &Harness<'static, ShellUi>) -> String {
+pub(super) fn library_label(h: &Harness<'static, ShellUi>) -> String {
     let now = camcraft_app::machine::of(&h.state().state.world).0;
     camcraft_app::posting::MACHINES
         .iter()

@@ -79,18 +79,27 @@ fn empty_egui_meshes_are_filtered_before_gpu_submission() {
 }
 
 mod face_origin;
+mod geo_row_hover;
+mod pick_mode;
 mod spindle_row;
 mod stock_size;
+mod setup_settings_page;
+mod machine_page;
+mod tool_list_page;
 mod stock_fit_sides;
 mod raw_stock_row;
 mod layout;
 mod machines_pane;
 mod machines_edit;
+mod machine_wire_edm;
 mod unsaved;
 mod post_refusal;
+mod program_units;
 mod gcode_viewer;
 mod first_setup;
 mod structural;
+mod cycle_combo;
+mod radial_step_field;
 // #661: every operation kind wears its own SVG-mastered glyph.
 mod op_icon_table;
 mod tool_icon_wiring;
@@ -114,6 +123,8 @@ mod mcp_live;
 mod setup_post_options;
 // #821: the raised-rotary rows of a setup's Machine page.
 mod setup_rotary;
+// #1494: the setup eye (display only).
+mod setup_eye;
 // #155: Pause / Home entries in the operation list.
 mod program_entry;
 // #371: the tool editor's Body section.
@@ -137,6 +148,7 @@ mod view_names;
 mod prefs_door;
 // #509: the Fixtures page rows fit the pane.
 mod fixture_rows;
+mod fixtures_page;
 // #864: a reduced-fidelity model says so on its page.
 mod model_fidelity;
 // #1054: the STEP facet budget on the model page.
@@ -145,10 +157,14 @@ mod step_budget;
 mod two_point_marks;
 // #979: the viewport box select.
 mod box_select;
+mod edge_click_modifiers;
 // #1104: the Setups page lists setups only.
 mod setups_declutter;
 // #1206: each setup's own Machine and Post pages pick its own mount.
 mod setup_mount_pages;
+// #1515: a pick on one setup never re-mounts another.
+mod setup_machine_bleed;
+mod setup_post_options_bleed;
 
 /// What the per-frame state of `Shell` is, minus the GPU half: the fields
 /// `shell_layout` touches, so the harness exercises the window's real body.
@@ -976,7 +992,8 @@ fn every_field_lives_on_exactly_one_section() {
                     "Heights",
                     vec!["Clearance Z", "Levels", "Top Z", "Bottom Z", "Stepdown"],
                 ),
-                ("Passes", vec!["Stepover", "Stock to leave", "Optimal load (% of D)"]),
+                // #1512: the load sets the step, so no Stepover row.
+                ("Passes", vec!["Stock to leave", "Optimal load (% of D)"]),
                 ("Lead in / Lead out", vec!["Entry", "Level to level", "Between levels", "Between passes"]),
                 ("Feeds", vec!["Feed", "Plunge feed", "Climb milling"]),
             ],
@@ -1367,8 +1384,12 @@ fn every_registry_kind_gets_its_tab_bar() {
                 k.label,
             );
             if has {
-                assert!(harness.query_by_label("Tool").is_some(), "{}: the pane opens on the tool row", k.label);
-                per_tab.push((si, pane_texts(&harness)));
+                // #535: a kind that mounts no library tool has no Tool row.
+                assert_eq!(harness.query_by_label("Tool").is_some(), k.mounts_tool(), "{}: the pane opens on the tool row (only of a tool-mounting kind)", k.label);
+                // #1514: the pick-mode line is chrome that reads per tab.
+                let mut texts = pane_texts(&harness);
+                texts.retain(|t| !t.starts_with("Picking o"));
+                per_tab.push((si, texts));
             }
         }
         // Chrome: what every open tab shares (heading, tool/source rows,
@@ -2770,6 +2791,11 @@ fn tips_match_the_imgui_table() {
     }
     // Every Create button shares the swap while the tool list is empty.
     for i in 0..panes::TYPES.len() {
+        // #535: a kind that mounts no library tool (the wire EDM's) is not
+        // held by an empty rack.
+        if camcraft_app::operation::KindInfo::ALL.get(i).is_some_and(|k| !k.mounts_tool()) {
+            continue;
+        }
         assert_eq!(
             panes::tip_of(Cmd::Create(i), &empty),
             "No tool yet - add one (Setup > Tools)",

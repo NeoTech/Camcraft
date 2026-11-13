@@ -5,7 +5,51 @@ use crate::machining2d::PocketStrategy;
 use crate::operation::types::params::OpParams;
 use crate::operation::types::sel::lead_sane;
 
+/// The refusal of pre-drilled entry on a kind that does not read it (#1449).
+pub const PREDRILLED_POCKET_ONLY: &str =
+    "pre-drilled entry is read by the 2D Pocket only so far - turn it off for this operation kind";
+
 impl OpParams {
+    /// Pre-drilled entry asked on a kind other than the 2-D Pocket.
+    fn predrilled_elsewhere(&self) -> bool {
+        !matches!(self, OpParams::Pocket { .. }) && self.links().is_some_and(|l| l.approach.predrilled)
+    }
+
+    /// The by-name refusal behind a failed [`Self::is_sane`], where a
+    /// kind can say it (#546: the sinker burn's wear rate and layer
+    /// step; the side burn's structural refusal, which names a wear rate
+    /// or layer step it does not support yet); `None` keeps the
+    /// commands' generic "not usable".
+    #[must_use]
+    pub fn named_refusal(&self) -> Option<String> {
+        if self.predrilled_elsewhere() {
+            return Some(PREDRILLED_POCKET_ONLY.into());
+        }
+        // #1448: only the untilted 2D contour takes a picked start so far;
+        // every other kind refuses it here rather than ignore it.
+        // #1473: the exit point likewise.
+        for (what, set) in [
+            ("start", self.links().is_some_and(|l| l.approach.start_point.is_some())),
+            ("exit", self.links().is_some_and(|l| l.approach.exit_point.is_some())),
+        ] {
+            if !set {
+                continue;
+            }
+            match self {
+                OpParams::Contour { tilt: None, .. } => {}
+                OpParams::Contour { .. } => {
+                    return Some(format!("a {what} point is not taken on a tilted (3+2) contour yet - clear it or the tilt"));
+                }
+                _ => return Some(format!("a {what} point is taken only by the 2D contour so far - clear it on this operation")),
+            }
+        }
+        match self {
+            OpParams::SinkerBurn(p) => p.compensation_refusal(),
+            OpParams::SinkerSideBurn(p) => p.refusal(),
+            _ => None,
+        }
+    }
+
     /// Shallow sanity for command construction, no world: finite numbers,
     /// positive increments, in-range slots. Ordering needs resolved
     /// heights and runs in [`crate::operation::depth_sane`] wherever a command holds the
@@ -30,6 +74,9 @@ impl OpParams {
         // every ladder kind at once: the ramp angle where it is read, a
         // pitch and a stay-down limit that are zero or positive.
         let links_ok = self.links().is_none_or(|l| l.validate().is_ok());
+        // #1449: pre-drilled entry is read by the 2-D Pocket only - set
+        // on another kind it would be a silently dropped choice.
+        let links_ok = links_ok && !self.predrilled_elsewhere();
         tilt_ok
             && links_ok
             && match self {
@@ -951,6 +998,7 @@ impl OpParams {
                 infeed,
                 feed,
                 plunge_feed,
+                infeed_plan,
                 hand: _,
             } => {
                 pos(*tolerance)
@@ -962,6 +1010,11 @@ impl OpParams {
                     && pos(*infeed)
                     && pos(*feed)
                     && pos(*plunge_feed)
+                    // The plan's tool-free numbers (#416); whether the
+                    // flank angle fits the insert is the tool's
+                    // question, asked by name at the threading gate.
+                    && infeed_plan.is_sane()
+                    && infeed_plan.refusal(*depth, *infeed, 180.0).is_none()
             }
             // The contour doors (M5.2 stage E): the twins' heights and
             // feeds, plus each kind's own promise-number, finite.
@@ -1114,12 +1167,18 @@ impl OpParams {
                 feed,
                 plunge_feed,
                 holes,
+                pitch,
+                passes,
                 ..
             } => {
                 clearance_z.is_sane()
                     && retract_z.is_none_or(|r| r.is_sane())
                     && top_z.is_sane()
                     && bottom_z.is_none_or(|b| b.is_sane())
+                    && pitch.is_none_or(pos)
+                    // #988: signs are judged by name at the door.
+                    && passes.finish.is_finite()
+                    && passes.allowance.is_finite()
                     && pos(*infeed)
                     && pos(*feed)
                     && pos(*plunge_feed)

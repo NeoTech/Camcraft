@@ -63,6 +63,12 @@ pub use camcraft_motion::wire_edm;
 pub use camcraft_motion::probing;
 // #541: sinker EDM burn to depth.
 pub use camcraft_motion::sinker;
+// #543: sinker rough and finish with undersize.
+pub use camcraft_motion::sinker_undersize;
+// #547: electrode generation from part faces.
+pub use camcraft_motion::sinker_cavity;
+pub use camcraft_motion::sinker_electrode;
+pub use camcraft_motion::sinker_wear;
 // #544: sinker EDM orbit patterns.
 pub use camcraft_motion::sinker_orbit;
 // #545: sinker EDM side burning.
@@ -87,6 +93,8 @@ pub mod setup_align;
 pub mod setup_mount;
 // #316: transforms between setups and the setup-relative link.
 pub mod setup_relative;
+// #1510: a tilted milling WCS is refused at generation.
+pub mod setup_wcs_tilt;
 pub mod setup_post_options;
 // #1031: a setup's workholding (chuck/collet) rpm limit.
 pub mod setup_workholding;
@@ -119,6 +127,8 @@ pub mod tool_list_export;
 // #221: the number a tool posts as, and the clash law.
 pub mod tool_numbers;
 pub use camcraft_tools::tools;
+// #894: the thread mills' form constants, sanity law and pitch door.
+pub use camcraft_tools::thread_mill;
 // #630: the lathe tool orientation code (LinuxCNC 1-9) and its control point.
 pub use camcraft_tools::orientation;
 pub use camcraft_tools::catalog_fields;

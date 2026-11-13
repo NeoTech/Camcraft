@@ -4,7 +4,8 @@
 //! Provenance: our own tests, specced from the operation lifecycle and
 //! the hand-test report (vertical-wall rim picked for a 2D Pocket).
 //!
-//! Gate map (M4.4): covers app::commands, app::operation, app::model, app::schema.
+//! Gate map (M4.4): covers app::commands, app::operation, app::model, app::schema,
+//! app::setup_wcs_tilt (#1510).
 
 mod common;
 
@@ -13,6 +14,7 @@ use flecs_ecs::prelude::World;
 use camcraft_app::commands::{
     AddTool, ChangeOperationKind, ClearToolpath, CommandError, CreateOperation, DeleteOperation,
     EditOperationLinks, GenerateOperation, History, ImportModel, MoveModel, SetOperationGeometry, SetStock,
+    SetWcsOrigin,
 };
 use camcraft_app::geometry::feature::FaceKind;
 use camcraft_app::geometry::{Point3, cube, quat_from_euler};
@@ -213,6 +215,29 @@ fn a_rotated_face_pick_for_facing_is_refused_before_generation() {
     assert!(err.to_string().contains("not horizontal"), "{err}");
     let (_, refusal) = operation::selection_account(&world, None, &[top], &facing());
     assert!(refusal.is_some_and(|msg| msg.contains("not horizontal")));
+}
+
+/// #1510: a wall the tilted WCS calls level - the reporter's pick - says
+/// the WCS is why, and that the part is turned with its alignment.
+#[test]
+fn a_wall_level_only_in_a_tilted_wcs_names_the_wcs() {
+    let (world, mut history) = world_with_part();
+    history.execute(
+        &world,
+        CreateOperation::new(&world, "F1", TOOL, SrcRef::Stock, facing()).expect("facing op"),
+    );
+    let tilted = Location { rot: quat_from_euler(std::f64::consts::FRAC_PI_2, 0.0, 0.0), ..Location::default() };
+    history.execute(&world, SetWcsOrigin::new(&world, tilted).expect("tilt the WCS"));
+    let err = SetOperationGeometry::new(&world, "F1", vec![pick(face_id(&world, true))])
+        .err()
+        .expect("a machine-vertical face is refused at the pick");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("not horizontal")
+            && msg.contains("the WCS (G54) has its Z axis tilted 90.000 deg off the machine's Z")
+            && msg.contains("Part alignment"),
+        "{msg}"
+    );
 }
 
 #[test]

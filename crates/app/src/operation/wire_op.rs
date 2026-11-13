@@ -16,7 +16,7 @@ use crate::geo2d::{Loop, Point2, Region};
 use crate::machine::{ConditionField, Kind};
 use crate::machining2d::GenError;
 use crate::verify::Warning;
-use crate::wire_edm::{wire_contour, WireParams};
+use crate::wire_edm::{clearance_door, wire_burnout, wire_contour_tapered, TabParams, WireParams, WireTaper};
 
 use super::kinds::Carried;
 use super::types::{OpParams, WireContourOp, WireSide};
@@ -32,6 +32,12 @@ pub(super) fn seed_wire_contour(c: &Carried) -> OpParams {
         condition: String::new(),
         side: WireSide::Die,
         start: None,
+        tabs: None,
+        capture: false,
+        taper_deg: 0.0,
+        four_axis: None,
+        burnout: None,
+        clearance: super::types::DEFAULT_CLEARANCE,
     })
 }
 
@@ -43,6 +49,10 @@ pub struct WireCondition {
     pub wire_diameter: f64,
     /// The spark gap per side, mm.
     pub gap: f64,
+    /// The machine's name and its stated maximum taper (#536), for the
+    /// taper's door.
+    pub machine: String,
+    pub max_taper_deg: Option<f64>,
 }
 
 /// The condition door (#531, #532): the op's condition on the machine
@@ -84,7 +94,12 @@ pub fn condition_of(world: &World, setup: Option<&str>, op: &WireContourOp) -> R
     let (Some(gap), Some(wire_diameter)) = (c.gap, c.wire_diameter) else {
         return Err(format!("machine {}: EDM condition {:?} states no gap or no wire diameter", machine.model, c.id));
     };
-    Ok(WireCondition { id: c.id.clone(), wire_diameter, gap })
+    let cond = WireCondition { id: c.id.clone(), wire_diameter, gap, machine: machine.model.clone(), max_taper_deg: edm.max_taper_deg };
+    // The burnout's clearance against the condition's kerf (#540).
+    if let Some(clear) = op.burnout {
+        clearance_door(clear, cond.wire_diameter * 0.5 + cond.gap)?;
+    }
+    Ok(cond)
 }
 
 /// The condition a wire EDM kind's generation cuts with, read where
@@ -93,11 +108,30 @@ pub fn condition_of(world: &World, setup: Option<&str>, op: &WireContourOp) -> R
 ///
 /// # Errors
 /// [`condition_of`]'s refusals, as a generation refusal.
-pub(super) fn job_wire(world: &World, op: &crate::schema::Operation) -> Result<Option<WireCondition>, GenError> {
+pub(super) fn job_wire(world: &World, op: &crate::schema::Operation) -> Result<Option<(WireCondition, Option<WireCondition>)>, GenError> {
     match &op.params {
-        OpParams::WireContour(w) => condition_of(world, op.setup.as_deref(), w).map(Some).map_err(GenError::Invalid),
+        OpParams::WireContour(w) => {
+            let setup = op.setup.as_deref();
+            let main = condition_of(world, setup, w).map_err(GenError::Invalid)?;
+            let cutoff = cutoff_of(world, setup, w).map_err(GenError::Invalid)?;
+            Ok(Some((main, cutoff)))
+        }
         _ => Ok(None),
     }
+}
+
+/// The tab cut-off's condition (#539): `None` when tabs are off or no
+/// cut-off condition is named (the generator refuses the latter by
+/// name); a named one the machine does not state is refused here.
+///
+/// # Errors
+/// The condition lookup's refusal, by name.
+pub fn cutoff_of(world: &World, setup: Option<&str>, op: &WireContourOp) -> Result<Option<WireCondition>, String> {
+    let Some(t) = op.tabs.as_ref().filter(|t| !t.cutoff_condition.trim().is_empty()) else {
+        return Ok(None);
+    };
+    let probe = WireContourOp { condition: t.cutoff_condition.clone(), ..op.clone() };
+    condition_of(world, setup, &probe).map(Some).map_err(|e| format!("the tab cut-off's condition: {e}"))
 }
 
 /// What stands in the job's tool slot for a wire cut: a spindle-less
@@ -122,8 +156,25 @@ pub(super) fn stamp_condition(world: &World, setup: Option<&str>, op: &WireConto
             h.write_u8(0xff);
             h.write(&c.wire_diameter.to_bits().to_le_bytes());
             h.write(&c.gap.to_bits().to_le_bytes());
+            // #536: a taper also reads the machine's maximum; a vertical
+            // cut's stamp stays what it was.
+            if op.taper_deg != 0.0 || op.four_axis.is_some() {
+                h.write(&c.max_taper_deg.map_or(u64::MAX, f64::to_bits).to_le_bytes());
+            }
         }
         Err(_) => h.write_u8(0),
+    }
+    // #539: the cut-off's condition, only when tabs are on.
+    if op.tabs.is_some() {
+        h.write(b"wire-cutoff");
+        match cutoff_of(world, setup, op) {
+            Ok(Some(c)) => {
+                h.write_u8(1);
+                h.write(&c.wire_diameter.to_bits().to_le_bytes());
+                h.write(&c.gap.to_bits().to_le_bytes());
+            }
+            Ok(None) | Err(_) => h.write_u8(0),
+        }
     }
 }
 
@@ -142,12 +193,19 @@ pub fn conditions_of(world: &World, setup: Option<&str>) -> Vec<String> {
 }
 
 /// The generator's numbers from the op's, the condition's and the
-/// world's.
+/// world's. `stock` is the setup's stock outline in XY - the edge an
+/// open run is entered from (#1109).
 ///
 /// # Errors
 /// A workpiece top or bottom that does not resolve, or a bottom that
 /// does not stand below the top.
-pub fn wire_params(op: &WireContourOp, cond: &WireCondition, hs: &ResolvedHeights) -> Result<WireParams, GenError> {
+pub fn wire_params(
+    op: &WireContourOp,
+    cond: &WireCondition,
+    cutoff: Option<&WireCondition>,
+    hs: &ResolvedHeights,
+    stock: Option<Region>,
+) -> Result<WireParams, GenError> {
     let (Some(top), Some(bottom)) = (hs.top, hs.bottom) else {
         return Err(GenError::Invalid("wire contour: the workpiece's top and bottom must both resolve".into()));
     };
@@ -163,25 +221,96 @@ pub fn wire_params(op: &WireContourOp, cond: &WireCondition, hs: &ResolvedHeight
         side: op.side,
         start: op.start.map(|[x, y]| Point2::new(x, y)),
         plane_z: bottom,
+        tabs: op.tabs.as_ref().map(|t| TabParams {
+            count: t.count,
+            width: t.width,
+            at: t.at.iter().map(|[x, y]| Point2::new(*x, *y)).collect(),
+            cutoff: cutoff.map(|c| (c.id.clone(), c.wire_diameter * 0.5 + c.gap)),
+        }),
+        stock,
+        clearance: op.clearance,
+    })
+}
+
+/// Tabs with a taper (#539 x #536), refused by name at the command
+/// door and at generation: the tapered builder reads the top-plane path
+/// as one closed ring, and a tabbed path is not one. `None` when the
+/// op states no tabs or no taper.
+#[must_use]
+pub fn tabs_taper_refusal(op: &WireContourOp) -> Option<String> {
+    (op.tabs.is_some() && op.taper_deg != 0.0).then(|| {
+        format!(
+            "wire contour: tabs can't be combined with a taper yet (a {:.3} degree taper is asked) - remove the tabs or set the taper to 0",
+            op.taper_deg
+        )
     })
 }
 
 /// Generate: `picks` is the picked profile (closed rings, open runs)
 /// when the source is a selection; otherwise `base` - the model's
-/// through-silhouette - is the profile. No verification runs yet (the
+/// through-silhouette - is the profile. `stock` is read only for an
+/// open run (#1109). No verification runs yet (the
 /// wire sweep against the part is #534), and the path's notes say so.
 pub(super) fn generate_wire(
     op: &WireContourOp,
-    cond: Result<WireCondition, GenError>,
+    cond: Result<(WireCondition, Option<WireCondition>), GenError>,
     hs: &ResolvedHeights,
     picks: Option<(Vec<Loop>, Vec<Vec<Point2>>)>,
+    ruled: Option<Result<super::wire_ruled::RuledPicks, GenError>>,
     base: impl FnOnce() -> Result<Region, GenError>,
+    stock: impl FnOnce() -> Option<Region>,
 ) -> Result<(Toolpath, Vec<Warning>), GenError> {
-    let p = wire_params(op, &cond?, hs)?;
+    let (cond, cutoff) = cond?;
+    // #537: two profiles paired into rulings - its own generator, read
+    // from its own picks. A burnout (#540), tabs (#539) and an open run
+    // (#1109) are not cut along rulings: each refused by name, never
+    // cut as something else.
+    if let Some(four) = &op.four_axis {
+        if op.burnout.is_some() {
+            return Err(GenError::Invalid(
+                "wire contour: a 4-axis cut is asked with a no-core burnout - the burnout is cut vertical only; turn the burnout off or cut the two profiles without it".into(),
+            ));
+        }
+        if op.tabs.is_some() {
+            return Err(GenError::Invalid(
+                "wire contour: a 4-axis cut is asked with tabs - tabs are cut on a one-profile contour only; remove the tabs or cut the two profiles without them".into(),
+            ));
+        }
+        let p = wire_params(op, &cond, cutoff.as_ref(), hs, None)?;
+        let picks = ruled.ok_or_else(|| super::job::unreached("wire profiles"))??;
+        return super::wire_ruled::generate(op, four, &cond, &p, hs, &picks).map(|path| (path, Vec::new()));
+    }
+
     let (loops, chains) = match picks {
         Some(geom) => geom,
         None => (base()?.loops().to_vec(), Vec::new()),
     };
-    let path = wire_contour(&loops, &chains, &p)?;
+    let stock = if chains.is_empty() { None } else { stock() };
+    let p = wire_params(op, &cond, cutoff.as_ref(), hs, stock)?;
+    let taper = WireTaper {
+        angle_deg: op.taper_deg,
+        top_z: hs.top.unwrap_or(p.plane_z),
+        max_deg: cond.max_taper_deg,
+        machine: cond.machine.clone(),
+    };
+    let path = match op.burnout {
+        // #536 x #540: the burnout's rings are cut vertical; a taper
+        // with them is refused by name, never cut upright silently.
+        Some(_) if op.taper_deg != 0.0 => {
+            return Err(GenError::Invalid(format!(
+                "wire contour: a {:.3} degree taper is asked with a no-core burnout - the burnout is cut vertical only; set the taper to 0 or turn the burnout off",
+                op.taper_deg
+            )))
+        }
+        Some(clearance) => wire_burnout(&loops, &chains, &p, clearance)?,
+        // #539 x #536: the tapered builder reads one closed ring; a
+        // tabbed path is not one, so the pair is refused by name.
+        None => {
+            if let Some(why) = tabs_taper_refusal(op) {
+                return Err(GenError::Invalid(why));
+            }
+            wire_contour_tapered(&loops, &chains, &p, &taper)?
+        }
+    };
     Ok((path, Vec::new()))
 }

@@ -13,11 +13,14 @@ use crate::cl::Toolpath;
 use crate::geometry::Triangle;
 use crate::machine::{ConditionField, Kind};
 use crate::machining2d::GenError;
-use crate::sinker::{burn_to_depth, SinkerDatum, SinkerParams};
+use crate::sinker::{SinkerDatum, SinkerParams};
+use crate::sinker_undersize::{inverted, judge, SinkerPass, Undersize};
+use crate::sinker_wear::burn_compensated;
 use crate::tools::{Tool, ToolKind};
 use crate::verify::Warning;
 
 use super::kinds::Carried;
+use super::sinker_pass::PassRead;
 use super::types::{OpParams, SinkerBurnOp};
 use super::ResolvedHeights;
 
@@ -42,7 +45,13 @@ pub(super) fn burn_draft(c: &Carried) -> SinkerBurnOp {
         y: 0.0,
         feed: 50.0,
         condition: String::new(),
+        pass: super::SinkerPass::Single,
+        cavity_x: 0.0,
+        cavity_y: 0.0,
         orbit: None,
+        layer: None,
+        wear_lost: None,
+        wear_over: None,
     }
 }
 
@@ -64,6 +73,40 @@ pub fn condition_gap(world: &World, setup: Option<&str>, op: &SinkerBurnOp) -> R
 /// # Errors
 /// [`condition_gap`]'s refusals.
 pub fn condition_gap_as(world: &World, setup: Option<&str>, label: &str, op: &SinkerBurnOp) -> Result<f64, String> {
+    let c = condition_as(world, setup, label, op, &[ConditionField::Gap])?;
+    let machine = crate::setup_mount::machine_label(&crate::machine::of_setup(world, setup));
+    c.gap.ok_or_else(|| format!("machine {machine}: EDM condition {:?} states no spark gap", op.condition.trim()))
+}
+
+/// The Sinker Burn's condition with every field in `need` stated
+/// ([`condition_as`] under the Sinker Burn's name) - the door #541's gap
+/// and #543's undersize share.
+///
+/// # Errors
+/// [`condition_as`]'s refusals.
+pub fn condition(
+    world: &World,
+    setup: Option<&str>,
+    op: &SinkerBurnOp,
+    need: &[ConditionField],
+) -> Result<crate::machine::Condition, String> {
+    condition_as(world, setup, "Sinker Burn", op, need)
+}
+
+/// The burn's condition with every field in `need` stated, read from the
+/// op's setup's machine; `label` names the op kind in the refusals.
+/// Refused by name: a setup not on a sinker EDM, no condition named, no
+/// EDM section, or a condition missing or short of a field.
+///
+/// # Errors
+/// Each refusal above, in words.
+pub fn condition_as(
+    world: &World,
+    setup: Option<&str>,
+    label: &str,
+    op: &SinkerBurnOp,
+    need: &[ConditionField],
+) -> Result<crate::machine::Condition, String> {
     let kind = crate::machine::kind_of_setup(world, setup);
     if kind != Kind::SinkerEdm {
         return Err(format!(
@@ -85,8 +128,7 @@ pub fn condition_gap_as(world: &World, setup: Option<&str>, label: &str, op: &Si
         .as_ref()
         .and_then(|m| m.edm.as_ref())
         .ok_or_else(|| format!("machine {label} states no EDM section, so no condition {id:?}"))?;
-    let c = edm.condition(&label, id, &[ConditionField::Gap])?;
-    c.gap.ok_or_else(|| format!("machine {label}: EDM condition {id:?} states no spark gap"))
+    edm.condition(&label, id, need).cloned()
 }
 
 /// The orbit's machine law (#544, #290 D6): the setup's sinker lists
@@ -173,18 +215,60 @@ pub fn sinker_params(
         electrode_len: tool.flute_len,
         feed: op.feed,
         gap,
+        stand: None,
         orbit: op.orbit,
     })
 }
 
-/// Generate the burn.
+/// Generate the burn. A rough or finish (#543) is first judged by the
+/// undersize law (`sinker_undersize::judge`), which also places the tip
+/// one undersize above the finished floor; a finish whose undersize is
+/// not smaller than the rough's it follows is warned by name.
+/// The burn is then wear-compensated in Z when a rate is stated (#546:
+/// measured on the op, else the condition's `cond_wear`), from the
+/// stand-off the undersize placed.
 pub(super) fn generate_sinker(
     op: &SinkerBurnOp,
     tool: &Tool,
     hs: &ResolvedHeights,
     gap: f64,
+    pass: Option<Result<PassRead, String>>,
+    cond_wear: Option<f64>,
     facets: &[Triangle],
 ) -> Result<(Toolpath, Vec<Warning>), GenError> {
-    let p = sinker_params(op, tool, hs, gap, facets)?;
-    Ok((burn_to_depth(&p)?, Vec::new()))
+    if let Some(why) = op.pass_refusal() {
+        return Err(GenError::Invalid(why));
+    }
+    if let Some(why) = op.wear_refusal() {
+        return Err(GenError::Invalid(why));
+    }
+    let mut p = sinker_params(op, tool, hs, gap, facets)?;
+    let read = match (op.pass, pass) {
+        (SinkerPass::Single, _) => None,
+        (_, Some(r)) => Some(r.map_err(GenError::Invalid)?),
+        (_, None) => {
+            return Err(GenError::Invalid(format!("sinker {}: its condition's undersize was never read", op.pass.label())));
+        }
+    };
+    if let Some(r) = &read {
+        let u = Undersize {
+            pass: op.pass,
+            cavity: (op.cavity_x, op.cavity_y),
+            electrode: (tool.diameter, tool.width),
+            gap,
+            undersize: r.undersize,
+        };
+        p.stand = Some(judge(&u, op.condition.trim())?);
+    }
+    let w = super::sinker_wear_op::sinker_wear(op, cond_wear);
+    let path = burn_compensated(&p, &w)?;
+    let mut warns = Vec::new();
+    if let Some(PassRead { undersize, rough: Some((_, rough)) }) = read
+        && op.pass == SinkerPass::Finish
+        && inverted(undersize, rough)
+    {
+        let at = path.moves.iter().position(|m| m.kind == crate::cl::MoveKind::Feed).unwrap_or(0);
+        warns.push(Warning::SinkerFinishOrder { at, finish_mm: undersize, rough_mm: rough });
+    }
+    Ok((path, warns))
 }

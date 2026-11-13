@@ -13,6 +13,7 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use camcraft_app::geometry::{Point3, Triangle};
 use camcraft_app::mcp::Server;
@@ -184,10 +185,13 @@ fn degenerate_boxes_take_nothing() {
 
 // ---- the MCP twin --------------------------------------------------------
 
+/// Writes the plate STL into a directory unique to this call (pid plus a
+/// process-wide counter), so parallel tests never share or delete each other's file.
 fn write_plate_stl() -> PathBuf {
+    static CALLS: AtomicUsize = AtomicUsize::new(0);
+    let n = CALLS.fetch_add(1, Ordering::Relaxed);
     let mut dir = std::env::temp_dir();
-    dir.push(format!("camcraft-box-pick-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+    dir.push(format!("camcraft-box-pick-{}-{n}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("temp dir");
     let path = dir.join("plate.stl");
     let mut s = String::from("solid plate\n");

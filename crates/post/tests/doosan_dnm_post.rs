@@ -40,14 +40,16 @@ fn default_vmc() -> serde_json::Value {
 fn doosan_dnm_posts_basic_milling_clean() {
     let cps = dnm_post();
     let mch = dnm_machine();
-    let stream = read("crates/app/tests/golden/face_square_40x40.cl");
+    // #1359: a real face op states its spindle (a cut with the spindle
+    // stopped is refused by name).
+    let stream = read("crates/app/tests/golden/face_square_40x40.cl").replacen('\n', "\nPARAM SpindleSpeed 4500\n", 1);
     let out = engine::run(&cps, &mch, &stream).expect("runs clean");
 
     assert!(out.warnings.is_empty(), "unexpected warnings: {:?}", out.warnings);
     let p = out.program;
 
     // Header & preamble
-    assert!(p.starts_with("%\nO0001 (Doosan DNM 5700)\n"));
+    assert!(p.starts_with("%\nO0001 (Doosan DNM 5700 + rotary table)\n"));
     assert!(p.contains("G90 G17 G54 G40 G49 G80"));
 
     // Linear motion & feed
@@ -365,7 +367,7 @@ SECTION END
 fn doosan_dnm_absent_rotary_takes_no_angle_word() {
     let cps = dnm_post();
     let mch = machine::mirror(&parse_mch(&read("assets/machines/tilthead.mch")).expect("tilthead parses"));
-    let stream = "TOOL 1 T1\nSECTION\nRapid X 0 Y 0 Z 20000 A 30000 B 0 C 0\nFeed X 20000 Y 0 Z 0 F 300000 A 0 B 30000 C 0\nENDSECTION\n";
+    let stream = "TOOL 1 T1\nPARAM SpindleSpeed 6000\nSECTION\nRapid X 0 Y 0 Z 20000 A 30000 B 0 C 0\nFeed X 20000 Y 0 Z 0 F 300000 A 0 B 30000 C 0\nENDSECTION\n";
     let options = serde_json::json!({ "rotaryBrake": true });
     let out = engine::run_with(&cps, &mch, stream, &options).expect("post");
     assert!(out.warnings.is_empty(), "{:?}", out.warnings);
@@ -383,7 +385,7 @@ fn doosan_dnm_absent_rotary_takes_no_angle_word() {
 fn doosan_dnm_index_names_only_a_stated_rotary() {
     let cps = dnm_post();
     let opts = serde_json::json!({ "rotaryBrake": true });
-    let stream = |a: &str, c: &str| format!("TOOL 1 T1\nSECTION\nRapid X 0 Y 0 Z 10000 A {a} C {c}\nFeed X 50000 Y 0 Z -1000 F 400000 A {a} C {c}\nENDSECTION\n");
+    let stream = |a: &str, c: &str| format!("TOOL 1 T1\nPARAM SpindleSpeed 6000\nSECTION\nRapid X 0 Y 0 Z 10000 A {a} C {c}\nFeed X 50000 Y 0 Z -1000 F 400000 A {a} C {c}\nENDSECTION\n");
     let axis = |l: &str, k: char| l.split(' ').any(|w| w.len() > 1 && w.starts_with(k) && w[1..].parse::<f64>().is_ok());
     let out = engine::run_with(&cps, &serde_json::json!({}), &stream("90000", "0"), &opts).expect("post");
     assert_eq!(out.warnings, vec!["indexed move commands A - the machine states no A rotary"]);

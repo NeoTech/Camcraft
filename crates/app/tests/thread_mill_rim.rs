@@ -25,9 +25,10 @@ use camcraft_app::model;
 use camcraft_app::operation::{Height, OpParams, SrcRef};
 use camcraft_app::schema::Location;
 use camcraft_app::stock::StockShape;
-use camcraft_app::tools::{Tool, ToolKind};
+use camcraft_app::tools::{catalog, Tool};
 use camcraft_app::verify::Warning;
 use camcraft_app::world::new_world;
+use flecs_ecs::prelude::World;
 
 /// The block's top, and the floor of its hole or cavity.
 const TOP: f64 = 20.0;
@@ -144,45 +145,59 @@ fn thread(x: f64, radius: f64) -> OpParams {
         plunge_feed: 150.0,
         climb: true,
         holes: vec![hole(x, radius)],
+        pitch: None,
+        hand: camcraft_app::cl::ThreadHand::Right,
+        external: false,
+        passes: camcraft_app::machining2d::ThreadPasses::default(),
     }
 }
 
-/// A 6 mm Tap-form thread mill, pitch 1 (`mill2d_c`'s), long enough for
-/// the hole.
+/// A 6 mm multi-form thread mill, pitch 1 (`mill2d_c`'s, #894's kind),
+/// long enough for the hole.
 fn thread_mill() -> Tool {
-    Tool {
-        kind: ToolKind::Tap,
-        diameter: 6.0,
-        corner_r: 0.0,
-        tip_angle: 0.0,
-        pitch: 1.0,
-        nose_radius: 0.0,
-        width: 0.0,
-        flute_len: 25.0,
-        shank_d: 6.0,
-        shank_len: 40.0,
-        holder_d: 44.0,
-        holder_len: 35.0,
-        material_group: "steel".into(),
-        center_cutting: true,
-        rpm: 6000.0,
-        feed: 400.0,
-        tool_material: None,
-        flutes: None,
-        orientation: None,
-        turning: None,
-        catalog: camcraft_tools::catalog_fields::ToolCatalog::default(),
-        cutting: Vec::new(),
+    Tool { material_group: "steel".into(), ..camcraft_app::thread_mill::thread_mill(6.0, 1.0, 0.0, 25.0) }
+}
+
+/// #992: a thread mill is not centre-cutting, so each declared hole is
+/// opened ahead of the thread: a Bore of the same holes (centre, minor
+/// radius, floor) with a flat end mill of 1.2 x the radius, whose ring
+/// (0.4 r out) leaves no core standing. The Bore's own verdict is not read.
+fn open_ahead(world: &World, h: &mut History, thread: &OpParams) {
+    let OpParams::Thread { holes, .. } = thread else { unreachable!("a thread op") };
+    for (k, hole) in holes.iter().enumerate() {
+        let d = 1.2 * hole.radius;
+        let em = catalog().into_iter().find(|(n, _)| *n == "EM-0800-4FL").map(|(_, t)| t).expect("catalog end mill");
+        let tool = Tool { diameter: d, shank_d: d, flute_len: 30.0, ..em };
+        let (t, op) = (format!("OPEN-T{k}"), format!("OPEN{k}"));
+        h.execute(world, AddTool::new(world, &t, tool).expect("open tool"));
+        let bore = OpParams::Bore {
+            links: camcraft_app::links::Links::PLANAR,
+            clearance_z: Height::fixed(30.0),
+            retract_z: None,
+            top_z: Height::fixed(TOP),
+            bottom_z: None,
+            stock_to_leave: 0.0,
+            stepdown: 5.0,
+            feed: 500.0,
+            plunge_feed: 150.0,
+            climb: true,
+            tolerance: 0.01,
+            holes: vec![*hole],
+        };
+        h.execute(world, CreateOperation::new(world, &op, &t, SrcRef::Entity("part".into()), bore).expect("create bore"));
+        h.execute(world, GenerateOperation::new(world, &op).expect("generate bore"));
     }
 }
 
-/// The blocking warnings of `params` run over `part`, model-sourced.
+/// The blocking warnings of `params` run over `part`, model-sourced,
+/// with its holes opened ahead.
 fn verdict(part: Mesh, params: OpParams) -> Vec<Warning> {
     let world = new_world();
     let mut h = History::default();
     h.execute(&world, ImportModel::from_mesh("part", part));
     let loc = Location { pos: Point3::new(0.0, 0.0, -2.0), ..Default::default() };
     h.execute(&world, SetStock::new(&world, StockShape::Box { dx: 60.0, dy: 60.0, dz: 22.0 }, loc).expect("stock"));
+    open_ahead(&world, &mut h, &params);
     h.execute(&world, AddTool::new(&world, "T", thread_mill()).expect("tool"));
     h.execute(&world, CreateOperation::new(&world, "OP", "T", SrcRef::Entity("part".into()), params).expect("create"));
     h.execute(&world, GenerateOperation::new(&world, "OP").expect("generate"));
@@ -232,10 +247,10 @@ fn a_thread_taken_below_the_models_hole_floor_convicts() {
     // the grant covers the wall and the mouth, never a floor.
     let mut h = hole(0.0, 5.0);
     h.floor_z = 9.0;
-    let OpParams::Thread { clearance_z, retract_z, top_z, bottom_z, infeed, feed, plunge_feed, climb, .. } = thread(0.0, 5.0) else {
+    let OpParams::Thread { clearance_z, retract_z, top_z, bottom_z, infeed, feed, plunge_feed, climb, pitch, hand, .. } = thread(0.0, 5.0) else {
         unreachable!("a thread op")
     };
-    let p = OpParams::Thread { clearance_z, retract_z, top_z, bottom_z, infeed, feed, plunge_feed, climb, holes: vec![h] };
+    let p = OpParams::Thread { clearance_z, retract_z, top_z, bottom_z, infeed, feed, plunge_feed, climb, holes: vec![h], pitch, hand, external: false, passes: camcraft_app::machining2d::ThreadPasses::default() };
     let w = verdict(drilled_block(5.0), p);
     assert!(gouged(&w), "{w:?}");
 }
@@ -250,6 +265,7 @@ fn a_stock_sourced_thread_mill_verifies_clean_too() {
     h.execute(&world, ImportModel::from_mesh("part", cavity_block()));
     let loc = Location { pos: Point3::new(0.0, 0.0, -2.0), ..Default::default() };
     h.execute(&world, SetStock::new(&world, StockShape::Box { dx: 60.0, dy: 60.0, dz: 22.0 }, loc).expect("stock"));
+    open_ahead(&world, &mut h, &thread(0.0, 5.0));
     h.execute(&world, AddTool::new(&world, "T", thread_mill()).expect("tool"));
     h.execute(&world, CreateOperation::new(&world, "OP", "T", SrcRef::Stock, thread(0.0, 5.0)).expect("create"));
     h.execute(&world, GenerateOperation::new(&world, "OP").expect("generate"));

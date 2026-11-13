@@ -147,6 +147,7 @@ fn threading(depth: f64) -> OpParams {
         infeed: 0.4,
         feed: 120.0,
         plunge_feed: 40.0,
+        infeed_plan: Default::default(),
         hand: camcraft_app::cl::ThreadHand::Right,
     }
 }

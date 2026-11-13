@@ -18,6 +18,9 @@
 //! between them from the table up through the strap. Rotary subplate
 //! (#821): the origin on its first locating pin bore, on the underside,
 //! +x toward the second bore (the way `plate::mount` seats a dowel pair).
+//! Lathe chucks (#1442: 3-jaw, 4-jaw, collet) break the underside rule:
+//! their frame's z = 0 is the face the work stands on, +z the spindle
+//! axis out of it, the body below (`camcraft_sim::chuck`).
 //!
 //! Provenance: our own generic geometry and figures (common inch sizes of
 //! shop accessories); no vendor model copied.
@@ -27,6 +30,9 @@ use serde::{Deserialize, Serialize};
 use crate::geometry::{Aabb, Point3, Triangle, quat_conjugate, quat_rotate_point};
 use crate::schema::Location;
 
+pub use camcraft_sim::chuck::{ColletChuck, JawChuck};
+
+pub mod chuck;
 pub mod mesh;
 pub mod subplate;
 
@@ -78,10 +84,26 @@ pub enum Accessory {
         bore_y: f64,
         bore_diameter: f64,
     },
+    /// A self-centring 3-jaw lathe chuck (#1442).
+    ThreeJawChuck(JawChuck),
+    /// A 4-jaw lathe chuck (#1442), its jaws closed evenly.
+    FourJawChuck(JawChuck),
+    /// A collet chuck (#1442).
+    ColletChuck(ColletChuck),
 }
 
 /// The kinds, in the order the dialog lists them.
-pub const KINDS: [&str; 6] = ["parallels", "block", "step_block", "strap_clamp", "soft_jaw", "rotary_subplate"];
+pub const KINDS: [&str; 9] = [
+    "parallels",
+    "block",
+    "step_block",
+    "strap_clamp",
+    "soft_jaw",
+    "rotary_subplate",
+    "three_jaw_chuck",
+    "four_jaw_chuck",
+    "collet_chuck",
+];
 
 /// One named dimension: the file/MCP key, the label the UI shows, and
 /// the value.
@@ -113,6 +135,7 @@ impl Accessory {
             },
             "soft_jaw" => Self::SoftJaw { width: 6.0 * IN, height: 2.0 * IN, thickness: 0.75 * IN },
             "rotary_subplate" => subplate::generic(),
+            "three_jaw_chuck" | "four_jaw_chuck" | "collet_chuck" => return chuck::generic(kind),
             _ => return None,
         })
     }
@@ -127,6 +150,9 @@ impl Accessory {
             Self::StrapClamp { .. } => "strap_clamp",
             Self::SoftJaw { .. } => "soft_jaw",
             Self::RotarySubplate { .. } => "rotary_subplate",
+            Self::ThreeJawChuck(_) => "three_jaw_chuck",
+            Self::FourJawChuck(_) => "four_jaw_chuck",
+            Self::ColletChuck(_) => "collet_chuck",
         }
     }
 
@@ -184,6 +210,8 @@ impl Accessory {
                 d("bore_y", "Bores from the -Y edge", bore_y),
                 d("bore_diameter", "Pin bore diameter", bore_diameter),
             ],
+            Self::ThreeJawChuck(c) | Self::FourJawChuck(c) => c.dims_mut().into_iter().map(|(k, l, v)| d(k, l, v)).collect(),
+            Self::ColletChuck(c) => c.dims_mut().into_iter().map(|(k, l, v)| d(k, l, v)).collect(),
         }
     }
 
@@ -249,6 +277,9 @@ impl Accessory {
                 Ok(())
             }
             Self::RotarySubplate { .. } => subplate::check(self),
+            Self::ThreeJawChuck(c) => c.check(what, 3),
+            Self::FourJawChuck(c) => c.check(what, 4),
+            Self::ColletChuck(c) => c.check(what),
             _ => Ok(()),
         }
     }
@@ -282,6 +313,9 @@ pub fn label_of(kind: &str) -> &'static str {
         "strap_clamp" => "Strap clamp",
         "soft_jaw" => "Soft jaw",
         "rotary_subplate" => "Rotary subplate",
+        "three_jaw_chuck" => "3-jaw chuck",
+        "four_jaw_chuck" => "4-jaw chuck",
+        "collet_chuck" => "Collet chuck",
         _ => "Accessory",
     }
 }

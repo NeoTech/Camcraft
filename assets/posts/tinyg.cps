@@ -10,7 +10,7 @@
 // script text and no other CAM's output used; original work. Structure
 // follows our own grblhal.cps (the other grbl-family dialect); the
 // goldens lock this file's decisions.
-description = "Synthetos TinyG (3-axis mill, G20/G21 from the machine, XY G2/G3 in half turns, other-plane arcs as chords, G4 dwell; drilling as plain moves - no canned cycles, no G41/G42, no G84, no probing macros; tools T1-T31, M0 after every tool change)";
+description = "Synthetos TinyG (3-axis mill, G20/G21 from the document, XY G2/G3 in half turns, other-plane arcs as chords, G4 dwell; drilling as plain moves - no canned cycles, no G41/G42, no G84, no probing macros; tools T1-T31, M0 after every tool change)";
 vendor = "Camcraft";
 legal = "Original clean-room work; public documentation only";
 certificationLevel = 1;
@@ -20,6 +20,7 @@ setCodePage = "utf-8";
 capabilities = 1; // reference contract: integer feature mask (bit 1 = milling)
 coolantModes = true; // reads PARAM Coolant (#112/#150)
 afterModes = true;   // reads PARAM AfterOperation (#110)
+programUnits = "mm inch"; // #902: writes the document's unit (postOptions.Units), G21 / G20
 
 // Determinism law: no timestamps, no randomness - the same stream
 // always posts to the same text (golden files depend on it).
@@ -36,7 +37,7 @@ var afterAsk = "";         // the section's PARAM AfterOperation (#110), none wh
 var coolantOp = "";        // the section's OperationName, for refusals (#150)
 var sectionOpen = false;   // preamble written (a legacy .cl carries no SECTION)
 var orgX = 0, orgY = 0, orgZ = 0; // the WCS slot origin (OriginX/Y/Z PARAMs)
-var inch = false;          // the machine is programmed in inches (onOpen)
+var inch = false;          // the document's unit is inch (onOpen, #902: postOptions.Units)
 var smoothTol = 0;         // #616: the section's PARAM Smoothing, mm (0: none asked)
 var smoothNamed = false;   // the not-written note, once per program
 
@@ -45,7 +46,7 @@ var smoothNamed = false;   // the not-written note, once per program
 // in either unit: TinyG checks that an arc's start and end sit at the
 // same radius from the I J K centre, and a tenth of a micron keeps a
 // rounded centre inside that check where three decimals would not
-// always. An inch machine gets every length and feed divided by 25.4.
+// always. An inch document gets every length and feed divided by 25.4.
 // Angles and rpm never scale.
 function has(v) { return v !== null && v !== undefined && isFinite(v); }
 function trim(s) {
@@ -53,7 +54,7 @@ function trim(s) {
   return s === "-0" ? "0" : s;
 }
 function len(v) { return inch ? v / 25.4 : v; }
-function fu(v) {  // a length, in the machine's unit
+function fu(v) {  // a length, in the document's unit
   if (!has(v)) return "0";
   return trim(Number(len(v)).toFixed(4));
 }
@@ -92,6 +93,29 @@ function xyz(p) { return [wo("X", p.X, orgX), wo("Y", p.Y, orgY), wo("Z", p.Z, o
 function wo(letter, v, o) { return has(v) ? letter + fu(v - o) : ""; }  // axis word, origin-relative
 function msg(s) {  // counted warning where the host offers message()
   if (typeof message === "function") message(s); else writeln("(" + s + ")");
+}
+
+// #1359 (from #1357): a cut needs a turning spindle. spindleOn is true
+// from the preamble's spindle start (S.. M3) to the next M5 (every
+// section end, and a touch probe's stop). A touch probe's section feeds
+// its stylus with the spindle stopped on purpose: a section is a
+// probe's only when it states 0 rpm (#574) AND its tool is a touch
+// probe (PARAM ToolKind) - a cutter whose speed reads 0 is a stopped
+// spindle, not a probe. A feed, arc or cycle with the spindle stopped
+// anywhere else is refused by name and not posted: a stream that states
+// no spindle speed would otherwise drag a stopped cutter through the
+// part. Once per program.
+var spindleOn = false;
+var probeSection = false;
+var kindProbe = false;    // this section's PARAM ToolKind names a touch probe
+var spindleRefused = false;
+function spindleStopped(what) {  // true: refused, nothing is posted
+  if (spindleOn || probeSection) return false;
+  if (!spindleRefused) {
+    spindleRefused = true;
+    msg(what + " with the spindle stopped - no spindle start (S.. M3) precedes it; state the operation's spindle speed");
+  }
+  return true;
 }
 var tapRefused = false;   // the tapping refusal, once per program
 var tiltRefused = false;  // one named refusal per program, not per line
@@ -178,7 +202,7 @@ function commentParam(name, value) {
   if (name === "SetupName") setupName = clean(value);
   else if (name === "OperationName") opName = clean(value);
   else if (name === "OperationKind") opKind = clean(value).toUpperCase();
-  else if (name === "ToolKind") toolKind = clean(value).toUpperCase();
+  else if (name === "ToolKind") { toolKind = clean(value).toUpperCase(); kindProbe = toolKind === "TOUCH PROBE"; }
   else if (name === "ToolDiameter" && has(value)) toolDia = Number(value);
   else if (name === "ToolCornerRadius" && has(value)) toolCr = Number(value);
 }
@@ -213,7 +237,7 @@ function toolNote() {  // just before the tool change it describes
 // a G49 here would throw a measured length away, and the post knows no
 // length to restate. No G40 either: TinyG accepts it only to ignore it.
 function onOpen() {
-  inch = typeof machine !== "undefined" && machine.units === "inch";
+  inch = typeof postOptions !== "undefined" && postOptions && postOptions.Units === "inch"; // #902: the document's unit, never the machine file's
   var nm = (typeof machine !== "undefined" && machine.name) || "CAMCRAFT";
   note(clean(nm) || "CAMCRAFT");
   block([inch ? "G20" : "G21", "G17", "G90", "G91.1", "G94", "G64"]);
@@ -358,8 +382,10 @@ function startPreamble() {
   }
   // A touch probe states 0 rpm: no spindle start and no cutting fluid.
   var touchProbe = spindleWait && !(sRpm > 0);
+  probeSection = touchProbe && kindProbe;
   if (spindleWait && sRpm > 0) {
     block(["S" + ni(sRpm), "M3"]);
+    spindleOn = true;
     spindleDwell();
   }
   spindleWait = false;
@@ -394,6 +420,9 @@ function endPreamble() {
   coolant = "";
   coolantAsk = "flood";      // the next section states its own ask
   block(["M5"]);
+  spindleOn = false;
+  probeSection = false;
+  kindProbe = false;         // the next section states its own tool kind
   smoothOff();
   afterOp();
 }
@@ -447,6 +476,7 @@ function onLinear() {
   startPreamble();
   seeZ(properties.Z); seeZ(properties.StartZ);
   if (!tiltOk(properties)) return;
+  if (spindleStopped("feed move G1")) return;
   if (!startXY(properties)) return;
   block(["G1"].concat(xyz(properties), [fw(properties.FeedRate)]));
   dwellAtBottom(properties.Z);
@@ -458,6 +488,7 @@ function onLinear() {
 function onCircular() {
   startPreamble();
   if (!tiltOk(properties)) return;
+  if (spindleStopped("arc move " + (properties.CircularDirection === "CW" ? "G2" : "G3"))) return;
   var p = properties, c = p.IJKIncrement || {};
   var from = [p.StartX, p.StartY, p.StartZ], to = [p.X, p.Y, p.Z];
   var axes = p.CircularPlane === "XZ" ? [2, 0, 1] :
