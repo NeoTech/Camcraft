@@ -45,3 +45,14 @@ law, which does the same.
 
 **Cost to change later.** The three constants in `turn_hidden.rs`; a finer
 budget only costs slices.
+
+**Composed with #1319's refresh (2026-11-12).** #1319 moved the grid
+backstop's column to main's exact rim dip lowered by #1303's span floor
+(`band_floors`), and put the same floors into the column law's cells. The
+backstop's cells now take those floors too (`push_cells_with` threads
+them; `turn_hidden` passes `band_floors`), so every ask stands no higher
+than the span-floored exact-dip column the grid read at that pose: the
+whole-turn reading convicts all the grid did, plus what lies between its
+samples. #1319's pin `the_backstop_reads_the_exact_dip_lowered_by_the_span_floor`
+was ported from `backstop_columns` to `backstop_asks` with the same
+verdicts and the same exact reading (-56.43).

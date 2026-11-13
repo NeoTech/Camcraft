@@ -29,6 +29,11 @@ use super::turn_cells::{Cell, push_cells};
 use super::turn_hidden::backstop_asks;
 use super::types::Warning;
 
+/// The turn fractions #1303's span floors are read at, endpoints
+/// INCLUDED (the sampled sweep's poses before #1313): the cells holding
+/// one read no higher than its floor ([`band_floors`]).
+const POSE_FRACS: [f64; 5] = [0.0, 0.25, 0.5, 0.75, 1.0];
+
 /// The overhang backstop's ask ([`super::hidden`]'s `hidden_in_cover`):
 /// (box, plane, footprint probes - built on demand -, footprint
 /// membership, judged move).
@@ -150,7 +155,8 @@ fn swing_hit(
     let pieces = m.segments3(chord_tol);
     let mut cells: Vec<Cell> = Vec::new();
     for &band in bands {
-        push_cells(&mut cells, &pieces, from_abc, to_abc, band, r, grow);
+        let floors = band_floors(from_abc, to_abc, band);
+        push_cells(&mut cells, &pieces, from_abc, to_abc, band, r, grow, &floors);
     }
     if cells.is_empty() {
         return None; // every band upright within the tool's radius: nothing to sweep
@@ -206,3 +212,37 @@ fn swing_hit(
     }
     worst
 }
+/// The letters at each of [`POSE_FRACS`], lerped from `from` to `to`.
+fn pose_letters(from: [f64; 3], to: [f64; 3]) -> [[f64; 3]; 5] {
+    POSE_FRACS.map(|g| {
+        [from[0] + (to[0] - from[0]) * g, from[1] + (to[1] - from[1]) * g, from[2] + (to[2] - from[2]) * g]
+    })
+}
+
+/// #1303's span floor at the pose `k` of `poses`, over the tip: the
+/// lowest the band can reach between that pose and either neighbour
+/// where the lerp can lean past both samples ([`super::tilt_span`]);
+/// `+inf` inside the cap, where the samples bound the span.
+fn span_floor_at(poses: &[[f64; 3]; 5], k: usize, (above, band_r, band_len): (f64, f64, f64)) -> f64 {
+    let span = |j: usize| super::tilt_span::span_floor(&poses[j], &poses[k], above, band_r, band_len);
+    [k.checked_sub(1), Some(k + 1).filter(|&j| j < poses.len())]
+        .into_iter()
+        .flatten()
+        .filter_map(span)
+        .fold(f64::INFINITY, f64::min)
+}
+
+/// The span floors of one band at the turn fractions [`POSE_FRACS`],
+/// `(g, floor over the tip)`: what the sampled sweep before #1313 read
+/// at those poses. A turn cell holding a fraction reads no higher
+/// ([`push_cells`]), so the cell law convicts all the sampled law did;
+/// the overhang backstop's coarser cells hold the same floors
+/// ([`super::turn_hidden`]), so it convicts all the sampled backstop did.
+pub(super) fn band_floors(from: [f64; 3], to: [f64; 3], band: (f64, f64, f64)) -> [(f64, f64); 5] {
+    let poses = pose_letters(from, to);
+    std::array::from_fn(|k| (POSE_FRACS[k], span_floor_at(&poses, k, band)))
+}
+
+#[cfg(test)]
+#[path = "sweep_tests.rs"]
+mod tests;

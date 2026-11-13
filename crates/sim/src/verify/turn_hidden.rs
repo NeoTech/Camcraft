@@ -19,6 +19,10 @@
 //! - one ask per (interval, run): at the LOWEST bottom any column of
 //!   the run's cells reaches, over the union of their footprints, the
 //!   kerf excused only where the tip stands (the cells' own test).
+//! - every cell holding one of the sampled turn fractions reads no
+//!   higher than #1303's span floor there ([`super::sweep::band_floors`],
+//!   the column law's own floors), so no ask stands above the column
+//!   the sampled backstop read at that pose (#1313).
 //!
 //! So a move asks at most [`BACKSTOP_PLANES`] planes per live band -
 //! the old grid's 4 x 5 = 20 - and its footprint is read whole between
@@ -26,6 +30,7 @@
 //! band meets above its bottom plane is the column law's), and the
 //! hidden region is sampled in XY by its own law.
 
+use super::sweep::band_floors;
 use super::turn_cells::{Cell, push_cells_with};
 use crate::geo2d::Point2;
 use crate::geometry::Point3;
@@ -85,7 +90,12 @@ pub(super) fn backstop_asks(
     }
     for &band in bands {
         let mut cells = Vec::new();
-        let n = push_cells_with(&mut cells, pieces, from, to, band, r, grow, (BACKSTOP_SAG, BACKSTOP_PLANES));
+        // #1303's span floors, as the column law's cells hold them
+        // (#1313): a cell holding a sampled pose reads no higher than
+        // its floor, so every ask's plane is at most the sampled
+        // backstop's column bottom there.
+        let floors = band_floors(from, to, band);
+        let n = push_cells_with(&mut cells, pieces, from, to, band, r, grow, (BACKSTOP_SAG, BACKSTOP_PLANES), &floors);
         if n == 0 || cells.is_empty() {
             continue;
         }

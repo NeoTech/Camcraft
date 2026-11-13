@@ -1,5 +1,6 @@
 //! Cutting-data commands (M13.2): `SetWorkMaterial` states the
-//! document's workpiece material; `ApplyCuttingData` lands an
+//! document's workpiece material (and, #890, seeds the tools' rows for
+//! it); `ApplyCuttingData` lands an
 //! operation's feeds-and-speeds suggestion as ONE undo unit - the
 //! feed through `EditOperationParams`, the spindle speed through
 //! `ChangeTool` (the tool's rpm IS the program's spindle word). A
@@ -17,12 +18,20 @@ use flecs_ecs::prelude::World;
 
 use crate::commands::{ChangeTool, Command, CommandError, EditOperationParams};
 use crate::cutting::{self, Suggestion};
+use crate::cutting_rows;
 use crate::model;
 use crate::tools::{TurningData, WorkMaterial};
 
+/// State the document's workpiece material - and (#890) seed it: every
+/// tool whose per-material table names the new material runs that row
+/// (`ChangeTool`), and every operation on such a tool takes the row's
+/// milling feed (`EditOperationParams`), all in this one undo step.
+/// Tools with no row for it, and their operations, keep their numbers.
 pub struct SetWorkMaterial {
     prev: Option<WorkMaterial>,
     next: Option<WorkMaterial>,
+    tools: Vec<ChangeTool>,
+    ops: Vec<EditOperationParams>,
 }
 
 impl SetWorkMaterial {
@@ -31,16 +40,53 @@ impl SetWorkMaterial {
         if prev == next {
             return Err(CommandError::Invalid("that workpiece material is already stated".to_owned()));
         }
-        Ok(Self { prev, next })
+        let mut tools = Vec::new();
+        let mut ops = Vec::new();
+        let named = model::named_entities(world);
+        for (name, e) in &named {
+            if let Some(t) = model::tool_of(world, e)
+                && let Some(seeded) = cutting_rows::seeded_for(&t, next)
+            {
+                tools.push(ChangeTool::new(world, name, seeded)?);
+            }
+        }
+        for (name, e) in &named {
+            let Some(op) = model::operation_of(world, e) else { continue };
+            let Some(tool) = model::find_by_name(world, &op.tool).and_then(|t| model::tool_of(world, &t)) else {
+                continue;
+            };
+            if let Some(params) = cutting_rows::reseeded_params(&op.params, &tool, next) {
+                ops.push(EditOperationParams::new(world, name, params)?);
+            }
+        }
+        Ok(Self { prev, next, tools, ops })
+    }
+
+    /// How many tools and operations the material's rows re-seeded.
+    #[must_use]
+    pub fn seeded(&self) -> (usize, usize) {
+        (self.tools.len(), self.ops.len())
     }
 }
 
 impl Command for SetWorkMaterial {
     fn apply(&self, world: &World) {
         cutting::material_set(world, self.next);
+        for t in &self.tools {
+            t.apply(world);
+        }
+        for o in &self.ops {
+            o.apply(world);
+        }
     }
 
     fn invert(&self, world: &World) {
+        for o in self.ops.iter().rev() {
+            o.invert(world);
+        }
+        for t in self.tools.iter().rev() {
+            t.invert(world);
+        }
         cutting::material_set(world, self.prev);
     }
 }

@@ -152,6 +152,7 @@ pub use crate::tools::ToolGeom;
 
 
 mod air;
+mod axis_door;
 mod arc_bulge;
 mod arc_wall;
 mod arc_wall_plane;
@@ -188,7 +189,10 @@ mod stack_span;
 mod stock_top;
 mod stock_top_shell;
 mod sweep;
+mod tilt_band;
+mod tilt_span;
 mod swept;
+mod thread_bore;
 mod turn_cells;
 mod turn_hidden;
 mod types;
@@ -201,6 +205,7 @@ pub use types::{FixturePart, Mode, VerifyContext, Warning};
 pub use crossing::{crossed_pairs, crossed_pairs_all};
 pub use laws::CROSSING_TOUCH;
 pub use engine::{verify, verify_bodies};
+pub use thread_bore::{CHORD_CREDIT, ThreadBore};
 pub use air::cuts_no_material;
 pub use prior::{acquit_by_prior, prior_surface};
 pub use stock_top::acquit_by_stock_top;
@@ -216,7 +221,7 @@ pub use body_bands::{BodyBands, NeckBands, BODY_BANDS_CAP};
 pub use probe::Cutter;
 pub use rotary::{rotary_hits, RotaryAxis, RotaryLaw};
 pub use hole_wall::{HoleAxis, WALL_SAG};
-pub use solid::{SolidLaw, solid_hits, solid_hits_walled};
+pub use solid::{SolidLaw, solid_hits, solid_hits_threaded, solid_hits_walled};
 pub use mesh_steel::{mesh_refined, steel_stack, MeshSteel, SteelBand};
 #[doc(hidden)]
 pub use contact::posed_contact;

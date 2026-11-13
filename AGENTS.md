@@ -92,14 +92,33 @@ afterwards - the work must not bother them.
   the merging session itself (MECHANICAL). Only a conflict resolved by hand
   gets a delta review of its remerge-diff (DELTA), and new commits get a
   review of those commits (NEW CODE).
-- **Only the owner's reviews count** (issue #1207, 2026-11-12: "No, only
-  ours count"). A `<!-- pr-reviewer: ... -->` or `<!-- review-cost: ... -->`
-  marker counts only in a review or comment whose author is the repository
-  owner's account (`gh repo view <base repo> --json owner`, the repository
-  the PR targets: `NeoTech/Camcraft`, also in a fork). `merge-ready` counts only
-  when that account set it. A contributor's pre-check is a plain comment
-  without the marker. `/review-prs`, `/resolve-conflicts check` and the
-  PR-reviewer agent all filter on the author.
+- **Only collaborators' reviews count** (issue #1320, 2026-11-12, decided in
+  the question dialog: "Any collaborator review counts"; the maintainer in
+  chat: "everyone counts. everyone needs to get merged, mkinney and i are
+  coolaboration across the world on the same code base"). A
+  `<!-- pr-reviewer: ... -->` or `<!-- review-cost: ... -->` marker counts
+  only in a review or comment made by a collaborator of the repository the
+  PR targets (`NeoTech/Camcraft`, also in a fork): an account with write
+  access, `gh api repos/NeoTech/Camcraft/collaborators --jq '.[] |
+  select(.permissions.push) | .login'`. `merge-ready` counts only when a
+  collaborator set it. This holds for a collaborator's own PRs as well as
+  others'; the independence that still applies is the one above, that the
+  review is done by an agent that did not write the change. A marker or label
+  from an account that is not a collaborator does not count: a
+  contributor's pre-check is a plain comment without the marker.
+  A review that requests changes on a head stays open until it is addressed:
+  by a new head that a collaborator's review then clears, or by the reviewer
+  who asked withdrawing the request in a comment. A `merge-ready` label or a
+  "ready" review from another collaborator on the same head does not
+  override it. A PR whose current head carries both a collaborator review
+  requesting changes and a `merge-ready` label (or `merge-ready` beside
+  `needs-rework`) is a disagreement: `/merge-ready` reports it and does not
+  offer it; no agent removes either label; the two collaborators settle it
+  on the PR.
+  `/review-prs`, `/resolve-conflicts check`, `/merge-ready` and the
+  PR-reviewer agent all filter on the collaborator list. (Superseded since
+  2026-11-12, later the same day: issue #1207's "only the owner's reviews
+  count", "No, only ours count", which counted the owner's account alone.)
 - **Side work rides subagents.** All testing, documentation, and knowledge
   graphing (the graphify updates) are done by subagents dispatched as
   subtasks, never inline: their completion notification is what triggers
@@ -245,7 +264,8 @@ go to `CHANGELOG.md`.
     `.cargo/config.toml` (its `cargo xtask` alias), and the wrappers that
     forward to it - `scripts/gate.ps1`, `scripts/gate.sh`,
     `scripts/release.ps1`, `scripts/collect-decisions.ps1`,
-    `scripts/collect-decisions.sh` - changes between releases, and a fork's
+    `scripts/collect-decisions.sh`, and `crates/ui/AGENTS.md` (the UI
+    steering document, #1121) - changes between releases, and a fork's
     agents must follow the current rules.
     At the start of every session in a fork, before claiming work,
     compare `git show upstream/main:.claude/PROCESS_VERSION` with the
@@ -253,7 +273,7 @@ go to `CHANGELOG.md`.
     those files: `git checkout upstream/main -- AGENTS.md .claude/agents
     .claude/skills .claude/PROCESS_VERSION xtask .cargo/config.toml
     scripts/gate.ps1 scripts/gate.sh scripts/release.ps1
-    scripts/collect-decisions.ps1 scripts/collect-decisions.sh`, commit as `chore(process): sync
+    scripts/collect-decisions.ps1 scripts/collect-decisions.sh crates/ui/AGENTS.md`, commit as `chore(process): sync
     process files to upstream PROCESS_VERSION <n>` on a `process-sync`
     branch, and merge
     it into the fork's `main` (or open a PR there if the fork protects
@@ -602,6 +622,8 @@ must carry a delete hook that frees everything it owns.
 
 ## Assets
 
+UI work also follows `crates/ui/AGENTS.md` (the UI steering document; it restates the laws here, nothing more).
+
 `assets/ui/` holds PNGs for toolbar and tree icons; `assets/ui/fonts/` holds
 the fonts. The UI must render them — loading the files alone isn't enough;
 wired-in usage in each panel's draw code is required.
@@ -657,6 +679,22 @@ Phase 4 refactors the codebase for reuse; work in the shape it is heading to:
   goes in the module that will become its crate's seed, and cross-domain
   calls go through the seams that will become crate APIs - not through
   private helpers of another domain.
+- **`app` holds the document, nothing else** (maintainer, 2026-11-11: "high
+  cohesion, low coupling, because every gate is costly"). New code goes in
+  `crates/app/src` only if it reads or writes the ECS world, the project
+  file, a command, MCP or the CLI. Code that works only on domain values
+  (cl, geometry, tools, post, sim, motion types) goes in the crate that owns
+  them, and `app` re-exports it. A reviewer checks this from the new file's
+  `use` lines: if none names one of those five things, the file is in the
+  wrong crate.
+- **No new dependency between our crates without a decision.** A
+  `camcraft-*` entry added to `[dependencies]` or `[dev-dependencies]` in any
+  `crates/*/Cargo.toml` needs a `docs/decisions/` entry in the same PR. The
+  entry lists the imported items, says why the caller cannot pass the value
+  in instead (a parameter, a closure, a recorded file), and names what now
+  rebuilds when the dependency changes. An edge that would carry fewer than
+  five items is not added: the caller passes the value in. (The wording of
+  the five-item clause is the maintainer's to confirm.)
 - **Stays buildable everywhere.** No platform-specific assumptions in core
   code (M4.2 ships Windows/Linux/macOS builds from the same source).
 - **Neutral naming.** M4.3 renamed the product label hsmworks to camcraft
@@ -667,10 +705,20 @@ Phase 4 refactors the codebase for reuse; work in the shape it is heading to:
 
 ## Testing
 
-`crates/app/tests/` (app + commands) and `crates/ui/tests/` (UI/event tests
-which spawn the real app via `test_harness.rs`; helpers in `ui::test_harness`,
-app-level fixtures in `crates/app/tests/common/mod.rs`). Each future subcrate
-carries its own tests inside its crate (M4.1).
+`crates/app/tests/` (tests of what `crates/app/src` defines: commands, the
+project file, the schema, operations, MCP and the CLI) and `crates/ui/tests/`
+(UI/event tests which spawn the real app via `test_harness.rs`; helpers in
+`ui::test_harness`, app-level fixtures in `crates/app/tests/common/mod.rs`).
+Each future subcrate carries its own tests inside its crate (M4.1).
+
+- **A test lives with the code it tests.** A new test file goes in the lowest
+  crate that provides everything it imports, and its Gate map names that
+  crate (`camcraft_post::post::engine`, not `app::post`). A file in
+  `crates/app/tests/` must import something `crates/app/src` defines; a test
+  that uses only another crate's re-exports (`app::post`, `app::verify`,
+  `app::machining2d`) belongs in that crate's `tests/`. A test that needs
+  another crate's output reads a recorded file (`.cl`, `.cnc`) rather than
+  importing that crate's generator.
 
 **Three gate tiers - never hours per change** (user, 2026-11-07: "break up
 those test suites so we don't have to run hours on hours of tests"). One
@@ -941,10 +989,16 @@ run on demand (`/review-prs`, or `/review-prs <N>` for one PR) and on a loop
 (`/loop 10m /review-prs`, every 10 minutes). The agent trial-merges the PR with current main in
 its own worktree, builds, runs the suites it touches and clippy, checks this
 file's laws, and posts a plain review **comment** whose first line is
-`<!-- pr-reviewer: <head sha> -->` (counted only when its author is the owner's account, see "Only the owner's reviews count"; the marker that stops a second review of
+`<!-- pr-reviewer: <head sha> -->` (counted only when its author is a collaborator, see "Only collaborators' reviews count"; the marker that stops a second review of
 the same push), and sets the review label (below). It never approves, requests changes, merges or pushes:
 the user approves and merges an outside PR by hand ("make sure u leave a
-comment and allow us to approve it manually"). **Never two PR reviews at
+comment and allow us to approve it manually") - that stays for the PRs of
+accounts that are not collaborators; a collaborator's PR is handled like our
+own: reviewed here, then merged by any collaborator's session through
+`/merge-ready` (maintainer, 2026-11-12, "Both collaborators" may merge; cuts
+and tags stay with the maintainer). A merge batch is run with `/merge-ready`
+(`.claude/skills/merge-ready/`), which plans the order with `cargo xtask
+merge-plan`. **Never two PR reviews at
 once** ("make sure we are not running concurrent PR reviews"): one PR per
 `/review-prs` run, guarded by the lock `.claude/pr-review.lock` (`<N> <sha>
 <UTC>`) - a run that finds a lock younger than 90 min stops; an older one is

@@ -143,3 +143,63 @@ fn a_setups_own_machine_picked_over_mcp_reaches_its_own_posted_file_and_undoes()
     assert_eq!(c.post(&out), before, "the undo restores the earlier output");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// #1233, the post half of the trace: two setups given two different
+/// posts over MCP post one file per mount, each in its own post's dialect;
+/// the MCP `undo` of the pick gives the mount back to the document's post.
+#[test]
+fn a_setups_own_post_picked_over_mcp_reaches_its_own_posted_file_and_undoes() {
+    let dir = tmp_dir("post");
+    let project = saved_project(&dir);
+    let out = dir.join("job.nc");
+    let mut c = Client::new();
+    c.ok("open_project", json!({ "path": project.display().to_string() }));
+    c.ok("set_setup_post", json!({ "setup": "Setup1", "post": "Siemens 840D" }));
+    c.ok("set_setup_post", json!({ "setup": "Setup2", "post": "Haas" }));
+    c.ok("generate", json!({}));
+    let files = c.post(&out);
+    assert_eq!(files.len(), 2, "one file per mount: {files:?}");
+    let ((_, a), (_, b)) = (&files[0], &files[1]);
+    assert!(a.starts_with("; VMC 3-AXIS\n") && a.contains("N10 G17 G710") && a.contains("Face1"), "{a}");
+    assert!(!a.contains("M30") && !a.contains("Face2"), "{a}");
+    assert!(b.starts_with("%\n(VMC 3-AXIS)") && b.contains("Face2") && b.contains("G55"), "{b}");
+    assert!(!b.contains("G710") && !b.contains("Face1"), "{b}");
+
+    // Undo steps back through the generate to Setup2's pick (bounded) and
+    // takes it: Setup2 follows the document's Fanuc again, Setup1 keeps its own.
+    let own = |c: &mut Client, i: usize| c.ok("get_job", json!({}))["setups"][i]["post"].clone();
+    for _ in 0..4 {
+        if own(&mut c, 1) == Value::Null {
+            break;
+        }
+        c.ok("undo", json!({}));
+    }
+    assert_eq!(own(&mut c, 1), Value::Null, "the pick is undone");
+    assert!(own(&mut c, 0).as_str().unwrap_or_default().contains("Siemens"), "Setup1 keeps its pick");
+    c.ok("generate", json!({}));
+    let after = c.post(&out);
+    assert!(after[0].1 == *a, "Setup1 keeps its own post");
+    assert!(after[1].1.starts_with("%\nO0001 (VMC 3-AXIS)") && after[1].1.contains("Face2"), "{}", after[1].1);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// #1233: `set_setup_post` sets the field only. A milling post on a setup
+/// carrying milling work, given a lathe post, is accepted by the tool; the
+/// later `post` refuses it by name (#1213) and writes nothing.
+#[test]
+fn a_post_that_does_not_serve_the_setups_machine_is_accepted_then_refused_at_post() {
+    let dir = tmp_dir("kind");
+    let project = saved_project(&dir);
+    let out = dir.join("job.nc");
+    let mut c = Client::new();
+    c.ok("open_project", json!({ "path": project.display().to_string() }));
+    let r = c.ok("set_setup_post", json!({ "setup": "Setup2", "post": "Fanuc Lathe" }));
+    assert_eq!(r["own_post"], json!(true), "{r}");
+    c.ok("generate", json!({}));
+    let reply = c.request("tools/call", json!({ "name": "post", "arguments": { "output": out.display().to_string() } }));
+    assert_eq!(reply["result"]["isError"], json!(true), "{reply}");
+    let text = reply.to_string();
+    assert!(text.contains("lathe post") && text.contains("Face2"), "refusal names the post and setup: {text}");
+    assert!(!dir.join("job_02_Setup2.nc").exists() && !out.exists(), "nothing written");
+    let _ = std::fs::remove_dir_all(&dir);
+}

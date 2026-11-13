@@ -10,7 +10,7 @@ use crate::model;
 use crate::operation::{self, OpParams, SrcRef};
 use crate::schema::Operation;
 
-use super::gates::{area_gate, family_gate, heights_gate, tool_door, tool_gate, valid_src, wire_gate};
+use super::gates::{area_gate, family_gate, heights_gate, sinker_gate, tool_door, tool_gate, valid_src, wire_gate};
 
 /// Replace an operation's parameters. The cache is left alone and the
 /// stamp is dropped, so the operation reads Stale immediately: the old
@@ -108,6 +108,7 @@ impl EditOperationParams {
                 prev.params.kind()
             )));
         }
+        sinker_gate(world, prev.setup.as_deref(), &params)?;
         if !params.is_sane() {
             return Err(CommandError::Invalid(format!(
                 "operation parameters are not usable for a {} operation",
@@ -195,6 +196,7 @@ impl ChangeOperationKind {
             )));
         }
         family_gate(world, prev.setup.as_deref(), &params)?;
+        sinker_gate(world, prev.setup.as_deref(), &params)?;
         tool_door(world, &params, &prev.tool)?;
         wire_gate(world, prev.setup.as_deref(), &params)?;
         if !params.is_sane() {
@@ -269,6 +271,13 @@ impl EditOperationLinks {
             // source-only edit never trips over a legacy mismatch.
             if tool != prev.tool {
                 tool_gate(world, &next.params, tool)?;
+                // #890: the new tool's row for the document material
+                // seeds the op's milling feed (same undo step).
+                if let Some(t) = model::find_by_name(world, tool).and_then(|e| model::tool_of(world, &e))
+                    && let Some(p) = crate::cutting_rows::reseeded_params(&next.params, &t, crate::cutting::material_of(world))
+                {
+                    next.params = p;
+                }
             }
             next.tool = tool.to_string();
         }

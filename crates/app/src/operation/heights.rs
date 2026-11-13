@@ -175,6 +175,8 @@ pub fn region_z(
         OpParams::PlasmaProfile(p) => resolve_height(world, setup, src, p.top_z),
         // The wire's profile is read on the workpiece's top (#532).
         OpParams::WireContour(p) => resolve_height(world, setup, src, p.top_z),
+        // The electrode enters at the work top (#541).
+        OpParams::SinkerBurn(p) | OpParams::SinkerSideBurn(crate::operation::SinkerSideBurnOp { burn: p, .. }) => resolve_height(world, setup, src, p.top_z),
     }
 }
 
@@ -399,6 +401,15 @@ pub fn resolve_params(
             let top = req("Top of Workpiece Z", p.top_z)?;
             (top, Some(top), Some(req("Bottom of Workpiece Z", p.bottom_z)?), None, None)
         }
+        // The sinker burn (#541): the approach plane, the work top and
+        // the cavity floor datum - no hop plane.
+        OpParams::SinkerBurn(p) | OpParams::SinkerSideBurn(crate::operation::SinkerSideBurnOp { burn: p, .. }) => (
+            req("Clearance Z", p.clearance_z)?,
+            Some(req("Work Top Z", p.top_z)?),
+            Some(req("Cavity Floor Z", p.floor_z)?),
+            None,
+            None,
+        ),
     };
     Ok(ResolvedHeights { clearance, top, bottom, face_top, retract })
 }

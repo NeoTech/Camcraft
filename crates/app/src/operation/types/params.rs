@@ -540,6 +540,14 @@ pub enum OpParams {
         /// the op's tool diameter or the pencil refuses by name;
         /// every other pattern ignores it as if it never arrived.
         pencil_reference: Option<f64>,
+        /// The land model (#1196): lid every CLOSED opening (hole or
+        /// pocket) a flat disk of this diameter, mm, cannot enter, on
+        /// the surface the path is PLANNED on - the finish flies over
+        /// it at its rim instead of diving down its walls. The verdict
+        /// still judges the real model. `None` (every older file) is
+        /// the model itself, byte for byte. See
+        /// [`crate::finishing3d::fill_openings`] for the rule.
+        fill_openings: Option<f64>,
     },
     /// Deburr (M2.5 E B): the cone-ruled edge break in 3D. The ONE
     /// authored number is `width` - the break's width in the edge's
@@ -1168,6 +1176,14 @@ pub enum OpParams {
     /// punch / die side, from a stated start hole (see
     /// [`crate::wire_edm`]). The wire EDM's first kind (#290 D1).
     WireContour(super::wire_edm::WireContourOp),
+    /// Sinker EDM burn to depth (#541): one electrode fed down Z to a
+    /// depth from a stated datum (see [`crate::sinker`]). The sinker
+    /// EDM's first kind.
+    SinkerBurn(super::sinker::SinkerBurnOp),
+    /// Sinker EDM side burn (#545): the burn's plunge, then one lateral
+    /// move along an axis that burns the faced wall out by a stated
+    /// amount (see [`crate::sinker_side`]).
+    SinkerSideBurn(super::sinker::SinkerSideBurnOp),
 }
 
 impl OpParams {
@@ -1215,6 +1231,8 @@ impl OpParams {
             OpParams::Probe { .. } => OpType::Probe,
             OpParams::PlasmaProfile(_) => OpType::PlasmaProfile,
             OpParams::WireContour(_) => OpType::WireContour,
+            OpParams::SinkerBurn(_) => OpType::SinkerBurn,
+            OpParams::SinkerSideBurn(_) => OpType::SinkerSideBurn,
             OpParams::TrochoidalSlot { .. } => OpType::TrochoidalSlot,
         }
     }
@@ -1245,6 +1263,8 @@ impl OpParams {
             // The wire stands vertical (#532): a taper is a pose per
             // move (#290 D2, #536), never a 3+2 index.
             OpParams::WireContour(_) => None,
+            // The electrode burns straight down Z (#541, #545).
+            OpParams::SinkerBurn(_) | OpParams::SinkerSideBurn(_) => None,
             // The 5-axis kinds (M5.1 C) are the third answer, not the
             // second: the PART stands still and the TOOL AXIS moves -
             // a 3+2 index inside them would command the machine to
@@ -1318,6 +1338,7 @@ impl OpParams {
             // A wire has no rapids plane (#532): it never lifts out of
             // the work; its travel plane is the workpiece's top.
             OpParams::WireContour(p) => p.top_z,
+            OpParams::SinkerBurn(p) | OpParams::SinkerSideBurn(super::sinker::SinkerSideBurnOp { burn: p, .. }) => p.clearance_z,
             OpParams::Face { clearance_z, .. }
             | OpParams::Contour { clearance_z, .. }
             | OpParams::Pocket { clearance_z, .. }
@@ -1375,6 +1396,8 @@ impl OpParams {
             OpParams::PlasmaProfile(p) => p.top_z,
             // The wire's profile is drawn on the workpiece's top (#532).
             OpParams::WireContour(p) => p.top_z,
+            // The electrode enters at the work top (#541).
+            OpParams::SinkerBurn(p) | OpParams::SinkerSideBurn(super::sinker::SinkerSideBurnOp { burn: p, .. }) => p.top_z,
             OpParams::Face { top_z, cut_z, .. } => top_z.unwrap_or(*cut_z),
             OpParams::Contour { top_z, .. }
             | OpParams::Pocket { top_z, .. }
@@ -1453,6 +1476,11 @@ impl OpParams {
             OpParams::WireContour(p) => {
                 f(p.top_z);
                 f(p.bottom_z);
+            }
+            OpParams::SinkerBurn(p) | OpParams::SinkerSideBurn(super::sinker::SinkerSideBurnOp { burn: p, .. }) => {
+                f(p.clearance_z);
+                f(p.top_z);
+                f(p.floor_z);
             }
             OpParams::Face { clearance_z, cut_z, top_z, .. } => {
                 f(*clearance_z);

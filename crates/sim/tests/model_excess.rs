@@ -9,7 +9,7 @@
 //! Provenance: our own fixtures; the sagitta `R * (1 - cos(pi / n))` of an
 //! inscribed n-gon is elementary geometry. No vendor material.
 //!
-//! Gate map (#864, #904): covers camcraft_sim::verify (excess, section,
+//! Gate map (#864, #904, #1057): covers camcraft_sim::verify (excess, section,
 //! finish).
 
 use camcraft_sim::cl::{Move, MoveKind, Toolpath};
@@ -238,4 +238,50 @@ fn the_envelope_laws_gouge_half_answers_to_the_tolerance_less_the_excess() {
             assert!(envelope_gouge(&sunk_raster(0.3), mode, FINISH, e).is_some_and(|g| g > 0.29), "{mode:?}, excess {e}");
         }
     }
+}
+
+/// #1057: a containment kind's rim is our own polygon of a declared
+/// circle, not a model facet - law (b) reads it at the plain tolerance,
+/// every other loop still tightened.
+#[test]
+fn a_declared_rim_is_read_untightened_and_no_other_loop_is() {
+    // A 48-gon rim of a 2 mm hole: 0.0043 mm of its own sagitta.
+    let rim = region(ring(2.0, 48).collect());
+    let drill = ToolGeom { radius: 2.0, ..tool() };
+    let plunge = {
+        let (a, b) = (Point3::new(0.0, 0.0, 12.0), Point3::new(0.0, 0.0, 8.0));
+        let mut p = feeds(&[], 0.0);
+        p.moves.push(Move::new(MoveKind::Feed, a, b, Some(100.0)));
+        p
+    };
+    let judge = |wall: &Region, tool: &ToolGeom, path: &Toolpath, excess: f64, rims: &[(Point2, f64)]| {
+        let cx = VerifyContext {
+            region: wall,
+            tool,
+            mode: Mode::Boundary,
+            stock_top_z: 10.0,
+            clearance_z: 20.0,
+            gouge_tol: TOL,
+            z_tol: 1e-6,
+            model_excess: excess,
+            rims,
+            ..Default::default()
+        };
+        verify(path, &cx).iter().filter(|w| matches!(w, Warning::Gouge { .. })).count()
+    };
+    let declared = [(Point2::new(0.0, 0.0), 2.0)];
+    // Just under the bound: 0.0001 mm left of the tightened tolerance.
+    let near = TOL - 1e-4;
+    assert_eq!(judge(&rim, &drill, &plunge, 0.0, &[]), 0, "full fidelity: clean");
+    assert!(judge(&rim, &drill, &plunge, near, &[]) > 0, "undeclared, the excess eats the rim's own sagitta");
+    assert_eq!(judge(&rim, &drill, &plunge, near, &declared), 0, "declared, the rim reads untightened");
+    // An oversize drill against the declared rim still convicts.
+    let fat = ToolGeom { radius: 2.01, ..drill };
+    assert!(judge(&rim, &fat, &plunge, near, &declared) > 0);
+    // A declaration that does not trace the loop changes nothing: the
+    // coarse boss stays convicted with a circle 0.01 mm off its own.
+    let (wall, excess) = (coarse_boss(), chord() - CAP);
+    let off = [(Point2::new(0.0, 0.0), BOSS_R - 0.01)];
+    let t6 = tool();
+    assert!(judge(&wall, &t6, &ring_cut(0.006), excess, &off) > 0);
 }

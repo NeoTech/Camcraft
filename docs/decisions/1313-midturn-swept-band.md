@@ -88,3 +88,55 @@ multiply those slices. Filed as #1316.
 loosening `SAG` only trades cells for overstatement. Replacing the hull by
 another enclosure touches `turn_cells.rs` alone - `sweep.rs` asks one
 question of a cell (`bottom_over`).
+
+**Merged with #1303's span floor and exact rim dip (PR #1306, main's
+3cee560c / de1d8641).** Main's sampled sweep had gained two changes to the
+pose loop this PR replaced: each pose's bottom dips by the rim's exact
+R·sin θ (not the whole R), and each pose reads the lower of that and the
+`tilt_span::span_floor` of the two spans it ends (a lerp whose A or B
+letters leave (-90, 90) can lean past both samples). Chosen: the two laws
+compose by `min`, so the merged (c3) convicts everything either side
+convicts on its own.
+- *The cells* read the rim's exact dip (below) and additionally the
+  span floor of every sampled pose fraction (0, 0.25, ..., 1) the cell
+  holds (`sweep::band_floors`, applied in `push_cells`). Every such
+  fraction lies in at least one cell (the cells tile [0, 1]); that cell's
+  hull holds the sampled pose's column (same offset and radius as
+  `tilt_band::lean`), its tip chord holds the sampled stations, and its
+  bottom is no higher than the sampled reading `min(exact dip, span
+  floor)`. Inside the cap the floor is `+inf` and nothing moves.
+- *The backstop columns* read main's column exactly: `tilt_band::lean`
+  with its exact dip, lowered by the same span floor.
+- *Dropped:* reading the span floor of each cell's own letter interval
+  (tighter, so higher than the sampled law's floor over a quarter of the
+  turn - it would let a sampled conviction go); and lowering every cell
+  that overlaps a span (convicts more than either side, with no physical
+  need - the cell's sag bound already holds every in-between pose).
+
+**The exact rim dip per cell - #1303's law wins over the whole radius.**
+The merge first kept this PR's cell bottom (the whole band radius under
+the lower end station), and main's
+`tilt_tolerance::a_tilt_just_above_the_tolerance_reads_like_upright_and_a_real_dip_convicts`
+failed: a holder 5 mm clear, tilted 1.01e-9 rad, convicted - the cliff at
+the upright tolerance #1303 removed. The two readings cannot both hold, so
+"convict everything either side convicts" does not apply to this one
+class. Chosen (main session, 2026-11-12, for the maintainer to overrule):
+each cell's bottom is `min(lo0, lo1) - R * min(1, max(sin θ0, sin θ1) +
+kappa) - sag`, `lo` the lower end station over the tip at each end pose.
+Sound: over the cell the axis strays from its chord by `kappa` at most, so
+its horizontal part - the rim's sine - stays under the larger end's sine
+plus `kappa`, and the stations stay within the existing sag. Why: #1303
+already calls the whole-radius convictions false (a band a hair off upright
+read R lower than upright), and the bound above is still never under the
+true band. Dropped: keeping the whole radius and changing main's
+tilt_tolerance test (it would re-open the cliff #1303 closed). The one test
+number this PR changes follows from it:
+`the_kerf_excuses_only_where_the_tip_stands` now expects the bottom under
+`5 - 4.8` less a dip of at most 6·sin 1°, not a whole 6 mm lower.
+
+Pinned by `turn_cells::tests::a_cell_holding_a_sampled_pose_reads_its_span_floor`
+(A 100 -> 260: a column under the far rim of the A 100 column that only
+the span floor reaches). Mutation-checked: without the floor in
+`push_cells` that pin fails; with the cells replaced by the five sampled
+poses `midturn_swept_band::a_holder_crossing_a_stock_post_between_two_sampled_poses_is_convicted`
+fails.

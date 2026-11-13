@@ -153,9 +153,9 @@ reports `CONFLICTING` without the label - add the label to those):
    their commits kept; GitHub then shows the original PR as merged).
 3. **Now `MERGEABLE`:** remove `conflicts`, then decide what review it needs.
    Run `cargo xtask merge-plan --delta <PR> --reviewed <sha>`, where the sha
-   is the last reviewed head: the one in the owner-authored
-   `<!-- pr-reviewer: ... -->` marker (AGENTS.md "Only the owner's reviews
-   count"; a marker by another account does not count).
+   is the last reviewed head: the one in the collaborator-authored
+   `<!-- pr-reviewer: ... -->` marker (AGENTS.md "Only collaborators' reviews
+   count"; a marker by a non-collaborator does not count).
    - **SAME** (head unchanged, or only merges of main with an empty
      remerge-diff - AGENTS.md "A clean merge of main keeps its review"): the
      tree is what merging the reviewed head would give. Restore `merge-ready`

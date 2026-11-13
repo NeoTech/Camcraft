@@ -151,6 +151,12 @@ pub struct VerifyContext<'a> {
     /// which is also the budget moves are read into chords at and must
     /// not shrink with the model.
     pub model_excess: f64,
+    /// The declared circles `(centre, radius)` a containment kind's
+    /// region draws as rim loops (#1057): our own polygons of a hole the
+    /// operation names, not a model's facets, so law (b) reads a loop
+    /// that traces one at the untightened `gouge_tol`
+    /// ([`VerifyContext::loop_tol`]). Empty everywhere else.
+    pub rims: &'a [(crate::geo2d::Point2, f64)],
 }
 
 /// The inert tool of [`VerifyContext::default`].
@@ -187,6 +193,7 @@ impl Default for VerifyContext<'_> {
             fixtures: &[],
             spindle: None,
             model_excess: 0.0,
+            rims: &[],
         }
     }
 }
@@ -253,7 +260,8 @@ pub enum Warning {
         at: usize,
         fixture_part: FixturePart,
     },
-    /// Defensive: a non-finite coordinate (generators gate this out).
+    /// Defensive: a non-finite coordinate, or a tool axis that is
+    /// non-finite or of zero length (#1312; generators gate both out).
     NonFinite { at: usize },
     /// A 3-D finish's measured ball envelope misses the model:
     /// `gouge_mm` below it (worst), `rest_mm` above it (worst),
@@ -350,7 +358,7 @@ impl core::fmt::Display for Warning {
                     FixturePart::Flute => "flute",
                 }
             ),
-            Warning::NonFinite { at } => write!(f, "move {at} has a non-finite coordinate"),
+            Warning::NonFinite { at } => write!(f, "move {at} has a non-finite coordinate or tool axis"),
             Warning::Envelope {
                 at,
                 gouge_mm,
