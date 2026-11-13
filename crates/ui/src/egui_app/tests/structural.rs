@@ -284,7 +284,7 @@ fn setup_page_alignment_rows_structure() {
     let plane = h.query_by_label_contains("Lay on a plane - pick a face").expect("the plane row shows").rect();
     assert!(h.query_by_label("Pick a face").is_some_and(|n| !n.accesskit_node().is_disabled()), "the plane row picks a face");
     assert!(h.query_by_label("Pick face or edges").is_none(), "#554: the plane row offers no edge pick");
-    let axes = h.query_by_label_contains("Axes in the plane - pick an edge or two points").expect("the axes rows show");
+    let axes = h.query_by_label_contains("Part axes - pick an edge or two points for +Y and +X; +Z follows by the right-hand rule").expect("the axes rows show");
     assert!(plane.min.y < axes.rect().min.y, "the axes rows follow the plane row");
     for label in ["+Y by Edge", "+Y by Two points", "Pick +Y edge", "Flip +Y", "+X by Edge", "+X by Two points", "Pick +X edge", "Flip +X"] {
         assert!(h.query_by_label(label).is_some(), "the axes rows must show {label:?}");
@@ -334,6 +334,35 @@ fn setup_page_alignment_rows_structure() {
         assert!(pane.contains_rect(r), "Apply lies inside the pane: {r:?}");
     }
     assert!(h.state().state.points_pick.is_none(), "nothing is armed by drawing the page");
+}
+
+/// #535: the machine editor of a wire EDM stands the wire section in
+/// its order - keys, codes, conditions - with every absent value saying
+/// "not stated", and the spindle / tooling / coolant groups gone.
+#[test]
+fn wire_machine_editor_structure() {
+    let _g = snapshot_guard();
+    let mut harness = shell_harness();
+    harness.run();
+    let mut m = camcraft_app::machine::parse_mch(include_str!("../../../../app/tests/edm/wire-iso-fixture.mch")).expect("fixture");
+    m.edm = None;
+    m.edm_codes.clear();
+    harness.state_mut().state.machine_editor =
+        Some(crate::egui_app::machine_editor::MachineEditor { path: "wire.mch".to_owned(), machine: m });
+    harness.run_steps(3);
+    let mut last_y = f32::MIN;
+    for label in ["Wire keys", "EDM codes (the control's words)", "Conditions"] {
+        let y = harness.get_by_label(label).rect().center().y;
+        assert!(y > last_y, "{label:?} must follow the section above it");
+        last_y = y;
+    }
+    for label in ["lower guide Z", "upper guide Z", "max taper (deg)", "code condition", "code comp_off", "code thread", "code cut", "code tip_disposal"] {
+        assert!(harness.query_by_label(label).is_some(), "{label:?} row is drawn");
+    }
+    assert!(harness.query_all_by_label("not stated").count() >= 8, "absent values say so");
+    for gone in ["Spindle (rpm)", "Tooling", "Coolants"] {
+        assert!(harness.query_by_label(gone).is_none(), "{gone:?} has no place on a wire EDM");
+    }
 }
 
 /// #1031: a lathe setup's Settings page carries the "Workholding max rpm"

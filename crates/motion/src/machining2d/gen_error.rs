@@ -42,6 +42,11 @@ pub enum GenError {
     Ghosted { msg: String, at: Option<Point3>, ghost: Ghost },
     #[error("nothing to machine: {0}")]
     Empty(String),
+    /// The source model itself cannot be sectioned (#1407): an open or
+    /// non-manifold mesh - the model is at fault, not a parameter, so
+    /// the refusal says so instead of "invalid machining parameters".
+    #[error("the source model cannot be sliced: {0}")]
+    Model(String),
     #[error(transparent)]
     Geo(#[from] GeoError),
 }

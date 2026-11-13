@@ -1,11 +1,11 @@
-//! The axes-in-the-plane pick draft (#557): while a Setups page row
-//! collects picks for +Y or +X, a viewport Edge or Vertex click lands
-//! here instead of in the open operation's geometry. Each axis takes one
-//! straight edge (Edge mode) or two points (Vertex mode); a face sets no
-//! direction and is refused by name in the status line. Ephemeral view
-//! state like the lay-on-a-plane draft - nothing here writes the world;
-//! Apply queues the undoable `AlignPartToSetup` through
-//! `CommandKind::TurnPartInPlane`.
+//! The part-axes pick draft (#557, full 3D since #769): while a Setups
+//! page row collects picks for +Y or +X, a viewport Edge or Vertex
+//! click lands here instead of in the open operation's geometry. Each
+//! axis takes one straight edge (Edge mode) or two points (Vertex
+//! mode); a face sets no direction and is refused by name in the status
+//! line. Ephemeral view state like the lay-on-a-plane draft - nothing
+//! here writes the world; Apply queues the undoable
+//! `AlignPartToSetup` through `CommandKind::AlignPartFromAxes`.
 //!
 //! Provenance: our own UI over plain fixture practice (indicate an edge
 //! along the table's travel); no vendor material consulted.
@@ -208,6 +208,11 @@ pub fn hint_stray(state: &mut State) -> bool {
 /// the axis's edge; a point joins, the last two kept. A pick of the
 /// wrong kind is refused by name and changes nothing.
 pub fn take(state: &mut State, pick: GeoSel) {
+    // #692: why an edge gives no centre (`None` for a round one or a non-edge).
+    let no_centre = match pick.feature {
+        FeatureSel::Chain(_) => camcraft_app::pick::centre_point(&state.world, &pick).err(),
+        _ => None,
+    };
     let Some(d) = state.axis_pick.as_mut() else { return };
     let Some(axis) = d.picking else { return };
     d.applied = false;
@@ -220,7 +225,12 @@ pub fn take(state: &mut State, pick: GeoSel) {
             d.slot(axis).picks = vec![pick];
             format!("{setup}: edge picked for {}", axis.label())
         }
-        (AxisBy::Points, FeatureSel::Vertex(_)) => {
+        // #692: a round edge picked for its centre is a point; any other
+        // edge is refused with the reason.
+        (AxisBy::Points, FeatureSel::Chain(_)) if no_centre.is_some() => {
+            format!("{setup}: {}", no_centre.as_deref().unwrap_or_default())
+        }
+        (AxisBy::Points, FeatureSel::Vertex(_) | FeatureSel::Chain(_)) => {
             let picks = &mut d.slot(axis).picks;
             picks.push(pick);
             let extra = picks.len().saturating_sub(2);
@@ -229,7 +239,6 @@ pub fn take(state: &mut State, pick: GeoSel) {
         }
         (_, FeatureSel::Face(_) | FeatureSel::Patch(_)) => refuse("a face (a face sets no direction)"),
         (AxisBy::Edge, FeatureSel::Vertex(_)) => refuse("a point"),
-        (AxisBy::Points, FeatureSel::Chain(_)) => refuse("an edge"),
     };
     state.status = status;
 }
@@ -255,8 +264,9 @@ pub fn picks_text(world: &World, picks: &[GeoSel], unit: Unit) -> String {
     };
     let coords: Vec<Vec<[f64; 3]>> = picks.iter().filter_map(|g| pick::pick_coords(world, g)).collect();
     let suffix = unit.suffix();
+    let centre = coords.first().is_some_and(|c| c.len() == 1); // #692: a round edge's centre
     match first.feature {
-        FeatureSel::Chain(_) => match coords.first().map(Vec::as_slice) {
+        FeatureSel::Chain(_) if !centre => match coords.first().map(Vec::as_slice) {
             Some([a, b]) => {
                 let d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
                 let l = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();

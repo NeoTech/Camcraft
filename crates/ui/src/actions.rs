@@ -115,6 +115,9 @@ pub(crate) fn toggle_deviate(state: &mut State) {
             if let Some(vote) = machine_vote(&state.world) {
                 state.status += &vote;
             }
+            if let Some(note) = camcraft_app::stock_sim::carry_engine_note() {
+                state.status += &format!(" - {note}"); // #1168: never silent
+            }
             state.program_sim = Some(sim);
             state.doc_version += 1; // the sheet is a new GPU part
         }
@@ -358,7 +361,11 @@ pub(crate) fn add_operation(state: &mut State, kind: usize) {
         .get(kind)
         .map(|k| camcraft_app::operation::tool_gate::fitting_tools(&state.world, k))
         .unwrap_or_default();
-    let Some(tool) = fitting.last().cloned().or_else(|| state.tool_names().pop()) else {
+    // #532: a kind that mounts no library tool (the wire EDM's) is
+    // created naming none - its door then asks for what it does need.
+    let toolless = camcraft_app::operation::KindInfo::ALL.get(kind).is_some_and(|k| !k.mounts_tool());
+    let picked = if toolless { Some(String::new()) } else { fitting.last().cloned().or_else(|| state.tool_names().pop()) };
+    let Some(tool) = picked else {
         state.status = String::from("cannot add an operation: no tool in the document");
         return;
     };
@@ -374,11 +381,21 @@ pub(crate) fn add_operation(state: &mut State, kind: usize) {
         n += 1;
     };
     let mut params = quick_params(kind);
+    // #535: a quick-add wire contour takes the machine's first stated
+    // condition (the door refuses an op naming none); with none stated
+    // the door's refusal names the table to fill.
+    if let camcraft_app::operation::OpParams::WireContour(w) = &mut params
+        && let Some(first) = camcraft_app::operation::wire_op::conditions_of(&state.world, None).into_iter().next()
+    {
+        w.condition = first;
+    }
     // M11.3: the seed helix radius follows the op's tool (0.4 x radius).
     if let Some(t) = camcraft_app::model::find_by_name(&state.world, &tool)
         .and_then(|e| camcraft_app::model::tool_of(&state.world, &e))
     {
         camcraft_app::operation::seed_helix_for_tool(&mut params, t.diameter);
+        // #890: and its feed, from the tool's row for the document material.
+        camcraft_app::cutting_rows::seed_feed_for_tool(&state.world, &mut params, &t);
     }
     state.pending.push_back(CommandKind::CreateOperation {
         name: name.clone(),

@@ -54,6 +54,9 @@ pub struct UpdateModel {
     /// model at construction (`Some`) - the propagation law's side of the
     /// snapshot, so undo trades model and material back together.
     prev_stock: Option<std::sync::Arc<[crate::geometry::Triangle]>>,
+    /// The derived stock's own flag as it stood (#1056): the copy carries
+    /// the fidelity of the facets it holds, traded with them both ways.
+    prev_stock_coarse_mm: Option<f64>,
     /// The fidelity of the new mesh and of the one it replaces (#864): the
     /// flag describes the facets, so it is traded with them, both ways.
     coarse_mm: Option<f64>,
@@ -95,13 +98,16 @@ impl UpdateModel {
         // Every copy of this model holds the same local facets, so one
         // snapshot serves them all (divergence is what this command
         // prevents, not a state it must describe).
-        let prev_stock = stock_copies(world, name).first().and_then(|s| model::facets_of(world, s));
+        let copies = stock_copies(world, name);
+        let prev_stock = copies.first().and_then(|s| model::facets_of(world, s));
+        let prev_stock_coarse_mm = copies.first().and_then(|s| crate::model_fidelity::chord_of(world, s));
         Ok(UpdateModel {
             name: name.to_string(),
             mesh,
             prev_facets: model::facets_of(world, &entity),
             prev_rev: model::rev_of(world, &entity),
             prev_stock,
+            prev_stock_coarse_mm,
             coarse_mm: None,
             prev_coarse_mm: crate::model_fidelity::chord_of(world, &entity),
             facet_budget: None,
@@ -180,6 +186,7 @@ impl Command for UpdateModel {
         if self.prev_stock.is_some() {
             for stock in stock_copies(world, &self.name) {
                 model::set_facets(world, &stock, self.mesh.facets.clone());
+                crate::model_fidelity::set(world, &stock, self.coarse_mm);
             }
         }
         if let Some(p) = &self.plate {
@@ -212,6 +219,7 @@ impl Command for UpdateModel {
         if let Some(tris) = &self.prev_stock {
             for stock in stock_copies(world, &self.name) {
                 model::set_facets(world, &stock, tris.clone());
+                crate::model_fidelity::set(world, &stock, self.prev_stock_coarse_mm);
             }
         }
         self.marks.write(world, false);
