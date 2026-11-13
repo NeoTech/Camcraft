@@ -160,6 +160,8 @@ mod box_select;
 mod setups_declutter;
 // #1206: each setup's own Machine and Post pages pick its own mount.
 mod setup_mount_pages;
+// #1515: a pick on one setup never re-mounts another.
+mod setup_machine_bleed;
 
 /// What the per-frame state of `Shell` is, minus the GPU half: the fields
 /// `shell_layout` touches, so the harness exercises the window's real body.
