@@ -13,10 +13,13 @@ use flecs_ecs::prelude::*;
 use crate::model;
 
 /// Refuse the first program op whose family its setup's machine does
-/// not admit, naming the op, its kind and the machine kind.
+/// not admit, naming the op, its kind and the machine kind - or whose
+/// kind mounts no library tool (#532: the wire EDM's, whose post is not
+/// built yet).
 ///
 /// # Errors
-/// `"<op>: a <kind> operation cannot run on its setup's <machine> machine - ..."`.
+/// `"<op>: a <kind> operation cannot run on its setup's <machine> machine - ..."`,
+/// or `"<op>: a <kind> operation posts through a wire EDM post, which is not built yet - ..."`.
 pub(crate) fn family_at_post(world: &World, ops: &[(String, Entity)]) -> Result<(), String> {
     for (name, e) in ops {
         if let Some(op) = model::operation_of(world, e) {
@@ -28,7 +31,48 @@ pub(crate) fn family_at_post(world: &World, ops: &[(String, Entity)]) -> Result<
                     machine.label()
                 ));
             }
+            // #532: a wire EDM kind posts through a wire EDM post, and
+            // none is built yet - refused by name, never posted in a
+            // cutting dialect (and before any tool is read: it has none).
+            if !op.params.kind().info().mounts_tool() {
+                return Err(format!(
+                    "{name}: a {} operation posts through a wire EDM post, which is not built yet - nothing is posted",
+                    op.params.kind()
+                ));
+            }
         }
+    }
+    Ok(())
+}
+
+/// The EDM door at post (review of #1131): no EDM dialect ships yet
+/// (#533 wire, #542 sinker), so an op whose setup's machine is a wire
+/// or sinker EDM is refused by name before any file is written - never
+/// handed to a milling post that would address the EDM control with a
+/// tool change, a length offset and the electrode tip as a Z target.
+/// Shared by every writer: the one-file post, the per-mount and the
+/// per-op writers, each beside its lathe door.
+///
+/// # Errors
+/// `"<setup>: no post for a sinker EDM machine yet (#542) - ..."`.
+pub(crate) fn edm_at_post<'a>(world: &World, names: impl IntoIterator<Item = &'a str>) -> Result<(), String> {
+    use crate::machine::Kind;
+    for name in names {
+        let Some(op) = model::find_by_name(world, name).and_then(|e| model::operation_of(world, &e)) else {
+            continue;
+        };
+        let machine = crate::machine::kind_of_setup(world, op.setup.as_deref());
+        let issue = match machine {
+            Kind::WireEdm => "#533",
+            Kind::SinkerEdm => "#542",
+            Kind::Mill | Kind::Lathe | Kind::MillTurn | Kind::Plasma => continue,
+        };
+        let setup = crate::setup::effective(world, op.setup.as_deref()).unwrap_or_else(|| "the setup".to_owned());
+        return Err(format!(
+            "{setup}: no post for a {} machine yet ({issue}) - {name} is not posted and no file is written; \
+             an EDM dialect ships with {issue}",
+            machine.label()
+        ));
     }
     Ok(())
 }

@@ -147,7 +147,7 @@ pub(crate) fn floor_of(params: &OpParams) -> f64 {
 /// the multi-axis ball kinds.
 ///
 /// Not yet: swarf (its flank proof is the generator's), the cone and
-/// engrave rides, probe, the cross drill and plasma. On a reduced-
+/// engrave rides, probe, the cross drill, plasma and the wire. On a reduced-
 /// fidelity model those are refused at the program gate rather than
 /// judged loosely.
 pub(crate) fn excess_aware(params: &OpParams) -> bool {
@@ -161,6 +161,8 @@ pub(crate) fn excess_aware(params: &OpParams) -> bool {
         }
         Section::Turning => true,
         Section::MultiAxis => !matches!(params, OpParams::Swarf { .. } | OpParams::AdvancedSwarf { .. }),
-        Section::Plasma => false,
+        // #532: the wire's kerf law is not excess-aware yet either.
+        // #541: nor the sinker's burn verdict.
+        Section::Plasma | Section::WireEdm | Section::Sinker => false,
     }
 }

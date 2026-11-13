@@ -219,6 +219,7 @@ fn verdicts() -> Vec<(&'static str, Vec<Warning>)> {
         flutes: None,
         center_cutting: true,
         orientation: None,
+        catalog: camcraft_tools::catalog_fields::ToolCatalog::default(),
         turning: None,
     };
     let hole = |x: f64, y: f64, r: f64, floor: f64, through: bool| Hole { xy: Point2::new(x, y), radius: r, entry_z: 0.0, floor_z: floor, through, stepped: false };
@@ -302,16 +303,30 @@ fn a_lead_on_the_rings_own_circle_is_refused() {
 /// (#862 option (c)); none does today.
 const REFUSED_HEADER: &str = "refused program, posted for syntax conformance";
 
-/// Posted goldens whose program no gate judges, each with why: the
-/// guard below makes every other posted golden's program pass the gate
-/// its kind's post runs, so a new one is either judged or named here.
-/// The slot, trochoid, trace and plasma goldens are judged since #1000
-/// (`posted_gates`).
-const UNJUDGED: &[(&str, &str)] = &[(
-    "arc_planes",
-    "a hand-built posting fixture (arc_planes.rs): no operation kind, part, region or tool record makes it, \
-     so no gate a user's post runs can judge it - #1093",
-)];
+/// How a posted golden's first line and gate verdict settle it (#1093):
+/// the synthetic marker is honest only for a stem no op program makes
+/// (`judged` holds every stem a gate judges), and every other golden must
+/// be judged. There is no list of unjudged goldens.
+fn posted_golden_verdict(first: &str, stem: &str, judged: &[&str]) -> Result<(), String> {
+    let is_judged = judged.contains(&stem);
+    let marked = first.contains(common::SYNTHETIC_MARKER);
+    match (marked, is_judged) {
+        (true, true) => Err(format!("{stem}: carries the synthetic marker but a gate judges its op program")),
+        (true, false) | (false, true) => Ok(()),
+        (false, false) => Err(format!("{stem}: posted, but no gate judges its program and it is not marked synthetic")),
+    }
+}
+
+#[test]
+fn the_synthetic_marker_is_accepted_only_for_a_fixture_with_no_op_program() {
+    let marked = format!("({})", common::SYNTHETIC_MARKER);
+    assert_eq!(posted_golden_verdict(&marked, "arc_planes", &["drill_plate"]), Ok(()));
+    // A marker on a golden an op program makes would hide it from the gate.
+    assert!(posted_golden_verdict(&marked, "drill_plate", &["drill_plate"]).is_err());
+    // An unmarked, unjudged golden fails.
+    assert!(posted_golden_verdict("%", "mystery", &["drill_plate"]).is_err());
+    assert_eq!(posted_golden_verdict("%", "drill_plate", &["drill_plate"]), Ok(()));
+}
 
 #[test]
 fn the_slot_trace_and_plasma_goldens_pass_their_gates() {
@@ -366,13 +381,12 @@ fn every_posted_golden_is_a_program_the_gate_passes() {
                 continue;
             }
             let cl = format!("{stem}.cl");
-            match judged.iter().find(|(n, _)| *n == cl) {
-                Some((_, w)) => assert!(w.is_empty(), "{}: posted, but the gate refuses its program: {w:?}", e.display()),
-                None => assert!(
-                    UNJUDGED.iter().any(|(n, _)| *n == stem),
-                    "{}: posted, but no gate judges its program - judge it in verdicts() / posted_gates or name it in UNJUDGED",
-                    e.display()
-                ),
+            if let Some((_, w)) = judged.iter().find(|(n, _)| *n == cl) {
+                assert!(w.is_empty(), "{}: posted, but the gate refuses its program: {w:?}", e.display());
+            }
+            let names: Vec<&str> = judged.iter().filter_map(|(n, _)| n.strip_suffix(".cl")).collect();
+            if let Err(m) = posted_golden_verdict(&first, stem, &names) {
+                panic!("{}: {m}", e.display());
             }
         }
     }
