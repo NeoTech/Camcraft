@@ -227,7 +227,9 @@ fn an_unrelated_edit_and_a_round_trip_leave_the_cuts_ok() {
     assert_eq!(status(&back, "Punch1"), OpStatus::Ok);
 }
 
-fn four(pairing: WirePairingRule, sync: &[(Option<[f64; 2]>, Option<[f64; 2]>)], tolerance: f64) -> WireContourOp {
+type Pt = Option<[f64; 2]>;
+
+fn four(pairing: WirePairingRule, sync: &[(Pt, Pt)], tolerance: f64) -> WireContourOp {
     let sync = sync.iter().map(|&(upper, lower)| WireSyncPair { upper, lower }).collect();
     WireContourOp { four_axis: Some(WireFourAxis { pairing, sync, tolerance }), ..wire_op(WireSide::Punch, Some([-10.0, 25.0])) }
 }
