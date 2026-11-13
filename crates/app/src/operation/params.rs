@@ -1704,6 +1704,10 @@ impl OpParams {
                 if a.arc_xy {
                     h.write_u8(0xC4);
                 }
+                // #1449: pre-drilled entry - a byte only when on.
+                if a.predrilled {
+                    h.write_u8(0xC7);
+                }
                 // M13.11: control compensation moves what the post
                 // writes - a byte only when on, so every earlier
                 // approach keeps its digest.
@@ -1718,6 +1722,12 @@ impl OpParams {
                 // #1448: the user's start point - bytes only when set.
                 if let Some(q) = a.start_point {
                     h.write_u8(0xC7);
+                    w(h, q.x);
+                    w(h, q.y);
+                }
+                // #1473: the exit point - bytes only when set.
+                if let Some(q) = a.exit_point {
+                    h.write_u8(0xC8);
                     w(h, q.x);
                     w(h, q.y);
                 }

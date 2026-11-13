@@ -19,6 +19,7 @@ use super::fillet_tally::{FilletTally, fillet_floor};
 use super::waterscan::{scan_row, waterline_passes};
 use super::slots::chord_clears;
 use super::pocket_hsm::adaptive_passes;
+use super::predrilled::PreHole;
 pub use super::pocket_strategy::PocketStrategy;
 
 
@@ -201,6 +202,12 @@ impl PocketParams {
 /// lift-rapid-plunge. Rapids inside the footprint below the safe plane
 /// are the verifier's business (step 7).
 pub fn pocket(region: &Region, p: &PocketParams) -> Result<Toolpath, GenError> {
+    pocket_entered(region, p, &[])
+}
+
+/// [`pocket`] with the holes the caller proved open (#1449): read only
+/// when `p.links.approach.predrilled` asks (`predrilled.rs`).
+pub fn pocket_entered(region: &Region, p: &PocketParams, holes: &[PreHole]) -> Result<Toolpath, GenError> {
     p.validate()?;
     if region.is_empty() {
         return Err(GenError::Empty("empty pocket region".into()));
@@ -210,7 +217,7 @@ pub fn pocket(region: &Region, p: &PocketParams) -> Result<Toolpath, GenError> {
         // Material exists that no legal tool position can reach.
         return Err(GenError::Invalid("pocket is narrower than the tool".into()));
     }
-    pocket_over(region, &center, p, Vec::new(), false)
+    pocket_over(region, &center, p, Vec::new(), false, holes)
 }
 
 /// The pocket passes over a given cutter-center area: [`pocket`]'s body
@@ -220,13 +227,15 @@ pub fn pocket(region: &Region, p: &PocketParams) -> Result<Toolpath, GenError> {
 /// plus the stock to leave; `notes` are said first on the path.
 /// `hold_crossings` holds every fitted arc to the crossing law on the
 /// posted path (`arc_cross`): rest areas have thin horns where two
-/// fitted arcs can cross within tolerance.
+/// fitted arcs can cross within tolerance. `holes` are the proved
+/// pre-drilled entries (#1449; rest machining passes none).
 pub(super) fn pocket_over(
     region: &Region,
     center: &Region,
     p: &PocketParams,
     notes: Vec<String>,
     hold_crossings: bool,
+    holes: &[PreHole],
 ) -> Result<Toolpath, GenError> {
     let r = p.tool_diameter * 0.5;
     // Auto commits to a shape here, from the region's own outline - the
@@ -259,6 +268,8 @@ pub(super) fn pocket_over(
     // The horizontal arc entry (M11.3) lands on the first pass: a closed
     // first ring starts mid its longest edge, where an arc has room.
     let passes = if p.links.approach.arc_xy && room.is_none() { super::descent_xy::reseat_first(passes) } else { passes };
+    // #1449: a proved hole re-seats the plan on itself (not the HSM plan's own bore).
+    let passes = super::predrilled::reseat(passes, holes, center, p.links.approach.predrilled && room.is_none());
     let zs = cut_levels(p.top_z, p.bottom_z, p.stepdown)?;
     // Waterline rings circle around material, so they get the arc fitter
     // (rings straight enough to be lines stay exactly that); zigzag rows
@@ -283,7 +294,8 @@ pub(super) fn pocket_over(
         .with_links(p.links, helix_r)
         .with_top(p.top_z)
         .with_xy_arc(p.links.approach.arc_xy)
-        .with_microlift(joins);
+        .with_microlift(joins)
+        .with_holes(holes);
     // The walks: fitted where the strategy fits, then - opted in - the
     // corner fillets, proved inside the cutter-center area. Passes are
     // one plan at every level, so the plan's refusals are said once.

@@ -4,7 +4,8 @@
 //! the door by name, the project file writing `start_point` only when set
 //! and reading it back, the stamp telling a pick apart, the MCP
 //! `edit_operation` patch reaching it, and the generated path over the
-//! stock locked by a golden CL dump.
+//! stock locked by a golden CL dump. #1473: the exit point through the
+//! same doors (command, undo, project file, stamp, MCP, other kinds).
 //!
 //! Gate map (#1448): covers app::operation (sane, params digest),
 //! app::project (approach DTO), app::commands (CreateOperation,
@@ -168,4 +169,63 @@ fn mcp_edit_operation_reaches_the_start_point() {
     let face = json!({ "name": "F", "params": { "links": { "approach": { "start_point": [35.0, 0.0] } } } });
     let (err, r) = mcp(&mut s, "edit_operation", face);
     assert!(err && r.to_string().contains("start point"), "{r}");
+}
+
+fn exit_op(exit: Option<Point2>) -> OpParams {
+    let mut op = contour_op(None);
+    if let OpParams::Contour { links, .. } = &mut op {
+        links.approach.exit_point = exit;
+    }
+    op
+}
+
+fn exit_of(p: &OpParams) -> Option<Point2> {
+    match p {
+        OpParams::Contour { links, .. } => links.approach.exit_point,
+        _ => None,
+    }
+}
+
+#[test]
+fn the_exit_point_rides_the_command_undo_the_file_and_the_stamp() {
+    let (world, mut h) = job();
+    assert!(CreateOperation::new(&world, "Op1", "T", SrcRef::Stock, exit_op(Some(Point2::new(f64::NAN, 0.0)))).is_err());
+    h.execute(&world, CreateOperation::new(&world, "Op1", "T", SrcRef::Stock, exit_op(None)).expect("create"));
+    let q = Point2::new(0.0, 25.0);
+    h.execute(&world, EditOperationParams::new(&world, "Op1", exit_op(Some(q))).expect("edit"));
+    assert_eq!(exit_of(&params_of(&world)), Some(q));
+    h.execute(&world, GenerateOperation::new(&world, "Op1").expect("generate"));
+    let e = model::find_by_name(&world, "Op1").expect("op");
+    let tp = model::toolpath_of(&world, &e).expect("cached path");
+    // The cutter-centre ring runs 5 mm off the top wall (y = 25): the cut leaves at (0, 25).
+    let leaves = tp.path.moves.iter().any(|m| m.from.x.abs() < 1e-6 && (m.from.y - 25.0).abs() < 1e-6 && m.to.y > 25.0);
+    assert!(leaves, "the lead-out leaves at the exit's foot: {:?}", tp.path.notes);
+    let path = std::env::temp_dir().join(format!("camcraft-exit-point-{}.camproj", std::process::id()));
+    project::save(&world, &path).expect("save");
+    let text = std::fs::read_to_string(&path).expect("read");
+    assert!(text.contains("\"exit_point\""), "the key when set");
+    let back = new_world();
+    project::load(&back, &path).expect("load");
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(exit_of(&params_of(&back)), Some(q));
+    let stamp = |p: OpParams| operation::current_stamp(&world, "T", &SrcRef::Stock, &p, "X", None);
+    assert_ne!(stamp(exit_op(Some(q))), stamp(exit_op(None)));
+    h.undo(&world);
+    h.undo(&world);
+    assert_eq!(exit_of(&params_of(&world)), None);
+}
+
+#[test]
+fn mcp_edit_operation_reaches_the_exit_point() {
+    let mut s = Server::new();
+    assert!(!mcp(&mut s, "set_stock", json!({ "box": { "dx": 60.0, "dy": 40.0, "dz": 20.0 } })).0);
+    assert!(!mcp(&mut s, "add_tool", json!({ "catalog": "EM-1000-4FL" })).0);
+    assert!(!mcp(&mut s, "add_operation", json!({ "kind": "Contour", "tool": "EM-1000-4FL", "name": "C" })).0);
+    let patch = json!({ "name": "C", "params": { "links": { "approach": { "exit_point": [0.0, 25.0] } } } });
+    let (err, r) = mcp(&mut s, "edit_operation", patch);
+    assert!(!err && r.to_string().contains("exit_point"), "the patch is taken: {r}");
+    assert!(!mcp(&mut s, "add_operation", json!({ "kind": "Pocket", "tool": "EM-1000-4FL", "name": "F" })).0);
+    let face = json!({ "name": "F", "params": { "links": { "approach": { "exit_point": [0.0, 25.0] } } } });
+    let (err, r) = mcp(&mut s, "edit_operation", face);
+    assert!(err && r.to_string().contains("exit point"), "{r}");
 }

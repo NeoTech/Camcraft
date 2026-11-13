@@ -420,7 +420,7 @@ fn gizmo_len(state: &State) -> f64 {
 pub(crate) fn gizmos(state: &State) -> Vec<Gizmo> {
     let mut out: Vec<Gizmo> = Vec::new();
     for (name, entity) in model::named_entities(&state.world) {
-        if state.hidden_offsets.contains(&name) || !model::is_wcs(&state.world, &entity) {
+        if state.hidden_offsets.contains(&name) || state.wcs_hidden_by_setup(&name) || !model::is_wcs(&state.world, &entity) {
             continue;
         }
         let Some(stored) = model::transform_of(&state.world, &entity) else {
@@ -464,7 +464,7 @@ pub(crate) fn gizmos(state: &State) -> Vec<Gizmo> {
 // ------------------------------------------------- screen-space layers
 
 /// Screen-space segments of the FEATURE under the cursor - in the viewport,
-/// or on a Geometry-list row (`state.geo_hover`) - as viewport-uv
+/// (the Geometry-list row hover is [`row_hover_segments`]) - as viewport-uv
 /// pairs (0..1 within the image, like `overlay_labels` - each shell maps
 /// them through the image rect and draws with its own draw list). A
 /// draw-list producer on purpose: hovering must never rebuild the 3D
@@ -476,19 +476,28 @@ pub(crate) fn gizmos(state: &State) -> Vec<Gizmo> {
 /// nothing - a highlight must never promise a pick the click cannot make.
 pub(crate) fn hover_features(state: &State, aspect: f64) -> Vec<([f32; 2], [f32; 2])> {
     let mut out = Vec::new();
-    let mut viewport: Option<(String, FeatureSel)> = None;
     if let Some(hit) = &state.hover
         && let Some(sel) = hit.feature
     {
         feature_segments(state, &hit.entity, sel, aspect, &mut out);
-        viewport = Some((hit.entity.clone(), sel));
     }
-    // The Geometry list's row hover lights the same feature the same way:
-    // the list answering "which one is that?" without a click. Viewport
-    // hover keeps precedence, and one feature never draws twice.
-    if let Some(g) = &state.geo_hover
-        && !viewport.as_ref().is_some_and(|(e, f)| *e == g.entity && *f == g.feature)
-    {
+    out
+}
+
+/// Stroke width of the Geometry-list row hover (#1507), over a
+/// [`ROW_HOVER_HALO_PX`] dark halo: strong enough to read on the shaded and
+/// the wireframe model in both themes, and apart from the 1 px viewport hover.
+pub(crate) const ROW_HOVER_PX: f32 = 3.5;
+/// The dark halo under the row hover stroke.
+pub(crate) const ROW_HOVER_HALO_PX: f32 = 7.0;
+
+/// Screen-space segments of the feature a Geometry-list row (or its remove
+/// button) is hovered over (`state.geo_hover_drawn`, #1507), drawn strongly by the
+/// shell. Same resolution rules as [`hover_features`]: stale, hidden and
+/// gone draw nothing.
+pub(crate) fn row_hover_segments(state: &State, aspect: f64) -> Vec<([f32; 2], [f32; 2])> {
+    let mut out = Vec::new();
+    if let Some(g) = &state.geo_hover_drawn {
         feature_segments(state, &g.entity, g.feature, aspect, &mut out);
     }
     out
@@ -953,7 +962,7 @@ pub fn toolpath_lines(state: &State) -> Vec<[f32; 6]> {
     for (name, entity) in camcraft_app::setup::operation_order(&state.world) {
         // Browser-eye hidden: the cache still exists and still posts, it
         // just does not draw (display state, never a geometry change).
-        if state.hidden_paths.contains(&name) {
+        if state.hidden_paths.contains(&name) || state.op_hidden_by_setup(&name) {
             continue;
         }
         let Some(cache) = model::toolpath_of(&state.world, &entity) else {

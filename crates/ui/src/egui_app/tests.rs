@@ -79,6 +79,7 @@ fn empty_egui_meshes_are_filtered_before_gpu_submission() {
 }
 
 mod face_origin;
+mod geo_row_hover;
 mod spindle_row;
 mod stock_size;
 mod setup_settings_page;
@@ -120,6 +121,8 @@ mod mcp_live;
 mod setup_post_options;
 // #821: the raised-rotary rows of a setup's Machine page.
 mod setup_rotary;
+// #1494: the setup eye (display only).
+mod setup_eye;
 // #155: Pause / Home entries in the operation list.
 mod program_entry;
 // #371: the tool editor's Body section.

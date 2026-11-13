@@ -100,6 +100,13 @@ pub struct Approach {
     /// turn when `0`) runs tangentially onto the first pass. `false` -
     /// the default - descends onto the pass start itself, as before.
     pub arc_xy: bool,
+    /// Enter down holes an earlier drilling operation opened (#1449, the
+    /// 2-D pocket only): where the application has PROVED a hole open
+    /// under the tool's disc to a level's depth, the level's entry is a
+    /// straight plunge down it instead of the chosen helix or ramp. The
+    /// holes themselves ride the generator call, never this flag.
+    /// `false` - the default - never reads a hole.
+    pub predrilled: bool,
     /// Height above the material (mm) a plunge rapids down to before it
     /// feeds (held under the retract plane); also where an angle-bounded
     /// ramp starts on the first level. `0` feeds the whole way from the
@@ -145,6 +152,12 @@ pub struct Approach {
     /// name. `None` - every earlier file - keeps the automatic seam.
     /// Only the closed contour reads it; every other kind refuses it.
     pub start_point: Option<crate::geo2d::Point2>,
+    /// The user's exit point (#1473, model XY in mm): the closed 2D
+    /// contour ring nearest it is cut all the way round, then on along
+    /// itself to the pick's projection, where the lead-out leaves - or
+    /// the operation is refused by name. `None` - every earlier file -
+    /// leaves at the seam (or after the overlap).
+    pub exit_point: Option<crate::geo2d::Point2>,
     /// Can the tool plunge axially into solid (M11.3, the user's safety
     /// call)? Not a saved parameter: the application lays the tool's own
     /// `center_cutting` over it for each generation, so a stored op
@@ -198,6 +211,7 @@ impl Approach {
         arc_radius: 0.0,
         arc_sweep: 0.0,
         arc_xy: false,
+        predrilled: false,
         plunge_height: DEFAULT_PLUNGE_HEIGHT,
         ramp_feed: 0.0,
         plunge_feed: 0.0,
@@ -212,6 +226,7 @@ impl Approach {
         axis_tol: DEFAULT_AXIS_TOL,
         compensation: Compensation::Computer,
         start_point: None,
+        exit_point: None,
         center_cutting: true,
     };
 
@@ -270,6 +285,9 @@ impl Approach {
         let coord = |v: f64| v.is_finite() && v.abs() <= 1.0e6;
         if self.start_point.is_some_and(|q| !(coord(q.x) && coord(q.y))) {
             return Err("the start point must be two finite coordinates within 1 km of the origin");
+        }
+        if self.exit_point.is_some_and(|q| !(coord(q.x) && coord(q.y))) {
+            return Err("the exit point must be two finite coordinates within 1 km of the origin");
         }
         Ok(())
     }

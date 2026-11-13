@@ -52,6 +52,14 @@ pub fn contour_along_chain(
             q.x, q.y
         )));
     }
+    if let Some(q) = p.links.approach.exit_point {
+        // #1473: likewise an open run leaves at its other end.
+        return Err(GenError::Invalid(format!(
+            "exit point ({:.3}, {:.3}): an open chain leaves at its end - a picked exit is \
+             taken only on closed contours yet; clear the exit point",
+            q.x, q.y
+        )));
+    }
     let poly: Vec<Point2> = if p.climb {
         pts.to_vec()
     } else {
