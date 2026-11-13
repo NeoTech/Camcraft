@@ -20,6 +20,7 @@ liveTooling = true;  // voices PARAM LiveTool sections (issue #33): the engine r
 threadHands = true;  // reads PARAM SpindleDirection (#629): the engine refuses a reverse-spindle thread for a post without it
 workOffsetIndex = true; // reads PARAM WorkOffset as the 1-based offset number (#931)
 workOffsetMax = 6;      // G54..G59; extended offsets not verified for this control (#931)
+programUnits = "mm inch"; // #902 / #977: writes the document's unit (postOptions.Units), G21 / G20
 
 // Determinism law: no timestamps, no randomness - the same stream
 // always posts to the same text (golden files depend on it).
@@ -41,6 +42,19 @@ workOffsetMax = 6;      // G54..G59; extended offsets not verified for this cont
 //    it.
 //    A move with BOTH in-plane coordinates off the axis is off every
 //    meridian - milling work - and is refused by name, never projected.
+//  - UNITS from the document (#902, #977): G21, or G20 with every value
+//    in its inch unit - the stream stays mm and is converted only where
+//    a word is written. Lengths (X diameter, Z, I K, G76 R, the tool
+//    note) / 25.4 at four decimals; per-rev feeds in in/rev at four; a
+//    thread lead in inches at six (an inch lead such as 13 TPI needs
+//    them, and a rounded lead accumulates along the thread); the
+//    no-point increment words (G76 P Q, G83 Q) in the inch least
+//    increment, 0.0001 in, where mm counts microns; G96 S in surface
+//    feet per minute (m/min / 0.3048). Rpm (G97 S, G50 S), dwell ms,
+//    angles and the G76 P(m)(r)(a) counts never scale. A C-axis
+//    live-tool section is refused on an inch program: its composite
+//    rotary feed law was not confirmed for inch input from the public
+//    manuals, so it is never guessed.
 //  - G97 constant rpm, from the stream's SpindleSpeed; G96 constant
 //    surface speed ONLY when the stream states a SurfaceSpeed (m/min)
 //    PARAM - the post never invents a surface speed from an rpm. G50
@@ -48,6 +62,11 @@ workOffsetMax = 6;      // G54..G59; extended offsets not verified for this cont
 //    and again before a G96 section whose tool states a lower max rpm
 //    (PARAM MaxSpindleSpeed, #891). A G96 with neither clamp stated is
 //    refused by name - unclamped CSS runs away toward the centre.
+//    A section that posted G96 cancels it at its end (G97 after M05,
+//    #1173), so every section opens under G97 unless it states G96
+//    itself: a live tool's, a drill's or a thread's S is read as rpm,
+//    whatever kind of section follows, and the program never ends -
+//    or hands the next program - a constant-surface-speed mode.
 //  - G99 feed per revolution: F = mm/min / rpm, so the cut speed the
 //    generator planned is the cut speed the control runs. No rpm, no
 //    per-rev feed - refused by name.
@@ -77,8 +96,9 @@ workOffsetMax = 6;      // G54..G59; extended offsets not verified for this cont
 //      G76 X(root dia) Z(end) P(k) Q(first depth) F(lead)
 //    m = finishing passes (1 + the record's spring passes), r = pull-out
 //    in tenths of the lead, a = infeed angle (0 radial, 29 30 55 60 80),
-//    dmin / k / first depth radius values in whole microns, d the finish
-//    allowance in mm; the explicit passes inside the record are skipped.
+//    dmin / k / first depth radius values in whole microns (0.0001 in
+//    under G20), d the finish allowance in the program's unit; the
+//    explicit passes inside the record are skipped.
 //    A straight external thread only; a record out of range, or thread
 //    passes with no record, is refused by name - never posted as G32.
 //  - Face cycles: G83 (Q peck in whole microns, the 0i-T word; P dwell
@@ -128,6 +148,7 @@ var sRpm = 0;              // S/M3 waits for the section (PARAMs, TOOL, SECTION 
 var sCss = 0;              // SurfaceSpeed PARAM (m/min), 0 = none stated
 var sMax = 0;              // MaxSpindleSpeed PARAM (#891): the tool's own rpm ceiling, 0 = none
 var clampS = 0;            // the G50 S in force (#891), 0 = none posted yet
+var cssOn = false;         // this section posted G96: its end cancels it (#1173)
 var spindleWait = false;
 var toolWait = false;
 var tNo = 0;
@@ -155,23 +176,26 @@ var lastR = 0, lastZ = 0;  // ... and the station radius / Z it stood at
 var liveCRate = 0;         // the machine's stated C rate (deg/min), 0 = unstated
 var liveCTravel = false;   // the machine states a C travel (#906)
 var C_TOL = 0.005;         // mm a C-turned tip may stand off the station (lattice + milli-degree words)
+var inch = false;          // the document's unit is inch (onOpen, #902/#977: postOptions.Units)
 
 // ------------------------------------------------------------ helpers
 function has(v) { return v !== null && v !== undefined && isFinite(v); }
 function pad2(n) { n = Math.round(Number(n) || 0); return n < 10 ? "0" + n : String(n); }
-function fu(v) {  // mm at three decimals, trailing zeros trimmed
+// The stream is mm; a word is converted to the program's unit only here.
+function len(v) { return inch ? Number(v) / 25.4 : Number(v); }
+function fixed(v, dp) {  // dp decimals, trailing zeros trimmed
   if (!has(v)) return "0";
-  var s = Number(v).toFixed(3);
+  var s = Number(v).toFixed(dp);
   if (s.indexOf(".") >= 0) s = s.replace(/0+$/, "").replace(/\.$/, "");
   return s === "-0" ? "0" : s;
 }
-function fr(v) {  // mm/rev at four decimals, trailing zeros trimmed
-  if (!has(v)) return "0";
-  var s = Number(v).toFixed(4);
-  if (s.indexOf(".") >= 0) s = s.replace(/0+$/, "").replace(/\.$/, "");
-  return s === "-0" ? "0" : s;
-}
-function um(v) { return String(Math.round(Number(v) * 1000)); } // whole microns, no point
+function fu(v) { return has(v) ? fixed(len(v), inch ? 4 : 3) : "0"; }  // a length: mm at three, inch at four
+function fr(v) { return has(v) ? fixed(len(v), 4) : "0"; }             // a feed per rev: mm/rev or in/rev at four
+function fl(v) { return has(v) ? fixed(len(v), inch ? 6 : 4) : "0"; }  // a thread lead: mm at four, inch at six
+// A no-point increment word (G76 P Q, G83 Q): whole microns under G21,
+// whole ten-thousandths of an inch (the inch least increment) under G20.
+function incr(v) { return Math.round(inch ? Number(v) / 25.4 * 10000 : Number(v) * 1000); }
+function um(v) { return String(incr(v)); }
 function ff(v) { return has(v) && v > 0 ? String(Math.round(v)) : "0"; }
 function block(words) {
   var a = [];
@@ -203,7 +227,9 @@ function zWord(z) { return has(z) ? "Z" + fu(z - orgZ) : ""; }
 function feedWord(f) {
   if (!has(f) || f <= 0) return "";                                  // modal feed stands
   if (!(sRpm > 0)) { refuse("feed per revolution needs a spindle speed - none stated"); return ""; }
-  return "F" + fr(f / sRpm);
+  var w = fr(f / sRpm);
+  if (w === "0") { refuse("feed per revolution under the program's least increment (F0) - refused, never posted as no feed"); return ""; }
+  return "F" + w;
 }
 function posed(p) {
   if (has(p.A) || has(p.B) || has(p.C)) {
@@ -221,7 +247,7 @@ function posed(p) {
 // flood code: refused by name (#150), never posted as mist or dry. An
 // unstated list stays silent (the unstated-limit law). M9 (stop) is
 // the RS-274 fixed pair.
-var COOLANT_KINDS = ["flood", "mist", "through-spindle", "through-tool"];
+var COOLANT_KINDS = ["flood", "mist", "air", "air-blast", "through-spindle", "through-tool"];
 function coolantWho() { return coolantOp ? "operation " + coolantOp + ": " : ""; }
 function coolantCode() {
   var cs = (typeof machine !== "undefined" && machine.coolants) || [];
@@ -239,14 +265,14 @@ function coolantCode() {
 }
 
 // The op's coolant ask (#112): the stream says nothing for flood (every
-// older stream), or carries PARAM Coolant off / mist / through-tool. The
+// older stream), or carries PARAM Coolant off / mist / air (#869) / through-tool. The
 // code is the machine's own entry of that family - the machine is truth;
 // an ask the machine states no code for is refused by name, naming the
 // operation (#150), never silently posted dry.
 function coolantFor(ask) {
   if (ask === "off") return "";
   if (!ask || ask === "flood") return coolantCode();
-  var want = ask === "mist" ? ["mist"] : (ask === "through-tool" ? ["through-spindle", "through-tool"] : []);
+  var want = ask === "mist" ? ["mist"] : (ask === "air" ? ["air", "air-blast"] : (ask === "through-tool" ? ["through-spindle", "through-tool"] : []));
   if (want.length === 0) { msg(coolantWho() + "unknown coolant ask " + ask); return ""; }
   var cs = (typeof machine !== "undefined" && machine.coolants) || [];
   for (var i = 0; i < cs.length; i++) {
@@ -260,12 +286,27 @@ function coolantFor(ask) {
 }
 
 // -------------------------------------------------------------- header
-// The program's O-word (#111): O0001 for the whole job, and one file
-// per operation counts up (the engine's programNumber); a host that
-// publishes none posts O0001.
+// The document's program identity (#258), from the engine's `program`
+// global: its number (1 when the document states none; one file per
+// operation counts up from it, #111), whether the document stated it,
+// and its program comment ("" for none - the header then names the
+// machine, as before #258). A host that publishes none posts O0001.
+function progNo() {
+  var n = typeof program !== "undefined" ? program.number : (typeof programNumber !== "undefined" ? programNumber : 1);
+  return Math.round(Number(n) || 1);
+}
+function progNumbered() { return typeof program !== "undefined" && program.numbered === true; }
+function progComment() { return clean(typeof program !== "undefined" ? program.comment : ""); }
+// The program's O-word (#111, #258). FANUC's published
+// operator's manuals (Series 0i-F, "program number") give a program
+// number of O0001-O9999, four digits (the 8-digit program number is
+// an option this post does not assume).
+// A number outside the range is refused by name, never clamped onto
+// another program's number.
 function oWord() {
-  var n = typeof programNumber !== "undefined" ? Math.round(Number(programNumber) || 1) : 1;
-  var t = String(Math.max(1, Math.min(n, 9999)));
+  var n = progNo();
+  if (n < 1 || n > 9999) throw new Error("program number " + n + " is outside O0001-O9999, the control's program numbers");
+  var t = String(n);
   while (t.length < 4) t = "0" + t;
   return "O" + t;
 }
@@ -323,10 +364,11 @@ function toolNote() {  // just before the tool change it describes
 function onOpen() {
   var nm = (typeof machine !== "undefined" && machine.name) || "CAMCRAFT";
   writeln("%");
-  // #594: the name is user text from the machine file - cleaned like
-  // every other comment text, so `Tormach 770MX (ML)` never nests.
-  block([oWord(), "(" + (clean(nm) || "CAMCRAFT") + ")"]);
-  block(["G21", "G18", "G40", "G80", "G99"]);   // mm, ZX plane, no nose comp, feed/rev
+  // #594: the machine name is user text - cleaned like every other
+  // comment text, so `Tormach 770MX (ML)` never nests.
+  block([oWord(), "(" + (progComment() || clean(nm) || "CAMCRAFT") + ")"]);
+  inch = typeof postOptions !== "undefined" && postOptions.Units === "inch";
+  block([inch ? "G20" : "G21", "G18", "G40", "G80", "G99"]);   // unit, ZX plane, no nose comp, feed/rev
 }
 
 // Cutter compensation in the control (M13.11): on a lathe G41/G42 is
@@ -416,7 +458,9 @@ function startPreamble() {
       if (!(cap > 0)) refuse(UNCLAMPED);
       else {
         if (cap !== clampS) { block(["G50", "S" + ff(cap)]); clampS = cap; }   // a tool rated under the machine (#891)
-        block(["G96", "S" + ff(sCss), m]);
+        // G96 S is m/min under G21, surface feet per minute under G20.
+        block(["G96", "S" + ff(inch ? sCss / 0.3048 : sCss), m]);
+        cssOn = true;
       }
     } else {
       // A tool's lower clamp is lifted back to the machine's before a
@@ -467,6 +511,9 @@ function endPreamble() {
   sCss = 0;                  // and its own spindle mode: no stale G96 (#772)
   sMax = 0;                  // and its own clamp (#891)
   if (liveAsk) {
+    // The live tool and the C axis are released before the op's stop or
+    // trip home (#1188): the operator never meets a driven tool still
+    // turning, and the home move never drags an engaged C.
     if (liveOk) {
       block([liveCodes.spindleOff]);
       block([liveCodes.cAxisOff]);
@@ -474,17 +521,23 @@ function endPreamble() {
     }
     liveAsk = false; liveOk = false; liveCodes = null; lastC = null;
     spindleWait = false;
-    return;
+  } else {
+    block(["M05"]);
+    if (cssOn) block(["G97"]); // #1173: no section opens under a G96 it did not state
+    cssOn = false;
+    spinRev = false;           // the next section states its own
   }
-  block(["M05"]);
-  spinRev = false;           // the next section states its own
-  afterOp();
+  afterOp();                 // #1188: every section ends with its own ask, live or not
 }
 
 // --------------------------------------------- C-axis live tooling (#33)
 // Engage the section: the machine's words, or a refusal by name.
 function liveStart() {
   spindleWait = false;
+  if (inch) {
+    refuse(coolantWho() + "C-axis live-tool work on an inch program - the composite C feed law under G20 is not confirmed for this control; post the document in mm");
+    return;
+  }
   var m = (typeof machine !== "undefined") ? machine : {};
   var lt = m.liveTool;
   var ok = lt && lt.cAxisOn && lt.cAxisOff && lt.spindleOn && lt.spindleOff;
@@ -577,6 +630,13 @@ function liveMove(p, rapid) {
     block(["G01", xWord(r), zWord(p.Z), "C" + fc(p.C), "F" + fm(fc_)]);
   }
   lastC = Number(p.C); lastR = r; lastZ = p.Z;
+}
+
+// The bar feeder's advance (the engine's default comment) in the
+// program's unit: mm unchanged, inch named so the number is not read as mm.
+function onPartLoading() {
+  var a = properties.Advance;
+  writeComment("PART LOAD" + (a > 0 ? " ADVANCE " + (inch ? fu(a) + " IN" : fu(a)) : ""));
 }
 
 function onSection() { seatKnown = false; startPreamble(); }
@@ -677,7 +737,7 @@ function threadHalfTurn(p) {
     refuse("thread half-turn turns " + (cw ? "clockwise" : "counter-clockwise") + " seen from +Z but the spindle runs " + (spinRev ? "M04" : "M03") + " - it would cut the other hand; regenerate the thread");
     return;
   }
-  block(["G32", zWord(p.Z), "F" + fr(lead)]);
+  block(["G32", zWord(p.Z), "F" + fl(lead)]);
 }
 
 function onCircular() {
@@ -711,6 +771,7 @@ function g76Why(p, r0, r1) {
   var r = Math.round(10 * p.PullOut / p.Lead);
   if (!(p.PullOut >= 0) || r > 99 || Math.abs(r * p.Lead / 10 - p.PullOut) > EPS) return "pull-out is not 0..9.9 leads in tenths";
   if (!(p.MinorDiameter < p.MajorDiameter)) return "not an external thread (minor diameter at or over the major)";
+  if (incr(p.MinimumDepth) < 1 || incr(p.ThreadHeight) < 1 || incr(p.FirstDepth) < 1) return "a depth under the program's least increment";
   if (!(r0 * r1 > 0)) return "start and end stand on different sides of the axis";
   if (Math.abs(2 * Math.abs(r1) - p.MinorDiameter) > 2 * EPS) return "the end point does not stand on the minor diameter";
   if (!(Math.abs(r0) > p.MajorDiameter / 2)) return "the start point stands inside the crest";
@@ -744,7 +805,7 @@ function onThreadCycle() {
   var r = Math.round(10 * p.PullOut / p.Lead);
   block(["G00", xWord(r0), zWord(p.Z)]);
   block(["G76", "P" + pad2(m) + pad2(r) + pad2(Math.round(p.InfeedAngle)), "Q" + um(p.MinimumDepth), "R" + fu(p.FinishAllowance)]);
-  block(["G76", xWord(r1), zWord(p.EndZ), "P" + um(p.ThreadHeight), "Q" + um(p.FirstDepth), "F" + fr(p.Lead)]);
+  block(["G76", xWord(r1), zWord(p.EndZ), "P" + um(p.ThreadHeight), "Q" + um(p.FirstDepth), "F" + fl(p.Lead)]);
   inThread = true;
 }
 function onThreadCycleEnd() { inThread = false; threadSeen = false; }
@@ -804,10 +865,16 @@ function onCycle() {
   if (p.CycleType === "TAP") g = "G84";
   else if (p.CycleType === "BORE") g = "G85";
   else if (p.CycleType === "BACKBORE") { refuse("back-boring cycle - no such face cycle on a 2-axis lathe"); return; }
+  // #1357: the cycle feeds at its own F word; with none the control
+  // drills at whatever feed was last modal - refused by name.
+  if (!(has(p.FeedRate) && p.FeedRate > 0)) {
+    refuse("canned cycle " + g + " has no feed rate - refused: without F the control drills at whatever feed was last modal");
+    return;
+  }
   if (!cycleSeat(p, r)) return;
   var words = [g, zWord(p.Z)];
   if ((p.CycleType === "PECK" || p.CycleType === "DEEP") && has(p.Q) && p.Q > 0) {
-    words.push("Q" + Math.round(p.Q * 1000));    // whole microns, no decimal point
+    words.push("Q" + um(p.Q));                    // whole microns (G21) / 0.0001 in (G20), no decimal point
   }
   if (ms > 0 && g !== "G84") words.push("P" + ms);
   words.push(feedWord(p.FeedRate));
