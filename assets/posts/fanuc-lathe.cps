@@ -886,6 +886,7 @@ function onCycle() {
   var g = "G83";
   if (p.CycleType === "TAP") g = "G84";
   else if (p.CycleType === "BORE") g = "G85";
+  else if (p.CycleType === "REAM") g = "G85";   // #1445: feed in, feed out at F
   else if (p.CycleType === "BACKBORE") { refuse("back-boring cycle - no such face cycle on a 2-axis lathe"); return; }
   // #1357: the cycle feeds at its own F word; with none the control
   // drills at whatever feed was last modal - refused by name.
