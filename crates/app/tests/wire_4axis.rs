@@ -166,6 +166,9 @@ fn wire_op(four_axis: Option<WireFourAxis>) -> WireContourOp {
         condition: "C110".into(),
         side: WireSide::Punch,
         start: Some([-30.0, 0.0]),
+        tabs: None,
+        // The punch drops into a stated capture (#539's hold law).
+        capture: true,
         taper_deg: 0.0,
         burnout: None,
         clearance: camcraft_app::operation::DEFAULT_CLEARANCE,
