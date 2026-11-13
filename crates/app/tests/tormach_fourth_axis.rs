@@ -112,6 +112,9 @@ fn head() -> Vec<cnc::Record> {
 /// way every prismatic dump reads).
 fn face_section(recs: &mut Vec<cnc::Record>, name: &str, a: f64) {
     recs.push(cnc::Record::Param { name: "OperationName".into(), value: json!(name) });
+    // #1357: every section states its speed, as `post::dump` does - each
+    // section ends M5, and a cut with the spindle stopped is refused.
+    recs.push(cnc::Record::Param { name: "SpindleSpeed".into(), value: json!(6000) });
     recs.push(cnc::Record::Section { begin: true });
     for (k, l, f) in face_local() {
         let abc = (a != 0.0).then_some([a, 0.0, 0.0]);

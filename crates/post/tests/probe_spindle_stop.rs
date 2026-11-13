@@ -51,6 +51,9 @@ fn post(stem: &str, rpm: f64) -> String {
         op_name: "Probe1",
         tool_number: 99,
         tool_name: "PROBE-4",
+        // A touch probe states its kind (posting.rs does): Tormach exempts
+        // a 0-rpm section from the spindle refusal only for a probe (#1357).
+        tool_kind: if rpm > 0.0 { "" } else { "touch probe" },
         tool_diameter: 4.0,
         rpm,
         clearance_z: 50.0,

@@ -158,4 +158,8 @@ fn a_cutter_hand_against_the_spindle_and_other_nonsense_are_refused_by_name() {
     assert!(err_of(&fine).contains("raise the infeed"), "{}", err_of(&fine));
     let nan = params(false, ThreadPasses { finish: f64::NAN, ..ThreadPasses::default() });
     assert!(err_of(&nan).contains("finite"), "{}", err_of(&nan));
+    // A negative finish would rough past depth - allowance: the last
+    // roughing pass overshoots the thread depth, a gouge.
+    let under = params(false, ThreadPasses { finish: -0.05, ..ThreadPasses::default() });
+    assert!(err_of(&under).contains("finishing pass depth cannot be negative"), "{}", err_of(&under));
 }
