@@ -23,6 +23,7 @@ use flecs_ecs::prelude::World;
 use camcraft_app::commands::{CommandError, CreateOperation, GenerateOperation, History, ImportModel, LoadMachine, SetToolBody};
 use camcraft_app::geometry::import::step;
 use camcraft_app::operation::{Height, OpParams, SrcRef};
+use camcraft_app::schema::PostRef;
 use camcraft_app::tool_body::{self, BodyFrame};
 use camcraft_app::tool_body_lathe_view::{self, FrameChoice};
 use camcraft_app::tools::ToolKind;
@@ -93,6 +94,8 @@ fn a_step_lathe_holder_placed_off_its_model_frame_is_judged_and_its_mirror_stand
     let (world, mut history) = od_world();
     let path = testdata("lathe_holder_offset.step");
     history.execute(&world, CreateOperation::new(&world, "F1", INSERT, SrcRef::Entity("step".into()), finish()).expect("create"));
+    // #1232: the setup's post must serve turning; the default milling post is refused by name.
+    posting::post_set(&world, &PostRef::Named("Fanuc Lathe".into()));
     regen(&world, &mut history, "F1");
     let bare = cache(&world, "F1").expect("cached");
     assert!(holder_hits(&bare.warnings).is_empty(), "{:?}", bare.warnings);
