@@ -15,13 +15,14 @@
 
 use flecs_ecs::prelude::World;
 
-use camcraft_app::commands::{CreateOperation, GenerateOperation, History, ImportModel, LoadMachine, SetStock};
+use camcraft_app::commands::{CreateOperation, EditOperationParams, GenerateOperation, History, ImportModel, LoadMachine, SetStock};
 use camcraft_app::geo2d::Point2;
 use camcraft_app::geometry::{Mesh, Point3, Triangle};
 use camcraft_app::machine::parse_mch;
 use camcraft_app::model;
 use camcraft_app::operation::{Height, OpParams, SrcRef, WireContourOp, WireSide, WireTabs};
 use camcraft_app::posting::{self, BUILTINS};
+use camcraft_app::project;
 use camcraft_app::schema::Location;
 use camcraft_app::stock::StockShape;
 use camcraft_app::world::new_world;
@@ -192,4 +193,56 @@ fn missing_or_impossible_tab_parameters_are_refused_by_name() {
         let err = refusal(die(Some(tabs), false));
         assert!(err.contains(want), "want {want:?}, got: {err}");
     }
+}
+
+/// #539 x #536: the tapered builder reads the top-plane path as one
+/// closed ring and a tabbed path is not one, so tabs with a taper are
+/// refused by name - at creation, at a params edit and at generation (a
+/// file that states both) - never refused only by accident of the
+/// geometry. Tabs with taper 0 still generate.
+#[test]
+fn tabs_with_a_taper_are_refused_by_name_at_every_door() {
+    let why = "tabs can't be combined with a taper yet (a 2.000 degree taper is asked) - remove the tabs or set the taper to 0";
+    let tapered = WireContourOp { taper_deg: 2.0, ..die(Some(two_tabs()), false) };
+    // Creation.
+    let world = new_world();
+    let m = parse_mch(&machine()).expect("the fixture parses");
+    let mut h = History::default();
+    h.execute(&world, LoadMachine::new(&world, "wire-iso.mch".into(), Some(m)).expect("mount"));
+    h.execute(&world, ImportModel::from_mesh("opening", opening()));
+    let err = CreateOperation::new(&world, "Die1", "", SrcRef::Entity("opening".into()), OpParams::WireContour(tapered.clone()))
+        .err()
+        .expect("refused at creation")
+        .to_string();
+    assert!(err.contains(why), "{err}");
+    // A params edit onto an untapered tabbed die.
+    let world = generated(die(Some(two_tabs()), false));
+    let err = EditOperationParams::new(&world, "Die1", OpParams::WireContour(tapered)).err().expect("refused at the edit").to_string();
+    assert!(err.contains(why), "{err}");
+    // Generation: a file that states both reaches no command door.
+    let file = std::env::temp_dir().join(format!("camcraft-539-taper-{}.ccam", std::process::id()));
+    project::save(&world, &file).expect("save");
+    let text = std::fs::read_to_string(&file).expect("read back");
+    let mut v: serde_json::Value = serde_json::from_str(&text).expect("project json");
+    fn lean(v: &mut serde_json::Value) -> bool {
+        match v {
+            serde_json::Value::Object(m) => match m.get_mut("wire_contour") {
+                Some(w) => {
+                    w["taper_deg"] = serde_json::json!(2.0);
+                    true
+                }
+                None => m.values_mut().any(lean),
+            },
+            serde_json::Value::Array(a) => a.iter_mut().any(lean),
+            _ => false,
+        }
+    }
+    assert!(lean(&mut v), "the file states the wire contour");
+    std::fs::write(&file, v.to_string()).expect("write");
+    let back = new_world();
+    let loaded = project::load(&back, &file);
+    let _ = std::fs::remove_file(&file);
+    loaded.expect("load");
+    let err = GenerateOperation::new(&back, "Die1").err().expect("refused at generation").to_string();
+    assert!(err.contains("Die1") && err.contains(why), "{err}");
 }

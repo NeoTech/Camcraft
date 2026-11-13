@@ -231,6 +231,20 @@ pub fn wire_params(
     })
 }
 
+/// Tabs with a taper (#539 x #536), refused by name at the command
+/// door and at generation: the tapered builder reads the top-plane path
+/// as one closed ring, and a tabbed path is not one. `None` when the
+/// op states no tabs or no taper.
+#[must_use]
+pub fn tabs_taper_refusal(op: &WireContourOp) -> Option<String> {
+    (op.tabs.is_some() && op.taper_deg != 0.0).then(|| {
+        format!(
+            "wire contour: tabs can't be combined with a taper yet (a {:.3} degree taper is asked) - remove the tabs or set the taper to 0",
+            op.taper_deg
+        )
+    })
+}
+
 /// Generate: `picks` is the picked profile (closed rings, open runs)
 /// when the source is a selection; otherwise `base` - the model's
 /// through-silhouette - is the profile. `stock` is read only for an
@@ -267,7 +281,14 @@ pub(super) fn generate_wire(
             )))
         }
         Some(clearance) => wire_burnout(&loops, &chains, &p, clearance)?,
-        None => wire_contour_tapered(&loops, &chains, &p, &taper)?,
+        // #539 x #536: the tapered builder reads one closed ring; a
+        // tabbed path is not one, so the pair is refused by name.
+        None => {
+            if let Some(why) = tabs_taper_refusal(op) {
+                return Err(GenError::Invalid(why));
+            }
+            wire_contour_tapered(&loops, &chains, &p, &taper)?
+        }
     };
     Ok((path, Vec::new()))
 }
