@@ -121,9 +121,10 @@ pub struct GenJob {
     pub(super) carried_overhang: Option<super::carried_stock::Overhang>,
     /// #532: the machine condition a wire EDM kind cuts with (its wire
     /// and gap); `None` for every kind that mounts a library tool.
-    pub(super) wire: Option<super::wire_op::WireCondition>,
+    pub(super) wire: Option<(super::wire_op::WireCondition, Option<super::wire_op::WireCondition>)>,
     /// #537: a 4-axis wire cut's two picked profiles.
     pub(super) wire_ruled: Option<Result<super::wire_ruled::RuledPicks, GenError>>,
+
     /// #541: a sinker burn's spark gap, read from its setup's machine
     /// condition (`sinker_op::condition_gap`); `None` for every other kind.
     pub(super) sinker_gap: Option<Result<f64, String>>,
@@ -157,7 +158,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
     let wire = super::wire_op::job_wire(world, op)?;
     // Tool: the diameter drives the path, the body drives the reach law.
     let (tool, body, lathe_body, neck) = match &wire {
-        Some(cond) => (super::wire_op::job_tool(cond), None, None, Vec::new()),
+        Some((cond, _)) => (super::wire_op::job_tool(cond), None, None, Vec::new()),
         None => super::tool_gate::job_tool(world, op)?,
     };
     let setup = op.setup.as_deref();

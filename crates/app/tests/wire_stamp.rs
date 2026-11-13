@@ -10,8 +10,12 @@
 //! move the stamp, and so does the machine's maximum taper; a one-profile
 //! cut's stamp is pinned to the value main's arm gives.
 //!
-//! Gate map (#1370, #537): covers app::operation (params' stamp_with wire
-//! arm, wire_ruled::digest, stamp, wire_op::stamp_condition),
+//! #539: a tabbed cut's stamp digests every tab word and the cut-off
+//! condition's id, wire and gap, so an edited tab never posts a stale
+//! path.
+//!
+//! Gate map (#1370, #537, #539): covers app::operation (params' stamp_with
+//! wire arm, wire_ruled::digest, stamp, wire_op::stamp_condition),
 //! app::commands (operation edit and generate), app::project
 //! (wire_edm_dto save / load).
 //! Provenance: our own tests over our own synthetic fixture (the
@@ -25,7 +29,7 @@ use camcraft_app::machine::parse_mch;
 use camcraft_app::model;
 use camcraft_app::operation::{
     self, FeatureSel, GenStamp, GeoSel, Height, OpParams, OpStatus, SrcRef, WireContourOp, WireFourAxis, WirePairingRule,
-    WireSide, WireSyncPair,
+    WireSide, WireSyncPair, WireTabs,
 };
 use camcraft_app::project;
 use camcraft_app::schema::Location;
@@ -55,9 +59,11 @@ fn wire_op(side: WireSide, start: Option<[f64; 2]>) -> WireContourOp {
         condition: "C110".into(),
         side,
         start,
-        burnout: None,
+        tabs: None,
+        capture: false,
         taper_deg: 0.0,
         four_axis: None,
+        burnout: None,
         clearance: operation::DEFAULT_CLEARANCE,
     }
 }
@@ -286,4 +292,63 @@ fn the_machines_maximum_taper_moves_a_4_axis_cuts_stamp() {
     assert_ne!(stamp_of(&world, cut), before, "a 4-axis cut reads the machine's maximum taper");
     assert_eq!(stamp_of(&world, plain), plain_before, "a vertical cut never reads it");
     assert_eq!(status(&world, "Punch1"), OpStatus::Ok, "the generated vertical punch stays Ok");
+}
+
+/// The fixture plus the tab cut-off's SYNTHETIC conditions: C120 of
+/// `wire` and `gap`, and C130 always of the main cut's 0.25 / 0.04.
+fn tabbed_world(wire: f64, gap: f64) -> World {
+    let mut v: serde_json::Value = serde_json::from_str(FIXTURE).expect("fixture json");
+    let conds = v["edm"]["conditions"].as_array_mut().expect("conditions");
+    conds.push(serde_json::json!({ "id": "C120", "name": "synthetic cut-off", "gap": gap, "wire_diameter": wire, "role": "rough", "notes": "SYNTHETIC" }));
+    conds.push(serde_json::json!({ "id": "C130", "name": "synthetic cut-off b", "gap": 0.04, "wire_diameter": 0.25, "role": "rough", "notes": "SYNTHETIC" }));
+    let world = new_world();
+    let mut h = History::default();
+    let m = parse_mch(&v.to_string()).expect("the fixture parses");
+    h.execute(&world, LoadMachine::new(&world, "wire-iso.mch".into(), Some(m)).expect("mount"));
+    h.execute(&world, ImportModel::from_mesh("part", prism(&[(0.0, 0.0), (60.0, 0.0), (60.0, 50.0), (0.0, 50.0)])));
+    world
+}
+
+fn tabbed(t: WireTabs) -> WireContourOp {
+    WireContourOp { tabs: Some(t), ..wire_op(WireSide::Punch, Some([-10.0, 25.0])) }
+}
+
+fn two_tabs() -> WireTabs {
+    WireTabs { count: Some(2), width: Some(1.0), at: vec![[0.0, 25.0], [60.0, 25.0]], cutoff_condition: "C120".into() }
+}
+
+/// Done means (#539 review): each tab word alone - the count, the width,
+/// a position (x or y), one more position, the cut-off condition's id
+/// (C130 states the same wire and gap as C120, so only the id tells
+/// them apart) - and the cut-off condition's wire or gap as the machine
+/// states it, each moves the stamp; so an edited tab marks its path
+/// Stale and the old one never posts as the new cut.
+#[test]
+fn every_tab_word_and_the_cut_off_wire_and_gap_move_the_stamp() {
+    let world = tabbed_world(0.25, 0.04);
+    let base = stamp_of(&world, tabbed(two_tabs()));
+    assert!(base.is_some());
+    assert_eq!(base, stamp_of(&world, tabbed(two_tabs())), "the stamp is a function of the cut");
+    assert_ne!(base, stamp_of(&world, wire_op(WireSide::Punch, Some([-10.0, 25.0]))), "tabs off");
+    let t = two_tabs;
+    for (what, tabs) in [
+        ("count", WireTabs { count: Some(3), ..t() }),
+        ("count unset", WireTabs { count: None, ..t() }),
+        ("width", WireTabs { width: Some(1.5), ..t() }),
+        ("width unset", WireTabs { width: None, ..t() }),
+        ("a position's x", WireTabs { at: vec![[0.5, 25.0], [60.0, 25.0]], ..t() }),
+        ("a position's y", WireTabs { at: vec![[0.0, 25.0], [60.0, 24.0]], ..t() }),
+        ("one more position", WireTabs { at: vec![[0.0, 25.0], [60.0, 25.0], [30.0, 0.0]], ..t() }),
+        ("the cut-off condition id", WireTabs { cutoff_condition: "C130".into(), ..t() }),
+    ] {
+        assert_ne!(base, stamp_of(&world, tabbed(tabs)), "{what} alone must move the stamp");
+    }
+    let wire = tabbed_world(0.3, 0.04);
+    assert_ne!(base, stamp_of(&wire, tabbed(two_tabs())), "the cut-off condition's wire alone must move the stamp");
+    let gap = tabbed_world(0.25, 0.05);
+    assert_ne!(base, stamp_of(&gap, tabbed(two_tabs())), "the cut-off condition's gap alone must move the stamp");
+    // The main condition is untouched across the three machines.
+    let plain = wire_op(WireSide::Punch, Some([-10.0, 25.0]));
+    assert_eq!(stamp_of(&world, plain.clone()), stamp_of(&wire, plain.clone()));
+    assert_eq!(stamp_of(&world, plain.clone()), stamp_of(&gap, plain));
 }

@@ -1243,6 +1243,7 @@ impl OpParams {
                 infeed,
                 feed,
                 plunge_feed,
+                infeed_plan,
                 hand,
             } => {
                 w(h, *tolerance);
@@ -1251,6 +1252,18 @@ impl OpParams {
                 wh(h, *bottom_z);
                 for v in [*pitch, *depth, *infeed, *feed, *plunge_feed] {
                     w(h, v);
+                }
+                // The infeed plan (#416) moves every pass - bytes only
+                // when it differs from the default, so every earlier
+                // thread keeps its digest (the approach precedent).
+                if *infeed_plan != crate::turning::ThreadInfeed::default() {
+                    h.write_u8(0xD4);
+                    h.write_u8(infeed_plan.method as u8);
+                    h.write_u8(infeed_plan.schedule as u8);
+                    h.write_u32(infeed_plan.spring_passes);
+                    for v in [infeed_plan.flank_angle, infeed_plan.min_depth, infeed_plan.finish_allowance] {
+                        w(h, v);
+                    }
                 }
                 // #629: the hand sets the helix's sense, and the passes
                 // now run toward the chuck - written for BOTH hands, so
@@ -1475,6 +1488,21 @@ impl OpParams {
                         w(h, y);
                     }
                     None => h.write_u8(0),
+                }
+                // #539: the tabs, only when stated, so no stamp of an
+                // untabbed cut moves. `capture` shapes no move and is
+                // read live at the post.
+                if let Some(t) = &p.tabs {
+                    h.write(b"tabs");
+                    h.write_u32(t.count.unwrap_or(u32::MAX));
+                    w(h, t.width.unwrap_or(f64::NAN));
+                    h.write_usize(t.at.len());
+                    for [x, y] in &t.at {
+                        w(h, *x);
+                        w(h, *y);
+                    }
+                    h.write(t.cutoff_condition.as_bytes());
+                    h.write_u8(0xff);
                 }
                 // #536: only a stated taper is digested, so every
                 // vertical cut's stamp stays what it was.

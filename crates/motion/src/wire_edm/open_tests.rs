@@ -24,6 +24,7 @@ fn params(side: WireSide) -> WireParams {
         plane_z: -12.0,
         stock: Some(plate()),
         clearance: 1.0,
+        tabs: None,
     }
 }
 
@@ -117,6 +118,10 @@ fn every_open_run_refusal_is_named() {
         .expect_err("refused")
         .to_string();
     assert!(why.contains("profile is closed") && why.contains("die or punch"), "{why}");
+    // Tabs on an open run (#539): refused by name, never silently dropped.
+    let tabs = TabParams { count: Some(1), width: Some(2.0), at: vec![Point2::new(60.0, 25.0)], cutoff: None };
+    let why = refusal(&line, &WireParams { tabs: Some(tabs), ..params(WireSide::Left) });
+    assert!(why.contains("tabs are stated on an open run"), "{why}");
 }
 
 /// #536 x #1109 (M3's review): a tapered open run is refused by name.

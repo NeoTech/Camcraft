@@ -928,6 +928,7 @@ impl ParamsDto {
                 infeed,
                 feed,
                 plunge_feed,
+                infeed_plan,
                 hand,
             } => ParamsDto::Threading {
                 tolerance: *tolerance,
@@ -939,6 +940,7 @@ impl ParamsDto {
                 infeed: *infeed,
                 feed: *feed,
                 plunge_feed: *plunge_feed,
+                infeed_plan: (*infeed_plan).into(),
                 hand: (*hand).into(),
             },
             // The contour kinds (M5.2 stage E): the promise-number
@@ -2095,6 +2097,7 @@ impl ParamsDto {
                 infeed,
                 feed,
                 plunge_feed,
+                infeed_plan,
                 hand,
             } => OpParams::Threading {
                 tolerance: *tolerance,
@@ -2106,6 +2109,7 @@ impl ParamsDto {
                 infeed: *infeed,
                 feed: *feed,
                 plunge_feed: *plunge_feed,
+                infeed_plan: (*infeed_plan).into(),
                 hand: (*hand).into(),
             },
             // Read back whole, the contour kinds' way too - sane or

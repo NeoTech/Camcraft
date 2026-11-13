@@ -91,6 +91,8 @@ fn punch_doc(machine_text: &str) -> World {
         condition: "C110".into(),
         side: WireSide::Punch,
         start: Some([-30.0, 0.0]),
+        tabs: None,
+        capture: true,
         taper_deg: 0.0,
         four_axis: None,
         burnout: None,
@@ -118,6 +120,8 @@ fn gouging_die() -> World {
         condition: "C110".into(),
         side: WireSide::Die,
         start: Some([0.0, 0.0]),
+        tabs: None,
+        capture: true,
         taper_deg: 0.0,
         four_axis: None,
         burnout: None,
@@ -184,7 +188,7 @@ fn the_wire_laws_stand_between_the_cut_and_its_nc_text() {
     let clause = posting::wire_clause(&world);
     assert!(clause.problems.is_empty(), "{:?}", clause.problems);
     let line = clause.line.expect("the clean punch is judged, not skipped");
-    assert!(line.contains("Punch1 frees") && line.ends_with("(the part)"), "{line}");
+    assert!(line.contains("Punch1 frees") && line.ends_with("(the part) into the stated capture"), "{line}");
     let out = std::env::temp_dir().join(format!("camcraft-wire-laws-ok-{}.nc", std::process::id()));
     let posted = posting::post_script(&world, &out, cps(WIRE)).expect("the judged punch posts");
     let written = std::fs::read_to_string(&out);
@@ -303,6 +307,8 @@ fn cutoff_doc(wrong: bool) -> World {
         condition: "C110".into(),
         side,
         start: None,
+        tabs: None,
+        capture: false,
         taper_deg: 0.0,
         burnout: None,
         clearance: operation::DEFAULT_CLEARANCE,
