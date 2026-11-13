@@ -27,6 +27,7 @@ use camcraft_app::operation;
 
 use crate::actions;
 use crate::machine_modes;
+use crate::shortcut_keys::chord;
 use crate::build_info;
 use crate::state::{CommandKind, Sim, State, UiTarget};
 
@@ -363,12 +364,12 @@ pub(super) fn text_of(c: Cmd, state: &State) -> String {
 /// `shortcuts` implements them all, and the pin gesture names itself.
 pub(super) fn tip_of(c: Cmd, state: &State) -> String {
     match c {
-        Cmd::New => "New document\tCtrl+N".into(),
-        Cmd::Model => "Open a mesh model\tCtrl+O".into(),
-        Cmd::Project => "Open a project\tCtrl+Shift+O".into(),
-        Cmd::Save => "Save the project\tCtrl+S".into(),
-        Cmd::SaveAs => "Save the project under a new name\tCtrl+Shift+S".into(),
-        Cmd::Post => "Post NC program (validation gate), then review it\tCtrl+P".into(),
+        Cmd::New => format!("New document\t{}", chord("N")),
+        Cmd::Model => format!("Open a mesh model\t{}", chord("O")),
+        Cmd::Project => format!("Open a project\t{}", chord("Shift+O")),
+        Cmd::Save => format!("Save the project\t{}", chord("S")),
+        Cmd::SaveAs => format!("Save the project under a new name\t{}", chord("Shift+S")),
+        Cmd::Post => format!("Post NC program (validation gate), then review it\t{}", chord("P")),
         Cmd::Setups => "Setups: create, activate and delete the document's setups".into(),
         Cmd::Stock => "Stock definition".into(),
         Cmd::Origin => "Work offset (WCS)".into(),
@@ -391,7 +392,7 @@ pub(super) fn tip_of(c: Cmd, state: &State) -> String {
             // enforces at the command. The pin hint rides every live
             // tip: the gesture a ribbon cell answers to beyond the
             // click, so the tip table is where it belongs.
-            if state.tool_names().is_empty() {
+            if no_tool_for(i, state) {
                 "No tool yet - add one (Setup > Tools)".into()
             } else {
                 let machine = camcraft_app::machine::kind_of(&state.world);
@@ -402,7 +403,7 @@ pub(super) fn tip_of(c: Cmd, state: &State) -> String {
                     let f = camcraft_app::operation::KindInfo::ALL[i].family();
                     let (fword, mword) = (f.work(), f.machine());
                     // #670: plasma work has no mill-turn to fall back on.
-                    let or_mt = if f == camcraft_app::operation::Family::Plasma { "" } else { " or a mill-turn" };
+                    let or_mt = if matches!(f, camcraft_app::operation::Family::Plasma | camcraft_app::operation::Family::WireEdm | camcraft_app::operation::Family::Sinker) { "" } else { " or a mill-turn" };
                     format!(
                         "The document's machine is a {} - {fword} operations do not drive it; mount a {mword}{or_mt} (Setup > Machine)",
                         machine.word()
@@ -419,8 +420,8 @@ pub(super) fn tip_of(c: Cmd, state: &State) -> String {
             }
         }
         Cmd::More(s) => format!("The rest of the {} kinds", s.label()),
-        Cmd::Undo => "Undo\tCtrl+Z".into(),
-        Cmd::Redo => "Redo\tCtrl+Y".into(),
+        Cmd::Undo => format!("Undo\t{}", chord("Z")),
+        Cmd::Redo => format!("Redo\t{}", chord("Y")),
         Cmd::Run => "Generate the selected operation".into(),
         Cmd::Delete => "Delete the selection\tDel".into(),
         Cmd::Frame => "Frame all\tF".into(),
@@ -459,7 +460,7 @@ pub(super) fn enabled(c: Cmd, state: &State) -> bool {
             // #216: every ribbon-made op machines the active setup's stock
             // (`SrcRef::Stock`) - without one the door refuses, so the
             // cell darkens and says so instead of failing on the click.
-            kind_admits && !state.tool_names().is_empty() && has_stock(state) && tool_law_note(i, state).is_none()
+            kind_admits && !no_tool_for(i, state) && has_stock(state) && tool_law_note(i, state).is_none()
         }
         // A dropdown button is live whenever it is on the ribbon; the
         // kinds behind it carry their own gates.
@@ -487,7 +488,7 @@ fn gate_note(c: Cmd, state: &State) -> Option<String> {
     if enabled(c, state) {
         return None;
     }
-    if state.tool_names().is_empty() {
+    if no_tool_for(i, state) {
         return Some(String::from(
             "cannot add an operation: no tool in the document - add one (Setup > Tools)",
         ));
@@ -500,7 +501,7 @@ fn gate_note(c: Cmd, state: &State) -> Option<String> {
         Some(k) => {
             let f = k.family();
             let (fword, mword) = (f.work(), f.machine());
-            let or_mt = if f == camcraft_app::operation::Family::Plasma { "" } else { " or a mill-turn" };
+            let or_mt = if matches!(f, camcraft_app::operation::Family::Plasma | camcraft_app::operation::Family::WireEdm | camcraft_app::operation::Family::Sinker) { "" } else { " or a mill-turn" };
             Some(format!(
                 "cannot add a {} operation: {fword} operations do not drive the document's {} - mount a {mword}{or_mt} (Setup > Machine)",
                 k.label,
@@ -548,7 +549,7 @@ pub(super) fn gate_route(c: Cmd, state: &State) -> Option<GateRoute> {
     if enabled(c, state) {
         return None;
     }
-    if state.tool_names().is_empty() {
+    if no_tool_for(i, state) {
         return Some(GateRoute::Tools);
     }
     let machine = camcraft_app::machine::kind_of(&state.world);
@@ -592,6 +593,13 @@ pub(super) fn follow_gate(c: Cmd, state: &mut State) {
 /// for creating kind `i` against the active setup's tools, or `None`
 /// when a fitting tool is there. The predicate lives in app (the same
 /// one `CreateOperation` enforces); the ribbon only renders it.
+/// The empty-rack gate of a Create cell - waived for a kind that
+/// mounts no library tool (the wire EDM's wire is the machine's, #535).
+fn no_tool_for(i: usize, state: &State) -> bool {
+    let needs = camcraft_app::operation::KindInfo::ALL.get(i).is_none_or(|k| k.mounts_tool());
+    needs && state.tool_names().is_empty()
+}
+
 fn tool_law_note(i: usize, state: &State) -> Option<String> {
     camcraft_app::operation::KindInfo::ALL
         .get(i)
@@ -663,6 +671,13 @@ pub(super) fn icon_of(c: Cmd, state: &State) -> Option<Icon> {
             // #670: the plasma section cuts 2D profiles - the contour's
             // glyph (the machine door's own choice, no new asset).
             operation::Section::Plasma => Icon::Contour,
+            // #532: the wire cuts a profile too - the same glyph the
+            // wire EDM's machine door wears (no new asset; the op page
+            // and its own glyph are #535).
+            operation::Section::WireEdm => Icon::Contour,
+            // #541: the sinker burns straight down - the drill's glyph
+            // (no new asset).
+            operation::Section::Sinker => Icon::Drill,
         }),
         // The machine door wears its workspace's glyph (#207), from the
         // existing set: the face mill for Milling, the turned bar for

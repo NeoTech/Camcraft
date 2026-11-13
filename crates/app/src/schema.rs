@@ -81,10 +81,12 @@ pub struct GeoSig {
 /// A model whose mesh stands for its curved surfaces more coarsely than
 /// the STEP importer promises (#864): `chord_mm` is the chord error the
 /// import actually kept, always above `step::CHORD_CAP`. Present ONLY on
-/// such a model - one that met the promise, an STL or OBJ mesh, and
-/// every model of a project saved before this existed carry no component
-/// and read as full fidelity. Written by the import and update commands
-/// and the project loader, through `model_fidelity::set`.
+/// such a model - one that met the promise and an STL or OBJ mesh carry
+/// no component and read as full fidelity. A stock copied from such a
+/// model carries it too (#1056: the same facets). A mesh of a project
+/// saved before v59 with no recorded chord carries the sentinel
+/// `model_fidelity::UNKNOWN_MM` (#1056: fidelity unknown, refused). Written by the import, update and
+/// stock commands and the project loader, through `model_fidelity::set`.
 #[derive(Component, Debug, Clone, Copy, PartialEq)]
 pub struct ReducedFidelity {
     pub chord_mm: f64,
@@ -271,6 +273,12 @@ impl ToolBody {
 /// `post_options` (#389) is the setup's own post options; `None`, the
 /// default and every earlier file, follows the document's `PostOptions`.
 /// Written only by `SetSetupPostOptions` and the project loader.
+/// `nose_to_axis` (#821) is the setup's stated spindle-nose-to-rotary-
+/// centerline figure, mm, for a rotary raised by a stack (a subplate on a
+/// fixture plate): it wins over the machine file's, less any stack
+/// (`crate::rotary_stack`). `None`, the default and every earlier file,
+/// states none. Written only by `SetSetupNoseToAxis`, the datum transfer
+/// and the project loader.
 /// `workholding_max_rpm` (#1031) is the rated maximum rpm of the chuck
 /// or collet the setup holds the work in; `None`, the default and every
 /// earlier file, states none. Read through [`crate::setup_workholding`];
@@ -287,6 +295,7 @@ pub struct SetupDef {
     pub relative_to: Option<String>,
     pub stock_source: Option<crate::setup_stock::StockSource>,
     pub post_options: Option<PostOptions>,
+    pub nose_to_axis: Option<f64>,
     pub workholding_max_rpm: Option<f64>,
 }
 
@@ -486,6 +495,11 @@ pub struct PostOptions {
     pub smoothing: bool,
     /// The length unit the control is left in after the program (#596).
     pub end_units: EndUnits,
+    /// Explain G-code (#1386): off (the default) posts no explanations;
+    /// on, a post that declares `explains` appends a short comment to
+    /// each block saying what its words do, and one that does not is
+    /// refused by name.
+    pub explain: bool,
 }
 
 /// The end-units choice of [`PostOptions`] (#596). LinuxCNC's M2 / M30
@@ -504,6 +518,21 @@ pub enum EndUnits {
     Inch,
     /// End in millimetres: an inch program writes G21 before M30.
     Millimeters,
+}
+
+/// The document's program identity (#258), a flecs singleton beside
+/// `PostOptions`: the program number a numbering dialect writes as its
+/// O-word and the program comment (the program's name on a control
+/// that addresses programs by name). Moved only by `SetProgramInfo`
+/// (undoable, validated at creation) or a document load. `None` is "not
+/// stated": every post then writes exactly what it wrote before #258
+/// (O0001 and the machine's name), so the default changes no program.
+#[derive(Component, Debug, Clone, Default, PartialEq, Eq)]
+pub struct ProgramInfo {
+    /// The program number, 1..=9999 when stated.
+    pub number: Option<u32>,
+    /// The program comment / name, non-empty when stated.
+    pub comment: Option<String>,
 }
 
 /// The thread-output choice of [`PostOptions`].
@@ -623,6 +652,7 @@ pub fn register_schema(world: &World) {
     world.component::<PostOptions>();
     world.component::<ThemeRef>();
     world.component::<PostOptions>();
+    world.component::<ProgramInfo>();
     world.component::<ColorVision>();
     world.component::<WorkMaterialDef>();
     world.component::<RibbonPins>();

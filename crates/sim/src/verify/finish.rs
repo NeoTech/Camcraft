@@ -57,7 +57,10 @@ pub(super) fn finish_envelope(
             .unwrap_or(0);
         let verdict = match cx.model.zip(cx.finish_tol) {
             Some((facets, tol)) => match if nose_centers {
-                crate::stock_sim::envelope_scan_centers(facets, &path.moves, r, tol)
+                // #1408: the work turns under the nose - the hidden
+                // half reads the spindle the caller fitted, if any,
+                // and lets a rough's own leave stand.
+                crate::stock_sim::envelope_scan_turned(facets, &path.moves, r, tol, (cx.lathe_axis, cx.stock_to_leave))
             } else {
                 crate::stock_sim::envelope_scan(facets, &path.moves, r, tol)
             } {

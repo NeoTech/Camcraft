@@ -17,6 +17,7 @@
 //! #940 adds the machining mesh of such a solid ([`machining_mesh`]):
 //! solidcore-tess at a chord in mm, every shortfall a named refusal, the
 //! deviation from the exact surfaces measured ([`mesh_deviation`]).
+//! #1456 reads a Solidcraft design's cached final body ([`solidcraft`]).
 //!
 //! Provenance: our own seam design; solidcore (tangency-labs, Apache-2.0
 //! port of NVIDIA's SMLib) and its STEP reader are linked at one pinned
@@ -34,6 +35,7 @@ mod solidcore_blend;
 pub mod solidcore_impl;
 pub mod solidcore_import;
 pub mod solidcore_step;
+pub mod solidcraft;
 #[cfg(feature = "truck")]
 pub mod truck_impl;
 

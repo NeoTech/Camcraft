@@ -5,6 +5,9 @@ impl ParamsDto {
         match p {
             OpParams::Probe { .. } => ParamsDto::Probe(ProbeDto::from_params(p)),
             OpParams::PlasmaProfile(op) => ParamsDto::PlasmaProfile(PlasmaDto::from_op(op)),
+            OpParams::WireContour(op) => ParamsDto::WireContour(WireContourDto::from_op(op)),
+            OpParams::SinkerBurn(op) => ParamsDto::SinkerBurn(SinkerDto::from_op(op)),
+            OpParams::SinkerSideBurn(op) => ParamsDto::SinkerSideBurn(SinkerSideDto::from_op(op)),
             OpParams::TrochoidalSlot { .. } => ParamsDto::TrochoidalSlot(TrochoidDto::from_params(p)),
             OpParams::Face {
                 stepover,
@@ -384,6 +387,7 @@ impl ParamsDto {
                 entry_ramp,
                 steep_stepover,
                 pencil_reference,
+                fill_openings,
             } => ParamsDto::Finish3D {
                 pattern: (*pattern).into(),
                 stepover: *stepover,
@@ -401,6 +405,7 @@ impl ParamsDto {
                 entry_ramp: *entry_ramp,
                 steep_stepover: *steep_stepover,
                 pencil_reference: *pencil_reference,
+                fill_openings: *fill_openings,
             },
             // The deburr ride (M2.5 E B): the six keys are the kind's
             // whole content - no pattern, no retract, nothing derived
@@ -923,6 +928,7 @@ impl ParamsDto {
                 infeed,
                 feed,
                 plunge_feed,
+                infeed_plan,
                 hand,
             } => ParamsDto::Threading {
                 tolerance: *tolerance,
@@ -934,6 +940,7 @@ impl ParamsDto {
                 infeed: *infeed,
                 feed: *feed,
                 plunge_feed: *plunge_feed,
+                infeed_plan: (*infeed_plan).into(),
                 hand: (*hand).into(),
             },
             // The contour kinds (M5.2 stage E): the promise-number
@@ -1116,6 +1123,7 @@ impl ParamsDto {
                     CycleChoice::FloatingTap => CycleChoiceDto::FloatingTap,
                     CycleChoice::Bore => CycleChoiceDto::Bore,
                     CycleChoice::BackBore => CycleChoiceDto::BackBore,
+                    CycleChoice::Ream => CycleChoiceDto::Ream,
                 },
                 peck: *peck,
                 dwell: *dwell,
@@ -1164,7 +1172,15 @@ impl ParamsDto {
                 plunge_feed,
                 climb,
                 holes,
+                pitch,
+                hand,
+                external,
+                passes,
             } => ParamsDto::Thread {
+                external: *external,
+                passes: (*passes).into(),
+                pitch: *pitch,
+                hand: (*hand).into(),
                 clearance_z: (*clearance_z).into(),
                 retract_z: (*retract_z).map(Into::into),
                 top_z: (*top_z).into(),
@@ -1182,6 +1198,9 @@ impl ParamsDto {
         match self {
             ParamsDto::Probe(d) => d.to_params(),
             ParamsDto::PlasmaProfile(d) => d.to_params(),
+            ParamsDto::WireContour(d) => d.to_params(),
+            ParamsDto::SinkerBurn(d) => d.to_params(),
+            ParamsDto::SinkerSideBurn(d) => d.to_params(),
             ParamsDto::TrochoidalSlot(d) => d.to_params(),
             // Absent v5 keys decode (via serde defaults) to the legacy
             // single-level face, byte-exact; present ones land on the
@@ -1563,6 +1582,7 @@ impl ParamsDto {
                 entry_ramp,
                 steep_stepover,
                 pencil_reference,
+                fill_openings,
             } => OpParams::Finish3D {
                 pattern: (*pattern).into(),
                 stepover: *stepover,
@@ -1580,6 +1600,7 @@ impl ParamsDto {
                 entry_ramp: *entry_ramp,
                 steep_stepover: *steep_stepover,
                 pencil_reference: *pencil_reference,
+                fill_openings: *fill_openings,
             },
             // Read back whole, the blade kinds' way - sane or
             // nothing, `validate_kind`'s door first (M2.5 E B):
@@ -2077,6 +2098,7 @@ impl ParamsDto {
                 infeed,
                 feed,
                 plunge_feed,
+                infeed_plan,
                 hand,
             } => OpParams::Threading {
                 tolerance: *tolerance,
@@ -2088,6 +2110,7 @@ impl ParamsDto {
                 infeed: *infeed,
                 feed: *feed,
                 plunge_feed: *plunge_feed,
+                infeed_plan: (*infeed_plan).into(),
                 hand: (*hand).into(),
             },
             // Read back whole, the contour kinds' way too - sane or
@@ -2276,6 +2299,7 @@ impl ParamsDto {
                     CycleChoiceDto::FloatingTap => CycleChoice::FloatingTap,
                     CycleChoiceDto::Bore => CycleChoice::Bore,
                     CycleChoiceDto::BackBore => CycleChoice::BackBore,
+                    CycleChoiceDto::Ream => CycleChoice::Ream,
                 },
                 peck: *peck,
                 dwell: *dwell,
@@ -2324,7 +2348,15 @@ impl ParamsDto {
                 plunge_feed,
                 climb,
                 holes,
+                pitch,
+                hand,
+                external,
+                passes,
             } => OpParams::Thread {
+                external: *external,
+                passes: (*passes).into(),
+                pitch: *pitch,
+                hand: (*hand).into(),
                 clearance_z: (*clearance_z).into(),
                 retract_z: retract_z.map(Into::into),
                 top_z: (*top_z).into(),

@@ -17,7 +17,7 @@ use crate::interact::{
     CLEARANCE_RGB, CUT_RGB, FEED_RGB, MAX_OVERLAY_VERTICES, PLUNGE_RGB, RAPID_RGB,
     REGION_RGB, RETRACT_RGB, anchor_hit, anchor_points, anchor_reference, capped, chevrons,
     collect_overlay, ftoz, ground_grid_lines, height_plane_lines, height_planes,
-    gizmo_segments, hover_features, is_axis_label, overlay_labels, plane_corner, plane_rect, project_uv, queue_feature_pick,
+    gizmo_segments, hover_features, is_axis_label, row_hover_segments, overlay_labels, plane_corner, plane_rect, project_uv, queue_feature_pick,
     region_lines, selection_feature_lines, shown_regions, toolpath_lines,
 };
 use crate::state::{CommandKind, HoverHit, State};
@@ -237,6 +237,7 @@ mod gizmo_tests {
         state.pending.push_back(CommandKind::CreateSetup { name: None, datum_from: None });
         state.drain_actions();
         set_origin(&mut state, [50.0, 0.0, 0.0], 0.0);
+        state.toggle_setup_display("Setup1"); // #1494: another setup's triad needs its eye on
         let labels = overlay_labels(&state, 1.0);
         for want in ["G54", "Setup2/WCS"] {
             let label = labels
@@ -277,6 +278,7 @@ mod gizmo_tests {
         state.pending.push_back(CommandKind::CreateSetup { name: None, datum_from: None });
         state.drain_actions();
         set_origin(&mut state, [50.0, 0.0, 0.0], 0.0);
+        state.toggle_setup_display("Setup1"); // #1494: another setup's triad needs its eye on
         assert!(overlay_labels(&state, 1.0).iter().any(|(_, _, text)| text == "G54"));
         State::toggle_visibility(&mut state.hidden_offsets, "G54");
         let texts: Vec<String> =
@@ -1090,8 +1092,8 @@ mod preview_tests {
         let face = GeoSel { entity: "c".into(), feature: FeatureSel::Face(top) };
         let run = GeoSel { entity: "c".into(), feature: FeatureSel::Chain(chain) };
 
-        state.geo_hover = Some(face.clone());
-        let segs = hover_features(&state, 4.0 / 3.0);
+        state.geo_hover_drawn = Some(face.clone());
+        let segs = row_hover_segments(&state, 4.0 / 3.0);
         assert_eq!(segs.len(), 4, "the row's face lights its four sides");
         for (a, b) in &segs {
             for uv in [a, b] {
@@ -1102,25 +1104,23 @@ mod preview_tests {
             }
         }
 
-        // Both pointers on the same feature: once, not twice.
-        state.hover =
-            Some(HoverHit { entity: "c".into(), facet: 0, feature: Some(face.feature) });
-        assert_eq!(hover_features(&state, 4.0 / 3.0).len(), 4, "no double-draw");
-
-        // Two different features: the viewport keeps its, the row adds its.
+        // The row hover is its own strong layer (#1507): the viewport hover
+        // pass never repeats it.
+        assert!(hover_features(&state, 4.0 / 3.0).is_empty(), "the row hover is not in the thin pass");
         state.hover = Some(HoverHit { entity: "c".into(), facet: 0, feature: Some(run.feature) });
-        assert_eq!(hover_features(&state, 4.0 / 3.0).len(), 5, "one edge plus the square");
+        assert_eq!(hover_features(&state, 4.0 / 3.0).len(), 1, "the viewport hover keeps its one edge");
+        assert_eq!(row_hover_segments(&state, 4.0 / 3.0).len(), 4, "and the row its square");
 
         // Stale ids and hidden models draw nothing through the row either -
         // the highlight never promises a pick the click cannot make.
         state.hover = None;
-        state.geo_hover = Some(GeoSel { entity: "c".into(), feature: FeatureSel::Face(7) });
-        assert!(hover_features(&state, 4.0 / 3.0).is_empty(), "a stale face id draws no ghost");
-        state.geo_hover = Some(GeoSel { entity: "nope".into(), feature: face.feature });
-        assert!(hover_features(&state, 4.0 / 3.0).is_empty(), "a gone entity draws nothing");
-        state.geo_hover = Some(face);
+        state.geo_hover_drawn = Some(GeoSel { entity: "c".into(), feature: FeatureSel::Face(7) });
+        assert!(row_hover_segments(&state, 4.0 / 3.0).is_empty(), "a stale face id draws no ghost");
+        state.geo_hover_drawn = Some(GeoSel { entity: "nope".into(), feature: face.feature });
+        assert!(row_hover_segments(&state, 4.0 / 3.0).is_empty(), "a gone entity draws nothing");
+        state.geo_hover_drawn = Some(face);
         state.hidden_models.push("c".into());
-        assert!(hover_features(&state, 4.0 / 3.0).is_empty(), "display-off stays off");
+        assert!(row_hover_segments(&state, 4.0 / 3.0).is_empty(), "display-off stays off");
     }
 }
 
@@ -2102,23 +2102,26 @@ mod view_cube_tests {
 
     #[test]
     fn the_hud_is_laid_out_from_the_pane_alone() {
-        // Cube top-right (the hint owns bottom-right), five buttons
-        // below it, right-aligned; and no room, no furniture.
+        // Cube top-right (the legend owns bottom-right); the control ribbon
+        // rests on the bottom edge, centred, holding every
+        // view button (#1198 slice a, fix round); and no room, no furniture.
         let pane = egui::Rect::from_min_max(egui::pos2(300.0, 100.0), egui::pos2(1200.0, 700.0));
         let h = Hud::new(pane).expect("900 x 600 has room");
         assert!((h.cube.max.x - (1200.0 - 10.0)).abs() < 1e-6);
         assert!((h.cube.min.y - 110.0).abs() < 1e-6, "the cube hugs the top");
-        let bottom = h.nav_rect(viewcube::Nav::Axes);
-        assert!(
-            bottom.max.x <= h.cube.max.x + 1e-6 && bottom.min.x >= pane.min.x,
-            "the nav column stays in the pane"
-        );
-        assert!(bottom.max.y < pane.max.y, "the column ends inside the pane");
-        let top_button = h.nav_rect(viewcube::Nav::Frame);
-        assert!(top_button.min.y > h.cube.max.y, "buttons start under the cube");
+        let bar = crate::egui_app::viewport_bar::bar_rect(pane);
+        assert!((bar.center().x - pane.center().x).abs() < 1e-3, "the ribbon is centred");
+        assert!((bar.max.y - (700.0 - 10.0)).abs() < 1e-3, "the ribbon rests on the bottom edge");
+        assert!(!h.cube.intersects(bar), "the cube and the ribbon never overlap");
+        for kind in crate::egui_app::viewport_bar::NAVS {
+            let r = h.nav_rect(kind);
+            assert!(bar.contains(r.min) && bar.contains(r.max), "{kind:?} sits in the ribbon");
+        }
         assert!(Hud::new(egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(120.0, 800.0))).is_none());
         assert!(Hud::new(egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(800.0, 250.0))).is_none());
-        assert!(Hud::new(egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(130.0, 260.0))).is_some());
+        let fits = viewcube::min_width();
+        assert!(Hud::new(egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(fits, 260.0))).is_some());
+        assert!(Hud::new(egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(fits - 1.0, 260.0))).is_none(), "the ribbon needs its width");
     }
 }
 
