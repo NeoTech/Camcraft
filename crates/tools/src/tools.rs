@@ -212,6 +212,12 @@ pub struct Tool {
     /// names the touched-off corner of the tip edge (#641,
     /// [`crate::orientation::blade_corner`]); inert on every other kind.
     pub orientation: Option<u8>,
+    /// Part number, vendor, coating, helix and notes (#898): catalog
+    /// facts no generator or law reads.
+    pub catalog: crate::catalog_fields::ToolCatalog,
+    /// Cutting data per workpiece material (#890): `rpm` / `feed` above
+    /// stay the running numbers and the fallback; empty = none stated.
+    pub cutting: Vec<crate::cutting_rows::CuttingRow>,
     /// Turning cutting data (#891, [`crate::turning_data`]): surface
     /// speed, feed per rev and the tool's max-rpm clamp. `None` = not
     /// stated - the turning ops then post the constant `rpm` (G97) as
@@ -273,6 +279,8 @@ impl Tool {
             && self.feed > 0.0
             && self.flutes.is_none_or(|z| (1..=32).contains(&z))
             && self.orientation.is_none_or(crate::orientation::is_valid)
+            && self.catalog.refusal().is_none()
+            && crate::cutting_rows::refusal(&self.cutting, self.kind == ToolKind::Torch).is_none()
             // #891: stated turning data is sane, and the constant rpm
             // the tool states never runs over its own max-rpm clamp.
             && self.turning.is_none_or(|t| t.is_sane() && t.max_rpm.is_none_or(|m| self.rpm <= m))
@@ -547,6 +555,8 @@ pub fn probe_tool(ball_d: f64, stylus_len: f64) -> Tool {
         flutes: None,
         center_cutting: false,
         orientation: None,
+        catalog: crate::catalog_fields::ToolCatalog::default(),
+        cutting: Vec::new(),
         turning: None,
     }
 }
@@ -577,6 +587,8 @@ pub fn torch_tool(kerf: f64) -> Tool {
         flutes: None,
         center_cutting: false,
         orientation: None,
+        catalog: crate::catalog_fields::ToolCatalog::default(),
+        cutting: Vec::new(),
         turning: None,
     }
 }

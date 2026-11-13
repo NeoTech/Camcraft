@@ -22,6 +22,7 @@ use crate::cl::{lattice, Toolpath};
 use crate::drilling::{self, CrossHole, CrossParams};
 use crate::geometry::{Point3, Triangle};
 use crate::machining2d::GenError;
+use crate::units::Unit;
 
 /// The plain lathe's cross drill stands on the same reading its axial
 /// drill does: a part the axis fit cannot read as revolved has no
@@ -69,6 +70,7 @@ pub(super) fn cross_drill(
     origin: [f64; 3],
     cutter: &crate::verify::Cutter,
     tool_name: &str,
+    unit: Unit,
 ) -> Result<Toolpath, GenError> {
     let (ox, oy) = (origin[0], origin[1]);
     if !(ox.is_finite() && oy.is_finite()) {
@@ -91,12 +93,12 @@ pub(super) fn cross_drill(
     let (local, extra) = match st.raw {
         // #677: its refusal names the local mouth; carry it (and the
         // sentence) to world like the kernel's own refusals.
-        Some(raw) => super::cross_stock::to_raw_mouths(&local, &st, raw, p.tool).map_err(|e| in_world(e, &local, p.holes))?,
+        Some(raw) => super::cross_stock::to_raw_mouths(&local, &st, raw, p.tool, unit).map_err(|e| in_world(e, &local, p.holes))?,
         None => (local, Vec::new()),
     };
     // Issue #84: no hole deeper from the stock surface than the flute
     // (the wider of drill and shank sets where the stock surface is).
-    super::drill_reach::cross_reach(&local, &extra, p.holes, p.cycle, p.tool, tool_name)?;
+    super::drill_reach::cross_reach(&local, &extra, p.holes, p.cycle, p.tool, tool_name, unit)?;
     // A shank wider than the drill raises the planes to clear it.
     let (clearance_d, hop_d) = super::cross_stock::body_clear(p.clearance_d, p.hop_d, p.tool);
     let mut t = drilling::cross_drill(&CrossParams {
@@ -110,8 +112,8 @@ pub(super) fn cross_drill(
     .map_err(|e| in_world(e, &local, p.holes))?;
     // #1015: these laws judge the chain in the spindle frame; their
     // refusals carry it back to the world by the same shift (`back`).
-    super::cross_stock::rapids_clear(&t, &st, p.tool).map_err(|e| shifted_ghost(e, &t, ox, oy))?;
-    super::drill_reach::cross_holder(&t, facets, stock, (ox, oy), p.tool, cutter.body.as_ref(), tool_name)
+    super::cross_stock::rapids_clear(&t, &st, p.tool, unit).map_err(|e| shifted_ghost(e, &t, ox, oy))?;
+    super::drill_reach::cross_holder(&t, facets, stock, (ox, oy), p.tool, cutter.body.as_ref(), tool_name, unit)
         .map_err(|e| shifted_ghost(e, &t, ox, oy))?;
     if on_origin {
         // Issue #117: what the chain leaves is judged against the part.

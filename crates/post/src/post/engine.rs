@@ -99,11 +99,12 @@ pub fn run_numbered_with(
     // #374: an inverted machine axis - the one place the stream is
     // mirrored into the controller's frame, or refused by name.
     let records = super::invert::apply(records, mch, &s)?;
-    let props = machine::script_props(mch);
-    // #542: the serves law - an EDM machine takes only a post declaring
-    // its kind, and a post declaring kinds posts for those only.
-    super::machine_edm::serves_gate(s.string_global("serves")?.as_deref(), &props)?;
-    s.set_machine(&props)?;
+    s.set_machine(&machine::script_props(mch))?;
+    // #542: whether the manifest's `serves` (#1266) names a sinker EDM -
+    // the one script that may voice a sinker section (below).
+    let serves_sinker = s
+        .words_global("serves")?
+        .is_some_and(|w| w.iter().any(|k| crate::machine::Kind::from_word(k) == Some(crate::machine::Kind::SinkerEdm)));
     s.set_program_number(program)?;
     if options.is_object() {
         s.set_options(options)?;
@@ -171,6 +172,22 @@ pub fn run_numbered_with(
                     let who = if op.is_empty() { String::new() } else { format!("operation {op}: ") };
                     warnings.push(format!(
                         "{who}is C-axis live-tool work (the spindle turns as C under a radial live tool), but this post script does not declare liveTooling - use a lathe post that voices the C axis"
+                    ));
+                }
+                // A wire EDM section (#533) through a script that does not
+                // voice one would post the wire path as a cutting move.
+                if name == "EdmCondition" && !s.voices_wire_edm() {
+                    let op = base.get("OperationName").and_then(Value::as_str).unwrap_or("");
+                    let who = if op.is_empty() { String::new() } else { format!("operation {op}: ") };
+                    warnings.push(format!("{who}is wire EDM work, but this post script does not declare wireEdm - use a wire EDM post"));
+                }
+                // A sinker burn (#542) through a script that does not
+                // serve a sinker would post the burn as a cutting plunge.
+                if name == "SinkerCondition" && !serves_sinker {
+                    let op = base.get("OperationName").and_then(Value::as_str).unwrap_or("");
+                    let who = if op.is_empty() { String::new() } else { format!("operation {op}: ") };
+                    warnings.push(format!(
+                        "{who}is sinker EDM work, but this post script does not serve a sinker EDM (serves = [\"sinker_edm\"]) - use a sinker EDM post"
                     ));
                 }
                 // A thread whose hand needs the spindle reversed (#629),

@@ -37,6 +37,10 @@ pub const BUILTINS: &[(&str, &str)] = &[
     ("Heidenhain", include_str!("../../../assets/posts/heidenhain.cps")),
     ("Mazak", include_str!("../../../assets/posts/mazak.cps")),
     ("Tormach PathPilot", include_str!("../../../assets/posts/tormach.cps")),
+    // #710: grbl-family controllers (hobby and small-shop routers and mills).
+    ("grblHAL", include_str!("../../../assets/posts/grblhal.cps")),
+    // Synthetos TinyG: the other grbl-family controller, no canned cycles, M0 after each tool change.
+    ("TinyG", include_str!("../../../assets/posts/tinyg.cps")),
     ("Doosan DNM", include_str!("../../../assets/posts/doosan-dnm.cps")),
     ("Makera Carvera", include_str!("../../../assets/posts/carvera.cps")),
     ("Fanuc Lathe", include_str!("../../../assets/posts/fanuc-lathe.cps")),
@@ -44,6 +48,9 @@ pub const BUILTINS: &[(&str, &str)] = &[
     // #671: the plasma dialect, from UM10720 §6-7 and the PathPilot
     // post guidelines; it serves plasma tables only (`PLASMA_POSTS`).
     ("Tormach PathPilot Plasma", include_str!("../../../assets/posts/tormach-plasma.cps")),
+    // #533: the generic RS-274 wire EDM post; every EDM code is the
+    // machine's `edm.codes` (#290 D5). It serves wire EDMs only.
+    ("Generic ISO Wire EDM", include_str!("../../../assets/posts/wire-iso.cps")),
     // #542: the generic ISO-style sinker post; every EDM code is the
     // machine's `edm.codes` (#290 D5). It serves sinker EDMs only.
     ("Sinker EDM (ISO)", include_str!("../../../assets/posts/sinker-iso.cps")),
@@ -61,34 +68,40 @@ pub const LATHE_POSTS: &[&str] = &["Fanuc Lathe", "Tormach PathPilot Lathe"];
 /// serves one (a torch has no spindle for their S/M3).
 pub const PLASMA_POSTS: &[&str] = &["Tormach PathPilot Plasma"];
 
-/// The registry entries that speak SINKER EDM (#542): each declares
-/// `serves = "sinker_edm"`, and the engine posts it for a sinker only
-/// (and posts nothing else for one). No milling, turning or plasma
-/// dialect serves an EDM.
+/// The registry entries that speak WIRE EDM (#533): RS-274 motion with
+/// the control's own codes from the machine file. They serve wire EDMs
+/// only, and no cutting post serves one.
+pub const WIRE_POSTS: &[&str] = &["Generic ISO Wire EDM"];
+
+/// The registry entries that speak SINKER EDM (#542): RS-274 motion
+/// with the control's own codes from the machine file, each declaring
+/// `serves = ["sinker_edm"]`. They serve sinker EDMs only, and no
+/// cutting or wire post serves one.
 pub const SINKER_POSTS: &[&str] = &["Sinker EDM (ISO)"];
 
 /// Whether a registry entry can post programs for a machine of this
 /// kind: a lathe post serves lathes and mill-turns, a mill post serves
-/// mills and mill-turns. A mismatched choice is not refused here (a
-/// user may still pick any name, and the post refuses by name what it
-/// cannot express) - this is the picker's listing law, not a gate.
+/// mills and mill-turns. The picker's listing law, and since #1232 the
+/// post's gate too: every posting path refuses by name a mount whose
+/// post does not serve its machine's kind (`posting_serves.rs`).
 #[must_use]
 pub fn post_serves(name: &str, kind: crate::machine::Kind) -> bool {
     use crate::machine::Kind;
     let lathe_post = LATHE_POSTS.contains(&name);
     let plasma_post = PLASMA_POSTS.contains(&name);
+    let wire_post = WIRE_POSTS.contains(&name);
     let sinker_post = SINKER_POSTS.contains(&name);
     match kind {
-        Kind::Mill => !lathe_post && !plasma_post && !sinker_post,
+        Kind::Mill => !lathe_post && !plasma_post && !wire_post && !sinker_post,
         Kind::Lathe => lathe_post,
-        Kind::MillTurn => !plasma_post && !sinker_post,
+        Kind::MillTurn => !plasma_post && !wire_post && !sinker_post,
         // #669: a cutting post would write spindle words a torch has not.
         Kind::Plasma => plasma_post,
-        // #542: the sinker posts serve sinkers; no wire post ships yet
-        // (#533), and no milling or turning dialect speaks to an EDM
-        // control (the engine's serves law refuses it at post too).
+        // #533: the wire post serves wire EDMs; #542: the sinker post
+        // serves sinker EDMs; no milling or turning dialect speaks to an
+        // EDM control, and neither EDM post to the other kind.
+        Kind::WireEdm => wire_post,
         Kind::SinkerEdm => sinker_post,
-        Kind::WireEdm => false,
     }
 }
 
@@ -107,14 +120,14 @@ pub fn default_post_for(kind: crate::machine::Kind) -> PostRef {
         crate::machine::Kind::Plasma => PLASMA_POSTS
             .first()
             .map_or(PostRef::Builtin, |n| PostRef::Named((*n).to_owned())),
-        // #542: the generic sinker post.
+        // #533: the generic wire post serves wire EDMs; #542: the
+        // generic sinker post serves sinker EDMs.
+        crate::machine::Kind::WireEdm => WIRE_POSTS
+            .first()
+            .map_or(PostRef::Builtin, |n| PostRef::Named((*n).to_owned())),
         crate::machine::Kind::SinkerEdm => SINKER_POSTS
             .first()
             .map_or(PostRef::Builtin, |n| PostRef::Named((*n).to_owned())),
-        // #533: no wire post ships yet; `post_serves` refuses every post
-        // for a wire EDM (and the engine's serves law refuses the
-        // built-in on one), so this name is never offered or posted.
-        crate::machine::Kind::WireEdm => PostRef::Builtin,
         crate::machine::Kind::Mill | crate::machine::Kind::MillTurn => PostRef::Builtin,
     }
 }
@@ -149,6 +162,8 @@ pub fn post_offer(world: &World) -> Option<(&'static str, PostRef)> {
         "lathe"
     } else if PLASMA_POSTS.contains(&name) {
         "plasma"
+    } else if WIRE_POSTS.contains(&name) {
+        "wire EDM"
     } else if SINKER_POSTS.contains(&name) {
         "sinker EDM"
     } else {
@@ -197,6 +212,10 @@ pub const MACHINES: &[(&str, &str)] = &[
     // #618: the M+ upgrade kits - the M's figures with the MX's axis speeds.
     ("Tormach 770M+", include_str!("../../../assets/machines/tormach-770m-plus.mch")),
     ("Tormach 1100M+", include_str!("../../../assets/machines/tormach-1100m-plus.mch")),
+    // #710: a generic grbl-family router / mill; pairs with the "grblHAL" post.
+    ("grblHAL 3-axis", include_str!("../../../assets/machines/grblhal-3axis.mch")),
+    // A generic TinyG router / mill; pairs with the "TinyG" post.
+    ("TinyG 3-axis", include_str!("../../../assets/machines/tinyg-3axis.mch")),
     // #620: the PathPilot routers, each from its own manual / spec sheet
     // (the plain xsTECH from its spec sheet and knowledge base: no manual).
     ("Tormach 24R", include_str!("../../../assets/machines/tormach-24r.mch")),
@@ -404,6 +423,9 @@ mod sim_clause_impl;
 #[path = "posting_plasma.rs"]
 mod plasma_clause_impl;
 pub use plasma_clause_impl::{plasma_clause, PlasmaClause, PLASMA_VERDICT};
+#[path = "posting_wire.rs"]
+mod wire;
+pub use wire::{wire_clause, WireClause, WIRE_VERDICT};
 #[path = "posting_per_op.rs"]
 mod per_op;
 #[path = "posting_suppressed.rs"]
@@ -414,12 +436,16 @@ mod wcs_rotation;
 mod wcs_slot;
 #[path = "posting_mounts.rs"]
 mod mounts;
+#[path = "posting_serves.rs"]
+mod serves;
 #[path = "posting_edm.rs"]
 mod edm_params;
 #[path = "posting_nose.rs"]
 pub mod nose;
 #[path = "posting_index_swing.rs"]
 pub mod index_swing;
+#[path = "posting_swing_standing.rs"]
+pub mod swing_standing;
 pub(crate) use wcs_rotation::{offset_frame, OffsetFrame};
 pub use mounts::{
     machine_checks, machine_value_for, machine_value_of, post_mounts, post_mounts_script, post_of_setup, PostedMount,
@@ -445,8 +471,8 @@ pub struct GateReport {
 /// mounts is refused here by name; [`post_mounts`] writes it as one
 /// file per mount.
 pub fn post_setup(world: &World, out_path: &Path) -> Result<Posted, String> {
-    let (_label, cps) = script_of(&mounts::single(world, true)?.post)?;
-    post_script(world, out_path, &cps)
+    let (label, cps) = script_of(&mounts::single(world, true)?.post)?;
+    post_script_as(world, out_path, &cps, Some(&label))
 }
 
 /// The gate's post at a given script (M3.3 A): the stream and the
@@ -454,8 +480,14 @@ pub fn post_setup(world: &World, out_path: &Path) -> Result<Posted, String> {
 /// parameterized - what a caller holding a script text runs, and
 /// what the tests use to exercise the script seam directly.
 pub fn post_script(world: &World, out_path: &Path, cps: &str) -> Result<Posted, String> {
+    post_script_as(world, out_path, cps, None)
+}
+
+/// [`post_script`] with the script's label (a post file's path), for
+/// the refusal that names a post not serving the machine (#1232).
+fn post_script_as(world: &World, out_path: &Path, cps: &str, label: Option<&str>) -> Result<Posted, String> {
     let started = crate::clock::Instant::now();
-    let posted = post_script_body(world, out_path, cps);
+    let posted = post_script_body(world, out_path, cps, label);
     match &posted {
         Ok(p) => tracing::info!(
             file = %crate::logging::file_name(out_path),
@@ -470,16 +502,26 @@ pub fn post_script(world: &World, out_path: &Path, cps: &str) -> Result<Posted, 
     posted
 }
 
-fn post_script_body(world: &World, out_path: &Path, cps: &str) -> Result<Posted, String> {
+fn post_script_body(world: &World, out_path: &Path, cps: &str, label: Option<&str>) -> Result<Posted, String> {
     // #388: the program's one machine (a program over several refuses).
-    let machine = mounts::single(world, false)?.machine;
-    let records = stream_records(world)?;
+    let mount = mounts::single(world, false)?;
+    let streams = op_streams(world)?;
+    // #1190: a turning dialect opens only what a lathe may run.
+    crate::lathe_voice::at_post(world, streams.iter().map(|(n, _)| n.as_str()), cps, label)?;
+    // #1232: and a post writes only for a machine kind it serves.
+    let names: Vec<&str> = streams.iter().map(|(n, _)| n.as_str()).collect();
+    let unserved = serves::refusal(world, &mount.setups, &names, &mount.machine, cps, label)?;
+    let machine = mount.machine;
+    let records = join_streams(streams);
     // The verification gate (M2.3 D): the same two program-level
     // judgments the Deviate cell shows, made binding. Evidence is
     // computed here and now - never a cached verdict carried in from
     // the viewer (the PostView law: a verdict about an older world
     // must not release this one's metal).
-    let mut report = verification_report(world);
+    // #1174: the workholding clause reads the dialect of THIS script.
+    let voice = post::dialect::work_voice(cps).map_err(|e| format!("post engine: {e}"))?;
+    let mut report = verification_report_by(world, &|_| voice);
+    report.problems.splice(0..0, unserved);
     // One file, one register per word (#196): two setups posting the same
     // word from different placements refuse here - per-op files are exempt.
     report.problems.extend(wcs_slot::shared_word_problems(world));
@@ -650,6 +692,15 @@ pub fn verification_gate(world: &World) -> Vec<String> {
 /// read, so the visible line and the binding gate are one run.
 #[must_use]
 pub fn verification_report(world: &World) -> GateReport {
+    verification_report_by(world, &crate::setup_workholding::mounted_voices(world))
+}
+
+/// [`verification_report`] with the workholding clause (#1174) judged
+/// for the post scripts that will actually run: `voice` names the
+/// dialect of the script each operation's setup context posts through
+/// (an explicit script: the same for every op).
+#[must_use]
+pub fn verification_report_by(world: &World, voice: &dyn Fn(Option<&str>) -> post::dialect::WorkVoice) -> GateReport {
     let mut problems = Vec::new();
 
     // The fidelity clause (#864), first: an operation judged against a
@@ -666,6 +717,10 @@ pub fn verification_report(world: &World) -> GateReport {
     // not run for it, never a silent skip.
     let plasma = plasma_clause(world);
     problems.extend(plasma.problems);
+    // The wire clause (#534): likewise for a wire EDM cut - the 2.5D
+    // kerf, threading and slug laws, every finding binding.
+    let wire = wire_clause(world);
+    problems.extend(wire.problems);
 
     // The suppression clause (#110 review B1): an op generated against
     // a suppressed op's cut refuses by name - the cut it assumed is not
@@ -677,8 +732,9 @@ pub fn verification_report(world: &World) -> GateReport {
     // program (the Output and the thread output) - never posted half one
     // way. Judged program-wide, ahead of #388's per-mount split.
     problems.extend(crate::setup_post_options::program_problems(world));
-    // #1031: a G97 rpm over a setup's workholding maximum, by name.
-    problems.extend(crate::setup_workholding::program_problems(world));
+    // #1031/#1174: the work spindle over a setup's workholding maximum,
+    // by name - judged for the post dialect each op runs through.
+    problems.extend(crate::setup_workholding::program_problems_by(world, voice));
     // The carried-stock clause (#319): a feed move into carried material
     // outside a setup's declared stock is engagement nothing verified.
     problems.extend(crate::operation::carried_problems(world));
@@ -689,6 +745,10 @@ pub fn verification_report(world: &World) -> GateReport {
     // #804: before a work-turning A indexes, the retracted tool tip
     // clears what the stock, parts and turning fixtures sweep about it.
     problems.extend(index_swing::index_swing_problems(world));
+    // #1107: ... and the work it sweeps clears the face the rotary
+    // stands on and the fixed fixtures over its length.
+    let standing = swing_standing::standing_problems(world);
+    problems.extend(standing.problems);
 
     // The workholding clause (M3.2 B, live-gate law): the same fixture
     // bands and rapid laws generation reports early, re-run HERE against
@@ -711,10 +771,21 @@ pub fn verification_report(world: &World) -> GateReport {
     // what came after it). The law and lines live in
     // `operation::probe_problems`.
     problems.extend(crate::operation::probe_problems(world));
-    let not_judged = match (sim.not_judged, plasma.line) {
+    let plasma_line = match (plasma.line, wire.line) {
+        (Some(p), Some(w)) => Some(format!("{p}; {w}")),
+        (p, w) => p.or(w),
+    };
+    let not_judged = match (sim.not_judged, plasma_line) {
         (Some(s), Some(p)) => Some(format!("{s}; {p}")),
         (None, Some(p)) => Some(format!("{NOT_JUDGED}: {p}")),
         (s, None) => s,
+    };
+    // #1107: standing steel the swing clause could not read, named.
+    let swing = (!standing.not_judged.is_empty())
+        .then(|| format!("{}: {}", swing_standing::SWING_NOT_JUDGED, standing.not_judged.join("; ")));
+    let not_judged = match (not_judged, swing) {
+        (Some(s), Some(w)) => Some(format!("{s}; {w}")),
+        (s, w) => s.or(w),
     };
     GateReport { problems, not_judged }
 }
@@ -834,7 +905,8 @@ pub fn op_streams(world: &World) -> Result<Vec<(String, Vec<cnc::Record>)>, Stri
         return Err(msg);
     }
 
-    // #530: the family door again, at post (`posting_family`).
+    // #530: the family door again, at post (`posting_family`), and
+    // #532/#533's law on tool-less kinds: only the Wire Contour posts.
     crate::posting_family::family_at_post(world, &ops)?;
 
     // #155: Pause / Home entries fold into the gap they stand in; #389:
@@ -849,6 +921,11 @@ pub fn op_streams(world: &World) -> Result<Vec<(String, Vec<cnc::Record>)>, Stri
             .ok_or_else(|| format!("{name}: lost its operation"))?;
         let cache = model::toolpath_of(world, e)
             .ok_or_else(|| format!("{name}: lost its toolpath"))?;
+        if let OpParams::WireContour(p) = &op.params {
+            let after = afters.get(name).copied().unwrap_or_default();
+            streams.push((name.clone(), wire::stream(world, name, e, &op, &cache, p, after)?));
+            continue;
+        }
         let tool = model::find_by_name(world, &op.tool)
             .and_then(|t| model::tool_of(world, &t))
             .ok_or_else(|| format!("{name}: tool {} is not in the library", op.tool))?;
@@ -1002,7 +1079,8 @@ impl HeightRefs for OpParams {
         match self {
             OpParams::Probe { clearance_z, .. } => vec![clearance_z],
             OpParams::PlasmaProfile(p) => vec![&p.clearance_z, &p.top_z, &p.bottom_z],
-            OpParams::SinkerBurn(p) => vec![&p.clearance_z, &p.top_z, &p.floor_z],
+            OpParams::WireContour(p) => vec![&p.top_z, &p.bottom_z],
+            OpParams::SinkerBurn(p) | OpParams::SinkerSideBurn(crate::operation::SinkerSideBurnOp { burn: p, .. }) => vec![&p.clearance_z, &p.top_z, &p.floor_z],
             OpParams::Face {
                 clearance_z,
                 cut_z,
