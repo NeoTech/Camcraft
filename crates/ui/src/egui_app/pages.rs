@@ -503,41 +503,6 @@ fn setups_page(ui: &mut Ui, state: &mut State) {
     );
 }
 
-/// The tool list of one setup context (M3.2 stage C): what goes into
-/// the spindle here, in change order, with the shop's time law behind
-/// the estimate. Read-only by law - tools live in the Tool Library and
-/// operations pick them; this page only reports what that wiring
-/// implies, so there is no draft and no command here.
-pub(super) fn tool_list_section(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
-    let u = state.units();
-    let rows = camcraft_app::tool_list::for_setup(&state.world, ctx);
-    if rows.is_empty() {
-        ui.label("Tool list: no generated operation in this setup yet.");
-        return;
-    }
-    ui.label("Tool list for this setup (in change order):");
-    for row in &rows {
-        ui.label(format!(
-            "    {}  {} op{}  {} change{}  cut {}  rapid {}  est {} min",
-            row.tool,
-            row.ops.len(),
-            if row.ops.len() == 1 { "" } else { "s" },
-            row.changes,
-            if row.changes == 1 { "" } else { "s" },
-            units::len(row.cut_mm, u, 2),
-            units::len(row.rapid_mm, u, 2),
-            camcraft_app::setup_sheet::minutes(row.minutes),
-        ));
-    }
-    ui.label(format!(
-        "    setup total: est {} min",
-        camcraft_app::setup_sheet::minutes(camcraft_app::tool_list::setup_minutes(
-            &state.world,
-            ctx,
-        )),
-    ));
-}
-
 /// The setup-sheet export row (M3.2 stage D). Writing a sheet is a
 /// read of the document plus a file write - like posting - so the
 /// button queues the dialog arm and nothing touches the history.
