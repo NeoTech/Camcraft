@@ -10,6 +10,10 @@
 //! Provenance: our own fixtures over plain re-clamp practice (a part
 //! flipped into a vise or a nest); no vendor material consulted.
 //!
+//! The #1530 review: a post or a lip narrower than the grid pitch,
+//! standing between the column lines, is refused; an open mesh and a
+//! coarse-fidelity fixture keep the box verdict.
+//!
 //! Gate map (#1530): covers app::fixture_carried (carried_fixture_problems,
 //! mesh_penetration, CARRIED_CONTACT_TOL), sim::fixture_mesh::column
 //! (steel_on_line), app::commands (InsertVise, AlignPartToSetup).
@@ -33,6 +37,7 @@ use camcraft_app::stock_sim::incoming_body;
 use camcraft_app::tools::catalog;
 use camcraft_app::vise;
 use camcraft_app::world::new_world;
+use camcraft_app::{model, model_fidelity};
 
 const TOOL: &str = "EM-0600-4FL";
 
@@ -104,18 +109,39 @@ fn mesh_of(boxes: &[(Point3, Point3)]) -> Mesh {
 }
 
 /// One-piece soft jaws (80 x 80, Z -10..5) with a square nest pocket
-/// `half` from the centre each way and its floor at `floor`.
-fn soft_jaws(world: &World, h: &mut History, half: f64, floor: f64) {
+/// `half` from the centre each way and its floor at `floor`, plus any
+/// `extra` blocks.
+fn soft_jaws_mesh(half: f64, floor: f64, extra: &[(Point3, Point3)]) -> Mesh {
     let p = |x: f64, y: f64, z: f64| Point3::new(x, y, z);
-    let m = mesh_of(&[
+    let mut boxes = vec![
         (p(-40.0, -40.0, -10.0), p(40.0, 40.0, floor)),
         (p(-40.0, -40.0, floor), p(-half, 40.0, 5.0)),
         (p(half, -40.0, floor), p(40.0, 40.0, 5.0)),
         (p(-half, -40.0, floor), p(half, -half, 5.0)),
         (p(-half, half, floor), p(half, 40.0, 5.0)),
-    ]);
+    ];
+    boxes.extend_from_slice(extra);
+    mesh_of(&boxes)
+}
+
+fn add_jaws(world: &World, h: &mut History, m: Mesh) {
     h.execute(world, ImportModel::from_mesh("Soft jaws", m));
     h.execute(world, TagFixture::new(world, "Soft jaws", Some("Setup2")).expect("tag jaws"));
+}
+
+fn soft_jaws(world: &World, h: &mut History, half: f64, floor: f64) {
+    add_jaws(world, h, soft_jaws_mesh(half, floor, &[]));
+}
+
+/// The middle between four column centres of Setup2's carried grid,
+/// near `(x, y)`: as far from every column line as the grid allows.
+fn between_columns(world: &World, x: f64, y: f64) -> (f64, f64) {
+    let body = incoming_body(world, "Setup2").expect("carried");
+    let d = &body.dex;
+    let ix = ((x - d.x0) / d.cell).floor().clamp(0.0, (d.nx - 2) as f64) as usize;
+    let iy = ((y - d.y0) / d.cell).floor().clamp(0.0, (d.ny - 2) as f64) as usize;
+    let c = d.center(ix, iy);
+    (c.x + d.cell * 0.5, c.y + d.cell * 0.5)
 }
 
 fn refusals(world: &World) -> Vec<String> {
@@ -203,3 +229,53 @@ fn a_nest_floor_touching_within_the_contact_tolerance_is_held() {
     assert!(r.is_empty(), "contact within {CARRIED_CONTACT_TOL} mm: {r:?}");
 }
 
+
+#[test]
+fn a_post_narrower_than_the_pitch_between_the_columns_is_refused() {
+    // 0.19 x 0.19 mm, 3 mm into the part, on no column's line.
+    let (world, mut h) = flipped_hat();
+    let (x, y) = between_columns(&world, 10.0, 10.0);
+    let r = 0.095;
+    let post = (Point3::new(x - r, y - r, 0.0), Point3::new(x + r, y + r, 3.0));
+    add_jaws(&world, &mut h, soft_jaws_mesh(25.05, 0.0, &[post]));
+    let r = refusals(&world);
+    assert!(r.len() == 1 && r[0].contains("fixture 'Soft jaws'") && r[0].contains("3.00 mm deep"), "{r:?}");
+}
+
+#[test]
+fn a_lip_narrower_than_the_pitch_between_the_columns_is_refused() {
+    // 0.19 mm wide along Y, 4 mm into the part, between two column rows.
+    let (world, mut h) = flipped_hat();
+    let (x, _) = between_columns(&world, 10.0, 0.0);
+    let lip = (Point3::new(x - 0.095, -24.0, 0.0), Point3::new(x + 0.095, 24.0, 4.0));
+    add_jaws(&world, &mut h, soft_jaws_mesh(25.05, 0.0, &[lip]));
+    let r = refusals(&world);
+    assert!(r.len() == 1 && r[0].contains("fixture 'Soft jaws'") && r[0].contains("4.00 mm deep"), "{r:?}");
+}
+
+#[test]
+fn an_open_mesh_keeps_the_box_verdict() {
+    // The clear nest, one facet short: no inside to judge, so the box
+    // (Z -10..5 over the part) refuses as before #1530.
+    let (world, mut h) = flipped_hat();
+    let mut m = soft_jaws_mesh(25.05, 0.0, &[]);
+    let mut facets: Vec<Triangle> = m.facets.iter().copied().collect();
+    facets.pop();
+    m.facets = facets.into();
+    add_jaws(&world, &mut h, m);
+    let r = refusals(&world);
+    assert!(r.len() == 1 && r[0].contains("fixture 'Soft jaws'") && r[0].contains("5.00 mm deep"), "{r:?}");
+}
+
+#[test]
+fn a_coarse_fidelity_fixture_keeps_the_box_verdict() {
+    // #864: a mesh tessellated coarser than the importer promises is not
+    // its shape; the box refuses the clear nest.
+    let (world, mut h) = flipped_hat();
+    soft_jaws(&world, &mut h, 25.05, 0.0);
+    assert!(refusals(&world).is_empty(), "at full fidelity the nest is held");
+    let e = model::find_by_name(&world, "Soft jaws").expect("jaws");
+    model_fidelity::set(&world, &e, Some(1.0));
+    let r = refusals(&world);
+    assert!(r.len() == 1 && r[0].contains("fixture 'Soft jaws'") && r[0].contains("5.00 mm deep"), "{r:?}");
+}
