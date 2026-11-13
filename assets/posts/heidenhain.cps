@@ -43,7 +43,6 @@ var smoothActive = false;   // #616: this section wrote its smoothing words
 var modalWait = false;  // G40 G90 rides the section's first motion block
 var pendingDwell = null; // {z, s}: the open hole's dwell, owed at its bottom
 var inCycle = false, cycleSig = "", cycleX = 0, cycleY = 0, cycleR = 0;
-var modalFeed = null;
 var orgX = 0, orgY = 0, orgZ = 0;
 var pgmName = "CAMCRAFT";
 var blockNo = 0;
@@ -370,7 +369,6 @@ function onLinear() {
     if (!sameHole(properties) || properties.Z > cycleR + 1e-6) msg("native drilling cycle has an inconsistent expanded cutting chain");
     return;
   }
-  if (has(properties.FeedRate)) modalFeed = Number(properties.FeedRate);
   motion("G01", xyz(properties).concat([fw(properties.FeedRate)]));
   dwellAtBottom(properties.Z);
 }
@@ -498,7 +496,9 @@ function onCycle() {
   var clearance = p.R - p.EntryZ, depth = p.Z - p.EntryZ;
   var surface = p.EntryZ - orgZ;
   var dwell = has(p.P) ? Number(p.P) : 0;
-  var feed = has(p.FeedRate) ? Number(p.FeedRate) : (has(p.ChainFeedRate) ? Number(p.ChainFeedRate) : modalFeed);
+  // #1357: the cycle's own feed, else its own hole chain's - never the
+  // last modal feed of some other move; with neither it is refused below.
+  var feed = has(p.FeedRate) ? Number(p.FeedRate) : (has(p.ChainFeedRate) ? Number(p.ChainFeedRate) : null);
   if (clearance < 0 || clearance > 99999.9999 || depth >= 0 || depth < -99999.9999 || Math.abs(surface) > 99999.9999) {
     cycleBad("needs a nonnegative R clearance and a negative surface-relative depth within the manual's range"); return;
   }

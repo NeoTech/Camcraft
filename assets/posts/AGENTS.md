@@ -124,6 +124,14 @@ write (the gate), so the released program never carries one.
   everything the first raw motion line needs (`startPreamble`
   pattern), and serve legacy streams that carry no `SECTION` by
   firing it from the first motion too.
+- **A cycle states its feed; a cut needs a turning spindle (#1357).**
+  A canned cycle whose `FeedRate` is missing or not positive is a
+  `message()` refusal by name ("canned cycle G73 has no feed rate"),
+  never a G7x/G8x with no F that drills at the last modal feed or
+  alarms on zero. `tormach.cps` also refuses a feed, arc or cycle with
+  the spindle stopped (no `S.. M3` since the last `M5`); a touch
+  probe's 0 rpm section is exempt, and spindleless dialects (plasma,
+  wire, sinker) never apply it.
 - **Modal discipline.** G43.4 / retract modes once per program
   or per arm; tool change resets the arm and the angle memory
   (stage D). The cycle group suppresses its expanded chain — one

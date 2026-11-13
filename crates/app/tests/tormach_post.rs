@@ -8,7 +8,10 @@
 //! Gate map (M4.4): covers post::post (tormach.cps), post::machine (units),
 //! app::posting (registry).
 
+mod common;
+
 use camcraft_app::machine::parse_mch;
+use common::legacy_program::as_program;
 use camcraft_app::post::{engine, machine};
 use std::path::{Path, PathBuf};
 
@@ -42,7 +45,9 @@ fn machine_for(mch: &str) -> serde_json::Value {
 
 fn post(mch: &str, golden: &str) -> String {
     let cps = read("assets/posts/tormach.cps");
-    let stream = read(&format!("crates/app/tests/golden/{golden}.cl"));
+    // #1357: posted as a real program (tool, spindle, cycle feeds) - the
+    // bare stream is refused by name.
+    let stream = as_program(golden, &read(&format!("crates/app/tests/golden/{golden}.cl")));
     let out =
         engine::run(&cps, &machine_for(mch), &stream).unwrap_or_else(|e| panic!("{golden}: {e}"));
     assert!(
@@ -153,7 +158,10 @@ fn an_inch_machine_posts_every_length_and_feed_in_inches() {
             mm.contains("G21 G17 G90 G91.1 G94"),
             "{golden}: metric header"
         );
-        let (a, b): (Vec<&str>, Vec<&str>) = (inch.lines().collect(), mm.lines().collect());
+        // The belt-range note is the 770MX's own (its two ranges); the
+        // metric reference machine states none.
+        let (a, b): (Vec<&str>, Vec<&str>) =
+            (inch.lines().filter(|l| !l.contains("BELT RANGE")).collect(), mm.lines().collect());
         assert_eq!(
             a.len(),
             b.len(),
@@ -206,6 +214,7 @@ fn a_dwell_posts_in_seconds() {
     let stream = read("crates/app/tests/golden/drill_peck.cl")
         .replace("; CYCLE Peck", "; CYCLE Spot")
         .replace("DWELL0", "DWELL500");
+    let stream = as_program("drill_peck", &stream);
     let out = engine::run(&cps, &machine_for(TORMACH_MCH), &stream).expect("posts");
     assert!(out.warnings.is_empty(), "{:?}", out.warnings);
     let g82 = out
@@ -284,6 +293,7 @@ fn a_tap_posts_g84_with_its_feed_and_no_dwell_word() {
     // A tap marker carrying its synthesized feed: 1270 mm/min = 50 in/min.
     let stream =
         read("crates/app/tests/golden/tap_plate.cl").replace("DWELL0 AT1", "DWELL500 F1270000 AT1");
+    let stream = as_program("tap_plate", &stream);
     let out = engine::run(&cps, &machine_for(TORMACH_MCH), &stream).expect("posts");
     assert!(out.warnings.is_empty(), "{:?}", out.warnings);
     let g84 = out
