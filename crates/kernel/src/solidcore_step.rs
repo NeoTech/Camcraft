@@ -275,11 +275,25 @@ fn build(k: &mut SolidcoreKernel, s: topology::Solid) -> Result<StepSolid, (&'st
             "a surface model of open shells, not a closed solid".into(),
         ));
     }
+    build_record(k, s.item, s.name, s.brep, s.notes)
+}
+
+/// One B-rep record (mm) from a file as a checked kernel solid: built,
+/// healed, integrity-checked, measured and its vertex gaps judged. Shared
+/// by the STEP and the Solidcraft (#1456) importers. `Err` is
+/// `(stage, reason)`.
+pub(crate) fn build_record(
+    k: &mut SolidcoreKernel,
+    item: u64,
+    name: String,
+    record: solidcore_record::brep::Brep,
+    notes: Vec<String>,
+) -> Result<StepSolid, (&'static str, String)> {
     // Untrusted: the record comes from a file, so the kernel heals it as it
     // builds it (the conversion's own rule for records not made by a
     // modeller that keeps the kernel's rules).
     let mut brep =
-        to_kernel_body(&mut k.k, &s.brep, false).map_err(|e| ("build", e.to_string()))?;
+        to_kernel_body(&mut k.k, &record, false).map_err(|e| ("build", e.to_string()))?;
     // Finding at the pinned commit (bench, tests/step_agreement.rs): the
     // build leaves the port's cached `Face::shell` behind its face-use
     // links on every fixture, which the integrity check below refuses. The
@@ -317,14 +331,14 @@ fn build(k: &mut SolidcoreKernel, s: topology::Solid) -> Result<StepSolid, (&'st
         ));
     }
     Ok(StepSolid {
-        item: s.item,
-        name: s.name,
+        item,
+        name,
         brep,
-        record: s.brep,
+        record,
         measure,
         area,
         vertex_gap: gaps.gap,
-        notes: s.notes,
+        notes,
     })
 }
 

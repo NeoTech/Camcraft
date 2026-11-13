@@ -761,7 +761,9 @@ name = "camcraft-kernel"
 version = "0.19.0"
 dependencies = [
  "camcraft-kernel",
+ "flate2",
  "ruststep",
+ "serde_json",
  "solidcore",
  "solidcore-convert",
  "solidcore-record",
