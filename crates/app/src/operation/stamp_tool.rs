@@ -36,6 +36,7 @@ pub(super) fn write(world: &World, tool_name: &str, params: &OpParams, h: &mut s
         crate::tools::ToolKind::Taper => 10,
         crate::tools::ToolKind::Probe => 11,
         crate::tools::ToolKind::Torch => 12,
+        crate::tools::ToolKind::Electrode => 13,
     });
     for v in [
         tool.diameter,
@@ -65,6 +66,8 @@ pub(super) fn write(world: &World, tool_name: &str, params: &OpParams, h: &mut s
         crate::tools::ToolKind::Drill => w(h, tool.tip_angle),
         crate::tools::ToolKind::Tap => w(h, tool.pitch),
         crate::tools::ToolKind::Groove => w(h, tool.width),
+        // The electrode's Y size is its face (#541).
+        crate::tools::ToolKind::Electrode => w(h, tool.width),
         // The threading insert digests BOTH its profile numbers
         // (M5.2 D): the crest width and the flanks' angle are the
         // wave's footprint - a recut V is a different thread even
@@ -102,5 +105,7 @@ pub(super) fn write(world: &World, tool_name: &str, params: &OpParams, h: &mut s
     // #368: a modelled body's envelope - bytes only when there is one,
     // so no digest without a body moves.
     crate::tool_body::digest(world, &tool_entity, h);
+    // #852: a drawn neck the stack laws read - bytes only with one.
+    crate::tool_cutter::digest(world, &tool_entity, &tool, h);
     Some(())
 }

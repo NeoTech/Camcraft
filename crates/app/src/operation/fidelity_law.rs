@@ -1,14 +1,72 @@
 //! What an operation kind's gouge verdicts need of its model's fidelity
-//! (#864): the tolerance its envelope law is judged at, the smallest
-//! tolerance any of its gouge laws holds, and whether those laws read a
-//! coarse model's excess at all.
+//! (#864, #904): the tolerance its envelope law is judged at, the
+//! smallest tolerance any of its laws holds, and whether those laws read
+//! a coarse model's excess at all.
 //!
 //! Provenance: our own registry of our own verify laws; `finish_tol_of`
 //! is the envelope budget `generate` always handed to `verify`, moved
 //! here unchanged so the program gate reads the same number.
+//!
+//! ## Which law judges which kind (#904)
+//!
+//! A kind is judged on a reduced-fidelity model only when EVERY law that
+//! convicts it against the model reads the excess; otherwise it is
+//! refused at the program gate.
+//!
+//! - Turning, the nose kinds (facing, profile, chamfer, taper, multi-
+//!   pass, boring): `verify`'s envelope law (f) on the nose circle.
+//! - Turning, the band kinds (groove, part, thread, form): the meridian
+//!   scan (`turning::*_warnings_excess`), and for a Part's inspection
+//!   ask the composed scan at the post (`operation::probe`).
+//! - Every turning kind: the meridian rapid, bar-feed and holder scans,
+//!   whose margin is tightened the same way ([`tightened`]).
+//! - The rotary kinds: law (f), and the radial field law's band and
+//!   rapid allowances (`rotary_law`).
+//! - The multi-axis ball kinds (5-axis contour and parallel, flow,
+//!   multi-axis contour and rough): law (f) - a posed ball is the same
+//!   ball about the same centre, so the envelope scan is the whole
+//!   gouge verdict of the cut.
+//! - Probe (#1053): its protected-move law (`probe_op::stylus_hits` and
+//!   the stem and body bands of `stylus_reach_hits`) - the stylus slack
+//!   gives the excess back (`probe_op::stylus_slack`). A probe cuts
+//!   nothing, so no other law reads it.
+//! - Plasma (#1053): the kerf law and the cover law
+//!   (`plasma::PlasmaParams::kerf_tol`), the only laws that read the
+//!   part; the cut-order, kerf-crossing and tip-up laws read the path.
+//!
+//! Still refused, each for its reason:
+//!
+//! - Swarf and advanced swarf: the flank that does the cutting is proved
+//!   clear only inside the generator (`multiaxis::stamp_pose`,
+//!   `flank_clear` at the plan tolerance); no verify law re-measures it,
+//!   so there is nothing here to tighten until that proof reads the
+//!   excess (#1052).
+//! - The cone rides (2D chamfer, deburr) and the engrave rides (trace,
+//!   engrave): no law holds them to a tolerance against the model at
+//!   all. The ride IS the mesh's edge by construction (law (b) stands
+//!   down for both modes), so the cut stands off the true edge by the
+//!   mesh's own chord error, which no reading of that mesh can see or
+//!   bound - there is no tolerance to give the excess back from. Worse,
+//!   deburr finds its edges by the bend between facets: a coarse mesh
+//!   of a smooth face bends more between neighbours and can be read as
+//!   a crease the ride then breaks - a cut no verify law speaks to.
+//!   Judging them needs a stated ride accuracy, a new promise, not a
+//!   tightened one (#1053's decision file).
+//! - The cross drill: its part law (`cross_part`, `GOUGE_TOL`) and its
+//!   rapid law (`rapids_radial`) could give the excess back, but the
+//!   chain is also proved by construction laws that measure the mesh
+//!   with no slack at all - the standoff radius and Z top the kernel
+//!   stations about (`cross_stock::standoff`, `rapids_clear`), the
+//!   entry along each hole's line (`cross_entry`), the flute reach and
+//!   holder faces (`drill_reach`). Each reads a coarse mesh's chord
+//!   error straight through; tightening them means growing every
+//!   measured standoff by the excess, which moves the kernel's
+//!   stations. Left for #1053's remainder.
 
 use super::material::GOUGE_TOL;
+use super::probe_op::STYLUS_SLACK;
 use super::{OpParams, Section};
+use crate::plasma::KERF_TOL;
 use crate::verify::Mode;
 
 /// The envelope law's budget for `params`: the op's own tolerance for the
@@ -67,29 +125,90 @@ pub(crate) fn finish_tol_of(params: &OpParams) -> Option<f64> {
     }
 }
 
-/// The smallest tolerance a gouge law of this kind is held at: the
-/// section and solid laws' `GOUGE_TOL`, and the envelope law's own budget
-/// where the kind carries one. A coarse model's excess must leave all of
-/// them positive, or the operation is refused instead of judged.
-pub(crate) fn floor_of(params: &OpParams) -> f64 {
-    finish_tol_of(params).map_or(GOUGE_TOL, |t| t.min(GOUGE_TOL))
+/// A verdict tolerance on a model imported coarser than promised: `tol`
+/// less `excess` while a positive tolerance is left, `tol` untouched
+/// past that - where [`floor_of`] makes the program gate refuse the
+/// operation instead (`verify::excess_floor` is the one test both read).
+pub(crate) fn tightened(tol: f64, excess: f64) -> f64 {
+    crate::verify::excess_floor(tol, excess).unwrap_or(tol)
 }
 
-/// Whether every gouge law that judges this kind reads a coarse model's
-/// excess: the upright mill kinds, whose verdict is `verify`'s section
-/// law (b), solid law (b2 - `generate::contain_into` for the containment
-/// kinds) and envelope law (f), plus the lathe's axial hole verdict.
+/// The band kinds' meridian-scan tolerance (`turning::revolve`), `None`
+/// for every kind that scan does not judge.
+pub(crate) fn meridian_tol_of(params: &OpParams) -> Option<f64> {
+    match params {
+        OpParams::GrooveRough { tolerance, .. }
+        | OpParams::GrooveFinish { tolerance, .. }
+        | OpParams::Part { tolerance, .. }
+        | OpParams::Threading { tolerance, .. }
+        | OpParams::FormTurning { tolerance, .. } => Some(*tolerance),
+        _ => None,
+    }
+}
+
+/// A Part's inspection ask, when it states one: the composed blade scan
+/// at the post judges the finished part at it (`operation::probe`).
+fn ask_of(params: &OpParams) -> Option<f64> {
+    match params {
+        OpParams::Part { inspect_tol, .. } if *inspect_tol > 0.0 => Some(*inspect_tol),
+        _ => None,
+    }
+}
+
+/// The slack of a kind's own law that is not a `verify` tolerance
+/// (#1053): the probe's stylus slack, the plasma kerf law's.
+fn own_law_tol_of(params: &OpParams) -> Option<f64> {
+    match params {
+        OpParams::Probe { .. } => Some(STYLUS_SLACK),
+        OpParams::PlasmaProfile(_) => Some(KERF_TOL),
+        _ => None,
+    }
+}
+
+/// The smallest tolerance a law of this kind is held at: `GOUGE_TOL`
+/// (the section and solid laws, the rotary bands, the turning margin),
+/// the envelope law's own budget, the meridian scan's, a Part's
+/// inspection ask, and the probe's and plasma's own slack, where the
+/// kind carries one. A coarse model's excess must leave all of them
+/// positive, or the operation is refused instead of judged. `GOUGE_TOL`
+/// is the base for every kind, so plasma (whose kerf law holds 0.025
+/// mm) is refused at the same 0.01 mm the rest are - stricter than its
+/// own law needs, never looser.
+pub(crate) fn floor_of(params: &OpParams) -> f64 {
+    [finish_tol_of(params), meridian_tol_of(params), ask_of(params), own_law_tol_of(params)]
+        .into_iter()
+        .flatten()
+        .fold(GOUGE_TOL, f64::min)
+}
+
+/// Whether every law that convicts this kind against its model reads a
+/// coarse model's excess (the module header names them per family): the
+/// upright mill kinds (#864), - #904 - turning, the rotary kinds and
+/// the multi-axis ball kinds, and - #1053 - probe and plasma.
 ///
-/// Not yet: the cone and engrave rides (their verdict is the generator's
-/// own construction law), the cross drill (`cross_part`), the multi-axis
-/// and rotary kinds (the stamp, lean and radial field laws), turning
-/// (the meridian scans) and plasma. On a reduced-fidelity model those are
-/// refused at the program gate rather than judged loosely.
+/// Not yet: swarf (its flank proof is the generator's), the cone and
+/// engrave rides (no tolerance holds them to the model), the cross
+/// drill (its standoffs read the mesh with no slack), the wire (#532)
+/// and the sinker (#541). On a reduced-
+/// fidelity model those are refused at the program gate rather than
+/// judged loosely.
 pub(crate) fn excess_aware(params: &OpParams) -> bool {
+    if matches!(params, OpParams::Probe { .. }) {
+        return true;
+    }
     let info = params.kind().info();
-    let upright_mill = matches!(info.section, Section::Mill2D | Section::Mill3D | Section::Drilling);
-    let judged = matches!(info.mode, Mode::Area | Mode::Boundary)
-        || (info.mode == Mode::Envelope && info.section == Section::Mill3D);
-    let cross_drill = matches!(params, OpParams::Drill { cross, .. } if !cross.is_empty());
-    upright_mill && judged && !cross_drill
+    match info.section {
+        Section::Mill2D | Section::Mill3D | Section::Drilling => {
+            let judged = matches!(info.mode, Mode::Area | Mode::Boundary)
+                || (info.mode == Mode::Envelope && info.section == Section::Mill3D);
+            let cross_drill = matches!(params, OpParams::Drill { cross, .. } if !cross.is_empty());
+            judged && !cross_drill
+        }
+        Section::Turning => true,
+        Section::MultiAxis => !matches!(params, OpParams::Swarf { .. } | OpParams::AdvancedSwarf { .. }),
+        Section::Plasma => true,
+        // #532: the wire's kerf law is not excess-aware yet either.
+        // #541: nor the sinker's burn verdict.
+        Section::WireEdm | Section::Sinker => false,
+    }
 }
