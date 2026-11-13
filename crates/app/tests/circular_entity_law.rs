@@ -2,8 +2,9 @@
 //! `SrcRef::Entity`) is judged against that part. A circle typed through
 //! the hole's wall is a blocking `Warning::Gouge` and the post is held;
 //! a circle inside the modeled hole stays clean; a Stock source still
-//! cuts the typed circle unjudged; a picked Circular keeps its law. The
-//! same job driven over MCP is judged the same.
+//! cuts the typed circle unjudged (a picked Circular is judged too:
+//! `circular_pick_law.rs`, #1550). The same job driven over MCP is
+//! judged the same.
 //!
 //! Provenance: our own tests over the depth-aware verify (the section
 //! and solid laws); no vendor material consulted.

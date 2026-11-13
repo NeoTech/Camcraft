@@ -118,7 +118,7 @@ pub use setup_stock::SetSetupStockSource;
 pub use set_units::SetUnits;
 pub use theme::{check_theme, theme_of, theme_set};
 pub use color_vision::{color_vision_of, color_vision_set};
-pub use set_wcs::SetWcsOrigin;
+pub use set_wcs::{BoxPoint, OriginAt, SetWcsOrigin, place_setup_origin};
 pub use wcs_circle::SetWcsAtCircleCentre;
 pub use tool::{AddTool, ChangeTool, DeleteTool, HolderPick};
 pub use tool_body::{LatheBodySpec, SetToolBody, ToolBodySpec};

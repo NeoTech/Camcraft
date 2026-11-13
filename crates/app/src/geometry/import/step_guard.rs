@@ -10,10 +10,12 @@
 //! Why it is needed: truck's surface subdivision splits every parameter
 //! cell whose midpoint stands off the bilinear patch of its corners by more
 //! than the tolerance, and recurses until no cell splits. A B-spline that is
-//! not continuous - an interior knot repeated past its degree, a degenerate
-//! corner blend - keeps one cell "far" at every depth, so the recursion
-//! never ends (it outlives the float resolution: a split at an unchanged
-//! midpoint still grows the list). It runs inside a rayon task we cannot
+//! not continuous - an interior knot repeated past its degree - keeps one
+//! cell "far" at every depth, so the recursion never ends (it outlives the
+//! float resolution: a split at an unchanged midpoint still grows the
+//! list). So does a range that runs far off the knot domain; the one known
+//! source of that, a boundary point on a collapsed patch side, is settled
+//! in `step_pole` (#1548) before it reaches the subdivision. It runs inside a rayon task we cannot
 //! interrupt, and no facet is ever produced, so the facet budget never
 //! fires.
 //!
@@ -159,7 +161,10 @@ impl ParameterDivision2D for Metered {
 impl SearchParameter<D2> for Metered {
     type Point = Point3;
     fn search_parameter<H: Into<SPHint2D>>(&self, point: Point3, hint: H, trials: usize) -> Option<(f64, f64)> {
-        self.inner.search_parameter(point, hint, trials)
+        let hint = hint.into();
+        let found = self.inner.search_parameter(point, hint, trials)?;
+        // #1548: at a pole the free parameter comes back anywhere.
+        Some(super::step_pole::settle(&self.inner, point, previous(hint), found))
     }
 }
 
@@ -171,7 +176,17 @@ impl SearchNearestParameter<D2> for Metered {
         hint: H,
         trials: usize,
     ) -> Option<(f64, f64)> {
-        self.inner.search_nearest_parameter(point, hint, trials)
+        let hint = hint.into();
+        let found = self.inner.search_nearest_parameter(point, hint, trials)?;
+        Some(super::step_pole::settle(&self.inner, point, previous(hint), found))
+    }
+}
+
+/// The previous boundary point's parameter, when the search was given one.
+fn previous(hint: SPHint2D) -> Option<(f64, f64)> {
+    match hint {
+        SPHint2D::Parameter(u, v) => Some((u, v)),
+        _ => None,
     }
 }
 
