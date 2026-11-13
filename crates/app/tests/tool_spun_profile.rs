@@ -4,7 +4,7 @@
 //! fixture laws, it saves/loads/undoes, refuses nonsense by name, and
 //! the parametric profile changes nothing for an existing tool.
 //!
-//! Gate map (M4.4): covers app::commands, app::tool_body, app::tool_body_view, app::project, app::schema, app::tools.
+//! Gate map (M4.4): covers app::commands, app::tool_body, app::tool_body_view, app::project, app::schema, tools::tools.
 
 use camcraft_app::commands::{AddTool, CommandError, CreateOperation, GenerateOperation, History, SetStock, SetToolBody, TagFixture};
 use camcraft_app::geometry::{Point3, Triangle};

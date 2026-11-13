@@ -95,22 +95,30 @@ function msg(s) {  // counted warning where the host offers message()
 // (counted warning, gate-blocked) wherever it cannot honor one. Law:
 // a tilted record states all three angles (the stream's parser zeros
 // unstated letters), so the presence of A decides; angle memory
-// resets with the arm, so re-arming always commands all three words.
+// resets with the arm, so re-arming always commands every stated
+// rotary's word (#997: a letter with no rotary takes none).
 // A prismatic record never touches the mode - the tilt stays modal.
-function missingLetter(p) {  // the first turning letter no rotary is named for, else ""
+function statesRotary(letter) {  // does the machine state a rotary of this name?
   var rs = (typeof machine !== "undefined" && machine.rotaries) || [];
+  for (var j = 0; j < rs.length; j++) {
+    if (String(rs[j].name || "").toUpperCase() === letter) return true;
+  }
+  return false;
+}
+function missingLetter(p) {  // the first turning letter no rotary is named for, else ""
   var ls = ["A", "B", "C"];
   for (var i = 0; i < ls.length; i++) {
     var v = p[ls[i]];
     if (!has(v) || Math.abs(v) <= 1e-9) continue;
-    var named = false;
-    for (var j = 0; j < rs.length; j++) {
-      if (String(rs[j].name || "").toUpperCase() === ls[i]) named = true;
-    }
-    if (!named) return ls[i];
+    if (!statesRotary(ls[i])) return ls[i];
   }
   return "";
 }
+// #997: the angle words name only the rotaries the machine states. The
+// stream zeros an unstated letter, and missingLetter has refused one
+// that turns, so a letter with no rotary here is a stated zero - a word
+// for it (C0 on an A/B head) is an address the control has no axis for.
+function angleWord(letter, v) { return statesRotary(letter) ? w(letter, v) : ""; }
 // #797 review: the machine check judges a lone rotary about X by the
 // angle the table must hold, signed by its stated direction - a [-1,0,0]
 // table holds the negated angle (`judge.rs` `x_rotary_problem`). This
@@ -153,12 +161,12 @@ function tilt(p) {  // words to append, [] if none, null if refused
     block(["G43.4", "H" + pad2(tNo)]);
     tcpmOn = true;
     lastA = p.A; lastB = p.B; lastC = p.C;
-    return [w("A", p.A), w("B", p.B), w("C", p.C)];
+    return [angleWord("A", p.A), angleWord("B", p.B), angleWord("C", p.C)];
   }
   var words = [];
-  if (p.A !== lastA) { words.push("A" + fu(p.A)); lastA = p.A; }
-  if (p.B !== lastB) { words.push("B" + fu(p.B)); lastB = p.B; }
-  if (p.C !== lastC) { words.push("C" + fu(p.C)); lastC = p.C; }
+  if (p.A !== lastA) { words.push(angleWord("A", p.A)); lastA = p.A; }
+  if (p.B !== lastB) { words.push(angleWord("B", p.B)); lastB = p.B; }
+  if (p.C !== lastC) { words.push(angleWord("C", p.C)); lastC = p.C; }
   return words;
 }
 
@@ -207,7 +215,7 @@ function compRefuse(what) {
 // flood code: refused by name (#150), never posted as mist or dry. An
 // unstated list stays silent (the unstated-limit law). M9 (stop) is
 // the RS-274 fixed pair.
-var COOLANT_KINDS = ["flood", "mist", "through-spindle", "through-tool"];
+var COOLANT_KINDS = ["flood", "mist", "air", "air-blast", "through-spindle", "through-tool"];
 function coolantWho() { return coolantOp ? "operation " + coolantOp + ": " : ""; }
 function coolantCode() {
   var cs = (typeof machine !== "undefined" && machine.coolants) || [];
@@ -225,14 +233,14 @@ function coolantCode() {
 }
 
 // The op's coolant ask (#112): the stream says nothing for flood (every
-// older stream), or carries PARAM Coolant off / mist / through-tool. The
+// older stream), or carries PARAM Coolant off / mist / air (#869) / through-tool. The
 // code is the machine's own entry of that family - the machine is truth;
 // an ask the machine states no code for is refused by name, naming the
 // operation (#150), never silently posted dry.
 function coolantFor(ask) {
   if (ask === "off") return "";
   if (!ask || ask === "flood") return coolantCode();
-  var want = ask === "mist" ? ["mist"] : (ask === "through-tool" ? ["through-spindle", "through-tool"] : []);
+  var want = ask === "mist" ? ["mist"] : (ask === "air" ? ["air", "air-blast"] : (ask === "through-tool" ? ["through-spindle", "through-tool"] : []));
   if (want.length === 0) { msg(coolantWho() + "unknown coolant ask " + ask); return ""; }
   var cs = (typeof machine !== "undefined" && machine.coolants) || [];
   for (var i = 0; i < cs.length; i++) {
@@ -446,7 +454,9 @@ function startPreamble() {
     spindleWait = false;
   }
   if (probeStop) block(["M5"]);
-  coolant = coolantFor(coolantAsk);
+  // #995: a touch probe section starts no coolant, whatever its ask -
+  // fluid on the stylus and the measured faces spoils the reading.
+  coolant = probeStop ? "" : coolantFor(coolantAsk);
   if (coolant) block([coolant]);
   smoothOn();
 }

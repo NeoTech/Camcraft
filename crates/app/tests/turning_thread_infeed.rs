@@ -212,6 +212,9 @@ fn the_plan_rides_the_project_file_and_a_default_one_is_absent() {
         spring_passes: 2,
     };
     create(&world, &mut history, "TH1", plan);
+    // Fresh before the save, so a Stale after the load can only be the
+    // round trip (NeoTech's 2026-11-13 refresh saw one; not reproduced).
+    assert_eq!(status(&world, "TH1"), OpStatus::Ok, "TH1: fresh before the save");
     let b = dir.join(format!("camcraft-infeed-b-{}.json", std::process::id()));
     camcraft_app::project::save(&world, &b).expect("saved");
     let other = new_world();
@@ -222,6 +225,10 @@ fn the_plan_rides_the_project_file_and_a_default_one_is_absent() {
         let o = model::operation_of(&other, &e).expect("operation");
         let OpParams::Threading { infeed_plan, .. } = &o.params else { unreachable!() };
         assert_eq!(*infeed_plan, want, "{name}");
+        let saved = model::find_by_name(&world, name).and_then(|e| model::operation_of(&world, &e)).expect("saved op");
+        assert_eq!(o.stamp, saved.stamp, "{name}: the stored stamp survives the round trip");
+        let now = camcraft_app::operation::op_stamp(&other, &o, name);
+        assert_eq!(now, camcraft_app::operation::op_stamp(&world, &saved, name), "{name}: the loaded inputs digest as before");
         assert_eq!(status(&other, name), OpStatus::Ok, "{name}: the loaded cache matches its plan");
     }
 }
