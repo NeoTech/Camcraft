@@ -121,4 +121,48 @@ mod tests {
         // Unknown is the way-in laws' to refuse.
         assert!(judge(&path(20.0), 3.0, None).is_ok());
     }
+    /// The operation door's "pitch not stated yet" branch (a new Thread
+    /// on a single-form mill) still asks the R-plane door: a fixed R
+    /// plane under the hole's top is refused when the operation is made,
+    /// not first at generate.
+    #[test]
+    fn a_low_r_plane_is_refused_at_the_door_before_the_pitch_is_stated() {
+        let mill = crate::tools::catalog()
+            .into_iter()
+            .find(|(n, _)| *n == "TMS-0600-P050-150")
+            .map(|(_, t)| t)
+            .expect("the catalog's single-form thread mill");
+        let op = |r: f64| crate::operation::OpParams::Thread {
+            clearance_z: Height::fixed(30.0),
+            retract_z: None,
+            top_z: Height::fixed(r),
+            bottom_z: None,
+            infeed: 0.25,
+            feed: 300.0,
+            plunge_feed: 150.0,
+            climb: true,
+            holes: vec![hole(20.0)],
+            pitch: None,
+            hand: crate::cl::ThreadHand::Right,
+            external: false,
+            passes: crate::machining2d::ThreadPasses::default(),
+        };
+        let low = super::super::thread_op::door(&mill, &op(19.0)).unwrap_or_default();
+        assert!(low.contains("the R plane at z 19 is below the top of the hole"), "{low}");
+        assert_eq!(super::super::thread_op::door(&mill, &op(20.0)), None, "an unstated pitch alone is the generator's to name");
+    }
+
+    /// Only a vertical rapid DOWN is the dive onto the R plane: a
+    /// sideways rapid (even one that descends), or one going up, that ends under the stock left
+    /// ahead is the link and rapid laws' to judge, not this one.
+    #[test]
+    fn only_the_dive_is_judged_against_the_stock_left_ahead() {
+        let stock = block(22.0, 3.3);
+        let mut side = path(22.0);
+        side.moves.insert(0, Move::new(MoveKind::Rapid, Point3::new(-8.0, 0.0, 25.0), Point3::new(8.0, 0.0, 21.0), None));
+        assert!(judge(&side, 3.0, Some(&stock)).is_ok(), "a sideways rapid, even descending, is no dive");
+        let mut up = path(22.0);
+        up.moves.push(Move::new(MoveKind::Rapid, Point3::new(8.0, 0.0, 20.0), Point3::new(8.0, 0.0, 21.0), None));
+        assert!(judge(&up, 3.0, Some(&stock)).is_ok(), "a rapid going up is no dive");
+    }
 }
