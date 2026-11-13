@@ -147,7 +147,11 @@ fn every_builtin_posts_every_golden_byte_exact() {
         let cps = read(&format!("assets/posts/{cps_stem}.cps"));
         for g in GOLDENS {
             let (mch, stream) = golden_input(cps_stem, g);
-            let out = engine::run(&cps, &mch, &stream)
+            // #902: the program's unit is the document's. The Tormach
+            // goldens stand for an inch document on the 770MX (what they
+            // were run as in PathPilot); the rest for an mm one.
+            let units = if *cps_stem == "tormach" { json!({ "Units": "inch" }) } else { serde_json::Value::Null };
+            let out = engine::run_with(&cps, &mch, &stream, &units)
                 .unwrap_or_else(|e| panic!("{name} on {g}: must post: {e}"));
             if let Some((_, _, why)) = REFUSED.iter().find(|(s, gg, _)| s == cps_stem && gg == g) {
                 assert!(
