@@ -210,7 +210,15 @@ inch declares `programUnits = "mm inch"` in its manifest; an inch
 document on a script that does not is refused by name before any hook
 runs (`post::units`). `machine.units` is only the unit the machine
 file's own numbers were written in; no post takes the program's unit
-from it. `onClose`
+from it. `program` is the program's identity
+(#258, `engine::run_program_with`): `{ number, numbered, comment }` -
+`number` the program number (1 when the document states none; one file
+per operation counts up from it, #111; `programNumber` holds it too),
+`numbered` true only when the document stated it, `comment` the
+document's program comment (`""` for none). The app validates both at
+`SetProgramInfo` (1-9999; at most 40 printable ASCII characters, no
+`( ) % ; *`); a script applies its dialect's own narrower rule and
+refuses by name. `onClose`
 ends the run; its lines belong to no record.
 
 A parsed stream is normalized to program order before the hooks

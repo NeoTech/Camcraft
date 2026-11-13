@@ -65,7 +65,7 @@ argument semantics in `docs/CNC-INTERMEDIATE.md`):
 
 | hook | fires |
 |---|---|
-| `onOpen` | once, before all records (write the header here; the global `programNumber` is the program's number - 1 for a whole job, 1, 2, 3... per file when posting one file per operation (#111) - for a dialect with an O-word) |
+| `onOpen` | once, before all records (write the header here; the global `program` is the program's identity (#258): `program.number` - the document's number, 1 when it states none, counting up per file when posting one file per operation (#111; `programNumber` holds it too) - `program.numbered` (the document stated it: a dialect whose default header writes no number keeps writing none) and `program.comment` (the document's program comment, `""` for none - write the machine's name then, as before). Write them in the dialect's own form (O-word, program name, header comment), clean the comment to the dialect's comment-legal characters, and refuse by name what the dialect cannot hold) |
 | `onParameter(name, value)` | per `PARAM`; `onSpindleSpeed` follows the `SpindleSpeed` one |
 | `onToolChange(number, name)` | per `TOOL` |
 | `onSection` / `onSectionEnd` | per operation span (preamble bookends) |

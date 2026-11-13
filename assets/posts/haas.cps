@@ -183,6 +183,31 @@ function centerWords(p) {
   ];
 }
 
+// -------------------------------------------------------------- header
+// The document's program identity (#258), from the engine's `program`
+// global: its number (1 when the document states none; one file per
+// operation counts up from it, #111), whether the document stated it,
+// and its program comment ("" for none - the header then names the
+// machine, as before #258). A host that publishes none posts O0001.
+function progNo() {
+  var n = typeof program !== "undefined" ? program.number : (typeof programNumber !== "undefined" ? programNumber : 1);
+  return Math.round(Number(n) || 1);
+}
+function progNumbered() { return typeof program !== "undefined" && program.numbered === true; }
+function progComment() { return clean(typeof program !== "undefined" ? program.comment : ""); }
+// The O-word (#258), written only when the document states a number:
+// a program with none keeps the header it always had. Haas's published
+// mill operator's manual names a program O followed by five digits,
+// O00000-O99999; O00000 is not a program this post writes (from O00001).
+function oWord() {
+  if (!progNumbered()) return "";
+  var n = progNo();
+  if (n < 1 || n > 99999) throw new Error("program number " + n + " is outside O00001-O99999, the control's program numbers");
+  var t = String(n);
+  while (t.length < 5) t = "0" + t;
+  return "O" + t;
+}
+
 // ------------------------------------------------------------ comments
 // Program commentary (#257): the setup, the operation and the tool, for
 // the operator reading the program - never a word the control moves on.
@@ -254,9 +279,9 @@ function onOpen() {
   inch = typeof postOptions !== "undefined" && postOptions.Units === "inch";
   var nm = (typeof machine !== "undefined" && machine.name) || "CAMCRAFT";
   writeln("%");
-  // #594: the name is user text from the machine file - cleaned like
-  // every other comment text, so `Tormach 770MX (ML)` never nests.
-  block(["(" + (clean(nm) || "CAMCRAFT") + ")"]);
+  // #594: the machine name is user text - cleaned like every other
+  // comment text, so `Tormach 770MX (ML)` never nests.
+  block([oWord(), "(" + (progComment() || clean(nm) || "CAMCRAFT") + ")"]);
   invertedNotes();
   unitBlock();
 }

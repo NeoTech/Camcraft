@@ -46,6 +46,7 @@ pub mod colorvision;
 pub mod ground_ink;
 pub mod window_chrome;
 mod post_options;
+mod program_info;
 pub mod cvd;
 mod icons;
 mod op_icons;
@@ -240,6 +241,8 @@ mod thread_hand_tests;
 mod thread_mill_page_tests;
 #[cfg(test)]
 mod after_op_tests;
+#[cfg(test)]
+mod program_info_tests;
 #[cfg(test)]
 mod colorvision_tests;
 #[cfg(test)]
