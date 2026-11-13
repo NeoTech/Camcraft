@@ -224,6 +224,41 @@ impl<'a> SolidIndex<'a> {
         }
         true
     }
+
+    /// Where the vertical through `(x, y)` crosses the solid's facets,
+    /// highest first: `(z, up)`, `up` at a facet whose outward normal
+    /// points up (leaving the solid on the way up), `!up` at a
+    /// down-facing one (the same winding `slice::shadow_above` reads).
+    /// `None` when the vertical grazes an edge or a vertex: the caller
+    /// retries a hair aside ([`Self::inside`]'s rule). Vertical facets
+    /// carry no crossing; their neighbours do.
+    pub(super) fn column(&mut self, x: f64, y: f64) -> Option<Vec<(f64, bool)>> {
+        self.gather([x, y, self.lo[2]], [x, y, self.hi[2]]);
+        let mut out = Vec::new();
+        for &f in &self.cand {
+            let t = &self.facets[f as usize];
+            let o = |a: Point3, b: Point3| (b.x - a.x) * (y - a.y) - (b.y - a.y) * (x - a.x);
+            let area = (t.b.x - t.a.x) * (t.c.y - t.a.y) - (t.b.y - t.a.y) * (t.c.x - t.a.x);
+            if area == 0.0 {
+                continue;
+            }
+            let s = area.signum();
+            let (e1, e2, e3) = (o(t.a, t.b) * s, o(t.b, t.c) * s, o(t.c, t.a) * s);
+            if e1 < 0.0 || e2 < 0.0 || e3 < 0.0 {
+                continue;
+            }
+            if e1 == 0.0 || e2 == 0.0 || e3 == 0.0 || area.is_nan() || e1.is_nan() || e2.is_nan() || e3.is_nan() {
+                return None;
+            }
+            let z = (e2 * t.a.z + e3 * t.b.z + e1 * t.c.z) / area.abs();
+            if !z.is_finite() {
+                return None;
+            }
+            out.push((z, area > 0.0));
+        }
+        out.sort_by(|a, b| b.0.total_cmp(&a.0));
+        Some(out)
+    }
 }
 
 /// Does facet box `f` meet the world box `b0..b1`?

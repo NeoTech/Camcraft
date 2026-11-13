@@ -23,7 +23,7 @@ use super::edm::Edm;
 pub const CONDITION_ROLES: [&str; 3] = ["rough", "skim", "finish"];
 
 /// The keys one condition may state; any other refuses by name.
-pub const CONDITION_KEYS: [&str; 7] = ["id", "name", "gap", "wire_diameter", "undersize", "role", "notes"];
+pub const CONDITION_KEYS: [&str; 8] = ["id", "name", "gap", "wire_diameter", "undersize", "wear", "role", "notes"];
 
 /// The largest wire diameter and electrode undersize per side a
 /// condition may state, mm: a wire is in `[MIN_WIRE_MM, MAX_WIRE_MM]`,
@@ -47,6 +47,14 @@ pub const MAX_GAP_MM: f64 = MAX_WIRE_MM / 2.0;
 /// is 0.254 mm on both sides of the comparison).
 pub const WIRE_MATCH_MM: f64 = 0.001;
 
+/// The axial wear rate law (#546): a finite ratio from 0 up to, but not
+/// including, 1 - the electrode cannot lose more length than the burn
+/// gains depth.
+#[must_use]
+pub fn wear_rate_ok(r: f64) -> bool {
+    r.is_finite() && (0.0..1.0).contains(&r)
+}
+
 /// One generator condition (#531, #290 D4).
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -64,6 +72,12 @@ pub struct Condition {
     /// Sinker: the electrode undersize per side this condition wants, mm.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub undersize: Option<f64>,
+    /// Sinker: the electrode's axial wear rate under this condition
+    /// (#546) - electrode length lost per unit of depth burned, a ratio
+    /// in [0, 1). Unstated = no rate: the burn is not wear-compensated
+    /// from the table (no fixed ratio is ever assumed).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub wear: Option<f64>,
     /// One of [`CONDITION_ROLES`], or empty: not stated.
     #[serde(skip_serializing_if = "String::is_empty")]
     pub role: String,
@@ -166,6 +180,13 @@ pub(super) fn condition_refusal(c: &Condition, wires: &[f64]) -> Option<String> 
     {
         return Some(format!("undersize: {u} mm is outside (0, {MAX_WIRE_MM}] mm"));
     }
+    if let Some(w) = c.wear
+        && !wear_rate_ok(w)
+    {
+        return Some(format!(
+            "wear: {w} is not an axial wear rate - state a ratio from 0 up to (not including) 1: the electrode cannot wear more than the burn deepens"
+        ));
+    }
     if let (Some(g), Some(d)) = (c.gap, c.wire_diameter)
         && g >= d / 2.0
     {
@@ -239,6 +260,11 @@ pub(super) fn parse_conditions(v: Option<&Value>, f: f64, k: Kind, wires: &[f64]
             let field_kind = if k == Kind::WireEdm { "a sinker" } else { "a wire" };
             return Err(at(format!("{other} is {field_kind} field; this is a {} machine", k.word())));
         }
+        // `wear` (#546) is a sinker field: a wire is fed fresh, so a rate
+        // stated on a wire machine would be read by nothing - refuse it.
+        if k == Kind::WireEdm && o.get("wear").is_some_and(|x| !x.is_null()) {
+            return Err(at(format!("wear is a sinker field; this is a {} machine", k.word())));
+        }
         let word = |key: &str| -> Result<String, String> {
             match c.get(key) {
                 None | Some(Value::Null) => Ok(String::new()),
@@ -261,6 +287,10 @@ pub(super) fn parse_conditions(v: Option<&Value>, f: f64, k: Kind, wires: &[f64]
             gap: num("gap")?,
             wire_diameter: if own == "wire_diameter" { num("wire_diameter")? } else { None },
             undersize: if own == "undersize" { num("undersize")? } else { None },
+            wear: match c.get("wear") {
+                None | Some(Value::Null) => None,
+                Some(x) => Some(x.as_f64().filter(|n| n.is_finite()).ok_or_else(|| at(format!("wear must be a number, not {x}")))?),
+            },
             role: word("role")?,
             notes: word("notes")?,
             id: id.clone(),

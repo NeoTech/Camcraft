@@ -234,6 +234,7 @@ pub(super) fn band_reach(
         // generator ever touched hold every pose at home and convict
         // nothing, exactly as before this law existed.
         if cx.mode != Mode::Engrave {
+            let columns = super::hidden_span::Columns::new(None);
             let sweeps = super::sweep::mid_turn_sweeps(
                 path,
                 &bands,
@@ -245,7 +246,7 @@ pub(super) fn band_reach(
                 &in_stock,
                 &|q: Point2| rest.surface_steps(q),
                 &part_at,
-                &|pc, tip, r_in, r_out, h, upto| rest.hidden_in_annulus(pc, tip, r_in, r_out, h, upto),
+                &|bx, h, probes, heights, upto| rest.hidden_in_cover(bx, h, probes, heights, upto, &columns),
             );
             warns.extend(
                 sweeps

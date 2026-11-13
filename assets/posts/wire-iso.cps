@@ -168,7 +168,13 @@ function onSection() {
 }
 
 // The first motion of a section: go to the start hole with the wire
-// cut, thread there, select the condition, cancel compensation.
+// cut, thread there, select the condition, cancel compensation. An open
+// run (#1109, side left / right of travel) has no start hole: its path
+// starts at its run-in point in the air outside the stock, and it is
+// threaded there; it ends at its run-out point past the stock's far
+// edge, where onSectionEnd cuts the wire - the post writes the path's
+// moves only, so no return to the threading point is ever written.
+function openRun() { return side === "left" || side === "right"; }
 function startCut(p) {
   if (threaded) return true;
   if (!codesOk || condition === "") return false;
@@ -179,7 +185,7 @@ function startCut(p) {
   block(["G0", wo("X", p.StartX, orgX), wo("Y", p.StartY, orgY)]);
   if (awt) block([code("thread")]);
   else {
-    note("THREAD THE WIRE AT THE START HOLE");
+    note(openRun() ? "THREAD THE WIRE AT THE RUN-IN POINT OUTSIDE THE STOCK" : "THREAD THE WIRE AT THE START HOLE");
     block(["M00"]);
   }
   block([code("condition").split("{id}").join(condition)]);
@@ -254,7 +260,7 @@ function onSectionEnd() {
       block([code("cut")]);
       block([code("tip_disposal")]);
     } else {
-      note("CUT THE WIRE");
+      note(openRun() ? "CUT THE WIRE AT THE RUN-OUT POINT" : "CUT THE WIRE");
       block(["M00"]);
     }
   }

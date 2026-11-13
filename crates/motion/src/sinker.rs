@@ -84,7 +84,7 @@ pub struct SinkerParams {
 }
 
 /// Slack under which a floor reading counts as "on" the floor, mm.
-const ON_FLOOR: f64 = 1e-6;
+pub(crate) const ON_FLOOR: f64 = 1e-6;
 
 /// The burn floor `depth` reaches from the stated datum: the cavity's
 /// floor as burned (the electrode tip stops one spark gap above it).
@@ -98,7 +98,8 @@ pub fn burn_floor(p: &SinkerParams) -> f64 {
 }
 
 /// Every refusal of the burn, by name, before a move is built; the
-/// burn floor it reaches. The side burn (#545) reads the same door.
+/// burn floor it reaches. The side burn (#545) and the wear-compensated
+/// burn (#546) read the same door.
 pub(crate) fn check(p: &SinkerParams) -> Result<f64, GenError> {
     let nums = [p.x, p.y, p.approach_z, p.top_z, p.floor_z, p.depth, p.electrode_len, p.feed, p.gap];
     if !nums.iter().all(|v| v.is_finite()) || p.model_floor_z.is_some_and(|z| !z.is_finite()) {
