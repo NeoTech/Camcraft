@@ -343,12 +343,8 @@ fn a_burnout_or_a_machine_missing_a_taper_code_refuses_the_4_axis_cut_by_name() 
     let err = made.expect_err("a 4-axis cut with a burnout");
     assert!(err.contains("a 4-axis cut is asked with a no-core burnout - the burnout is cut vertical only"), "{err}");
     let off = "\"taper_off\": \"FX-TAPER-OFF\"";
-    let cut = [
-        ("taper_on", FIXTURE.replace("\"taper_on\": \"FX-TAPER-ON\",", "")),
-        ("taper_off", FIXTURE.replace(&format!("{off},"), "")),
-        ("uv", FIXTURE.replace(&format!("{off},"), off).replace("\"uv\": \"U{u} V{v}\"", "")),
-    ];
-    for (code, text) in cut {
+    let (on, uv) = (FIXTURE.replace("\"taper_on\": \"FX-TAPER-ON\",", ""), FIXTURE.replace(&format!("{off},"), off));
+    for (code, text) in [("taper_on", on), ("taper_off", FIXTURE.replace(&format!("{off},"), "")), ("uv", uv.replace("\"uv\": \"U{u} V{v}\"", ""))] {
         assert_ne!(text, FIXTURE, "{code}: the fixture states it");
         let (world, made) = punch(&text, part(), &[H, 0.0], wire_op(Some(arc())));
         made.expect("the cut generates; the codes are the post's");
