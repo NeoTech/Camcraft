@@ -13,7 +13,8 @@
 //
 // Written: G21 / G20, G90, the setup's G54-G59, G00 to the threading
 // point, T91 (thread the wire) and T90 (cut the wire) on a machine with
-// automatic threading, the C condition word, G40 on the first cut, G01,
+// automatic threading, the C condition word, G40 on the G00 to the
+// threading point (before any motion of the section), G01,
 // G02 / G03 with I J, M00 / M01, M02.
 // Never written (each a named refusal or an operator's task): taper
 // (G50-G52, A), 4-axis (G74 / G75, U V), the control's wire offset
@@ -42,7 +43,7 @@ var condition = "", side = "", afterOp = "";
 var inSection = false;     // between onSection and onSectionEnd
 var sectionOk = false;     // the section is one this post can write
 var threaded = false;      // the wire is threaded through the work
-var compOff = false;       // G40 has been written for this section
+var compOff = false;       // the section's first cut has been written
 var cutZ = null;           // the section's one programmed plane (2-axis)
 var awt = false;
 var taper = 0;             // the section's stated taper, degrees (0: vertical)
@@ -114,6 +115,7 @@ function onOpen() {
   note("WORK OFFSET SET AT THE CONTROL - NO G92 IS WRITTEN");
   note("TANK FILL AND FLUSHING ARE NOT PROGRAMMED - SET THEM AT THE CONTROL");
   note("WIRE-CENTRE PATH - NO WIRE OFFSET G41 G42 IS USED");
+  note("EACH C CONDITION NAMED BELOW MUST EXIST IN THE CONTROL CONDITION TABLE BEFORE START");
   block([inch ? "G20" : "G21"]);
   block(["G90"]);
 }
@@ -174,6 +176,9 @@ function onSection() {
   note(opName + (opKind ? " - " + opKind : ""));
   if (setupName) note("SETUP " + setupName);
   if (side) note("SIDE " + side.toUpperCase() + " - KERF IN THE PATH");
+  // The C word selects a row of the control's own condition table; the
+  // program carries no table, so the operator checks the row exists.
+  note("CONDITION " + condition + " MUST EXIST IN THE CONTROL CONDITION TABLE - CHECK ITS VALUES");
   block([wcsWord]);
 }
 
@@ -189,7 +194,13 @@ function startCut(p) {
     refuse("start" + opName, who() + "the path states no threading point - regenerate it");
     return false;
   }
-  block(["G00", wo("X", p.StartX, orgX), wo("Y", p.StartY, orgY)]);
+  // G40 rides the section's first motion, the G00 to the threading point
+  // (the manual cancels offset on a move, "G40 Y-.02"; RS-274 puts G40 in
+  // its own modal group, so it shares a block with G00, and cancelling an
+  // offset that is already off is legal): a wire offset left active by an
+  // earlier program would shift the positioning, the threading point and
+  // every cut after it.
+  block(["G40", "G00", wo("X", p.StartX, orgX), wo("Y", p.StartY, orgY)]);
   if (awt) block(["T91"]);
   else {
     note(openRun() ? "THREAD THE WIRE AT THE RUN-IN POINT OUTSIDE THE STOCK" : "THREAD THE WIRE AT THE START HOLE");
@@ -240,10 +251,9 @@ function onRapid() {
 function onLinear() {
   var p = properties;
   if (!cutOk(p)) return;
-  // G40 rides the first cutting move (the manual cancels offset on a
-  // move, "G40 Y-.02"): an offset left active by an earlier program
-  // would shift the wire-centre path. No F word: the condition sets the rate.
-  block([compOff ? "" : "G40", "G01", wo("X", p.X, orgX), wo("Y", p.Y, orgY)]);
+  // No F word: the condition sets the rate. G40 was written on the G00
+  // to the threading point (startCut).
+  block(["G01", wo("X", p.X, orgX), wo("Y", p.Y, orgY)]);
   compOff = true;
 }
 
@@ -254,7 +264,7 @@ function onCircular() {
     return;
   }
   if (!threaded && !compOff && sectionOk && inSection && condition !== "") {
-    refuse("arcfirst" + opName, who() + "the first cut is an arc - the Sodick wire post cancels the wire offset (G40) on a straight first move; give the cut a straight lead-in");
+    refuse("arcfirst" + opName, who() + "the first cut is an arc - the Sodick wire post starts every cut with a straight move from the threading point (an arc start is not shown in its source); give the cut a straight lead-in");
     sectionOk = false;
     return;
   }

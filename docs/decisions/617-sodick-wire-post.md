@@ -20,6 +20,7 @@ What the post writes, each with its place in the manual:
 | the condition as `C` and three digits, on its own block | word list; program example (`C411`) |
 | `T91` thread the wire, `T90` cut the wire | T code table; AWT sequence |
 | `G40` on a move, not alone | program example (`G40 Y-.02`) |
+| `G40` in the same block as `G00` | RS-274 / ISO 6983: G40 is in its own modal group, so it may share a block with a motion word, and cancelling an offset that is already off is legal |
 | `M00`, `M01`, `M02` (program end) | M code table; program examples |
 | comments in parentheses | program example |
 
@@ -37,9 +38,22 @@ express.
   `edm.codes`, so a machine file needs none for it.
 - The stream is the wire-centre path (the kerf is in it, #532), so the
   control's wire offset is never engaged: no `G41` / `G42`, no `H`.
-  `G40` is written once per section, on the first cutting move, in the
-  form the manual shows; a section whose first cut is an arc is refused
-  (an offset cancel on an arc is not shown anywhere in the source).
+  `G40` is written once per section, on the section's first motion,
+  the `G00` to the threading point, so an offset left active by an
+  earlier program never shifts the positioning, the threading point or
+  any cut (review of PR #1506; first written on the first cut, which let
+  the `G00` and the threading run under a stale offset). A move is the
+  form the manual shows; G40 beside G00 is RS-274's modal-group rule. A
+  section whose first cut is an arc is still refused: an arc start from
+  the threading point is not shown anywhere in the source.
+- The program carries no condition table, so the header says every C
+  condition named below must exist in the control's condition table
+  before start, and each section names its own (`CONDITION C110 MUST
+  EXIST IN THE CONTROL CONDITION TABLE - CHECK ITS VALUES`) before its
+  first motion (review of PR #1506). A list of every condition in the
+  program's first lines was dropped: the post writes as it reads, and
+  splicing lines into the header afterwards would shift the section line
+  ranges the engine records.
 - No `G92` and no `G29`: positions are in the setup's `G54`-`G59`, which
   the operator sets at the control. A setup without one of those six is
   refused. The header says so.
@@ -59,13 +73,14 @@ express.
 **Unconfirmed (not run on a Sodick control; check at the machine).**
 - Whether the LN1W / LN2W controls of the AQ / AD / ALN series (the
   issue's machine is an AQ600L) read these Mark 21 words unchanged.
-- `G40` on the first cut with no offset active, and a program that
-  never states `G41` / `G42`.
+- `G40` beside `G00` on the move to the threading point, and a program
+  that never states `G41` / `G42`.
 - A program with no `G92` / `G29`, relying on the work offset register.
 - Cutting with no flushing or tank word in the program.
 - The absence of `%`, of a program number and of `M30`.
 - The condition written as a bare `C` word with no condition table or
-  header rows in the file (later controls keep conditions in the file).
+  header rows in the file (later controls keep conditions in the file);
+  the program's header and each section tell the operator to check it.
 - `M02` leaving the wire cut and the machine safe after `T90`.
 - The source was read through a third-party-hosted copy by a
   summarising fetch, not page by page from Sodick.

@@ -3,7 +3,8 @@
 //! wire laws included) to its golden, and its refusals by name.
 //! Provenance: the words asserted here are the ones Sodick's 1998 "Wire
 //! EDM Machine Operation" manual (Mark 21 / EX21 control) prints - T91 /
-//! T90, the C condition word, G40 on a move, the decimal point, M02; no
+//! T90, the C condition word, G40 on a move (RS-274 for G40 beside G00),
+//! the decimal point, M02; no
 //! other CAM product's post or output was read. The output was not run
 //! on a Sodick control (docs/decisions/617-sodick-wire-post.md).
 //!
@@ -123,19 +124,21 @@ fn the_punch_contour_posts_its_sodick_golden_through_the_gate() {
     assert_eq!(text, want, "the Sodick wire program drifted from its golden");
 
     // The shape the golden locks, said out loud: the unit and G90, the
-    // setup's offset, the wire to the start hole cut (G00), threaded
-    // (T91), the condition word, G40 on the first cut, X Y cuts with no F
-    // and no Z, the wire cut (T90), M02.
+    // setup's offset, the wire offset cancelled on the G00 to the start
+    // hole (before any motion, so an offset left by an earlier program
+    // never shifts the positioning or the threading point), threaded
+    // (T91), the condition word, X Y cuts with no F and no Z, the wire
+    // cut (T90), M02.
     let lines: Vec<&str> = text.lines().collect();
     let at = |w: &str| lines.iter().position(|l| *l == w).unwrap_or_else(|| panic!("no {w} in\n{text}"));
     let (unit, abs, wcs, g0, th, cond, first, cut, end) = (
         at("G21"),
         at("G90"),
         at("G54"),
-        at("G00 X-30. Y0."),
+        at("G40 G00 X-30. Y0."),
         at("T91"),
         at("C110"),
-        at("G40 G01 X-20.165 Y0."),
+        at("G01 X-20.165 Y0."),
         at("T90"),
         at("M02"),
     );
@@ -155,6 +158,12 @@ fn the_punch_contour_posts_its_sodick_golden_through_the_gate() {
         assert!(!words.iter().any(|w| w.starts_with(['H', 'A', 'U', 'V', 'S', 'F', 'N'])), "{l}");
     }
     assert_eq!(lines.iter().filter(|l| l.contains("G40")).count(), 1, "{text}");
+    // The C word selects a row of the control's own table, which the
+    // program does not carry: the header says so, and the section names
+    // its condition before the first motion.
+    let table = at("(EACH C CONDITION NAMED BELOW MUST EXIST IN THE CONTROL CONDITION TABLE BEFORE START)");
+    let named = at("(CONDITION C110 MUST EXIST IN THE CONTROL CONDITION TABLE - CHECK ITS VALUES)");
+    assert!(table < unit && named < g0, "{text}");
     // The fixture's fictional codes are never read by this post.
     assert!(!text.contains("FX-"), "{text}");
     // The program says it was not verified and what it leaves to the operator.
@@ -255,14 +264,14 @@ fn an_inch_document_posts_g20_with_pointed_four_place_words() {
     let lines: Vec<&str> = out.program.lines().collect();
     assert!(lines.contains(&"G20") && !lines.contains(&"G21"), "{}", out.program);
     // -30 mm is -1.1811 in; -20.165 mm is -0.7939 in.
-    assert!(lines.contains(&"G00 X-1.1811 Y0."), "{}", out.program);
-    assert!(lines.contains(&"G40 G01 X-0.7939 Y0."), "{}", out.program);
+    assert!(lines.contains(&"G40 G00 X-1.1811 Y0."), "{}", out.program);
+    assert!(lines.contains(&"G01 X-0.7939 Y0."), "{}", out.program);
     assert!(lines.iter().filter(|l| !l.starts_with('(')).all(|l| pointed(l)), "{}", out.program);
 }
 
 /// An arc is G02 / G03 with the centre as I J increments from the arc's
 /// start (the manual's I J), each with its decimal point; an arc as the
-/// first cut is refused (G40 rides a straight move).
+/// first cut is refused (every cut starts straight from the threading point).
 #[test]
 fn an_arc_posts_g03_with_incremental_i_j_and_never_as_the_first_cut() {
     let world = punch_doc(FIXTURE, "C110");

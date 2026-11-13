@@ -233,8 +233,9 @@ under `nc/wire-iso/` (`wire_post.rs`); the decision record is
 `WIRE_POSTS` entry, never the default. Its words are Sodick's own, from
 the 1998 "Wire EDM Machine Operation" manual (Mark 21 / EX21 control):
 `T91` / `T90` thread and cut the wire (`edm.awt`), the operation's
-condition id is the `C` word itself (C and three digits, else refused),
-`G40` rides the first cut, a coordinate always carries its decimal point,
+condition id is the `C` word itself (C and three digits, else refused;
+the header and each section tell the operator it must exist in the
+control's condition table), `G40` rides the `G00` to the threading point, a coordinate always carries its decimal point,
 `M02` ends. It reads no `edm.codes`. It writes a vertical 2-axis cut
 only: taper, 4-axis, a missing G54-G59 and an arc as the first cut are
 refused by name; G92, the tank and flushing T codes and G41 / G42 are
