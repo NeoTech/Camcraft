@@ -38,7 +38,7 @@ const WIRE: &str = include_str!("edm/wire-edm.mch");
 const TABLE: &str = r#"[
     { "id": "C110", "name": "rough", "gap": 0.04, "wire_diameter": 0.25, "role": "rough" },
     { "id": "330", "wire_diameter": 0.25, "role": "finish" },
-    { "id": "S9", "gap": 0.02, "undersize": 0.1 }
+    { "id": "S9", "gap": 0.02 }
 ]"#;
 /// Wire radius 0.125 + gap 0.04.
 const K: f64 = 0.165;

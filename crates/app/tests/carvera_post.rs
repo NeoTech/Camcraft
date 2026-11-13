@@ -7,7 +7,7 @@
 //! compensation in the control.
 //! Provenance: our own tests over our own post; the words are the Carvera
 //! firmware's supported-codes tables (see assets/posts/carvera.cps).
-//! Gate map (M4.4): covers app::post (carvera.cps) with the shipped
+//! Gate map (M4.4): covers post::post (carvera.cps) with the shipped
 //! Makera Carvera machine (posting::MACHINES).
 
 mod common;
@@ -39,10 +39,13 @@ fn mv(kind: MoveKind, x: f64, y: f64, z: f64, feed: Option<f64>) -> cnc::Record 
 
 /// Two operations: a 3 mm end mill (T1) roughs a 20 mm square pocket,
 /// and a 1 mm end mill (T3) finishes its rounded corner with an arc.
+/// Each asks for the air blast (#869: a flood ask on the air-only
+/// Carvera is refused by name, never posted as M7).
 fn two_tool_pocket(tool_a: u32, comp: bool) -> String {
     use cnc::Record as R;
     let mut recs = vec![
         R::Param { name: "OperationName".into(), value: json!("Pocket1") },
+        R::Param { name: "Coolant".into(), value: json!("air") },
         R::Param { name: "SpindleSpeed".into(), value: json!(12000) },
         R::Tool { number: tool_a, name: "3MM FLAT".into() },
         R::Section { begin: true },
@@ -60,6 +63,7 @@ fn two_tool_pocket(tool_a: u32, comp: bool) -> String {
         mv(MoveKind::Rapid, 5.0, 5.0, 5.0, None),
         R::Section { begin: false },
         R::Param { name: "OperationName".into(), value: json!("Corner1") },
+        R::Param { name: "Coolant".into(), value: json!("air") },
         R::Param { name: "SpindleSpeed".into(), value: json!(15000) },
         R::Tool { number: 3, name: "1MM FLAT".into() },
         R::Section { begin: true },

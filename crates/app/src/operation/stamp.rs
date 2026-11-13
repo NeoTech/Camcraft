@@ -44,6 +44,26 @@ pub fn current_stamp(
         OpParams::WireContour(op) => super::wire_op::stamp_condition(world, setup, op, &mut h),
         _ => super::stamp_tool::write(world, tool_name, params, &mut h)?,
     }
+    // #541: the sinker burn places its tip one spark gap above the floor,
+    // read from the setup machine's condition - a re-stated gap (or a
+    // condition gone) is a different burn, marked Stale through here.
+    // (The electrode itself - kind and face width - is `stamp_tool`'s.)
+    // #544: so is a re-stated orbit list or maximum orbit radius.
+    if let OpParams::SinkerBurn(p) = params {
+        h.write(b"sinker-gap");
+        match super::sinker_op::burn_gap(world, setup, p) {
+            Ok(g) => w(&mut h, g),
+            Err(e) => h.write(e.as_bytes()),
+        }
+    }
+    // #545: the side burn's gap too, behind its allowance law.
+    if let OpParams::SinkerSideBurn(p) = params {
+        h.write(b"sinker-side-gap");
+        match super::sinker_side_op::side_gap(world, setup, p) {
+            Ok(g) => w(&mut h, g),
+            Err(e) => h.write(e.as_bytes()),
+        }
+    }
     params.stamp_with(world, setup, Some(src), &mut h);
     // #326: the setup's part alignment is a moved input for every op of
     // the setup (the parts it machines, verifies against or measures

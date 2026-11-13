@@ -59,8 +59,8 @@ thread_local! {
 }
 
 /// Run `f` with the STEP facet budget lowered to `budget` on this thread.
-/// Never raises it past [`MAX_FACETS`]. For tests; the override is
-/// cleared on return.
+/// Never raises the budget an import asked for. For tests; the override
+/// is cleared on return.
 #[doc(hidden)]
 pub fn with_facet_budget<R>(budget: usize, f: impl FnOnce() -> R) -> R {
     BUDGET_OVERRIDE.with(|b| b.set(Some(budget)));
@@ -69,29 +69,40 @@ pub fn with_facet_budget<R>(budget: usize, f: impl FnOnce() -> R) -> R {
     out
 }
 
-fn facet_budget() -> usize {
-    BUDGET_OVERRIDE
-        .with(std::cell::Cell::get)
-        .map_or(MAX_FACETS, |b| b.min(MAX_FACETS))
+fn facet_budget(asked: usize) -> usize {
+    BUDGET_OVERRIDE.with(std::cell::Cell::get).map_or(asked, |b| b.min(asked))
 }
 
 pub fn parse(data: &[u8]) -> Result<Mesh, ImportError> {
     parse_with_chord(data).map(|(mesh, _)| mesh)
 }
 
+/// [`parse_with_chord`] under the default budget, [`MAX_FACETS`].
+pub fn parse_with_chord(data: &[u8]) -> Result<(Mesh, f64), ImportError> {
+    parse_with_chord_budget(data, MAX_FACETS)
+}
+
 /// [`parse`], and the chord error the kept mesh was actually made at, in
 /// millimetres: the coarsest kept tolerance over all shells, scaled by the
 /// file's length unit (#864). Never NaN, infinite or negative - such a
 /// value is refused as a corrupt import, not carried into a verdict.
-pub fn parse_with_chord(data: &[u8]) -> Result<(Mesh, f64), ImportError> {
+/// `budget` caps the whole model's facets (#1054: the caller checked it
+/// against `step_budget`'s bounds).
+pub fn parse_with_chord_budget(data: &[u8], budget: usize) -> Result<(Mesh, f64), ImportError> {
     super::step_depth::check(data)?; // #1075: refuse before ruststep can overflow
     if data.is_empty() {
         return Err(ImportError::Empty);
     }
     let text = std::str::from_utf8(data)
         .map_err(|_| ImportError::Step("file is not valid UTF-8".into()))?;
-    let exchange = ruststep::parser::parse(text)
-        .map_err(|e| ImportError::Step(format!("syntax error: {e}")))?;
+    let exchange = ruststep::parser::parse(text).map_err(|e| {
+        // #912: ruststep fails the whole DATA section at once and its
+        // position is not the bad entity; re-scan to name it.
+        ImportError::Step(match super::step_diag::locate(text) {
+            Some(found) => found.to_string(),
+            None => format!("syntax error: {e}"),
+        })
+    })?;
     // An exchange with zero DATA sections parses fine but would index out of
     // bounds inside truck's convenience helpers; guard the only raw index.
     let Some(section) = exchange.data.first() else {
@@ -107,7 +118,7 @@ pub fn parse_with_chord(data: &[u8]) -> Result<(Mesh, f64), ImportError> {
         return Err(ImportError::Step("no shells found".into()));
     }
 
-    let max_facets = facet_budget();
+    let max_facets = facet_budget(budget);
     let mut facets: Vec<Triangle> = Vec::new();
     let mut chord = 0.0f64;
     for shell in table.shell.values() {
@@ -124,7 +135,7 @@ pub fn parse_with_chord(data: &[u8]) -> Result<(Mesh, f64), ImportError> {
         }));
         let (tris, tol) = match per_shell {
             Err(_) => {
-                eprintln!("step: truck kernel panicked on a shell; import aborted");
+                tracing::error!("step: truck kernel panicked on a shell; import aborted");
                 return Err(ImportError::Step(
                     "geometry kernel failed on a shell (degenerate or unclosed B-rep)".into(),
                 ));
@@ -247,7 +258,7 @@ fn shell_facets(
     // it actually kept (#864).
     let kept = super::step_refine::refine(extent, tol_target, budget, triangulate)?;
     if kept.tol > wanted {
-        eprintln!(
+        tracing::warn!(
             "step: tessellated at reduced fidelity (tol {:e} mm, target {:e} mm, {} facets) - bounded by memory or by the kernel's least tolerance",
             kept.tol * k,
             wanted * k,

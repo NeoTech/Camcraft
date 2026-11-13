@@ -7,7 +7,7 @@
 //! Provenance: machine-tool handbook tooling practice read against our
 //! own generators' tool doors; no vendor material consulted.
 //!
-//! Gate map (M4.4): covers app::operation (kinds table, tool_law), app::tools.
+//! Gate map (M4.4): covers app::operation (kinds table, tool_law), tools::tools.
 
 use camcraft_app::operation::{tool_law, KindInfo, OpType, Section};
 use camcraft_app::tools::ToolKind;
@@ -30,6 +30,7 @@ fn every_tool_kind() -> Vec<ToolKind> {
         ToolKind::Taper,
         ToolKind::Probe,
         ToolKind::Torch,
+        ToolKind::Electrode,
     ];
     for k in &all {
         match k {
@@ -45,7 +46,8 @@ fn every_tool_kind() -> Vec<ToolKind> {
             | ToolKind::Form
             | ToolKind::Taper
             | ToolKind::Probe
-            | ToolKind::Torch => {}
+            | ToolKind::Torch
+            | ToolKind::Electrode => {}
         }
     }
     all
