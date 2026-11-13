@@ -371,7 +371,7 @@ pub(super) fn post_section(ui: &mut Ui, state: &mut State) {
         if let Some(name) = pick {
             state.pending.push_back(CommandKind::SelectPostNamed(name));
         }
-        if ui.button("Load post (.cps)").clicked() {
+        if crate::browser_files::button(ui, state.browser_refusal_of(&CommandKind::SelectPostDialog), "Load post (.cps)", "") {
             state.pending.push_back(CommandKind::SelectPostDialog);
         }
         if matches!(current, PostRef::File(_)) && ui.button("Built-in").clicked() {
@@ -495,7 +495,7 @@ pub(super) fn machine_section(ui: &mut Ui, state: &mut State) {
             };
             super::machine_grid::machine_grid(ui, "machine_overview", m, state.units(), &[("Source", source)]);
             ui.horizontal(|ui| {
-                if ui.button("Load other").clicked() {
+                if crate::browser_files::button(ui, state.browser_refusal_of(&CommandKind::LoadMachineDialog), "Load other", "") {
                     state.pending.push_back(CommandKind::LoadMachineDialog);
                 }
                 if ui.button("Edit").clicked() {
@@ -508,7 +508,7 @@ pub(super) fn machine_section(ui: &mut Ui, state: &mut State) {
         }
         None => {
             ui.label("No machine loaded - the checker states, it cannot judge.");
-            if ui.button("Load machine (.mch)").clicked() {
+            if crate::browser_files::button(ui, state.browser_refusal_of(&CommandKind::LoadMachineDialog), "Load machine (.mch)", "") {
                 state.pending.push_back(CommandKind::LoadMachineDialog);
             }
         }
@@ -683,7 +683,7 @@ pub(super) fn tool_list_section(ui: &mut Ui, state: &mut State, ctx: Option<&str
 /// button queues the dialog arm and nothing touches the history.
 pub(super) fn sheet_footer(ui: &mut Ui, state: &mut State) {
     ui.horizontal(|ui| {
-        if ui.button("Export setup sheets…").clicked() {
+        if crate::browser_files::button(ui, state.browser_refusal_of(&CommandKind::SetupSheetDialog), "Export setup sheets…", "") {
             state.pending.push_back(CommandKind::SetupSheetDialog);
         }
         ui.label("(one page per setup, text)");
@@ -731,7 +731,7 @@ pub(super) fn fixtures_section(ui: &mut Ui, state: &mut State, ctx: Option<&str>
         ));
     }
     ui.horizontal_wrapped(|ui| {
-        if ui.button("Import fixture…").clicked() {
+        if crate::browser_files::button(ui, state.browser_refusal_of(&CommandKind::ImportFixtureDialog), "Import fixture…", "") {
             state.pending.push_back(CommandKind::ImportFixtureDialog);
         }
         // #788: a generic parametric vise, placed in one undoable step.
@@ -829,14 +829,18 @@ fn tool_page(ui: &mut Ui, state: &mut State, name: &str) {
     let (new, export, import) = ui
         .horizontal_wrapped(|ui| {
             let new = ui.button("New tool…").clicked();
-            let export = ui
-                .button("Export library…")
-                .on_hover_text("write the document's tools to a CamCraft tool library file")
-                .clicked();
-            let import = ui
-                .button("Import library…")
-                .on_hover_text("import the tools of a CamCraft tool library file (one undo step; the mode beside it says what happens to a name the document has)")
-                .clicked();
+            let export = crate::browser_files::button(
+                ui,
+                state.in_browser(crate::browser_files::NO_EXPORT),
+                "Export library…",
+                "write the document's tools to a CamCraft tool library file",
+            );
+            let import = crate::browser_files::button(
+                ui,
+                state.in_browser(crate::browser_files::NEEDS_PICKER),
+                "Import library…",
+                "import the tools of a CamCraft tool library file (one undo step; the mode beside it says what happens to a name the document has)",
+            );
             tool_import_mode_combo(ui, &mut state.tool_import_mode);
             (new, export, import)
         })
