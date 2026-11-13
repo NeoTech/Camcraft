@@ -81,6 +81,8 @@ pub struct GenJob {
     pub(super) fixtures: Vec<crate::fixture::FixtureBox>,
     /// `fixtures`' names, index for index (#339 slice 5 refusals).
     pub(super) fixture_names: Vec<String>,
+    /// Tagged fixtures no box could be read for (#1037), by name.
+    pub(super) unread_steel: Vec<String>,
     /// The highest world Z the tip reaches (WCS origin + stated Z top).
     pub(super) z_ceiling: Option<f64>,
     /// `fixtures` split by whether the steel turns with the part
@@ -123,6 +125,8 @@ pub struct GenJob {
     /// #541: a sinker burn's spark gap, read from its setup's machine
     /// condition (`sinker_op::condition_gap`); `None` for every other kind.
     pub(super) sinker_gap: Option<Result<f64, String>>,
+    /// #546: that condition's stated axial wear rate, when it states one.
+    pub(super) sinker_wear: Option<f64>,
     /// #740: the document's display unit, read off the world here where
     /// it can be. The drill-reach refusals run on worker threads with
     /// no World to read, so they spell their depths through this lens.
@@ -309,6 +313,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
     let is_mill = machine_kind == crate::machine::Kind::Mill;
     let (fixture_names, fixtures) = crate::fixture::named_boxes_for(world, setup).into_iter().unzip();
     let workholding = crate::fixture::workholding_for(world, setup);
+    let unread_steel = crate::fixture::unreadable_for(world, setup);
     let fixture_meshes = crate::fixture::meshes_for(world, setup);
     let rotary_axis = crate::fixture::rotary_axis_of(world, op);
     let mounted = crate::machine::of_setup(world, setup).1;
@@ -325,6 +330,10 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         OpParams::SinkerBurn(p) => Some(super::sinker_op::burn_gap(world, setup, p)),
         // #545: the side burn's gap, once its allowance holds under it.
         OpParams::SinkerSideBurn(p) => Some(super::sinker_side_op::side_gap(world, setup, p)),
+        _ => None,
+    };
+    let sinker_wear = match &op.params {
+        OpParams::SinkerBurn(p) => super::sinker_wear_op::condition_wear(world, setup, p),
         _ => None,
     };
     let machine_rotaries = mounted.map(|m| {
@@ -362,6 +371,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         spindle,
         fixtures,
         fixture_names,
+        unread_steel,
         z_ceiling,
         workholding,
         fixture_meshes,
@@ -373,6 +383,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         carried_overhang,
         wire,
         sinker_gap,
+        sinker_wear,
         unit: crate::units::of(world),
     })
 }

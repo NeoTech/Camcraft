@@ -16,7 +16,7 @@
 //! writes nothing: never a folder with ops 1 and 3 but not 2.
 
 use super::{
-    machine_value_of, op_streams, options_value, post_options, script_of, script_source, viewer_map,
+    machine_value_of, op_streams, script_of, script_source, viewer_map,
     Posted,
 };
 use crate::post::{cnc, engine};
@@ -117,7 +117,7 @@ fn post_per_op_with(
         return Err(format!("{} is not a folder", dir.display()));
     }
     let streams = op_streams(world)?;
-    // No EDM dialect ships yet (#533, #542): refused before any file.
+    // No sinker EDM dialect ships yet (#542): refused before any file.
     crate::posting_family::edm_at_post(world, streams.iter().map(|(n, _)| n.as_str()))?;
     // Each op's setup and script, resolved once - and the lathe door
     // (#1190) before anything else is judged: a turning dialect opens
@@ -157,7 +157,7 @@ fn post_per_op_with(
     if !report.problems.is_empty() {
         return Err(format!("post blocked - {}", report.problems.join("; ")));
     }
-    let options = options_value(post_options(world));
+    let options = super::program_options(world);
     let mut files = Vec::with_capacity(streams.len());
     for (k, ((name, records), (setup, cps))) in streams.iter().zip(resolved).enumerate() {
         let index = k + 1;

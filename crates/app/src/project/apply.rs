@@ -511,10 +511,15 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
         // body; absent is the holder cylinder every older tool judged.
         // None of these rungs needs a rewrite. v58 -> v59 (#1056): every
         // mesh the file holds no fidelity record for is marked unknown.
-        // v59 -> v60 (#258): the document may state its program number
+        // v60 -> v61 (#258): the document may state its program number
         // and comment; absent states neither (O0001, the machine's name).
         notes = super::wcs_one::settle(&mut file, from)?;
         notes.extend(super::fidelity_migrate::settle(&mut file.entities, from));
+        // v59 -> v60 (#902): the document's unit is its programs' unit;
+        // an older file opens on the unit it posted in (`units_migrate`).
+        if from < 60 {
+            notes.extend(super::units_migrate::settle(&mut file));
+        }
         file.version = PROJECT_VERSION;
     }
     if file.version != PROJECT_VERSION {

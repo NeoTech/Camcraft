@@ -1,6 +1,6 @@
 //! #258: the document's program number and comment - stated through
 //! the undoable `SetProgramInfo` (refused by name at creation), saved in
-//! the project (v60; an older file opens with nothing stated), and
+//! the project (v61; an older file opens with nothing stated), and
 //! written by every post in its own dialect: the O-word (Fanuc, Fanuc
 //! Lathe, Mazak, Haas), the program name (Heidenhain `%NAME G71 *`,
 //! SINUMERIK `%_N_NAME_MPF`), a header comment (PathPilot). Nothing
@@ -10,7 +10,7 @@
 //!
 //! Gate map (#258): covers app::commands (SetProgramInfo),
 //! app::posting (program_info, program_id, parse_program_number,
-//! post_script), app::project (ProgramDto, v60), post::engine
+//! post_script), app::project (ProgramDto, v61), post::engine
 //! (run_program_with), post::js (ProgramId, the `program` global),
 //! assets/posts/*.cps (headers).
 //! Lane shape (M4.4): all tests here run in seconds.
@@ -243,7 +243,7 @@ fn the_document_post_writes_the_stated_number() {
 
 #[test]
 fn the_program_info_round_trips_and_an_older_file_states_none() {
-    const _: () = assert!(project::PROJECT_VERSION >= 60, "the program key needs project v60 or later");
+    const _: () = assert!(project::PROJECT_VERSION >= 61, "the program key needs project v61 or later");
     let world = new_world();
     let info = ProgramInfo { number: Some(1234), comment: Some("Bracket A".into()) };
     let mut history = History::default();
@@ -261,6 +261,12 @@ fn the_program_info_round_trips_and_an_older_file_states_none() {
     // that over a stale value, never leaking the previous document's.
     project::open(&world2, r#"{"version": 58, "entities": []}"#).expect("v58 opens");
     assert_eq!(posting::program_info(&world2), ProgramInfo::default());
+    // A v60 file (#902's unit law, the step before this key) steps up
+    // to v61 unchanged: nothing stated, no load note.
+    History::default().execute(&world2, SetProgramInfo::new(&world2, info.clone()).expect("valid"));
+    let notes = project::open_noted(&world2, r#"{"version": 60, "entities": []}"#).expect("v60 opens");
+    assert_eq!(posting::program_info(&world2), ProgramInfo::default());
+    assert!(notes.is_empty(), "{notes:?}");
     // Nothing stated writes no key.
     project::save(&world2, &path).expect("save");
     assert!(!std::fs::read_to_string(&path).expect("read").contains("\"program\""));

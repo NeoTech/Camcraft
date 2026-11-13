@@ -100,9 +100,16 @@ mod probe;
 pub mod probe_op;
 // #670: the Plasma Profile's seed and generation glue.
 pub mod plasma_op;
+// #894: the thread-milling operation's door, kernel plan and its two verdict readings.
+pub mod thread_op;
+mod thread_entry;
 pub mod wire_op;
+// #534: the wire laws' inputs, read live at the post.
+pub mod wire_verify;
 // #541: the sinker EDM burn to depth.
 pub mod sinker_op;
+// #546: the sinker burn's electrode wear compensation.
+pub mod sinker_wear_op;
 // #545: the Sinker Side Burn's seed, laws and generation.
 pub mod sinker_side_op;
 // #171: the Probe op seeded from one picked face, edge, vertex or round wall.
@@ -171,6 +178,9 @@ mod turning_holder;
 pub(crate) use turning_holder::body_axes as lathe_body_axes;
 mod turning_holder_scene;
 mod turning_holder_side;
+mod turning_holder_steel;
+pub use turning_holder_steel::STEEL_UNREAD_NOTE;
+pub(crate) use turning_holder_steel::lathe_steel_hits;
 mod turning_outline;
 mod turning_rapids;
 mod turning_stock;

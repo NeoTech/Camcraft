@@ -85,6 +85,9 @@ impl CreateOperation {
         // law makes that the first/legacy context byte-identically.
         let setup = crate::setup::active(world);
         valid_src(world, setup.as_deref(), &src)?;
+        if let Some(why) = params.named_refusal() {
+            return Err(CommandError::Invalid(why));
+        }
         sinker_gate(world, setup.as_deref(), &params)?;
         if !params.is_sane() {
             return Err(CommandError::Invalid(format!(

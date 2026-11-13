@@ -22,7 +22,7 @@
 
 use super::per_op::{sanitise, write_all};
 use super::{
-    file_stem, join_streams, op_streams, options_value, post_options, script_of, verification_report, viewer_map,
+    file_stem, join_streams, op_streams, script_of, verification_report, viewer_map,
     wcs_slot, Posted,
 };
 use crate::machine::{check_ops, Machine, MachineCheck};
@@ -201,7 +201,7 @@ fn post_each(world: &World, out_path: &Path, cps: Option<&str>, mounts: Vec<Moun
         });
     }
     let streams = op_streams(world)?;
-    // No EDM dialect ships yet (#533, #542): refused before any file.
+    // No sinker EDM dialect ships yet (#542): refused before any file.
     crate::posting_family::edm_at_post(world, streams.iter().map(|(n, _)| n.as_str()))?;
     // #1190: each mount's own script opens only what a lathe may run;
     // #1232: and writes only for a machine kind it serves.
@@ -233,7 +233,7 @@ fn post_each(world: &World, out_path: &Path, cps: Option<&str>, mounts: Vec<Moun
     }
     let dir = out_path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
     let program = out_path.file_stem().and_then(|s| s.to_str()).unwrap_or("program");
-    let options = options_value(post_options(world));
+    let options = super::program_options(world);
     // #258: each mount's file is a whole program of its own, numbered as
     // the single-file post numbers it (the document's number, or O0001).
     let id = super::document_program_id(world, 1)?;

@@ -56,10 +56,13 @@ manual, behaviour only; the citation sits beside the code in the .cps):
 post (#388) numbers each mount's file with the document's number, as it
 wrote O0001 for each before.
 
-**Project v60.** The new `program` key is a version step, not additive:
+**Project v61.** The new `program` key is a version step, not additive:
 an older reader would drop it and post O0001, which on the control can
-overwrite a different program held under that number. v58 files step up
-unchanged (absent = nothing stated).
+overwrite a different program held under that number. v60 and older
+files step up unchanged (absent = nothing stated). The step was v60
+until #902 (PR #981) took v60 for the document-unit law first; #564
+renumbered to v61 when it merged main, so the two laws keep separate
+rungs and a v60 reader still refuses a file that states a program.
 
 **Considered and dropped.** One range per dialect at the command (the
 command does not know which post - setups may post through different

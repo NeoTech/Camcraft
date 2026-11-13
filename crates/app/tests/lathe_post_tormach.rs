@@ -201,7 +201,9 @@ fn css_arcs_part_load_and_a_trip_home_speak_linuxcnc() {
             ccw: false, plane: camcraft_app::cl::ArcPlane::Yz, abc: None,
         }));
         r.push(cnc::Record::Section { begin: false });
-        let out = engine::run(CPS, &lathe_mch(inch), &cnc::serialize(&r)).expect("runs");
+        // #902: the inch run is an inch document's.
+        let units = serde_json::json!({ "Units": if inch { "inch" } else { "mm" } });
+        let out = engine::run_with(CPS, &lathe_mch(inch), &cnc::serialize(&r), &units).expect("runs");
         assert!(out.warnings.is_empty(), "{:?}", out.warnings);
         let p = &out.program;
         if inch {

@@ -86,8 +86,10 @@ mod raw_stock_row;
 mod layout;
 mod machines_pane;
 mod machines_edit;
+mod machine_wire_edm;
 mod unsaved;
 mod post_refusal;
+mod program_units;
 mod gcode_viewer;
 mod first_setup;
 mod structural;
@@ -1367,7 +1369,8 @@ fn every_registry_kind_gets_its_tab_bar() {
                 k.label,
             );
             if has {
-                assert!(harness.query_by_label("Tool").is_some(), "{}: the pane opens on the tool row", k.label);
+                // #535: a kind that mounts no library tool has no Tool row.
+                assert_eq!(harness.query_by_label("Tool").is_some(), k.mounts_tool(), "{}: the pane opens on the tool row (only of a tool-mounting kind)", k.label);
                 per_tab.push((si, pane_texts(&harness)));
             }
         }
@@ -2770,6 +2773,11 @@ fn tips_match_the_imgui_table() {
     }
     // Every Create button shares the swap while the tool list is empty.
     for i in 0..panes::TYPES.len() {
+        // #535: a kind that mounts no library tool (the wire EDM's) is not
+        // held by an empty rack.
+        if camcraft_app::operation::KindInfo::ALL.get(i).is_some_and(|k| !k.mounts_tool()) {
+            continue;
+        }
         assert_eq!(
             panes::tip_of(Cmd::Create(i), &empty),
             "No tool yet - add one (Setup > Tools)",

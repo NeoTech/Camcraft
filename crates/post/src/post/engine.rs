@@ -110,6 +110,10 @@ pub fn run_program_with(
 ) -> Result<PostOutput, PostError> {
     let records = super::normalize_program_order(cnc::parse(stream)?);
     let mut s = Script::load(cps)?;
+    // #902: an inch document on a script that cannot write inch.
+    if let Some(why) = super::units::refusal(&mut s, options)? {
+        return Err(PostError::Refused(why));
+    }
     // #374: an inverted machine axis - the one place the stream is
     // mirrored into the controller's frame, or refused by name.
     let records = super::invert::apply(records, mch, &s)?;
@@ -182,6 +186,13 @@ pub fn run_program_with(
                     warnings.push(format!(
                         "{who}is C-axis live-tool work (the spindle turns as C under a radial live tool), but this post script does not declare liveTooling - use a lathe post that voices the C axis"
                     ));
+                }
+                // A wire EDM section (#533) through a script that does not
+                // voice one would post the wire path as a cutting move.
+                if name == "EdmCondition" && !s.voices_wire_edm() {
+                    let op = base.get("OperationName").and_then(Value::as_str).unwrap_or("");
+                    let who = if op.is_empty() { String::new() } else { format!("operation {op}: ") };
+                    warnings.push(format!("{who}is wire EDM work, but this post script does not declare wireEdm - use a wire EDM post"));
                 }
                 // A thread whose hand needs the spindle reversed (#629),
                 // posted through a script that cannot voice it, would
