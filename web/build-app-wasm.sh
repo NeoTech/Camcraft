@@ -55,7 +55,21 @@ die() { echo "build-app-wasm: $*" >&2; exit 1; }
 # Portable across GNU (Linux, Git Bash) and BSD (macOS) tools: BSD sed reads
 # the next argument as the `-i` suffix, so `sed -i` is never used. The edit
 # goes through a temp file and a move instead.
-sed_in_place() { sed "$1" "$2" > "$2.tmp" && mv "$2.tmp" "$2"; }
+# Returns 1 (after naming the file) when sed or the move fails; each caller
+# stops the script on that with `|| die`. A plain `&&` list would not do:
+# bash ignores set -e inside it, so a failing sed would pass silently.
+sed_in_place() {
+    if ! sed "$1" "$2" > "$2.tmp"; then
+        echo "build-app-wasm: sed failed on $2" >&2
+        rm -f "$2.tmp"
+        return 1
+    fi
+    if ! mv "$2.tmp" "$2"; then
+        echo "build-app-wasm: could not replace $2" >&2
+        rm -f "$2.tmp"
+        return 1
+    fi
+}
 # sha256sum is GNU; stock macOS ships shasum instead.
 sha256_of() {
     if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1
@@ -110,14 +124,14 @@ cp -r "$FLECS_SRC" "$PATCHED/flecs_ecs"
 cp -r "$FLECS_SYS_SRC" "$PATCHED/flecs_ecs_sys"
 
 B="$PATCHED/flecs_ecs_sys/src/bindings.rs"
-sed_in_place 's/^use libc::FILE;$/pub type FILE = core::ffi::c_void;/' "$B"
-sed_in_place 's/"C-unwind"/"C"/g' "$B"
+sed_in_place 's/^use libc::FILE;$/pub type FILE = core::ffi::c_void;/' "$B" || die "cannot patch $B (libc::FILE)"
+sed_in_place 's/"C-unwind"/"C"/g' "$B" || die "cannot patch $B (C-unwind)"
 grep -q '^pub type FILE = core::ffi::c_void;$' "$B" || die "patch point moved: libc::FILE in bindings.rs"
 ! grep -q '"C-unwind"' "$B" || die "patch point moved: C-unwind in bindings.rs"
 M="$PATCHED/flecs_ecs/src/addons/meta/meta_fn_types.rs"
 [[ "$(head -2 "$M")" == $'#[cfg(not(target_family = "wasm"))]\nuse crate::core::{Entity, WorldRef};' ]] \
     || die "patch point moved: the WorldRef import in meta_fn_types.rs"
-sed_in_place '1d' "$M"
+sed_in_place '1d' "$M" || die "cannot patch $M (WorldRef import)"
 
 # --- 3. the build ---------------------------------------------------------
 NSYS="$(native_path "$SYSROOT")"
