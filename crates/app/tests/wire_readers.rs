@@ -70,6 +70,7 @@ fn wire_doc() -> (World, History) {
         condition: "C110".into(),
         side: WireSide::Die,
         start: Some([0.0, 0.0]),
+        skims: Vec::new(),
     };
     let create = CreateOperation::new(&world, "Die1", "", SrcRef::Entity("slug".into()), OpParams::WireContour(op));
     h.execute(&world, create.expect("die"));
