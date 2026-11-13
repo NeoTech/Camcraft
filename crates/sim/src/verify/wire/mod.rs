@@ -53,6 +53,8 @@ mod dist;
 mod kerf;
 mod slug;
 #[cfg(test)]
+mod taper_tests;
+#[cfg(test)]
 mod tests;
 
 use crate::cl::Toolpath;
