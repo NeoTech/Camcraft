@@ -21,6 +21,9 @@ mod icon_font;
 mod icons;
 #[cfg(test)]
 mod icons_tests;
+mod logo;
+#[cfg(test)]
+mod logo_tests;
 mod merge_delta;
 mod merge_plan;
 #[cfg(test)]
@@ -60,6 +63,7 @@ usage:
   cargo xtask icons [--check | --sheet <out.png> [--px N] [--zoom N]]
                                                    rasterise assets/ui/svg/*.svg to the 32 px PNGs (#661), check
                                                    them against their masters, or draw a 16 px contact sheet
+  cargo xtask logo [--check]                       generate assets/logo/icons/ (PNG sizes, camcraft.ico) from the logotype (#1459)
   cargo xtask decisions --version X.Y.Z            gather docs/decisions/*.md into RECOMMENDED.md
   cargo xtask release --version X.Y.Z --no-tag [--title T] [--skip-gate] [--skip-build] [--installer] [--dry-run]
                                                    the release cut on release/vX.Y.Z (scripts/release.ps1's phases)
@@ -172,6 +176,7 @@ fn run(args: &[String]) -> Result<i32, String> {
             Ok(0)
         }
         Some("icons") => icons::run(&root(), &args[1..]),
+        Some("logo") => logo::run(&root(), &args[1..]),
         Some("merge-plan") => merge_plan_git::run(&root(), &args[1..]),
         Some("package") => {
             let a = package::parse(&args[1..]).map_err(|e| format!("{e}\n{USAGE}"))?;

@@ -48,6 +48,7 @@ pub mod window_chrome;
 mod post_options;
 mod program_info;
 pub mod cvd;
+mod app_icon;
 mod icons;
 mod op_icons;
 mod tool_icons;
