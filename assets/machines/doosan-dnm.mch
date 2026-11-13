@@ -10,13 +10,13 @@
       "units": { "length": "mm", "angle": "degrees" },
       "parts": [
         { "id": "base", "name": "table", "type": "table", "parts": [
-          { "id": "crl", "name": "X", "type": "linear", "travel": { "min": -510.0, "max": 510.0 }, "parts": [
-            { "id": "sld", "name": "Y", "type": "linear", "travel": { "min": -285.0, "max": 285.0 }, "parts": [
+          { "id": "crl", "name": "X", "type": "linear", "travel": { "min": -1020.0, "max": 1020.0 }, "parts": [
+            { "id": "sld", "name": "Y", "type": "linear", "travel": { "min": -570.0, "max": 570.0 }, "parts": [
               { "id": "rot_a", "name": "A", "type": "rotary", "axis": [1.0, 0.0, 0.0],
                 "travel": { "min": -360000.0, "max": 360000.0 }, "resolution": 0.001 }
             ] }
           ] },
-          { "id": "col", "name": "Z", "type": "linear", "travel": { "min": -510.0, "max": 0.0 }, "safe_retract": 0.0, "parts": [
+          { "id": "col", "name": "Z", "type": "linear", "travel": { "min": -510.0, "max": 510.0 }, "safe_retract": 0.0, "parts": [
             { "id": "hed", "name": "head", "type": "head",
               "spindle": { "min_speed": 40.0, "max_speed": 12000.0, "power": 18.5,
                            "body_diameter": 150.0, "body_length": 250.0, "rigid_tapping": true },
