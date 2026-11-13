@@ -40,6 +40,7 @@ mod box_pick;
 mod pockets;
 mod render;
 mod setup_tools;
+mod tool_delete;
 mod tool_edit;
 mod tools;
 mod wcs_circle;
