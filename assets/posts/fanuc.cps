@@ -18,6 +18,8 @@ coolantModes = true; // reads PARAM Coolant (#112/#150): the engine refuses non-
 afterModes = true; // reads PARAM AfterOperation (#110): the engine refuses a stop or home ask for a post without it
 axisInversion = true; // verified on the engine's mirrored stream for an inverted X/Y (#374): goldens + equivalence test
 probeAxisInversion = true; // probing blocks verified on the mirrored stream (#392): macro interpreter on a simulated inverted machine
+millSpindleReverse = true; // reads PARAM MillSpindle (#988): M4 for a left-hand-cut mill; the engine refuses a reverse mill spindle for a post without it
+programUnits = "mm inch"; // #902: writes the document's unit (postOptions.Units), G21 / G20
 
 // Determinism law: no timestamps, no randomness - the same stream
 // always posts to the same text (golden files depend on it).
@@ -26,6 +28,7 @@ probeAxisInversion = true; // probing blocks verified on the mirrored stream (#3
 var wcsWord = "G54";       // from the WorkOffset PARAM
 var sRpm = 0;              // S/M3 waits for the section: the stream
 var spindleWait = false;   // order is PARAMs, TOOL, SECTION
+var spinRev = false;       // PARAM MillSpindle reverse (#988): this section's spindle runs M4
 var toolWait = false;      // T../M6 and G43 wait the same way
 var tNo = 0;
 var inCycle = false;       // a cycle group is open; its chain is suppressed
@@ -57,11 +60,22 @@ var orgX = 0, orgY = 0, orgZ = 0; // the WCS slot origin (OriginX/Y/Z PARAMs):
 // ------------------------------------------------------------ helpers
 function has(v) { return v !== null && v !== undefined && isFinite(v); }
 function pad2(n) { n = Math.round(Number(n) || 0); return n < 10 ? "0" + n : String(n); }
-function fu(v) {  // mm at three decimals, trailing zeros trimmed
-  if (!has(v)) return "0";
-  var s = Number(v).toFixed(3);
+// #902: the program's unit is the document's (postOptions.Units, "mm"
+// or "inch"; absent = mm), never the machine file's. The stream speaks
+// mm and mm/min: an inch program writes every length / 25.4 at four
+// decimals and every feed in in/min at two; angles, seconds and rpm
+// carry no length and are written as they come.
+var inch = false;
+function trimNum(s) {
   if (s.indexOf(".") >= 0) s = s.replace(/0+$/, "").replace(/\.$/, "");
   return s === "-0" ? "0" : s;
+}
+function fu(v) {  // a length: mm at three decimals, or inch at four
+  if (!has(v)) return "0";
+  return trimNum(Number(inch ? v / 25.4 : v).toFixed(inch ? 4 : 3));
+}
+function fa(v) {  // an angle (degrees) at three decimals - no unit to convert
+  return has(v) ? trimNum(Number(v).toFixed(3)) : "0";
 }
 // #377: `expr - v` as a macro-B expression with v's sign folded into the
 // operator, so a negative v never writes a doubled sign (`#100--15`).
@@ -73,9 +87,15 @@ function minusU(expr, v) {
   if (s === "0") return expr;
   return s.charAt(0) === "-" ? expr + "+" + s.substring(1) : expr + "-" + s;
 }
-function ff(v) { return has(v) && v > 0 ? String(Math.round(v)) : "0"; }
+function ff(v) {  // a feed: whole mm/min, or in/min at two decimals
+  if (!(has(v) && v > 0)) return "0";
+  return inch ? trimNum((v / 25.4).toFixed(2)) : String(Math.round(v));
+}
+function ni(v) { return has(v) ? String(Math.round(v)) : "0"; } // integer word (rpm)
+function eps() { return inch ? "0.0001" : "0.001"; } // one output step, the probe checks' band
 function w(letter, v) { return has(v) ? letter + fu(v) : ""; }
 function fw(v) { return has(v) ? "F" + ff(v) : ""; }
+function wa(letter, v) { return has(v) ? letter + fa(v) : ""; } // an angle word
 function block(words) {  // join the non-empty words onto one line
   var a = [];
   for (var i = 0; i < words.length; i++) {
@@ -89,6 +109,29 @@ function msg(s) {  // counted warning where the host offers message()
   if (typeof message === "function") message(s); else writeln("; " + s);
 }
 
+// #1359 (from #1357): a cut needs a turning spindle. spindleOn is true
+// from the preamble's spindle start (S.. M3) to the next M5 (every
+// section end, and a touch probe's stop). A touch probe's section feeds
+// its stylus with the spindle stopped on purpose: a section is a
+// probe's only when it states 0 rpm (#574) AND its tool is a touch
+// probe (PARAM ToolKind) - a cutter whose speed reads 0 is a stopped
+// spindle, not a probe. A feed, arc or cycle with the spindle stopped
+// anywhere else is refused by name and not posted: a stream that states
+// no spindle speed would otherwise drag a stopped cutter through the
+// part. Once per program.
+var spindleOn = false;
+var probeSection = false;
+var kindProbe = false;    // this section's PARAM ToolKind names a touch probe
+var spindleRefused = false;
+function spindleStopped(what) {  // true: refused, nothing is posted
+  if (spindleOn || probeSection) return false;
+  if (!spindleRefused) {
+    spindleRefused = true;
+    msg(what + " with the spindle stopped - no spindle start (S.. M3) precedes it; state the operation's spindle speed");
+  }
+  return true;
+}
+
 // RTCP output (stage D). A tilted record locates the TOOL TIP in the
 // work offset while the machine turns - G43.4 delegates the kinematics
 // to the controller, so the post never does pivot math; it arms the
@@ -96,22 +139,30 @@ function msg(s) {  // counted warning where the host offers message()
 // (counted warning, gate-blocked) wherever it cannot honor one. Law:
 // a tilted record states all three angles (the stream's parser zeros
 // unstated letters), so the presence of A decides; angle memory
-// resets with the arm, so re-arming always commands all three words.
+// resets with the arm, so re-arming always commands every stated
+// rotary's word (#997: a letter with no rotary takes none).
 // A prismatic record never touches the mode - the tilt stays modal.
-function missingLetter(p) {  // the first turning letter no rotary is named for, else ""
+function statesRotary(letter) {  // does the machine state a rotary of this name?
   var rs = (typeof machine !== "undefined" && machine.rotaries) || [];
+  for (var j = 0; j < rs.length; j++) {
+    if (String(rs[j].name || "").toUpperCase() === letter) return true;
+  }
+  return false;
+}
+function missingLetter(p) {  // the first turning letter no rotary is named for, else ""
   var ls = ["A", "B", "C"];
   for (var i = 0; i < ls.length; i++) {
     var v = p[ls[i]];
     if (!has(v) || Math.abs(v) <= 1e-9) continue;
-    var named = false;
-    for (var j = 0; j < rs.length; j++) {
-      if (String(rs[j].name || "").toUpperCase() === ls[i]) named = true;
-    }
-    if (!named) return ls[i];
+    if (!statesRotary(ls[i])) return ls[i];
   }
   return "";
 }
+// #997: the angle words name only the rotaries the machine states. The
+// stream zeros an unstated letter, and missingLetter has refused one
+// that turns, so a letter with no rotary here is a stated zero - a word
+// for it (C0 on an A/B head) is an address the control has no axis for.
+function angleWord(letter, v) { return statesRotary(letter) ? wa(letter, v) : ""; }  // degrees: never the document unit
 // #797 review: the machine check judges a lone rotary about X by the
 // angle the table must hold, signed by its stated direction - a [-1,0,0]
 // table holds the negated angle (`judge.rs` `x_rotary_problem`). This
@@ -154,12 +205,12 @@ function tilt(p) {  // words to append, [] if none, null if refused
     block(["G43.4", "H" + pad2(tNo)]);
     tcpmOn = true;
     lastA = p.A; lastB = p.B; lastC = p.C;
-    return [w("A", p.A), w("B", p.B), w("C", p.C)];
+    return [angleWord("A", p.A), angleWord("B", p.B), angleWord("C", p.C)];
   }
   var words = [];
-  if (p.A !== lastA) { words.push("A" + fu(p.A)); lastA = p.A; }
-  if (p.B !== lastB) { words.push("B" + fu(p.B)); lastB = p.B; }
-  if (p.C !== lastC) { words.push("C" + fu(p.C)); lastC = p.C; }
+  if (p.A !== lastA) { words.push(angleWord("A", p.A)); lastA = p.A; }
+  if (p.B !== lastB) { words.push(angleWord("B", p.B)); lastB = p.B; }
+  if (p.C !== lastC) { words.push(angleWord("C", p.C)); lastC = p.C; }
   return words;
 }
 
@@ -208,7 +259,7 @@ function compRefuse(what) {
 // flood code: refused by name (#150), never posted as mist or dry. An
 // unstated list stays silent (the unstated-limit law). M9 (stop) is
 // the RS-274 fixed pair.
-var COOLANT_KINDS = ["flood", "mist", "through-spindle", "through-tool"];
+var COOLANT_KINDS = ["flood", "mist", "air", "air-blast", "through-spindle", "through-tool"];
 function coolantWho() { return coolantOp ? "operation " + coolantOp + ": " : ""; }
 function coolantCode() {
   var cs = (typeof machine !== "undefined" && machine.coolants) || [];
@@ -226,14 +277,14 @@ function coolantCode() {
 }
 
 // The op's coolant ask (#112): the stream says nothing for flood (every
-// older stream), or carries PARAM Coolant off / mist / through-tool. The
+// older stream), or carries PARAM Coolant off / mist / air (#869) / through-tool. The
 // code is the machine's own entry of that family - the machine is truth;
 // an ask the machine states no code for is refused by name, naming the
 // operation (#150), never silently posted dry.
 function coolantFor(ask) {
   if (ask === "off") return "";
   if (!ask || ask === "flood") return coolantCode();
-  var want = ask === "mist" ? ["mist"] : (ask === "through-tool" ? ["through-spindle", "through-tool"] : []);
+  var want = ask === "mist" ? ["mist"] : (ask === "air" ? ["air", "air-blast"] : (ask === "through-tool" ? ["through-spindle", "through-tool"] : []));
   if (want.length === 0) { msg(coolantWho() + "unknown coolant ask " + ask); return ""; }
   var cs = (typeof machine !== "undefined" && machine.coolants) || [];
   for (var i = 0; i < cs.length; i++) {
@@ -289,12 +340,27 @@ function centerWords(p) {
 }
 
 // -------------------------------------------------------------- header
-// The program's O-word (#111): O0001 for the whole job, and one file
-// per operation counts up (the engine's programNumber); a host that
-// publishes none posts O0001.
+// The document's program identity (#258), from the engine's `program`
+// global: its number (1 when the document states none; one file per
+// operation counts up from it, #111), whether the document stated it,
+// and its program comment ("" for none - the header then names the
+// machine, as before #258). A host that publishes none posts O0001.
+function progNo() {
+  var n = typeof program !== "undefined" ? program.number : (typeof programNumber !== "undefined" ? programNumber : 1);
+  return Math.round(Number(n) || 1);
+}
+function progNumbered() { return typeof program !== "undefined" && program.numbered === true; }
+function progComment() { return clean(typeof program !== "undefined" ? program.comment : ""); }
+// The program's O-word (#111, #258). FANUC's published
+// operator's manuals (Series 0i-F, "program number") give a program
+// number of O0001-O9999, four digits (the 8-digit program number is
+// an option this post does not assume).
+// A number outside the range is refused by name, never clamped onto
+// another program's number.
 function oWord() {
-  var n = typeof programNumber !== "undefined" ? Math.round(Number(programNumber) || 1) : 1;
-  var t = String(Math.max(1, Math.min(n, 9999)));
+  var n = progNo();
+  if (n < 1 || n > 9999) throw new Error("program number " + n + " is outside O0001-O9999, the control's program numbers");
+  var t = String(n);
   while (t.length < 4) t = "0" + t;
   return "O" + t;
 }
@@ -326,7 +392,7 @@ function commentParam(name, value) {
   if (name === "SetupName") setupName = clean(value);
   else if (name === "OperationName") opName = clean(value);
   else if (name === "OperationKind") opKind = clean(value).toUpperCase();
-  else if (name === "ToolKind") toolKind = clean(value).toUpperCase();
+  else if (name === "ToolKind") { toolKind = clean(value).toUpperCase(); kindProbe = toolKind === "TOUCH PROBE"; }
   else if (name === "ToolDiameter" && has(value)) toolDia = Number(value);
   else if (name === "ToolCornerRadius" && has(value)) toolCr = Number(value);
 }
@@ -356,22 +422,22 @@ function invertedNotes() {
   }
 }
 
-// #901: the unit this post writes - millimetres - stated in a block of
-// its own before any motion, so a control left in inch by power-on or
-// the last program never reads mm numbers as inches (RS-274 / ISO 6983:
-// G20 inch, G21 mm; the family's published manual puts G20 / G21 in a
-// block of its own at the program's start). Where the program's unit is
-// chosen, and inch output, is #902.
+// #901: the unit this post writes stated in a block of its own before
+// any motion, so a control left in the other unit by power-on or the
+// last program never misreads the numbers (RS-274 / ISO 6983: G20 inch,
+// G21 mm; the family's published manual puts G20 / G21 in a block of
+// its own at the program's start). #902: the unit is the document's.
 function unitBlock() {
-  block(["G21"]);
+  block([inch ? "G20" : "G21"]);
 }
 
 function onOpen() {
+  inch = typeof postOptions !== "undefined" && postOptions.Units === "inch";
   var nm = (typeof machine !== "undefined" && machine.name) || "CAMCRAFT";
   writeln("%");
-  // #594: the name is user text from the machine file - cleaned like
-  // every other comment text, so `Tormach 770MX (ML)` never nests.
-  block([oWord(), "(" + (clean(nm) || "CAMCRAFT") + ")"]);
+  // #594: the machine name is user text - cleaned like every other
+  // comment text, so `Tormach 770MX (ML)` never nests.
+  block([oWord(), "(" + (progComment() || clean(nm) || "CAMCRAFT") + ")"]);
   invertedNotes();
   unitBlock();
 }
@@ -381,7 +447,8 @@ function onParameter(name, value) {
   if (name === "Smoothing") { smoothTol = Number(value) || 0; return; }
   if (name === "SmoothingMode") { smoothMode = String(value || ""); return; }
   commentParam(name, value);
-  if (name === "OperationName") coolantOp = String(value || "");
+  if (name === "OperationName") { coolantOp = String(value || ""); spinRev = false; }
+  if (name === "MillSpindle") { spinRev = String(value || "") === "reverse"; return; }
   if (name === "Coolant") { coolantAsk = String(value || "flood"); return; }
   if (name === "AfterOperation") { afterAsk = String(value || ""); return; }
   if (name === "WorkOffset" && value) wcsWord = String(value);
@@ -443,11 +510,15 @@ function startPreamble() {
     toolWait = false;
   }
   if (spindleWait && sRpm > 0) {   // a touch probe (#108) states no spindle
-    block(["S" + ff(sRpm), "M3"]);
+    block(["S" + ni(sRpm), spinRev ? "M4" : "M3"]);
+    spindleOn = true;
     spindleWait = false;
   }
-  if (probeStop) block(["M5"]);
-  coolant = coolantFor(coolantAsk);
+  if (probeStop) { block(["M5"]); spindleOn = false; }
+  probeSection = probeStop && kindProbe;
+  // #995: a touch probe section starts no coolant, whatever its ask -
+  // fluid on the stylus and the measured faces spoils the reading.
+  coolant = probeStop ? "" : coolantFor(coolantAsk);
   if (coolant) block([coolant]);
   smoothOn();
 }
@@ -492,6 +563,9 @@ function endPreamble() {
   coolant = "";
   coolantAsk = "flood";      // the next section states its own ask
   block(["M5"]);
+  spindleOn = false;
+  probeSection = false;
+  kindProbe = false;         // the next section states its own tool kind
   afterOp();
   // The next preamble carries G49, which cancels TCPM too - so the
   // arm and the angle memory reset here, and a later tilt re-arms by
@@ -581,6 +655,7 @@ function onLinear() {
   startPreamble();
   var tw = tilt(properties);
   if (tw === null || chainCut()) return;
+  if (spindleStopped("feed move G01")) return;
   var fwd = feedWord(properties, false);
   if (fwd === null) return;
   // The pending comp word rides this straight block (M13.11).
@@ -594,6 +669,7 @@ function onCircular() {
   compRefuse("an arc");
   var tw = tilt(properties);
   if (tw === null || chainCut()) return;
+  if (spindleStopped("arc move " + (properties.CircularDirection === "CW" ? "G02" : "G03"))) return;
   var p = properties;
   if (compPlaneRefuse(planeOf(p))) return;
   var fwd = feedWord(p, true);
@@ -666,6 +742,14 @@ function onCycle() {
   else if (p.CycleType === "TAP") g = "G84";
   else if (p.CycleType === "BORE") g = "G86";
   else if (p.CycleType === "BACKBORE") g = "G89";
+  // #1357: a canned cycle feeds at its own F word. Without one the
+  // control drills at whatever feed was last modal (or alarms on a zero
+  // feed), so a cycle the stream gives no positive feed is refused by name.
+  if (!(has(p.FeedRate) && p.FeedRate > 0)) {
+    msg("canned cycle " + g + " has no feed rate - refused: without F the control drills at whatever feed was last modal");
+    return;
+  }
+  if (spindleStopped("canned cycle " + g)) return;
   cycleSeat(p);
   var sig = g + "|" + p.Z + "|" + p.R + "|" + p.Q;
   if (inCycle && sig === cycleSig) {
@@ -711,7 +795,7 @@ function onProbeMove() {
   var d = [Math.abs(p.X - p.ExpectX), Math.abs(p.Y - p.ExpectY), Math.abs(p.Z - p.ExpectZ)];
   var ai = d[0] >= d[1] && d[0] >= d[2] ? 0 : (d[1] >= d[2] ? 1 : 2);
   var tgt = [p.X - orgX, p.Y - orgY, p.Z - orgZ][ai];
-  block(["IF[ABS[" + minusU("#" + (5061 + ai), tgt) + "]LT0.001]THEN#3000=2(PROBE NO CONTACT)"]);
+  block(["IF[ABS[" + minusU("#" + (5061 + ai), tgt) + "]LT" + eps() + "]THEN#3000=2(PROBE NO CONTACT)"]);
   if (has(p.Measure) && p.Measure >= 0) {
     var b = probeBase + 3 * p.Measure;
     block(["#" + b + "=#5061"]);
@@ -741,7 +825,7 @@ function onProbeGuard() {
   var to = [p.X, p.Y, p.Z], from = [p.StartX, p.StartY, p.StartZ], org = [orgX, orgY, orgZ];
   for (var ai = 0; ai < 3; ai++) {
     if (has(from[ai]) && Math.abs(to[ai] - from[ai]) < 1e-6) continue;  // an axis that holds still
-    block(["IF[ABS[" + minusU("#" + (5061 + ai), to[ai] - org[ai]) + "]GT0.001]THEN#3000=3(PROBE HIT ON POSITIONING)"]);
+    block(["IF[ABS[" + minusU("#" + (5061 + ai), to[ai] - org[ai]) + "]GT" + eps() + "]THEN#3000=3(PROBE HIT ON POSITIONING)"]);
   }
 }
 function slotOf(word) {  // "G55" -> 1

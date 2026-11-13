@@ -15,6 +15,23 @@
 //!   set: a document tool the library lacks is removed - unless an
 //!   operation uses it, which refuses the import by name, nothing applied.
 //!
+//! #889: holder bodies ride on top, as a choice of the same command
+//! ([`ImportTools::with_options`], `holders`). On, a tool lands with the
+//! body its file carries (judged again here against the tool); off, the
+//! file's bodies are left out. Per mode:
+//!
+//! - **Add**: a tool lands with its file body (on) or bare (off). The
+//!   skip compares the body only when one lands: record AND body (as the
+//!   DTO a save writes) must match, else the tool arrives renamed; a
+//!   bare landing matches on the record alone, as before.
+//! - **Update / Replace**: a file body that differs from the document
+//!   tool's is a change like any other - it takes the `ChangeTool` gates
+//!   (`change_refusal`, which fits the body that will stand) and moves
+//!   the operation stamp (the body digest), so operations using the tool
+//!   go Stale. A tool whose file carries no body, or any tool with
+//!   holders off, keeps the body the document has - never cleared
+//!   silently - and that body must fit the incoming record.
+//!
 //! Provenance: our own command model (`AddTool` / `ChangeTool` /
 //! `DeleteTool`, batched into one undo unit); no vendor material consulted.
 
@@ -23,7 +40,9 @@ use flecs_ecs::prelude::World;
 use crate::commands::tool::reserved;
 use crate::commands::{Command, CommandError, DeleteTool};
 use crate::model;
-use crate::schema::ToolDef;
+use crate::project::ToolBodyDto;
+use crate::schema::{ToolBody, ToolDef};
+use crate::tool_body;
 use crate::tool_library::LibraryTool;
 use crate::tools::Tool;
 
@@ -75,6 +94,10 @@ pub struct ImportReport {
     pub replaced: Vec<String>,
     /// Replace mode: document tools the library lacked, removed.
     pub removed: Vec<String>,
+    /// #889: tools that landed (added or changed) with their file's holder body.
+    pub holders: usize,
+    /// #889: bodies the file carried that the import left out (holders off).
+    pub holders_left_out: usize,
 }
 
 fn list(names: &[String]) -> String {
@@ -103,16 +126,30 @@ impl ImportReport {
         if !self.skipped.is_empty() {
             parts.push(format!("{} already in the document ({})", self.skipped.len(), list(&self.skipped)));
         }
+        if self.holders > 0 {
+            parts.push(format!("{} with {} holder", self.holders, if self.holders == 1 { "its" } else { "their" }));
+        }
+        if self.holders_left_out > 0 {
+            let s = if self.holders_left_out == 1 { "" } else { "s" };
+            parts.push(format!("{} holder{s} in the file not imported", self.holders_left_out));
+        }
         parts.join("; ")
     }
 }
 
 /// One planned change of an import, applied in order, inverted in reverse.
 enum Step {
-    Add(String, Tool),
-    /// Same entity, new definition; the controller number stays.
-    Change { name: String, prev: Tool, next: Tool },
+    /// A new tool, with the body it lands with (#889).
+    Add(String, Tool, Option<ToolBody>),
+    /// Same entity, new definition; the controller number stays. `body`
+    /// is `(document body before, file body)` when the file's lands.
+    Change { name: String, prev: Tool, next: Tool, body: Option<Box<(Option<ToolBody>, ToolBody)>> },
     Remove(DeleteTool),
+}
+
+/// The body as a save writes it - the identity the skip compares (#889).
+fn body_key(b: Option<&ToolBody>) -> Option<ToolBodyDto> {
+    b.map(ToolBodyDto::from_body)
 }
 
 /// Import a library in one step; undo restores every changed tool exactly.
@@ -121,8 +158,10 @@ pub struct ImportTools {
     report: ImportReport,
 }
 
-/// Why `name` cannot take `next` in place (the `ChangeTool` gates), by name.
-fn change_refusal(world: &World, name: &str, prev: &Tool, next: &Tool) -> Option<String> {
+/// Why `name` cannot take `next` in place (the `ChangeTool` gates), by
+/// name. `landing` is the file body that lands with it (#889); without
+/// one the document's body stays and must fit `next`.
+fn change_refusal(world: &World, name: &str, prev: &Tool, next: &Tool, landing: Option<&ToolBody>) -> Option<String> {
     if let Some(why) = next.torch_refusal() {
         return Some(format!("tool '{name}': {why}"));
     }
@@ -130,8 +169,8 @@ fn change_refusal(world: &World, name: &str, prev: &Tool, next: &Tool) -> Option
         return Some(msg);
     }
     let entity = model::find_by_name(world, name)?;
-    if let Some(body) = crate::tool_body::body_of(world, &entity)
-        && let Err(e) = crate::tool_body::fits(next, &body)
+    if let Some(body) = landing.cloned().or_else(|| tool_body::body_of(world, &entity))
+        && let Err(e) = tool_body::fits(next, &body)
     {
         return Some(format!("tool '{name}': {e}"));
     }
@@ -144,22 +183,39 @@ fn change_refusal(world: &World, name: &str, prev: &Tool, next: &Tool) -> Option
 }
 
 impl ImportTools {
-    /// The original import: [`ImportMode::Add`].
+    /// The original import: [`ImportMode::Add`], holders taken.
     pub fn new(world: &World, library: Vec<LibraryTool>) -> Result<Self, CommandError> {
-        Self::with_mode(world, library, ImportMode::Add)
+        Self::with_options(world, library, ImportMode::Add, true)
+    }
+
+    /// `mode`, with the file's holders taken (#899's door).
+    pub fn with_mode(world: &World, library: Vec<LibraryTool>, mode: ImportMode) -> Result<Self, CommandError> {
+        Self::with_options(world, library, mode, true)
+    }
+
+    /// [`ImportMode::Add`] with the holders choice (#889's door).
+    pub fn with_holders(world: &World, library: Vec<LibraryTool>, holders: bool) -> Result<Self, CommandError> {
+        Self::with_options(world, library, ImportMode::Add, holders)
     }
 
     /// Plan the import against the document. Refuses (nothing applied)
     /// a library naming setup furniture, a tool `is_sane` refuses, a
     /// library that changes nothing, and - Update / Replace - a tool the
     /// edit gates refuse or a name that belongs to a non-tool; Replace
-    /// also refuses to remove a tool an operation uses.
-    pub fn with_mode(world: &World, library: Vec<LibraryTool>, mode: ImportMode) -> Result<Self, CommandError> {
+    /// also refuses to remove a tool an operation uses. #889: `holders`
+    /// takes each tool's file body (judged against its tool; a body that
+    /// does not fit refuses the file by name) or leaves them out.
+    pub fn with_options(
+        world: &World,
+        library: Vec<LibraryTool>,
+        mode: ImportMode,
+        holders: bool,
+    ) -> Result<Self, CommandError> {
         let mut steps: Vec<Step> = Vec::with_capacity(library.len());
         let mut added: Vec<(String, Tool)> = Vec::new();
         let mut report = ImportReport::default();
         let names: Vec<String> = library.iter().map(|l| l.name.clone()).collect();
-        for LibraryTool { name, tool } in library {
+        for LibraryTool { name, tool, body } in library {
             if let Some(err) = reserved(world, &name) {
                 return Err(err);
             }
@@ -168,28 +224,54 @@ impl ImportTools {
                     "tool '{name}': parameters must be finite and positive"
                 )));
             }
-            if steps.iter().any(|s| matches!(s, Step::Add(n, _) if *n == name)) || report_has(&report, &name) {
+            if steps.iter().any(|s| matches!(s, Step::Add(n, ..) if *n == name)) || report_has(&report, &name) {
                 return Err(CommandError::Invalid(format!("tool '{name}' appears twice in the library")));
+            }
+            let body = match body {
+                Some(b) if holders => {
+                    // Judged again at the command, as SetToolBody does.
+                    tool_body::fits(&tool, &b).map_err(|e| CommandError::Invalid(format!("tool '{name}': {e}")))?;
+                    Some(b)
+                }
+                Some(_) => {
+                    report.holders_left_out = report.holders_left_out.saturating_add(1);
+                    None
+                }
+                None => None,
+            };
+            if body.is_some() {
+                // Counted now; a skipped tool takes it back below.
+                report.holders = report.holders.saturating_add(1);
             }
             let taken = |n: &str| model::find_by_name(world, n).is_some() || added.iter().any(|(t, _)| t == n);
             let existing = model::find_by_name(world, &name);
             let current = existing.as_ref().and_then(|e| model::tool_of(world, e));
+            let doc_body = existing.as_ref().and_then(|e| tool_body::body_of(world, e));
+            // A landing body is part of identity; a bare one leaves the
+            // document's body alone, so only the record is compared.
+            let body_same = body.is_none() || body_key(doc_body.as_ref()) == body_key(body.as_ref());
             match (existing, current) {
                 (None, _) => {
                     report.added.push(name.clone());
                     added.push((name.clone(), tool.clone()));
-                    steps.push(Step::Add(name, tool));
+                    steps.push(Step::Add(name, tool, body));
                 }
-                (Some(_), Some(prev)) if prev == tool => report.skipped.push(name),
+                (Some(_), Some(prev)) if prev == tool && body_same => {
+                    if body.is_some() {
+                        report.holders = report.holders.saturating_sub(1);
+                    }
+                    report.skipped.push(name);
+                }
                 (Some(_), Some(prev)) if mode != ImportMode::Add => {
-                    if let Some(why) = change_refusal(world, &name, &prev, &tool) {
+                    if let Some(why) = change_refusal(world, &name, &prev, &tool, body.as_ref()) {
                         return Err(CommandError::Invalid(why));
                     }
                     match mode {
                         ImportMode::Replace => report.replaced.push(name.clone()),
                         _ => report.updated.push(name.clone()),
                     }
-                    steps.push(Step::Change { name, prev, next: tool });
+                    let body = body.map(|b| Box::new((doc_body, b)));
+                    steps.push(Step::Change { name, prev, next: tool, body });
                 }
                 (Some(_), None) if mode != ImportMode::Add => {
                     return Err(CommandError::Invalid(format!(
@@ -202,7 +284,7 @@ impl ImportTools {
                     };
                     report.renamed.push((name, free.clone()));
                     added.push((free.clone(), tool.clone()));
-                    steps.push(Step::Add(free, tool));
+                    steps.push(Step::Add(free, tool, body));
                 }
             }
         }
@@ -253,18 +335,30 @@ fn put(world: &World, name: &str, tool: &Tool) {
     }
 }
 
+fn put_body(world: &World, name: &str, body: Option<&ToolBody>) {
+    if let Some(entity) = model::find_by_name(world, name) {
+        tool_body::set_body(world, &entity, body);
+    }
+}
+
 impl Command for ImportTools {
     fn apply(&self, world: &World) {
         for step in &self.steps {
             match step {
-                Step::Add(name, tool) => {
+                Step::Add(name, tool, body) => {
                     let entity = match model::find_by_name(world, name) {
                         Some(entity) => entity,
                         None => model::spawn(world, name),
                     };
                     entity.entity_view(world).set(ToolDef { tool: tool.clone(), number: None });
+                    tool_body::set_body(world, &entity, body.as_ref());
                 }
-                Step::Change { name, next, .. } => put(world, name, next),
+                Step::Change { name, next, body, .. } => {
+                    put(world, name, next);
+                    if let Some((_, b)) = body.as_deref() {
+                        put_body(world, name, Some(b));
+                    }
+                }
                 Step::Remove(del) => del.apply(world),
             }
         }
@@ -273,12 +367,17 @@ impl Command for ImportTools {
     fn invert(&self, world: &World) {
         for step in self.steps.iter().rev() {
             match step {
-                Step::Add(name, _) => {
+                Step::Add(name, ..) => {
                     if let Some(entity) = model::find_by_name(world, name) {
                         model::remove(world, &entity);
                     }
                 }
-                Step::Change { name, prev, .. } => put(world, name, prev),
+                Step::Change { name, prev, body, .. } => {
+                    put(world, name, prev);
+                    if let Some((before, _)) = body.as_deref() {
+                        put_body(world, name, before.as_ref());
+                    }
+                }
                 Step::Remove(del) => del.invert(world),
             }
         }

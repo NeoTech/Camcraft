@@ -4,7 +4,8 @@
 //! tolerances while a positive tolerance is left, so they are judged -
 //! and past that they are refused by name, as the upright mill kinds
 //! are. Kinds whose verdict is still a generator's own proof (swarf, the
-//! cone and engrave rides, probe, the cross drill, plasma) stay refused.
+//! cone and engrave rides, the cross drill) stay refused; probe and
+//! plasma joined the judged kinds in #1053 (`coarse_probe_plasma`).
 //!
 //! What "right" means here: on a model flagged 0.012 mm (0.007 mm past
 //! the promise) a turning, rotary or 5-axis operation generates,
@@ -121,7 +122,7 @@ fn fidelity_lines(world: &World) -> Vec<String> {
 }
 
 fn refusal(op: &str, mm: &str) -> String {
-    format!("{op}: model 'bar' was imported too coarsely to verify; re-import with a larger budget (surfaces are approximated to within {mm} mm)")
+    format!("{op}: model 'bar' was imported too coarsely to verify; re-import with a larger STEP facet budget (surfaces are approximated to within {mm} mm)")
 }
 
 fn groove_finish(tolerance: f64) -> OpParams {
@@ -336,9 +337,15 @@ fn problem(kind: OpType, coarse_mm: Option<f64>, stock_of: Option<(&str, Option<
 #[test]
 fn every_kind_is_either_judged_or_refused_for_a_stated_reason_on_a_reduced_model() {
     use OpType::*;
-    // Still refused: the verdict is a generator's own proof, or its own
-    // module's, and does not read the excess yet.
-    let refused = [Swarf, AdvancedSwarf, Trace, Engrave, Chamfer2D, Deburr, Probe, PlasmaProfile];
+    // Still refused: the verdict is a generator's own proof (swarf), or
+    // no tolerance holds the ride to the model at all (the cone and
+    // engrave rides). Probe and plasma read the excess since #1053.
+    // #532: the wire's kerf law does not read the excess yet either.
+    // SinkerBurn (#541): the burn is verified against the model's floor and
+    // walls, so a reduced model is refused until it reads the excess.
+    // SinkerSideBurn (#545): its lateral move is judged against the same
+    // walls - refused on a reduced model for the same reason.
+    let refused = [Swarf, AdvancedSwarf, Trace, Engrave, Chamfer2D, Deburr, WireContour, SinkerBurn, SinkerSideBurn];
     for row in KindInfo::ALL {
         assert_eq!(problem(row.ty, None, None), None, "{:?}: full fidelity is untouched", row.ty);
         let said = problem(row.ty, Some(TIGHT), None);

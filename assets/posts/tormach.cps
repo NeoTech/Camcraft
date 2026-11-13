@@ -20,6 +20,7 @@ minimumRevision = 1;
 extension = "nc";
 setCodePage = "utf-8";
 capabilities = 1; // reference contract: integer feature mask (bit 1 = milling)
+programUnits = "mm inch"; // #902: writes the document's unit (postOptions.Units), G21 / G20
 
 // Determinism law: no timestamps, no randomness - the same stream
 // always posts to the same text (golden files depend on it).
@@ -41,10 +42,10 @@ var smoothTol = 0;          // #616: the section's PARAM Smoothing, mm (0: none 
 var smoothMode = "";        // #616: "finish" or "rough"
 var smoothActive = false;   // #616: this section wrote its smoothing words
 var orgX = 0, orgY = 0, orgZ = 0; // the WCS slot origin (OriginX/Y/Z PARAMs)
-var inch = false;          // the machine is programmed in inches (onOpen)
+var inch = false;          // the document's unit is inch (onOpen, #902: postOptions.Units, never the machine file's)
 
 // ------------------------------------------------------------ helpers
-// The stream speaks mm and mm/min. An inch machine gets every length and
+// The stream speaks mm and mm/min. An inch program gets every length and
 // feed divided by 25.4 and written at four decimals (a tenth of a
 // thousandth); a metric one keeps mm at three. Angles and rpm never scale.
 function has(v) { return v !== null && v !== undefined && isFinite(v); }
@@ -53,7 +54,7 @@ function trim(s) {
   return s === "-0" ? "0" : s;
 }
 function len(v) { return inch ? v / 25.4 : v; }
-function fu(v) {  // a length, in the machine's unit
+function fu(v) {  // a length, in the program's unit
   if (!has(v)) return "0";
   return trim(Number(len(v)).toFixed(inch ? 4 : 3));
 }
@@ -84,21 +85,51 @@ function msg(s) {  // counted warning where the host offers message()
 }
 var tapRefused = false;   // the rigid-tap refusal, once per program
 
-// The .mch tool-station coolant list carries names + M-codes; the
-// first Flood entry (else the first entry at all) is this machine's
-// cutting-fluid-on code. M9 (stop) is the RS-274 fixed pair.
+// #1357: a cut needs a turning spindle. spindleOn is true from the
+// preamble's S.. M3 to the next M5 (every section end); a touch probe's
+// section feeds its stylus with the spindle stopped on purpose. A
+// section is a probe's only when it states 0 rpm (#574) AND its tool is
+// a touch probe (PARAM ToolKind) - a cutter whose speed reads 0 is not
+// a probe, it is a stopped spindle. A feed, arc or cycle with the
+// spindle stopped anywhere else is refused by name - a stream that
+// states no spindle speed (a bare legacy .cl) would otherwise post a
+// program that drags a stopped cutter through the part. Once per program.
+var spindleOn = false;
+var probeSection = false;
+var kindProbe = false;    // this section's PARAM ToolKind names a touch probe
+var spindleRefused = false;
+function spindleStopped(what) {  // true: refused, nothing is posted
+  if (spindleOn || probeSection) return false;
+  if (!spindleRefused) {
+    spindleRefused = true;
+    msg(what + inOp() + " with the spindle stopped - no spindle start (S.. M3) precedes it; state the operation's spindle speed");
+  }
+  return true;
+}
+var feedRefused = false;  // #1357: the cycle-feed refusal, once per program
+
+// The .mch tool-station coolant list carries names + M-codes. This post
+// reads no PARAM Coolant (the engine refuses a non-Flood op by name), so
+// every section asks flood: the machine's Flood entry; failing one, the
+// first coded entry of no other known family (a shop's own "Brine" is
+// its flood); a stated codeless Flood is the operator's own valve,
+// silent. A list that states only other kinds (Mist, Air - #869) has no
+// flood code: refused by name, never posted as mist or air. An unstated
+// list stays silent. M9 (stop) is the RS-274 fixed pair.
+var COOLANT_KINDS = ["flood", "mist", "air", "air-blast", "through-spindle", "through-tool"];
 function coolantCode() {
   var cs = (typeof machine !== "undefined" && machine.coolants) || [];
-  var first = "";
+  var other = "", floodNamed = false;
   for (var i = 0; i < cs.length; i++) {
     var c = cs[i];
     var code = (typeof c === "string") ? "" : (c.mCode || "");
-    var name = (typeof c === "string") ? c : (c.name || "");
-    if (!code) continue;
-    if (name === "Flood") return code;
-    if (!first) first = code;
+    var name = String((typeof c === "string") ? c : (c.name || "")).trim().toLowerCase().replace(/[\s_]+/g, "-");
+    if (name === "flood") { if (code) return code; floodNamed = true; continue; }
+    if (code && !other && COOLANT_KINDS.indexOf(name) < 0) other = code;
   }
-  return first;
+  if (other || floodNamed || cs.length === 0) return other;
+  msg("the machine states no flood coolant code" + inOp() + " - add a Flood entry to the machine, or post through a post that reads the operation's coolant");
+  return "";
 }
 
 // ------------------------------------------------------------ the plane
@@ -124,6 +155,27 @@ function centerWords(p) {
     w("J", has(c.J) && has(p.StartY) ? c.J - p.StartY : null),
     w("K", has(c.K) && has(p.StartZ) ? c.K - p.StartZ : null),
   ];
+}
+
+// -------------------------------------------------------------- header
+// The document's program identity (#258), from the engine's `program`
+// global: its number (1 when the document states none; one file per
+// operation counts up from it, #111), whether the document stated it,
+// and its program comment ("" for none - the header then names the
+// machine, as before #258). A host that publishes none posts O0001.
+function progNo() {
+  var n = typeof program !== "undefined" ? program.number : (typeof programNumber !== "undefined" ? programNumber : 1);
+  return Math.round(Number(n) || 1);
+}
+function progNumbered() { return typeof program !== "undefined" && program.numbered === true; }
+function progComment() { return clean(typeof program !== "undefined" ? program.comment : ""); }
+// No O-word (#258): PathPilot runs the LinuxCNC interpreter, where an O
+// word opens a subroutine or a flow-control block (LinuxCNC G-code
+// reference, "O Codes") - a program number on a block of its own is not
+// a legal line. A stated number rides the header comment instead.
+function headTitle(nm) {
+  var t = progComment() || clean(nm) || "CAMCRAFT";
+  return progNumbered() ? "PROGRAM " + progNo() + " - " + t : t;
 }
 
 // ------------------------------------------------------------ comments
@@ -159,7 +211,7 @@ function commentParam(name, value) {
   if (name === "SetupName") setupName = clean(value);
   else if (name === "OperationName") opName = clean(value);
   else if (name === "OperationKind") opKind = clean(value).toUpperCase();
-  else if (name === "ToolKind") toolKind = clean(value).toUpperCase();
+  else if (name === "ToolKind") { toolKind = clean(value).toUpperCase(); kindProbe = toolKind === "TOUCH PROBE"; }
   else if (name === "ToolDiameter" && has(value)) toolDia = Number(value);
   else if (name === "ToolCornerRadius" && has(value)) toolCr = Number(value);
 }
@@ -188,11 +240,11 @@ function toolNote() {  // just before the tool change it describes
 // "no tolerance" in plain LinuxCNC, and a stated P reads the same on
 // every build (0.001 in, or its 0.025 mm twin).
 function onOpen() {
-  inch = typeof machine !== "undefined" && machine.units === "inch";
+  inch = typeof postOptions !== "undefined" && postOptions.Units === "inch";
   var nm = (typeof machine !== "undefined" && machine.name) || "CAMCRAFT";
-  // #594: the name is user text from the machine file - cleaned like
-  // every other comment text, so `Tormach 770MX (ML)` never nests.
-  note(clean(nm) || "CAMCRAFT");
+  // #594: the machine name is user text - cleaned like every other
+  // comment text, so `Tormach 770MX (ML)` never nests.
+  note(headTitle(nm));
   block([inch ? "G20" : "G21", "G17", "G90", "G91.1", "G94", "G40", "G49", "G80"]);
   block(["G64", blendP()]);
   var z = safeZ();
@@ -363,8 +415,10 @@ function startPreamble() {
   if (spindleWait && sRpm > 0) {
     block([beltNote(sRpm)]);
     block(["S" + ni(sRpm), "M3"]);
+    spindleOn = true;
   }
-  if (probeStop) block(["M5"]);
+  if (probeStop) { block(["M5"]); spindleOn = false; }
+  probeSection = touchProbe && kindProbe;
   spindleWait = false;
   coolant = touchProbe ? "" : coolantCode();
   if (coolant) block([coolant]);
@@ -384,6 +438,9 @@ function endPreamble() {
   inCycle = false;
   if (coolant) block(["M9"]);
   block(["M5"]);
+  spindleOn = false;
+  probeSection = false;
+  kindProbe = false;         // the next section states its own tool kind
 }
 
 function onSection() { seatKnown = false; startPreamble(); }
@@ -606,6 +663,7 @@ function onRapid() {
 function onLinear() {
   startPreamble();
   if (chainCut() || !indexFor(properties)) return;
+  if (spindleStopped("feed move G1")) return;
   startXY(properties);
   block(["G1"].concat(xyz(properties), [fw(properties.FeedRate)]));
 }
@@ -617,6 +675,7 @@ function onCircular() {
     aRefuse("arc on an indexed A" + inOp() + " - the indexed frame posts lines only");
     return;
   }
+  if (spindleStopped("arc move " + (p.CircularDirection === "CW" ? "G2" : "G3"))) return;
   startXY(p);
   block([
     planeWord(planeOf(p)),
@@ -728,6 +787,18 @@ function onCycle() {
     }
     g = "G84";
   }
+  // #1357: a canned cycle feeds at its own F word. Without one LinuxCNC
+  // alarms on a zero feed ("Cannot feed with zero feed rate") or, after
+  // an earlier F, drills at whatever feed was last modal - so a cycle
+  // the stream gives no positive feed is refused by name.
+  if (!(has(p.FeedRate) && p.FeedRate > 0)) {
+    if (!feedRefused) {
+      feedRefused = true;
+      msg("canned cycle " + g + inOp() + " has no feed rate - refused: without F the control drills at whatever feed was last modal");
+    }
+    return;
+  }
+  if (spindleStopped("canned cycle " + g)) return;
   xyFirst(p.X, p.Y);         // a cycle as the first move: its first hole
   cycleSeat(p);
   var sig = g + "|" + p.Z + "|" + p.R + "|" + p.Q;

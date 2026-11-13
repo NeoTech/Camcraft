@@ -15,6 +15,7 @@ setCodePage = "utf-8";
 capabilities = 1; // reference contract: integer feature mask (bit 1 = milling)
 coolantModes = true; // reads PARAM Coolant (#112/#150): the engine refuses non-Flood ops for a post without it
 afterModes = true; // reads PARAM AfterOperation (#110): the engine refuses a stop or home ask for a post without it
+programUnits = "mm inch"; // #902: writes the document's unit (postOptions.Units), G710 / G700
 
 // Determinism law: no timestamps, no randomness - the same stream
 // always posts to the same text (golden files depend on it).
@@ -48,13 +49,24 @@ var nLine = 0;             // the numbered-block dialect: every written
 
 // ------------------------------------------------------------ helpers
 function has(v) { return v !== null && v !== undefined && isFinite(v); }
-function fu(v) {  // mm at three decimals, trailing zeros trimmed
-  if (!has(v)) return "0";
-  var s = Number(v).toFixed(3);
+// #902: the program's unit is the document's (postOptions.Units, "mm"
+// or "inch"; absent = mm), never the machine file's. The stream speaks
+// mm and mm/min: an inch program writes every length / 25.4 at four
+// decimals and every feed in in/min at two; angles, seconds and rpm
+// carry no length and are written as they come.
+var inch = false;
+function trimNum(s) {
   if (s.indexOf(".") >= 0) s = s.replace(/0+$/, "").replace(/\.$/, "");
   return s === "-0" ? "0" : s;
 }
-function ff(v) { return has(v) && v > 0 ? String(Math.round(v)) : "0"; }
+function fu(v) {  // a length: mm at three decimals, or inch at four
+  if (!has(v)) return "0";
+  return trimNum(Number(inch ? v / 25.4 : v).toFixed(inch ? 4 : 3));
+}
+function ff(v) {  // a feed: whole mm/min, or in/min at two decimals
+  if (!(has(v) && v > 0)) return "0";
+  return inch ? trimNum((v / 25.4).toFixed(2)) : String(Math.round(v));
+}
 function ni(v) { return has(v) ? String(Math.round(v)) : "0"; }
 function w(letter, v) { return has(v) ? letter + fu(v) : ""; }
 function fw(v) { return has(v) ? "F" + ff(v) : ""; }
@@ -73,6 +85,29 @@ function wo(letter, v, o) { return has(v) ? letter + fu(v - o) : ""; }
 function msg(s) {  // counted warning where the host offers message()
   if (typeof message === "function") message(s); else writeln("; " + s);
 }
+
+// #1359 (from #1357): a cut needs a turning spindle. spindleOn is true
+// from the preamble's spindle start (S.. M3) to the next M5 (every
+// section end, and a touch probe's stop). A touch probe's section feeds
+// its stylus with the spindle stopped on purpose: a section is a
+// probe's only when it states 0 rpm (#574) AND its tool is a touch
+// probe (PARAM ToolKind) - a cutter whose speed reads 0 is a stopped
+// spindle, not a probe. A feed, arc or cycle with the spindle stopped
+// anywhere else is refused by name and not posted: a stream that states
+// no spindle speed would otherwise drag a stopped cutter through the
+// part. Once per program.
+var spindleOn = false;
+var probeSection = false;
+var kindProbe = false;    // this section's PARAM ToolKind names a touch probe
+var spindleRefused = false;
+function spindleStopped(what) {  // true: refused, nothing is posted
+  if (spindleOn || probeSection) return false;
+  if (!spindleRefused) {
+    spindleRefused = true;
+    msg(what + " with the spindle stopped - no spindle start (S.. M3) precedes it; state the operation's spindle speed");
+  }
+  return true;
+}
 var tiltRefused = false;  // stage D: one named refusal per program, not per line
 function tiltOk(p) {  // RTCP words are Fanuc-family; this dialect refuses them
   if (!has(p.A)) return true;
@@ -88,7 +123,7 @@ function tiltOk(p) {  // RTCP words are Fanuc-family; this dialect refuses them
 // flood code: refused by name (#150), never posted as mist or dry. An
 // unstated list stays silent (the unstated-limit law). M9 (stop) is
 // the RS-274 fixed pair.
-var COOLANT_KINDS = ["flood", "mist", "through-spindle", "through-tool"];
+var COOLANT_KINDS = ["flood", "mist", "air", "air-blast", "through-spindle", "through-tool"];
 function coolantWho() { return coolantOp ? "operation " + coolantOp + ": " : ""; }
 function coolantCode() {
   var cs = (typeof machine !== "undefined" && machine.coolants) || [];
@@ -106,14 +141,14 @@ function coolantCode() {
 }
 
 // The op's coolant ask (#112): the stream says nothing for flood (every
-// older stream), or carries PARAM Coolant off / mist / through-tool. The
+// older stream), or carries PARAM Coolant off / mist / air (#869) / through-tool. The
 // code is the machine's own entry of that family - the machine is truth;
 // an ask the machine states no code for is refused by name, naming the
 // operation (#150), never silently posted dry.
 function coolantFor(ask) {
   if (ask === "off") return "";
   if (!ask || ask === "flood") return coolantCode();
-  var want = ask === "mist" ? ["mist"] : (ask === "through-tool" ? ["through-spindle", "through-tool"] : []);
+  var want = ask === "mist" ? ["mist"] : (ask === "air" ? ["air", "air-blast"] : (ask === "through-tool" ? ["through-spindle", "through-tool"] : []));
   if (want.length === 0) { msg(coolantWho() + "unknown coolant ask " + ask); return ""; }
   var cs = (typeof machine !== "undefined" && machine.coolants) || [];
   for (var i = 0; i < cs.length; i++) {
@@ -198,7 +233,7 @@ function commentParam(name, value) {
   if (name === "SetupName") setupName = clean(value);
   else if (name === "OperationName") opName = clean(value);
   else if (name === "OperationKind") opKind = clean(value).toUpperCase();
-  else if (name === "ToolKind") toolKind = clean(value).toUpperCase();
+  else if (name === "ToolKind") { toolKind = clean(value).toUpperCase(); kindProbe = toolKind === "TOUCH PROBE"; }
   else if (name === "ToolDiameter" && has(value)) toolDia = Number(value);
   else if (name === "ToolCornerRadius" && has(value)) toolCr = Number(value);
 }
@@ -216,11 +251,44 @@ function toolNote() {  // just before the tool change it describes
   toolKind = ""; toolCr = 0;
 }
 
+// -------------------------------------------------------------- header
+// The document's program identity (#258), from the engine's `program`
+// global: its number (1 when the document states none; one file per
+// operation counts up from it, #111), whether the document stated it,
+// and its program comment ("" for none - the header then names the
+// machine, as before #258).
+function progNo() {
+  var n = typeof program !== "undefined" ? program.number : (typeof programNumber !== "undefined" ? programNumber : 1);
+  return Math.round(Number(n) || 1);
+}
+function progNumbered() { return typeof program !== "undefined" && program.numbered === true; }
+function progComment() { return clean(typeof program !== "undefined" ? program.comment : ""); }
+// #258: the control addresses a main program by its name. Siemens'
+// published SINUMERIK 840D sl / 828D programming manual (Fundamentals,
+// "Program names") states the rules: letters, digits and underscores
+// only, the first two characters letters (or an underscore and a
+// letter), at most 24 characters; a program read in as text opens with
+// the `%_N_<name>_MPF` line naming it a main program. So a stated
+// program comment becomes that name (spaces and every other character
+// to `_`), and a name the rules refuse is refused by name here, never
+// renamed into another program. A stated number has no word on this
+// control - it rides the header comment. None stated: the header is
+// the machine's name, as before.
+function mpfName(said) {
+  var t = said.replace(/[^A-Za-z0-9_]/g, "_");
+  if (!/^([A-Za-z]{2}|_[A-Za-z])/.test(t) || t.length > 24) {
+    throw new Error("program name \"" + said + "\" cannot name a SINUMERIK program (" + t
+      + "): it must start with two letters (or _ and a letter) and be at most 24 characters");
+  }
+  return t;
+}
 function onOpen() {
+  inch = typeof postOptions !== "undefined" && postOptions.Units === "inch";
   var nm = (typeof machine !== "undefined" && machine.name) || "CAMCRAFT";
-  // #594: the name is user text from the machine file - cleaned like
-  // every other comment text, one rule for every comment line.
-  writeln("; " + (clean(nm) || "CAMCRAFT"));
+  var said = progComment();
+  if (said) writeln("%_N_" + mpfName(said) + "_MPF");
+  var t = said || clean(nm) || "CAMCRAFT"; // #594: cleaned
+  writeln("; " + (progNumbered() ? "PROGRAM " + progNo() + " - " + t : t));
   var z = safeZ();
   if (z !== null && z !== 0) note("SAFE RETRACT G53 Z" + fu(z) + " - STATED BY THE MACHINE");
 }
@@ -299,7 +367,7 @@ function onParameter(name, value) {
   if (name === "OperationName") coolantOp = String(value || "");
   if (name === "Coolant") { coolantAsk = String(value || "flood"); return; }
   if (name === "AfterOperation") { afterAsk = String(value || ""); return; }
-  if (name === "WorkOffset" && value) wcsWord = String(value);
+  if (name === "WorkOffset" && value) wcsWord = frameWord(String(value));
   else if (name === "OriginX" && has(value)) orgX = Number(value);
   else if (name === "OriginY" && has(value)) orgY = Number(value);
   else if (name === "OriginZ" && has(value)) orgZ = Number(value);
@@ -350,9 +418,10 @@ function startPreamble() {
   // programming manual: G71 switches only geometric data, so F would
   // still read in the basic system's unit; G710 switches both). Stated
   // in the opening block before any motion, whatever the control's
-  // basic system or the last program left modal. Where the program's
-  // unit is chosen, and inch output, is #902.
-  block(["G17", "G710", "G90", wcsWord, "G40", "G80"]);
+  // basic system or the last program left modal. #902: the unit is the
+  // document's - an inch program states G700, inch for lengths and
+  // feeds alike, by the same law.
+  block(["G17", inch ? "G700" : "G710", "G90", wcsWord, "G40", "G80"]);
   planeG = 17;              // the preamble states the plane
   if (toolWait) {
     toolNote();
@@ -360,11 +429,15 @@ function startPreamble() {
     toolWait = false;
   }
   if (spindleWait && sRpm > 0) {   // a touch probe (#173) states no spindle
-    block(["S" + ff(sRpm), "M3"]);
+    block(["S" + ni(sRpm), "M3"]);
+    spindleOn = true;
     spindleWait = false;
   }
-  if (probeStop) block(["M5"]);
-  coolant = coolantFor(coolantAsk);
+  if (probeStop) { block(["M5"]); spindleOn = false; }
+  probeSection = probeStop && kindProbe;
+  // #995: a touch probe section starts no coolant, whatever its ask -
+  // fluid on the stylus and the measured faces spoils the reading.
+  coolant = probeStop ? "" : coolantFor(coolantAsk);
   if (coolant) block([coolant]);
   smoothOn();
 }
@@ -406,6 +479,9 @@ function endPreamble() {
   coolant = "";
   coolantAsk = "flood";      // the next section states its own ask
   block(["M5"]);
+  spindleOn = false;
+  probeSection = false;
+  kindProbe = false;         // the next section states its own tool kind
   afterOp();
 }
 
@@ -458,6 +534,7 @@ function onRapid() {
 function onLinear() {
   startPreamble();
   if (!tiltOk(properties) || chainCut()) return;
+  if (spindleStopped("feed move G1")) return;
   // The pending comp word rides this straight block (#39).
   var cg = compG, cd = compD;
   compG = ""; compD = "";
@@ -467,6 +544,7 @@ function onCircular() {
   startPreamble();
   compRefuse("an arc");
   if (!tiltOk(properties) || chainCut()) return;
+  if (spindleStopped("arc move " + (properties.CircularDirection === "CW" ? "G2" : "G3"))) return;
   var p = properties;
   if (compPlaneRefuse(planeOf(p))) return;
   block([
@@ -534,6 +612,14 @@ function onCycle() {
   else if (p.CycleType === "TAP") g = "G84";
   else if (p.CycleType === "BORE") g = "G86";
   else if (p.CycleType === "BACKBORE") g = "G89";
+  // #1357: a canned cycle feeds at its own F word. Without one the
+  // control drills at whatever feed was last modal (or alarms on a zero
+  // feed), so a cycle the stream gives no positive feed is refused by name.
+  if (!(has(p.FeedRate) && p.FeedRate > 0)) {
+    msg("canned cycle " + g + " has no feed rate - refused: without F the control drills at whatever feed was last modal");
+    return;
+  }
+  if (spindleStopped("canned cycle " + g)) return;
   cycleSeat(p);
   var words = [g, wo("X", p.X, orgX), wo("Y", p.Y, orgY), wo("Z", p.Z, orgZ), wo("R", p.R, orgZ)];
   if ((p.CycleType === "PECK" || p.CycleType === "DEEP") && has(p.Q) && p.Q > 0) {
@@ -561,8 +647,8 @@ function onCycle() {
 // measure air. A measured trip k is kept in R(50+3k)..R(52+3k) and the
 // deviations in R90.., inside R0..R99 (the R parameters every 840D
 // carries; more are a machine-data option). The back-off is incremental
-// (G91). G58/G59 are axial programmable offsets
-// on this control, not settable frames: setting one is refused by name.
+// (G91). The fifth and sixth work offsets are the settable frames
+// G505/G506 here (frameWord, #934), so a probe sets those frames.
 // Arming the probe is the machine's own.
 var probeBase = 50;
 function axisIx(a) { return a === "X" ? 0 : (a === "Y" ? 1 : 2); }
@@ -616,6 +702,19 @@ function onProbeGuard() {
   block(["MEAS=1", "G1", wo("X", p.X, orgX), wo("Y", p.Y, orgY), wo("Z", p.Z, orgZ), fw(p.Feed)]);
   stopAlarm("$AC_MEA[1]==1", 65002, "PROBE HIT ON POSITIONING");
 }
+// #934: the engine hands the setup's work offset as its generic word
+// (G54..G59, one per controller register). On the 840D the settable
+// zero offsets are G54..G57 and then G505..G599 (840D sl Fundamentals,
+// "settable zero offset"); G58/G59 are axial programmable offsets that
+// select no frame. So offsets 5 and 6 are written G505/G506, and a
+// word naming no settable frame is refused by name, never posted.
+function frameWord(word) {
+  var w = String(word).toUpperCase();
+  if (w === "G58") return "G505";
+  if (w === "G59") return "G506";
+  if (!frameOf(w)) msg("work offset " + w + " - only the settable frames G54..G57 / G505..G599 can be selected on this control");
+  return w;
+}
 function frameOf(word) {  // "G54".."G57" -> 1..4, G505..G599 -> 5..99; 0 none
   var n = Number(String(word).replace(/[^0-9]/g, ""));
   if (n >= 54 && n <= 57) return n - 53;
@@ -641,7 +740,7 @@ function onProbeResult() {
     stopAlarm("ABS(R" + (dev + i) + ")>" + fu(p.Tolerance), 65001, "PROBE " + a.Axis + " OUT OF TOLERANCE");
   }
   if (has(p.SetWorkOffset) && p.SetWorkOffset >= 0) {
-    var want = "G" + (54 + Number(p.SetWorkOffset));
+    var want = frameWord("G" + (54 + Number(p.SetWorkOffset)));
     var to = frameOf(want), from = frameOf(wcsWord);
     if (!to || !from) {
       msg("probing: setting " + want + " from " + wcsWord + " - only the settable frames G54..G57 / G505..G599 can be set on this control");
