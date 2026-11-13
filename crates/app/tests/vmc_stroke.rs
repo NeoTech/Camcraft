@@ -6,6 +6,7 @@
 //! the work origin was "out of stroke" and no program posted. Pinned
 //! here: the reported plate contour posts clean on the built-in VMC,
 //! and a clearance genuinely past the stroke still refuses by name.
+//! The same holds for the built-in Doosan DNM 5700 (#1410).
 //!
 //! Provenance: general machine-tool practice (a slide's stroke, a work
 //! offset placed anywhere along it); every number is our own fixture.
@@ -55,11 +56,11 @@ fn contour(clearance: f64) -> OpParams {
 }
 
 /// A 1 mm plate under a 2D Contour, the document machine the built-in
-/// VMC 3-axis, G54 unplaced (the world origin, the plate's floor).
-fn plate_on_the_vmc(clearance: f64) -> World {
+/// `machine`, G54 unplaced (the world origin, the plate's floor).
+fn plate_on(machine: &str, clearance: f64) -> World {
     let world = camcraft_app::world::new_world();
     let mut h = History::default();
-    h.execute(&world, LoadMachine::builtin(&world, "VMC 3-axis").expect("built-in machine"));
+    h.execute(&world, LoadMachine::builtin(&world, machine).expect("built-in machine"));
     let stock = SetStock::new(&world, StockShape::Box { dx: 100.0, dy: 100.0, dz: 1.0 }, Default::default());
     h.execute(&world, stock.expect("plate stock"));
     let tool = catalog().into_iter().find(|(n, _)| *n == TOOL).map(|(_, t)| t).expect("catalog");
@@ -74,10 +75,23 @@ fn plate_on_the_vmc(clearance: f64) -> World {
     world
 }
 
-fn mounted(world: &World) -> machine::Machine {
+fn plate_on_the_vmc(clearance: f64) -> World {
+    plate_on(VMC, clearance)
+}
+
+const VMC: &str = "VMC 3-axis";
+/// #1410: the DNM file stated its Z in the machine frame (`-510..0`) and
+/// X/Y as half strokes, the #457 defect in a machine registered later.
+const DNM: &str = "Doosan DNM 5700";
+
+fn mounted_as(world: &World, name: &str) -> machine::Machine {
     let (path, m) = machine::of(world);
-    assert_eq!(path, posting::builtin_path("VMC 3-axis"), "the built-in is the document machine");
-    m.expect("the built-in VMC is mounted")
+    assert_eq!(path, posting::builtin_path(name), "the built-in is the document machine");
+    m.expect("the built-in machine is mounted")
+}
+
+fn mounted(world: &World) -> machine::Machine {
+    mounted_as(world, VMC)
 }
 
 #[test]
@@ -116,6 +130,48 @@ fn a_clearance_past_the_vmc_column_still_refuses_by_name() {
     let report = posting::verification_report(&world);
     assert!(report.problems.iter().any(|p| p.contains("the stroke is")), "the over-travel blocks the post: {:?}", report.problems);
     let path = std::env::temp_dir().join(format!("camcraft_vmc_overtravel_{}.nc", std::process::id()));
+    let posted = posting::post_setup(&world, &path);
+    let _ = std::fs::remove_file(&path);
+    assert!(posted.is_err(), "an over-travel never posts");
+}
+
+#[test]
+fn a_plate_contour_on_the_built_in_dnm_passes_the_stroke() {
+    // #1410: every move above G54's Z0 was refused on the DNM 5700.
+    let world = plate_on(DNM, 26.0);
+    let m = mounted_as(&world, DNM);
+    let band = |i: usize| m.axis(i).and_then(|a| a.travel);
+    // The catalog strokes 1020/570/510 mm, each stated full length either way.
+    assert_eq!(band(0), Some((-1020.0, 1020.0)), "X");
+    assert_eq!(band(1), Some((-570.0, 570.0)), "Y");
+    assert_eq!(band(2), Some((-510.0, 510.0)), "Z");
+    let c = check_document(&world, &m).expect("a fresh program checks");
+    assert!(c.is_ok(), "rapid at Z 26, cuts at Z 0..1 - inside the DNM: {:?}", c.problems);
+    // The gate holds no stroke problem. Its one remaining refusal is the
+    // optional A's unstated nose_to_axis (#1433), a separate law that the
+    // file cannot satisfy with an invented figure.
+    let report = posting::verification_report(&world);
+    assert!(!report.problems.iter().any(|p| p.contains("the stroke is")), "{:?}", report.problems);
+    assert!(
+        report.problems.iter().all(|p| p.contains("states no nose_to_axis")),
+        "only the A's nose figure blocks the post: {:?}",
+        report.problems
+    );
+}
+
+#[test]
+fn a_clearance_past_the_dnm_column_still_refuses_by_name() {
+    let world = plate_on(DNM, 520.0);
+    let m = mounted_as(&world, DNM);
+    let c = check_document(&world, &m).expect("checks");
+    assert!(
+        c.problems.iter().any(|p| p.starts_with("2D Contour1:")
+            && p.contains("reaches 520.000 in Z")
+            && p.contains("the stroke is -510.000..510.000")),
+        "{:?}",
+        c.problems
+    );
+    let path = std::env::temp_dir().join(format!("camcraft_dnm_overtravel_{}.nc", std::process::id()));
     let posted = posting::post_setup(&world, &path);
     let _ = std::fs::remove_file(&path);
     assert!(posted.is_err(), "an over-travel never posts");
