@@ -9,6 +9,13 @@
 // and nothing here invents an EDM code. Behaviour only, per this repo's
 // Clean-Room Protocol. The decision record is
 // docs/decisions/533-wire-iso-post.md; the goldens lock this file.
+// A constant taper (#536): the app hands each leaning move's X Y at the
+// lower guide and the upper guide's offset from it (PARAM WireU and
+// WireV, from
+// the pose and the machine's guide planes); the words that switch the
+// taper on and off and that write U V are the machine's edm.codes.
+// A 4-axis cut (#537, PARAM WireFourAxis: its pairing rule) leans the
+// same way: the same words, the same U V, no stated angle.
 description = "Generic ISO wire EDM (RS-274 motion; every EDM code from the machine's edm.codes)";
 vendor = "Camcraft";
 legal = "Original clean-room work; public standards only";
@@ -19,6 +26,7 @@ setCodePage = "utf-8";
 capabilities = 1;          // reference contract: integer feature mask
 wireEdm = true;            // voices PARAM EdmCondition (the engine's door)
 afterModes = true;         // reads PARAM AfterOperation (M01 / M00; home refused)
+programUnits = "mm inch"; // #902: writes the document's unit (postOptions.Units), G21 / G20
 
 // Determinism law: no timestamps, no randomness.
 
@@ -32,6 +40,9 @@ var REQUIRED = ["condition", "comp_off"];
 // hole, cut the wire after the cut, and dispose of the cut tip. Without
 // it the operator threads and cuts at an M00 the program states.
 var AWT_REQUIRED = ["thread", "cut", "tip_disposal"];
+// A tapered section (#536) also needs the taper's switch and its U V
+// words; `uv` is a template holding {u} and {v}.
+var TAPER_REQUIRED = ["taper_on", "taper_off", "uv"];
 
 // ---------------------------------------------------------------- state
 var inch = false;
@@ -43,6 +54,11 @@ var inSection = false;     // between onSection and onSectionEnd
 var threaded = false;      // the wire is threaded through the work
 var cutZ = null;           // the section's one programmed plane (2-axis)
 var awt = false;
+var taper = 0;             // the section's stated taper, degrees (0: vertical)
+var fourAxis = "";         // the section's 4-axis pairing rule ("": one profile)
+var uv = null;             // the next move's upper guide offset [U, V] (WireU, WireV)
+var tapering = false;      // the taper switch is on
+var taperOk = true;
 var codesOk = false;
 var refused = {};
 
@@ -121,7 +137,7 @@ function machineOk() {
 // ISO 6983 tape fence, the unit and absolute positions; the program
 // starts with the wire NOT threaded, which the header says.
 function onOpen() {
-  inch = typeof machine !== "undefined" && machine.units === "inch";
+  inch = typeof postOptions !== "undefined" && postOptions && postOptions.Units === "inch"; // #902: the document's unit, never the machine file's
   codesOk = machineOk();
   writeln("%");
   note(clean(machineName()));
@@ -139,6 +155,10 @@ function onParameter(name, value) {
   else if (name === "EdmCondition") condition = String(value === null || value === undefined ? "" : value);
   else if (name === "WireSide") side = clean(value);
   else if (name === "AfterOperation") afterOp = String(value);
+  else if (name === "WireTaper" && has(value)) taper = Number(value);
+  else if (name === "WireFourAxis") fourAxis = clean(value);
+  else if (name === "WireU" && has(value)) uv = [Number(value), uv !== null ? uv[1] : null];
+  else if (name === "WireV" && has(value) && uv !== null) uv = [uv[0], Number(value)];
   else if (name === "SpindleSpeed" && has(value) && Number(value) > 0) {
     refuse("rpm" + opName, who() + "states " + Math.round(Number(value)) + " rpm - a wire EDM turns no spindle");
   }
@@ -163,6 +183,22 @@ function onSection() {
   note(opName + (opKind ? " - " + opKind : ""));
   if (setupName) note("SETUP " + setupName);
   if (side) note("SIDE " + side.toUpperCase() + " - KERF IN THE PATH");
+  taperOk = true;
+  if (taper !== 0 || fourAxis !== "") {
+    for (var i = 0; i < TAPER_REQUIRED.length; i++) {
+      if (code(TAPER_REQUIRED[i]) === null) {
+        refuse("tcode" + TAPER_REQUIRED[i] + opName, who() + (fourAxis !== "" ? "is a 4-axis cut" : "is tapered") + ", and machine " + machineName() + " states no edm.codes." + TAPER_REQUIRED[i] + " - the wire post never invents an EDM code");
+        taperOk = false;
+      }
+    }
+    var t = code("uv");
+    if (t !== null && (t.indexOf("{u}") < 0 || t.indexOf("{v}") < 0)) {
+      refuse("uvtpl" + opName, "machine " + machineName() + ": edm.codes.uv states no {u} and {v} places for the upper guide's offset");
+      taperOk = false;
+    }
+    if (fourAxis !== "") note("4-AXIS UPPER AND LOWER PROFILES PAIRED BY " + fourAxis.toUpperCase() + " - XY LOWER GUIDE, UV UPPER GUIDE OFFSET");
+    else note("TAPER " + trim(Number(taper).toFixed(3)) + " DEG - XY LOWER GUIDE, UV UPPER GUIDE OFFSET");
+  }
   if (wcsWord) block([wcsWord]);
 }
 
@@ -227,6 +263,20 @@ function onRapid() {
 function onLinear() {
   var p = properties;
   if (!cutOk(p)) return;
+  var w = uv;
+  uv = null;
+  if (w !== null) {
+    if ((taper === 0 && fourAxis === "") || !taperOk || !has(w[1])) {
+      refuse("uv" + opName, who() + "a leaning move in a section that states no taper - refused");
+      return;
+    }
+    if (!tapering) {
+      block([code("taper_on")]);
+      tapering = true;
+    }
+    block(["G1", wo("X", p.X, orgX), wo("Y", p.Y, orgY), code("uv").split("{u}").join(fu(w[0])).split("{v}").join(fu(w[1]))]);
+    return;
+  }
   // No F word: the condition's generator sets the cutting rate.
   block(["G1", wo("X", p.X, orgX), wo("Y", p.Y, orgY)]);
 }
@@ -238,6 +288,10 @@ function onCircular() {
     return;
   }
   if (!cutOk(p)) return;
+  if (uv !== null) {
+    refuse("uvarc" + opName, who() + "a tapered arc - this post writes straight tapered moves only");
+    return;
+  }
   var c = p.IJKIncrement || {};
   block([
     p.CircularDirection === "CW" ? "G2" : "G3",
@@ -254,6 +308,9 @@ function onCycle() {
 // The section's end: cut the wire (and dispose of its tip), then the
 // operator's stop if the op asks one.
 function onSectionEnd() {
+  // The wire stands upright again (the lead-out's U0 V0) before the
+  // taper is switched off.
+  if (tapering) block([code("taper_off")]);
   if (threaded) {
     if (awt) {
       block([code("cut")]);
@@ -273,6 +330,10 @@ function onSectionEnd() {
   condition = "";
   side = "";
   afterOp = "";
+  taper = 0;
+  fourAxis = "";
+  uv = null;
+  tapering = false;
 }
 
 // ------------------------------------------------------------ footer

@@ -34,12 +34,26 @@
 //! Seams left for the family (built by none of this): the wire post
 //! (#533) reads the feed moves between the threading point's visits;
 //! verification (#534), taper as a pose per move (#536), skims as
-//! further offsets (#538) and tabs (#539) stand on this path.
+//! further offsets (#538) and tabs (#539) stand on this path; the
+//! no-core burnout of a pocket (#540) is `burnout`; the 4-axis cut
+//! between two profiles (#537) is `ruled`.
 
+mod burnout;
 mod laws;
+mod pairing;
 mod open;
 mod ring;
+mod ruled;
+mod ruled_laws;
+mod tabs;
+mod taper;
 
+pub use ruled::{wire_contour_ruled, WirePairing, WireProfile, WireRuled, WireSync, SYNC_TOL};
+pub use tabs::{cutoff_split, TabParams, MAX_TABS};
+
+pub use taper::{wire_contour_tapered, WireTaper};
+
+pub use burnout::{clearance_door, wire_burnout, CORE_AREA_TOL, RING_STEP};
 pub use open::{CLEARANCE_MAX, EDGE_TOL};
 
 use crate::cl::{MoveKind, PathBuilder, Toolpath};
@@ -111,6 +125,8 @@ pub struct WireParams {
     pub start: Option<Point2>,
     /// The lower programmed plane the moves ride.
     pub plane_z: f64,
+    /// The tabs (#539); `None` is off - the default (#290 D6).
+    pub tabs: Option<TabParams>,
     /// The stock's outline in XY - the edge an open run is entered
     /// from (#1109). A closed profile never reads it.
     pub stock: Option<Region>,
@@ -179,6 +195,11 @@ impl WireParams {
 pub fn wire_contour(loops: &[Loop], chains: &[Vec<Point2>], p: &WireParams) -> Result<Toolpath, GenError> {
     p.door()?;
     if !chains.is_empty() {
+        if p.tabs.is_some() {
+            return Err(invalid(
+                "tabs are stated on an open run - an open run closes no slug for a tab to hold; tabs hold a closed profile's slug (#539)".into(),
+            ));
+        }
         return open::wire_open(loops, chains, p);
     }
     let (given, profile) = ring::profile(loops, chains)?;
@@ -217,17 +238,32 @@ pub fn wire_contour(loops: &[Loop], chains: &[Vec<Point2>], p: &WireParams) -> R
     start_side(&profile, &path_ring, start, p)?;
     let z = p.plane_z;
     let mut b = PathBuilder::new(Point3::new(start.x, start.y, z));
-    for q in ring::walk_from(&path_ring, seg, foot) {
+    let tabbed = match &p.tabs {
+        Some(t) => Some(tabs::tabbed(&path_ring, &given, start, p, t)?),
+        None => None,
+    };
+    let pts: Vec<Point2> = match &tabbed {
+        Some(tb) => tb.main.iter().chain(&tb.cutoff).copied().collect(),
+        None => {
+            let mut v = ring::walk_from(&path_ring, seg, foot);
+            v.push(start);
+            v
+        }
+    };
+    for q in pts {
         b.push(MoveKind::Feed, Point3::new(q.x, q.y, z), None);
     }
-    b.push(MoveKind::Feed, Point3::new(start.x, start.y, z), None);
     let mut path = b.finish();
     if path.moves.len() < 4 {
         return Err(invalid("the wire path lays down no cut".into()));
     }
     // The certificate: no move brings the kerf into the product.
     laws::kerf(&path, &given, true, k, p.plane_z)?;
-    path.notes.extend(notes(p, start, lead));
+    let mut said = notes(p, start, lead);
+    if let Some(tb) = tabbed {
+        said.splice(1..2, tb.notes);
+    }
+    path.notes.extend(said);
     Ok(path)
 }
 
@@ -289,5 +325,7 @@ fn notes(p: &WireParams, start: Point2, lead: f64) -> Vec<String> {
 
 #[cfg(test)]
 mod open_tests;
+#[cfg(test)]
+mod ruled_tests;
 #[cfg(test)]
 mod tests;

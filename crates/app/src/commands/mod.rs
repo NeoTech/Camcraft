@@ -25,6 +25,8 @@ pub mod move_model;
 pub mod operation;
 pub mod post;
 pub mod post_options;
+// #258: the document's program number and comment.
+pub mod program_info;
 // #155: Pause / Home entries of the operation list.
 pub mod program_entry;
 // M13.11: mesh repair (weld + fill holes) as one undo unit over UpdateModel.
@@ -56,6 +58,8 @@ pub mod theme;
 // M13.4 / #877: the viewer's colour-vision remap, the theme's twin.
 pub mod color_vision;
 pub mod set_wcs;
+// #739: the WCS origin on a picked circle's centre.
+pub mod wcs_circle;
 pub mod tool;
 // #368: a tool's modelled body.
 pub mod tool_body;
@@ -66,6 +70,8 @@ pub mod tool_import;
 // #221: a tool's controller number.
 pub mod tool_number;
 pub mod update_model;
+// #547: a sinker electrode generated from a cavity's picked faces.
+pub mod electrode;
 
 use flecs_ecs::prelude::World;
 
@@ -92,6 +98,7 @@ pub use operation::{
 };
 pub use post::SelectPost;
 pub use post_options::SetPostOptions;
+pub use program_info::SetProgramInfo;
 pub use program_entry::{AddProgramEntry, EditProgramEntry};
 pub use repair_model::RepairModel;
 pub use ribbon_pins::SetRibbonPins;
@@ -111,10 +118,12 @@ pub use set_units::SetUnits;
 pub use theme::{check_theme, theme_of, theme_set};
 pub use color_vision::{color_vision_of, color_vision_set};
 pub use set_wcs::SetWcsOrigin;
+pub use wcs_circle::SetWcsAtCircleCentre;
 pub use tool::{AddTool, ChangeTool, DeleteTool, HolderPick};
 pub use tool_body::{LatheBodySpec, SetToolBody, ToolBodySpec};
 pub use tool_cutter::{ReshapeTool, SetToolCutter};
 pub use tool_import::{ImportMode, ImportReport, ImportTools};
+pub use electrode::ElectrodeFromFaces;
 pub use tool_number::SetToolNumber;
 pub use update_model::UpdateModel;
 

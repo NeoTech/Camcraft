@@ -549,7 +549,8 @@ fn thread_milling_over_the_tools() {
     multi.as_object_mut().expect("an object").remove("pitch_min");
     c.ok("add_tool", json!({ "name": "TM-P100", "definition": multi }));
 
-    let hole = json!({ "xy": [30.0, 30.0], "radius": 3.45875, "entry_z": 20.0, "floor_z": 8.0, "through": false });
+    // #1212: the mouth on the block's 15 mm top, where the default R plane (top of model) stands.
+    let hole = json!({ "xy": [30.0, 30.0], "radius": 3.45875, "entry_z": 15.0, "floor_z": 8.0, "through": false });
     // A tap is not a thread mill; a single-form mill's pitch must sit inside its range.
     let msg = c.refused("add_operation", json!({ "kind": "Thread", "tool": "TAP-M6" }));
     assert!(msg.contains("thread mill"), "{msg}");
@@ -574,6 +575,80 @@ fn thread_milling_over_the_tools() {
     // centre-cutting, so generate refuses the thread by name.
     let msg = c.refused("generate", json!({ "name": name }));
     assert!(msg.contains("the hole at (30.000, 30.000) is not drilled yet"), "{msg}");
+}
+
+/// #985: an external thread is drivable with the tools that exist - the
+/// `external` param on add/edit, `detect_holes` reading bosses for it,
+/// the boss door's refusal by name, undo, and generate's refusal of a
+/// boss standing in uncut stock.
+#[test]
+fn external_thread_milling_over_the_tools() {
+    let dir = tmp_dir("thread_boss");
+    let stl = dir.join("block.stl");
+    write_box_stl(&stl);
+    let mut c = Client::new();
+    c.request("initialize", json!({ "protocolVersion": "2025-06-18" }));
+    c.ok("import_model", json!({ "path": stl.display().to_string() }));
+    c.ok("set_stock", json!({ "box": { "dx": 60.0, "dy": 60.0, "dz": 20.0 } }));
+    c.ok("add_tool", json!({ "catalog": "TM-0600-P125" }));
+    // #1212: the top on the block's 15 mm top, where the default R plane (top of model) stands.
+    let boss = json!({ "xy": [30.0, 30.0], "radius": 4.0, "entry_z": 15.0, "floor_z": 10.0, "through": false });
+    // A pin thinner than the thread is deep is refused when the operation is made.
+    let pin = json!({ "xy": [30.0, 30.0], "radius": 0.7, "entry_z": 20.0, "floor_z": 10.0, "through": false });
+    let msg = c.refused("add_operation", json!({ "kind": "Thread", "tool": "TM-0600-P125", "params": { "external": true, "holes": [pin] } }));
+    assert!(msg.contains("thinner than the 0.76675 mm thread is deep"), "{msg}");
+    let add = c.ok("add_operation", json!({ "kind": "Thread", "tool": "TM-0600-P125", "params": { "holes": [] } }));
+    let name = add["operation"].as_str().expect("the operation's name").to_owned();
+    assert!(add["params"]["thread"].get("external").is_none(), "an internal thread writes no flag: {add}");
+    let edit = c.ok("edit_operation", json!({ "name": name, "params": { "external": true, "holes": [boss] } }));
+    assert_eq!(edit["params"]["thread"]["external"], json!(true));
+    // The box has no round wall: detect says so for bosses, by name.
+    let msg = c.refused("detect_holes", json!({ "name": name }));
+    assert!(msg.contains("no upright round bosses"), "{msg}");
+    // Nothing ahead machined round the boss: generate refuses the thread by name.
+    let msg = c.refused("generate", json!({ "name": name }));
+    assert!(msg.contains("the boss at (30.000, 30.000) is not cleared"), "{msg}");
+    c.ok("undo", json!({}));
+    let job = c.ok("get_job", json!({}));
+    assert!(job["operations"][0]["params"]["thread"].get("external").is_none(), "undo restores the internal thread");
+}
+
+/// #988: a Thread operation's pass control rides the params door - the
+/// flattened keys on add and edit, the door's refusals by name, undo,
+/// and no key written while the ride is the #894 default.
+#[test]
+fn thread_pass_control_over_the_params_door() {
+    let dir = tmp_dir("thread_passes");
+    let stl = dir.join("block.stl");
+    write_box_stl(&stl);
+    let mut c = Client::new();
+    c.request("initialize", json!({ "protocolVersion": "2025-06-18" }));
+    c.ok("import_model", json!({ "path": stl.display().to_string() }));
+    c.ok("set_stock", json!({ "box": { "dx": 60.0, "dy": 60.0, "dz": 20.0 } }));
+    c.ok("add_tool", json!({ "catalog": "TM-0600-P125" }));
+    let hole = json!({ "xy": [30.0, 30.0], "radius": 3.3235, "entry_z": 20.0, "floor_z": 8.0, "through": false });
+    let add = c.ok("add_operation", json!({ "kind": "Thread", "tool": "TM-0600-P125", "params": { "holes": [hole] } }));
+    let name = add["operation"].as_str().expect("the operation's name").to_owned();
+    let thread = &add["params"]["thread"];
+    for key in ["pass_schedule", "finish_depth", "spring_passes", "depth_allowance", "spindle_reverse", "cutter_left_hand"] {
+        assert!(thread.get(key).is_none(), "the default ride writes no {key}: {add}");
+    }
+    let msg = c.refused("edit_operation", json!({ "name": name, "params": { "spindle_reverse": true } }));
+    assert!(msg.contains("right-hand-cut thread mill under an M4"), "{msg}");
+    let msg = c.refused("edit_operation", json!({ "name": name, "params": { "depth_allowance": -0.1 } }));
+    assert!(msg.contains("past the thread's standard depth"), "{msg}");
+    let edit = c.ok("edit_operation", json!({ "name": name, "params": {
+        "pass_schedule": "constant_area", "finish_depth": 0.05, "spring_passes": 1, "depth_allowance": 0.02,
+        "spindle_reverse": true, "cutter_left_hand": true
+    } }));
+    let t = &edit["params"]["thread"];
+    assert_eq!(t["pass_schedule"], json!("constant_area"), "{edit}");
+    assert_eq!(t["spring_passes"], json!(1));
+    assert_eq!(t["cutter_left_hand"], json!(true));
+    c.ok("undo", json!({}));
+    let job = c.ok("get_job", json!({}));
+    assert!(job["operations"][0]["params"]["thread"].get("pass_schedule").is_none(), "undo restores the #894 ride");
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// #1196: the land width rides the MCP params door - one undoable edit,

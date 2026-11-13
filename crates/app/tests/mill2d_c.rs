@@ -149,6 +149,8 @@ fn thread(holes: Vec<Hole>) -> OpParams {
         holes,
         pitch: None,
         hand: camcraft_app::cl::ThreadHand::Right,
+        external: false,
+        passes: camcraft_app::machining2d::ThreadPasses::default(),
     }
 }
 
