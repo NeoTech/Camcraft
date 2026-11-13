@@ -22,7 +22,7 @@ pub fn window_icon() -> Option<Icon> {
     match made {
         Ok(i) => Some(i),
         Err(e) => {
-            eprintln!("{e} - the window opens without an icon");
+            diag_warn!("{e} - the window opens without an icon");
             None
         }
     }

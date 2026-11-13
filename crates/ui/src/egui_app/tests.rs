@@ -82,6 +82,7 @@ mod face_origin;
 mod spindle_row;
 mod stock_size;
 mod setup_settings_page;
+mod machine_page;
 mod tool_list_page;
 mod stock_fit_sides;
 mod raw_stock_row;
