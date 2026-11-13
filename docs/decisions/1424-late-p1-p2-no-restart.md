@@ -10,4 +10,4 @@
 - Skip the start check and rely on the maintainer's judgement alone. Dropped: the start record in the release PR body makes the check auditable.
 - Edit the `merge-ready` skill's "no release cut in progress" precondition. Not done: it tests for an open `release/*` PR, which stays true during a cut; it never repeated the P1/P2 rule.
 
-**Cost to change later.** Low: a text edit to the Priorities bullet and the release steps of AGENTS.md. Forks pick it up through the PROCESS_VERSION sync (55).
+**Cost to change later.** Low: a text edit to the Priorities bullet and the release steps of AGENTS.md. Forks pick it up through the PROCESS_VERSION sync (56).
