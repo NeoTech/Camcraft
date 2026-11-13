@@ -561,7 +561,13 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 m_gen,
                 frame.as_ref(),
             )?;
-            let path = machining2d::pocket(
+            // #1449: the holes the program ahead proves open, when asked.
+            let (holes, hole_notes) = if lk.approach.predrilled {
+                super::predrilled_entry::proved_holes(&drills_ahead, d * 0.5, verify_prior.get(), frame.is_some())
+            } else {
+                (Vec::new(), Vec::new())
+            };
+            let mut path = machining2d::pocket_entered(
                 &region,
                 &PocketParams {
                     links: lk,
@@ -582,7 +588,9 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     optimal_load: *optimal_load,
                     blend_turns: *blend_turns,
                 },
+                &holes,
             )?;
+            super::predrilled_entry::say(&mut path, hole_notes);
             (region, path)
         }
         // The roughing twins (M2.4 A) are the pocket's own machinery
@@ -1728,7 +1736,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             )?;
             (region, path)
         }
-        OpParams::TrochoidalSlot { a, b, .. } => {
+        OpParams::TrochoidalSlot { a, b, width, .. } => {
             let tp = super::trochoid_op::trochoid_params(
                 &params,
                 d,
@@ -1737,7 +1745,6 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 req_z(hl.top, "Top of Part Z")?,
                 req_z(hl.bottom, "Bottom of Part Z")?,
             )?;
-            let path = machining2d::trochoidal_slot(&[*a, *b], &tp)?;
             let region = region_for_job(
                     &mut picked_region,
                     &mut section_z,
@@ -1746,6 +1753,13 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 m_gen,
                 frame.as_ref(),
             )?;
+            // #1503: with a selection picked, the slot must fit inside
+            // it - refused by name, never cut across a wall into the
+            // model and reported OK.
+            if matches!(src, SrcRef::Selection(_)) {
+                super::slot_fit::refuse_unfit_slot(params.kind().info().label, *a, *b, *width, &region)?;
+            }
+            let path = machining2d::trochoidal_slot(&[*a, *b], &tp)?;
             (region, path)
         }
         OpParams::Trace {

@@ -1,7 +1,7 @@
-//! The viewport's pick marks (#1505, #1507): one style for what an
+//! The viewport's pick marks (#1505): one style for what an
 //! operation's Geometry has selected and one, clearly different, for what
-//! the pointer is over - the edge a click would take, a selected entity's
-//! Geometry-list row (the pick that row's remove button would delete). Both
+//! the pointer is over - the edge a click would take (the Geometry-list row
+//! hover is main's `interact::row_hover_segments`, #1507). Both
 //! are screen-space strokes drawn over the model with a dark halo, so they
 //! read on the shaded and the wireframe model in either theme. Hover is
 //! ephemeral view state: nothing here is a command.

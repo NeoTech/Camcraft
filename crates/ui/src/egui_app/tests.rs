@@ -79,6 +79,8 @@ fn empty_egui_meshes_are_filtered_before_gpu_submission() {
 }
 
 mod face_origin;
+mod geo_row_hover;
+mod pick_mode;
 mod spindle_row;
 mod stock_size;
 mod setup_settings_page;
@@ -1379,7 +1381,10 @@ fn every_registry_kind_gets_its_tab_bar() {
             if has {
                 // #535: a kind that mounts no library tool has no Tool row.
                 assert_eq!(harness.query_by_label("Tool").is_some(), k.mounts_tool(), "{}: the pane opens on the tool row (only of a tool-mounting kind)", k.label);
-                per_tab.push((si, pane_texts(&harness)));
+                // #1514: the pick-mode line is chrome that reads per tab.
+                let mut texts = pane_texts(&harness);
+                texts.retain(|t| !t.starts_with("Picking o"));
+                per_tab.push((si, texts));
             }
         }
         // Chrome: what every open tab shares (heading, tool/source rows,

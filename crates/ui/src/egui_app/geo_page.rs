@@ -33,6 +33,17 @@ pub fn click_selects_hint() -> String {
     )
 }
 
+/// #1514: the plain "picking on / off" line under the tab bar. On: viewport
+/// clicks edit this operation's picks (the Geometry tab, or a boundary row
+/// armed). Off: every other tab - the selection is locked, clicks do nothing.
+pub(super) fn pick_mode_line(ui: &mut Ui, state: &State) {
+    if crate::interact::op_pick_locked(state) {
+        ui.label(RichText::new("Picking off - selection locked").weak());
+    } else {
+        ui.label(RichText::new("Picking on - clicks edit the selection").strong());
+    }
+}
+
 pub(super) fn pick_block(ui: &mut Ui, state: &mut State, target: &str, live_setup: Option<&str>) {
     group(ui, "Selection", None, |ui| body(ui, state, target, live_setup));
 }
@@ -128,7 +139,7 @@ fn chips(ui: &mut Ui, state: &mut State, target: &str) {
             }
             _ => None,
         };
-        let remove = ui
+        let row = ui
             .horizontal(|ui| {
                 // M13.4 stage 2 hook: a picked corner can place the WCS
                 // slot chosen in the WCS pane, through SetWcsOrigin.
@@ -161,13 +172,17 @@ fn chips(ui: &mut Ui, state: &mut State, target: &str) {
                     ui.label(&label)
                 };
                 let x = ui.small_button("×").on_hover_text("remove this pick");
-                // #1507: the label and its remove button both light the pick.
+                // #1507: the label, the remove button and the row's other
+                // buttons all light the pick: "which one am I removing?".
                 if resp.hovered() || x.hovered() {
-                    state.geo_hover = Some(sel);
+                    state.geo_hover = Some(sel.clone());
                 }
                 x.clicked()
-            })
-            .inner;
+            });
+        if row.response.hovered() || ui.rect_contains_pointer(row.response.rect) {
+            state.geo_hover = Some(sel);
+        }
+        let remove = row.inner;
         if remove {
             let mut rest: Vec<GeoSel> = state.op_ui.geo.clone();
             if i < rest.len() {

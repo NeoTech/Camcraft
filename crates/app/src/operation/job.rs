@@ -300,7 +300,10 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
     // The axial pilots ahead (#103): a bore pass's approach runs down
     // the hole the drill made, which the facing-only prior cannot read.
     let turned = op.params.kind().info().section == super::kinds::Section::Turning;
-    let drills_ahead = if turned { crate::rest::drills_ahead(world, op_name, setup) } else { Vec::new() };
+    // #1449: a pocket entering down pre-drilled holes reads them too.
+    let predrilled = matches!(op.params, OpParams::Pocket { .. }) && op.params.links().is_some_and(|l| l.approach.predrilled);
+    let drills_ahead =
+        if turned || predrilled { crate::rest::drills_ahead(world, op_name, setup) } else { Vec::new() };
     let turned_ahead = if turned { crate::rest::turned_ahead(world, op_name, setup) } else { Vec::new() };
     let area = area_ctx(world, op, tool.diameter * 0.5, &material, part_solid);
     // #388: the op's own setup's machine, active or not.

@@ -95,7 +95,7 @@ pub(crate) fn shell_layout(
     // Ephemeral hover clears every frame before anything recomputes it (the
     // imgui App::draw law); the viewport's update_hover and the property-page
     // chip hovers then own it until the pointer moves on.
-    state.geo_hover = None;
+    state.geo_hover_drawn = state.geo_hover.take();
     panes::shortcuts(ui, state);
     // The live theme, read once per pass: the strips and every pane below
     // share one token table, so the widget path and the painted ink cannot
@@ -176,6 +176,11 @@ pub(crate) fn shell_layout(
     super::fixture_library_dialog::window(ui.ctx(), state);
     // #107: the unsaved-changes prompt, last so it sits over everything.
     unsaved_prompt::window(ui.ctx(), state);
+    // #1507: the panes set the row hover after the viewport drew; a change
+    // needs one more frame for the highlight to follow (or clear).
+    if state.geo_hover != state.geo_hover_drawn {
+        ui.ctx().request_repaint();
+    }
 }
 
 /// Feed this pass's CPU-texture deltas (the font atlas first of all) to the
@@ -578,9 +583,22 @@ fn viewport_panel(
         for (a, b) in crate::vertex_pick::picked_point_marks(state, aspect) {
             ui.painter().line_segment([to_px(a), to_px(b)], egui::Stroke::new(2.0, rgb8(super::ground_ink::overlay(super::ground_ink::Overlay::Pick))));
         }
-        // #1505/#1507: selected picks and the hover (viewport or list row)
+        // #1505/#1507: selected picks and the viewport hover
         // as thick, haloed strokes over the model.
         crate::pick_ink::paint(ui.painter(), state, aspect, to_px, rgb8);
+        // #1507: the Geometry-list row hover, strong: a dark halo, then the
+        // row-hover ink.
+        {
+            let segs = interact::row_hover_segments(state, aspect);
+            let ink = rgb8(super::ground_ink::overlay(super::ground_ink::Overlay::RowHover));
+            let halo = egui::Color32::from_black_alpha(200);
+            for (a, b) in &segs {
+                ui.painter().line_segment([to_px(*a), to_px(*b)], egui::Stroke::new(interact::ROW_HOVER_HALO_PX, halo));
+            }
+            for (a, b) in &segs {
+                ui.painter().line_segment([to_px(*a), to_px(*b)], egui::Stroke::new(interact::ROW_HOVER_PX, ink));
+            }
+        }
         // #979: the pick box's rubber band - solid for a window, dashed
         // for a crossing box.
         if let Some(b) = state.pick_box {
