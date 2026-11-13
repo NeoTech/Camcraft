@@ -83,6 +83,11 @@ pub(super) fn generate_sinker_side(
     gap: f64,
     facets: &[Triangle],
 ) -> Result<(Toolpath, Vec<Warning>), GenError> {
+    // The generator's own door: a wear rate or layer step (#546), an
+    // orbit, a side out of range - refused by name, never ignored.
+    if let Some(why) = op.refusal() {
+        return Err(GenError::Invalid(why));
+    }
     let p = super::sinker_op::sinker_params(&op.burn, tool, hs, gap, facets)?;
     Ok((side_burn(&p, &op.side())?, Vec::new()))
 }

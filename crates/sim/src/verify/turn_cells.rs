@@ -36,6 +36,8 @@ pub(super) const SAG: f64 = 0.001;
 /// Cells per band cap. Past it the cells stay conservative and the
 /// overstatement grows instead (90 degrees at 150 mm reach: 0.011 mm).
 pub(super) const MAX_CELLS: usize = 64;
+/// Ring points per radius in a cell's footprint probes ([`Cell::probes`]).
+const PROBE_RING: usize = 24;
 
 /// One band's column swept along one tip chord under every pose of one
 /// interval of the turn. Offsets are from the tip; radii carry the
@@ -49,19 +51,33 @@ pub(super) struct Cell {
     r: [f64; 2],
     z0: f64,
     z1: f64,
+    /// How far above its lowest (`z0`/`z1`) the column's bottom can
+    /// stand in this cell at one tip position: the bottom's whole range
+    /// over the cell's poses ([`Cell::heights_over`], #1316).
+    rise: f64,
     /// The hull's flat flanks between the two end discs, as half-planes
     /// `n . x <= bound` in tip-relative XY; `None` when one disc holds
     /// the other (the hull is that disc).
     flanks: Option<[(f64, f64, f64); 4]>,
+    /// The interval of the turn this cell holds (`0..n`), for the
+    /// overhang backstop's plane grouping ([`super::turn_hidden`]).
+    pub interval: usize,
     pub lo: Point2,
     pub hi: Point2,
 }
 
 /// The intervals a band of `reach` needs for a turn of `rate` radians
 /// (the letters' summed sweep) to keep its sag within [`SAG`].
+#[cfg(test)]
 pub(super) fn cell_count(reach: f64, rate: f64) -> usize {
-    let want = rate * (reach / (8.0 * SAG)).sqrt();
-    if want.is_finite() { (want.ceil() as usize).clamp(1, MAX_CELLS) } else { MAX_CELLS }
+    cell_count_for(reach, rate, SAG, MAX_CELLS)
+}
+
+/// [`cell_count`] for a stated sag budget `sag` and cap `cap`.
+pub(super) fn cell_count_for(reach: f64, rate: f64, sag: f64, cap: usize) -> usize {
+    let cap = cap.max(1);
+    let want = rate * (reach / (8.0 * sag)).sqrt();
+    if want.is_finite() { (want.ceil() as usize).clamp(1, cap) } else { cap }
 }
 
 /// Law (c)'s column for one band at one pose, tip-relative: (offset,
@@ -99,12 +115,30 @@ pub(super) fn push_cells(
     grow: f64,
     floors: &[(f64, f64)],
 ) {
+    push_cells_with(out, pieces, from, to, (above, band_r, band_len), r, grow, (SAG, MAX_CELLS), floors);
+}
+
+/// [`push_cells`] under a stated `(sag, cap)` cell budget, the span
+/// `floors` read the same way; returns the interval count `n` it split
+/// the turn into (0 for a dead band).
+#[allow(clippy::too_many_arguments)]
+pub(super) fn push_cells_with(
+    out: &mut Vec<Cell>,
+    pieces: &[(Point3, Point3)],
+    from: [f64; 3],
+    to: [f64; 3],
+    (above, band_r, band_len): (f64, f64, f64),
+    r: f64,
+    grow: f64,
+    (sag_budget, cap): (f64, usize),
+    floors: &[(f64, f64)],
+) -> usize {
     if band_len <= 0.0 || band_r <= 0.0 {
-        return;
+        return 0;
     }
     let reach = above.abs().max((above + band_len).abs());
     let rate: f64 = (0..3).map(|k| (to[k] - from[k]).abs()).sum::<f64>().to_radians();
-    let n = cell_count(reach, rate);
+    let n = cell_count_for(reach, rate, sag_budget, cap);
     let w = rate / n as f64;
     // Non-finite letters cannot be bounded: the widest sag there is
     // (the axis is a unit vector, so no chord is off by more than 2).
@@ -128,6 +162,13 @@ pub(super) fn push_cells(
         let b = if upright { above } else { l0.min(l1) - dip } - sag;
         // #1303's span floor at every sampled pose this cell holds.
         let b = floors.iter().filter(|&&(g, _)| g0 <= g && g <= g1).fold(b, |b, &(_, f)| b.min(f));
+        // The highest the bottom stands at any pose of the cell: each
+        // end station is `axis.z` times a length within `reach`, so it
+        // strays from the chord of its end values by `sag` at most, and
+        // the rim's dip only lowers it. Unbounded when not a number.
+        let ends = |len: f64| (len * a0[2]).max(len * a1[2]);
+        let b_hi = if upright { above } else { ends(above).min(ends(above + band_len)) } + sag;
+        let rise = if b_hi - b >= 0.0 { b_hi - b } else { f64::INFINITY };
         let rad = [r0 + grow + sag + 1e-9, r1 + grow + sag + 1e-9];
         let flanks = flanks(o0, o1, rad);
         for (p, q) in pieces {
@@ -144,12 +185,15 @@ pub(super) fn push_cells(
                 r: rad,
                 z0: p.z + b,
                 z1: q.z + b,
+                rise,
                 flanks,
+                interval: j,
                 lo: Point2::new(p.x + x_lo, p.y + y_lo),
                 hi: Point2::new(p.x + x_hi, p.y + y_hi),
             });
         }
     }
+    n
 }
 
 /// The four half-planes of the quadrilateral between the outer tangent
@@ -214,6 +258,37 @@ fn clip(e: (f64, f64), d: (f64, f64), planes: &[(f64, f64, f64); 4]) -> Option<(
 }
 
 impl Cell {
+    /// The lowest the band's bottom stands anywhere in this cell.
+    pub(super) fn floor(&self) -> f64 {
+        self.z0.min(self.z1)
+    }
+
+    /// Points of the cell's footprint, appended to `out`: at
+    /// `stations + 1` tip positions along the chord, each end disc's centre, the
+    /// hull's middle and rings of [`PROBE_RING`] points at a quarter,
+    /// half, three quarters and the whole of each disc's radius. The
+    /// hidden region's own boundary samples catch a region that only
+    /// clips the footprint; these catch one that swallows it.
+    pub(super) fn probes(&self, stations: usize, out: &mut Vec<Point2>) {
+        let stations = stations.max(1);
+        for i in 0..=stations {
+            let s = i as f64 / stations as f64;
+            let t = (self.t0.x + self.d.0 * s, self.t0.y + self.d.1 * s);
+            let mid = ((self.o[0].0 + self.o[1].0) * 0.5, (self.o[0].1 + self.o[1].1) * 0.5);
+            out.push(Point2::new(t.0 + mid.0, t.1 + mid.1));
+            for k in 0..2 {
+                let (c, rad) = ((t.0 + self.o[k].0, t.1 + self.o[k].1), self.r[k]);
+                out.push(Point2::new(c.0, c.1));
+                for f in [0.25, 0.5, 0.75, 1.0] {
+                    for j in 0..PROBE_RING {
+                        let a = std::f64::consts::TAU * j as f64 / PROBE_RING as f64;
+                        out.push(Point2::new(c.0 + f * rad * a.cos(), c.1 + f * rad * a.sin()));
+                    }
+                }
+            }
+        }
+    }
+
     /// The lowest the band's column bottom stands over the sample
     /// column `q` anywhere in this cell - `None` when no position of
     /// the cell puts the column over `q` outside the flutes' kerf
@@ -221,6 +296,34 @@ impl Cell {
     /// edge; negative for no kerf). The kerf's own rim counts as
     /// covered: closed toward conviction.
     pub(super) fn bottom_over(&self, q: Point2, kerf2: f64) -> Option<f64> {
+        let z = |s: f64| self.z0 + (self.z1 - self.z0) * s;
+        let low = |(a, b): (f64, f64)| z(a).min(z(b));
+        match self.stretches(q, kerf2) {
+            [Some(a), Some(b)] => Some(low(a).min(low(b))),
+            [a, b] => a.or(b).map(low),
+        }
+    }
+
+    /// Every height the band's column bottom takes over `q` in this
+    /// cell, as one closed range per stretch of the chord that stands
+    /// the column over `q` outside the kerf: from the lowest bottom
+    /// there ([`Self::bottom_over`]'s reading) to the highest any pose
+    /// of the cell holds it (`rise` above). `hit` is asked each range;
+    /// the first `true` ends the walk and is returned. The overhang
+    /// backstop's reading (#1316): hidden stock is not monotone in the
+    /// plane, so it is asked over the whole range, never at one end.
+    pub(super) fn heights_over(&self, q: Point2, kerf2: f64, hit: &mut dyn FnMut(f64, f64) -> bool) -> bool {
+        let z = |s: f64| self.z0 + (self.z1 - self.z0) * s;
+        self.stretches(q, kerf2)
+            .into_iter()
+            .flatten()
+            .any(|(a, b)| hit(z(a).min(z(b)), z(a).max(z(b)) + self.rise))
+    }
+
+    /// The stretches `(s0, s1)` of the chord (tip at `t0 + s * d`) that
+    /// stand the column over `q` outside the kerf: the one before the
+    /// tip's kerf passes over `q` and the one after it.
+    fn stretches(&self, q: Point2, kerf2: f64) -> [Option<(f64, f64)>; 2] {
         // The tip stands at t0 + s*d; seen from it, q walks backwards.
         let p = (q.x - self.t0.x, q.y - self.t0.y);
         let back = (-self.d.0, -self.d.1);
@@ -236,18 +339,12 @@ impl Cell {
         if let Some(planes) = &self.flanks {
             join(clip(p, back, planes));
         }
-        let (lo, hi) = over?;
-        let z = |s: f64| self.z0 + (self.z1 - self.z0) * s;
+        let Some((lo, hi)) = over else {
+            return [None, None];
+        };
         match span(p, back, kerf2) {
-            None => Some(z(lo).min(z(hi))),
-            Some((k0, k1)) => {
-                let before = (k0 > lo).then(|| z(lo).min(z(k0)));
-                let after = (k1 < hi).then(|| z(k1).min(z(hi)));
-                match (before, after) {
-                    (Some(a), Some(b)) => Some(a.min(b)),
-                    (a, b) => a.or(b),
-                }
-            }
+            None => [Some((lo, hi)), None],
+            Some((k0, k1)) => [(k0 > lo).then_some((lo, k0)), (k1 < hi).then_some((k1, hi))],
         }
     }
 }
