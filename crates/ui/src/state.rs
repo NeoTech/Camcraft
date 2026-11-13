@@ -4203,9 +4203,10 @@ impl State {
                 // describes the document's post (#265).
                 self.post_refusal = None;
                 self.status = format!(
-                    "posted {} op(s), {} lines to {}",
+                    "posted {} op(s), {} lines in {} to {}",
                     posted.ops,
                     posted.lines,
+                    posting::unit_word(self.units()),
                     path.display()
                 );
                 // A program the material sim refused to judge posts

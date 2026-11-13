@@ -17,6 +17,7 @@ extension = "nc";
 setCodePage = "utf-8";
 capabilities = 1; // reference contract: integer feature mask (bit 1 = milling)
 coolantModes = true; // reads PARAM Coolant (#869): the op's ask is posted, or refused by name
+programUnits = "mm"; // #902: millimetres only - the engine refuses an inch document by name
 
 // Determinism law: no timestamps, no randomness - the same stream
 // always posts to the same text (golden files depend on it).
@@ -38,7 +39,9 @@ var smoothMode = "";        // #616: "finish" or "rough"
 
 // ------------------------------------------------------------ helpers
 // The firmware is millimetres only (its G20 "will halt the machine"), so
-// every length is mm at three decimals and every feed whole mm/min.
+// every length is mm at three decimals and every feed whole mm/min; an
+// inch document is refused by the engine before this script runs
+// (`programUnits = "mm"`, #902) - never mm numbers for an inch program.
 function has(v) { return v !== null && v !== undefined && isFinite(v); }
 function trim(s) {
   if (s.indexOf(".") >= 0) s = s.replace(/0+$/, "").replace(/\.$/, "");
@@ -170,9 +173,6 @@ function toolNote() {
 // (absolute), G94 (feed per minute). No G40 / G49 / G80: the table lists
 // none of them (no cutter comp, no tool length word, no canned cycles).
 function onOpen() {
-  if (typeof machine !== "undefined" && machine.units === "inch") {
-    msg("the Carvera firmware runs in millimetres only (G20 halts the machine) - the machine file must be metric");
-  }
   var nm = (typeof machine !== "undefined" && machine.name) || "CAMCRAFT";
   note(clean(nm) || "CAMCRAFT");
   block(["G21", "G17", "G90", "G94"]);

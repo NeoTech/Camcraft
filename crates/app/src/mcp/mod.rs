@@ -47,6 +47,7 @@ mod vise_tools;
 mod accessory_tools;
 mod plate_tools;
 mod modvise_tools;
+mod units_tools;
 mod tool_number_tools;
 mod wcs_tools;
 mod rotary_tools;
