@@ -1,7 +1,11 @@
 //! Lathe chucks generated from their figures (#1442): the envelope each
 //! chuck's shells stand in (body diameter and length, jaw reach and
 //! height, collet nose), the mesh law reads them as closed solids, and
-//! every nonsense figure is refused by name.
+//! every nonsense figure is refused by name. The envelope is pinned to
+//! the tessellation allowance (#1470): steel a hair inside every true
+//! outer face and a hair outside every true bore wall, all the way round,
+//! and air a hair past the polygon's own allowance - so a solid shrunk by
+//! more than [`HAIR`] anywhere fails here.
 //!
 //! Gate map (M4.4): covers camcraft_sim::chuck.
 
@@ -35,6 +39,37 @@ fn bounds(t: &[Triangle]) -> (Point3, Point3) {
     (lo, hi)
 }
 
+/// How close (mm) to a true surface the envelope probes stand.
+const HAIR: f64 = 1e-3;
+
+/// The angles probed round a ring: on every polygon vertex and every
+/// flat's middle (each nudged off the exact seam, so the ray-crossing law
+/// never grazes an edge), the two places a round face's drawing is
+/// farthest from and nearest to its circle.
+fn sweep() -> Vec<f64> {
+    let n = chuck::SIDES as f64;
+    (0..2 * chuck::SIDES).map(|k| std::f64::consts::PI * k as f64 / n + 1e-7).collect()
+}
+
+/// The tessellation allowance of a round face of radius `r`: how far the
+/// polygon's vertices stand off its flats' middles.
+fn allowance(r: f64) -> f64 {
+    r * (1.0 / (std::f64::consts::PI / chuck::SIDES as f64).cos() - 1.0)
+}
+
+/// Steel a hair inside the true outer face `r_out` and a hair outside the
+/// true bore `r_in` all round at height `z`; air a hair past the outer
+/// face's allowance and a hair inside the bore's.
+fn ring_envelope(m: &FixtureMesh, r_in: f64, r_out: f64, z: f64, what: &str) {
+    for a in sweep() {
+        let at = |r: f64| Point3::new(r * a.cos(), r * a.sin(), z);
+        assert!(m.contains(at(r_out - HAIR)), "{what}: steel just inside the outer face at {a} rad");
+        assert!(m.contains(at(r_in + HAIR)), "{what}: steel just outside the bore wall at {a} rad");
+        assert!(!m.contains(at(r_out + allowance(r_out) + HAIR)), "{what}: air past the outer allowance at {a} rad");
+        assert!(!m.contains(at(r_in - allowance(r_in) - HAIR)), "{what}: air inside the bore allowance at {a} rad");
+    }
+}
+
 fn max_radius(t: &[Triangle]) -> f64 {
     t.iter().flat_map(|t| [t.a, t.b, t.c]).map(|p| p.x.hypot(p.y)).fold(0.0, f64::max)
 }
@@ -54,14 +89,18 @@ fn three_jaw_envelope_is_pinned() {
     let m = FixtureMesh::build(&t).expect("closed shells");
     // Steel: just inside the body's rim, in the body under the face, a
     // jaw's tip (the first jaw on +x reaches 20 + 35 = 55).
-    assert!(m.contains(Point3::new(79.5, 0.0, -35.0)), "body rim");
+    ring_envelope(&m, 20.0, 80.0, -35.0, "body");
     assert!(m.contains(Point3::new(0.0, 50.0, -1.0)), "body under the face");
-    assert!(m.contains(Point3::new(54.5, 0.0, 15.0)), "first jaw's tip");
-    assert!(m.contains(Point3::new(20.5, 0.0, 29.5)), "first jaw's gripping face");
+    assert!(m.contains(Point3::new(55.0 - HAIR, 0.0, 15.0)), "first jaw's tip");
+    assert!(m.contains(Point3::new(20.0 + HAIR, 0.0, 30.0 - HAIR)), "first jaw's gripping face");
+    assert!(m.contains(Point3::new(40.0, 10.0 - HAIR, 15.0)), "first jaw's side");
     // Air: past the rim, past the jaw tip, the bore, the work's room
     // between the jaws, and above the jaws.
     assert!(!m.contains(Point3::new(81.0, 0.0, -35.0)), "past the rim");
-    assert!(!m.contains(Point3::new(56.0, 0.0, 15.0)), "past the jaw tip");
+    assert!(!m.contains(Point3::new(55.0 + HAIR, 0.0, 15.0)), "past the jaw tip");
+    assert!(!m.contains(Point3::new(20.0 - HAIR, 0.0, 15.0)), "before the gripping face");
+    assert!(!m.contains(Point3::new(40.0, 10.0 + HAIR, 15.0)), "beside the first jaw");
+    assert!(!m.contains(Point3::new(40.0, 0.0, 30.0 + HAIR)), "over the first jaw");
     assert!(!m.contains(Point3::new(0.0, 0.0, -35.0)), "the through bore");
     assert!(!m.contains(Point3::new(19.0, 0.0, 15.0)), "the work's room");
     assert!(!m.contains(Point3::new(54.0, 0.0, 31.0)), "above the jaws");
@@ -91,9 +130,8 @@ fn collet_envelope_is_pinned() {
     let (lo, hi) = bounds(&t);
     assert!((lo.z + 70.0).abs() < 1e-9 && hi.z.abs() < 1e-9, "z {}..{}", lo.z, hi.z);
     let m = FixtureMesh::build(&t).expect("closed shells");
-    assert!(m.contains(Point3::new(24.5, 0.0, -15.0)), "nose");
-    assert!(!m.contains(Point3::new(26.0, 0.0, -15.0)), "beside the nose");
-    assert!(m.contains(Point3::new(49.5, 0.0, -50.0)), "body");
+    ring_envelope(&m, 10.0, 25.0, -15.0, "nose");
+    ring_envelope(&m, 10.0, 50.0, -50.0, "body");
     assert!(!m.contains(Point3::new(0.0, 0.0, -50.0)), "the collet bore");
     assert!(!m.contains(Point3::new(0.0, 0.0, 5.0)), "above the nose");
 }

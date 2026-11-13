@@ -22,12 +22,19 @@
 //!
 //! ## The laws here
 //!
-//! - **Never less steel outside.** Round outer faces are polygons whose
-//!   flats touch the true circle ([`SIDES`] sides), so the drawn body
-//!   encloses the real one: a tool clear of the drawing is clear of the
-//!   chuck. Bores are drawn the same way (flats on the bore circle): the
-//!   bore is where the work stands, so the drawn steel never claims the
-//!   work's own room.
+//! - **Never less steel anywhere.** Every drawn face is on or outside the
+//!   real steel, so a tool clear of the drawing is clear of the chuck.
+//!   Round outer faces are polygons ([`SIDES`] sides) whose flats touch
+//!   the true circle: circumscribed, the vertices stand out by the
+//!   tessellation allowance. Bores are the other way round (#1470):
+//!   inscribed, the vertices on the bore circle and the flats inside it,
+//!   so the drawn bore wall is on or inside the true one. A flat touching
+//!   the bore circle would leave the vertices outside it - up to 0.12 %
+//!   of the bore radius of steel missing - which is the unsafe side. The
+//!   price is that the drawn steel stands up to that sag into the bore,
+//!   the work's own room: a part or stock exactly at the bore can read as
+//!   sunk into it by that sag (the clash check's warning, never a
+//!   refusal, counts only past `PENETRATION_MM`).
 //! - **Shells touch, never overlap.** The jaws stand on the body face and
 //!   the nose on the body, each a closed shell of its own, so the mesh
 //!   law's ray-crossing test reads one inside per point.
@@ -231,11 +238,13 @@ fn flats_on(r: f64) -> f64 {
     r / (std::f64::consts::PI / SIDES as f64).cos()
 }
 
-/// A closed, outward annulus about the z axis: radii `r_in..r_out`
-/// (each drawn with flats on its circle), z `z0..z1`.
+/// A closed, outward annulus about the z axis: radii `r_in..r_out`, z
+/// `z0..z1`. Conservative both ways: the outer face circumscribes its
+/// circle (flats on it), the bore is inscribed in its circle (vertices
+/// on it), so the drawn steel holds every point of the true annulus.
 #[must_use]
 pub fn ring(r_in: f64, r_out: f64, z0: f64, z1: f64) -> Vec<Triangle> {
-    let (ri, ro) = (flats_on(r_in), flats_on(r_out));
+    let (ri, ro) = (r_in, flats_on(r_out));
     let at = |r: f64, k: usize, z: f64| {
         let a = std::f64::consts::TAU * (k % SIDES) as f64 / SIDES as f64;
         Point3::new(r * a.cos(), r * a.sin(), z)
