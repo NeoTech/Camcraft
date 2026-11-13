@@ -524,7 +524,7 @@ fn an_oversized_line_is_a_parse_error_and_is_skipped() {
 /// #894: thread milling is drivable with the tools that exist - a
 /// thread mill from the catalog or by definition, the Thread
 /// operation's pitch and hand as params, the door's refusals by name,
-/// and undo.
+/// undo, and (#992) generate's refusal of a hole nothing drilled.
 #[test]
 fn thread_milling_over_the_tools() {
     let dir = tmp_dir("thread");
@@ -570,8 +570,10 @@ fn thread_milling_over_the_tools() {
     let job = c.ok("get_job", json!({}));
     assert_eq!(job["operations"][0]["params"]["thread"]["pitch"], json!(1.0), "undo restores the pitch");
     assert_eq!(job["operations"][0]["params"]["thread"]["hand"], json!("left"));
-    let generated = c.ok("generate", json!({ "name": name }));
-    assert_eq!(generated["generated"][0]["status"], json!("ok"), "{generated}");
+    // #992: nothing ahead opened the hole (the block is solid there) - a thread mill is not
+    // centre-cutting, so generate refuses the thread by name.
+    let msg = c.refused("generate", json!({ "name": name }));
+    assert!(msg.contains("the hole at (30.000, 30.000) is not drilled yet"), "{msg}");
 }
 
 /// #1196: the land width rides the MCP params door - one undoable edit,

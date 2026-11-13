@@ -102,6 +102,7 @@ pub mod probe_op;
 pub mod plasma_op;
 // #894: the thread-milling operation's door, kernel plan and its two verdict readings.
 pub mod thread_op;
+mod thread_entry;
 pub mod wire_op;
 // #534: the wire laws' inputs, read live at the post.
 pub mod wire_verify;

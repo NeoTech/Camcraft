@@ -26,6 +26,7 @@
 
 mod common;
 mod posted_gates;
+mod thread_support;
 
 use common::gen_to_cltext;
 use posted_gates::thread::thread_verdicts;

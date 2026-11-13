@@ -2150,6 +2150,9 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             thread_round = super::thread_op::walls_round(&m_gen.facets, &plan);
             let region = if thread_round { super::thread_rims::major_rims(region, holes, plan.depth())? } else { region };
             let path = machining2d::thread_mill(&plan)?;
+            // #992: the mill is not centre-cutting - each hole must be
+            // open in the stock the program ahead leaves, or refused.
+            super::thread_entry::judge(holes, &path, d * 0.5, verify_prior.get())?;
             (region, path)
         }
         // M5.2 stage A: the first turning kind. Which documents may
