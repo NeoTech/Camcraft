@@ -201,6 +201,18 @@ function toolNote() {  // just before the tool change it describes
   toolKind = ""; toolCr = 0;
 }
 
+// The document's program identity (#258), from the engine's `program`
+// global: its number (1 when the document states none; one file per
+// operation counts up from it, #111), whether the document stated it,
+// and its program comment ("" for none - the header then names the
+// machine, as before #258).
+function progNo() {
+  var n = typeof program !== "undefined" ? program.number : (typeof programNumber !== "undefined" ? programNumber : 1);
+  return Math.round(Number(n) || 1);
+}
+function progNumbered() { return typeof program !== "undefined" && program.numbered === true; }
+function progComment() { return clean(typeof program !== "undefined" ? program.comment : ""); }
+
 // -------------------------------------------------------------- header
 // #50: "The first block of a program is identified by %, the program
 // name and the active unit of measure" (p. 130): `%NAME G71 *`, G71 =
@@ -208,10 +220,19 @@ function toolNote() {  // just before the tool change it describes
 // name, so the machine's name stands in, cut to the file-name
 // characters the manual permits (A-Z a-z 0-9 . _ -, p. 143). The old
 // parenthetical identity line is gone: `( )` is no TNC comment form.
+// #258: the TNC addresses a program by its name, so the document's
+// program comment IS the name when it states one (cut to the same
+// characters); else a stated number names it (a name of digits is a
+// legal file name); else the machine's, as before. A stated number the
+// name does not carry is the operator's comment block after the begin.
 function onOpen() {
   var nm = (typeof machine !== "undefined" && machine.name) || "CAMCRAFT";
-  pgmName = String(nm).replace(/[^A-Za-z0-9._-]/g, "_") || "CAMCRAFT";
+  var said = progComment();
+  if (said) pgmName = said.replace(/[^A-Za-z0-9._-]/g, "_");
+  else if (progNumbered()) pgmName = String(progNo());
+  else pgmName = String(nm).replace(/[^A-Za-z0-9._-]/g, "_") || "CAMCRAFT";
   writeln("%" + pgmName + " G71 *");
+  if (said && progNumbered()) note("PROGRAM " + progNo());
 }
 
 // Cutter compensation in the control (M13.11, #39): refused by name,
