@@ -3343,8 +3343,9 @@ pub(super) enum DepthLaw {
 /// - The pocket family cuts picked part features (`Section`); a whole-
 ///   model source there is the volume to REMOVE (the region is the
 ///   material, its interior is cut by contract), so no part law applies.
-/// - Slot and Circular cut authored geometry into their source - the
-///   source is the material to remove, not a part to keep.
+/// - Slot and Circular cut authored geometry into their source. A Stock
+///   source is the material to remove; a finished-part source (a whole
+///   model) is a part to keep - [`authored_law`] (#1543).
 /// - Trace, Engrave and 2D Chamfer enter the part by design (the
 ///   engraving, the broken edge); their own modes stand the gouge law
 ///   down for exactly that reason.
@@ -3362,7 +3363,25 @@ pub(super) fn depth_law_of(params: &OpParams, src: &SrcRef, part_solid: bool) ->
         }
         OpParams::Drill { cross, .. } if cross.is_empty() => DepthLaw::Contain,
         OpParams::Bore { .. } | OpParams::Thread { .. } => DepthLaw::Contain,
+        OpParams::Circular { .. } => authored_law(src),
         _ => DepthLaw::None,
+    }
+}
+
+/// The law of a kind that cuts geometry typed by hand (Circular's centre
+/// and radius; the Slot's endpoints and width, #1537) into a finished-
+/// part source (#1543, Prime Directive). A whole-model source names the
+/// part to keep, not a volume to remove: nothing about the typed circle
+/// says it stays inside the part's own hole, so the path answers to the
+/// part's sections and solid (`Section`) - a circle typed through a wall
+/// is a blocking Gouge, a circle inside the modeled hole stays clean.
+/// A picked source keeps its own kind's arm (a picked Circular's circle
+/// IS the picked rim's); a Stock source never reaches here
+/// (`part_solid` is false), so it still cuts unjudged.
+pub(super) fn authored_law(src: &SrcRef) -> DepthLaw {
+    match src {
+        SrcRef::Entity(_) => DepthLaw::Section,
+        SrcRef::Stock | SrcRef::Selection(_) => DepthLaw::None,
     }
 }
 
