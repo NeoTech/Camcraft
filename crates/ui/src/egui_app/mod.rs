@@ -123,6 +123,7 @@ pub(crate) use setup_align_pick::align_text;
 // #330: the Setups page's lay-on-a-plane row.
 mod setup_plane_pick;
 mod setup_axis_pick;
+mod setup_orient_pick;
 // #555: the Setups page's lay-on-three-points row.
 mod setup_points_pick;
 // #701: the Setups page's set-WCS-from-features role row.

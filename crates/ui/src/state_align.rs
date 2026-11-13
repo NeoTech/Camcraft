@@ -18,6 +18,7 @@ enum Draft {
     Plane,
     Points,
     Axes,
+    Cylinder,
 }
 
 impl State {
@@ -47,6 +48,10 @@ impl State {
                 let c = AlignPartToSetup::align_from_axes(w, &setup, &axes);
                 (setup, c, "part aligned from its picks".to_owned(), "part not aligned from its picks", Draft::Axes)
             }
+            CommandKind::AlignPartCylinder { setup, pick, target, angle_deg, flip } => {
+                let c = AlignPartToSetup::align_from_cylinder(w, &setup, &pick, target, angle_deg, flip);
+                (setup, c, "part aligned from its cylinder".to_owned(), "part not aligned from its cylinder", Draft::Cylinder)
+            }
             _ => return, // only the alignment verbs are routed here
         };
         let command = match built {
@@ -67,6 +72,13 @@ impl State {
                 if let Some(d) = self.axis_pick.as_mut().filter(|d| d.setup == setup) {
                     d.picking = None;
                     d.applied = true;
+                }
+            }
+            // The picks stay (disarmed) so the angle re-applies onto what
+            // the setup now holds.
+            Draft::Cylinder => {
+                if let Some(d) = self.cylinder_pick.as_mut().filter(|d| d.setup == setup) {
+                    d.picking = false;
                 }
             }
             Draft::None => {}
