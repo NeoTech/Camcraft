@@ -165,6 +165,11 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
     if let Some(why) = crate::setup_align::generation_problem(world, op) {
         return Err(GenError::Invalid(why));
     }
+    // #1510: a milling WCS whose Z is tilted off the machine's would
+    // cut the part as it lies, not as the WCS shows - refused by name.
+    if let Some(why) = crate::setup_wcs_tilt::generation_problem(world, op) {
+        return Err(GenError::Invalid(why));
+    }
     let material = super::material::judged_material(world, setup, &op.src)?;
     let part_solid = part_solid_of(world, setup, &op.src, &material);
     // Setup stock, when it is not the source itself: the swarf column
