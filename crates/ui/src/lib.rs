@@ -18,6 +18,7 @@
 pub mod diag;
 
 pub mod actions;
+pub mod align_pick_viz;
 pub(crate) mod machine_modes;
 mod axis_note;
 mod build_info;
@@ -44,6 +45,7 @@ pub mod path_lines;
 pub(crate) mod refusal_ghost;
 pub mod post_file;
 pub mod plane_pick;
+pub mod pick_words;
 pub mod axis_pick;
 pub mod points_pick;
 pub mod wcs_pick;

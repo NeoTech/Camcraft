@@ -90,6 +90,9 @@ pub use material::*;
 mod material_region;
 pub(crate) use material_region::selection_drives_region;
 mod circle_fit;
+// #1504: the plain Slot's room read off two picked edges or a face.
+mod slot_pick;
+pub use slot_pick::{slot_bound_of, slot_fit_of, slot_from_picks};
 pub use circle_fit::{CIRCLE_FIT_TOL, circle_of_region, circular_fit_of};
 mod material_source;
 // #1071: the thread mill's major-circle rims and solid-law bores.
@@ -152,6 +155,10 @@ pub use boundary_picks::{
 };
 pub use boundary_ctx::op_stamp;
 use boundary_ctx::*;
+// #763: the one machining-frame seam — the composed door for an
+// operation's world reads and CL wrap (part_alignment x Tilt).
+mod frame;
+pub use frame::OpFrame;
 mod job;
 pub use job::*;
 mod generate;

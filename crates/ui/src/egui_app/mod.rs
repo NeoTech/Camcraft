@@ -249,6 +249,8 @@ mod thread_hand_tests;
 #[cfg(test)]
 mod thread_mill_page_tests;
 #[cfg(test)]
+mod slot_pick_page_tests;
+#[cfg(test)]
 mod after_op_tests;
 #[cfg(test)]
 mod program_info_tests;
