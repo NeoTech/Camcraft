@@ -774,14 +774,21 @@ instead of a 10-20 GB worktree on the reviewer's machine. It has a
 `workflow_dispatch` trigger only (inputs: the PR number and the head SHA
 the reviewer read), a read-only token and no secrets; it checks out
 `refs/pull/<N>/head`, refuses any other head, refuses a diff touching
-`build.rs`, `.github/`, `scripts/`, `.cargo/`, a `Cargo.toml`/`Cargo.lock`
-or a toolchain file, trial-merges with main and runs `cargo xtask gate
+`build.rs`, `.github/`, `scripts/`, a `.cargo/` directory at any depth, a
+`Cargo.toml`/`Cargo.lock`, a toolchain file or `xtask/` (listed with
+`--no-renames`), trial-merges with main and runs `cargo xtask gate
 quick --base origin/main` plus clippy on the touched crates (ui suites under
 `xvfb-run` with Mesa's software drivers, the cut runner's setup from issue
 1413). Only the PR-reviewer agent starts it, after reading the diff, and
-only when a runner is online and no cut is using it; a "read, not built" PR
+only for a collaborator's PR ("Collaborators only", maintainer, 2026-11-13;
+the workflow checks the author's push access itself and refuses otherwise,
+other PRs build locally) when a runner is online and no cut is using it; a "read, not built" PR
 is never sent. With no runner, or a run that is cancelled, times out or
 never starts, the review builds locally or says "not built" - never "pass".
+The job targets its own runner label (`camcraft-pr-test`) under its own OS
+user, HOME, cargo home and sccache dir, never shared with the cut/release
+runner of issue 1413 ("Separate runner/user", same date). The refusal list
+does not stop hostile test code: that is why only collaborators' PRs run.
 Windows-only readings (`cfg(windows)`, per-OS pinned values) still run
 locally for the touched suites.
 

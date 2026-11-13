@@ -86,3 +86,55 @@ reviewer reads the PR with `git fetch origin pull/<N>/head` and `git show`
 and makes no worktree and no `target/`. Why: the issue's point is the 10-20
 GB per review. The cost to change: none - the local path is unchanged and
 remains the fallback.
+
+## Review rework (maintainer decisions, 2026-11-13, question dialog)
+
+**Who may use the runner: "Collaborators only".** Decided: the workflow's
+first step reads the PR's author through the API with the workflow token and
+refuses unless that account has `admin`, `maintain` or `write` permission on
+the repository (an API error also refuses: fail closed). The PR-reviewer
+agent and `review-prs` dispatch it only for a collaborator's PR; any other
+PR is built locally in the reviewer's worktree, as before. Why: the run
+executes the PR's tests and build code, and the refusal list below stops
+build scripts and config switches but not hostile `#[test]` bodies or
+`tests/` files; a human who has push access wrote this code. Dropped: an
+`author_association` check (it says COLLABORATOR without saying push access),
+accepting the risk for fork PRs, and trusting the agent's read of the diff
+as the only gate (an LLM reading attacker text).
+
+**The refusal list, completed.** The workflow now refuses a diff touching
+`build.rs`, `.github/`, `scripts/`, a `Cargo.toml`/`Cargo.lock`, a
+`rust-toolchain` file, any `.cargo/` directory at any depth
+(`(^|/)\.cargo/`: cargo reads config from the CWD upward and the ui suites
+run with CWD `crates/ui`) and `xtask/` (the gate itself would be PR code).
+The diff is listed with `git diff --name-only --no-renames`, so both sides
+of a rename are checked. What it still does NOT cover: arbitrary code in
+`#[test]` functions and `tests/` files; that is what "Collaborators only"
+answers. A PR touching `xtask/` is built locally.
+
+**Isolation: "Separate runner/user".** Decided: the job runs on
+`[self-hosted, linux, camcraft-pr-test]`, a label the cut pipeline (issue
+1413) never uses. That runner is registered under its own OS user, with its
+own HOME, rustup home and no access to the cut runner's files. In the
+workflow `CARGO_HOME` and `SCCACHE_DIR` are set to
+`$RUNNER_WORKSPACE/.pr-test-cache/...`, i.e. under that runner's work dir
+(sccache stays on there, but only for this user's cache; it is never a cache
+a release build reads). What persists on the runner between runs:
+`actions/checkout` cleans the workspace (`target/` is rebuilt every run),
+while that `.pr-test-cache`, the user's HOME and `~/.cargo`/rustup survive
+and are writable by PR test code; hence the separate user, and the cut
+runner must never be this one. Dropped: one shared runner with
+only the workflow's own isolation, and an ephemeral/container runner (more
+setup than the maintainer asked for).
+
+**Smaller points.** Third-party actions are pinned by full commit SHA with
+the tag in a comment (`checkout` and `upload-artifact`, tag v4). The
+uploaded `gate-logs/` is written by the PR's own xtask/tests, so it is
+PR-controlled content (a planted symlink could pull a runner file in):
+retention is capped at 7 days and the artifact is read as untrusted by
+the reviewer; uploading only the two `$RUNNER_TEMP` files was dropped
+because the per-binary logs are what the reviewer needs. The PR-reviewer's
+"read, not built" list is now the workflow's refusal list, one list.
+The token needs only `contents: read`: the author lookup uses public
+endpoints; a token that cannot read the permission endpoint refuses (and
+the PR is built locally).

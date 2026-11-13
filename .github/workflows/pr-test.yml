@@ -15,7 +15,12 @@
 # secrets, no credentials left on disk while PR code runs. PRs the reviewer
 # classes "read, not built" (a new dependency, build.rs, scripts, .github)
 # are never sent here; this workflow refuses them too (defence in depth),
-# and the reviewer then decides as it does without a runner.
+# and the reviewer then decides as it does without a runner. Maintainer
+# decisions (2026-11-13): "Collaborators only" - the PR's author must have
+# push access, else the run refuses and the PR is built locally; and
+# "Separate runner/user" - the job targets the runner label camcraft-pr-test,
+# an OS user of its own with its own HOME, never the cut/release runner
+# (issue 1413); cargo home and sccache are under that runner's work dir.
 # Provenance: our own review and gate laws (AGENTS.md "Outside PRs are
 # reviewed", "Three gate tiers"); GitHub's public Actions documentation for
 # the workflow syntax.
@@ -50,7 +55,7 @@ env:
 
 jobs:
   test:
-    runs-on: [self-hosted, linux]
+    runs-on: [self-hosted, linux, camcraft-pr-test]
     timeout-minutes: 90
     permissions:
       contents: read
@@ -60,7 +65,35 @@ jobs:
         run: |
           if ! [[ "$PR" =~ ^[0-9]+$ ]]; then echo "::error::pr must be a number, got '$PR'"; exit 1; fi
           if ! [[ "$SHA" =~ ^[0-9a-f]{40}$ ]]; then echo "::error::sha must be 40 lowercase hex, got '$SHA'"; exit 1; fi
-      - uses: actions/checkout@v4
+      - name: Collaborators only (the PR author has push access)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          api() { curl -fsS -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/$REPO/$1"; }
+          author=$(api "pulls/$PR" | python3 -c 'import json,sys; print(json.load(sys.stdin)["user"]["login"])') || author=""
+          perm=""
+          if [[ "$author" =~ ^[A-Za-z0-9-]+$ ]]; then
+            perm=$(api "collaborators/$author/permission" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("permission",""))') || perm=""
+          fi
+          case "$perm" in
+            admin|maintain|write) echo "PR #$PR author '$author' has $perm access" ;;
+            *)
+              echo "::error::refused: PR #$PR author '${author:-unknown}' is not a collaborator with push access (permission '${perm:-unknown}', or the check failed) - build it locally in the reviewer's worktree"
+              { echo "### PR #$PR at $SHA: refused (author is not a collaborator with push access; built locally instead)"; } >> "$GITHUB_STEP_SUMMARY"
+              exit 1 ;;
+          esac
+      - name: Private cargo home and sccache dir (never shared with a release build)
+        shell: bash
+        run: |
+          # Own OS user, own HOME; these two dirs also sit under this
+          # runner's work dir, so no cache a release build could read is written.
+          echo "CARGO_HOME=$RUNNER_WORKSPACE/.pr-test-cache/cargo" >> "$GITHUB_ENV"
+          echo "SCCACHE_DIR=$RUNNER_WORKSPACE/.pr-test-cache/sccache" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_WORKSPACE/.pr-test-cache/cargo" "$RUNNER_WORKSPACE/.pr-test-cache/sccache"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: refs/pull/${{ inputs.pr }}/head
           fetch-depth: 0
@@ -75,12 +108,14 @@ jobs:
           fi
           git rev-parse --verify -q origin/main >/dev/null || { echo "::error::origin/main was not fetched"; exit 1; }
           echo "main=$(git rev-parse origin/main)" >> "$GITHUB_ENV"
-      - name: Not a read-only PR (dependency, build.rs, scripts, .github, cargo config)
+      - name: Not a read-only PR (dependency, build.rs, scripts, .github, cargo config, xtask)
         shell: bash
         run: |
           set -euo pipefail
           mb=$(git merge-base origin/main HEAD)
-          hits=$(git diff --name-only "$mb" HEAD | grep -E '(^|/)build\.rs$|^\.github/|^scripts/|(^|/)Cargo\.(toml|lock)$|^\.cargo/|(^|/)rust-toolchain(\.toml)?$' || true)
+          # --no-renames: both sides of a rename are listed. xtask/ is the gate
+          # itself: a PR that changes it would run its own gate code.
+          hits=$(git diff --name-only --no-renames "$mb" HEAD | grep -E '(^|/)build\.rs$|^\.github/|^scripts/|(^|/)Cargo\.(toml|lock)$|(^|/)\.cargo/|(^|/)rust-toolchain(\.toml)?$|^xtask/' || true)
           if [ -n "$hits" ]; then
             echo "::error::read, not built: the PR touches files the runner never builds - $(echo "$hits" | tr '\n' ' ')"
             { echo "### PR #$PR at $SHA: refused (read, not built)"; echo '```'; echo "$hits"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
@@ -141,9 +176,12 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Gate logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: pr-test-${{ inputs.pr }}-${{ github.run_attempt }}
+          # gate-logs/ is written by the PR's own tests: PR-controlled content,
+          # so retention is capped (docs/decisions/1420-pr-test-pipeline.md).
+          retention-days: 7
           path: |
             gate-logs/
             ${{ runner.temp }}/gate-output.txt

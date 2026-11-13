@@ -95,8 +95,10 @@ takes the next. Never launch two `PR-reviewer` agents at once.
 **Build on the runner when one is online** (#1420; maintainer, 2026-11-13:
 "then that is the decision, workflow_dispatch"). The agent, not this skill,
 decides where the PR is built, because the decision needs the diff it reads
-(PR-reviewer step 2b): with a self-hosted Linux runner online, no cut on it
-and a PR that is not "read, not built", it starts `pr-test.yml`
+(PR-reviewer step 2b): with a self-hosted Linux runner online, no cut on it,
+a PR written by a collaborator with push access ("Collaborators only"; the
+workflow refuses any other author, which builds locally) and a PR that is
+not "read, not built", it starts `pr-test.yml`
 (`gh workflow run pr-test.yml -f pr=<N> -f sha=<head>`, `workflow_dispatch`
 only), waits for the run and reads its per-binary result, and makes no
 worktree or `target/`; otherwise it builds locally as before. A run that is
