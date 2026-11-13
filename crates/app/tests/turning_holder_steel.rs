@@ -20,11 +20,13 @@ mod common;
 use flecs_ecs::prelude::World;
 
 use camcraft_app::commands::{
-    CreateOperation, GenerateOperation, History, ImportModel, LatheBodySpec, LoadMachine, SetFixtureFixed, SetToolBody, TagFixture,
+    CreateOperation, GenerateOperation, History, ImportModel, LatheBodySpec, LoadMachine, SelectPost, SetFixtureFixed, SetToolBody,
+    TagFixture,
 };
 use camcraft_app::geometry::{Mesh, Point3, Triangle};
 use camcraft_app::operation::{Height, OpParams, SrcRef, STEEL_UNREAD_NOTE};
 use camcraft_app::posting;
+use camcraft_app::schema::PostRef;
 use camcraft_app::verify::{FixturePart, Warning};
 use camcraft_tools::lathe_holder::LathePlacement;
 
@@ -58,6 +60,9 @@ fn chucked(jaw: ([f64; 3], [f64; 3])) -> (World, History) {
     let world = camcraft_app::world::new_world();
     let mut history = History::default();
     history.execute(&world, LoadMachine::new(&world, "lathe.mch".into(), Some(machine("lathe"))).expect("lathe"));
+    // A post that serves a lathe: main refuses one that does not
+    // (`posting_serves`), which would mask this suite's own verdicts.
+    history.execute(&world, SelectPost::new(&world, PostRef::Named("Fanuc Lathe".into())).expect("lathe post"));
     add_tool(&world, &mut history, INSERT);
     let part = revolve(&[(0.0, -16.0), (12.0, -16.0), (12.0, 0.0), (6.0, 0.0), (6.0, 20.0), (0.0, 20.0)]);
     history.execute(&world, ImportModel::from_mesh("step", part));
@@ -176,3 +181,4 @@ fn a_fixture_the_law_cannot_read_is_named_on_the_op() {
     let notes = cache(&world, "F1").expect("cached").path.notes;
     assert!(notes.iter().any(|n| n.starts_with(STEEL_UNREAD_NOTE) && n.contains("'ghost'") && !n.contains("'jaw'")), "{notes:?}");
 }
+

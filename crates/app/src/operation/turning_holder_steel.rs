@@ -21,6 +21,13 @@
 //!   signed radius, and +-|y| across the plane (the band keeps |y| only,
 //!   so both sides are read). The fixture is read as the frame box of
 //!   its corners: exact for a spindle on a world axis, larger otherwise.
+//! - **On the holder's own side** (#1102). A body point x stands along
+//!   the HOLDER's radial, which is the path's signed radial or its
+//!   negation (a rear tool post, a path whose first point sits past
+//!   centre): the pieces and the steel are both read in the holder's
+//!   frame (`sided_pieces`), and a path on both sides of the axis is
+//!   refused by name, as the holder law refuses it - never read
+//!   mirrored.
 //! - **Contact is contact.** Each box is grown by the margin, as the
 //!   fixture laws grow theirs (`point_inside`).
 //! - **One finding per move**: a `FixtureHit` on the holder, blocking
@@ -37,7 +44,7 @@ use crate::turning::profile::Frame;
 use crate::verify::{FixturePart, Warning};
 
 use super::kinds::Section;
-use super::turning_holder::pieces_of;
+use super::turning_holder::sided_pieces;
 use super::turning_rapids::SignedMeridian;
 use super::OpParams;
 
@@ -102,16 +109,19 @@ pub(crate) fn steel_hits(
     let unjudged = |why: String| format!("the lathe holder body cannot be judged against the fixtures: {why}");
     let frame = Frame::about(part).map_err(|e| unjudged(format!("no spindle fits the part ({e})")))?;
     let sm = SignedMeridian::of(&frame, path);
+    // #1102: the holder's side; every radius below is read along the
+    // holder's own +x (the path's signed radial times `side`).
+    let (side, pieces) = sided_pieces(&sm, path, super::Z_TOL).map_err(unjudged)?;
     let m = if margin.is_finite() { margin.max(0.0) } else { 0.0 };
     let mut steel = Vec::with_capacity(turning.len() + fixed.len());
     for (b, turns) in turning.iter().map(|b| (b, true)).chain(fixed.iter().map(|b| (b, false))) {
-        steel.push(read(&sm, b, turns, m).ok_or_else(|| unjudged("a fixture box is not finite".into()))?);
+        steel.push(read(&sm, b, turns, m, side).ok_or_else(|| unjudged("a fixture box is not finite".into()))?);
     }
     let spans = body.spans();
     let mut out = Vec::new();
-    for (i, mv) in path.moves.iter().enumerate() {
-        let pieces = pieces_of(mv, &sm, super::Z_TOL).ok_or_else(|| unjudged(format!("move {i} leaves the turning plane")))?;
-        let struck = pieces.iter().filter(|&&(p, q)| [p.0, p.1, q.0, q.1].iter().all(|v| v.is_finite())).any(|&(p, q)| {
+    for (i, pieces) in pieces.iter().enumerate() {
+        let pieces = pieces.iter().map(|&((ps, px), (qs, qx))| ((ps, side * px), (qs, side * qx)));
+        let struck = pieces.filter(|&(p, q)| [p.0, p.1, q.0, q.1].iter().all(|v| v.is_finite())).any(|(p, q)| {
             // Only steel the body's whole length can reach along this piece.
             let (lo, hi) = (p.0.min(q.0) + body.z_lo(), p.0.max(q.0) + body.z_hi());
             steel.iter().filter(|st| st.stations().1 >= lo && st.stations().0 <= hi).any(|st| spans.iter().any(|&(z0, z1, reach)| meets(p, q, z0, z1, &reach, st)))
@@ -141,9 +151,10 @@ pub(crate) fn lathe_steel_hits(
     steel_hits(&op.params, path, &part.facets, body, steel, super::GOUGE_TOL)
 }
 
-/// A fixture box in the meridian frame, grown by `m`; `None` when it
-/// holds a non-finite number.
-fn read(sm: &SignedMeridian, b: &FixtureBox, turns: bool, m: f64) -> Option<Steel> {
+/// A fixture box in the meridian frame on the holder's `side` (its
+/// radial along the holder's +x), grown by `m`; `None` when it holds a
+/// non-finite number.
+fn read(sm: &SignedMeridian, b: &FixtureBox, turns: bool, m: f64, side: f64) -> Option<Steel> {
     let (lo, hi) = (b.min, b.max);
     let mut s = (f64::INFINITY, f64::NEG_INFINITY);
     let (mut u, mut v) = (s, s);
@@ -151,6 +162,7 @@ fn read(sm: &SignedMeridian, b: &FixtureBox, turns: bool, m: f64) -> Option<Stee
     for k in 0..8 {
         let q = Point3::new(if k & 1 == 0 { lo.x } else { hi.x }, if k & 2 == 0 { lo.y } else { hi.y }, if k & 4 == 0 { lo.z } else { hi.z });
         let (cs, cu, cv) = sm.suv(q);
+        let cu = side * cu;
         if !(cs.is_finite() && cu.is_finite() && cv.is_finite()) {
             return None;
         }
@@ -221,42 +233,5 @@ fn meet(a: Option<Span>, b: Option<Span>) -> Option<Span> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn reach(x_lo: f64, x_hi: f64, y_hi: f64) -> Reach {
-        Reach { x_lo, x_hi, y_lo: 0.0, y_hi }
-    }
-
-    #[test]
-    fn a_band_meets_a_box_exactly_along_a_straight_tip_motion() {
-        // A band x 2..40, |y| <= 6, stations -8..10 about the tip.
-        let r = reach(2.0, 40.0, 6.0);
-        let jaw = Steel::Standing { s: (-40.0, -20.0), u: (14.0, 30.0), v: (-5.0, 5.0) };
-        // The tip rides r 6.8 from station 20 to 2: the band's foot
-        // reaches station -6, short of the jaw's -20.
-        assert!(!meets((20.0, 6.8), (2.0, 6.8), -8.0, 10.0, &r, &jaw));
-        // Down to station -10: the band spans -18..0, the jaw -40..-20:
-        // still clear.
-        assert!(!meets((20.0, 6.8), (-10.0, 6.8), -8.0, 10.0, &r, &jaw));
-        // Down to -13: the foot reaches -21, inside the jaw.
-        assert!(meets((20.0, 6.8), (-13.0, 6.8), -8.0, 10.0, &r, &jaw));
-        // A jaw beside the plane, past the band's |y|, is clear.
-        let aside = Steel::Standing { s: (-40.0, -20.0), u: (14.0, 30.0), v: (7.0, 9.0) };
-        assert!(!meets((20.0, 6.8), (-13.0, 6.8), -8.0, 10.0, &r, &aside));
-        // Revolved: the same jaw spinning reaches every side.
-        let spun = Steel::Revolved { s: (-40.0, -20.0), r: (14.0, 34.0) };
-        assert!(meets((20.0, 6.8), (-13.0, 6.8), -8.0, 10.0, &r, &spun));
-        // A band wholly inside the envelope's bore never meets it.
-        let inside = reach(-1.0, 1.0, 1.0);
-        assert!(!meets((0.0, 6.8), (-30.0, 6.8), -1.0, 1.0, &inside, &spun));
-        // ...and one wholly past its skin neither.
-        let past = Steel::Revolved { s: (-40.0, -20.0), r: (0.0, 5.0) };
-        let out = reach(2.0, 40.0, 0.0);
-        assert!(!meets((0.0, 6.8), (-30.0, 6.8), -1.0, 1.0, &out, &past));
-        // A tip crossing the axis sweeps the band through a revolved
-        // bore from the other side.
-        let ring = Steel::Revolved { s: (-1.0, 1.0), r: (20.0, 22.0) };
-        assert!(meets((0.0, 30.0), (0.0, -30.0), -0.5, 0.5, &reach(-1.0, 1.0, 0.0), &ring));
-    }
-}
+#[path = "turning_holder_steel_tests.rs"]
+mod tests;

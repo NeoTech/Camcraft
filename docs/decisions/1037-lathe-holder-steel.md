@@ -66,3 +66,13 @@ dropped in (1).
 was in flight on main at the same time; this change adds a module and
 one call after the holder law in `generate.rs`, and touches
 `turning_holder.rs` only to make `pieces_of` visible to its sibling.
+
+**Review fix: the holder's side (#1102).** The review of PR #1061 found
+a rear-side holder read mirrored: a tip at X -8 of the path's frame had
+its body read along that frame's +x, so a standing jaw on the holder's
+own side passed. Chosen: the steel law takes main's `sided_pieces` (the
+holder law's own side reading), multiplies every tip radius and every
+standing box's radial by the side, and refuses a path on both sides of
+the axis by the same message. Dropped: a second, steel-only side
+reading - two side rules could disagree, and the drawn body
+(`body_axes`) already follows `sided_pieces`.
