@@ -127,3 +127,40 @@ fn the_backstop_reads_the_exact_dip_lowered_by_the_span_floor() {
     let read = asks.iter().filter(|a| a.covers(p, kerf2)).map(|a| a.plane).fold(f64::INFINITY, f64::min);
     assert!((read - floor).abs() < 1e-9, "the backstop reads {read} over the post, the exact dip and span floor {floor}");
 }
+
+/// #1404: a blade-lying swarf link turns B +90 -> -90 at a fixed tip, the
+/// band swinging through vertical (band 60 up, radius 3, 40 long; cutter
+/// radius 3 - the release lane's full-band swarf fixture). Every letter
+/// stays in the closed cap [-90, 90], so no span can lean past its more
+/// tilted end: the horizontal ends' `-R` reading belongs to the ends'
+/// own footprints. Before the closed cap, the B 45 pose read that `-R`
+/// floor (its neighbour stood at exactly 90) over its own footprint,
+/// where the band stands some 34 mm over the tip, and a post 47 mm out
+/// topped at +10 was refused - the 18 false hits. The twins keep the
+/// real refusals: a post under a horizontal end's band (70 mm out, top
+/// -2, the band's bottom there -3) and one the swing passes through.
+#[test]
+fn a_swing_through_vertical_reads_no_floor_from_its_horizontal_ends() {
+    let bands = [(60.0, 3.0, 40.0)];
+    let (r, tol) = (3.0, 0.01);
+    let o = Point3::new(0.0, 0.0, 0.0);
+    let m = Move::new(MoveKind::Feed, o, o, Some(300.0));
+    for (from, to) in [([0.0, 90.0, 0.0], [0.0, -90.0, 0.0]), ([0.0, -90.0, 0.0], [0.0, 90.0, 0.0])] {
+        for k in 0..5 {
+            assert_eq!(band_floors(from, to, bands[0])[k].1, f64::INFINITY, "pose {k}: no span floor in the closed cap");
+        }
+        let verdict = |x: f64, top: f64| {
+            let mut memo = std::collections::HashMap::new();
+            let none_in = |_: Point2| false;
+            let flat = |_: Point2| -> Steps { unreachable!("no sample column to read") };
+            swing_hit(&m, 1, from, to, &bands, r, (tol, 0.0), 0.01, &[], &mut memo, &none_in, &flat, &none_in, &hidden_post(Point2::new(x, 0.0), top))
+        };
+        for x in [-47.0, 47.0] {
+            assert_eq!(verdict(x, 10.0), None, "{from:?} -> {to:?}: the band stands ~34 mm over the tip {x} mm out");
+            assert_eq!(verdict(x, 40.0), Some(false), "{from:?} -> {to:?}: the swing passes through a post topped at 40, {x} mm out");
+        }
+        for x in [-70.0, 70.0] {
+            assert_eq!(verdict(x, -2.0), Some(false), "{from:?} -> {to:?}: a horizontal end's band (bottom -3) over a post topped at -2, {x} mm out");
+        }
+    }
+}
