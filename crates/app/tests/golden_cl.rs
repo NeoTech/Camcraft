@@ -1185,6 +1185,7 @@ fn wire_contour_die_and_punch_match_golden() {
             side,
             start: Some(start),
             plane_z: 0.0,
+            tabs: None,
             stock: None,
             clearance: 1.0,
         };
@@ -1216,6 +1217,7 @@ fn wire_open_cutoff_matches_golden() {
         plane_z: 0.0,
         stock: Some(Region::new(vec![Loop::new(plate).unwrap()]).unwrap()),
         clearance: 1.0,
+        tabs: None,
     };
     let line = vec![Point2::new(60.0, 0.0), Point2::new(60.0, 50.0)];
     let path = wire_contour(&[], &[line], &p).unwrap();

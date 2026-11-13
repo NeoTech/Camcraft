@@ -21,6 +21,7 @@ fn params(side: WireSide, start: Option<(f64, f64)>) -> WireParams {
         plane_z: 0.0,
         stock: None,
         clearance: 1.0,
+        tabs: None,
     }
 }
 
@@ -102,6 +103,10 @@ fn a_missing_or_misplaced_start_hole_and_a_punch_are_refused_by_name() {
     assert!(punch.contains("die-side cut") && punch.contains("punch"), "{punch}");
     let tiny = refusal(&[rect(0.0, 0.0, 0.5, 0.5)], &params(WireSide::Die, Some((0.25, 0.25))), 0.5);
     assert!(tiny.contains("too small for the wire"), "{tiny}");
+    // Tabs on a burnout (#539): refused by name, never silently dropped.
+    let tabs = super::super::TabParams { count: Some(1), width: Some(1.0), at: vec![Point2::new(6.0, 0.0)], cutoff: None };
+    let tabbed = refusal(&pocket, &WireParams { tabs: Some(tabs), ..params(WireSide::Die, Some((0.0, 0.0))) }, 0.5);
+    assert!(tabbed.contains("tabs are stated on a burnout"), "{tabbed}");
 }
 
 /// A pattern that cannot reach every interior point is refused: a neck

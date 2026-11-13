@@ -97,7 +97,12 @@ pub(super) fn tool_door(world: &World, params: &OpParams, tool: &str) -> Result<
 /// in the generator.
 pub(super) fn wire_gate(world: &World, setup: Option<&str>, params: &OpParams) -> Result<(), CommandError> {
     match params {
-        OpParams::WireContour(w) => operation::wire_op::condition_of(world, setup, w).map(|_| ()).map_err(CommandError::Invalid),
+        OpParams::WireContour(w) => {
+            if let Some(why) = operation::wire_op::tabs_taper_refusal(w) {
+                return Err(CommandError::Invalid(why));
+            }
+            operation::wire_op::condition_of(world, setup, w).map(|_| ()).map_err(CommandError::Invalid)
+        }
         _ => Ok(()),
     }
 }

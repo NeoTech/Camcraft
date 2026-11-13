@@ -1476,6 +1476,21 @@ impl OpParams {
                     }
                     None => h.write_u8(0),
                 }
+                // #539: the tabs, only when stated, so no stamp of an
+                // untabbed cut moves. `capture` shapes no move and is
+                // read live at the post.
+                if let Some(t) = &p.tabs {
+                    h.write(b"tabs");
+                    h.write_u32(t.count.unwrap_or(u32::MAX));
+                    w(h, t.width.unwrap_or(f64::NAN));
+                    h.write_usize(t.at.len());
+                    for [x, y] in &t.at {
+                        w(h, *x);
+                        w(h, *y);
+                    }
+                    h.write(t.cutoff_condition.as_bytes());
+                    h.write_u8(0xff);
+                }
                 // #536: only a stated taper is digested, so every
                 // vertical cut's stamp stays what it was.
                 if p.taper_deg != 0.0 {

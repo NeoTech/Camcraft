@@ -27,6 +27,12 @@ impl Wire {
         let dz = z - self.z0;
         self.pts.iter().zip(&self.lean).map(|(p, t)| Point2::new(p.x + t[0] * dz, p.y + t[1] * dz)).collect()
     }
+
+    /// The wire through its first `n` points (#539: a tabbed cut's main
+    /// cut, judged before its cut-off); `None` past the path's end.
+    pub(super) fn prefix(&self, n: usize) -> Option<Wire> {
+        Some(Wire { pts: self.pts.get(..n)?.to_vec(), lean: self.lean.get(..n)?.to_vec(), z0: self.z0 })
+    }
 }
 
 /// The first move whose kerf enters the product at height `z`: the

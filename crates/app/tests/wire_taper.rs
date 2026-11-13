@@ -67,6 +67,9 @@ fn punch_with(text: &str, taper: f64, burnout: Option<f64>) -> (World, Result<()
         condition: "C110".into(),
         side: WireSide::Punch,
         start: Some([-30.0, 0.0]),
+        tabs: None,
+        // The punch drops into a stated capture (#539's hold law).
+        capture: true,
         taper_deg: taper,
         burnout,
         clearance: camcraft_app::operation::DEFAULT_CLEARANCE,

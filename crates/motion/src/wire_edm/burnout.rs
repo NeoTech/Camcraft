@@ -84,6 +84,11 @@ pub fn wire_burnout(loops: &[Loop], chains: &[Vec<Point2>], p: &WireParams, clea
             p.side.word()
         )));
     }
+    if p.tabs.is_some() {
+        return Err(invalid(
+            "tabs are stated on a burnout - a burnout leaves no core for a tab to hold (#539, #540)".into(),
+        ));
+    }
     let (given, profile) = ring::profile(loops, chains)?;
     let rings = rings(&profile, clearance, k)?;
     let Some(outer) = rings.first() else {
