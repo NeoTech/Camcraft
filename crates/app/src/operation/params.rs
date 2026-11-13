@@ -1703,6 +1703,10 @@ impl OpParams {
                 if a.arc_xy {
                     h.write_u8(0xC4);
                 }
+                // #1449: pre-drilled entry - a byte only when on.
+                if a.predrilled {
+                    h.write_u8(0xC7);
+                }
                 // M13.11: control compensation moves what the post
                 // writes - a byte only when on, so every earlier
                 // approach keeps its digest.

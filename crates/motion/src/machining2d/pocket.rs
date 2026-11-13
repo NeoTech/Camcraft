@@ -20,6 +20,7 @@ use super::ring::ring_is_circular;
 use super::waterscan::{scan_row, waterline_passes};
 use super::slots::chord_clears;
 use super::pocket_hsm::adaptive_passes;
+use super::predrilled::PreHole;
 /// How a pocket is filled: straight rows back and forth, or closed rings
 /// marching inward.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -249,6 +250,12 @@ impl PocketParams {
 /// lift-rapid-plunge. Rapids inside the footprint below the safe plane
 /// are the verifier's business (step 7).
 pub fn pocket(region: &Region, p: &PocketParams) -> Result<Toolpath, GenError> {
+    pocket_entered(region, p, &[])
+}
+
+/// [`pocket`] with the holes the caller proved open (#1449): read only
+/// when `p.links.approach.predrilled` asks (`predrilled.rs`).
+pub fn pocket_entered(region: &Region, p: &PocketParams, holes: &[PreHole]) -> Result<Toolpath, GenError> {
     p.validate()?;
     if region.is_empty() {
         return Err(GenError::Empty("empty pocket region".into()));
@@ -288,6 +295,8 @@ pub fn pocket(region: &Region, p: &PocketParams) -> Result<Toolpath, GenError> {
     // The horizontal arc entry (M11.3) lands on the first pass: a closed
     // first ring starts mid its longest edge, where an arc has room.
     let passes = if p.links.approach.arc_xy && room.is_none() { super::descent_xy::reseat_first(passes) } else { passes };
+    // #1449: a proved hole re-seats the plan on itself (not the HSM plan's own bore).
+    let passes = super::predrilled::reseat(passes, holes, &center, p.links.approach.predrilled && room.is_none());
     let zs = cut_levels(p.top_z, p.bottom_z, p.stepdown)?;
     // Waterline rings circle around material, so they get the arc fitter
     // (rings straight enough to be lines stay exactly that); zigzag rows
@@ -312,7 +321,8 @@ pub fn pocket(region: &Region, p: &PocketParams) -> Result<Toolpath, GenError> {
         .with_links(p.links, helix_r)
         .with_top(p.top_z)
         .with_xy_arc(p.links.approach.arc_xy)
-        .with_microlift(joins);
+        .with_microlift(joins)
+        .with_holes(holes);
     // The walks: fitted where the strategy fits, then - opted in - the
     // corner fillets, proved inside the cutter-center area. Passes are
     // one plan at every level, so the plan's refusals are said once.

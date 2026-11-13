@@ -100,6 +100,13 @@ pub struct Approach {
     /// turn when `0`) runs tangentially onto the first pass. `false` -
     /// the default - descends onto the pass start itself, as before.
     pub arc_xy: bool,
+    /// Enter down holes an earlier drilling operation opened (#1449, the
+    /// 2-D pocket only): where the application has PROVED a hole open
+    /// under the tool's disc to a level's depth, the level's entry is a
+    /// straight plunge down it instead of the chosen helix or ramp. The
+    /// holes themselves ride the generator call, never this flag.
+    /// `false` - the default - never reads a hole.
+    pub predrilled: bool,
     /// Height above the material (mm) a plunge rapids down to before it
     /// feeds (held under the retract plane); also where an angle-bounded
     /// ramp starts on the first level. `0` feeds the whole way from the
@@ -192,6 +199,7 @@ impl Approach {
         arc_radius: 0.0,
         arc_sweep: 0.0,
         arc_xy: false,
+        predrilled: false,
         plunge_height: DEFAULT_PLUNGE_HEIGHT,
         ramp_feed: 0.0,
         plunge_feed: 0.0,

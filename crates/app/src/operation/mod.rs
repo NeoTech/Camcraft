@@ -168,6 +168,9 @@ mod carried_stock;
 pub use carried_stock::{CARRIED_OUTSIDE_DECLARED, CARRIED_OUTSIDE_NOTED, carried_problems};
 pub(crate) use drill_prior::reads_prior;
 mod plunge_solid;
+mod predrilled_entry;
+#[cfg(test)]
+mod predrilled_entry_tests;
 mod rotary_law;
 pub(crate) mod spindle_law;
 pub use spindle_law::{spindle_reading, SpindleReading, SPINDLE_TOL};

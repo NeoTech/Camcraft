@@ -561,7 +561,13 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 m_gen,
                 frame.as_ref(),
             )?;
-            let path = machining2d::pocket(
+            // #1449: the holes the program ahead proves open, when asked.
+            let (holes, hole_notes) = if lk.approach.predrilled {
+                super::predrilled_entry::proved_holes(&drills_ahead, d * 0.5, verify_prior.get(), frame.is_some())
+            } else {
+                (Vec::new(), Vec::new())
+            };
+            let mut path = machining2d::pocket_entered(
                 &region,
                 &PocketParams {
                     links: lk,
@@ -582,7 +588,9 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     optimal_load: *optimal_load,
                     blend_turns: *blend_turns,
                 },
+                &holes,
             )?;
+            super::predrilled_entry::say(&mut path, hole_notes);
             (region, path)
         }
         // The roughing twins (M2.4 A) are the pocket's own machinery
