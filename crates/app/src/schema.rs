@@ -78,6 +78,29 @@ pub struct GeoSig {
     pub sig: u64,
 }
 
+/// A model whose mesh stands for its curved surfaces more coarsely than
+/// the STEP importer promises (#864): `chord_mm` is the chord error the
+/// import actually kept, always above `step::CHORD_CAP`. Present ONLY on
+/// such a model - one that met the promise, an STL or OBJ mesh, and
+/// every model of a project saved before this existed carry no component
+/// and read as full fidelity. A stock copied from such a model carries
+/// it too (#1056: the same facets). Written by the import, update and
+/// stock commands and the project loader, through `model_fidelity::set`.
+#[derive(Component, Debug, Clone, Copy, PartialEq)]
+pub struct ReducedFidelity {
+    pub chord_mm: f64,
+}
+
+/// The STEP facet budget a model's mesh was imported under, when it is not
+/// the default (#1054; `step_budget::DEFAULT`). Absent on every model
+/// imported at the default, on STL/OBJ meshes and on every model of a
+/// project saved before it existed. Written by the import and update
+/// commands and the project loader, through `model_fidelity::set_budget`.
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StepBudget {
+    pub facets: u64,
+}
+
 /// Selection marker (tag). Only `SelectEntity` writes it (AGENTS.md: changes
 /// go through commands); the tree and viewport read it to highlight.
 #[derive(Component, Debug)]
@@ -90,6 +113,42 @@ pub struct Selected;
 #[derive(Component, Debug)]
 pub struct StockDef {
     pub shape: StockShape,
+}
+
+/// #1094: the user said the from-model stock's source model is raw stock
+/// only - a casting or blank, not the finished part - so the program
+/// verdict does not judge it. Rides the stock entity; `source` is the
+/// model it was said of, honoured only while the stock is still a copy of
+/// that model AND while the model's geometry still carries `print`, the
+/// fingerprint taken when the mark was set (third review: the mark is
+/// self-validating where it takes effect). Absent (the default, every
+/// older file) judges it. Only `SetStockSourceOnly` and the project
+/// loader write it.
+#[derive(Component, Debug, Clone, PartialEq)]
+pub struct StockSourceOnly {
+    pub source: String,
+    pub print: GeomPrint,
+}
+
+/// A model's geometry as the program verdict reads it (#1094,
+/// `stock_print`): its facet count and two independent 64-bit hashes over
+/// every vertex coordinate's bits (local frame) and its placement's bits.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GeomPrint {
+    pub facets: u64,
+    pub hash: [u64; 2],
+}
+
+/// The memo of a model's facet hashes (`stock_print`), valid while `rev`,
+/// `ptr` and `len` still describe the mounted facets - a 200k-facet model
+/// is hashed once per revision, not once per verdict. Derived, never
+/// serialized; dies with its entity.
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GeomPrintMemo {
+    pub rev: u64,
+    pub ptr: usize,
+    pub len: usize,
+    pub hash: [u64; 2],
 }
 
 /// Unit tag marking an entity as a work coordinate system origin: a
@@ -136,12 +195,20 @@ pub struct ToolBody {
     pub spun: Option<camcraft_tools::spun::SpunProfile>,
     /// The frame, the placement it landed with, and the derived read.
     pub frame: crate::tool_body::BodyFrame,
+    /// #828: the holder is ASSUMED - a machine's `tooling.default_holder`
+    /// landed on a new tool, not a holder the user picked. Judged no
+    /// smaller than the tool's stand-in holder cylinder anywhere
+    /// (`HolderProfile::floored`, in `tool_body::judged`). `false` for
+    /// every body the user lands, and for every older file's.
+    pub machine_default: bool,
 }
 
 /// #93 slice 2: a milling tool's own drawn cutter, neck and shank
-/// outline (`SetToolCutter`, `crate::tool_cutter`). Display data: it
-/// agrees with the tool's numbers by law (`cutter_profile::check`) and
-/// no generator or judging law reads it. Absent = drawn from the numbers.
+/// outline (`SetToolCutter`, `crate::tool_cutter`). It agrees with the
+/// tool's numbers by law (`cutter_profile::check`); no generator reads
+/// it, and the stack laws and simulation read only its neck where it is
+/// narrower than the stated shank (#852, `tool_cutter::neck_of`).
+/// Absent = drawn from the numbers.
 #[derive(Component, Debug, Clone, PartialEq)]
 pub struct ToolCutter {
     pub spun: camcraft_tools::spun::SpunProfile,
@@ -204,6 +271,16 @@ impl ToolBody {
 /// `post_options` (#389) is the setup's own post options; `None`, the
 /// default and every earlier file, follows the document's `PostOptions`.
 /// Written only by `SetSetupPostOptions` and the project loader.
+/// `nose_to_axis` (#821) is the setup's stated spindle-nose-to-rotary-
+/// centerline figure, mm, for a rotary raised by a stack (a subplate on a
+/// fixture plate): it wins over the machine file's, less any stack
+/// (`crate::rotary_stack`). `None`, the default and every earlier file,
+/// states none. Written only by `SetSetupNoseToAxis`, the datum transfer
+/// and the project loader.
+/// `workholding_max_rpm` (#1031) is the rated maximum rpm of the chuck
+/// or collet the setup holds the work in; `None`, the default and every
+/// earlier file, states none. Read through [`crate::setup_workholding`];
+/// written only by `SetSetupWorkholdingRpm` and the project loader.
 #[derive(Component, Debug, Clone, PartialEq)]
 pub struct SetupDef {
     pub stock: String,
@@ -216,6 +293,8 @@ pub struct SetupDef {
     pub relative_to: Option<String>,
     pub stock_source: Option<crate::setup_stock::StockSource>,
     pub post_options: Option<PostOptions>,
+    pub nose_to_axis: Option<f64>,
+    pub workholding_max_rpm: Option<f64>,
 }
 
 /// The M3.2 stage B marker turning a model entity into a FIXTURE: the
@@ -444,16 +523,14 @@ pub enum ThreadingOutput {
     G76Cycle,
 }
 
-/// Which theme the document wears (M6.1 C), a flecs singleton like
-/// `PostRef`: setup furniture, never a browser row. `Dark` is the
-/// shipped default - the meaning of a file with no theme key at all;
-/// `Named` addresses a built-in theme BY NAME (the post law, M3.3 B:
-/// names survive growth, indices don't); `File` names the user's
-/// `.json` theme by path. The constructor validates (registry names
-/// exist, files are there and within the byte budget - the JSON parse
-/// itself is the ui seam's, since the parser lives there); a value
-/// landed from a project file reads as written and refuses by name at
-/// apply time, never silently swapping back to the default.
+/// Which theme the user wears (M6.1 C), a flecs singleton. Since #877 a
+/// user preference, not a document setting: `app::prefs` keeps it per
+/// user, and no project file carries it. `Dark` is the shipped default;
+/// `Named` addresses a built-in theme BY NAME (names survive growth,
+/// indices don't); `File` names the user's `.json` theme by path. A pick
+/// is validated before it is set (`commands::check_theme`, plus the ui
+/// seam's JSON parse); a stored `File` reads as written and refuses by
+/// name at apply time, never silently swapping back to the default.
 #[derive(Component, Debug, Clone, Default, PartialEq)]
 pub enum ThemeRef {
     #[default]
@@ -463,9 +540,9 @@ pub enum ThemeRef {
 }
 
 /// The colour-vision remap the viewer wears (M13.4), a flecs singleton
-/// switched by `SetColorVision` under the theme's command law. `Off`
-/// is the default and changes nothing on screen. Unlike `ThemeRef` it
-/// is a VIEW preference, not a document setting: a deficiency belongs
+/// kept per user with the theme (`app::prefs`, #877). `Off` is the
+/// default and changes nothing on screen. Like `ThemeRef` it is a VIEW
+/// preference, not a document setting: a deficiency belongs
 /// to the person at the screen, not to the part - a protan's document
 /// opened by a colleague must not wear the protan palette - so the
 /// project file never carries it and opening a document leaves it as
@@ -533,8 +610,12 @@ pub fn register_schema(world: &World) {
     world.component::<Facets>();
     world.component::<Revision>();
     world.component::<GeoSig>();
+    world.component::<ReducedFidelity>();
+    world.component::<StepBudget>();
     world.component::<Selected>();
     world.component::<StockDef>();
+    world.component::<StockSourceOnly>();
+    world.component::<GeomPrintMemo>();
     world.component::<Wcs>();
     world.component::<ToolDef>();
     world.component::<ToolBody>();

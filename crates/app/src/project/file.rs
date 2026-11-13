@@ -137,16 +137,9 @@ pub struct ProjectFile {
     /// every earlier document means - so the default writes no key.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub post_options: Option<PostOptionsDto>,
-    /// The document's theme (M6.1 C), same law as `post`: an absent key
-    /// is the built-in `dark` - what every earlier document wears - so
-    /// the default writes nothing. `{"named": ...}` is a built-in by
-    /// name, `{"file": path}` a user `.json` theme; landed values are
-    /// not re-validated on open (the `SelectTheme` constructor and the
-    /// shell's parse pre-step did), and one that went missing refuses
-    /// by name at apply time in the status line, never silently
-    /// reverting the look of an intact document.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub theme: Option<ThemeDto>,
+    // From v41 a `theme` key lived here (M6.1 C). Since #877 the theme is a
+    // user preference (`app::prefs`): the key is no longer written, and an
+    // older file that carries it reads cleanly - serde ignores unknown keys.
     /// The ribbon's pinned kinds (M6.2), v42+: registry indices in pin
     /// order. An absent key pins nothing - what every v41 document is,
     /// since the ribbon could not pin then. The indices ride the
@@ -179,17 +172,6 @@ pub struct ProjectFile {
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub smoothing: bool,
     pub entities: Vec<EntityDto>,
-}
-
-/// The file mirror of the `ThemeRef` singleton (M6.1 C), spelled like
-/// `PostDto`: a built-in name or a path, never one string standing
-/// ambiguously for both. `dark` is the default and needs no key, so a
-/// `{"named": "dark"}` is as legal as an omission - it reads the same.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-#[serde(rename_all = "lowercase")]
-pub enum ThemeDto {
-    Named(String),
-    File(String),
 }
 
 /// The file mirror of the `PostOptions` singleton (issue #34): each
@@ -354,6 +336,27 @@ pub struct ToolDto {
     /// tool sanity law (`validate`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub orientation: Option<u8>,
+    /// #898 catalog facts, additive (no version step): each key is
+    /// written only when stated, so a tool without them saves byte for
+    /// byte as before, and an older build reads a file that has them by
+    /// skipping the keys (it keeps no unknown-key refusal on a tool).
+    /// Display data: nothing a generator or law reads.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub part_number: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vendor: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub coating: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub helix_deg: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notes: Option<String>,
+    /// #891 addition, additive (no version step): the turning cutting
+    /// data (surface speed m/min, feed mm/rev, max-rpm clamp). Absent
+    /// from every older file and written only when stated; absent
+    /// reads as unstated - the turning ops post the tool's rpm (G97).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub turning: Option<camcraft_tools::turning_data::TurningData>,
 }
 
 fn centre_cutting() -> bool {
@@ -412,6 +415,8 @@ pub enum ToolKindDto {
     /// The plasma torch (#670): additive in the same way - no older
     /// file names it.
     Torch,
+    /// The sinker electrode (#541): additive in the same way.
+    Electrode,
 }
 
 impl ToolDto {
@@ -431,6 +436,7 @@ impl ToolDto {
                 ToolKind::Taper => ToolKindDto::Taper,
                 ToolKind::Probe => ToolKindDto::Probe,
                 ToolKind::Torch => ToolKindDto::Torch,
+                ToolKind::Electrode => ToolKindDto::Electrode,
             },
             diameter: t.diameter,
             corner_r: t.corner_r,
@@ -456,6 +462,12 @@ impl ToolDto {
             body: None,
             cutter: None,
             orientation: t.orientation,
+            part_number: t.catalog.part_number.clone(),
+            vendor: t.catalog.vendor.clone(),
+            coating: t.catalog.coating.clone(),
+            helix_deg: t.catalog.helix_deg,
+            notes: t.catalog.notes.clone(),
+            turning: t.turning,
         }
     }
 
@@ -475,6 +487,7 @@ impl ToolDto {
                 ToolKindDto::Taper => ToolKind::Taper,
                 ToolKindDto::Probe => ToolKind::Probe,
                 ToolKindDto::Torch => ToolKind::Torch,
+                ToolKindDto::Electrode => ToolKind::Electrode,
             },
             diameter: self.diameter,
             corner_r: self.corner_r,
@@ -497,6 +510,16 @@ impl ToolDto {
             flutes: self.flutes,
             center_cutting: self.center_cutting,
             orientation: self.orientation,
+            // Read trimmed, so a hand-edited padded string loads.
+            catalog: camcraft_tools::catalog_fields::ToolCatalog {
+                part_number: self.part_number.clone(),
+                vendor: self.vendor.clone(),
+                coating: self.coating.clone(),
+                helix_deg: self.helix_deg,
+                notes: self.notes.clone(),
+            }
+            .normalized(),
+            turning: self.turning,
         }
     }
 }

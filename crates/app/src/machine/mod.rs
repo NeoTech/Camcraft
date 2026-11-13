@@ -50,6 +50,10 @@
 // (crates/post/src/machine/); this module keeps only what touches the
 // world - the singleton glue and the program checker.
 pub use camcraft_post::machine::*;
+// #828: the reader, validator and re-judge with the holder library
+// passed in - these shadow the post crate's word-only ones.
+mod holders;
+pub use holders::{holder_lookup, parse_mch, tooling_refusal, tooling_refusals};
 
 // #287: the Machines pane's catalogue, property sheet and validator.
 pub mod library;
@@ -57,6 +61,7 @@ pub mod library;
 // it shares with the cutting check.
 mod judge;
 mod plasma;
+mod wire_edm;
 use judge::{c_letter_problem, move_extremes, pose_problems, say, slowest_axis, tap_gate};
 mod sheet;
 pub mod validate;
@@ -155,6 +160,9 @@ pub fn check_document(world: &World, machine: &Machine) -> Result<MachineCheck, 
 pub fn check_ops(world: &World, machine: &Machine, program: &[(String, flecs_ecs::prelude::Entity)]) -> Result<MachineCheck, String> {
     if kind(Some(machine)) == Kind::Plasma {
         return plasma::check_plasma_ops(world, machine, program);
+    }
+    if kind(Some(machine)) == Kind::WireEdm {
+        return wire_edm::check_wire_ops(world, machine, program);
     }
     let ops = program.to_vec();
     let mut out = MachineCheck::default();

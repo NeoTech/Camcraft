@@ -308,9 +308,10 @@ fn collect_parts(state: &State) -> Vec<GpuPart> {
 /// world space. Only while the transport is up and its timeline is this
 /// document's (`cached_script` refreshes it before the next frame), any
 /// playhead including 0 and the end, playing or paused, the op fresh or
-/// stale (display reads the cached path). Lathe insert kinds yield
-/// nothing (marker only); a degenerate or misfitting tool yields nothing
-/// and is logged. The mesh lives in `State::sim_tool_cache` and is
+/// stale (display reads the cached path). A lathe-held body (#1038) is
+/// drawn as modelled, posed in the holder law's turning frame; a lathe
+/// insert without one yields nothing (marker only); a degenerate or
+/// misfitting tool yields nothing and is logged. The mesh lives in `State::sim_tool_cache` and is
 /// dropped as soon as there is no tool to draw.
 pub(crate) fn sim_tool_tris(state: &State) -> Option<Vec<camcraft_app::geometry::Triangle>> {
     // A poisoned lock only means a draw panicked mid-update: the cache
@@ -350,6 +351,14 @@ fn sim_body_part(state: &State) -> Option<GpuPart> {
 /// committed-pick outlines, and the gizmos, built by the same functions the
 /// imgui shell uploads. (The pre-M-e mirror skipped the gizmos and the
 /// `show_all_paths` dimming; this delegation closes both gaps for free.)
+///
+/// The Z=0 ground grid goes FIRST, so a path-heavy document that fills the
+/// overlay buffer loses toolpath detail at the cap, never the floor: the
+/// grid is what makes the empty viewport read as a machine table rather
+/// than a void, and it is depth-tested against the part like the rest of
+/// the buffer.
 fn collect_overlay(state: &State) -> Vec<[f32; 6]> {
-    crate::interact::collect_overlay(state)
+    let mut out = crate::interact::ground_grid_lines(state);
+    out.extend(crate::interact::collect_overlay(state));
+    crate::interact::capped(out)
 }
