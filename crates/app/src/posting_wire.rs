@@ -186,6 +186,7 @@ fn section(
     condition: &str,
     side: &str,
     taper: Option<(f64, (f64, f64))>,
+    four: Option<&str>,
 ) -> Result<Vec<cnc::Record>, String> {
     let mut records = post::dump(path, d);
     if let Some((_, guides)) = taper {

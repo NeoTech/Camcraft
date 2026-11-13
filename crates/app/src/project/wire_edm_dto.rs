@@ -202,6 +202,7 @@ mod tests {
             tabs,
             capture,
             taper_deg: 0.0,
+            four_axis: None,
             burnout: None,
             clearance: crate::operation::DEFAULT_CLEARANCE,
         }
