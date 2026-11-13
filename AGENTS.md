@@ -287,15 +287,25 @@ go to `CHANGELOG.md`.
     current. What changed and why is in the pinned issue #681 ("Process
     changes"); a fork maintainer subscribes there.
 - **Process changes bump `PROCESS_VERSION` and are announced** (same
-  request). Any PR that changes a process file (the list above) also
-  increments the single integer in `.claude/PROCESS_VERSION`, and when it
-  merges, the merging session adds a comment to the pinned issue #681:
-  `PROCESS_VERSION <n>` · PR #M · what changed · what a fork must do. The
-  reviewer treats a missing bump as a requested change. Two process PRs
-  open at once both bump to the same number; whichever merges second
-  takes the next number when it merges main. At a cut, the release notes
-  get a short "Process changes" section listing the versions since the
-  previous tag.
+  request; the writer changed with #1153, 2026-11-13). A PR that changes a
+  process file (the list above) does NOT touch `.claude/PROCESS_VERSION`:
+  every open process PR bumping the same line made each merge conflict
+  the rest, and two could carry the same number (#1117 and #930 both at
+  17). Its body carries the line `Process change: yes` instead, and the
+  reviewer treats a missing line, or an edit of `PROCESS_VERSION` in the
+  PR, as a requested change. The merging session is the one writer: after
+  a merge batch that merged at least one process PR it runs `cargo xtask
+  process-bump` (one integer, +1, once per batch, however many process PRs
+  were in it) in a worktree off the new `main`, opens a one-line PR
+  `chore(process): PROCESS_VERSION <n>` and merges it, then adds a comment
+  to the pinned issue #681: `PROCESS_VERSION <n>` · PR #M (every process
+  PR of the batch) · what changed · what a fork must do. A fork still
+  compares `.claude/PROCESS_VERSION` with upstream's and pulls the process
+  files when upstream's is higher, so nothing changes for it; the number
+  moves a little after the files do, and a fork that synced in between
+  pulls the same files again at the bump, which is harmless. At a cut, the
+  release notes get a short "Process changes" section listing the
+  versions since the previous tag.
 - **Overlapping issues stack.** Open PRs wait unmerged (a `feat` until its
   cut, a fix until it is reviewed), so an
   issue touching code an open PR changes branches off that PR's branch
