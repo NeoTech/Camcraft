@@ -10,7 +10,7 @@ use crate::model;
 use crate::operation::{self, OpParams, SrcRef};
 use crate::schema::Operation;
 
-use super::gates::{area_gate, family_gate, heights_gate, sinker_gate, thread_gate, tool_door, tool_gate, valid_src, wire_gate};
+use super::gates::{area_gate, family_gate, heights_gate, infeed_plan_gate, sinker_gate, tool_door, tool_gate, valid_src, wire_gate};
 
 /// Replace an operation's parameters. The cache is left alone and the
 /// stamp is dropped, so the operation reads Stale immediately: the old
@@ -108,7 +108,10 @@ impl EditOperationParams {
                 prev.params.kind()
             )));
         }
-        thread_gate(world, &params, &prev.tool)?;
+        infeed_plan_gate(world, &params, &prev.tool)?;
+        if let Some(why) = params.named_refusal() {
+            return Err(CommandError::Invalid(why));
+        }
         sinker_gate(world, prev.setup.as_deref(), &params)?;
         if !params.is_sane() {
             return Err(CommandError::Invalid(format!(
@@ -117,6 +120,8 @@ impl EditOperationParams {
             )));
         }
         heights_gate(world, prev.setup.as_deref(), &prev.src, &params)?;
+        // #894: a thread's pitch, infeed and holes against the mounted thread mill.
+        super::gates::thread_gate(world, &params, &prev.tool)?;
         if let Some(msg) = crate::operation::side_sane(&params, &prev.src) {
             return Err(CommandError::Invalid(msg));
         }
@@ -197,7 +202,7 @@ impl ChangeOperationKind {
             )));
         }
         family_gate(world, prev.setup.as_deref(), &params)?;
-        thread_gate(world, &params, &prev.tool)?;
+        infeed_plan_gate(world, &params, &prev.tool)?;
         sinker_gate(world, prev.setup.as_deref(), &params)?;
         tool_door(world, &params, &prev.tool)?;
         wire_gate(world, prev.setup.as_deref(), &params)?;

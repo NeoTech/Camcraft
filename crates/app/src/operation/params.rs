@@ -1494,6 +1494,14 @@ impl OpParams {
                     h.write_u32(o.vectors);
                     h.write_u32(o.turns);
                 }
+                // #546: the layer step and a measured wear, a tagged
+                // byte only when stated - an older burn's digest holds.
+                for (tag, v) in [(1u8, p.layer), (2, p.wear_lost), (3, p.wear_over)] {
+                    if let Some(v) = v {
+                        h.write_u8(tag);
+                        w(h, v);
+                    }
+                }
                 // #545: then the side's direction, amount and undersize.
                 if let OpParams::SinkerSideBurn(s) = self {
                     h.write(s.direction.word().as_bytes());
@@ -1532,6 +1540,8 @@ impl OpParams {
                 plunge_feed,
                 climb,
                 holes,
+                pitch,
+                hand,
             } => {
                 wh(h, *clearance_z);
                 wh(h, *top_z);
@@ -1541,6 +1551,14 @@ impl OpParams {
                     w(h, v);
                 }
                 h.write_u8(u8::from(*climb));
+                // #894: the thread's own pitch and hand. Written for
+                // every Thread op, so each one made before the rework
+                // reads Stale once - its path is a different ride now.
+                w(h, pitch.unwrap_or(0.0));
+                h.write_u8(match hand {
+                    crate::cl::ThreadHand::Right => 0xA1,
+                    crate::cl::ThreadHand::Left => 0xA2,
+                });
                 h.write_u32(holes.len() as u32);
                 for hole in holes {
                     wp2(h, hole.xy);
