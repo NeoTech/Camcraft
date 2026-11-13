@@ -1293,6 +1293,7 @@ pub(crate) fn tool_editor_window(ctx: &egui::Context, state: &mut State) {
                         TextEdit::singleline(&mut state.tool_ui.material_group)
                             .desired_width(140.0),
                     );
+                    super::tool_catalog_rows::catalog_rows(ui, &mut state.tool_ui);
                     if !torch && !electrode {
                         field(ui, "Spindle rpm");
                         num_plain(ui, &mut state.tool_ui.rpm);
