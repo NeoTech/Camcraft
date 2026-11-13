@@ -199,7 +199,8 @@ impl Planner<'_> {
                 let (rev, b) = morph_rev(&ring, &b, LAND);
                 p.work.add_len(super::front::len(&rev));
                 let mut ras = p.ras.clone();
-                let w = ras.walk_until(&rev, (s.r, p.rim, p.step), limit);
+                // Out of the bore the wall conforms to the rim (`conform`).
+                let w = if disc { p.conform_walk(&mut ras, &rev, limit) } else { ras.walk_until(&rev, (s.r, p.rim, p.step), limit) };
                 Ok(Some((g, yr, b, rev, ras, w, done)))
             };
             let (kept, over) = self.step_search(trial, step)?;
@@ -259,6 +260,8 @@ impl Planner<'_> {
             ));
         }
         self.note_corners(&d0, rho_c);
+        // The laps' fillet-to-wall kinks spread (`conform`).
+        self.smooth_grown(self.laps_from);
         Ok(Grown::Done)
     }
 
