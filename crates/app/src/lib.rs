@@ -111,6 +111,7 @@ pub use camcraft_geometry::geometry::stock;
 pub mod stock_sim;
 // #1094: the model that is only the stock's source is not the part.
 pub mod stock_source;
+pub mod stock_fit;
 // #1094: the geometry fingerprint a raw-stock-only mark is checked by.
 pub mod stock_print;
 pub mod stock_export;
