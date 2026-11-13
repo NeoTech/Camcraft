@@ -15,7 +15,7 @@
 //!
 //! Gate map (M4.4): covers app::cutting, app::cutting_turn,
 //! app::commands (ApplyCuttingData), app::posting (the CSS PARAMs),
-//! app::post (both lathe dialects), app::project (the additive key),
+//! post::post (both lathe dialects), app::project (the additive key),
 //! tools::turning_data.
 //! Lane shape (M4.4): all tests here run in seconds.
 
@@ -217,7 +217,10 @@ fn applying_the_turning_suggestion_is_one_undo_and_posts_g96_and_the_table_feed(
     let p = &out.program;
     assert!(p.contains("G50 S12000\n"), "the machine's clamp: {p}");
     assert!(p.contains("G96 S170 M03\n"), "constant surface speed from the tool: {p}");
-    assert!(!p.contains("G97"), "no constant rpm in a CSS-only program: {p}");
+    assert!(!p.contains("G97 S"), "no constant rpm in a CSS-only program: {p}");
+    // #1173: the CSS section cancels its G96 at its end - the only G97.
+    assert_eq!(p.matches("G97").count(), 1, "{p}");
+    assert!(p.contains("M05\nG97\nG28 U0 W0\nM30\n"), "{p}");
     assert!(p.contains("G99"), "feed per revolution: {p}");
     assert!(p.contains(" F0.2\n"), "the cut feeds at the table's 0.2 mm/rev: {p}");
     assert!(p.contains(" F0.1\n"), "the plunge at half of it: {p}");

@@ -57,6 +57,11 @@ continuousThreading = true;
 //    and again before a G96 section whose tool states a lower max rpm
 //    (PARAM MaxSpindleSpeed, #891). A G96 with neither clamp stated is
 //    refused by name - unclamped CSS runs away toward the centre.
+//    A section that posted G96 cancels it at its end (G97 after M05,
+//    #1173), so every section opens under G97 unless it states G96
+//    itself: a live tool's, a drill's or a thread's S is read as rpm,
+//    whatever kind of section follows, and the program never ends -
+//    or hands the next program - a constant-surface-speed mode.
 //  - G99 feed per revolution: F = mm/min / rpm, so the cut speed the
 //    generator planned is the cut speed the control runs. No rpm, no
 //    per-rev feed - refused by name.
@@ -160,6 +165,7 @@ var sRpm = 0;              // S/M3 waits for the section (PARAMs, TOOL, SECTION 
 var sCss = 0;              // SurfaceSpeed PARAM (m/min), 0 = none stated
 var sMax = 0;              // MaxSpindleSpeed PARAM (#891): the tool's own rpm ceiling, 0 = none
 var clampS = 0;            // the G50 S in force (#891), 0 = none posted yet
+var cssOn = false;         // this section posted G96: its end cancels it (#1173)
 var spindleWait = false;
 var toolWait = false;
 var tNo = 0;
@@ -256,7 +262,7 @@ function posed(p) {
 // flood code: refused by name (#150), never posted as mist or dry. An
 // unstated list stays silent (the unstated-limit law). M9 (stop) is
 // the RS-274 fixed pair.
-var COOLANT_KINDS = ["flood", "mist", "through-spindle", "through-tool"];
+var COOLANT_KINDS = ["flood", "mist", "air", "air-blast", "through-spindle", "through-tool"];
 function coolantWho() { return coolantOp ? "operation " + coolantOp + ": " : ""; }
 function coolantCode() {
   var cs = (typeof machine !== "undefined" && machine.coolants) || [];
@@ -274,14 +280,14 @@ function coolantCode() {
 }
 
 // The op's coolant ask (#112): the stream says nothing for flood (every
-// older stream), or carries PARAM Coolant off / mist / through-tool. The
+// older stream), or carries PARAM Coolant off / mist / air (#869) / through-tool. The
 // code is the machine's own entry of that family - the machine is truth;
 // an ask the machine states no code for is refused by name, naming the
 // operation (#150), never silently posted dry.
 function coolantFor(ask) {
   if (ask === "off") return "";
   if (!ask || ask === "flood") return coolantCode();
-  var want = ask === "mist" ? ["mist"] : (ask === "through-tool" ? ["through-spindle", "through-tool"] : []);
+  var want = ask === "mist" ? ["mist"] : (ask === "air" ? ["air", "air-blast"] : (ask === "through-tool" ? ["through-spindle", "through-tool"] : []));
   if (want.length === 0) { msg(coolantWho() + "unknown coolant ask " + ask); return ""; }
   var cs = (typeof machine !== "undefined" && machine.coolants) || [];
   for (var i = 0; i < cs.length; i++) {
@@ -440,6 +446,7 @@ function startPreamble() {
       else {
         if (cap !== clampS) { block(["G50", "S" + ff(cap)]); clampS = cap; }   // a tool rated under the machine (#891)
         block(["G96", "S" + ff(sCss), m]);
+        cssOn = true;
       }
     } else {
       // A tool's lower clamp is lifted back to the machine's before a
@@ -491,6 +498,9 @@ function endPreamble() {
   sCss = 0;                  // and its own spindle mode: no stale G96 (#772)
   sMax = 0;                  // and its own clamp (#891)
   if (liveAsk) {
+    // The live tool and the C axis are released before the op's stop or
+    // trip home (#1188): the operator never meets a driven tool still
+    // turning, and the home move never drags an engaged C.
     if (liveOk) {
       block([liveCodes.spindleOff]);
       block([liveCodes.cAxisOff]);
@@ -498,11 +508,13 @@ function endPreamble() {
     }
     liveAsk = false; liveOk = false; liveCodes = null; lastC = null;
     spindleWait = false;
-    return;
+  } else {
+    block(["M05"]);
+    if (cssOn) block(["G97"]); // #1173: no section opens under a G96 it did not state
+    cssOn = false;
+    spinRev = false;           // the next section states its own
   }
-  block(["M05"]);
-  spinRev = false;           // the next section states its own
-  afterOp();
+  afterOp();                 // #1188: every section ends with its own ask, live or not
 }
 
 // --------------------------------------------- C-axis live tooling (#33)

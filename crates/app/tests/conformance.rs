@@ -54,6 +54,8 @@ const POSTS: &[(&str, &str, &str)] = &[
     ("Heidenhain", "heidenhain", "heidenhain"),
     ("Mazak", "mazak", "mazak"),
     ("Tormach PathPilot", "tormach", "tormach"),
+    ("grblHAL", "grblhal", "grblhal"),
+    ("TinyG", "tinyg", "tinyg"),
     ("Doosan DNM", "doosan-dnm", "doosan-dnm"),
     ("Makera Carvera", "carvera", "carvera"),
 ];
@@ -62,9 +64,14 @@ const POSTS: &[(&str, &str, &str)] = &[
 /// rather than post, so it has no `.nc` there. Heidenhain (#51) supports
 /// tapping, but this legacy golden lacks spindle speed. Carvera (#707)
 /// cannot tap (no canned cycles or spindle reverse).
+/// #710: grblHAL's core G-code list has no G84 either; TinyG has no
+/// canned cycles at all and posts drilling as plain moves, but a tap
+/// cannot be plain moves.
 const REFUSED: &[(&str, &str, &str)] = &[
     ("heidenhain", "tap_plate", "tapping needs a positive integral spindle speed"),
     ("carvera", "tap_plate", "tapping"),
+    ("grblhal", "tap_plate", "tapping"),
+    ("tinyg", "tap_plate", "tapping"),
 ];
 
 /// The TURNING dialects (M13.5): their goldens are the lathe
@@ -76,6 +83,10 @@ const LATHE_POSTS: &[(&str, &str)] = &[("Fanuc Lathe", "fanuc-lathe"), ("Tormach
 /// own (`plasma_post.rs`, `nc/tormach-plasma/`); on a mill golden they
 /// refuse by name (`plasma_post_refusals.rs`).
 const PLASMA_POSTS: &[(&str, &str)] = &[("Tormach PathPilot Plasma", "tormach-plasma")];
+
+/// The WIRE EDM dialects (#533): their golden is the wire stream's own
+/// (`wire_post.rs`, `nc/wire-iso/`); a mill golden they refuse by name.
+const WIRE_POSTS: &[(&str, &str)] = &[("Generic ISO Wire EDM", "wire-iso")];
 
 #[test]
 fn every_lathe_post_refuses_every_mill_golden_by_name() {
@@ -288,8 +299,11 @@ fn the_synthesized_stream_locks_the_tool_and_spindle_words() {
         // #51: Heidenhain supports the full G55 + tap stream.
         // #707: the Carvera refuses the tap the same way (no canned
         // cycles, no spindle reverse); its G55 stands.
+        // #710: grblHAL has no G84, so its golden drops only the tap;
+        // TinyG the same (its drill chains post as plain moves).
         let stream = match *cps_stem {
             "carvera" => synth_stream_with("G55", false),
+            "grblhal" | "tinyg" => synth_stream_with("G55", false),
             _ => synth_stream(),
         };
         let cps = read(&format!("assets/posts/{cps_stem}.cps"));
@@ -352,9 +366,13 @@ fn every_builtin_registry_entry_compiles() {
     let mut want: Vec<&str> = POSTS.iter().map(|(n, _, _)| *n).collect();
     want.extend(LATHE_POSTS.iter().map(|(n, _)| *n));
     want.extend(PLASMA_POSTS.iter().map(|(n, _)| *n));
+    want.extend(WIRE_POSTS.iter().map(|(n, _)| *n));
     assert_eq!(names, want, "the picker lists what the registry ships");
     for (n, _) in PLASMA_POSTS {
         assert!(camcraft_app::posting::PLASMA_POSTS.contains(n), "{n} is a plasma dialect in the registry's own table");
+    }
+    for (n, _) in WIRE_POSTS {
+        assert!(camcraft_app::posting::WIRE_POSTS.contains(n), "{n} is a wire EDM dialect in the registry's own table");
     }
     for (n, _) in LATHE_POSTS {
         assert!(
@@ -375,11 +393,14 @@ const EXTENSIONS: &[(&str, &str)] = &[
     ("heidenhain", "I"),
     ("mazak", "nc"),
     ("tormach", "nc"),
+    ("grblhal", "nc"),
+    ("tinyg", "gcode"),
     ("doosan-dnm", "nc"),
     ("carvera", "nc"),
     ("fanuc-lathe", "nc"),
     ("tormach-lathe", "nc"),
     ("tormach-plasma", "nc"),
+    ("wire-iso", "nc"),
 ];
 
 /// The top-level `extension = "..."` manifest line's value.
@@ -394,6 +415,7 @@ fn every_builtin_declares_its_controls_file_extension() {
     let mut stems: Vec<&str> = POSTS.iter().map(|(_, s, _)| *s).collect();
     stems.extend(LATHE_POSTS.iter().map(|(_, s)| *s));
     stems.extend(PLASMA_POSTS.iter().map(|(_, s)| *s));
+    stems.extend(WIRE_POSTS.iter().map(|(_, s)| *s));
     let pinned: Vec<&str> = EXTENSIONS.iter().map(|(s, _)| *s).collect();
     assert_eq!(pinned, stems, "every shipped post has its extension pinned");
     for (stem, want) in EXTENSIONS {

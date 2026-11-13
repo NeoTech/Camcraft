@@ -109,6 +109,7 @@ fn bar_world(meridian: &[(f64, f64)], tools: &[&str]) -> (World, History) {
     history.execute(&world, cmd.expect("bar stock"));
     let cmd = LoadMachine::new(&world, "lathe.mch".into(), Some(lathe()));
     history.execute(&world, cmd.expect("lathe"));
+    history.execute(&world, camcraft_app::commands::SelectPost::new(&world, camcraft_app::schema::PostRef::Named("Fanuc Lathe".into())).expect("lathe post"));
     for t in tools {
         add_tool(&world, &mut history, t);
     }
