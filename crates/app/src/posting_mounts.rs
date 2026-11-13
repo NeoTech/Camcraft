@@ -201,8 +201,6 @@ fn post_each(world: &World, out_path: &Path, cps: Option<&str>, mounts: Vec<Moun
         });
     }
     let streams = op_streams(world)?;
-    // No sinker EDM dialect ships yet (#542): refused before any file.
-    crate::posting_family::edm_at_post(world, streams.iter().map(|(n, _)| n.as_str()))?;
     // #1190: each mount's own script opens only what a lathe may run;
     // #1232: and writes only for a machine kind it serves.
     let mut unserved = Vec::new();

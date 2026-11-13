@@ -9,9 +9,13 @@
 // table was read. The umbrella's decision D5 is this file's law: the post
 // writes the RS-274 motion words itself, and EVERY EDM-specific code -
 // the unit word, the pickup, the reference, the condition select, the
-// burn to depth, the orbit, the program end - comes from the machine
-// file's `edm.codes` / `edm.orbits`. A missing code refuses the post by
-// name; none is invented here. Decision record:
+// burn to depth, the program end - comes from the machine file's
+// `edm.codes` (main's `Machine.edm_codes`, its names and texts held to
+// one law by `post::machine::edm_codes`). A missing code refuses the post
+// by name; none is invented here. A condition the machine's
+// `edm.conditions` does not list, an orbit (#544, expanded into explicit
+// moves the stock sim judged) and a Sinker Side Burn (#545) are refused
+// by name: this post writes a straight burn down Z only. Decision record:
 // docs/decisions/542-sinker-iso-post.md. Not exercised on a real EDM
 // control.
 description = "Generic ISO-style sinker EDM (every EDM code from the machine's edm.codes)";
@@ -23,7 +27,7 @@ extension = "nc";
 setCodePage = "utf-8";
 capabilities = 1;          // reference contract: integer feature mask
 coolantModes = true;       // reads PARAM Coolant - to refuse every ask but Off
-serves = "sinker_edm";     // the engine posts this for sinker EDMs only (#542)
+serves = ["sinker_edm"];   // posts for sinker EDMs only (#1266 manifest; the app's serves door, #1232)
 
 // Determinism law: no timestamps, no randomness - the same stream always
 // posts to the same text (golden files depend on it).
@@ -36,7 +40,7 @@ var sectionOpen = false;   // preamble written (a legacy .cl has no SECTION)
 var sectionOk = false;     // the preamble was written whole
 var toolNumber = 0, toolName = "";
 var opName = "", opKind = "", toolKind = "", setupName = "", setupSaid = "";
-var condition = null;      // PARAM EdmCondition: the control's condition id
+var condition = null;      // PARAM SinkerCondition: the control's condition id
 var pickup = null;         // PARAM ElectrodePickup: the pickup offset, mm
 var orbit = null, orbitRadius = null; // PARAM EdmOrbit / EdmOrbitRadius
 var last = { X: null, Y: null, Z: null }; // the modal axis words written
@@ -136,8 +140,9 @@ function emit(line) { if (line !== null) writeln(line); return line !== null; }
 
 // ------------------------------------------------------------- machine
 // This post writes a sinker's program: a machine not declared
-// `kind: sinker_edm` is refused by name (the engine refuses it first,
-// from `serves`; this is the script's own word for the same law).
+// `kind: sinker_edm` is refused by name (the app's serves door refuses
+// it first, from `serves`; this is the script's own word for the same
+// law, and the one the CLI meets).
 function machineOk() {
   var m = typeof machine !== "undefined" ? machine : null;
   if (!m || m.kind !== "sinker_edm") {
@@ -165,7 +170,7 @@ function onParameter(name, value) {
   else if (name === "OperationKind") opKind = clean(value);
   else if (name === "ToolKind") toolKind = clean(value);
   else if (name === "SetupName") setupName = clean(value);
-  else if (name === "EdmCondition") condition = value === null || value === undefined ? null : String(value);
+  else if (name === "SinkerCondition") condition = value === null || value === undefined ? null : String(value);
   else if (name === "ElectrodePickup" && has(value)) pickup = Number(value);
   else if (name === "EdmOrbit") orbit = value ? String(value) : null;
   else if (name === "EdmOrbitRadius" && has(value)) orbitRadius = Number(value);
@@ -179,8 +184,8 @@ function onParameter(name, value) {
 function onToolChange(number, name) { toolNumber = number; toolName = clean(name); }
 
 // The section's preamble: the electrode picked up and referenced, the
-// work offset, the condition selected, the orbit (when the program
-// states one). Written whole, or refused by name - never half.
+// work offset, the condition selected. Written whole, or refused by
+// name - never half.
 function startPreamble() {
   if (sectionOpen) return;
   sectionOpen = true;
@@ -188,6 +193,10 @@ function startPreamble() {
   if (!machineOk()) return;
   if (toolKind && !/electrode/i.test(toolKind)) {
     refuse("tool" + opName, who() + "a " + toolKind + " is not an electrode - this post writes sinker burns only");
+    return;
+  }
+  if (/side/i.test(opKind)) {
+    refuse("side" + opName, who() + "a Sinker Side Burn moves the electrode sideways - this post writes a straight burn down Z only");
     return;
   }
   if (opKind && !/sinker/i.test(opKind)) {
@@ -198,6 +207,16 @@ function startPreamble() {
     refuse("cond" + opName, who() + "the program names no EDM condition - the burn's condition selects the generator");
     return;
   }
+  if (!listed(condition)) {
+    refuse("unlisted" + opName, who() + "condition " + clean(condition) + " is not in " + machineName() +
+      "'s edm.conditions - this post selects only a condition the machine lists");
+    return;
+  }
+  if (orbit !== null) {
+    refuse("orbit" + opName, who() + "a " + clean(orbit) + " orbit - CamCraft expands it into the moves the stock sim judged, " +
+      "and this post writes a straight burn down Z only (it never swaps them for the control's orbit word); burn without an orbit");
+    return;
+  }
   if (setupName && setupName !== setupSaid) { note("SETUP: " + setupName); setupSaid = setupName; }
   if (opName) note("OPERATION: " + opName + (opKind ? " - " + opKind.toUpperCase() : ""));
   note("T" + toolNumber + (toolName ? " " + toolName : "") + " - ELECTRODE - CONDITION " + clean(condition));
@@ -205,24 +224,19 @@ function startPreamble() {
   if (!emit(code("reference", { offset: has(pickup) ? fu(pickup) : null }))) return;
   block([wcsWord]);
   if (!emit(code("condition", { id: condition }))) return;
-  if (orbit !== null && !emit(orbitWord())) return;
   last = { X: null, Y: null, Z: null };
   sectionOk = true;
 }
 
-// The orbit (#290 D6): CamCraft names the geometry, the machine states
-// the control's word for it under edm.orbits; a pattern the machine does
-// not list is refused by name. {radius} is the orbit's radius.
-function orbitWord() {
+// Whether the machine's condition table lists `id`, as the table writes
+// it (the lookup law of assets/machines/AGENTS.md, #531).
+function listed(id) {
   var e = typeof machine !== "undefined" && machine ? machine.edm : null;
-  var list = e && e.orbits ? e.orbits : [];
+  var list = e && e.conditions ? e.conditions : [];
   for (var i = 0; i < list.length; i++) {
-    if (list[i] && list[i].kind === orbit) {
-      return fill("edm.orbits." + orbit, String(list[i].word), { radius: has(orbitRadius) ? fu(orbitRadius) : null });
-    }
+    if (list[i] && String(list[i].id) === id) return true;
   }
-  refuse("orbit" + opName, who() + machineName() + " lists no " + orbit + " orbit under edm.orbits - fill the control's word for it, or burn without an orbit");
-  return null;
+  return false;
 }
 
 function onSection() { startPreamble(); }
@@ -283,7 +297,7 @@ function onLinear() {
 
 function onCircular() {
   if (!moveOk(properties)) return;
-  refuse("arc" + opName, who() + "an arc - a sinker burn feeds straight down Z (an orbit is the control's, from edm.orbits)");
+  refuse("arc" + opName, who() + "an arc - a sinker burn feeds straight down Z");
 }
 
 function onCycle() {
