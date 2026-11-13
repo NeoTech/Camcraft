@@ -360,30 +360,59 @@ fn a_normal_sized_v_sharper_than_30_degrees_is_refused() {
     assert!(e.contains("contour C0") && e.contains("bridged"), "{e:?}");
 }
 
-/// #1053 review: the cover law gives a coarse model's excess back out of
-/// [`KERF_TOL`] too. The plate's top edge is judged at a contour drawn
-/// below the cut, so it stands `kerf + tol` from the torch for a `tol`
-/// between the tightened and the plain tolerance: covered at full
-/// fidelity, refused by name on the coarse model.
+/// The plate with a notch `w` wide and `drop` deep cut into its top edge.
+fn notched(w: f64, drop: f64) -> Loop {
+    let top = 60.0;
+    Loop::new(vec![
+        Point2::new(0.0, 0.0),
+        Point2::new(100.0, 0.0),
+        Point2::new(100.0, top),
+        Point2::new(50.0 + w * 0.5, top),
+        Point2::new(50.0 + w * 0.5, top - drop),
+        Point2::new(50.0 - w * 0.5, top - drop),
+        Point2::new(50.0 - w * 0.5, top),
+        Point2::new(0.0, top),
+    ])
+    .unwrap()
+}
+
+/// #1053 review: the cut hands the cover law the model-aware tolerance.
+/// A notch narrower than the kerf is bridged by the offset, so its floor
+/// stands off the torch by more than a kerf/2; its depth is set (by the
+/// geometry alone, measured off the bridged cut) so the farthest floor
+/// point sits midway between the plain and the tightened reach. The same
+/// plate then cuts at full fidelity and is refused by name on a coarse
+/// model - through `plasma_profile`, the path the program takes.
 #[test]
 fn the_cover_law_reads_the_tightened_tolerance_on_a_coarse_model() {
-    let outline = rect(0.0, 0.0, 100.0, 60.0);
-    let part = Region::new(vec![outline.clone()]).unwrap();
-    let plain = params();
-    let coarse = PlasmaParams { model_excess: 0.007, ..params() };
+    let plain = PlasmaParams { lead_in: 0.0, lead_out: 0.0, overburn: 0.0, ..params() };
+    let coarse = PlasmaParams { model_excess: 0.007, ..plain.clone() };
     assert!(coarse.kerf_tol() < KERF_TOL, "the coarse model tightens the tolerance");
-    let path = cut_plate(&[outline], &part, &plain);
-    let spans = path.plasma.as_ref().unwrap().torches.clone();
-    // The torch runs kerf/2 outside the outline; the judged top edge
-    // sits `drop` below it, midway between the two reaches.
-    let r = plain.kerf * 0.5;
-    let between = plain.kerf + 0.5 * (KERF_TOL + coarse.kerf_tol());
-    let drop = between - r;
-    let judged = rect(0.0, 0.0, 100.0, 60.0 - drop);
-    let judged_part = Region::new(vec![judged.clone()]).unwrap();
-    let cs = nest::contours(std::slice::from_ref(&judged), &[], &judged_part).unwrap();
-    let order = nest::cut_order(&cs);
-    assert!(laws::cover_law(&path, &spans, &cs, &order, (plain.kerf, plain.kerf_tol())).is_ok(), "covered at full fidelity");
-    let why = laws::cover_law(&path, &spans, &cs, &order, (coarse.kerf, coarse.kerf_tol())).expect_err("refused on the coarse model");
-    assert!(why.to_string().contains("plasma profile"), "refused by name: {why}");
+    let w = 1.0;
+    let cut_at = |drop: f64, p: &PlasmaParams| {
+        let l = notched(w, drop);
+        plasma_profile(std::slice::from_ref(&l), &[], &Region::new(vec![l.clone()]).unwrap(), p)
+    };
+    // The bridged cut does not depend on the notch's depth (its floor is
+    // far below the bridge); read its chords once.
+    let path = cut_at(0.3, &plain).unwrap();
+    let chords: Vec<(Point2, Point2)> = path.moves.iter().flat_map(|m| m.chords(emit::FIT_TOL)).collect();
+    let far = |drop: f64| {
+        let (x0, x1, y0) = (50.0 - w * 0.5, 50.0 + w * 0.5, 60.0 - drop);
+        (0..=100)
+            .map(|k| Point2::new(x0 + (x1 - x0) * f64::from(k) / 100.0, y0))
+            .map(|q| chords.iter().map(|(a, b)| laws::pt_seg(q, *a, *b)).fold(f64::INFINITY, f64::min))
+            .fold(0.0, f64::max)
+    };
+    let target = plain.kerf + 0.5 * (KERF_TOL + coarse.kerf_tol());
+    let (mut lo, mut hi) = (0.3, 2.0);
+    for _ in 0..60 {
+        let mid = 0.5 * (lo + hi);
+        if far(mid) < target { lo = mid } else { hi = mid }
+    }
+    let drop = 0.5 * (lo + hi);
+    assert!((far(drop) - target).abs() < 1e-6, "the floor sits between the reaches");
+    assert!(cut_at(drop, &plain).is_ok(), "covered at full fidelity: {:?}", cut_at(drop, &plain).err());
+    let why = cut_at(drop, &coarse).expect_err("refused on the coarse model").to_string();
+    assert!(why.contains("never comes within a kerf of the part edge"), "the cover law, by name: {why}");
 }
