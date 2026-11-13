@@ -167,6 +167,8 @@ fn wire_op(four_axis: Option<WireFourAxis>) -> WireContourOp {
         side: WireSide::Punch,
         start: Some([-30.0, 0.0]),
         taper_deg: 0.0,
+        burnout: None,
+        clearance: camcraft_app::operation::DEFAULT_CLEARANCE,
         four_axis,
     }
 }

@@ -16,7 +16,7 @@ use crate::geo2d::{Loop, Point2, Region};
 use crate::machine::{ConditionField, Kind};
 use crate::machining2d::GenError;
 use crate::verify::Warning;
-use crate::wire_edm::{wire_contour_tapered, WireParams, WireTaper};
+use crate::wire_edm::{clearance_door, wire_burnout, wire_contour_tapered, WireParams, WireTaper};
 
 use super::kinds::Carried;
 use super::types::{OpParams, WireContourOp, WireSide};
@@ -34,6 +34,8 @@ pub(super) fn seed_wire_contour(c: &Carried) -> OpParams {
         start: None,
         taper_deg: 0.0,
         four_axis: None,
+        burnout: None,
+        clearance: super::types::DEFAULT_CLEARANCE,
     })
 }
 
@@ -90,7 +92,12 @@ pub fn condition_of(world: &World, setup: Option<&str>, op: &WireContourOp) -> R
     let (Some(gap), Some(wire_diameter)) = (c.gap, c.wire_diameter) else {
         return Err(format!("machine {}: EDM condition {:?} states no gap or no wire diameter", machine.model, c.id));
     };
-    Ok(WireCondition { id: c.id.clone(), wire_diameter, gap, machine: machine.model.clone(), max_taper_deg: edm.max_taper_deg })
+    let cond = WireCondition { id: c.id.clone(), wire_diameter, gap, machine: machine.model.clone(), max_taper_deg: edm.max_taper_deg };
+    // The burnout's clearance against the condition's kerf (#540).
+    if let Some(clear) = op.burnout {
+        clearance_door(clear, cond.wire_diameter * 0.5 + cond.gap)?;
+    }
+    Ok(cond)
 }
 
 /// The condition a wire EDM kind's generation cuts with, read where
@@ -153,12 +160,18 @@ pub fn conditions_of(world: &World, setup: Option<&str>) -> Vec<String> {
 }
 
 /// The generator's numbers from the op's, the condition's and the
-/// world's.
+/// world's. `stock` is the setup's stock outline in XY - the edge an
+/// open run is entered from (#1109).
 ///
 /// # Errors
 /// A workpiece top or bottom that does not resolve, or a bottom that
 /// does not stand below the top.
-pub fn wire_params(op: &WireContourOp, cond: &WireCondition, hs: &ResolvedHeights) -> Result<WireParams, GenError> {
+pub fn wire_params(
+    op: &WireContourOp,
+    cond: &WireCondition,
+    hs: &ResolvedHeights,
+    stock: Option<Region>,
+) -> Result<WireParams, GenError> {
     let (Some(top), Some(bottom)) = (hs.top, hs.bottom) else {
         return Err(GenError::Invalid("wire contour: the workpiece's top and bottom must both resolve".into()));
     };
@@ -174,12 +187,15 @@ pub fn wire_params(op: &WireContourOp, cond: &WireCondition, hs: &ResolvedHeight
         side: op.side,
         start: op.start.map(|[x, y]| Point2::new(x, y)),
         plane_z: bottom,
+        stock,
+        clearance: op.clearance,
     })
 }
 
 /// Generate: `picks` is the picked profile (closed rings, open runs)
 /// when the source is a selection; otherwise `base` - the model's
-/// through-silhouette - is the profile. No verification runs yet (the
+/// through-silhouette - is the profile. `stock` is read only for an
+/// open run (#1109). No verification runs yet (the
 /// wire sweep against the part is #534), and the path's notes say so.
 pub(super) fn generate_wire(
     op: &WireContourOp,
@@ -188,24 +204,46 @@ pub(super) fn generate_wire(
     picks: Option<(Vec<Loop>, Vec<Vec<Point2>>)>,
     ruled: Option<Result<super::wire_ruled::RuledPicks, GenError>>,
     base: impl FnOnce() -> Result<Region, GenError>,
+    stock: impl FnOnce() -> Option<Region>,
 ) -> Result<(Toolpath, Vec<Warning>), GenError> {
     let cond = cond?;
-    let p = wire_params(op, &cond, hs)?;
-    // #537: two profiles paired into rulings - its own generator.
+    // #537: two profiles paired into rulings - its own generator, read
+    // from its own picks. A burnout (#540) is cut vertical only and an
+    // open run (#1109) has no ring to pair: both refused by name, never
+    // cut as something else.
     if let Some(four) = &op.four_axis {
+        if op.burnout.is_some() {
+            return Err(GenError::Invalid(
+                "wire contour: a 4-axis cut is asked with a no-core burnout - the burnout is cut vertical only; turn the burnout off or cut the two profiles without it".into(),
+            ));
+        }
+        let p = wire_params(op, &cond, hs, None)?;
         let picks = ruled.ok_or_else(|| super::job::unreached("wire profiles"))??;
         return super::wire_ruled::generate(op, four, &cond, &p, hs, &picks).map(|path| (path, Vec::new()));
     }
+    let (loops, chains) = match picks {
+        Some(geom) => geom,
+        None => (base()?.loops().to_vec(), Vec::new()),
+    };
+    let stock = if chains.is_empty() { None } else { stock() };
+    let p = wire_params(op, &cond, hs, stock)?;
     let taper = WireTaper {
         angle_deg: op.taper_deg,
         top_z: hs.top.unwrap_or(p.plane_z),
         max_deg: cond.max_taper_deg,
         machine: cond.machine.clone(),
     };
-    let (loops, chains) = match picks {
-        Some(geom) => geom,
-        None => (base()?.loops().to_vec(), Vec::new()),
+    let path = match op.burnout {
+        // #536 x #540: the burnout's rings are cut vertical; a taper
+        // with them is refused by name, never cut upright silently.
+        Some(_) if op.taper_deg != 0.0 => {
+            return Err(GenError::Invalid(format!(
+                "wire contour: a {:.3} degree taper is asked with a no-core burnout - the burnout is cut vertical only; set the taper to 0 or turn the burnout off",
+                op.taper_deg
+            )))
+        }
+        Some(clearance) => wire_burnout(&loops, &chains, &p, clearance)?,
+        None => wire_contour_tapered(&loops, &chains, &p, &taper)?,
     };
-    let path = wire_contour_tapered(&loops, &chains, &p, &taper)?;
     Ok((path, Vec::new()))
 }

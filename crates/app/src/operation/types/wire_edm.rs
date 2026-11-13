@@ -13,6 +13,11 @@ use super::height::Height;
 
 pub use crate::wire_edm::WireSide;
 
+/// The run-out clearance (mm) a new wire cut is seeded with (#1109): an
+/// open run is threaded and run out this far clear of the stock's edge,
+/// past the kerf. A closed profile never reads it.
+pub const DEFAULT_CLEARANCE: f64 = 1.0;
+
 /// The longest condition id an operation stores (a control's selector
 /// is a short word; this only bounds a hand-edited file).
 pub const CONDITION_ID_MAX: usize = 64;
@@ -30,7 +35,9 @@ pub struct WireContourOp {
     /// empty word is "none chosen", refused at the command door.
     pub condition: String,
     /// Which side of the profile is the product - stated by the user,
-    /// never inferred from the geometry (#290 D8).
+    /// never inferred from the geometry (#290 D8): die / punch for a
+    /// closed profile, the kerf's left / right of travel for an open
+    /// run (#1109).
     pub side: WireSide,
     /// The start hole / threading point, world XY mm; `None` is not
     /// stated, and a closed profile is refused at generation without it.
@@ -40,6 +47,14 @@ pub struct WireContourOp {
     /// plane (a die's relief, a drafted punch's base), negative narrows
     /// it. The machine's `edm.max_taper_deg` bounds it at generation.
     pub taper_deg: f64,
+    /// No-core burnout (#540): `Some(clearance)` burns the pocket's
+    /// whole interior out by offset rings, the wire centre at least
+    /// `clearance` mm from the walls (never under the kerf offset);
+    /// `None` cuts the profile alone.
+    pub burnout: Option<f64>,
+    /// An open run's threading and run-out clearance past the kerf, mm
+    /// (#1109); unread for a closed profile.
+    pub clearance: f64,
     /// The 4-axis cut (#537): `Some` reads the selection as two closed
     /// profiles - the upper on the top plane, the lower on the bottom
     /// plane - and pairs them into rulings by the stated rule. `None`
@@ -114,6 +129,9 @@ impl WireContourOp {
             && self.taper_deg.is_finite()
             && self.taper_deg.abs() < 90.0
             && self.four_axis.as_ref().is_none_or(WireFourAxis::is_sane)
+            && self.burnout.is_none_or(|c| c.is_finite() && c > 0.0 && c < 1e6)
+            && self.clearance.is_finite()
+            && (0.0..=crate::wire_edm::CLEARANCE_MAX).contains(&self.clearance)
             && self.condition.len() <= CONDITION_ID_MAX
             && !self.condition.chars().any(char::is_control)
     }

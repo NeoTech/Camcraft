@@ -11,7 +11,7 @@
 //! suite `fanuc_post.rs` already locks); the four stage-B dialects get
 //! one subdirectory each.
 //!
-//! Gate map (M4.4): covers app::cl, app::post, app::posting.
+//! Gate map (M4.4): covers cl::cl, post::post, app::posting.
 
 use camcraft_app::cl::{CycleKind, MoveKind};
 use camcraft_app::post::{cnc, engine};
@@ -54,6 +54,8 @@ const POSTS: &[(&str, &str, &str)] = &[
     ("Heidenhain", "heidenhain", "heidenhain"),
     ("Mazak", "mazak", "mazak"),
     ("Tormach PathPilot", "tormach", "tormach"),
+    ("grblHAL", "grblhal", "grblhal"),
+    ("TinyG", "tinyg", "tinyg"),
     ("Doosan DNM", "doosan-dnm", "doosan-dnm"),
     ("Makera Carvera", "carvera", "carvera"),
 ];
@@ -62,9 +64,14 @@ const POSTS: &[(&str, &str, &str)] = &[
 /// rather than post, so it has no `.nc` there. Heidenhain (#51) supports
 /// tapping, but this legacy golden lacks spindle speed. Carvera (#707)
 /// cannot tap (no canned cycles or spindle reverse).
+/// #710: grblHAL's core G-code list has no G84 either; TinyG has no
+/// canned cycles at all and posts drilling as plain moves, but a tap
+/// cannot be plain moves.
 const REFUSED: &[(&str, &str, &str)] = &[
     ("heidenhain", "tap_plate", "tapping needs a positive integral spindle speed"),
     ("carvera", "tap_plate", "tapping"),
+    ("grblhal", "tap_plate", "tapping"),
+    ("tinyg", "tap_plate", "tapping"),
 ];
 
 /// The TURNING dialects (M13.5): their goldens are the lathe
@@ -199,6 +206,12 @@ fn synth_stream_with(wcs: &str, tap: bool) -> String {
         R::Param { name: "OriginX".into(), value: json!(10.0) },
         R::Param { name: "OriginY".into(), value: json!(20.0) },
         R::Param { name: "OriginZ".into(), value: json!(5.0) },
+        // #1028: the planes a generator states for every section (as in
+        // the recorded drill_retract stream): the clearance, and the hop
+        // the holes traverse at - above their R plane 2. The holes below
+        // carry no leaving rapids, so each cycle is seated at this hop.
+        R::Param { name: "ClearancePlane".into(), value: json!(10.0) },
+        R::Param { name: "RetractPlane".into(), value: json!(5.0) },
         R::Tool { number: 2, name: "10MM END MILL".into() },
         R::Section { begin: true },
         // The contour: moves 0..2, no cycle anchored at or below 2
@@ -286,8 +299,11 @@ fn the_synthesized_stream_locks_the_tool_and_spindle_words() {
         // #51: Heidenhain supports the full G55 + tap stream.
         // #707: the Carvera refuses the tap the same way (no canned
         // cycles, no spindle reverse); its G55 stands.
+        // #710: grblHAL has no G84, so its golden drops only the tap;
+        // TinyG the same (its drill chains post as plain moves).
         let stream = match *cps_stem {
             "carvera" => synth_stream_with("G55", false),
+            "grblhal" | "tinyg" => synth_stream_with("G55", false),
             _ => synth_stream(),
         };
         let cps = read(&format!("assets/posts/{cps_stem}.cps"));
@@ -377,6 +393,8 @@ const EXTENSIONS: &[(&str, &str)] = &[
     ("heidenhain", "I"),
     ("mazak", "nc"),
     ("tormach", "nc"),
+    ("grblhal", "nc"),
+    ("tinyg", "gcode"),
     ("doosan-dnm", "nc"),
     ("carvera", "nc"),
     ("fanuc-lathe", "nc"),

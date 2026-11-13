@@ -17,6 +17,7 @@ mod height;
 mod links;
 mod params;
 mod plasma;
+mod sinker;
 mod sane;
 mod sel;
 mod wire_edm;
@@ -33,7 +34,9 @@ pub use camcraft_post::post::AfterOperation;
 pub use height::{Height, HeightReference};
 pub use params::{OpParams, Tilt};
 pub use plasma::{PlasmaComp, PlasmaOp};
+pub use sinker::{SinkerBurnOp, SinkerDatum, SinkerOrbit, SinkerOrbitKind, SinkerSide, SinkerSideBurnOp, SinkerSideDirection};
 pub use wire_edm::{
-    WireContourOp, WireFourAxis, WirePairingRule, WireSide, WireSyncPair, CONDITION_ID_MAX, FOUR_AXIS_TOLERANCE, SYNC_PAIRS_MAX,
+    WireContourOp, WireFourAxis, WirePairingRule, WireSide, WireSyncPair, CONDITION_ID_MAX, DEFAULT_CLEARANCE, FOUR_AXIS_TOLERANCE,
+    SYNC_PAIRS_MAX,
 };
 pub use sel::{FeatureSel, GenStamp, GeoSel, OpStatus, OpType, SrcRef, WCS_SLOTS};

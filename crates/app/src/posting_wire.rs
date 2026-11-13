@@ -25,7 +25,7 @@
 
 use crate::model;
 use crate::operation::wire_verify::wire_verdict;
-use crate::operation::{self, WireContourOp};
+use crate::operation::{self, OpParams, WireContourOp};
 use crate::post::AfterOperation;
 use crate::post::{self, cnc, Dump};
 use crate::schema::Operation;
@@ -78,7 +78,13 @@ pub fn wire_clause(world: &World) -> WireClause {
             Err(why) => out.problems.push(format!("{name}: {why}")),
             Ok(v) => {
                 out.problems.extend(v.findings.iter().map(|f| format!("{name}: wire {}", f.describe())));
-                judged.push(format!("{name} {}", slugs(&v.slugs)));
+                let what = match (v.skipped, &op.params) {
+                    // #1109: an open run says which laws it skipped and why.
+                    (Some(why), OpParams::WireContour(w)) => format!("open run ({} of travel): kerf judged; {why}", w.side.word()),
+                    (Some(why), _) => why.to_owned(),
+                    (None, _) => slugs(&v.slugs),
+                };
+                judged.push(format!("{name} {what}"));
             }
         }
     }
