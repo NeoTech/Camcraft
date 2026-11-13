@@ -106,6 +106,7 @@ pub fn operation_for(golden: &str) -> Operation {
         g if g.starts_with("pocket_") => mill("Pocket1", "Pocket", 3, "8MM 3FL END MILL", 8.0, 5000.0),
         "slot_fullwidth_centerline" => mill("Slot1", "Slot", 1, "10MM 3FL END MILL", 10.0, 4500.0),
         g if g.starts_with("slot_") => mill("Slot1", "Slot", 2, "6MM 3FL END MILL", 6.0, 6000.0),
+        g if g.starts_with("trochoid_") => mill("Trochoid1", "Trochoidal slot", 2, "6MM 3FL END MILL", 6.0, 6000.0),
         g if g.starts_with("trace_") => mill("Trace1", "Trace", 2, "6MM 3FL END MILL", 6.0, 6000.0),
         "tap_plate" => Operation {
             name: "Tap1",

@@ -276,7 +276,10 @@ fn the_plane_goes_back_to_g17_before_a_cycle_and_at_section_end() {
         })
     };
     let s = cnc::serialize(&[
+        // #1359: each section states its spindle (a cut with it stopped
+        // is refused by name).
         R::Tool { number: 1, name: "DRILL".into() },
+        R::Param { name: "SpindleSpeed".into(), value: serde_json::json!(3000) },
         R::Section { begin: true },
         mv(10.0, 0.0, 5.0, None, ArcPlane::Xy),
         mv(5.0, 0.0, 0.0, Some((5.0, 5.0)), ArcPlane::Xz),
@@ -295,6 +298,7 @@ fn the_plane_goes_back_to_g17_before_a_cycle_and_at_section_end() {
         }),
         mv(20.0, 0.0, 5.0, None, ArcPlane::Xy),
         R::Section { begin: false },
+        R::Param { name: "SpindleSpeed".into(), value: serde_json::json!(3000) },
         R::Section { begin: true },
         mv(30.0, 0.0, 5.0, None, ArcPlane::Xy),
         mv(30.0, 5.0, 0.0, Some((5.0, 5.0)), ArcPlane::Yz),
