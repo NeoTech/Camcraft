@@ -108,6 +108,9 @@ impl EditOperationParams {
                 prev.params.kind()
             )));
         }
+        if let Some(why) = params.named_refusal() {
+            return Err(CommandError::Invalid(why));
+        }
         sinker_gate(world, prev.setup.as_deref(), &params)?;
         if !params.is_sane() {
             return Err(CommandError::Invalid(format!(
@@ -116,6 +119,8 @@ impl EditOperationParams {
             )));
         }
         heights_gate(world, prev.setup.as_deref(), &prev.src, &params)?;
+        // #894: a thread's pitch, infeed and holes against the mounted thread mill.
+        super::gates::thread_gate(world, &params, &prev.tool)?;
         if let Some(msg) = crate::operation::side_sane(&params, &prev.src) {
             return Err(CommandError::Invalid(msg));
         }

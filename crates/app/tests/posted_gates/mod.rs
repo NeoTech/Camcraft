@@ -9,7 +9,13 @@
 //! warnings ride the verdict line). Every program is first proved
 //! byte-identical to its committed CL golden.
 //!
+//! The wire punch rides `wire` (#534): the wire laws its post runs.
+//!
 //! Provenance: our own harness over our own goldens; no vendor material.
+
+pub mod thread;
+mod wire;
+pub use wire::{wire_findings, wire_verdict};
 
 use flecs_ecs::prelude::World;
 

@@ -27,6 +27,7 @@ OPTIONS:
     --machine <mch>   machine definition (.mch JSON)
     --log <file>      write the warning list here instead of stderr
     --trace <file>    write the block-by-block trace here (stage D)
+    --units <mm|inch> the program's unit (#902; default mm)
     -h, --help        print this text
     --version         print the version
 ";
@@ -36,6 +37,7 @@ fn main() -> ExitCode {
     let mut machine: Option<String> = None;
     let mut log: Option<String> = None;
     let mut trace: Option<String> = None;
+    let mut units: Option<String> = None;
     let mut positional: Vec<String> = Vec::new();
     let mut it = args.iter();
     while let Some(a) = it.next() {
@@ -48,10 +50,11 @@ fn main() -> ExitCode {
                 println!("post {} (boa_engine)", env!("CARGO_PKG_VERSION"));
                 return ExitCode::SUCCESS;
             }
-            "--machine" | "--log" | "--trace" => {
+            "--machine" | "--log" | "--trace" | "--units" => {
                 let slot = match a.as_str() {
                     "--machine" => &mut machine,
                     "--log" => &mut log,
+                    "--units" => &mut units,
                     _ => &mut trace,
                 };
                 match it.next() {
@@ -80,6 +83,7 @@ fn main() -> ExitCode {
         machine.as_deref(),
         log.as_deref(),
         trace.as_deref(),
+        units.as_deref(),
     )
 }
 
@@ -110,6 +114,7 @@ fn run(
     machine: Option<&str>,
     log: Option<&str>,
     trace: Option<&str>,
+    units: Option<&str>,
 ) -> ExitCode {
     let cps = match std::fs::read_to_string(config) {
         Ok(s) => s,
@@ -146,7 +151,10 @@ fn run(
         }
         None => Value::Null,
     };
-    match engine::run(&cps, &mch, &stream) {
+    // #902: the document's unit, stated the way the app states it; the
+    // engine refuses a word that is not mm or inch by name.
+    let options = units.map_or(Value::Null, |u| serde_json::json!({ "Units": u }));
+    match engine::run_with(&cps, &mch, &stream, &options) {
         Ok(out) => {
             if let Err(e) = std::fs::write(Path::new(output), &out.program) {
                 return die(format!("cannot write {output}: {e}"));

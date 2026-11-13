@@ -39,10 +39,12 @@ pub mod machine;
 pub mod nose_tip;
 pub mod probe_rec;
 mod program;
+pub mod units;
 
 pub use after_op::AfterOperation;
 pub use coolant::CoolantMode;
 pub use engine::{LineInfo, PostOutput, TraceBlock};
+pub use js::ProgramId;
 
 use crate::cl::{MoveKind, Toolpath};
 use cnc::{CycleRec, MoveRec, Record};

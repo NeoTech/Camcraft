@@ -231,6 +231,9 @@ pub(super) fn validate_kind(dto: &EntityDto, kind: EntityKind) -> Result<(), Pro
                 )));
             }
             let params = op.params.to_params();
+            if let Some(why) = params.named_refusal() {
+                return Err(corrupt(format!("'{}': {why}", dto.name)));
+            }
             if !params.is_sane() {
                 return Err(corrupt(format!(
                     "operation parameters are not usable for a {} operation '{}'",

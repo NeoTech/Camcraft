@@ -17,6 +17,7 @@ setCodePage = "utf-8";
 capabilities = 1; // reference contract: integer feature mask (bit 1 = milling)
 coolantModes = true; // reads PARAM Coolant (#112/#150): the engine refuses non-Flood ops for a post without it
 afterModes = true; // reads PARAM AfterOperation (#110): the engine refuses a stop or home ask for a post without it
+programUnits = "mm inch"; // #902: writes the document's unit (postOptions.Units), G21 / G20
 
 // Determinism law: no timestamps, no randomness - the same stream
 // always posts to the same text (golden files depend on it).
@@ -49,13 +50,25 @@ var orgX = 0, orgY = 0, orgZ = 0; // the WCS slot origin (OriginX/Y/Z PARAMs)
 
 // ------------------------------------------------------------ helpers
 function has(v) { return v !== null && v !== undefined && isFinite(v); }
-function fu(v) {  // mm at three decimals, trailing zeros trimmed
-  if (!has(v)) return "0";
-  var s = Number(v).toFixed(3);
+// #902: the program's unit is the document's (postOptions.Units, "mm"
+// or "inch"; absent = mm), never the machine file's. The stream speaks
+// mm and mm/min: an inch program writes every length / 25.4 at four
+// decimals and every feed in in/min at two; angles, seconds and rpm
+// carry no length and are written as they come.
+var inch = false;
+function trimNum(s) {
   if (s.indexOf(".") >= 0) s = s.replace(/0+$/, "").replace(/\.$/, "");
   return s === "-0" ? "0" : s;
 }
-function ff(v) { return has(v) && v > 0 ? String(Math.round(v)) : "0"; }
+function fu(v) {  // a length: mm at three decimals, or inch at four
+  if (!has(v)) return "0";
+  return trimNum(Number(inch ? v / 25.4 : v).toFixed(inch ? 4 : 3));
+}
+function ff(v) {  // a feed: whole mm/min, or in/min at two decimals
+  if (!(has(v) && v > 0)) return "0";
+  return inch ? trimNum((v / 25.4).toFixed(2)) : String(Math.round(v));
+}
+function eps() { return inch ? "0.0001" : "0.001"; } // one output step, the probe checks' band
 function ni(v) { return has(v) ? String(Math.round(v)) : "0"; }
 function w(letter, v) { return has(v) ? letter + fu(v) : ""; }
 function fw(v) { return has(v) ? "F" + ff(v) : ""; }
@@ -167,12 +180,27 @@ function centerWords(p) {
 }
 
 // -------------------------------------------------------------- header
-// The program's O-word (#111): O0001 for the whole job, and one file
-// per operation counts up (the engine's programNumber); a host that
-// publishes none posts O0001.
+// The document's program identity (#258), from the engine's `program`
+// global: its number (1 when the document states none; one file per
+// operation counts up from it, #111), whether the document stated it,
+// and its program comment ("" for none - the header then names the
+// machine, as before #258). A host that publishes none posts O0001.
+function progNo() {
+  var n = typeof program !== "undefined" ? program.number : (typeof programNumber !== "undefined" ? programNumber : 1);
+  return Math.round(Number(n) || 1);
+}
+function progNumbered() { return typeof program !== "undefined" && program.numbered === true; }
+function progComment() { return clean(typeof program !== "undefined" ? program.comment : ""); }
+// The program's O-word (#111, #258). Mazak's published EIA/ISO
+// programming manuals number an EIA program by its O-word; this post
+// writes the four-digit O0001-O9999 every Fanuc-style EIA control in
+// the family reads (the wider work-number range is not assumed).
+// A number outside the range is refused by name, never clamped onto
+// another program's number.
 function oWord() {
-  var n = typeof programNumber !== "undefined" ? Math.round(Number(programNumber) || 1) : 1;
-  var t = String(Math.max(1, Math.min(n, 9999)));
+  var n = progNo();
+  if (n < 1 || n > 9999) throw new Error("program number " + n + " is outside O0001-O9999, the control's program numbers");
+  var t = String(n);
   while (t.length < 4) t = "0" + t;
   return "O" + t;
 }
@@ -222,22 +250,23 @@ function toolNote() {  // just before the tool change it describes
   toolKind = ""; toolCr = 0;
 }
 
-// #901: the unit this post writes - millimetres - stated in a block of
-// its own before any motion, so a control left in inch by power-on or
-// the last program never reads mm numbers as inches (RS-274 / ISO 6983:
-// G20 inch, G21 mm; the family's EIA/ISO conventions follow the Fanuc
-// words, G21 in a block of its own at the program's start). Where the
-// program's unit is chosen, and inch output, is #902.
+// #901: the unit this post writes stated in a block of its own before
+// any motion, so a control left in the other unit by power-on or the
+// last program never misreads the numbers (RS-274 / ISO 6983: G20 inch,
+// G21 mm; the family's EIA/ISO conventions follow the Fanuc words, the
+// unit word in a block of its own at the program's start). #902: the
+// unit is the document's.
 function unitBlock() {
-  block(["G21"]);
+  block([inch ? "G20" : "G21"]);
 }
 
 function onOpen() {
+  inch = typeof postOptions !== "undefined" && postOptions.Units === "inch";
   var nm = (typeof machine !== "undefined" && machine.name) || "CAMCRAFT";
   writeln("%");
-  // #594: the name is user text from the machine file - cleaned like
-  // every other comment text, so `Tormach 770MX (ML)` never nests.
-  block([oWord(), "(" + (clean(nm) || "CAMCRAFT") + ")"]);
+  // #594: the machine name is user text - cleaned like every other
+  // comment text, so `Tormach 770MX (ML)` never nests.
+  block([oWord(), "(" + (progComment() || clean(nm) || "CAMCRAFT") + ")"]);
   unitBlock();
 }
 
@@ -339,7 +368,7 @@ function startPreamble() {
     toolWait = false;
   }
   if (spindleWait && sRpm > 0) {   // a touch probe (#173) states no spindle
-    block(["MOTON", "S" + ff(sRpm)]);
+    block(["MOTON", "S" + ni(sRpm)]);
     spindleWait = false;
   }
   if (probeStop) block(["MOTOFF"]);
@@ -577,7 +606,7 @@ function onProbeMove() {
   block(["G31", wo("X", p.X, orgX), wo("Y", p.Y, orgY), wo("Z", p.Z, orgZ), fw(p.Feed)]);
   var ai = travelAxis(p);
   var tgt = [p.X - orgX, p.Y - orgY, p.Z - orgZ][ai];
-  alarmUnless("ABS[" + minusU("#" + (5061 + ai), tgt) + "]GE0.001", 2, "PROBE NO CONTACT");
+  alarmUnless("ABS[" + minusU("#" + (5061 + ai), tgt) + "]GE" + eps(), 2, "PROBE NO CONTACT");
   if (has(p.Measure) && p.Measure >= 0) {
     var b = probeBase + 3 * p.Measure;
     block(["#" + b + "=#5061"]);
@@ -609,7 +638,7 @@ function onProbeGuard() {
   var to = [p.X, p.Y, p.Z], from = [p.StartX, p.StartY, p.StartZ], org = [orgX, orgY, orgZ];
   for (var ai = 0; ai < 3; ai++) {
     if (has(from[ai]) && Math.abs(to[ai] - from[ai]) < 1e-6) continue;  // an axis that holds still
-    alarmUnless("ABS[" + minusU("#" + (5061 + ai), to[ai] - org[ai]) + "]LE0.001", 3, "PROBE HIT ON POSITIONING");
+    alarmUnless("ABS[" + minusU("#" + (5061 + ai), to[ai] - org[ai]) + "]LE" + eps(), 3, "PROBE HIT ON POSITIONING");
   }
 }
 function slotOf(word) {  // "G55" -> 1

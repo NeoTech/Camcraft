@@ -415,6 +415,7 @@ mod plasma_clause_impl;
 pub use plasma_clause_impl::{plasma_clause, PlasmaClause, PLASMA_VERDICT};
 #[path = "posting_wire.rs"]
 mod wire;
+pub use wire::{wire_clause, WireClause, WIRE_VERDICT};
 #[path = "posting_per_op.rs"]
 mod per_op;
 #[path = "posting_suppressed.rs"]
@@ -425,6 +426,16 @@ mod wcs_rotation;
 mod wcs_slot;
 #[path = "posting_mounts.rs"]
 mod mounts;
+#[path = "posting_program.rs"]
+mod program;
+pub use program::{
+    document_program_id, parse_number as parse_program_number, program_id, program_info, program_info_set,
+    PROGRAM_COMMENT_MAX, PROGRAM_NUMBER_MAX,
+};
+pub(crate) use program::{check as check_program_info, normalised as normalised_program_info};
+#[path = "posting_units.rs"]
+mod program_unit;
+pub use program_unit::{program_options, unit_word};
 #[path = "posting_serves.rs"]
 mod serves;
 #[path = "posting_nose.rs"]
@@ -520,7 +531,8 @@ fn post_script_body(world: &World, out_path: &Path, cps: &str, label: Option<&st
         return Err(format!("post blocked - {}", report.problems.join("; ")));
     }
     let stream = cnc::serialize(&records);
-    let out = engine::run_with(cps, &machine_value_for(&machine), &stream, &options_value(post_options(world)))
+    let id = document_program_id(world, 1)?;
+    let out = engine::run_program_with(cps, &machine_value_for(&machine), &stream, &program_options(world), &id)
         .map_err(|e| format!("post engine: {e}"))?;
     if !out.warnings.is_empty() {
         return Err(format!(
@@ -708,6 +720,10 @@ pub fn verification_report_by(world: &World, voice: &dyn Fn(Option<&str>) -> pos
     // not run for it, never a silent skip.
     let plasma = plasma_clause(world);
     problems.extend(plasma.problems);
+    // The wire clause (#534): likewise for a wire EDM cut - the 2.5D
+    // kerf, threading and slug laws, every finding binding.
+    let wire = wire_clause(world);
+    problems.extend(wire.problems);
 
     // The suppression clause (#110 review B1): an op generated against
     // a suppressed op's cut refuses by name - the cut it assumed is not
@@ -758,7 +774,11 @@ pub fn verification_report_by(world: &World, voice: &dyn Fn(Option<&str>) -> pos
     // what came after it). The law and lines live in
     // `operation::probe_problems`.
     problems.extend(crate::operation::probe_problems(world));
-    let not_judged = match (sim.not_judged, plasma.line) {
+    let plasma_line = match (plasma.line, wire.line) {
+        (Some(p), Some(w)) => Some(format!("{p}; {w}")),
+        (p, w) => p.or(w),
+    };
+    let not_judged = match (sim.not_judged, plasma_line) {
         (Some(s), Some(p)) => Some(format!("{s}; {p}")),
         (None, Some(p)) => Some(format!("{NOT_JUDGED}: {p}")),
         (s, None) => s,

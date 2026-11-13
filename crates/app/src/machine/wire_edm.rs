@@ -26,7 +26,7 @@ use crate::operation::Family;
 pub(super) fn check_wire_ops(world: &World, machine: &Machine, ops: &[(String, Entity)]) -> Result<MachineCheck, String> {
     let mut out = MachineCheck::default();
     out.notes.push(format!(
-        "{}: a wire EDM - only the X/Y travel is judged here; the wire's sweep against the part, the slug and the start hole are not (wire verification is not built yet)",
+        "{}: a wire EDM - only the X/Y travel is judged here; the wire's sweep against the part, the slug and the start hole are judged at the post by the wire laws (#534)",
         machine.model
     ));
     out.notes.push(format!(
