@@ -23,6 +23,7 @@ fn params(external: bool, passes: ThreadPasses) -> ThreadParams {
         climb: true,
         passes,
         clearance_z: 10.0,
+        r_z: None,
         retract_z: None,
         feed: 400.0,
         plunge_feed: 120.0,

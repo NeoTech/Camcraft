@@ -215,6 +215,7 @@ fn thread_solid(model_hole: &[P2], minor: f64) -> usize {
         passes: camcraft_app::machining2d::ThreadPasses::default(),
         hand: camcraft_app::cl::ThreadHand::Right,
         clearance_z: 25.0,
+        r_z: None,
         retract_z: None,
         feed: 400.0,
         plunge_feed: 150.0,
