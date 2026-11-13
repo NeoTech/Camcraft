@@ -22,6 +22,7 @@ fn params() -> WireParams {
         side: WireSide::Punch,
         start: Some(Point2::new(-30.0, 0.0)),
         plane_z: 0.0,
+        tabs: None,
         stock: None,
         clearance: 1.0,
     }
