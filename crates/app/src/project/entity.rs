@@ -567,7 +567,8 @@ pub struct EntityDto {
     #[serde(default, skip_serializing_if = "is_unrevised")]
     pub rev: u64,
     /// The chord error (mm) of a model imported coarser than the STEP
-    /// importer promises (#864, `schema::ReducedFidelity`). Absent on
+    /// importer promises (#864, `schema::ReducedFidelity`), and of a
+    /// stock copied from one (#1056: the copy carries it). Absent on
     /// every other entity, so a document without such a model - and every
     /// file from before the key existed - saves byte for byte as it did
     /// and loads as full fidelity.
