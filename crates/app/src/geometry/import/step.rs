@@ -23,6 +23,9 @@
 //!   #1548), and an edge on a `SURFACE_CURVE` is read from its 3D curve
 //!   (`step_edge3d`, #1548): a rounded-edge solid then meshes closed
 //!   instead of being refused or losing faces.
+//! - A shell the file declares closed must mesh closed, and a face the
+//!   kernel returns no mesh for is refused by name (`step_closed`, #1573):
+//!   truck drops or mis-trims such faces without an error.
 
 use std::panic::AssertUnwindSafe;
 
@@ -153,6 +156,8 @@ pub fn parse_with_chord_budget(data: &[u8], budget: usize) -> Result<(Mesh, f64)
         return Err(ImportError::Step("no shells found".into()));
     }
 
+    // #1573: shells declared closed must mesh closed.
+    let closed = super::step_closed::closed_shells(section);
     let max_facets = facet_budget(budget);
     let mut facets: Vec<Triangle> = Vec::new();
     let mut chord = 0.0f64;
@@ -166,7 +171,8 @@ pub fn parse_with_chord_budget(data: &[u8], budget: usize) -> Result<(Mesh, f64)
         // AssertUnwindSafe holds for our purposes: on a panic we discard all
         // outputs and abort the import.
         let per_shell = std::panic::catch_unwind(AssertUnwindSafe(|| {
-            shell_facets(&table, (*shell_id, shell), budget, mm_per_unit.unwrap_or(1.0))
+            let closed = closed.contains(shell_id);
+            shell_facets(&table, (*shell_id, shell), closed, budget, mm_per_unit.unwrap_or(1.0))
         }));
         let (tris, tol) = match per_shell {
             Err(_) => {
@@ -207,6 +213,7 @@ pub fn parse_with_chord_budget(data: &[u8], budget: usize) -> Result<(Mesh, f64)
 fn shell_facets(
     table: &Table,
     (shell_id, shell): (u64, &truck_stepio::r#in::ShellHolder),
+    closed: bool,
     budget: usize,
     mm_per_unit: f64,
 ) -> Result<(Vec<Triangle>, f64), ImportError> {
@@ -232,11 +239,19 @@ fn shell_facets(
     // triangles, stop with `TooLarge` as soon as `budget` is crossed. A
     // closure so the heavily-aliased CompressedShell type is inferred
     // instead of spelled out.
+    // The first face each pass got no polygon for, by the pass's tol.
+    let dropped: std::cell::RefCell<Vec<(f64, Option<usize>)>> = std::cell::RefCell::default();
     let triangulate = |tol: f64| -> Result<Vec<Triangle>, ImportError> {
         guarded.reset();
         // A panic is held until the meters are read: a face that ran past
         // its cap is the cause worth naming, not the panic it led to.
-        let meshed = std::panic::catch_unwind(AssertUnwindSafe(|| cshell.robust_triangulation(tol).to_polygon()));
+        let meshed = std::panic::catch_unwind(AssertUnwindSafe(|| {
+            let faces = cshell.robust_triangulation(tol);
+            // #1573: truck's `to_polygon` skips a face it has no polygon for.
+            let none = faces.faces.iter().position(|f| f.surface.is_none());
+            dropped.borrow_mut().push((tol, none));
+            faces.to_polygon()
+        }));
         if let Some((i, kind)) = guarded.tripped() {
             // Refused even when a coarser pass met: a surface that jumps
             // converges at any tolerance wider than its gap, and keeping
@@ -310,6 +325,25 @@ fn shell_facets(
     // lives in `step_refine`, which also keeps the tolerance of the mesh
     // it actually kept (#864).
     let kept = super::step_refine::refine(extent, tol_target, budget, triangulate)?;
+    // #1573: the kept pass's dropped face, then the closed-shell law.
+    let faces = cshell.faces.len();
+    let dropped = dropped.borrow().iter().rev().find(|(t, _)| *t == kept.tol).and_then(|(_, i)| *i);
+    let dropped = dropped.map(|i| match face_ids.as_ref().and_then(|ids| ids.get(i)) {
+        Some(id) => format!("face #{id} (face {} of {faces})", i + 1),
+        None => format!("face {} of {faces}", i + 1),
+    });
+    if closed {
+        let (edges, first) = super::step_closed::open_edges(&kept.facets, super::step_closed::WELD);
+        if edges > 0 {
+            let mm = |p: Point3| Point3::new(p.x * k, p.y * k, p.z * k);
+            tracing::error!("step: closed shell #{shell_id} meshes open ({edges} unmatched edges)");
+            return Err(super::step_closed::open_refusal(shell_id, faces, edges, first.map(|(a, b)| (mm(a), mm(b))), dropped));
+        }
+    }
+    if let Some(face) = dropped {
+        tracing::error!("step: {face} of shell #{shell_id} got no mesh from the kernel");
+        return Err(super::step_closed::dropped_refusal(&face, shell_id));
+    }
     if kept.tol > wanted {
         tracing::warn!(
             "step: tessellated at reduced fidelity (tol {:e} mm, target {:e} mm, {} facets) - bounded by memory or by the kernel's least tolerance",

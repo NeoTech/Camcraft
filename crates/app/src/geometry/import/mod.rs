@@ -9,6 +9,7 @@ pub mod obj;
 pub mod step;
 pub mod step_budget;
 pub mod step_csys;
+mod step_closed;
 mod step_diag;
 mod step_edge3d;
 mod step_guard;
