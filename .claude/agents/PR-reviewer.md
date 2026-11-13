@@ -169,7 +169,9 @@ merge.
      must say `Process change: yes` in its body and must NOT edit
      `.claude/PROCESS_VERSION` (the merging session bumps it, AGENTS.md
      "Process changes bump `PROCESS_VERSION`"); a missing line or an edit
-     of that file is a requested change.
+     of that file is a requested change. Exempt: the bump PR itself
+     (`chore(process): PROCESS_VERSION <n>`, one line, MECHANICAL, read by the
+     merging session, no review needed) and #1488, which introduced the rule.
    - Process: body ends `Fixes #N`, has a `Changelog:` line, conventional
      commit subjects; `CHANGELOG.md` edits in the PR conflict with the
      release-time changelog and should be dropped.

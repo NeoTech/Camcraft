@@ -162,7 +162,8 @@ reports `CONFLICTING` without the label - add the label to those):
      with no agent and no delta review.
    - **MECHANICAL** (hand edits only in rule-settled files: `.claude/
      PROCESS_VERSION`, `CHANGELOG.md`, `RECOMMENDED.md`, `Cargo.lock`, PNGs
-     taken from main): the merging session reads `git show --remerge-diff
+     taken from main; `PROCESS_VERSION` stays listed for branches opened before
+     #1153 that still edit it): the merging session reads `git show --remerge-diff
      <merge>` itself, and restores `merge-ready` when it is right.
    - **DELTA** (a conflict was resolved by hand): a **delta review** - a
      reviewer checks only the remerge-diff of those merges (both sides kept,

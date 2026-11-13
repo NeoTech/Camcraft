@@ -234,7 +234,10 @@ A PR that changes a process file (`AGENTS.md`, `.claude/agents/`,
 `scripts/collect-decisions.sh`) says `Process change: yes` in its body and
 does not edit `.claude/PROCESS_VERSION` (AGENTS.md "Process changes bump
 `PROCESS_VERSION`", #1153). The reviewer checks this; a missing line or an
-edit of that file is a requested change (`needs-rework`). The merging
+edit of that file is a requested change (`needs-rework`). Exempt: the bump
+PR itself (`chore(process): PROCESS_VERSION <n>`: MECHANICAL, read by the
+merging session, no agent review, merges at once) and #1488, which introduced
+the rule. The merging
 session bumps the number once per merge batch (`cargo xtask process-bump`)
 and comments on the pinned issue #681 (Process changes):
 `PROCESS_VERSION <n>` · PR #M · what changed · what a fork must do (usually

@@ -89,7 +89,8 @@ afterwards - the work must not bother them.
   --delta <PR> --reviewed <sha>` reports it (SAME). Hand edits confined to
   rule-settled files (`.claude/PROCESS_VERSION`, `CHANGELOG.md`,
   `RECOMMENDED.md`, `Cargo.lock`, snapshot PNGs taken from main) are read by
-  the merging session itself (MECHANICAL). Only a conflict resolved by hand
+  the merging session itself (MECHANICAL; `PROCESS_VERSION` stays on that
+  list for branches opened before #1153 that still edit it). Only a conflict resolved by hand
   gets a delta review of its remerge-diff (DELTA), and new commits get a
   review of those commits (NEW CODE).
 - **Only collaborators' reviews count** (issue #1320, 2026-11-12, decided in
@@ -293,7 +294,10 @@ go to `CHANGELOG.md`.
   the rest, and two could carry the same number (#1117 and #930 both at
   17). Its body carries the line `Process change: yes` instead, and the
   reviewer treats a missing line, or an edit of `PROCESS_VERSION` in the
-  PR, as a requested change. The merging session is the one writer: after
+  PR, as a requested change. Exempt: the bump PR itself and #1488, which
+  introduced this rule and bumped 62 to 63. The one-line bump PR is
+  MECHANICAL: the merging session reads it, it needs no agent review, and
+  it merges at once. The merging session is the one writer: after
   a merge batch that merged at least one process PR it runs `cargo xtask
   process-bump` (one integer, +1, once per batch, however many process PRs
   were in it) in a worktree off the new `main`, opens a one-line PR
