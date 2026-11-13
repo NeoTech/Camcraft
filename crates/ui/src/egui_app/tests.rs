@@ -80,6 +80,7 @@ fn empty_egui_meshes_are_filtered_before_gpu_submission() {
 
 mod face_origin;
 mod geo_row_hover;
+mod pick_mode;
 mod spindle_row;
 mod stock_size;
 mod setup_settings_page;
@@ -155,10 +156,14 @@ mod step_budget;
 mod two_point_marks;
 // #979: the viewport box select.
 mod box_select;
+mod edge_click_modifiers;
 // #1104: the Setups page lists setups only.
 mod setups_declutter;
 // #1206: each setup's own Machine and Post pages pick its own mount.
 mod setup_mount_pages;
+// #1515: a pick on one setup never re-mounts another.
+mod setup_machine_bleed;
+mod setup_post_options_bleed;
 
 /// What the per-frame state of `Shell` is, minus the GPU half: the fields
 /// `shell_layout` touches, so the harness exercises the window's real body.
@@ -1379,7 +1384,10 @@ fn every_registry_kind_gets_its_tab_bar() {
             if has {
                 // #535: a kind that mounts no library tool has no Tool row.
                 assert_eq!(harness.query_by_label("Tool").is_some(), k.mounts_tool(), "{}: the pane opens on the tool row (only of a tool-mounting kind)", k.label);
-                per_tab.push((si, pane_texts(&harness)));
+                // #1514: the pick-mode line is chrome that reads per tab.
+                let mut texts = pane_texts(&harness);
+                texts.retain(|t| !t.starts_with("Picking o"));
+                per_tab.push((si, texts));
             }
         }
         // Chrome: what every open tab shares (heading, tool/source rows,

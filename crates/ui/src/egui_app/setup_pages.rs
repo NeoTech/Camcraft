@@ -13,7 +13,8 @@
 //! one of its nodes, so this guard only shows after a later radio click.)
 //!
 //! Provenance: our own page law (issue #343, the maintainer's per-node
-//! behaviour); no HSMWorks material consulted.
+//! behaviour; #1515, a pick on one setup never re-mounts another); no
+//! HSMWorks material consulted.
 
 use egui::{RichText, Ui};
 
@@ -120,6 +121,13 @@ pub(super) fn ownership(ui: &mut Ui, state: &mut State, ctx: Option<&str>, which
     let mut pick = owns;
     ui.radio_value(&mut pick, false, format!("Use the document's {word} ({doc})"));
     ui.radio_value(&mut pick, true, format!("This setup has its own {word}"));
+    // #1515: say by name where a pick on this page lands - this setup's
+    // own mount, or the document's (which every following setup reads).
+    let target = match which {
+        Mount::Machine => state.machine_target(),
+        Mount::Post => state.post_target(),
+    };
+    ui.label(target_line(word, name, target.as_deref() == Some(name)));
     if pick != owns {
         let setup = name.to_owned();
         state.pending.push_back(match which {
@@ -130,6 +138,17 @@ pub(super) fn ownership(ui: &mut Ui, state: &mut State, ctx: Option<&str>, which
     hint(ui, &format!(
         "Setups with different {word}s post one at a time: a program is written by one post for one machine."
     ));
+}
+
+/// Where a machine (`word`) or post picked on setup `name`'s page lands
+/// (#1515): `own` - that setup's own, nothing else moves; else the
+/// document's, named as such.
+pub(super) fn target_line(word: &str, name: &str, own: bool) -> String {
+    if own {
+        format!("A {word} picked on this page is {name}'s own - no other setup changes.")
+    } else {
+        format!("A {word} picked on this page sets the document's {word} - every setup without its own uses it.")
+    }
 }
 
 /// The active-setup radio's words (#866: "furniture" was our in-code
