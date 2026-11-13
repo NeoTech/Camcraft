@@ -50,7 +50,7 @@
 //! (our code) and the egui vendored sources; no HSMWorks material involved.
 
 use egui::{
-    Align2, Color32, DragValue, FontId, Id, Pos2, RichText, ScrollArea,
+    Align2, Color32, DragValue, FontId, Id, Pos2, ScrollArea,
     Sense, Shape, Stroke, TextEdit, Ui, Vec2, Window,
 };
 
@@ -74,7 +74,7 @@ use super::theme::Tokens;
 // The value widgets graduated to `fields` with the property grid (user
 // review 2026-11-06); the setup pages below and the sibling modules keep
 // reading them through this path.
-pub(crate) use super::fields::{combo, combo_owned, field, num, num_feed, num_plain};
+pub(crate) use super::fields::{combo, field, num, num_feed, num_plain};
 
 /// Tool kind labels, same order as `ToolKind` (mirrors the tool page).
 const TOOL_KINDS: [&str; 16] = [
@@ -135,7 +135,7 @@ pub fn properties(ui: &mut Ui, state: &mut State, pal: &Tokens) {
                 state.sync_setup_ui();
                 ui.heading("Stock");
                 ui.separator();
-                stock_page(ui, state);
+                super::stock_page::stock_page(ui, state);
                 setup_error(ui, state);
             }
             UiTarget::Wcs => {
@@ -184,146 +184,6 @@ fn setup_error(ui: &mut Ui, state: &State) {
         super::error_text::error_text(ui, super::colorvision::text_inks(ui, &state.world).error, &msg);
     }
 }
-// --------------------------------------------------------------- stock page
-
-fn stock_page(ui: &mut Ui, state: &mut State) {
-    // The document's unit (display and posted program, #902) - the
-    // numbers below re-render from the world next pass.
-    super::post_options::units_row(ui, state, "Units");
-    let u = state.units();
-    ui.add_space(3.0);
-    ui.horizontal(|ui| {
-        for (i, name) in ["Box", "Cylinder", "From model"].iter().enumerate() {
-            if ui
-                .radio_value(&mut state.stock_ui.shape, i as i32, *name)
-                .changed()
-            {}
-        }
-    });
-    // #197: the models' size, right above the numbers it informs.
-    match super::stock_info::part_size_lines(&state.world, u) {
-        Some([size, extents]) => {
-            ui.label(size).on_hover_text("The models' bounding box - what Fit to Models wraps, plus the fit margin");
-            ui.label(RichText::new(extents).weak());
-        }
-        None => {
-            ui.label(RichText::new("No models yet - load one to see its size.").weak());
-        }
-    }
-    ui.add_space(3.0);
-    let shape = state.stock_ui.shape;
-    if shape == 1 {
-        field(ui, "Diameter");
-        num(ui, u, &mut state.stock_ui.diameter);
-        field(ui, "Height");
-        num(ui, u, &mut state.stock_ui.height);
-    } else if shape == 2 {
-        // Stock from a model: parts only, as the op Source picker.
-        let models: Vec<String> = model::model_entities(&state.world)
-            .into_iter()
-            .filter(|(_, e)| !model::is_fixture(&state.world, e))
-            .map(|(n, _)| n)
-            .collect();
-        field(ui, "Source");
-        if models.is_empty() {
-            ui.label("No models to take stock from.");
-        } else {
-            let mut idx = models
-                .iter()
-                .position(|m| *m == state.stock_ui.source)
-                .unwrap_or(models.len() - 1);
-            let before = idx;
-            combo_owned(ui, "stk_src", &mut idx, &models);
-            if idx != before {
-                state.stock_ui.source = models[idx.min(models.len() - 1)].clone();
-            }
-        }
-        super::raw_stock_row::raw_stock_row(ui, state);
-    } else {
-        field(ui, "Length (X)");
-        num(ui, u, &mut state.stock_ui.dx);
-        field(ui, "Width (Y)");
-        num(ui, u, &mut state.stock_ui.dy);
-        field(ui, "Height (Z)");
-        num(ui, u, &mut state.stock_ui.dz);
-    }
-    ui.add_space(6.0);
-    field(ui, "X center");
-    num(ui, u, &mut state.stock_ui.x);
-    field(ui, "Y center");
-    num(ui, u, &mut state.stock_ui.y);
-    field(ui, "Z bottom");
-    num(ui, u, &mut state.stock_ui.z);
-    field(ui, "Rotation (yaw deg)");
-    num_plain(ui, &mut state.stock_ui.yaw_deg);
-    ui.add_space(6.0);
-    // #198: a box can be fitted by a separate allowance on each side.
-    let per_side = state.stock_ui.shape == 0 && {
-        ui.checkbox(&mut state.stock_ui.fit_per_side, "Per side")
-            .on_hover_text("Fit to Models pads each face of the box by its own allowance");
-        state.stock_ui.fit_per_side
-    };
-    if per_side {
-        for (i, name) in ["-X", "+X", "-Y", "+Y", "Bottom", "Top"].iter().enumerate() {
-            field(ui, &format!("Fit margin {name}"));
-            num(ui, u, &mut state.stock_ui.fit_sides[i]);
-        }
-    } else {
-        field(ui, "Fit margin");
-        num(ui, u, &mut state.stock_ui.fit_margin);
-    }
-    let sides = state.stock_ui.fit_sides;
-    let shape = state.stock_ui.shape;
-    let (dx, dy, dz) = (state.stock_ui.dx, state.stock_ui.dy, state.stock_ui.dz);
-    let (diameter, height) = (state.stock_ui.diameter, state.stock_ui.height);
-    let source = state.stock_ui.source.clone();
-    let pos = [state.stock_ui.x, state.stock_ui.y, state.stock_ui.z];
-    let yaw = state.stock_ui.yaw_deg;
-    let margin = state.stock_ui.fit_margin;
-    // The stock pane edits the ACTIVE setup's stock entity (M3.2 A):
-    // with no setups in the document this resolves to the old global
-    // "Stock", so the legacy behavior is the degenerate case, not a
-    // branch. sync_setup_ui already mirrored this entity's numbers.
-    let active = camcraft_app::setup::active(&state.world);
-    let stock_name = camcraft_app::setup::stock_entity_name(&state.world, active.as_deref());
-    let has_stock = model::find_by_name(&state.world, &stock_name)
-        .is_some_and(|e| model::is_stock(&state.world, &e));
-    if let Some(s) = active.as_deref() {
-        ui.label(format!("Stock of setup {s}."));
-    }
-    ui.horizontal(|ui| {
-        if ui.button("Apply").clicked() {
-            let s = if shape == 1 {
-                StockShape::Cylinder { diameter, height }
-            } else if shape == 2 {
-                StockShape::FromModel {
-                    source: source.clone(),
-                }
-            } else {
-                StockShape::Box { dx, dy, dz }
-            };
-            state.pending.push_back(CommandKind::SetStock {
-                shape: s,
-                pos,
-                yaw_deg: yaw,
-            });
-        }
-        if ui.button("Fit to Models").clicked() {
-            let cmd = if per_side {
-                CommandKind::StockFitSides { sides }
-            } else {
-                CommandKind::StockFit { margin, shape }
-            };
-            state.pending.push_back(cmd);
-        }
-        if has_stock && ui.button("Delete").clicked() {
-            state
-                .pending
-                .push_back(CommandKind::DeleteByName(stock_name.clone()));
-        }
-    });
-}
-
 /// The document's post script (M3.3 A/B): setup furniture, read live
 /// off the world singleton like the machine section above. The label
 /// is exactly what the post resolves - one truth, so a pane can never
