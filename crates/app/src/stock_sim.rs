@@ -377,9 +377,12 @@ pub(crate) fn plan_program(world: &flecs_ecs::prelude::World) -> Result<Vec<Plan
             (None, Some([hx, hy, _])) => hx.min(hy),
             (None, None) => crate::operation::tool_law::cutting_radius(&tool).map_err(|e| format!("{name}: {e}"))?,
         };
+        // #546: a wear-compensated burn is judged as the worn electrode burns it.
+        let moves = crate::operation::sinker_wear_op::judged(world, &op, electrode.map(|e| e[2]), cache.path.moves)
+            .map_err(|e| format!("{name}: {e}"))?;
         planned.push(Planned {
             name: name.clone(),
-            moves: cache.path.moves,
+            moves,
             // #529: only what the op itself declared, never wider.
             breaks: breaks::bounded(name, &op.params, cache.path.breaks),
             radius,
