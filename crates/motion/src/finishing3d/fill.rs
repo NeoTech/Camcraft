@@ -31,9 +31,17 @@
 //!   deeper than one planned on the model itself - the fill can raise
 //!   the path, never lower it. The verifier still judges the real
 //!   model (the caller hands it the model, not these facets).
+//! - **One plane per opening.** A closed opening's whole lid - its
+//!   cells and the ring around them - is one horizontal plane at the
+//!   highest of the lid cells' closed levels. The raster closing gives
+//!   those cells near-equal levels; keeping each cell its own would
+//!   tile the lid as steps, and a stepped lid catches the ball at
+//!   every step edge: across the edge is an annulus where the ball can
+//!   seat on neither plane, support goes None, and each step turns
+//!   into a retract-and-plunge.
 //! - **One cell of reach.** Lids cover the opening's cells plus the
-//!   ring of cells around it, at each cell's own closed height, so no
-//!   crack along the rim is wider than the grid's sampling error.
+//!   ring of cells around it, so no crack along the rim is wider than
+//!   the grid's sampling error.
 
 use crate::geometry::{Point3, Triangle};
 use crate::machining2d::GenError;
@@ -84,7 +92,7 @@ pub fn fill_openings(facets: &[Triangle], width: f64, tol: f64) -> Result<Filled
         return Err(GenError::Invalid("3D finish fill needs a finite positive tolerance".into()));
     }
     let grid = Grid::sample(facets, width)?;
-    let closed = grid.closing();
+    let mut closed = grid.closing();
     let raised: Vec<bool> = (0..grid.h.len()).map(|i| closed[i] > grid.floor_of(i) + tol).collect();
     let mut lid = vec![false; grid.h.len()];
     let mut seen = vec![false; grid.h.len()];
@@ -96,11 +104,14 @@ pub fn fill_openings(facets: &[Triangle], width: f64, tol: f64) -> Result<Filled
         let comp = grid.component(start, &raised, &mut seen);
         if grid.enclosed(&comp, &raised, &closed, tol) {
             openings += 1;
+            let mut cells = comp.clone();
             for &i in &comp {
                 for j in grid.ring8(i) {
                     lid[j] = true;
+                    cells.push(j);
                 }
             }
+            grid.plateau(&mut closed, &cells);
         }
     }
     let mut out = facets.to_vec();
@@ -286,6 +297,26 @@ impl Grid {
             }
         }
         comp
+    }
+
+    /// One flat plane per opening: lift every cell of a closed opening's
+    /// lid - the raised component and its one-cell ring - to the
+    /// highest closed height over all of them, so the lid has no steps
+    /// anywhere on it. The closing's per-cell levels differ only by
+    /// raster slop, but a stepped lid is worse than flat: across each
+    /// step edge there is a full ball-width annulus where the ball
+    /// rests on neither plane - the higher lid's top blocks it from
+    /// seating on the lower one, and a lid top's free edge carries no
+    /// fold support - so the support field goes None there and every
+    /// step becomes a retract and plunge. One plane per opening removes
+    /// that annulus; the highest level keeps every lid cell at or above
+    /// its own closed height, so the lid still never digs below the
+    /// closing.
+    fn plateau(&self, closed: &mut [f64], cells: &[usize]) {
+        let top = cells.iter().fold(f64::NEG_INFINITY, |m, &i| m.max(closed[i]));
+        for &i in cells {
+            closed[i] = top;
+        }
     }
 
     /// Closed: no cell on the border, and every cell bordering the
