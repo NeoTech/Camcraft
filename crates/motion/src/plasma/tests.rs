@@ -380,7 +380,8 @@ fn the_cover_law_reads_the_tightened_tolerance_on_a_coarse_model() {
     let between = plain.kerf + 0.5 * (KERF_TOL + coarse.kerf_tol());
     let drop = between - r;
     let judged = rect(0.0, 0.0, 100.0, 60.0 - drop);
-    let cs = nest::contours(&[judged.clone()], &[], &Region::new(vec![judged]).unwrap()).unwrap();
+    let judged_part = Region::new(vec![judged.clone()]).unwrap();
+    let cs = nest::contours(std::slice::from_ref(&judged), &[], &judged_part).unwrap();
     let order = nest::cut_order(&cs);
     assert!(laws::cover_law(&path, &spans, &cs, &order, (plain.kerf, plain.kerf_tol())).is_ok(), "covered at full fidelity");
     let why = laws::cover_law(&path, &spans, &cs, &order, (coarse.kerf, coarse.kerf_tol())).expect_err("refused on the coarse model");
