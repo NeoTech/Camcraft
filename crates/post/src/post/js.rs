@@ -226,7 +226,7 @@ impl Script {
     /// refusal, never a half-defined script.
     pub fn load(cps: &str) -> Result<Self, PostError> {
         let mut ctx = Context::default();
-        let src = format!("{PRELUDE}\n{cps}");
+        let src = format!("{PRELUDE}\n{}\n{cps}", super::rotary_cap::ROTARY_CAP);
         if let Err(e) = ctx.eval(Source::from_bytes(src.as_bytes())) {
             return Err(PostError::Script(format!("{e}")));
         }
