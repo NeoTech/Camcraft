@@ -10,7 +10,7 @@
 // script text and no other CAM's output used; original work. Structure
 // follows our own grblhal.cps (the other grbl-family dialect); the
 // goldens lock this file's decisions.
-description = "Synthetos TinyG (3-axis mill, G20/G21 from the machine, XY G2/G3 in half turns, other-plane arcs as chords, G4 dwell; drilling as plain moves - no canned cycles, no G41/G42, no G84, no probing macros; tools T1-T31, M0 after every tool change)";
+description = "Synthetos TinyG (3-axis mill, G20/G21 from the document, XY G2/G3 in half turns, other-plane arcs as chords, G4 dwell; drilling as plain moves - no canned cycles, no G41/G42, no G84, no probing macros; tools T1-T31, M0 after every tool change)";
 vendor = "Camcraft";
 legal = "Original clean-room work; public documentation only";
 certificationLevel = 1;
@@ -20,6 +20,7 @@ setCodePage = "utf-8";
 capabilities = 1; // reference contract: integer feature mask (bit 1 = milling)
 coolantModes = true; // reads PARAM Coolant (#112/#150)
 afterModes = true;   // reads PARAM AfterOperation (#110)
+programUnits = "mm inch"; // #902: writes the document's unit (postOptions.Units), G21 / G20
 
 // Determinism law: no timestamps, no randomness - the same stream
 // always posts to the same text (golden files depend on it).
@@ -36,7 +37,7 @@ var afterAsk = "";         // the section's PARAM AfterOperation (#110), none wh
 var coolantOp = "";        // the section's OperationName, for refusals (#150)
 var sectionOpen = false;   // preamble written (a legacy .cl carries no SECTION)
 var orgX = 0, orgY = 0, orgZ = 0; // the WCS slot origin (OriginX/Y/Z PARAMs)
-var inch = false;          // the machine is programmed in inches (onOpen)
+var inch = false;          // the document's unit is inch (onOpen, #902: postOptions.Units)
 var smoothTol = 0;         // #616: the section's PARAM Smoothing, mm (0: none asked)
 var smoothNamed = false;   // the not-written note, once per program
 
@@ -45,7 +46,7 @@ var smoothNamed = false;   // the not-written note, once per program
 // in either unit: TinyG checks that an arc's start and end sit at the
 // same radius from the I J K centre, and a tenth of a micron keeps a
 // rounded centre inside that check where three decimals would not
-// always. An inch machine gets every length and feed divided by 25.4.
+// always. An inch document gets every length and feed divided by 25.4.
 // Angles and rpm never scale.
 function has(v) { return v !== null && v !== undefined && isFinite(v); }
 function trim(s) {
@@ -53,7 +54,7 @@ function trim(s) {
   return s === "-0" ? "0" : s;
 }
 function len(v) { return inch ? v / 25.4 : v; }
-function fu(v) {  // a length, in the machine's unit
+function fu(v) {  // a length, in the document's unit
   if (!has(v)) return "0";
   return trim(Number(len(v)).toFixed(4));
 }
@@ -213,7 +214,7 @@ function toolNote() {  // just before the tool change it describes
 // a G49 here would throw a measured length away, and the post knows no
 // length to restate. No G40 either: TinyG accepts it only to ignore it.
 function onOpen() {
-  inch = typeof machine !== "undefined" && machine.units === "inch";
+  inch = typeof postOptions !== "undefined" && postOptions && postOptions.Units === "inch"; // #902: the document's unit, never the machine file's
   var nm = (typeof machine !== "undefined" && machine.name) || "CAMCRAFT";
   note(clean(nm) || "CAMCRAFT");
   block([inch ? "G20" : "G21", "G17", "G90", "G91.1", "G94", "G64"]);

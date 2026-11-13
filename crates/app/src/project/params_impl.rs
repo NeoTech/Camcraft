@@ -1169,7 +1169,11 @@ impl ParamsDto {
                 plunge_feed,
                 climb,
                 holes,
+                pitch,
+                hand,
             } => ParamsDto::Thread {
+                pitch: *pitch,
+                hand: (*hand).into(),
                 clearance_z: (*clearance_z).into(),
                 retract_z: (*retract_z).map(Into::into),
                 top_z: (*top_z).into(),
@@ -2334,7 +2338,11 @@ impl ParamsDto {
                 plunge_feed,
                 climb,
                 holes,
+                pitch,
+                hand,
             } => OpParams::Thread {
+                pitch: *pitch,
+                hand: (*hand).into(),
                 clearance_z: (*clearance_z).into(),
                 retract_z: retract_z.map(Into::into),
                 top_z: (*top_z).into(),
