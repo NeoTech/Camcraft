@@ -45,6 +45,8 @@ use {cross::*, cycle::*, hole::*, recognize::*};
 mod tests;
 #[cfg(test)]
 mod tests_cross;
+#[cfg(test)]
+mod tests_ream;
 
 pub use axial::{axial_doors, axial_warnings, AXIAL_TOL};
 pub use boss::recognize_bosses;

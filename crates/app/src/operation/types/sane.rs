@@ -25,6 +25,17 @@ impl OpParams {
         if self.predrilled_elsewhere() {
             return Some(PREDRILLED_POCKET_ONLY.into());
         }
+        // #1448: only the untilted 2D contour takes a picked start so far;
+        // every other kind refuses it here rather than ignore it.
+        if self.links().is_some_and(|l| l.approach.start_point.is_some()) {
+            match self {
+                OpParams::Contour { tilt: None, .. } => {}
+                OpParams::Contour { .. } => {
+                    return Some("a start point is not taken on a tilted (3+2) contour yet - clear it or the tilt".into());
+                }
+                _ => return Some("a start point is taken only by the 2D contour so far - clear it on this operation".into()),
+            }
+        }
         match self {
             OpParams::SinkerBurn(p) => p.compensation_refusal(),
             OpParams::SinkerSideBurn(p) => p.refusal(),

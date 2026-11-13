@@ -81,6 +81,7 @@ fn empty_egui_meshes_are_filtered_before_gpu_submission() {
 mod face_origin;
 mod spindle_row;
 mod stock_size;
+mod setup_settings_page;
 mod machine_page;
 mod tool_list_page;
 mod stock_fit_sides;
@@ -95,6 +96,7 @@ mod program_units;
 mod gcode_viewer;
 mod first_setup;
 mod structural;
+mod cycle_combo;
 // #661: every operation kind wears its own SVG-mastered glyph.
 mod op_icon_table;
 mod tool_icon_wiring;

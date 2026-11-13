@@ -43,6 +43,15 @@ pub fn contour_along_chain(
             "a centerline run needs at least two points".into(),
         ));
     }
+    if let Some(q) = p.links.approach.start_point {
+        // #1448: an open run starts at one of its ends; a picked start
+        // there is a later slice - refused by name, never ignored.
+        return Err(GenError::Invalid(format!(
+            "start point ({:.3}, {:.3}): an open chain starts at its end - a picked start is \
+             taken only on closed contours yet; clear the start point",
+            q.x, q.y
+        )));
+    }
     let poly: Vec<Point2> = if p.climb {
         pts.to_vec()
     } else {

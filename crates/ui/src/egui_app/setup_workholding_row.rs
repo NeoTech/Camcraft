@@ -16,13 +16,19 @@ use crate::state::{CommandKind, State};
 /// The row's words, pinned by the structural twin.
 pub(crate) const ROW_LABEL: &str = "    Workholding max rpm";
 
+/// Whether the row is drawn for `name`: a turning setup, or one that
+/// already states a limit.
+pub(super) fn shown(state: &State, name: &str) -> bool {
+    let turns = matches!(setup_mount::kind_of_setup(&state.world, Some(name)), Kind::Lathe | Kind::MillTurn);
+    turns || setup_workholding::of(&state.world, Some(name)).is_some()
+}
+
 /// One setup's row.
 pub(super) fn row(ui: &mut Ui, state: &mut State, name: &str) {
-    let held = setup_workholding::of(&state.world, Some(name));
-    let turns = matches!(setup_mount::kind_of_setup(&state.world, Some(name)), Kind::Lathe | Kind::MillTurn);
-    if held.is_none() && !turns {
+    if !shown(state, name) {
         return;
     }
+    let held = setup_workholding::of(&state.world, Some(name));
     let id = ui.id().with(("setup_workholding_draft", name));
     let mut draft: f64 = ui.data_mut(|d| *d.get_temp_mut_or_insert_with(id, || held.unwrap_or(2000.0)));
     let mut queued: Option<Option<f64>> = None;

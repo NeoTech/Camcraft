@@ -35,6 +35,9 @@ mod merge_plan_tests;
 mod package;
 mod path_mods;
 mod plan;
+mod process_bump;
+#[cfg(test)]
+mod process_bump_tests;
 mod quick;
 mod release;
 mod release_bump;
@@ -70,6 +73,7 @@ usage:
   cargo xtask merge-plan <PR>... | --label <name> [--json] | --delta <PR> --reviewed <sha>
                                                    the merge order of open PRs (waves, refresh only at merge time)
                                                    or the delta class of a PR since a reviewed head (#1221)
+  cargo xtask process-bump                         PROCESS_VERSION + 1, the one writer of that file (#1153)
   cargo xtask package [--version X.Y.Z] [--out dist] [--bin-dir target/release] [--dry-run]
                                                    stage the Windows portable tree and write camcraft-<ver>-win-x64.zip
                                                    (no bump/commit/build; version defaults to post.exe --version;
@@ -178,6 +182,7 @@ fn run(args: &[String]) -> Result<i32, String> {
         Some("icons") => icons::run(&root(), &args[1..]),
         Some("logo") => logo::run(&root(), &args[1..]),
         Some("merge-plan") => merge_plan_git::run(&root(), &args[1..]),
+        Some("process-bump") => process_bump::run(&root(), &args[1..]),
         Some("package") => {
             let a = package::parse(&args[1..]).map_err(|e| format!("{e}\n{USAGE}"))?;
             Ok(package::run(&root(), &a))
