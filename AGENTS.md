@@ -767,6 +767,31 @@ they were all but unused. A clean-machine gate run on
 GitHub is issue 1413's subject. Never add a `push`, `pull_request` or `schedule` trigger without
 the user's say-so.
 
+**The PR test runner** (#1420; maintainer, 2026-11-13: "then that is the
+decision, workflow_dispatch"). `pr-test.yml` runs a PR review's build and
+tests on the maintainer's self-hosted Linux runner (no billed minutes)
+instead of a 10-20 GB worktree on the reviewer's machine. It has a
+`workflow_dispatch` trigger only (inputs: the PR number and the head SHA
+the reviewer read), a read-only token and no secrets; it checks out
+`refs/pull/<N>/head`, refuses any other head, refuses a diff touching
+`build.rs`, `.github/`, `scripts/`, a `.cargo/` directory at any depth, a
+`Cargo.toml`/`Cargo.lock`, a toolchain file or `xtask/` (listed with
+`--no-renames`), trial-merges with main and runs `cargo xtask gate
+quick --base origin/main` plus clippy on the touched crates (ui suites under
+`xvfb-run` with Mesa's software drivers, the cut runner's setup from issue
+1413). Only the PR-reviewer agent starts it, after reading the diff, and
+only for a collaborator's PR ("Collaborators only", maintainer, 2026-11-13;
+the workflow checks the author's push access itself and refuses otherwise,
+other PRs build locally) when a runner is online and no cut is using it; a "read, not built" PR
+is never sent. With no runner, or a run that is cancelled, times out or
+never starts, the review builds locally or says "not built" - never "pass".
+The job targets its own runner label (`camcraft-pr-test`) under its own OS
+user, HOME, cargo home and sccache dir, never shared with the cut/release
+runner of issue 1413 ("Separate runner/user", same date). The refusal list
+does not stop hostile test code: that is why only collaborators' PRs run.
+Windows-only readings (`cfg(windows)`, per-OS pinned values) still run
+locally for the touched suites.
+
 **Test the change, not everything.** A fix is proved by the test(s) that pin
 it, run one by one: `cargo xtask gate test <name> [--crate c] [--binary b]
 [--exact]` (or plain `cargo test -p <crate> --test <binary> -- <name>
@@ -1017,8 +1042,10 @@ use of the /review-prs into agents.md"). A pull request from a fork gets a
 review by the `PR-reviewer` agent (`.claude/agents/PR-reviewer.md`),
 dispatched by the project skill `/review-prs` (`.claude/skills/review-prs/`) -
 run on demand (`/review-prs`, or `/review-prs <N>` for one PR) and on a loop
-(`/loop 10m /review-prs`, every 10 minutes). The agent trial-merges the PR with current main in
-its own worktree, builds, runs the suites it touches and clippy, checks this
+(`/loop 10m /review-prs`, every 10 minutes). The agent trial-merges the PR with current main
+and builds it, runs the suites it touches and clippy - on the self-hosted
+runner through `pr-test.yml` when one is online ("The PR test runner"), else
+in its own worktree - checks this
 file's laws, and posts a plain review **comment** whose first line is
 `<!-- pr-reviewer: <head sha> -->` (counted only when its author is a collaborator, see "Only collaborators' reviews count"; the marker that stops a second review of
 the same push), and sets the review label (below). It never approves, requests changes, merges or pushes:
