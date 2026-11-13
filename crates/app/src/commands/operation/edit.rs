@@ -108,6 +108,9 @@ impl EditOperationParams {
                 prev.params.kind()
             )));
         }
+        if let Some(why) = params.named_refusal() {
+            return Err(CommandError::Invalid(why));
+        }
         sinker_gate(world, prev.setup.as_deref(), &params)?;
         if !params.is_sane() {
             return Err(CommandError::Invalid(format!(

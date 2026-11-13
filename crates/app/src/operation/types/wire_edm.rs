@@ -13,6 +13,11 @@ use super::height::Height;
 
 pub use crate::wire_edm::WireSide;
 
+/// The run-out clearance (mm) a new wire cut is seeded with (#1109): an
+/// open run is threaded and run out this far clear of the stock's edge,
+/// past the kerf. A closed profile never reads it.
+pub const DEFAULT_CLEARANCE: f64 = 1.0;
+
 /// The longest condition id an operation stores (a control's selector
 /// is a short word; this only bounds a hand-edited file).
 pub const CONDITION_ID_MAX: usize = 64;
@@ -49,11 +54,16 @@ pub struct WireContourOp {
     /// empty word is "none chosen", refused at the command door.
     pub condition: String,
     /// Which side of the profile is the product - stated by the user,
-    /// never inferred from the geometry (#290 D8).
+    /// never inferred from the geometry (#290 D8): die / punch for a
+    /// closed profile, the kerf's left / right of travel for an open
+    /// run (#1109).
     pub side: WireSide,
     /// The start hole / threading point, world XY mm; `None` is not
     /// stated, and a closed profile is refused at generation without it.
     pub start: Option<[f64; 2]>,
+    /// An open run's threading and run-out clearance past the kerf, mm
+    /// (#1109); unread for a closed profile.
+    pub clearance: f64,
     /// The skim passes after the rough cut, in cut order (#538); empty
     /// is the rough pass alone.
     pub skims: Vec<WireSkim>,
@@ -69,6 +79,8 @@ impl WireContourOp {
         self.top_z.is_sane()
             && self.bottom_z.is_sane()
             && self.start.is_none_or(|s| s.iter().all(|v| v.is_finite() && v.abs() < 1e9))
+            && self.clearance.is_finite()
+            && (0.0..=crate::wire_edm::CLEARANCE_MAX).contains(&self.clearance)
             && sane_id(&self.condition)
             && self.skims.len() <= SKIMS_MAX
             && self.skims.iter().all(|s| sane_id(&s.condition))

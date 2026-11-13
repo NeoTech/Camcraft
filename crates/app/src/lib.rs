@@ -63,6 +63,7 @@ pub use camcraft_motion::wire_edm;
 pub use camcraft_motion::probing;
 // #541: sinker EDM burn to depth.
 pub use camcraft_motion::sinker;
+pub use camcraft_motion::sinker_wear;
 // #544: sinker EDM orbit patterns.
 pub use camcraft_motion::sinker_orbit;
 // #545: sinker EDM side burning.

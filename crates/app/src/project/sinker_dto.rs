@@ -87,6 +87,14 @@ pub struct SinkerDto {
     pub condition: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub orbit: Option<SinkerOrbitDto>,
+    /// #546: additive keys - an older file states none (one layer, no
+    /// measured wear) and loads unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub layer: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wear_lost: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wear_over: Option<f64>,
 }
 
 impl SinkerDto {
@@ -109,6 +117,9 @@ impl SinkerDto {
             y: p.y,
             feed: p.feed,
             condition: p.condition.clone(),
+            layer: p.layer,
+            wear_lost: p.wear_lost,
+            wear_over: p.wear_over,
             orbit: p.orbit.as_ref().map(SinkerOrbitDto::from_orbit),
         }
     }
@@ -132,6 +143,9 @@ impl SinkerDto {
             y: self.y,
             feed: self.feed,
             condition: self.condition.clone(),
+            layer: self.layer,
+            wear_lost: self.wear_lost,
+            wear_over: self.wear_over,
             orbit: self.orbit.map(SinkerOrbitDto::to_orbit),
         }
     }
