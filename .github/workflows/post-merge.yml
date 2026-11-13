@@ -35,8 +35,10 @@ env:
 permissions:
   contents: read
 
+# A dispatch of a non-main ref gets its own group, so it never cancels (or is
+# cancelled by) the gate of main.
 concurrency:
-  group: post-merge-main
+  group: post-merge-${{ github.event_name == 'push' && 'main' || inputs.ref || 'main' }}
   cancel-in-progress: true
 
 jobs:

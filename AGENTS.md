@@ -986,8 +986,10 @@ anyone dispatching it: a burst of merges tests only the newest head
 (`cancel-in-progress`), a run skips itself while a `cut.yml` run or a
 release PR is open (the cut's release gate covers main then), and one rolling
 issue `main is red (post-merge gate)` is opened or commented on when it fails
-(`P1`, or `P0` when a failing suite is a golden, gcode or post suite) and closed by the next green
-run. A red result is that issue; the main session does not dispatch a gate for
+(`P2`, "a gate on main is red"; `P1` only when a failing suite is a
+wrong-output suite - a golden CL/NC or recorded-post-stream suite, named in
+the script's anchored `OUTPUT_SUITES` list) and closed by the next green
+run; only a `source:agent` issue is ever closed by it. A red result is that issue; the main session does not dispatch a gate for
 a merge the workflow covers. **Fallback when the runner is down** (the run
 is queued with no runner, or it was skipped for a cut and the cut was
 abandoned): the old local procedure below. After a fix merges (or, one gate
