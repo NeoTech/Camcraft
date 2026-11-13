@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::plan::{self, SLOW_BINARIES, Step};
 use crate::quick::{self, Diff, Quick};
-use crate::{decisions, exec, parse_gate, scan, single};
+use crate::{decisions, exec, parse_gate, scan, single, tier_plan};
 
 struct Fixture(PathBuf);
 
@@ -194,6 +194,19 @@ fn release_without_snapshots_drops_only_the_pixel_lanes() {
     assert!(parse_gate(&a("release --no-snapshots --dry-run")).expect("release").no_snapshots);
     assert!(!parse_gate(&a("release")).expect("release").no_snapshots);
     assert!(parse_gate(&a("batch --no-snapshots")).is_err());
+}
+
+#[test]
+fn gate_no_snapshots_reaches_the_release_plan() {
+    // #1413 review: `gate()` builds its non-quick plan through `tier_plan`; the flag must reach it.
+    let fx = fixture();
+    let a = |s: &str| s.split_whitespace().map(String::from).collect::<Vec<_>>();
+    let lines = |p: plan::Plan| p.steps.iter().map(line).collect::<Vec<_>>();
+    let off = lines(tier_plan(&fx.0, &parse_gate(&a("release --no-snapshots")).expect("args")));
+    let on = lines(tier_plan(&fx.0, &parse_gate(&a("release")).expect("args")));
+    assert!(off.iter().all(|s| !s.contains("snapshot")), "{off:#?}");
+    assert!(on.iter().any(|s| s.contains("snapshot")), "{on:#?}");
+    assert_eq!(on, lines(plan::release(&fx.0)));
 }
 
 #[test]

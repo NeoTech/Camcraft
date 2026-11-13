@@ -212,9 +212,17 @@ fn gate(root: &Path, g: &GateArgs) -> Result<i32, String> {
                 }
             }
         }
-        "batch" => plan::batch(root),
-        _ => plan::release_with(root, !g.no_snapshots),
+        _ => tier_plan(root, g),
     };
     run.plan(&plan)?;
     Ok(run.summary())
+}
+
+/// The plan of a non-quick tier, pure (no cargo, no git): `gate()` runs exactly this, so the
+/// `--no-snapshots` wiring is pinned by `tests::gate_no_snapshots_reaches_the_release_plan`.
+pub(crate) fn tier_plan(root: &Path, g: &GateArgs) -> plan::Plan {
+    match g.tier.as_str() {
+        "batch" => plan::batch(root),
+        _ => plan::release_with(root, !g.no_snapshots),
+    }
 }
