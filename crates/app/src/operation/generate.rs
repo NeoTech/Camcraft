@@ -2824,6 +2824,8 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
     // at each level it cuts - a blind bore's ring below its floor is in
     // steel the flat region never shows.
     let depth_law = depth_law_of(&params, &src, part_solid);
+    // #1057: the containment kinds' declared rims, read untightened.
+    let rims = if depth_law == DepthLaw::Contain { super::material_source::rims_of(&params) } else { Vec::new() };
     match &frame {
         None => {
             let ctx = VerifyContext {
@@ -2916,6 +2918,8 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 spindle: None,
                 // #864: a source imported coarser than promised.
                 model_excess: material.excess,
+                // #1057: the containment kinds' declared rims, read untightened.
+                rims: &rims,
             };
             // The picks' touching bodies, read as their union
             // (M13.11); empty for one body.
@@ -3186,6 +3190,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     spindle: None,
                     // #864: a source imported coarser than promised.
                     model_excess: material.excess,
+                    rims: &rims,
                 },
                 &m_gen.bodies,
             );
