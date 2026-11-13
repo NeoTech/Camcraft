@@ -81,3 +81,26 @@
   one-block G76 P2/P4, a LinuxCNC post) reads the same flag. Changing
   the clamp reading is a one-line change in `infeed::area_rungs` and in
   the test's model.
+- **The Tormach (LinuxCNC) G76 reads the new finish allowance too**
+  (merge with main's #612, 2026-11-13). Main's PathPilot lathe post
+  refused any non-zero `FinishAllowance`, which was right while the
+  field meant an extra allowance (0 on every radial ladder). Under this
+  PR the field is the finishing pass's own step, never 0, so every G76
+  would have been refused. Chosen: LinuxCNC's `R1` ladder (J, 2J, ...
+  clamped at K) has no finish word, but its finishing pass takes the
+  ladder's own last step, `K - (ceil(K/J) - 1)·J`; a record whose
+  finish allowance is that step (within a micron) posts, any other is
+  refused by name, and an alternating record is refused by name.
+  Dropped: dropping the check (a stated allowance the control cannot cut
+  would pass silently), or posting R with another degression (changes
+  the passes the verdict judged). Pinned by
+  `lathe_post_tormach_thread::g76_takes_the_record_whose_finishing_step_is_the_ladders_own`
+  and the alternating case in `a_g76_record_the_cycle_cannot_state_exactly_is_refused_by_name`.
+- **TH1 Stale after a save/load is a main defect** (not this PR's data):
+  the save snaps every move to the 1 um lattice, the in-memory path
+  signature hashes the unsnapped moves, so an off-lattice predecessor's
+  signature moves across a round trip and every op behind it reads
+  Stale. Reproduced on upstream/main with a 12 TPI radial thread;
+  reported to be filed on its own, not patched here. The infeed pin now
+  also asserts `rest::prior_digest` is equal before the save and after
+  the load.
