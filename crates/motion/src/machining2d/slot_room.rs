@@ -122,7 +122,7 @@ impl SlotBound {
         }
         let (p, q) = (e1[0], e1[e1.len() - 1]);
         let len = (q.x - p.x).hypot(q.y - p.y);
-        if !(len > STRAIGHT_TOL) {
+        if len.is_nan() || len <= STRAIGHT_TOL {
             return Err(GenError::Invalid("the first picked edge has no length in XY - pick the edges along the slot".into()));
         }
         let u = Point2::new((q.x - p.x) / len, (q.y - p.y) / len);
@@ -167,7 +167,7 @@ impl SlotBound {
     /// An empty or degenerate region.
     pub fn from_face(region: Region) -> Result<SlotBound, GenError> {
         let pts: Vec<Point2> = region.loops().iter().flat_map(|l| l.points().iter().copied()).collect();
-        if region.is_empty() || !finite(&pts) || !(region.area().abs() > STRAIGHT_TOL * STRAIGHT_TOL) {
+        if region.is_empty() || !finite(&pts) || region.area().abs().is_nan() || region.area().abs() <= STRAIGHT_TOL * STRAIGHT_TOL {
             return Err(GenError::Invalid("the picked face bounds no area in XY - pick a floor face or two opposite edges".into()));
         }
         let h = hull(&pts);
@@ -175,7 +175,7 @@ impl SlotBound {
         for i in 0..h.len() {
             let (a, b) = (h[i], h[(i + 1) % h.len()]);
             let len = (b.x - a.x).hypot(b.y - a.y);
-            if !(len > 0.0) {
+            if len.is_nan() || len <= 0.0 {
                 continue;
             }
             let u = Point2::new((b.x - a.x) / len, (b.y - a.y) / len);
@@ -227,7 +227,7 @@ impl SlotBound {
     /// A room no longer than it is wide, or a face its best slot leaves.
     pub fn fit(&self) -> Result<SlotFit, GenError> {
         let (l, w) = self.room();
-        if !(w > FIT_TOL) {
+        if w.is_nan() || w <= FIT_TOL {
             return Err(GenError::Invalid(format!("{} {} no width for a slot", self.picks(), self.leave())));
         }
         if l - w <= FIT_TOL {
