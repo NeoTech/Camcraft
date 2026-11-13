@@ -355,8 +355,11 @@ fn the_slot_trace_and_plasma_goldens_pass_their_gates() {
 fn the_thread_golden_passes_its_gate() {
     // #894: the thread-mill golden through the real operation and the
     // post's gate - the crest region, the root solid law over its round
-    // (96-flat) hole and the verification gate find nothing.
-    for (name, w) in thread_verdicts() {
+    // (96-flat) hole and the verification gate find nothing; #985: the
+    // external golden on its boss, judged by the external laws, too.
+    let got = thread_verdicts();
+    assert_eq!(got.len(), 2, "every thread golden is judged");
+    for (name, w) in got {
         assert_eq!(w, Vec::<String>::new(), "{name}");
     }
 }

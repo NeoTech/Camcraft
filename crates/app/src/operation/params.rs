@@ -1562,7 +1562,14 @@ impl OpParams {
                 holes,
                 pitch,
                 hand,
+                external,
             } => {
+                // #985: an external thread is a different ride on the
+                // same list. Written only when set, so every internal
+                // thread keeps the digest it was cached under.
+                if *external {
+                    h.write_u8(0xE7);
+                }
                 wh(h, *clearance_z);
                 wh(h, *top_z);
                 wh_opt(h, *bottom_z);

@@ -1003,6 +1003,8 @@ fn seed_thread_mill(c: &Carried) -> OpParams {
         holes: Vec::new(),
         pitch: None,
         hand: crate::cl::ThreadHand::Right,
+        // #985: holes until the author says bosses.
+        external: false,
     }
 }
 

@@ -103,6 +103,8 @@ pub mod plasma_op;
 // #894: the thread-milling operation's door, kernel plan and its two verdict readings.
 pub mod thread_op;
 mod thread_entry;
+// #985: external threads - the boss door, the crest region, the neighbour law.
+mod thread_boss;
 pub mod wire_op;
 // #534: the wire laws' inputs, read live at the post.
 pub mod wire_verify;
