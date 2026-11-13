@@ -1,8 +1,9 @@
-//! The Thread operation page's pitch and hand rows (#894): the thread's
-//! own pitch - left to a multi-form mill's, or stated for a single-form
-//! mill - and its hand, by name. The rows edit the page draft; Apply
-//! rides `EditOperationParams`, which refuses a pitch the mounted mill
-//! cannot cut, so the edit is gated and undoable.
+//! The Thread operation page's own rows (#894, #985): the feature list -
+//! holes, or bosses for an external thread - the thread's pitch (left to
+//! a multi-form mill's, or stated for a single-form mill) and its hand,
+//! by name. The rows edit the page draft; Apply rides
+//! `EditOperationParams`, which refuses a thread the mounted mill cannot
+//! cut, so the edit is gated and undoable.
 //!
 //! Provenance: ISO metric thread terms; our own page law. No vendor
 //! material consulted.
@@ -10,9 +11,82 @@
 use egui::Ui;
 
 use camcraft_app::cl::ThreadHand;
-use camcraft_app::units::Unit;
+use camcraft_app::drilling::Hole;
+use camcraft_app::units::{self, Unit};
 
-use super::fields::{check_row, hint, num, prop_row};
+use super::fields::{check_row, field, hint, num, prop_row};
+
+/// The Geometry tab's rows: whether the thread is external, the feature
+/// list and its detect button. Returns whether the button was clicked
+/// (one recognize pass per click; the list it finds lands as a command).
+/// Switching between holes and bosses empties the draft's list: a hole
+/// is not a boss, and the other kind is read from the model again.
+pub(super) fn geometry_rows(ui: &mut Ui, u: Unit, features: &mut Vec<Hole>, external: &mut bool) -> bool {
+    let was = *external;
+    check_row(ui, "External thread (on a boss)", external);
+    if *external != was {
+        features.clear();
+    }
+    let (title, none, button, note) = if *external {
+        (
+            "Bosses",
+            "none yet - Detect bosses reads them from the model",
+            "Detect bosses",
+            "each boss's diameter is the thread's MAJOR diameter (the nominal size CAD draws); the stock around it must be machined away first",
+        )
+    } else {
+        (
+            "Holes",
+            "none yet - Detect holes reads them from the model",
+            "Detect holes",
+            "each hole's diameter is the thread's MINOR diameter (the tap-drill size CAD draws)",
+        )
+    };
+    field(ui, title);
+    if features.is_empty() {
+        hint(ui, none);
+    }
+    // One row per feature, each with its own remove button: detection
+    // lists every round wall (a round base is a boss too), and the
+    // thread is cut only on the ones left in the list.
+    let mut drop = None;
+    for (i, h) in features.iter().enumerate() {
+        let foot = match (*external, h.through) {
+            (true, _) => format!("shoulder {}", units::len(h.floor_z, u, 3)),
+            (false, true) => "through".to_owned(),
+            (false, false) => format!("floor {}", units::len(h.floor_z, u, 3)),
+        };
+        ui.horizontal(|ui| {
+            ui.label(format!(
+                "{}  X {}  Y {}  Ø{}  {} {}  {foot}",
+                i + 1,
+                units::len(h.xy.x, u, 3),
+                units::len(h.xy.y, u, 3),
+                units::len(2.0 * h.radius, u, 3),
+                if *external { "top" } else { "entry" },
+                units::len(h.entry_z, u, 3),
+            ));
+            if ui.small_button(format!("Remove {}", i + 1)).clicked() {
+                drop = Some(i);
+            }
+        });
+    }
+    if let Some(i) = drop.filter(|i| *i < features.len()) {
+        features.remove(i);
+    }
+    let clicked = ui.button(button).clicked();
+    hint(ui, note);
+    clicked
+}
+
+/// The infeed row's hint: the depth the last pass lands on.
+pub(super) fn infeed_hint(external: bool) -> &'static str {
+    if external {
+        "equal radial passes, each a full helix; the last lands on the external thread depth (0.6134 x pitch)"
+    } else {
+        "equal radial passes, each a full helix; the last lands on the thread depth (0.5413 x pitch)"
+    }
+}
 
 /// The Passes tab's thread rows: whether the pitch is stated, the pitch,
 /// and the hand.
@@ -32,5 +106,5 @@ pub(super) fn thread_rows(ui: &mut Ui, u: Unit, pitch: &mut Option<f64>, hand: &
         ui.radio_value(hand, ThreadHand::Left, "Left hand");
         ui.radio_value(hand, ThreadHand::Right, "Right hand");
     });
-    hint(ui, "climb milling winds a right-hand thread up from the bottom of the hole, a left-hand one down from the top");
+    hint(ui, "climb milling winds a right-hand thread up from the bottom of a hole, a left-hand one down from the top; on a boss the other way round");
 }

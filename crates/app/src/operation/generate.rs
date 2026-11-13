@@ -2135,27 +2135,37 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         // (`thread_op`): the tool's form and the thread's pitch are
         // judged at the door, by name. Every move posted is plain
         // 3-axis interpolation (G2/G3 with Z) - no spindle sync.
-        OpParams::Thread { holes, .. } => {
+        OpParams::Thread { holes, external, .. } => {
             let plan = super::thread_op::kernel_params(&tool, &params, &hl)?;
-            let region = region_for_job(
-                    &mut picked_region,
-                    &mut section_z,
-                    &src,
-                    &params,
-                m_gen,
-                frame.as_ref(),
-            )?;
-            // #1071: the gouge law reads the thread's major circle, the
-            // wall the helix is cut to, not the declared minor rim - grown
-            // from the model's own rim where that stands nearer.
-            // #894 x #1205: only over a round wall; a polygon's flats keep
-            // their rim, and the solid law's thread grant stands down too.
-            thread_round = super::thread_op::walls_round(&m_gen.facets, &plan);
-            let region = if thread_round { super::thread_rims::major_rims(region, holes, plan.depth())? } else { region };
+            // The crest law's wall: the tangency verdict reads the
+            // furthest the teeth may reach. #1071: a hole's MAJOR circle,
+            // grown from the model's own rim where that stands nearer;
+            // #894 x #1205: only over a round wall - a polygon's flats
+            // keep their rim, and the solid law's thread grant stands
+            // down too. #985: a boss's MINOR circle, with no silhouette
+            // beside it, and only over a round boss: a polygonal one (a
+            // hex stud) is refused by name, since the crest law and the
+            // neighbour law both take its wall for a circle and its
+            // flats would be cut unjudged. `thread_round` stays true.
+            let region = if *external {
+                if let Some(why) = super::thread_boss::not_round(&m_gen.facets, &plan) {
+                    return Err(GenError::Invalid(why));
+                }
+                super::thread_boss::crest_region(holes, plan.depth())?
+            } else {
+                let region = region_for_job(&mut picked_region, &mut section_z, &src, &params, m_gen, frame.as_ref())?;
+                thread_round = super::thread_op::walls_round(&m_gen.facets, &plan);
+                if thread_round { super::thread_rims::major_rims(region, holes, plan.depth())? } else { region }
+            };
             let path = machining2d::thread_mill(&plan)?;
             // #992: the mill is not centre-cutting - each hole must be
             // open in the stock the program ahead leaves, or refused.
-            super::thread_entry::judge(holes, &path, d * 0.5, verify_prior.get())?;
+            // #985: beside a boss, the stock around it must be gone.
+            if *external {
+                super::thread_entry::judge_bosses(holes, &path, d * 0.5, verify_prior.get())?;
+            } else {
+                super::thread_entry::judge(holes, &path, d * 0.5, verify_prior.get())?;
+            }
             (region, path)
         }
         // M5.2 stage A: the first turning kind. Which documents may
@@ -2686,6 +2696,12 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
     // no band, exactly as it adds no feed or travel check.
     // #1071 x #894: the solid law's thread grant, at the thread's own pitch.
     let thread_bores = super::thread_op::bores(&tool, &params, thread_round);
+    // #985: an external thread has no grant (a boss is no bore); the
+    // solid law judges it at its tooth roots instead - the cutter
+    // narrowed by the external depth, against the whole part - and the
+    // neighbour law reads the crests at full radius against every other
+    // wall. An internal thread keeps its full cutter.
+    let cutter = super::thread_op::root_cutter(cutter, &tool, &params);
     let fixture_boxes = fixtures;
     // #339 slice 5: an upright mill's links are planned over the steel -
     // a struck link rises over it, an unclearable one refuses by name.
@@ -3076,6 +3092,13 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // answer the same law inside `verify` (b2), real tip (M13.7).
             if depth_law == DepthLaw::Contain {
                 contain_into(&mut warns, &path, &material.facets, &cutter, depth_law, stl, material.excess, &params, &thread_bores);
+            }
+            // #985: an external thread's crest ring against every wall
+            // that is not the boss it threads, with no thread allowance.
+            for w in super::thread_boss::neighbours(&params, &path, &material.facets, &tool) {
+                if !warns.contains(&w) {
+                    warns.push(w);
+                }
             }
             // #266: a tap's cutting moves re-read at its thread's core.
             super::tap_core::acquit(&mut warns, &tool, &params, |core| {

@@ -109,6 +109,7 @@ fn thread(radius: f64) -> OpParams {
         holes: vec![hole(0.0, radius)],
         pitch: None,
         hand: camcraft_app::cl::ThreadHand::Right,
+        external: false,
     }
 }
 

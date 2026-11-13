@@ -147,6 +147,7 @@ fn verdict(model_hole: &[P2], kind: Kind, radius: f64) -> Vec<Warning> {
             holes,
             pitch: None,
             hand: camcraft_app::cl::ThreadHand::Right,
+            external: false,
         },
         Kind::Bore => OpParams::Bore {
             links: camcraft_app::links::Links::PLANAR,
