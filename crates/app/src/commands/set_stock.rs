@@ -25,13 +25,21 @@ pub struct SetStock {
     shape: StockShape,
     location: Location,
     facets: std::sync::Arc<[Triangle]>,
+    /// The copied model's chord error when it was imported coarser than
+    /// promised (#1056): the copy holds the same facets, so it carries
+    /// the flag itself and keeps it when the model is deleted or renamed.
+    coarse_mm: Option<f64>,
     /// Stock's state before this command; `None` means the command creates
     /// the stock entity, so its inverse removes it.
-    prev: Option<(StockShape, Location, std::sync::Arc<[Triangle]>)>,
+    prev: Option<Prev>,
     /// #1094: any new stock - another shape, or the same model again -
     /// drops the raw-stock-only mark; only undo brings it back.
     marks: super::stock_source_only::MarkDrops,
 }
+
+/// A stock as it stood: shape, placement, facets and its own
+/// reduced-fidelity chord (#1056).
+type Prev = (StockShape, Location, std::sync::Arc<[Triangle]>, Option<f64>);
 
 impl SetStock {
     /// Validates against the world now. `location` places the stock; for
@@ -60,6 +68,10 @@ impl SetStock {
             return Err(CommandError::Invalid("stock placement must be finite".into()));
         }
 
+        let coarse_mm = match &shape {
+            StockShape::FromModel { source } => crate::model_fidelity::chord_behind(world, source),
+            _ => None,
+        };
         let facets = match &shape {
             StockShape::FromModel { source } => {
                 if *source == stock_name {
@@ -104,6 +116,7 @@ impl SetStock {
                     prev_shape,
                     model::transform_of(world, &entity).unwrap_or_default(),
                     model::facets_of(world, &entity).unwrap_or_default(),
+                    crate::model_fidelity::chord_of(world, &entity),
                 ))
             }
             None => None,
@@ -114,6 +127,7 @@ impl SetStock {
             shape,
             location,
             facets,
+            coarse_mm,
             prev,
         })
     }
@@ -128,6 +142,7 @@ impl Command for SetStock {
         };
         model::set_transform(world, &entity, self.location);
         model::set_facets(world, &entity, self.facets.clone());
+        crate::model_fidelity::set(world, &entity, self.coarse_mm);
         entity
             .entity_view(world)
             .set(StockDef { shape: self.shape.clone() });
@@ -139,9 +154,10 @@ impl Command for SetStock {
             return; // already undone (idempotent undo path)
         };
         match &self.prev {
-            Some((shape, location, facets)) => {
+            Some((shape, location, facets, coarse_mm)) => {
                 model::set_transform(world, &entity, *location);
                 model::set_facets(world, &entity, facets.clone());
+                crate::model_fidelity::set(world, &entity, *coarse_mm);
                 entity
                     .entity_view(world)
                     .set(StockDef { shape: shape.clone() });

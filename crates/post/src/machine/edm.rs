@@ -77,8 +77,9 @@ pub struct Edm {
 pub const WIRE_KEYS: [&str; 5] = ["lower_guide_z", "upper_guide_z", "max_taper_deg", "wire_diameters", "awt"];
 /// The keys only a sinker machine states.
 pub const SINKER_KEYS: [&str; 3] = ["orbits", "max_orbit_radius", "pickup"];
-/// The keys either EDM kind states.
-pub const COMMON_KEYS: [&str; 1] = ["conditions"];
+/// The keys either EDM kind states (`codes`: the control's own words,
+/// #533, read by `edm_codes::parse_codes`).
+pub const COMMON_KEYS: [&str; 2] = ["conditions", "codes"];
 /// The keys of one orbit entry.
 const ORBIT_KEYS: [&str; 2] = ["kind", "word"];
 
