@@ -12,9 +12,19 @@ the hidden-rest half of the scan changes, by four clauses
    the top itself and its two turns into the path's meridian plane. Each
    sample is a point of the orbit, so the reading is at or above the true
    orbit distance - an over-read rest, never a hidden one.
-2. **The band.** A hidden top farther along the spindle than every nose
-   centre by more than the nose, the scan floor and the arcs' bulge is out
-   of reach of every ball of the pass: excused (the groove under a Facing).
+2. **The band, read with its recess.** A hidden top farther along the
+   spindle than every nose centre by more than the nose, the scan floor and
+   the arcs' bulge is out of reach of every ball of the pass - and is
+   excused only when, in addition, no segment of the path stood level
+   (within that same reach) with the top's recess: the open span along the
+   spindle from the top up to the part's next surface over it, read from
+   the scan column's own paired crossings (the groove under a Facing).
+   A pass that went into the groove and stopped short of its floor stood
+   in the recess, so that floor stays its rest (PR #1429's review: a path
+   into the 34..37 groove at centre z 35.5 or 36 read 0.000 under the bare
+   band clause; with the recess it reads 0.695 / 1.502 / 1.194 and is
+   refused). The recess is read along the scan's Z, so the excuse applies
+   only to a spindle along Z; any other spindle is judged without it.
 3. **The crease.** A hidden top the nose cannot touch at all - the ridge
    law's own accessibility test (`ridge::Access::reachable`), the tangent
    ball along the top's normal cutting a neighbouring face - is excused (a
@@ -55,9 +65,15 @@ nothing to a tool approaching radially.
   Exact, but linear in segments per top and outside the `SegGrid`'s work
   budget; the three orbit samples are exact for an in-plane path and never
   under-read for any other.
+- *Band alone (the first head of PR #1429).* Out of reach is not proof of
+  another op's floor: every floor a pass stops short of is out of its
+  reach. Dropped on review for the recess reading above.
+- *A rule on the path's radius in the recess* (only centres inside the OD
+  count). It would excuse a pass that rode over the groove mouth, which is
+  less safe than judging it; the plain station overlap errs refusing.
 
-**Cost to change later.** The clauses live in one 140-line module and are
-switched by one context field; a later meridian-exact reading replaces
+**Cost to change later.** The clauses live in one module and are switched
+by one context field; a later meridian-exact reading replaces
 `TurnedBand::turned` without touching callers.
 
 **Left open.** Whether a profile insert's real geometry (trailing angle,

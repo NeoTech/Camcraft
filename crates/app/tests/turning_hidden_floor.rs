@@ -1,11 +1,12 @@
 //! #1408 at the app level: a turning nose path's envelope verdict
 //! reads a hidden floor (a groove's floor under the bar's full
 //! diameter) as the turned work sees it - the scan turns the work
-//! about the spindle, and a hidden top outside the band the path's
-//! nose sweeps along the axis is another op's jurisdiction (the
-//! Groove kinds'), never the Facing's or the Profile's rest. A real
-//! gouge, and a real hidden floor inside the path's own band, still
-//! block the post by name.
+//! about the spindle, and a hidden top out of the nose's reach, in a
+//! recess the path never stood level with, is another op's
+//! jurisdiction (the Groove kinds'), never the Facing's or the
+//! Profile's rest. A real gouge, a real hidden floor inside the path's
+//! own band, and the floor of a groove the path went into and stopped
+//! short of (PR #1429's review) still block the post by name.
 //!
 //! Gate map (M4.4): covers camcraft_app::operation (the Facing and
 //! Profile arms of generate's envelope verdict), sim::verify::finish
@@ -208,6 +209,40 @@ fn bars_without_a_groove_post_as_before() {
     assert_posts(STEPPED, &ops, "stepped");
     let (_, verdicts) = generated(WIDER_AT_FREE_END, &[("F2", facing(48.0))]);
     assert!(verdicts.iter().all(|(_, w)| w.is_empty()), "wider at the free end: {verdicts:?}");
+}
+
+fn profile_finish_to(bottom: f64) -> OpParams {
+    match profile_finish() {
+        OpParams::ProfileFinish { tolerance, clearance_z, top_z, feed, plunge_feed, .. } => OpParams::ProfileFinish {
+            tolerance,
+            clearance_z,
+            top_z,
+            bottom_z: Height::fixed(bottom),
+            feed,
+            plunge_feed,
+        },
+        other => other,
+    }
+}
+
+#[test]
+fn a_finish_that_stops_short_of_the_groove_floor_is_refused() {
+    // PR #1429's review: a pass that goes into the groove and stops
+    // short of its floor left that floor uncut, and the band clause
+    // read it as another op's. The finish window here ends at z 35.5,
+    // inside the 34..37 groove: the floor under it is the finish's
+    // rest, and the post refuses by name. The Facing on the same bar,
+    // whose stations never stand level with the groove, still posts.
+    let (world, verdicts) = generated(GROOVE, &[("S1", profile_finish_to(35.5))]);
+    let w = &verdicts[0].1;
+    assert!(
+        w.iter().any(|w| matches!(w, Warning::Envelope { rest_mm, .. } if *rest_mm > 0.3)),
+        "the floor under the short finish is its rest: {:?}",
+        w.iter().map(ToString::to_string).collect::<Vec<_>>()
+    );
+    let why = post(&world, "short").expect_err("a finish that stops short of the floor must not post");
+    assert!(why.contains("post blocked") && why.contains("S1") && why.contains("finish envelope"), "{why}");
+    assert_posts(GROOVE, &[("F2", facing(48.0))], "groove_facing_still");
 }
 
 #[test]

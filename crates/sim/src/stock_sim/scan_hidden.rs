@@ -313,17 +313,22 @@ fn judge_rows(
             };
             // Interval tops, high to low: the highest is the visible
             // surface; every lower one hides under a top above it.
-            for c in z.as_chunks::<2>().0 {
+            let chunks = z.as_chunks::<2>().0;
+            for (k, c) in chunks.iter().enumerate() {
                 let hi = c[1];
+                // The part's next surface over this top: its recess's
+                // roof (none known: infinite, and never an excuse).
+                let roof = chunks.get(k + 1).map_or(f64::INFINITY, |n| n[0]);
                 if hi >= t - f.floor {
                     continue; // not occluded: the ridge law already owns this top
                 }
                 let (cx, cy) = f.center(ix, iy);
                 let p = Point3::new(cx, cy, hi);
-                // #1408: a top outside the spindle band a turning
-                // path's noses travel is no ball's of this pass
-                // (`scan_turned`) - another op's floor, not this rest.
-                if f.band.is_some_and(|b| !b.reaches(p, reach)) {
+                // #1408: a top out of every turning nose's reach, in a
+                // recess the pass never stood level with, is another
+                // op's floor (`scan_turned`); one the pass went into
+                // and stopped short of is its rest (PR #1429 review).
+                if f.band.is_some_and(|b| b.excuses(p, roof, reach)) {
                     continue;
                 }
                 // The nearest ball center, exact (`scan_near`); a top

@@ -107,6 +107,35 @@ fn without_a_spindle_the_scan_is_the_old_one_bit_for_bit() {
     }
 }
 
+/// A nose that rides the OD down from the end face and then goes into
+/// the groove at centre station `z`, in to centre radius `r` - the
+/// review's probe on PR #1429.
+fn into_the_groove(z: f64, r: f64) -> Vec<Move> {
+    vec![feed(p(10.8, 0.0, 48.8), p(10.8, 0.0, z)), feed(p(10.8, 0.0, z), p(r, 0.0, z))]
+}
+
+#[test]
+fn a_pass_that_stops_short_of_the_groove_floor_it_entered_convicts() {
+    // The review's table (PR #1429): the band clause read the three
+    // shortfall rows as 0.000 - the floor 0.7 mm or more under the
+    // nose, inside the very groove the pass entered, posted clean. A
+    // floor the pass stood over is its rest; only a floor whose recess
+    // the pass never stood level with is another op's.
+    let f = revolve(GROOVE);
+    let read = |z: f64, r: f64| {
+        stock_sim::envelope_scan_turned(&f, &into_the_groove(z, r), NOSE, TOL, (Some(LatheAxis::Z), 0.0))
+            .expect("scan")
+    };
+    let cut = read(34.8, 6.3);
+    let gate = TOL + cut.cell * cut.cell / (2.0 * NOSE);
+    assert!(cut.rest_mm <= gate, "z 34.8 r 6.3: the floor is cut: {}", cut.rest_mm);
+    assert!(read(34.8, 8.0).rest_mm > 1.0, "z 34.8 r 8.0: the radial shortfall convicts");
+    for (z, r, least) in [(35.5, 6.3, 0.5), (35.5, 8.0, 0.5), (36.0, 6.3, 1.0)] {
+        let rep = read(z, r);
+        assert!(rep.rest_mm > least, "z {z} r {r}: the floor left under the nose is this pass's rest: {}", rep.rest_mm);
+    }
+}
+
 /// Law (f) through `verify`: a turning nose path on `facets` with the
 /// spindle given, as the app hands it.
 fn verdict(facets: &[Triangle], moves: Vec<Move>) -> Vec<Warning> {
