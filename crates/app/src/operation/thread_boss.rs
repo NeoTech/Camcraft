@@ -14,7 +14,8 @@
 //! boss rises from a wider base, so the part's silhouette says nothing
 //! about the wall the teeth cut, and reads the base's outline as a
 //! wall the tool stands "inside". So an external thread is judged in
-//! three readings that never ask the silhouette:
+//! three readings that never ask the silhouette, and only on a round
+//! boss ([`not_round`] refuses a polygonal one by name):
 //! - the **crest law** - the tangency verdict against [`crest_region`],
 //!   each boss's MINOR circle: the teeth may reach in to the design
 //!   root and no further (the boss is drawn at its major diameter, so a
@@ -115,6 +116,29 @@ pub(super) fn door(tool: &Tool, bosses: &[Hole], depth: Option<f64>, bottom: Opt
 pub(super) fn crest_region(bosses: &[Hole], depth: f64) -> Result<Region, GenError> {
     let loops = bosses.iter().map(|x| disk_loop(x.xy, x.radius - depth)).collect::<Result<Vec<_>, _>>()?;
     Ok(Region::new(loops)?)
+}
+
+/// Why the bosses of `plan` cannot be threaded, by name, when one is
+/// not a round wall in the part, else `None` (#985 x #1205). The crest
+/// law reads each boss's minor circle and the neighbour law passes the
+/// boss's own wall, both on the word that the wall is a circle: a
+/// polygonal boss (a hex stud, a square post) stands its flats inside
+/// that circle, where the teeth would cut them unjudged. So every wall
+/// facet within the drawn (major) radius plus [`crate::verify::WALL_SAG`]
+/// of the axis, over the thread's span, must read as a tessellated
+/// circle by the solid law's own sagitta test - the internal side's
+/// `thread_op::walls_round` - or the thread is refused.
+pub(super) fn not_round(facets: &[Triangle], plan: &crate::machining2d::ThreadParams) -> Option<String> {
+    plan.holes.iter().find_map(|h| {
+        let (lo, hi) = (h.floor_z.min(h.top_z) - plan.tool_diameter, h.floor_z.max(h.top_z));
+        let round = crate::verify::hole_is_round(facets, [h.xy.x, h.xy.y], h.radius + crate::verify::WALL_SAG, lo, hi);
+        (!round).then(|| {
+            format!(
+                "the boss at ({:.3}, {:.3}) is not round - external thread milling needs a round boss (its flats would be cut inside the thread's minor circle)",
+                h.xy.x, h.xy.y
+            )
+        })
+    })
 }
 
 /// The boss each move is threading, by its place in the list; `None`

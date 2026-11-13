@@ -79,6 +79,7 @@ pub mod tool_gate;
 mod params;
 mod trochoid_op;
 mod stamp;
+mod stamp_tool;
 pub use stamp::*;
 mod stamp_stock;
 pub use stamp_stock::reads_setup_stock;
@@ -90,6 +91,8 @@ pub(crate) use material_region::selection_drives_region;
 mod circle_fit;
 pub use circle_fit::{CIRCLE_FIT_TOL, circle_of_region, circular_fit_of};
 mod material_source;
+// #1071: the thread mill's major-circle rims and solid-law bores.
+mod thread_rims;
 mod footprint;
 pub use footprint::machined_footprint;
 mod probe;
@@ -102,6 +105,15 @@ pub mod thread_op;
 mod thread_entry;
 // #985: external threads - the boss door, the crest region, the neighbour law.
 mod thread_boss;
+pub mod wire_op;
+// #534: the wire laws' inputs, read live at the post.
+pub mod wire_verify;
+// #541: the sinker EDM burn to depth.
+pub mod sinker_op;
+// #546: the sinker burn's electrode wear compensation.
+pub mod sinker_wear_op;
+// #545: the Sinker Side Burn's seed, laws and generation.
+pub mod sinker_side_op;
 // #171: the Probe op seeded from one picked face, edge, vertex or round wall.
 mod probe_pick;
 mod probe_pick_round;
@@ -155,12 +167,22 @@ pub(crate) mod spindle_law;
 pub use spindle_law::{spindle_reading, SpindleReading, SPINDLE_TOL};
 mod rotary_gate;
 mod air_law;
+// #864: what a kind's gouge laws need of its model's fidelity.
+pub(crate) mod fidelity_law;
 mod top_stock;
+mod stock_top_law;
+// #266: a tap judged at its thread's core.
+mod tap_core;
 pub use top_stock::TOP_STOCK_WARNING;
 mod turning_credit;
 mod turning_feeds;
 mod turning_holder;
+pub(crate) use turning_holder::body_axes as lathe_body_axes;
 mod turning_holder_scene;
+mod turning_holder_side;
+mod turning_holder_steel;
+pub use turning_holder_steel::STEEL_UNREAD_NOTE;
+pub(crate) use turning_holder_steel::lathe_steel_hits;
 mod turning_outline;
 mod turning_rapids;
 mod turning_stock;

@@ -6,11 +6,19 @@
 //! Provenance: ISO 965-1 external thread sizes and public handbook
 //! thread milling; our own fixtures.
 
+use flecs_ecs::prelude::World;
+
 use camcraft_app::cl::ThreadHand;
+use camcraft_app::commands::{AddTool, CreateOperation, GenerateOperation, History, ImportModel, SetStock};
 use camcraft_app::drilling::Hole;
 use camcraft_app::geo2d::Point2;
 use camcraft_app::geometry::{Mesh, Point3, Triangle};
-use camcraft_app::operation::{Height, OpParams};
+use camcraft_app::operation::{Height, OpParams, SrcRef};
+use camcraft_app::schema::Location;
+use camcraft_app::stock::StockShape;
+use camcraft_app::world::new_world;
+
+use super::{MULTI, SINGLE, catalog_tool};
 
 pub const SHOULDER: f64 = 10.0;
 pub const TOP: f64 = 20.0;
@@ -25,7 +33,12 @@ pub fn quad(a: Point3, b: Point3, c: Point3, d: Point3, f: &mut Vec<Triangle>) {
 /// on it up to `TOP`, walls in 96 flats; `extra` facets ride along (a
 /// rib beside the boss). Outward-wound.
 pub fn stud(radius: f64, extra: Vec<Triangle>) -> Mesh {
-    let n = 96;
+    stud_of(96, radius, extra)
+}
+
+/// [`stud`] with the boss (and base) drawn as `n` flats, corners on
+/// `radius`: 6 is a hex stud, which is no round boss.
+pub fn stud_of(n: usize, radius: f64, extra: Vec<Triangle>) -> Mesh {
     let at = |r: f64, k: usize, z: f64| {
         let a = std::f64::consts::TAU * (k % n) as f64 / n as f64;
         Point3::new(r * a.cos(), r * a.sin(), z)
@@ -95,4 +108,32 @@ pub fn clearing(bottom: f64, leave: f64) -> OpParams {
         blend_turns: false,
         links: camcraft_app::links::Links::PLANAR,
     }
+}
+
+/// A world holding the stud in a 40 x 40 x 20 block, the thread mills
+/// and the end mill; nothing machined yet.
+pub fn stud_bare(mesh: Mesh) -> (World, History) {
+    let world = new_world();
+    let mut history = History::default();
+    let stock = SetStock::new(&world, StockShape::Box { dx: 40.0, dy: 40.0, dz: TOP }, Location::default());
+    history.execute(&world, stock.expect("box stock"));
+    for name in [MULTI, SINGLE, ENDMILL] {
+        history.execute(&world, AddTool::new(&world, name, catalog_tool(name)).expect("tool"));
+    }
+    history.execute(&world, ImportModel::from_mesh("stud", mesh));
+    (world, history)
+}
+
+/// The roughing "Rough1" ([`clearing`]) created and generated.
+pub fn clear_around(world: &World, history: &mut History, bottom: f64, leave: f64) {
+    let op = CreateOperation::new(world, "Rough1", ENDMILL, SrcRef::Entity("stud".into()), clearing(bottom, leave));
+    history.execute(world, op.expect("create the roughing"));
+    history.execute(world, GenerateOperation::new(world, "Rough1").expect("generate the roughing"));
+}
+
+/// [`stud_bare`] with the stock round the boss cleared to the shoulder.
+pub fn stud_world(mesh: Mesh) -> (World, History) {
+    let (world, mut history) = stud_bare(mesh);
+    clear_around(&world, &mut history, SHOULDER, 0.0);
+    (world, history)
 }

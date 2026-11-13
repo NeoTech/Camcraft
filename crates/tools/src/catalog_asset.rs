@@ -53,6 +53,7 @@ enum KindWord {
     Taper,
     Probe,
     Torch,
+    Electrode,
     ThreadMill,
     ThreadMillSingle,
 }
@@ -99,6 +100,9 @@ struct Def {
     /// Lathe tool orientation (LinuxCNC 1-9); the starter catalog states none.
     #[serde(default)]
     orientation: Option<u8>,
+    /// Turning cutting data (#891); the starter catalog states none.
+    #[serde(default)]
+    turning: Option<crate::turning_data::TurningData>,
 }
 
 fn yes() -> bool {
@@ -122,6 +126,7 @@ impl Def {
                 KindWord::Taper => ToolKind::Taper,
                 KindWord::Probe => ToolKind::Probe,
                 KindWord::Torch => ToolKind::Torch,
+                KindWord::Electrode => ToolKind::Electrode,
                 KindWord::ThreadMill => ToolKind::ThreadMill,
                 KindWord::ThreadMillSingle => ToolKind::ThreadMillSingle,
             },
@@ -147,6 +152,9 @@ impl Def {
             flutes: self.flutes,
             center_cutting: self.center_cutting,
             orientation: self.orientation,
+            catalog: crate::catalog_fields::ToolCatalog::default(),
+            cutting: Vec::new(),
+            turning: self.turning,
         }
     }
 }

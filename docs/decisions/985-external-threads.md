@@ -119,3 +119,49 @@ No HSMWorks / Fusion material, output or documentation was consulted.
 - The neighbour law samples every 0.25 mm and walks the facets the path's
   box reaches; a model with very many facets around the boss wants a
   spatial index.
+
+## The refresh onto #1045 @ 6dd3f773 (#1005's #1071 laws) and a round-boss law
+
+**What was decided**
+
+1. **Internal threads take the parent's laws unchanged; external threads
+   keep their own.** #1005's refresh replaced `crest_region` and the
+   narrowed `root_cutter` with main's `thread_rims::major_rims` and the
+   solid law's thread grant (`thread_op::bores`, see
+   `894-thread-mill.md`, "The refresh against main"). A boss is no bore:
+   `bores` returns no grant for an external thread, and `root_cutter`
+   comes back for external threads only (the cutter narrowed by the
+   external depth, roots / tip / shank / holder against the whole part).
+   The grant and a narrowed cutter are therefore never stacked - the
+   reason #1005 gave for dropping `root_cutter` on the internal side. The
+   crest law on a boss stays `thread_boss::crest_region` (the minor
+   circle), and the neighbour law and the air law are unchanged.
+2. **A boss must be round, or the thread is refused by name.** The
+   crest law reads each boss's minor circle and the neighbour law passes
+   the boss's own wall (vertices within radius + 0.05 mm), both on the
+   word that the wall is a circle. A hex stud or square post stands its
+   flats inside the drawn circle, where the teeth would cut them with no
+   law reading them. `thread_boss::not_round` applies the internal side's
+   `walls_round` test to the boss wall: every upright wall facet within
+   the drawn radius + `WALL_SAG` of the axis, over the thread's span,
+   must read as a tessellated circle by the solid law's own sagitta test
+   (`verify::hole_is_round`). Otherwise generate refuses: "the boss at
+   (x, y) is not round - external thread milling needs a round boss".
+   Pinned by `thread_boss::a_hex_stud_is_no_round_boss_and_is_refused_by_name`.
+
+**Why** - the internal side settled on the stricter #1071 reading; the
+external side has no bore to grant, so its own root law is the only
+solid reading it can take, and it must not ride a grant. A polygonal
+boss was the one shape the three external laws assumed away; refusing it
+is the safe reading until it is judged properly.
+
+**Considered and dropped**
+
+- *Judging a polygonal boss at full tooth radius* (the internal side's
+  fallback for a non-round hole): beside a boss, the full radius against
+  its own wall convicts every helix of a real thread (the crests are
+  meant to cut past the drawn wall), so the fallback would be a refusal
+  in all but name - and a less legible one.
+- *Threading a hex stud on purpose* (a thread cut over across-flats
+  stock): a real shop job, but it needs the crest law to read the flats,
+  not a circle; left for a follow-up if asked for.
