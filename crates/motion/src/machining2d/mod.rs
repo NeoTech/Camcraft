@@ -27,6 +27,7 @@ mod arc_leads;
 mod arcs;
 mod blend;
 mod bore;
+mod bore_core;
 mod chamfer;
 mod circular;
 mod thread_mill;
@@ -90,7 +91,8 @@ mod thread_pass_tests;
 
 pub use arcs::{fit_arcs, Seg, ARC_FIT_TOL};
 pub use blend::MIN_BLEND_RADIUS;
-pub use bore::{bore, max_bore_diameter, BoreHole, BoreParams};
+pub use bore::{bore, BoreHole, BoreParams};
+pub use bore_core::{bore_core_gap, bore_floor_reach, bore_leaves_core, cutting_radius_at, max_bore_diameter};
 pub use chamfer::{chamfer, ChamferParams};
 pub use circular::{circular, CircularParams};
 pub use contour::{contour, contour_on_bodies, contour_on_part, ContourParams, Lead, Side};

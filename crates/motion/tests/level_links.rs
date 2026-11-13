@@ -301,6 +301,7 @@ fn bore_params(links: Links) -> BoreParams {
             stepped: false,
         }],
         tool_diameter: 6.0,
+        corner_radius: 0.0,
         stock_to_leave: 0.0,
         stepdown: 2.0,
         through_allowance: 0.5,

@@ -2129,6 +2129,8 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     })
                     .collect(),
                 tool_diameter: d,
+                // #1556: the corner sets the reach at a through floor.
+                corner_radius: tool.corner_r,
                 stock_to_leave: *stock_to_leave,
                 stepdown: *stepdown,
                 // The cycles' exit gift, the drilling crate's own

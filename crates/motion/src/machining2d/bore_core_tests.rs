@@ -20,10 +20,15 @@ fn hole(radius: f64, through: bool) -> BoreHole {
 }
 
 fn params(h: BoreHole, dia: f64, leave: f64) -> BoreParams {
+    params_c(h, dia, 0.0, leave)
+}
+
+fn params_c(h: BoreHole, dia: f64, corner: f64, leave: f64) -> BoreParams {
     BoreParams {
         links: crate::links::Links::PLANAR,
         holes: vec![h],
         tool_diameter: dia,
+        corner_radius: corner,
         stock_to_leave: leave,
         stepdown: 2.0,
         through_allowance: 1.0,
@@ -50,6 +55,13 @@ fn seg_dist(p: Point2, a: Point2, b: Point2) -> f64 {
 /// from every cut move at the deepest level, minus the tool radius:
 /// positive means a point no pass touches.
 fn worst_uncut(path: &Toolpath, h: &BoreHole, r: f64, leave: f64, inset: f64) -> f64 {
+    worst_uncut_within(path, h, r, h.radius - leave - inset)
+}
+
+/// [`worst_uncut`] over the floor disc of radius `reach` about the hole's
+/// centre (a corner-radiused cutter's own wall fillet stands outside the
+/// ring's floor-plane band and is joined to the wall, so it is no core).
+fn worst_uncut_within(path: &Toolpath, h: &BoreHole, r: f64, reach: f64) -> f64 {
     let floor = path
         .moves
         .iter()
@@ -65,7 +77,6 @@ fn worst_uncut(path: &Toolpath, h: &BoreHole, r: f64, leave: f64, inset: f64) ->
         .flat_map(|m| m.chords(1e-4))
         .collect();
     assert!(!segs.is_empty(), "the floor level cuts");
-    let reach = h.radius - leave - inset;
     let mut worst = f64::NEG_INFINITY;
     let n = 60;
     for i in 0..=n {
@@ -101,7 +112,8 @@ fn bore_refuses_just_past_the_limit_and_takes_the_limit() {
     assert!(worst_uncut(&at, &hole(6.5, false), 2.0, 0.5, 1e-3) <= 1e-3, "the limit hole is cleared");
     let err = bore(&params(hole(6.51, false), 4.0, 0.5)).expect_err("13.02 mm is past the limit");
     assert!(format!("{err:?}").contains("too wide to bore"), "{err:?}");
-    assert_eq!(max_bore_diameter(4.0, 0.5), 13.0);
+    assert_eq!(max_bore_diameter(4.0, 0.0, 0.5, None), 13.0);
+    assert_eq!(max_bore_diameter(4.0, 0.0, 0.5, Some(1.0)), 13.0, "a square end reaches its radius at any floor");
 }
 
 #[test]
@@ -116,3 +128,70 @@ fn every_bore_the_ride_takes_clears_its_whole_floor() {
     }
 }
 
+
+#[test]
+fn the_cutting_radius_follows_the_corner_torus() {
+    // r = 6, corner 2: the flat bottom is R4; at 1 mm up the corner adds
+    // sqrt(2^2 - 1^2) = sqrt(3); from 2 mm up it is the full R6.
+    assert!((cutting_radius_at(6.0, 2.0, 1.0) - (4.0 + 3f64.sqrt())).abs() < 1e-12);
+    assert_eq!(cutting_radius_at(6.0, 2.0, 0.0), 4.0);
+    assert_eq!(cutting_radius_at(6.0, 2.0, 2.0), 6.0);
+    assert_eq!(cutting_radius_at(6.0, 2.0, 7.0), 6.0);
+    // A ball (corner = r): no flat; 1 mm up a R3 ball cuts sqrt(1 x 5).
+    assert!((cutting_radius_at(3.0, 3.0, 1.0) - 5f64.sqrt()).abs() < 1e-12);
+    assert_eq!(cutting_radius_at(3.0, 3.0, 0.0), 0.0);
+    // A ball smaller than the drop reaches its full radius.
+    assert_eq!(cutting_radius_at(0.5, 0.5, 1.0), 0.5);
+    // A square end mill is its radius at every height.
+    assert_eq!(cutting_radius_at(2.0, 0.0, 0.0), 2.0);
+    // Through: judged at the floor reach; blind: the full radius.
+    assert!((bore_floor_reach(12.0, 2.0, Some(1.0)) - (4.0 + 3f64.sqrt())).abs() < 1e-12);
+    assert_eq!(bore_floor_reach(12.0, 2.0, None), 6.0);
+}
+
+/// The review's example: a Ø12 bull nose with r2 corners on a through
+/// hole, its tip 1 mm under the floor, reaches only R5.732 there, so the
+/// ride clears through holes up to 12 + 4 x 5.732 = 34.928 mm (not 36).
+#[test]
+fn a_bull_nose_through_hole_is_judged_at_its_floor_reach() {
+    let reach = 4.0 + 3f64.sqrt();
+    let limit = 12.0 + 4.0 * reach;
+    assert!((max_bore_diameter(12.0, 2.0, 0.0, Some(1.0)) - limit).abs() < 1e-12);
+    // At the limit: bores, and every floor point is within the corner's
+    // floor-plane reach of a cut at the deepest level.
+    let at = hole(limit * 0.5, true);
+    let path = bore(&params_c(at, 12.0, 2.0, 0.0)).expect("the 34.928 mm limit hole bores");
+    // Inside the ring's floor-plane band (`rc + reach`): the wall's own
+    // corner fillet outside it is joined to the wall, no core.
+    let band_out = at.radius - 6.0 + reach - 1e-3;
+    assert!(worst_uncut_within(&path, &at, reach, band_out) <= 1e-3, "the limit hole's floor is cleared");
+    // Just past it: refused by name, with the corner's numbers - the
+    // full-radius limit (36 mm) would have posted a free C-shaped ridge.
+    let err = bore(&params_c(hole(limit * 0.5 + 0.01, true), 12.0, 2.0, 0.0)).expect_err("34.948 mm frees a ridge");
+    let msg = format!("{err:?}");
+    for want in ["34.948 mm hole", "up to 34.928 mm", "R5.732 its 2.000 mm corner reaches"] {
+        assert!(msg.contains(want), "refusal names `{want}`: {msg}");
+    }
+    // A blind hole keeps its floor under the corner: the ridge stands on
+    // it, never free, so the square-end 36 mm limit holds there. Its
+    // ride is the one a through 36 mm hole would have posted under the
+    // full-radius limit: at a through floor's reach it leaves the ridge
+    // (rc 12 vs 2 x 5.732: a 0.536 mm band, ~0.27 mm from every pass).
+    let blind = hole(18.0, false);
+    let ride = bore(&params_c(blind, 12.0, 2.0, 0.0)).expect("a blind 36 mm hole bores");
+    let sliver = worst_uncut_within(&ride, &blind, reach, 12.0 + reach - 1e-3);
+    assert!(sliver > 0.2, "the coverage check sees the through ridge: {sliver}");
+    assert!(bore(&params_c(hole(18.01, false), 12.0, 2.0, 0.0)).is_err(), "36.02 mm is past the blind limit");
+}
+
+#[test]
+fn a_ball_through_hole_and_a_corner_that_does_not_fit_are_judged() {
+    // Ø6 ball (corner 3): at the floor, 1 mm above its tip, it cuts
+    // sqrt(5) = R2.236, so through holes stop at 6 + 4 x 2.236 = 14.944.
+    let limit = 6.0 + 4.0 * 5f64.sqrt();
+    bore(&params_c(hole(limit * 0.5, true), 6.0, 3.0, 0.0)).expect("the ball's limit hole bores");
+    assert!(bore(&params_c(hole(limit * 0.5 + 0.01, true), 6.0, 3.0, 0.0)).is_err(), "past the ball's limit");
+    // A corner wider than the cutter's radius is refused at the door.
+    let err = bore(&params_c(hole(5.0, false), 6.0, 3.5, 0.0)).expect_err("a 3.5 corner on a 6 mm cutter");
+    assert!(format!("{err:?}").contains("corner radius does not fit"), "{err:?}");
+}

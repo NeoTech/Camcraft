@@ -254,6 +254,7 @@ fn bore_params(holes: Vec<BoreHole>, dia: f64) -> BoreParams {
         links: crate::links::Links::PLANAR,
         holes,
         tool_diameter: dia,
+        corner_radius: 0.0,
         stock_to_leave: 0.0,
         stepdown: 2.0,
         through_allowance: 1.0,

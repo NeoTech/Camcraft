@@ -196,3 +196,40 @@ fn a_bore_op_handed_the_wide_bore_by_hand_refuses_at_generate() {
     let v = c.ok("verify", json!({}));
     assert_ne!(v["ok"], json!(true), "a refused bore never verifies ok: {v}");
 }
+
+/// The review's bull-nose example (PR #1575): a Ø12 bull nose with r2
+/// corners reaches only R5.732 at a through floor (its tip 1 mm under
+/// it), so a Ø35.5 through bore - inside the 36 mm square-end limit -
+/// would free a C-shaped ridge. Detect holes leaves it out by the corner's
+/// own limit (34.928 mm), and generate refuses it handed in by hand: the
+/// tool's corner radius reaches the kernel from the op's own tool.
+#[test]
+fn a_bull_nose_through_bore_is_judged_by_its_corner_at_detect_and_generate() {
+    let stl = write_stl("bull", &[17.75, 8.0]);
+    let mut c = Client::new();
+    c.ok("import_model", json!({ "path": stl.display().to_string(), "name": "plate" }));
+    c.ok("set_stock", json!({ "from_model": "plate" }));
+    c.ok("add_tool", json!({ "name": "BN12", "definition": {
+        "kind": "bull_nose", "diameter": 12.0, "corner_r": 2.0, "flute_len": 30.0, "shank_d": 12.0,
+        "shank_len": 40.0, "holder_d": 44.0, "holder_len": 35.0, "material_group": "general",
+        "rpm": 8000.0, "feed": 800.0 } }));
+    c.ok("add_operation", json!({ "kind": "bore", "tool": "BN12", "source": "plate", "name": "B", "params": { "stepdown": 2.0 } }));
+
+    let got = c.ok("detect_holes", json!({ "name": "B" }));
+    assert_eq!(got["holes"], json!(1), "only the Ø16 hole is stored: {got}");
+    let note = got["skipped"][0].as_str().unwrap_or_default().to_owned();
+    for want in ["35.500 mm hole at (-50.000, 0.000)", "wider than the 34.928 mm", "12.000 mm tool"] {
+        assert!(note.contains(want), "the note names `{want}`: {note}");
+    }
+
+    let mut list = holes(&mut c);
+    let mut wide = list[0].clone();
+    wide["radius"] = json!(17.75);
+    wide["xy"] = json!([-50.0, 0.0]);
+    list.push(wide);
+    c.ok("edit_operation", json!({ "name": "B", "params": { "holes": list } }));
+    let e = c.refused("generate", json!({ "name": "B" }));
+    for want in ["35.500 mm hole at (-50.000, 0.000)", "too wide to bore", "up to 34.928 mm", "2.000 mm corner"] {
+        assert!(e.contains(want), "the refusal names `{want}`: {e}");
+    }
+}
