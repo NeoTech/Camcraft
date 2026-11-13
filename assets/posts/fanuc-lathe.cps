@@ -560,6 +560,19 @@ function trim0(s) {
 }
 function fc(v) { return trim0(Number(v).toFixed(3)); }  // degrees, three decimals
 function fm(v) { return trim0(Number(v).toFixed(1)); }  // mm/min, one decimal
+// #1392: a feed held under a machine rate is judged on its POSTED word.
+// fm() rounds to nearest, so a feed within half a step of its cap could
+// post up to 0.05 mm/min over it: then the word is floored to the step
+// at or under the cap. A word over by no more than the cap arithmetic's
+// own float noise (1e-9 relative) is the cap itself and stays as is, so
+// a feed far from (or exactly at) its cap posts unchanged.
+function capWord(v, cap) {
+  var w = fm(v);
+  if (!(cap < Infinity)) return w;
+  var tol = 1e-9 * Math.max(1, Math.abs(cap));
+  if (Number(w) <= cap + tol) return w;
+  return fm(Math.floor((cap + tol) * 10) / 10);
+}
 // One straight move of a C section: the tip turned by C onto the station.
 function liveMove(p, rapid) {
   if (!liveOk) return;
@@ -610,9 +623,11 @@ function liveMove(p, rapid) {
     var fc_ = f * lcmd / ltrue;
     var lin = Math.sqrt(dr * dr + dz * dz);
     var fmax = Number(machine.feedRateMax);
-    if (fmax > 0 && lin > EPS) fc_ = Math.min(fc_, fmax * lcmd / lin);
-    if (liveCRate > 0 && Math.abs(dc) > 1e-9) fc_ = Math.min(fc_, liveCRate * lcmd / Math.abs(dc));
-    block(["G01", xWord(r), zWord(p.Z), "C" + fc(p.C), "F" + fm(fc_)]);
+    var capF = Infinity;
+    if (fmax > 0 && lin > EPS) capF = Math.min(capF, fmax * lcmd / lin);
+    if (liveCRate > 0 && Math.abs(dc) > 1e-9) capF = Math.min(capF, liveCRate * lcmd / Math.abs(dc));
+    fc_ = Math.min(fc_, capF);
+    block(["G01", xWord(r), zWord(p.Z), "C" + fc(p.C), "F" + capWord(fc_, capF)]);
   }
   lastC = Number(p.C); lastR = r; lastZ = p.Z;
 }
