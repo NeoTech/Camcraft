@@ -60,14 +60,18 @@ fn all() -> impl Iterator<Item = &'static Tool> {
         .chain(super::setup_tools::TOOLS)
         .chain(super::fixture_tools::TOOLS)
         .chain(super::align_tools::TOOLS)
+        .chain(super::wcs_tools::TOOLS)
         .chain(super::model_tools::TOOLS)
         .chain(super::vise_tools::TOOLS)
         .chain(super::accessory_tools::TOOLS)
         .chain(super::cutter_tools::TOOLS)
+        .chain(super::body_tools::TOOLS)
         .chain(super::plate_tools::TOOLS)
         .chain(super::modvise_tools::TOOLS)
+        .chain(super::rotary_tools::TOOLS)
         .chain(super::workholding_tools::TOOLS)
         .chain(super::order_tools::TOOLS)
+        .chain(super::machine_tools::TOOLS)
 }
 
 /// The `tools/list` rows.
@@ -255,12 +259,12 @@ fn s_add_op() -> Value {
     obj(
         json!({
             "kind": { "type": "string", "description": "Operation kind: label or key from list_operation_types." },
-            "tool": { "type": "string", "description": "A document tool name (add_tool first)." },
+            "tool": { "type": "string", "description": "A document tool name (add_tool first). Required, except for a kind that mounts no tool (list_operation_types says \"mounts_tool\": false - the Wire Contour): omit it there; naming one is refused." },
             "name": { "type": "string", "description": "Operation name; defaults to the kind's label plus a number." },
             "source": { "type": "string", "description": "\"stock\" (default) or a model name." },
             "params": { "type": "object", "description": "Fields to change from the kind's defaults." }
         }),
-        &["kind", "tool"],
+        &["kind"],
     )
 }
 

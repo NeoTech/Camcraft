@@ -14,6 +14,7 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, TryRecvError};
 use camcraft_app::clock::Instant;
 use std::time::Duration;
+use crate::shortcut_keys::chord;
 
 use camcraft_app::commands::{
     ActivateSetup, AlignPartToSetup, SetSetupRelative, SetSetupStockSource, SetSetupWorkOffset, AddTool, HolderPick, ApplyCuttingData, ChangeOperationKind, ChangeTool, CommandError, CreateOperation,
@@ -75,6 +76,9 @@ pub use program_entry::EntryVerb;
 #[path = "state_tool_body.rs"]
 mod tool_body_ui;
 pub use tool_body_ui::{BodyDraft, BodyPickMode, ToolBodyUi, ZOOM_MAX, ZOOM_MIN, clamp_zoom};
+#[path = "state_tool_body_lathe.rs"]
+mod tool_body_lathe_ui;
+pub use tool_body_lathe_ui::{LatheBodyDraft, LatheDraft};
 #[path = "state_tool_profile.rs"]
 mod tool_profile_ui;
 #[path = "state_tool_cutter.rs"]
@@ -206,6 +210,12 @@ pub enum CommandKind {
         setup: String,
         own: bool,
     },
+    /// #821: a setup states its own nose-to-rotary figure, mm, or clears
+    /// it (`SetSetupNoseToAxis`).
+    SetupNoseToAxis {
+        setup: String,
+        value: Option<f64>,
+    },
     /// #1031: state (`Some`) or clear a setup's workholding maximum rpm
     /// (`SetSetupWorkholdingRpm`).
     SetSetupWorkholdingRpm { setup: String, max_rpm: Option<f64> },
@@ -255,6 +265,13 @@ pub enum CommandKind {
     SetToolBody {
         name: String,
         body: Option<BodyDraft>,
+    },
+    /// #361: set a lathe-held tool's body in the turning tool frame -
+    /// the tool editor's Apply body on a lathe draft, one
+    /// `SetToolBody::lathe`. (Clear body stays `SetToolBody` with `None`.)
+    SetLatheToolBody {
+        name: String,
+        body: LatheBodyDraft,
     },
     /// #93: set a milling tool's drawn spun holder (`Some` points) or
     /// return it to its parametric cylinder (`None`) - the tool editor's
@@ -2896,6 +2913,7 @@ impl State {
             CommandKind::SetupOwnMachine { setup, own } => self.own_machine(&setup, own),
             CommandKind::SetupOwnPost { setup, own } => self.own_post(&setup, own),
             CommandKind::SetupOwnPostOptions { setup, own } => self.own_post_options(&setup, own),
+            CommandKind::SetupNoseToAxis { setup, value } => self.set_setup_nose(&setup, value),
             CommandKind::SetSetupWorkholdingRpm { setup, max_rpm } => self.set_workholding_rpm(&setup, max_rpm),
             CommandKind::EditMachineDialog => {
                 let (path, m) = machine::of(&self.world);
@@ -3059,6 +3077,7 @@ impl State {
                 }
             }
             CommandKind::SetToolBody { name, body } => self.run_set_tool_body(&name, body),
+            CommandKind::SetLatheToolBody { name, body } => self.run_set_lathe_tool_body(&name, body),
             CommandKind::SetToolProfile { name, points } => self.run_set_tool_profile(&name, points),
             CommandKind::SetToolCutter { name, points } => self.run_set_tool_cutter(&name, points),
             CommandKind::ReshapeTool { name, tool, points } => self.run_reshape_tool(&name, tool, points),
@@ -3307,7 +3326,7 @@ impl State {
                 Ok(command) => {
                     self.history.execute(&self.world, command);
                     self.doc_version += 1;
-                    self.status = format!("cleared the toolpath of {name} - Ctrl+Z restores it");
+                    self.status = format!("cleared the toolpath of {name} - {} restores it", chord("Z"));
                 }
                 Err(err) => {
                     self.refuse(ErrorScope::Operation, format!("toolpath not cleared: {err}"))
@@ -3796,6 +3815,9 @@ impl State {
         let (tx, rx) = mpsc::channel();
         let worker_path = path.clone();
         let budget = self.step_budget_for(&path);
+        if let (Some(b), false) = (budget, self.step_budget.explicit) {
+            self.status = format!("importing {} under its recorded STEP facet budget of {b}…", file_label(&path));
+        }
         let spawned = std::thread::Builder::new()
             .name("camcraft-import".to_string())
             .spawn(move || {

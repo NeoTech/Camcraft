@@ -75,6 +75,21 @@ pub fn budget_of(world: &World, entity: &Entity) -> Option<u64> {
         .and_then(|b| step_budget::recorded(Some(b)))
 }
 
+/// The budget a re-import of `path` carries when the caller gave none
+/// (#1185): for a STEP file landing on a model that already exists under
+/// `name` (default: the file's stem, as the importers name it), the budget
+/// that model was imported under, so a restart or a fresh session never
+/// silently re-meshes it at the default. `None` is the default budget.
+#[must_use]
+pub fn reimport_budget(world: &World, path: &std::path::Path, name: Option<&str>) -> Option<u64> {
+    if !matches!(crate::geometry::import::format_from_path(path), Ok(crate::geometry::import::Format::Step)) {
+        return None;
+    }
+    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("model");
+    let entity = model::find_by_name(world, name.unwrap_or(stem))?;
+    budget_of(world, &entity)
+}
+
 /// Write or clear the recorded budget. Like [`set`]: for the import and
 /// update commands, their undo and the project loader only.
 pub fn set_budget(world: &World, entity: &Entity, budget: Option<u64>) {

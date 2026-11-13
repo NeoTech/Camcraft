@@ -60,6 +60,8 @@ fn family_is_derived_not_forked() {
         let want = match k.section {
             Section::Turning => Family::Turn,
             Section::Plasma => Family::Plasma,
+            // #532: the Wire EDM section is the wire family's.
+            Section::WireEdm => Family::WireEdm,
             // #541: the Sinker section is the sinker family's.
             Section::Sinker => Family::Sinker,
             _ => Family::Mill,
@@ -310,6 +312,8 @@ fn the_probe_appends_its_id_and_lists_in_drilling() {
     // (40), #541 the sinker burn (41).
     assert_eq!(KindInfo::ALL[39].ty, operation::OpType::PlasmaProfile);
     assert_eq!(KindInfo::ALL[40].ty, operation::OpType::TrochoidalSlot);
+    // #532 appended the wire contour behind them (41).
+    // #541 appended the sinker burn behind it (42).
     assert_eq!(KindInfo::ALL[KIND_COUNT - 1].ty, operation::OpType::SinkerBurn);
     assert_eq!(KindInfo::ALL[13].ty, operation::OpType::Pocket3D, "Pocket3D keeps id 13");
     assert_eq!(KindInfo::ALL[37].ty, operation::OpType::BoringTurning, "the turning tail keeps 37");

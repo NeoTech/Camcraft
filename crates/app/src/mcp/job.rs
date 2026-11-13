@@ -60,6 +60,9 @@ fn setups_view(env: &Env) -> Vec<Value> {
                 "stock": stock.as_ref().map(project::stock_to_json),
                 "stock_bounds": model::stock_world_aabb_for(w, d).as_ref().map(aabb),
                 "wcs": wcs,
+                // #1233: the setup's own post (null: follows the document's) and what it posts with.
+                "post": crate::setup_mount::own_post(w, d).as_ref().map(crate::posting::post_ref_label),
+                "posts_with": crate::posting::post_ref_label(&crate::setup_mount::post_of(w, d)),
                 // #1031: the chuck's or collet's rated maximum rpm.
                 "workholding_max_rpm": s.as_deref().and_then(|n| crate::setup_workholding::of(w, Some(n))).map(fnum),
             })
@@ -83,6 +86,16 @@ fn op_full(env: &Env, key: &str, e: &flecs_ecs::prelude::Entity, status: operati
         "status": api::st_str(status),
         "warnings": warnings,
         "params": op.as_ref().map(|o| project::params_to_json(&o.params)),
+    })
+}
+
+/// #1162: the document's mounted machine, its whole definition, so an
+/// agent reads back what `edit_machine` changed.
+fn machine_view(w: &flecs_ecs::prelude::World) -> Value {
+    let (path, m) = crate::machine::document_of(w);
+    json!({
+        "path": (!path.is_empty()).then_some(path),
+        "definition": m.as_ref().and_then(|m| serde_json::to_value(m).ok()),
     })
 }
 
@@ -121,6 +134,7 @@ pub(super) fn get_job(env: &mut Env, _a: &Map<String, Value>) -> Result<Value, S
         "models": models,
         "tools": tools,
         "operations": ops,
+        "machine": machine_view(w),
         "can_undo": env.history.can_undo(),
         "can_redo": env.history.can_redo(),
     }))
@@ -157,13 +171,18 @@ pub(super) fn list_operation_types(_env: &mut Env, _a: &Map<String, Value>) -> R
                 .as_object()
                 .map(|m| m.iter().map(|(n, v)| json!({ "name": n, "type": json_type(v), "default": v })).collect())
                 .unwrap_or_default();
-            json!({
+            let mut kind = json!({
                 "label": k.label,
                 "key": key,
                 "section": format!("{:?}", k.section),
                 "tool_kinds": k.tool_kinds.iter().map(|t| format!("{t:?}")).collect::<Vec<_>>(),
+                "mounts_tool": k.mounts_tool(),
                 "fields": fields,
-            })
+            });
+            if !k.mounts_tool() {
+                kind["note"] = json!("mounts no library tool: add_operation takes no \"tool\" for this kind (the wire is the machine's EDM condition, named in params.condition)");
+            }
+            kind
         })
         .collect();
     Ok(json!({
