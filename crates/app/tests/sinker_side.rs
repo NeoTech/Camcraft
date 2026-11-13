@@ -29,7 +29,7 @@ use camcraft_app::commands::{
 use camcraft_app::geometry::{Mesh, Point3, Triangle};
 use camcraft_app::machine::parse_mch;
 use camcraft_app::operation::{
-    Height, OpParams, SinkerBurnOp, SinkerDatum, SinkerSideBurnOp, SinkerSideDirection, SrcRef,
+    Height, OpParams, SinkerBurnOp, SinkerDatum, SinkerPass, SinkerSideBurnOp, SinkerSideDirection, SrcRef,
 };
 use camcraft_app::sinker::SinkerParams;
 use camcraft_app::sinker_side::{side_burn, SideBurn};
@@ -92,6 +92,9 @@ fn side(direction: SinkerSideDirection, amount: f64, undersize: f64, condition: 
             y: 0.0,
             feed: 40.0,
             condition: condition.into(),
+            pass: SinkerPass::Single,
+            cavity_x: 0.0,
+            cavity_y: 0.0,
             orbit: None,
             layer: None,
             wear_lost: None,
@@ -159,6 +162,7 @@ fn sinker_side_burn_matches_golden() {
         electrode_len: 30.0,
         feed: 40.0,
         gap: GAP,
+        stand: None,
         orbit: None,
     };
     let s = SideBurn { direction: SinkerSideDirection::MinusY, amount: AMOUNT, undersize: UNDER };
@@ -230,6 +234,16 @@ fn a_lateral_move_past_the_allowance_is_refused_by_name() {
         let err = create(side(SinkerSideDirection::PlusX, AMOUNT, undersize, "S1")).expect_err("no undersize");
         assert!(err.to_string().contains("is not a finite, non-negative number"), "{undersize}: {err}");
     }
+    // #543's rough / finish is a Sinker Burn's pass: the side burn sizes
+    // its electrode by its own undersize, so its burn is a single pass.
+    let mut rough = side(SinkerSideDirection::PlusX, AMOUNT, UNDER, "S1");
+    if let OpParams::SinkerSideBurn(op) = &mut rough {
+        op.burn.pass = SinkerPass::Rough;
+        op.burn.cavity_x = 20.0;
+        op.burn.cavity_y = 12.0;
+    }
+    let err = create(rough).expect_err("a side burn as a rough");
+    assert!(err.to_string().contains("its burn is a single pass"), "{err}");
 
     // At the allowance exactly: admitted. Edited past it: refused at the
     // edit's door, the op unchanged.
