@@ -299,6 +299,7 @@ fn cutoff_doc(wrong: bool) -> World {
         condition: "C110".into(),
         side,
         start: None,
+        burnout: None,
         clearance: operation::DEFAULT_CLEARANCE,
     };
     let src = SrcRef::Selection(vec![GeoSel { entity: "part".into(), feature: FeatureSel::Chain(chain) }]);

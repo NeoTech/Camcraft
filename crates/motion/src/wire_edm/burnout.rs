@@ -128,7 +128,7 @@ pub fn wire_burnout(loops: &[Loop], chains: &[Vec<Point2>], p: &WireParams, clea
         return Err(invalid("the burnout lays down no cut".into()));
     }
     // The certificate: no move nearer the walls than the clearance.
-    laws::kerf(&path, &given, clearance, z).map_err(|e| match e {
+    laws::kerf(&path, &given, true, clearance, z).map_err(|e| match e {
         GenError::At { msg, at } => GenError::At { msg: msg.replace("wire contour", "wire burnout").replace("the kerf offset", "the wall clearance"), at },
         e => e,
     })?;
