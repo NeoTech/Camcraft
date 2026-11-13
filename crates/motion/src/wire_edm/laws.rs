@@ -24,7 +24,7 @@ use crate::geo2d::Point2;
 use crate::geometry::Point3;
 use crate::machining2d::GenError;
 
-use super::ring::{dist, pt_ring};
+use super::ring::{dist, pt_poly, pt_ring};
 use super::{WireParams, COVER_TOL, PATH_TOL};
 
 /// The most samples either law reads along the profile or the path.
@@ -37,27 +37,53 @@ fn step_for(k: f64, total: f64) -> f64 {
     (k * 0.5).max(total / MAX_SAMPLES).max(1e-4)
 }
 
-fn perimeter(ring: &[Point2]) -> f64 {
-    let n = ring.len();
-    (0..n).map(|i| dist(ring[i], ring[(i + 1) % n])).sum()
+/// The segments of `pts` as index pairs: closing back to the first
+/// point for a ring, not for an open run (#1109).
+fn segs(n: usize, closed: bool) -> impl Iterator<Item = (usize, usize)> {
+    let m = if closed { n } else { n.saturating_sub(1) };
+    (0..m).map(move |i| (i, (i + 1) % n.max(1)))
+}
+
+fn perimeter(pts: &[Point2], closed: bool) -> f64 {
+    segs(pts.len(), closed).map(|(i, j)| dist(pts[i], pts[j])).sum()
+}
+
+/// Distance from `q` to `pts`, a ring or an open run.
+fn to(q: Point2, pts: &[Point2], closed: bool) -> f64 {
+    if closed {
+        pt_ring(q, pts)
+    } else {
+        pt_poly(q, pts)
+    }
 }
 
 /// The corner minimum: every point of the profile `given` lies within
 /// the kerf offset of the wire-centre `path_ring`.
 pub(super) fn cover(given: &[Point2], path_ring: &[Point2], p: &WireParams) -> Result<(), GenError> {
+    cover_run(given, true, path_ring, true, p)
+}
+
+/// [`cover`] over a ring or an open run (#1109): `given_closed` and
+/// `path_closed` say which each polyline is.
+pub(super) fn cover_run(
+    given: &[Point2],
+    given_closed: bool,
+    path: &[Point2],
+    path_closed: bool,
+    p: &WireParams,
+) -> Result<(), GenError> {
     let k = p.kerf_offset();
     let reach = k + COVER_TOL;
-    let step = step_for(k, perimeter(given));
-    let n = given.len();
+    let step = step_for(k, perimeter(given, given_closed));
     let mut worst: Option<(f64, Point2)> = None;
-    for i in 0..n {
-        let (a, b) = (given[i], given[(i + 1) % n]);
+    for (i, j) in segs(given.len(), given_closed) {
+        let (a, b) = (given[i], given[j]);
         let len = dist(a, b);
         let steps = (len / step).ceil().clamp(1.0, 65_536.0) as u32;
         for j in 0..steps {
             let f = f64::from(j) / f64::from(steps);
             let q = Point2::new(a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f);
-            let d = pt_ring(q, path_ring);
+            let d = to(q, path, path_closed);
             // A NaN distance is never "covered".
             if d.is_nan() {
                 return Err(GenError::Invalid(
@@ -87,8 +113,9 @@ pub(super) fn cover(given: &[Point2], path_ring: &[Point2], p: &WireParams) -> R
 }
 
 /// The certificate: no move of `path` brings the wire's centre nearer
-/// the profile `given` than the kerf offset `k`.
-pub(super) fn kerf(path: &Toolpath, given: &[Point2], k: f64, z: f64) -> Result<(), GenError> {
+/// the profile `given` (a ring, or an open run when `!given_closed`,
+/// #1109) than the kerf offset `k`.
+pub(super) fn kerf(path: &Toolpath, given: &[Point2], given_closed: bool, k: f64, z: f64) -> Result<(), GenError> {
     let total: f64 = path.moves.iter().map(|m| (m.to.x - m.from.x).hypot(m.to.y - m.from.y)).sum();
     let step = step_for(k, total);
     let floor = k - PATH_TOL;
@@ -98,7 +125,7 @@ pub(super) fn kerf(path: &Toolpath, given: &[Point2], k: f64, z: f64) -> Result<
         for j in 0..=steps {
             let f = f64::from(j) / f64::from(steps);
             let q = Point2::new(a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f);
-            let d = pt_ring(q, given);
+            let d = to(q, given, given_closed);
             if d.is_nan() || d < floor {
                 return Err(GenError::invalid_at(
                     format!(

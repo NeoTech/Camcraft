@@ -125,7 +125,16 @@ pub(super) fn get_job(env: &mut Env, _a: &Map<String, Value>) -> Result<Value, S
         .collect();
     let tools: Vec<Value> = model::named_entities(w)
         .iter()
-        .filter_map(|(n, e)| model::tool_of(w, e).map(|t| json!({ "name": n, "definition": project::tool_to_json(&t), "holder": super::holders::holder_view(w, n) })))
+        .filter_map(|(n, e)| model::tool_of(w, e).map(|t| {
+            let mut row = super::tool_number_tools::number_view(env, n);
+            row["definition"] = project::tool_to_json(&t);
+            row["name"] = json!(n);
+            if let Some(o) = row.as_object_mut() {
+                o.remove("tool");
+            }
+            row["holder"] = super::holders::holder_view(w, n);
+            row
+        }))
         .collect();
     let ops: Vec<Value> = inventory(env).iter().map(|(k, e, s)| op_full(env, k, e, *s)).collect();
     Ok(json!({

@@ -108,6 +108,8 @@ pub mod wire_op;
 pub mod wire_verify;
 // #541: the sinker EDM burn to depth.
 pub mod sinker_op;
+// #546: the sinker burn's electrode wear compensation.
+pub mod sinker_wear_op;
 // #545: the Sinker Side Burn's seed, laws and generation.
 pub mod sinker_side_op;
 // #171: the Probe op seeded from one picked face, edge, vertex or round wall.

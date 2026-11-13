@@ -1148,6 +1148,8 @@ fn wire_contour_die_and_punch_match_golden() {
             side,
             start: Some(start),
             plane_z: 0.0,
+            stock: None,
+            clearance: 1.0,
         };
         let path = wire_contour(std::slice::from_ref(&profile), &[], &p).unwrap();
         assert!(path.is_prismatic() && path.moves.iter().all(|m| m.kind == MoveKind::Feed && m.feed.is_none()));
@@ -1158,4 +1160,30 @@ fn wire_contour_die_and_punch_match_golden() {
         assert_eq!(camcraft_app::cl::text::from_text(&text).unwrap().moves.len(), path.moves.len());
         write_golden(file, &text);
     }
+}
+
+/// #1109: an open wire run - a cut-off across a 100 x 50 plate at
+/// x = 60, kerf right of travel, SYNTHETIC condition (wire 0.25 mm, gap
+/// 0.04 mm): the wire stands 0.165 mm right of the line, threaded 1 mm
+/// past the kerf below the plate and run out 1 mm past it above.
+#[test]
+fn wire_open_cutoff_matches_golden() {
+    use camcraft_app::wire_edm::{wire_contour, WireParams, WireSide};
+    let plate = vec![Point2::new(0.0, 0.0), Point2::new(100.0, 0.0), Point2::new(100.0, 50.0), Point2::new(0.0, 50.0)];
+    let p = WireParams {
+        wire_diameter: 0.25,
+        gap: 0.04,
+        condition: "C110".into(),
+        side: WireSide::Right,
+        start: None,
+        plane_z: 0.0,
+        stock: Some(Region::new(vec![Loop::new(plate).unwrap()]).unwrap()),
+        clearance: 1.0,
+    };
+    let line = vec![Point2::new(60.0, 0.0), Point2::new(60.0, 50.0)];
+    let path = wire_contour(&[], &[line], &p).unwrap();
+    assert!(path.is_prismatic() && path.moves.iter().all(|m| m.kind == MoveKind::Feed && m.feed.is_none()));
+    let text = gen_to_cltext(&path);
+    assert_eq!(camcraft_app::cl::text::to_text(&path).unwrap(), text);
+    write_golden("wire_open_cutoff.cl", &text);
 }
