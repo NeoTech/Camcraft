@@ -49,6 +49,7 @@ fn wire_op(side: WireSide, start: Option<[f64; 2]>) -> WireContourOp {
         side,
         start,
         burnout: None,
+        taper_deg: 0.0,
         clearance: operation::DEFAULT_CLEARANCE,
     }
 }
