@@ -41,6 +41,9 @@ mod burnout;
 mod laws;
 mod open;
 mod ring;
+mod taper;
+
+pub use taper::{wire_contour_tapered, WireTaper};
 
 pub use burnout::{clearance_door, wire_burnout, CORE_AREA_TOL, RING_STEP};
 pub use open::{CLEARANCE_MAX, EDGE_TOL};

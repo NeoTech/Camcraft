@@ -91,6 +91,7 @@ fn punch_doc(machine_text: &str) -> World {
         condition: "C110".into(),
         side: WireSide::Punch,
         start: Some([-30.0, 0.0]),
+        taper_deg: 0.0,
         burnout: None,
         clearance: operation::DEFAULT_CLEARANCE,
     };
@@ -116,6 +117,7 @@ fn gouging_die() -> World {
         condition: "C110".into(),
         side: WireSide::Die,
         start: Some([0.0, 0.0]),
+        taper_deg: 0.0,
         burnout: None,
         clearance: operation::DEFAULT_CLEARANCE,
     };
@@ -299,6 +301,7 @@ fn cutoff_doc(wrong: bool) -> World {
         condition: "C110".into(),
         side,
         start: None,
+        taper_deg: 0.0,
         burnout: None,
         clearance: operation::DEFAULT_CLEARANCE,
     };
