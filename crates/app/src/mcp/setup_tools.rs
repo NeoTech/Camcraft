@@ -9,11 +9,12 @@
 
 use super::tools::{opt_str, req_str, Tool};
 use crate::commands::{
-    ActivateSetup, CommandError, CreateSetup, LoadMachine, SetSetupMachine, SetSetupWorkOffset, SetWcsOrigin,
+    ActivateSetup, CommandError, CreateSetup, LoadMachine, SetProgramInfo, SetSetupMachine, SetSetupPost, SetSetupWorkOffset,
+    SetStockSourceOnly, SetWcsOrigin,
 };
 use crate::geometry::{Point3, IDENTITY_Q};
 use crate::model;
-use crate::schema::{Location, WCS_SLOTS};
+use crate::schema::{Location, PostRef, WCS_SLOTS};
 use crate::script::{fnum, Env};
 use crate::setup;
 
@@ -24,7 +25,10 @@ pub(super) const TOOLS: &[Tool] = &[
     Tool { name: "activate_setup", description: "Make a declared setup the active one: where new operations, stock and WCS edits go.", schema: s_setup_name, run: activate_setup },
     Tool { name: "set_wcs", description: "Place the active setup's work coordinate system: an absolute origin, or a point of the stock's bounding box (min/center/max per axis) plus an optional offset. Rotation is a unit quaternion [x, y, z, w]; omitted keeps the current one.", schema: s_set_wcs, run: set_wcs },
     Tool { name: "set_work_offset", description: "Set the work offset (G54 to G59) the post uses for a declared setup's WCS; null clears it (posts G54). Moves no origin.", schema: s_work_offset, run: set_work_offset },
+    Tool { name: "set_program", description: "State the document's program number (1 to 9999: the O-word O0001-O9999) and program comment (the program's name on Heidenhain and SINUMERIK). An omitted key keeps its value; null clears it (O0001 and the machine's name). One undo step.", schema: s_set_program, run: set_program },
+    Tool { name: "set_raw_stock_only", description: "For a stock made from a model (set_stock from_model): say whether that source model is raw stock only - a casting or blank you cut into, not the finished part - so the post's gouge verdict does not judge it (on), or is judged like every model (off, the default). An operation that machines the model judges it again. One undo step.", schema: s_raw_stock_only, run: set_raw_stock_only },
     Tool { name: "load_machine", description: "Mount a machine: a built-in by name or a .mch file, or clear it. With setup, the machine is that setup's own (clear: the setup follows the document's machine again); without, it is the document's.", schema: s_load_machine, run: load_machine },
+    Tool { name: "set_setup_post", description: "Give a declared setup its own post: a built-in post name or a .cps path; null clears it (the setup follows the document's post again). One undo step. This sets the field only - posting judges whether the post serves the setup's machine.", schema: s_setup_post, run: set_setup_post },
 ];
 
 // ---- shared readers (the fixture tools use them too) --------------------
@@ -172,6 +176,52 @@ fn set_work_offset(env: &mut Env, a: &Map<String, Value>) -> Result<Value, Strin
     }))
 }
 
+fn set_program(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
+    let mut next = crate::posting::program_info(&env.world);
+    match a.get("number") {
+        None => {}
+        Some(Value::Null) => next.number = None,
+        Some(v) => {
+            let n = v.as_u64().ok_or_else(|| format!("\"number\" must be a whole number 1 to 9999 or null, got {v}"))?;
+            next.number = Some(u32::try_from(n).map_err(|_| format!("program number {n} is outside 1 to 9999"))?);
+        }
+    }
+    match a.get("comment") {
+        None => {}
+        Some(Value::Null) => next.comment = None,
+        Some(Value::String(c)) => next.comment = Some(c.clone()),
+        Some(other) => return Err(format!("\"comment\" must be a string or null, got {other}")),
+    }
+    let cmd = SetProgramInfo::new(&env.world, next).map_err(cmd_err)?;
+    env.history.execute(&env.world, cmd);
+    let p = crate::posting::program_info(&env.world);
+    Ok(json!({ "number": p.number, "comment": p.comment }))
+}
+
+/// #1233: `SetSetupPost` through the session History, as the Setup pane runs it.
+fn set_setup_post(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
+    let next = match a.get("post") {
+        None => return Err("\"post\" is required (a post name or .cps path, or null to clear)".into()),
+        Some(Value::Null) => None,
+        Some(Value::String(s)) if s.trim().is_empty() => return Err("\"post\" must not be empty (null clears it)".into()),
+        Some(Value::String(s)) if s.trim().to_ascii_lowercase().ends_with(".cps") => Some(PostRef::File(s.trim().to_owned())),
+        Some(Value::String(s)) => Some(PostRef::Named(s.trim().to_owned())),
+        Some(other) => return Err(format!("\"post\" must be a string or null, got {other}")),
+    };
+    let name = setup_or_active(env, a)?
+        .ok_or("no setup is declared - add_setup first (the document's post is select_post's)")?;
+    let cmd = SetSetupPost::new(&env.world, &name, next).map_err(cmd_err)?;
+    env.history.execute(&env.world, cmd);
+    let w = &env.world;
+    let own = crate::setup_mount::own_post(w, Some(&name));
+    Ok(json!({
+        "setup": name,
+        "post": own.as_ref().map(crate::posting::post_ref_label),
+        "own_post": own.is_some(),
+        "posts_with": crate::posting::post_ref_label(&crate::setup_mount::post_of(w, Some(&name))),
+    }))
+}
+
 fn load_machine(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
     let builtin = opt_str(a, "builtin")?;
     let path = opt_str(a, "path")?;
@@ -249,6 +299,18 @@ fn s_add_setup() -> Value {
     )
 }
 
+fn s_raw_stock_only() -> Value {
+    obj(json!({ "on": { "type": "boolean", "description": "true: the source model is raw stock only; false: judge it as the part (default)." } }), &["on"])
+}
+
+/// #1094: the stock page's checkbox, through the same command.
+fn set_raw_stock_only(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
+    let on = a.get("on").and_then(Value::as_bool).ok_or("\"on\" must be true or false")?;
+    let cmd = SetStockSourceOnly::new(&env.world, on).map_err(cmd_err)?;
+    env.history.execute(&env.world, cmd);
+    Ok(json!({ "raw_stock_only": on, "judged_out": crate::stock_source::stock_only_model(&env.world).and_then(|e| model::name_of(&env.world, &e)) }))
+}
+
 fn s_setup_name() -> Value {
     obj(json!({ "name": { "type": "string", "description": "A declared setup's name." } }), &["name"])
 }
@@ -281,6 +343,16 @@ fn s_work_offset() -> Value {
     )
 }
 
+fn s_setup_post() -> Value {
+    obj(
+        json!({
+            "post": { "type": ["string", "null"], "description": "A built-in post name or a .cps path; null clears the setup's own post (it follows the document's)." },
+            "setup": { "type": "string", "description": "A declared setup; defaults to the active one." }
+        }),
+        &["post"],
+    )
+}
+
 fn s_load_machine() -> Value {
     obj(
         json!({
@@ -288,6 +360,18 @@ fn s_load_machine() -> Value {
             "path": { "type": "string", "description": "A .mch machine file." },
             "clear": { "type": "boolean", "description": "true: no machine (with setup: follow the document's)." },
             "setup": { "type": "string", "description": "Mount on this declared setup only; omitted mounts the document's machine." }
+        }),
+        &[],
+    )
+}
+
+fn s_set_program() -> Value {
+    obj(
+        json!({
+            "number": { "type": ["integer", "null"], "minimum": 1, "maximum": 9999,
+                "description": "The program number; null clears it (O0001)." },
+            "comment": { "type": ["string", "null"],
+                "description": "The program comment, at most 40 printable ASCII characters without ( ) % ; *; null clears it (the machine's name)." }
         }),
         &[],
     )

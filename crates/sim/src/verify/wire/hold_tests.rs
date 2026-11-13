@@ -34,6 +34,7 @@ fn job(tp: &Toolpath, cutoff_from: Option<usize>, capture: bool) -> WireVerdict 
         sections,
         cutoff_from,
         capture,
+        burnout: false,
     })
 }
 

@@ -19,8 +19,17 @@ the property table there is the vocabulary, this file is the grammar.
 
 Manifest: top-level assignments only — `description`, `vendor`, `legal`,
 `certificationLevel`, `minimumRevision`, `extension`, `setCodePage`,
-`capabilities`, `coolantModes`, `liveTooling`, `afterModes`, `axisInversion`, `probeAxisInversion`, `threadHands`. All but the last six are
-text the engine reads none of; `threadHands = true` (#629) says the script
+`capabilities`, `serves`, `coolantModes`, `programUnits`, `liveTooling`, `afterModes`, `axisInversion`, `probeAxisInversion`, `threadHands`. All but `serves` and the last six are
+text the engine reads none of; `serves = ["plasma"];` (#1266; one word or a list of kind words: mill, lathe, mill-turn, plasma, wire_edm, sinker_edm) names the machine kinds a script of the user's own posts to - the app refuses it by name on any other kind, and a script that states none is accepted only on a mill (non-turning dialect), a lathe (turning) or a mill-turn, never on a plasma table or an EDM; shipped posts are judged by registry name and need no `serves`; `programUnits = "mm inch"` (#902) says
+the script writes the program in the document's unit -
+`postOptions.Units`, `"mm"` or `"inch"`, absent = mm: the dialect's
+unit word (G21 / G20, the 840D's G710 / G700) before any motion, every
+length / 25.4 at four decimals and every feed in in/min, angles,
+seconds and rpm as they come - and an inch document on a script whose
+`programUnits` lacks `inch` (Carvera and Heidenhain say `"mm"`) is
+refused by name before any hook runs; never read
+`machine.units` for the program's unit, it is only the unit the
+machine file was written in; `threadHands = true` (#629) says the script
 reads `PARAM SpindleDirection` and states a thread's hand (M04 when the
 helix needs the spindle reversed) - without it the engine refuses a
 reverse-spindle thread section by name (fanuc-lathe.cps and tormach-lathe.cps set it); `liveTooling = true` (issue #33) says the
@@ -56,7 +65,7 @@ argument semantics in `docs/CNC-INTERMEDIATE.md`):
 
 | hook | fires |
 |---|---|
-| `onOpen` | once, before all records (write the header here; the global `programNumber` is the program's number - 1 for a whole job, 1, 2, 3... per file when posting one file per operation (#111) - for a dialect with an O-word) |
+| `onOpen` | once, before all records (write the header here; the global `program` is the program's identity (#258): `program.number` - the document's number, 1 when it states none, counting up per file when posting one file per operation (#111; `programNumber` holds it too) - `program.numbered` (the document stated it: a dialect whose default header writes no number keeps writing none) and `program.comment` (the document's program comment, `""` for none - write the machine's name then, as before). Write them in the dialect's own form (O-word, program name, header comment), clean the comment to the dialect's comment-legal characters, and refuse by name what the dialect cannot hold) |
 | `onParameter(name, value)` | per `PARAM`; `onSpindleSpeed` follows the `SpindleSpeed` one |
 | `onToolChange(number, name)` | per `TOOL` |
 | `onSection` / `onSectionEnd` | per operation span (preamble bookends) |
@@ -105,7 +114,11 @@ write (the gate), so the released program never carries one.
   with Z0 at the bottom would rapid down into the part. Unstated and
   not a known-convention machine is a `message()` refusal by name
   (`sinumerik.cps`, #503: no name is a known convention there - only
-  "no machine at all" keeps the old `G53 Z0`).
+  "no machine at all" keeps the old `G53 Z0`). A dialect whose machines
+  often run unhomed (`grblhal.cps`, #710: with `$22=0` machine Z0 is the
+  power-on height) reads an unstated `safe_retract` as "not homed" and
+  lifts in the work offset to the section's `ClearancePlane` instead,
+  refused by name when that height is unknown or not above `StockZTop`.
 - **Refuse, never lie.** A record you cannot honor in this dialect
   gets a counted `message()` naming why (Fanuc's `tilt()` returns null
   after one refusal per program — a per-line refusal is noise, a
@@ -120,13 +133,28 @@ write (the gate), so the released program never carries one.
   everything the first raw motion line needs (`startPreamble`
   pattern), and serve legacy streams that carry no `SECTION` by
   firing it from the first motion too.
-- **Modal discipline.** G98 / G43.4 / retract modes once per program
+- **Modal discipline.** G43.4 / retract modes once per program
   or per arm; tool change resets the arm and the angle memory
   (stage D). The cycle group suppresses its expanded chain — one
   cycle block per hole, bare X Y continuations when the signature is
   unchanged, `G80` before any cycle-signature change or section end.
+  **The hop law (#994):** the chain a cycle replaces is only what
+  stays on its hole (its XY, at or below R). Each hole returns to R
+  (`G99` in the block; a dialect with no return word is read with the
+  tool seated on R, so either return mode lands there), and the first
+  rapid leaving the hole - the hop, the traverse, the exit - ends the
+  group with `G80` and posts as the stream says. The program never
+  moves between holes lower than the verified path, and a cut that
+  leaves the hole inside a group is refused by name
+  (`crates/post/tests/cycle_hop.rs` reads every cycle post back).
+  A cycle read away from its hole with no rapid to it (two cycle
+  records back to back, or a cycle straight after probing) is seated
+  at the section's own `RetractPlane`: up to it, over the hole, down
+  to R. A section that states no `RetractPlane` is refused by name
+  (#1028). Probe moves seat the next cycle like any other motion.
   A dialect whose documented cycles this post was not specced from
-  (Heidenhain DIN/ISO: G200-G209 with Q parameters, #50) posts the
+  (Heidenhain DIN/ISO: G200-G209 with Q parameters, #50; TinyG, which
+  has no canned cycles at all) posts the
   expanded chain as plain moves instead and refuses what plain moves
   cannot do (tapping) - never a cycle word the manual does not list.
   The arc plane (M11.2 A) is modal too: `CircularPlane` XY/XZ/YZ maps

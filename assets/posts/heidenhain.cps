@@ -22,6 +22,11 @@ capabilities = 1; // reference contract: integer feature mask (bit 1 = milling)
 coolantModes = true; // reads PARAM Coolant (#112/#150): the engine refuses non-Flood ops for a post without it
 afterModes = true; // reads PARAM AfterOperation (#110): the engine refuses a stop or home ask for a post without it
 floatingTapping = true; // #51: G206 requires the operation's explicit floating-holder choice
+// #902: millimetres only for now - the engine refuses an inch document by
+// name. The TNC runs inch (G70), but the feed unit its inch programs and
+// cycle Q feeds take was not confirmed from the public manual this post
+// is specced from, and a feed off by a factor is no program to post.
+programUnits = "mm";
 
 // Determinism law: no timestamps, no randomness - the same stream
 // always posts to the same text (golden files depend on it).
@@ -111,7 +116,7 @@ function tiltOk(p) {  // RTCP words are Fanuc-family; this dialect refuses them
 // flood code: refused by name (#150), never posted as mist or dry. An
 // unstated list stays silent (the unstated-limit law). M9 (stop) is
 // the RS-274 fixed pair.
-var COOLANT_KINDS = ["flood", "mist", "through-spindle", "through-tool"];
+var COOLANT_KINDS = ["flood", "mist", "air", "air-blast", "through-spindle", "through-tool"];
 function coolantWho() { return coolantOp ? "operation " + coolantOp + ": " : ""; }
 function coolantCode() {
   var cs = (typeof machine !== "undefined" && machine.coolants) || [];
@@ -129,14 +134,14 @@ function coolantCode() {
 }
 
 // The op's coolant ask (#112): the stream says nothing for flood (every
-// older stream), or carries PARAM Coolant off / mist / through-tool. The
+// older stream), or carries PARAM Coolant off / mist / air (#869) / through-tool. The
 // code is the machine's own entry of that family - the machine is truth;
 // an ask the machine states no code for is refused by name, naming the
 // operation (#150), never silently posted dry.
 function coolantFor(ask) {
   if (ask === "off") return "";
   if (!ask || ask === "flood") return coolantCode();
-  var want = ask === "mist" ? ["mist"] : (ask === "through-tool" ? ["through-spindle", "through-tool"] : []);
+  var want = ask === "mist" ? ["mist"] : (ask === "air" ? ["air", "air-blast"] : (ask === "through-tool" ? ["through-spindle", "through-tool"] : []));
   if (want.length === 0) { msg(coolantWho() + "unknown coolant ask " + ask); return ""; }
   var cs = (typeof machine !== "undefined" && machine.coolants) || [];
   for (var i = 0; i < cs.length; i++) {
@@ -196,6 +201,18 @@ function toolNote() {  // just before the tool change it describes
   toolKind = ""; toolCr = 0;
 }
 
+// The document's program identity (#258), from the engine's `program`
+// global: its number (1 when the document states none; one file per
+// operation counts up from it, #111), whether the document stated it,
+// and its program comment ("" for none - the header then names the
+// machine, as before #258).
+function progNo() {
+  var n = typeof program !== "undefined" ? program.number : (typeof programNumber !== "undefined" ? programNumber : 1);
+  return Math.round(Number(n) || 1);
+}
+function progNumbered() { return typeof program !== "undefined" && program.numbered === true; }
+function progComment() { return clean(typeof program !== "undefined" ? program.comment : ""); }
+
 // -------------------------------------------------------------- header
 // #50: "The first block of a program is identified by %, the program
 // name and the active unit of measure" (p. 130): `%NAME G71 *`, G71 =
@@ -203,10 +220,19 @@ function toolNote() {  // just before the tool change it describes
 // name, so the machine's name stands in, cut to the file-name
 // characters the manual permits (A-Z a-z 0-9 . _ -, p. 143). The old
 // parenthetical identity line is gone: `( )` is no TNC comment form.
+// #258: the TNC addresses a program by its name, so the document's
+// program comment IS the name when it states one (cut to the same
+// characters); else a stated number names it (a name of digits is a
+// legal file name); else the machine's, as before. A stated number the
+// name does not carry is the operator's comment block after the begin.
 function onOpen() {
   var nm = (typeof machine !== "undefined" && machine.name) || "CAMCRAFT";
-  pgmName = String(nm).replace(/[^A-Za-z0-9._-]/g, "_") || "CAMCRAFT";
+  var said = progComment();
+  if (said) pgmName = said.replace(/[^A-Za-z0-9._-]/g, "_");
+  else if (progNumbered()) pgmName = String(progNo());
+  else pgmName = String(nm).replace(/[^A-Za-z0-9._-]/g, "_") || "CAMCRAFT";
   writeln("%" + pgmName + " G71 *");
+  if (said && progNumbered()) note("PROGRAM " + progNo());
 }
 
 // Cutter compensation in the control (M13.11, #39): refused by name,
@@ -309,7 +335,9 @@ function startPreamble() {
   }
   if (probeStop) block(["M5"]);
   spindleWait = false;
-  coolant = coolantFor(coolantAsk);
+  // #995: a touch probe section starts no coolant, whatever its ask -
+  // fluid on the stylus and the measured faces spoils the reading.
+  coolant = probeStop ? "" : coolantFor(coolantAsk);
   if (coolant) block([coolant]);
   smoothOn();
 }

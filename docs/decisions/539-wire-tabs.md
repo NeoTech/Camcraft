@@ -26,3 +26,9 @@ The umbrella (#290 D6) decided that tabs are off by default and, when on, are st
 **Not exercised on a real EDM control (D10):** the golden `wire_contour_die_tabs.nc` posts against the synthetic fixture with an invented second condition (`C120`, same wire and gap). A user with a real machine dry-runs before any cut.
 
 **Cost to change later:** a different cut-off offset needs a step move at each tab end and its own kerf law; tabs on arcs need arc-length gaps on arc moves (the path has none today). Both stand on `tabs.rs` alone.
+
+**Merge with main (open runs #1109, no-core burnout #540), 2026-11-13:**
+
+- Tabs stated on an open run or on a burnout are refused by name in the generator (`wire_contour` before `wire_open`, and `wire_burnout`), pinned in `open_tests` and `burnout_tests`. Chosen over silently ignoring the tabs (Prime Directive: never silent). Considered and dropped: tabbing an open run (it closes no slug to hold) and tabbing the burnout's outer ring (a burnout must free nothing).
+- The hold law's "an untabbed freed piece must be captured" check skips a burnout (its own no-core law already refuses any freed piece) and never reaches an open run (`judge` returns before the slug law). The kerf and slug laws are unchanged: no tolerance was loosened.
+- Main's existing fixtures that post a freed slug or punch (`wire_readers`, `posted_gates/wire.rs`) state `capture: true`, as the PR's own fixtures already did, so they stay judged clean; main's open-run and burnout fixtures state `capture: false`.

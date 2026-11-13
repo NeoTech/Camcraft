@@ -16,7 +16,7 @@ use crate::geo2d::{Loop, Point2, Region};
 use crate::machine::{ConditionField, Kind};
 use crate::machining2d::GenError;
 use crate::verify::Warning;
-use crate::wire_edm::{wire_contour, TabParams, WireParams};
+use crate::wire_edm::{clearance_door, wire_burnout, wire_contour, TabParams, WireParams};
 
 use super::kinds::Carried;
 use super::types::{OpParams, WireContourOp, WireSide};
@@ -34,6 +34,8 @@ pub(super) fn seed_wire_contour(c: &Carried) -> OpParams {
         start: None,
         tabs: None,
         capture: false,
+        burnout: None,
+        clearance: super::types::DEFAULT_CLEARANCE,
     })
 }
 
@@ -86,7 +88,12 @@ pub fn condition_of(world: &World, setup: Option<&str>, op: &WireContourOp) -> R
     let (Some(gap), Some(wire_diameter)) = (c.gap, c.wire_diameter) else {
         return Err(format!("machine {}: EDM condition {:?} states no gap or no wire diameter", machine.model, c.id));
     };
-    Ok(WireCondition { id: c.id.clone(), wire_diameter, gap })
+    let cond = WireCondition { id: c.id.clone(), wire_diameter, gap };
+    // The burnout's clearance against the condition's kerf (#540).
+    if let Some(clear) = op.burnout {
+        clearance_door(clear, cond.wire_diameter * 0.5 + cond.gap)?;
+    }
+    Ok(cond)
 }
 
 /// The condition a wire EDM kind's generation cuts with, read where
@@ -175,7 +182,8 @@ pub fn conditions_of(world: &World, setup: Option<&str>) -> Vec<String> {
 }
 
 /// The generator's numbers from the op's, the condition's and the
-/// world's.
+/// world's. `stock` is the setup's stock outline in XY - the edge an
+/// open run is entered from (#1109).
 ///
 /// # Errors
 /// A workpiece top or bottom that does not resolve, or a bottom that
@@ -185,6 +193,7 @@ pub fn wire_params(
     cond: &WireCondition,
     cutoff: Option<&WireCondition>,
     hs: &ResolvedHeights,
+    stock: Option<Region>,
 ) -> Result<WireParams, GenError> {
     let (Some(top), Some(bottom)) = (hs.top, hs.bottom) else {
         return Err(GenError::Invalid("wire contour: the workpiece's top and bottom must both resolve".into()));
@@ -207,12 +216,15 @@ pub fn wire_params(
             at: t.at.iter().map(|[x, y]| Point2::new(*x, *y)).collect(),
             cutoff: cutoff.map(|c| (c.id.clone(), c.wire_diameter * 0.5 + c.gap)),
         }),
+        stock,
+        clearance: op.clearance,
     })
 }
 
 /// Generate: `picks` is the picked profile (closed rings, open runs)
 /// when the source is a selection; otherwise `base` - the model's
-/// through-silhouette - is the profile. No verification runs yet (the
+/// through-silhouette - is the profile. `stock` is read only for an
+/// open run (#1109). No verification runs yet (the
 /// wire sweep against the part is #534), and the path's notes say so.
 pub(super) fn generate_wire(
     op: &WireContourOp,
@@ -220,13 +232,18 @@ pub(super) fn generate_wire(
     hs: &ResolvedHeights,
     picks: Option<(Vec<Loop>, Vec<Vec<Point2>>)>,
     base: impl FnOnce() -> Result<Region, GenError>,
+    stock: impl FnOnce() -> Option<Region>,
 ) -> Result<(Toolpath, Vec<Warning>), GenError> {
-    let (main, cutoff) = cond?;
-    let p = wire_params(op, &main, cutoff.as_ref(), hs)?;
+    let (cond, cutoff) = cond?;
     let (loops, chains) = match picks {
         Some(geom) => geom,
         None => (base()?.loops().to_vec(), Vec::new()),
     };
-    let path = wire_contour(&loops, &chains, &p)?;
+    let stock = if chains.is_empty() { None } else { stock() };
+    let p = wire_params(op, &cond, cutoff.as_ref(), hs, stock)?;
+    let path = match op.burnout {
+        Some(clearance) => wire_burnout(&loops, &chains, &p, clearance)?,
+        None => wire_contour(&loops, &chains, &p)?,
+    };
     Ok((path, Vec::new()))
 }
