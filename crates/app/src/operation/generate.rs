@@ -94,6 +94,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         mut picked_region,
         mut contour_sel,
         mut drive_chains,
+        mut slot_bound,
         mut prior,
         verify_prior,
         drills_ahead,
@@ -1705,6 +1706,12 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             helix_radius,
             ..
         } => {
+            // #1504: picks bound the room the slot may cut in - a slot
+            // too wide, too long or placed past them is refused by name,
+            // never cut across the wall.
+            if let Some(room) = slot_bound.take() {
+                room?.judge(*a, *b, *width)?;
+            }
             let path = machining2d::slot(
                 *a,
                 *b,
@@ -3344,7 +3351,8 @@ pub(super) enum DepthLaw {
 ///   model source there is the volume to REMOVE (the region is the
 ///   material, its interior is cut by contract), so no part law applies.
 /// - Slot and Circular cut authored geometry into their source - the
-///   source is the material to remove, not a part to keep.
+///   source is the material to remove, not a part to keep - except a
+///   picked Slot (#1504), which cuts the part's own feature: `Section`.
 /// - Trace, Engrave and 2D Chamfer enter the part by design (the
 ///   engraving, the broken edge); their own modes stand the gouge law
 ///   down for exactly that reason.
@@ -3355,7 +3363,9 @@ pub(super) fn depth_law_of(params: &OpParams, src: &SrcRef, part_solid: bool) ->
     }
     match params {
         OpParams::Contour { .. } | OpParams::Face { .. } => DepthLaw::Section,
-        OpParams::Pocket { .. } | OpParams::Adaptive2D { .. } | OpParams::Offset2D { .. }
+        // #1504: a picked Slot machines the part's own slot feature -
+        // the part around it is kept, like a picked pocket's.
+        OpParams::Pocket { .. } | OpParams::Adaptive2D { .. } | OpParams::Offset2D { .. } | OpParams::Slot { .. }
             if matches!(src, SrcRef::Selection(_)) =>
         {
             DepthLaw::Section

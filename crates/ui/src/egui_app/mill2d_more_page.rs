@@ -38,6 +38,13 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
                 lead_page::leads_tab(ui, u, "s", Some((entry, helix_radius)), links);
             }
             if tab == SEC_GEO {
+                // #1504: picks seed the slot and bound it - echoed here,
+                // or the refusal generation would make.
+                match cx.slot_fit {
+                    Some(Ok(note)) => hint(ui, note),
+                    Some(Err(e)) => hint(ui, e),
+                    None => {}
+                }
                 prop_row(ui, "A X", |ui| num(ui, u, &mut a.x));
                 prop_row(ui, "A Y", |ui| num(ui, u, &mut a.y));
                 prop_row(ui, "B X", |ui| num(ui, u, &mut b.x));
