@@ -42,6 +42,9 @@ pub mod setup_wcs;
 // #343: a setup's own machine and post.
 pub mod setup_mount;
 pub mod setup_post_options;
+// #821: a setup's stated nose-to-rotary figure (a raised rotary).
+pub mod setup_nose;
+pub mod setup_workholding;
 // #316: a setup placed relative to another (flip / turn presets).
 pub mod setup_relative;
 // #320: a setup's stock source.
@@ -100,6 +103,8 @@ pub use setup_align::AlignPartToSetup;
 pub use setup_wcs::SetSetupWorkOffset;
 pub use setup_mount::{SetSetupMachine, SetSetupPost};
 pub use setup_post_options::SetSetupPostOptions;
+pub use setup_nose::SetSetupNoseToAxis;
+pub use setup_workholding::SetSetupWorkholdingRpm;
 pub use setup_relative::SetSetupRelative;
 pub use setup_stock::SetSetupStockSource;
 pub use set_units::SetUnits;
@@ -108,7 +113,7 @@ pub use color_vision::{color_vision_of, color_vision_set};
 pub use set_wcs::SetWcsOrigin;
 pub use tool::{AddTool, ChangeTool, DeleteTool, HolderPick};
 pub use tool_body::{LatheBodySpec, SetToolBody, ToolBodySpec};
-pub use tool_cutter::SetToolCutter;
+pub use tool_cutter::{ReshapeTool, SetToolCutter};
 pub use tool_import::{ImportMode, ImportReport, ImportTools};
 pub use tool_number::SetToolNumber;
 pub use update_model::UpdateModel;

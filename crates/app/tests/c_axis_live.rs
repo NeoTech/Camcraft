@@ -14,7 +14,7 @@
 //! `WRITE_GOLDEN=1 cargo test -p camcraft-app --test c_axis_live`
 //!
 //! Gate map (M4.4): covers camcraft_app::operation (rotary_gate's C
-//! stamp), camcraft_app::cl (stamp_c), camcraft_app::post (the dump's
+//! stamp), cl::cl (stamp_c), post::post (the dump's
 //! C word, the engine's liveTooling refusal, fanuc-lathe.cps).
 //! Lane shape (M4.4): all tests here run in seconds.
 
