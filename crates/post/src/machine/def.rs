@@ -75,6 +75,14 @@ pub struct AxisLimits {
     /// by name rather than guessed clear.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub nose_to_axis: Option<f64>,
+    /// How far this work-turning rotary's centerline stands above the
+    /// face it is bolted to, mm (#1107): the file's `"axis_to_table"`
+    /// (its centre height). The index-swing clause judges the swept work
+    /// against it - the table, plate or subplate the rotary stands on is
+    /// this far under the line, whatever stack lifts the rotary. `None`
+    /// = unstated: the work-vs-table swing is named not judged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub axis_to_table: Option<f64>,
 }
 
 fn is_false(b: &bool) -> bool {
@@ -194,6 +202,15 @@ pub struct Machine {
     /// post that needs it refuses rather than guess where up is.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub safe_retract_z: Option<f64>,
+    /// The `edm` section of a wire or sinker EDM machine (#530), or
+    /// None: unstated.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub edm: Option<super::edm::Edm>,
+    /// The EDM control's own words, `edm.codes` (#533, #290 D5): name ->
+    /// the text the control reads. Empty = none stated; a post that
+    /// needs one refuses by its name.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub edm_codes: std::collections::BTreeMap<String, String>,
     /// The holder system the spindle takes (#828): `tooling.spindle_mount`,
     /// one of [`super::SPINDLE_MOUNTS`]. Unstated reads `None`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -257,15 +274,19 @@ impl Machine {
                 .is_none_or(|w| Kind::from_word(w).is_some())
             && self.coolants.iter().all(|c| !c.name.is_empty())
             && self.plasma_sane()
+            && self.edm_sane()
             && self.axes.iter().all(|a| {
                 rate_ok(a.feed) && rate_ok(a.rapid) && rate_ok(a.resolution) && a.travel.is_none_or(|(lo, hi)| lo.is_finite() && hi.is_finite() && hi > lo)
                     && a.axis.is_none_or(|d| d.iter().all(|x| x.is_finite()))
                     && rate_ok(a.nose_to_axis)
+                    && rate_ok(a.axis_to_table)
             })
             && match (self.spindle_min, self.spindle_max) {
                 (Some(lo), Some(hi)) => hi >= lo,
                 _ => true,
             }
+            && self.edm.as_ref().is_none_or(super::edm::Edm::is_sane)
+            && super::edm_codes::codes_sane(&self.edm_codes)
     }
 
     /// The one-line identity for the Setup pane and the stage E sheet.

@@ -61,11 +61,15 @@
 mod backend;
 mod backend_build;
 mod backend_edit;
+mod carried;
+mod carried_read;
 mod carry;
 mod columns;
 mod cut;
 mod dexel;
 mod dexel_arc;
+// #541: the sinker electrode's box atom.
+mod dexel_box;
 mod dexel_bull;
 mod deviate;
 mod edge_break;
@@ -105,16 +109,19 @@ mod scan;
 mod scan_arc;
 mod scan_hidden;
 mod scan_near;
+mod scan_turned;
 mod tiles;
 mod wall_slack;
 
 pub use backend::{Backend, Stock, FIELD_BAND, FIELD_VERDICT_EPS, LATHE_COLUMN_REFUSAL};
 pub use backend_edit::SET_TOPS_FIELD_REFUSAL;
+pub use carried::{clip_columns_under, lattice_of_grid, CarriedStock, FieldBody};
 pub use carry::{Body, LatticeTurn, CARRY_TURN_REFUSAL};
 pub use columns::Columns;
 pub use cut::{auto_cell, first_posed, simulate, SimOp, POSED_REFUSAL};
 pub use deviate::{color_classes, deviate, Deviation, DEV_TOL, ProgramSim, SimSurface};
 pub use dexel::{reach, Dexel};
+pub use dexel_box::{simulate_box, BOX_ARC_REFUSAL};
 pub use edge_break::credit_breaks;
 pub use field::SdfField;
 pub use field_body::Lattice;
@@ -128,5 +135,5 @@ pub use field_rotary::{rotary_chords, rotary_chords_law, ChordLaw, RotaryChordSt
 pub use gouge::dist_seg_tri;
 pub use kernel::{measure, part_surface, StockError, StockReport};
 pub use preview::{preview, Preview, PreviewCamera};
-pub use scan::{envelope_scan, envelope_scan_centers, envelope_scan_within, EnvelopeReport};
+pub use scan::{envelope_scan, envelope_scan_centers, envelope_scan_turned, envelope_scan_within, EnvelopeReport};
 pub use scan_hidden::{HiddenRest, ScanBudget};
