@@ -1446,7 +1446,23 @@ impl OpParams {
                 wh(h, p.bottom_z);
                 h.write(p.condition.as_bytes());
                 h.write_u8(0xff);
-                h.write_u8(u8::from(p.side == super::WireSide::Punch));
+                // #1370: the side as its own discriminant - die and punch
+                // keep the bytes they always wrote (0 / 1), so no closed
+                // cut's stamp moves; an open run's left / right (#1109)
+                // and its run-out clearance, read only by an open run,
+                // stand apart.
+                match p.side {
+                    super::WireSide::Die => h.write_u8(0),
+                    super::WireSide::Punch => h.write_u8(1),
+                    super::WireSide::Left => {
+                        h.write_u8(2);
+                        w(h, p.clearance);
+                    }
+                    super::WireSide::Right => {
+                        h.write_u8(3);
+                        w(h, p.clearance);
+                    }
+                }
                 // #540: written only when set, so no contour's stamp moves.
                 if let Some(c) = p.burnout {
                     h.write(b"burnout");
