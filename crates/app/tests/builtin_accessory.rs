@@ -107,7 +107,8 @@ fn expected(a: &Accessory) -> (f64, [f64; 3], [f64; 3]) {
             let hw = (0.5 * w).max(mesh::stud_radius(d));
             (v, [0.0, -hw, 0.0], [l, hw, h + t + s])
         }
-        // #1442: rings drawn with flats on their circles; jaws boxes.
+        // #1442: outer faces drawn with flats on their circles, bores
+        // with vertices on theirs (#1470); jaws boxes.
         Accessory::ThreeJawChuck(c) | Accessory::FourJawChuck(c) => {
             let n = if matches!(a, Accessory::ThreeJawChuck(_)) { 3.0 } else { 4.0 };
             let v = ring_area(0.5 * c.body_diameter, 0.5 * c.bore_diameter) * c.body_length
@@ -129,10 +130,12 @@ fn flats_on(r: f64) -> f64 {
     r / (std::f64::consts::PI / camcraft_sim::chuck::SIDES as f64).cos()
 }
 
-/// The area between two polygons with flats on circles `ro` and `ri`.
+/// The area between a polygon with flats on circle `ro` (circumscribed)
+/// and a bore polygon with vertices on circle `ri` (inscribed, #1470).
 fn ring_area(ro: f64, ri: f64) -> f64 {
     let n = camcraft_sim::chuck::SIDES as f64;
-    n * (std::f64::consts::PI / n).tan() * (ro * ro - ri * ri)
+    let half = std::f64::consts::PI / n;
+    n * half.tan() * ro * ro - n * half.sin() * half.cos() * ri * ri
 }
 
 fn check_solid(a: &Accessory, what: &str) {
