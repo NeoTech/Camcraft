@@ -177,3 +177,116 @@ fn a_chooser_outside_a_click_says_what_to_do_instead_of_failing_silently() {
     let project = file_pick::chooser_status(PickFor::Project, false);
     assert!(project.contains("File > Open"), "{project}");
 }
+
+// #1613: both ways a project reaches the shell must keep the old document
+// even if the loader gets past parsing and starts applying the new file.
+fn refused_project_keeps_document(from_disk: bool) {
+    use camcraft_app::commands::SetUnits;
+    use camcraft_app::units::{self, Unit};
+
+    let mut incoming: serde_json::Value =
+        serde_json::from_str(&project::save_text(&State::new().world).expect("empty project")).expect("JSON");
+    incoming["units"] = serde_json::json!("in");
+    incoming["entities"] = serde_json::json!([{
+        "name": "BrokenSetup", "translation": [0.0, 0.0, 0.0], "kind": "setup",
+        "setup": {"stock": "Stock", "wcs": "WCS", "workholding_max_rpm": -1.0}
+    }]);
+    let late_failure = serde_json::to_vec(&incoming).expect("incoming bytes");
+    // This is a semantic failure after document singleton writes, rather
+    // than a second spelling of a JSON parse error.
+    let probe = State::new();
+    let error = project::open_noted(&probe.world, std::str::from_utf8(&late_failure).expect("text"))
+        .expect_err("invalid workholding rpm");
+    assert!(error.to_string().contains("BrokenSetup"), "{error}");
+    assert_eq!(units::of(&probe.world), Unit::Inches, "the loader reached world writes");
+
+    for (case, bytes) in [("json", b"{ not json".to_vec()), ("semantic", late_failure)] {
+        let mut state = State::new();
+        let model = std::fs::read(testdata("cube.stl")).expect("cube");
+        state.run(CommandKind::OpenPicked(picked(PickFor::Model, "cube.stl", Ok(model))));
+        assert!(has_model(&state, "cube"), "{}", state.status);
+        let command = SetUnits::new(&state.world, Unit::Inches).expect("change units");
+        state.history.execute(&state.world, command);
+        assert!(state.history.undo(&state.world));
+        state.project_path = Some(PathBuf::from("original.camproj"));
+        state.hidden_stocks.push("Stock".into());
+        let before = project::save_text(&state.world).expect("old document");
+        let title = state.window_title();
+        let version = state.doc_version;
+        assert!(state.history.is_dirty());
+        assert!(state.history.can_undo() && state.history.can_redo());
+
+        let name = format!("refused-{case}.camproj");
+        let dir = std::env::temp_dir().join(format!("camcraft-1613-{}-{case}", std::process::id()));
+        if from_disk {
+            std::fs::create_dir_all(&dir).expect("temp dir");
+            let path = dir.join(&name);
+            std::fs::write(&path, bytes).expect("corrupt project");
+            state.run(CommandKind::OpenProjectFile(path));
+            std::fs::remove_dir_all(&dir).expect("remove temp dir");
+        } else {
+            state.run(CommandKind::OpenPicked(picked(PickFor::Project, &name, Ok(bytes))));
+        }
+
+        assert_eq!(project::save_text(&state.world).expect("document after refusal"), before);
+        assert!(state.status.starts_with("open failed:") && state.status.contains(&name), "{}", state.status);
+        assert_eq!(state.project_path, Some(PathBuf::from("original.camproj")));
+        assert_eq!(state.window_title(), title);
+        assert_eq!(state.doc_version, version);
+        assert_eq!(state.hidden_stocks, ["Stock"]);
+        assert!(state.history.is_dirty());
+        assert!(state.history.can_undo() && state.history.can_redo());
+        assert!(state.history.redo(&state.world), "redo command survived");
+        assert_eq!(units::of(&state.world), Unit::Inches);
+        assert!(state.history.undo(&state.world));
+        assert_eq!(project::save_text(&state.world).expect("redo reversed"), before);
+        assert!(state.history.undo(&state.world), "import command survived");
+        assert!(!has_model(&state, "cube"));
+        assert!(!state.history.is_dirty(), "original clean point survived");
+        assert!(state.history.redo(&state.world));
+        assert_eq!(project::save_text(&state.world).expect("import redone"), before);
+    }
+}
+
+#[test]
+fn refused_disk_project_keeps_document_and_history() {
+    refused_project_keeps_document(true);
+}
+
+#[test]
+fn refused_byte_project_keeps_document_and_history() {
+    refused_project_keeps_document(false);
+}
+
+#[test]
+fn successful_disk_project_replaces_document_and_keeps_preferences() {
+    use camcraft_app::commands::{color_vision_of, color_vision_set, theme_of, theme_set};
+    use camcraft_app::schema::{ColorVision, ThemeRef};
+
+    let dir = std::env::temp_dir().join(format!("camcraft-1613-success-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("temp dir");
+    let path = dir.join("replacement.camproj");
+    let mut author = State::new();
+    let bytes = std::fs::read(testdata("cube.stl")).expect("cube");
+    author.run(CommandKind::OpenPicked(picked(PickFor::Model, "cube.stl", Ok(bytes))));
+    project::save(&author.world, &path).expect("save new document");
+
+    let mut state = State::new();
+    let bytes = std::fs::read(testdata("box.obj")).expect("box");
+    state.run(CommandKind::OpenPicked(picked(PickFor::Model, "box.obj", Ok(bytes))));
+    assert!(has_model(&state, "box"));
+    theme_set(&state.world, &ThemeRef::Named("light".into()));
+    color_vision_set(&state.world, ColorVision::Deutan);
+    let version = state.doc_version;
+    state.run(CommandKind::OpenProjectFile(path.clone()));
+    assert!(state.status.starts_with("opened "), "{}", state.status);
+    assert!(has_model(&state, "cube"));
+    assert!(!has_model(&state, "box"));
+    assert_eq!(state.project_path, Some(path));
+    assert!(state.history.is_empty());
+    assert!(!state.history.is_dirty());
+    assert_eq!(state.doc_version, version + 1);
+    assert_eq!(theme_of(&state.world), ThemeRef::Named("light".into()));
+    assert_eq!(color_vision_of(&state.world), ColorVision::Deutan);
+    std::fs::remove_dir_all(dir).expect("remove temp dir");
+}

@@ -1071,14 +1071,8 @@ impl OpParams {
                 // through here or through the source arm.
                 h.write_u32(holes.len() as u32);
                 for hole in holes {
-                    wp2(h, hole.xy);
-                    w(h, hole.radius);
-                    w(h, hole.entry_z);
-                    w(h, hole.floor_z);
-                    h.write_u8(u8::from(hole.through));
-                    h.write_u8(u8::from(hole.stepped)); // changes what the
-                    // bore door says, so it belongs in the digest (M8.3):
-                    // a re-detect that folds a step marks the op Stale.
+                    // #1560: in the form the file stores (lattice).
+                    super::hole_digest::hole(h, hole);
                 }
                 // The radial list digests too (M5.2 F2): same law -
                 // detection output or a typed edit is params data, and
@@ -1086,15 +1080,7 @@ impl OpParams {
                 // the op Stale rather than re-detect silently.
                 h.write_u32(cross.len() as u32);
                 for c in cross {
-                    for p in [c.origin, c.dir] {
-                        w(h, p.x);
-                        w(h, p.y);
-                        w(h, p.z);
-                    }
-                    for v in [c.radius, c.entry_d, c.floor_d] {
-                        w(h, v);
-                    }
-                    h.write_u8(u8::from(c.through));
+                    super::hole_digest::cross(h, c);
                 }
             }
             // The facing ladder (M5.2 stage A, tag 18): three heights,
@@ -1418,12 +1404,8 @@ impl OpParams {
                 h.write_u8(u8::from(*climb));
                 h.write_u32(holes.len() as u32);
                 for hole in holes {
-                    wp2(h, hole.xy);
-                    w(h, hole.radius);
-                    w(h, hole.entry_z);
-                    w(h, hole.floor_z);
-                    h.write_u8(u8::from(hole.through));
-                    h.write_u8(u8::from(hole.stepped));
+                    // #1560: in the form the file stores (lattice).
+                    super::hole_digest::hole(h, hole);
                 }
             }
             // The probe (#108): every number moves the touches or the
@@ -1648,12 +1630,8 @@ impl OpParams {
                 });
                 h.write_u32(holes.len() as u32);
                 for hole in holes {
-                    wp2(h, hole.xy);
-                    w(h, hole.radius);
-                    w(h, hole.entry_z);
-                    w(h, hole.floor_z);
-                    h.write_u8(u8::from(hole.through));
-                    h.write_u8(u8::from(hole.stepped));
+                    // #1560: in the form the file stores (lattice).
+                    super::hole_digest::hole(h, hole);
                 }
             }
         }

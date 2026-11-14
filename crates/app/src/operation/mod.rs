@@ -77,6 +77,7 @@ pub use seed::seed_params;
 pub mod tool_law;
 pub mod tool_gate;
 mod params;
+mod hole_digest;
 mod slot_fit;
 mod trochoid_op;
 mod stamp;
