@@ -108,6 +108,22 @@ that refuses more.
   suites still import.
 - A faulted face is never "continuous": no coarser pass's mesh is kept for
   it (`step_refine`), since the coarser pass searched the same boundary.
+- **Sheet-jump bound (review item 4).** When truck's answer is inside the
+  knot domain, it followed the previous boundary point, so it is kept
+  unless it is more than `JUMP` = 1e-3 model units (1 um in a millimetre
+  file) off the point AND the second search's answer is at least 10 times
+  nearer. A fold of the surface within 1e-3 of the point never moves a
+  boundary point; a thread's wrong turn (one pitch off, against an edge
+  error of microns) still does. An answer outside the domain is replaced
+  as before, by any in-domain answer on the surface or nearer.
+  **Dropped:** the reviewer's narrower option, a second answer only when
+  truck's answer is outside the domain (it gives up the in-domain wrong
+  turn that `a_nearer_answer_replaces_a_far_one_off_the_surface` pins); a
+  bound on the chord tolerance (truck does not pass the tolerance to the
+  search); a ratio alone (a point
+  exactly on the other sheet would always jump).
+  **Cost, owed a reading:** `JUMP` is in model units, so an inch file's
+  bound is 25 um and a metre file's 1 mm. Not measured on real files.
 
 ## Readings (release, local; the user's files stay local)
 

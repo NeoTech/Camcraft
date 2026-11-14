@@ -31,10 +31,23 @@
 //! acceptance distance of the point is kept as it is (a pole's free
 //! parameter is settled by `step_pole` before this, so it is inside). Any
 //! other answer, or none, is compared with Newton started from the nearest
-//! samples of a grid with a few samples in every knot span, and the nearest
-//! answer INSIDE the knot domain wins when it is on the surface or nearer
-//! than the first. An answer inside the domain that no search betters is
-//! kept as truck gave it.
+//! samples of a grid with a few samples in every knot span. When truck's
+//! answer is outside the domain (or none), the nearest answer INSIDE the
+//! knot domain wins when it is on the surface or nearer than the first.
+//! An answer inside the domain that no search betters is kept as truck
+//! gave it.
+//!
+//! The sheet-jump bound (PR #1638 review item 4): truck's answer follows
+//! the previous boundary point, so when it is inside the domain it is on
+//! the boundary's own sheet unless it is far off. A surface that folds
+//! near itself has another sheet within a small distance, and a boundary
+//! point a little off the surface (a file's edge-curve error) can be
+//! nearer that other sheet. So an in-domain answer of truck is replaced
+//! only when it is more than `JUMP` off the point AND the new answer is
+//! at least `JUMP_RATIO` times nearer. A fold whose sheets lie within
+//! `JUMP` of the point never moves a boundary point; past that, a point is
+//! moved only when it is clearly on the other sheet (a thread's wrong
+//! turn, one pitch away, against an edge error of microns).
 //!
 //! What is refused (review of PR #1638), each by name through the face's
 //! meter (`step_guard`), never passed on as an answer:
@@ -56,6 +69,14 @@ use super::ImportError;
 /// truck's acceptance distance for a parameter search (its `TOLERANCE`,
 /// in model units): an answer this near the point is on the surface.
 const SAME_POINT: f64 = 1.0e-6;
+/// An in-domain answer of truck this near the point (model units: 1 um in
+/// a millimetre file) is never moved to another sheet; see the module
+/// comment. Edge curves of exported files lie 1e-5 to 1e-3 mm off their
+/// surfaces.
+const JUMP: f64 = 1.0e-3;
+/// How many times nearer the point another in-domain answer must be to
+/// replace an in-domain answer of truck farther than `JUMP`.
+const JUMP_RATIO: f64 = 10.0;
 /// The most surface evaluations one sample grid may take.
 const MAX_SAMPLES: usize = 4_096;
 /// The most samples per knot span in each direction.
@@ -145,8 +166,17 @@ pub(super) fn rescue(surface: &Surface, point: Point3, found: Option<(f64, f64)>
         .filter(|uv| inside(*uv, domain))
         .filter_map(|uv| Some((dist(uv), uv)).filter(|(d, _)| d.is_finite()))
         .min_by(|a, b| a.0.total_cmp(&b.0));
+    // The sheet-jump bound: an in-domain first answer gives way only when
+    // it is far off and the new one clearly nearer.
+    let better = |d: f64, f: f64| {
+        if found_inside {
+            f > JUMP && d * JUMP_RATIO < f
+        } else {
+            d <= SAME_POINT || d < f
+        }
+    };
     match (best, first) {
-        (Some((d, uv)), Some(f)) if d <= SAME_POINT || d < f => Some(uv),
+        (Some((d, uv)), Some(f)) if better(d, f) => Some(uv),
         (Some((_, uv)), None) => Some(uv),
         // truck's own answer stands only inside the domain (or as none).
         _ if found_inside || found.is_none() => found,

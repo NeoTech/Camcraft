@@ -134,3 +134,44 @@ fn a_nearer_answer_replaces_a_far_one_off_the_surface() {
     let found = rescue(&s, p, wrong_turn, &meter()).expect("an answer");
     assert!((found.1 - v).abs() < 1e-3, "{found:?}");
 }
+
+/// A degree-1 hairpin: sheet A along x at z = 0 for u in [0, 0.5], folded at
+/// x = 1 back to sheet B, which climbs to z = `gap` at x = 0.
+fn hairpin(gap: f64) -> Surface {
+    let uk = KnotVec::from(vec![0.0, 0.0, 0.5, 1.0, 1.0]);
+    let vk = KnotVec::bezier_knot(1);
+    let p = |x: f64, y: f64, z: f64| Point3::new(x, y, z);
+    let cps = vec![
+        vec![p(0.0, 0.0, 0.0), p(0.0, 1.0, 0.0)],
+        vec![p(1.0, 0.0, 0.0), p(1.0, 1.0, 0.0)],
+        vec![p(0.0, 0.0, gap), p(0.0, 1.0, gap)],
+    ];
+    Surface::BSplineSurface(Box::new(BSplineSurface::new((uk, vk), cps)))
+}
+
+/// PR #1638 review item 4: on a surface that folds near itself, a boundary
+/// point a little off its sheet but nearer the other sheet keeps truck's
+/// answer on its own sheet (the one its hint followed). It moves only when
+/// truck's answer is more than `JUMP` off and the other sheet is
+/// `JUMP_RATIO` times nearer.
+#[test]
+fn a_boundary_point_does_not_jump_to_a_fold_of_the_surface_within_the_bound() {
+    // Sheets 5e-4 apart at x = 0.5; the point 4e-4 above A, 1e-4 below B.
+    let s = hairpin(1e-3);
+    let p = Point3::new(0.5, 0.5, 4e-4);
+    let on_a = (0.25, 0.5);
+    let to_b = s.search_nearest_parameter(p, (0.75, 0.5), TRIALS);
+    let b_d = to_b.map(|(u, v)| s.subs(u, v).distance(p));
+    assert!(to_b.is_some_and(|(u, _)| u > 0.5) && b_d.is_some_and(|d| d < 2e-4), "the fold is nearer: {to_b:?} {b_d:?}");
+    let m = meter();
+    assert_eq!(rescue(&s, p, Some(on_a), &m), Some(on_a), "a point within JUMP of its own sheet jumped the fold");
+    assert_eq!(m.fault(), None);
+    // Sheets 0.05 apart at x = 0.5: a point 0.03 off A and 0.02 off B is
+    // not clearly on B and stays; one 0.0495 off A and 5e-4 off B moves.
+    let s = hairpin(0.1);
+    let between = Point3::new(0.5, 0.5, 0.03);
+    assert_eq!(rescue(&s, between, Some(on_a), &meter()), Some(on_a));
+    let on_b = Point3::new(0.5, 0.5, 0.0495);
+    let moved = rescue(&s, on_b, Some(on_a), &meter());
+    assert!(moved.is_some_and(|(u, _)| u > 0.5), "a point clearly on the other sheet must move there: {moved:?}");
+}

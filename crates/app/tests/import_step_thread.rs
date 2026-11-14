@@ -253,9 +253,7 @@ fn edge(a: Point3, b: Point3) -> f64 {
 fn a_four_turn_thread_flank_meshes_at_full_fidelity_in_a_bounded_count() {
     let turns = 4;
     let text = flank_step(turns);
-    let started = std::time::Instant::now();
     let (mesh, chord) = step::parse_with_chord(text.as_bytes()).expect("the flank imports");
-    let took = started.elapsed();
     let facets = &mesh.facets;
     // ~80 steps a turn at 5 um on a 6.35 mm radius, two triangles each;
     // the isotropic division made 523 K.
@@ -275,5 +273,6 @@ fn a_four_turn_thread_flank_meshes_at_full_fidelity_in_a_bounded_count() {
         .map(|t| axial_gap(Point3::new((t.a.x + t.b.x + t.c.x) / 3.0, (t.a.y + t.b.y + t.c.y) / 3.0, (t.a.z + t.b.z + t.c.z) / 3.0)))
         .fold(0.0, f64::max);
     assert!(worst < 0.01, "a facet stands {worst} mm off the flank");
-    assert!(took.as_secs() < 60, "bounded: {took:?}");
+    // No wall-clock assert (PR #1638 review item 7, the issue-1605 class):
+    // the facet bound above already pins the runaway.
 }
