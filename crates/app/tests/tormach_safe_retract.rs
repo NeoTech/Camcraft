@@ -16,8 +16,8 @@ use camcraft_app::posting::MACHINES;
 use serde_json::{json, Value};
 use std::path::Path;
 
-const STREAM: &str = "PARAM SpindleSpeed 2000\nTOOL 1 T1\nSECTION\nRapid X 0 Y 0 Z 5000\nFeed X 1000 Y 0 Z -1000 F 500000\nENDSECTION\n\
-                      PARAM SpindleSpeed 2000\nTOOL 2 T2\nSECTION\nRapid X 0 Y 0 Z 5000\nFeed X 1000 Y 0 Z -1000 F 500000\nENDSECTION\n";
+const STREAM: &str = "PARAM SpindleSpeed 2000\nPARAM ClearancePlane 10\nTOOL 1 T1\nSECTION\nRapid X 0 Y 0 Z 5000\nFeed X 1000 Y 0 Z -1000 F 500000\nENDSECTION\n\
+                      PARAM SpindleSpeed 2000\nPARAM ClearancePlane 10\nTOOL 2 T2\nSECTION\nRapid X 0 Y 0 Z 5000\nFeed X 1000 Y 0 Z -1000 F 500000\nENDSECTION\n";
 
 fn read(rel: &str) -> String {
     let p = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../").join(rel);

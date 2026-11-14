@@ -50,6 +50,7 @@ const CYCLE_POSTS: &[(&str, &str)] = &[
 /// A drilled hole whose cycle and chain state no feed at all: a tool,
 /// a spindle and a stated R, nothing else missing.
 const NO_FEED: &str = "PARAM SpindleSpeed 1500
+PARAM ClearancePlane 10
 TOOL 4 6MM DRILL
 START 20000 10000 6000
 Rapid 20000 10000 2000
@@ -88,6 +89,7 @@ fn a_canned_cycle_with_no_feed_is_refused_by_name() {
 fn the_lathe_drill_cycle_with_no_feed_is_refused_by_name() {
     // On centre (X0 Y0), so only the feed is wrong.
     let stream = "PARAM SpindleSpeed 800
+PARAM ClearancePlane 10
 TOOL 1 10MM DRILL
 START 0 0 6000
 Rapid 0 0 2000
@@ -140,6 +142,7 @@ fn a_tormach_section_after_m5_with_no_spindle_speed_is_refused() {
     // A second section that states no speed would cut with it stopped.
     let cps = read("assets/posts/tormach.cps");
     let stream = "PARAM SpindleSpeed 6000
+PARAM ClearancePlane 10
 TOOL 2 6MM END MILL
 SECTION
 Rapid 0 0 5000
@@ -158,7 +161,7 @@ ENDSECTION
         out.program
     );
     // Restated, it posts.
-    let restated = stream.replacen("SECTION\nRapid 0 10000", "PARAM SpindleSpeed 6000\nSECTION\nRapid 0 10000", 1);
+    let restated = stream.replacen("SECTION\nRapid 0 10000", "PARAM SpindleSpeed 6000\nPARAM ClearancePlane 10\nSECTION\nRapid 0 10000", 1);
     let out = engine::run(&cps, &mx770(), &restated).expect("runs");
     assert!(out.warnings.is_empty(), "{:?}", out.warnings);
 }
@@ -186,6 +189,7 @@ fn the_tormach_drill_golden_is_a_runnable_program() {
 fn zero_rpm_section(kind: &str) -> String {
     format!(
         "PARAM SpindleSpeed 0
+PARAM ClearancePlane 10
 PARAM ToolKind {kind}
 TOOL 2 6MM END MILL
 SECTION
@@ -241,6 +245,7 @@ fn a_tormach_touch_probe_section_still_posts() {
 /// state no feed: a post that falls back to the modal feed would drill
 /// it at F300 from the facing pass. Refused by name instead.
 const EARLIER_F_THEN_NO_FEED: &str = "PARAM SpindleSpeed 1500
+PARAM ClearancePlane 10
 TOOL 4 6MM DRILL
 START 20000 10000 6000
 Feed 30000 10000 6000 F300000

@@ -263,7 +263,7 @@ fn the_belt_range_is_named_and_a_stray_tool_number_is_refused() {
     let mch = machine_for(TORMACH_MCH);
     let run = |rpm: u32, tool: u32| {
         let stream = format!(
-            "PARAM SpindleSpeed {rpm}\nTOOL {tool} T{tool}\nSECTION\nRapid X 0 Y 0 Z 5000\nENDSECTION\n"
+            "PARAM SpindleSpeed {rpm}\nPARAM ClearancePlane 10\nTOOL {tool} T{tool}\nSECTION\nRapid X 0 Y 0 Z 5000\nENDSECTION\n"
         );
         engine::run(&cps, &mch, &stream).expect("runs")
     };
@@ -325,8 +325,8 @@ fn a_tap_posts_g84_with_its_feed_and_no_dwell_word() {
 #[test]
 fn every_tool_change_lifts_z_before_g30() {
     let cps = read("assets/posts/tormach.cps");
-    let stream = "PARAM SpindleSpeed 2000\nTOOL 1 T1\nSECTION\nRapid X 0 Y 0 Z 5000\nFeed X 1000 Y 0 Z -1000 F 500000\nENDSECTION\n\
-                  PARAM SpindleSpeed 2000\nTOOL 2 T2\nSECTION\nRapid X 0 Y 0 Z 5000\nFeed X 1000 Y 0 Z -1000 F 500000\nENDSECTION\n";
+    let stream = "PARAM SpindleSpeed 2000\nPARAM ClearancePlane 10\nTOOL 1 T1\nSECTION\nRapid X 0 Y 0 Z 5000\nFeed X 1000 Y 0 Z -1000 F 500000\nENDSECTION\n\
+                  PARAM SpindleSpeed 2000\nPARAM ClearancePlane 10\nTOOL 2 T2\nSECTION\nRapid X 0 Y 0 Z 5000\nFeed X 1000 Y 0 Z -1000 F 500000\nENDSECTION\n";
     let out = run_doc(&cps, TORMACH_MCH, stream).expect("posts");
     assert!(out.warnings.is_empty(), "{:?}", out.warnings);
     let lines: Vec<&str> = out.program.lines().collect();
@@ -346,15 +346,16 @@ fn every_tool_change_lifts_z_before_g30() {
 }
 
 /// X and Y are unknown at the program's start and after every G30, so the
-/// first move after a tool change is preceded by a G0 to its X Y alone,
-/// at the Z-up height: PathPilot otherwise warns "Axis XY not specified
-/// by this or previous motions" and the move starts wherever the table
-/// happens to be.
+/// first move after a tool change is preceded by a G0 to its X Y alone:
+/// PathPilot otherwise warns "Axis XY not specified by this or previous
+/// motions" and the move starts wherever the table happens to be. #1614:
+/// that traverse is made at the section's STATED clearance (a Z-only G0
+/// first), never at whatever height the top of Z travel leaves the tip.
 #[test]
 fn the_first_move_after_a_tool_change_positions_xy_with_z_up() {
     let cps = read("assets/posts/tormach.cps");
-    let stream = "PARAM SpindleSpeed 2000\nTOOL 1 T1\nSECTION\nRapid X 25400 Y 12700 Z 5080\nFeed X 25400 Y 12700 Z -2540 F 254000\nENDSECTION\n\
-                  PARAM SpindleSpeed 2000\nTOOL 2 T2\nSECTION\nFeed X 50800 Y 0 Z -2540 F 254000\nENDSECTION\n";
+    let stream = "PARAM SpindleSpeed 2000\nPARAM ClearancePlane 10\nTOOL 1 T1\nSECTION\nRapid X 25400 Y 12700 Z 5080\nFeed X 25400 Y 12700 Z -2540 F 254000\nENDSECTION\n\
+                  PARAM SpindleSpeed 2000\nPARAM ClearancePlane 10\nTOOL 2 T2\nSECTION\nFeed X 50800 Y 0 Z -2540 F 254000\nENDSECTION\n";
     let out = run_doc(&cps, TORMACH_MCH, stream).expect("posts");
     assert!(out.warnings.is_empty(), "{:?}", out.warnings);
     let lines: Vec<&str> = out.program.lines().collect();
@@ -369,13 +370,13 @@ fn the_first_move_after_a_tool_change_positions_xy_with_z_up() {
         if !l.ends_with(" M6") {
             continue;
         }
-        let first = lines[i..]
-            .iter()
-            .find(|l| is_motion(l))
-            .unwrap_or_else(|| panic!("{}", out.program));
+        let mut motions = lines[i..].iter().filter(|l| is_motion(l));
+        let (first, second) = (motions.next(), motions.next());
+        assert_eq!(first, Some(&"G0 Z0.3937"), "the stated clearance (10 mm) first\n{}", out.program);
+        let second = second.unwrap_or_else(|| panic!("{}", out.program));
         assert!(
-            first.starts_with("G0 X") && first.contains(" Y") && !first.contains('Z'),
-            "XY alone first, not {first}\n{}",
+            second.starts_with("G0 X") && second.contains(" Y") && !second.contains('Z'),
+            "then XY alone, not {second}\n{}",
             out.program
         );
         checked += 1;

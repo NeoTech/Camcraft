@@ -1,5 +1,6 @@
 {
-  "version": 59,
+  "version": 61,
+  "units": "in",
   "machine": {
     "path": "built-in: Tormach 770MX + microARC 4",
     "machine": {
@@ -51,7 +52,7 @@
           ],
           "turns_part": true,
           "nose_to_axis": 269.23999999999995,
-          "axis_to_table": 80.01
+          "axis_to_table": 80.00999999999999
         }
       ],
       "max_tool_length": null,
@@ -84,7 +85,9 @@
         ]
       ],
       "rigid_tapping": true,
-      "safe_retract_z": 0.0
+      "safe_retract_z": 0.0,
+      "spindle_mount": "BT30",
+      "default_holder": "BT30 ER20"
     }
   },
   "post": {
@@ -146,7 +149,7 @@
             "helix_radius": 0.5
           }
         },
-        "stamp": 18260334045019109720,
+        "stamp": 7569503656405261756,
         "cache": {
           "moves": [
             {

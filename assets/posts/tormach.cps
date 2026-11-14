@@ -39,6 +39,7 @@ var cycleSig = "";         // g|Z|R|Q of the open group (modal X Y holes)
 var cycX = 0, cycY = 0, cycR = 0; // the open group's hole XY and R plane (world, #994)
 var seatKnown = false;     // #994: this section moved, so the stream's Start is where the tool is
 var hopZ = null;           // #1028: the section's RetractPlane (its hop), null when unstated
+var clearZ = null;         // #1614: the section's ClearancePlane, null when unstated
 var coolant = "";          // the M-code this program started, if any
 var sectionOpen = false;   // preamble written (a legacy .cl carries no SECTION)
 var smoothTol = 0;          // #616: the section's PARAM Smoothing, mm (0: none asked)
@@ -333,6 +334,7 @@ function offsetWord(value) {
 
 function onParameter(name, value) {
   if (name === "RetractPlane") hopZ = has(value) ? Number(value) : null;  // #1028
+  if (name === "ClearancePlane") clearZ = has(value) ? Number(value) : null;  // #1614
   if (name === "Smoothing") { smoothTol = Number(value) || 0; return; }
   if (name === "SmoothingMode") { smoothMode = String(value || ""); return; }
   commentParam(name, value);
@@ -476,7 +478,7 @@ function endPreamble() {
 }
 
 function onSection() { seatKnown = false; startPreamble(); }
-function onSectionEnd() { endPreamble(); hopZ = null; }  // #1028: the next section states its own hop
+function onSectionEnd() { endPreamble(); hopZ = null; clearZ = null; }  // #1028: the next section states its own hop
 
 // ------------------------------------------------------- the 4th axis
 // #785. A rotary table about X (Tormach's microARC 4 or the older 4th-axis
@@ -618,8 +620,41 @@ function indexed() { return !!aSection; }
 // its target; a feed or arc at the point the stream says it starts from
 // (the target when the stream names none); a cycle at its first hole.
 var xyUnknown = true;
+// #1614: the height that traverse is made at is STATED, never assumed.
+// The top of Z travel (G53 G0 Z0, #1596) clears the part only while the
+// tool is short enough for the work offset: a PathPilot Hub run with a
+// 5" T4 and G54 Z zero 4.3" below the top had the tip 0.68" under the
+// part top after G43, and the bare X Y rapid crossed the part there.
+// So an upright section first rapids to its clearance - the stream's
+// ClearancePlane, else its RetractPlane (the hop, #1028), never below
+// the move's own Z. (Not StartZ: the engine starts every stream at 0
+// when it states no start, so that height is not the stream's.) On a
+// setup that can clear, that is an ordinary move down to clearance; on
+// one that cannot, the control refuses the block as past its Z limit
+// and stops, instead of rapiding through the part. A stream that states
+// neither has no verified height to traverse at: refused by name.
+function traverseZ(z) {
+  var c = has(clearZ) ? clearZ : (has(hopZ) ? hopZ : null);
+  if (c === null) return null;
+  return has(z) ? Math.max(c, Number(z)) : c;
+}
+var traverseRefused = false;  // #1614: once per program
+var traversedAt = null;       // #1614: the Z the last first-traverse was made at
 function xyFirst(x, y, z) {
   if (!xyUnknown || !has(x) || !has(y)) return;
+  traversedAt = null;
+  if (!indexed()) {
+    var tz = traverseZ(z);
+    if (tz === null) {
+      if (!traverseRefused) {
+        traverseRefused = true;
+        msg("first X/Y traverse" + inOp() + " with no clearance height stated (no ClearancePlane or RetractPlane) - the post will not rapid X/Y at an unknown height");
+      }
+      return;
+    }
+    block(["G0", wo("Z", tz, orgZ)]);
+    traversedAt = tz;
+  }
   if (indexed()) {  // #785: X Y of the turned tip, which Z enters
     if (!has(z)) return;
     var q = tip(x, y, z);
@@ -645,7 +680,8 @@ function startXY(p) {
       // #785: "above" is the indexed frame's Z, the tool axis.
       var s0 = tip(p.StartX, p.StartY, p.StartZ), e0 = tip(p.X, p.Y, p.Z);
       if (s0[2] > e0[2]) block(["G0", "Z" + fu(s0[2])]);
-    } else if (!indexed()) {
+    } else if (!indexed() && !(has(traversedAt) && Math.abs(traversedAt - p.StartZ) < 1e-9)) {
+      // #1614: not when the stated traverse height already is it.
       block(["G0", wo("Z", p.StartZ, orgZ)]);
     }
   }
