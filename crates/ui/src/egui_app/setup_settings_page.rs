@@ -78,11 +78,11 @@ fn groups(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
     group(ui, GROUPS[1], None, |ui| super::setup_stock_pick::picker(ui, state, name));
     group(ui, GROUPS[2], None, |ui| {
         ui.label(RichText::new(ORIENT_HELP).small().weak());
-        super::setup_align_pick::picker(ui, state, name);
+        // The two dropdowns (#771): plane orientation (axes, points, face,
+        // manual, cylinder) and orientation point; they draw the picker
+        // rows main keeps (#738).
+        super::setup_orient_pick::section(ui, state, name);
         super::setup_relative_pick::picker(ui, state, name);
-        super::setup_plane_pick::row(ui, state, name);
-        super::setup_points_pick::row(ui, state, name);
-        super::setup_axis_pick::rows(ui, state, name);
     });
     group(ui, GROUPS[3], None, |ui| {
         // Main's reading order: set the WCS from features, then name its slot.

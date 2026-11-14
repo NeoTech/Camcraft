@@ -123,6 +123,7 @@ pub(crate) use setup_align_pick::align_text;
 // #330: the Setups page's lay-on-a-plane row.
 mod setup_plane_pick;
 mod setup_axis_pick;
+mod setup_orient_pick;
 // #555: the Setups page's lay-on-three-points row.
 mod setup_points_pick;
 // #701: the Setups page's set-WCS-from-features role row.
@@ -171,6 +172,7 @@ mod panes;
 // #441: the ribbon's Theme door and its dropdown.
 mod theme_drop;
 mod recent_drop;
+mod file_drop;
 // #343: the browser tree, split from panes (rows / pane / operation menu).
 mod browser_tree;
 // #155: Pause / Home entry rows and their menu.
@@ -297,6 +299,8 @@ mod setup_axis_tests;
 mod setup_points_tests;
 #[cfg(test)]
 mod wcs_pick_tests;
+#[cfg(test)]
+mod wcs_pick_click_tests;
 #[cfg(test)]
 mod ball_corner_tests;
 #[cfg(test)]

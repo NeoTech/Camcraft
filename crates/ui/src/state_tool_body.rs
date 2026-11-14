@@ -151,6 +151,9 @@ impl State {
 
     /// "Import body…": pick a mesh file, then read it into the draft.
     pub(crate) fn import_tool_body_dialog(&mut self) {
+        if self.refuse_in_browser(crate::browser_files::NEEDS_PICKER) {
+            return;
+        }
         if let Some(path) = super::pick_mesh_file() {
             self.import_tool_body_from(&path);
         }

@@ -29,6 +29,7 @@ fn job(tp: &Toolpath, cutoff_from: Option<usize>, capture: bool) -> WireVerdict 
     judge(&WireJob {
         path: tp,
         kerf_offset: K,
+        skim_offsets: Vec::new(),
         side: CutSide::Die,
         start: Some(Point2::new(0.0, 0.0)),
         sections,

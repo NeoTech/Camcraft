@@ -82,7 +82,20 @@ fn adds(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
     let size = Vec2::new(ui.available_width().max(24.0), BUTTON_H);
     let labels = ["Import fixture…", "Add built-in vise…", "Add accessory…", "Add fixture plate…"];
     for (i, label) in labels.iter().enumerate() {
-        if super::wcs_page::even_row(ui, &[label], size).is_none() {
+        // #1431: the import needs a file picker a page cannot open, so
+        // the browser build greys that one row with its reason; the
+        // others queue dialogs that need no path.
+        let clicked = match i {
+            0 => crate::browser_files::button_sized(
+                ui,
+                state.browser_refusal_of(&CommandKind::ImportFixtureDialog),
+                label,
+                "",
+                size,
+            ),
+            _ => super::wcs_page::even_row(ui, &[label], size).is_some(),
+        };
+        if !clicked {
             continue;
         }
         state.pending.push_back(match i {

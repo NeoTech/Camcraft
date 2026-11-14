@@ -84,18 +84,45 @@ fn library_row(ui: &mut Ui, state: &mut State, path: &str, names: &[&str]) {
 }
 
 /// Load other / Edit / Clear as equal buttons; with no machine, the one
-/// load button.
+/// load button. #1431: in the browser build the `.mch` load slot greys
+/// with its refusal reason (a page has no file picker yet); the rows
+/// lay out exactly as on the desktop while nothing is refused.
 fn actions(ui: &mut Ui, state: &mut State, has_machine: bool) {
     let avail = ui.available_width();
+    let why = state.browser_refusal_of(&CommandKind::LoadMachineDialog);
     if has_machine {
         let size = Vec2::new(cell_w(ui, avail, 3), BUTTON_H);
-        match even_row(ui, &["Load other", "Edit", "Clear"], size) {
+        let clicked = match why {
+            None => even_row(ui, &["Load other", "Edit", "Clear"], size),
+            Some(why) => {
+                let mut hit = None;
+                ui.horizontal(|ui| {
+                    if crate::browser_files::button_sized(ui, Some(why), "Load other", "", size) {
+                        hit = Some(0);
+                    }
+                    for (i, label) in ["Edit", "Clear"].iter().enumerate() {
+                        if ui.add_sized(size, egui::Button::new(*label)).clicked() {
+                            hit = Some(i + 1);
+                        }
+                    }
+                });
+                hit
+            }
+        };
+        match clicked {
             Some(0) => state.pending.push_back(CommandKind::LoadMachineDialog),
             Some(1) => state.pending.push_back(CommandKind::EditMachineDialog),
             Some(_) => state.pending.push_back(CommandKind::ClearMachine),
             None => {}
         }
-    } else if even_row(ui, &["Load machine (.mch)"], Vec2::new(cell_w(ui, avail, 1), BUTTON_H)).is_some() {
-        state.pending.push_back(CommandKind::LoadMachineDialog);
+    } else {
+        let size = Vec2::new(cell_w(ui, avail, 1), BUTTON_H);
+        let load = match why {
+            None => even_row(ui, &["Load machine (.mch)"], size).is_some(),
+            Some(why) => crate::browser_files::button_sized(ui, Some(why), "Load machine (.mch)", "", size),
+        };
+        if load {
+            state.pending.push_back(CommandKind::LoadMachineDialog);
+        }
     }
 }

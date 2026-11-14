@@ -127,7 +127,19 @@ function onParameter(name, value) {
   else if (name === "OperationName") opName = clean(value);
   else if (name === "OperationKind") opKind = clean(value);
   else if (name === "SetupName") setupName = clean(value);
-  else if (name === "EdmCondition") condition = String(value === null || value === undefined ? "" : value);
+  else if (name === "EdmCondition") {
+    // #538: the C word is written once, when the wire is threaded
+    // (startCut). A condition stated after the section's first cut is a
+    // skim pass's; this post has no public source for how the control
+    // takes a condition change mid-program (#617), so it is refused by
+    // name - never cut on the rough pass's C word.
+    if (inSection && (threaded || compOff)) {
+      refuse("skims" + opName, who() + "Sodick: a condition change between passes (skims) is not supported by this post - post the skims through wire-iso or as separate operations");
+      sectionOk = false;
+      return;
+    }
+    condition = String(value === null || value === undefined ? "" : value);
+  }
   else if (name === "WireSide") side = clean(value);
   else if (name === "AfterOperation") afterOp = String(value);
   else if (name === "WireTaper" && has(value)) taper = Number(value);

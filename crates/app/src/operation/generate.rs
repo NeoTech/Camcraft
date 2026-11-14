@@ -2136,6 +2136,8 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     })
                     .collect(),
                 tool_diameter: d,
+                // #1556: the corner sets the reach at a through floor.
+                corner_radius: tool.corner_r,
                 stock_to_leave: *stock_to_leave,
                 stepdown: *stepdown,
                 // The cycles' exit gift, the drilling crate's own
@@ -3350,12 +3352,14 @@ pub(super) enum DepthLaw {
 /// - The pocket family cuts picked part features (`Section`); a whole-
 ///   model source there is the volume to REMOVE (the region is the
 ///   material, its interior is cut by contract), so no part law applies.
-/// - Circular cuts authored geometry into its source - the source is
-///   the material to remove, not a part to keep.
-/// - Slot: `Section` whenever its source is the finished part - picked
-///   (#1504, the part's own feature) or the whole model (#1537: a slot
-///   typed through the part's wall gouges what the job keeps). A Stock
-///   source is not part-solid, so the typed slot cuts it unjudged.
+/// - Circular, Slot and Trochoidal slot cut geometry typed by hand into
+///   their source: [`authored_law`]. `Section` whenever the source is
+///   the finished part - picked (Slot #1504, Circular #1550, Trochoidal
+///   slot #1593: a ring or channel typed below the picked floor gouges
+///   it) or the whole model (Slot #1537, Circular #1543, Trochoidal slot
+///   #1593: a circle or slot typed through the part's wall gouges what
+///   the job keeps). A Stock source is not part-solid, so the typed
+///   geometry cuts it unjudged.
 /// - Trace, Engrave and 2D Chamfer enter the part by design (the
 ///   engraving, the broken edge); their own modes stand the gouge law
 ///   down for exactly that reason.
@@ -3366,9 +3370,10 @@ pub(super) fn depth_law_of(params: &OpParams, src: &SrcRef, part_solid: bool) ->
     }
     match params {
         OpParams::Contour { .. } | OpParams::Face { .. } => DepthLaw::Section,
-        // #1504 / #1537: a Slot on the finished part (picked or whole
-        // model) keeps the part around it; only Stock is cut unjudged.
-        OpParams::Slot { .. } => DepthLaw::Section,
+        // #1504 / #1537 / #1543 / #1550 / #1593: a Slot, Trochoidal
+        // slot or Circular on the finished part (picked or whole model)
+        // keeps the part around it; only Stock is cut unjudged.
+        OpParams::Slot { .. } | OpParams::TrochoidalSlot { .. } | OpParams::Circular { .. } => authored_law(src),
         OpParams::Pocket { .. } | OpParams::Adaptive2D { .. } | OpParams::Offset2D { .. }
             if matches!(src, SrcRef::Selection(_)) =>
         {
@@ -3377,6 +3382,25 @@ pub(super) fn depth_law_of(params: &OpParams, src: &SrcRef, part_solid: bool) ->
         OpParams::Drill { cross, .. } if cross.is_empty() => DepthLaw::Contain,
         OpParams::Bore { .. } | OpParams::Thread { .. } => DepthLaw::Contain,
         _ => DepthLaw::None,
+    }
+}
+
+/// The one law of the kinds that cut geometry typed by hand - Circular's
+/// centre and radius, the Slot's and the Trochoidal slot's endpoints and
+/// width - into a finished-part source (#1504, #1537, #1543, #1550,
+/// #1593; Prime Directive). Nothing
+/// about typed geometry says it stays inside the part's own hole or
+/// above its own floor, so the path answers to the part's sections and
+/// solid (`Section`) whether the source is the whole model or a pick:
+/// a circle typed through a wall, or a ring typed below the picked
+/// floor, is a blocking Gouge; a circle inside the modeled hole stays
+/// clean. A Stock source is the material to remove and never reaches
+/// here (`part_solid` is false, `depth_law_of`'s early return); its arm
+/// reads `None` so the function alone stays truthful.
+pub(super) fn authored_law(src: &SrcRef) -> DepthLaw {
+    match src {
+        SrcRef::Entity(_) | SrcRef::Selection(_) => DepthLaw::Section,
+        SrcRef::Stock => DepthLaw::None,
     }
 }
 

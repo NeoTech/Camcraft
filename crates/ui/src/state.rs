@@ -21,7 +21,7 @@ use camcraft_app::commands::{
     ClearToolpath, CreateSetup, DeleteEntity, DeleteFixture, DeleteOperation, DeleteSetup, DeleteTool,
     EditOperationLinks, EditOperationParams, GenerateOperation, History, ImportModel,
     MoveFixture, MoveModel, PasteOperation, RegenerateAll, RenameOperation, ReorderOperation, RepairModel, SelectEntity, SetOperationGeometry,
-    SetFixtureFixed, SetOperationSetup, SetStock, SetToolNumber, SetUnits,
+    SetFixtureFixed, SetOperationSetup, SetStock, SetToolNumber, SetUnits, SetWcsOrigin,
     SetWorkMaterial, TagFixture, UntagFixture, ImportFixture,
     UpdateModel, theme_of,
 };
@@ -40,6 +40,8 @@ use camcraft_app::{machine, model, posting, project, world::new_world};
 
 #[path = "state_per_op.rs"]
 mod per_op;
+#[path = "state_browser.rs"]
+mod browser;
 #[path = "state_program_info.rs"]
 mod program_info;
 #[path = "state_tool_library.rs"]
@@ -336,6 +338,13 @@ pub enum CommandKind {
         name: String,
         params: OpParams,
     },
+    /// Detect holes' list (#1556): the same edit, with a sentence per
+    /// hole left out that the status line names once it is stored.
+    DetectedHoles {
+        name: String,
+        params: OpParams,
+        skipped: Vec<String>,
+    },
     /// The same draft with its Boundary group (M11.5): one undo unit.
     EditOperationBoundary {
         name: String,
@@ -469,6 +478,25 @@ pub enum CommandKind {
     AlignPartFromAxes {
         setup: String,
         axes: camcraft_app::pick::InPlaneAxes,
+    },
+    /// Align the part from a picked cylinder (#771): one curved-wall
+    /// pick names a bore's or cylinder's axis; it lands on the chosen
+    /// world axis, turned by an angle about it. Undoable
+    /// (`AlignPartToSetup`). Never touches the work offset.
+    AlignPartCylinder {
+        setup: String,
+        pick: camcraft_app::operation::GeoSel,
+        target: camcraft_app::pick::TargetAxis,
+        angle_deg: f64,
+        flip: bool,
+    },
+    /// Place a named setup's WCS origin (#771): a picked vertex, or a
+    /// box reading - the parts' bounds or the setup's stock. The
+    /// rotation is kept: the frame comes from the plane side. Undoable
+    /// (`SetWcsOrigin`).
+    PlaceSetupOrigin {
+        setup: String,
+        at: camcraft_app::commands::OriginAt,
     },
     /// Lay the part on a G17 / G18 / G19 plane through three picked
     /// points (#555), read by the app through the face pick's apply
@@ -1434,6 +1462,10 @@ pub struct State {
     pub status: String,
     /// Last successfully opened or saved project in this window.
     pub project_path: Option<PathBuf>,
+    /// #1431: the browser build - Save, Save As and Post download, and
+    /// the file commands a page cannot run are refused by name. Set from
+    /// the target; the tests turn it on to drive the browser's law.
+    pub browser_build: bool,
     /// #225: the Feeds tab shows the spindle speed as surface (cutting)
     /// speed instead of rpm. View state - never a command, never saved.
     pub spindle_as_vc: bool,
@@ -1711,6 +1743,12 @@ pub struct State {
     /// The Setups page's three-points draft (#555); `Some` routes Vertex
     /// picks into it (and refuses faces and edges by name).
     pub points_pick: Option<crate::points_pick::PointsPick>,
+    /// The Setups page's cylinder-angle draft (#771); while it is
+    /// collecting, Face picks land in it ahead of everything else.
+    pub cylinder_pick: Option<crate::cylinder_pick::CylinderPick>,
+    /// The Setups page's orientation-point draft (#771); while it is
+    /// collecting, Vertex picks land in it ahead of everything else.
+    pub origin_pick: Option<crate::origin_pick::OriginPick>,
     /// The axes-in-the-plane rows were drawn this frame (#557): a
     /// feature click with no axis armed says what to do, never falls
     /// through to the operation pick.
@@ -1917,6 +1955,7 @@ impl State {
             history: History::default(),
             status,
             project_path: None,
+            browser_build: cfg!(target_arch = "wasm32"),
             debug_info_open: false,
             gpu_line: None,
             spindle_as_vc: false,
@@ -1936,6 +1975,8 @@ impl State {
             locate_form_drawn: false,
             axis_pick: None,
             points_pick: None,
+            cylinder_pick: None,
+            origin_pick: None,
             axis_rows_shown: false,
             setup_pick_rows: Vec::new(),
             wcs_pick: None,
@@ -2088,6 +2129,12 @@ impl State {
     /// Record a refusal: status strip for everyone, tagged message for the
     /// pane that caused it. An operation-scope refusal is stamped with the
     /// page it was raised on, so it retires with that state.
+    /// A refused file drop (#1450): said on the status line, the document untouched.
+    pub(crate) fn refuse_drop(&mut self, msg: String) {
+        diag_warn!("{msg}");
+        self.status = msg;
+    }
+
     fn refuse(&mut self, scope: ErrorScope, msg: String) {
         self.status.clone_from(&msg);
         // The page's draft as the next frame will show it: a document
@@ -2332,13 +2379,14 @@ impl State {
         // (#312), so a click and an agent store the same holes.
         match operation::detect_holes(&self.world, name, current, op.setup.as_deref(), &op.src) {
             Err(why) => self.refuse(ErrorScope::Operation, why),
-            Ok(params) => {
+            Ok(operation::DetectedHoles { params, skipped }) => {
                 if draft {
                     self.op_ui.params = params.clone();
                 }
-                self.pending.push_back(CommandKind::EditOperationParams {
+                self.pending.push_back(CommandKind::DetectedHoles {
                     name: name.to_string(),
                     params,
+                    skipped,
                 });
             }
         }
@@ -2820,6 +2868,11 @@ impl State {
         self.feedback_ghost = None;
         // #107: New, Open and Quit over unsaved changes wait for the
         // prompt's answer instead of discarding the document.
+        // #1431: a file command the browser cannot run says why instead
+        // of doing nothing - before the unsaved prompt, which it never needs.
+        if self.refused_in_browser(&action) {
+            return;
+        }
         let Some(action) = self.hold_if_unsaved(action) else {
             return;
         };
@@ -2869,6 +2922,12 @@ impl State {
                 }
             }
             CommandKind::OpenProjectFile(path) => self.open_project_path(path),
+            CommandKind::SaveProjectDialog if self.browser_build => {
+                self.download_project(false);
+            }
+            CommandKind::SaveProjectAsDialog if self.browser_build => {
+                self.download_project(true);
+            }
             CommandKind::SaveProjectDialog => {
                 if let Some(path) = self.project_path.clone().or_else(|| save_project_dialog(None)) {
                     self.save_project_path(path);
@@ -3192,6 +3251,22 @@ impl State {
                     }
                 }
             }
+            CommandKind::DetectedHoles { name, params, skipped } => {
+                match EditOperationParams::new(&self.world, &name, params) {
+                    Ok(command) => {
+                        self.history.execute(&self.world, command);
+                        self.doc_version += 1;
+                        self.status = if skipped.is_empty() {
+                            format!("parameters updated for {name}")
+                        } else {
+                            format!("holes detected for {name}; {}", skipped.join("; "))
+                        };
+                    }
+                    Err(err) => {
+                        self.refuse(ErrorScope::Operation, format!("parameters not updated: {err}"));
+                    }
+                }
+            }
             CommandKind::EditOperationBoundary { name, params, area } => {
                 match EditOperationParams::with_area(&self.world, &name, params, area) {
                     Ok(command) => {
@@ -3443,7 +3518,8 @@ impl State {
             | CommandKind::TurnPart { .. }
             | CommandKind::LayPartOnPlane { .. }
             | CommandKind::LayPartOnPoints { .. }
-            | CommandKind::AlignPartFromAxes { .. }) => self.dispatch_align(k), // #738: state_align.rs
+            | CommandKind::AlignPartFromAxes { .. }
+            | CommandKind::AlignPartCylinder { .. }) => self.dispatch_align(k), // #738: state_align.rs
             CommandKind::SetSetupRelative { setup, to, angles } => {
                 let built = match &to {
                     Some(parent) => SetSetupRelative::link(&self.world, &setup, parent, angles),
@@ -3473,6 +3549,29 @@ impl State {
                     }
                     Err(err) => {
                         self.refuse(ErrorScope::Setup, format!("stock source not changed: {err}"));
+                    }
+                }
+            }
+            CommandKind::PlaceSetupOrigin { setup, at } => {
+                match camcraft_app::commands::place_setup_origin(&self.world, &setup, &at) {
+                    Ok(location) => match SetWcsOrigin::for_setup(&self.world, Some(&setup), location) {
+                        Ok(command) => {
+                            let label = camcraft_app::setup::wcs_label(&self.world, Some(&setup));
+                            self.history.execute(&self.world, command);
+                            self.doc_version += 1;
+                            self.status = format!(
+                                "{setup} {label} origin placed: {:.3} {:.3} {:.3} (rotation kept)",
+                                location.pos.x,
+                                location.pos.y,
+                                location.pos.z
+                            );
+                        }
+                        Err(err) => {
+                            self.refuse(ErrorScope::Setup, format!("origin not placed: {err}"));
+                        }
+                    },
+                    Err(err) => {
+                        self.refuse(ErrorScope::Setup, format!("origin not placed: {err}"));
                     }
                 }
             }
