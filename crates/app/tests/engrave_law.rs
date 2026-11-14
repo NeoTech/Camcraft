@@ -266,18 +266,19 @@ fn a_picked_top_face_marked_shallow_posts_on_both_stocks() {
 }
 
 #[test]
-fn a_cut_on_the_stock_is_never_judged_by_the_mark_law() {
+fn a_cut_on_the_stock_answers_to_the_mark_law_against_the_part() {
     // The stock made from the part: the Stock source, or its top face
-    // picked, is the material to remove (`part_solid` false) - the
-    // operation carries no part law, whatever the depth.
+    // picked, is the material to remove (`part_solid` false) - but the
+    // part standing in it is not (#1607): the line down its outside
+    // wall, 7 mm on a 3 mm budget, is convicted as a mark too deep.
     for kind in KINDS {
         for picked in [false, true] {
             let (world, mut h) = job(false);
             h.execute(&world, SetStock::new(&world, StockShape::FromModel { source: "part".into() }, Location::default()).expect("stock"));
             let src = if picked { face_pick(&world, STOCK_NAME, TOP) } else { SrcRef::Stock };
             let (warns, notes) = generated(&world, &mut h, src, cut(kind, TOP, 1.0));
-            assert_eq!(gouges(&warns), 0, "{kind:?} picked {picked}: the stock is never the part: {warns:?}");
-            assert!(!notes.iter().any(|n| n.contains("deeper than a mark")), "{notes:?}");
+            assert!(gouges(&warns) > 0, "{kind:?} picked {picked}: the part in the stock is kept: {warns:?}");
+            assert!(notes.iter().any(|n| n.contains("deeper than a mark")), "{notes:?}");
         }
     }
 }
@@ -300,11 +301,14 @@ fn the_program_sim_credits_the_mark_and_nothing_past_it() {
     // A Top typed 1 mm low: the budget is the stated 0.3, the cut 1.3.
     let low = sim(7.0, 6.7, whole());
     assert!((low.max_gouge - 1.0).abs() < 1e-6, "charged {}", low.max_gouge);
-    // A cut whose source is the stock declares no mark: the same 0.3 mm
-    // along the block's outline is judged against the sharp model.
+    // #1607: a cut whose source is the stock carries the same mark law
+    // against the part in it, so it declares its mark too: the same
+    // 0.3 mm along the block's outline is credited, and 7 mm is charged
+    // past its budget exactly as the whole model's is.
     let on_stock = sim(TOP, 7.7, SrcRef::Stock);
-    assert!(on_stock.gouge_cells > 0, "a stock-source cut is not a declared mark");
-    assert!((on_stock.max_gouge - 0.3).abs() < 1e-6, "charged {}", on_stock.max_gouge);
+    assert_eq!(on_stock.gouge_cells, 0, "worst {} at {:?}", on_stock.max_gouge, on_stock.max_gouge_at);
+    let deep_on_stock = sim(TOP, 1.0, SrcRef::Stock);
+    assert!((deep_on_stock.max_gouge - 4.0).abs() < 1e-6, "charged {}", deep_on_stock.max_gouge);
 }
 
 // ---- MCP parity -----------------------------------------------------

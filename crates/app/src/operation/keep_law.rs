@@ -20,6 +20,13 @@
 //!   the material to remove, but the parts standing inside it are not
 //!   (#1554). The same solid law runs against the setup's parts
 //!   ([`parts_in_stock`]). A document with no part judges nothing.
+//!   #1607 widened this from the pocket family to every 2D kind that
+//!   answers for the part on a part source ([`is_stock_kept_kind`]):
+//!   the typed kinds (Slot, Trochoidal slot, Circular), Contour and
+//!   Face take the same solid law; Engrave and Trace take their own
+//!   mark law (`mark_law`) against the parts instead, so a mark on the
+//!   part's surface reads the same whether the line came off the part
+//!   or off the stock.
 //!
 //! The cutter's own tip and stack are swept against the mesh, so a legal
 //! pocket - its rings tangent to the part - stays clean, and a cut that
@@ -36,12 +43,32 @@ pub fn is_keep_kind(params: &OpParams) -> bool {
     matches!(params, OpParams::Pocket { .. } | OpParams::Adaptive2D { .. } | OpParams::Offset2D { .. })
 }
 
-/// The parts a pocket-family operation whose source is NOT the part
-/// (the stock, or picks off it) must still keep: the setup's parts in
-/// its frame - what the program sim judges against
-/// (`setup_align::parts_facets_in`: fixtures and a stock-only model
-/// left out). Empty for every other kind, and for a part-solid source
-/// (whose own mesh `DepthLaw::Keep` or `Section` reads).
+/// Whether `params` answers for the parts standing in its stock when
+/// its source is the stock (#1603, #1607): every 2D kind that carries a
+/// part law on a part source - the pocket family (`Keep`), Slot,
+/// Trochoidal slot and Circular (`authored_law`), Contour and Face
+/// (`Section`), Engrave and Trace (`Mark`). The 2D Chamfer (a derived
+/// depth the sim credits as a break) and the hole kinds are not here.
+#[must_use]
+pub fn is_stock_kept_kind(params: &OpParams) -> bool {
+    is_keep_kind(params)
+        || super::mark_law::is_mark_kind(params)
+        || matches!(
+            params,
+            OpParams::Slot { .. }
+                | OpParams::TrochoidalSlot { .. }
+                | OpParams::Circular { .. }
+                | OpParams::Contour { .. }
+                | OpParams::Face { .. }
+        )
+}
+
+/// The parts an operation whose source is NOT the part (the stock, or
+/// picks off it) must still keep: the setup's parts in its frame - what
+/// the program sim judges against (`setup_align::parts_facets_in`:
+/// fixtures and a stock-only model left out). Empty for a kind outside
+/// [`is_stock_kept_kind`], and for a part-solid source (whose own mesh
+/// its `DepthLaw` reads).
 #[must_use]
 pub(super) fn parts_in_stock(
     world: &flecs_ecs::prelude::World,
@@ -49,7 +76,7 @@ pub(super) fn parts_in_stock(
     params: &OpParams,
     part_solid: bool,
 ) -> Vec<Triangle> {
-    if part_solid || !is_keep_kind(params) {
+    if part_solid || !is_stock_kept_kind(params) {
         return Vec::new();
     }
     crate::setup_align::parts_facets_in(world, setup)

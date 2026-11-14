@@ -214,18 +214,19 @@ fn a_trochoid_inside_the_pocket_at_its_floor_stays_clean_and_posts() {
 }
 
 #[test]
-fn a_trochoid_on_the_stock_is_never_judged() {
+fn a_trochoid_on_the_stock_answers_for_the_part() {
     // The stock made from the part carries the same pocket; the Stock
     // source, or its floor picked, is the material to remove
-    // (`part_solid` false). `depth_law_of`'s early return answers before
-    // the kind's arm: judged as a part, the stock's own solid would
-    // convict this channel under the picked floor.
+    // (`part_solid` false) - but the part standing in it is kept (#1607,
+    // replacing #1593's "never judged"): the channel 3 mm under the
+    // floor enters the part, judged against the setup's parts, never
+    // against the stock's own solid.
     for whole in [true, false] {
         let (world, mut h) = job(false);
         h.execute(&world, SetStock::new(&world, StockShape::FromModel { source: "part".into() }, Location::default()).expect("stock"));
         let src = if whole { SrcRef::Stock } else { floor_pick_on(&world, STOCK_NAME) };
         let warns = warnings_of(&world, &mut h, src, under_floor());
-        assert_eq!(gouges(&warns), 0, "the stock is never the part (whole {whole}): {warns:?}");
+        assert!(gouges(&warns) > 0, "the part in the stock is kept (whole {whole}): {warns:?}");
     }
 }
 

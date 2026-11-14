@@ -5,9 +5,10 @@
 //! is computed here from the operation's parameters and tool as they
 //! stand, never read from a cached record, so file data cannot state a
 //! deeper mark than the operation does (the #529 bound, by
-//! construction). An operation on any other kind, or one whose source
-//! is not the finished part, declares no mark and is judged against the
-//! sharp model - stricter, never looser.
+//! construction). An operation on any other kind declares no mark and
+//! is judged against the sharp model - stricter, never looser. Since
+//! #1607 a stock-source Engrave or Trace declares its mark too: its
+//! operation holds it to the same budget against the setup's parts.
 //!
 //! Provenance: our own wiring of this repo's mark law onto the sim
 //! crate's `credit_marks`. No vendor material consulted.

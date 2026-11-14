@@ -1,8 +1,8 @@
 //! #1543: a Circular whose source is the finished part (a whole model,
 //! `SrcRef::Entity`) is judged against that part. A circle typed through
 //! the hole's wall is a blocking `Warning::Gouge` and the post is held;
-//! a circle inside the modeled hole stays clean; a Stock source still
-//! cuts the typed circle unjudged (a picked Circular is judged too:
+//! a circle inside the modeled hole stays clean; a Stock source answers
+//! for the part standing in it the same way (#1607) (a picked Circular is judged too:
 //! `circular_pick_law.rs`, #1550). The same job driven over MCP is
 //! judged the same.
 //!
@@ -142,12 +142,15 @@ fn a_whole_model_circle_inside_the_modeled_hole_stays_clean() {
 }
 
 #[test]
-fn a_stock_source_still_cuts_the_typed_circle_unjudged() {
-    // The stock IS the material to remove: no part law, as before.
+fn a_stock_source_circle_through_the_hole_wall_answers_for_the_part() {
+    // The stock IS the material to remove, but the part standing in it
+    // is kept (#1607, `keep_law::parts_in_stock`): the same circle
+    // through the hole's wall is convicted off a Stock source too.
     let (world, mut h) = job();
     let (path, warns) = run(&world, &mut h, "C3", SrcRef::Stock, circular(12.0));
     assert!(!path.moves.is_empty(), "the rings were generated");
-    assert_eq!(gouges(&warns), 0, "{warns:?}");
+    assert!(gouges(&warns) > 0, "the wall is convicted: {warns:?}");
+    assert_blocked(&world, "stock-wall");
 }
 
 // ---- MCP parity -----------------------------------------------------

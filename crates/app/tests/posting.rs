@@ -340,9 +340,10 @@ fn a_gouging_program_is_refused_by_the_verification_gate() {
     // Stage D's own law: the program-level sim is no longer just an
     // informed verdict - it is the gate. The fixture is Deviate's
     // stage-B sentence made into a world: a face 0.5 mm below the top
-    // of a model that fills the stock. Generation is SILENT (the face
-    // verifies against the stock, not the model - that net is this
-    // gate's job), so the refusal below can only come from the sim.
+    // of a model that fills the stock. Since #1607 the stock-source face
+    // answers for the part on the op too (its moves are gouges); the
+    // aligned stock's refusal below still leads with the sim's own
+    // clause, so this pins the sim as the gate.
     let world = new_world();
     let mut history = History::default();
     box_stock(&world, &mut history, 60.0, 60.0, 20.0);
@@ -368,8 +369,9 @@ fn a_gouging_program_is_refused_by_the_verification_gate() {
         model::toolpath_of(&world, &e)
             .expect("cache")
             .warnings
-            .is_empty(),
-        "the fixture must generate silent - the sim is the only net here"
+            .iter()
+            .any(|w| matches!(w, camcraft_app::verify::Warning::Gouge { .. })),
+        "#1607: the stock-source face into the part is the op's own gouge too"
     );
 
     let path = tmp_nc("gouge");

@@ -155,17 +155,17 @@ fn a_picked_circle_cut_to_its_floor_stays_clean() {
 }
 
 #[test]
-fn a_circle_picked_off_the_stock_is_never_judged() {
+fn a_circle_picked_off_the_stock_answers_for_the_part() {
     // The stock made from the part carries the same pocket; picking ITS
     // floor names the stock, the material to remove (`part_solid`
-    // false). `depth_law_of`'s early return answers before any kind's
-    // arm, so the rings cut below that floor are not judged - judged as
-    // a part, the stock's own solid would convict them.
+    // false) - but the part standing in it is kept (#1607): the rings
+    // cut 3 mm below that floor enter the part, judged against the
+    // setup's parts, never against the stock's own solid.
     let (world, mut h) = job(false);
     h.execute(&world, SetStock::new(&world, StockShape::FromModel { source: "part".into() }, Location::default()).expect("stock"));
     let src = floor_pick_on(&world, STOCK_NAME);
     let warns = warnings_of(&world, &mut h, src, circular(1.0));
-    assert_eq!(gouges(&warns), 0, "the stock is never the part: {warns:?}");
+    assert!(gouges(&warns) > 0, "the part in the stock is kept: {warns:?}");
 }
 
 // ---- MCP parity -----------------------------------------------------
