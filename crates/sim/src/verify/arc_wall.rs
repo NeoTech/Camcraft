@@ -24,7 +24,7 @@
 //! keeps the distance from ever reading farther than the truth.
 
 use super::arc_bulge::ARC_PAD;
-use super::laws::{dist2_segs, orient, proper_cross};
+use super::laws::{dist2_seg, dist2_segs, orient, proper_cross, CROSSING_TOUCH};
 use crate::cl::Move;
 use crate::geo2d::Point2;
 use std::f64::consts::PI;
@@ -121,6 +121,30 @@ impl Trace {
             Trace::Unread => false,
         }
     }
+
+    /// Whether the trace passes through the loop vertex `v` from one side
+    /// of the loop to the other (#1659): `v` lies on the trace's interior
+    /// (within [`CROSSING_TOUCH`]) and its neighbours `u` and `w` stand
+    /// strictly on opposite sides of the trace. A row that runs exactly
+    /// through a vertex of the rim crosses the rim as truly as one that
+    /// cuts an edge's interior, but [`Self::crosses`] counts only the
+    /// second. A touch (both neighbours on one side) or a neighbour on
+    /// the trace itself is no crossing.
+    pub(super) fn through(&self, u: Point2, v: Point2, w: Point2) -> bool {
+        let seg = |a: Point2, b: Point2| {
+            let touch2 = CROSSING_TOUCH * CROSSING_TOUCH;
+            let len2 = (b.x - a.x).powi(2) + (b.y - a.y).powi(2);
+            let end = |e: Point2| (v.x - e.x).powi(2) + (v.y - e.y).powi(2) <= touch2;
+            let (su, sw) = (orient(a, b, u), orient(a, b, w));
+            len2 > touch2 && dist2_seg(v, a, b) <= touch2 && !end(a) && !end(b) && su * sw < 0.0
+        };
+        match self {
+            Trace::Seg(a, b) => seg(*a, *b),
+            Trace::Arc(arc) => arc.through(u, v, w),
+            Trace::Poly(pts, _) => pts.windows(2).any(|p| seg(p[0], p[1])),
+            Trace::Unread => false,
+        }
+    }
 }
 
 impl XyArc {
@@ -176,6 +200,19 @@ impl XyArc {
             best = best.min(gap);
         }
         best
+    }
+
+    /// [`Trace::through`] for the arc, on the circle through the band's
+    /// middle: `v` on that circle strictly inside the sweep, `u` and `w`
+    /// strictly on opposite sides of it.
+    fn through(&self, u: Point2, v: Point2, w: Point2) -> bool {
+        let r = 0.5 * (self.r_lo + self.r_hi);
+        let th = (v.y - self.c.y).atan2(v.x - self.c.x);
+        let off = (th - self.a0).rem_euclid(2.0 * PI);
+        (self.rho(v) - r).abs() <= CROSSING_TOUCH
+            && off > 0.0
+            && off < self.sweep
+            && (self.rho(u) - r) * (self.rho(w) - r) < 0.0
     }
 
     /// A transversal crossing of the segment's interior with the arc's

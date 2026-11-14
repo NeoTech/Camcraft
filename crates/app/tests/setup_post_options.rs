@@ -21,7 +21,7 @@ use camcraft_app::commands::{
 };
 use camcraft_app::operation::{AfterOperation, Height, OpParams, SrcRef};
 use camcraft_app::post::cnc;
-use camcraft_app::schema::{PostOptions, ThreadingOutput};
+use camcraft_app::schema::{BetweenSetups, PostOptions, ThreadingOutput};
 use camcraft_app::stock::StockShape;
 use camcraft_app::tools::catalog;
 use camcraft_app::world::new_world;
@@ -137,16 +137,21 @@ fn a_setups_own_post_options_do_undo_redo() {
 #[test]
 fn a_setup_that_skips_posts_without_its_stops_while_the_other_follows_the_document() {
     let (world, mut h) = doc(2);
+    // #1532: the program runs straight on between the setups, so the
+    // count reads the operations' own stops only (a setup change stops
+    // whatever the skip switch says - `between_setups.rs`).
+    let cont = |o: PostOptions| PostOptions { between_setups: BetweenSetups::Continue, ..o };
+    h.execute(&world, SetPostOptions::new(&world, cont(PostOptions::default())).expect("run straight on"));
     assert_eq!(stops(&world), 2, "both faces stop");
     let both = post(&world, "skip-before").expect("posts");
-    h.execute(&world, SetSetupPostOptions::new(&world, "Setup1", Some(skip())).expect("Setup1 skips"));
+    h.execute(&world, SetSetupPostOptions::new(&world, "Setup1", Some(cont(skip()))).expect("Setup1 skips"));
     assert_eq!(stops(&world), 1, "only Setup2's face keeps its stop");
     let one = post(&world, "skip-one").expect("posts: the skip switch may differ per setup");
     assert_ne!(one, both);
     // The document skipping too reaches Setup2 (which follows it) only.
-    h.execute(&world, SetPostOptions::new(&world, skip()).expect("document skips"));
+    h.execute(&world, SetPostOptions::new(&world, cont(skip())).expect("document skips"));
     assert_eq!(stops(&world), 0);
-    h.execute(&world, SetSetupPostOptions::new(&world, "Setup1", Some(PostOptions::default())).expect("own: keep stops"));
+    h.execute(&world, SetSetupPostOptions::new(&world, "Setup1", Some(cont(PostOptions::default()))).expect("own: keep stops"));
     assert_eq!(stops(&world), 1, "Setup1's own options keep its stop while the document skips");
 }
 
@@ -232,6 +237,7 @@ fn own_post_options_round_trip_and_old_files_follow_the_document() {
         end_units: camcraft_app::schema::EndUnits::Inch,
         smoothing: true,
         explain: false,
+        between_setups: Default::default(),
     };
     h.execute(&world, SetSetupPostOptions::new(&world, "Setup2", Some(own)).expect("own options"));
     let text = saved(&world, "rt");

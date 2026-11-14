@@ -113,5 +113,8 @@ fn differing(has: &PostOptions, want: &PostOptions) -> Vec<&'static str> {
     if has.end_units != want.end_units {
         out.push("end units");
     }
+    if has.between_setups != want.between_setups {
+        out.push("between setups");
+    }
     out
 }

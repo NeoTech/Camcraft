@@ -500,6 +500,64 @@ pub struct PostOptions {
     /// each block saying what its words do, and one that does not is
     /// refused by name.
     pub explain: bool,
+    /// What the post does where the program moves from one setup to the
+    /// next (#1532): pause for the operator (the default), an optional
+    /// stop, run straight on, or write one file per setup.
+    pub between_setups: BetweenSetups,
+}
+
+/// The between-setups choice of [`PostOptions`] (#1532). A setup is a
+/// new clamping (the part flipped, re-clamped, moved to another vise),
+/// so a program that runs from one setup's last cut into the next
+/// setup's first with no pause cuts a part nobody has re-clamped. The
+/// default therefore pauses; running straight on is the user's explicit
+/// choice (several vises on one table, each its own work offset).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum BetweenSetups {
+    /// A program stop (M0) after each setup's last operation, with a
+    /// comment naming the next setup.
+    #[default]
+    Pause,
+    /// An optional stop (M1) there instead.
+    OptionalStop,
+    /// No stop: the program runs on into the next setup (the behaviour
+    /// of every post before #1532).
+    Continue,
+    /// One file per setup, each a whole program of its own.
+    FilePerSetup,
+}
+
+impl BetweenSetups {
+    /// Every choice, in the order the post page lists them.
+    pub const ALL: [BetweenSetups; 4] = [Self::Pause, Self::OptionalStop, Self::Continue, Self::FilePerSetup];
+
+    /// The project file's and MCP's word.
+    #[must_use]
+    pub fn word(self) -> &'static str {
+        match self {
+            Self::Pause => "pause",
+            Self::OptionalStop => "optional-stop",
+            Self::Continue => "continue",
+            Self::FilePerSetup => "file-per-setup",
+        }
+    }
+
+    /// The choice a word names; `None` for a word that names none.
+    #[must_use]
+    pub fn from_word(word: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|b| b.word() == word)
+    }
+
+    /// The post page's words.
+    #[must_use]
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Pause => "Pause (M0)",
+            Self::OptionalStop => "Optional stop (M1)",
+            Self::Continue => "Run straight on",
+            Self::FilePerSetup => "One file per setup",
+        }
+    }
 }
 
 /// The end-units choice of [`PostOptions`] (#596). LinuxCNC's M2 / M30

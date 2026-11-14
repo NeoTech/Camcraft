@@ -11,7 +11,8 @@
 //! part is a blocking `Warning::Gouge` on the operation on both stocks;
 //! a legal stock-source cut (a mark, a face above the part, a contour
 //! round the stock, a slot in the part's own pocket) posts on both; a
-//! setup with no part judges nothing, as before.
+//! setup with no part judges nothing, as before. A Face of a stock lower
+//! than the part runs through the part and is refused the same (#1657).
 //!
 //! Provenance: our own fixtures (`pocket_support::block_with_pocket`,
 //! the #1585 block) over the solid and mark laws and the column sim; no
@@ -245,6 +246,19 @@ fn the_typed_kinds_and_face_off_the_stock_into_the_part_gouge_and_never_post() {
     ];
     for (label, params) in &cases {
         refused_on_both_stocks(label, params, false);
+    }
+}
+
+#[test]
+fn a_face_of_a_stock_lower_than_the_part_cuts_the_part_and_never_posts() {
+    // #1657: a 6 mm stock under the 8 mm part - the part stands 2 mm out
+    // of the stock's top. A Face of the stock's top (Z 5.5) runs through
+    // the part's body: a true gouge, convicted on the op, never posted.
+    for rotated in [false, true] {
+        let (world, mut h) = job(true, rotated, 6.0);
+        let (warns, _) = generated(&world, &mut h, SrcRef::Stock, face(5.5));
+        assert!(gouges(&warns) > 0, "rotated {rotated}: the face cuts the part: {warns:?}");
+        assert_post_refused(&world, &format!("low-stock-face-{rotated}"), rotated);
     }
 }
 
