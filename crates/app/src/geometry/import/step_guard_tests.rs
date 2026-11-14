@@ -55,6 +55,9 @@ fn a_discontinuous_bspline_division_stops_at_the_cap_and_trips_the_meter() {
     assert!(started.elapsed().as_secs() < 10, "bounded: {:?}", started.elapsed());
 }
 
+/// On a patch curved both ways the per-direction division (#1602) splits
+/// both directions every sweep, as truck's own division does, and gives
+/// the same grid.
 #[test]
 fn a_smooth_bspline_divides_exactly_as_truck_does_and_does_not_trip() {
     let s = smooth();
@@ -249,4 +252,54 @@ fn a_proven_and_a_jumping_face_tripping_in_one_pass_refuse_naming_the_jump() {
     });
     let err = r.expect_err("a smeared jump is never kept").to_string();
     assert!(err.contains("face 6 of") && err.contains("did not converge"), "{err}");
+}
+
+/// #1602: a thread flank's parameters are stretched for the mesher; the
+/// wrapper shows the same surface in the stretched plane - its points,
+/// range and derivatives agree with the face at the parameters it maps to.
+#[test]
+fn a_stretched_face_shows_the_same_surface_in_the_mesher_plane() {
+    use crate::geometry::import::step_thread_fixture::flank;
+    use truck_stepio::r#in::alias::{InnerSpace, MetricSpace};
+    let s = flank(3);
+    let m = Metered::new(s.clone(), FACE_EVAL_CAP);
+    let k = m.stretch;
+    assert!(k.u == 1.0 && k.v > 50.0, "the strip's long direction is stretched: {k:?}");
+    assert_eq!(m.parameter_range(), (scaled(s.parameter_range().0, k.u), scaled(s.parameter_range().1, k.v)));
+    let (u, v) = (0.3, 0.41);
+    let (pu, pv) = k.outer((u, v));
+    assert!(m.subs(pu, pv).distance(s.subs(u, v)) < 1e-12);
+    // Derivatives in the stretched plane match finite differences there.
+    let h = 1e-6;
+    let fd_u = (m.subs(pu + h, pv) - m.subs(pu - h, pv)) / (2.0 * h);
+    let fd_v = (m.subs(pu, pv + h) - m.subs(pu, pv - h)) / (2.0 * h);
+    assert!((m.uder(pu, pv) - fd_u).magnitude() < 1e-5 * fd_u.magnitude().max(1.0), "u derivative");
+    assert!((m.vder(pu, pv) - fd_v).magnitude() < 1e-5 * fd_v.magnitude().max(1.0), "v derivative");
+    let fd_vv = (m.vder(pu, pv + h) - m.vder(pu, pv - h)) / (2.0 * h);
+    assert!((m.vvder(pu, pv) - fd_vv).magnitude() < 1e-4 * fd_vv.magnitude().max(1.0), "second derivative");
+    let fd_uv = (m.uder(pu, pv + h) - m.uder(pu, pv - h)) / (2.0 * h);
+    assert!((m.uvder(pu, pv) - fd_uv).magnitude() < 1e-4 * fd_uv.magnitude().max(1.0), "mixed derivative");
+}
+
+/// #1602: the searches the mesher runs on a metered face answer in the
+/// stretched plane, on the point's own turn and inside the knot domain -
+/// with no hint on a many-turn flank, and from a neighbouring turn's hint
+/// on a root band whose rulings meet its other turns when extrapolated.
+#[test]
+fn a_metered_face_finds_boundary_points_on_their_own_turn() {
+    use crate::geometry::import::step_thread_fixture::{flank, root};
+    use truck_stepio::r#in::alias::{MetricSpace, SPHint2D, SearchNearestParameter, SearchParameter};
+    let inside = |(u, v): (f64, f64)| (-1e-9..=1.0 + 1e-9).contains(&u) && (-1e-9..=1.0 + 1e-9).contains(&v);
+    let f = Metered::new(flank(14), FACE_EVAL_CAP);
+    let r = Metered::new(root(14), FACE_EVAL_CAP);
+    for k in 0..40 {
+        let v = (k as f64 + 0.37) / 40.0;
+        let p = f.inner.subs(0.0, v);
+        let got = f.search_nearest_parameter(p, SPHint2D::None, 100).map(|(a, b)| f.own(a, b));
+        assert!(got.is_some_and(|uv| inside(uv) && f.inner.subs(uv.0, uv.1).distance(p) < 1e-6), "flank v {v}: {got:?}");
+        let p = r.inner.subs(1.0, v);
+        let hint = r.stretch.outer((0.5, (v - 1.0 / 14.0).max(0.0)));
+        let got = r.search_parameter(p, hint, 100).map(|(a, b)| r.own(a, b));
+        assert!(got.is_none_or(inside), "root v {v}: an answer outside the domain {got:?}");
+    }
 }

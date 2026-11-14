@@ -4,8 +4,9 @@
 //!
 //! Provenance: our own design (an evaluation budget on a parametric
 //! surface); the subdivision it meters is truck's published
-//! `parameter_division` (ricosjp, Apache-2.0), called unchanged. Nothing
-//! from any CAM vendor.
+//! `parameter_division` (ricosjp, Apache-2.0) for most surface kinds, and
+//! `step_division` for B-spline and NURBS faces (#1602). Nothing from any
+//! CAM vendor.
 //!
 //! Why it is needed: truck's surface subdivision splits every parameter
 //! cell whose midpoint stands off the bilinear patch of its corners by more
@@ -21,10 +22,12 @@
 //!
 //! How it is bounded: each face's surface is wrapped in [`Metered`], which
 //! counts every point truck evaluates on it during one tessellation pass.
-//! B-spline and NURBS faces are subdivided by truck's own generic algorithm
-//! called on the wrapper (exactly what their own `parameter_division` runs,
-//! so the evaluations - and the mesh - are identical); other surface kinds
-//! keep their specialised division. Past the cap the wrapper answers every
+//! B-spline and NURBS faces are subdivided by `step_division` called on the
+//! wrapper, so every probe is counted (a division still splitting at its
+//! sweep cap spends the whole budget at once); other surface kinds keep
+//! their specialised division. The wrapper also stretches a B-spline or
+//! NURBS face's parameters (`step_stretch`), and its parameter searches
+//! settle poles and retry misses (`step_nearest`, #1602). Past the cap the wrapper answers every
 //! evaluation with one fixed point: no cell is then "far", the subdivision
 //! ends within one more sweep, and the importer refuses the model naming
 //! the face - unless the trip came on a finer pass over a face proven
@@ -36,11 +39,11 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 
 use truck_stepio::r#in::alias::{
-    algo, ParameterDivision2D, ParametricSurface, ParametricSurface3D, ParameterRange, Point3,
-    SPHint2D, SearchNearestParameter, SearchParameter, Surface, Vector3, D2,
+    ParameterDivision2D, ParametricSurface, ParametricSurface3D, ParameterRange, Point3, Surface, Vector3,
 };
 use truck_topology::compress::{CompressedFace, CompressedShell};
 
+use super::step_stretch::Stretch;
 use super::ImportError;
 
 /// Surface evaluations one face may spend in one tessellation pass.
@@ -87,6 +90,11 @@ impl Meter {
     fn tripped(&self) -> bool {
         self.used.load(Ordering::Relaxed) > self.cap
     }
+    /// Spend the whole budget at once: the face's division did not
+    /// converge (#1602), so the pass is refused as for a runaway.
+    fn exhaust(&self) {
+        self.used.fetch_max(self.cap.saturating_add(1), Ordering::Relaxed);
+    }
     /// A new pass: the whole budget again. `outside` stays set.
     fn reset(&self) {
         self.used.store(0, Ordering::Relaxed);
@@ -96,13 +104,21 @@ impl Meter {
 /// A STEP surface whose evaluations are counted against a [`Meter`].
 #[derive(Clone, Debug)]
 pub(super) struct Metered {
-    inner: Surface,
+    pub(super) inner: Surface,
     meter: Arc<Meter>,
+    /// The mesher sees `inner`'s parameters multiplied by this (#1602,
+    /// `step_stretch`); every evaluation divides it back out.
+    pub(super) stretch: Stretch,
 }
 
 impl Metered {
     pub(super) fn new(inner: Surface, cap: u64) -> Self {
-        Self { inner, meter: Arc::new(Meter::new(cap)) }
+        let stretch = Stretch::of(&inner);
+        Self { inner, meter: Arc::new(Meter::new(cap)), stretch }
+    }
+    /// The surface's own parameters for a point of the mesher's plane.
+    pub(super) fn own(&self, u: f64, v: f64) -> (f64, f64) {
+        self.stretch.inner((u, v))
     }
 }
 
@@ -123,39 +139,59 @@ impl ParametricSurface for Metered {
         // Past the cap every point is the same point: the subdivision then
         // sees no cell off its patch and stops. The pass is refused after.
         if self.meter.spend() {
+            let (u, v) = self.own(u, v);
             self.inner.subs(u, v)
         } else {
             Point3::new(0.0, 0.0, 0.0)
         }
     }
+    // A stretched parameter moves the point 1/stretch as fast (chain rule).
     fn uder(&self, u: f64, v: f64) -> Vector3 {
-        self.inner.uder(u, v)
+        let (s, t) = self.own(u, v);
+        self.inner.uder(s, t) / self.stretch.u
     }
     fn vder(&self, u: f64, v: f64) -> Vector3 {
-        self.inner.vder(u, v)
+        let (s, t) = self.own(u, v);
+        self.inner.vder(s, t) / self.stretch.v
     }
     fn uuder(&self, u: f64, v: f64) -> Vector3 {
-        self.inner.uuder(u, v)
+        let (s, t) = self.own(u, v);
+        self.inner.uuder(s, t) / (self.stretch.u * self.stretch.u)
     }
     fn uvder(&self, u: f64, v: f64) -> Vector3 {
-        self.inner.uvder(u, v)
+        let (s, t) = self.own(u, v);
+        self.inner.uvder(s, t) / (self.stretch.u * self.stretch.v)
     }
     fn vvder(&self, u: f64, v: f64) -> Vector3 {
-        self.inner.vvder(u, v)
+        let (s, t) = self.own(u, v);
+        self.inner.vvder(s, t) / (self.stretch.v * self.stretch.v)
     }
     fn parameter_range(&self) -> (ParameterRange, ParameterRange) {
-        self.inner.parameter_range()
+        let (ur, vr) = self.inner.parameter_range();
+        (scaled(ur, self.stretch.u), scaled(vr, self.stretch.v))
     }
     fn u_period(&self) -> Option<f64> {
-        self.inner.u_period()
+        self.inner.u_period().map(|p| p * self.stretch.u)
     }
     fn v_period(&self) -> Option<f64> {
-        self.inner.v_period()
+        self.inner.v_period().map(|p| p * self.stretch.v)
     }
+}
+
+/// A parameter range multiplied by a positive `k`.
+fn scaled((lo, hi): ParameterRange, k: f64) -> ParameterRange {
+    let by = |b: Bound<f64>| match b {
+        Bound::Included(x) => Bound::Included(x * k),
+        Bound::Excluded(x) => Bound::Excluded(x * k),
+        Bound::Unbounded => Bound::Unbounded,
+    };
+    (by(lo), by(hi))
 }
 
 impl ParametricSurface3D for Metered {
     fn normal(&self, u: f64, v: f64) -> Vector3 {
+        // A positive stretch keeps the normal's direction.
+        let (u, v) = self.own(u, v);
         self.inner.normal(u, v)
     }
 }
@@ -163,24 +199,32 @@ impl ParametricSurface3D for Metered {
 impl ParameterDivision2D for Metered {
     fn parameter_division(&self, range: ((f64, f64), (f64, f64)), tol: f64) -> (Vec<f64>, Vec<f64>) {
         match &self.inner {
-            // truck's B-spline and NURBS surfaces divide with exactly this
-            // generic algorithm; running it on the wrapper routes every
-            // probe through the meter and changes nothing else.
+            // B-spline and NURBS faces divide per direction (#1602,
+            // `step_division`); running it on the wrapper routes every
+            // probe through the meter.
             Surface::BSplineSurface(_) | Surface::NurbsSurface(_) => {
-                let (ur, vr) = self.inner.parameter_range();
+                let (ur, vr) = self.parameter_range();
                 if !within(range.0, ur) || !within(range.1, vr) {
                     self.meter.outside.store(true, Ordering::Relaxed);
                 }
-                let division = algo::surface::parameter_division(self, range, tol);
+                let division = super::step_division::parameter_division(self, range, tol);
+                // A division still splitting at its sweep cap (a jump) is
+                // refused like one that ran out of evaluations.
+                if division.is_none() {
+                    self.meter.exhaust();
+                }
                 // A tripped face is refused after the pass; handing truck
                 // the grid it grew (millions of points down the runaway
                 // seam) would only make it triangulate them first.
-                if self.meter.tripped() {
-                    let ((u0, u1), (v0, v1)) = range;
-                    return (vec![u0, u1], vec![v0, v1]);
+                match division {
+                    Some(division) if !self.meter.tripped() => division,
+                    _ => {
+                        let ((u0, u1), (v0, v1)) = range;
+                        (vec![u0, u1], vec![v0, v1])
+                    }
                 }
-                division
             }
+            // Other kinds are never stretched (`Stretch::of`).
             other => other.parameter_division(range, tol),
         }
     }
@@ -199,38 +243,6 @@ fn within((lo, hi): (f64, f64), own: ParameterRange) -> bool {
         (Bound::Unbounded, Bound::Unbounded) => (true, true),
     };
     lo.is_finite() && hi.is_finite() && lo_ok && hi_ok
-}
-
-impl SearchParameter<D2> for Metered {
-    type Point = Point3;
-    fn search_parameter<H: Into<SPHint2D>>(&self, point: Point3, hint: H, trials: usize) -> Option<(f64, f64)> {
-        let hint = hint.into();
-        let found = self.inner.search_parameter(point, hint, trials)?;
-        // #1548: at a pole the free parameter comes back anywhere.
-        Some(super::step_pole::settle(&self.inner, point, previous(hint), found))
-    }
-}
-
-impl SearchNearestParameter<D2> for Metered {
-    type Point = Point3;
-    fn search_nearest_parameter<H: Into<SPHint2D>>(
-        &self,
-        point: Point3,
-        hint: H,
-        trials: usize,
-    ) -> Option<(f64, f64)> {
-        let hint = hint.into();
-        let found = self.inner.search_nearest_parameter(point, hint, trials)?;
-        Some(super::step_pole::settle(&self.inner, point, previous(hint), found))
-    }
-}
-
-/// The previous boundary point's parameter, when the search was given one.
-fn previous(hint: SPHint2D) -> Option<(f64, f64)> {
-    match hint {
-        SPHint2D::Parameter(u, v) => Some((u, v)),
-        _ => None,
-    }
 }
 
 type StepShell<S> = CompressedShell<Point3, truck_stepio::r#in::alias::Curve3D, S>;
