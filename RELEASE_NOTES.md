@@ -1,3 +1,155 @@
+# CamCraft 0.20.0 (clean-room implementation)
+
+Released 2026-11-14.
+
+## Breaking
+- **Climb milling now runs climb on 2D Contour and 2D Chamfer** (#1555, PR #1577).
+  With the M3 spindle, an outside profile runs clockwise and an inside profile
+  runs counter-clockwise. Under control or wear compensation, climb posts G41
+  and conventional posts G42. The posted direction of every existing 2D Contour
+  and 2D Chamfer reverses, and G41 and G42 swap. A project that set climb off
+  to get climb milling now posts conventional. Check the first program you post
+  from an old project.
+- **Work offsets above G59 are saved by number** (#931, PR #1113). A setup can
+  use the offsets that its own post supports (Tormach: 7 to 9, G59.1 to G59.3).
+  Older builds cannot open a project that saves such an offset. A post that
+  cannot write an offset refuses it by setup name. It no longer posts G54.
+- **Programs stop between setups by default** (#1532, PR #1650). A program that
+  runs from one setup into the next now writes M0 with a comment that names the
+  next setup. "Between setups" in the post options chooses an optional stop,
+  running straight on, or one file per setup.
+- **Tormach mill programs end and lift differently** (#1594, #1596, PR #1600,
+  PR #1606). A program ends with `G53 G0 Z0` then `M30`, with no trailing G30.
+  Each tool change is followed by a `G53 G0 Z<safe>` lift before the first X/Y
+  move.
+
+A minor release headlined by **a Z clearance law for the posts**, **wire and
+sinker EDM in the UI**, **stricter gouge judgement of 2D operations against the
+parts in the stock**, **a hardened STEP importer**, and **a browser build that
+opens, saves and posts**. 118 pull requests merged since 0.19.0.
+
+## Highlights
+### Posts and G-code
+- Fanuc, Haas, Mazak, Doosan DNM, Sinumerik 840D and Heidenhain posts state the
+  section's clearance Z before the first X/Y traverse after each tool change.
+  grblHAL, TinyG, Carvera and Tormach do the same. A stream that states no
+  clearance or retract plane is refused by name (#1633, #1616, #1632).
+- The Carvera post lifts to the clearance height after M6, before the X/Y
+  traverse (#1616).
+- Work offsets are an index; each post writes its own word. The Setups page lists
+  the offsets of the setup's post, and MCP `set_work_offset` takes a 1-based
+  `index` (#931).
+- The Mazak post writes `S.. M3` or `M4`, and `M5`, not MOTON and MOTOFF (#1411).
+- The fanuc-lathe C-axis feed is floored, never rounded, over its cap (#1392).
+- Explain G-code reads a lathe post's own words: G98, G99, T0101 and G50 S
+  (#1399).
+- The whole-program post refuses by name when setups differ in End units (#1540).
+- New Sodick wire EDM post for 2-axis contours; taper and 4-axis are refused by
+  name (#617).
+- Drilling has a Ream cycle (G85 or an explicit feed-out chain) (#1445).
+- Circular posts rings as arcs, not 512 chords. A 6 mm hole drops from 74,131
+  moves to 417 (#1558).
+- New built-in machine Makera Z1 (#868). The Doosan DNM 5700 is a 3-axis machine
+  with full-stroke travel, and a separate rotary-table variant (#1433, #1410).
+
+### Gouge and collision checks
+- 2D Engrave, Trace, Slot, Trochoidal slot, Circular, Contour, Face, Chamfer,
+  Drill, Bore and Thread are judged against the parts in the stock, also when
+  the stock is their source. A cut into a part blocks the post (#1543, #1550,
+  #1593, #1607, #1631, #1635, #1641).
+- The post judges the parts beside each operation's source again at post time
+  (#1628). A legal stock-source Drill, Bore, Thread or cross drill in the
+  part's own modelled hole is no longer refused there (#1691).
+- A Slot or a Trochoidal slot that leaves its picks is refused by name (#1503,
+  #1504).
+- A Bore wider than three tool diameters is refused by name (#1556).
+- A milling setup whose WCS Z is tilted off the machine Z is refused (#1510).
+- Fixtures are judged against the carried stock's real shape in a flipped setup
+  (#1530). Model heights and Fit to Models measure parts, never fixtures
+  (#1529, #1538).
+- Lathe Facing on a grooved bar is no longer refused wrongly (#1408). Lathe chuck
+  collision solids never drop steel (#1470).
+- A 2D clearing no longer cuts across a part between two pieces of its area
+  (#1620). A Face with a last row on a rim vertex gets no false Gouge (#1659).
+
+### Operations
+- 2D Adaptive has a Trochoidal method (#1509). 2D Pocket can enter by plunge
+  down proved pre-drilled holes (#1449).
+- Contour has a user-set start point and exit point on closed contours (#1448,
+  #1473).
+- Wire EDM: skim passes with a condition per pass (#538), and 4-axis ruled
+  surfaces between an upper and a lower profile (#537).
+- Circular ramp entry rides the ring at the ramp angle (#1609).
+- Fixtures can generate 3-jaw, 4-jaw and collet lathe chucks (#1442).
+
+### Importers
+- STEP import refuses a closed shell that meshes open, a face whose tessellation
+  never converges, and any face the kernel cannot mesh, by name (#1573, #1536).
+- Three-fillet corner blends import closed (#1548). Rational B-spline thread
+  faces mesh in seconds at full fidelity (#1602).
+- A closed STEP solid wound inward is turned outward, and the import says so
+  (#1617). The per-face evaluation cap has measured headroom (#1568).
+- Solidcraft `.sc` bodies are read, and far-off coordinates are refused (#1456,
+  #1467).
+
+### UI
+- Setup, Stock, Tool list, Fixtures and Machine pages share one layout (#1440).
+- Setup alignment composes on the current pose (#738). Two orientation dropdowns
+  replace the old section (#771). Circle and arc centres can be picked as points
+  (#692).
+- Operation picking is a mode; other tabs lock the selection (#1514). Edge picks
+  are one edge per click (#1505).
+- Sinker EDM machine setup in the Machine window (#548).
+- Drop a STEP, STL or OBJ file on the window to import it (#1450). A failed
+  project open keeps the current document (#1613).
+- The browser build opens files with a picker, saves, and posts as downloads
+  (#31, #1431). The logotype is the window icon and the package icon (#1459,
+  #1461).
+
+### MCP
+- `set_work_offset` takes a 1-based `index` and replies with `index` and `name`.
+- New tool `fit_stock`. Chuck fixtures, pick points and the contour start and
+  exit points are available through MCP.
+
+### Tooling
+- The cut runs on a self-hosted Linux runner, and a post-merge gate runs on
+  main (#1413, #1451). PR builds run on `camcraft-pr-test` runners (#1420).
+- `cargo xtask` selects and runs directory test suites (#927).
+
+## Not exercised on a real control
+No real control ran the output of these post changes. The test goldens are
+regression records. Check the first program on the machine before cutting.
+- The clearance Z law on the Fanuc family, Haas, Mazak, Doosan DNM, Sinumerik
+  840D and Heidenhain (#1636, #1633). A G43.4 stream with an unknown rotary pose
+  was not run.
+- The clearance Z law on grblHAL and TinyG (#1632).
+- The Carvera post (#1632, #1661): after `M6` it writes `G0 Z` to the clearance
+  height before the first X/Y traverse. This follows a reading of the public
+  firmware source. No real Carvera ran it.
+- Setup stops and "Between setups" (#1650); the Fanuc and PathPilot programs are
+  checked by text only.
+- The Tormach clearance state, partly (#1618): the refusal path was not run on a
+  control.
+- The Sodick wire EDM post (#617). Its program header says it is not verified.
+- The Ream cycle (#1445) and the fanuc-lathe C-axis feed cap (#1392).
+
+## Process changes
+Contributor and agent process only; no effect on the program. PROCESS_VERSION
+went from 62 to 65:
+- **63** (#1488): the merging session is the one writer of `PROCESS_VERSION`;
+  process PRs no longer edit it.
+- **64** (#1581): the PR test job runs on any `camcraft-pr-test` runner, Linux or
+  macOS. A fork pulls the process files.
+- **65** (#1645): issues and comments are written in ASD-STE100 Simplified
+  Technical English. A fork pulls the process files and reads AGENTS.md again.
+
+## Known issues
+- None at the start of the cut.
+- No installer is built on the cut machine; the zip is the release, and the
+  published artifact is built by the release workflow from the tag.
+
+---
+
 # CamCraft 0.19.0 (clean-room implementation)
 
 Released 2026-11-13.
