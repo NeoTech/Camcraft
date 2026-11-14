@@ -9,3 +9,8 @@
 - **Follow-up filed: #1616** for the other mill posts:
   - grblhal and carvera make the same bare X/Y traverse at the top of travel.
   - fanuc, haas, mazak, doosan-dnm, sinumerik and heidenhain take the stream's first rapid as one combined X/Y/Z move from the tool-change height. That is safe only while the tool-change height is above the part.
+- **Chosen (merge of main, M5 take-over):** a refused first traverse writes NO motion. `xyFirst` and `startXY` return false on the refusal, and each caller (rapid, feed, arc, probe guard, probe move, canned cycle) then writes nothing for its move. Every later move that still has X/Y unknown is left out too, with no second message. This is the rule NeoTech's review of #1636 set for the Fanuc family (#1633): a caller that reads the warning but keeps the text must not get a combined X/Y/Z rapid from an unknown height. The PR's refusal pin now asserts no line with an X/Y word.
+  - Dropped: writing the stream's move after the warning, as the PR first did (and as grblhal from #1632 still does). The warning alone does not stop the text from reaching a control.
+
+**Taken on trust (not exercised on any control).**
+- **The clearance plane over the tool-change X/Y.** The `G0 Z<clearance>` is made at whatever X/Y the tool change (the G30 position) left the spindle at, before the X/Y traverse. It trusts the stated clearance plane (else the retract plane) to clear everything under that X/Y - vise, fixture, rotary table. The post cannot know what is there. When the tip stood below the part top (the #1614 case), this is safer than the bare traverse. When something under the tool-change X/Y is taller than the stated clearance, the vertical descent meets it.

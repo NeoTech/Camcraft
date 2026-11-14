@@ -88,6 +88,22 @@ fn a_first_traverse_with_no_stated_plane_is_refused_by_name() {
         out.warnings,
         out.program
     );
+    // #1633's review, applied here: the refused move is not written
+    // either - no bare `G0 X20 Y10`, no combined rapid, no feed, cycle
+    // or probe with an X/Y word reaches the text at an unknown height.
+    let xy_words: Vec<&str> = out
+        .program
+        .lines()
+        .filter(|l| !l.trim_start().starts_with('('))
+        .filter(|l| l.split_whitespace().any(|w| w.starts_with('X') || w.starts_with('Y')))
+        .collect();
+    assert!(xy_words.is_empty(), "no X/Y motion at an unknown height: {xy_words:?}\n{}", out.program);
+    assert_eq!(
+        out.warnings.iter().filter(|w| w.contains("first X/Y traverse")).count(),
+        1,
+        "refused once per program: {:?}",
+        out.warnings
+    );
 }
 
 #[test]

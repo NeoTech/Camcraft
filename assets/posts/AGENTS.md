@@ -164,7 +164,9 @@ write (the gate), so the released program never carries one.
   stand below the part there. `tormach.cps` writes `G0 Z<ClearancePlane>`
   (else the RetractPlane) before the first X/Y move, so a setup that
   cannot clear is stopped by the control's Z limit instead of rapiding
-  through the part; a stream stating neither plane is refused by name.
+  through the part; a stream stating neither plane is refused by name,
+  and the refused move (with every later one while X/Y stay unknown) is
+  not written.
 - **A cycle states its feed; a cut needs a turning spindle (#1357).**
   A canned cycle whose `FeedRate` is missing or not positive is a
   `message()` refusal by name ("canned cycle G73 has no feed rate"),
