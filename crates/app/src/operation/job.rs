@@ -112,6 +112,10 @@ pub struct GenJob {
     /// #1603: the setup's parts a pocket-family op on the stock must
     /// keep (`keep_law::parts_in_stock`); empty for every other job.
     pub(super) keep_parts: Vec<Triangle>,
+    /// #1621: the setup's other parts a part-source op must keep with
+    /// the plain solid law (`keep_law::neighbour_parts`); empty for a
+    /// stock source and a one-part document.
+    pub(super) neighbour_parts: Vec<Triangle>,
     /// The area controls resolved against the world (M11.5); `None` for
     /// the identity - an untouched operation carries nothing new.
     pub(super) area: Option<Result<AreaCtx, GenError>>,
@@ -409,6 +413,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         part_solid,
         around_part,
         keep_parts: super::keep_law::parts_in_stock(world, setup, &op.params, part_solid),
+        neighbour_parts: super::keep_law::neighbour_parts(world, setup, &op.params, &op.src, part_solid),
         area,
         wcs_origin,
         spindle_note,

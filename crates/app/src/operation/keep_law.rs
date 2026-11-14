@@ -28,13 +28,24 @@
 //!   part's surface reads the same whether the line came off the part
 //!   or off the stock.
 //!
+//! - **Part source, neighbouring parts** (#1621): a part-source
+//!   operation's own law reads its source's mesh only, so a cut on part
+//!   B that enters part A beside it had no finding on the operation -
+//!   and with the stock turned (the sim refuses to judge) nothing judged
+//!   A at all. Every part-source operation that carries a part law
+//!   (`depth_law_of` not `None`) now also answers to the plain solid law
+//!   against the setup's OTHER parts ([`neighbour_parts`]): no mark
+//!   budget there (a mark is on the part it marks), no hole excused (the
+//!   holes are the source's), nothing kept around. Its own source keeps
+//!   its own law.
+//!
 //! The cutter's own tip and stack are swept against the mesh, so a legal
 //! pocket - its rings tangent to the part - stays clean, and a cut that
 //! enters the part is a blocking `Gouge` on its move.
 
 use crate::geometry::Triangle;
 
-use super::OpParams;
+use super::{OpParams, SrcRef};
 
 /// Whether `params` is a pocket-family kind: it clears an area and
 /// keeps the part.
@@ -80,4 +91,35 @@ pub(super) fn parts_in_stock(
         return Vec::new();
     }
     crate::setup_align::parts_facets_in(world, setup)
+}
+
+/// The parts a part-source operation must keep beside its own (#1621):
+/// every part the setup holds (`setup_align::parts_facets_in`'s set -
+/// fixtures and a stock-only model left out) but the entities its
+/// source names, in the setup's frame. Empty for a source that is not
+/// the part (whose parts [`parts_in_stock`] reads), for a kind that
+/// carries no part law on a part source, and for a one-part document.
+#[must_use]
+pub(super) fn neighbour_parts(
+    world: &flecs_ecs::prelude::World,
+    setup: Option<&str>,
+    params: &OpParams,
+    src: &SrcRef,
+    part_solid: bool,
+) -> Vec<Triangle> {
+    if !part_solid || super::generate::depth_law_of(params, src, true) == super::generate::DepthLaw::None {
+        return Vec::new();
+    }
+    let own: Vec<&str> = match src {
+        SrcRef::Stock => return Vec::new(),
+        SrcRef::Entity(n) => vec![n.as_str()],
+        SrcRef::Selection(items) => items.iter().map(|g| g.entity.as_str()).collect(),
+    };
+    let skip = crate::stock_source::stock_only_model(world);
+    crate::model::model_entities(world)
+        .into_iter()
+        .filter(|(name, e)| !own.contains(&name.as_str()) && crate::stock_source::judged(world, e, skip))
+        .filter_map(|(_, e)| crate::setup_align::facets_in(world, &e, setup))
+        .flatten()
+        .collect()
 }

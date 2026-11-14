@@ -113,6 +113,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         part_solid,
         around_part,
         keep_parts,
+        neighbour_parts,
         area,
         wcs_origin,
         unit,
@@ -3151,6 +3152,11 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 Some(part) => super::mark_law::mark_into(&mut warns, &path, part, &cutter, mark_budget, material.excess),
                 None => super::mark_law::Marked::default(),
             };
+            // #1621: the setup's other parts, beside a part source - the
+            // plain solid law, no budget (a mark is on its own part).
+            if !neighbour_parts.is_empty() {
+                contain_into(&mut warns, &path, &neighbour_parts, &cutter, DepthLaw::Keep, stl, material.excess, &params, &[]);
+            }
             // #985: an external thread's crest ring against every wall
             // that is not the boss it threads, with no thread allowance.
             for w in super::thread_boss::neighbours(&params, &path, &material.facets, &tool) {
@@ -3302,6 +3308,10 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             if let Some(part) = mark_part {
                 let marked = super::mark_law::mark_into(&mut warns, &path, part, &cutter, mark_budget, material.excess);
                 path_world.notes.extend(super::mark_law::notes(params.kind().info().label, marked, mark_budget, unit));
+            }
+            // #1621: the setup's other parts, in the plane's frame.
+            if !neighbour_parts.is_empty() {
+                contain_into(&mut warns, &path, &f.local_facets(&neighbour_parts), &cutter, DepthLaw::Keep, stl, material.excess, &params, &[]);
             }
             warns.extend(workholding_warnings(
                 &path_world,
