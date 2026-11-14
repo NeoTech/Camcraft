@@ -1,8 +1,9 @@
 //! #1603: the pocket family (2D Pocket, 2D Adaptive, 2D Offset) keeps
 //! the part, and says so on the operation (`DepthLaw::Keep`,
-//! `operation::keep_law`). A whole-model source is cleared AROUND (#12);
-//! an area offset or extension that carries the boundary into the part,
-//! or a stock source that covers it (#1554), is a blocking
+//! `operation::keep_law`). A whole-model source is cleared AROUND (#12),
+//! and since #1554 a stock source is too (the stock minus the setup's
+//! parts); an area offset or extension that carries the boundary into
+//! the part, from either source, is a blocking
 //! `Warning::Gouge` on the operation and the post is refused by name on
 //! its moves - with the stock aligned and with it turned (where the
 //! program sim refuses to judge). Before #1603 these carried
@@ -171,16 +172,51 @@ fn a_whole_model_extension_into_the_part_gouges_and_never_posts() {
     refused_on_both_stocks(&AreaControls { extension: 5.0, ..Default::default() }, "extension");
 }
 
+/// The feed points whose tool centre stands over the part's own section
+/// (the block, or the boss above it) closer than the cutter radius, below
+/// that section's top. A path that keeps the part has none.
+fn over_the_part(t: &Toolpath) -> Vec<Point3> {
+    let near = |p: &Point3, half: f64| (p.x.abs() - half).max(0.0).hypot((p.y.abs() - half).max(0.0)) < R - 0.05;
+    feeds(t)
+        .into_iter()
+        .filter(|p| (near(p, 15.0) && p.z < 10.0 - EPS) || (near(p, 6.0) && p.z < 20.0 - EPS))
+        .collect()
+}
+
 #[test]
-fn a_stock_source_cut_through_the_part_gouges_and_never_posts() {
-    // #1554: the stock as the source clears its whole footprint, the
-    // part included. Before #1603 nothing on the op said so.
-    for (label, params) in kinds(20.0, 5.0) {
+fn a_stock_source_clearing_goes_around_the_part_and_posts() {
+    // #1554: the stock as the source cleared its whole footprint, the
+    // part's own section included; generate said ok and only the keep
+    // law (#1603) or verify stopped it. Now the region is the stock
+    // minus the setup's parts (the #12 island law): no move over the
+    // part, nothing on the op, and the program posts on both stocks.
+    let all = [("2D Pocket", pocket(20.0, 5.0)), ("2D Adaptive", retyped(OpType::Adaptive2D, 20.0, 10.0))];
+    for (label, params) in all {
         for rotated in [false, true] {
             let (world, mut h) = job(Some(block_with_boss()), rotated);
             let warns = generated(&world, &mut h, SrcRef::Stock, params.clone(), AreaControls::default());
+            let blocking: Vec<_> = warns.iter().filter(|w| w.blocks_post()).collect();
+            assert!(blocking.is_empty(), "{label} rotated {rotated}: {blocking:?}");
+            let e = model::find_by_name(&world, "P1").expect("op");
+            let tp = model::toolpath_of(&world, &e).expect("cached path");
+            let over = over_the_part(&tp.path);
+            assert!(over.is_empty(), "{label} rotated {rotated}: {} feed point(s) over the part, first {:?}", over.len(), over.first());
+            assert_posts(&world, &format!("stock-around-{label}-{rotated}"));
+        }
+    }
+}
+
+#[test]
+fn a_stock_source_area_offset_into_the_part_gouges_and_never_posts() {
+    // The keep law stays the backstop for a stock source: an offset of
+    // +3 grows the region 3 mm into the part's own section again.
+    for (label, params) in kinds(20.0, 5.0) {
+        for rotated in [false, true] {
+            let (world, mut h) = job(Some(block_with_boss()), rotated);
+            let area = AreaControls { offset: 3.0, ..Default::default() };
+            let warns = generated(&world, &mut h, SrcRef::Stock, params.clone(), area);
             assert!(gouges(&warns) > 0, "{label} rotated {rotated}: the part under the stock is convicted: {warns:?}");
-            assert_post_refused(&world, &format!("stock-{label}-{rotated}"), rotated);
+            assert_post_refused(&world, &format!("stock-offset-{label}-{rotated}"), rotated);
         }
     }
 }
@@ -285,9 +321,13 @@ fn over_mcp_the_pocket_family_keeps_the_part_the_same() {
     let offset = mcp_verify("offset", kind, "part", Some(json!({ "offset": 3.0 })));
     assert!(op_gouges(&offset) > 0, "an offset into the part is the op's own gouge: {offset}");
     assert_eq!(offset["ok"], json!(false), "{offset}");
+    // #1554: the stock source clears around the part, and verifies ok.
     let stock = mcp_verify("stock", kind, "stock", None);
-    assert!(op_gouges(&stock) > 0, "the stock source over the part is the op's own gouge: {stock}");
-    assert_eq!(stock["ok"], json!(false), "{stock}");
+    assert_eq!(op_gouges(&stock), 0, "the stock source keeps the part: {stock}");
+    assert_eq!(stock["ok"], json!(true), "a stock-source clearing around the part verifies ok: {stock}");
+    let into = mcp_verify("stock-offset", kind, "stock", Some(json!({ "offset": 3.0 })));
+    assert!(op_gouges(&into) > 0, "a stock-source offset into the part is the op's own gouge: {into}");
+    assert_eq!(into["ok"], json!(false), "{into}");
     let good = mcp_verify("legal", kind, "part", None);
     assert_eq!(op_gouges(&good), 0, "{good}");
     assert_eq!(good["ok"], json!(true), "a legal clearing verifies ok: {good}");

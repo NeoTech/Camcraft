@@ -240,6 +240,9 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         }
         // A whole PART under the pocket family clears the stock around
         // it, never the part's own section (issue #12).
+        // #1554: the STOCK as the source clears the stock around the
+        // setup's parts the same way, never the parts' own sections.
+        (params, src @ SrcRef::Stock) => super::area::stock_pocket(world, setup, src, params, frame.as_ref()),
         (params, src) => whole_model_pocket(world, setup, src, params, frame.as_ref()),
     };
     // #1603: the keep law speaks exactly where that reading does.
