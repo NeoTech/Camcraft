@@ -115,7 +115,7 @@ fn ctx(name: &str) -> Option<&str> {
     (!name.is_empty()).then_some(name)
 }
 
-fn eye(state: &mut State, leaf: &Leaf) {
+pub(super) fn eye(state: &mut State, leaf: &Leaf) {
     match leaf {
         Leaf::Model(n) => State::toggle_visibility(&mut state.hidden_models, n),
         Leaf::Stock(s) => {
@@ -127,6 +127,7 @@ fn eye(state: &mut State, leaf: &Leaf) {
             State::toggle_visibility(&mut state.hidden_offsets, &name);
         }
         Leaf::Op(n) => State::toggle_visibility(&mut state.hidden_paths, n),
+        Leaf::Setup(n) => state.toggle_setup_display(n),
         _ => {}
     }
 }

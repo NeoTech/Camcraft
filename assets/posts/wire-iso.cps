@@ -6,7 +6,8 @@
 // compensation cancel, automatic wire threading and cutting, wire-tip
 // disposal - is the machine's own text from its `.mch` `edm.codes`
 // (D5): no vendor dialect, manual table or post was read or copied,
-// and nothing here invents an EDM code. Behaviour only, per this repo's
+// and nothing here invents an EDM code. Skim passes (#538) select
+// their own condition mid-section, the wire left threaded. Behaviour only, per this repo's
 // Clean-Room Protocol. The decision record is
 // docs/decisions/533-wire-iso-post.md; the goldens lock this file.
 // A constant taper (#536): the app hands each leaning move's X Y at the
@@ -14,6 +15,8 @@
 // WireV, from
 // the pose and the machine's guide planes); the words that switch the
 // taper on and off and that write U V are the machine's edm.codes.
+// A 4-axis cut (#537, PARAM WireFourAxis: its pairing rule) leans the
+// same way: the same words, the same U V, no stated angle.
 description = "Generic ISO wire EDM (RS-274 motion; every EDM code from the machine's edm.codes)";
 vendor = "Camcraft";
 legal = "Original clean-room work; public standards only";
@@ -51,8 +54,11 @@ var condition = "", side = "", afterOp = "";
 var inSection = false;     // between onSection and onSectionEnd
 var threaded = false;      // the wire is threaded through the work
 var cutZ = null;           // the section's one programmed plane (2-axis)
+var skim = 0;             // skim passes begun in this section (#538)
+var skimPending = false;   // a skim's condition arrived; select it at its first move
 var awt = false;
 var taper = 0;             // the section's stated taper, degrees (0: vertical)
+var fourAxis = "";         // the section's 4-axis pairing rule ("": one profile)
 var uv = null;             // the next move's upper guide offset [U, V] (WireU, WireV)
 var tapering = false;      // the taper switch is on
 var taperOk = true;
@@ -149,10 +155,16 @@ function onParameter(name, value) {
   else if (name === "OperationName") opName = clean(value);
   else if (name === "OperationKind") opKind = clean(value);
   else if (name === "SetupName") setupName = clean(value);
-  else if (name === "EdmCondition") condition = String(value === null || value === undefined ? "" : value);
+  else if (name === "EdmCondition") {
+    // With the wire threaded, a condition is the next skim's (#538):
+    // selected at that pass's first move, the wire left threaded.
+    condition = String(value === null || value === undefined ? "" : value);
+    if (threaded) skimPending = true;
+  }
   else if (name === "WireSide") side = clean(value);
   else if (name === "AfterOperation") afterOp = String(value);
   else if (name === "WireTaper" && has(value)) taper = Number(value);
+  else if (name === "WireFourAxis") fourAxis = clean(value);
   else if (name === "WireU" && has(value)) uv = [Number(value), uv !== null ? uv[1] : null];
   else if (name === "WireV" && has(value) && uv !== null) uv = [uv[0], Number(value)];
   else if (name === "SpindleSpeed" && has(value) && Number(value) > 0) {
@@ -168,6 +180,8 @@ function onToolChange(number, name) {
 function onSection() {
   inSection = true;
   threaded = false;
+  skim = 0;
+  skimPending = false;
   cutZ = null;
   if (condition === "") {
     refuse("op" + opName, who() + "is not wire EDM work (no EDM condition) - the wire post posts Wire Contour operations only");
@@ -180,10 +194,10 @@ function onSection() {
   if (setupName) note("SETUP " + setupName);
   if (side) note("SIDE " + side.toUpperCase() + " - KERF IN THE PATH");
   taperOk = true;
-  if (taper !== 0) {
+  if (taper !== 0 || fourAxis !== "") {
     for (var i = 0; i < TAPER_REQUIRED.length; i++) {
       if (code(TAPER_REQUIRED[i]) === null) {
-        refuse("tcode" + TAPER_REQUIRED[i] + opName, who() + "is tapered, and machine " + machineName() + " states no edm.codes." + TAPER_REQUIRED[i] + " - the wire post never invents an EDM code");
+        refuse("tcode" + TAPER_REQUIRED[i] + opName, who() + (fourAxis !== "" ? "is a 4-axis cut" : "is tapered") + ", and machine " + machineName() + " states no edm.codes." + TAPER_REQUIRED[i] + " - the wire post never invents an EDM code");
         taperOk = false;
       }
     }
@@ -192,7 +206,8 @@ function onSection() {
       refuse("uvtpl" + opName, "machine " + machineName() + ": edm.codes.uv states no {u} and {v} places for the upper guide's offset");
       taperOk = false;
     }
-    note("TAPER " + trim(Number(taper).toFixed(3)) + " DEG - XY LOWER GUIDE, UV UPPER GUIDE OFFSET");
+    if (fourAxis !== "") note("4-AXIS UPPER AND LOWER PROFILES PAIRED BY " + fourAxis.toUpperCase() + " - XY LOWER GUIDE, UV UPPER GUIDE OFFSET");
+    else note("TAPER " + trim(Number(taper).toFixed(3)) + " DEG - XY LOWER GUIDE, UV UPPER GUIDE OFFSET");
   }
   if (wcsWord) block([wcsWord]);
 }
@@ -206,7 +221,7 @@ function onSection() {
 // moves only, so no return to the threading point is ever written.
 function openRun() { return side === "left" || side === "right"; }
 function startCut(p) {
-  if (threaded) return true;
+  if (threaded) return skimPending ? startSkim() : true;
   if (!codesOk || condition === "") return false;
   if (!has(p.StartX) || !has(p.StartY)) {
     refuse("start" + opName, who() + "the path states no threading point - regenerate it");
@@ -222,6 +237,22 @@ function startCut(p) {
   block([code("comp_off")]);
   threaded = true;
   cutZ = has(p.StartZ) ? p.StartZ : null;
+  return true;
+}
+
+// A skim pass (#538): the previous pass ended back at the threading
+// point; select the skim's condition and cancel compensation again
+// before its first move. Its offset is in the path, as the rough's.
+function startSkim() {
+  skimPending = false;
+  if (condition === "" || !/^[A-Za-z0-9._-]+$/.test(condition)) {
+    refuse("skim" + opName, who() + "skim condition id " + JSON.stringify(condition) + " is not one word the control can read");
+    return false;
+  }
+  skim++;
+  note("SKIM " + skim);
+  block([code("condition").split("{id}").join(condition)]);
+  block([code("comp_off")]);
   return true;
 }
 
@@ -261,7 +292,7 @@ function onLinear() {
   var w = uv;
   uv = null;
   if (w !== null) {
-    if (taper === 0 || !taperOk || !has(w[1])) {
+    if ((taper === 0 && fourAxis === "") || !taperOk || !has(w[1])) {
       refuse("uv" + opName, who() + "a leaning move in a section that states no taper - refused");
       return;
     }
@@ -322,10 +353,13 @@ function onSectionEnd() {
   }
   inSection = false;
   threaded = false;
+  skim = 0;
+  skimPending = false;
   condition = "";
   side = "";
   afterOp = "";
   taper = 0;
+  fourAxis = "";
   uv = null;
   tapering = false;
 }

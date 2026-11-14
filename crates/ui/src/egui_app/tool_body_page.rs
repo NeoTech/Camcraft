@@ -63,10 +63,12 @@ pub(super) fn body_section(ui: &mut Ui, state: &mut State, exists: bool, u: Unit
     super::tool_body_lathe_page::frame_row(ui, state);
     let (import, clear) = ui
         .horizontal(|ui| {
-            let import = ui
-                .button("Import body…")
-                .on_hover_text("read a STEP, STL or OBJ holder/assembly; place it, then Apply body")
-                .clicked();
+            let import = crate::browser_files::button(
+                ui,
+                state.in_browser(crate::browser_files::NEEDS_PICKER),
+                "Import body…",
+                "read a STEP, STL or OBJ holder/assembly; place it, then Apply body",
+            );
             let clear = ui
                 .add_enabled(landed.is_some() || has_draft, egui::Button::new("Clear body"))
                 .on_hover_text("remove the body - the holder cylinder is judged again (undoable)")

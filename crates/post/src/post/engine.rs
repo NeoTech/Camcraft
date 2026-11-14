@@ -114,6 +114,10 @@ pub fn run_program_with(
     if let Some(why) = super::units::refusal(&mut s, options)? {
         return Err(PostError::Refused(why));
     }
+    let wo = super::work_offset::Manifest::read(&mut s);
+    // #1386: Explain G-code on a script that states no comment form is
+    // refused by name here, before any hook runs.
+    let explain_form = super::explain::form(&mut s, options)?;
     // #374: an inverted machine axis - the one place the stream is
     // mirrored into the controller's frame, or refused by name.
     let records = super::invert::apply(records, mch, &s)?;
@@ -126,6 +130,9 @@ pub fn run_program_with(
     s.set_program(id)?;
     if options.is_object() {
         s.set_options(options)?;
+    }
+    if let Some(f) = explain_form {
+        s.arm_explain(f)?;
     }
     s.call("onOpen", "")?;
     let head = s.out_len()?;
@@ -149,7 +156,24 @@ pub fn run_program_with(
         let before = s.out_len()?;
         let mut swallow = false;
         match r {
-            Record::Param { name, value } => {
+            Record::Param { name, value } => 'param: {
+                // #931: the work offset reaches the script as its number
+                // (flagged) or its legacy word (1-6), or is refused by name.
+                let translated;
+                let value = if name == "WorkOffset" {
+                    match wo.translate(value, &base) {
+                        Ok(v) => {
+                            translated = v;
+                            &translated
+                        }
+                        Err(w) => {
+                            warnings.push(w);
+                            break 'param;
+                        }
+                    }
+                } else {
+                    value
+                };
                 base.insert(name.clone(), value.clone());
                 match name.as_str() {
                     "StartX" => pos.0 = value.as_f64().unwrap_or(0.0),

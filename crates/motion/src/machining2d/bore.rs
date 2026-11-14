@@ -24,7 +24,9 @@
 //! Prime Directive: the wall is a circle only the model's own recognition
 //! draws (`holes` arrive as params data, like the drill's); a tool too
 //! wide to enter the mouth, a hole with no floor under its entry, and
-//! every non-finite number are refused before any move is built.
+//! every non-finite number are refused before any move is built. A
+//! hole too wide for the dive and the one ring to meet (#1556: a core
+//! left that no pass touches) is refused by name with its numbers.
 
 use std::f64::consts::PI;
 
@@ -34,6 +36,7 @@ use crate::geo2d::{Loop, Point2, Region};
 use crate::geometry::Point3;
 use crate::links::Links;
 
+use super::bore_core::{CORE_TOL, bore_floor_reach, bore_leaves_core, max_bore_diameter};
 use super::face::GenError;
 use super::levels::{Cert, Motion, cut_levels, run_levels};
 
@@ -69,6 +72,11 @@ impl BoreHole {
 pub struct BoreParams {
     pub holes: Vec<BoreHole>,
     pub tool_diameter: f64,
+    /// The cutter's corner radius: 0 for a square end mill, between 0
+    /// and `tool_diameter / 2` for a bull nose, half the diameter for a
+    /// ball. It sets how far the cutter reaches at a through hole's
+    /// floor plane (#1556, [`bore_floor_reach`]).
+    pub corner_radius: f64,
     /// Wall allowance: the rim stands `leave` short of the model's
     /// circle. `0.0` finishes to nominal.
     pub stock_to_leave: f64,
@@ -95,6 +103,7 @@ impl BoreParams {
     pub(super) fn validate(&self) -> Result<(), GenError> {
         let mut finite = [
             self.tool_diameter,
+            self.corner_radius,
             self.stock_to_leave,
             self.stepdown,
             self.through_allowance,
@@ -116,6 +125,12 @@ impl BoreParams {
         }
         if self.tool_diameter <= 0.0 {
             return Err(GenError::Invalid("tool diameter must be positive".into()));
+        }
+        if self.corner_radius < 0.0 || self.corner_radius > self.tool_diameter * 0.5 + CORE_TOL {
+            return Err(GenError::Invalid(format!(
+                "a {:.3} mm corner radius does not fit a {:.3} mm cutter (0 up to half its diameter)",
+                self.corner_radius, self.tool_diameter
+            )));
         }
         if self.stock_to_leave < 0.0 || self.stepdown <= 0.0 || self.through_allowance < 0.0 {
             return Err(GenError::Invalid(
@@ -185,9 +200,55 @@ impl BoreParams {
                     mouth,
                 ));
             }
+            // #1556, the core door: the ride clears the centre disc
+            // the dive opens and the ring's band `[rc - reach, rc +
+            // reach]`, where `reach` is how far the cutter cuts at the
+            // plane the core would stand on (the full radius, or a
+            // corner-radiused cutter's reach at a through hole's floor,
+            // [`bore_floor_reach`]). A ring whose inner edge stands past
+            // the dive's leaves the annulus between them uncut - a free
+            // core on a through hole - that no pass touches. Refused by
+            // name with the numbers, never posted as a finished bore.
+            let through = h.through.then_some(self.through_allowance);
+            if bore_leaves_core(h.radius, self.tool_diameter, self.corner_radius, self.stock_to_leave, through) {
+                let reach = bore_floor_reach(self.tool_diameter, self.corner_radius, through);
+                let rule = if reach < self.tool_diameter * 0.5 - CORE_TOL {
+                    format!(
+                        "the tool diameter + 4 x the R{reach:.3} its {:.3} mm corner reaches at the \
+                         break-through + 2 x the stock to leave",
+                        self.corner_radius
+                    )
+                } else {
+                    "3 x the tool diameter + 2 x the stock to leave".to_string()
+                };
+                return Err(GenError::invalid_at(
+                    format!(
+                        "the {:.3} mm hole at ({:.3}, {:.3}) is too wide to bore with a {:.3} mm cutter: \
+                         the centre dive and one ring at R{:.3} leave a core from {:.3} to {:.3} mm \
+                         across that no pass touches (free once the hole breaks through). This ride \
+                         clears holes up to {:.3} mm ({rule}) - clear it with a pocket or adaptive \
+                         operation, or bore it with a larger tool",
+                        h.radius * 2.0,
+                        tidy(h.xy.x),
+                        tidy(h.xy.y),
+                        self.tool_diameter,
+                        rc,
+                        reach * 2.0,
+                        (rc - reach) * 2.0,
+                        max_bore_diameter(self.tool_diameter, self.corner_radius, self.stock_to_leave, through),
+                    ),
+                    mouth,
+                ));
+            }
         }
         Ok(())
     }
+}
+
+/// A coordinate as a refusal prints it: noise under the printed
+/// precision reads 0.000, never -0.000.
+fn tidy(v: f64) -> f64 {
+    if v.abs() < 5e-4 { 0.0 } else { v }
 }
 
 /// The ride's closed wall circle at `rho`: one entry chord plus the

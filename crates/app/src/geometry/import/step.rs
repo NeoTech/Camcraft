@@ -15,12 +15,21 @@
 //!   being thrown away.
 //! - Facet collection is capped per shell while extracting, as a last line of
 //!   defense on top of the tolerance schedule.
+//! - Every face's surface evaluations are metered per pass (`step_guard`,
+//!   #1536): a face whose subdivision never converges is refused by name
+//!   instead of hanging inside truck, where nothing else can stop it.
+//! - A boundary point on a collapsed patch side (the pole of a corner
+//!   blend) keeps its parameters inside the knot domain (`step_pole`,
+//!   #1548), and an edge on a `SURFACE_CURVE` is read from its 3D curve
+//!   (`step_edge3d`, #1548): a rounded-edge solid then meshes closed
+//!   instead of being refused or losing faces.
 
 use std::panic::AssertUnwindSafe;
 
 use truck_meshalgo::prelude::*;
 use truck_stepio::r#in::Table;
 
+use super::step_refine::PassError;
 use super::{ImportError, MAX_FACETS};
 use crate::geometry::{Mesh, Point3, Triangle};
 
@@ -69,6 +78,27 @@ pub fn with_facet_budget<R>(budget: usize, f: impl FnOnce() -> R) -> R {
     out
 }
 
+thread_local! {
+    /// Test-only override of the per-face evaluation cap (#1536's pins
+    /// trip it on a small fixture in well under a second).
+    static EVAL_CAP_OVERRIDE: std::cell::Cell<Option<u64>> = const { std::cell::Cell::new(None) };
+}
+
+/// Run `f` with the per-face evaluation cap lowered to `cap` on this
+/// thread. Never raises it. For tests; cleared on return.
+#[doc(hidden)]
+pub fn with_face_eval_cap<R>(cap: u64, f: impl FnOnce() -> R) -> R {
+    EVAL_CAP_OVERRIDE.with(|c| c.set(Some(cap)));
+    let out = f();
+    EVAL_CAP_OVERRIDE.with(|c| c.set(None));
+    out
+}
+
+fn face_eval_cap() -> u64 {
+    let cap = super::step_guard::FACE_EVAL_CAP;
+    EVAL_CAP_OVERRIDE.with(std::cell::Cell::get).map_or(cap, |c| c.min(cap))
+}
+
 fn facet_budget(asked: usize) -> usize {
     BUDGET_OVERRIDE.with(std::cell::Cell::get).map_or(asked, |b| b.min(asked))
 }
@@ -113,7 +143,13 @@ pub fn parse_with_chord_budget(data: &[u8], budget: usize) -> Result<(Mesh, f64)
     // read as millimetres. No stated unit keeps millimetres.
     let mm_per_unit = super::step_units::mm_per_unit(section)
         .map_err(|e| ImportError::Step(format!("length unit: {e}")))?;
-    let table = Table::from_data_section(section);
+    let mut table = Table::from_data_section(section);
+    // #1548: edges are read from their 3D curves, never rebuilt from a
+    // pcurve in truck's own parametrisation of the neighbouring surface.
+    let repointed = super::step_edge3d::prefer_3d(&mut table);
+    if repointed > 0 {
+        tracing::debug!("step: {repointed} surface-curve edges read from their 3D curve");
+    }
     if table.shell.is_empty() {
         return Err(ImportError::Step("no shells found".into()));
     }
@@ -121,7 +157,7 @@ pub fn parse_with_chord_budget(data: &[u8], budget: usize) -> Result<(Mesh, f64)
     let max_facets = facet_budget(budget);
     let mut facets: Vec<Triangle> = Vec::new();
     let mut chord = 0.0f64;
-    for shell in table.shell.values() {
+    for (shell_id, shell) in &table.shell {
         if facets.len() >= max_facets {
             return Err(ImportError::TooLarge);
         }
@@ -131,7 +167,7 @@ pub fn parse_with_chord_budget(data: &[u8], budget: usize) -> Result<(Mesh, f64)
         // AssertUnwindSafe holds for our purposes: on a panic we discard all
         // outputs and abort the import.
         let per_shell = std::panic::catch_unwind(AssertUnwindSafe(|| {
-            shell_facets(&table, shell, budget, mm_per_unit.unwrap_or(1.0))
+            shell_facets(&table, (*shell_id, shell), budget, mm_per_unit.unwrap_or(1.0))
         }));
         let (tris, tol) = match per_shell {
             Err(_) => {
@@ -171,13 +207,19 @@ pub fn parse_with_chord_budget(data: &[u8], budget: usize) -> Result<(Mesh, f64)
 /// Runs inside `catch_unwind`; returns `Err` only for reasons we control.
 fn shell_facets(
     table: &Table,
-    shell: &truck_stepio::r#in::ShellHolder,
+    (shell_id, shell): (u64, &truck_stepio::r#in::ShellHolder),
     budget: usize,
     mm_per_unit: f64,
 ) -> Result<(Vec<Triangle>, f64), ImportError> {
     let cshell = table
         .to_compressed_shell(shell)
         .map_err(|e| ImportError::Step(format!("shell conversion failed: {e}")))?;
+    // #1536: every face metered, so one whose subdivision never converges
+    // is refused by name instead of hanging the import.
+    let face_ids = super::step_guard::face_entities(shell, cshell.faces.len());
+    let cap = face_eval_cap();
+    let guarded = super::step_guard::Guarded::new(cshell, cap);
+    let cshell = &guarded.shell;
     let mut extent = 0.0f64;
     for p in cshell.vertices.iter() {
         for c in [p.x, p.y, p.z] {
@@ -191,8 +233,29 @@ fn shell_facets(
     // triangles, stop with `TooLarge` as soon as `budget` is crossed. A
     // closure so the heavily-aliased CompressedShell type is inferred
     // instead of spelled out.
-    let triangulate = |tol: f64| -> Result<Vec<Triangle>, ImportError> {
-        let meshed = cshell.robust_triangulation(tol).to_polygon();
+    let triangulate = |tol: f64| -> Result<Vec<Triangle>, PassError> {
+        guarded.reset();
+        // A panic is held until the meters are read: a face that ran past
+        // its cap is the cause worth naming, not the panic it led to.
+        let meshed = std::panic::catch_unwind(AssertUnwindSafe(|| cshell.robust_triangulation(tol).to_polygon()));
+        if let Some(trip) = guarded.tripped() {
+            // A face that may jump is refused even when a coarser pass
+            // met: it converges at any tolerance wider than its gap, and
+            // that mesh smears the gap into a wall that is not there. A
+            // face proven continuous only ran out of evaluations, and
+            // `refine` keeps the coarser mesh if there is one (#1568).
+            let i = trip.index;
+            tracing::warn!(
+                "step: face {} of shell #{shell_id} ({}, continuous: {}) ran past {cap} evaluations at tol {tol:e}",
+                i + 1,
+                trip.kind,
+                trip.continuous
+            );
+            let entity = face_ids.as_ref().and_then(|ids| ids.as_slice().get(i).copied());
+            let refusal = super::step_guard::refusal(trip, cshell.faces.len(), entity, Some(shell_id), cap);
+            return Err(PassError::Unconverged { continuous: trip.continuous, refusal });
+        }
+        let meshed = meshed.unwrap_or_else(|panic| std::panic::resume_unwind(panic));
         let positions = meshed.positions();
         let mut facets: Vec<Triangle> = Vec::new();
         for face in meshed.face_iter() {
@@ -217,7 +280,7 @@ fn shell_facets(
                 if n.x != 0.0 || n.y != 0.0 || n.z != 0.0 {
                     facets.push(tri);
                     if facets.len() > budget {
-                        return Err(ImportError::TooLarge);
+                        return Err(PassError::Over);
                     }
                 }
             }
@@ -258,8 +321,15 @@ fn shell_facets(
     // it actually kept (#864).
     let kept = super::step_refine::refine(extent, tol_target, budget, triangulate)?;
     if kept.tol > wanted {
+        // The cause, so the advice fits it: a larger facet budget does
+        // nothing for a face that ran out of evaluations (#1568 review).
+        let why = if kept.eval_capped {
+            "a finer pass ran past a face's evaluation cap (a larger facet budget will not help)"
+        } else {
+            "bounded by memory or by the kernel's least tolerance"
+        };
         tracing::warn!(
-            "step: tessellated at reduced fidelity (tol {:e} mm, target {:e} mm, {} facets) - bounded by memory or by the kernel's least tolerance",
+            "step: tessellated at reduced fidelity (tol {:e} mm, target {:e} mm, {} facets) - {why}",
             kept.tol * k,
             wanted * k,
             kept.facets.len()

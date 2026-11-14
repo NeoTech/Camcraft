@@ -18,15 +18,18 @@
 pub mod diag;
 
 pub mod actions;
+pub mod align_pick_viz;
 pub(crate) mod machine_modes;
 mod axis_note;
 mod build_info;
 pub mod boundary_draft;
 pub mod box_pick;
+pub mod browser_files;
 pub mod boundary_viz;
 pub mod plate_viz;
 pub mod boundary_summary;
 pub mod edge_pick;
+pub mod pick_ink;
 pub mod feature_click;
 pub mod egui_app;
 pub mod feedback;
@@ -37,13 +40,17 @@ pub mod headless_gpu;
 pub mod interact;
 pub mod locate_pick;
 pub mod machined;
+mod setup_display;
 pub mod mcp_host;
 pub mod operations;
 pub mod path_lines;
 pub(crate) mod refusal_ghost;
 pub mod post_file;
 pub mod plane_pick;
+pub mod pick_words;
 pub mod axis_pick;
+pub mod cylinder_pick;
+pub mod origin_pick;
 pub mod points_pick;
 pub mod wcs_pick;
 pub mod shortcut_keys;
@@ -62,6 +69,8 @@ mod law_tests;
 #[cfg(test)]
 mod refusal_focus_tests;
 #[cfg(test)]
+mod detect_holes_note_tests;
+#[cfg(test)]
 mod refusal_ghost_tests;
 #[cfg(test)]
 mod helix_view_tests;
@@ -73,6 +82,8 @@ mod machined_tests;
 mod play_bench_tests;
 #[cfg(test)]
 mod vertex_pick_tests;
+#[cfg(test)]
+mod centre_pick_tests;
 #[cfg(test)]
 mod setup_chip_tests;
 #[cfg(test)]

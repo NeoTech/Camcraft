@@ -5,13 +5,19 @@
 //! the clearance, so its stamp does not move with it. An unrelated edit
 //! and a save / load round trip leave a generated open run Ok.
 //!
+//! #537 (M3's review of PR #1181, items 2 and 3): the 4-axis block's
+//! pairing rule, every sync point's either side and its tolerance each
+//! move the stamp, and so does the machine's maximum taper; a one-profile
+//! cut's stamp is pinned to the value main's arm gives.
+//!
 //! #539: a tabbed cut's stamp digests every tab word and the cut-off
 //! condition's id, wire and gap, so an edited tab never posts a stale
 //! path.
 //!
-//! Gate map (#1370, #539): covers app::operation (params' stamp_with wire arm,
-//! stamp, wire_op::stamp_condition), app::commands (operation edit and
-//! generate), app::project (wire_edm_dto save / load).
+//! Gate map (#1370, #537, #539): covers app::operation (params' stamp_with
+//! wire arm, wire_ruled::digest, stamp, wire_op::stamp_condition),
+//! app::commands (operation edit and generate), app::project
+//! (wire_edm_dto save / load).
 //! Provenance: our own tests over our own synthetic fixture (the
 //! invented wire-iso machine of #533, #290 D10).
 
@@ -22,7 +28,8 @@ use camcraft_app::geometry::{feature, Mesh, Point3, Triangle};
 use camcraft_app::machine::parse_mch;
 use camcraft_app::model;
 use camcraft_app::operation::{
-    self, FeatureSel, GenStamp, GeoSel, Height, OpParams, OpStatus, SrcRef, WireContourOp, WireSide, WireTabs,
+    self, FeatureSel, GenStamp, GeoSel, Height, OpParams, OpStatus, SrcRef, WireContourOp, WireFourAxis, WirePairingRule,
+    WireSide, WireSyncPair, WireTabs,
 };
 use camcraft_app::project;
 use camcraft_app::schema::Location;
@@ -55,8 +62,10 @@ fn wire_op(side: WireSide, start: Option<[f64; 2]>) -> WireContourOp {
         tabs: None,
         capture: false,
         taper_deg: 0.0,
+        four_axis: None,
         burnout: None,
         clearance: operation::DEFAULT_CLEARANCE,
+        skims: Vec::new(),
     }
 }
 
@@ -225,6 +234,67 @@ fn an_unrelated_edit_and_a_round_trip_leave_the_cuts_ok() {
     assert_eq!(status(&back, "Punch1"), OpStatus::Ok);
 }
 
+type Pt = Option<[f64; 2]>;
+
+fn four(pairing: WirePairingRule, sync: &[(Pt, Pt)], tolerance: f64) -> WireContourOp {
+    let sync = sync.iter().map(|&(upper, lower)| WireSyncPair { upper, lower }).collect();
+    WireContourOp { four_axis: Some(WireFourAxis { pairing, sync, tolerance }), ..wire_op(WireSide::Punch, Some([-10.0, 25.0])) }
+}
+
+/// The punch's stamp with no 4-axis block, as main's wire arm (before
+/// #537) computes it for this document. Every byte the 4-axis cut adds
+/// is written only when the block is stated, so this value does not
+/// move; if a toolchain changes `DefaultHasher`, re-pin it only after
+/// checking the arm still writes nothing for `four_axis: None`.
+const ONE_PROFILE_STAMP: u64 = 16_116_910_563_891_173_640;
+
+/// Done means (M3, PR #1181 item 2): the pairing rule, each sync point
+/// on each side of each pair, and the tolerance each move the stamp, so
+/// an edited 4-axis cut never posts its old path; a one-profile cut's
+/// stamp is byte for byte main's.
+#[test]
+fn the_4_axis_block_moves_the_stamp_and_a_one_profile_cut_keeps_its_own() {
+    let (world, _h) = doc();
+    let (a, b, c, d) = (Some([1.0, 2.0]), Some([3.0, 4.0]), Some([5.0, 6.0]), Some([7.0, 8.0]));
+    let base = stamp_of(&world, four(WirePairingRule::SyncPoints, &[(a, b), (c, d)], 0.05));
+    let moved = Some([9.0, 9.0]);
+    let edits = [
+        ("pairing rule", four(WirePairingRule::ArcLength, &[(a, b), (c, d)], 0.05)),
+        ("pair 1 upper", four(WirePairingRule::SyncPoints, &[(moved, b), (c, d)], 0.05)),
+        ("pair 1 lower", four(WirePairingRule::SyncPoints, &[(a, moved), (c, d)], 0.05)),
+        ("pair 2 upper", four(WirePairingRule::SyncPoints, &[(a, b), (moved, d)], 0.05)),
+        ("pair 2 lower", four(WirePairingRule::SyncPoints, &[(a, b), (c, moved)], 0.05)),
+        ("pair 1 upper unstated", four(WirePairingRule::SyncPoints, &[(None, b), (c, d)], 0.05)),
+        ("pair 2 lower unstated", four(WirePairingRule::SyncPoints, &[(a, b), (c, None)], 0.05)),
+        ("a pair dropped", four(WirePairingRule::SyncPoints, &[(a, b)], 0.05)),
+        ("tolerance", four(WirePairingRule::SyncPoints, &[(a, b), (c, d)], 0.08)),
+    ];
+    assert!(base.is_some());
+    for (what, op) in edits {
+        assert_ne!(stamp_of(&world, op), base, "the {what} moves the stamp");
+    }
+    let plain = stamp_of(&world, wire_op(WireSide::Punch, Some([-10.0, 25.0])));
+    assert_ne!(plain, base, "the 4-axis block is digested at all");
+    assert_eq!(plain, Some(GenStamp(ONE_PROFILE_STAMP)), "a one-profile cut's stamp is main's: {plain:?}");
+}
+
+/// Done means (M3, PR #1181 item 3): the machine re-stating its maximum
+/// taper re-stamps a 4-axis cut - it reads the maximum as a taper does -
+/// and leaves a vertical cut's stamp alone.
+#[test]
+fn the_machines_maximum_taper_moves_a_4_axis_cuts_stamp() {
+    let (world, mut h) = doc();
+    let cut = four(WirePairingRule::ArcLength, &[], 0.05);
+    let plain = wire_op(WireSide::Punch, Some([-10.0, 25.0]));
+    let (before, plain_before) = (stamp_of(&world, cut.clone()), stamp_of(&world, plain.clone()));
+    let m = parse_mch(&FIXTURE.replace("\"max_taper_deg\": 15.0,", "\"max_taper_deg\": 5.0,")).expect("parses");
+    h.execute(&world, LoadMachine::new(&world, "wire-iso.mch".into(), Some(m)).expect("re-mount"));
+    assert!(before.is_some());
+    assert_ne!(stamp_of(&world, cut), before, "a 4-axis cut reads the machine's maximum taper");
+    assert_eq!(stamp_of(&world, plain), plain_before, "a vertical cut never reads it");
+    assert_eq!(status(&world, "Punch1"), OpStatus::Ok, "the generated vertical punch stays Ok");
+}
+
 /// The fixture plus the tab cut-off's SYNTHETIC conditions: C120 of
 /// `wire` and `gap`, and C130 always of the main cut's 0.25 / 0.04.
 fn tabbed_world(wire: f64, gap: f64) -> World {
@@ -282,4 +352,40 @@ fn every_tab_word_and_the_cut_off_wire_and_gap_move_the_stamp() {
     let plain = wire_op(WireSide::Punch, Some([-10.0, 25.0]));
     assert_eq!(stamp_of(&world, plain.clone()), stamp_of(&wire, plain.clone()));
     assert_eq!(stamp_of(&world, plain.clone()), stamp_of(&gap, plain));
+}
+
+/// The fixture with its machine's maximum taper stated as `max`, and the
+/// part imported (no stock, so the two machines differ in that one word).
+fn world_with_max_taper(max: f64) -> World {
+    let mut v: serde_json::Value = serde_json::from_str(FIXTURE).expect("fixture json");
+    v["edm"]["max_taper_deg"] = max.into();
+    let world = new_world();
+    let mut h = History::default();
+    let m = parse_mch(&v.to_string()).expect("the fixture parses");
+    h.execute(&world, LoadMachine::new(&world, "wire-iso.mch".into(), Some(m)).expect("mount"));
+    h.execute(&world, ImportModel::from_mesh("part", prism(&[(0.0, 0.0), (60.0, 0.0), (60.0, 50.0), (0.0, 50.0)])));
+    world
+}
+
+/// #1380: the taper alone moves the stamp. A stated taper is digested
+/// under its own tag (params.rs), so a path cut at one taper reads Stale
+/// at another - for a closed punch and for an open run - and the machine's
+/// maximum taper moves a tapered stamp too (stamp_condition). Done means:
+/// changing only `taper_deg` changes the stamp.
+#[test]
+fn a_taper_alone_moves_the_stamp_and_so_does_the_machine_maximum() {
+    let (world, _h) = doc();
+    for side in [WireSide::Punch, WireSide::Left] {
+        let start = if side == WireSide::Punch { Some([-10.0, 25.0]) } else { None };
+        let at = |deg: f64| stamp_of(&world, WireContourOp { taper_deg: deg, ..wire_op(side, start) });
+        let (flat, two, three) = (at(0.0), at(2.0), at(3.0));
+        assert!(flat.is_some() && two.is_some() && three.is_some(), "{side:?}: {flat:?} {two:?} {three:?}");
+        assert_ne!(flat, two, "{side:?}: a 2 degree taper alone must move the stamp");
+        assert_ne!(two, three, "{side:?}: 2 and 3 degrees must stamp apart");
+    }
+    let tapered = WireContourOp { taper_deg: 2.0, ..wire_op(WireSide::Punch, Some([-10.0, 25.0])) };
+    let at15 = stamp_of(&world_with_max_taper(15.0), tapered.clone());
+    let at9 = stamp_of(&world_with_max_taper(9.0), tapered);
+    assert!(at15.is_some() && at9.is_some());
+    assert_ne!(at15, at9, "the machine's maximum taper alone must move a tapered stamp");
 }

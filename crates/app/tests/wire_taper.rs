@@ -71,8 +71,10 @@ fn punch_with(text: &str, taper: f64, burnout: Option<f64>) -> (World, Result<()
         // The punch drops into a stated capture (#539's hold law).
         capture: true,
         taper_deg: taper,
+        four_axis: None,
         burnout,
         clearance: camcraft_app::operation::DEFAULT_CLEARANCE,
+        skims: Vec::new(),
     };
     let c = CreateOperation::new(&world, "Punch1", "", SrcRef::Entity("block".into()), OpParams::WireContour(op)).expect("op");
     h.execute(&world, c);

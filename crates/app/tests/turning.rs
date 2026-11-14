@@ -29,7 +29,7 @@ use camcraft_app::commands::{
 use camcraft_app::geometry::{Mesh, Point3, Triangle};
 use camcraft_app::machine::Machine;
 use camcraft_app::model;
-use camcraft_app::operation::{Carried, Height, KindInfo, OpParams, OpStatus, OpType, SrcRef};
+use camcraft_app::operation::{Height, OpParams, OpStatus, OpType, SrcRef};
 use camcraft_app::schema::{Location, Toolpath};
 use camcraft_app::tools::{catalog, Tool};
 use camcraft_app::world::new_world;
@@ -279,21 +279,16 @@ fn the_facing_seed_faces_the_bar() {
     // mounts a lathe and presses Generate gets a path, not a
     // refusal - the one number the mill fold would have gotten
     // wrong.
+    // #1409: through the REAL seed (the MCP add_operation's and,
+    // by the same retype, the quick-add's) - a hand-built Carried
+    // with fixed heights hid the fold's Bottom of Model facing plane.
     let (world, mut history) = bar_world();
     mount(&world, &mut history, "lathe");
-    let c = Carried {
-        feed: 150.0,
-        plunge: 80.0,
-        climb: true,
-        clearance: Height::fixed(25.0),
-        stepover: 3.0,
-        stepdown: 5.0, // the mill's fold: the seed must NOT carry it
-        top: Height::fixed(16.0),
-        bottom: Height::fixed(14.0),
-        retract: Height::fixed(20.0),
-        tilt: None,
+    let params = camcraft_app::operation::seed_params(OpType::Facing.ordinal());
+    let OpParams::Facing { stepdown, .. } = params else {
+        panic!("the Facing row seeds a Facing");
     };
-    let params = (KindInfo::ALL[OpType::Facing as usize].seed)(&c);
+    assert_eq!(stepdown, 0.5, "the mill fold's 5.0 must not be carried");
     history.execute(
         &world,
         CreateOperation::new(&world, "S1", "TN-1600-0R8", SrcRef::Entity("bar".into()), params)
@@ -301,6 +296,15 @@ fn the_facing_seed_faces_the_bar() {
     );
     history.execute(&world, GenerateOperation::new(&world, "S1").expect("generate"));
     assert_eq!(status(&world, "S1"), OpStatus::Ok, "the seed's own numbers stand");
+    // The facing plane is the part's top (z 16): no CL point sinks
+    // below its tangency, so the seed faces only the stock above.
+    let t = cache(&world, "S1").expect("cached").path;
+    assert!(!t.moves.is_empty(), "the stock above the part is faced");
+    for m in &t.moves {
+        for q in [m.from, m.to] {
+            assert!(q.z >= 16.0 + 0.8 - 1e-9, "a CL point inside the part: {q:?}");
+        }
+    }
 }
 
 #[test]

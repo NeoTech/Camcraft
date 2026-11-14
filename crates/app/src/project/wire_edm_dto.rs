@@ -1,14 +1,17 @@
 //! The wire contour's file mirror (#532): the op's parameters as plain
 //! keys - the two workpiece planes, the machine condition's id, the
-//! side and the start hole. `side` has no default on purpose: a file
+//! side, the start hole and the skim passes (#538). `side` has no default on purpose: a file
 //! (or an MCP patch) that leaves it out is refused, never read as a
-//! die - the side is stated, not inferred (#290 D8). The wire and the
+//! die - the side is stated, not inferred (#290 D8); the 4-axis block's
+//! pairing rule (#537) likewise. The wire and the
 //! gap are not here: they are the machine's condition table's.
 //! Provenance: our own file format (`project/mod.rs`); the names are ours.
 
 use super::*;
 
-use crate::operation::{WireContourOp, WireSide, WireTabs};
+use crate::operation::{
+    WireContourOp, WireFourAxis, WirePairingRule, WireSide, WireSkim, WireSyncPair, WireTabs, FOUR_AXIS_TOLERANCE,
+};
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -61,6 +64,56 @@ pub struct WireContourDto {
     /// seed's, so a closed cut's file reads and writes as before.
     #[serde(default = "default_clearance", skip_serializing_if = "is_default_clearance")]
     pub clearance: f64,
+    /// The skim passes after the rough cut (#538), in cut order; absent
+    /// is the rough pass alone, so a file without skims reads as before.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub skims: Vec<WireSkimDto>,
+    /// The 4-axis cut (#537); absent is the one-profile cut, so every
+    /// file written before it reads unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub four_axis: Option<WireFourAxisDto>,
+}
+
+/// One skim: its condition id (stated - no default) and whether it
+/// walks the profile the other way round (absent is not reversed).
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct WireSkimDto {
+    pub condition: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub reverse: bool,
+}
+
+/// The pairing rule's words. No default: a 4-axis block that leaves the
+/// rule out is refused, never read as arc length (#537: stated).
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WirePairingDto {
+    ArcLength,
+    SyncPoints,
+}
+
+/// One sync pair, `[x, y]` mm each; a side left out is unpaired (kept,
+/// and refused by name at generation).
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
+pub struct WireSyncDto {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub upper: Option<[f64; 2]>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lower: Option<[f64; 2]>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct WireFourAxisDto {
+    pub pairing: WirePairingDto,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sync: Vec<WireSyncDto>,
+    /// The twist tolerance, mm; absent is the default.
+    #[serde(default = "four_axis_tolerance")]
+    pub tolerance: f64,
+}
+
+fn four_axis_tolerance() -> f64 {
+    FOUR_AXIS_TOLERANCE
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
@@ -101,8 +154,17 @@ impl WireContourDto {
             }),
             capture: p.capture,
             taper_deg: p.taper_deg,
+            four_axis: p.four_axis.as_ref().map(|f| WireFourAxisDto {
+                pairing: match f.pairing {
+                    WirePairingRule::ArcLength => WirePairingDto::ArcLength,
+                    WirePairingRule::SyncPoints => WirePairingDto::SyncPoints,
+                },
+                sync: f.sync.iter().map(|s| WireSyncDto { upper: s.upper, lower: s.lower }).collect(),
+                tolerance: f.tolerance,
+            }),
             burnout_clearance: p.burnout,
             clearance: p.clearance,
+            skims: p.skims.iter().map(|s| WireSkimDto { condition: s.condition.clone(), reverse: s.reverse }).collect(),
         }
     }
 
@@ -126,8 +188,17 @@ impl WireContourDto {
             }),
             capture: self.capture,
             taper_deg: self.taper_deg,
+            four_axis: self.four_axis.as_ref().map(|f| WireFourAxis {
+                pairing: match f.pairing {
+                    WirePairingDto::ArcLength => WirePairingRule::ArcLength,
+                    WirePairingDto::SyncPoints => WirePairingRule::SyncPoints,
+                },
+                sync: f.sync.iter().map(|s| WireSyncPair { upper: s.upper, lower: s.lower }).collect(),
+                tolerance: f.tolerance,
+            }),
             burnout: self.burnout_clearance,
             clearance: self.clearance,
+            skims: self.skims.iter().map(|s| WireSkim { condition: s.condition.clone(), reverse: s.reverse }).collect(),
         })
     }
 }
@@ -147,8 +218,10 @@ mod tests {
             tabs,
             capture,
             taper_deg: 0.0,
+            four_axis: None,
             burnout: None,
             clearance: crate::operation::DEFAULT_CLEARANCE,
+            skims: Vec::new(),
         }
     }
 

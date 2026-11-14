@@ -9,6 +9,9 @@
 //! post states compensation off and never asks the control for a
 //! second offset (#290 D5, #532's decision record).
 //!
+//! With skims (#538) each later pass is announced mid-section by its
+//! own `PARAM EdmCondition` (`announce_skims`).
+//!
 //! Provenance: our own design over the stream contract
 //! (docs/CNC-INTERMEDIATE.md) and #290's decisions D2, D5 and D10.
 //!
@@ -145,13 +148,18 @@ pub(super) fn stream(
             .collect(),
         ..Dump::default()
     };
+    // #537: a 4-axis cut's moves lean as a taper's do.
+    let four = p.four_axis.as_ref().map(|f| match f.pairing {
+        operation::WirePairingRule::ArcLength => "arc length",
+        operation::WirePairingRule::SyncPoints => "sync points",
+    });
     // #536: a tapered cut's guide planes, read once from the machine.
-    let taper = if p.taper_deg == 0.0 {
+    let taper = if p.taper_deg == 0.0 && four.is_none() {
         None
     } else {
         let machine = crate::machine::of_setup(world, setup)
             .1
-            .ok_or_else(|| format!("{name}: a tapered wire cut needs its wire EDM machine mounted"))?;
+            .ok_or_else(|| format!("{name}: a leaning wire cut needs its wire EDM machine mounted"))?;
         let guides = crate::machine::wire_edm::guide_planes(&machine, origin[2]).map_err(|e| format!("{name}: {e}"))?;
         Some((p.taper_deg, guides))
     };
@@ -160,19 +168,30 @@ pub(super) fn stream(
     // the slug), then the tab cut-off with its own condition.
     let split = crate::operation::wire_verify::cutoff_from(p, &cache.path).map_err(|e| format!("{name}: {e}"))?;
     let (Some(m), Some(t)) = (split, p.tabs.as_ref()) else {
-        return section(&cache.path, &d, name, &p.condition, p.side.word(), taper);
+        let mut records = section(&cache.path, &d, name, &p.condition, p.side.word(), taper, four)?;
+        if !p.skims.is_empty() {
+            announce_skims(&mut records, cache, p, name)?;
+        }
+        return Ok(records);
     };
+    // #538 x #539: skims are cut on an untabbed profile only (the
+    // generator refuses the pair); a path that carries both is refused
+    // here too, never posted with a skim's condition on the cut-off.
+    if !p.skims.is_empty() {
+        return Err(format!("{name}: skim passes are stated with tabs - skims are cut on an untabbed profile only; remove the tabs or the skims"));
+    }
     let (head, tail) = cache.path.moves.split_at_checked(m).ok_or_else(|| format!("{name}: the tab cut-off's start is past the path"))?;
     let main = crate::cl::Toolpath { moves: head.to_vec(), ..crate::cl::Toolpath::default() };
     let cut = crate::cl::Toolpath { moves: tail.to_vec(), ..crate::cl::Toolpath::default() };
     let off_name = format!("{display_name} tab cut-off");
-    let mut records = section(&main, &Dump { after: AfterOperation::ProgramStop, ..d.clone() }, name, &p.condition, p.side.word(), taper)?;
-    records.extend(section(&cut, &Dump { op_name: &off_name, warnings: Vec::new(), ..d }, name, &t.cutoff_condition, p.side.word(), taper)?);
+    let mut records = section(&main, &Dump { after: AfterOperation::ProgramStop, ..d.clone() }, name, &p.condition, p.side.word(), taper, four)?;
+    records.extend(section(&cut, &Dump { op_name: &off_name, warnings: Vec::new(), ..d }, name, &t.cutoff_condition, p.side.word(), taper, four)?);
     Ok(records)
 }
 
 /// One wire section: the dump with the wire words before it opens;
-/// `taper` (#536) is the angle and the guide planes of a tapered cut.
+/// `taper` (#536) is the angle and the guide planes of a leaning cut,
+/// `four` (#537) the pairing rule of a 4-axis cut.
 fn section(
     path: &crate::cl::Toolpath,
     d: &Dump,
@@ -180,6 +199,7 @@ fn section(
     condition: &str,
     side: &str,
     taper: Option<(f64, (f64, f64))>,
+    four: Option<&str>,
 ) -> Result<Vec<cnc::Record>, String> {
     let mut records = post::dump(path, d);
     if let Some((_, guides)) = taper {
@@ -194,11 +214,54 @@ fn section(
         cnc::Record::Param { name: "EdmCondition".into(), value: json!(condition) },
         cnc::Record::Param { name: "WireSide".into(), value: json!(side) },
     ];
-    if let Some((deg, _)) = taper {
+    if let Some((deg, _)) = taper.filter(|(deg, _)| *deg != 0.0) {
         wire.push(cnc::Record::Param { name: "WireTaper".into(), value: json!(deg) });
     }
+    wire.extend(four.map(|rule| cnc::Record::Param { name: "WireFourAxis".into(), value: json!(rule) }));
     records.splice(at..at, wire);
     Ok(records)
+}
+
+/// #538: every pass starts and ends at the threading point (#532), so
+/// each return to it closes a pass; the skim that follows is announced
+/// by its own `PARAM EdmCondition` before its first move - the post
+/// selects that condition there, with the wire still threaded. A path
+/// that does not return once per pass is refused, never posted with
+/// the wrong condition on a pass.
+fn announce_skims(records: &mut Vec<cnc::Record>, cache: &crate::schema::Toolpath, p: &WireContourOp, name: &str) -> Result<(), String> {
+    use crate::cl::MoveKind;
+    let Some(start) = cache.path.moves.first().map(|m| m.from) else {
+        return Err(format!("{name}: the wire path is empty - regenerate it"));
+    };
+    let at_start = |m: &cnc::MoveRec| (m.x - start.x).abs() < 1e-6 && (m.y - start.y).abs() < 1e-6;
+    let mut out = Vec::with_capacity(records.len() + p.skims.len());
+    let mut back = 0usize;
+    let mut pending = false;
+    for r in records.drain(..) {
+        if let cnc::Record::Move(m) = &r
+            && m.kind != MoveKind::Rapid
+        {
+            if pending {
+                if let Some(s) = back.checked_sub(1).and_then(|i| p.skims.get(i)) {
+                    out.push(cnc::Record::Param { name: "EdmCondition".into(), value: json!(s.condition) });
+                }
+                pending = false;
+            }
+            if at_start(m) {
+                back = back.saturating_add(1);
+                pending = true;
+            }
+        }
+        out.push(r);
+    }
+    *records = out;
+    if back != p.skims.len() + 1 {
+        return Err(format!(
+            "{name}: the wire path returns to its threading point {back} time(s), not once per pass ({} passes) - regenerate it",
+            p.skims.len() + 1
+        ));
+    }
+    Ok(())
 }
 
 /// A tapered section's moves as the guides take them (#536, #290 D2):

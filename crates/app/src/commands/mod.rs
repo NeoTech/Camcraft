@@ -40,6 +40,7 @@ pub mod setup;
 pub mod setup_delete;
 // #196: a setup's picked program offset.
 pub mod setup_align;
+mod align_stock;
 pub mod setup_wcs;
 // #343: a setup's own machine and post.
 pub mod setup_mount;
@@ -117,7 +118,7 @@ pub use setup_stock::SetSetupStockSource;
 pub use set_units::SetUnits;
 pub use theme::{check_theme, theme_of, theme_set};
 pub use color_vision::{color_vision_of, color_vision_set};
-pub use set_wcs::SetWcsOrigin;
+pub use set_wcs::{BoxPoint, OriginAt, SetWcsOrigin, place_setup_origin};
 pub use wcs_circle::SetWcsAtCircleCentre;
 pub use tool::{AddTool, ChangeTool, DeleteTool, HolderPick};
 pub use tool_body::{LatheBodySpec, SetToolBody, ToolBodySpec};

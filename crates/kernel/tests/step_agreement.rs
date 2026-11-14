@@ -66,6 +66,12 @@ const ROWS: &[Row] = &[
         mesh: "watertight, within tolerance",
     },
     Row {
+        file: "bad_entity_mid_data.step",
+        mm_per_unit: 1.0,
+        import: "both refuse (solidcore: read_step: invalid input: STEP syntax error)",
+        mesh: "no exact solid to judge against",
+    },
+    Row {
         file: "box.step",
         mm_per_unit: 1.0,
         import: "agree",
@@ -73,6 +79,12 @@ const ROWS: &[Row] = &[
     },
     Row {
         file: "empty_list.step",
+        mm_per_unit: 1.0,
+        import: "agree",
+        mesh: "watertight, within tolerance",
+    },
+    Row {
+        file: "lathe_holder_offset.step",
         mm_per_unit: 1.0,
         import: "agree",
         mesh: "watertight, within tolerance",

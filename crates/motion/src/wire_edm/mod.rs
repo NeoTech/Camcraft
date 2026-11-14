@@ -33,18 +33,28 @@
 //!
 //! Seams left for the family (built by none of this): the wire post
 //! (#533) reads the feed moves between the threading point's visits;
-//! verification (#534), taper as a pose per move (#536), skims as
-//! further offsets (#538) and tabs (#539) stand on this path; the
-//! no-core burnout of a pocket (#540) is `burnout`.
+//! verification (#534), taper as a pose per move (#536) and tabs
+//! (#539) stand on this path; skims (#538, `skims.rs`) are further
+//! passes of it, each at its own condition's offset; the no-core
+//! burnout of a pocket (#540) is `burnout`; the 4-axis cut between two
+//! profiles (#537) is `ruled`.
 
 mod burnout;
 mod laws;
+mod pairing;
 mod open;
 mod ring;
+mod ruled;
+mod ruled_laws;
+mod skims;
 mod tabs;
 mod taper;
 
+pub use skims::{check_passes, wire_passes, WirePass};
+
+pub use ruled::{wire_contour_ruled, WirePairing, WireProfile, WireRuled, WireSync, SYNC_TOL};
 pub use tabs::{cutoff_split, TabParams, MAX_TABS};
+
 pub use taper::{wire_contour_tapered, WireTaper};
 
 pub use burnout::{clearance_door, wire_burnout, CORE_AREA_TOL, RING_STEP};
@@ -187,6 +197,12 @@ impl WireParams {
 /// # Errors
 /// Every refusal the module head lists, by name; none is a panic.
 pub fn wire_contour(loops: &[Loop], chains: &[Vec<Point2>], p: &WireParams) -> Result<Toolpath, GenError> {
+    cut_pass(loops, chains, p, false)
+}
+
+/// One pass round the profile at `p`'s offset, every law judged at
+/// that offset; `reverse` walks it clockwise (a skim's reversal, #538).
+pub(super) fn cut_pass(loops: &[Loop], chains: &[Vec<Point2>], p: &WireParams, reverse: bool) -> Result<Toolpath, GenError> {
     p.door()?;
     if !chains.is_empty() {
         if p.tabs.is_some() {
@@ -233,6 +249,11 @@ pub fn wire_contour(loops: &[Loop], chains: &[Vec<Point2>], p: &WireParams) -> R
     let z = p.plane_z;
     let mut b = PathBuilder::new(Point3::new(start.x, start.y, z));
     let tabbed = match &p.tabs {
+        // A tabbed pass walks its tabs in the rough pass's direction;
+        // a reversed one is refused by name, never cut half-tabbed.
+        Some(_) if reverse => {
+            return Err(invalid("a reversed pass is stated with tabs - tabs are cut on the rough pass's walk only (#538 x #539)".into()))
+        }
         Some(t) => Some(tabs::tabbed(&path_ring, &given, start, p, t)?),
         None => None,
     };
@@ -240,6 +261,9 @@ pub fn wire_contour(loops: &[Loop], chains: &[Vec<Point2>], p: &WireParams) -> R
         Some(tb) => tb.main.iter().chain(&tb.cutoff).copied().collect(),
         None => {
             let mut v = ring::walk_from(&path_ring, seg, foot);
+            if reverse {
+                v.reverse();
+            }
             v.push(start);
             v
         }
@@ -253,7 +277,7 @@ pub fn wire_contour(loops: &[Loop], chains: &[Vec<Point2>], p: &WireParams) -> R
     }
     // The certificate: no move brings the kerf into the product.
     laws::kerf(&path, &given, true, k, p.plane_z)?;
-    let mut said = notes(p, start, lead);
+    let mut said = pass_notes(p, start, lead, reverse);
     if let Some(tb) = tabbed {
         said.splice(1..2, tb.notes);
     }
@@ -294,6 +318,11 @@ fn start_side(profile: &Region, path_ring: &[Point2], start: Point2, p: &WirePar
 /// What the path says of itself: the side, the offset and its two
 /// terms, the kerf, the threading point and the leads.
 fn notes(p: &WireParams, start: Point2, lead: f64) -> Vec<String> {
+    pass_notes(p, start, lead, false)
+}
+
+/// [`notes`] for a pass walked either way round (#538).
+fn pass_notes(p: &WireParams, start: Point2, lead: f64, reverse: bool) -> Vec<String> {
     let cond = if p.condition.is_empty() { String::new() } else { format!(", condition {}", p.condition) };
     vec![
         format!(
@@ -310,8 +339,10 @@ fn notes(p: &WireParams, start: Point2, lead: f64) -> Vec<String> {
             p.kerf_width()
         ),
         format!(
-            "wire EDM: threaded at X{:.3} Y{:.3}; straight lead-in of {lead:.3} mm to the path's nearest point, the profile cut counter-clockwise, the lead-out back along the lead-in to the threading point",
-            start.x, start.y
+            "wire EDM: threaded at X{:.3} Y{:.3}; straight lead-in of {lead:.3} mm to the path's nearest point, the profile cut {}, the lead-out back along the lead-in to the threading point",
+            start.x,
+            start.y,
+            if reverse { "clockwise" } else { "counter-clockwise" }
         ),
         "wire EDM: a vertical cut - the moves state no pose (XY only) and no feed (the control's generator sets the rate); not verified here (no wire sweep against the part yet)".into(),
     ]
@@ -319,5 +350,7 @@ fn notes(p: &WireParams, start: Point2, lead: f64) -> Vec<String> {
 
 #[cfg(test)]
 mod open_tests;
+#[cfg(test)]
+mod ruled_tests;
 #[cfg(test)]
 mod tests;

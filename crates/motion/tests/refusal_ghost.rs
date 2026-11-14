@@ -147,6 +147,7 @@ fn bore_over(holes: Vec<camcraft_motion::machining2d::BoreHole>) -> Result<Toolp
     camcraft_motion::machining2d::bore(&camcraft_motion::machining2d::BoreParams {
         holes,
         tool_diameter: 6.0,
+        corner_radius: 0.0,
         stock_to_leave: 0.0,
         stepdown: 0.01,
         through_allowance: 0.5,

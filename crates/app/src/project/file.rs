@@ -194,6 +194,10 @@ pub struct ProjectFile {
     /// `skip_stops`: an absent key is off - no smoothing words.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub smoothing: bool,
+    /// Explain G-code at post (#1386), additive like `smoothing`: an
+    /// absent key is off - no explanatory comments.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub explain: bool,
     pub entities: Vec<EntityDto>,
 }
 
