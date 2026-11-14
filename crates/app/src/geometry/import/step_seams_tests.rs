@@ -172,7 +172,7 @@ fn a_face_never_closes_its_own_boundary() {
 
 /// The importer's own gap: a side's top edge bowed `bow` chord
 /// tolerances off the top face's edge, judged as a closed shell.
-fn judged_with_bow(bow: f64) -> Result<(), crate::geometry::import::ImportError> {
+fn judged_with_bow(bow: f64) -> Result<Vec<String>, crate::geometry::import::ImportError> {
     use super::super::step_closed::{Shell, judge};
     let tol = 1e-3;
     let mut l = loops();
@@ -189,4 +189,39 @@ fn the_importer_closes_seams_within_two_chord_tolerances_only() {
     assert!(judged_with_bow(1.5).is_ok());
     let err = judged_with_bow(3.0).expect_err("a boundary 3 chord tolerances off is a gap");
     assert!(err.to_string().contains("closed shell #1 (6 faces) meshes open"), "{err}");
+}
+
+fn judged(tris: &mut [Triangle], ends: &[usize]) -> Result<Vec<String>, crate::geometry::import::ImportError> {
+    use super::super::step_closed::{Shell, judge};
+    let shell = Shell { id: 7, faces: ends.len(), closed: true, mm_per_unit: 1.0 };
+    judge(tris, Some(ends), GAP / 2.0, &shell, |f| Some(100 + f as u64), None)
+}
+
+#[test]
+fn a_flipped_face_is_said_by_name_in_the_result() {
+    let (mut tris, ends) = mesh(&reversed(&loops(), 3));
+    let notes = judged(&mut tris, &ends).expect("a reversed face is fixed, not refused");
+    assert_eq!(notes, vec!["shell #7: 1 face(s) wound against their neighbours were flipped: face #103 (4 of 6)".to_string()]);
+    let (mut good, ends) = mesh(&loops());
+    assert_eq!(judged(&mut good, &ends).expect("a cube imports"), Vec::<String>::new(), "nothing changed, nothing said");
+}
+
+#[test]
+fn a_shared_edge_left_reversed_after_the_flips_is_refused_by_name() {
+    // Face 3 meshed as two facets wound against each other: whichever way
+    // it is turned, one of its seams runs the same way as its neighbour's.
+    let l = loops();
+    let (mut tris, mut ends) = mesh(&l[..3]);
+    let q = &l[3];
+    tris.push(Triangle::new(q[0], q[1], q[2]));
+    tris.push(Triangle::new(q[0], q[3], q[2]));
+    ends.push(tris.len());
+    let (rest, rest_ends) = mesh(&l[4..]);
+    let base = tris.len();
+    tris.extend(rest);
+    ends.extend(rest_ends.iter().map(|e| e + base));
+    let err = judged(&mut tris, &ends).expect_err("a face left wound against a neighbour must not import");
+    let msg = err.to_string();
+    assert!(msg.contains("closed shell #7 (6 faces) is wound inconsistently: 2 shared edges still run the same way"), "{msg}");
+    assert!(msg.contains("most between face #101 (2 of 6) and face #103 (4 of 6)"), "{msg}");
 }

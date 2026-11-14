@@ -11,17 +11,18 @@
 //!
 //! Three seam faults are told apart, because only one of them is a hole:
 //! - **Orientation**: an edge two faces share runs the same way in both. A
-//!   face is wound against its neighbours; the geometry is closed. Fixed
-//!   here: each face is flipped to agree with the faces it meets, and each
-//!   connected group of faces is turned to enclose a positive volume.
+//!   face is wound against its neighbours; the geometry is closed. Fixed:
+//!   `step_orient` decides the flips (deterministically, strongest evidence
+//!   first) and they are applied here.
 //! - **T-junction**: neighbouring faces divide their shared boundary into
 //!   different segments, so its edges are used once each, yet every point of
 //!   one side lies on the other side within the chord tolerance. Closed.
 //! - **Gap**: a boundary edge with a point farther than the gap tolerance
 //!   from every other face's boundary. The only fault that is refused.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{BTreeMap, HashMap};
 
+use super::step_orient::{self, Vote};
 use crate::geometry::{Point3, Triangle};
 
 /// What [`close`] found and did.
@@ -34,21 +35,26 @@ pub(super) struct Seams {
     /// The face that owns the most gap edges.
     pub gap_face: Option<usize>,
     /// How far the gap edges' midpoints lie from any other face's
-    /// boundary, at most (over the first [`WIDTH_SAMPLES`] gap edges).
+    /// boundary, at most (over every gap edge, or an even stride through
+    /// them past [`WIDTH_WORK`]).
     pub widest: f64,
     /// Edges two faces share running the same way, before the fix.
     pub reversed_edges: usize,
-    /// Faces flipped to agree with their neighbours.
+    /// Faces flipped to agree with their neighbours, ascending.
     pub flipped: Vec<usize>,
-    /// Neighbour relations the flips could not all satisfy.
+    /// Face pairs whose net vote the flips could not satisfy.
     pub contradictions: usize,
+    /// Shared edges still running the same way in both faces after the
+    /// flips, and the face pair holding the most of them.
+    pub unresolved_edges: usize,
+    pub unresolved_pair: Option<(usize, usize)>,
     /// Edges used once whose points all lie on another face's boundary.
     pub t_junction_edges: usize,
 }
 
-/// Gap edges measured for [`Seams::widest`]: each is a scan of every
-/// boundary edge, so the count is bounded.
-const WIDTH_SAMPLES: usize = 256;
+/// Distance evaluations spent on [`Seams::widest`]: each gap edge measured
+/// is a scan of every boundary edge, so the work is bounded.
+const WIDTH_WORK: usize = 100_000_000;
 
 #[derive(Clone, Copy)]
 struct Use {
@@ -123,12 +129,18 @@ pub(super) fn close(tris: &mut [Triangle], ends: &[usize], weld: f64, gap: f64) 
         }
     }
     drop(grid);
+    // No hash order may reach the votes, the flips or the message (#1576
+    // review): the votes are counts in an ordered map, and the boundary
+    // segments are sorted below before anything reads their order.
     let mut seams = Seams::default();
-    // Votes per face pair (lower, higher): (agree, disagree).
-    let mut votes: HashMap<(u32, u32), (u32, u32)> = HashMap::new();
-    let mut vote = |f: u32, g: u32, agree: bool| {
+    // Votes per face pair (lower, higher).
+    let mut votes: BTreeMap<(u32, u32), Vote> = BTreeMap::new();
+    let mut vote = |f: u32, g: u32, agree: bool, exact: bool| {
         let v = votes.entry((f.min(g), f.max(g))).or_default();
-        if agree { v.0 += 1 } else { v.1 += 1 }
+        let side = if exact { &mut v.exact } else { &mut v.near };
+        if let Some(n) = side.get_mut(usize::from(!agree)) {
+            *n = n.saturating_add(1);
+        }
     };
     let mut segs: Vec<Seg> = Vec::new();
     for (&(lo, hi), u) in &edges {
@@ -145,14 +157,27 @@ pub(super) fn close(tris: &mut [Triangle], ends: &[usize], weld: f64, gap: f64) 
                 if !agree {
                     seams.reversed_edges += 1;
                 }
-                vote(u.face[0], u.face[1], agree);
+                vote(u.face[0], u.face[1], agree, true);
             }
             _ => {} // inside one face, or non-manifold: neither is a hole
         }
     }
     drop(edges);
-    cover(&segs, gap, &mut seams, &mut vote);
-    orient(tris, ends, &votes, &mut seams);
+    // By face, then by position: the first gap and the sampled widths are
+    // the same whatever order the facets came in.
+    let key = |s: &Seg| [s.a.x, s.a.y, s.a.z, s.b.x, s.b.y, s.b.z];
+    segs.sort_by(|x, y| x.face.cmp(&y.face).then_with(|| {
+        key(x).iter().zip(key(y)).map(|(a, b)| a.total_cmp(&b)).find(|o| o.is_ne()).unwrap_or(std::cmp::Ordering::Equal)
+    }));
+    cover(&segs, gap, &mut seams, &mut |f, g, agree| vote(f, g, agree, false));
+    let o = step_orient::orient(tris, ends, &votes);
+    for &f in &o.flipped {
+        for t in tris.get_mut(step_orient::range(ends, f)).unwrap_or(&mut []) {
+            *t = Triangle::new(t.a, t.c, t.b);
+        }
+    }
+    (seams.flipped, seams.contradictions) = (o.flipped, o.contradictions);
+    (seams.unresolved_edges, seams.unresolved_pair) = (o.unresolved_edges, o.unresolved_pair);
     seams
 }
 
@@ -195,7 +220,7 @@ fn cover(segs: &[Seg], gap: f64, seams: &mut Seams, vote: &mut impl FnMut(u32, u
                 .filter_map(|&j| segs.get(j))
                 .filter(|o| o.face != s.face)
                 .map(|o| (seg_dist(p, o.a, o.b), o))
-                .min_by(|x, y| x.0.total_cmp(&y.0));
+                .min_by(|x, y| x.0.total_cmp(&y.0).then(x.1.face.cmp(&y.1.face)));
             match best {
                 Some((d, o)) if d <= gap => {
                     if k == 1 {
@@ -223,92 +248,16 @@ fn cover(segs: &[Seg], gap: f64, seams: &mut Seams, vote: &mut impl FnMut(u32, u
         *by_face.entry(s.face).or_default() += 1;
     }
     seams.gap_face = by_face.into_iter().max_by_key(|&(f, n)| (n, std::cmp::Reverse(f))).map(|(f, _)| f as usize);
-    for s in gaps.iter().take(WIDTH_SAMPLES) {
+    // Every gap edge when the scan is small (a few thousand boundary edges
+    // in a real shell), else an even stride through them: the same edges on
+    // every run.
+    let work = gaps.len().saturating_mul(segs.len());
+    let stride = work.div_ceil(WIDTH_WORK).max(1);
+    for s in gaps.iter().step_by(stride) {
         let mid = Point3::new((s.a.x + s.b.x) * 0.5, (s.a.y + s.b.y) * 0.5, (s.a.z + s.b.z) * 0.5);
         let near = segs.iter().filter(|o| o.face != s.face).map(|o| seg_dist(mid, o.a, o.b)).fold(f64::INFINITY, f64::min);
         if near.is_finite() {
             seams.widest = seams.widest.max(near);
-        }
-    }
-}
-
-/// Flip faces so each agrees with the faces it meets; each connected group
-/// then faces outward (its enclosed volume positive).
-fn orient(tris: &mut [Triangle], ends: &[usize], votes: &HashMap<(u32, u32), (u32, u32)>, seams: &mut Seams) {
-    let nf = ends.len();
-    let range = |f: usize| {
-        let lo = f.checked_sub(1).and_then(|p| ends.get(p).copied()).unwrap_or(0);
-        lo..ends.get(f).copied().unwrap_or(lo).max(lo)
-    };
-    let mut adj: Vec<Vec<(usize, bool)>> = vec![Vec::new(); nf];
-    for (&(f, g), &(agree, disagree)) in votes {
-        if agree == disagree {
-            continue;
-        }
-        let (f, g) = (f as usize, g as usize);
-        let flip = disagree > agree;
-        if let Some(a) = adj.get_mut(f) {
-            a.push((g, flip));
-        }
-        if let Some(a) = adj.get_mut(g) {
-            a.push((f, flip));
-        }
-    }
-    let mut flip: Vec<Option<bool>> = vec![None; nf];
-    for start in 0..nf {
-        if flip.get(start).copied().flatten().is_some() {
-            continue;
-        }
-        let mut group = vec![start];
-        let mut queue = VecDeque::from([start]);
-        if let Some(s) = flip.get_mut(start) {
-            *s = Some(false);
-        }
-        while let Some(f) = queue.pop_front() {
-            let here = flip.get(f).copied().flatten().unwrap_or(false);
-            for &(g, rel) in adj.get(f).map(Vec::as_slice).unwrap_or(&[]) {
-                match flip.get(g).copied().flatten() {
-                    None => {
-                        if let Some(s) = flip.get_mut(g) {
-                            *s = Some(here ^ rel);
-                        }
-                        group.push(g);
-                        queue.push_back(g);
-                    }
-                    Some(there) if there != here ^ rel && f < g => seams.contradictions += 1,
-                    Some(_) => {}
-                }
-            }
-        }
-        // Outward is the polarity whose enclosed volume is positive
-        // (divergence theorem, tetrahedra to the group's centroid).
-        let facets = |f: usize| tris.get(range(f)).unwrap_or(&[]);
-        let n = group.iter().map(|&f| facets(f).len()).sum::<usize>().max(1) as f64;
-        let o = group.iter().flat_map(|&f| facets(f)).fold(Point3::new(0.0, 0.0, 0.0), |s, t| {
-            Point3::new(s.x + t.a.x / n, s.y + t.a.y / n, s.z + t.a.z / n)
-        });
-        let volume: f64 = group
-            .iter()
-            .map(|&f| {
-                let v: f64 = facets(f).iter().map(|t| (t.a - o).dot((t.b - o).cross(t.c - o))).sum();
-                if flip.get(f).copied().flatten() == Some(true) { -v } else { v }
-            })
-            .sum();
-        if volume < 0.0 {
-            for &f in &group {
-                if let Some(Some(s)) = flip.get_mut(f) {
-                    *s = !*s;
-                }
-            }
-        }
-    }
-    for f in 0..nf {
-        if flip.get(f).copied().flatten() != Some(true) {
-            continue;
-        }
-        seams.flipped.push(f);
-        for t in tris.get_mut(range(f)).unwrap_or(&mut []) {
-            *t = Triangle::new(t.a, t.c, t.b);
         }
     }
 }

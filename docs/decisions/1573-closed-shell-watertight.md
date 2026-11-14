@@ -11,10 +11,11 @@ does two checks:
    - **Reversed face** (an edge two faces share runs the same way in
      both): the geometry is closed, one face is wound against its
      neighbours. **Fixed, not refused**: each face is flipped to agree
-     with the faces it meets, propagated face to face; in each connected
-     group is then turned to enclose a positive volume (outward). Logged as
-     a warning naming the face. Only closed shells are re-wound: an open
-     shell's winding stays as the kernel made it.
+     with the faces it meets (`step_orient.rs`, rules below). Said by name
+     in the import result (`Graded::notes`, `ImportModel::notes`, the MCP
+     / script `import_model` answer's `notes`, and the status line), and
+     logged. Only closed shells are re-wound: an open shell's winding
+     stays as the kernel made it.
    - **T-junction** (neighbouring faces divide their shared boundary into
      different segments): closed when every boundary edge's ends and
      midpoint lie within 2 chord tolerances of another face's boundary
@@ -27,6 +28,50 @@ does two checks:
      no mesh from the kernel]".
 The checks run on the pass the refinement KEPT, never on a pass it threw
 away for the budget.
+
+**How the flips are decided** (#1576 second review, pullrequestreview-
+5900373722: on `10208.STEP` three runs gave two flip sets, because hash
+order drove a breadth-first walk; a cavity wound inward had all 6 faces
+flipped, and a lone curved face was flipped by its own curvature):
+- **Deterministic.** Edges, seam segments and shells are walked in sorted
+  order, the votes kept in an ordered map; the result is a function of the
+  facets alone, not of the hash seed or the facet order (pinned by
+  `conflicting_votes_give_one_answer_on_every_run_and_in_every_order`: 64
+  runs, each a new hash seed and a shuffled facet order).
+- **Strongest evidence first.** Face pairs are joined in a parity
+  union-find in the order: most exact shared edges (margin agree vs
+  disagree), then T-junction votes, then face numbers. A pair that
+  contradicts what is already joined is a contradiction, not a re-flip:
+  one weak vote never overturns many shared edges.
+- **The kernel's winding is the root.** In each connected group the side
+  holding more faces keeps the kernel's winding (a tie: the group's lowest
+  face's side). Nothing is flipped unless some vote says so.
+- **Outward once, for the whole shell.** Only when that leaves some face
+  flipped is the outward polarity decided, from the signed volume of the
+  WHOLE shell, and every group turns together. A cavity wound inward and a
+  lone face keep their winding; a connected shell gets the same answer as
+  before (the corpus files, `the_flips_turn_the_shell_outward`).
+- **What still disagrees.** A shared edge still running the same way in
+  both faces after the flips (`UNRESOLVED_EDGES` = 0 allowed) is
+  **refused by name**: "closed shell #id (N faces) is wound
+  inconsistently: K shared edges still run the same way in both faces
+  after the flips, most between face #A (..) and face #B (..)". No healthy
+  closed mesh has one, and a face left wound against its neighbour turns
+  inside and outside over for every check that reads its winding (the
+  Prime Directive). A face pair met only across T-junctions that still
+  disagrees is **said in the notes, not refused**: a T-junction vote is a
+  nearest-boundary reading, not a shared edge, and every exact seam then
+  agrees. The gap refusal comes first, so a shell with a gap keeps the gap
+  message.
+  On the two corpus files (second rework, release, 3 runs each, the same
+  refusal every run) the solve cannot satisfy the shared edges either:
+  `10208.STEP` shell #1319 keeps 31 shared edges reversed (one B-spline
+  face disagrees with each of 24 small neighbours on all 32 of their
+  shared edges while agreeing with face 48 on 807), and `32050.STEP` shell
+  #4240 keeps 29 (the same pattern on one face). Both are refused for
+  their gap first; without it they would be refused as wound
+  inconsistently, not imported with a guessed winding. The first rework's
+  "2 faces flipped" / "1 face flipped" was that guess.
 
 **Why.** truck drops a face it cannot place a boundary on (no polygon) and
 trims wrongly one it places wrongly, with no error either way; the model
@@ -67,10 +112,18 @@ hole the dropped-face fixture leaves.
   first: on `10208.STEP` the two reversed faces are B-spline faces with
   4 M of the shell's 6.1 M facets, so the rule flipped the other 50 faces
   inward. The enclosed volume's sign is the outward test instead.
-- *Refusing a shell whose face pairs still disagree after the flips.* Both
-  corpus files show a few (8 and 1, around their B-spline faces); it is
-  logged as a warning. No healthy closed mesh can have one, but no file
-  reaches it without also having a gap, so it adds no refusal today.
+- *Warn only for shared edges left reversed after the flips* (the first
+  rework's rule). Dropped in the second review: the mesh would import with
+  a face wound against its neighbour and only a log line saying so.
+- *Refusing on T-junction-only disagreement too.* A T-junction vote reads
+  the nearest other boundary within the gap tolerance; near thin walls and
+  corners it can read the wrong neighbour, and no exact seam is then wrong.
+  Said in the notes instead.
+- *Outward per connected group* (the first rework's rule). It flipped a
+  correctly wound cavity and a lone curved face; outward is a property of
+  the shell, not of a group.
+- *Breadth-first propagation in a fixed order.* Deterministic, but the
+  first vote reached wins over stronger ones met later.
 - *Refusing a reversed face by name.* The fix is safe and local (reverse
   the facets of one face; the facets do not move), downstream reads a
   face's outside from its winding (`pick/winding.rs`, wall recognition),

@@ -13,13 +13,16 @@
 //!
 //! Gate map (M4.4): covers app::geometry::import::step,
 //! app::geometry::import::step_closed, app::geometry::import::step_seams,
-//! app::geometry::import::step_facets.
+//! app::geometry::import::step_orient, app::geometry::import::step_facets,
+//! app::commands::import_model (notes), app::script::api (v_import notes).
 
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::time::Duration;
 
 use camcraft_app::geometry::import::{self, step, Format, ImportError};
+use camcraft_app::mcp::Server;
+use serde_json::{json, Value};
 
 fn model(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/models").join(name)
@@ -94,16 +97,20 @@ fn volume(m: &camcraft_app::geometry::Mesh) -> f64 {
     m.facets.iter().map(|t| (t.a - o).dot((t.b - o).cross(t.c - o)) / 6.0).sum()
 }
 
-#[test]
-fn a_face_wound_against_its_neighbours_imports_flipped_not_refused() {
+/// `box.step` with face #32 wound against its neighbours.
+fn reversed_box() -> String {
     let text = std::fs::read_to_string(model("box.step")).expect("fixture");
     let face = "#32 = FACE_SURFACE('', (#33), #90, .T.);";
     assert_eq!(text.matches(face).count(), 1, "fixture layout changed");
-    let good = import(text.clone()).expect("box.step imports");
     let bound = "#33 = FACE_BOUND('', #34, .T.);";
     assert_eq!(text.matches(bound).count(), 1, "fixture layout changed");
-    let bad = text.replace(face, "#32 = FACE_SURFACE('', (#33), #90, .F.);").replace(bound, "#33 = FACE_BOUND('', #34, .F.);");
-    let mesh = import(bad).expect("a reversed face is closed geometry: imported, not refused");
+    text.replace(face, "#32 = FACE_SURFACE('', (#33), #90, .F.);").replace(bound, "#33 = FACE_BOUND('', #34, .F.);")
+}
+
+#[test]
+fn a_face_wound_against_its_neighbours_imports_flipped_not_refused() {
+    let good = import(std::fs::read_to_string(model("box.step")).expect("fixture")).expect("box.step imports");
+    let mesh = import(reversed_box()).expect("a reversed face is closed geometry: imported, not refused");
     assert_eq!(mesh.facets.len(), good.facets.len());
     let (v, w) = (volume(&mesh), volume(&good));
     assert!(w > 0.0, "box.step is wound outward: {w}");
@@ -126,4 +133,39 @@ fn every_solid_step_fixture_still_imports() {
         let r = within(Duration::from_secs(240), move || import::load_model(&path));
         assert!(r.is_ok(), "{name}: {:?}", r.err());
     }
+}
+
+/// One MCP `tools/call`, in process: the structured answer, or the refusal.
+fn mcp_import(path: &Path) -> Value {
+    let mut server = Server::new();
+    let init = json!({ "jsonrpc": "2.0", "id": 1, "method": "initialize", "params": { "protocolVersion": "2025-06-18" } });
+    server.handle(&init).expect("initialize answers");
+    let args = json!({ "path": path.display().to_string(), "name": "box" });
+    let call = json!({ "jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": { "name": "import_model", "arguments": args } });
+    let reply = server.handle(&call).expect("tools/call answers");
+    assert_ne!(reply["result"]["isError"], json!(true), "import_model refused: {reply}");
+    reply["result"]["structuredContent"].clone()
+}
+
+#[test]
+fn a_flipped_face_is_named_in_the_import_result_and_the_mcp_answer() {
+    // #1576 review: a flip is said by name where the user and an agent
+    // read the import, not only in the log.
+    let bad = reversed_box();
+    let graded = within(Duration::from_secs(90), move || import::parse_model_graded(bad.as_bytes(), Format::Step))
+        .expect("a reversed face imports");
+    assert_eq!(graded.notes.len(), 1, "{:?}", graded.notes);
+    assert!(graded.notes[0].contains("1 face(s) wound against their neighbours were flipped: face #32 ("), "{:?}", graded.notes);
+    let dir = std::env::temp_dir().join(format!("camcraft-closed-shell-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("temp dir");
+    let (bad_path, good_path) = (dir.join("reversed.step"), dir.join("good.step"));
+    std::fs::write(&bad_path, reversed_box()).expect("write");
+    std::fs::copy(model("box.step"), &good_path).expect("copy");
+    let said = mcp_import(&bad_path);
+    let notes = said["notes"].as_array().cloned().unwrap_or_default();
+    assert_eq!(notes.len(), 1, "{said}");
+    assert!(notes[0].as_str().unwrap_or_default().contains("flipped: face #32 ("), "{said}");
+    let quiet = mcp_import(&good_path);
+    assert!(quiet.get("notes").is_none(), "nothing changed, nothing said: {quiet}");
+    let _ = std::fs::remove_dir_all(&dir);
 }

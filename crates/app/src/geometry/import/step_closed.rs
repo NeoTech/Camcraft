@@ -29,6 +29,15 @@ pub(super) const WELD: f64 = 1e-6;
 /// tolerance of the shared curve, so the two within two of each other.
 pub(super) const GAP_CHORDS: f64 = 2.0;
 
+/// Shared edges a closed shell may keep running the same way in both its
+/// faces after the flips: none. A healthy closed mesh has none, and a face
+/// left wound against a neighbour turns inside and outside over for every
+/// check that reads its winding (#1576 review).
+pub(super) const UNRESOLVED_EDGES: usize = 0;
+
+/// Flipped faces named in a note; the rest are counted.
+const NAMED: usize = 8;
+
 /// The shell being judged.
 pub(super) struct Shell {
     pub id: u64,
@@ -60,10 +69,13 @@ pub(super) fn closed_shells(section: &DataSection) -> HashSet<u64> {
 /// Judge one shell's kept mesh, at chord tolerance `tol` (file units),
 /// whose face `i` owns facets `ends[i-1]..ends[i]`; `names` gives a face's
 /// entity id. In a closed shell, faces wound against their neighbours are
-/// flipped in place (an open shell's winding is left as the kernel made it).
+/// flipped in place (an open shell's winding is left as the kernel made it)
+/// and said in the returned notes, by name, for the import result.
 /// Refused: a closed shell with a real gap (a boundary edge farther than
-/// [`GAP_CHORDS`] tolerances from any other face), and in any shell a face
-/// the kernel gave no mesh (`dropped`, already named).
+/// [`GAP_CHORDS`] tolerances from any other face); a closed shell with a
+/// shared edge still running the same way in both its faces after the
+/// flips (more than [`UNRESOLVED_EDGES`]); and in any shell a face the
+/// kernel gave no mesh (`dropped`, already named).
 pub(super) fn judge(
     tris: &mut [Triangle],
     ends: Option<&[usize]>,
@@ -71,18 +83,38 @@ pub(super) fn judge(
     shell: &Shell,
     names: impl Fn(usize) -> Option<u64>,
     dropped: Option<String>,
-) -> Result<(), ImportError> {
+) -> Result<Vec<String>, ImportError> {
     let id = shell.id;
+    let mut notes = Vec::new();
+    let face = |f: usize| match names(f) {
+        Some(n) => format!("face #{n} ({} of {})", f + 1, shell.faces),
+        None => format!("face {} of {}", f + 1, shell.faces),
+    };
     if shell.closed {
         let whole = [tris.len()];
         let gap = (GAP_CHORDS * tol).max(WELD);
         let seams = super::step_seams::close(tris, ends.unwrap_or(&whole), WELD, gap);
-        for &f in &seams.flipped {
-            let name = names(f).map(|n| format!("#{n} ")).unwrap_or_default();
-            tracing::warn!("step: face {name}({} of {}) of shell #{id} was wound against its neighbours; flipped", f + 1, shell.faces);
+        if !seams.flipped.is_empty() {
+            let mut said: Vec<String> = seams.flipped.iter().take(NAMED).map(|&f| face(f)).collect();
+            if seams.flipped.len() > NAMED {
+                said.push(format!("{} more", seams.flipped.len() - NAMED));
+            }
+            let note = format!(
+                "shell #{id}: {} face(s) wound against their neighbours were flipped: {}",
+                seams.flipped.len(),
+                said.join(", ")
+            );
+            tracing::warn!("step: {note}");
+            notes.push(note);
         }
-        if seams.contradictions > 0 {
-            tracing::warn!("step: shell #{id}: {} face pairs still disagree on winding after the flips", seams.contradictions);
+        if seams.contradictions > 0 && seams.unresolved_edges == 0 {
+            let note = format!(
+                "shell #{id}: {} face pair(s) met only across T-junctions still disagree on winding after the flips; \
+                 every shared edge agrees",
+                seams.contradictions
+            );
+            tracing::warn!("step: {note}");
+            notes.push(note);
         }
         if seams.reversed_edges > 0 || seams.t_junction_edges > 0 {
             tracing::info!(
@@ -95,20 +127,25 @@ pub(super) fn judge(
             let k = shell.mm_per_unit;
             let mm = |p: Point3| Point3::new(p.x * k, p.y * k, p.z * k);
             tracing::error!("step: closed shell #{id} meshes open ({} boundary edges with a gap)", seams.gaps);
-            let face = seams.gap_face.map(|f| match names(f) {
-                Some(n) => format!("face #{n} ({} of {})", f + 1, shell.faces),
-                None => format!("face {} of {}", f + 1, shell.faces),
-            });
             let first = seams.first_gap.map(|(a, b)| (mm(a), mm(b)));
-            let gap = Gap { edges: seams.gaps, tol_mm: gap * k, widest_mm: seams.widest * k, face, first };
+            let gap = Gap { edges: seams.gaps, tol_mm: gap * k, widest_mm: seams.widest * k, face: seams.gap_face.map(face), first };
             return Err(open_refusal(shell, &gap, dropped));
+        }
+        if seams.unresolved_edges > UNRESOLVED_EDGES {
+            let between = seams.unresolved_pair.map(|(f, g)| format!(", most between {} and {}", face(f), face(g))).unwrap_or_default();
+            tracing::error!("step: closed shell #{id}: {} shared edges still reversed after the flips", seams.unresolved_edges);
+            return Err(ImportError::Step(format!(
+                "closed shell #{id} ({} faces) is wound inconsistently: {} shared edges still run the same way in both faces \
+                 after the flips{between} - its inside and outside cannot be told apart there; re-export the model, or import an STL",
+                shell.faces, seams.unresolved_edges
+            )));
         }
     }
     if let Some(face) = dropped {
         tracing::error!("step: {face} of shell #{id} got no mesh from the kernel");
         return Err(dropped_refusal(&face, id));
     }
-    Ok(())
+    Ok(notes)
 }
 
 /// A closed shell's real gap, in mm.

@@ -122,6 +122,13 @@ pub fn parse_with_chord(data: &[u8]) -> Result<(Mesh, f64), ImportError> {
 /// `budget` caps the whole model's facets (#1054: the caller checked it
 /// against `step_budget`'s bounds).
 pub fn parse_with_chord_budget(data: &[u8], budget: usize) -> Result<(Mesh, f64), ImportError> {
+    parse_noted(data, budget).map(|(mesh, chord, _)| (mesh, chord))
+}
+
+/// [`parse_with_chord_budget`], and what the importer changed on the way,
+/// one line each, for the import result (#1573 review: a face flipped to
+/// agree with its neighbours is said by name, not only logged).
+pub fn parse_noted(data: &[u8], budget: usize) -> Result<(Mesh, f64, Vec<String>), ImportError> {
     super::step_depth::check(data)?; // #1075: refuse before ruststep can overflow
     if data.is_empty() {
         return Err(ImportError::Empty);
@@ -162,7 +169,12 @@ pub fn parse_with_chord_budget(data: &[u8], budget: usize) -> Result<(Mesh, f64)
     let max_facets = facet_budget(budget);
     let mut facets: Vec<Triangle> = Vec::new();
     let mut chord = 0.0f64;
-    for (shell_id, shell) in &table.shell {
+    let mut notes = Vec::new();
+    // Shells in id order, not the table's hash order: the facets, the notes
+    // and the first refusal are the same on every run (#1576 review).
+    let mut shells: Vec<(&u64, &truck_stepio::r#in::ShellHolder)> = table.shell.iter().collect();
+    shells.sort_unstable_by_key(|&(id, _)| *id);
+    for (shell_id, shell) in shells {
         if facets.len() >= max_facets {
             return Err(ImportError::TooLarge);
         }
@@ -175,7 +187,7 @@ pub fn parse_with_chord_budget(data: &[u8], budget: usize) -> Result<(Mesh, f64)
             let closed = closed.contains(shell_id);
             shell_facets(&table, (*shell_id, shell), closed, budget, mm_per_unit.unwrap_or(1.0))
         }));
-        let (tris, tol) = match per_shell {
+        let (tris, tol, said) = match per_shell {
             Err(_) => {
                 tracing::error!("step: truck kernel panicked on a shell; import aborted");
                 return Err(ImportError::Step(
@@ -187,6 +199,7 @@ pub fn parse_with_chord_budget(data: &[u8], budget: usize) -> Result<(Mesh, f64)
         };
         chord = chord.max(tol);
         facets.extend(tris);
+        notes.extend(said);
     }
     if facets.is_empty() {
         return Err(ImportError::Empty);
@@ -204,7 +217,7 @@ pub fn parse_with_chord_budget(data: &[u8], budget: usize) -> Result<(Mesh, f64)
     if !(chord.is_finite() && chord >= 0.0) {
         return Err(ImportError::Step(format!("tessellation reported a chord error of {chord} mm")));
     }
-    Ok((Mesh::from_facets(facets), chord))
+    Ok((Mesh::from_facets(facets), chord, notes))
 }
 
 /// Tessellate one STEP shell into triangles, staying inside `budget` facets.
@@ -217,7 +230,7 @@ fn shell_facets(
     closed: bool,
     budget: usize,
     mm_per_unit: f64,
-) -> Result<(Vec<Triangle>, f64), ImportError> {
+) -> Result<(Vec<Triangle>, f64, Vec<String>), ImportError> {
     let cshell = table
         .to_compressed_shell(shell)
         .map_err(|e| ImportError::Step(format!("shell conversion failed: {e}")))?;
@@ -333,7 +346,7 @@ fn shell_facets(
     let ends = owners.borrow_mut().iter_mut().rev().find(|(t, _)| *t == kept.tol).map(|(_, e)| std::mem::take(e));
     let names = |i: usize| face_ids.as_ref().and_then(|ids| ids.get(i));
     let seam = super::step_closed::Shell { id: shell_id, faces, closed, mm_per_unit: k };
-    super::step_closed::judge(&mut kept.facets, ends.as_deref(), kept.tol, &seam, names, dropped)?;
+    let notes = super::step_closed::judge(&mut kept.facets, ends.as_deref(), kept.tol, &seam, names, dropped)?;
     if kept.tol > wanted {
         // The cause, so the advice fits it: a larger facet budget does
         // nothing for a face that ran out of evaluations (#1568 review).
@@ -349,5 +362,5 @@ fn shell_facets(
             kept.facets.len()
         );
     }
-    Ok((kept.facets, kept.tol))
+    Ok((kept.facets, kept.tol, notes))
 }
