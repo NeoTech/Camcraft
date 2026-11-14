@@ -61,6 +61,7 @@ fn program(org: (f64, f64)) -> (String, Vec<Arc>) {
         R::Param { name: "SpindleSpeed".into(), value: json!(9000) },
         R::Param { name: "OriginX".into(), value: json!(org.0) },
         R::Param { name: "OriginY".into(), value: json!(org.1) },
+        R::Param { name: "ClearancePlane".into(), value: json!(5.0) }, // #1633, as `post::dump` states it
         R::Tool { number: 1, name: "6MM END MILL".into() },
         R::Section { begin: true },
         mv(MoveKind::Rapid, 110.0, -75.0, 5.0, None, false),

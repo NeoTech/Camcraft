@@ -256,6 +256,8 @@ fn a_recorded_toolpath_posts_under_each_offset() {
             param("SetupName", json!("Fixture")),
             param("SpindleSpeed", json!(6000.0)),
             param("WorkOffset", json!(n)),
+            // #1633: a section states its clearance, as `post::dump` does.
+            param("ClearancePlane", json!(10.0)),
             Record::Tool { number: 1, name: "EM6".into() },
             Record::Section { begin: true },
         ];

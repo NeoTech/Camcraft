@@ -67,6 +67,9 @@ struct Ctl<'a> {
     /// Controller machine coordinates; `None` before the first move and
     /// after a reference return.
     pos: Option<Pt>,
+    /// #1633: Z alone, while `pos` is `None` - the first traverse's height,
+    /// stated after a tool change before X/Y are known.
+    z_only: Option<f64>,
     skip: Pt,
     trips: Vec<Pt>,
 }
@@ -99,6 +102,7 @@ pub fn run(program: &str, flip: [bool; 3], offsets: [Pt; 6], material: &dyn Fn(P
         abs: true,
         motion: 0,
         pos: None,
+        z_only: None,
         skip: [0.0; 3],
         trips: Vec::new(),
     };
@@ -250,10 +254,18 @@ impl Ctl<'_> {
         }
         if home {
             self.pos = None; // to the reference point, away from the part
+            self.z_only = None;
             return Ok(Flow::Next);
         }
         let given = [get('X'), get('Y'), get('Z')];
         if given.iter().all(Option::is_none) {
+            return Ok(Flow::Next);
+        }
+        // #1633: a Z-only absolute move from an unknown position (the
+        // first traverse's stated height): X/Y stay unknown - away from
+        // the part, as after a reference return - and Z is known.
+        if let (None, None, Some(z), None, true, false) = (given[0], given[1], given[2], self.pos, self.abs, skip) {
+            self.z_only = Some(self.offsets[self.active][2] + z);
             return Ok(Flow::Next);
         }
         let mut end = [0.0; 3];
@@ -262,6 +274,7 @@ impl Ctl<'_> {
                 (Some(v), _, true) => self.offsets[self.active][a] + v,
                 (Some(v), Some(p), false) => p[a] + v,
                 (None, Some(p), _) => p[a],
+                (None, None, _) if a == 2 && self.z_only.is_some() => self.z_only.unwrap_or_default(),
                 _ => return Err("a move from an unknown position".into()),
             };
         }
