@@ -118,6 +118,9 @@ pub(super) struct Motion {
     /// The pocket's horizontal arc entry (M11.3, `descent_xy`): only a
     /// ladder that opts in reads `Approach::arc_xy`.
     pub(super) xy_arc: bool,
+    /// Holes the caller proved open (#1449, `predrilled`): read only
+    /// when the approach asks for pre-drilled entry.
+    pub(super) holes: Vec<super::predrilled::PreHole>,
 }
 
 impl Motion {
@@ -142,7 +145,14 @@ impl Motion {
             top_z: clearance_z,
             micro: Vec::new(),
             xy_arc: false,
+            holes: Vec::new(),
         }
+    }
+
+    /// The proved pre-drilled holes (#1449).
+    pub(super) fn with_holes(mut self, holes: &[super::predrilled::PreHole]) -> Self {
+        self.holes = holes.to_vec();
+        self
     }
 
     /// Opt this ladder into the horizontal arc entry (the pocket, when

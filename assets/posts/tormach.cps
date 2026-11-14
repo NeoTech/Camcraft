@@ -20,6 +20,8 @@ minimumRevision = 1;
 extension = "nc";
 setCodePage = "utf-8";
 capabilities = 1; // reference contract: integer feature mask (bit 1 = milling)
+workOffsetIndex = true; // reads PARAM WorkOffset as the 1-based offset number (#931)
+workOffsetMax = 9;      // LinuxCNC G-code reference: G54-G59.3 select coordinate systems 1-9 (#931)
 programUnits = "mm inch"; // #902: writes the document's unit (postOptions.Units), G21 / G20
 
 // Determinism law: no timestamps, no randomness - the same stream
@@ -27,6 +29,7 @@ programUnits = "mm inch"; // #902: writes the document's unit (postOptions.Units
 
 // ---------------------------------------------------------------- state
 var wcsWord = "G54";       // from the WorkOffset PARAM
+var wcsIndex = 1;          // the offset number wcsWord writes (#931)
 var sRpm = 0;              // spindle/T order follows the stream: PARAMs,
 var spindleWait = false;   // TOOL, SECTION - the preamble writes them
 var toolWait = false;      // when the first motion needs them legal
@@ -280,16 +283,25 @@ function safeZ() {
   return safeZValue;
 }
 
-// Z straight up in machine coordinates, then G30 to the operator's preset
+// Z straight up in machine coordinates, the one retract both the tool
+// change and the program end start with (#1594 split them: only the
+// tool change goes on to G30, see onClose).
+function liftZ() {
+  var z = safeZ();
+  if (z === null) return null;
+  block(["G53", "G0", "Z" + fu(z)]);
+  return z;
+}
+
+// Before a tool change: liftZ, then G30 to the operator's preset
 // tool-change spot. The G30 rides PathPilot's convention with the Z0
 // retract: a machine that states a different safe Z is not on it, and an
 // unset G30 position (LinuxCNC's default is the machine origin) could
 // drive Z back down - so there the retract stands alone and M6 / the
 // control's own tool-change position does the rest.
 function retract() {
-  var z = safeZ();
+  var z = liftZ();
   if (z === null) return;
-  block(["G53", "G0", "Z" + fu(z)]);
   if (z === 0) {
     block(["G30"]);
     // #785 (review of PR #798): a G30 with no axis words moves EVERY
@@ -306,12 +318,25 @@ function onRadiusCompensation() {
   msg("control cutter compensation (G41/G42) is not supported by this post - choose In computer, or the Fanuc post");
 }
 
+// #931: PARAM WorkOffset arrives as the 1-based offset number (the engine
+// refuses one above workOffsetMax by setup name); the word is ours to write.
+function workOffsetName(n) {  // offset n -> this control's word; "" when it has none
+  if (!(n >= 1 && n <= 9 && n === Math.floor(n))) return "";
+  return n <= 6 ? "G" + (53 + n) : "G59." + (n - 6);  // LinuxCNC: G59.1..G59.3 are systems 7-9
+}
+function offsetWord(value) {
+  var n = Number(value), w = workOffsetName(n);
+  if (!w) { msg("work offset " + value + " - this post expresses work offsets 1-" + workOffsetMax + " only"); return wcsWord; }
+  wcsIndex = n;
+  return w;
+}
+
 function onParameter(name, value) {
   if (name === "RetractPlane") hopZ = has(value) ? Number(value) : null;  // #1028
   if (name === "Smoothing") { smoothTol = Number(value) || 0; return; }
   if (name === "SmoothingMode") { smoothMode = String(value || ""); return; }
   commentParam(name, value);
-  if (name === "WorkOffset" && value) wcsWord = String(value);
+  if (name === "WorkOffset" && value) wcsWord = offsetWord(value);
   else if (name === "OriginX" && has(value)) orgX = Number(value);
   else if (name === "OriginY" && has(value)) orgY = Number(value);
   else if (name === "OriginZ" && has(value)) orgZ = Number(value);
@@ -407,6 +432,13 @@ function startPreamble() {
     xyUnknown = true;        // G30 (or the changer) may have moved X and Y
     block(["T" + ni(tNo), "M6"]);
     block(["G43", "H" + ni(tNo)]);
+    // #1596: Z straight up again (G53, so the G43 just applied does not
+    // shift it) before the section's first X/Y or A move. The G30 above
+    // leaves Z at the operator's stored G30 height, and one stored below
+    // the part top (a PathPilot Hub run had machine Z -1.5611) would
+    // otherwise carry the tool sideways at that height into the part or
+    // the vise. Also after a non-G30 retract: M6 may move Z.
+    liftZ();
     toolWait = false;
   }
   // A touch probe (#108, #362) states 0 rpm: no spindle start, no belt
@@ -772,6 +804,7 @@ function onCycle() {
   else if (p.CycleType === "DEEP") g = "G83";
   else if (p.CycleType === "BORE") g = "G86";
   else if (p.CycleType === "BACKBORE") g = "G89";
+  else if (p.CycleType === "REAM") g = "G85";   // #1445: feed in, feed out at F, no dwell
   // Tormach documents G84 for PathPilot: F is the pitch times the rpm
   // (the stream's synthesized tap feed), no P - PathPilot sizes the
   // bottom dwell itself, and the MX mills tap from the spindle encoder.
@@ -786,6 +819,12 @@ function onCycle() {
       return;
     }
     g = "G84";
+  }
+  else {
+    // #1445: a cycle kind this post does not know is refused by name,
+    // never posted as the G81 default (a rapid out it never asked for).
+    msg("canned cycle " + p.CycleType + " is not known to this post - refused, not posted as another cycle");
+    return;
   }
   // #1357: a canned cycle feeds at its own F word. Without one LinuxCNC
   // alarms on a zero feed ("Cannot feed with zero feed rate") or, after
@@ -927,10 +966,17 @@ function onProbeResult() {
 // ------------------------------------------------------------ footer
 // G53 G0 Z0 lifts the spindle straight up to the top of Z travel in
 // machine coordinates (Tormach's Z home is at the top; another machine
-// states its own height, #495 - see safeZ), whatever the
-// stored G30 position holds; then G30 takes the machine to the
-// operator's preset G30 location (the unload spot), the way PathPilot's
-// own programs end. M30 ends the program (no % fence).
+// states its own height, #495 - see safeZ), and the program ends there:
+// no G30 follows it and no rotary return (#1594). A G30 with no axis
+// words moves every axis to the stored G30 position (LinuxCNC params
+// 5181-5189), so an operator's G30 stored below the top of travel
+// brought the tool straight back down after the lift. The user's
+// PathPilot Hub run (770MX sim, 2026-11-13, stored G30 at machine
+// Z -1.5611) showed it: an end of G53 G0 Z0 then G30, or G30 alone, drove
+// the tool down below the part top; G53 G0 Z0 alone stayed at the top of
+// travel, the ending the user chose. A G0 A0 after the lift was tried
+// and not wanted. The G30 before each tool change (retract) is
+// unchanged. M30 ends the program (no % fence).
 //
 // #596: LinuxCNC's M2 / M30 (linuxcnc.org/docs, M-codes, "M2, M30
 // Program End") resets offsets to G54, the plane to G17, G90, G94, M48,
@@ -948,7 +994,7 @@ function endUnitsWord() {
 }
 function onClose() {
   endPreamble();
-  retract();
+  liftZ();               // #1594: straight up and stay there - no G30
   var u = endUnitsWord();
   if (u) block([u]);
   block(["M30"]);

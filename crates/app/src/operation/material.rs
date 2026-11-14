@@ -173,14 +173,15 @@ pub fn cross_holes_of(
 /// of the mesh's sides). `name` only words the refusals. The caller
 /// commits the result as one undoable `EditOperationParams`, so the
 /// app's Detect holes button and the MCP `detect_holes` tool store the
-/// same list.
+/// same list. A Bore op keeps only the holes its tool's one ring clears
+/// (#1556); each one left out is named in [`DetectedHoles::skipped`].
 pub fn detect_holes(
     world: &World,
     name: &str,
     params: &OpParams,
     setup: Option<&str>,
     src: &SrcRef,
-) -> Result<OpParams, String> {
+) -> Result<DetectedHoles, String> {
     let mut params = params.clone();
     // #985: an external Thread operation lists bosses, read the same way.
     if let OpParams::Thread { external: true, holes, .. } = &mut params {
@@ -189,7 +190,7 @@ pub fn detect_holes(
             return Err("no upright round bosses found in the source model - an external thread is milled on one".to_string());
         }
         *holes = found;
-        return Ok(params);
+        return Ok(DetectedHoles { params, skipped: Vec::new() });
     }
     let is_drill = matches!(params, OpParams::Drill { .. });
     let holes: &mut Vec<_> = match &mut params {
@@ -211,10 +212,13 @@ pub fn detect_holes(
         });
     }
     *holes = axial;
+    // #1556: a Bore op's ride is one ring; a hole wider than that ring
+    // clears would leave a core - left out here, named, never stored.
+    let skipped = super::bore_reach::skip_unborable(world, name, &mut params)?;
     if let OpParams::Drill { cross, .. } = &mut params {
         *cross = radial;
     }
-    Ok(params)
+    Ok(DetectedHoles { params, skipped })
 }
 
 /// A named entity's facets in its setup's frame (#326: a part of an

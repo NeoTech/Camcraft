@@ -26,6 +26,8 @@ pub struct PointsPick {
 /// the other alignment drafts stop (one draft collects at a time).
 pub fn arm(state: &mut State, setup: &str) {
     state.plane_pick = None;
+    state.cylinder_pick = None; // #771
+    state.origin_pick = None; // #771
     crate::axis_pick::disarm(state);
     crate::wcs_pick::disarm(state); // #701: one draft collects at a time
     state.points_pick = Some(PointsPick { setup: setup.to_owned(), picks: Vec::new() });
@@ -65,7 +67,7 @@ pub fn take(state: &mut State, pick: GeoSel) {
     };
     let Some(d) = state.points_pick.as_mut() else { return };
     let setup = d.setup.clone();
-    let words = format!("{} of '{}'", pick.feature, pick.entity);
+    let words = format!("that pick on '{}'", pick.entity); // #738: no internal id
     state.status = match pick.feature {
         FeatureSel::Chain(_) if no_centre.is_some() => {
             format!("{setup}: {} - this row takes three points", no_centre.as_deref().unwrap_or_default())

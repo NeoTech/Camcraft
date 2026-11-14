@@ -75,6 +75,7 @@ fn wire_doc() -> (World, History) {
         taper_deg: 0.0,
         burnout: None,
         clearance: camcraft_app::operation::DEFAULT_CLEARANCE,
+        skims: Vec::new(),
         four_axis: None,
     };
     let create = CreateOperation::new(&world, "Die1", "", SrcRef::Entity("slug".into()), OpParams::WireContour(op));

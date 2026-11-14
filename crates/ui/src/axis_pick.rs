@@ -108,6 +108,8 @@ fn mode_of(by: AxisBy) -> GeoPick {
 /// Vertex mode for two points. The lay-on-a-plane draft stops.
 pub fn arm(state: &mut State, setup: &str, axis: InPlaneAxis) {
     state.plane_pick = None;
+    state.cylinder_pick = None; // #771
+    state.origin_pick = None; // #771
     state.points_pick = None; // #555: one draft collects at a time
     crate::wcs_pick::disarm(state); // #701: one draft collects at a time
     let d = draft_for(state, setup);
@@ -145,6 +147,14 @@ pub fn disarm_hidden(state: &mut State) {
     // #555's three-points draft keeps the same law (merge with #664).
     if state.points_pick.as_ref().is_some_and(|d| !shown.contains(&d.setup)) {
         crate::points_pick::disarm(state);
+    }
+    // #771's cylinder and origin drafts keep the same law: a draft
+    // whose rows are off screen must not eat a viewport click.
+    if state.cylinder_pick.as_ref().is_some_and(|d| !shown.contains(&d.setup)) {
+        crate::cylinder_pick::pause(state);
+    }
+    if state.origin_pick.as_ref().is_some_and(|d| !shown.contains(&d.setup)) {
+        crate::origin_pick::pause(state);
     }
     if state.wcs_pick.as_ref().is_some_and(|d| !shown.contains(&d.setup)) {
         crate::wcs_pick::pause(state); // #701: same law for the role draft
@@ -218,7 +228,7 @@ pub fn take(state: &mut State, pick: GeoSel) {
     d.applied = false;
     let by = d.by(axis);
     let setup = d.setup.clone();
-    let words = format!("{} of '{}'", pick.feature, pick.entity);
+    let words = format!("that pick on '{}'", pick.entity); // #738: no internal id
     let refuse = |what: &str| format!("{setup}: {words} is {what} - {} takes {}", axis.label(), by.noun());
     let status = match (by, pick.feature) {
         (AxisBy::Edge, FeatureSel::Chain(_)) => {
@@ -241,6 +251,19 @@ pub fn take(state: &mut State, pick: GeoSel) {
         (AxisBy::Edge, FeatureSel::Vertex(_)) => refuse("a point"),
     };
     state.status = status;
+}
+
+/// One picked point where it is (#738): "on 'block' (x, y, z) mm", in
+/// the document's units and frame - never its internal id.
+#[must_use]
+pub fn point_words(world: &World, g: &GeoSel, unit: Unit) -> String {
+    match pick::pick_coords(world, g).as_deref() {
+        Some([p]) => {
+            let c: Vec<String> = p.iter().map(|v| units::len(*v, unit, 3)).collect();
+            format!("on '{}' ({}) {}", g.entity, c.join(", "), unit.suffix())
+        }
+        _ => format!("on '{}' (no longer in the model - re-pick it)", g.entity),
+    }
 }
 
 /// The picked row's words (#557 hand check): what was picked and where,

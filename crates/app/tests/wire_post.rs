@@ -10,6 +10,9 @@
 //! cut-off (#1109, kerf left / right of travel) posts its own golden -
 //! threaded at its run-in point in the air, cut off at its run-out point,
 //! no return move - and an open run whose kerf burns the part is refused.
+//! #538: a rough pass and two skims post with three distinct offsets
+//! and condition selects (their own golden); each skim refusal by name;
+//! the rough-only golden above does not move.
 //! Not exercised on a real EDM control (D10).
 //!
 //! Gate map (#533): covers app::posting (posting_wire, WIRE_POSTS,
@@ -17,7 +20,9 @@
 //! app::posting_serves (the serves door: a sinker refused), post::engine
 //! (the wireEdm door), post::machine (edm codes mirror, edm_codes), and
 //! the wire-iso.cps script, and the wire clause's place in the post
-//! gate (posting_wire's wire_clause before NC text, #534).
+//! gate (posting_wire's wire_clause before NC text, #534); #538:
+//! operation::wire_op (skims), motion::wire_edm::skims, posting_wire's
+//! skim announcements.
 //! Provenance: our own tests over our own synthetic fixture.
 
 #[path = "edm/sinker_fixture.rs"]
@@ -25,12 +30,14 @@ mod sinker_fixture;
 
 use flecs_ecs::prelude::World;
 
-use camcraft_app::commands::{CreateOperation, GenerateOperation, History, ImportModel, LoadMachine, SetStock};
+use camcraft_app::commands::{CreateOperation, EditOperationParams, GenerateOperation, History, ImportModel, LoadMachine, SetStock};
 use camcraft_app::geometry::{Mesh, Point3, Triangle};
 use camcraft_app::machine::{parse_mch, Kind};
-use camcraft_app::operation::{self, Height, OpParams, SrcRef, WireContourOp, WireSide};
+use camcraft_app::operation::{self, Height, OpParams, SrcRef, WireContourOp, WireSide, WireSkim};
 use camcraft_app::post::{self, cnc};
+use camcraft_app::model;
 use camcraft_app::posting::{self, BUILTINS, WIRE_POSTS};
+use camcraft_app::project;
 use camcraft_app::schema::Location;
 use camcraft_app::stock::StockShape;
 use camcraft_app::world::new_world;
@@ -38,6 +45,7 @@ use camcraft_app::world::new_world;
 const FIXTURE: &str = include_str!("edm/wire-iso-fixture.mch");
 const WIRE: &str = "Generic ISO Wire EDM";
 const GOLDEN: &str = "tests/golden/nc/wire-iso/wire_slug_punch.nc";
+const SKIMS_GOLDEN: &str = "tests/golden/nc/wire-iso/wire_contour_punch_skims.nc";
 const OPEN_GOLDEN: &str = "tests/golden/nc/wire-iso/wire_contour_open_cutoff.nc";
 
 fn cps(name: &str) -> &'static str {
@@ -80,6 +88,11 @@ fn prism(pts: &[(f64, f64)]) -> Mesh {
 /// The fixture machine mounted, a punch cut around the slug from a
 /// start hole outside it, generated.
 fn punch_doc(machine_text: &str) -> World {
+    punch_doc_with(machine_text, Vec::new())
+}
+
+/// [`punch_doc`] with skim passes after the rough cut (#538).
+fn punch_doc_with(machine_text: &str, skims: Vec<WireSkim>) -> World {
     let world = new_world();
     let mut h = History::default();
     let m = parse_mch(machine_text).expect("the fixture parses");
@@ -97,6 +110,7 @@ fn punch_doc(machine_text: &str) -> World {
         four_axis: None,
         burnout: None,
         clearance: operation::DEFAULT_CLEARANCE,
+        skims,
     };
     let c = CreateOperation::new(&world, "Punch1", "", SrcRef::Entity("slug".into()), OpParams::WireContour(op)).expect("op");
     h.execute(&world, c);
@@ -126,6 +140,7 @@ fn gouging_die() -> World {
         four_axis: None,
         burnout: None,
         clearance: operation::DEFAULT_CLEARANCE,
+        skims: Vec::new(),
     };
     let c = CreateOperation::new(&world, "Die1", "", SrcRef::Entity("opening".into()), OpParams::WireContour(op)).expect("op");
     h.execute(&world, c);
@@ -250,7 +265,7 @@ fn a_mill_machine_and_a_cutting_post_are_refused_by_name() {
     let mill = std::fs::read_to_string("../../assets/machines/3axis-vmc.mch").expect("the vmc");
     let w = warnings(cps(WIRE), &mill, &stream);
     assert!(w.iter().any(|m| m.contains("is not declared kind wire_edm")), "{w:?}");
-    for (n, s) in BUILTINS.iter().filter(|(n, _)| *n != WIRE) {
+    for (n, s) in BUILTINS.iter().filter(|(n, _)| !WIRE_POSTS.contains(n)) {
         let w = warnings(s, FIXTURE, &stream);
         assert!(w.iter().any(|m| m.contains("Punch1") && m.contains("does not declare wireEdm")), "{n}: {w:?}");
     }
@@ -262,7 +277,8 @@ fn a_mill_machine_and_a_cutting_post_are_refused_by_name() {
 
 #[test]
 fn the_registry_offers_the_wire_post_for_wire_edms_only() {
-    assert_eq!(WIRE_POSTS, &[WIRE]);
+    // #617 added the Sodick dialect; the generic post stays first (the default).
+    assert_eq!(WIRE_POSTS.first(), Some(&WIRE));
     for (n, _) in BUILTINS {
         assert_eq!(posting::post_serves(n, Kind::WireEdm), WIRE_POSTS.contains(n), "{n}");
     }
@@ -270,6 +286,110 @@ fn the_registry_offers_the_wire_post_for_wire_edms_only() {
         assert!(!posting::post_serves(WIRE, k), "{k:?}");
     }
     assert_eq!(posting::post_name(&posting::default_post_for(Kind::WireEdm)), Some(WIRE));
+}
+
+fn skim(id: &str, reverse: bool) -> WireSkim {
+    WireSkim { condition: id.into(), reverse }
+}
+
+fn post_text(world: &World) -> String {
+    let out = std::env::temp_dir().join(format!("camcraft-wire-skims-{}.nc", std::process::id()));
+    let posted = posting::post_script(world, &out, cps(WIRE)).expect("the wire program posts");
+    let _ = std::fs::remove_file(&out);
+    posted.program
+}
+
+/// #538 Done means: a rough plus two skims post with three distinct
+/// offsets and condition selects - one threading, one cut, the second
+/// skim walked the other way round.
+#[test]
+fn a_rough_and_two_skims_post_three_offsets_and_condition_selects() {
+    let world = punch_doc_with(FIXTURE, vec![skim("S21", false), skim("S31", true)]);
+    let text = post_text(&world);
+    if std::env::var_os("WRITE_GOLDEN").is_some() {
+        std::fs::write(SKIMS_GOLDEN, &text).expect("write golden");
+    }
+    let want = std::fs::read_to_string(SKIMS_GOLDEN).expect("golden present");
+    assert_eq!(text, want, "the skimmed wire program drifted from its golden");
+    let lines: Vec<&str> = text.lines().collect();
+    let count = |w: &str| lines.iter().filter(|l| **l == w).count();
+    assert_eq!((count("FX-THREAD"), count("FX-CUT"), count("FX-COMP-OFF")), (1, 1, 3), "{text}");
+    let selects: Vec<usize> = ["FX-COND C110", "FX-COND S21", "FX-COND S31"]
+        .iter()
+        .map(|w| lines.iter().position(|l| l == w).unwrap_or_else(|| panic!("no {w} in\n{text}")))
+        .collect();
+    assert!(selects.windows(2).all(|w| w[0] < w[1]), "{text}");
+    // Each pass's lead-in meets its own offset: wire radius 0.125 plus
+    // the gap 0.04, 0.02, 0.01 - the punch's left side at X = -20 - k.
+    for (i, x) in ["-20.165", "-20.145", "-20.135"].iter().enumerate() {
+        let lead = lines[selects[i] + 2];
+        assert_eq!(lead, format!("G1 X{x} Y0"), "pass {i}: {text}");
+    }
+    // The first skim keeps the rough's direction (down the left side),
+    // the reversed second one goes up it.
+    assert_eq!(lines[selects[1] + 3], "G1 X-20.145 Y-10.145", "{text}");
+    assert_eq!(lines[selects[2] + 3], "G1 X-20.135 Y10.135", "{text}");
+    assert_eq!(count("(SKIM 1)") + count("(SKIM 2)"), 2, "{text}");
+}
+
+/// #538: the rough-only program is byte-identical with skims absent,
+/// and its project / MCP JSON carries no `skims` key.
+#[test]
+fn no_skims_is_the_rough_program_and_json_unchanged() {
+    let world = punch_doc(FIXTURE);
+    assert_eq!(post_text(&world), std::fs::read_to_string(GOLDEN).expect("golden present"));
+    let op = model::find_by_name(&world, "Punch1").and_then(|e| model::operation_of(&world, &e)).expect("op");
+    let json = project::params_to_json(&op.params);
+    assert!(json["wire_contour"].get("skims").is_none(), "{json}");
+}
+
+/// #538: skims ride EditOperationParams (undoable) and the JSON door
+/// the file and the MCP patch share.
+#[test]
+fn skims_edit_undo_and_round_trip() {
+    let world = punch_doc(FIXTURE);
+    let mut h = History::default();
+    let params = |w: &World| model::find_by_name(w, "Punch1").and_then(|e| model::operation_of(w, &e)).map(|o| o.params);
+    let Some(OpParams::WireContour(mut w)) = params(&world) else { panic!("a wire contour") };
+    let p0 = OpParams::WireContour(w.clone());
+    w.skims = vec![skim("S21", false), skim("S31", true)];
+    let p1 = OpParams::WireContour(w);
+    h.execute(&world, EditOperationParams::new(&world, "Punch1", p1.clone()).expect("edit"));
+    assert_eq!(params(&world), Some(p1.clone()));
+    assert!(h.undo(&world));
+    assert_eq!(params(&world), Some(p0));
+    assert!(h.redo(&world));
+    let json = project::params_to_json(&p1);
+    assert_eq!(json["wire_contour"]["skims"], serde_json::json!([{ "condition": "S21" }, { "condition": "S31", "reverse": true }]));
+    assert_eq!(project::params_from_json(&json).expect("reads back"), p1);
+}
+
+/// #538: each skim refusal by name, at command creation.
+#[test]
+fn each_skim_refusal_is_named_at_the_door() {
+    let world = punch_doc(FIXTURE);
+    let refusal = |rough: &str, skims: Vec<WireSkim>| {
+        let Some(OpParams::WireContour(mut w)) =
+            model::find_by_name(&world, "Punch1").and_then(|e| model::operation_of(&world, &e)).map(|o| o.params)
+        else {
+            panic!("a wire contour")
+        };
+        w.condition = rough.into();
+        w.skims = skims;
+        EditOperationParams::new(&world, "Punch1", OpParams::WireContour(w)).map(|_| ()).expect_err("refused").to_string()
+    };
+    let e = refusal("C110", vec![skim("", false)]);
+    assert!(e.contains("skim 1 of the Wire Contour names no EDM condition") && e.contains("C110, S21, S31, W20"), "{e}");
+    let e = refusal("C110", vec![skim("S21", false), skim("S99", false)]);
+    assert!(e.contains("skim 2 of the Wire Contour") && e.contains("states no EDM condition \"S99\""), "{e}");
+    let e = refusal("C110", vec![skim("S31", false), skim("S21", false)]);
+    assert!(e.contains("skim 1 (condition S31)") && e.contains("cut past the finished profile"), "{e}");
+    let e = refusal("S31", vec![skim("S21", false)]);
+    assert!(e.contains("the rough pass (S31)") && e.contains("cut past the finished profile"), "{e}");
+    let e = refusal("C110", vec![skim("S31", false), skim("S21", false), skim("S31", false)]);
+    assert!(e.contains("skim 2 (condition S21)") && e.contains("farther out than skim 1") && e.contains("cut only air"), "{e}");
+    let e = refusal("C110", vec![skim("W20", false)]);
+    assert!(e.contains("skim 1 (condition W20)") && e.contains("one threading cuts every pass with one wire"), "{e}");
 }
 
 /// #1109: a 60 x 50 x 12 part at the left end of a 100 x 50 x 12 bar,
@@ -312,6 +432,7 @@ fn cutoff_doc(wrong: bool) -> World {
         taper_deg: 0.0,
         burnout: None,
         clearance: operation::DEFAULT_CLEARANCE,
+        skims: Vec::new(),
         four_axis: None,
     };
     let src = SrcRef::Selection(vec![GeoSel { entity: "part".into(), feature: FeatureSel::Chain(chain) }]);

@@ -131,14 +131,17 @@ fn g76_world(infeed: f64, plan: ThreadInfeed) -> World {
 
 /// The program and the script's own refusals.
 fn post(world: &World) -> (String, Vec<String>) {
-    let records = posting::stream_records(world).expect("generated");
-    let out = engine::run_with(
-        LATHE_CPS,
-        &posting::machine_value(world),
-        &camcraft_app::post::cnc::serialize(&records),
-        &posting::options_value(posting::post_options(world)),
-    )
-    .expect("the lathe script runs");
+    let stream = camcraft_app::post::cnc::serialize(&posting::stream_records(world).expect("generated"));
+    post_stream(world, &stream, "mm")
+}
+
+/// `stream` posted in `unit` ("mm" or "inch") on the world's machine.
+fn post_stream(world: &World, stream: &str, unit: &str) -> (String, Vec<String>) {
+    let mut options = posting::options_value(posting::post_options(world));
+    if let Some(m) = options.as_object_mut() {
+        m.insert("Units".into(), serde_json::json!(unit));
+    }
+    let out = engine::run_with(LATHE_CPS, &posting::machine_value(world), stream, &options).expect("the lathe script runs");
     (out.program, out.warnings)
 }
 
@@ -150,14 +153,28 @@ fn word(text: &str, marker: &str, letter: char) -> String {
         .unwrap_or_else(|| panic!("{letter} in {line}"))
 }
 
-/// The control's depths (radius, from the crest) for the posted words.
+/// The program's least increment in mm: 0.001 mm under G21, 0.0001 in
+/// under G20 (the no-point words count it; the R word is in its unit).
+fn least_increment(text: &str) -> f64 {
+    if text.lines().any(|l| l.split_whitespace().any(|w| w == "G20")) {
+        0.00254
+    } else {
+        0.001
+    }
+}
+
+/// The control's depths (radius, from the crest, in mm) for the posted
+/// words. It works on the words as written - each rounded on its own -
+/// never on the record's numbers.
 fn control_depths(text: &str) -> (Vec<f64>, f64) {
+    let inc = least_increment(text);
+    let unit = if inc < 0.002 { 1.0 } else { 25.4 };
     let p1 = word(text, "R", 'P');
     let (m, a) = (p1[0..2].parse::<usize>().expect("m"), p1[4..6].parse::<f64>().expect("a"));
-    let dmin = word(text, "R", 'Q').parse::<f64>().expect("dmin") / 1000.0;
-    let d = word(text, "R", 'R').parse::<f64>().expect("d");
-    let k = word(text, "F", 'P').parse::<f64>().expect("k") / 1000.0;
-    let dd = word(text, "F", 'Q').parse::<f64>().expect("dd") / 1000.0;
+    let dmin = word(text, "R", 'Q').parse::<f64>().expect("dmin") * inc;
+    let d = word(text, "R", 'R').parse::<f64>().expect("d") * unit;
+    let k = word(text, "F", 'P').parse::<f64>().expect("k") * inc;
+    let dd = word(text, "F", 'Q').parse::<f64>().expect("dd") * inc;
     let mut cum = Vec::new();
     let mut prev = 0.0_f64;
     let mut n = 1.0_f64;
@@ -195,12 +212,15 @@ fn same_ladder(world: &World, text: &str) {
     let (got, z0) = laid(world);
     assert_eq!(got.len(), want.len(), "pass count: laid {got:?} vs the control's {want:?}\n{text}");
     let tan = (a * 0.5).to_radians().tan();
+    // mm words are exact on the micron lattice; an inch word is one
+    // ten-thousandth from its mm value at most 1.5 increments down a rung.
+    let tol = if least_increment(text) < 0.002 { 1e-3 } else { 1.5 * 0.00254 };
     for ((z, depth), w) in got.iter().zip(&want) {
-        assert!((depth - w).abs() < 1e-3, "depth: laid {got:?} vs the control's {want:?}");
+        assert!((depth - w).abs() < tol, "depth: laid {got:?} vs the control's {want:?}");
         // #629's ladder runs toward the chuck (-Z): the record starts a
         // full flank shift toward the free end, each pass `w·tan` back
         // toward the chuck from it (the merge of #416 onto #629).
-        assert!((z - (z0 - w * tan)).abs() < 1e-3, "station: laid {got:?}, start {z0}, a {a}");
+        assert!((z - (z0 - w * tan)).abs() < tol, "station: laid {got:?}, start {z0}, a {a}");
     }
 }
 
@@ -238,6 +258,70 @@ fn the_default_thread_g76_states_its_three_passes() {
     assert!(refused.is_empty(), "{refused:?}");
     assert!(text.contains("G76 P010000 Q500 R0.2\n"), "{text}");
     same_ladder(&world, &text);
+}
+
+#[test]
+fn the_default_thread_g76_states_its_three_passes_in_inch() {
+    // PR #517 review: each inch word rounds on its own (0.4 mm = Q157,
+    // 1.2 mm = P472), so R0.0157 left k - d = 0.0315 one ten-thousandth
+    // past the second rung 0.0314 and the control cut a fourth pass
+    // nobody verified. R comes from the rounded words' own ladder.
+    let world = g76_world(0.4, ThreadInfeed::default());
+    let stream = camcraft_app::post::cnc::serialize(&posting::stream_records(&world).expect("generated"));
+    let (text, refused) = post_stream(&world, &stream, "inch");
+    assert!(refused.is_empty(), "{refused:?}");
+    assert!(text.contains("G76 P010000 Q157 R0.0158\n"), "{text}");
+    assert!(text.contains(" P472 Q157 F0.07874\n"), "{text}");
+    let (want, _) = control_depths(&text);
+    assert_eq!(want.len(), 3, "the control cuts {want:?} from\n{text}");
+    same_ladder(&world, &text);
+}
+
+/// `stream` with the THREAD record's `key` numbers (whole microns) replaced.
+fn with_thread_words(stream: &str, words: &[(&str, &str)]) -> String {
+    let mut out = String::new();
+    for line in stream.lines() {
+        if line.starts_with("THREAD X") {
+            let mut w: Vec<String> = line.split_whitespace().map(str::to_string).collect();
+            for (key, value) in words {
+                let at = w.iter().position(|x| x == key).expect("the THREAD word");
+                w[at + 1] = (*value).to_string();
+            }
+            out.push_str(&w.join(" "));
+        } else {
+            out.push_str(line);
+        }
+        out.push('\n');
+    }
+    out
+}
+
+#[test]
+fn a_ladder_the_rounded_words_cannot_state_is_refused_by_name() {
+    // Inch ladders whose rounded first depth drifts the control's rungs
+    // off the record's: 0.1 mm = Q39 (0.0039 in, 0.9906 mm) over 13
+    // sqrt rungs leaves the allowance two increments from the record's
+    // R0.033 (0.839 mm) - one past what the words may round by.
+    let world = g76_world(0.4, ThreadInfeed::default());
+    let stream = camcraft_app::post::cnc::serialize(&posting::stream_records(&world).expect("generated"));
+    let cases: [(&str, &str, &str, &str); 2] = [
+        ("100", "10", "839", "Q39 (first depth), Q4 (minimum depth) and P472 (thread height) make the control cut 13 rough passes"),
+        ("146", "10", "288", "make the control cut 39 rough passes"),
+    ];
+    for (first, min, finish, why) in cases {
+        let s = with_thread_words(&stream, &[("FIRST", first), ("MIN", min), ("FINISH", finish)]);
+        let (text, refused) = post_stream(&world, &s, "inch");
+        assert!(
+            refused.iter().any(|w| w.contains("G76 threading cycle refused - the rounded words cannot state the verified passes") && w.contains(why)),
+            "{first}/{finish}: not refused by name: {refused:?}\n{text}"
+        );
+        assert!(!text.contains("G76 X"), "{first}: a refused cycle was written: {text}");
+    }
+    // The same record in mm: the micron words state 13 rungs, R one
+    // micron over the record (rung 13 is 0.36056, not 0.361).
+    let s = with_thread_words(&stream, &[("FIRST", "100"), ("MIN", "10"), ("FINISH", "839")]);
+    let (text, refused) = post_stream(&world, &s, "mm");
+    assert!(refused.is_empty() && text.contains("G76 P010000 Q10 R0.84\n"), "{refused:?}\n{text}");
 }
 
 #[test]

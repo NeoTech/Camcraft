@@ -231,7 +231,7 @@ const EYE_RESERVE: f32 = 24.0;
 
 /// Rows whose viewport visibility the user can toggle get the eye.
 pub(crate) fn has_eye(kind: Kind) -> bool {
-    matches!(kind, Kind::Model | Kind::Fixture | Kind::Stock | Kind::Wcs | Kind::Op)
+    matches!(kind, Kind::Model | Kind::Fixture | Kind::Stock | Kind::Wcs | Kind::Op | Kind::Setup(_))
 }
 
 /// Hit result for one frame of the tree.

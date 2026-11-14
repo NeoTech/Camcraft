@@ -84,13 +84,14 @@ fn the_wcs_page_shows_the_work_offset_dropdown_and_no_setups_page_pointer() {
     h.run_steps(3);
     let texts = super::structural::painted(&h);
     assert!(
-        texts.iter().any(|(t, _)| t == "Work offset: the G54-G59 slot this setup posts. It does not move the origin."),
+        texts.iter().any(|(t, _)| t == "Work offset: the offset this setup posts, as its post names it. It does not move the origin."),
         "the WCS page names the work offset in plain words: {texts:?}"
     );
     assert!(
         !texts.iter().any(|(t, _)| t.contains("Setups page")),
         "no WCS-page label points at the Setups page: {texts:?}"
     );
-    // The dropdown itself: an unset setup reads G54 in the combo.
-    h.get_by(|n| n.role() == egui::accesskit::Role::ComboBox && n.value().as_deref() == Some("G54"));
+    // The dropdown itself: an unset setup reads offset 1 in the combo,
+    // named by its post (#931).
+    h.get_by(|n| n.role() == egui::accesskit::Role::ComboBox && n.value().as_deref() == Some("Work offset 1 (G54)"));
 }

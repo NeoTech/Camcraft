@@ -9,7 +9,6 @@ use crate::geometry::Aabb;
 use crate::model;
 use crate::operation::{self, KindInfo, SrcRef};
 use crate::project;
-use crate::schema::WCS_SLOTS;
 use crate::script::{api, fnum, inventory, Env};
 use crate::setup;
 use crate::verify::Warning;
@@ -49,7 +48,10 @@ fn setups_view(env: &Env) -> Vec<Value> {
             let wcs = setup::wcs_entity(w, d).and_then(|e| model::transform_of(w, &e).map(|loc| (e, loc)));
             let wcs = json!({
                 "label": setup::wcs_label(w, d),
-                "word": WCS_SLOTS.get(setup::wcs_slot(w, d)).copied().unwrap_or("G54"),
+                "index": crate::setup_offsets::index(w, d),
+                "name": setup::wcs_name(w, d),
+                // #931: kept as an alias of `name` for older callers.
+                "word": setup::wcs_name(w, d),
                 "placed": wcs.is_some(),
                 "entity": setup::wcs_entity_name(w, d),
                 "origin": wcs.as_ref().map(|(_, loc)| vec![fnum(loc.pos.x), fnum(loc.pos.y), fnum(loc.pos.z)]),

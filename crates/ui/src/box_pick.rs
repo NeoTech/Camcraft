@@ -30,6 +30,7 @@ pub(crate) fn armed(state: &State, mods: Mods) -> bool {
     (mods.command || mods.shift)
         && matches!(state.geo_pick, GeoPick::Edge | GeoPick::Face)
         && !state.op_ui.name.is_empty()
+        && !crate::interact::op_pick_locked(state)
         && state.boundary_pick.is_none()
         && state.locate_pick.is_none()
         && state.points_pick.is_none()

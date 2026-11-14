@@ -27,6 +27,8 @@ capabilities = 2; // reference contract: integer feature mask (bit 2 = turning)
 coolantModes = true; // reads PARAM Coolant (#112/#150)
 afterModes = true;   // reads PARAM AfterOperation (#110)
 threadHands = true;  // reads PARAM SpindleDirection (#629): M4 when the thread's hand needs it
+workOffsetIndex = true; // reads PARAM WorkOffset as the 1-based offset number (#931)
+workOffsetMax = 9;      // LinuxCNC G-code reference: G54-G59.3 select coordinate systems 1-9 (#931)
 programUnits = "mm inch"; // #902: writes the document's unit (postOptions.Units), G21 / G20
 // Explain G-code (#1399): T0101 is tool 1, offset 1 (the PathPilot lathe
 // T word above), never "tool 101". Read only when Explain is on.
@@ -119,6 +121,7 @@ explainTool = "station-offset";
 
 // ---------------------------------------------------------------- state
 var wcsWord = "G54";
+var wcsIndex = 1;          // the offset number wcsWord writes (#931)
 var sRpm = 0;              // S/M3 waits for the section (PARAMs, TOOL, SECTION order)
 var sCss = 0;              // SurfaceSpeed PARAM (m/min), 0 = none stated
 var cssOn = false;         // this section posted G96: its end cancels it (#1173)
@@ -327,13 +330,26 @@ function onRadiusCompensation() {
   msg("control cutter compensation on a lathe is nose-radius compensation - not supported by the PathPilot lathe post; choose In computer");
 }
 
+// #931: PARAM WorkOffset arrives as the 1-based offset number (the engine
+// refuses one above workOffsetMax by setup name); the word is ours to write.
+function workOffsetName(n) {  // offset n -> this control's word; "" when it has none
+  if (!(n >= 1 && n <= 9 && n === Math.floor(n))) return "";
+  return n <= 6 ? "G" + (53 + n) : "G59." + (n - 6);  // LinuxCNC: G59.1..G59.3 are systems 7-9
+}
+function offsetWord(value) {
+  var n = Number(value), w = workOffsetName(n);
+  if (!w) { msg("work offset " + value + " - this post expresses work offsets 1-" + workOffsetMax + " only"); return wcsWord; }
+  wcsIndex = n;
+  return w;
+}
+
 function onParameter(name, value) {
   flushPass();
   commentParam(name, value);
   if (name === "OperationName") coolantOp = String(value || "");
   if (name === "Coolant") { coolantAsk = String(value || "flood"); return; }
   if (name === "AfterOperation") { afterAsk = String(value || ""); return; }
-  if (name === "WorkOffset" && value) wcsWord = String(value);
+  if (name === "WorkOffset" && value) wcsWord = offsetWord(value);
   else if (name === "OriginX" && has(value)) orgX = Number(value);
   else if (name === "OriginY" && has(value)) orgY = Number(value);
   else if (name === "OriginZ" && has(value)) orgZ = Number(value);

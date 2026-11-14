@@ -211,6 +211,7 @@ pub enum CycleKindDto {
     Bore,
     BackBore,
     FloatingTap,
+    Ream,
 }
 
 impl CycleDto {
@@ -225,6 +226,7 @@ impl CycleDto {
                 CycleKind::FloatingTap => CycleKindDto::FloatingTap,
                 CycleKind::Bore => CycleKindDto::Bore,
                 CycleKind::BackBore => CycleKindDto::BackBore,
+                CycleKind::Ream => CycleKindDto::Ream,
             },
             xy: [lattice(c.xy.x), lattice(c.xy.y)],
             r_z: lattice(c.r_z),
@@ -247,6 +249,7 @@ impl CycleDto {
                 CycleKindDto::FloatingTap => CycleKind::FloatingTap,
                 CycleKindDto::Bore => CycleKind::Bore,
                 CycleKindDto::BackBore => CycleKind::BackBore,
+                CycleKindDto::Ream => CycleKind::Ream,
             },
             xy: Point2::new(self.xy[0], self.xy[1]),
             r_z: self.r_z,
@@ -262,7 +265,7 @@ impl CycleDto {
 /// A setup as files hold it (M3.2 A): the furniture it owns, by name.
 /// `wcs` names the setup's one WCS entity (v54, #342); it may name an
 /// entity the file does not contain - the WCS is simply not placed yet.
-/// Older files held a list indexed by [`WCS_SLOTS`] (see [`WcsDto`]).
+/// Older files held a list indexed by [`LEGACY_WCS_NAMES`] (see [`WcsDto`]).
 /// `datum_from` is
 /// clone provenance for the setup sheet (stage D); every stamp ignores
 /// it, so it defaults and rides along for the reader, not the machinery.

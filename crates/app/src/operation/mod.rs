@@ -77,6 +77,7 @@ pub use seed::seed_params;
 pub mod tool_law;
 pub mod tool_gate;
 mod params;
+mod slot_fit;
 mod trochoid_op;
 mod stamp;
 mod stamp_tool;
@@ -89,6 +90,9 @@ pub use material::*;
 mod material_region;
 pub(crate) use material_region::selection_drives_region;
 mod circle_fit;
+// #1504: the plain Slot's room read off two picked edges or a face.
+mod slot_pick;
+pub use slot_pick::{slot_bound_of, slot_fit_of, slot_from_picks};
 pub use circle_fit::{CIRCLE_FIT_TOL, circle_of_region, circular_fit_of};
 mod material_source;
 // #1071: the thread mill's major-circle rims and solid-law bores.
@@ -151,6 +155,10 @@ pub use boundary_picks::{
 };
 pub use boundary_ctx::op_stamp;
 use boundary_ctx::*;
+// #763: the one machining-frame seam — the composed door for an
+// operation's world reads and CL wrap (part_alignment x Tilt).
+mod frame;
+pub use frame::OpFrame;
 mod job;
 pub use job::*;
 mod generate;
@@ -163,11 +171,18 @@ mod cross_part;
 mod cross_spindle;
 mod cross_stock;
 mod drill_reach;
+mod bore_reach;
+pub use bore_reach::DetectedHoles;
 mod drill_prior;
 mod carried_stock;
 pub use carried_stock::{CARRIED_OUTSIDE_DECLARED, CARRIED_OUTSIDE_NOTED, carried_problems};
 pub(crate) use drill_prior::reads_prior;
 mod plunge_solid;
+mod predrilled_entry;
+#[cfg(test)]
+mod predrilled_entry_tests;
+#[cfg(test)]
+mod authored_law_tests;
 mod rotary_law;
 pub(crate) mod spindle_law;
 pub use spindle_law::{spindle_reading, SpindleReading, SPINDLE_TOL};

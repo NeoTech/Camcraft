@@ -71,8 +71,13 @@ pub(crate) fn ask(state: &State, mods: Mods) -> Ask {
     {
         // #701: a role pick takes one run per edge click too, like a boundary.
         EdgeUnit::Run
-    } else {
+    } else if mods.shift && !mods.command {
+        // Shift takes the whole loop or tangent chain (`edge_pick`).
         EdgeUnit::Chain
+    } else {
+        // #1505: a plain or Ctrl click is exactly the edge under the
+        // cursor, never the tangent chain it happens to lie on.
+        EdgeUnit::Run
     };
     let mode = match state.geo_pick {
         GeoPick::Edge => PickKinds { faces: true, ..PickKinds::EDGES },
@@ -93,8 +98,11 @@ pub(crate) fn ask(state: &State, mods: Mods) -> Ask {
         // which refuses it by name. #692: a point taker opts in to
         // round-edge centres.
         PickKinds { centres: mode.points, ..mode }
-    } else if crate::plane_pick::collecting(state) {
+    } else if crate::plane_pick::collecting(state) || crate::cylinder_pick::collecting(state) {
         PickKinds::FACES
+    } else if crate::origin_pick::collecting(state) {
+        // #771: the origin point is a vertex.
+        PickKinds::POINTS
     } else if let Some(by) = state.axis_pick.as_ref().and_then(|d| d.picking.map(|a| d.by(a))) {
         match by {
             AxisBy::Edge => PickKinds::EDGES,
@@ -189,6 +197,14 @@ pub(crate) fn click(state: &mut State, p: [f32; 2], mods: Mods) {
     }
     if crate::plane_pick::collecting(state) {
         crate::plane_pick::take(state, pick); // #330 / #554
+        return;
+    }
+    if crate::cylinder_pick::collecting(state) {
+        crate::cylinder_pick::take(state, pick); // #771
+        return;
+    }
+    if crate::origin_pick::collecting(state) {
+        crate::origin_pick::take(state, pick); // #771
         return;
     }
     if crate::axis_pick::hint_stray(state) {

@@ -95,8 +95,10 @@ pub(crate) fn shell_layout(
     // Ephemeral hover clears every frame before anything recomputes it (the
     // imgui App::draw law); the viewport's update_hover and the property-page
     // chip hovers then own it until the pointer moves on.
-    state.geo_hover = None;
+    state.geo_hover_drawn = state.geo_hover.take();
     panes::shortcuts(ui, state);
+    // #1450: a model file dropped on the window goes through Model's import.
+    super::file_drop::take_drop(ui, state);
     // The live theme, read once per pass: the strips and every pane below
     // share one token table, so the widget path and the painted ink cannot
     // disagree on a retheme (M6.1 A). `ribbon_h` tracks the cell box.
@@ -176,6 +178,11 @@ pub(crate) fn shell_layout(
     super::fixture_library_dialog::window(ui.ctx(), state);
     // #107: the unsaved-changes prompt, last so it sits over everything.
     unsaved_prompt::window(ui.ctx(), state);
+    // #1507: the panes set the row hover after the viewport drew; a change
+    // needs one more frame for the highlight to follow (or clear).
+    if state.geo_hover != state.geo_hover_drawn {
+        ui.ctx().request_repaint();
+    }
 }
 
 /// Feed this pass's CPU-texture deltas (the font atlas first of all) to the
@@ -373,11 +380,12 @@ fn viewport_panel(
                 fly = Some([q.x, q.y, q.z]);
             }
             // M7.2 D: what the program leaves, out as a mesh.
-            if ui
-                .button("Export STL")
-                .on_hover_text("Write the machined stock as an STL mesh (extracted from the traced field)")
-                .clicked()
-            {
+            if crate::browser_files::button(
+                ui,
+                state.browser_refusal_of(&crate::state::CommandKind::ExportStockDialog),
+                "Export STL",
+                "Write the machined stock as an STL mesh (extracted from the traced field)",
+            ) {
                 export = true;
             }
         });
@@ -405,6 +413,7 @@ fn viewport_panel(
     // global pointer coords imgui's viewport_rect fed the raw-event path.
     let ([rx0, ry0], [rx1, ry1]) = (parr(resp.rect.min), parr(resp.rect.max));
     state.viewport_rect = ([rx0, ry0], [rx1, ry1]);
+    super::file_drop::paint_hint(ui, resp.rect);
     let hot = resp.hovered();
     state.viewport_hot = hot;
     let (rw, rh) = (rx1 - rx0, ry1 - ry0);
@@ -574,12 +583,27 @@ fn viewport_panel(
                 ui.painter().text(at, egui::Align2::LEFT_TOP, text, font.clone(), rgb8(rgb));
             }
         }
+        // #738: the alignment draft's picks - filled faces, bold edges, discs.
+        crate::align_pick_viz::paint(ui.painter(), egui::Rect::from_min_size(to_px([0.0, 0.0]), egui::vec2(rw, rh)), state, aspect);
         // #709: picked points, violet and never occluded; the hover over them.
         for (a, b) in crate::vertex_pick::picked_point_marks(state, aspect) {
             ui.painter().line_segment([to_px(a), to_px(b)], egui::Stroke::new(2.0, rgb8(super::ground_ink::overlay(super::ground_ink::Overlay::Pick))));
         }
-        for (a, b) in interact::hover_features(state, aspect) {
-            ui.painter().line_segment([to_px(a), to_px(b)], egui::Stroke::new(1.0, rgb8(super::ground_ink::overlay(super::ground_ink::Overlay::Hover))));
+        // #1505/#1507: selected picks and the viewport hover
+        // as thick, haloed strokes over the model.
+        crate::pick_ink::paint(ui.painter(), state, aspect, to_px, rgb8);
+        // #1507: the Geometry-list row hover, strong: a dark halo, then the
+        // row-hover ink.
+        {
+            let segs = interact::row_hover_segments(state, aspect);
+            let ink = rgb8(super::ground_ink::overlay(super::ground_ink::Overlay::RowHover));
+            let halo = egui::Color32::from_black_alpha(200);
+            for (a, b) in &segs {
+                ui.painter().line_segment([to_px(*a), to_px(*b)], egui::Stroke::new(interact::ROW_HOVER_HALO_PX, halo));
+            }
+            for (a, b) in &segs {
+                ui.painter().line_segment([to_px(*a), to_px(*b)], egui::Stroke::new(interact::ROW_HOVER_PX, ink));
+            }
         }
         // #979: the pick box's rubber band - solid for a window, dashed
         // for a crossing box.

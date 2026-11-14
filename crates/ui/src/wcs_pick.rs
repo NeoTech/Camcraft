@@ -51,6 +51,8 @@ pub fn arm(state: &mut State, setup: &str) {
     crate::plane_pick::disarm(state);
     crate::axis_pick::disarm(state);
     state.points_pick = None; // #555: one draft collects at a time
+    state.cylinder_pick = None; // #771
+    state.origin_pick = None; // #771
     match state.wcs_pick.as_mut().filter(|d| d.setup == setup) {
         Some(d) => d.picking = true,
         None => state.wcs_pick =

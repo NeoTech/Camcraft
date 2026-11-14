@@ -17,6 +17,8 @@ coolantModes = true; // reads PARAM Coolant (#112/#150): the engine refuses non-
 afterModes = true; // reads PARAM AfterOperation (#110): the engine refuses a stop or home ask for a post without it
 axisInversion = true; // verified on the engine's mirrored stream for an inverted X/Y (#374): goldens + equivalence test
 probeAxisInversion = true; // probing blocks verified on the mirrored stream (#392): macro interpreter on a simulated inverted machine
+workOffsetIndex = true; // reads PARAM WorkOffset as the 1-based offset number (#931)
+workOffsetMax = 6;      // G54..G59; G154 P extended offsets not verified against Haas' manual here (#931)
 programUnits = "mm inch"; // #902: writes the document's unit (postOptions.Units), G21 / G20
 
 // Determinism law: no timestamps, no randomness - the same stream
@@ -24,6 +26,7 @@ programUnits = "mm inch"; // #902: writes the document's unit (postOptions.Units
 
 // ---------------------------------------------------------------- state
 var wcsWord = "G54";       // from the WorkOffset PARAM
+var wcsIndex = 1;          // the offset number wcsWord writes (#931)
 var sRpm = 0;              // spindle/T order follows the stream: PARAMs,
 var spindleWait = false;   // TOOL, SECTION - the preamble writes them
 var toolWait = false;      // when the first motion needs them legal
@@ -348,6 +351,18 @@ function compRefuse(what) {
   }
 }
 
+// #931: PARAM WorkOffset arrives as the 1-based offset number (the engine
+// refuses one above workOffsetMax by setup name); the word is ours to write.
+function workOffsetName(n) {  // offset n -> this control's word; "" when it has none
+  return n >= 1 && n <= 6 && n === Math.floor(n) ? "G" + (53 + n) : "";
+}
+function offsetWord(value) {
+  var n = Number(value), w = workOffsetName(n);
+  if (!w) { msg("work offset " + value + " - this post expresses work offsets 1-" + workOffsetMax + " only"); return wcsWord; }
+  wcsIndex = n;
+  return w;
+}
+
 function onParameter(name, value) {
   if (name === "RetractPlane") hopZ = has(value) ? Number(value) : null;  // #1028
   if (name === "Smoothing") { smoothTol = Number(value) || 0; return; }
@@ -356,7 +371,7 @@ function onParameter(name, value) {
   if (name === "OperationName") coolantOp = String(value || "");
   if (name === "Coolant") { coolantAsk = String(value || "flood"); return; }
   if (name === "AfterOperation") { afterAsk = String(value || ""); return; }
-  if (name === "WorkOffset" && value) wcsWord = String(value);
+  if (name === "WorkOffset" && value) wcsWord = offsetWord(value);
   else if (name === "OriginX" && has(value)) orgX = Number(value);
   else if (name === "OriginY" && has(value)) orgY = Number(value);
   else if (name === "OriginZ" && has(value)) orgZ = Number(value);
@@ -594,6 +609,13 @@ function onCycle() {
   else if (p.CycleType === "TAP") g = "G84";
   else if (p.CycleType === "BORE") g = "G86";
   else if (p.CycleType === "BACKBORE") g = "G89";
+  else if (p.CycleType === "REAM") g = "G85";   // #1445: feed in, feed out at F, no dwell
+  else {
+    // #1445: a cycle kind this post does not know is refused by name,
+    // never posted as the G81 default (a rapid out it never asked for).
+    msg("canned cycle " + p.CycleType + " is not known to this post - refused, not posted as another cycle");
+    return;
+  }
   // #1357: a canned cycle feeds at its own F word. Without one the
   // control drills at whatever feed was last modal (or alarms on a zero
   // feed), so a cycle the stream gives no positive feed is refused by name.
@@ -695,10 +717,6 @@ function onProbeGuard() {
     block(["IF[ABS[" + minusU("#" + (5061 + ai), to[ai] - org[ai]) + "]GT" + eps() + "]THEN#3000=3(PROBE HIT ON POSITIONING)"]);
   }
 }
-function slotOf(word) {  // "G55" -> 1
-  var n = Number(String(word).replace(/[^0-9]/g, "")) - 54;
-  return n >= 0 && n <= 5 ? n : 0;
-}
 function onProbeResult() {
   var p = properties;
   var org = [orgX, orgY, orgZ];
@@ -718,7 +736,7 @@ function onProbeResult() {
     block(["IF[ABS[#" + (dev + i) + "]GT" + fu(p.Tolerance) + "]THEN#3000=1(PROBE " + a.Axis + " OUT OF TOLERANCE)"]);
   }
   if (has(p.SetWorkOffset) && p.SetWorkOffset >= 0) {
-    var act = 5221 + 20 * slotOf(wcsWord);
+    var act = 5221 + 20 * (wcsIndex - 1);
     var words = ["G10", "L2", "P" + (Number(p.SetWorkOffset) + 1)];
     for (var j = 0; j < axes.length; j++) {
       var aj = axisIx(axes[j].Axis);

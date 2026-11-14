@@ -67,9 +67,11 @@
     differ by under 1 µm. In an edge case where k - d rounds above the
     last roughing depth, it could add one sub-micron pass.
 
-  None of these moves the finished form; all three should be checked in
-  the PathPilot Hub simulation or on a lathe before the PR is flagged
-  ready.
+  None of these moves the finished form, so none blocks the merge. They
+  cannot be checked in the PathPilot Hub simulation: its lathe is
+  LinuxCNC's one-block `G76 P.. J.. K..`, not Fanuc's two-block G76.
+  They stay open for a run on a Fanuc lathe control (or its vendor's
+  simulator), recorded here and in the PR's "Not exercised".
 - **Record plumbing:** `ThreadCycle.alternating` and `ThreadRec.alternating`.
   The stream line writes `ALT 1` only when set (absent reads 0), so
   every earlier stream keeps its bytes. The post property is
@@ -104,3 +106,23 @@
   reported to be filed on its own, not patched here. The infeed pin now
   also asserts `rest::prior_digest` is equal before the save and after
   the load.
+- **R comes from the rounded words' own ladder** (M3's review of head
+  49d0a3c2, 2026-11-13). Each G76 word rounds to the least increment on
+  its own, and the control works on the words: under G20 the default
+  thread's `Q157 P472 R0.0157` put k - d = 0.0315 one increment past
+  the second rung 0.0314, so the control cut a fourth, unverified pass.
+  Chosen: count the record's rough passes N from its own (mm) ladder,
+  rebuild rungs N-1 and N from the rounded Q/Q/P, and write the R whose
+  last rough depth P - R lies in (rung N-1, rung N] nearest the record's
+  allowance - exactly N rough passes by construction (inch golden:
+  R0.0158). More than one least increment from the record's allowance is
+  refused by name, naming the Q/Q/P words and the window. Dropped:
+  re-rounding R alone with ceil/floor (fixes this golden, not a ladder
+  whose sqrt rungs drift); a tolerance wider than one increment (would
+  let a visibly different finishing depth post); checking every rung's
+  depth against the laid one (long sqrt ladders drift by a few
+  increments with no extra pass, and would refuse legitimate threads).
+  The Tormach (LinuxCNC) G76 has the same class of gap in J/K (inch
+  default `J0.0314 K0.0944` gives ceil(K/J) = 4 passes for a 3-pass
+  record); left out of this PR because its goldens must stay
+  byte-identical to the Hub-run files, and filed on its own.
