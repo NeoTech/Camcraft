@@ -114,9 +114,10 @@ impl State {
             self.status = format!("open failed: {name} is not a CamCraft project (not text)");
             return;
         };
-        self.reset_for_open();
-        match project::open_noted(&self.world, text) {
+        let loaded = camcraft_app::world::new_world();
+        match project::open_noted(&loaded, text) {
             Ok(notes) => {
+                self.reset_for_open(loaded);
                 self.history.mark_clean();
                 self.doc_version += 1;
                 self.status = if notes.is_empty() {

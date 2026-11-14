@@ -4148,9 +4148,10 @@ impl State {
     }
 
     fn open_project_path(&mut self, path: PathBuf) {
-        self.reset_for_open();
-        match project::load_noted(&self.world, &path) {
+        let loaded = new_world();
+        match project::load_noted(&loaded, &path) {
             Ok(notes) => {
+                self.reset_for_open(loaded);
                 self.project_path = Some(path.clone());
                 self.note_recent(camcraft_app::recent::RecentKind::Project, &path);
                 // The loaded document is the new clean point (#107).
@@ -4163,13 +4164,16 @@ impl State {
                     format!("opened {} - {}", path.display(), notes.join("; "))
                 };
             }
-            Err(err) => self.status = format!("open failed: {err}"),
+            Err(err) => self.status = format!("open failed: {}: {err}", path.display()),
         }
     }
 
-    /// Retire the old document before a project replaces it (from disk,
-    /// or from bytes the browser's picker read, #31).
-    fn reset_for_open(&mut self) {
+    /// Install a fully loaded replacement (disk or browser bytes, #1613).
+    /// User preferences belong to the window, not to either document.
+    fn reset_for_open(&mut self, loaded: World) {
+        use camcraft_app::commands::{color_vision_of, color_vision_set, theme_set};
+        theme_set(&loaded, &theme_of(&self.world));
+        color_vision_set(&loaded, color_vision_of(&self.world));
         self.abandon_imports();
         self.project_path = None;
         self.hidden_stocks.clear();
@@ -4186,6 +4190,7 @@ impl State {
         self.machine_editor = None; // nor a draft over its machine's numbers
         self.rename_draft = None;
         self.dragging_op = None;
+        self.world = loaded;
     }
 
     pub(crate) fn save_project_path(&mut self, path: PathBuf) {
