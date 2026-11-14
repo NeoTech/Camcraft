@@ -30,7 +30,7 @@ const CIRCLE: usize = 2;
 const BUTTON_H: f32 = 24.0;
 const CELL_MAX: Vec2 = Vec2::new(72.0, 30.0);
 
-/// The quarter turns, two rows of three: (label, world axis, sign).
+/// The quarter turns, two rows of three: (label, setup axis, sign).
 const TURNS: [[(&str, usize, f64); 3]; 2] = [
     [("Turn X+", 0, 1.0), ("Turn Y+", 1, 1.0), ("Turn Z+", 2, 1.0)],
     [("Turn X-", 0, -1.0), ("Turn Y-", 1, -1.0), ("Turn Z-", 2, -1.0)],
@@ -86,7 +86,7 @@ pub(super) fn cell_w(ui: &Ui, avail: f32, n: usize) -> f32 {
 }
 
 fn quarter_turns(ui: &mut Ui, state: &mut State) {
-    ui.label(RichText::new("About the world axes; applied at once.").small().weak());
+    ui.label(RichText::new("About the setup axes; applied at once.").small().weak());
     let avail = ui.available_width();
     let size3 = Vec2::new(cell_w(ui, avail, 3), BUTTON_H);
     for row in TURNS {
@@ -267,7 +267,8 @@ pub(super) fn turn_wcs(state: &mut State, axis: usize, sign: f64) {
         state.wcs_ui.yaw_deg.to_radians(),
     );
     let turn = quat_from_axis_angle(axis, sign * 90.0f64.to_radians());
-    let (r, p, y) = quat_to_euler(quat_mul(turn, q));
+    // Right composition turns about the current setup axes.
+    let (r, p, y) = quat_to_euler(quat_mul(q, turn));
     state.wcs_ui.roll_deg = r.to_degrees();
     state.wcs_ui.pitch_deg = p.to_degrees();
     state.wcs_ui.yaw_deg = y.to_degrees();
