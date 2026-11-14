@@ -4,7 +4,10 @@
 // carvera-community.gitbook.io, firmware -> supported commands -> GCodes
 // and MCodes, read 2026-11-10) and the Carvera instruction manual
 // (coordinates, tool changer, wireless probe) - behavior only, per this
-// repo's Clean-Room Protocol. The hook contract from Autodesk's published
+// repo's Clean-Room Protocol. Where M6 leaves the spindle (#1616): the
+// firmware's open GPL source on GitHub (MakeraInc/CarveraFirmware and
+// Carvera-Community/Carvera_Community_Firmware, ATCHandler.cpp and
+// Robot.cpp, read 2026-11-14), read for behavior only. The hook contract from Autodesk's published
 // post docs. No vendor post script text and no CAM post's output used;
 // original work. Structure follows our own tormach.cps; drilling as its
 // expanded chain follows our own heidenhain.cps.
@@ -286,7 +289,6 @@ function startPreamble() {
   if (toolWait) {
     toolNote();
     xyUnknown = true;          // the changer moved X and Y
-    changedAt = true;          // #1616: the next traverse leaves the changer X/Y first
     block(["M6", "T" + ni(tNo)]);
     toolWait = false;
   }
@@ -328,24 +330,20 @@ function onSectionEnd() { endPreamble(); clearZ = null; hopZ = null; }  // #1616
 // A setup that cannot reach it is stopped by the control's Z limit
 // instead of rapiding through the part. A stream that states neither
 // plane has no verified height to traverse at: refused by name.
-// The order depends on where the spindle stands:
-// - at the program's start (no tool change yet): Z first, then X Y, so
-//   the traverse is never made at an unknown height;
-// - right after M6 T: X Y first, at the height the changer leaves the
-//   spindle, then Z. Nothing we have read says where the firmware parks
-//   X/Y after its tool change; a Z-only rapid down to a thin stock's
-//   clearance at that X/Y could meet the tools stored in the rack. The
-//   clearance Z is stated before any descent (M3's option (c),
-//   docs/decisions/1616-first-traverse-clearance.md).
-//   OPEN HAZARD (#1614): this X Y traverse is still made at the changer's
-//   exit height, which is not verified. A long tool can leave the tip
-//   below the part top there, and the traverse then crosses the part.
-//   The hazard stays for the Carvera after M6 until a public source
-//   confirms the firmware's M6 exit position (option b).
+// Z first everywhere, right after M6 T too (#1616). The firmware's
+// public source (MakeraInc/CarveraFirmware and the Carvera Community
+// firmware, ATCHandler::on_main_loop) ends every M6 with
+// G53 G0 Z<coordinate.clearance_z> - a few mm under the top of Z travel,
+// where Z homes - then G53 G0 X Y back to the machine X/Y it read when the
+// M6 arrived. The spindle is not left over the tool rack: it stands where
+// the program put it before the change (the previous section's last
+// move), so the Z-only rapid down to the clearance is made there. The
+// firmware's soft Z limit halts a G0 Z above its top, so a tool too long
+// to reach the clearance stops the program before the traverse instead
+// of crossing the part (docs/decisions/1616-carvera-after-m6.md).
 // A feed's first move then rapids Z to the height the generator says the
 // tool starts from, and feeds only the stretch planned.
 var xyUnknown = true;
-var changedAt = false;        // #1616: an M6 was written since the last traverse
 var clearZ = null;            // #1616: the section's ClearancePlane, null when unstated
 var hopZ = null;              // #1616: the section's RetractPlane, null when unstated
 var traverseRefused = false;  // #1616: once per program
@@ -366,15 +364,9 @@ function xyFirst(x, y, z) {
     }
     return;
   }
-  if (changedAt) {  // #1616 (c): leave the changer's X/Y at its height first
-    block(["G0", wo("X", x, orgX), wo("Y", y, orgY)]);
-    block(["G0", wo("Z", tz, orgZ)]);
-  } else {
-    block(["G0", wo("Z", tz, orgZ)]);
-    block(["G0", wo("X", x, orgX), wo("Y", y, orgY)]);
-  }
+  block(["G0", wo("Z", tz, orgZ)]);
+  block(["G0", wo("X", x, orgX), wo("Y", y, orgY)]);
   traversedAt = tz;
-  changedAt = false;
   xyUnknown = false;
 }
 function startXY(p) {
