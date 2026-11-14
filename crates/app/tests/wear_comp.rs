@@ -93,7 +93,7 @@ fn comp_of(world: &World) -> Compensation {
 }
 
 #[test]
-fn wear_posts_the_centre_path_under_g42_through_fanuc_to_the_golden() {
+fn wear_posts_the_centre_path_under_g41_through_fanuc_to_the_golden() {
     let (world, _) = world_with(Compensation::Wear);
     let e = model::find_by_name(&world, "Contour1").expect("op");
     let cache = model::toolpath_of(&world, &e).expect("cache");
@@ -102,14 +102,14 @@ fn wear_posts_the_centre_path_under_g42_through_fanuc_to_the_golden() {
         assert_eq!(c.programmed.as_slice(), &cache.path.moves[c.first..=c.last], "the centre walk, verbatim");
     }
     let text = stream(&world);
-    assert!(text.contains("COMP RIGHT 3000 WEAR\n") && text.contains("COMP OFF\n"), "{text}");
+    assert!(text.contains("COMP LEFT 3000 WEAR\n") && text.contains("COMP OFF\n"), "{text}");
     // The centre path rides the stream: the 10 x 10 box's corners
     // stand 3 mm off, so the part corner (10, 10) is never programmed.
     assert!(!text.contains("Feed X 10000 Y 10000 Z"), "{text}");
     let out = engine::run(&post_text("fanuc"), &posting::machine_value(&world), &text).unwrap();
     assert!(out.warnings.is_empty(), "{:?}", out.warnings);
     let spans = cache.path.comps.len();
-    assert_eq!(out.program.matches("G42 ").count(), spans, "{}", out.program);
+    assert_eq!(out.program.matches("G41 ").count(), spans, "{}", out.program);
     assert_eq!(out.program.matches("G01 G40 ").count(), spans, "{}", out.program);
     assert!(out.program.contains(" D01 "), "the tool's register: {}", out.program);
     assert_eq!(out.program.matches("HOLDS THE WEAR DELTA ONLY").count(), 1, "one note per section: {}", out.program);
@@ -125,7 +125,7 @@ fn wear_posts_the_centre_path_under_g42_through_fanuc_to_the_golden() {
 /// (post stem, the engage block's leading words, the wear note's
 /// register) for the dialects that write the comp words (#39).
 const DIALECTS: &[(&str, &str, &str)] =
-    &[("haas", "G1 G42 ", "(WEAR COMP - D1 "), ("mazak", "G01 G42 ", "(WEAR COMP - D1 "), ("sinumerik", "G1 G42 ", "; WEAR COMP - D1 ")];
+    &[("haas", "G1 G41 ", "(WEAR COMP - D1 "), ("mazak", "G01 G41 ", "(WEAR COMP - D1 "), ("sinumerik", "G1 G41 ", "; WEAR COMP - D1 ")];
 
 #[test]
 fn haas_mazak_and_840d_post_wear_over_the_centre_path_to_the_goldens() {

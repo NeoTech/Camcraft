@@ -681,7 +681,10 @@ mod path_tests {
                     stepdown: 2.0,
                     feed: 800.0,
                     plunge_feed: 200.0,
-                    climb: true,
+                    // #1555: climb rides this coarse (0.1) fit 0.01 mm
+                    // past the wall - the verify flags it red - so the
+                    // draw law is pinned on the conventional walk.
+                    climb: false,
                     side: camcraft_app::machining2d::Side::Auto,
                     lead: camcraft_app::machining2d::Lead::None,
                     tolerance: 0.1,
