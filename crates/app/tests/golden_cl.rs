@@ -1226,3 +1226,35 @@ fn wire_open_cutoff_matches_golden() {
     assert_eq!(camcraft_app::cl::text::to_text(&path).unwrap(), text);
     write_golden("wire_open_cutoff.cl", &text);
 }
+
+#[test]
+fn circular_ring_arcs_matches_golden() {
+    // #1558: the issue's hole - Ø6, a Ø4 cutter, 0.5 stepover, 1 mm
+    // stepdown through 11 mm - with the helix standing down to the ring
+    // ramp: two rings of two half-turn arcs per level, and each ramp
+    // flown as the ring's own helical arcs. Any change to this shape
+    // shows up here as a diff.
+    let c = Point2::new(-35.0, 2.9);
+    let p = camcraft_app::machining2d::CircularParams {
+        links: camcraft_app::links::Links::PLANAR,
+        center: c,
+        radius: 3.0,
+        vault: false,
+        bottom_z: -11.524,
+        top_z: -0.508,
+        tool_diameter: 4.0,
+        stock_to_leave: 0.0,
+        stepover: 0.5,
+        stepdown: 1.0,
+        clearance_z: 5.0,
+        retract_z: None,
+        feed: 500.0,
+        plunge_feed: 250.0,
+        climb: true,
+        entry: camcraft_app::machining3d::Entry3D::Helix,
+        helix_radius: 1.0,
+    };
+    let t = camcraft_app::machining2d::circular(&rect(c.x - 9.0, c.y - 9.0, c.x + 9.0, c.y + 9.0), &p).unwrap();
+    assert!(t.has_arcs());
+    write_golden("circular_ring_arcs.cl", &gen_to_cltext(&t));
+}

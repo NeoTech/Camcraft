@@ -7,7 +7,7 @@
 //! Provenance: our own tests over the kernel's circle law (standard
 //! circular interpolation, RS-274 G2/G3); no vendor material consulted.
 //!
-//! Gate map: covers camcraft_motion::machining2d (circular).
+//! Gate map: covers camcraft_motion::machining2d (circular), camcraft_motion::ring_zig.
 
 use camcraft_motion::cl::{Move, MoveKind, Toolpath};
 use camcraft_motion::entry::Entry3D;
@@ -125,3 +125,100 @@ fn the_ramp_rides_the_ring_as_helical_arcs() {
     }
 }
 
+
+/// An arc move's sweep in its own sense, radians in (0, 2 pi].
+fn sweep(m: &Move) -> f64 {
+    let a = m.arc.expect("an arc");
+    let ang = |p: camcraft_motion::geometry::Point3| (p.y - a.center.y).atan2(p.x - a.center.x);
+    let d = if a.ccw { ang(m.to) - ang(m.from) } else { ang(m.from) - ang(m.to) };
+    let d = d.rem_euclid(2.0 * std::f64::consts::PI);
+    if d <= 0.0 { 2.0 * std::f64::consts::PI } else { d }
+}
+
+fn is_ramp(m: &Move) -> bool {
+    m.kind == MoveKind::Feed && m.from.z != m.to.z && (m.from.x != m.to.x || m.from.y != m.to.y)
+}
+
+/// #1558 review: the ring ramp keeps the ramp law. Every helical piece
+/// descends at the ramp angle at most, measured along the arc it flies
+/// (radius times its sweep, in its own sense); each ramp's out and back
+/// legs all sweep the same planned leg (to the endpoint lattice); and the ramp's whole XY travel
+/// is exactly what the angle needs for its drop - so no piece is steep
+/// and none flies the long way round.
+#[test]
+fn the_ring_ramp_holds_the_ramp_angle_on_every_piece() {
+    let tan = camcraft_motion::links::DEFAULT_RAMP_ANGLE.to_radians().tan();
+    for climb in [true, false] {
+        let t = path(&params(Entry3D::Helix, climb));
+        let mut ramps: Vec<Vec<&Move>> = Vec::new();
+        let mut run: Vec<&Move> = Vec::new();
+        for m in &t.moves {
+            if is_ramp(m) {
+                run.push(m);
+            } else if !run.is_empty() {
+                ramps.push(std::mem::take(&mut run));
+            }
+        }
+        if !run.is_empty() {
+            ramps.push(run);
+        }
+        assert!(ramps.len() >= 26, "climb {climb}: {} ramps", ramps.len());
+        for r in &ramps {
+            let (mut xy, mut dz) = (0.0, 0.0);
+            let mut legs: Vec<f64> = Vec::new();
+            let mut sense = None;
+            for m in r {
+                let rho = rad(m, m.from);
+                let len = rho * sweep(m);
+                let d = m.from.z - m.to.z;
+                // 1e-5 mm of XY slack: the endpoint lattice.
+                assert!(d > 0.0 && d <= tan * (len + 1e-5), "climb {climb}: a piece at {:.4} deg", (d / len).atan().to_degrees());
+                let ccw = m.arc.map(|a| a.ccw);
+                if sense != ccw {
+                    legs.push(0.0);
+                    sense = ccw;
+                }
+                if let Some(l) = legs.last_mut() {
+                    *l += len;
+                }
+                xy += len;
+                dz += d;
+            }
+            assert!(legs.len().is_multiple_of(2), "climb {climb}: legs pair out and back: {legs:?}");
+            assert!(legs.iter().all(|l| (l - legs[0]).abs() < 1e-5), "climb {climb}: every leg the planned leg: {legs:?}");
+            assert!((xy * tan - dz).abs() <= 1e-6 * dz.max(1.0), "climb {climb}: travel {xy} for drop {dz}");
+        }
+    }
+}
+
+/// #1558 review: a tiny last level (a few microns: here 0.3 um, then
+/// 3 um, below the 1 mm ladder) never posts an arc whose ends a post
+/// could round together - checked at three-decimal mm and four-decimal
+/// inch, the coarsest lengths the shipped posts write. A control reads
+/// such an arc as a full circle.
+#[test]
+fn no_arc_rounds_to_a_full_circle_on_a_tiny_last_level() {
+    for tail in [0.0003, 0.003] {
+        for entry in [Entry3D::Plunge, Entry3D::Helix, Entry3D::Ramp] {
+            let mut p = params(entry, true);
+            p.bottom_z = -11.508 - tail;
+            let t = path(&p);
+            let arcs: Vec<&Move> = t.moves.iter().filter(|m| m.arc.is_some()).collect();
+            assert!(!arcs.is_empty());
+            for m in arcs {
+                let mm = |v: f64| (v * 1e3).round();
+                let inch = |v: f64| (v / 25.4 * 1e4).round();
+                for (unit, f) in [("mm", &mm as &dyn Fn(f64) -> f64), ("inch", &inch)] {
+                    assert!(
+                        f(m.from.x) != f(m.to.x) || f(m.from.y) != f(m.to.y),
+                        "{entry:?} tail {tail}: an arc {:?} -> {:?} posts as a full circle in {unit}",
+                        m.from,
+                        m.to
+                    );
+                }
+                let c = (m.to.x - m.from.x).hypot(m.to.y - m.from.y);
+                assert!(c >= camcraft_motion::ring_zig::MIN_ARC_CHORD, "{entry:?} tail {tail}: chord {c}");
+            }
+        }
+    }
+}

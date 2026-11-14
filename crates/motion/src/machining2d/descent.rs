@@ -26,7 +26,8 @@ use crate::entry::{Entry3D, disc_clears, dive_room, helix_about};
 use crate::entry_arc::{ArcLead, arc_lead_swept, pts_dir, push_arc_lead, seg_dir};
 use crate::geo2d::{Point2, Region};
 use crate::geometry::Point3;
-use crate::links::{helix_turns, plan_zig_capped, push_zig, push_zig_ring};
+use crate::links::{helix_turns, plan_zig_capped, push_zig};
+use crate::ring_zig::push_zig_ring;
 
 use super::arcs::{ARC_FIT_TOL, Seg};
 use super::levels::{Cert, Motion};

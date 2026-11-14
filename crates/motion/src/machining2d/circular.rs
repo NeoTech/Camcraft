@@ -38,6 +38,7 @@ use crate::entry::Entry3D;
 use crate::geo2d::{Loop, Point2, Region};
 use crate::geometry::Point3;
 use crate::links::Links;
+use crate::ring_zig::MIN_ARC_CHORD;
 
 use super::arcs::{ARC_FIT_TOL, Seg};
 use super::face::GenError;
@@ -200,10 +201,14 @@ fn ring_loop(center: Point2, rho: f64, climb: bool) -> Vec<Point2> {
 /// the polygon's start to its opposite vertex, then home - G3 for
 /// climb, G2 otherwise, the same travel as the polygon. Two halves,
 /// because a full circle has no sweep `push_arc` can tell from none.
+/// A ring whose half-turn chord (its diameter) is under
+/// [`MIN_ARC_CHORD`] walks its polygon instead: a post could round the
+/// arc's ends together and a control would cut a full circle.
 fn ring_walk(center: Point2, ring: &[Point2], climb: bool) -> Vec<Seg> {
     let n = ring.len().saturating_sub(1);
+    let wide = ring.first().is_some_and(|p| 2.0 * (p.x - center.x).hypot(p.y - center.y) >= MIN_ARC_CHORD);
     match (ring.get(n / 2), ring.last()) {
-        (Some(&half), Some(&home)) if n >= 2 => vec![
+        (Some(&half), Some(&home)) if n >= 2 && wide => vec![
             Seg::Arc { center, ccw: climb, to: half },
             Seg::Arc { center, ccw: climb, to: home },
         ],
@@ -313,5 +318,26 @@ mod tests {
         }
         assert_eq!(ring_chords(1.0, ARC_FIT_TOL), 32, "R1 (the issue's ring): 32, not 512");
         assert_eq!(ring_chords(f64::NAN, ARC_FIT_TOL), RING_MAX_CHORDS);
+    }
+
+    /// #1558 review: ring ramps are the circular kernel's opt-in; every
+    /// other ladder starts without it (and `push_zig_ring` re-proves
+    /// the ring itself, so a wrong opt-in still posts chords).
+    #[test]
+    fn ring_ramps_are_opt_in() {
+        assert!(!Motion::new(5.0, None, 100.0, 50.0).ring_zig);
+        assert!(Motion::new(5.0, None, 100.0, 50.0).with_ring_zig().ring_zig);
+    }
+
+    /// #1558 review: a ring narrower than MIN_ARC_CHORD walks its
+    /// polygon, never two half-turn arcs a post could round into full
+    /// circles; a wider one walks the arcs.
+    #[test]
+    fn a_sub_resolution_ring_walks_its_polygon() {
+        let c = Point2::new(1.0, 2.0);
+        for (rho, arcs) in [(0.004, false), (0.0005, false), (0.006, true), (1.0, true)] {
+            let walk = ring_walk(c, &ring_loop(c, rho, true), true);
+            assert_eq!(walk.iter().all(|s| matches!(s, Seg::Arc { .. })), arcs, "rho {rho}");
+        }
     }
 }
