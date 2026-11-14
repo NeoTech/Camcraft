@@ -4,8 +4,9 @@
 //!
 //! Provenance: our own design (an evaluation budget on a parametric
 //! surface); the subdivision it meters is truck's published
-//! `parameter_division` (ricosjp, Apache-2.0), called unchanged. Nothing
-//! from any CAM vendor.
+//! `parameter_division` (ricosjp, Apache-2.0) for most surface kinds, and
+//! `step_division` for B-spline and NURBS faces (#1602). Nothing from any
+//! CAM vendor.
 //!
 //! Why it is needed: truck's surface subdivision splits every parameter
 //! cell whose midpoint stands off the bilinear patch of its corners by more
@@ -21,10 +22,12 @@
 //!
 //! How it is bounded: each face's surface is wrapped in [`Metered`], which
 //! counts every point truck evaluates on it during one tessellation pass.
-//! B-spline and NURBS faces are subdivided by truck's own generic algorithm
-//! called on the wrapper (exactly what their own `parameter_division` runs,
-//! so the evaluations - and the mesh - are identical); other surface kinds
-//! keep their specialised division. Past the cap the wrapper answers every
+//! B-spline and NURBS faces are subdivided by `step_division` called on the
+//! wrapper, so every probe is counted (a division still splitting at its
+//! sweep cap spends the whole budget at once); other surface kinds keep
+//! their specialised division. The wrapper also stretches a B-spline or
+//! NURBS face's parameters (`step_stretch`), and its parameter searches
+//! settle poles and retry misses (`step_nearest`, #1602). Past the cap the wrapper answers every
 //! evaluation with one fixed point: no cell is then "far", the subdivision
 //! ends within one more sweep, and the importer refuses the model naming
 //! the face - unless the trip came on a finer pass over a face proven
@@ -32,15 +35,16 @@
 //! and none is left behind.
 
 use std::ops::Bound;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
 use std::sync::Arc;
 
 use truck_stepio::r#in::alias::{
-    algo, ParameterDivision2D, ParametricSurface, ParametricSurface3D, ParameterRange, Point3,
-    SPHint2D, SearchNearestParameter, SearchParameter, Surface, Vector3, D2,
+    ParameterDivision2D, ParametricSurface, ParametricSurface3D, ParameterRange, Point3, Surface, Vector3,
 };
 use truck_topology::compress::{CompressedFace, CompressedShell};
 
+use super::step_nearest::Fault;
+use super::step_stretch::Stretch;
 use super::ImportError;
 
 /// Surface evaluations one face may spend in one tessellation pass.
@@ -74,35 +78,75 @@ pub(super) struct Meter {
     /// so the coarser pass whose mesh a fallback would keep may be the one
     /// that went wild while the finer pass that tripped stayed in range.
     outside: AtomicBool,
+    /// A boundary search of this pass that could not be answered soundly
+    /// (`step_nearest::Fault`, 0 for none): the face is refused by name.
+    fault: AtomicU8,
 }
 
 impl Meter {
-    fn new(cap: u64) -> Self {
-        Self { used: AtomicU64::new(0), cap, outside: AtomicBool::new(false) }
+    pub(super) fn new(cap: u64) -> Self {
+        Self { used: AtomicU64::new(0), cap, outside: AtomicBool::new(false), fault: AtomicU8::new(0) }
     }
     /// Count one evaluation; `false` once the cap is spent.
     fn spend(&self) -> bool {
         self.used.fetch_add(1, Ordering::Relaxed) < self.cap
     }
+    /// Count `n` evaluations done outside `subs` (a boundary search's own
+    /// work, #1602); `false` once the cap is spent. Saturating, never wraps.
+    pub(super) fn spend_many(&self, n: u64) -> bool {
+        let mut used = self.used.load(Ordering::Relaxed);
+        loop {
+            let next = used.saturating_add(n);
+            match self.used.compare_exchange_weak(used, next, Ordering::Relaxed, Ordering::Relaxed) {
+                Ok(_) => return next <= self.cap,
+                Err(now) => used = now,
+            }
+        }
+    }
     fn tripped(&self) -> bool {
         self.used.load(Ordering::Relaxed) > self.cap
+    }
+    /// Refuse the face for a boundary search fault. The first one stands.
+    pub(super) fn flag(&self, fault: Fault) {
+        let _ = self.fault.compare_exchange(0, fault as u8, Ordering::Relaxed, Ordering::Relaxed);
+    }
+    pub(super) fn fault(&self) -> Option<Fault> {
+        Fault::from_code(self.fault.load(Ordering::Relaxed))
+    }
+    /// The pass is refused for this face: out of evaluations, or a fault.
+    pub(super) fn refused(&self) -> bool {
+        self.tripped() || self.fault().is_some()
+    }
+    /// Spend the whole budget at once: the face's division did not
+    /// converge (#1602), so the pass is refused as for a runaway.
+    fn exhaust(&self) {
+        self.used.fetch_max(self.cap.saturating_add(1), Ordering::Relaxed);
     }
     /// A new pass: the whole budget again. `outside` stays set.
     fn reset(&self) {
         self.used.store(0, Ordering::Relaxed);
+        self.fault.store(0, Ordering::Relaxed);
     }
 }
 
 /// A STEP surface whose evaluations are counted against a [`Meter`].
 #[derive(Clone, Debug)]
 pub(super) struct Metered {
-    inner: Surface,
-    meter: Arc<Meter>,
+    pub(super) inner: Surface,
+    pub(super) meter: Arc<Meter>,
+    /// The mesher sees `inner`'s parameters multiplied by this (#1602,
+    /// `step_stretch`); every evaluation divides it back out.
+    pub(super) stretch: Stretch,
 }
 
 impl Metered {
     pub(super) fn new(inner: Surface, cap: u64) -> Self {
-        Self { inner, meter: Arc::new(Meter::new(cap)) }
+        let stretch = Stretch::of(&inner);
+        Self { inner, meter: Arc::new(Meter::new(cap)), stretch }
+    }
+    /// The surface's own parameters for a point of the mesher's plane.
+    pub(super) fn own(&self, u: f64, v: f64) -> (f64, f64) {
+        self.stretch.inner((u, v))
     }
 }
 
@@ -123,39 +167,59 @@ impl ParametricSurface for Metered {
         // Past the cap every point is the same point: the subdivision then
         // sees no cell off its patch and stops. The pass is refused after.
         if self.meter.spend() {
+            let (u, v) = self.own(u, v);
             self.inner.subs(u, v)
         } else {
             Point3::new(0.0, 0.0, 0.0)
         }
     }
+    // A stretched parameter moves the point 1/stretch as fast (chain rule).
     fn uder(&self, u: f64, v: f64) -> Vector3 {
-        self.inner.uder(u, v)
+        let (s, t) = self.own(u, v);
+        self.inner.uder(s, t) / self.stretch.u
     }
     fn vder(&self, u: f64, v: f64) -> Vector3 {
-        self.inner.vder(u, v)
+        let (s, t) = self.own(u, v);
+        self.inner.vder(s, t) / self.stretch.v
     }
     fn uuder(&self, u: f64, v: f64) -> Vector3 {
-        self.inner.uuder(u, v)
+        let (s, t) = self.own(u, v);
+        self.inner.uuder(s, t) / (self.stretch.u * self.stretch.u)
     }
     fn uvder(&self, u: f64, v: f64) -> Vector3 {
-        self.inner.uvder(u, v)
+        let (s, t) = self.own(u, v);
+        self.inner.uvder(s, t) / (self.stretch.u * self.stretch.v)
     }
     fn vvder(&self, u: f64, v: f64) -> Vector3 {
-        self.inner.vvder(u, v)
+        let (s, t) = self.own(u, v);
+        self.inner.vvder(s, t) / (self.stretch.v * self.stretch.v)
     }
     fn parameter_range(&self) -> (ParameterRange, ParameterRange) {
-        self.inner.parameter_range()
+        let (ur, vr) = self.inner.parameter_range();
+        (scaled(ur, self.stretch.u), scaled(vr, self.stretch.v))
     }
     fn u_period(&self) -> Option<f64> {
-        self.inner.u_period()
+        self.inner.u_period().map(|p| p * self.stretch.u)
     }
     fn v_period(&self) -> Option<f64> {
-        self.inner.v_period()
+        self.inner.v_period().map(|p| p * self.stretch.v)
     }
+}
+
+/// A parameter range multiplied by a positive `k`.
+fn scaled((lo, hi): ParameterRange, k: f64) -> ParameterRange {
+    let by = |b: Bound<f64>| match b {
+        Bound::Included(x) => Bound::Included(x * k),
+        Bound::Excluded(x) => Bound::Excluded(x * k),
+        Bound::Unbounded => Bound::Unbounded,
+    };
+    (by(lo), by(hi))
 }
 
 impl ParametricSurface3D for Metered {
     fn normal(&self, u: f64, v: f64) -> Vector3 {
+        // A positive stretch keeps the normal's direction.
+        let (u, v) = self.own(u, v);
         self.inner.normal(u, v)
     }
 }
@@ -163,24 +227,32 @@ impl ParametricSurface3D for Metered {
 impl ParameterDivision2D for Metered {
     fn parameter_division(&self, range: ((f64, f64), (f64, f64)), tol: f64) -> (Vec<f64>, Vec<f64>) {
         match &self.inner {
-            // truck's B-spline and NURBS surfaces divide with exactly this
-            // generic algorithm; running it on the wrapper routes every
-            // probe through the meter and changes nothing else.
+            // B-spline and NURBS faces divide per direction (#1602,
+            // `step_division`); running it on the wrapper routes every
+            // probe through the meter.
             Surface::BSplineSurface(_) | Surface::NurbsSurface(_) => {
-                let (ur, vr) = self.inner.parameter_range();
+                let (ur, vr) = self.parameter_range();
                 if !within(range.0, ur) || !within(range.1, vr) {
                     self.meter.outside.store(true, Ordering::Relaxed);
                 }
-                let division = algo::surface::parameter_division(self, range, tol);
+                let division = super::step_division::parameter_division(self, range, tol);
+                // A division still splitting at its sweep cap (a jump) is
+                // refused like one that ran out of evaluations.
+                if division.is_none() {
+                    self.meter.exhaust();
+                }
                 // A tripped face is refused after the pass; handing truck
                 // the grid it grew (millions of points down the runaway
                 // seam) would only make it triangulate them first.
-                if self.meter.tripped() {
-                    let ((u0, u1), (v0, v1)) = range;
-                    return (vec![u0, u1], vec![v0, v1]);
+                match division {
+                    Some(division) if !self.meter.refused() => division,
+                    _ => {
+                        let ((u0, u1), (v0, v1)) = range;
+                        (vec![u0, u1], vec![v0, v1])
+                    }
                 }
-                division
             }
+            // Other kinds are never stretched (`Stretch::of`).
             other => other.parameter_division(range, tol),
         }
     }
@@ -201,38 +273,6 @@ fn within((lo, hi): (f64, f64), own: ParameterRange) -> bool {
     lo.is_finite() && hi.is_finite() && lo_ok && hi_ok
 }
 
-impl SearchParameter<D2> for Metered {
-    type Point = Point3;
-    fn search_parameter<H: Into<SPHint2D>>(&self, point: Point3, hint: H, trials: usize) -> Option<(f64, f64)> {
-        let hint = hint.into();
-        let found = self.inner.search_parameter(point, hint, trials)?;
-        // #1548: at a pole the free parameter comes back anywhere.
-        Some(super::step_pole::settle(&self.inner, point, previous(hint), found))
-    }
-}
-
-impl SearchNearestParameter<D2> for Metered {
-    type Point = Point3;
-    fn search_nearest_parameter<H: Into<SPHint2D>>(
-        &self,
-        point: Point3,
-        hint: H,
-        trials: usize,
-    ) -> Option<(f64, f64)> {
-        let hint = hint.into();
-        let found = self.inner.search_nearest_parameter(point, hint, trials)?;
-        Some(super::step_pole::settle(&self.inner, point, previous(hint), found))
-    }
-}
-
-/// The previous boundary point's parameter, when the search was given one.
-fn previous(hint: SPHint2D) -> Option<(f64, f64)> {
-    match hint {
-        SPHint2D::Parameter(u, v) => Some((u, v)),
-        _ => None,
-    }
-}
-
 type StepShell<S> = CompressedShell<Point3, truck_stepio::r#in::alias::Curve3D, S>;
 
 /// A shell with every face metered, and the meters in face order.
@@ -243,7 +283,8 @@ pub(super) struct Guarded {
     continuous: Vec<bool>,
 }
 
-/// A face that ran past the cap in a pass.
+/// A face that ran past the cap in a pass, or whose boundary search was
+/// refused (`Guarded::fault` then says why).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct Trip {
     /// The face's index in the shell (0-based).
@@ -285,7 +326,7 @@ impl Guarded {
     /// (#1568 review: a proven face tripping beside one that may jump must
     /// not let the fallback keep the jump's smear).
     pub(super) fn tripped(&self) -> Option<Trip> {
-        let mut trips = self.meters.iter().enumerate().filter(|(_, m)| m.tripped()).map(|(i, _)| self.trip(i));
+        let mut trips = self.meters.iter().enumerate().filter(|(_, m)| m.refused()).map(|(i, _)| self.trip(i));
         let first = trips.next()?;
         Some(if first.continuous { trips.find(|t| !t.continuous).unwrap_or(first) } else { first })
     }
@@ -297,8 +338,14 @@ impl Guarded {
             // Proven on the surface's own range only: a face any pass
             // divided outside that range is not covered by the proof.
             continuous: self.continuous.get(index).copied().unwrap_or(false)
-                && self.meters.get(index).is_some_and(|m| !m.outside.load(Ordering::Relaxed)),
+                && self.meters.get(index).is_some_and(|m| !m.outside.load(Ordering::Relaxed) && m.fault().is_none()),
         }
+    }
+
+    /// The boundary search fault of face `index` in this pass, if any. A
+    /// faulted face is never continuous: no coarser mesh of it is kept.
+    pub(super) fn fault(&self, index: usize) -> Option<Fault> {
+        self.meters.get(index).and_then(|m| m.fault())
     }
 }
 
@@ -324,21 +371,26 @@ pub(super) fn face_entities(shell: &truck_stepio::r#in::ShellHolder, faces: usiz
 /// (a finer one falls back to the coarser mesh), so its text says it is
 /// too dense, not broken.
 pub(super) fn refusal(trip: Trip, faces: usize, entity: Option<u64>, shell: Option<u64>, cap: u64) -> ImportError {
-    let Trip { index, kind, continuous } = trip;
-    let face = match entity {
-        Some(id) => format!("face #{id} ({kind}, face {} of {faces}", index + 1),
-        None => format!("face {} of {faces} ({kind}", index + 1),
-    };
-    let shell = shell.map(|s| format!(" in shell #{s}")).unwrap_or_default();
-    let why = if continuous {
+    let face = face_name(trip, faces, entity, shell);
+    let why = if trip.continuous {
         "did not finish within {cap} evaluations at the coarsest tolerance (a continuous surface, too dense to divide)"
     } else {
         "did not converge within {cap} evaluations (a discontinuous or degenerate surface)"
     };
     let why = why.replace("{cap}", &cap.to_string());
     ImportError::Step(format!(
-        "{face}{shell}) could not be tessellated: its surface subdivision {why} - re-export the model, or import an STL"
+        "{face} could not be tessellated: its surface subdivision {why} - re-export the model, or import an STL"
     ))
+}
+
+/// How a refusal names a face: its STEP entity, kind, place and shell.
+pub(super) fn face_name(trip: Trip, faces: usize, entity: Option<u64>, shell: Option<u64>) -> String {
+    let Trip { index, kind, .. } = trip;
+    let shell = shell.map(|s| format!(" in shell #{s}")).unwrap_or_default();
+    match entity {
+        Some(id) => format!("face #{id} ({kind}, face {} of {faces}{shell})", index + 1),
+        None => format!("face {} of {faces} ({kind}{shell})", index + 1),
+    }
 }
 
 #[cfg(test)]

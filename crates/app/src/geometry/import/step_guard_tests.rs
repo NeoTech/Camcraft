@@ -55,6 +55,9 @@ fn a_discontinuous_bspline_division_stops_at_the_cap_and_trips_the_meter() {
     assert!(started.elapsed().as_secs() < 10, "bounded: {:?}", started.elapsed());
 }
 
+/// On a patch curved both ways the per-direction division (#1602) splits
+/// both directions every sweep, as truck's own division does, and gives
+/// the same grid.
 #[test]
 fn a_smooth_bspline_divides_exactly_as_truck_does_and_does_not_trip() {
     let s = smooth();
@@ -249,4 +252,128 @@ fn a_proven_and_a_jumping_face_tripping_in_one_pass_refuse_naming_the_jump() {
     });
     let err = r.expect_err("a smeared jump is never kept").to_string();
     assert!(err.contains("face 6 of") && err.contains("did not converge"), "{err}");
+}
+
+/// #1602: a thread flank's parameters are stretched for the mesher; the
+/// wrapper shows the same surface in the stretched plane - its points,
+/// range and derivatives agree with the face at the parameters it maps to.
+#[test]
+fn a_stretched_face_shows_the_same_surface_in_the_mesher_plane() {
+    use crate::geometry::import::step_thread_fixture::flank;
+    use truck_stepio::r#in::alias::{InnerSpace, MetricSpace};
+    let s = flank(3);
+    let m = Metered::new(s.clone(), FACE_EVAL_CAP);
+    let k = m.stretch;
+    assert!(k.u == 1.0 && k.v > 50.0, "the strip's long direction is stretched: {k:?}");
+    assert_eq!(m.parameter_range(), (scaled(s.parameter_range().0, k.u), scaled(s.parameter_range().1, k.v)));
+    let (u, v) = (0.3, 0.41);
+    let (pu, pv) = k.outer((u, v));
+    assert!(m.subs(pu, pv).distance(s.subs(u, v)) < 1e-12);
+    // Derivatives in the stretched plane match finite differences there.
+    let h = 1e-6;
+    let fd_u = (m.subs(pu + h, pv) - m.subs(pu - h, pv)) / (2.0 * h);
+    let fd_v = (m.subs(pu, pv + h) - m.subs(pu, pv - h)) / (2.0 * h);
+    assert!((m.uder(pu, pv) - fd_u).magnitude() < 1e-5 * fd_u.magnitude().max(1.0), "u derivative");
+    assert!((m.vder(pu, pv) - fd_v).magnitude() < 1e-5 * fd_v.magnitude().max(1.0), "v derivative");
+    let fd_vv = (m.vder(pu, pv + h) - m.vder(pu, pv - h)) / (2.0 * h);
+    assert!((m.vvder(pu, pv) - fd_vv).magnitude() < 1e-4 * fd_vv.magnitude().max(1.0), "second derivative");
+    let fd_uv = (m.uder(pu, pv + h) - m.uder(pu, pv - h)) / (2.0 * h);
+    assert!((m.uvder(pu, pv) - fd_uv).magnitude() < 1e-4 * fd_uv.magnitude().max(1.0), "mixed derivative");
+}
+
+/// #1602: the searches the mesher runs on a metered face answer in the
+/// stretched plane, on the point's own turn and inside the knot domain -
+/// with no hint on a many-turn flank, and from a neighbouring turn's hint
+/// on a root band whose rulings meet its other turns when extrapolated.
+#[test]
+fn a_metered_face_finds_boundary_points_on_their_own_turn() {
+    use crate::geometry::import::step_thread_fixture::{flank, root};
+    use truck_stepio::r#in::alias::{MetricSpace, SPHint2D, SearchNearestParameter, SearchParameter};
+    let inside = |(u, v): (f64, f64)| (-1e-9..=1.0 + 1e-9).contains(&u) && (-1e-9..=1.0 + 1e-9).contains(&v);
+    let f = Metered::new(flank(14), FACE_EVAL_CAP);
+    let r = Metered::new(root(14), FACE_EVAL_CAP);
+    for k in 0..40 {
+        let v = (k as f64 + 0.37) / 40.0;
+        let p = f.inner.subs(0.0, v);
+        let got = f.search_nearest_parameter(p, SPHint2D::None, 100).map(|(a, b)| f.own(a, b));
+        assert!(got.is_some_and(|uv| inside(uv) && f.inner.subs(uv.0, uv.1).distance(p) < 1e-6), "flank v {v}: {got:?}");
+        let p = r.inner.subs(1.0, v);
+        let hint = r.stretch.outer((0.5, (v - 1.0 / 14.0).max(0.0)));
+        let got = r.search_parameter(p, hint, 100).map(|(a, b)| r.own(a, b));
+        assert!(got.is_none_or(inside), "root v {v}: an answer outside the domain {got:?}");
+    }
+}
+
+/// A flat degree-(1,1) B-spline sheet over the unit square with `n` knot
+/// spans each way, as a one-face shell.
+fn sheet_shell(n: usize, cap: u64) -> Guarded {
+    let mut knots = vec![0.0];
+    knots.extend((0..=n).map(|i| i as f64 / n as f64));
+    knots.push(1.0);
+    let at = |i: usize| i as f64 / n as f64;
+    let cps = (0..=n).map(|i| (0..=n).map(|j| Point3::new(at(i), at(j), 0.0)).collect()).collect();
+    let k = KnotVec::from(knots);
+    let surface = Surface::BSplineSurface(Box::new(BSplineSurface::new((k.clone(), k), cps)));
+    let face = CompressedFace { boundaries: vec![], orientation: true, surface };
+    Guarded::new(CompressedShell { vertices: vec![], edges: vec![], faces: vec![face] }, cap)
+}
+
+/// PR #1638 review item 1: a face with more knot spans than the second
+/// search may sample (300 x 300 here; a file may carry any number) gets no
+/// sample grid at all. A boundary point that needs the second search (1e-4
+/// off the face, a file's own tolerance) refuses the face by name.
+#[test]
+fn a_face_with_more_spans_than_the_search_grid_is_refused_by_name() {
+    use truck_stepio::r#in::alias::SearchNearestParameter;
+    let g = sheet_shell(300, FACE_EVAL_CAP);
+    let got = g.shell.faces[0].surface.search_nearest_parameter(Point3::new(0.5, 0.5, 1e-4), (0.4, 0.4), 100);
+    assert_eq!(g.tripped(), Some(Trip { index: 0, kind: "B-spline surface", continuous: false }));
+    assert_eq!(got, None, "a refused search hands the mesher no parameters");
+    assert_eq!(g.fault(0), Some(Fault::Grid));
+    assert_eq!(g.meters[0].used.load(Ordering::Relaxed), 0, "no sample of the oversized grid is evaluated");
+    let trip = Trip { index: 0, kind: "B-spline surface", continuous: false };
+    let e = Fault::Grid.refusal(&face_name(trip, 1, Some(7), None)).to_string();
+    assert!(e.contains("face #7 (B-spline surface, face 1 of 1) could not be tessellated"), "{e}");
+    assert!(e.contains("knot spans"), "{e}");
+    // A new pass starts clean, and a point on the face needs no second search.
+    g.reset();
+    let on = g.shell.faces[0].surface.search_nearest_parameter(Point3::new(0.5, 0.5, 0.0), (0.4, 0.4), 100);
+    assert!(on.is_some() && g.tripped().is_none(), "{on:?}");
+}
+
+/// PR #1638 review item 2: the second search is charged to the face's
+/// evaluation budget (#1536). Boundary points 1e-4 off a many-turn flank
+/// each need one; past the budget the face trips like any runaway.
+#[test]
+fn second_searches_spend_the_face_budget_and_trip_it() {
+    use crate::geometry::import::step_thread_fixture::flank;
+    use truck_stepio::r#in::alias::{SPHint2D, SearchNearestParameter};
+    let off = |m: &Metered, v: f64| m.inner.subs(0.0, v) + m.inner.normal(0.0, v) * 1e-4;
+    let m = Metered::new(flank(14), FACE_EVAL_CAP);
+    assert!(m.search_nearest_parameter(off(&m, 0.437), SPHint2D::None, 100).is_some());
+    let one = m.meter.used.load(Ordering::Relaxed);
+    assert!(one >= 4_096 && !m.meter.tripped(), "one second search is counted: {one}");
+    let m = Metered::new(flank(14), 50_000);
+    for k in 0..40 {
+        let _ = m.search_nearest_parameter(off(&m, (k as f64 + 0.37) / 40.0), SPHint2D::None, 100);
+    }
+    assert!(m.meter.tripped(), "40 second searches must run a 50,000 budget out");
+    assert!(m.meter.used.load(Ordering::Relaxed) < 50_000 + 2 * one, "a tripped face runs no further search");
+}
+
+/// PR #1638 review item 3: a boundary point whose only answer is outside
+/// the knot domain (here on the extended plane past the sheet's edge) is
+/// never handed to the mesher; the face is refused by name.
+#[test]
+fn a_boundary_point_outside_the_knot_domain_is_refused_not_answered() {
+    use truck_stepio::r#in::alias::SearchNearestParameter;
+    let g = sheet_shell(1, FACE_EVAL_CAP);
+    let got = g.shell.faces[0].surface.search_nearest_parameter(Point3::new(1.5, 0.5, 0.0), (0.9, 0.5), 100);
+    assert_eq!(got, None, "an answer outside the knot domain was returned as valid");
+    assert_eq!(g.tripped(), Some(Trip { index: 0, kind: "B-spline surface", continuous: false }));
+    assert_eq!(g.fault(0), Some(Fault::Outside));
+    let trip = Trip { index: 0, kind: "B-spline surface", continuous: false };
+    let e = Fault::Outside.refusal(&face_name(trip, 1, None, Some(3))).to_string();
+    assert!(e.contains("face 1 of 1 (B-spline surface in shell #3) could not be tessellated"), "{e}");
+    assert!(e.contains("outside its knot domain"), "{e}");
 }
