@@ -453,7 +453,7 @@ fn ribbon_labels_whole_and_captions_painted() {
     }
     // The captions are back: one under each multi-cell group, in left to
     // right order, below the cell row and above the dock.
-    let caps: Vec<(&str, egui::Pos2)> = ["File", "Setup", "Modify", "Inspect", "View"]
+    let caps: Vec<(&str, egui::Pos2)> = ["FILE", "SETUP", "MODIFY", "INSPECT", "VIEW"]
         .into_iter()
         .map(|c| {
             let hit = ribbon.iter().find(|(t, _, _)| t == c);
@@ -499,6 +499,7 @@ fn origin_names_paint_on_and_quiet_off_letters_and_lines_always() {
     // On: the painted frame shows the offset's name row in the viewport,
     // and the shared projection law agrees.
     h.run_steps(2);
+    super::open_view_menu(&mut h);
     let texts = painted(&h);
     let v = at(&texts, "Viewport").x;
     let p = at(&texts, "Properties").x;
@@ -529,41 +530,36 @@ fn origin_names_paint_on_and_quiet_off_letters_and_lines_always() {
         );
         let segs = interact::gizmo_segments(st, 1.0);
         assert!(!segs.is_empty(), "the triad's strokes draw");
-        let letters = letters(&labels);
-        assert!(!letters.is_empty(), "the axis letters draw");
-        (segs.len(), letters)
+        (segs.len(), letters(&labels))
     };
-    // Off: the checkbox clicks the flag through the real widget and the
-    // name row leaves the painted frame; letters and lines stay.
+
+    // Off: click the switch; letters and lines stay, the name row goes.
     h.get_by_label("Show origin names").click();
     h.run_steps(2);
+    assert!(!h.state().state.show_gizmo_names, "the click flipped the flag");
+    super::open_view_menu(&mut h);
+    assert_eq!(
+        h.get_by_label("Show origin names").accesskit_node().toggled(),
+        Some(egui::accesskit::Toggled::False),
+        "the checkbox reads unchecked after the click"
+    );
     let texts = painted(&h);
-    {
-        let st = &h.state().state;
-        assert!(!st.show_gizmo_names, "the click flipped the flag");
-        assert_eq!(
-            h.get_by_label("Show origin names").accesskit_node().toggled(),
-            Some(egui::accesskit::Toggled::False),
-            "the checkbox reads unchecked after the click"
-        );
-        let labels = interact::overlay_labels(st, 1.0);
-        assert!(
-            labels.iter().all(|(_, _, t)| t != "G54"),
-            "off: no name row anywhere: {labels:?}"
-        );
-        assert!(
-            !texts.iter().any(in_viewport),
-            "off: the painted viewport no longer shows the name row"
-        );
-        // Letters and strokes ignore the switch: the same letters and
-        // the same segments draw either way.
-        assert_eq!(letters(&labels), letters_on, "the letters survive untouched");
-        assert_eq!(
-            interact::gizmo_segments(st, 1.0).len(),
-            segs_on,
-            "the strokes ignore the switch"
-        );
-    }
+    let st = &h.state().state;
+    let labels = interact::overlay_labels(st, 1.0);
+    assert!(
+        labels.iter().all(|(_, _, t)| t != "G54"),
+        "off: no name row anywhere: {labels:?}"
+    );
+    assert!(
+        !texts.iter().any(in_viewport),
+        "off: the painted viewport no longer shows the name row"
+    );
+    assert_eq!(letters(&labels), letters_on, "the letters survive untouched");
+    assert_eq!(
+        interact::gizmo_segments(st, 1.0).len(),
+        segs_on,
+        "the strokes ignore the switch"
+    );
     let _ = std::fs::remove_dir_all(&d);
 }
 

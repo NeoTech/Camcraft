@@ -34,6 +34,19 @@ pub(crate) fn caption(kind: MachineKind) -> &'static str {
         .map_or("Machine", |(_, c, _)| *c)
 }
 
+/// The one-word door caption: the ribbon cell is 43 px wide at the
+/// 1280-point floor, so the full caption ("Mill-turning") elides; the
+/// cell keeps a word that fits and the tip carries the full name.
+pub(crate) fn short_caption(kind: MachineKind) -> &'static str {
+    match kind {
+        MachineKind::Mill => "Mill",
+        MachineKind::Lathe => "Turn",
+        MachineKind::MillTurn => "M-Turn",
+        MachineKind::Plasma => "Plasma",
+        _ => "Machine",
+    }
+}
+
 /// The modes as a phrase for the door's tip: "Milling, Turning,
 /// Mill-turning or Plasma cutting", read off the table.
 pub(crate) fn modes_phrase() -> String {
