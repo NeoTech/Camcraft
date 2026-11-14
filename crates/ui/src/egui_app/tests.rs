@@ -4698,7 +4698,7 @@ fn setup_navigation_is_always_reachable_and_operations_keep_a_flat_browser() {
     let setup_group = plan.iter().find(|group| group.title == "Setup").expect("setup group");
     assert_eq!(
         setup_group.cells.as_slice(),
-        &[Cmd::Setups, Cmd::Stock, Cmd::Origin, Cmd::Tools, Cmd::Machine],
+        &[Cmd::Setups, Cmd::Stock, Cmd::Origin, Cmd::Tools],
         "the Setup toolbar opens on the Setups door (#322)"
     );
 

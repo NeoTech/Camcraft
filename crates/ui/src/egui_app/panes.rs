@@ -29,7 +29,7 @@ use crate::actions;
 use crate::machine_modes;
 use crate::shortcut_keys::chord;
 use crate::build_info;
-use crate::state::{CommandKind, Sim, State, UiTarget};
+use crate::state::{CommandKind, SetupPage, Sim, State, UiTarget};
 
 use super::icons::{Icon, IconSet};
 use super::op_icons::op_icon;
@@ -185,7 +185,7 @@ pub(super) enum Cmd {
 const FILE: (&str, &[Cmd]) =
     ("File", &[Cmd::New, Cmd::Model, Cmd::Project, Cmd::Save, Cmd::SaveAs, Cmd::Post]);
 const SETUP: (&str, &[Cmd]) =
-    ("Setup", &[Cmd::Setups, Cmd::Stock, Cmd::Origin, Cmd::Tools, Cmd::Machine]);
+    ("Setup", &[Cmd::Setups, Cmd::Stock, Cmd::Origin, Cmd::Tools]);
 
 /// The bar's whole op-shortcut budget (the ribbon law): at most this
 /// many Create cells stand inline, and they are the user's pins. The
@@ -612,8 +612,9 @@ pub(super) fn follow_gate(c: Cmd, state: &mut State) {
             state.ribbon_view_open = false;
             state.ribbon_theme_open = false;
             state.ribbon_recent_open = None;
-            state.ribbon_mode_open = true;
-            state.status = format!("{why} - pick a workspace");
+            let setup = camcraft_app::setup::active(&state.world).unwrap_or_default();
+            actions::target(state, UiTarget::SetupNode(setup, SetupPage::Machine));
+            state.status = format!("{why} - opened the Machine page");
         }
         None => state.status = why,
     }

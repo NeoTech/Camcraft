@@ -447,8 +447,8 @@ fn ribbon_labels_whole_and_captions_painted() {
     // once - no two buttons share a label.
     let words = [
         "New", "Model", "Open", "Save", "Save As", "Post", "Setups", "Stock", "Origin", "Tools",
-        "Undo", "Redo", "Run", "Delete", "Frame", "Paths", "Simulate", "Deviate", "Panels\u{2026}",
-        "Theme\u{2026}", "Mill 2D\u{2026}", "Mill 3D\u{2026}", "Drill\u{2026}", "Multi\u{2026}",
+        "Undo", "Redo", "Run", "Delete", "Frame", "Paths", "Simulate", "Deviate", "Panels",
+        "Theme", "2D", "3D", "Drill", "Multi",
     ];
     for w in words {
         let n = ribbon.iter().filter(|(t, _, _)| t == w).count();
