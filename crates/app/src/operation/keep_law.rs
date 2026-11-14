@@ -31,6 +31,11 @@
 //!   against the parts - the round wall of a hole the part models where
 //!   the op declares one is excused, nothing else - and the 2D Chamfer,
 //!   which takes the solid law: a stock edge is not a part edge.
+//!   #1635 added the cross drill (a Drill with cross holes,
+//!   [`is_cross_drill`]): its chain answers to its own radial part law
+//!   (`cross_part`) against the setup's parts, as it does against its
+//!   source on a part source - each declared cross hole's round wall,
+//!   about its own axis, excused; never the stock it was read off.
 //!
 //! - **Part source, neighbouring parts** (#1621): a part-source
 //!   operation's own law reads its source's mesh only, so a cut on part
@@ -64,12 +69,14 @@ pub fn is_keep_kind(params: &OpParams) -> bool {
 /// Slot, Trochoidal slot and Circular (`authored_law`), Contour and Face
 /// (`Section`), Engrave and Trace (`Mark`), the hole kinds (`Contain`,
 /// [`is_hole_kind`]) - and the 2D Chamfer (#1631: on a part source its
-/// break is the part's own edge; off the stock, the solid law).
+/// break is the part's own edge; off the stock, the solid law) - and
+/// the cross drill (#1635, [`is_cross_drill`]: `cross_part`).
 #[must_use]
 pub fn is_stock_kept_kind(params: &OpParams) -> bool {
     is_keep_kind(params)
         || super::mark_law::is_mark_kind(params)
         || is_hole_kind(params)
+        || is_cross_drill(params)
         || matches!(
             params,
             OpParams::Slot { .. }
@@ -96,6 +103,16 @@ pub fn is_hole_kind(params: &OpParams) -> bool {
         OpParams::Bore { .. } | OpParams::Thread { .. } => true,
         _ => false,
     }
+}
+
+/// Whether `params` is a cross drill: a Drill with cross holes. Its
+/// chain runs along each hole's own axis and answers to `cross_part`
+/// (the cross holes' walls excused about their axes), never to the
+/// vertical-wall containment law; off the stock (#1635) that law reads
+/// the setup's parts ([`parts_in_stock`]) instead of the stock.
+#[must_use]
+pub fn is_cross_drill(params: &OpParams) -> bool {
+    matches!(params, OpParams::Drill { cross, .. } if !cross.is_empty())
 }
 
 /// The parts an operation whose source is NOT the part (the stock, or
