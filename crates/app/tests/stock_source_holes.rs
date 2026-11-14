@@ -160,3 +160,29 @@ fn over_mcp_a_stock_source_hole_or_chamfer_answers_for_the_part_the_same() {
     assert_eq!(op_gouges(&clear), 0, "{clear}");
     assert_eq!(clear["ok"], json!(true), "{clear}");
 }
+
+#[test]
+fn a_part_added_under_a_stock_source_drill_is_judged_at_the_post_by_the_hole_law() {
+    // #1691: on a turned stock the program sim does not judge, so the post
+    // judges the kept parts again (#1628) - by generation's own law. A
+    // Drill off the stock at (25, 0), where only the stock stands, posts.
+    // A second part then added there: with its own modelled hole at the
+    // drill's size the hole law excuses its faceted wall and the program
+    // posts; solid there, the drill cuts it and the post refuses by name.
+    for (label, hole) in [("holed", true), ("solid", false)] {
+        let (world, mut h) = job(Model::hole(3.0, 8.0), HALF, true);
+        let warns = hole_op(&world, &mut h, Kind::Drill, Cut::at(25.0, 0.0, 3.0, 10.0));
+        assert!(warns.iter().all(|w| !w.blocks_post()), "{label}: a clean generation: {warns:?}");
+        assert_posts(&world, &format!("added-{label}-before"));
+        let mut f = Vec::new();
+        let ring = common::solid_part::circle((25.0, 0.0), 3.0, 32);
+        let rim = hole.then_some((ring.as_slice(), 8.0));
+        common::solid_part::plate(&common::solid_part::rect(20.0, -5.0, 30.0, 5.0), rim, 0.0, TOP, &mut f);
+        h.execute(&world, ImportModel::from_mesh("other", Mesh::from_facets(f)));
+        if hole {
+            assert_posts(&world, "added-holed");
+        } else {
+            assert_not_posted(&world, "added-solid", "S1 now cuts part 'other'");
+        }
+    }
+}
