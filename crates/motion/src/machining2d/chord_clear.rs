@@ -26,9 +26,11 @@ const EPS: f64 = 1e-9;
 /// slips off its end at a vertex whose other edge turns away - two
 /// pieces of one area that meet the chord line only along their own
 /// walls (the cutter-centre pieces either side of a part that pinches
-/// the stock's band shut). Every edge touch splits the chord, and the
-/// midpoint of each piece decides for that piece: between two touches
-/// it meets no boundary, so it lies wholly inside or wholly outside.
+/// the stock's band shut). Every vertex the chord touches without a
+/// crossing splits the chord (the ends of a grazed edge are such
+/// vertices), and the midpoint of each piece decides for that piece:
+/// between two touches it crosses no boundary, so it lies wholly in the
+/// closed region or wholly outside it.
 pub fn chord_clears(region: &Region, a: Point2, b: Point2) -> bool {
     if (!region.contains(a) && !on_boundary(region, a))
         || (!region.contains(b) && !on_boundary(region, b))
@@ -39,9 +41,7 @@ pub fn chord_clears(region: &Region, a: Point2, b: Point2) -> bool {
         return true;
     }
     let d = Point2::new(b.x - a.x, b.y - a.y);
-    let dd = d.x * d.x + d.y * d.y;
     let mut cuts: Vec<f64> = vec![0.0, 1.0];
-    let along = |q: Point2| ((q.x - a.x) * d.x + (q.y - a.y) * d.y) / dd;
     for l in region.loops() {
         let pts = l.points();
         let n = pts.len();
@@ -52,14 +52,9 @@ pub fn chord_clears(region: &Region, a: Point2, b: Point2) -> bool {
             let ca = Point2::new(c.x - a.x, c.y - a.y);
             let den = d.x * g.y - d.y * g.x;
             if den == 0.0 {
-                // Parallel to this edge. On the chord's line (within
-                // the boundary tolerance) it is a graze: its ends split
-                // the chord, so the piece beyond the edge is judged on
-                // its own.
-                let off = ca.x * d.y - ca.y * d.x;
-                if off * off <= 1e-18 * dd {
-                    cuts.extend([along(c), along(e)].into_iter().filter(|t| EPS < *t && *t < 1.0 - EPS));
-                }
+                // Parallel to this edge. An edge on the chord's line is
+                // a graze; its ends are vertices that the edges next to
+                // it meet (below), and those touches split the chord.
                 continue;
             }
             let t = (ca.x * g.y - ca.y * g.x) / den;
@@ -70,7 +65,7 @@ pub fn chord_clears(region: &Region, a: Point2, b: Point2) -> bool {
             if u > EPS && u < 1.0 - EPS {
                 return false; // crosses the open edge: a real crossing
             }
-            if u >= -EPS && u <= 1.0 + EPS {
+            if (-EPS..=1.0 + EPS).contains(&u) {
                 // The chord goes through a loop vertex. That cuts the
                 // boundary only if the two edges meeting there are on
                 // opposite sides of the chord line; both on one side is
