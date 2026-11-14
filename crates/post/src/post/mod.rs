@@ -111,6 +111,11 @@ pub struct Dump<'a> {
     /// Stock bounds in mm: left, right, front, back (XY), plus top Z.
     pub stock: [f64; 4],
     pub stock_top_z: f64,
+    /// #1666: the radius the stock sweeps about the spindle axis (the
+    /// world Z line through `origin`), in mm - a round bar's radius, a
+    /// square bar's half-diagonal. Stated for turning machines only;
+    /// None writes no PARAM, so a mill stream stays as it was.
+    pub stock_turn_radius: Option<f64>,
     /// Verification warnings attached to the path (the gate's
     /// evidence, riding the stream).
     pub warnings: Vec<String>,
@@ -205,6 +210,7 @@ impl<'a> Default for Dump<'a> {
             origin: [0.0; 3],
             stock: [0.0; 4],
             stock_top_z: 0.0,
+            stock_turn_radius: None,
             warnings: Vec::new(),
             part_load: None,
             part_unload: false,
@@ -265,6 +271,9 @@ pub fn dump(t: &Toolpath, d: &Dump) -> Vec<Record> {
     out.push(Record::Param { name: "StockXYFront".into(), value: json!(d.stock[2]) });
     out.push(Record::Param { name: "StockXYBack".into(), value: json!(d.stock[3]) });
     out.push(Record::Param { name: "StockZTop".into(), value: json!(d.stock_top_z) });
+    if let Some(r) = d.stock_turn_radius.filter(|r| r.is_finite() && *r > 0.0) {
+        out.push(Record::Param { name: "StockTurnRadius".into(), value: json!(r) });
+    }
     if let Some(word) = d.coolant.param_word() {
         out.push(Record::Param { name: "Coolant".into(), value: json!(word) });
     }

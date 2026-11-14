@@ -998,6 +998,15 @@ pub fn op_streams(world: &World) -> Result<Vec<(String, Vec<cnc::Record>)>, Stri
             Some(a) => ([a.min.x, a.max.x, a.min.y, a.max.y], a.max.z),
             None => ([0.0; 4], 0.0),
         };
+        // #1666: a turning machine's stream states the radius the stock
+        // sweeps about the spindle axis, so a square bar's corners are
+        // known to the post; a mill's stream stays as it was.
+        let stock_turn_radius = matches!(
+            crate::machine::kind_of_setup(world, setup),
+            crate::machine::Kind::Lathe | crate::machine::Kind::MillTurn
+        )
+        .then(|| crate::stock_turn::turn_radius_for(world, setup, [origin[0], origin[1]]))
+        .flatten();
         // The feeder signals ride the section (M5.2 G.2): only a
         // Part operation can carry them, and a load with an advance
         // of 0 is still a load - the ACT, not the number. The
@@ -1086,6 +1095,7 @@ pub fn op_streams(world: &World) -> Result<Vec<(String, Vec<cnc::Record>)>, Stri
             origin,
             stock,
             stock_top_z,
+            stock_turn_radius,
             // The scallop reading (M13.9) is a quality note: shown on
             // the op, never a WARN record - a WARN record holds the
             // post, and a scallop is neither a gouge nor a collision.
