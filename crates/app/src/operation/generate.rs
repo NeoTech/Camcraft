@@ -2779,110 +2779,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
     } else {
         path
     };
-    let stl = match &params {
-        OpParams::Face { .. }
-        | OpParams::Probe { .. }
-        | OpParams::PlasmaProfile(_)
-        | OpParams::WireContour(_)
-        | OpParams::SinkerBurn(_)
-        | OpParams::SinkerSideBurn(_)
-        | OpParams::Trace { .. }
-        // The engrave twin leaves no kerf shelf (M2.4 B), and the
-        // chamfer cone owns its face outright - the ride IS the
-        // finished surface, a leave number could only move the rest
-        // verdict (the contour-rides' answer, spoken on a mill).
-        | OpParams::Engrave { .. }
-        | OpParams::Chamfer2D { .. }
-        // The deburr cone owns its break outright, same grammar as
-        // its 2D twin one row up: the ride IS the finished edge, and
-        // a leave number could only move the rest verdict (M2.5 E B).
-        | OpParams::Deburr { .. }
-        | OpParams::Drill { .. }
-        | OpParams::Finish3D { .. }
-        // The 5-axis kinds leave no stock - the ball path is the
-        // finish's path, and the pose adds no material law. The swarf
-        // family included: lying WITH the flank changes what the
-        // shank sees, not what the ball removes.
-        | OpParams::Contour5D { .. }
-        | OpParams::Parallel5D { .. }
-        | OpParams::Swarf { .. }
-        | OpParams::AdvancedSwarf { .. }
-        // Rotary leaves no stock either: the posed path is the
-        // finish's path, the axis fit adds no material law.
-        | OpParams::RotaryContour { .. }
-        | OpParams::RotaryParallel { .. }
-        // Flow bends the lines, not the material law. The drive-curve
-        // contour removes what the chain says, nothing more - the
-        // ball's envelope at the curve's stations is the whole law.
-        | OpParams::Flow5D { .. }
-        | OpParams::MultiAxisContour { .. }
-        // Facing leaves no shelf: the ladder steps to the facing
-        // plane and stops - the tolerance measures the finish, a
-        // stock-to-leave number would only move the verdict (M5.2 A).
-        // The finish ride is that answer on the skin: the tolerance
-        // IS its chord budget, and a leave would only move the
-        // verdict (M5.2 B).
-        | OpParams::Facing { .. }
-        // The finish plunge is the floor itself - the leave would
-        // only move the rest verdict, and the verdict already reads
-        // it (M5.2 C). Parting leaves nothing: the bar that stands
-        // past the kerf is the scrap, and it goes.
-        | OpParams::ProfileFinish { .. }
-        | OpParams::GrooveFinish { .. }
-        | OpParams::Part { .. }
-        // Threading leaves no shelf either: the full-form pass owns
-        // the whole wave, and the shallower rungs before it only
-        // widen it - what stands is what the wave scan measures,
-        // with nothing added to the floor (M5.2 D). The contour
-        // rides own their skin outright: a chamfer and a taper are
-        // finished by definition, and a multi-pass program ends ON
-        // the profile - its leave is spent inside the ladder, not
-        // standing outside the verdict (M5.2 E).
-        | OpParams::Threading { .. }
-        | OpParams::Chamfering { .. }
-        | OpParams::TaperTurning { .. }
-        | OpParams::MultiPassTurning { .. }
-        // A crown plunge leaves no shelf either: the valley IS the
-        // promise, and the deepest legal sink stands in it exactly -
-        // a leave number could only move the rest verdict (M5.2 E2).
-        // The bore ride owns its wall outright: the nose stands ON
-        // the skin it offsets, and a leave would only move the
-        // envelope's pass band (M5.2 F).
-        | OpParams::FormTurning { .. }
-        | OpParams::BoringTurning { .. }
-        // The thread mill owns the wave outright: the helix ends ON
-        // the major circle, and the infeed rungs before it only
-        // widen it (M2.4 C) - the threading answer on a mill.
-        | OpParams::Thread { .. } => 0.0,
-        OpParams::Contour { stock_to_leave, .. }
-        | OpParams::Pocket { stock_to_leave, .. }
-        // The twins leave the pocket's shelf, same law (M2.4 A).
-        | OpParams::Adaptive2D { stock_to_leave, .. }
-        | OpParams::Offset2D { stock_to_leave, .. }
-        | OpParams::Slot { stock_to_leave, .. }
-        | OpParams::TrochoidalSlot { stock_to_leave, .. }
-        // The circular ladder leaves the pocket's shelf, ring 0 eroded
-        // off the wall by it (M2.4 B).
-        | OpParams::Circular { stock_to_leave, .. }
-        // The boring ride leaves the wall's own shelf: the rim
-        // stands this far short of the model's circle (M2.4 C).
-        | OpParams::Bore { stock_to_leave, .. }
-        | OpParams::Pocket3D { stock_to_leave, .. }
-        // The ladder is the one rotary that LEAVES a shelf on purpose:
-        // the finishing kinds own the ledge under a column's last cut,
-        // so the wrap reads this number as a radial wall (E2).
-        | OpParams::RotaryOffset { stock_to_leave, .. }
-        // The stamped ladder leaves the pocket's shelf, same law.
-        | OpParams::MultiAxisRough { stock_to_leave, .. }
-        // The rung ladder leaves a radial wall read as a distance to
-        // the part - which is exactly what the scan measures
-        // (M5.2 B): every feed point must stand nose+leave off.
-        // The blade ladder leaves the same skin on the groove floor,
-        // and the meridian verdict gates REST by exactly tol+leave
-        // (M5.2 C).
-        | OpParams::ProfileRough { stock_to_leave, .. }
-        | OpParams::GrooveRough { stock_to_leave, .. } => *stock_to_leave,
-    };
+    let stl = stock_to_leave_of(&params);
     // The 2D kinds' depth-aware verify (the silent-gouge fix): a flat
     // region says where the walls stand at ONE plane, and a path walked
     // at every level of the ladder must also answer to the part solid
@@ -3559,7 +3456,7 @@ const CONTAIN_STEP: f64 = 0.25;
 /// own axis (#1205), never a flat - and a thread mill's `bores` their
 /// threads (#1071).
 #[allow(clippy::too_many_arguments)] // the path, the part, the cutter and the law's inputs
-fn contain_into(
+pub(super) fn contain_into(
     warns: &mut Vec<Warning>,
     path: &Toolpath,
     facets: &[Triangle],
@@ -3585,6 +3482,116 @@ fn contain_into(
         if !warns.contains(&w) {
             warns.push(w);
         }
+    }
+}
+
+/// The stock to leave every solid law reads for `params` (#1628: one
+/// table, so the post's live re-judge of the kept parts reads the very
+/// number generation did).
+pub(super) fn stock_to_leave_of(params: &OpParams) -> f64 {
+    match params {
+        OpParams::Face { .. }
+        | OpParams::Probe { .. }
+        | OpParams::PlasmaProfile(_)
+        | OpParams::WireContour(_)
+        | OpParams::SinkerBurn(_)
+        | OpParams::SinkerSideBurn(_)
+        | OpParams::Trace { .. }
+        // The engrave twin leaves no kerf shelf (M2.4 B), and the
+        // chamfer cone owns its face outright - the ride IS the
+        // finished surface, a leave number could only move the rest
+        // verdict (the contour-rides' answer, spoken on a mill).
+        | OpParams::Engrave { .. }
+        | OpParams::Chamfer2D { .. }
+        // The deburr cone owns its break outright, same grammar as
+        // its 2D twin one row up: the ride IS the finished edge, and
+        // a leave number could only move the rest verdict (M2.5 E B).
+        | OpParams::Deburr { .. }
+        | OpParams::Drill { .. }
+        | OpParams::Finish3D { .. }
+        // The 5-axis kinds leave no stock - the ball path is the
+        // finish's path, and the pose adds no material law. The swarf
+        // family included: lying WITH the flank changes what the
+        // shank sees, not what the ball removes.
+        | OpParams::Contour5D { .. }
+        | OpParams::Parallel5D { .. }
+        | OpParams::Swarf { .. }
+        | OpParams::AdvancedSwarf { .. }
+        // Rotary leaves no stock either: the posed path is the
+        // finish's path, the axis fit adds no material law.
+        | OpParams::RotaryContour { .. }
+        | OpParams::RotaryParallel { .. }
+        // Flow bends the lines, not the material law. The drive-curve
+        // contour removes what the chain says, nothing more - the
+        // ball's envelope at the curve's stations is the whole law.
+        | OpParams::Flow5D { .. }
+        | OpParams::MultiAxisContour { .. }
+        // Facing leaves no shelf: the ladder steps to the facing
+        // plane and stops - the tolerance measures the finish, a
+        // stock-to-leave number would only move the verdict (M5.2 A).
+        // The finish ride is that answer on the skin: the tolerance
+        // IS its chord budget, and a leave would only move the
+        // verdict (M5.2 B).
+        | OpParams::Facing { .. }
+        // The finish plunge is the floor itself - the leave would
+        // only move the rest verdict, and the verdict already reads
+        // it (M5.2 C). Parting leaves nothing: the bar that stands
+        // past the kerf is the scrap, and it goes.
+        | OpParams::ProfileFinish { .. }
+        | OpParams::GrooveFinish { .. }
+        | OpParams::Part { .. }
+        // Threading leaves no shelf either: the full-form pass owns
+        // the whole wave, and the shallower rungs before it only
+        // widen it - what stands is what the wave scan measures,
+        // with nothing added to the floor (M5.2 D). The contour
+        // rides own their skin outright: a chamfer and a taper are
+        // finished by definition, and a multi-pass program ends ON
+        // the profile - its leave is spent inside the ladder, not
+        // standing outside the verdict (M5.2 E).
+        | OpParams::Threading { .. }
+        | OpParams::Chamfering { .. }
+        | OpParams::TaperTurning { .. }
+        | OpParams::MultiPassTurning { .. }
+        // A crown plunge leaves no shelf either: the valley IS the
+        // promise, and the deepest legal sink stands in it exactly -
+        // a leave number could only move the rest verdict (M5.2 E2).
+        // The bore ride owns its wall outright: the nose stands ON
+        // the skin it offsets, and a leave would only move the
+        // envelope's pass band (M5.2 F).
+        | OpParams::FormTurning { .. }
+        | OpParams::BoringTurning { .. }
+        // The thread mill owns the wave outright: the helix ends ON
+        // the major circle, and the infeed rungs before it only
+        // widen it (M2.4 C) - the threading answer on a mill.
+        | OpParams::Thread { .. } => 0.0,
+        OpParams::Contour { stock_to_leave, .. }
+        | OpParams::Pocket { stock_to_leave, .. }
+        // The twins leave the pocket's shelf, same law (M2.4 A).
+        | OpParams::Adaptive2D { stock_to_leave, .. }
+        | OpParams::Offset2D { stock_to_leave, .. }
+        | OpParams::Slot { stock_to_leave, .. }
+        | OpParams::TrochoidalSlot { stock_to_leave, .. }
+        // The circular ladder leaves the pocket's shelf, ring 0 eroded
+        // off the wall by it (M2.4 B).
+        | OpParams::Circular { stock_to_leave, .. }
+        // The boring ride leaves the wall's own shelf: the rim
+        // stands this far short of the model's circle (M2.4 C).
+        | OpParams::Bore { stock_to_leave, .. }
+        | OpParams::Pocket3D { stock_to_leave, .. }
+        // The ladder is the one rotary that LEAVES a shelf on purpose:
+        // the finishing kinds own the ledge under a column's last cut,
+        // so the wrap reads this number as a radial wall (E2).
+        | OpParams::RotaryOffset { stock_to_leave, .. }
+        // The stamped ladder leaves the pocket's shelf, same law.
+        | OpParams::MultiAxisRough { stock_to_leave, .. }
+        // The rung ladder leaves a radial wall read as a distance to
+        // the part - which is exactly what the scan measures
+        // (M5.2 B): every feed point must stand nose+leave off.
+        // The blade ladder leaves the same skin on the groove floor,
+        // and the meridian verdict gates REST by exactly tol+leave
+        // (M5.2 C).
+        | OpParams::ProfileRough { stock_to_leave, .. }
+        | OpParams::GrooveRough { stock_to_leave, .. } => *stock_to_leave,
     }
 }
 
