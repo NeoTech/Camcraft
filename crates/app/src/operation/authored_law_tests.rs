@@ -77,21 +77,33 @@ fn the_trochoidal_slot_answers_to_the_same_authored_law() {
 }
 
 #[test]
-fn the_kinds_that_enter_or_remove_the_part_by_contract_stay_unjudged() {
-    // #1593 audit: the 2D kinds still at `None` on a finished-part
-    // source, each by contract (see `depth_law_of`'s doc): the 2D
-    // Chamfer enters the part by design at a derived depth, and a
-    // whole-model pocket family source is the volume to remove. Moving
-    // one of them is a decision, not a drift - this table makes it a
-    // visible one.
-    let whole = SrcRef::Entity("part".into());
+fn the_2d_chamfer_alone_stays_unjudged_on_the_part() {
+    // #1593 audit, as #1595 and #1603 left it: the one 2D kind still at
+    // `None` on a finished-part source is the 2D Chamfer - it enters
+    // the part by design at a depth derived from its width and angle,
+    // and the program sim judges it against its declared break (#303).
+    // Moving it is a decision, not a drift.
     let p = seed_params(OpType::Chamfer2D.ordinal());
-    assert_eq!(depth_law_of(&p, &whole, true), DepthLaw::None, "Chamfer2D whole");
+    assert_eq!(depth_law_of(&p, &SrcRef::Entity("part".into()), true), DepthLaw::None, "Chamfer2D whole");
     assert_eq!(depth_law_of(&p, &picked(), true), DepthLaw::None, "Chamfer2D picked");
+}
+
+#[test]
+fn the_pocket_family_keeps_a_whole_model_and_sections_a_pick() {
+    // #1603: a whole model is cleared around and kept (`Keep`: an area
+    // offset or extension into it gouges); a pick is `Section` as before.
+    let whole = SrcRef::Entity("part".into());
     for t in [OpType::Pocket, OpType::Adaptive2D, OpType::Offset2D] {
         let p = seed_params(t.ordinal());
-        assert_eq!(depth_law_of(&p, &whole, true), DepthLaw::None, "{t:?} whole");
+        assert!(super::keep_law::is_keep_kind(&p), "{t:?}");
+        assert_eq!(depth_law_of(&p, &whole, true), DepthLaw::Keep, "{t:?} whole");
         assert_eq!(depth_law_of(&p, &picked(), true), DepthLaw::Section, "{t:?} picked");
+        // Not a `part_solid` job: the stock-source reading is the
+        // job's `keep_parts`, never this table.
+        assert_eq!(depth_law_of(&p, &SrcRef::Stock, false), DepthLaw::None, "{t:?} stock");
+    }
+    for t in [OpType::Contour, OpType::Face, OpType::Slot, OpType::Engrave, OpType::Trace, OpType::Chamfer2D, OpType::Drill] {
+        assert!(!super::keep_law::is_keep_kind(&seed_params(t.ordinal())), "{t:?}");
     }
 }
 

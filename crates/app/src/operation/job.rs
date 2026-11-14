@@ -105,6 +105,9 @@ pub struct GenJob {
     /// aware verify judges the 2D kinds against its solid only then -
     /// cutting into stock is the job, cutting into the part never is.
     pub(super) part_solid: bool,
+    /// #1603: the setup's parts a pocket-family op on the stock must
+    /// keep (`keep_law::parts_in_stock`); empty for every other job.
+    pub(super) keep_parts: Vec<Triangle>,
     /// The area controls resolved against the world (M11.5); `None` for
     /// the identity - an untouched operation carries nothing new.
     pub(super) area: Option<Result<AreaCtx, GenError>>,
@@ -398,6 +401,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         fixture_meshes,
         rotary_axis,
         part_solid,
+        keep_parts: super::keep_law::parts_in_stock(world, setup, &op.params, part_solid),
         area,
         wcs_origin,
         spindle_note,

@@ -65,16 +65,21 @@ aligned stock, and any depth posted on a turned one. After:
   groove is the part's own surface, the budget is measured from its
   floor, and the cut passes.
 
-**`uncovered()` (posting_sim.rs): left as it is.** The issue asked
-whether it should refuse an op at `None` on a model source when the sim
-refuses to judge, perhaps scoped to these two kinds. With `Mark`, no
-Engrave or Trace on a model source is at `None`, so a scoped refusal
-would have nothing to refuse. It would also be option (b), which keeps
-the verdict tied to whether the sim can model the stock - the thing the
-issue asks to remove - and would refuse every legal engraving on a
-turned stock, a 3+2 frame or a rotary. The kinds still at `None` on a
-model source (whole-model Pocket / Adaptive2D / Offset2D, 2D Chamfer)
-are #1593's audit, unchanged.
+**`uncovered()` (posting_sim.rs): left as it is.** Both issues asked
+whether it should stop counting an op at `None` on a model source as
+judged when the sim refuses to judge. Measured against the rule's own
+test - a legal program must still post on a turned stock:
+- Before this PR a legal whole-model Pocket, Adaptive2D and Offset2D
+  were at `None`. The rule would refuse every one of them on a turned
+  stock, a 3+2 frame or a rotary: a false refusal, so those ops needed
+  a law of their own instead (#1603, below).
+- It keeps the verdict tied to whether the sim can model the stock,
+  which is what #1595 asks to remove.
+- It cannot name the move. The op-level laws do.
+- With `Mark` and `Keep`, the only 2D kind left at `None` on a model
+  source is the 2D Chamfer, whose depth is derived and whose break the
+  sim credits (#303). A rule for one kind that is legal by construction
+  would only add refusals.
 
 **Considered and dropped:**
 - (b) refuse on a model source when the sim cannot judge, and (c) both:
@@ -124,3 +129,74 @@ are #1593's audit, unchanged.
 **Cost to change later:** the budget is one function
 (`mark_law::budget`), read by the operation's law and the sim's credit
 alike; the law's kinds are one match arm.
+
+## #1603 - The pocket family keeps the part: a whole model, or the parts under a stock source
+
+**Decided:** 2D Pocket, 2D Adaptive and 2D Offset answer for the part
+on the operation itself (`crates/app/src/operation/keep_law.rs`):
+- **Whole-model source:** a new `DepthLaw::Keep` - the solid law alone
+  (`contain_into` with nothing excused), against the source's own mesh.
+- **Stock source, or a pick off the setup's stock:** the same solid law
+  against the setup's parts (`setup_align::parts_facets_in`, the mesh
+  the program sim judges against; fixtures and a stock-only model left
+  out), collected into the job as `keep_parts`. A setup with no part
+  judges nothing.
+A cutting move that enters the part is a blocking `Warning::Gouge` on
+that move. Picks on the part stay `Section`, as before.
+
+**Why:** these were `DepthLaw::None` ("the source is the volume to
+remove"). That contract is true only of the stock. A whole model is
+cleared AROUND (#12: its sections are islands), and with the default
+area controls every ring stands outside it - but an area offset or an
+extension moves the boundary into the part, and a stock source covers
+the part outright (#1554). Nothing on the operation judged either, so
+the post rode on the program sim, which refuses a turned stock.
+Measured on the #12 fixture (30 x 30 x 10 block, 12 x 12 boss to Z20,
+10 mm end mill, 50 x 50 x 20 stock), cut to Z5:
+
+| case | op gouges before | turned stock before | op gouges now | aligned / turned now |
+|---|---|---|---|---|
+| whole model, Area offset +3 (Pocket, Adaptive) | 0 | posts | yes | refused / refused by the op's moves |
+| whole model, extension +5 (Pocket, Adaptive) | 0 | posts | yes | refused / refused by the op's moves |
+| stock source (Pocket, Adaptive) | 0 | posts | yes | refused / refused by the op's moves |
+| whole model, default controls (Pocket, Adaptive, Offset) | 0 | posts | 0 | posts / posts |
+| stock source stopping on the part's top | 0 | posts | 0 | posts / posts |
+
+**Why the solid law and not `Section`:** `Section` adds the plane law,
+which reads tangency against the operation's region. For a whole model
+the region is the stock around the part, not the part, so that reading
+has nothing true to add; the solid law sweeps the real cutter against
+the real mesh and is the same test `Section` ends in (b2).
+
+**Correction to #1593's audit** (`docs/decisions/1593-trochoid-law.md`,
+merged with #1597): its bullet says a whole-model Pocket / Adaptive2D /
+Offset2D "stays outside the part". That holds only with the default
+area controls (M5's review of #1597, pullrequestreview-5899991928). With
+an offset or extension it cuts the part; this entry is the fix. The
+pinning unit test moved with it: the table is now
+`the_pocket_family_keeps_a_whole_model_and_sections_a_pick` and
+`the_2d_chamfer_alone_stays_unjudged_on_the_part`.
+
+**Considered and dropped:**
+- The `uncovered()` rule: above. It refuses the legal rows of the table
+  on a turned stock.
+- Refusing a stock-source pocket at generate whenever a part stands in
+  the stock (#1554's first option). A stock-source clearing that stops
+  on the part's top is legal and common; the law convicts only the
+  moves that enter the part. #1554's generate-side behaviour (rough the
+  stock minus the part) stays its own issue.
+- Judging every stock-source 2D kind against the setup's parts here.
+  #1593 decided and pinned the opposite for the typed kinds
+  (`a_trochoid_on_the_stock_is_never_judged`), and Engrave / Trace
+  would need the mark credited against a part they do not name. Probed:
+  a stock-source Engrave or Trace 7 mm into the part has 0 op findings
+  and posts on a turned stock. Filed as its own issue rather than
+  widened here.
+
+**Known cost (conservative side):** the same as #1593's: a ring finished
+to size against a coarsely tessellated wall is convicted once the chord
+sag passes the gouge tolerance (0.01 mm). The default clearing on the
+#12 fixture reads 0.005 mm and is clean; leaving stock clears it.
+
+**Cost to change later:** one match arm (`depth_law_of`) and one
+function (`keep_law::parts_in_stock`).

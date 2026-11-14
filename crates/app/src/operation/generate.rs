@@ -111,6 +111,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         fixture_meshes,
         rotary_axis,
         part_solid,
+        keep_parts,
         area,
         wcs_origin,
         unit,
@@ -3125,6 +3126,11 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             if depth_law == DepthLaw::Contain {
                 contain_into(&mut warns, &path, &material.facets, &cutter, depth_law, stl, material.excess, &params, &thread_bores);
             }
+            // #1603: the pocket family keeps the part - its own mesh
+            // for a whole-model source, the setup's parts for a stock one.
+            if let Some(kept) = (depth_law == DepthLaw::Keep).then_some(&material.facets).or((!keep_parts.is_empty()).then_some(&keep_parts)) {
+                contain_into(&mut warns, &path, kept, &cutter, DepthLaw::Keep, stl, material.excess, &params, &[]);
+            }
             // #1595: an Engrave or Trace on the part may lower its
             // surface by the mark budget and no more (`mark_law`).
             let marked = (depth_law == DepthLaw::Mark)
@@ -3270,6 +3276,11 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             if depth_law == DepthLaw::Contain {
                 contain_into(&mut warns, &path, &m_gen.facets, &cutter, depth_law, stl, material.excess, &params, &thread_bores);
             }
+            // #1603: the keep law in the plane's frame.
+            let keep_local = (!keep_parts.is_empty()).then(|| f.local_facets(&keep_parts));
+            if let Some(kept) = (depth_law == DepthLaw::Keep).then_some(&m_gen.facets).or(keep_local.as_ref()) {
+                contain_into(&mut warns, &path, kept, &cutter, DepthLaw::Keep, stl, material.excess, &params, &[]);
+            }
             // #1595: the mark law in the plane's frame - local path,
             // local part, the budget measured along the tool.
             let mut path_world = path_world;
@@ -3350,6 +3361,13 @@ pub(super) enum DepthLaw {
     /// material they remove or whose cut enters the part by design
     /// with a depth that is derived, not typed (2D Chamfer).
     None,
+    /// The keep law (#1603, `keep_law`): the pocket family on a whole
+    /// model. The part's sections are islands the rings stand outside
+    /// of, so tangency to them is the promise and the section laws
+    /// have nothing to add - but an area offset or extension can move
+    /// the boundary into the part. The solid law alone, nothing
+    /// excused: a stack entering the part anywhere is a gouge.
+    Keep,
     /// The mark law (Engrave, Trace; #1595, `mark_law`): the cut enters
     /// the part by design, so tangency and the sections stand down -
     /// but only as a mark. The solid law runs against the part lowered
@@ -3375,9 +3393,13 @@ pub(super) enum DepthLaw {
 /// The depth law per kind and source. Only a finished-part source (see
 /// `GenJob::part_solid`) can be gouged:
 /// - Contour and Face trim/skim the part itself: `Section`.
-/// - The pocket family cuts picked part features (`Section`); a whole-
-///   model source there is the volume to REMOVE (the region is the
-///   material, its interior is cut by contract), so no part law applies.
+/// - The pocket family cuts picked part features (`Section`). A whole-
+///   model source there is cleared AROUND (#12: the part's sections are
+///   islands), and the part itself is kept: `Keep` (#1603), the solid
+///   law alone - an area offset or extension that carries the boundary
+///   into the part gouges it. (On a stock source the same law reads the
+///   setup's parts, `keep_law::parts_in_stock`; that is not a
+///   `part_solid` job and does not come through here.)
 /// - Circular, Slot and Trochoidal slot cut geometry typed by hand into
 ///   their source: [`authored_law`]. `Section` whenever the source is
 ///   the finished part - picked (Slot #1504, Circular #1550, Trochoidal
@@ -3409,6 +3431,8 @@ pub(super) fn depth_law_of(params: &OpParams, src: &SrcRef, part_solid: bool) ->
         {
             DepthLaw::Section
         }
+        // #1603: a whole model is kept, whatever the area controls say.
+        OpParams::Pocket { .. } | OpParams::Adaptive2D { .. } | OpParams::Offset2D { .. } => DepthLaw::Keep,
         OpParams::Drill { cross, .. } if cross.is_empty() => DepthLaw::Contain,
         OpParams::Bore { .. } | OpParams::Thread { .. } => DepthLaw::Contain,
         // #1595: a centreline cut on the finished part is a mark.
