@@ -138,14 +138,14 @@ fn a_pathpilot_program_has_no_fence_and_no_o_or_n_words() {
             !nc.contains("G21"),
             "{golden}: an inch program never states mm"
         );
-        // The end: Z straight up in machine coordinates, then the
-        // operator's preset G30 location, then M30 - PathPilot's own
-        // ending order.
+        // The end (#1594): Z straight up in machine coordinates, then
+        // M30 - no G30 after it, which could drive Z back down to a low
+        // stored G30 position (the user's PathPilot Hub run).
         let n = lines.len();
         assert_eq!(
             lines.get(n.saturating_sub(3)..),
-            Some(&["G53 G0 Z0", "G30", "M30"][..]),
-            "{golden}: the program ends Z up, G30, M30"
+            Some(&["M5", "G53 G0 Z0", "M30"][..]),
+            "{golden}: the program ends Z up, M30"
         );
     }
 }

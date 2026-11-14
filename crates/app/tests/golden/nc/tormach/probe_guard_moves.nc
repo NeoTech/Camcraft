@@ -39,5 +39,4 @@ M2
 o5005 endif
 M5
 G53 G0 Z0
-G30
 M30
