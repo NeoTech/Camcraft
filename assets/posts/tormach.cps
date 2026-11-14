@@ -432,6 +432,13 @@ function startPreamble() {
     xyUnknown = true;        // G30 (or the changer) may have moved X and Y
     block(["T" + ni(tNo), "M6"]);
     block(["G43", "H" + ni(tNo)]);
+    // #1596: Z straight up again (G53, so the G43 just applied does not
+    // shift it) before the section's first X/Y or A move. The G30 above
+    // leaves Z at the operator's stored G30 height, and one stored below
+    // the part top (a PathPilot Hub run had machine Z -1.5611) would
+    // otherwise carry the tool sideways at that height into the part or
+    // the vise. Also after a non-G30 retract: M6 may move Z.
+    liftZ();
     toolWait = false;
   }
   // A touch probe (#108, #362) states 0 rpm: no spindle start, no belt
