@@ -335,9 +335,13 @@ function onSectionEnd() { endPreamble(); clearZ = null; hopZ = null; }  // #1616
 //   spindle, then Z. Nothing we have read says where the firmware parks
 //   X/Y after its tool change; a Z-only rapid down to a thin stock's
 //   clearance at that X/Y could meet the tools stored in the rack. The
-//   changer's own exit height is what main always traversed at, so the
-//   new hazard is not added; the clearance Z is stated before any
-//   descent (M3's option (c), docs/decisions/1616-first-traverse-clearance.md).
+//   clearance Z is stated before any descent (M3's option (c),
+//   docs/decisions/1616-first-traverse-clearance.md).
+//   OPEN HAZARD (#1614): this X Y traverse is still made at the changer's
+//   exit height, which is not verified. A long tool can leave the tip
+//   below the part top there, and the traverse then crosses the part.
+//   The hazard stays for the Carvera after M6 until a public source
+//   confirms the firmware's M6 exit position (option b).
 // A feed's first move then rapids Z to the height the generator says the
 // tool starts from, and feeds only the stretch planned.
 var xyUnknown = true;

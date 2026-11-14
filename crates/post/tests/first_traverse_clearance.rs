@@ -10,6 +10,8 @@
 //! nothing we have read says where its firmware parks X/Y after a tool
 //! change, and a Z-only rapid down at the rack's X/Y could meet the stored
 //! tools (M3's option (c), docs/decisions/1616-first-traverse-clearance.md).
+//! That X/Y traverse at the unverified exit height is the #1614 hazard,
+//! which stays open on the Carvera until its M6 exit position is confirmed.
 //! At a program start with no tool change it states Z first like the rest.
 //! Provenance: our own tests over our own posts and stream format.
 //!
@@ -233,4 +235,20 @@ ENDSECTION
         let motions: Vec<&str> = out.program.lines().filter(|l| is_motion(l) && !l.starts_with("G53 ")).collect();
         assert_eq!(motions.get(..2), Some(&["G0 Z25.4", "G0 X20 Y10"][..]), "{cps}\n{}", out.program);
     }
+}
+
+/// The Carvera's X/Y traverse right after `M6` is still made at the
+/// changer's exit height, which no source we read confirms (the #1614
+/// hazard stays there, option b open). The script must say so where the
+/// order is chosen, and must not claim that the hazard is gone. This pin
+/// fails if the open-hazard note is removed while the order stays.
+#[test]
+fn the_carvera_script_names_the_open_hazard_after_its_tool_change() {
+    let cps = read("assets/posts/carvera.cps");
+    let note = cps.find("OPEN HAZARD (#1614)").unwrap_or_else(|| panic!("carvera.cps: the open-hazard note is missing"));
+    let order = cps.find("if (changedAt)").unwrap_or_else(|| panic!("carvera.cps: the M6 order branch is missing"));
+    assert!(note < order, "carvera.cps: the note must stand with the traverse comment, before the order branch");
+    let block = &cps[note..order];
+    assert!(block.contains("until a public source") && block.contains("M6 exit position"), "carvera.cps: the note must say what closes it\n{block}");
+    assert!(!cps.contains("hazard is not added"), "carvera.cps: claims the hazard is gone");
 }
