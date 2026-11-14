@@ -15,7 +15,8 @@
 //! material consulted.
 //!
 //! Gate map (#1036): covers app::operation (generate, the Bore arm),
-//! motion::machining2d (bore, descent), motion::plunge_law.
+//! motion::machining2d (bore, descent), motion::plunge_law; and (#1560)
+//! app::operation::hole_digest through app::project (save, load).
 
 use flecs_ecs::prelude::World;
 
@@ -23,7 +24,7 @@ use camcraft_app::cl::{MoveKind, Toolpath};
 use camcraft_app::commands::{AddTool, History, SetStock};
 use camcraft_app::drilling::Hole;
 use camcraft_app::geo2d::Point2;
-use camcraft_app::operation::{self, Height, OpParams, SrcRef};
+use camcraft_app::operation::{self, Height, OpParams, OpStatus, SrcRef};
 use camcraft_app::schema::{Location, Operation};
 use camcraft_app::stock::StockShape;
 use camcraft_app::tools::{catalog, Tool};
@@ -119,4 +120,37 @@ fn an_undrilled_hole_too_tight_for_a_ramp_or_helix_is_refused_by_name() {
     assert!(msg.contains(CENTER_CUT_REFUSAL), "refused by the centre-cutting law: {msg}");
     // The centre-cutting cutter bores the same hole.
     assert!(generate(&world, "CC", bore(4.5)).is_ok());
+}
+
+/// #1560 through the commands: a Bore op whose hole list is edited to a
+/// floor off the 1 um lattice (3.8099999999999996 mm, the file stores
+/// 3.81) is generated Ok, saved, loaded into a fresh world, and still
+/// reads Ok - the stamp digests the hole as the file keeps it.
+#[test]
+fn an_edited_hole_floor_off_the_lattice_stays_ok_through_save_and_load() {
+    use camcraft_app::commands::{CreateOperation, EditOperationParams, GenerateOperation};
+    use camcraft_app::{model, project};
+
+    let world = world();
+    let mut h = History::default();
+    h.execute(&world, CreateOperation::new(&world, "B", "CC", SrcRef::Stock, bore(8.0)).expect("create"));
+    let typed: f64 = 0.190 * 25.4 - 0.040 * 25.4;
+    assert_ne!(typed.to_bits(), 3.81f64.to_bits(), "the probe must be off the lattice");
+    let mut edited = bore(8.0);
+    if let OpParams::Bore { holes, .. } = &mut edited {
+        holes[0].floor_z = typed;
+    }
+    h.execute(&world, EditOperationParams::new(&world, "B", edited).expect("edit"));
+    h.execute(&world, GenerateOperation::new(&world, "B").expect("generate"));
+    let op = model::find_by_name(&world, "B").expect("op");
+    assert_eq!(operation::status_of(&world, &op), OpStatus::Ok, "generated Ok");
+
+    let path = std::env::temp_dir().join(format!("camcraft_f1560_{}.camproj", std::process::id()));
+    project::save(&world, &path).expect("save");
+    let world2 = new_world();
+    let loaded = project::load(&world2, &path);
+    let _ = std::fs::remove_file(&path);
+    loaded.expect("load");
+    let op2 = model::find_by_name(&world2, "B").expect("loaded op");
+    assert_eq!(operation::status_of(&world2, &op2), OpStatus::Ok, "saved Ok, loaded Ok - not Stale");
 }

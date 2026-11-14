@@ -27,6 +27,10 @@ pub mod drilling;
 pub mod entry;
 pub mod entry_arc;
 pub mod links;
+// #1558: a zig-zag ramp flown as the ring's own helical arcs.
+pub mod ring_zig;
+#[cfg(test)]
+mod ring_zig_tests;
 pub mod load;
 pub mod finishing3d;
 pub mod machining2d;

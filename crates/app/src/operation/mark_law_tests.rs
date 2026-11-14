@@ -196,6 +196,20 @@ fn only_the_retract_up_the_marks_own_kerf_is_a_rapid_under_the_surface() {
 }
 
 #[test]
+fn the_retract_out_of_the_kerf_is_judged_past_where_the_cut_left_the_tool() {
+    // Review of PR #1615: an open line's end under an overhang of the
+    // part at Z 105..110 - over the holder's top (Z 99.7) while the
+    // line is cut, in the holder's way as it retracts to Z 130.
+    let feed = Move::new(MoveKind::Feed, p(15.0, 10.0, 9.7), p(15.0, 30.0, 9.7), Some(500.0));
+    let lift = Toolpath::new(vec![feed, Move::new(MoveKind::Rapid, p(15.0, 30.0, 9.7), p(15.0, 30.0, 130.0), None)]);
+    let mut roofed = stepped();
+    roofed.extend(cube(p(5.0, 22.0, 105.0), p(25.0, 38.0, 110.0)).facets.iter().copied());
+    assert_eq!(found_on(&roofed, &lift, &cutter(), 0.3), (Marked { deep: 0, through: 0, stack: 1 }, vec![Warning::RapidInStock { at: 1 }]));
+    // No overhang: the same retract is the kerf's own, and clean.
+    assert_eq!(found_on(&stepped(), &lift, &cutter(), 0.3), (Marked::default(), Vec::new()));
+}
+
+#[test]
 fn the_notes_name_the_budget_and_the_floor_each_for_its_own_finding() {
     let u = Unit::default();
     assert!(notes("Trace", Marked::default(), 3.0, u).is_empty());
