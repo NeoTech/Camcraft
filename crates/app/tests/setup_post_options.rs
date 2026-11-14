@@ -167,6 +167,39 @@ fn setups_disagreeing_on_the_output_are_refused_by_name() {
     assert_eq!(post(&world, "out-back").expect("posts"), both);
 }
 
+/// #1540: the End units are one word for the whole program. Setups that
+/// differ in them are refused by name, whichever setup is active - never
+/// posted with the active setup's word. Setups that agree post exactly
+/// what the document's own choice posts.
+#[test]
+fn setups_disagreeing_on_the_end_units_are_refused_by_name() {
+    use camcraft_app::schema::EndUnits;
+    let (world, mut h) = doc(2);
+    let inch = PostOptions { end_units: EndUnits::Inch, ..PostOptions::default() };
+    let mm = PostOptions { end_units: EndUnits::Millimeters, ..PostOptions::default() };
+    h.execute(&world, SetSetupPostOptions::new(&world, "Setup1", Some(inch)).expect("Setup1 ends in inch"));
+    h.execute(&world, SetSetupPostOptions::new(&world, "Setup2", Some(mm)).expect("Setup2 ends in mm"));
+    let why = post(&world, "end-diff-2").expect_err("refused with Setup2 active");
+    assert!(why.contains("setup 'Setup1' posts with other post options (end units) than the active setup 'Setup2'"), "{why}");
+    h.execute(&world, ActivateSetup::new(&world, Some("Setup1")).expect("activate"));
+    let why = post(&world, "end-diff-1").expect_err("refused with Setup1 active");
+    assert!(why.contains("setup 'Setup2' posts with other post options (end units) than the active setup 'Setup1'"), "{why}");
+    // A setup that follows the document is judged by the document's word.
+    h.execute(&world, SetSetupPostOptions::new(&world, "Setup2", None).expect("Setup2 follows"));
+    assert!(post(&world, "end-follow").is_err(), "the document leaves the unit modal; Setup1 ends in inch");
+    // Agreement posts the program the document's own choice posts.
+    h.execute(&world, SetSetupPostOptions::new(&world, "Setup1", None).expect("Setup1 follows"));
+    h.execute(&world, SetPostOptions::new(&world, inch).expect("document ends in inch"));
+    let document = post(&world, "end-doc").expect("one word: posts");
+    h.execute(&world, SetSetupPostOptions::new(&world, "Setup2", Some(inch)).expect("Setup2 owns inch"));
+    assert_eq!(post(&world, "end-same").expect("posts"), document);
+    // Two differences are both named.
+    let both = PostOptions { per_op: true, end_units: EndUnits::Millimeters, ..PostOptions::default() };
+    h.execute(&world, SetSetupPostOptions::new(&world, "Setup2", Some(both)).expect("Setup2 differs twice"));
+    let why = post(&world, "end-two").expect_err("refused");
+    assert!(why.contains("(output, end units)"), "{why}");
+}
+
 #[test]
 fn a_single_setup_document_posts_byte_identically() {
     for setups in [0, 1] {
