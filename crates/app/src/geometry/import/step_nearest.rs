@@ -240,6 +240,12 @@ impl SearchParameter<D2> for Metered {
     type Point = Point3;
     fn search_parameter<H: Into<SPHint2D>>(&self, point: Point3, hint: H, trials: usize) -> Option<(f64, f64)> {
         let hint = self.own_hint(hint.into());
+        // A miss returns here on purpose, with no second search and no
+        // fault: truck's robust mesher (`by_search_nearest_parameter`,
+        // truck-meshalgo 0.4.0) then asks again with no hint, and after
+        // that calls `search_nearest_parameter` below, with the hint and
+        // without it. Every miss of this exact search therefore reaches
+        // the second search there, charged to the same meter.
         let found = self.inner.search_parameter(point, hint, trials)?;
         // #1548: at a pole the free parameter comes back anywhere.
         let found = super::step_pole::settle(&self.inner, point, previous(hint), found);
