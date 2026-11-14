@@ -12,9 +12,10 @@
 //!
 //! Why it exists: a helix of radius `b` clears the ring `b +- r` only.
 //! With `b > r` a post of radius `b - r` is left standing at the bore's
-//! centre, which no front arc ever reaches. The stand-alone slot keeps
-//! the plain bore it always posted (`open: false`); the 2D Adaptive
-//! trochoidal method asks for the opened one. Ours, no vendor material.
+//! centre, which no front arc ever reaches. The 2D Adaptive trochoidal
+//! method always asks for the opened bore; the stand-alone slot asks for
+//! it when `b > r` (#1589) and keeps the plain bore it always posted
+//! otherwise. Ours, no vendor material.
 
 use crate::cl::{MoveKind, PathBuilder, lattice};
 use crate::geo2d::Point2;

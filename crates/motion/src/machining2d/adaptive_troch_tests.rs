@@ -1,5 +1,6 @@
 //! 2D Adaptive's trochoidal method, pinned (issue #1509; Gate map:
-//! covers motion::machining2d::adaptive_troch, trochoid_bore): the path
+//! covers motion::machining2d::adaptive_troch, trochoid_bore,
+//! trochoid_slot::plan_trochoidal_slot): the path
 //! stays in the region and under the engagement limit, the opened bore
 //! leaves no post, and every refusal is by name.
 
@@ -90,8 +91,9 @@ fn the_pocket_face_is_cleared_inside_its_region_under_the_engagement_limit() {
     eprintln!("trochoidal 34x16 D6: {:.1} deg, {} moves, {:?}", q.max_deg, t.moves.len(), t.notes);
 }
 
-/// A band wider than the tool: the plain bore (the stand-alone slot's)
-/// leaves a post at the lane's start; the opened bore clears it.
+/// A band wider than the tool: the plain bore leaves a post at the
+/// lane's start; the opened bore clears it, and so does the stand-alone
+/// slot, which opens its bore on such a band (#1589).
 #[test]
 fn the_opened_bore_leaves_no_post_at_the_lane_start() {
     let p = PocketParams { bottom_z: -3.0, ..params() };
@@ -133,6 +135,44 @@ fn the_opened_bore_leaves_no_post_at_the_lane_start() {
     };
     let Ok(plain) = plan_lane(&chain, &tp, false) else { panic!("plain") };
     assert!(rest(&plain.path) > 4.0, "the plain bore's post: {:.2} mm2", rest(&plain.path));
+    // #1589: the stand-alone slot on this band (b > r) opens its bore.
+    let slot = match super::super::plan_trochoidal_slot(&chain, &tp) {
+        Ok(pl) => pl,
+        Err(e) => panic!("slot: {e}"),
+    };
+    assert!(rest(&slot.path) < 0.5, "the stand-alone slot leaves {:.2} mm2 standing", rest(&slot.path));
+    assert!(slot.max_engagement <= tp.max_engagement, "engagement {:.1} deg", slot.max_engagement);
+}
+
+/// #1589: a stand-alone slot whose band is at most the tool radius keeps
+/// the plain bore it always posted, move for move.
+#[test]
+fn a_slot_band_within_the_tool_radius_keeps_the_plain_bore() {
+    let chain = [Point2::new(0.0, 0.0), Point2::new(12.0, 0.0)];
+    for width in [10.0, 12.0] {
+        let tp = TrochoidParams {
+            tool_diameter: D,
+            width,
+            loop_width: None,
+            step: 1.5,
+            max_engagement: 90.0,
+            ret: TrochoidReturn::Microlift { height: 0.3 },
+            smoothing: 0.5,
+            stock_to_leave: 0.0,
+            clearance_z: 5.0,
+            retract_z: Some(1.0),
+            top_z: -2.0,
+            bottom_z: -2.0,
+            stepdown: 2.0,
+            feed: 800.0,
+            return_feed: 2000.0,
+            plunge_feed: 200.0,
+            climb: true,
+        };
+        let Ok(plain) = plan_lane(&chain, &tp, false) else { panic!("plain {width}") };
+        let Ok(slot) = super::super::plan_trochoidal_slot(&chain, &tp) else { panic!("slot {width}") };
+        assert!(slot.path == plain.path, "a {width} mm slot (band {:.1} <= r 3) moved", 0.5 * (width - D));
+    }
 }
 
 #[test]
