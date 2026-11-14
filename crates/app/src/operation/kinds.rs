@@ -794,6 +794,7 @@ fn seed_adaptive2d(c: &Carried) -> OpParams {
         entry: Entry3D::Helix, // M11.3: new pocket-family ops helix in (ramp, then plunge, stand in)
         helix_radius: 1.0,
         optimal_load: crate::load::DEFAULT_OPTIMAL_LOAD,
+        method: crate::machining2d::AdaptiveMethod::Spiral,
         tilt: c.tilt,
     }
 }

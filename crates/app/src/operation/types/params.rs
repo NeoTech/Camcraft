@@ -198,8 +198,14 @@ pub enum OpParams {
         helix_radius: f64,
         links: Links,
         /// Optimal load, ae/D (M11.4 B): the ring step the ladder keeps;
-        /// the law `PocketStrategy::Adaptive` reads.
+        /// the law `PocketStrategy::Adaptive` reads. Under the Trochoidal
+        /// method it is the most the loops advance a turn.
         optimal_load: f64,
+        /// How the region is cleared (#1509): the HSM spiral every 2D
+        /// Adaptive cut before the choice existed (the default), or
+        /// trochoidal loops along the region's medial line
+        /// (`machining2d::adaptive_trochoidal`).
+        method: crate::machining2d::AdaptiveMethod,
         /// 3+2 index; see [`OpParams::Face`]'s field.
         tilt: Option<Tilt>,
     },
