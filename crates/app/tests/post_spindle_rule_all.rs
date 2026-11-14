@@ -57,10 +57,11 @@ fn refused(stem: &str, out: &engine::PostOutput, what: &str) {
 }
 
 /// A section with the caller's spindle and tool-kind records, a plunge
-/// and an arc.
+/// and an arc. #1616: it states its clearance, as `post::dump` does.
 fn section(head: &str) -> String {
     format!(
-        "{head}TOOL 2 6MM END MILL
+        "{head}PARAM ClearancePlane 10
+TOOL 2 6MM END MILL
 SECTION
 Rapid 10000 0 5000
 Feed 10000 0 -1000 F300000
@@ -131,7 +132,9 @@ fn a_section_after_the_stop_that_states_no_speed_is_refused() {
 }
 
 /// A fed hole with no spindle: a cycle whose own feed is stated.
-const HOLE: &str = "TOOL 4 6MM DRILL
+/// #1616: it states its clearance, as `post::dump` does.
+const HOLE: &str = "PARAM ClearancePlane 10
+TOOL 4 6MM DRILL
 START 20000 10000 6000
 Rapid 20000 10000 2000
 Plunge 20000 10000 -10000 F120000

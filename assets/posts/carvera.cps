@@ -232,6 +232,8 @@ function onParameter(name, value) {
   else if (name === "OriginX" && has(value)) orgX = Number(value);
   else if (name === "OriginY" && has(value)) orgY = Number(value);
   else if (name === "OriginZ" && has(value)) orgZ = Number(value);
+  else if (name === "ClearancePlane") clearZ = has(value) ? Number(value) : null;  // #1616
+  else if (name === "RetractPlane") hopZ = has(value) ? Number(value) : null;  // #1616
 }
 
 function onSpindleSpeed() {
@@ -314,7 +316,7 @@ function endPreamble() {
 }
 
 function onSection() { startPreamble(); }
-function onSectionEnd() { endPreamble(); }
+function onSectionEnd() { endPreamble(); clearZ = null; hopZ = null; }  // #1616: the next section states its own planes
 
 // ------------------------------------------------------------- motions
 // X and Y are unknown at the program's start and after a tool change: the
@@ -323,16 +325,48 @@ function onSectionEnd() { endPreamble(); }
 // changer left the spindle. A feed's first move rapids Z to the height
 // the generator says the tool starts from, then feeds the stretch planned.
 var xyUnknown = true;
-function xyFirst(x, y) {
+// #1616 (the #1614 hazard): the height that traverse is made at is
+// STATED, never assumed. Where the changer leaves the spindle is not
+// proof of clearance: a long tool on a high work offset can stand below
+// the part top there, and a bare X Y rapid would cross the part. So the
+// first traverse is preceded by a Z-only rapid to the section's
+// clearance - its ClearancePlane, else its RetractPlane, never below the
+// move's own Z. A setup that cannot reach it is stopped by the
+// control's Z limit instead of rapiding through the part. A stream that
+// states neither plane has no verified height to traverse at: refused
+// by name.
+var clearZ = null;            // #1616: the section's ClearancePlane, null when unstated
+var hopZ = null;              // #1616: the section's RetractPlane, null when unstated
+var traverseRefused = false;  // #1616: once per program
+var traversedAt = null;       // #1616: the Z the last first-traverse was made at
+function traverseZ(z) {
+  var c = has(clearZ) ? clearZ : (has(hopZ) ? hopZ : null);
+  if (c === null) return null;
+  return has(z) ? Math.max(c, Number(z)) : c;
+}
+function xyFirst(x, y, z) {
   if (!xyUnknown || !has(x) || !has(y)) return;
+  traversedAt = null;
+  var tz = traverseZ(z);
+  if (tz === null) {
+    if (!traverseRefused) {
+      traverseRefused = true;
+      msg(coolantWho() + "first X/Y traverse with no clearance height stated (no ClearancePlane or RetractPlane) - the post will not rapid X/Y at an unknown height");
+    }
+    return;
+  }
+  block(["G0", wo("Z", tz, orgZ)]);
+  traversedAt = tz;
   block(["G0", wo("X", x, orgX), wo("Y", y, orgY)]);
   xyUnknown = false;
 }
 function startXY(p) {
   if (!xyUnknown) return;
-  if (has(p.StartX) && has(p.StartY)) xyFirst(p.StartX, p.StartY);
-  else xyFirst(p.X, p.Y);
-  if (!xyUnknown && has(p.StartZ) && has(p.Z) && p.StartZ > p.Z) {
+  if (has(p.StartX) && has(p.StartY)) xyFirst(p.StartX, p.StartY, p.StartZ);
+  else xyFirst(p.X, p.Y, p.Z);
+  // #1616: not when the stated traverse height already is it.
+  if (!xyUnknown && has(p.StartZ) && has(p.Z) && p.StartZ > p.Z &&
+      !(has(traversedAt) && Math.abs(traversedAt - p.StartZ) < 1e-9)) {
     block(["G0", wo("Z", p.StartZ, orgZ)]);
   }
 }
@@ -340,7 +374,7 @@ function startXY(p) {
 function onRapid() {
   startPreamble();
   if (!tiltOk(properties)) return;
-  xyFirst(properties.X, properties.Y);
+  xyFirst(properties.X, properties.Y, properties.Z);
   block(["G0"].concat(xyz(properties)));
 }
 function onLinear() {
