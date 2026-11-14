@@ -784,8 +784,9 @@ pub fn verification_report_by(world: &World, voice: &dyn Fn(Option<&str>) -> pos
     // its own post's maximum - never posted at offset 1.
     problems.extend(crate::setup_offsets::range_problems(world));
     // #389: the setups' post options must agree on what shapes the whole
-    // program (the Output and the thread output) - never posted half one
-    // way. Judged program-wide, ahead of #388's per-mount split.
+    // program (the Output, the thread output and, #1540, the End units) -
+    // never posted half one way. Judged program-wide, ahead of #388's
+    // per-mount split.
     problems.extend(crate::setup_post_options::program_problems(world));
     // #1031/#1174: the work spindle over a setup's workholding maximum,
     // by name - judged for the post dialect each op runs through.

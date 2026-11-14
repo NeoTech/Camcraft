@@ -185,6 +185,7 @@ mod reach;
 mod rest;
 mod rotary;
 mod rotary_geom;
+mod seat;
 mod section;
 mod solid;
 mod solid_index;
@@ -224,7 +225,8 @@ pub use body_bands::{BodyBands, NeckBands, BODY_BANDS_CAP};
 pub use probe::Cutter;
 pub use rotary::{rotary_hits, RotaryAxis, RotaryLaw};
 pub use hole_wall::{HoleAxis, WALL_SAG, hole_is_round};
-pub use solid::{SolidLaw, solid_hits, solid_hits_threaded, solid_hits_walled};
+pub use seat::{seat_skin, undersides, MARK_FLOOR};
+pub use solid::{SolidLaw, solid_hits, solid_hits_threaded, solid_hits_walled, stack_hits};
 pub use mesh_steel::{mesh_refined, steel_stack, MeshSteel, SteelBand};
 #[doc(hidden)]
 pub use contact::posed_contact;

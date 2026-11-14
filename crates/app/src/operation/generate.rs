@@ -111,6 +111,9 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         fixture_meshes,
         rotary_axis,
         part_solid,
+        around_part,
+        keep_parts,
+        neighbour_parts,
         area,
         wcs_origin,
         unit,
@@ -2033,8 +2036,11 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 // refuses it by name, and every standoff is measured
                 // about the spindle the post programs - world Z
                 // through the work offset - not the world origin.
+                // #1635: off the stock, the parts it holds are the
+                // turned work (the raw stock may be a box).
                 if machine_kind == crate::machine::Kind::Lathe {
-                    super::cross_spindle::lathe_reads(&material.facets, wcs_origin)?;
+                    let turned = if part_solid || keep_parts.is_empty() { &material.facets } else { &keep_parts };
+                    super::cross_spindle::lathe_reads(turned, wcs_origin)?;
                 }
                 let radial = drilling::CrossParams {
                     // The clearance/retract planes projected onto the
@@ -2057,7 +2063,24 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     tool: &tool,
                     holes: cross,
                 };
-                super::cross_spindle::cross_drill(radial, &material.facets, stock_facets.as_deref(), wcs_origin, &cutter, &tool_name, unit)?
+                {
+                    // #1635: off the stock, the chain is the one a part
+                    // source drills in that stock - the setup's parts are
+                    // the solid it measures and keeps, the source stock
+                    // the raw material its mouths stand off. #1641: on a
+                    // part source the setup's other parts are kept too.
+                    let solids = if part_solid {
+                        super::cross_spindle::Solids {
+                            source: &material.facets,
+                            stock: stock_facets.as_deref(),
+                            kept: &material.facets,
+                            neighbours: &neighbour_parts,
+                        }
+                    } else {
+                        super::cross_spindle::Solids { source: &keep_parts, stock: Some(&material.facets), kept: &keep_parts, neighbours: &[] }
+                    };
+                    super::cross_spindle::cross_drill(radial, solids, wcs_origin, &cutter, &tool_name, unit)?
+                }
             } else {
                 // M13.5 A: on a plain lathe the Drill kind is the
                 // turret's axial hole - the doors refuse by name a
@@ -2865,7 +2888,26 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
     // at every level of the ladder must also answer to the part solid
     // at each level it cuts - a blind bore's ring below its floor is in
     // steel the flat region never shows.
-    let depth_law = depth_law_of(&params, &src, part_solid);
+    let depth_law = match depth_law_of(&params, &src, part_solid) {
+        // #1603: with no stock set up a whole-model pocket source is the
+        // volume to remove (#12's reading does not apply): nothing to keep.
+        DepthLaw::Keep if !around_part => DepthLaw::None,
+        law => law,
+    };
+    // #1607: an Engrave or Trace off the stock marks the setup's parts.
+    let parts_marked = super::mark_law::is_mark_kind(&params) && !keep_parts.is_empty();
+    // #1631: a Drill, Bore or Thread off the stock enters the setup's
+    // parts only through the holes they model (the containment law).
+    let parts_holed = super::keep_law::is_hole_kind(&params) && !keep_parts.is_empty();
+    // #1635: a cross drill off the stock answered for the setup's parts
+    // in its own radial law (`cross_part`, above); the vertical solid
+    // law below would convict the declared cross hole's own wall.
+    // #1641: on a part source its radial law also refuses a chain into
+    // the setup's other parts; the neighbour law below (no wall excused)
+    // stays on it as a second net.
+    let parts_crossed = super::keep_law::is_cross_drill(&params);
+    // #1595: what a mark may take off the part's surface under the cutter.
+    let mark_budget = hl.top.zip(hl.bottom).map_or(0.0, |(t, b)| super::mark_law::budget(t, b, tool.diameter * 0.5));
     // #1057: the containment kinds' declared rims, read untightened.
     let rims = if depth_law == DepthLaw::Contain { super::material_source::rims_of(&params) } else { Vec::new() };
     match &frame {
@@ -3132,6 +3174,29 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             if depth_law == DepthLaw::Contain {
                 contain_into(&mut warns, &path, &material.facets, &cutter, depth_law, stl, material.excess, &params, &thread_bores);
             }
+            // #1603: the pocket family keeps the part - its own mesh
+            // for a whole-model source, the setup's parts for a stock one
+            // (#1607: every stock-kept kind but the marks and the holes).
+            if let Some(kept) = (depth_law == DepthLaw::Keep).then_some(&material.facets).or((!keep_parts.is_empty() && !parts_marked && !parts_holed && !parts_crossed).then_some(&keep_parts)) {
+                contain_into(&mut warns, &path, kept, &cutter, DepthLaw::Keep, stl, material.excess, &params, &[]);
+            }
+            // #1631: a hole kind off the stock - the setup's parts by the
+            // containment law, its declared holes' modelled walls excused.
+            if parts_holed {
+                contain_into(&mut warns, &path, &keep_parts, &cutter, DepthLaw::Contain, stl, material.excess, &params, &thread_bores);
+            }
+            // #1595: an Engrave or Trace on the part may lower its
+            // surface by the mark budget and no more (`mark_law`);
+            // #1607: on a stock source, the setup's parts the same way.
+            let marked = match (depth_law == DepthLaw::Mark).then_some(&material.facets).or(parts_marked.then_some(&keep_parts)) {
+                Some(part) => super::mark_law::mark_into(&mut warns, &path, part, &cutter, mark_budget, material.excess),
+                None => super::mark_law::Marked::default(),
+            };
+            // #1621: the setup's other parts, beside a part source - the
+            // plain solid law, no budget (a mark is on its own part).
+            if !neighbour_parts.is_empty() {
+                contain_into(&mut warns, &path, &neighbour_parts, &cutter, DepthLaw::Keep, stl, material.excess, &params, &[]);
+            }
             // #985: an external thread's crest ring against every wall
             // that is not the boss it threads, with no thread allowance.
             for w in super::thread_boss::neighbours(&params, &path, &material.facets, &tool) {
@@ -3146,6 +3211,15 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 let mut w = verify::verify_bodies(&path, &VerifyContext { tool: &g, cutter: Some(c), ..ctx.clone() }, &material.bodies);
                 if depth_law == DepthLaw::Contain {
                     contain_into(&mut w, &path, &material.facets, &c, depth_law, stl, material.excess, &params, &[]);
+                }
+                // #1631: the core re-reads every part law the full tap
+                // answered to - the parts off the stock, and #1621's
+                // neighbours - or their gouges would be acquitted unread.
+                if parts_holed {
+                    contain_into(&mut w, &path, &keep_parts, &c, DepthLaw::Contain, stl, material.excess, &params, &[]);
+                }
+                if !neighbour_parts.is_empty() {
+                    contain_into(&mut w, &path, &neighbour_parts, &c, DepthLaw::Keep, stl, material.excess, &params, &[]);
                 }
                 w
             });
@@ -3165,6 +3239,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // The all-air verdict (M13.8): a finish that provably cuts
             // nothing says so by name instead of passing silent.
             let mut path = super::air_law::air_noted(path, mode, &material.facets, stock_top_z, &geom);
+            path.notes.extend(super::mark_law::notes(params.kind().info().label, marked, mark_budget, unit));
             // #104: explain the height mismatch, without replacing any move-level
             // verdict. Tilted, rotary and turning heights are not world-Z tops.
             if stock_aabb.is_some()
@@ -3269,6 +3344,28 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             if depth_law == DepthLaw::Contain {
                 contain_into(&mut warns, &path, &m_gen.facets, &cutter, depth_law, stl, material.excess, &params, &thread_bores);
             }
+            // #1603: the keep law in the plane's frame.
+            let keep_local = (!keep_parts.is_empty()).then(|| f.local_facets(&keep_parts));
+            if let Some(kept) = (depth_law == DepthLaw::Keep).then_some(&m_gen.facets).or(keep_local.as_ref().filter(|_| !parts_marked && !parts_holed && !parts_crossed)) {
+                contain_into(&mut warns, &path, kept, &cutter, DepthLaw::Keep, stl, material.excess, &params, &[]);
+            }
+            // #1631: a hole kind off the stock, in the plane's frame.
+            if let Some(kept) = keep_local.as_ref().filter(|_| parts_holed) {
+                contain_into(&mut warns, &path, kept, &cutter, DepthLaw::Contain, stl, material.excess, &params, &thread_bores);
+            }
+            // #1595: the mark law in the plane's frame - local path,
+            // local part, the budget measured along the tool (#1607:
+            // the setup's parts on a stock source).
+            let mut path_world = path_world;
+            let mark_part = (depth_law == DepthLaw::Mark).then_some(&m_gen.facets).or(keep_local.as_ref().filter(|_| parts_marked));
+            if let Some(part) = mark_part {
+                let marked = super::mark_law::mark_into(&mut warns, &path, part, &cutter, mark_budget, material.excess);
+                path_world.notes.extend(super::mark_law::notes(params.kind().info().label, marked, mark_budget, unit));
+            }
+            // #1621: the setup's other parts, in the plane's frame.
+            if !neighbour_parts.is_empty() {
+                contain_into(&mut warns, &path, &f.local_facets(&neighbour_parts), &cutter, DepthLaw::Keep, stl, material.excess, &params, &[]);
+            }
             warns.extend(workholding_warnings(
                 &path_world,
                 (&geom, &holder),
@@ -3338,8 +3435,23 @@ fn workholding_warnings(
 pub(super) enum DepthLaw {
     /// Nothing beyond the kind's own laws: the 3D kinds (they pass the
     /// model already), stock sources, and the kinds whose source IS the
-    /// material they remove or whose cut enters the part by design.
+    /// material they remove or whose cut enters the part by design
+    /// with a depth that is derived, not typed (2D Chamfer).
     None,
+    /// The keep law (#1603, `keep_law`): the pocket family on a whole
+    /// model. The part's sections are islands the rings stand outside
+    /// of, so tangency to them is the promise and the section laws
+    /// have nothing to add - but an area offset or extension can move
+    /// the boundary into the part. The solid law alone, nothing
+    /// excused: a stack entering the part anywhere is a gouge.
+    Keep,
+    /// The mark law (Engrave, Trace; #1595, `mark_law`): the cut enters
+    /// the part by design, so tangency and the sections stand down -
+    /// but only as a mark. The solid law runs against the part lowered
+    /// by the mark budget (the lesser of Top - Bottom and the cutter
+    /// radius): a cutter standing deeper than that under the part's
+    /// surface, or in a wall beside the line, is a gouge.
+    Mark,
     /// The full model law: the gouge tangency and containment checked
     /// against the part's section at every move's deepest plane, and
     /// the reach laws reading those sections as islands - plus the
@@ -3358,21 +3470,37 @@ pub(super) enum DepthLaw {
 /// The depth law per kind and source. Only a finished-part source (see
 /// `GenJob::part_solid`) can be gouged:
 /// - Contour and Face trim/skim the part itself: `Section`.
-/// - The pocket family cuts picked part features (`Section`); a whole-
-///   model source there is the volume to REMOVE (the region is the
-///   material, its interior is cut by contract), so no part law applies.
+/// - The pocket family cuts picked part features (`Section`). A whole-
+///   model source there is cleared AROUND (#12: the part's sections are
+///   islands), and the part itself is kept: `Keep` (#1603), the solid
+///   law alone - an area offset or extension that carries the boundary
+///   into the part gouges it. With no stock set up the model stays the
+///   volume to remove, and `run_job` stands the law down (`around_part`).
+///   (On a stock source the same law reads the
+///   setup's parts, `keep_law::parts_in_stock`; that is not a
+///   `part_solid` job and does not come through here. #1607: every kind
+///   below that carries a part law takes it there too - the solid law,
+///   or the mark law for Engrave and Trace.)
 /// - Circular, Slot and Trochoidal slot cut geometry typed by hand into
 ///   their source: [`authored_law`]. `Section` whenever the source is
 ///   the finished part - picked (Slot #1504, Circular #1550, Trochoidal
 ///   slot #1593: a ring or channel typed below the picked floor gouges
 ///   it) or the whole model (Slot #1537, Circular #1543, Trochoidal slot
 ///   #1593: a circle or slot typed through the part's wall gouges what
-///   the job keeps). A Stock source is not part-solid, so the typed
-///   geometry cuts it unjudged.
-/// - Trace, Engrave and 2D Chamfer enter the part by design (the
-///   engraving, the broken edge); their own modes stand the gouge law
-///   down for exactly that reason.
-/// - Drill (Z holes), Bore, Thread: `Contain`.
+///   the job keeps). A Stock source is not part-solid: its typed
+///   geometry answers to the setup's parts instead (#1607,
+///   `keep_law::parts_in_stock`).
+/// - Trace and Engrave enter the part by design, as a mark: `Mark`
+///   (#1595), whole model or pick - the part's surface under the
+///   cutter may give way by the mark budget and no more, so the verdict
+///   is the operation's own wherever the program sim cannot judge.
+/// - 2D Chamfer enters the part by design (the broken edge) with a
+///   depth derived from its width and angle; its mode stands the gouge
+///   law down for exactly that reason. Off the stock it breaks the
+///   stock's edge, not the part's: the setup's parts take the solid
+///   law there (#1631, `keep_law::parts_in_stock`).
+/// - Drill (Z holes), Bore, Thread: `Contain` - and off the stock the
+///   same law against the setup's parts (#1631).
 pub(super) fn depth_law_of(params: &OpParams, src: &SrcRef, part_solid: bool) -> DepthLaw {
     if !part_solid {
         return DepthLaw::None;
@@ -3388,8 +3516,12 @@ pub(super) fn depth_law_of(params: &OpParams, src: &SrcRef, part_solid: bool) ->
         {
             DepthLaw::Section
         }
+        // #1603: a whole model is kept, whatever the area controls say.
+        OpParams::Pocket { .. } | OpParams::Adaptive2D { .. } | OpParams::Offset2D { .. } => DepthLaw::Keep,
         OpParams::Drill { cross, .. } if cross.is_empty() => DepthLaw::Contain,
         OpParams::Bore { .. } | OpParams::Thread { .. } => DepthLaw::Contain,
+        // #1595: a centreline cut on the finished part is a mark.
+        OpParams::Engrave { .. } | OpParams::Trace { .. } => DepthLaw::Mark,
         _ => DepthLaw::None,
     }
 }
@@ -3405,7 +3537,8 @@ pub(super) fn depth_law_of(params: &OpParams, src: &SrcRef, part_solid: bool) ->
 /// floor, is a blocking Gouge; a circle inside the modeled hole stays
 /// clean. A Stock source is the material to remove and never reaches
 /// here (`part_solid` is false, `depth_law_of`'s early return); its arm
-/// reads `None` so the function alone stays truthful.
+/// reads `None` - the parts standing in that stock are kept by
+/// `keep_law::parts_in_stock` instead (#1607).
 pub(super) fn authored_law(src: &SrcRef) -> DepthLaw {
     match src {
         SrcRef::Entity(_) | SrcRef::Selection(_) => DepthLaw::Section,

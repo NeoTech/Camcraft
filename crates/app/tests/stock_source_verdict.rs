@@ -110,6 +110,20 @@ fn mark(world: &World, h: &mut History, on: bool) {
     h.execute(world, SetStockSourceOnly::new(world, on).expect("mark"));
 }
 
+/// Regenerate the job's operations after a mark: since #1621 a
+/// part-source op judges the setup's other parts on itself, so its
+/// cached verdict was read with the unmarked casting judged (as the
+/// program sim judges it); the mark takes the casting out of that set,
+/// and the verdict is read again by regenerating - as a user would.
+/// (The op's stamp does not yet follow that set: #1628.)
+fn regenerate(world: &World, h: &mut History) {
+    for name in ["Op1", "Op2"] {
+        if model::find_by_name(world, name).is_some() {
+            h.execute(world, GenerateOperation::new(world, name).expect("regenerate op"));
+        }
+    }
+}
+
 /// The issue's job: the casting left in the tree as the stock's source,
 /// a separate part, and a Bore (to `floor`) on the part.
 fn casting_job(floor: f64) -> (World, History) {
@@ -169,6 +183,7 @@ fn unmarked_the_casting_is_judged_and_the_refusal_says_how_to_mark_it() {
 fn marked_raw_stock_only_the_casting_leaves_the_verdict_and_the_program_posts() {
     let (world, mut h) = casting_job(FLOOR);
     mark(&world, &mut h, true);
+    regenerate(&world, &mut h);
     assert_eq!(stock_only_model(&world), Some(entity(&world, "casting")));
     assert_eq!(gouge_line(&world), None);
     let posted = post(&world, "marked");
@@ -179,6 +194,7 @@ fn marked_raw_stock_only_the_casting_leaves_the_verdict_and_the_program_posts() 
 fn marked_the_separate_part_stays_judged_a_cut_below_its_floor_blocks() {
     let (world, mut h) = casting_job(FLOOR - 5.0);
     mark(&world, &mut h, true);
+    regenerate(&world, &mut h);
     let why = post(&world, "deep").expect_err("a bore 5 mm into the part's floor posted");
     assert!(why.contains("gouge"), "refused, but not as a gouge: {why}");
 }
@@ -492,6 +508,7 @@ fn an_identical_re_import_under_the_same_name_keeps_the_mark() {
     // The same casting, removed and imported again (no drop): same print.
     let (world, mut h) = casting_job(FLOOR);
     mark(&world, &mut h, true);
+    regenerate(&world, &mut h);
     let old = stored_mark(&world).expect("marked");
     let e = model::find_by_name(&world, "casting").expect("casting");
     model::remove(&world, &e);

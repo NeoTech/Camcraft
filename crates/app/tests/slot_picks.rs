@@ -218,12 +218,13 @@ fn with_nothing_picked_the_typed_endpoints_rule_as_before() {
     // Across the whole part, through the pocket's walls at x 15, nothing
     // picked: the typed numbers rule (no pick law), and the model gouge
     // check decides. A Stock source is the material to remove - the
-    // typed slot is cut as typed, unjudged.
+    // typed slot is cut as typed - but the part standing in the stock is
+    // kept (#1607): through its pocket walls is a gouge.
     let typed = slot((-20.0, 0.0), (20.0, 0.0), 12.0, 10.0);
     h.execute(&world, CreateOperation::new(&world, "K1", TOOL, SrcRef::Stock, typed.clone()).expect("create"));
     assert_eq!(ends(&op(&world, "K1").params), (Point2::new(-20.0, 0.0), Point2::new(20.0, 0.0), 12.0));
     let (t, warns) = generate(&world, "K1").unwrap_or_else(|e| panic!("K1: {e}"));
-    assert!(warns.iter().all(|w| !matches!(w, Warning::Gouge { .. })), "K1: {warns:?}");
+    assert!(warns.iter().any(|w| matches!(w, Warning::Gouge { .. }) && w.blocks_post()), "K1: {warns:?}");
     let reach = t.moves.iter().filter(|m| m.kind == MoveKind::Feed).map(|m| m.to.x.abs()).fold(0.0, f64::max);
     assert!(reach >= 20.0 - EPS, "K1: the typed slot is cut as typed, through the pocket wall at x 15: {reach}");
     assert!(operation::region_of(&world, &op(&world, "K1")).is_some());
