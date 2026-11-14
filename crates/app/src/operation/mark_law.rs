@@ -59,7 +59,7 @@ use crate::units::{self, Unit};
 use crate::verify::{self, Warning, MARK_FLOOR};
 
 use super::material::GOUGE_TOL;
-use super::{OpParams, SrcRef};
+use super::OpParams;
 
 /// The solid law's sample spacing along a vertical-plane arc, mm (the
 /// containment kinds' number; a trace has none, every move is swept
@@ -84,29 +84,21 @@ pub fn is_mark_kind(params: &OpParams) -> bool {
 }
 
 /// The mark budget operation `op` declares, for the program sim's
-/// credit: `Some` only for an Engrave or Trace whose source is the
-/// finished part (the operations that carry the law themselves) with
-/// heights that resolve. Anything else declares no mark and is judged
-/// against the sharp model.
+/// credit: `Some` only for an Engrave or Trace (the operations that
+/// carry the law themselves) with heights that resolve. Whatever the
+/// source: on the finished part the law reads that part, on the stock
+/// (or a pick off it) the setup's parts standing in it (#1607,
+/// `keep_law::parts_in_stock`) - the very mesh the sim judges against,
+/// so the two judges agree. Anything else declares no mark and is
+/// judged against the sharp model.
 #[must_use]
 pub fn budget_of(world: &flecs_ecs::prelude::World, op: &Operation, cutter_r: f64) -> Option<f64> {
-    if !is_mark_kind(&op.params) || !names_part(world, op.setup.as_deref(), &op.src) {
+    if !is_mark_kind(&op.params) {
         return None;
     }
     let h = super::resolve_params(world, op.setup.as_deref(), Some(&op.src), &op.params).ok()?;
     let b = budget(h.top?, h.bottom?, cutter_r);
     (b > 0.0).then_some(b)
-}
-
-/// Whether `src` names a model that is not the setup's stock - the
-/// name half of `part_solid_of`, for a caller with no material in hand.
-fn names_part(world: &flecs_ecs::prelude::World, setup: Option<&str>, src: &SrcRef) -> bool {
-    let stock = crate::setup::stock_entity_name(world, setup);
-    match src {
-        SrcRef::Stock => false,
-        SrcRef::Entity(n) => *n != stock,
-        SrcRef::Selection(items) => !items.is_empty() && items.iter().all(|g| g.entity != stock),
-    }
 }
 
 /// `facets` lowered by `by` along Z: the part as a mark of that depth
