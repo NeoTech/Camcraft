@@ -123,6 +123,8 @@ pub mod stock_export;
 pub mod stock_follow;
 pub mod stock_play;
 pub mod stock_play_worker;
+// #1666: the radius the stock sweeps about the lathe's spindle axis.
+pub mod stock_turn;
 pub mod stock_view;
 pub mod tool_library;
 pub mod tool_list;

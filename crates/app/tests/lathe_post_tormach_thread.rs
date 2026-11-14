@@ -26,7 +26,7 @@ use camcraft_app::posting;
 use camcraft_app::schema::PostOptions;
 use serde_json::json;
 use tormach_lathe_support::{
-    g33s, g76, g76_words, gated, lathe_mch, linuxcnc_sane, post, program_with, thread_world, thread_world_with, CPS, DEPTH,
+    g33s, g76, g76_words, gated, lathe_mch, linuxcnc_sane, post, program_with, stock_params, thread_world, thread_world_with, CPS, DEPTH,
     PITCH,
 };
 
@@ -83,13 +83,13 @@ fn a_thread_posts_as_one_g76_block_with_the_option_in_mm_and_inch() {
             // Drive line Ø12.1 at the thread's top; peak Ø12, so I -0.1;
             // J 0.8 = the first 0.4 rung on the diameter; K 2.4 = 1.2
             // deep; R1 equal rungs, Q0 radial, H0 no spring pass.
-            assert!(text.contains("G0 X12.1 Z14\n"), "{text}");
+            assert!(text.contains("G0 X12.1\nG0 Z14\nG76 "), "X first after G30, then Z (#1604): {text}");
             assert_eq!(line, "G76 P2 Z8 I-0.1 J0.8 K2.4 R1 Q0 H0");
         } else {
             // The grid law: Ø12.1 is 0.4764, Ø12 0.4724 (I -0.004, not a
             // second rounding of 0.1 mm); the root rounds OUT to 0.378
             // (Ø9.6 is 0.37795 in), so K 0.0944 - never deeper.
-            assert!(text.contains("G0 X0.4764 Z0.5512\n"), "{text}");
+            assert!(text.contains("G0 X0.4764\nG0 Z0.5512\nG76 "), "X first after G30, then Z (#1604): {text}");
             assert_eq!(line, "G76 P0.07874 Z0.315 I-0.004 J0.0314 K0.0944 R1 Q0 H0");
         }
         assert_eq!(gated(&world, file), text, "the in-app post follows the document's option");
@@ -163,12 +163,14 @@ fn g33_states_one_k_per_thread_on_a_lead_off_the_lattice() {
             plane: Default::default(), abc: None,
         })
     };
-    let mut r = vec![
-        cnc::Record::Param { name: "SpindleSpeed".into(), value: json!(800.0) },
+    // A Ø8 bar, its face at Z12 (#1604: the post orders the G30 moves by it).
+    let mut r = vec![cnc::Record::Param { name: "SpindleSpeed".into(), value: json!(800.0) }];
+    r.extend(stock_params(4.0, 12.0, 20.0));
+    r.extend([
         cnc::Record::Tool { number: 1, name: "TD".into() },
         cnc::Record::Section { begin: true },
         mv(5.0, 10.0, None, MoveKind::Rapid),
-    ];
+    ]);
     for i in 0..6 {
         let x = if i % 2 == 0 { -5.0 } else { 5.0 };
         r.push(mv(x, 10.0 - h * f64::from(i + 1), Some((0.0, 0.0)), MoveKind::Feed));
@@ -200,12 +202,14 @@ fn g76_rounds_to_the_grid_and_never_deeper_than_the_minor() {
     for inch in [false, true] {
         let (world, _history) = thread_world(inch);
         let text = program_with(&world, g76());
-        // The drive line: the X of the rapid just before the G76 block.
+        // The drive line: the last X written before the G76 block (#1604:
+        // after G30 the X and the Z of the approach are two rapids).
         let lines: Vec<&str> = text.lines().collect();
         let at = lines.iter().position(|l| l.starts_with("G76 ")).expect("G76");
-        let x: f64 = lines[at - 1]
-            .split(' ')
-            .find_map(|w| w.strip_prefix('X'))
+        let x: f64 = lines[..at]
+            .iter()
+            .rev()
+            .find_map(|l| l.split(' ').find_map(|w| w.strip_prefix('X')))
             .and_then(|v| v.parse().ok())
             .expect("the drive-line rapid");
         let w = g76_words(&text);
