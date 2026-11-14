@@ -24,7 +24,7 @@ use common::legacy_program::as_program;
 use std::path::Path;
 
 const STREAM: &str = "PARAM ClearancePlane 15\nPARAM StockZTop 0\nPARAM SpindleSpeed 8000\nTOOL 3 EM6\nSECTION\nRapid X 0 Y 0 Z 5000\nFeed X 10000 Y 0 Z -1000 F 500000\nENDSECTION\n\
-                      PARAM SpindleSpeed 6000\nTOOL 4 DRILL5\nSECTION\nCYCLE DRILL X 20000 Y 5000 Z -3000 R 2000 P 1500 F 100000\nRapid X 20000 Y 5000 Z 2000\nPlunge X 20000 Y 5000 Z -3000 F 100000\nRapid X 20000 Y 5000 Z 2000\nENDSECTION\n";
+                      PARAM ClearancePlane 15\nPARAM SpindleSpeed 6000\nTOOL 4 DRILL5\nSECTION\nCYCLE DRILL X 20000 Y 5000 Z -3000 R 2000 P 1500 F 100000\nRapid X 20000 Y 5000 Z 2000\nPlunge X 20000 Y 5000 Z -3000 F 100000\nRapid X 20000 Y 5000 Z 2000\nENDSECTION\n";
 
 /// The G and M codes TinyG's wiki lists (the dotted ones spelled as the
 /// board spells them), and the word letters a block may carry.
@@ -131,7 +131,8 @@ fn each_tool_change_lifts_z_then_selects_the_tool_and_stops() {
         assert!(nc.contains(&format!("M5\nM9\nG0 Z15\n{call}\nM0\nG21 G17 G90 G91.1 G94 G64 G54\nG0 Z15\nS")), "{call}: lift, call, stop, spindle\n{nc}");
     }
     assert_eq!(nc.matches("\nM0\n").count(), 2, "one stop per tool change and no other\n{nc}");
-    assert_eq!(nc.matches("G0 Z15\n").count(), 5, "before and after two changes and the end\n{nc}");
+    // #1616: plus each section's stated first-traverse height.
+    assert_eq!(nc.matches("G0 Z15\n").count(), 7, "before and after two changes, two traverses and the end\n{nc}");
     assert!(!nc.contains("G53"), "no machine-coordinate move without homing\n{nc}");
     // Touch-off may lower Z: the first resumed move restores clearance before X Y.
     let lines: Vec<&str> = nc.lines().collect();
@@ -322,7 +323,7 @@ fn spindle_delay_is_optional_validated_and_rounds_up_in_seconds() {
 fn full_xy_circles_and_helices_split_without_losing_direction_or_depth() {
     for direction in ["CW", "CCW"] {
         for end_z in [5000, -5000] {
-            let stream = format!("PARAM SpindleSpeed 8000\nRapid X 10000 Y 0 Z 5000\nArc {direction} X 10000 Y 0 Z {end_z} F 100000 I 0 J 0\n");
+            let stream = format!("PARAM ClearancePlane 20\nPARAM SpindleSpeed 8000\nRapid X 10000 Y 0 Z 5000\nArc {direction} X 10000 Y 0 Z {end_z} F 100000 I 0 J 0\n");
             let nc = post(&json!({"safeRetractZ": 0.0}), &stream);
             let arcs: Vec<_> = nc.lines().filter(|l| l.starts_with("G2 ") || l.starts_with("G3 ")).collect();
             let code = if direction == "CW" { "G2" } else { "G3" };
@@ -334,7 +335,7 @@ fn full_xy_circles_and_helices_split_without_losing_direction_or_depth() {
 #[test]
 fn rounded_coincident_xy_arc_endpoints_are_refused() {
     // 1 micron separates the endpoints in mm, but both round to zero in inches.
-    let stream = "PARAM SpindleSpeed 8000\nRapid X 1 Y 0 Z 5000\nArc CCW X 0 Y 1 Z 5000 F 100000 I 0 J 0\n";
+    let stream = "PARAM ClearancePlane 20\nPARAM SpindleSpeed 8000\nRapid X 1 Y 0 Z 5000\nArc CCW X 0 Y 1 Z 5000 F 100000 I 0 J 0\n";
     let out = engine::run_with(&cps(), &json!({"safeRetractZ": 0.0}), stream, &json!({"Units": "inch"})).expect("runs");
     assert!(out.warnings.iter().any(|w| w.contains("too small to distinguish")), "{:?}", out.warnings);
 }
@@ -345,7 +346,7 @@ fn vertical_arcs_are_chords_within_five_microns() {
         ("X 10000 Y 0 Z 0", "CW X 0 Y 0 Z 10000 I 0 K 0", ['X', 'Z']),
         ("X 0 Y 10000 Z 0", "CCW X 0 Y 0 Z 10000 J 0 K 0", ['Y', 'Z']),
     ] {
-        let stream = format!("PARAM SpindleSpeed 8000\nRapid {start}\nArc {arc} F 100000\n");
+        let stream = format!("PARAM ClearancePlane 20\nPARAM SpindleSpeed 8000\nRapid {start}\nArc {arc} F 100000\n");
         let nc = post(&json!({"safeRetractZ": 20.0}), &stream);
         assert!(!nc.lines().any(|l| l.starts_with("G2 ") || l.starts_with("G3 ")), "{nc}");
         let mut previous = [10.0_f64, 0.0];
@@ -367,7 +368,7 @@ fn vertical_arcs_are_chords_within_five_microns() {
 #[test]
 fn first_cut_after_a_tool_change_seats_at_a_safe_start_height() {
     for (start, end) in [(5000, 5000), (5000, 10000), (-1000, -1000)] {
-        let stream = format!("PARAM ClearancePlane 15\nPARAM StockZTop 0\nPARAM SpindleSpeed 8000\nTOOL 3 EM6\nSECTION\nRapid X 0 Y 0 Z {start}\nENDSECTION\nPARAM SpindleSpeed 8000\nTOOL 4 EM6\nSECTION\nFeed X 10000 Y 0 Z {end} F 100000\nENDSECTION\n");
+        let stream = format!("PARAM ClearancePlane 15\nPARAM StockZTop 0\nPARAM SpindleSpeed 8000\nTOOL 3 EM6\nSECTION\nRapid X 0 Y 0 Z {start}\nENDSECTION\nPARAM ClearancePlane 15\nPARAM SpindleSpeed 8000\nTOOL 4 EM6\nSECTION\nFeed X 10000 Y 0 Z {end} F 100000\nENDSECTION\n");
         let out = engine::run(&cps(), &generic(), &stream).expect("runs");
         if start < 0 {
             assert!(out.warnings.iter().any(|w| w.contains("first cutting move must start above the stock")), "{:?}", out.warnings);
