@@ -495,7 +495,7 @@ function afterOp() {
   if (!ask) return;
   if (ask !== "optional-stop" && ask !== "stop") {
     msg(ask === "home"
-      ? "an operation asks a trip home after it - this post does not write one (the G30 spot is the operator's preset); set it to Pause (M0) or Continue"
+      ? "a trip home is asked after the operation" + inOp() + " - this post does not write one (the G30 spot is the operator's preset); set it to Pause (M0) or Continue"
       : "unknown after-operation ask " + ask);
     return;
   }

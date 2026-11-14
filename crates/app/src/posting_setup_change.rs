@@ -21,9 +21,10 @@
 //! - **One word per gap.** An operation that ends with Go home at a setup
 //!   change is refused by name: the post writes one after-action there,
 //!   and a trip home is not a pause.
-//! - **Per mount.** A boundary is between two setups of one machine's
-//!   program; the last operation of a machine's program gets no stop,
-//!   whatever setup another machine runs next.
+//! - **Per mount.** A boundary is between two setups of one file's
+//!   program (one mount: one machine, and one post unless an explicit
+//!   script posts them all); the last operation of a mount gets no stop,
+//!   whatever setup another mount's file runs next.
 
 use std::collections::HashMap;
 
@@ -51,33 +52,37 @@ fn stop_of(world: &World) -> Option<AfterOperation> {
 
 /// Fold the setup-change stops into `afters` (the program's posted
 /// after-actions, `program_entry::posted_afters`). Returns, per operation
-/// that ends a setup, the name of the setup its machine runs next - what
-/// [`ask`] writes into its stream. A Go home at a setup change is
-/// refused by name.
+/// that ends a setup, the name of the setup its mount runs next - what
+/// [`ask`] writes into its stream. `by_post` groups the mounts as the
+/// post that reads the streams does (`setup_mount::program_mounts`). A
+/// Go home at a setup change is refused by name.
 pub(super) fn fold(
     world: &World,
     ops: &[(String, Entity)],
     afters: &mut HashMap<String, AfterOperation>,
+    by_post: bool,
 ) -> Result<HashMap<String, String>, String> {
     let mut out = HashMap::new();
     let Some(stop) = stop_of(world) else {
         return Ok(out);
     };
-    // Each op's effective setup and machine, program order.
-    let placed: Vec<(String, String)> = ops
+    // Each op's effective setup and the mount (one file) it posts in,
+    // program order.
+    let mounts = crate::setup_mount::program_mounts(world, by_post);
+    let placed: Vec<(String, Option<usize>)> = ops
         .iter()
         .map(|(_, e)| {
             let setup = model::operation_of(world, e)
                 .and_then(|op| crate::setup::effective(world, op.setup.as_deref()))
                 .unwrap_or_default();
-            let machine = crate::setup_mount::machine_of(world, Some(&setup)).0;
-            (setup, machine)
+            let mount = mounts.iter().position(|m| m.setups.contains(&setup));
+            (setup, mount)
         })
         .collect();
-    for (i, ((name, e), (setup, machine))) in ops.iter().zip(&placed).enumerate() {
-        // The next op of the same machine's program.
+    for (i, ((name, e), (setup, mount))) in ops.iter().zip(&placed).enumerate() {
+        // The next op of the same mount's program.
         let rest = placed.get(i.saturating_add(1)..).unwrap_or_default();
-        let Some((next, _)) = rest.iter().find(|(_, m)| m == machine) else {
+        let Some((next, _)) = rest.iter().find(|(_, m)| m == mount) else {
             continue;
         };
         if next == setup {

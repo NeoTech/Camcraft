@@ -22,7 +22,7 @@
 
 use super::per_op::{sanitise, write_all};
 use super::{
-    file_stem, join_streams, op_streams, script_of, verification_report, viewer_map,
+    file_stem, join_streams, script_of, verification_report, viewer_map,
     wcs_slot, Posted,
 };
 use crate::machine::{check_ops, Machine, MachineCheck};
@@ -89,7 +89,8 @@ pub(super) fn single(world: &World, by_post: bool) -> Result<Mount, String> {
     if mounts.len() <= 1 && per_setup.len() > 1 {
         let names: Vec<String> = per_setup.iter().map(Mount::label).collect();
         return Err(format!(
-            "Between setups is set to One file per setup, and the program holds {} setups ({}) -              post it as one file per setup, or choose another Between setups",
+            "Between setups is set to One file per setup, and the program holds {} setups ({}) - \
+             post it as one file per setup, or choose another Between setups",
             per_setup.len(),
             names.join("; ")
         ));
@@ -212,7 +213,7 @@ fn post_each(world: &World, out_path: &Path, cps: Option<&str>, mounts: Vec<Moun
             None => script_of(&m.post).map(|(label, text)| (Some(label), text))?,
         });
     }
-    let streams = op_streams(world)?;
+    let streams = super::op_streams_by(world, cps.is_none())?;
     // #1190: each mount's own script opens only what a lathe may run;
     // #1232: and writes only for a machine kind it serves.
     let mut unserved = Vec::new();
