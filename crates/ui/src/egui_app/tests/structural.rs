@@ -14,6 +14,56 @@ use egui_kittest::kittest::NodeT;
 
 use super::*;
 
+/// #1683: only parametric stock can be fitted around the models.
+#[test]
+fn stock_fit_controls_follow_the_selected_shape() {
+    let mut h = shell_harness();
+    h.state_mut().state.ui_target = UiTarget::Stock;
+    h.run_steps(2);
+    assert!(!disabled(&h, "Fit to Models"), "box stock can fit");
+    assert!(h.query_by_label("Fit margin").is_some());
+    h.get_by_label("Cylinder").click();
+    h.run_steps(2);
+    assert!(!disabled(&h, "Fit to Models"), "cylinder stock can fit");
+    assert!(h.query_by_label("Fit margin").is_some());
+    h.get_by_label("From model").click();
+    h.run_steps(2);
+    assert!(h.query_by_label("Fit margin").is_none(), "source stock has no fit margin");
+    assert!(h.query_by_label("Fit to Models").is_none(), "source stock offers no fit action");
+    assert!(!disabled(&h, "Apply"), "source stock can still be applied");
+    let active = camcraft_app::setup::active(&h.state().state.world);
+    let stock = camcraft_app::setup::stock_entity_name(&h.state().state.world, active.as_deref());
+    assert!(model::find_by_name(&h.state().state.world, &stock).is_some());
+    h.get_by_label("Delete").click();
+    h.run_steps(2);
+    assert!(model::find_by_name(&h.state().state.world, &stock).is_none(), "Delete still deletes stock");
+    h.get_by_label("Box").click();
+    h.run_steps(2);
+    assert!(!disabled(&h, "Fit to Models"), "returning to box restores fit");
+    assert!(h.query_by_label("Fit margin").is_some());
+}
+
+/// #1683: changing the draft shape retires an actual fit refusal.
+#[test]
+fn stock_shape_change_clears_the_fit_refusal() {
+    let mut h = shell_harness();
+    h.state_mut().state.ui_target = UiTarget::Stock;
+    h.run_steps(2);
+    h.get_by_label("From model").click();
+    h.run_steps(2);
+    h.state_mut().state.pending.push_back(CommandKind::StockFit { margin: 2.0, shape: 2 });
+    h.run_steps(2);
+    let refusal = "from-model stock follows its source: choose Box or Cylinder to fit";
+    assert_eq!(h.state().state.error_for(crate::state::ErrorScope::Setup), Some(refusal));
+    assert!(h.query_by_label(refusal).is_some(), "the command refusal is visible");
+    h.get_by_label("Box").click();
+    h.run_steps(2);
+    assert_eq!(h.state().state.stock_ui.shape, 0);
+    assert!(h.state().state.error_for(crate::state::ErrorScope::Setup).is_none(), "the old fit refusal retires");
+    assert!(h.query_by_label(refusal).is_none(), "the page no longer shows the old refusal");
+    assert_ne!(h.state().state.status, refusal, "the status strip retires the refusal too");
+}
+
 /// Every painted text of the last frame with its top-left, in paint order.
 pub(super) fn painted(h: &Harness<'static, ShellUi>) -> Vec<(String, egui::Pos2)> {
     fn walk(shape: &egui::Shape, out: &mut Vec<(String, egui::Pos2)>) {
