@@ -79,9 +79,8 @@ stock (a from-model stock of the part, the part still in the setup):
 (`setup_align::parts_facets_in`), so a stock-source cut is judged
 against each of them: pinned with two parts in one stock
 (`a_stock_source_cut_answers_for_every_part_in_the_stock`, a cut into
-either part convicted). A part-SOURCE op (whole model or pick of part B)
-still reads only its own source's mesh, so it does not judge a
-neighbouring part A; that is outside #1607 (raised in #1615's review).
+either part convicted). A part-SOURCE op entering a neighbouring part is
+#1621, decided below on the same branch.
 
 **Correction to #1543 and #1593:** both say a Stock source, or a pick off
 the setup's stock, "still cuts unjudged". Since #1607 it is judged against
@@ -113,3 +112,75 @@ passes the gouge tolerance.
 
 **Cost to change later:** one predicate (`keep_law::is_stock_kept_kind`)
 and one branch in `run_job` (mark or solid law for `keep_parts`).
+
+**Merged with #1615's review fix (4f05e9c0).** #1615 bounded a mark by
+the part under the cutter (`MARK_FLOOR`, `verify::seat_skin`) and judged
+the shank, holder and rapids against the part as it stands
+(`verify::stack_hits`); `mark_into` now returns `Marked` and the note is
+`mark_law::notes`. Both halves apply to a stock-source Engrave or Trace:
+the merge passes whichever mesh the mark law reads (the source part, or
+on a stock source the setup's parts) to the one `mark_into`, so the
+floor and the stack check come with it. Pinned:
+`mark_floor.rs::a_stock_source_cut_through_the_plate_meets_the_same_floor`
+(2.9 mm and 1.9 mm off the stock through a 2 mm plate refused by name
+on both stocks, 0.3 mm posts; red with the skin emptied).
+
+## #1621 - a part-source cut answers for the setup's other parts
+
+**Decided:** a part-source 2D operation that carries a part law
+(`depth_law_of(params, src, true)` not `None`: Contour, Face, Slot,
+Trochoidal slot, Circular, the pocket family, Drill without cross holes,
+Bore, Thread, Engrave, Trace) is also judged against every OTHER part
+the setup holds (`keep_law::neighbour_parts`: the set
+`setup_align::parts_facets_in` reads - fixtures and a stock-only model
+left out - less the entities its source names, in the setup's frame),
+with the plain solid law (`contain_into` with `Keep`: nothing excused,
+no hole walls, no mark budget), in both frame arms of `run_job`. The
+source keeps its own law unchanged.
+
+**Why the source is excluded, not judged twice:** its own law is the
+right one for it - a mark lowers it by the budget, a `Section` cut
+answers to its region, a hole kind excuses its own modelled rims. The
+plain solid law against the source would convict every legal mark
+(measured: mutation M2 below turns the legal-mark pins red).
+
+**Why no budget on a neighbour:** a mark is on the part it marks. A
+flank that enters part A while marking B is a gouge of A, however
+shallow; judged with the budget it read clean (mutation M3: the probe
+passed).
+
+**Readings** (B: the #1585 pocket block on x [0, 40]; A: a 40 x 40 x 8
+box on x [-40, -gap]; 80 x 80 x 8 box stock; 6 mm end mill):
+
+| part-source case on B | before: op gouges in A, aligned / turned | now |
+|---|---|---|
+| Trace / Engrave 0.3 mm round B, gap 0.7 (flank 2.3 mm into A, 0.3 mm deep) | 0, **posts / posts** (the sim credits A the mark budget too) | op gouge, refused on both (by the op's moves on the turned stock) |
+| Contour outside B to Z 1, gap 0.7 | 0, refused by the sim (7.00 mm) / **posts** | the same |
+| Trace / Engrave 0.3 mm, whole B or B's top picked, gap 5 | 0, posts / posts | posts / posts |
+| Engrave 7 mm down B's walls, gap 5 | B's own gouge, named | unchanged |
+| 2D Pocket on B's picked pocket floor, gap 0.7 | clean, posts | unchanged: same path, same findings as gap 5 |
+
+**Behaviour change to know:** a whole-model 2D pocket on B (#12: clear
+the stock around the part) in a stock that also holds A clears through
+A; it is now convicted on the op. That is a real gouge of A.
+
+**Considered and dropped:**
+- Judging every part, the source included, with the plain solid law: it
+  convicts every legal mark (M2).
+- Only the issue's three laws (Mark, Section, Keep): the hole kinds'
+  `Contain` law also reads only the source, and a drill on B entering A
+  is the same defect; the predicate is "carries a part law" so the two
+  cannot drift.
+
+**Known cost / follow-ups:**
+- The sim's mark credit (`budget_of`, `stock_sim::credit_marks`) still
+  credits a neighbour the mark budget: before this fix the 0.3 mm mark
+  whose flank took 2.3 mm x 0.3 mm off A POSTED on the aligned stock
+  too. The op now refuses it on both stocks (the output is safe); making
+  the sim credit only the marked part, so the two judges agree, is a
+  follow-up.
+- The neighbour law tightens by the SOURCE's fidelity excess, not each
+  neighbour's (the same simplification #1603 takes for the stock's).
+
+**Cost to change later:** one function (`keep_law::neighbour_parts`) and
+one call per frame arm in `run_job`.
