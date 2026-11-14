@@ -107,10 +107,34 @@ pub(super) fn neighbour_parts(
     src: &SrcRef,
     part_solid: bool,
 ) -> Vec<Triangle> {
-    if !part_solid || super::generate::depth_law_of(params, src, true) == super::generate::DepthLaw::None {
+    if !part_solid {
         return Vec::new();
     }
+    kept_models(world, params, src, true)
+        .into_iter()
+        .filter_map(|(_, e)| crate::setup_align::facets_in(world, &e, setup))
+        .flatten()
+        .collect()
+}
+
+/// The models whose meshes an operation's part laws read beyond its own
+/// source: on a part source ([`neighbour_parts`]) the setup's other
+/// parts, on a stock source ([`parts_in_stock`]) every part. Empty for a
+/// kind that carries no such law.
+fn kept_models(
+    world: &flecs_ecs::prelude::World,
+    params: &OpParams,
+    src: &SrcRef,
+    part_solid: bool,
+) -> Vec<(String, flecs_ecs::prelude::Entity)> {
     let own: Vec<&str> = match src {
+        _ if !part_solid => {
+            if !is_stock_kept_kind(params) {
+                return Vec::new();
+            }
+            Vec::new()
+        }
+        _ if super::generate::depth_law_of(params, src, true) == super::generate::DepthLaw::None => return Vec::new(),
         SrcRef::Stock => return Vec::new(),
         SrcRef::Entity(n) => vec![n.as_str()],
         SrcRef::Selection(items) => items.iter().map(|g| g.entity.as_str()).collect(),
@@ -119,7 +143,43 @@ pub(super) fn neighbour_parts(
     crate::model::model_entities(world)
         .into_iter()
         .filter(|(name, e)| !own.contains(&name.as_str()) && crate::stock_source::judged(world, e, skip))
-        .filter_map(|(_, e)| crate::setup_align::facets_in(world, &e, setup))
-        .flatten()
         .collect()
+}
+
+/// The stamp term of [`kept_models`] (#1607, #1621): an operation judged
+/// against parts beside its source reads Stale when one of them is
+/// added, removed, moved, re-shaped, made a fixture or marked raw stock
+/// only - a verdict against parts that have since moved is a verdict
+/// nobody gave. Written only when the set is not empty, so a one-part
+/// document's part-source stamps do not change. `None` when a part's
+/// geometry cannot be read (an unresolvable digest reads Stale).
+pub(super) fn write_kept(
+    world: &flecs_ecs::prelude::World,
+    setup: Option<&str>,
+    params: &OpParams,
+    src: &SrcRef,
+    h: &mut std::hash::DefaultHasher,
+) -> Option<()> {
+    use std::hash::Hasher;
+    let stock = crate::setup::stock_entity_name(world, setup);
+    let part_solid = match src {
+        SrcRef::Stock => false,
+        SrcRef::Entity(n) => *n != stock,
+        SrcRef::Selection(items) => !items.is_empty() && items.iter().all(|g| g.entity != stock),
+    };
+    let kept = kept_models(world, params, src, part_solid);
+    if kept.is_empty() {
+        return Some(());
+    }
+    h.write(b"kept-parts");
+    h.write_usize(kept.len());
+    for (name, e) in &kept {
+        h.write(name.as_bytes());
+        let loc = crate::setup_align::pose_in(world, e, setup).unwrap_or_default();
+        for v in [loc.pos.x, loc.pos.y, loc.pos.z, loc.rot[0], loc.rot[1], loc.rot[2], loc.rot[3]] {
+            h.write(&v.to_bits().to_le_bytes());
+        }
+        h.write_u64(crate::model::geometry_signature(world, e)?);
+    }
+    Some(())
 }

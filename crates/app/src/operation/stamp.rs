@@ -198,6 +198,8 @@ pub fn current_stamp(
     if super::stamp_stock::reads_setup_stock(src) {
         super::stamp_stock::write_setup_stock(world, setup, &mut h)?;
     }
+    // #1607, #1621: the parts its part laws read beyond its source.
+    super::keep_law::write_kept(world, setup, params, src, &mut h)?;
     // M3.1 D re-machining: the program AHEAD is an input too - a 3D
     // pocket consumes what earlier operations leave standing, so when
     // their recorded PATHS or their order move, its cached path no

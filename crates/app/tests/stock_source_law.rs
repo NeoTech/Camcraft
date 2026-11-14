@@ -321,6 +321,24 @@ fn a_stock_source_cut_answers_for_every_part_in_the_stock() {
     }
 }
 
+#[test]
+fn moving_the_part_after_generation_makes_a_stock_source_cut_stale() {
+    // The verdict reads the part in the stock, so the part is an input of
+    // the stock-source op: moved after a clean generation, the op reads
+    // Stale and the post refuses until it is regenerated.
+    let (world, mut h) = job(true, false, TOP);
+    let (warns, _) = generated(&world, &mut h, SrcRef::Stock, mark(false, TOP, 7.7));
+    assert_eq!(gouges(&warns), 0, "{warns:?}");
+    let e = model::find_by_name(&world, "S1").expect("op");
+    assert_eq!(camcraft_app::operation::status_of(&world, &e), camcraft_app::operation::OpStatus::Ok);
+    let moved = Location { pos: Point3::new(0.5, 0.0, 0.0), ..Location::default() };
+    h.execute(&world, camcraft_app::commands::MoveModel::new(&world, "part", moved).expect("move the part"));
+    assert_eq!(camcraft_app::operation::status_of(&world, &e), camcraft_app::operation::OpStatus::Stale);
+    let out = nc("stale");
+    let err = posting::post_setup(&world, &out).expect_err("a stale op never posts");
+    assert!(err.contains("regenerate"), "{err}");
+}
+
 // ---- MCP parity -----------------------------------------------------
 
 fn call(s: &mut Server, id: &mut i64, name: &str, args: Value) -> Value {

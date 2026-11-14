@@ -6,8 +6,8 @@
 //! a cut on part B whose flank entered part A beside it had no finding
 //! on the operation - with the stock aligned the program sim held the
 //! post, with it turned (the sim refuses to judge) nothing judged A.
-//! Now the setup's other parts take the plain solid law (no mark budget
-//! - a mark is on the part it marks): the cut into A is a blocking
+//! Now the setup's other parts take the plain solid law (no mark budget:
+//! a mark is on the part it marks): the cut into A is a blocking
 //! `Warning::Gouge` on the operation on both stocks; a legal mark on B
 //! clear of A, and a pocket on B's own floor, post as before.
 //!
@@ -223,6 +223,29 @@ fn a_pocket_on_bs_own_floor_is_unchanged_beside_a_neighbour() {
         let low = path.moves.iter().map(|m| m.to.z).fold(f64::INFINITY, f64::min);
         assert!((low - FLOOR).abs() < 1e-9, "rotated {rotated}: cleared to B's floor: {low}");
         assert_posts(&world, &format!("pocket-{rotated}"));
+    }
+}
+
+#[test]
+fn moving_the_neighbour_after_generation_makes_the_cut_on_b_stale() {
+    // The verdict reads A, so A is an input of the op on B: moved up to
+    // 0.7 mm off B after a clean generation, the op reads Stale and the
+    // post refuses until it is regenerated - and then refuses the gouge.
+    for rotated in [false, true] {
+        let (world, mut h) = job(CLEAR, rotated);
+        let warns = generated(&world, &mut h, whole_b(), mark(true, TOP, 7.7));
+        assert_eq!(gouges(&warns), 0, "rotated {rotated}: {warns:?}");
+        let e = model::find_by_name(&world, "N1").expect("op");
+        assert_eq!(operation::status_of(&world, &e), operation::OpStatus::Ok);
+        let near = Location { pos: Point3::new(CLEAR - TIGHT, 0.0, 0.0), ..Location::default() };
+        h.execute(&world, camcraft_app::commands::MoveModel::new(&world, "other", near).expect("move A"));
+        assert_eq!(operation::status_of(&world, &e), operation::OpStatus::Stale, "rotated {rotated}: A moved");
+        let out = nc(&format!("stale-{rotated}"));
+        let err = posting::post_setup(&world, &out).expect_err("a stale op never posts");
+        assert!(err.contains("regenerate"), "rotated {rotated}: {err}");
+        h.execute(&world, GenerateOperation::new(&world, "N1").expect("regenerate"));
+        let tp = model::toolpath_of(&world, &e).expect("cached path");
+        assert!(gouges(&tp.warnings) > 0, "rotated {rotated}: regenerated beside A: {:?}", tp.warnings);
     }
 }
 
