@@ -128,6 +128,8 @@ pub use dexel::{reach, Dexel};
 pub use dexel_box::{simulate_box, BOX_ARC_REFUSAL};
 pub use edge_break::credit_breaks;
 pub use mark::{credit_marks, Mark};
+// The floor a mark must leave on the part's underside (#1595).
+pub use crate::verify::MARK_FLOOR;
 pub use field::SdfField;
 pub use field_body::Lattice;
 pub use field_carry::{box_signed, CarriedField, Clip, ClipRefusal};

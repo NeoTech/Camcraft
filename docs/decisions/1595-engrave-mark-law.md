@@ -14,12 +14,14 @@ LOWERED by the budget. A cutting move whose edge still enters the
 lowered part is a blocking `Warning::Gouge` on that move; the path also
 carries a note that names the budget and what to do. A source that is
 not the part (the Stock, or a pick off the setup's stock) is still
-`None`, as for every kind.
+`None`, as for every kind. (Amended by the review of PR #1615, below:
+the mark is also bounded by the part under the cutter, and the shank,
+holder and rapids are judged against the part as it stands.)
 
 The program sim credits the same thing (`stock_sim::credit_marks`,
 called beside #303's `credit_breaks`): a column the mark's own cutter
 swept is judged against `max(what that cutter swept, model top -
-budget)` instead of the model's top. So the two judges agree where both
+budget, underside + 0.2 mm)` instead of the model's top. So the two judges agree where both
 speak, and the operation's verdict stands alone where the sim refuses
 (a turned stock, posed moves, rotary and lathe frames).
 
@@ -129,6 +131,177 @@ test - a legal program must still post on a turned stock:
 **Cost to change later:** the budget is one function
 (`mark_law::budget`), read by the operation's law and the sim's credit
 alike; the law's kinds are one match arm.
+
+## #1595 (review of PR #1615) - A mark is bounded by the part under the cutter, and only the edge gets the budget
+
+Two findings of the review (NeoTech's runner review, items 1 and 2;
+M5's correction pullrequestreview-5900983707). Both amend the mark law
+above; the rest of it stands.
+
+### 1. The floor a mark must leave
+
+**The defect:** on a 40 x 40 x 2 plate with a 6 mm end mill, Top 2 and
+Bottom -0.9 state a 2.9 mm "mark". Lowered by 2.9 the plate lies at
+Z -2.9..-0.9, clear of a cutter at Z -0.9, so the operation's law found
+nothing; the sim's credit floor `max(sweep, top - budget)` was -0.9,
+under the plate, so the program sim forgave the same columns. Engrave
+and Trace cut THROUGH the finished plate and posted on both stocks.
+The same held for any web shorter than the budget (a deck over a
+void).
+
+**Decided:** a mark is bounded by the material actually under the
+cutter, in both judges:
+
+    depth of a mark <= min(budget, thickness under the cutter - MARK_FLOOR)
+
+`MARK_FLOOR = 0.2 mm` (`camcraft_sim::verify::MARK_FLOOR`, one constant
+read by both).
+- **The operation's law** (`mark_law::mark_into`): beside the
+  lowered-part reading, the cutting edge is swept with the same solid
+  law against the part's **undersides raised into a solid 0.2 mm high**
+  (`verify::seat_skin`). An edge that enters it stands less than the
+  floor above the part's bottom, or above the roof of a void in the
+  part. That is a blocking `Warning::Gouge` on the move, and the path
+  carries a second note that says so by name: "<kind> cuts through the
+  part: under the cutter less than 0.200 mm of the part is left on its
+  underside ...".
+- **The sim's credit** (`stock_sim::credit_marks`): the floor a swept
+  column is judged against is now `max(sweep, top - budget, underside
+  + MARK_FLOOR)`, the underside being the highest one in the column.
+  A column with a top and no underside under it (not a closed part
+  there) is credited nothing.
+- **What an underside is** (`verify::undersides`): a facet with the
+  solid just above it and air just below, by the vertical-ray parity
+  the solid law already uses. The winding is not trusted (an STL may
+  be wound either way), and a face between two bodies of one part
+  (material on both sides) is not an underside. A facet whose column
+  cannot be read is kept as one: a floor too many, never one too few.
+
+Readings on the thin plate (Engrave and Trace alike, whole model):
+
+| cut on the 2 mm plate | op | aligned | turned |
+|---|---|---|---|
+| Top 2, Bottom -0.9 (the review's repro) | Gouge, "cuts through the part" | refused | refused, by the op's moves |
+| 1.9 mm deep (0.1 mm left) | Gouge, "cuts through the part" | refused (sim charges 0.10) | refused |
+| 1.8 mm deep (exactly the floor left) | clean | posts | posts |
+| 0.3 mm deep | clean | posts | posts |
+
+**Why 0.2 mm, and why a fixed number:** the floor answers one
+question - is the part still whole under the mark? - and that is a
+property of the machine and the sheet, not of the cutter or the depth.
+Z setting, spindle runout and the flatness of a clamped sheet each run
+to several hundredths of a millimetre, so a web under about 0.2 mm is
+torn or cut through on a real machine even when the numbers say it
+stands. It also keeps the floor well above the tolerances the two
+judges read with (0.01 mm gouge tolerance on the operation, the sim's
+lattice tolerance), so neither can round a through-cut into a pass.
+It is deliberately small: thin tags are engraved (a 0.5 mm tag still
+takes a 0.3 mm mark), and the floor exists to refuse breakthroughs,
+not to judge how stiff the remaining web is.
+
+**Considered and dropped:**
+- Capping the budget by the thickness with no floor (the review's
+  first suggestion). A mark that leaves 0.01 mm is a through-cut on
+  any machine; the two judges would also be reading a zero-thickness
+  web at their own tolerances.
+- A proportional floor ("a mark takes at most half the part under
+  it"). Scale-free, but it refuses deliberate deep scoring of sheet
+  (fold grooves leave a thin web by design) and it would have changed
+  what M5 verified on the user's part. The maintainer may prefer it;
+  it is one constant and one line in each judge.
+- "Refuse when the lowered part leaves nothing under the cutter" (the
+  review's second suggestion). It convicts the 2.9 mm case but not a
+  1.95 mm cut on the 2 mm plate, which is the same breakthrough.
+- One global cap from the part's least thickness. Any chamfered or
+  wedge-shaped edge has zero thickness somewhere, so every mark on
+  such a part would be refused.
+- A column lattice on the operation's side. The standing rule: a
+  lattice verifies, it never judges an operation. The raised
+  undersides are a mesh, read by the same exact sweep.
+- A new `Warning` variant for a breakthrough: as for "deeper than a
+  mark" above, `Gouge` is the true verdict and the note names it.
+
+**Known cost (conservative side):**
+- Where the part is thinner than 0.2 mm (a knife edge where a sloped
+  top meets the underside) no mark can be made at all, and a cutting
+  edge passing within 0.2 mm above such an edge is convicted even if
+  it clears the part there.
+- A mesh made of several closed shells that overlap (not a modelled
+  solid) is read facet by facet: a facet that is an underside
+  anywhere under its centre or half way to its corners is treated as
+  one over its whole area.
+- A part with an open mesh (no underside under a top) gets no mark
+  credit from the sim in those columns.
+
+### 2. Shank, holder and rapids: the part as it stands
+
+**The defect:** `mark_into` lowered every facet and then asked the
+whole solid law, so the shank and holder checks (and the rapids) ran
+against the lowered part too. A shank standing up to the budget
+(as much as the cutter radius) inside the part was excused.
+
+**Decided:** only the cutting edge (the fluted length) gets the mark
+budget. On a cutting move the shank and holder bands, and on a rapid
+the whole assembly, are swept against the part as it stands
+(`verify::stack_hits`, a second reading of the same solid law that
+leaves a cutting move's edge to the mark law): `ShankHit` on the part,
+`RapidInStock`. From the lowered-part reading only the edge's `Gouge`
+is kept.
+
+**One excuse, stated and pinned:** a straight rapid UP along the tool
+axis that starts exactly where the cutting move before it ended is
+not judged. It lifts the tool out of the kerf that move just cut (the
+mesh does not show the kerf), every Engrave and Trace ends each chain
+that way, and the stack was judged at that position on the cutting
+move. This is the column law's own exemption for a vertical retract
+(`verify`, `RapidInStock`). A rapid sideways out of the kerf, a rapid
+down into the part, and a lift from anywhere no cut left the tool are
+all convicted (`only_the_retract_up_the_marks_own_kerf_is_a_rapid_
+under_the_surface`).
+
+**Stricter than before, on purpose:** a rapid that dips into the part
+within the budget (a re-entry rapid into an earlier pass's kerf) was
+excused by the lowered part and is now `RapidInStock`. The generators
+do not emit one for these kinds (each level re-plunges at feed from
+above Top; the suites and the user's `Milling-test.step` are
+unchanged), and a rapid has no mark to make.
+
+### 3. Notes for the maintainer (no code change)
+
+- **The budget grows with the cutter.** `budget = min(Top - Bottom,
+  radius)`: a 12.7 mm end mill may take a 6.35 mm deep, 12.7 mm wide
+  rabbet along every model edge and call it a mark. The stated depth
+  already caps it (a 0.3 mm engraving has a 0.3 mm budget whatever the
+  cutter); what is open is the unedited seed, whose Top and Bottom
+  span the part. Options, each one line in `mark_law::budget`:
+  (a) a fixed engraving maximum, e.g. `min(.., 1.0 mm)`. It makes
+  "mark" mean one thing for every tool, at the cost that today's
+  legal 3.0 mm cut with the 6 mm cutter (M5's reading on the user's
+  part) becomes a refusal;
+  (b) a cap by tool type (the full radius only for a ball or a
+  V-point, whose groove is its tip form; a small fixed depth for a
+  flat end mill, which cuts a rabbet);
+  (c) leave it (today). Not changed here: (a) and (b) both turn
+  programs that post today into refusals, and that is the
+  maintainer's call. Recommended: (b), in its own issue.
+- **No stock, no keep law.** With no stock set up, `DepthLaw::Keep`
+  stands down (`GenJob::around_part`): a whole-model Pocket with an
+  area offset of +3 has no finding and posts. That is #12's documented
+  contract (with no stock the model itself is the volume to remove),
+  not a regression of this PR, but it means a project whose stock is
+  simply not set yet is unjudged. Recommended: keep the contract, and
+  consider a path note "no stock is set up: the model is cleared as
+  the volume to remove" so the reading is visible.
+- **A Trace on part B that enters a neighbouring part A** has no
+  finding on the operation: the mark and keep laws read the source
+  entity's mesh only, so on a turned stock nothing judges A (the
+  aligned sim does). It predates this PR and holds for `Section` kinds
+  on B as well. Not fixed here: the fix is to judge the edge against
+  every part of the setup (`setup_align::parts_facets_in`, the mesh
+  #1607 already carries into the job as `keep_parts` for stock
+  sources), and #1607 is rewriting exactly those lines on top of this
+  branch. Filed as #1621 (P1: a gouge that posts) to land with or
+  after #1607.
 
 ## #1603 - The pocket family keeps the part: a whole model, or the parts under a stock source
 

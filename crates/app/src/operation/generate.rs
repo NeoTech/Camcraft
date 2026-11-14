@@ -3143,9 +3143,11 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             }
             // #1595: an Engrave or Trace on the part may lower its
             // surface by the mark budget and no more (`mark_law`).
-            let marked = (depth_law == DepthLaw::Mark)
-                .then(|| super::mark_law::mark_into(&mut warns, &path, &material.facets, &cutter, mark_budget, material.excess))
-                .is_some_and(|n| n > 0);
+            let marked = if depth_law == DepthLaw::Mark {
+                super::mark_law::mark_into(&mut warns, &path, &material.facets, &cutter, mark_budget, material.excess)
+            } else {
+                super::mark_law::Marked::default()
+            };
             // #985: an external thread's crest ring against every wall
             // that is not the boss it threads, with no thread allowance.
             for w in super::thread_boss::neighbours(&params, &path, &material.facets, &tool) {
@@ -3179,9 +3181,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // The all-air verdict (M13.8): a finish that provably cuts
             // nothing says so by name instead of passing silent.
             let mut path = super::air_law::air_noted(path, mode, &material.facets, stock_top_z, &geom);
-            if marked {
-                path.notes.push(super::mark_law::note(params.kind().info().label, mark_budget, unit));
-            }
+            path.notes.extend(super::mark_law::notes(params.kind().info().label, marked, mark_budget, unit));
             // #104: explain the height mismatch, without replacing any move-level
             // verdict. Tilted, rotary and turning heights are not world-Z tops.
             if stock_aabb.is_some()
@@ -3294,10 +3294,9 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // #1595: the mark law in the plane's frame - local path,
             // local part, the budget measured along the tool.
             let mut path_world = path_world;
-            if depth_law == DepthLaw::Mark
-                && super::mark_law::mark_into(&mut warns, &path, &m_gen.facets, &cutter, mark_budget, material.excess) > 0
-            {
-                path_world.notes.push(super::mark_law::note(params.kind().info().label, mark_budget, unit));
+            if depth_law == DepthLaw::Mark {
+                let marked = super::mark_law::mark_into(&mut warns, &path, &m_gen.facets, &cutter, mark_budget, material.excess);
+                path_world.notes.extend(super::mark_law::notes(params.kind().info().label, marked, mark_budget, unit));
             }
             warns.extend(workholding_warnings(
                 &path_world,

@@ -109,6 +109,35 @@ pub fn solid_hits_threaded(
     walls: &[HoleAxis],
     bores: &[ThreadBore],
 ) -> Vec<Warning> {
+    judged(path, facets, cutter, law, walls, bores, false)
+}
+
+/// The stack's half of the solid law, for a kind whose cutting edge
+/// answers to a law of its own (#1595's mark, which may lower the part
+/// under the edge): a cutting move whose shank or holder enters the
+/// solid is a [`Warning::ShankHit`] on the part whatever its edge does,
+/// and a rapid that enters it with any of the assembly a
+/// [`Warning::RapidInStock`]. The edge of a cutting move is not judged
+/// here, and neither is a straight retract UP the tool's own axis from
+/// where a cutting move left it: it rides the kerf that move made (the
+/// column law's own exemption, [`super`]'s `RapidInStock`), and the
+/// stack was judged there on that move. Fails closed as [`solid_hits`]
+/// does.
+pub fn stack_hits(path: &Toolpath, facets: &[Triangle], cutter: &Cutter, law: &SolidLaw) -> Vec<Warning> {
+    judged(path, facets, cutter, law, &[], &[], true)
+}
+
+/// The one walk both readings share; `stack_only` leaves a cutting
+/// move's edge to its caller's own law.
+fn judged(
+    path: &Toolpath,
+    facets: &[Triangle],
+    cutter: &Cutter,
+    law: &SolidLaw,
+    walls: &[HoleAxis],
+    bores: &[ThreadBore],
+    stack_only: bool,
+) -> Vec<Warning> {
     let walls = if law.hole_walls { walls } else { &[] };
     let first_cut = path.moves.iter().position(|m| m.kind != MoveKind::Rapid);
     if facets.is_empty() {
@@ -159,10 +188,15 @@ pub fn solid_hits_threaded(
                 }))
         };
         if m.kind == MoveKind::Rapid {
+            let lifts = stack_only && axis.is_none() && m.arc.is_none() && m.from.x == m.to.x && m.from.y == m.to.y && m.to.z >= m.from.z;
+            let from_cut = i.checked_sub(1).and_then(|j| path.moves.get(j)).is_some_and(|c| c.kind != MoveKind::Rapid && c.to == m.from);
+            if lifts && from_cut {
+                continue;
+            }
             if hits(&atoms) {
                 out.push(Warning::RapidInStock { at: i });
             }
-        } else if hits(&edge) {
+        } else if !stack_only && hits(&edge) {
             out.push(Warning::Gouge { at: i });
         } else if hits(&body) {
             out.push(Warning::ShankHit { at: i, part: true });

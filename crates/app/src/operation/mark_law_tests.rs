@@ -94,8 +94,117 @@ fn a_wall_beside_the_line_is_the_part_not_the_mark() {
 #[test]
 fn a_conviction_another_law_already_made_is_not_repeated() {
     let mut w = vec![Warning::Gouge { at: 0 }];
-    assert_eq!(mark_into(&mut w, &line(15.0, 9.0), &stepped(), &cutter(), 0.3, 0.0), 0);
+    let found = mark_into(&mut w, &line(15.0, 9.0), &stepped(), &cutter(), 0.3, 0.0);
+    assert_eq!(found, Marked { deep: 1, through: 0, stack: 0 }, "found, and not said twice");
     assert_eq!(w, vec![Warning::Gouge { at: 0 }]);
+}
+
+/// A 40 x 40 x 2 plate, Z 0..2 (the review's thin-plate fixture).
+fn plate() -> Vec<Triangle> {
+    cube(p(0.0, 0.0, 0.0), p(40.0, 40.0, 2.0)).facets.to_vec()
+}
+
+fn found_on(part: &[Triangle], path: &Toolpath, c: &verify::Cutter, budget: f64) -> (Marked, Vec<Warning>) {
+    let mut w = Vec::new();
+    let found = mark_into(&mut w, path, part, c, budget, 0.0);
+    (found, w)
+}
+
+#[test]
+fn a_mark_is_bounded_by_the_part_under_the_cutter() {
+    // The review's cut: Top 2, Bottom -0.9, a 2.9 mm budget on a 2 mm
+    // plate. The lowered plate (Z -2.9..-0.9) is clear of the cutter;
+    // the floor on its underside is not.
+    let (found, w) = found_on(&plate(), &line(20.0, -0.9), &cutter(), 2.9);
+    assert_eq!(found, Marked { deep: 0, through: 1, stack: 0 });
+    assert_eq!(w, vec![Warning::Gouge { at: 0 }], "a through-cut is a gouge on its move");
+    // Along the plate's edge, half the cutter over air: the same.
+    assert_eq!(found_on(&plate(), &line(0.0, -0.9), &cutter(), 2.9).0.through, 1);
+    // Down to the floor and no further: 1.8 deep leaves MARK_FLOOR.
+    assert_eq!(found_on(&plate(), &line(20.0, MARK_FLOOR), &cutter(), 2.9), (Marked::default(), Vec::new()));
+    assert_eq!(found_on(&plate(), &line(20.0, 1.7), &cutter(), 0.3), (Marked::default(), Vec::new()), "a shallow mark on a thin plate");
+    // 0.1 mm of plate left is a breakthrough, whatever the budget says.
+    assert_eq!(found_on(&plate(), &line(20.0, 0.1), &cutter(), 2.9).0, Marked { deep: 0, through: 1, stack: 0 });
+    // Past the budget AND through: both readings speak, one warning.
+    let (found, w) = found_on(&plate(), &line(20.0, -0.9), &cutter(), 0.3);
+    assert_eq!((found, w.len()), (Marked { deep: 1, through: 1, stack: 0 }, 1));
+}
+
+#[test]
+fn a_mark_over_a_void_may_not_break_into_it() {
+    // A bridge: two feet and a 2 mm deck (Z 6..8) over a tunnel along Y.
+    let mut part = cube(p(0.0, 0.0, 0.0), p(10.0, 40.0, 6.0)).facets.to_vec();
+    part.extend(cube(p(30.0, 0.0, 0.0), p(40.0, 40.0, 6.0)).facets.iter().copied());
+    part.extend(cube(p(0.0, 0.0, 6.0), p(40.0, 40.0, 8.0)).facets.iter().copied());
+    // 1.9 mm into the deck over the tunnel: 0.1 mm of roof left.
+    assert_eq!(found_on(&part, &line(20.0, 6.1), &cutter(), 3.0).0.through, 1);
+    // 1.5 mm in leaves 0.5 mm of roof: a mark.
+    assert_eq!(found_on(&part, &line(20.0, 6.5), &cutter(), 3.0), (Marked::default(), Vec::new()));
+}
+
+/// The 6 mm end mill with only 2 mm of flute under its shank.
+fn stubby() -> verify::Cutter {
+    verify::Cutter { flute_len: 2.0, ..cutter() }
+}
+
+#[test]
+fn the_shank_is_judged_against_the_part_as_it_stands() {
+    // 3 mm into the low face on a 3 mm budget, 2 mm of flute: the edge
+    // is within its mark, the shank stands 1 mm inside the part. Lowered
+    // by the budget the part would have excused it.
+    let (found, w) = found_on(&stepped(), &line(15.0, 7.0), &stubby(), 3.0);
+    assert_eq!(found, Marked { deep: 0, through: 0, stack: 1 });
+    assert_eq!(w, vec![Warning::ShankHit { at: 0, part: true }]);
+    // Within the flute the same tool marks clean.
+    assert_eq!(found_on(&stepped(), &line(15.0, 8.5), &stubby(), 3.0), (Marked::default(), Vec::new()));
+    // The boss beside the line, its top (Z 15) within the budget of the
+    // shank's foot: 0.3 mm into the low face clear of the wall by the
+    // cutter radius, a 5 mm shank radius reaching 2 mm over the boss
+    // at Z 11.7 - inside it.
+    let fat = verify::Cutter { shank_radius: 5.0, ..stubby() };
+    let (found, w) = found_on(&stepped(), &line(27.0, 9.7), &fat, 0.3);
+    assert_eq!((found.stack, w), (1, vec![Warning::ShankHit { at: 0, part: true }]));
+}
+
+#[test]
+fn a_rapid_has_no_mark_to_make() {
+    // A rapid 0.2 mm under the surface, inside a 0.3 mm budget.
+    let rapid = Toolpath::new(vec![Move::new(MoveKind::Rapid, p(15.0, 10.0, 9.8), p(15.0, 30.0, 9.8), None)]);
+    let (found, w) = found_on(&stepped(), &rapid, &cutter(), 0.3);
+    assert_eq!((found, w), (Marked { deep: 0, through: 0, stack: 1 }, vec![Warning::RapidInStock { at: 0 }]));
+    // On the surface it touches nothing.
+    let over = Toolpath::new(vec![Move::new(MoveKind::Rapid, p(15.0, 10.0, 10.0), p(15.0, 30.0, 10.0), None)]);
+    assert_eq!(found_on(&stepped(), &over, &cutter(), 0.3), (Marked::default(), Vec::new()));
+}
+
+#[test]
+fn only_the_retract_up_the_marks_own_kerf_is_a_rapid_under_the_surface() {
+    let feed = Move::new(MoveKind::Feed, p(15.0, 10.0, 9.7), p(15.0, 30.0, 9.7), Some(500.0));
+    let rapid = |a: Point3, b: Point3| Move::new(MoveKind::Rapid, a, b, None);
+    // Straight up from where the cut ended: the kerf it made.
+    let lift = Toolpath::new(vec![feed, rapid(p(15.0, 30.0, 9.7), p(15.0, 30.0, 25.0))]);
+    assert_eq!(found_on(&stepped(), &lift, &cutter(), 0.3), (Marked::default(), Vec::new()));
+    // Sideways out of the kerf, down into the part, or up from a place
+    // no cut left the tool: each is a rapid in the part.
+    let hit = |at: usize| (Marked { deep: 0, through: 0, stack: 1 }, vec![Warning::RapidInStock { at }]);
+    let side = Toolpath::new(vec![feed, rapid(p(15.0, 30.0, 9.7), p(20.0, 30.0, 9.7))]);
+    assert_eq!(found_on(&stepped(), &side, &cutter(), 0.3), hit(1));
+    let down = Toolpath::new(vec![feed, rapid(p(15.0, 30.0, 9.7), p(15.0, 30.0, 9.5))]);
+    assert_eq!(found_on(&stepped(), &down, &cutter(), 0.3), hit(1));
+    let elsewhere = Toolpath::new(vec![feed, rapid(p(15.0, 20.0, 9.2), p(15.0, 20.0, 25.0))]);
+    assert_eq!(found_on(&stepped(), &elsewhere, &cutter(), 0.3), hit(1));
+}
+
+#[test]
+fn the_notes_name_the_budget_and_the_floor_each_for_its_own_finding() {
+    let u = Unit::default();
+    assert!(notes("Trace", Marked::default(), 3.0, u).is_empty());
+    assert!(notes("Trace", Marked { stack: 2, ..Marked::default() }, 3.0, u).is_empty(), "a shank hit says itself");
+    assert_eq!(notes("Trace", Marked { deep: 1, ..Marked::default() }, 3.0, u), vec![note("Trace", 3.0, u)]);
+    let through = notes("Trace", Marked { through: 1, ..Marked::default() }, 3.0, u);
+    assert_eq!(through, vec![through_note("Trace", u)]);
+    assert!(through[0].starts_with("Trace cuts through the part") && through[0].contains("0.200 mm"), "{through:?}");
+    assert_eq!(notes("Trace", Marked { deep: 1, through: 1, stack: 0 }, 3.0, u).len(), 2);
 }
 
 #[test]
