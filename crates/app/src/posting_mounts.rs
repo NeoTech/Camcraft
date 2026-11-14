@@ -22,7 +22,7 @@
 
 use super::per_op::{sanitise, write_all};
 use super::{
-    file_stem, join_streams, op_streams, script_of, verification_report, viewer_map,
+    file_stem, join_streams, script_of, verification_report, viewer_map,
     wcs_slot, Posted,
 };
 use crate::machine::{check_ops, Machine, MachineCheck};
@@ -83,6 +83,18 @@ fn active(world: &World) -> Mount {
 /// machine alone (a caller handing its own script).
 pub(super) fn single(world: &World, by_post: bool) -> Result<Mount, String> {
     let mounts = program_mounts(world, by_post);
+    // #1532: "One file per setup" asks a file per setup - one file
+    // cannot hold two, so the single-file post refuses and says how.
+    let per_setup = super::setup_change::split(world, mounts.clone());
+    if mounts.len() <= 1 && per_setup.len() > 1 {
+        let names: Vec<String> = per_setup.iter().map(Mount::label).collect();
+        return Err(format!(
+            "Between setups is set to One file per setup, and the program holds {} setups ({}) - \
+             post it as one file per setup, or choose another Between setups",
+            per_setup.len(),
+            names.join("; ")
+        ));
+    }
     if mounts.len() > 1 {
         let names: Vec<String> = mounts.iter().map(Mount::label).collect();
         return Err(format!(
@@ -168,7 +180,8 @@ pub fn post_mounts_script(world: &World, out_path: &Path, cps: &str) -> Result<V
 }
 
 fn post_mounts_with(world: &World, out_path: &Path, cps: Option<&str>) -> Result<Vec<PostedMount>, String> {
-    let mounts = program_mounts(world, cps.is_none());
+    // #1532: "One file per setup" writes each setup as its own mount's file.
+    let mounts = super::setup_change::split(world, program_mounts(world, cps.is_none()));
     if mounts.len() <= 1 {
         let posted = match cps {
             None => super::post_setup(world, out_path)?,
@@ -200,7 +213,7 @@ fn post_each(world: &World, out_path: &Path, cps: Option<&str>, mounts: Vec<Moun
             None => script_of(&m.post).map(|(label, text)| (Some(label), text))?,
         });
     }
-    let streams = op_streams(world)?;
+    let streams = super::op_streams_by(world, cps.is_none())?;
     // #1190: each mount's own script opens only what a lathe may run;
     // #1232: and writes only for a machine kind it serves.
     let mut unserved = Vec::new();
