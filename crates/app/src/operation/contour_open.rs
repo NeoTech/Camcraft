@@ -71,7 +71,8 @@ pub(super) fn open_band(
 /// The tool-centre run of the open pass and its offset from the chain:
 /// the chain run on past both ends by the Boundary extension, offset to
 /// the chosen side by the containment's placement, the Boundary offset
-/// and the stock to leave. Every refusal of the pass is named here.
+/// and the stock to leave, ordered with the material on its right (the
+/// climb order, #1555). Every refusal of the pass is named here.
 pub(super) fn open_run(base: &Region, ctx: &AreaCtx, stock_to_leave: f64) -> Result<(Vec<Point2>, f64), GenError> {
     let Some((geom, side)) = &ctx.open else {
         return Err(unreached("contour open boundary"));
@@ -126,7 +127,15 @@ pub(super) fn open_run(base: &Region, ctx: &AreaCtx, stock_to_leave: f64) -> Res
         d = -d;
     }
     let ext = extended(&chain, c.extension);
-    let run = if d < TOL { ext } else { offset_run(&ext, d, tool_left, ctx.unit)? };
+    // #1555: the run is handed on with the material on its RIGHT, the
+    // order climb travels it under M3 (conventional reverses it). The
+    // offset comes back along the CCW tube, the chain - the material's
+    // side - on its left, so it turns round; a run on the chain itself
+    // keeps the chain's order when the tool stands left of it.
+    let mut run = if d < TOL { ext } else { offset_run(&ext, d, tool_left, ctx.unit)? };
+    if d >= TOL || !tool_left {
+        run.reverse();
+    }
     Ok((run, d))
 }
 

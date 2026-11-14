@@ -27,6 +27,7 @@ use crate::entry_arc::{ArcLead, arc_lead_swept, pts_dir, push_arc_lead, seg_dir}
 use crate::geo2d::{Point2, Region};
 use crate::geometry::Point3;
 use crate::links::{helix_turns, plan_zig_capped, push_zig};
+use crate::ring_zig::push_zig_ring;
 
 use super::arcs::{ARC_FIT_TOL, Seg};
 use super::levels::{Cert, Motion};
@@ -320,7 +321,11 @@ pub(super) fn push(b: &mut PathBuilder, d: &Descent, l: &Lvl, z: f64, tz: f64, m
                 b.push(MoveKind::Rapid, Point3::new(e.x, e.y, tz), None);
             }
             b.push(MoveKind::Rapid, Point3::new(e.x, e.y, *zf), None);
-            push_zig(b, pre, *n, *zf, z, fd);
+            // #1558: a ring's ramp rides the ring's own arcs.
+            match l.walk.and_then(<[Seg]>::first) {
+                Some(Seg::Arc { center, ccw, .. }) if m.ring_zig => push_zig_ring(b, pre, *center, *ccw, *n, *zf, z, fd),
+                _ => push_zig(b, pre, *n, *zf, z, fd),
+            }
             Vec::new()
         }
         Descent::Helix(h) => {

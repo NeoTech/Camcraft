@@ -5,7 +5,8 @@
 //!
 //! Gate map: covers app::operation::bore_reach, app::operation::material
 //! (detect_holes), app::mcp::edit (detect_holes) and the Bore arm of
-//! app::operation::generate, over the motion kernel's bore door.
+//! app::operation::generate, over the motion kernel's bore door; and
+//! (#1560) app::operation::hole_digest through save_project/open_project.
 //!
 //! Provenance: the issue's own MCP reproduction on a synthetic plate
 //! (a Ø74.3 through bore beside a Ø6 hole, a 4 mm end mill); no vendor
@@ -232,4 +233,42 @@ fn a_bull_nose_through_bore_is_judged_by_its_corner_at_detect_and_generate() {
     for want in ["35.500 mm hole at (-50.000, 0.000)", "too wide to bore", "up to 34.928 mm", "2.000 mm corner"] {
         assert!(e.contains(want), "the refusal names `{want}`: {e}");
     }
+}
+
+/// #1560: a hole floor typed off the 1 um lattice (`0.190 in - 0.040 in`
+/// = 3.8099999999999996 mm) is stored by the project file as 3.81. The
+/// op generated Ok before the save reopens Ok - the stamp digests the
+/// hole in the form the file keeps - and posts the same program.
+#[test]
+fn an_edited_hole_floor_off_the_lattice_reopens_ok_and_posts_the_same() {
+    let mut c = setup("reopen", &[SMALL_R]);
+    c.ok("detect_holes", json!({ "name": "B" }));
+    let typed: f64 = 0.190 * 25.4 - 0.040 * 25.4;
+    assert_ne!(typed.to_bits(), 3.81f64.to_bits(), "the probe must be off the lattice");
+    let mut list = holes(&mut c);
+    assert_eq!(list.len(), 1, "{list:?}");
+    list[0]["floor_z"] = json!(typed);
+    list[0]["through"] = json!(false);
+    c.ok("edit_operation", json!({ "name": "B", "params": { "holes": list } }));
+    let g = c.ok("generate", json!({ "name": "B" }));
+    assert_eq!(g["generated"][0]["status"], json!("ok"), "{g}");
+
+    let dir = std::env::temp_dir().join(format!("camcraft-bore-core-reopen-{}", std::process::id()));
+    let nc = |c: &mut Client, tag: &str| {
+        let out = dir.join(format!("{tag}.nc"));
+        c.ok("post", json!({ "output": out.display().to_string(), "post": "Fanuc" }));
+        std::fs::read_to_string(&out).unwrap_or_default()
+    };
+    let before = nc(&mut c, "before");
+    assert!(!before.is_empty(), "the bore posts");
+
+    let proj = dir.join("p.camproj");
+    c.ok("save_project", json!({ "path": proj.display().to_string() }));
+    let mut fresh = Client::new();
+    fresh.ok("open_project", json!({ "path": proj.display().to_string() }));
+    let job = fresh.ok("get_job", json!({}));
+    assert_eq!(job["operations"][0]["status"], json!("ok"), "saved Ok, reopened Ok: {job}");
+    let after = nc(&mut fresh, "after");
+    assert_eq!(before, after, "the reopened job posts the program it saved");
+    let _ = std::fs::remove_dir_all(&dir);
 }
