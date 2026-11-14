@@ -283,16 +283,25 @@ function safeZ() {
   return safeZValue;
 }
 
-// Z straight up in machine coordinates, then G30 to the operator's preset
+// Z straight up in machine coordinates, the one retract both the tool
+// change and the program end start with (#1594 split them: only the
+// tool change goes on to G30, see onClose).
+function liftZ() {
+  var z = safeZ();
+  if (z === null) return null;
+  block(["G53", "G0", "Z" + fu(z)]);
+  return z;
+}
+
+// Before a tool change: liftZ, then G30 to the operator's preset
 // tool-change spot. The G30 rides PathPilot's convention with the Z0
 // retract: a machine that states a different safe Z is not on it, and an
 // unset G30 position (LinuxCNC's default is the machine origin) could
 // drive Z back down - so there the retract stands alone and M6 / the
 // control's own tool-change position does the rest.
 function retract() {
-  var z = safeZ();
+  var z = liftZ();
   if (z === null) return;
-  block(["G53", "G0", "Z" + fu(z)]);
   if (z === 0) {
     block(["G30"]);
     // #785 (review of PR #798): a G30 with no axis words moves EVERY
@@ -950,10 +959,17 @@ function onProbeResult() {
 // ------------------------------------------------------------ footer
 // G53 G0 Z0 lifts the spindle straight up to the top of Z travel in
 // machine coordinates (Tormach's Z home is at the top; another machine
-// states its own height, #495 - see safeZ), whatever the
-// stored G30 position holds; then G30 takes the machine to the
-// operator's preset G30 location (the unload spot), the way PathPilot's
-// own programs end. M30 ends the program (no % fence).
+// states its own height, #495 - see safeZ), and the program ends there:
+// no G30 follows it and no rotary return (#1594). A G30 with no axis
+// words moves every axis to the stored G30 position (LinuxCNC params
+// 5181-5189), so an operator's G30 stored below the top of travel
+// brought the tool straight back down after the lift. The user's
+// PathPilot Hub run (770MX sim, 2026-11-13, stored G30 at machine
+// Z -1.5611) showed it: an end of G53 G0 Z0 then G30, or G30 alone, drove
+// the tool down below the part top; G53 G0 Z0 alone stayed at the top of
+// travel, the ending the user chose. A G0 A0 after the lift was tried
+// and not wanted. The G30 before each tool change (retract) is
+// unchanged. M30 ends the program (no % fence).
 //
 // #596: LinuxCNC's M2 / M30 (linuxcnc.org/docs, M-codes, "M2, M30
 // Program End") resets offsets to G54, the plane to G17, G90, G94, M48,
@@ -971,7 +987,7 @@ function endUnitsWord() {
 }
 function onClose() {
   endPreamble();
-  retract();
+  liftZ();               // #1594: straight up and stay there - no G30
   var u = endUnitsWord();
   if (u) block([u]);
   block(["M30"]);
