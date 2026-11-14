@@ -2,8 +2,7 @@
 
 **Chosen:** Use `browser_files::refusal` for Theme Browse and the Fixtures
 menu file commands. Disable unsupported rows and show the same reason before
-a click. Keep supported rows and desktop commands available. Correct the
-stale release-note claim that the browser file picker is still owed.
+a click. Keep supported rows and desktop commands available.
 
 **Why:** The command dispatch already refuses these actions in the browser,
 but live menu rows hide that limitation until after a click. The existing
