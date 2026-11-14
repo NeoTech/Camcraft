@@ -225,3 +225,43 @@ fn a_shared_edge_left_reversed_after_the_flips_is_refused_by_name() {
     assert!(msg.contains("closed shell #7 (6 faces) is wound inconsistently: 2 shared edges still run the same way"), "{msg}");
     assert!(msg.contains("most between face #101 (2 of 6) and face #103 (4 of 6)"), "{msg}");
 }
+
+/// Reverse facet `i` of the mesh in place (its corners b and c swap).
+fn turn(tris: &mut [Triangle], i: usize) {
+    if let Some(t) = tris.get_mut(i) {
+        *t = Triangle::new(t.a, t.c, t.b);
+    }
+}
+
+#[test]
+fn a_pair_met_only_across_t_junctions_that_still_disagrees_is_said() {
+    // The top face is split at every edge midpoint, so it meets each side
+    // across T-junctions only. Its two facets along the y = 0 edge are
+    // turned against the rest: that pair's near votes disagree with the
+    // others, and every exact shared edge still agrees.
+    let mut l = loops();
+    split_top(&mut l);
+    let (mut tris, ends) = mesh(&l);
+    let top = ends.first().copied().unwrap_or(0);
+    for i in [top, top + 1] {
+        turn(&mut tris, i);
+    }
+    let notes = judged(&mut tris, &ends).expect("T-junction-only disagreement imports, with a note");
+    assert!(
+        notes.iter().any(|n| n.contains("face pair(s) met only across T-junctions still disagree on winding after the flips")),
+        "{notes:?}"
+    );
+}
+
+#[test]
+fn exactly_one_shared_edge_left_reversed_is_refused() {
+    // Face 3 is fanned from its centroid, one facet per seam; one facet is
+    // turned, so exactly one seam runs the same way as its neighbour's.
+    let l = loops();
+    let (mut tris, ends) = mesh(&l);
+    let at = ends.get(2).copied().unwrap_or(0);
+    turn(&mut tris, at);
+    let err = judged(&mut tris, &ends).expect_err("one reversed shared edge is still a fault");
+    let msg = err.to_string();
+    assert!(msg.contains("is wound inconsistently: 1 shared edges still run the same way"), "{msg}");
+}
