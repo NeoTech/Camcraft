@@ -226,8 +226,11 @@ fn a_g76_record_the_cycle_cannot_state_exactly_is_refused_by_name() {
     let records = posting::stream_records(&world).expect("generated");
     let bare: Vec<cnc::Record> = records.iter().filter(|r| !matches!(r, cnc::Record::Thread(_))).cloned().collect();
     type Bend = fn(&mut cnc_thread::ThreadRec);
-    let cases: [(&str, Vec<cnc::Record>); 7] = [
+    let cases: [(&str, Vec<cnc::Record>); 8] = [
         ("no thread cycle record", bare),
+        // #417: R1's ladder infeeds along one line; its finishing pass
+        // is the ladder's own last step, never a stated allowance.
+        ("alternating flank infeed", with_rec(&records, (|t| t.alternating = true) as Bend)),
         ("infeed angle", with_rec(&records, (|t| t.infeed_angle = 29.5) as Bend)),
         ("finish allowance", with_rec(&records, (|t| t.finish_allowance = 0.05) as Bend)),
         ("pull-out", with_rec(&records, (|t| t.pull_out = 1.0) as Bend)),
@@ -241,4 +244,29 @@ fn a_g76_record_the_cycle_cannot_state_exactly_is_refused_by_name() {
         assert!(refused.iter().any(|w| w.contains("G76") && w.contains(why)), "{why}: {refused:?}");
         assert!(!text.contains("G76 P"), "{why}: a refused cycle was written: {text}");
     }
+}
+
+#[test]
+fn g76_takes_the_record_whose_finishing_step_is_the_ladders_own() {
+    // #417: the record's finish allowance is the finishing pass's own
+    // step. 1.0 deep in rungs of 0.4 lays 0.4, 0.8 and a 0.2 finish -
+    // exactly R1's J, 2J clamped at K - so the cycle states it.
+    let (world, _history) = thread_world_with(false, ThreadHand::Right, PITCH, 1.0);
+    let records = posting::stream_records(&world).expect("generated");
+    let finish = records
+        .iter()
+        .find_map(|r| match r {
+            cnc::Record::Thread(Some(t)) => Some(t.finish_allowance),
+            _ => None,
+        })
+        .expect("a thread record");
+    assert!((finish - 0.2).abs() < 1e-3, "the finishing pass's own step: {finish}");
+    let (text, refused) = post(&world, &records, g76());
+    assert!(refused.is_empty(), "{refused:?}");
+    let w = g76_words(&text);
+    assert_eq!((word(&w, 'J'), word(&w, 'K')), (0.8, 2.0), "{text}");
+    // Any other finishing step is no R1 ladder: refused by name.
+    let (text, refused) = post(&world, &with_rec(&records, |t| t.finish_allowance = 0.4), g76());
+    assert!(refused.iter().any(|w| w.contains("G76") && w.contains("finish allowance")), "{refused:?}");
+    assert!(!text.contains("G76 P"), "{text}");
 }

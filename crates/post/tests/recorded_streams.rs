@@ -117,6 +117,7 @@ fn tool_change() -> String {
         finish_allowance: 0.0,
         infeed_angle: 0.0,
         spring_passes: 0,
+        alternating: false,
         pull_out: 0.0,
         first: 0,
         last,

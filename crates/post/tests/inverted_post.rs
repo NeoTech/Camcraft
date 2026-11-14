@@ -188,6 +188,7 @@ fn a_threading_cycle_refuses_by_name() {
         infeed_angle: 0.0,
         spring_passes: 1,
         pull_out: 0.0,
+        alternating: false,
         hand: camcraft_post::cl::ThreadHand::Right,
     }));
     let e = refused("fanuc", &["X"], &with(vec![t, Record::Thread(None)]));

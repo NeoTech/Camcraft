@@ -239,8 +239,8 @@ fn alternating_infeed_flips_the_side_every_pass() {
         let want = if j % 2 == 0 { 14.0 + back } else { 14.0 - back };
         assert!((s - want).abs() < 1e-9, "pass {j}: s {s}, want {want}");
     }
-    assert!(path.threads.is_empty(), "alternating has no single compound angle: no record");
-    assert!(path.notes.iter().any(|n| n.contains("alternating")), "{:?}", path.notes);
+    let t = path.threads.first().copied().expect("a record, flagged");
+    assert!(t.alternating && (t.infeed_angle - 2.0 * ang).abs() < 1e-9, "{t:?}");
     let warns = thread_warnings(&threaded(), &path, width(), 60.0, TOL);
     assert!(warns.is_empty(), "alternating infeed reported: {warns:?}");
 }

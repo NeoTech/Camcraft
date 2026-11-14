@@ -227,6 +227,16 @@ fn the_plan_rides_the_project_file_and_a_default_one_is_absent() {
         assert_eq!(*infeed_plan, want, "{name}");
         let saved = model::find_by_name(&world, name).and_then(|e| model::operation_of(&world, &e)).expect("saved op");
         assert_eq!(o.stamp, saved.stamp, "{name}: the stored stamp survives the round trip");
+        // TH0's contribution to TH1's program-ahead digest: equal before
+        // the save and after the load. It moves only when TH0's cached
+        // path lands off the 1 um lattice the save snaps to (a main
+        // defect, reported apart from this PR; the radial ladder here
+        // lands on it on macOS, not on every platform's libm).
+        assert_eq!(
+            camcraft_app::rest::prior_digest(&other, name, o.setup.as_deref()),
+            camcraft_app::rest::prior_digest(&world, name, saved.setup.as_deref()),
+            "{name}: the program ahead digests as before the save"
+        );
         let now = camcraft_app::operation::op_stamp(&other, &o, name);
         assert_eq!(now, camcraft_app::operation::op_stamp(&world, &saved, name), "{name}: the loaded inputs digest as before");
         assert_eq!(status(&other, name), OpStatus::Ok, "{name}: the loaded cache matches its plan");

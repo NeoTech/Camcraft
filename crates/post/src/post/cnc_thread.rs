@@ -35,6 +35,9 @@ pub struct ThreadRec {
     pub pull_out: f64,
     /// The hand the passes cut (#629): `HAND right|left`, required.
     pub hand: ThreadHand,
+    /// Alternating flank infeed (issue #417): written `ALT 1` only when
+    /// set, so every earlier stream reads and writes the same bytes.
+    pub alternating: bool,
 }
 
 /// µm-integer text, the stream's length law.
@@ -63,6 +66,7 @@ impl ThreadRec {
             spring_passes: t.spring_passes,
             pull_out: t.pull_out,
             hand: t.hand,
+            alternating: t.alternating,
         }
     }
 
@@ -88,6 +92,7 @@ impl ThreadRec {
         m.insert("SpringPasses".into(), json!(self.spring_passes));
         m.insert("PullOut".into(), json!(self.pull_out));
         m.insert("Hand".into(), json!(self.hand.word()));
+        m.insert("Alternating".into(), json!(self.alternating));
         m
     }
 
@@ -96,7 +101,7 @@ impl ThreadRec {
     pub fn line(&self) -> String {
         format!(
             "THREAD X {} Y {} Z {} EX {} EY {} EZ {} MAJOR {} MINOR {} LEAD {:.6} HEIGHT {} \
-             FIRST {} MIN {} FINISH {} ANGLE {:.6} SPRING {} PULLOUT {} HAND {}\n",
+             FIRST {} MIN {} FINISH {} ANGLE {:.6} SPRING {} PULLOUT {} HAND {}{}\n",
             q(self.start[0]),
             q(self.start[1]),
             q(self.start[2]),
@@ -114,6 +119,7 @@ impl ThreadRec {
             self.spring_passes,
             q(self.pull_out),
             self.hand.word(),
+            if self.alternating { " ALT 1" } else { "" },
         )
     }
 
@@ -128,13 +134,13 @@ impl ThreadRec {
 }
 
 /// Parse the words after `THREAD`: `Ok(None)` is `THREAD END`. Every
-/// key is required, each once; a missing, repeated, unknown or
-/// non-finite word is refused by name - a cycle the parser guessed at
+/// key but `ALT` (issue #417, absent is 0) is required, each once; a
+/// missing, repeated, unknown or non-finite word is refused by name - a cycle the parser guessed at
 /// is a thread cut to the wrong depth.
 pub fn parse<'a>(mut it: impl Iterator<Item = &'a str>) -> Result<Option<ThreadRec>, String> {
-    const KEYS: [&str; 16] = [
+    const KEYS: [&str; 17] = [
         "X", "Y", "Z", "EX", "EY", "EZ", "MAJOR", "MINOR", "LEAD", "HEIGHT", "FIRST", "MIN", "FINISH", "ANGLE",
-        "SPRING", "PULLOUT",
+        "SPRING", "PULLOUT", "ALT",
     ];
     let mut seen: BTreeMap<&str, f64> = BTreeMap::new();
     let mut hand: Option<ThreadHand> = None;
@@ -177,6 +183,12 @@ pub fn parse<'a>(mut it: impl Iterator<Item = &'a str>) -> Result<Option<ThreadR
     if !(spring >= 0.0 && spring.fract() == 0.0 && spring <= f64::from(u32::MAX)) {
         return Err(format!("THREAD SPRING {spring} is not a pass count"));
     }
+    let alternating = match seen.get("ALT").copied() {
+        None => false,
+        Some(v) if v.to_bits() == 0.0_f64.to_bits() => false,
+        Some(v) if v.to_bits() == 1.0_f64.to_bits() => true,
+        Some(v) => return Err(format!("THREAD ALT {v} is not 0 or 1")),
+    };
     Ok(Some(ThreadRec {
         start: [um("X")?, um("Y")?, um("Z")?],
         end: [um("EX")?, um("EY")?, um("EZ")?],
@@ -191,5 +203,6 @@ pub fn parse<'a>(mut it: impl Iterator<Item = &'a str>) -> Result<Option<ThreadR
         spring_passes: spring as u32,
         pull_out: um("PULLOUT")?,
         hand,
+        alternating,
     }))
 }
