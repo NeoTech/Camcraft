@@ -182,5 +182,35 @@ A; it is now convicted on the op. That is a real gouge of A.
 - The neighbour law tightens by the SOURCE's fidelity excess, not each
   neighbour's (the same simplification #1603 takes for the stock's).
 
-**Cost to change later:** one function (`keep_law::neighbour_parts`) and
-one call per frame arm in `run_job`.
+**The other parts are stamp inputs** (#1607 and #1621 alike): a
+verdict read against parts beside the source is stale once one of them
+moves. The op's stamp digests that set (`keep_law::write_kept`: name,
+pose in the setup, geometry signature; the same set the laws read,
+`keep_law::kept_models`), written only when it is not empty - a
+one-part document's part-source stamps do not change; a stock-source op
+of a kept kind over a part reads Stale once (the mechanism working).
+Pinned: `neighbour_law.rs::moving_the_neighbour_after_generation_makes_the_cut_on_b_stale`,
+`stock_source_law.rs::a_part_added_after_generation_makes_a_stock_source_cut_stale`
+(both red with the term removed).
+
+**Tests that changed for #1621:**
+- `area_controls.rs::a_boundary_offset_on_a_tilted_pocket_is_the_flat_offset_pocket_rotated`
+  compared a tilted pocket on "part" with a flat one on "twin" in a
+  world that also holds "tower", standing on the block's top: the tilted
+  pocket's +3 offset puts the side-on cutter 3 mm into the tower (15
+  gouges, now on the op), the flat twin has nothing beside it. The
+  frame-door comparison now runs without the tower, and the tower's
+  conviction is asserted - which pins the neighbour law's 3+2 frame arm
+  (red with that call removed).
+- `stock_source_verdict.rs` (#1094): Op1 (a Bore on the part) now
+  judges the unmarked casting beside it, as the program sim does; the
+  mark takes the casting out of that set, so it moves the op's inputs
+  and the op reads Stale. The three tests that post or read the gate
+  after marking regenerate first, as a user would; nothing else changed.
+  Considered and dropped: never treating the stock's source model as a
+  neighbour - unmarked it IS judged as a part (the #1094 rule), and the
+  op would then disagree with the sim.
+
+**Cost to change later:** `keep_law::kept_models` (the set),
+`neighbour_parts` and `write_kept`, and one call per frame arm in
+`run_job`.
