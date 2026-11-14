@@ -201,3 +201,42 @@ fn turning_an_unplaced_wcs_applies_the_typed_position() {
     );
 }
 
+#[test]
+fn quarter_turns_follow_each_oblique_setup_axis_in_both_directions() {
+    for axis in 0..3 {
+        for sign in [-1.0, 1.0] {
+            let mut state = State::new();
+            let pos = [7.0, -11.0, 23.0];
+            state.pending.push_back(CommandKind::SetWcs {
+                pos,
+                roll_deg: 23.0,
+                pitch_deg: -31.0,
+                yaw_deg: 47.0,
+            });
+            state.drain_actions();
+            state.sync_setup_ui();
+            let before = location(&state, "G54");
+            turn_wcs(&mut state, axis, sign);
+            assert!(matches!(state.pending.back(), Some(CommandKind::SetWcs { .. })));
+            state.drain_actions();
+            let after = location(&state, "G54");
+            assert_eq!([after.pos.x, after.pos.y, after.pos.z], pos);
+            for basis in [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]] {
+                let [x, y, z] = basis;
+                // Right-hand quarter turns in the setup frame, then map to world.
+                let local = match axis {
+                    0 => [x, -sign * z, sign * y],
+                    1 => [sign * z, y, -sign * x],
+                    _ => [-sign * y, sign * x, z],
+                };
+                let expected = transform_point(Point3::new(local[0], local[1], local[2]), before.pos, before.rot);
+                let actual = transform_point(Point3::new(x, y, z), after.pos, after.rot);
+                assert!(
+                    [(actual.x - expected.x), (actual.y - expected.y), (actual.z - expected.z)]
+                        .iter().all(|v| v.abs() < 1e-9),
+                    "axis {axis}, sign {sign}, basis {basis:?}: {actual:?} != {expected:?}"
+                );
+            }
+        }
+    }
+}
