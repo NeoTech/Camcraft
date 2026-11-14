@@ -177,21 +177,23 @@ A; it is now convicted on the op. That is a real gouge of A.
   credits a neighbour the mark budget: before this fix the 0.3 mm mark
   whose flank took 2.3 mm x 0.3 mm off A POSTED on the aligned stock
   too. The op now refuses it on both stocks (the output is safe); making
-  the sim credit only the marked part, so the two judges agree, is a
-  follow-up.
+  the sim credit only the marked part, so the two judges agree, is
+  #1627.
 - The neighbour law tightens by the SOURCE's fidelity excess, not each
   neighbour's (the same simplification #1603 takes for the stock's).
 
-**The other parts are stamp inputs** (#1607 and #1621 alike): a
-verdict read against parts beside the source is stale once one of them
-moves. The op's stamp digests that set (`keep_law::write_kept`: name,
-pose in the setup, geometry signature; the same set the laws read,
-`keep_law::kept_models`), written only when it is not empty - a
-one-part document's part-source stamps do not change; a stock-source op
-of a kept kind over a part reads Stale once (the mechanism working).
-Pinned: `neighbour_law.rs::moving_the_neighbour_after_generation_makes_the_cut_on_b_stale`,
-`stock_source_law.rs::a_part_added_after_generation_makes_a_stock_source_cut_stale`
-(both red with the term removed).
+**The other parts are NOT stamp inputs yet (#1628).** A verdict read
+against parts beside the source goes stale once one of them moves, and
+the op's stamp digests only its source. A stamp term over the kept set
+(`keep_law::kept_models`: name, pose in the setup, geometry signature)
+was built and pinned on this branch, then taken out: it re-states
+established contracts - "workholding never stales" (an un-tagged vise
+becomes a part), "a stock-based path never reads the model" (a
+stock-source Face now reads its parts), the fidelity refusal on a
+deleted stock source - that want the maintainer's call. Filed as #1628
+(P1: a part moved into the cut after generation posts on a turned
+stock), with the options. Not a regression: before this branch those
+parts were not judged on the op at all.
 
 **Tests that changed for #1621:**
 - `area_controls.rs::a_boundary_offset_on_a_tilted_pocket_is_the_flat_offset_pocket_rotated`
@@ -203,14 +205,14 @@ Pinned: `neighbour_law.rs::moving_the_neighbour_after_generation_makes_the_cut_o
   conviction is asserted - which pins the neighbour law's 3+2 frame arm
   (red with that call removed).
 - `stock_source_verdict.rs` (#1094): Op1 (a Bore on the part) now
-  judges the unmarked casting beside it, as the program sim does; the
-  mark takes the casting out of that set, so it moves the op's inputs
-  and the op reads Stale. The three tests that post or read the gate
-  after marking regenerate first, as a user would; nothing else changed.
+  judges the unmarked casting beside it, as the program sim does, so its
+  cached verdict carries those gouges; the mark takes the casting out of
+  that set, and the three tests that post or read the gate after
+  marking regenerate first, as a user would (the stamp does not follow
+  the mark: #1628); nothing else changed.
   Considered and dropped: never treating the stock's source model as a
   neighbour - unmarked it IS judged as a part (the #1094 rule), and the
   op would then disagree with the sim.
 
-**Cost to change later:** `keep_law::kept_models` (the set),
-`neighbour_parts` and `write_kept`, and one call per frame arm in
-`run_job`.
+**Cost to change later:** `keep_law::kept_models` (the set) and
+`neighbour_parts`, and one call per frame arm in `run_job`.

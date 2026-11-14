@@ -111,9 +111,11 @@ fn mark(world: &World, h: &mut History, on: bool) {
 }
 
 /// Regenerate the job's operations after a mark: since #1621 a
-/// part-source op judges the setup's other parts on itself, so the mark
-/// (which takes the casting out of that set or puts it back) moves its
-/// inputs and it reads Stale until regenerated - as a user would.
+/// part-source op judges the setup's other parts on itself, so its
+/// cached verdict was read with the unmarked casting judged (as the
+/// program sim judges it); the mark takes the casting out of that set,
+/// and the verdict is read again by regenerating - as a user would.
+/// (The op's stamp does not yet follow that set: #1628.)
 fn regenerate(world: &World, h: &mut History) {
     for name in ["Op1", "Op2"] {
         if model::find_by_name(world, name).is_some() {
