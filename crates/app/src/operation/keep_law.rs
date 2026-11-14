@@ -145,3 +145,22 @@ fn kept_models(
         .filter(|(name, e)| !own.contains(&name.as_str()) && crate::stock_source::judged(world, e, skip))
         .collect()
 }
+
+/// The parts an operation's part laws read beyond its own source, one
+/// mesh per model, by name, in the setup's frame (#1628): the set
+/// [`parts_in_stock`] (a stock source) or [`neighbour_parts`] (a part
+/// source) reads, as it stands NOW - the post's live re-judge
+/// (`kept_rejudge`) names the part a cut enters.
+#[must_use]
+pub(super) fn kept_parts_named(
+    world: &flecs_ecs::prelude::World,
+    setup: Option<&str>,
+    params: &OpParams,
+    src: &SrcRef,
+    part_solid: bool,
+) -> Vec<(String, Vec<Triangle>)> {
+    kept_models(world, params, src, part_solid)
+        .into_iter()
+        .filter_map(|(name, e)| crate::setup_align::facets_in(world, &e, setup).map(|f| (name, f)))
+        .collect()
+}
