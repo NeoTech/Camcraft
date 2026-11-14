@@ -163,6 +163,7 @@ impl ParamsDto {
                 entry,
                 helix_radius,
                 optimal_load,
+                method,
                 tilt,
             } => ParamsDto::Adaptive2D {
                 links: links_to_dto(links, &p.default_links()),
@@ -185,6 +186,10 @@ impl ParamsDto {
                 helix_radius: *helix_radius,
                 max_engagement: None,
                 optimal_load: Some(*optimal_load),
+                method: match method {
+                    crate::machining2d::AdaptiveMethod::Spiral => AdaptiveMethodDto::Spiral,
+                    crate::machining2d::AdaptiveMethod::Trochoidal => AdaptiveMethodDto::Trochoidal,
+                },
                 tilt: (*tilt).map(Into::into),
             },
             OpParams::Offset2D {
@@ -1362,6 +1367,7 @@ impl ParamsDto {
                 helix_radius,
                 max_engagement,
                 optimal_load,
+                method,
                 tilt,
             } => OpParams::Adaptive2D {
                 links: links_from_dto(links.as_ref(), crate::links::Links::PLANAR),
@@ -1383,6 +1389,10 @@ impl ParamsDto {
                 },
                 helix_radius: *helix_radius,
                 optimal_load: load_from_file(*optimal_load, *max_engagement),
+                method: match method {
+                    AdaptiveMethodDto::Spiral => crate::machining2d::AdaptiveMethod::Spiral,
+                    AdaptiveMethodDto::Trochoidal => crate::machining2d::AdaptiveMethod::Trochoidal,
+                },
                 tilt: (*tilt).map(Into::into),
             },
             ParamsDto::Offset2D {

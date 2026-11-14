@@ -34,29 +34,30 @@ impl ImportModel {
     /// file that is not STEP (its mesh is the file; nothing would honour
     /// it), is refused by name here, before any parsing.
     pub fn within(path: &Path, facet_budget: Option<u64>) -> Result<Self, CommandError> {
-        // IGES needs a translation kernel we do not have; refuse by
-        // extension, not by a failed read, so the user gets the honest
-        // diagnostic. STEP imports via the truck tessellator (mesh only).
-        match path.extension().and_then(|e| e.to_str()) {
-            Some(ext) if matches!(ext.to_ascii_lowercase().as_str(), "iges" | "igs") => {
-                return Err(CommandError::UnsupportedType(ext.to_ascii_uppercase()));
-            }
-            _ => {}
-        }
-        let budget = match facet_budget {
-            None => import::MAX_FACETS,
-            Some(b) => {
-                if !matches!(import::format_from_path(path), Ok(import::Format::Step)) {
-                    return Err(CommandError::Invalid(format!(
-                        "a {} applies to STEP files only, not {}",
-                        step_budget::NAME,
-                        path.display()
-                    )));
-                }
-                step_budget::check(b).map_err(CommandError::Invalid)?
-            }
-        };
+        let budget = checked_budget(path, facet_budget)?;
         let graded = import::load_model_graded_within(path, budget)?;
+        Ok(Self::graded(path, graded, facet_budget))
+    }
+
+    /// [`ImportModel::within`] over bytes already in hand, named by the
+    /// file they came from (#31): a browser's file picker hands over a
+    /// name and its contents, never a path the importer could open. The
+    /// same laws run - IGES and an unknown extension refused by name, the
+    /// file-size cap, the STEP budget's bounds, the finite-mesh gate - so
+    /// a picked file lands exactly as the same file opened from disk.
+    pub fn from_bytes(file_name: &str, data: &[u8], facet_budget: Option<u64>) -> Result<Self, CommandError> {
+        let path = Path::new(file_name);
+        let budget = checked_budget(path, facet_budget)?;
+        let format = import::format_from_path(path)?;
+        if u64::try_from(data.len()).unwrap_or(u64::MAX) > import::MAX_FILE_BYTES {
+            return Err(import::ImportError::TooLarge.into());
+        }
+        let graded = import::parse_model_graded_within(data, format, budget)?;
+        Ok(Self::graded(path, graded, facet_budget))
+    }
+
+    /// The command for a graded mesh, named by its file's stem.
+    fn graded(path: &Path, graded: import::Graded, facet_budget: Option<u64>) -> Self {
         let name = path
             .file_stem()
             .and_then(|s| s.to_str())
@@ -64,7 +65,7 @@ impl ImportModel {
             .to_string();
         let mut cmd = Self::from_mesh(&name, graded.mesh).with_fidelity(graded.coarse_mm);
         cmd.facet_budget = step_budget::recorded(facet_budget);
-        Ok(cmd)
+        cmd
     }
 
     pub fn from_mesh(name: &str, mesh: Mesh) -> Self {
@@ -87,6 +88,34 @@ impl ImportModel {
     pub fn with_fidelity(mut self, coarse_mm: Option<f64>) -> Self {
         self.coarse_mm = coarse_mm;
         self
+    }
+}
+
+/// The facet budget an import runs under, checked before any parsing.
+/// IGES needs a translation kernel we do not have; refuse it by extension,
+/// not by a failed read, so the user gets the honest diagnostic. STEP
+/// imports via the truck tessellator (mesh only). A budget outside
+/// `step_budget`'s bounds, or one given for a file that is not STEP (its
+/// mesh is the file; nothing would honour it), is refused by name.
+fn checked_budget(path: &Path, facet_budget: Option<u64>) -> Result<usize, CommandError> {
+    match path.extension().and_then(|e| e.to_str()) {
+        Some(ext) if matches!(ext.to_ascii_lowercase().as_str(), "iges" | "igs") => {
+            return Err(CommandError::UnsupportedType(ext.to_ascii_uppercase()));
+        }
+        _ => {}
+    }
+    match facet_budget {
+        None => Ok(import::MAX_FACETS),
+        Some(b) => {
+            if !matches!(import::format_from_path(path), Ok(import::Format::Step)) {
+                return Err(CommandError::Invalid(format!(
+                    "a {} applies to STEP files only, not {}",
+                    step_budget::NAME,
+                    path.display()
+                )));
+            }
+            step_budget::check(b).map_err(CommandError::Invalid)
+        }
     }
 }
 

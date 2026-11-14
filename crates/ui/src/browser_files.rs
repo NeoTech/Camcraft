@@ -8,9 +8,10 @@
 
 use crate::state::CommandKind;
 
-/// Opening a file needs the browser's file picker, which is owed (#31).
+/// Opening this file needs a picker the browser build does not have yet:
+/// its async picker opens models and projects only (#31).
 pub const NEEDS_PICKER: &str =
-    "Not available in the browser yet: opening a file needs the browser file picker (#31)";
+    "Not available in the browser yet: the browser file picker opens models and projects only (#31)";
 /// The browser keeps no list of files it opened.
 pub const NO_RECENT: &str = "Not available in the browser: it keeps no list of recent files";
 /// The fixture library lives in a folder on disk.
@@ -26,9 +27,8 @@ pub const NO_FOLDER: &str =
 #[must_use]
 pub fn refusal(action: &CommandKind, per_op: bool) -> Option<&'static str> {
     match action {
-        CommandKind::OpenModelDialog
-        | CommandKind::OpenProjectDialog
-        | CommandKind::ImportFixtureDialog
+        // Open model and Open project run the browser's async picker (#31).
+        CommandKind::ImportFixtureDialog
         | CommandKind::LoadMachineDialog
         | CommandKind::SelectPostDialog
         | CommandKind::SelectThemeDialog => Some(NEEDS_PICKER),
@@ -200,8 +200,6 @@ mod tests {
     #[test]
     fn every_picker_and_folder_command_is_refused_by_name_in_the_browser() {
         for (action, why) in [
-            (CommandKind::OpenModelDialog, NEEDS_PICKER),
-            (CommandKind::OpenProjectDialog, NEEDS_PICKER),
             (CommandKind::ImportFixtureDialog, NEEDS_PICKER),
             (CommandKind::LoadMachineDialog, NEEDS_PICKER),
             (CommandKind::SelectPostDialog, NEEDS_PICKER),
@@ -218,6 +216,9 @@ mod tests {
         assert_eq!(refusal(&CommandKind::PostProgramDialog, true), Some(NO_FOLDER));
         for action in [CommandKind::SaveProjectDialog, CommandKind::SaveProjectAsDialog, CommandKind::PostProgramDialog] {
             assert_eq!(refusal(&action, false), None, "{action:?} downloads in the browser");
+        }
+        for action in [CommandKind::OpenModelDialog, CommandKind::OpenProjectDialog] {
+            assert_eq!(refusal(&action, false), None, "{action:?} runs the browser's picker (#31)");
         }
     }
 

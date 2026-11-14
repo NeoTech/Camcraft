@@ -232,14 +232,14 @@ fn a_flagged_script_without_a_max_or_names_gets_six_unnamed_offsets() {
 #[test]
 fn the_dump_carries_the_index() {
     let tp = camcraft_post::cl::Toolpath::default();
-    for (word, n) in [("G54", 1), ("G55", 2), ("G59", 6)] {
-        let recs = dump(&tp, &Dump { wcs: word, ..Dump::default() });
+    for n in [1u32, 2, 6, 7, 9] {
+        let recs = dump(&tp, &Dump { wcs: n, ..Dump::default() });
         let v = recs.iter().find_map(|r| match r {
             Record::Param { name, value } if name == "WorkOffset" => Some(value.clone()),
             _ => None,
         });
-        assert_eq!(v, Some(json!(f64::from(n))), "{word}");
-        assert!(cnc::serialize(&recs).contains(&format!("PARAM WorkOffset {n}.000000\n")), "{word}");
+        assert_eq!(v, Some(json!(f64::from(n))), "{n}");
+        assert!(cnc::serialize(&recs).contains(&format!("PARAM WorkOffset {n}.000000\n")), "{n}");
     }
 }
 

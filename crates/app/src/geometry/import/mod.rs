@@ -113,7 +113,9 @@ pub fn parse_model_graded(data: &[u8], format: Format) -> Result<Graded, ImportE
     parse_model_graded_within(data, format, MAX_FACETS)
 }
 
-fn parse_model_graded_within(data: &[u8], format: Format, budget: usize) -> Result<Graded, ImportError> {
+/// [`parse_model_graded`] with a STEP model tessellated inside `budget`
+/// facets - the bytes twin of [`load_model_graded_within`] (#31).
+pub fn parse_model_graded_within(data: &[u8], format: Format, budget: usize) -> Result<Graded, ImportError> {
     let (mesh, coarse_mm) = match format {
         Format::Stl => (stl::parse(data)?, None),
         Format::Obj => (obj::parse(data)?, None),

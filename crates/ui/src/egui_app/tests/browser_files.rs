@@ -39,13 +39,14 @@ fn make_the_seed_postable(h: &mut Harness<'static, ShellUi>) {
 }
 
 #[test]
-fn the_ribbon_darkens_open_in_the_browser_and_says_why() {
+fn the_ribbon_keeps_open_live_in_the_browser() {
     let mut h = browser_harness();
     h.run();
     let st = &h.state().state;
+    // #31: Open model and Open project run the browser's async picker.
     for c in [Cmd::Model, Cmd::Project] {
-        assert!(!panes::enabled(c, st), "{c:?} is dark in the browser");
-        assert_eq!(panes::tip_of(c, st), NEEDS_PICKER, "{c:?}'s tip is the reason");
+        assert!(panes::enabled(c, st), "{c:?} runs the picker in the browser");
+        assert!(panes::browser_refusal(c, st).is_none(), "{c:?}");
     }
     for c in [Cmd::Save, Cmd::SaveAs, Cmd::Post, Cmd::New] {
         assert!(panes::enabled(c, st), "{c:?} runs in the browser");
@@ -59,9 +60,11 @@ fn the_ribbon_darkens_open_in_the_browser_and_says_why() {
 }
 
 #[test]
-fn open_in_the_browser_is_refused_by_name_not_ignored() {
+fn a_picker_the_browser_lacks_is_refused_by_name_not_ignored() {
+    // Open model / Open project are not here: they run the browser's
+    // picker (#31; natively they would open rfd's dialog in the test).
     let mut h = browser_harness();
-    for action in [CommandKind::OpenModelDialog, CommandKind::OpenProjectDialog, CommandKind::LoadMachineDialog] {
+    for action in [CommandKind::LoadMachineDialog, CommandKind::SelectPostDialog] {
         h.state_mut().state.status.clear();
         h.state_mut().state.pending.push_back(action);
         h.run();

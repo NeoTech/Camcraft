@@ -611,6 +611,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             entry,
             helix_radius,
             optimal_load,
+            method,
             ..
         } => {
             let region = region_for_job(
@@ -621,28 +622,31 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 m_gen,
                 frame.as_ref(),
             )?;
-            let path = machining2d::pocket(
-                &region,
-                &PocketParams {
-                    links: lk,
-                    tool_diameter: d,
-                    stepover: *stepover,
-                    stock_to_leave: *stock_to_leave,
-                    clearance_z: hl.clearance,
-                    retract_z: hl.retract,
-                    top_z: req_z(hl.top, "Top of Part Z")?,
-                    bottom_z: req_z(hl.bottom, "Bottom of Part Z")?,
-                    stepdown: *stepdown,
-                    feed: *feed,
-                    plunge_feed: *plunge_feed,
-                    climb: *climb,
-                    strategy: PocketStrategy::Adaptive,
-                    entry: *entry,
-                    helix_radius: *helix_radius,
-                    optimal_load: *optimal_load,
-                    blend_turns: false,
-                },
-            )?;
+            let pp = PocketParams {
+                links: lk,
+                tool_diameter: d,
+                stepover: *stepover,
+                stock_to_leave: *stock_to_leave,
+                clearance_z: hl.clearance,
+                retract_z: hl.retract,
+                top_z: req_z(hl.top, "Top of Part Z")?,
+                bottom_z: req_z(hl.bottom, "Bottom of Part Z")?,
+                stepdown: *stepdown,
+                feed: *feed,
+                plunge_feed: *plunge_feed,
+                climb: *climb,
+                strategy: PocketStrategy::Adaptive,
+                entry: *entry,
+                helix_radius: *helix_radius,
+                optimal_load: *optimal_load,
+                blend_turns: false,
+            };
+            // #1509: the method picks the planner; both cut the same
+            // region, the one the op's source and boundary settings give.
+            let path = match method {
+                machining2d::AdaptiveMethod::Spiral => machining2d::pocket(&region, &pp)?,
+                machining2d::AdaptiveMethod::Trochoidal => machining2d::adaptive_trochoidal(&region, &pp)?,
+            };
             (region, path)
         }
         OpParams::Offset2D {

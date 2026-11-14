@@ -87,6 +87,7 @@ pub mod rotary_stack;
 pub mod schema;
 pub mod script;
 pub mod setup;
+pub mod setup_offsets;
 // #326: the part's alignment per setup.
 pub mod setup_align;
 // #343: each setup's own machine and post, and the one-mount law.

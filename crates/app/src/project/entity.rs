@@ -265,7 +265,7 @@ impl CycleDto {
 /// A setup as files hold it (M3.2 A): the furniture it owns, by name.
 /// `wcs` names the setup's one WCS entity (v54, #342); it may name an
 /// entity the file does not contain - the WCS is simply not placed yet.
-/// Older files held a list indexed by [`WCS_SLOTS`] (see [`WcsDto`]).
+/// Older files held a list indexed by [`LEGACY_WCS_NAMES`] (see [`WcsDto`]).
 /// `datum_from` is
 /// clone provenance for the setup sheet (stage D); every stamp ignores
 /// it, so it defaults and rides along for the reader, not the machinery.

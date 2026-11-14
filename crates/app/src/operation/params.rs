@@ -284,6 +284,7 @@ impl OpParams {
                 entry,
                 helix_radius,
                 optimal_load,
+                method,
                 tilt,
             } => {
                 w(h, *stepover);
@@ -306,6 +307,11 @@ impl OpParams {
                 // M11.4 C: the kind now runs the HSM plan, not rings -
                 // a generation word so every pre-C op goes Stale once.
                 h.write_u8(0xA4);
+                // #1509: written only off the default, so every Spiral
+                // op keeps the digest it had before the choice existed.
+                if *method == crate::machining2d::AdaptiveMethod::Trochoidal {
+                    h.write_u8(0xA5);
+                }
             }
             OpParams::Offset2D {
                 links: _,

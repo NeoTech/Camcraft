@@ -24,7 +24,6 @@ use camcraft_app::geometry::feature;
 use camcraft_app::geometry::{Aabb, Point3, transform_point};
 use camcraft_app::geo2d::Region;
 use camcraft_app::operation::{FeatureSel, GeoSel, Height};
-use camcraft_app::schema::WCS_SLOTS;
 use camcraft_app::units;
 use camcraft_app::{model, operation, pick};
 use winit::keyboard::ModifiersState;
@@ -684,10 +683,7 @@ pub(crate) fn overlay_labels(state: &State, aspect: f64) -> Vec<([f32; 2], [f32;
                     let source = match p.src.reference {
                         camcraft_app::operation::HeightReference::WorkOffset => format!(
                             "WCS {}",
-                            WCS_SLOTS
-                                .get(camcraft_app::setup::wcs_slot(&state.world, shown_setup(state).as_deref()))
-                                .copied()
-                                .unwrap_or("G54")
+                            camcraft_app::setup::wcs_name(&state.world, shown_setup(state).as_deref())
                         ),
                         r => r.to_string(),
                     };

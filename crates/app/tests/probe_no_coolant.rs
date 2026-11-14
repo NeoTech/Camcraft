@@ -180,7 +180,7 @@ fn a_bore_centre_probe_posts_no_coolant_on_doosan_dnm() {
         rpm: 0.0,
         clearance_z: 50.0,
         retract_z: 50.0,
-        wcs: "G54",
+        wcs: 1,
         probe_result: Some(post::probe_rec::ProbeResult { set_wcs: Some(1), tol_mm: 0.5 }),
         ..Dump::default()
     };
