@@ -138,7 +138,7 @@ fn the_routers_post_through_pathpilot() {
     }
     let p = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/posts/tormach.cps");
     let cps = std::fs::read_to_string(&p).expect("tormach.cps");
-    let stream = "PARAM SpindleSpeed 12000\nTOOL 1 T1\nSECTION\nRapid X 0 Y 0 Z 5000\nFeed X 1000 Y 0 Z -1000 F 500000\nENDSECTION\n";
+    let stream = "PARAM SpindleSpeed 12000\nPARAM ClearancePlane 10\nTOOL 1 T1\nSECTION\nRapid X 0 Y 0 Z 5000\nFeed X 1000 Y 0 Z -1000 F 500000\nENDSECTION\n";
     for name in SPECS.iter().map(|s| s.name) {
         let out = { let m = machine::mirror(&shipped(name)); engine::run_with(&cps, &m, stream, &doc_units(&m)) }.unwrap_or_else(|e| panic!("{name}: {e}"));
         assert!(out.warnings.is_empty(), "{name}: {:?}", out.warnings);

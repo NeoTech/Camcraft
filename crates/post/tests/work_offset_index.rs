@@ -73,6 +73,7 @@ fn section(wcs: Value, plasma: Option<Record>) -> String {
         param("OperationName", json!("Face1")),
         param("SetupName", json!("Fixture")),
         param("SpindleSpeed", json!(2000.0)),
+        param("ClearancePlane", json!(10.0)), // #1614: a section states its clearance
         param("WorkOffset", wcs),
         Record::Tool { number: 1, name: "T1".into() },
     ];
@@ -255,6 +256,7 @@ fn a_recorded_toolpath_posts_under_each_offset() {
         let mut rs = vec![
             param("SetupName", json!("Fixture")),
             param("SpindleSpeed", json!(6000.0)),
+            param("ClearancePlane", json!(10.0)), // #1614: a section states its clearance
             param("WorkOffset", json!(n)),
             // #1633: a section states its clearance, as `post::dump` does.
             param("ClearancePlane", json!(10.0)),

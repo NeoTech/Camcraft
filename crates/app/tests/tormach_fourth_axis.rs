@@ -100,6 +100,8 @@ fn face_local() -> Vec<(MoveKind, [f64; 3], Option<f64>)> {
 fn head() -> Vec<cnc::Record> {
     vec![
         cnc::Record::Param { name: "SpindleSpeed".into(), value: json!(6000) },
+        // #1614: a section states its clearance, as `post::dump` does.
+        cnc::Record::Param { name: "ClearancePlane".into(), value: json!(40.0) },
         cnc::Record::Param { name: "WorkOffset".into(), value: json!("G54") },
         cnc::Record::Param { name: "OriginX".into(), value: json!(ORIGIN[0]) },
         cnc::Record::Param { name: "OriginY".into(), value: json!(ORIGIN[1]) },
@@ -115,6 +117,7 @@ fn face_section(recs: &mut Vec<cnc::Record>, name: &str, a: f64) {
     // #1357: every section states its speed, as `post::dump` does - each
     // section ends M5, and a cut with the spindle stopped is refused.
     recs.push(cnc::Record::Param { name: "SpindleSpeed".into(), value: json!(6000) });
+    recs.push(cnc::Record::Param { name: "ClearancePlane".into(), value: json!(40.0) });
     recs.push(cnc::Record::Section { begin: true });
     for (k, l, f) in face_local() {
         let abc = (a != 0.0).then_some([a, 0.0, 0.0]);

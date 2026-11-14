@@ -40,6 +40,7 @@ var cycleSig = "";         // g|Z|R|Q of the open group (modal X Y holes)
 var cycX = 0, cycY = 0, cycR = 0; // the open group's hole XY and R plane (world, #994)
 var seatKnown = false;     // #994: this section moved, so the stream's Start is where the tool is
 var hopZ = null;           // #1028: the section's RetractPlane (its hop), null when unstated
+var clearZ = null;         // #1614: the section's ClearancePlane, null when unstated
 var afterAsk = "";         // the section's PARAM AfterOperation (#1532), none when unstated
 var setupNext = "";        // the section's PARAM SetupChange (#1532): the setup the program changes to after it
 var coolant = "";          // the M-code this program started, if any
@@ -336,6 +337,7 @@ function offsetWord(value) {
 
 function onParameter(name, value) {
   if (name === "RetractPlane") hopZ = has(value) ? Number(value) : null;  // #1028
+  if (name === "ClearancePlane") clearZ = has(value) ? Number(value) : null;  // #1614
   if (name === "Smoothing") { smoothTol = Number(value) || 0; return; }
   if (name === "SmoothingMode") { smoothMode = String(value || ""); return; }
   commentParam(name, value);
@@ -507,7 +509,7 @@ function afterOp() {
 }
 
 function onSection() { seatKnown = false; startPreamble(); }
-function onSectionEnd() { endPreamble(); hopZ = null; }  // #1028: the next section states its own hop
+function onSectionEnd() { endPreamble(); hopZ = null; clearZ = null; }  // #1028: the next section states its own hop
 
 // ------------------------------------------------------- the 4th axis
 // #785. A rotary table about X (Tormach's microARC 4 or the older 4th-axis
@@ -649,16 +651,53 @@ function indexed() { return !!aSection; }
 // its target; a feed or arc at the point the stream says it starts from
 // (the target when the stream names none); a cycle at its first hole.
 var xyUnknown = true;
+// #1614: the height that traverse is made at is STATED, never assumed.
+// The top of Z travel (G53 G0 Z0, #1596) clears the part only while the
+// tool is short enough for the work offset: a PathPilot Hub run with a
+// 5" T4 and G54 Z zero 4.3" below the top had the tip 0.68" under the
+// part top after G43, and the bare X Y rapid crossed the part there.
+// So an upright section first rapids to its clearance - the stream's
+// ClearancePlane, else its RetractPlane (the hop, #1028), never below
+// the move's own Z. (Not StartZ: the engine starts every stream at 0
+// when it states no start, so that height is not the stream's.) On a
+// setup that can clear, that is an ordinary move down to clearance; on
+// one that cannot, the control refuses the block as past its Z limit
+// and stops, instead of rapiding through the part. A stream that states
+// neither has no verified height to traverse at: refused by name.
+function traverseZ(z) {
+  var c = has(clearZ) ? clearZ : (has(hopZ) ? hopZ : null);
+  if (c === null) return null;
+  return has(z) ? Math.max(c, Number(z)) : c;
+}
+var traverseRefused = false;  // #1614: once per program
+var traversedAt = null;       // #1614: the Z the last first-traverse was made at
+// False when refused: the caller then writes nothing for its move - nor
+// for any later one while X/Y stay unknown (the rest of the section) -
+// so no combined X/Y/Z move from an unknown height reaches the text.
 function xyFirst(x, y, z) {
-  if (!xyUnknown || !has(x) || !has(y)) return;
+  if (!xyUnknown || !has(x) || !has(y)) return true;
+  traversedAt = null;
+  if (!indexed()) {
+    var tz = traverseZ(z);
+    if (tz === null) {
+      if (!traverseRefused) {
+        traverseRefused = true;
+        msg("first X/Y traverse" + inOp() + " with no clearance height stated (no ClearancePlane or RetractPlane) - the post will not rapid X/Y at an unknown height");
+      }
+      return false;
+    }
+    block(["G0", wo("Z", tz, orgZ)]);
+    traversedAt = tz;
+  }
   if (indexed()) {  // #785: X Y of the turned tip, which Z enters
-    if (!has(z)) return;
+    if (!has(z)) return true;
     var q = tip(x, y, z);
     block(["G0", "X" + fu(q[0]), "Y" + fu(q[1])]);
   } else {
     block(["G0", wo("X", x, orgX), wo("Y", y, orgY)]);
   }
   xyUnknown = false;
+  return true;
 }
 // A feed or arc as the first move after a tool change starts, in the
 // stream, from the generator's own start point - its clearance height
@@ -667,19 +706,21 @@ function xyFirst(x, y, z) {
 // plunge rate. Once X Y are positioned, a rapid takes Z down to that
 // start height - where the generator says the tool already is - and the
 // feed runs only the stretch it planned (proven on the 770MX, #131).
-function startXY(p) {
-  if (!xyUnknown) return;
-  if (has(p.StartX) && has(p.StartY)) xyFirst(p.StartX, p.StartY, p.StartZ);
-  else xyFirst(p.X, p.Y, p.Z);
+function startXY(p) {  // false: refused (#1614), the caller writes nothing
+  if (!xyUnknown) return true;
+  var ok = (has(p.StartX) && has(p.StartY)) ? xyFirst(p.StartX, p.StartY, p.StartZ) : xyFirst(p.X, p.Y, p.Z);
+  if (!ok) return false;
   if (!xyUnknown && has(p.StartZ) && has(p.Z) && p.StartZ > p.Z) {
     if (indexed() && has(p.StartX) && has(p.StartY)) {
       // #785: "above" is the indexed frame's Z, the tool axis.
       var s0 = tip(p.StartX, p.StartY, p.StartZ), e0 = tip(p.X, p.Y, p.Z);
       if (s0[2] > e0[2]) block(["G0", "Z" + fu(s0[2])]);
-    } else if (!indexed()) {
+    } else if (!indexed() && !(has(traversedAt) && Math.abs(traversedAt - p.StartZ) < 1e-9)) {
+      // #1614: not when the stated traverse height already is it.
       block(["G0", wo("Z", p.StartZ, orgZ)]);
     }
   }
+  return true;
 }
 
 // While a canned-cycle group is open its expanded hole chain is the
@@ -720,14 +761,14 @@ function probeSeat() {
 function onRapid() {
   startPreamble();
   if (chainRapid() || !indexFor(properties)) return;
-  xyFirst(properties.X, properties.Y, properties.Z);
+  if (!xyFirst(properties.X, properties.Y, properties.Z)) return;  // #1614: refused - the move is not written
   block(["G0"].concat(xyz(properties)));
 }
 function onLinear() {
   startPreamble();
   if (chainCut() || !indexFor(properties)) return;
   if (spindleStopped("feed move G1")) return;
-  startXY(properties);
+  if (!startXY(properties)) return;  // #1614: refused - the move is not written
   block(["G1"].concat(xyz(properties), [fw(properties.FeedRate)]));
 }
 function onCircular() {
@@ -739,7 +780,7 @@ function onCircular() {
     return;
   }
   if (spindleStopped("arc move " + (p.CircularDirection === "CW" ? "G2" : "G3"))) return;
-  startXY(p);
+  if (!startXY(p)) return;  // #1614: refused - the move is not written
   block([
     planeWord(planeOf(p)),
     p.CircularDirection === "CW" ? "G2" : "G3",
@@ -767,7 +808,7 @@ function onProbeGuard() {
   probeSeat();               // #1028
   var p = properties;
   if (!indexFor(p)) return;  // #785: probing is upright (A0 on a 4th axis)
-  startXY(p);
+  if (!startXY(p)) return;  // #1614: refused - the move is not written
   block(["G38.3", wo("X", p.X, orgX), wo("Y", p.Y, orgY), wo("Z", p.Z, orgZ), fw(p.Feed)]);
   guardO += 1;
   block(["o" + guardO, "if", "[#5070 EQ 1]"]);
@@ -869,7 +910,7 @@ function onCycle() {
     return;
   }
   if (spindleStopped("canned cycle " + g)) return;
-  xyFirst(p.X, p.Y);         // a cycle as the first move: its first hole
+  if (!xyFirst(p.X, p.Y)) return;  // a cycle as the first move: its first hole (#1614: refused - not written)
   cycleSeat(p);
   var sig = g + "|" + p.Z + "|" + p.R + "|" + p.Q;
   if (inCycle && sig === cycleSig) {
@@ -939,7 +980,7 @@ function onProbeMove() {
   probeSeat();               // #1028
   var p = properties;
   if (!indexFor(p)) return;  // #785: probing is upright (A0 on a 4th axis)
-  xyFirst(p.X, p.Y);       // never a probe from an unknown X Y
+  if (!xyFirst(p.X, p.Y)) return;  // never a probe from an unknown X Y (#1614: refused - not written)
   block(["G38.2", wo("X", p.X, orgX), wo("Y", p.Y, orgY), wo("Z", p.Z, orgZ), fw(p.Feed)]);
   if (has(p.Measure) && p.Measure >= 0) {
     var b = probeBase + 3 * p.Measure;

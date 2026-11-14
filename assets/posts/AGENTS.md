@@ -158,6 +158,15 @@ write (the gate), so the released program never carries one.
   everything the first raw motion line needs (`startPreamble`
   pattern), and serve legacy streams that carry no `SECTION` by
   firing it from the first motion too.
+- **The first traverse states its height (#1614).** After a tool
+  change (or a G30, or at the program's start) the top of Z travel
+  is not proof of clearance: a long tool on a high work offset can
+  stand below the part there. `tormach.cps` writes `G0 Z<ClearancePlane>`
+  (else the RetractPlane) before the first X/Y move, so a setup that
+  cannot clear is stopped by the control's Z limit instead of rapiding
+  through the part; a stream stating neither plane is refused by name,
+  and the refused move (with every later one while X/Y stay unknown) is
+  not written.
 - **A cycle states its feed; a cut needs a turning spindle (#1357).**
   A canned cycle whose `FeedRate` is missing or not positive is a
   `message()` refusal by name ("canned cycle G73 has no feed rate"),
