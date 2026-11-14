@@ -16,6 +16,8 @@
 //! Provenance: our own fixtures (plain boxes) over the solid law and
 //! the column sim; no vendor material consulted.
 //!
+//! #1607: the same floor holds on a Stock-source Engrave or Trace.
+//!
 //! Gate map: covers app::operation::mark_law, app::operation::generate
 //! (the Mark arm), app::stock_sim (marks, credit_marks), app::posting,
 //! app::posting_sim.
@@ -90,7 +92,12 @@ fn cut(kind: Kind, top: f64, bottom: f64) -> OpParams {
 /// Create and generate "E1" on the whole model with `tool`; its cached
 /// warnings, notes and deepest move.
 fn generated(world: &World, h: &mut History, tool: &str, params: OpParams) -> (Vec<Warning>, Vec<String>, f64) {
-    h.execute(world, CreateOperation::new(world, "E1", tool, SrcRef::Entity("part".into()), params).expect("create"));
+    generated_on(world, h, tool, SrcRef::Entity("part".into()), params)
+}
+
+/// [`generated`] with the source given.
+fn generated_on(world: &World, h: &mut History, tool: &str, src: SrcRef, params: OpParams) -> (Vec<Warning>, Vec<String>, f64) {
+    h.execute(world, CreateOperation::new(world, "E1", tool, src, params).expect("create"));
     h.execute(world, GenerateOperation::new(world, "E1").expect("generate"));
     let e = model::find_by_name(world, "E1").expect("op");
     let tp = model::toolpath_of(world, &e).expect("cached path");
@@ -209,6 +216,34 @@ fn a_shank_in_the_kerf_is_judged_against_the_part_as_it_stands() {
             let blocking: Vec<_> = warns.iter().filter(|w| w.blocks_post()).collect();
             assert!(blocking.is_empty(), "{kind:?} rotated {rotated}: {blocking:?}");
             post(&world, &format!("flute-{kind:?}-{rotated}")).unwrap_or_else(|e| panic!("{kind:?} rotated {rotated}: {e}"));
+        }
+    }
+}
+
+#[test]
+fn a_stock_source_cut_through_the_plate_meets_the_same_floor() {
+    // #1607 over this law: a Stock-source Engrave or Trace answers to
+    // the mark law against the parts in the stock, the floor included.
+    // The review's 2.9 mm "mark" on the 2 mm plate, and 1.9 mm (inside
+    // the budget, 0.1 mm of plate left), are refused by name on the op on
+    // both stocks; a 0.3 mm mark off the stock still posts.
+    for kind in KINDS {
+        for rotated in [false, true] {
+            for (bottom, tag) in [(-0.9, "through"), (0.1, "web")] {
+                let (world, mut h) = job(2.0, rotated);
+                let (warns, notes, _) = generated_on(&world, &mut h, TOOL, SrcRef::Stock, cut(kind, 2.0, bottom));
+                assert!(gouges(&warns) > 0, "{kind:?} rotated {rotated} to Z{bottom}: convicted on the op: {warns:?}");
+                assert!(notes.iter().any(|n| n.contains("cuts through the part")), "{kind:?} rotated {rotated}: {notes:?}");
+                let err = post(&world, &format!("stock-{tag}-{kind:?}-{rotated}")).expect_err("a through-cut off the stock blocks the post");
+                if rotated {
+                    assert!(err.contains("E1: move") && err.contains("cuts past the finish surface"), "{kind:?}: {err}");
+                }
+            }
+            let (world, mut h) = job(2.0, rotated);
+            let (warns, _, _) = generated_on(&world, &mut h, TOOL, SrcRef::Stock, cut(kind, 2.0, 1.7));
+            let blocking: Vec<_> = warns.iter().filter(|w| w.blocks_post()).collect();
+            assert!(blocking.is_empty(), "{kind:?} rotated {rotated}: {blocking:?}");
+            post(&world, &format!("stock-legal-{kind:?}-{rotated}")).unwrap_or_else(|e| panic!("{kind:?} rotated {rotated}: {e}"));
         }
     }
 }
