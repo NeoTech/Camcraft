@@ -58,11 +58,14 @@ pub(super) fn lathe_reads(facets: &[Triangle], origin: [f64; 3]) -> Result<(), G
 /// the setup's `stock` when it is not the source, and the parts whose
 /// finished solid the chain must keep (`cross_part`): the source itself
 /// on a part source, the setup's parts on a stock source (#1635 - the
-/// stock is the material to remove, never the solid to keep).
+/// stock is the material to remove, never the solid to keep) - and, on
+/// a part source, the setup's OTHER parts (`neighbours`, #1641:
+/// `keep_law::neighbour_parts`), which the chain may not enter at all.
 pub(super) struct Solids<'a> {
     pub source: &'a [Triangle],
     pub stock: Option<&'a [Triangle]>,
     pub kept: &'a [Triangle],
+    pub neighbours: &'a [Triangle],
 }
 
 /// Run the radial kernel about world Z through `origin`: `p` carries the
@@ -83,7 +86,7 @@ pub(super) fn cross_drill(
     tool_name: &str,
     unit: Unit,
 ) -> Result<Toolpath, GenError> {
-    let Solids { source: facets, stock, kept } = solids;
+    let Solids { source: facets, stock, kept, neighbours } = solids;
     let (ox, oy) = (origin[0], origin[1]);
     if !(ox.is_finite() && oy.is_finite()) {
         return Err(GenError::Invalid("the work offset's origin is not usable".into()));
@@ -130,6 +133,8 @@ pub(super) fn cross_drill(
     if on_origin {
         // Issue #117: what the chain leaves is judged against the part.
         super::cross_part::part_clear(&t, kept, p.tool, cutter, p.holes).map_err(|e| e.with_ghost(&t))?;
+        // #1641: and against the setup's other parts, nothing excused.
+        super::cross_part::neighbours_clear(&t, neighbours, p.tool, cutter, p.holes).map_err(|e| e.with_ghost(&t))?;
         return Ok(t);
     }
     // The kernel's chain is straight, cycle-free and computer-
@@ -152,6 +157,7 @@ pub(super) fn cross_drill(
         return Err(GenError::Invalid("cross-drill chain self-check failed after the spindle shift".into()));
     }
     super::cross_part::part_clear(&t, kept, p.tool, cutter, p.holes).map_err(|e| e.with_ghost(&t))?;
+    super::cross_part::neighbours_clear(&t, neighbours, p.tool, cutter, p.holes).map_err(|e| e.with_ghost(&t))?;
     Ok(t)
 }
 

@@ -46,7 +46,10 @@
 //!   against the setup's OTHER parts ([`neighbour_parts`]): no mark
 //!   budget there (a mark is on the part it marks), no hole excused (the
 //!   holes are the source's), nothing kept around. Its own source keeps
-//!   its own law.
+//!   its own law. #1641: the cross drill too (its `DepthLaw` reads
+//!   `None`, so it was skipped): its chain answers to the radial law
+//!   (`cross_part::neighbours_clear`) against the other parts, no
+//!   cross hole's wall excused there.
 //!
 //! The cutter's own tip and stack are swept against the mesh, so a legal
 //! pocket - its rings tangent to the part - stays clean, and a cut that
@@ -140,6 +143,8 @@ pub(super) fn parts_in_stock(
 /// source names, in the setup's frame. Empty for a source that is not
 /// the part (whose parts [`parts_in_stock`] reads), for a kind that
 /// carries no part law on a part source, and for a one-part document.
+/// A cross drill (#1641, [`is_cross_drill`]) carries one - its radial
+/// `cross_part` - and judges these parts in it, nothing excused.
 #[must_use]
 pub(super) fn neighbour_parts(
     world: &flecs_ecs::prelude::World,
@@ -175,7 +180,11 @@ fn kept_models(
             }
             Vec::new()
         }
-        _ if super::generate::depth_law_of(params, src, true) == super::generate::DepthLaw::None => return Vec::new(),
+        // #1641: a cross drill carries its radial part law
+        // (`cross_part`) though its `DepthLaw` reads `None`.
+        _ if super::generate::depth_law_of(params, src, true) == super::generate::DepthLaw::None && !is_cross_drill(params) => {
+            return Vec::new()
+        }
         SrcRef::Stock => return Vec::new(),
         SrcRef::Entity(n) => vec![n.as_str()],
         SrcRef::Selection(items) => items.iter().map(|g| g.entity.as_str()).collect(),
