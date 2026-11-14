@@ -45,7 +45,7 @@ use egui_kittest::Harness;
 use camcraft_app::model;
 use camcraft_app::operation::{FeatureSel, Height, OpParams, SrcRef};
 use camcraft_app::commands::theme_set;
-use camcraft_app::schema::{ThemeRef, WCS_SLOTS};
+use camcraft_app::schema::ThemeRef;
 use camcraft_app::units::{self, Unit};
 
 use crate::interact;
@@ -1681,7 +1681,7 @@ fn face_mode_click_replaces_geometry_of_the_open_op() {
 #[test]
 fn anchor_click_queues_setwcs() {
     let mut harness = shell_harness();
-    let slot = WCS_SLOTS[0];
+    let slot = "G54";
     let pos0 = {
         let e = model::find_by_name(&harness.state().state.world, slot).expect("seed sets G54");
         let p = model::transform_of(&harness.state().state.world, &e).unwrap_or_default().pos;
@@ -1752,7 +1752,7 @@ fn origin_page_shows_the_anchor_grid_and_arms_pick_mode() {
     harness.get_by_label("SE").click();
     harness.run();
     let want = interact::anchor_points(&harness.state().state)[8].0;
-    let e = model::find_by_name(&harness.state().state.world, WCS_SLOTS[0])
+    let e = model::find_by_name(&harness.state().state.world, "G54")
         .expect("the seed places G54");
     let q = model::transform_of(&harness.state().state.world, &e).unwrap_or_default().pos;
     let got = [q.x, q.y, q.z];
@@ -5101,7 +5101,7 @@ fn vertex_mode_hover_and_click_pick_a_corner() {
     harness.get_by_label("Set origin").click();
     harness.run_steps(2);
     let st = &harness.state().state;
-    let g54 = model::find_by_name(&st.world, WCS_SLOTS[0]).expect("G54");
+    let g54 = model::find_by_name(&st.world, "G54").expect("G54");
     let o = model::transform_of(&st.world, &g54).unwrap_or_default().pos;
     assert!(
         (o.x - corner[0]).abs() + (o.y - corner[1]).abs() + (o.z - corner[2]).abs() < 1e-6,

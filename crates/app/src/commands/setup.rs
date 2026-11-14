@@ -46,7 +46,7 @@ use crate::commands::{Command, CommandError};
 use crate::geometry::Triangle;
 use crate::model;
 use crate::schema::{
-    Location, Operation, OperationMeta, SetupDef, StockDef, Wcs, STOCK_NAME, WCS_SLOTS,
+    Location, Operation, OperationMeta, SetupDef, StockDef, Wcs, STOCK_NAME, LEGACY_WCS_NAMES,
 };
 use crate::setup;
 use crate::stock::StockShape;
@@ -107,7 +107,7 @@ impl CreateSetup {
         if model::find_by_name(world, &name).is_some() {
             return Err(CommandError::NameConflict(name.clone()));
         }
-        if STOCK_NAME == name || WCS_SLOTS.contains(&name.as_str()) {
+        if STOCK_NAME == name || LEGACY_WCS_NAMES.contains(&name.as_str()) {
             return Err(CommandError::Invalid(format!(
                 "'{name}' is a name reserved for a setup's stock and work offsets"
             )));
@@ -121,7 +121,7 @@ impl CreateSetup {
         let def = if materializing {
             SetupDef {
                 stock: STOCK_NAME.to_string(),
-                wcs: WCS_SLOTS[0].to_string(),
+                wcs: LEGACY_WCS_NAMES[0].to_string(),
                 datum_from: String::new(),
                 work_offset: None,
                 part_alignment: None,

@@ -51,8 +51,8 @@ fn the_picker_sets_the_setups_work_offset_through_the_command() {
     h.run();
     assert_eq!(pick(h.state()), None, "a fresh setup is unset - it reads G54");
     assert!(h.state().pending.is_empty(), "drawing the picker queues nothing");
-    let auto = super::setup_wcs_pick::pick_text(None);
-    h.get_by(|n| n.role() == Role::ComboBox && n.value().as_deref() == Some(auto)).click();
+    let auto = super::setup_wcs_pick::pick_text(&h.state().world, "Setup1", None);
+    h.get_by(|n| n.role() == Role::ComboBox && n.value().as_deref() == Some(auto.as_str())).click();
     h.run();
     h.get_by_label("G55").click();
     h.run();
@@ -115,7 +115,9 @@ fn the_heights_page_shows_the_setups_offset_with_no_wcs_choice() {
 #[test]
 fn an_unset_setup_reads_plain_g54() {
     use super::setup_wcs_pick::pick_text;
-    assert_eq!(pick_text(None), "G54");
-    assert_eq!(pick_text(Some(0)), "G54");
-    assert_eq!(pick_text(Some(1)), "G55");
+    let state = with_setup();
+    let w = &state.world;
+    assert_eq!(pick_text(w, "Setup1", None), "G54");
+    assert_eq!(pick_text(w, "Setup1", Some(0)), "G54");
+    assert_eq!(pick_text(w, "Setup1", Some(1)), "G55");
 }

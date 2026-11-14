@@ -127,7 +127,7 @@ fn a_dumped_lean_posts_the_same_program_as_a_tilted_stream() {
         clearance_z: 12.0,
         retract_z: 10.0,
         top_z: 0.0,
-        wcs: "G54",
+        wcs: 1,
         origin: [0.0; 3],
         stock: [-20.0, 20.0, -20.0, 20.0],
         stock_top_z: 0.0,

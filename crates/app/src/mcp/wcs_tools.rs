@@ -19,7 +19,7 @@ use crate::geometry::quat_from_euler;
 use crate::model;
 use crate::operation::GeoSel;
 use crate::pick::{Alignment, Role, align_roles, check_pickable};
-use crate::schema::{Location, WCS_SLOTS};
+use crate::schema::Location;
 use crate::script::{Env, fnum};
 use crate::setup;
 
@@ -113,7 +113,7 @@ fn set_wcs_from_features(env: &mut Env, a: &Map<String, Value>) -> Result<Value,
     let mut out = loc_view(&placed);
     out["setup"] = json!(active);
     out["label"] = json!(setup::wcs_label(w, active.as_deref()));
-    out["word"] = json!(WCS_SLOTS.get(setup::wcs_slot(w, active.as_deref())).copied().unwrap_or("G54"));
+    out["word"] = json!(setup::wcs_name(w, active.as_deref()));
     out["axes"] = json!({ "x": dir(fit.x), "y": dir(fit.y), "z": dir(fit.z) });
     out["angles_deg"] = json!({ "roll": fnum(fit.roll_deg), "pitch": fnum(fit.pitch_deg), "yaw": fnum(fit.yaw_deg) });
     out["picks"] = picks

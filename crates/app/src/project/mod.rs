@@ -98,7 +98,7 @@ use crate::model;
 use crate::operation::{FeatureSel, GenStamp, GeoSel, OpParams, SrcRef};
 use crate::schema::{
     FixtureDef, Location, Operation, OperationMeta, STOCK_NAME, SetupDef, StockDef, ToolDef,
-    Toolpath as ToolpathCache, WCS_SLOTS, Wcs,
+    Toolpath as ToolpathCache, LEGACY_WCS_NAMES, Wcs,
 };
 use crate::stock::{self, StockShape};
 use crate::tools::{Tool, ToolKind};
@@ -164,6 +164,8 @@ use validate::*;
 mod wcs_migrate;
 // #342: the v53 -> v54 one-WCS-per-setup rung.
 mod wcs_one;
+mod wcs_pick;
+pub(crate) use wcs_pick::{work_offset_pick, work_offset_text};
 // #343: a setup's own machine and post (v55).
 mod mount_dto;
 pub use mount_dto::{SetupMachineDto, SetupPostDto};

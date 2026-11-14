@@ -14,7 +14,6 @@
 use egui::{Label, RichText, Ui};
 
 use camcraft_app::operation::{Height, HeightReference, SrcRef};
-use camcraft_app::schema::WCS_SLOTS;
 use camcraft_app::units;
 
 use crate::operations::{height_echo, offset_label};
@@ -111,10 +110,7 @@ pub(crate) const SETUP_OFFSET_HINT: &str =
 /// The read-only work-offset row's text: the setup's resolved word, and
 /// where it is set.
 pub(crate) fn setup_offset_text(world: &flecs_ecs::prelude::World, setup: Option<&str>) -> String {
-    let word = WCS_SLOTS
-        .get(camcraft_app::setup::wcs_slot(world, setup))
-        .copied()
-        .unwrap_or("G54");
+    let word = camcraft_app::setup::wcs_name(world, setup);
     match camcraft_app::setup::effective(world, setup) {
         Some(s) => format!("WCS ({word})  (from setup {s})"),
         None => format!("WCS ({word})"),

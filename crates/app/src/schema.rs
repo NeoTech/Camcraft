@@ -238,10 +238,11 @@ impl ToolBody {
 /// (it sits at the origin). `datum_from` records the setup whose stock
 /// and WCS a new setup was cloned from - provenance for the sheet, inert
 /// for every stamp (the clones themselves carry the data).
-/// `work_offset` is only the setup's post LABEL (#196, #342), an index
-/// into [`WCS_SLOTS`]: the `G54`..`G59` word the post writes for this
-/// setup's WCS. It selects no stored origin - changing it moves nothing.
-/// `None` - the default - writes `G54` ([`crate::setup::wcs_slot`]).
+/// `work_offset` is only the setup's post LABEL (#196, #342, #931): the
+/// 0-based pick of the work offset the post writes for this setup's WCS
+/// (offset `pick + 1`; the setup's post names it and bounds it). It
+/// selects no stored origin - changing it moves nothing. `None` - the
+/// default - is offset 1 ([`crate::setup::wcs_slot`]).
 /// Written only by `SetSetupWorkOffset` and the loader's migrations.
 /// `part_alignment` (#326) is how the PART sits in this setup: the rigid
 /// transform from the document frame into the setup frame (which face
@@ -620,7 +621,7 @@ pub struct RibbonPins(pub Vec<usize>);
 /// tree, undo, and save all reach stock through this.
 pub const STOCK_NAME: &str = "Stock";
 
-pub use crate::operation::types::WCS_SLOTS;
+pub(crate) use crate::operation::types::LEGACY_WCS_NAMES;
 
 /// Registers every schema component with a fresh world. Called by
 /// `world::new_world()` so every binary (and every test) gets identical

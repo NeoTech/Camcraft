@@ -15,7 +15,7 @@ use flecs_ecs::prelude::World;
 
 use crate::geometry::{Point3, transform_point};
 use crate::model;
-use crate::schema::{Operation, WCS_SLOTS};
+use crate::schema::Operation;
 
 /// Tilt angle (rad) past which the WCS Z counts as off the machine's Z:
 /// the post's identity tolerance (`ROT_TOL_RAD`, 1e-9 rad), so nothing
@@ -52,10 +52,8 @@ pub fn setup_problem(world: &World, declared: Option<&str>) -> Option<String> {
     let wcs = crate::setup::wcs_entity(world, declared)?;
     let loc = model::transform_of(world, &wcs)?;
     let deg = tilt_deg(loc.rot)?;
-    let word = WCS_SLOTS
-        .get(crate::setup::wcs_slot(world, declared))
-        .copied()
-        .unwrap_or("G54");
+    // #931: the setup's post names its offset (display only).
+    let word = crate::setup::wcs_name(world, declared);
     let owner = match crate::setup::effective(world, declared) {
         Some(s) => format!("setup '{s}': its WCS ({word})"),
         None => format!("the WCS ({word})"),

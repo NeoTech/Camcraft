@@ -14,7 +14,7 @@ use crate::commands::{
 };
 use crate::geometry::{Point3, IDENTITY_Q};
 use crate::model;
-use crate::schema::{Location, PostRef, WCS_SLOTS};
+use crate::schema::{Location, PostRef};
 use crate::script::{api, fnum, inventory, Env};
 use crate::setup;
 
@@ -174,7 +174,7 @@ fn set_wcs(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
     let mut out = loc_view(&placed);
     out["setup"] = json!(active);
     out["label"] = json!(setup::wcs_label(w, active.as_deref()));
-    out["word"] = json!(WCS_SLOTS.get(setup::wcs_slot(w, active.as_deref())).copied().unwrap_or("G54"));
+    out["word"] = json!(setup::wcs_name(w, active.as_deref()));
     Ok(out)
 }
 
@@ -183,10 +183,8 @@ fn set_work_offset(env: &mut Env, a: &Map<String, Value>) -> Result<Value, Strin
         None => return Err("\"word\" is required (G54 to G59, or null to clear)".into()),
         Some(Value::Null) => None,
         Some(Value::String(s)) => Some(
-            WCS_SLOTS
-                .iter()
-                .position(|w| w.eq_ignore_ascii_case(s.trim()))
-                .ok_or_else(|| format!("unknown work offset '{s}' - the words are {}", WCS_SLOTS.join(", ")))?,
+            crate::setup_offsets::legacy_slot(s)
+                .ok_or_else(|| format!("unknown work offset '{s}' - the words are G54, G55, G56, G57, G58, G59"))?,
         ),
         Some(other) => return Err(format!("\"word\" must be a string or null, got {other}")),
     };
@@ -197,7 +195,7 @@ fn set_work_offset(env: &mut Env, a: &Map<String, Value>) -> Result<Value, Strin
     let w = &env.world;
     Ok(json!({
         "setup": name,
-        "word": WCS_SLOTS.get(setup::wcs_slot(w, Some(&name))).copied().unwrap_or("G54"),
+        "word": setup::wcs_name(w, Some(&name)),
         "label": setup::wcs_label(w, Some(&name)),
     }))
 }
