@@ -13,14 +13,19 @@ mod step_closed;
 mod step_facets;
 mod step_continuity;
 mod step_diag;
+mod step_division;
 mod step_edge3d;
 mod step_outward;
 mod step_guard;
+mod step_nearest;
 mod step_pole;
 pub mod step_depth;
 mod step_refine;
 mod step_orient;
 mod step_seams;
+mod step_stretch;
+#[cfg(test)]
+mod step_thread_fixture;
 mod step_units;
 pub mod stl;
 
