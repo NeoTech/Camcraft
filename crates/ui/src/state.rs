@@ -31,7 +31,7 @@ use camcraft_app::geometry::{
 use camcraft_app::operation::{
     self, AreaControls, FeatureSel, GeoSel, Height, HeightReference, OpParams, SrcRef,
 };
-use camcraft_app::schema::{ColorVision, Location, Operation as OperationDef, PostRef, ThemeRef, WCS_SLOTS};
+use camcraft_app::schema::{ColorVision, Location, Operation as OperationDef, PostRef, ThemeRef};
 use camcraft_app::stock::StockShape;
 use camcraft_app::stock_fit::FitKind as StockFitKind;
 use camcraft_app::tools::{Tool, ToolKind, catalog};
@@ -42,6 +42,10 @@ use camcraft_app::{machine, model, posting, project, world::new_world};
 mod per_op;
 #[path = "state_browser.rs"]
 mod browser;
+#[path = "state_picked.rs"]
+mod picked;
+#[cfg(test)]
+pub(crate) use picked::opens_a_chooser;
 #[path = "state_program_info.rs"]
 mod program_info;
 #[path = "state_tool_library.rs"]
@@ -115,6 +119,9 @@ pub enum CommandKind {
     NewDocument,
     OpenProjectDialog,
     OpenProjectFile(PathBuf),
+    /// A model or project the browser's async picker read (#31): its
+    /// name and bytes, landed through the same import / open laws.
+    OpenPicked(crate::file_pick::PickedFile),
     SaveProjectDialog,
     SaveProjectAsDialog,
     SaveProjectFile(PathBuf),
@@ -422,8 +429,8 @@ pub enum CommandKind {
     /// Move the active-setup cursor. Inert for every stamp - it decides
     /// where NEW things join, never what already cuts.
     ActivateSetup(Option<String>),
-    /// Pick the program offset a setup posts at (#196): `Some(i)` is
-    /// `WCS_SLOTS[i]`, `None` clears the pick - an unset setup is `G54`.
+    /// Pick the program offset a setup posts at (#196, #931): `Some(i)` is
+    /// offset `i + 1`, `None` clears the pick - an unset setup is offset 1.
     /// Undoable (`SetSetupWorkOffset`).
     SetSetupWorkOffset {
         setup: String,
@@ -1650,6 +1657,10 @@ pub struct State {
     /// Operation key being dragged in the browser; discarded on release.
     pub dragging_op: Option<String>,
     pub pending: VecDeque<CommandKind>,
+    /// #31: true while `run_click_actions` runs the queue inside the
+    /// browser's own click (pointerup) handler, so a file chooser opened
+    /// now opens inside the user's activation. False everywhere else.
+    pub picker_in_click: bool,
     /// #183: the live MCP session's inbox when the app was started with
     /// `--mcp-port` / `CAMCRAFT_MCP_PORT`; drained with `pending`.
     pub mcp: Option<camcraft_app::mcp::Inbox>,
@@ -1946,10 +1957,7 @@ impl State {
         // in the zip, the repo on a dev run. None found is said ONCE,
         // here, on the status line - the built-in rows stand regardless.
         let themes = crate::theme_dir::from_process();
-        let status = match &themes {
-            Ok(_) => String::from("ready"),
-            Err(why) => why.clone(),
-        };
+        let status = crate::theme_dir::startup_status(&themes, cfg!(target_arch = "wasm32"));
         State {
             world: new_world(),
             history: History::default(),
@@ -2025,6 +2033,7 @@ impl State {
             rename_draft: None,
             dragging_op: None,
             pending: VecDeque::new(),
+            picker_in_click: false,
             mcp: None,
             request_quit: false,
             unsaved_prompt: None,
@@ -2822,6 +2831,8 @@ impl State {
         // #183: an agent's live calls, after the user's own clicks.
         crate::mcp_host::pump(self);
         self.poll_import();
+        // #31: a file the browser's picker has read since the last frame.
+        self.take_picked_files();
         // A refusal that no longer describes the page retires, with its
         // status-strip mirror (crate::feedback).
         self.retire_stale_feedback();
@@ -2877,11 +2888,7 @@ impl State {
             return;
         };
         match action {
-            CommandKind::OpenModelDialog => {
-                if let Some(path) = pick_mesh_file() {
-                    self.import_path(path);
-                }
-            }
+            CommandKind::OpenModelDialog => self.open_model_dialog(),
             CommandKind::ImportFile(path) => self.import_path(path),
             CommandKind::NewDocument => {
                 self.abandon_imports();
@@ -2916,12 +2923,9 @@ impl State {
                 self.doc_version += 1;
                 self.status = String::from("new document");
             }
-            CommandKind::OpenProjectDialog => {
-                if let Some(path) = pick_project_file() {
-                    self.open_project_path(path);
-                }
-            }
+            CommandKind::OpenProjectDialog => self.open_project_dialog(),
             CommandKind::OpenProjectFile(path) => self.open_project_path(path),
+            CommandKind::OpenPicked(file) => self.open_picked(file),
             CommandKind::SaveProjectDialog if self.browser_build => {
                 self.download_project(false);
             }
@@ -3506,7 +3510,7 @@ impl State {
                     Ok(command) => {
                         self.history.execute(&self.world, command);
                         self.doc_version += 1;
-                        let word = WCS_SLOTS.get(slot.unwrap_or(0)).copied().unwrap_or("G54");
+                        let word = camcraft_app::setup::wcs_name(&self.world, Some(&setup));
                         self.status = format!("{setup} WCS posts as {word}");
                     }
                     Err(err) => {
@@ -4147,22 +4151,7 @@ impl State {
     }
 
     fn open_project_path(&mut self, path: PathBuf) {
-        self.abandon_imports();
-        self.project_path = None;
-        self.hidden_stocks.clear();
-        self.hidden_offsets.clear();
-        self.shown_setups.clear();
-        model::clear_named(&self.world);
-        self.history.clear();
-        self.post_view = None; // the old document's program is not this one's
-        self.post_refusal = None; // nor its refused post
-        self.program_sim = None; // and neither is its stock verdict
-        self.field_view = None; // nor its traced stock
-        self.field_play = None; // nor its playback
-        self.stock_mesh.clear(); // nor the mesh extracted from it
-        self.machine_editor = None; // nor a draft over its machine's numbers
-        self.rename_draft = None;
-        self.dragging_op = None;
+        self.reset_for_open();
         match project::load_noted(&self.world, &path) {
             Ok(notes) => {
                 self.project_path = Some(path.clone());
@@ -4179,6 +4168,27 @@ impl State {
             }
             Err(err) => self.status = format!("open failed: {err}"),
         }
+    }
+
+    /// Retire the old document before a project replaces it (from disk,
+    /// or from bytes the browser's picker read, #31).
+    fn reset_for_open(&mut self) {
+        self.abandon_imports();
+        self.project_path = None;
+        self.hidden_stocks.clear();
+        self.hidden_offsets.clear();
+        self.shown_setups.clear();
+        model::clear_named(&self.world);
+        self.history.clear();
+        self.post_view = None; // the old document's program is not this one's
+        self.post_refusal = None; // nor its refused post
+        self.program_sim = None; // and neither is its stock verdict
+        self.field_view = None; // nor its traced stock
+        self.field_play = None; // nor its playback
+        self.stock_mesh.clear(); // nor the mesh extracted from it
+        self.machine_editor = None; // nor a draft over its machine's numbers
+        self.rename_draft = None;
+        self.dragging_op = None;
     }
 
     pub(crate) fn save_project_path(&mut self, path: PathBuf) {
@@ -4340,16 +4350,18 @@ impl Default for State {
 }
 
 fn pick_mesh_file() -> Option<PathBuf> {
-    // STEP arrives tessellated through truck (mesh, not B-rep).
-    crate::file_dialog::FileDialog::new()
-        .add_filter("Mesh", &["stl", "obj", "step", "stp"])
-        .pick_file()
+    mesh_dialog().pick_file()
 }
 
-fn pick_project_file() -> Option<PathBuf> {
-    crate::file_dialog::FileDialog::new()
-        .add_filter("CamCraft Project", &["camproj"])
-        .pick_file()
+/// The model picker's filters - the native dialog and the browser's
+/// async picker (#31) ask with the same one.
+fn mesh_dialog() -> crate::file_dialog::FileDialog {
+    // STEP arrives tessellated through truck (mesh, not B-rep).
+    crate::file_dialog::FileDialog::new().add_filter("Mesh", &["stl", "obj", "step", "stp"])
+}
+
+fn project_dialog() -> crate::file_dialog::FileDialog {
+    crate::file_dialog::FileDialog::new().add_filter("CamCraft Project", &["camproj"])
 }
 
 fn pick_machine_file() -> Option<PathBuf> {

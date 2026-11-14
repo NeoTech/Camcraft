@@ -88,14 +88,16 @@ fn is_motion(ws: &[String]) -> bool {
 }
 
 /// (index of the last tool-change / length-offset block, index of the
-/// first motion block after it) in the program's lines.
+/// first motion block after it) in the program's lines. A `G53` block is
+/// a straight-up retract in machine coordinates (Tormach's lift after the
+/// tool change, #1596), not the section's first move.
 fn preamble_span(stem: &str, lines: &[Vec<String>]) -> (usize, usize) {
     let anchor = lines
         .iter()
         .rposition(|ws| ws.iter().any(|w| w == "T99" || w == "G43" || w == "H99" || w == "D99"))
         .unwrap_or_else(|| panic!("{stem}: no tool change / length offset block"));
     let first = (anchor + 1..lines.len())
-        .find(|&i| is_motion(&lines[i]))
+        .find(|&i| is_motion(&lines[i]) && !lines[i].iter().any(|w| w == "G53"))
         .unwrap_or_else(|| panic!("{stem}: no motion after the tool change"));
     (anchor, first)
 }

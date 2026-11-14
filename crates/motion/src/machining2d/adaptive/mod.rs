@@ -80,6 +80,7 @@ pub(crate) use troch_plan::{plan as plan_trochoid, seed as trochoid_seed};
 pub(crate) use lift::Travel;
 pub(crate) use lift_link::Return;
 pub(crate) use loops::boundary_dist;
+pub(crate) use medial::{Spine, spine as medial_spine};
 /// The plan's chord sagitta (`morph`): the finest tessellation the
 /// pocket family posts, which `quality` walks arcs at.
 pub(crate) use morph::SAG as PLAN_SAG;
