@@ -93,6 +93,26 @@ pub fn accept_attr(dialog: &FileDialog) -> String {
     seen.join(",")
 }
 
+/// The status line while the chooser is up. `in_click` says the chooser
+/// was asked for inside the user's click; outside one (a keyboard
+/// shortcut, which eframe hands to the app on a later frame) Safari
+/// refuses to open it without a word, so the line says what to do
+/// instead of leaving a silent no-op.
+#[must_use]
+pub fn chooser_status(purpose: PickFor, in_click: bool) -> String {
+    let (ask, button) = match purpose {
+        PickFor::Model => ("choose a model to import…", "File > Model"),
+        PickFor::Project => ("choose a project to open…", "File > Open"),
+    };
+    if in_click {
+        ask.to_string()
+    } else {
+        format!(
+            "{ask} if no file chooser opened, this browser (Safari) opens one only from a click - click {button} instead of the shortcut"
+        )
+    }
+}
+
 /// Why a file of `size` bytes is not read, or `None` when it may be.
 #[must_use]
 pub fn too_big(name: &str, size: f64) -> Option<String> {
@@ -125,7 +145,7 @@ mod web {
     /// Held, never leaked: a cancelled picker never fires, so it stays
     /// here until the next `open` replaces it - at most one at a time.
     struct Pending {
-        _input: web_sys::HtmlInputElement,
+        input: web_sys::HtmlInputElement,
         _on_change: Closure<dyn FnMut()>,
     }
 
@@ -176,6 +196,17 @@ mod web {
             .map_err(|_| "the page's <input> is not an input element".to_string())?;
         input.set_type("file");
         input.set_accept(&accept_attr(dialog));
+        // In the page, hidden: the MDN pattern (a `display:none` input
+        // whose `click()` runs from the user's click handler). A detached
+        // input is not relied on to fire `change` in every browser.
+        input
+            .set_attribute("style", "display:none")
+            .map_err(|e| said("the page would not hide the file input", &e))?;
+        document
+            .body()
+            .ok_or_else(|| "this page has no <body> to hold a file input".to_string())?
+            .append_child(&input)
+            .map_err(|e| said("the page would not take the file input", &e))?;
         let held = input.clone();
         let on_change = Closure::<dyn FnMut()>::new(move || {
             if let Some(file) = held.files().and_then(|list| list.get(0)) {
@@ -185,11 +216,17 @@ mod web {
         input.set_onchange(Some(on_change.as_ref().unchecked_ref()));
         let parked = PENDING.with(|p| match p.try_borrow_mut() {
             Ok(mut p) => {
-                // Replacing an earlier (cancelled) picker frees its handler.
-                *p = Some(Pending { _input: input.clone(), _on_change: on_change });
+                // Replacing an earlier (cancelled) picker frees its handler
+                // and takes its input out of the page.
+                if let Some(old) = p.replace(Pending { input: input.clone(), _on_change: on_change }) {
+                    old.input.remove();
+                }
                 true
             }
-            Err(_) => false,
+            Err(_) => {
+                input.remove();
+                false
+            }
         });
         if !parked {
             return Err("a file picker is already being set up - try again".to_string());

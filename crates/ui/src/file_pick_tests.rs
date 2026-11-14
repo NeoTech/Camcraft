@@ -121,3 +121,59 @@ fn a_file_over_the_browser_read_limit_is_refused_before_it_is_read() {
     let shown = format!("{:?}", picked(PickFor::Model, "m.stl", Ok(vec![7; 1000])));
     assert!(shown.contains("1000 bytes") && !shown.contains("7, 7"), "{shown}");
 }
+
+#[test]
+fn a_chooser_asked_for_by_a_click_opens_inside_that_click() {
+    // Safari opens a file chooser only while the user's click is handled:
+    // the actions that open one run at the end of the clicked frame
+    // (still in eframe's pointerup handler), not on the next one.
+    use crate::unsaved::UnsavedChoice;
+    for opens in [
+        CommandKind::OpenModelDialog,
+        CommandKind::OpenProjectDialog,
+        CommandKind::ResolveUnsaved(UnsavedChoice::DontSave),
+    ] {
+        assert!(crate::state::opens_a_chooser(&opens), "{opens:?}");
+    }
+    assert!(!crate::state::opens_a_chooser(&CommandKind::NewDocument));
+    assert!(!crate::state::opens_a_chooser(&CommandKind::Undo));
+
+    let mut state = State::new();
+    // Nothing that opens a chooser: left for the next frame's drain.
+    state.pending.push_back(CommandKind::NewDocument);
+    assert!(!state.run_click_actions(true));
+    assert_eq!(state.pending.len(), 1);
+    // A chooser action outside a click (a shortcut): also left alone.
+    state.pending.push_back(CommandKind::ResolveUnsaved(UnsavedChoice::Cancel));
+    assert!(!state.run_click_actions(false));
+    assert_eq!(state.pending.len(), 2);
+    // Inside the click: the whole queue runs now, in order.
+    assert!(state.run_click_actions(true));
+    assert!(state.pending.is_empty());
+    assert_eq!(state.status, "new document");
+    assert!(!state.picker_in_click, "the flag lives only while the click's queue runs");
+
+    // Open project over unsaved changes: the prompt is asked inside the
+    // click, so its Don't Save (another click) can open the chooser.
+    let bytes = std::fs::read(testdata("cube.stl")).expect("cube.stl");
+    file_pick::deliver(picked(PickFor::Model, "cube.stl", Ok(bytes)));
+    state.drain_actions();
+    assert!(state.history.is_dirty(), "{}", state.status);
+    state.pending.push_back(CommandKind::OpenProjectDialog);
+    assert!(state.run_click_actions(true));
+    assert!(matches!(state.unsaved_prompt, Some(CommandKind::OpenProjectDialog)));
+    assert_eq!(state.status, "unsaved changes");
+}
+
+#[test]
+fn a_chooser_outside_a_click_says_what_to_do_instead_of_failing_silently() {
+    assert_eq!(file_pick::chooser_status(PickFor::Model, true), "choose a model to import…");
+    assert_eq!(file_pick::chooser_status(PickFor::Project, true), "choose a project to open…");
+    let model = file_pick::chooser_status(PickFor::Model, false);
+    assert!(
+        model.starts_with("choose a model to import…") && model.contains("Safari") && model.contains("File > Model"),
+        "{model}"
+    );
+    let project = file_pick::chooser_status(PickFor::Project, false);
+    assert!(project.contains("File > Open"), "{project}");
+}

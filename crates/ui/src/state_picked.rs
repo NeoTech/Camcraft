@@ -27,8 +27,8 @@ impl State {
         }
         #[cfg(target_arch = "wasm32")]
         {
+            self.status = crate::file_pick::chooser_status(PickFor::Model, self.picker_in_click);
             crate::file_pick::open(&super::mesh_dialog(), PickFor::Model);
-            self.status = String::from("choose a model to import…");
         }
     }
 
@@ -40,9 +40,30 @@ impl State {
         }
         #[cfg(target_arch = "wasm32")]
         {
+            self.status = crate::file_pick::chooser_status(PickFor::Project, self.picker_in_click);
             crate::file_pick::open(&super::project_dialog(), PickFor::Project);
-            self.status = String::from("choose a project to open…");
         }
+    }
+
+    /// Run the queue now, inside the browser's click, when it holds an
+    /// action that opens a file chooser (#31). Safari opens a chooser
+    /// only while the user's click is being handled; the shell's usual
+    /// drain runs at the start of the NEXT frame, from
+    /// `requestAnimationFrame`, where Safari ignores the request without
+    /// a word. eframe runs the frame that sees a mouse release inside its
+    /// `pointerup` handler, so the web shell calls this at the end of that
+    /// frame (`in_click`); anything else waits for the usual drain.
+    /// Returns whether it ran anything.
+    pub fn run_click_actions(&mut self, in_click: bool) -> bool {
+        if !in_click || !self.pending.iter().any(opens_a_chooser) {
+            return false;
+        }
+        self.picker_in_click = true;
+        while let Some(action) = self.pending.pop_front() {
+            self.run(action);
+        }
+        self.picker_in_click = false;
+        true
     }
 
     /// Queue every file the picker delivered since the last frame as one
@@ -107,4 +128,15 @@ impl State {
             Err(err) => self.status = format!("open failed: {name}: {err}"),
         }
     }
+}
+
+/// The actions that may open the browser's file chooser: the two Open
+/// dialogs, and the unsaved-changes answer that lets a held Open project
+/// go on. They must run inside the click that asked for them.
+#[must_use]
+pub(crate) fn opens_a_chooser(action: &CommandKind) -> bool {
+    matches!(
+        action,
+        CommandKind::OpenModelDialog | CommandKind::OpenProjectDialog | CommandKind::ResolveUnsaved(_)
+    )
 }

@@ -41,6 +41,7 @@ use camcraft_app::{machine, model, posting, project, world::new_world};
 mod per_op;
 #[path = "state_picked.rs"]
 mod picked;
+pub(crate) use picked::opens_a_chooser;
 #[path = "state_program_info.rs"]
 mod program_info;
 #[path = "state_tool_library.rs"]
@@ -1608,6 +1609,10 @@ pub struct State {
     /// Operation key being dragged in the browser; discarded on release.
     pub dragging_op: Option<String>,
     pub pending: VecDeque<CommandKind>,
+    /// #31: true while `run_click_actions` runs the queue inside the
+    /// browser's own click (pointerup) handler, so a file chooser opened
+    /// now opens inside the user's activation. False everywhere else.
+    pub picker_in_click: bool,
     /// #183: the live MCP session's inbox when the app was started with
     /// `--mcp-port` / `CAMCRAFT_MCP_PORT`; drained with `pending`.
     pub mcp: Option<camcraft_app::mcp::Inbox>,
@@ -1893,10 +1898,7 @@ impl State {
         // in the zip, the repo on a dev run. None found is said ONCE,
         // here, on the status line - the built-in rows stand regardless.
         let themes = crate::theme_dir::from_process();
-        let status = match &themes {
-            Ok(_) => String::from("ready"),
-            Err(why) => why.clone(),
-        };
+        let status = crate::theme_dir::startup_status(&themes, cfg!(target_arch = "wasm32"));
         State {
             world: new_world(),
             history: History::default(),
@@ -1967,6 +1969,7 @@ impl State {
             rename_draft: None,
             dragging_op: None,
             pending: VecDeque::new(),
+            picker_in_click: false,
             mcp: None,
             request_quit: false,
             unsaved_prompt: None,
