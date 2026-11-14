@@ -5,14 +5,10 @@
 //! whatever height the tool change left the tip. A long tool on a high
 //! work offset can stand below the part top there. A stream stating
 //! neither plane is refused by name.
-//! The Carvera alone keeps X/Y first right after its `M6` (the changer's
-//! exit height, as before), then states the clearance before any descent:
-//! nothing we have read says where its firmware parks X/Y after a tool
-//! change, and a Z-only rapid down at the rack's X/Y could meet the stored
-//! tools (M3's option (c), docs/decisions/1616-first-traverse-clearance.md).
-//! That X/Y traverse at the unverified exit height is the #1614 hazard,
-//! which stays open on the Carvera until its M6 exit position is confirmed.
-//! At a program start with no tool change it states Z first like the rest.
+//! The Carvera states Z first right after its `M6` too: its firmware's
+//! public source ends every M6 at the top of Z travel over the machine X/Y
+//! it stood at before the change, not over the tool rack
+//! (docs/decisions/1616-carvera-after-m6.md).
 //! Provenance: our own tests over our own posts and stream format.
 //!
 //! Gate map (M4.4): covers assets/posts/grblhal.cps, assets/posts/tinyg.cps,
@@ -28,18 +24,12 @@ use std::path::{Path, PathBuf};
 /// states none, so `post` gives it one (a homed machine), for the same
 /// lift - otherwise its lift needs the ClearancePlane and the
 /// retract-plane-only stream would be refused for the lift, not the
-/// traverse. The flag: X/Y first right after a tool change (the Carvera).
-const POSTS: &[(&str, &str, bool)] = &[
-    ("assets/posts/grblhal.cps", "assets/machines/sienci-altmill-2x4.mch", false),
-    ("assets/posts/tinyg.cps", "assets/machines/tinyg-3axis.mch", false),
-    ("assets/posts/carvera.cps", "assets/machines/makera-carvera.mch", true),
+/// traverse.
+const POSTS: &[(&str, &str)] = &[
+    ("assets/posts/grblhal.cps", "assets/machines/sienci-altmill-2x4.mch"),
+    ("assets/posts/tinyg.cps", "assets/machines/tinyg-3axis.mch"),
+    ("assets/posts/carvera.cps", "assets/machines/makera-carvera.mch"),
 ];
-
-/// The two traverse lines in the order the post writes them: the Z-only
-/// rapid first, or (right after a Carvera tool change) X/Y first.
-fn traverse<'a>(xy_first: bool, z: &'a str, xy: &'a str) -> [&'a str; 2] {
-    if xy_first { [xy, z] } else { [z, xy] }
-}
 
 fn repo(rel: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../").join(rel)
@@ -96,8 +86,8 @@ fn motions_after_tool_change(program: &str) -> Vec<&str> {
 }
 
 /// The first two motion lines after each tool change: the Z-only rapid
-/// to `want_z` and X20 Y10 alone, in the post's order.
-fn assert_clearance_first(cps: &str, xy_first: bool, program: &str, want_z: &str) {
+/// to `want_z`, then X20 Y10 alone.
+fn assert_clearance_first(cps: &str, program: &str, want_z: &str) {
     let lines: Vec<&str> = program.lines().collect();
     let changes: Vec<usize> = lines
         .iter()
@@ -111,7 +101,7 @@ fn assert_clearance_first(cps: &str, xy_first: bool, program: &str, want_z: &str
         let got: Vec<&str> = motions.by_ref().take(2).copied().collect();
         assert_eq!(
             got,
-            traverse(xy_first, want_z, "G0 X20 Y10"),
+            [want_z, "G0 X20 Y10"],
             "{cps}: the stated clearance and X/Y alone, before any descent\n{program}"
         );
     }
@@ -119,25 +109,25 @@ fn assert_clearance_first(cps: &str, xy_first: bool, program: &str, want_z: &str
 
 #[test]
 fn the_first_traverse_after_a_tool_change_states_the_clearance_z() {
-    for (cps, mch, xy_first) in POSTS {
+    for (cps, mch) in POSTS {
         let out = post(cps, mch, &two_tools("PARAM ClearancePlane 25.4\nPARAM RetractPlane 12.7\n"));
         assert!(out.warnings.is_empty(), "{cps}: {:?}", out.warnings);
-        assert_clearance_first(cps, *xy_first, &out.program, "G0 Z25.4");
+        assert_clearance_first(cps, &out.program, "G0 Z25.4");
     }
 }
 
 #[test]
 fn the_retract_plane_serves_when_no_clearance_plane_is_stated() {
-    for (cps, mch, xy_first) in POSTS {
+    for (cps, mch) in POSTS {
         let out = post(cps, mch, &two_tools("PARAM RetractPlane 12.7\n"));
         assert!(out.warnings.is_empty(), "{cps}: {:?}", out.warnings);
-        assert_clearance_first(cps, *xy_first, &out.program, "G0 Z12.7");
+        assert_clearance_first(cps, &out.program, "G0 Z12.7");
     }
 }
 
 #[test]
 fn a_first_traverse_with_no_stated_plane_is_refused_by_name() {
-    for (cps, mch, _) in POSTS {
+    for (cps, mch) in POSTS {
         let out = post(cps, mch, &two_tools(""));
         assert!(
             out.warnings
@@ -168,11 +158,11 @@ Rapid 0 0 50800
 Feed 10000 0 -1000 F500000
 ENDSECTION
 ";
-    for (cps, mch, xy_first) in POSTS {
+    for (cps, mch) in POSTS {
         let out = post(cps, mch, s);
         assert!(out.warnings.is_empty(), "{cps}: {:?}", out.warnings);
         let motions = motions_after_tool_change(&out.program);
-        assert_eq!(motions.get(..2), Some(&traverse(*xy_first, "G0 Z50.8", "G0 X0 Y0")[..]), "{cps}\n{}", out.program);
+        assert_eq!(motions.get(..2), Some(&["G0 Z50.8", "G0 X0 Y0"][..]), "{cps}\n{}", out.program);
     }
 }
 
@@ -196,8 +186,8 @@ ENDSECTION
 "
         )
     };
-    for (cps, mch, xy_first) in POSTS {
-        let pair = traverse(*xy_first, "G0 Z10", "G0 X20 Y10");
+    for (cps, mch) in POSTS {
+        let pair = ["G0 Z10", "G0 X20 Y10"];
         // Starting at the clearance itself: no second Z rapid.
         let out = post(cps, mch, &stream(10.0));
         assert!(out.warnings.is_empty(), "{cps}: {:?}", out.warnings);
@@ -228,7 +218,7 @@ Rapid 20000 10000 2000
 Feed 20000 10000 -1000 F500000
 ENDSECTION
 ";
-    for (cps, mch, _) in POSTS {
+    for (cps, mch) in POSTS {
         let out = post(cps, mch, s);
         assert!(out.warnings.is_empty(), "{cps}: {:?}", out.warnings);
         assert!(!out.program.lines().any(|l| l.split_whitespace().any(|w| w == "M6")), "{cps}: no tool change\n{}", out.program);
@@ -237,18 +227,45 @@ ENDSECTION
     }
 }
 
-/// The Carvera's X/Y traverse right after `M6` is still made at the
-/// changer's exit height, which no source we read confirms (the #1614
-/// hazard stays there, option b open). The script must say so where the
-/// order is chosen, and must not claim that the hazard is gone. This pin
-/// fails if the open-hazard note is removed while the order stays.
+/// The Carvera's order right after `M6` rests on its firmware's public
+/// source: the change ends with a machine-coordinate lift to the top of Z
+/// travel and a return to the X/Y read when the M6 arrived. The script
+/// must cite that where it chooses the order, and must not keep an X/Y-first
+/// branch after the tool change. This pin fails if the X/Y-first branch
+/// comes back, or if the evidence note is removed.
 #[test]
-fn the_carvera_script_names_the_open_hazard_after_its_tool_change() {
+fn the_carvera_script_cites_where_its_m6_leaves_the_spindle() {
     let cps = read("assets/posts/carvera.cps");
-    let note = cps.find("OPEN HAZARD (#1614)").unwrap_or_else(|| panic!("carvera.cps: the open-hazard note is missing"));
-    let order = cps.find("if (changedAt)").unwrap_or_else(|| panic!("carvera.cps: the M6 order branch is missing"));
-    assert!(note < order, "carvera.cps: the note must stand with the traverse comment, before the order branch");
-    let block = &cps[note..order];
-    assert!(block.contains("until a public source") && block.contains("M6 exit position"), "carvera.cps: the note must say what closes it\n{block}");
-    assert!(!cps.contains("hazard is not added"), "carvera.cps: claims the hazard is gone");
+    assert!(!cps.contains("changedAt"), "carvera.cps: an X/Y-first branch after M6 is back");
+    assert!(!cps.contains("OPEN HAZARD"), "carvera.cps: the #1614 note must be closed, not kept beside Z first");
+    let note = cps.find("Z first everywhere, right after M6 T too (#1616)").unwrap_or_else(|| panic!("carvera.cps: the M6 evidence note is missing"));
+    let body = cps.find("function xyFirst").unwrap_or_else(|| panic!("carvera.cps: xyFirst is missing"));
+    assert!(note < body, "carvera.cps: the note must stand with the traverse comment, before xyFirst");
+    let block = &cps[note..body];
+    for want in ["ATCHandler::on_main_loop", "G53 G0 Z<coordinate.clearance_z>", "not left over the tool", "soft Z limit", "1616-carvera-after-m6.md"] {
+        assert!(block.contains(want), "carvera.cps: the note must say {want:?}
+{block}");
+    }
+}
+
+/// The Carvera after a tool change between two sections: the first motion
+/// after the second `M6` is the Z-only rapid to the clearance, and no X/Y
+/// word is written between that `M6` and it.
+#[test]
+fn the_carvera_states_the_clearance_before_any_xy_after_its_m6() {
+    let out = post("assets/posts/carvera.cps", "assets/machines/makera-carvera.mch", &two_tools("PARAM ClearancePlane 25.4
+"));
+    assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+    let lines: Vec<&str> = out.program.lines().collect();
+    let last_m6 = lines.iter().rposition(|l| l.split_whitespace().any(|w| w == "M6")).unwrap_or_else(|| panic!("no M6
+{}", out.program));
+    let first_motion = lines[last_m6..].iter().find(|l| is_motion(l)).copied();
+    assert_eq!(first_motion, Some("G0 Z25.4"), "{}", out.program);
+    let before: Vec<&&str> = lines[last_m6..].iter().take_while(|l| **l != "G0 Z25.4").collect();
+    assert!(
+        !before.iter().any(|l| l.split_whitespace().any(|w| w.starts_with('X') || w.starts_with('Y'))),
+        "no X/Y word between the M6 and the clearance Z
+{}",
+        out.program
+    );
 }
