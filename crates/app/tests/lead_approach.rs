@@ -99,14 +99,14 @@ fn user_job(tool_name: &str, src_entity: bool, params: OpParams) -> (World, Tool
     (world, path, warns)
 }
 
-/// The warnings of the user's stock-source pocket that are not the
-/// part it cuts. #1603 / #1554: the stock as the source clears the
-/// whole footprint, the user's part included, and the operation now
-/// says so (`keep_law`) - asserted here, so the entry laws this suite
-/// reads are judged on the rest.
+/// The warnings of the user's stock-source pocket. Since #1554 (PR
+/// #1656) the stock as the source clears the stock around the part and
+/// stays off the user's part, so the keep law (#1603) finds no gouge -
+/// asserted here, and the entry laws this suite reads are judged on the
+/// warnings that remain.
 fn beside_the_cut_part(warns: Vec<String>) -> Vec<String> {
-    assert!(warns.iter().any(|w| w.starts_with("Gouge")), "the stock-source pocket cuts the user's part: {warns:?}");
-    warns.into_iter().filter(|w| !w.starts_with("Gouge")).collect()
+    assert!(!warns.iter().any(|w| w.starts_with("Gouge")), "the stock-source pocket stays off the user's part: {warns:?}");
+    warns
 }
 
 fn with(a: Approach) -> Links {
