@@ -16,6 +16,15 @@ a piece, and the 2D Adaptive path fed along Y -32 from (-8.05, -32) to
 generator that links with it (2D pockets, Adaptive, Offset, the 3D ladders)
 gets the fix at once.
 
+After review, a vertex also counts as a touch when it is within
+`BOUNDARY_TOL` (1e-9 mm, in `ring.rs`) of the chord line, measured as a
+distance. `on_boundary` uses the same constant. Before, only the edge
+parameter decided, so a chord end that `on_boundary` accepted (up to
+1e-9 mm off the wall) could pass the vertex of a short chamfer edge by
+many parameter units, and the gap chord cleared again. An extra split
+only adds a midpoint test, so it cannot let through a chord that the law
+refused before.
+
 The first draft also split the chord at the ends of each edge that lies
 on the chord line. A mutation test showed that this adds nothing: those
 ends are vertices, and the edges next to them already split the chord.

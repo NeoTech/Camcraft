@@ -8,7 +8,7 @@
 
 use crate::geo2d::{Point2, Region};
 
-use super::ring::on_boundary;
+use super::ring::{BOUNDARY_TOL, on_boundary};
 
 /// Parameter slack along the chord: a touch closer than this to either
 /// end is the end itself.
@@ -31,6 +31,12 @@ const EPS: f64 = 1e-9;
 /// vertices), and the midpoint of each piece decides for that piece:
 /// between two touches it crosses no boundary, so it lies wholly in the
 /// closed region or wholly outside it.
+///
+/// A vertex is a touch when it lies within [`BOUNDARY_TOL`] mm of the
+/// chord's line, measured as a distance - the same slack `on_boundary`
+/// gives the chord's ends. An edge-parameter test alone misses it on a
+/// short edge (a chamfer facet a few microns long), where a nanometer
+/// off the line is many parameter units (#1620 review).
 pub fn chord_clears(region: &Region, a: Point2, b: Point2) -> bool {
     if (!region.contains(a) && !on_boundary(region, a))
         || (!region.contains(b) && !on_boundary(region, b))
@@ -42,6 +48,9 @@ pub fn chord_clears(region: &Region, a: Point2, b: Point2) -> bool {
     }
     let d = Point2::new(b.x - a.x, b.y - a.y);
     let mut cuts: Vec<f64> = vec![0.0, 1.0];
+    for l in region.loops() {
+        cuts.extend(l.points().iter().filter_map(|v| vertex_touch(a, d, *v)));
+    }
     for l in region.loops() {
         let pts = l.points();
         let n = pts.len();
@@ -91,6 +100,20 @@ pub fn chord_clears(region: &Region, a: Point2, b: Point2) -> bool {
     })
 }
 
+/// Where (as a chord parameter strictly between the ends) vertex `v`
+/// touches the chord `a` -> `a + d`, when it lies within
+/// [`BOUNDARY_TOL`] mm of the chord's line.
+fn vertex_touch(a: Point2, d: Point2, v: Point2) -> Option<f64> {
+    let dd = d.x * d.x + d.y * d.y;
+    if !dd.is_finite() || dd <= 0.0 {
+        return None;
+    }
+    let (vx, vy) = (v.x - a.x, v.y - a.y);
+    let h = vx * d.y - vy * d.x; // the distance off the line, times |d|
+    let t = (vx * d.x + vy * d.y) / dd;
+    (h * h <= BOUNDARY_TOL * BOUNDARY_TOL * dd && EPS < t && t < 1.0 - EPS).then_some(t)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -125,5 +148,40 @@ mod tests {
         assert!(chord_clears(&region, Point2::new(5.0, 0.0), Point2::new(25.0, 0.0)));
         assert!(chord_clears(&region, Point2::new(0.0, 0.0), Point2::new(30.0, 30.0)));
         assert!(!chord_clears(&region, Point2::new(0.0, 0.0), Point2::new(31.0, 0.0)));
+    }
+
+    /// The review's probe: the second piece's near corner is a 0.014 mm
+    /// chamfer. A chord end under a nanometer below the wall line is on
+    /// the boundary, and the chord line then passes the chamfer's lower
+    /// vertex by a fraction of a nanometer - many parameter units of that
+    /// short edge. The vertex still splits the chord, so the 16 mm gap
+    /// is still read.
+    #[test]
+    fn a_chord_end_a_hair_off_the_wall_line_still_splits_at_a_short_chamfer() {
+        let p = Point2::new;
+        let chamfered = Loop::new(vec![p(8.01, -32.0), p(32.0, -32.0), p(32.0, -8.0), p(8.0, -8.0), p(8.0, -31.99)]).expect("loop");
+        let region = Region::new(vec![sq(-32.0, -32.0, -8.0, -8.0), chamfered]).expect("region");
+        for d in [0.0, 1e-12, 1e-10, 5e-10, 9e-10, -5e-10] {
+            assert!(!chord_clears(&region, p(-8.0, -32.0), p(32.0, -32.0 - d)), "end {d:e} mm off the line: the gap x in (-8, 8) is outside");
+        }
+    }
+
+    /// The vertex touch is a distance in mm, from both sides of
+    /// `BOUNDARY_TOL`, on a long chord and a short one.
+    #[test]
+    fn a_vertex_touches_the_chord_within_the_boundary_tolerance_and_not_beyond() {
+        let p = Point2::new;
+        for len in [40.0, 0.01] {
+            let (a, d) = (p(0.0, 0.0), p(len, 0.0));
+            for side in [1.0, -1.0] {
+                let near = p(len * 0.25, side * 0.9 * BOUNDARY_TOL);
+                let far = p(len * 0.25, side * 1.1 * BOUNDARY_TOL);
+                let t = vertex_touch(a, d, near).expect("0.9 tol off the line touches");
+                assert!((t - 0.25).abs() < 1e-12, "at its foot on the chord: {t}");
+                assert_eq!(vertex_touch(a, d, far), None, "1.1 tol off the line does not touch (len {len})");
+            }
+            assert_eq!(vertex_touch(a, d, a), None, "a chord end is not a split");
+            assert_eq!(vertex_touch(a, d, p(len * 1.5, 0.0)), None, "a vertex past the end is not a split");
+        }
     }
 }

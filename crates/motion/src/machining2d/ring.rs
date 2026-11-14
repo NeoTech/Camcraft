@@ -153,6 +153,11 @@ pub(super) fn dist(a: Point2, b: Point2) -> f64 {
     ((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y)).sqrt()
 }
 
+/// How far (mm) a point may sit off a loop edge and still read as on it:
+/// [`on_boundary`] and the chord law's vertex touch (`chord_clear`, #1620)
+/// share it, so a chord end the one accepts is a touch the other sees.
+pub(super) const BOUNDARY_TOL: f64 = 1e-9;
+
 /// True when `p` sits on some loop edge, within a nanometer - exact-zero
 /// float tests cannot work here: a computed point on an edge (a chord's
 /// midpoint) has round-off of a few ulps against the cross product, and
@@ -160,7 +165,7 @@ pub(super) fn dist(a: Point2, b: Point2) -> f64 {
 /// is far under the micron quantization of the geometry and far over the
 /// cancellation error.
 pub fn on_boundary(region: &Region, p: Point2) -> bool {
-    pub(super) const TOL: f64 = 1e-9;
+    const TOL: f64 = BOUNDARY_TOL;
     for l in region.loops() {
         let pts = l.points();
         let n = pts.len();
