@@ -55,3 +55,46 @@ rfd's synchronous dialogs, and their inbox is never filled.
 
 **Cost to change later.** Low. Other pickers join by adding a `PickFor`
 variant and a route in `open_picked`.
+
+### Safari: the chooser opens inside the user's click (2026-11-13)
+
+**Chosen.** The user's hand check found File > Open model doing nothing
+in Safari (Chrome and Brave passed). The web shell drained the queued
+Open action at the start of the *next* frame, which eframe runs from
+`requestAnimationFrame`; Safari opens a file chooser only while the
+user's input event is being handled, and ignores `input.click()`
+elsewhere without an error. eframe 0.36 already runs the app's frame
+inside its `pointerup` listener (its own comment: Safari allows certain
+things only "on user action, such as a click"), so the fix runs the queue
+at the end of that frame whenever it holds an action that may open a
+chooser (Open model, Open project, the unsaved-changes answer that lets a
+held Open project go on): `State::run_click_actions`. The hidden input is
+now attached to the page with `display:none` (MDN's "Using files from web
+applications" pattern) and removed when replaced. A chooser asked for
+outside a click (the Cmd/Ctrl+O shortcut: eframe's keydown listener
+queues the key for a later frame) still tries, which works in Chrome and
+Firefox, and the status line says to click File > Model / File > Open if
+no chooser appeared, never a silent no-op. Merging #1431 from main, the
+browser refusals of Open model / Open project (which waited for this
+picker) are lifted.
+
+**Considered and dropped.**
+- An extra "Choose file…" button or overlay for every browser: a second
+  click in Chrome, where one already works.
+- Sniffing the user agent for Safari: brittle, and the click path now
+  works the same in every browser.
+- `navigator.userActivation.isActive` or `window.event` to detect a lost
+  activation: the former reports a timed activation that WebKit's file
+  input may still refuse, the latter is deprecated (MDN).
+- A keydown listener of our own for Cmd/Ctrl+O: it would open the
+  chooser twice unless deduplicated against egui's own shortcut; the
+  status line covers the rare shortcut case.
+
+**Sources.** MDN, "User activation" (transient activation, activation-
+triggering events); MDN, "Using files from web applications" (a hidden
+input's `click()` from a click handler); MDN, `Window.event`
+(deprecated); the eframe 0.36.2 source, `web/events.rs`
+(`install_pointerup` runs `runner.logic()` in the listener).
+
+**Cost to change later.** Low: the click-time drain is one call in the
+web shell and one method on `State`.
