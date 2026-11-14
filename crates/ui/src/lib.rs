@@ -47,6 +47,8 @@ pub mod post_file;
 pub mod plane_pick;
 pub mod pick_words;
 pub mod axis_pick;
+pub mod cylinder_pick;
+pub mod origin_pick;
 pub mod points_pick;
 pub mod wcs_pick;
 pub mod shortcut_keys;
@@ -62,6 +64,8 @@ pub mod wcs_circle_pick;
 mod law_tests;
 #[cfg(test)]
 mod refusal_focus_tests;
+#[cfg(test)]
+mod detect_holes_note_tests;
 #[cfg(test)]
 mod refusal_ghost_tests;
 #[cfg(test)]

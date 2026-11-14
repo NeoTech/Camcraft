@@ -154,8 +154,16 @@ fn picked_faces_fill_points_are_discs_and_edges_are_bold() {
     };
     let top = f.faces.iter().find(|x| x.normal[2] > 0.99).expect("the top face");
     let sel = |feature| camcraft_app::operation::GeoSel { entity: "Block".into(), feature };
+    // #771: each method's row waits behind the plane dropdown.
+    let method = |h: &mut Harness<'static, ShellUi>, from: &str, to: &str| {
+        h.get_by(|n| n.role() == egui::accesskit::Role::ComboBox && n.value().as_deref() == Some(from)).click();
+        h.run();
+        h.get_by_label(to).click();
+        h.run();
+    };
     let [r, g, b] = PICK_RGB8;
 
+    method(&mut harness, "Axes", "Face");
     crate::plane_pick::arm(&mut harness.state_mut().state, "Setup1");
     crate::plane_pick::take(&mut harness.state_mut().state, sel(FeatureSel::Face(top.id)));
     harness.run();
@@ -171,6 +179,7 @@ fn picked_faces_fill_points_are_discs_and_edges_are_bold() {
     assert!(fill.a() > 0 && fill.a() < 255, "semi-transparent");
     assert!(harness.query_by_label_contains("1 face selected").is_some(), "the row counts the face");
 
+    method(&mut harness, "Face", "Points");
     crate::points_pick::arm(&mut harness.state_mut().state, "Setup1");
     for vi in camcraft_app::geometry::feature::corner_verts(&f).into_iter().take(2) {
         let id = camcraft_app::geometry::feature::vertex_id(&f, vi).expect("a corner id");
@@ -185,6 +194,7 @@ fn picked_faces_fill_points_are_discs_and_edges_are_bold() {
     assert_eq!(discs, 2, "two picked points, two filled discs");
     assert!(harness.query_by_label_contains("2 points selected").is_some(), "the row counts the points");
 
+    method(&mut harness, "Points", "Axes");
     crate::axis_pick::arm(&mut harness.state_mut().state, "Setup1", camcraft_app::pick::InPlaneAxis::Y);
     let edge = camcraft_app::geometry::feature::chains(&f).into_iter().find(|c| !c.closed).expect("a straight edge");
     crate::axis_pick::take(&mut harness.state_mut().state, sel(FeatureSel::Chain(edge.id)));

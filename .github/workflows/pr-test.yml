@@ -1,5 +1,5 @@
 # PR test (#1420): the build-and-test step of a PR review, run on the
-# self-hosted Linux runner instead of a worktree on the reviewer's machine.
+# self-hosted runner (Linux or macOS) instead of a worktree on the reviewer's machine.
 # Started only by the PR-reviewer agent of a collaborator's session, after it
 # has read the diff (`.claude/agents/PR-reviewer.md` step 2b):
 #   gh workflow run pr-test.yml -f pr=<N> -f sha=<head sha the reviewer read>
@@ -21,6 +21,9 @@
 # "Separate runner/user" - the job targets the runner label camcraft-pr-test,
 # an OS user of its own with its own HOME, never the cut/release runner
 # (issue 1413); cargo home and sccache are under that runner's work dir.
+# Any runner carrying camcraft-pr-test takes the job, whatever its OS: the
+# steps are bash 3.2 / BSD-tool safe, and on macOS the UI suites open real
+# windows, so that runner needs a logged-in session.
 # Provenance: our own review and gate laws (AGENTS.md "Outside PRs are
 # reviewed", "Three gate tiers"); GitHub's public Actions documentation for
 # the workflow syntax.
@@ -55,7 +58,7 @@ env:
 
 jobs:
   test:
-    runs-on: [self-hosted, linux, camcraft-pr-test]
+    runs-on: [self-hosted, camcraft-pr-test]
     timeout-minutes: 90
     permissions:
       contents: read

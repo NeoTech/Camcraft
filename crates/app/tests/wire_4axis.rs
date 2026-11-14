@@ -173,6 +173,7 @@ fn wire_op(four_axis: Option<WireFourAxis>) -> WireContourOp {
         burnout: None,
         clearance: camcraft_app::operation::DEFAULT_CLEARANCE,
         four_axis,
+        skims: Vec::new(),
     }
 }
 
