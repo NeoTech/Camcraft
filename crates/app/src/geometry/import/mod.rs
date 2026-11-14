@@ -5,6 +5,7 @@
 //! `metadata` before the facet buffer exists; OBJ and STEP stay buffered,
 //! their parsers wanting the whole text in hand.
 
+mod mesh_outward;
 pub mod obj;
 pub mod step;
 pub mod step_budget;
@@ -63,6 +64,8 @@ pub enum ImportError {
     Step(String),
     #[error("imported mesh contains non-finite coordinates")]
     NonFinite,
+    #[error("mesh may have nested or overlapping shells; inward winding may describe a cavity, so automatic orientation is ambiguous; re-export as separate non-overlapping solids")]
+    AmbiguousShells,
     #[error("unsupported file type: {0}")]
     Unsupported(String),
 }
@@ -118,7 +121,7 @@ pub fn load_model_graded_within(path: &Path, budget: usize) -> Result<Graded, Im
     }
     if format == Format::Stl {
         let mut mesh = gate(stl::parse_file(path)?)?;
-        let notes = step_outward::turn_outward(&mut mesh).into_iter().collect();
+        let notes = mesh_outward::turn_outward(&mut mesh)?.into_iter().collect();
         return Ok(Graded { mesh, coarse_mm: None, notes });
     }
     let data = std::fs::read(path)?;
@@ -139,7 +142,7 @@ pub fn parse_model_graded_within(data: &[u8], format: Format, budget: usize) -> 
                 Format::Stl => stl::parse(data)?,
                 _ => obj::parse(data)?,
             })?;
-            let notes = step_outward::turn_outward(&mut mesh).into_iter().collect();
+            let notes = mesh_outward::turn_outward(&mut mesh)?.into_iter().collect();
             (mesh, None, notes)
         }
         Format::Step => {
