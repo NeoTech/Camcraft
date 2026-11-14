@@ -44,6 +44,7 @@ mod per_op;
 mod browser;
 #[path = "state_picked.rs"]
 mod picked;
+#[cfg(test)]
 pub(crate) use picked::opens_a_chooser;
 #[path = "state_program_info.rs"]
 mod program_info;
