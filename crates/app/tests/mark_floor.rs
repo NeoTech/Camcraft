@@ -12,6 +12,10 @@
 //!   `Warning::Gouge` said by name, a legal shallow mark still posts.
 //! - The shank and the holder are judged against the part as it stands
 //!   (`verify::stack_hits`), not lowered by the budget.
+//! - The retract out of a mark's kerf is judged too (second review):
+//!   only the pose the edge already stands in is excused, so a part
+//!   overhang the lift carries the holder into is a `RapidInStock` on
+//!   that lift.
 //!
 //! Provenance: our own fixtures (plain boxes) over the solid law and
 //! the column sim; no vendor material consulted.
@@ -23,7 +27,7 @@
 use flecs_ecs::prelude::World;
 
 use camcraft_app::commands::{AddTool, CreateOperation, GenerateOperation, History, ImportModel, SetStock};
-use camcraft_app::geometry::{cube, quat_from_yaw, Point3};
+use camcraft_app::geometry::{cube, quat_from_yaw, Mesh, Point3};
 use camcraft_app::model;
 use camcraft_app::operation::{Height, OpParams, SrcRef};
 use camcraft_app::posting;
@@ -43,6 +47,12 @@ const STUB: &str = "EM-0600-STUB";
 /// own size: axis-aligned, or turned a quarter about Z (the same
 /// footprint, but a rotation the program sim refuses to model).
 fn job(thick: f64, rotated: bool) -> (World, History) {
+    job_of(cube(Point3::new(-20.0, -20.0, 0.0), Point3::new(20.0, 20.0, thick)), thick, rotated)
+}
+
+/// [`job`] with `part` as the part: its plate is Z 0..`thick`, and the
+/// stock is that plate's box.
+fn job_of(part: Mesh, thick: f64, rotated: bool) -> (World, History) {
     let world = new_world();
     let mut h = History::default();
     let tool = catalog().into_iter().find(|(n, _)| *n == TOOL).map(|(_, t)| t).expect("tool");
@@ -50,8 +60,7 @@ fn job(thick: f64, rotated: bool) -> (World, History) {
     assert!(tool.flute_len > 3.0 && stub.shank_d >= tool.diameter, "the fixture's tool: {} flute, {} shank", tool.flute_len, stub.shank_d);
     h.execute(&world, AddTool::new(&world, TOOL, tool).expect("tool"));
     h.execute(&world, AddTool::new(&world, STUB, stub).expect("stub tool"));
-    let plate = cube(Point3::new(-20.0, -20.0, 0.0), Point3::new(20.0, 20.0, thick));
-    h.execute(&world, ImportModel::from_mesh("part", plate));
+    h.execute(&world, ImportModel::from_mesh("part", part));
     let rot = if rotated { quat_from_yaw(std::f64::consts::FRAC_PI_2) } else { Location::default().rot };
     let at = Location { pos: Point3::new(0.0, 0.0, 0.0), rot };
     h.execute(&world, SetStock::new(&world, StockShape::Box { dx: 40.0, dy: 40.0, dz: thick }, at).expect("stock"));
@@ -76,7 +85,12 @@ const KINDS: [Kind; 2] = [Kind::Engrave, Kind::Trace];
 
 /// The kind's centreline cut from `top` down to `bottom`, one level.
 fn cut(kind: Kind, top: f64, bottom: f64) -> OpParams {
-    let (clearance_z, top_z, bottom_z) = (Height::fixed(25.0), Height::fixed(top), Height::fixed(bottom));
+    cut_under(kind, top, bottom, 25.0)
+}
+
+/// [`cut`] with its clearance plane at `clearance`.
+fn cut_under(kind: Kind, top: f64, bottom: f64, clearance: f64) -> OpParams {
+    let (clearance_z, top_z, bottom_z) = (Height::fixed(clearance), Height::fixed(top), Height::fixed(bottom));
     match kind {
         Kind::Engrave => OpParams::Engrave {
             clearance_z, retract_z: None, top_z, bottom_z, stepdown: 10.0, feed: 800.0, plunge_feed: 200.0, climb: true, tilt: None,
@@ -209,6 +223,57 @@ fn a_shank_in_the_kerf_is_judged_against_the_part_as_it_stands() {
             let blocking: Vec<_> = warns.iter().filter(|w| w.blocks_post()).collect();
             assert!(blocking.is_empty(), "{kind:?} rotated {rotated}: {blocking:?}");
             post(&world, &format!("flute-{kind:?}-{rotated}")).unwrap_or_else(|e| panic!("{kind:?} rotated {rotated}: {e}"));
+        }
+    }
+}
+
+/// The 8 mm plate with a slab over all of it at Z 120..125: an overhang
+/// of the part above every point of the line, and above the holder's
+/// top while the line is cut.
+fn roofed() -> Mesh {
+    let mut f = cube(Point3::new(-20.0, -20.0, 0.0), Point3::new(20.0, 20.0, 8.0)).facets.to_vec();
+    f.extend(cube(Point3::new(-20.0, -20.0, 120.0), Point3::new(20.0, 20.0, 125.0)).facets.iter().copied());
+    Mesh { facets: f.into() }
+}
+
+#[test]
+fn a_retract_into_an_overhang_of_the_part_is_convicted_on_the_lift_and_never_posts() {
+    // 0.3 mm deep on the 8 mm plate, clearance at Z 150 over the slab.
+    // The holder's top stands under Z 100 on every cutting move, so
+    // only a rapid can reach the slab: the lift out of the kerf carries
+    // the holder through it. Before the fix that lift was excused whole
+    // (it starts where a cutting move ended) and no law judged it.
+    let reach = catalog().into_iter().find(|(n, _)| *n == TOOL).map(|(_, t)| t.flute_len + t.shank_len + t.holder_len).expect("tool");
+    assert!(reach > 0.0 && 8.0 + reach < 120.0, "the slab stands over the holder's top: reach {reach}");
+    for kind in KINDS {
+        for rotated in [false, true] {
+            let (world, mut h) = job_of(roofed(), 8.0, rotated);
+            let (warns, _, _) = generated(&world, &mut h, TOOL, cut_under(kind, 8.0, 7.7, 150.0));
+            let e = model::find_by_name(&world, "E1").expect("op");
+            let moves = model::toolpath_of(&world, &e).expect("cached path").path.moves.clone();
+            // The retract: a rapid straight up from where a cut ended.
+            let lifts: Vec<usize> = (1..moves.len())
+                .filter(|&i| {
+                    let (c, m) = (&moves[i - 1], &moves[i]);
+                    let rapid = |k| k == camcraft_app::cl::MoveKind::Rapid;
+                    rapid(m.kind) && !rapid(c.kind) && c.to == m.from && m.from.x == m.to.x && m.from.y == m.to.y && m.to.z > 125.0
+                })
+                .collect();
+            assert!(!lifts.is_empty(), "{kind:?} rotated {rotated}: the line ends in a retract through the slab");
+            assert_eq!(gouges(&warns), 0, "{kind:?} rotated {rotated}: the mark itself is legal: {warns:?}");
+            for at in lifts {
+                assert!(
+                    warns.contains(&Warning::RapidInStock { at }),
+                    "{kind:?} rotated {rotated}: the retract (move {at}) into the overhang is not convicted: {warns:?}"
+                );
+            }
+            assert!(post(&world, &format!("roof-{kind:?}-{rotated}")).is_err(), "{kind:?} rotated {rotated}: a retract into the part posted");
+            // The same cut and clearance with no slab: clean, and posts.
+            let (world, mut h) = job(8.0, rotated);
+            let (warns, _, _) = generated(&world, &mut h, TOOL, cut_under(kind, 8.0, 7.7, 150.0));
+            let blocking: Vec<_> = warns.iter().filter(|w| w.blocks_post()).collect();
+            assert!(blocking.is_empty(), "{kind:?} rotated {rotated}: a plain retract is clean: {blocking:?}");
+            post(&world, &format!("plain-{kind:?}-{rotated}")).unwrap_or_else(|e| panic!("{kind:?} rotated {rotated}: a plain retract posts: {e}"));
         }
     }
 }

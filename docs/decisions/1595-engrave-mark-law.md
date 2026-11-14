@@ -248,16 +248,44 @@ leaves a cutting move's edge to the mark law): `ShankHit` on the part,
 `RapidInStock`. From the lowered-part reading only the edge's `Gouge`
 is kept.
 
-**One excuse, stated and pinned:** a straight rapid UP along the tool
-axis that starts exactly where the cutting move before it ended is
-not judged. It lifts the tool out of the kerf that move just cut (the
-mesh does not show the kerf), every Engrave and Trace ends each chain
-that way, and the stack was judged at that position on the cutting
-move. This is the column law's own exemption for a vertical retract
-(`verify`, `RapidInStock`). A rapid sideways out of the kerf, a rapid
-down into the part, and a lift from anywhere no cut left the tool are
-all convicted (`only_the_retract_up_the_marks_own_kerf_is_a_rapid_
-under_the_surface`).
+**One excuse, stated and pinned:** on a straight rapid UP along the
+tool axis that starts exactly where the cutting move before it ended,
+the cutting edge is excused in the pose it already stands in - and
+nothing else is. That pose is the kerf the cutting move just made (the
+mesh does not show the kerf), judged on that move by the mark law, and
+every Engrave and Trace ends each chain that way. A rapid sideways out
+of the kerf, a rapid down into the part, and a lift from anywhere no
+cut left the tool are all convicted (`only_the_retract_up_the_marks_
+own_kerf_is_a_rapid_under_the_surface`).
+
+**The lift itself is judged** (second review of PR #1615; the first
+form skipped the whole move, on the reading "the stack was judged
+there on the cutting move" - true of the start pose only, and a lift
+carries the assembly up through space no cutting move swept). On the
+excused lift two things are swept against the part as it stands:
+
+- the shank and the holder, over the whole lift;
+- the column the edge rises through above its own top: a cylinder of
+  the edge's largest radius from the edge's top at the start to its
+  top at the end. The edge's profile never narrows upward, so that
+  column is exactly what the edge enters beyond its start pose. It
+  matters where no band speaks for it: a cutter with no shank or
+  holder entered, or a shank thinner than the cutter.
+
+Either one in the part is a `RapidInStock` on the lift, and the post
+refuses: a part overhang above the end of a line, which the holder
+reaches only on the way up, is no longer silent. Considered and
+dropped: judging the body only (the review's minimum - leaves the edge
+free to rise into a lip beside a thinner shank); dropping the excuse
+and judging the whole assembly (convicts every legal mark, whose kerf
+the mesh does not show). Pinned by `crates/sim/tests/mark_retract.rs`,
+`the_retract_out_of_the_kerf_is_judged_past_where_the_cut_left_the_
+tool` (mark law) and `a_retract_into_an_overhang_of_the_part_is_
+convicted_on_the_lift_and_never_posts` (generate and post, both
+stocks). Not reachable today through the generator as "posted clean":
+Engrave and Trace close every traversal, so the lift stands over the
+plunge and the approach rapid down the same column already convicted
+such an overhang; the law does not lean on that.
 
 **Stricter than before, on purpose:** a rapid that dips into the part
 within the budget (a re-entry rapid into an earlier pass's kerf) was
