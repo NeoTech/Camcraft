@@ -26,7 +26,11 @@
 //!   Face take the same solid law; Engrave and Trace take their own
 //!   mark law (`mark_law`) against the parts instead, so a mark on the
 //!   part's surface reads the same whether the line came off the part
-//!   or off the stock.
+//!   or off the stock. #1631 added the hole kinds (Drill without
+//!   cross holes, Bore, Thread), which take their own containment law
+//!   against the parts - the round wall of a hole the part models where
+//!   the op declares one is excused, nothing else - and the 2D Chamfer,
+//!   which takes the solid law: a stock edge is not a part edge.
 //!
 //! - **Part source, neighbouring parts** (#1621): a part-source
 //!   operation's own law reads its source's mesh only, so a cut on part
@@ -55,15 +59,17 @@ pub fn is_keep_kind(params: &OpParams) -> bool {
 }
 
 /// Whether `params` answers for the parts standing in its stock when
-/// its source is the stock (#1603, #1607): every 2D kind that carries a
-/// part law on a part source - the pocket family (`Keep`), Slot,
-/// Trochoidal slot and Circular (`authored_law`), Contour and Face
-/// (`Section`), Engrave and Trace (`Mark`). The 2D Chamfer (a derived
-/// depth the sim credits as a break) and the hole kinds are not here.
+/// its source is the stock (#1603, #1607, #1631): every 2D kind that
+/// carries a part law on a part source - the pocket family (`Keep`),
+/// Slot, Trochoidal slot and Circular (`authored_law`), Contour and Face
+/// (`Section`), Engrave and Trace (`Mark`), the hole kinds (`Contain`,
+/// [`is_hole_kind`]) - and the 2D Chamfer (#1631: on a part source its
+/// break is the part's own edge; off the stock, the solid law).
 #[must_use]
 pub fn is_stock_kept_kind(params: &OpParams) -> bool {
     is_keep_kind(params)
         || super::mark_law::is_mark_kind(params)
+        || is_hole_kind(params)
         || matches!(
             params,
             OpParams::Slot { .. }
@@ -71,7 +77,25 @@ pub fn is_stock_kept_kind(params: &OpParams) -> bool {
                 | OpParams::Circular { .. }
                 | OpParams::Contour { .. }
                 | OpParams::Face { .. }
+                | OpParams::Chamfer2D { .. }
         )
+}
+
+/// Whether `params` is a hole kind that answers to the containment law
+/// (`DepthLaw::Contain`) on a part source: a Drill with no cross holes
+/// (a cross chain answers to `cross_part` against its source), a Bore,
+/// a Thread. Off the stock (#1631) the same law reads the setup's
+/// parts: the drill, bar or mill may enter a part only through a hole
+/// the part models there - its declared hole's round wall excused, to
+/// its diameter and no deeper than its floor - and anywhere else it is
+/// a gouge.
+#[must_use]
+pub fn is_hole_kind(params: &OpParams) -> bool {
+    match params {
+        OpParams::Drill { cross, .. } => cross.is_empty(),
+        OpParams::Bore { .. } | OpParams::Thread { .. } => true,
+        _ => false,
+    }
 }
 
 /// The parts an operation whose source is NOT the part (the stock, or

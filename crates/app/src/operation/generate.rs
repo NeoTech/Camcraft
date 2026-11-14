@@ -2871,6 +2871,9 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
     };
     // #1607: an Engrave or Trace off the stock marks the setup's parts.
     let parts_marked = super::mark_law::is_mark_kind(&params) && !keep_parts.is_empty();
+    // #1631: a Drill, Bore or Thread off the stock enters the setup's
+    // parts only through the holes they model (the containment law).
+    let parts_holed = super::keep_law::is_hole_kind(&params) && !keep_parts.is_empty();
     // #1595: what a mark may take off the part's surface under the cutter.
     let mark_budget = hl.top.zip(hl.bottom).map_or(0.0, |(t, b)| super::mark_law::budget(t, b, tool.diameter * 0.5));
     // #1057: the containment kinds' declared rims, read untightened.
@@ -3141,9 +3144,14 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             }
             // #1603: the pocket family keeps the part - its own mesh
             // for a whole-model source, the setup's parts for a stock one
-            // (#1607: every stock-kept kind but the marks).
-            if let Some(kept) = (depth_law == DepthLaw::Keep).then_some(&material.facets).or((!keep_parts.is_empty() && !parts_marked).then_some(&keep_parts)) {
+            // (#1607: every stock-kept kind but the marks and the holes).
+            if let Some(kept) = (depth_law == DepthLaw::Keep).then_some(&material.facets).or((!keep_parts.is_empty() && !parts_marked && !parts_holed).then_some(&keep_parts)) {
                 contain_into(&mut warns, &path, kept, &cutter, DepthLaw::Keep, stl, material.excess, &params, &[]);
+            }
+            // #1631: a hole kind off the stock - the setup's parts by the
+            // containment law, its declared holes' modelled walls excused.
+            if parts_holed {
+                contain_into(&mut warns, &path, &keep_parts, &cutter, DepthLaw::Contain, stl, material.excess, &params, &thread_bores);
             }
             // #1595: an Engrave or Trace on the part may lower its
             // surface by the mark budget and no more (`mark_law`);
@@ -3171,6 +3179,15 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 let mut w = verify::verify_bodies(&path, &VerifyContext { tool: &g, cutter: Some(c), ..ctx.clone() }, &material.bodies);
                 if depth_law == DepthLaw::Contain {
                     contain_into(&mut w, &path, &material.facets, &c, depth_law, stl, material.excess, &params, &[]);
+                }
+                // #1631: the core re-reads every part law the full tap
+                // answered to - the parts off the stock, and #1621's
+                // neighbours - or their gouges would be acquitted unread.
+                if parts_holed {
+                    contain_into(&mut w, &path, &keep_parts, &c, DepthLaw::Contain, stl, material.excess, &params, &[]);
+                }
+                if !neighbour_parts.is_empty() {
+                    contain_into(&mut w, &path, &neighbour_parts, &c, DepthLaw::Keep, stl, material.excess, &params, &[]);
                 }
                 w
             });
@@ -3297,8 +3314,12 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             }
             // #1603: the keep law in the plane's frame.
             let keep_local = (!keep_parts.is_empty()).then(|| f.local_facets(&keep_parts));
-            if let Some(kept) = (depth_law == DepthLaw::Keep).then_some(&m_gen.facets).or(keep_local.as_ref().filter(|_| !parts_marked)) {
+            if let Some(kept) = (depth_law == DepthLaw::Keep).then_some(&m_gen.facets).or(keep_local.as_ref().filter(|_| !parts_marked && !parts_holed)) {
                 contain_into(&mut warns, &path, kept, &cutter, DepthLaw::Keep, stl, material.excess, &params, &[]);
+            }
+            // #1631: a hole kind off the stock, in the plane's frame.
+            if let Some(kept) = keep_local.as_ref().filter(|_| parts_holed) {
+                contain_into(&mut warns, &path, kept, &cutter, DepthLaw::Contain, stl, material.excess, &params, &thread_bores);
             }
             // #1595: the mark law in the plane's frame - local path,
             // local part, the budget measured along the tool (#1607:
@@ -3443,8 +3464,11 @@ pub(super) enum DepthLaw {
 ///   is the operation's own wherever the program sim cannot judge.
 /// - 2D Chamfer enters the part by design (the broken edge) with a
 ///   depth derived from its width and angle; its mode stands the gouge
-///   law down for exactly that reason.
-/// - Drill (Z holes), Bore, Thread: `Contain`.
+///   law down for exactly that reason. Off the stock it breaks the
+///   stock's edge, not the part's: the setup's parts take the solid
+///   law there (#1631, `keep_law::parts_in_stock`).
+/// - Drill (Z holes), Bore, Thread: `Contain` - and off the stock the
+///   same law against the setup's parts (#1631).
 pub(super) fn depth_law_of(params: &OpParams, src: &SrcRef, part_solid: bool) -> DepthLaw {
     if !part_solid {
         return DepthLaw::None;
