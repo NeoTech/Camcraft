@@ -1616,6 +1616,64 @@ fn mmb_orbits_and_rmb_pans() {
     assert!(st.pending.is_empty(), "camera gestures are not commands");
 }
 
+/// A latched nav tool owns the drag whatever the button: LMB pans in
+/// pan, zooms in zoom, and the release's pick law sees no press to
+/// resolve - a click with a tool latched is no click at all.
+#[test]
+fn nav_tools_own_the_drag_and_swallow_clicks() {
+    let mut harness = shell_harness();
+    let c = vp_center(harness.state());
+    // Zoom tool: a left drag dollies the camera, never a pick.
+    harness.state_mut().state.nav_tool = Some(DragMode::Zoom);
+    set_pos(&mut harness, c);
+    let d0 = harness.state().state.cam.dist;
+    button_at(&mut harness, egui::PointerButton::Primary, c, true);
+    let moved = c + egui::vec2(0.0, 60.0);
+    set_pos(&mut harness, moved);
+    {
+        let st = harness.state();
+        assert_eq!(st.state.drag, Some(DragMode::Zoom), "the zoom tool owns the drag");
+        assert_ne!(st.state.cam.dist, d0, "the zoom tool drags the distance");
+    }
+    button_at(&mut harness, egui::PointerButton::Primary, moved, false);
+    assert_eq!(harness.state().state.drag, None, "release ends any tool's drag");
+    // Pan tool: a left drag moves the target, never a pick.
+    harness.state_mut().state.nav_tool = Some(DragMode::Pan);
+    set_pos(&mut harness, c);
+    let t0 = harness.state().state.cam.target;
+    button_at(&mut harness, egui::PointerButton::Primary, c, true);
+    let moved = c + egui::vec2(40.0, 0.0);
+    set_pos(&mut harness, moved);
+    {
+        let st = harness.state();
+        assert_eq!(st.state.drag, Some(DragMode::Pan), "the pan tool owns the drag");
+        assert_ne!(st.state.cam.target, t0, "the pan tool drags the target");
+    }
+    button_at(&mut harness, egui::PointerButton::Primary, moved, false);
+    assert_eq!(harness.state().state.drag, None);
+    // A click with a tool latched does nothing at all.
+    harness.state_mut().state.nav_tool = Some(DragMode::Orbit);
+    set_pos(&mut harness, c);
+    button_at(&mut harness, egui::PointerButton::Primary, c, true);
+    button_at(&mut harness, egui::PointerButton::Primary, c, false);
+    assert!(
+        harness.state().state.pending.is_empty(),
+        "a click with a tool latched queues nothing: {:?}",
+        harness.state().state.pending,
+    );
+    // Unlatch: the stock gesture law is back (RMB pans, MMB orbits).
+    harness.state_mut().state.nav_tool = None;
+    set_pos(&mut harness, c);
+    let target0 = harness.state().state.cam.target;
+    button_at(&mut harness, egui::PointerButton::Secondary, c, true);
+    let m2 = c + egui::vec2(30.0, 0.0);
+    set_pos(&mut harness, m2);
+    assert_eq!(harness.state().state.drag, Some(DragMode::Pan), "unlatched: RMB pans again");
+    assert_ne!(harness.state().state.cam.target, target0);
+    button_at(&mut harness, egui::PointerButton::Secondary, m2, false);
+    assert_eq!(harness.state().state.drag, None);
+}
+
 /// Wheel = dolly, one notch of the Line unit to one step of
 /// `dolly_cursor`, positive toward the cursor - the same units the imgui
 /// shell's raw `mouse_wheel` feeds. Pure camera state: nothing queued.
