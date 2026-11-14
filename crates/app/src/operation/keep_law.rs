@@ -14,6 +14,8 @@
 //!   outside the part. An area offset or extension moves the boundary
 //!   INTO those islands, and nothing on the operation judged that. The
 //!   solid law, nothing excused, now runs against the source's own mesh.
+//!   Only where #12's reading applies (`GenJob::around_part`): with no
+//!   stock set up the model is the volume to remove, and nothing is kept.
 //! - **Stock source** (or a pick off the setup's stock): the source is
 //!   the material to remove, but the parts standing inside it are not
 //!   (#1554). The same solid law runs against the setup's parts

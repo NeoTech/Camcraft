@@ -111,6 +111,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         fixture_meshes,
         rotary_axis,
         part_solid,
+        around_part,
         keep_parts,
         area,
         wcs_origin,
@@ -2857,7 +2858,12 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
     // at every level of the ladder must also answer to the part solid
     // at each level it cuts - a blind bore's ring below its floor is in
     // steel the flat region never shows.
-    let depth_law = depth_law_of(&params, &src, part_solid);
+    let depth_law = match depth_law_of(&params, &src, part_solid) {
+        // #1603: with no stock set up a whole-model pocket source is the
+        // volume to remove (#12's reading does not apply): nothing to keep.
+        DepthLaw::Keep if !around_part => DepthLaw::None,
+        law => law,
+    };
     // #1595: what a mark may take off the part's surface under the cutter.
     let mark_budget = hl.top.zip(hl.bottom).map_or(0.0, |(t, b)| super::mark_law::budget(t, b, tool.diameter * 0.5));
     // #1057: the containment kinds' declared rims, read untightened.
@@ -3397,7 +3403,9 @@ pub(super) enum DepthLaw {
 ///   model source there is cleared AROUND (#12: the part's sections are
 ///   islands), and the part itself is kept: `Keep` (#1603), the solid
 ///   law alone - an area offset or extension that carries the boundary
-///   into the part gouges it. (On a stock source the same law reads the
+///   into the part gouges it. With no stock set up the model stays the
+///   volume to remove, and `run_job` stands the law down (`around_part`).
+///   (On a stock source the same law reads the
 ///   setup's parts, `keep_law::parts_in_stock`; that is not a
 ///   `part_solid` job and does not come through here.)
 /// - Circular, Slot and Trochoidal slot cut geometry typed by hand into

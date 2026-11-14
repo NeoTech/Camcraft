@@ -162,6 +162,22 @@ Measured on the #12 fixture (30 x 30 x 10 block, 12 x 12 boss to Z20,
 | whole model, default controls (Pocket, Adaptive, Offset) | 0 | posts | 0 | posts / posts |
 | stock source stopping on the part's top | 0 | posts | 0 | posts / posts |
 
+**Only where the part is kept.** With no stock set up, a whole-model
+pocket source is still the volume to remove (#12's reading needs a
+stock to clear around), so `Keep` stands down there
+(`GenJob::around_part`); the tilt suite's parked pocket is that case.
+
+**Tests that changed, and why:** three existing fixtures ran a
+stock-source pocket straight through a part and asserted a silent
+verify. Each was a real cut into the part:
+- `post_not_judged.rs` and `machine_switch.rs` (the tilted pocket): the
+  part filled the whole stock. The part is now the 10 mm the pocket
+  leaves, so the cut stops on it.
+- `lead_approach.rs` (the user's reported stock-source pocket on
+  `Milling-test.step`): it clears the part's own section, which is
+  #1554. The two tests now assert that gouge and read the entry laws on
+  the remaining warnings.
+
 **Why the solid law and not `Section`:** `Section` adds the plane law,
 which reads tangency against the operation's region. For a whole model
 the region is the stock around the part, not the part, so that reading
@@ -190,7 +206,7 @@ pinning unit test moved with it: the table is now
   (`a_trochoid_on_the_stock_is_never_judged`), and Engrave / Trace
   would need the mark credited against a part they do not name. Probed:
   a stock-source Engrave or Trace 7 mm into the part has 0 op findings
-  and posts on a turned stock. Filed as its own issue rather than
+  and posts on a turned stock. Filed as #1607 rather than
   widened here.
 
 **Known cost (conservative side):** the same as #1593's: a ring finished

@@ -105,6 +105,10 @@ pub struct GenJob {
     /// aware verify judges the 2D kinds against its solid only then -
     /// cutting into stock is the job, cutting into the part never is.
     pub(super) part_solid: bool,
+    /// #1603: a whole-model pocket-family job read as "clear the stock
+    /// around the part" (#12, `area::whole_model_pocket`). False with no
+    /// stock set up, where the model stays the volume to remove.
+    pub(super) around_part: bool,
     /// #1603: the setup's parts a pocket-family op on the stock must
     /// keep (`keep_law::parts_in_stock`); empty for every other job.
     pub(super) keep_parts: Vec<Triangle>,
@@ -238,6 +242,8 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         // it, never the part's own section (issue #12).
         (params, src) => whole_model_pocket(world, setup, src, params, frame.as_ref()),
     };
+    // #1603: the keep law speaks exactly where that reading does.
+    let around_part = super::keep_law::is_keep_kind(&op.params) && matches!(op.src, SrcRef::Entity(_)) && picked_region.is_some();
     let wire_ruled = super::wire_ruled::picks_of(world, op);
     let contour_sel = match (&op.params, &op.src) {
         // The plasma cut reads its picks the contour's way (#670):
@@ -401,6 +407,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         fixture_meshes,
         rotary_axis,
         part_solid,
+        around_part,
         keep_parts: super::keep_law::parts_in_stock(world, setup, &op.params, part_solid),
         area,
         wcs_origin,
