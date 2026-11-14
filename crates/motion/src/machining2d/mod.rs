@@ -78,6 +78,7 @@ mod chord_clear;
 mod ring;
 mod slots;
 mod slot_room;
+mod unreached;
 mod waterscan;
 
 #[cfg(test)]
@@ -118,6 +119,7 @@ pub use rest2d::{rest_plan, rest_pocket, RestParams, RestPlan, REST_FILM, REST_M
 pub use ring::{on_boundary, ring_is_circular};
 pub use slots::{chord_clears, slot, trace, SlotParams, TraceParams};
 pub use slot_room::{SlotBound, SlotFit, FIT_TOL as SLOT_FIT_TOL};
+pub use unreached::{unreached_note, unreached_pieces};
 pub use adaptive_method::AdaptiveMethod;
 pub use adaptive_troch::adaptive_trochoidal;
 pub use trochoid_air::lifted_cut;
