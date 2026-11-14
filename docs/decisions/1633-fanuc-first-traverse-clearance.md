@@ -38,6 +38,45 @@ The rapids are written after the record's own `tilt()`:
 - Haas, Mazak, 840D and the TNC refuse tilted records (`tiltOk`), so the
   rapids are always in the upright frame.
 
+**After the refusal, the move is not written (review of PR #1636).**
+`xyFirst` returns false when it refuses, and every caller (`onRapid`,
+`onLinear`, `onCircular`, `onCycle`, `onProbeMove`, `onProbeGuard`; the
+TNC's four) then returns without writing its move. X/Y stay unknown, so
+every later motion of that section is refused the same way (the warning is
+counted once): the rest of the section is refused cleanly rather than
+skipping one move and posting the next ones from a position the program
+never reached. No combined `G00 X.. Y.. Z..` from an unknown height is in
+the program text. Chosen over "skip only the first move" because the later
+blocks would then start from a position no block put the tool at (a cycle
+read unseated, a feed from nowhere). Blocking the post end to end on any
+warning stays the callers' job: the app paths refuse to write on a warning
+(`crates/app/src/posting.rs:588`, `posting_mounts.rs:248`,
+`posting_per_op.rs:168`); the `post` CLI (`crates/post/src/bin/post.rs:163`)
+writes the program and prints the warnings, as its recorded `.refusal`
+cases document - which is why the post itself now leaves the move out.
+
+**Taken on trust (not exercised on any control).**
+- **The clearance plane over the tool-change X/Y.** The Z-only rapid is
+  made at whatever X/Y the tool change left the spindle at, before the
+  X/Y traverse. It trusts the stated clearance plane (else the retract
+  plane) to clear everything under that X/Y - vise, fixture, tool rack,
+  rotary table. The post cannot know what is there. Against main's one
+  combined diagonal, this is safer when the tip stood below the part top
+  (the #1614 case: the descent is shorter and vertical, the traverse is
+  above the part), and it is not safer when something under the
+  tool-change X/Y is taller than the stated clearance: the vertical
+  descent meets it.
+- **G43.4 with an unknown rotary pose (fanuc, doosan-dnm).** The Z and
+  X/Y lines are written after the arm, with the rotaries still at the
+  pose the previous section left (or wherever they stood at the program's
+  start). Under TCP the Z word should be the tip's Z in the work frame;
+  no control has run it, and the tool body at that pose is not judged by
+  the inserted lines.
+- **Doosan's index path.** Z is commanded in G43 (machine-Z length
+  compensation) with the table clamped at its previous index; whether the
+  stated clearance clears the part at that index is the clearance plane's
+  promise, not checked by the post.
+
 **Why.** The lift before the change is not proof of clearance: a long tool
 on a high work offset can stand below the part top after `G43 H..` (the
 #1614 PathPilot Hub reading). A combined `G00 X20 Y10 Z-3` from there is a

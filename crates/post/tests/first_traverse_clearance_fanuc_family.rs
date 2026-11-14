@@ -160,9 +160,18 @@ fn a_first_traverse_with_no_stated_plane_is_refused_by_name() {
             .filter(|w| w.contains("first X/Y traverse") && w.contains("no clearance height stated"))
             .collect();
         assert_eq!(named.len(), 1, "{stem}: refused by name, once: {:?}\n{}", out.warnings, out.program);
+        // #1633 review: the refused move is not written either - no
+        // combined `G00 X20 Y10 Z2` (nor any X/Y motion of the refused
+        // sections) reaches the text, whatever the caller does with the
+        // warning.
+        let xy_motions: Vec<String> = lines(&out.program)
+            .into_iter()
+            .filter(|l| is_motion(l) && l.split_whitespace().any(|w| w.starts_with('X') || w.starts_with('Y')))
+            .collect();
+        assert!(xy_motions.is_empty(), "{stem}: no X/Y motion at an unknown height: {xy_motions:?}\n{}", out.program);
         assert!(
-            !lines(&out.program).iter().any(|l| l == "G00 X20 Y10"),
-            "{stem}: no X/Y traverse at an unknown height\n{}",
+            !lines(&out.program).iter().any(|l| l.contains("X20 Y10")),
+            "{stem}: neither the bare traverse nor the combined rapid\n{}",
             out.program
         );
     }

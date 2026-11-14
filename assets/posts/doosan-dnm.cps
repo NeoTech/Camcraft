@@ -780,21 +780,25 @@ function traverseZ(z) {
 // record itself then goes to; or, with `descend`, where the stream says a
 // feed, an arc or a probing move starts - rapided down to when it lies
 // below the clearance, so the move runs only the stretch planned.
+// False when refused: the caller then writes nothing for its move - nor
+// for any later one while X/Y stay unknown (the rest of the section) -
+// so no combined X/Y/Z rapid from an unknown height reaches the text.
 function xyFirst(x, y, z, descend) {
-  if (!xyUnknown || !has(x) || !has(y)) return;
+  if (!xyUnknown || !has(x) || !has(y)) return true;
   var tz = traverseZ(z);
   if (tz === null) {
     if (!traverseRefused) {
       traverseRefused = true;
       msg(coolantWho() + "first X/Y traverse with no clearance height stated (no ClearancePlane or RetractPlane) - the post will not rapid X/Y at an unknown height");
     }
-    return;
+    return false;
   }
   block(["G00", wo("Z", tz, orgZ)]);
   // A rapid already at the clearance is the traverse itself.
   if (descend || !has(z) || Math.abs(Number(z) - tz) > 1e-9) block(["G00", wo("X", x, orgX), wo("Y", y, orgY)]);
   if (descend && has(z) && Number(z) < tz - 1e-9) block(["G00", wo("Z", z, orgZ)]);
   xyUnknown = false;
+  return true;
 }
 function onRapid() {
   startPreamble();
@@ -802,7 +806,7 @@ function onRapid() {
   var aChanged = has(properties.A) && (!has(lastA) || properties.A !== lastA);
   var tw = tilt(properties);
   if (tw === null || chainRapid()) return;
-  xyFirst(properties.X, properties.Y, properties.Z, false);  // #1633
+  if (!xyFirst(properties.X, properties.Y, properties.Z, false)) return;  // #1633: refused - the move is not written
   if (aChanged) {
     ensureRotaryUnclamped();
   }
@@ -854,7 +858,7 @@ function onLinear() {
   if (spindleStopped("feed move G01")) return;
   var fwd = feedWord(properties, false);
   if (fwd === null) return;
-  xyFirst(properties.StartX, properties.StartY, properties.StartZ, true);  // #1633
+  if (!xyFirst(properties.StartX, properties.StartY, properties.StartZ, true)) return;  // #1633: refused - the move is not written
   if (aChanged) {
     ensureRotaryUnclamped();
     lastA = properties.A;
@@ -875,7 +879,7 @@ function onCircular() {
   var p = properties;
   var fwd = feedWord(p, true);
   if (fwd === null) return;
-  xyFirst(properties.StartX, properties.StartY, properties.StartZ, true);  // #1633
+  if (!xyFirst(properties.StartX, properties.StartY, properties.StartZ, true)) return;  // #1633: refused - the move is not written
   if (aChanged) {
     ensureRotaryUnclamped();
     lastA = properties.A;
@@ -962,7 +966,7 @@ function onCycle() {
     return;
   }
   if (spindleStopped("canned cycle " + g)) return;
-  xyFirst(p.X, p.Y, p.R, false);  // #1633: over the hole at the clearance first
+  if (!xyFirst(p.X, p.Y, p.R, false)) return;  // #1633: refused - the move is not written
   cycleSeat(p);
   var sig = g + "|" + p.Z + "|" + p.R + "|" + p.Q;
   if (inCycle && sig === cycleSig) {
@@ -1028,7 +1032,7 @@ function onProbeMove() {
   probeSeat();               // #1028
   disableSmoothing();
   compRefuse("a probing move");
-  xyFirst(properties.StartX, properties.StartY, properties.StartZ, true);  // #1633
+  if (!xyFirst(properties.StartX, properties.StartY, properties.StartZ, true)) return;  // #1633: refused - the move is not written
   var p = properties;
   if (isInspectionPlus()) {
     ensureProbeOn();
@@ -1063,7 +1067,7 @@ function onProbeGuard() {
   probeSeat();               // #1028
   disableSmoothing();
   compRefuse("a protected probe move");
-  xyFirst(properties.StartX, properties.StartY, properties.StartZ, true);  // #1633
+  if (!xyFirst(properties.StartX, properties.StartY, properties.StartZ, true)) return;  // #1633: refused - the move is not written
   var p = properties;
   if (isInspectionPlus()) {
     ensureProbeOn();

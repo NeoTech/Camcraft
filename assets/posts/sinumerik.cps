@@ -570,34 +570,38 @@ function traverseZ(z) {
 // record itself then goes to; or, with `descend`, where the stream says a
 // feed, an arc or a probing move starts - rapided down to when it lies
 // below the clearance, so the move runs only the stretch planned.
+// False when refused: the caller then writes nothing for its move - nor
+// for any later one while X/Y stay unknown (the rest of the section) -
+// so no combined X/Y/Z rapid from an unknown height reaches the text.
 function xyFirst(x, y, z, descend) {
-  if (!xyUnknown || !has(x) || !has(y)) return;
+  if (!xyUnknown || !has(x) || !has(y)) return true;
   var tz = traverseZ(z);
   if (tz === null) {
     if (!traverseRefused) {
       traverseRefused = true;
       msg(coolantWho() + "first X/Y traverse with no clearance height stated (no ClearancePlane or RetractPlane) - the post will not rapid X/Y at an unknown height");
     }
-    return;
+    return false;
   }
   block(["G0", wo("Z", tz, orgZ)]);
   // A rapid already at the clearance is the traverse itself.
   if (descend || !has(z) || Math.abs(Number(z) - tz) > 1e-9) block(["G0", wo("X", x, orgX), wo("Y", y, orgY)]);
   if (descend && has(z) && Number(z) < tz - 1e-9) block(["G0", wo("Z", z, orgZ)]);
   xyUnknown = false;
+  return true;
 }
 function onRapid() {
   startPreamble();
   compRefuse("a rapid");
   if (!tiltOk(properties) || chainRapid()) return;
-  xyFirst(properties.X, properties.Y, properties.Z, false);  // #1633
+  if (!xyFirst(properties.X, properties.Y, properties.Z, false)) return;  // #1633: refused - the move is not written
   block(["G0"].concat(xyz(properties)));
 }
 function onLinear() {
   startPreamble();
   if (!tiltOk(properties) || chainCut()) return;
   if (spindleStopped("feed move G1")) return;
-  xyFirst(properties.StartX, properties.StartY, properties.StartZ, true);  // #1633
+  if (!xyFirst(properties.StartX, properties.StartY, properties.StartZ, true)) return;  // #1633: refused - the move is not written
   // The pending comp word rides this straight block (#39).
   var cg = compG, cd = compD;
   compG = ""; compD = "";
@@ -610,7 +614,7 @@ function onCircular() {
   if (spindleStopped("arc move " + (properties.CircularDirection === "CW" ? "G2" : "G3"))) return;
   var p = properties;
   if (compPlaneRefuse(planeOf(p))) return;
-  xyFirst(properties.StartX, properties.StartY, properties.StartZ, true);  // #1633
+  if (!xyFirst(properties.StartX, properties.StartY, properties.StartZ, true)) return;  // #1633: refused - the move is not written
   block([
     planeWord(planeOf(p)),
     p.CircularDirection === "CW" ? "G2" : "G3",
@@ -691,7 +695,7 @@ function onCycle() {
     return;
   }
   if (spindleStopped("canned cycle " + g)) return;
-  xyFirst(p.X, p.Y, p.R, false);  // #1633: over the hole at the clearance first
+  if (!xyFirst(p.X, p.Y, p.R, false)) return;  // #1633: refused - the move is not written
   cycleSeat(p);
   var words = [g, wo("X", p.X, orgX), wo("Y", p.Y, orgY), wo("Z", p.Z, orgZ), wo("R", p.R, orgZ)];
   if ((p.CycleType === "PECK" || p.CycleType === "DEEP") && has(p.Q) && p.Q > 0) {
@@ -739,7 +743,7 @@ function onProbeMove() {
   startPreamble();
   probeSeat();               // #1028
   compRefuse("a probing move");
-  xyFirst(properties.StartX, properties.StartY, properties.StartZ, true);  // #1633
+  if (!xyFirst(properties.StartX, properties.StartY, properties.StartZ, true)) return;  // #1633: refused - the move is not written
   var p = properties;
   block(["MEAS=1", "G1", wo("X", p.X, orgX), wo("Y", p.Y, orgY), wo("Z", p.Z, orgZ), fw(p.Feed)]);
   stopAlarm("$AC_MEA[1]==0", 65000, "PROBE NO CONTACT");
@@ -771,7 +775,7 @@ function onProbeGuard() {
   startPreamble();
   probeSeat();               // #1028
   compRefuse("a protected probe move");
-  xyFirst(properties.StartX, properties.StartY, properties.StartZ, true);  // #1633
+  if (!xyFirst(properties.StartX, properties.StartY, properties.StartZ, true)) return;  // #1633: refused - the move is not written
   var p = properties;
   block(["MEAS=1", "G1", wo("X", p.X, orgX), wo("Y", p.Y, orgY), wo("Z", p.Z, orgZ), fw(p.Feed)]);
   stopAlarm("$AC_MEA[1]==1", 65002, "PROBE HIT ON POSITIONING");
