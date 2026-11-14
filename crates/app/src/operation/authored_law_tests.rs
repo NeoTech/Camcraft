@@ -1,8 +1,9 @@
-//! #1543 / #1550 / #1593: the depth law the kinds that cut geometry
+//! #1543 / #1550 / #1593 / #1595: the depth law the kinds that cut geometry
 //! typed by hand (Circular, Slot, Trochoidal slot) take per source, unit by unit - a finished-part
 //! source, whole model or pick, is judged (`Section`, the one
 //! `authored_law` both kinds call), and a source that is not the part
-//! (the Stock, `part_solid` false) is never judged. Our own fixtures.
+//! (the Stock, `part_solid` false) is never judged - and the mark law
+//! Engrave and Trace take instead (#1595). Our own fixtures.
 
 use super::generate::{authored_law, depth_law_of, DepthLaw};
 use super::{seed_params, FeatureSel, GeoSel, OpType, SrcRef};
@@ -78,20 +79,33 @@ fn the_trochoidal_slot_answers_to_the_same_authored_law() {
 #[test]
 fn the_kinds_that_enter_or_remove_the_part_by_contract_stay_unjudged() {
     // #1593 audit: the 2D kinds still at `None` on a finished-part
-    // source, each by contract (see `depth_law_of`'s doc): Trace,
-    // Engrave and 2D Chamfer enter the part by design, and a whole-model
-    // pocket family source is the volume to remove. Moving one of them
-    // is a decision, not a drift - this table makes it a visible one
-    // (#1595 owes Engrave and Trace a law of their own).
+    // source, each by contract (see `depth_law_of`'s doc): the 2D
+    // Chamfer enters the part by design at a derived depth, and a
+    // whole-model pocket family source is the volume to remove. Moving
+    // one of them is a decision, not a drift - this table makes it a
+    // visible one.
     let whole = SrcRef::Entity("part".into());
-    for t in [OpType::Trace, OpType::Engrave, OpType::Chamfer2D] {
-        let p = seed_params(t.ordinal());
-        assert_eq!(depth_law_of(&p, &whole, true), DepthLaw::None, "{t:?} whole");
-        assert_eq!(depth_law_of(&p, &picked(), true), DepthLaw::None, "{t:?} picked");
-    }
+    let p = seed_params(OpType::Chamfer2D.ordinal());
+    assert_eq!(depth_law_of(&p, &whole, true), DepthLaw::None, "Chamfer2D whole");
+    assert_eq!(depth_law_of(&p, &picked(), true), DepthLaw::None, "Chamfer2D picked");
     for t in [OpType::Pocket, OpType::Adaptive2D, OpType::Offset2D] {
         let p = seed_params(t.ordinal());
         assert_eq!(depth_law_of(&p, &whole, true), DepthLaw::None, "{t:?} whole");
         assert_eq!(depth_law_of(&p, &picked(), true), DepthLaw::Section, "{t:?} picked");
+    }
+}
+
+#[test]
+fn engrave_and_trace_on_the_part_answer_to_the_mark_law() {
+    // #1595: they enter the part by design, so `Section` would convict
+    // every legal engraving - but only as a mark, whole model or pick.
+    // A source that is not the part is never judged.
+    let whole = SrcRef::Entity("part".into());
+    for t in [OpType::Trace, OpType::Engrave] {
+        let p = seed_params(t.ordinal());
+        assert_eq!(depth_law_of(&p, &whole, true), DepthLaw::Mark, "{t:?} whole");
+        assert_eq!(depth_law_of(&p, &picked(), true), DepthLaw::Mark, "{t:?} picked");
+        assert_eq!(depth_law_of(&p, &SrcRef::Stock, false), DepthLaw::None, "{t:?} stock");
+        assert_eq!(depth_law_of(&p, &picked(), false), DepthLaw::None, "{t:?} picked off the stock");
     }
 }

@@ -32,6 +32,9 @@ pub mod carry;
 pub mod held;
 #[path = "stock_sim_breaks.rs"]
 pub mod breaks;
+// #1595: the marks an Engrave or Trace on the part declares.
+#[path = "stock_sim_marks.rs"]
+mod marks;
 // The wire clause (#1110): a wire cut stays out of the plan, by name.
 #[path = "stock_sim_wire.rs"]
 pub mod wire;
@@ -166,6 +169,9 @@ pub fn simulate_document(
     // #303: the op owns its break - a chamfer's or deburr's declared
     // bevel is part of the finished part, judged by its own depth.
     credit_breaks(&mut dev, &display, &model_facets, &program_breaks(world, &planned, walked.spanned, &walked.frame));
+    // #1595: and its mark - an Engrave's or Trace's own sweep, within
+    // the budget the operation's own law holds it to.
+    credit_marks(&mut dev, &display, &model_facets, &marks::program_marks(world, &planned, walked.spanned, &walked.frame));
     // #320: a gouge on a block a later setup set aside for a new one.
     if let Some(left) = &walked.left {
         carry::fold_left(&mut dev, left);
@@ -246,6 +252,9 @@ pub(crate) struct Planned {
     /// The edge breaks the op was asked to cut (#303); empty for every
     /// kind but the chamfer and the deburr.
     pub breaks: Vec<crate::cl::EdgeBreak>,
+    /// The mark budget the op declares (#1595, `operation::mark_law`):
+    /// `Some` only for an Engrave or Trace on the finished part.
+    pub mark: Option<f64>,
     /// A sinker electrode's box atom (#541): `[hx, hy, gap]` - the face's
     /// half sizes and the condition's spark gap. The column verdict cuts
     /// it (`simulate_box`); the field eye has no box atom and refuses the
@@ -385,6 +394,7 @@ pub(crate) fn plan_program(world: &flecs_ecs::prelude::World) -> Result<Vec<Plan
             moves,
             // #529: only what the op itself declared, never wider.
             breaks: breaks::bounded(name, &op.params, cache.path.breaks),
+            mark: crate::operation::mark_law::budget_of(world, &op, tool.diameter * 0.5),
             radius,
             ball: tool.kind == crate::tools::ToolKind::BallNose,
             cone,
