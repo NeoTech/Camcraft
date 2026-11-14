@@ -9,7 +9,7 @@ use crate::geo2d::{Loop, Point2, Region};
 use crate::geometry::{Point3, Triangle};
 use crate::links::{Link, LinkTally};
 
-use super::arcs::{fit_arcs, push_segs};
+use super::arcs::{fit_arcs_sided, push_segs};
 use super::contour_depth::{Ladder, ladder};
 use super::contour_entry::{Engage, crosses, flatten, say, seam_leads, wall_arc, wall_arc_top};
 use super::contour_comp::{self, SpanCtx};
@@ -245,7 +245,7 @@ fn contour_impl(
             if poly.len() < 2 {
                 continue;
             }
-            let mut walk = fit_arcs(&poly, p.tolerance);
+            let mut walk = fit_arcs_sided(&poly, p.tolerance, legal.air_left);
             if p.blend_turns {
                 let (w, t) = fillet_corners(&walk, poly[0], r, p.tolerance, &legal);
                 walk = w;

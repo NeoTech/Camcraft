@@ -5,6 +5,7 @@ use crate::cl::{lattice, MoveKind, PathBuilder};
 use crate::geo2d::Point2;
 use crate::geometry::Point3;
 
+use super::arc_side;
 use super::contour::unit;
 use super::ring::dist;
 // The lead geometry moved to `arc_leads` (#689, the 400-line law); its
@@ -134,6 +135,15 @@ pub(super) fn walk_tangent(segs: &[Seg], poly: &[Point2], front: bool) -> Point2
 /// chaining is exact by construction. Consumers fit at use; nothing
 /// about a [`crate::geometry::Features`] digest ever depends on this.
 pub fn fit_arcs(pts: &[Point2], tol: f64) -> Vec<Seg> {
+    fit_arcs_sided(pts, tol, None)
+}
+
+/// [`fit_arcs`] for a wall walk that knows its part's side (#1579):
+/// `air_left` `Some(true)` when the air (no part) is left of travel, the
+/// contour family's `climb` convention. Every fitted arc then passes each
+/// vertex of its run on the air side only (`arc_side`), so the fit never
+/// cuts past a point the plan verified; `None` is the two-sided fit.
+pub fn fit_arcs_sided(pts: &[Point2], tol: f64, air_left: Option<bool>) -> Vec<Seg> {
     let tol = if tol.is_finite() && tol > 0.0 { tol } else { ARC_FIT_TOL };
     let n = pts.len();
     let mut segs = Vec::new();
@@ -144,7 +154,7 @@ pub fn fit_arcs(pts: &[Point2], tol: f64) -> Vec<Seg> {
         let mut e = s + 2;
         let mut flat = 0;
         while e <= cap {
-            match arc_over(&pts[s..=e], tol) {
+            match arc_over(&pts[s..=e], tol, air_left) {
                 Over::Fit(center, ccw, total) => {
                     best = Some((e, center, ccw, total));
                     e += 1;
@@ -211,7 +221,7 @@ pub(super) enum Over {
 /// [`fit_arcs`]). `Straight` is the honest answer when no vertex leaves
 /// the end chord by more than `tol`: there is nothing there an arc
 /// could describe better than the chords already do.
-pub(super) fn arc_over(run: &[Point2], tol: f64) -> Over {
+pub(super) fn arc_over(run: &[Point2], tol: f64, air_left: Option<bool>) -> Over {
     let (a, b) = (run[0], run[run.len() - 1]);
     let dev = |p: Point2| chord_dev(p, a, b);
     // Farthest interior vertex from the end chord anchors the circle.
@@ -275,6 +285,24 @@ pub(super) fn arc_over(run: &[Point2], tol: f64) -> Over {
             (c, r, signed_area2(run) > 0.0)
         }
         (false, None) => return Over::Fail,
+    };
+    // #1579: a walk that knows its part's side keeps every vertex on the
+    // air side of its arc. The centre is left of travel on a ccw arc, so
+    // the part is on the centre's side exactly when the air is not.
+    let (c, r) = match air_left {
+        None => (c, r),
+        Some(air_left) => {
+            let part_in = air_left != ccw;
+            let held = if closing {
+                arc_side::air_side_holds(run, c, r, part_in, 1e-9).then_some((c, r))
+            } else {
+                arc_side::one_sided(run, a, b, c, part_in)
+            };
+            match held {
+                Some(cr) => cr,
+                None => return Over::Fail,
+            }
+        }
     };
     if !r.is_finite() || r <= tol {
         return Over::Fail;
