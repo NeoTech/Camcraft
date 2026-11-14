@@ -299,6 +299,12 @@ impl Script {
         self.present.iter().any(|(h, yes)| *h == name && *yes)
     }
 
+    /// Evaluate a manifest read (#931, `work_offset`) in the script's
+    /// context.
+    pub(super) fn eval_src(&mut self, src: &str) -> Result<JsValue, PostError> {
+        self.eval(src)
+    }
+
     fn eval(&mut self, src: &str) -> Result<JsValue, PostError> {
         self.ctx
             .eval(Source::from_bytes(src.as_bytes()))

@@ -171,6 +171,8 @@ mod cross_part;
 mod cross_spindle;
 mod cross_stock;
 mod drill_reach;
+mod bore_reach;
+pub use bore_reach::DetectedHoles;
 mod drill_prior;
 mod carried_stock;
 pub use carried_stock::{CARRIED_OUTSIDE_DECLARED, CARRIED_OUTSIDE_NOTED, carried_problems};

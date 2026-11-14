@@ -380,11 +380,12 @@ fn viewport_panel(
                 fly = Some([q.x, q.y, q.z]);
             }
             // M7.2 D: what the program leaves, out as a mesh.
-            if ui
-                .button("Export STL")
-                .on_hover_text("Write the machined stock as an STL mesh (extracted from the traced field)")
-                .clicked()
-            {
+            if crate::browser_files::button(
+                ui,
+                state.browser_refusal_of(&crate::state::CommandKind::ExportStockDialog),
+                "Export STL",
+                "Write the machined stock as an STL mesh (extracted from the traced field)",
+            ) {
                 export = true;
             }
         });

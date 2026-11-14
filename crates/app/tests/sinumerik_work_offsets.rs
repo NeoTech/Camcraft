@@ -63,5 +63,7 @@ fn sinumerik_posts_offsets_one_to_six_as_their_settable_frames() {
 #[test]
 fn sinumerik_refuses_a_work_offset_that_names_no_settable_frame() {
     let out = engine::run(SINUMERIK, &Value::Null, &stream(&["G53"])).expect("engine runs");
-    assert!(out.warnings.iter().any(|w| w.contains("G53") && w.contains("settable frames")), "{:?}", out.warnings);
+    // #931: the stream carries an offset number (the legacy words G54..G59
+    // read as 1-6); a word naming no offset is refused by the engine.
+    assert!(out.warnings.iter().any(|w| w.contains("G53") && w.contains("not a work offset number")), "{:?}", out.warnings);
 }
