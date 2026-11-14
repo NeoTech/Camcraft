@@ -84,8 +84,8 @@ pub(crate) fn v_import(env: &mut Env, args: Vec<Value>) -> Result<Value, String>
     if let Some(b) = entity.and_then(|e| crate::model_fidelity::budget_of(&env.world, &e)) {
         out["facet_budget"] = json!(b);
     }
-    // #1617: what the importer changed (a closed STEP solid wound inward,
-    // turned outward) is in the result.
+    // #1573 review: what the importer changed (a STEP face flipped to agree
+    // with its neighbours) is in the result, by name.
     if !notes.is_empty() {
         out["notes"] = json!(notes);
     }

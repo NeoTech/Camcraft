@@ -69,7 +69,11 @@ fn a_lone_curved_face_is_left_alone() {
     let text = read("bspline_dome.step");
     let shell = "#17 = CLOSED_SHELL('', (#18, #25, #32, #39, #46, #53));";
     assert_eq!(text.matches(shell).count(), 1, "fixture layout changed");
-    let lone = text.replace(shell, "#17 = OPEN_SHELL('', (#53));");
+    // A solid brep naming the shell makes main's closed-shell check judge it
+    // (#1576), so the lone face is held by a surface model instead.
+    let brep = "#16 = MANIFOLD_SOLID_BREP('', #17);";
+    assert_eq!(text.matches(brep).count(), 1, "fixture layout changed");
+    let lone = text.replace(shell, "#17 = OPEN_SHELL('', (#53));").replace(brep, "#16 = SHELL_BASED_SURFACE_MODEL('', (#17));");
     for (label, data) in [("as written", lone.clone()), ("reversed", reversed(&lone))] {
         let got = parse_model_graded(data.as_bytes(), Format::Step).expect("a lone face imports");
         assert!(!got.mesh.facets.is_empty(), "{label}: the face meshed");

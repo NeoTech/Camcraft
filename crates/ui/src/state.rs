@@ -3913,8 +3913,8 @@ impl State {
         match result {
             Ok(command) => {
                 let name = command.name.clone();
-                // #1617: what the importer changed (a closed STEP solid
-                // wound inward, turned outward) is said, not only logged.
+                // #1573 review: what the importer changed (a STEP face
+                // flipped to agree with its neighbours) is said by name.
                 let changed = if command.notes.is_empty() { String::new() } else { format!(" - {}", command.notes.join("; ")) };
                 let timed = |verb: &str, note: &str| {
                     if secs >= 2.0 {

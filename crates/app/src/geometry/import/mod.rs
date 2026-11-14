@@ -9,6 +9,8 @@ pub mod obj;
 pub mod step;
 pub mod step_budget;
 pub mod step_csys;
+mod step_closed;
+mod step_facets;
 mod step_continuity;
 mod step_diag;
 mod step_edge3d;
@@ -17,6 +19,8 @@ mod step_guard;
 mod step_pole;
 pub mod step_depth;
 mod step_refine;
+mod step_orient;
+mod step_seams;
 mod step_units;
 pub mod stl;
 
@@ -87,7 +91,8 @@ pub struct Graded {
     /// the promise, and for STL and OBJ - those files ARE the mesh, with
     /// no surface behind them to measure against.
     pub coarse_mm: Option<f64>,
-    /// What the importer changed on the way, one line each (#1617: a
+    /// What the importer changed on the way, one line each (#1573 review:
+    /// a STEP face flipped to agree with its neighbours, by name; #1617: a
     /// closed STEP solid wound inward turned outward). Empty when it
     /// changed nothing, and for STL and OBJ.
     pub notes: Vec<String>,
@@ -125,10 +130,10 @@ pub fn parse_model_graded_within(data: &[u8], format: Format, budget: usize) -> 
         Format::Stl => (stl::parse(data)?, None, Vec::new()),
         Format::Obj => (obj::parse(data)?, None, Vec::new()),
         Format::Step => {
-            let (mut mesh, chord) = step::parse_with_chord_budget(data, budget)?;
+            let (mut mesh, chord, mut notes) = step::parse_noted(data, budget)?;
             // #1617: a closed solid the file winds inward is turned
             // outward, and the import says so.
-            let notes = step_outward::turn_outward(&mut mesh).into_iter().collect();
+            notes.extend(step_outward::turn_outward(&mut mesh));
             (mesh, step::coarse(chord), notes)
         }
     };

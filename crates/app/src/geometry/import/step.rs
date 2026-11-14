@@ -23,6 +23,9 @@
 //!   #1548), and an edge on a `SURFACE_CURVE` is read from its 3D curve
 //!   (`step_edge3d`, #1548): a rounded-edge solid then meshes closed
 //!   instead of being refused or losing faces.
+//! - A shell the file declares closed must mesh closed, and a face the
+//!   kernel returns no mesh for is refused by name (`step_closed`, #1573):
+//!   truck drops or mis-trims such faces without an error.
 
 use std::panic::AssertUnwindSafe;
 
@@ -119,6 +122,13 @@ pub fn parse_with_chord(data: &[u8]) -> Result<(Mesh, f64), ImportError> {
 /// `budget` caps the whole model's facets (#1054: the caller checked it
 /// against `step_budget`'s bounds).
 pub fn parse_with_chord_budget(data: &[u8], budget: usize) -> Result<(Mesh, f64), ImportError> {
+    parse_noted(data, budget).map(|(mesh, chord, _)| (mesh, chord))
+}
+
+/// [`parse_with_chord_budget`], and what the importer changed on the way,
+/// one line each, for the import result (#1573 review: a face flipped to
+/// agree with its neighbours is said by name, not only logged).
+pub fn parse_noted(data: &[u8], budget: usize) -> Result<(Mesh, f64, Vec<String>), ImportError> {
     super::step_depth::check(data)?; // #1075: refuse before ruststep can overflow
     if data.is_empty() {
         return Err(ImportError::Empty);
@@ -154,10 +164,17 @@ pub fn parse_with_chord_budget(data: &[u8], budget: usize) -> Result<(Mesh, f64)
         return Err(ImportError::Step("no shells found".into()));
     }
 
+    // #1573: shells declared closed must mesh closed.
+    let closed = super::step_closed::closed_shells(section);
     let max_facets = facet_budget(budget);
     let mut facets: Vec<Triangle> = Vec::new();
     let mut chord = 0.0f64;
-    for (shell_id, shell) in &table.shell {
+    let mut notes = Vec::new();
+    // Shells in id order, not the table's hash order: the facets, the notes
+    // and the first refusal are the same on every run (#1576 review).
+    let mut shells: Vec<(&u64, &truck_stepio::r#in::ShellHolder)> = table.shell.iter().collect();
+    shells.sort_unstable_by_key(|&(id, _)| *id);
+    for (shell_id, shell) in shells {
         if facets.len() >= max_facets {
             return Err(ImportError::TooLarge);
         }
@@ -167,9 +184,10 @@ pub fn parse_with_chord_budget(data: &[u8], budget: usize) -> Result<(Mesh, f64)
         // AssertUnwindSafe holds for our purposes: on a panic we discard all
         // outputs and abort the import.
         let per_shell = std::panic::catch_unwind(AssertUnwindSafe(|| {
-            shell_facets(&table, (*shell_id, shell), budget, mm_per_unit.unwrap_or(1.0))
+            let closed = closed.contains(shell_id);
+            shell_facets(&table, (*shell_id, shell), closed, budget, mm_per_unit.unwrap_or(1.0))
         }));
-        let (tris, tol) = match per_shell {
+        let (tris, tol, said) = match per_shell {
             Err(_) => {
                 tracing::error!("step: truck kernel panicked on a shell; import aborted");
                 return Err(ImportError::Step(
@@ -181,6 +199,7 @@ pub fn parse_with_chord_budget(data: &[u8], budget: usize) -> Result<(Mesh, f64)
         };
         chord = chord.max(tol);
         facets.extend(tris);
+        notes.extend(said);
     }
     if facets.is_empty() {
         return Err(ImportError::Empty);
@@ -198,7 +217,7 @@ pub fn parse_with_chord_budget(data: &[u8], budget: usize) -> Result<(Mesh, f64)
     if !(chord.is_finite() && chord >= 0.0) {
         return Err(ImportError::Step(format!("tessellation reported a chord error of {chord} mm")));
     }
-    Ok((Mesh::from_facets(facets), chord))
+    Ok((Mesh::from_facets(facets), chord, notes))
 }
 
 /// Tessellate one STEP shell into triangles, staying inside `budget` facets.
@@ -208,9 +227,10 @@ pub fn parse_with_chord_budget(data: &[u8], budget: usize) -> Result<(Mesh, f64)
 fn shell_facets(
     table: &Table,
     (shell_id, shell): (u64, &truck_stepio::r#in::ShellHolder),
+    closed: bool,
     budget: usize,
     mm_per_unit: f64,
-) -> Result<(Vec<Triangle>, f64), ImportError> {
+) -> Result<(Vec<Triangle>, f64, Vec<String>), ImportError> {
     let cshell = table
         .to_compressed_shell(shell)
         .map_err(|e| ImportError::Step(format!("shell conversion failed: {e}")))?;
@@ -233,11 +253,34 @@ fn shell_facets(
     // triangles, stop with `TooLarge` as soon as `budget` is crossed. A
     // closure so the heavily-aliased CompressedShell type is inferred
     // instead of spelled out.
+    // The first face each pass got no polygon for, and each face's facet
+    // range, by the pass's tol (#1573).
+    let dropped: std::cell::RefCell<Vec<(f64, Option<usize>)>> = std::cell::RefCell::default();
+    let owners: std::cell::RefCell<Vec<(f64, Vec<usize>)>> = std::cell::RefCell::default();
     let triangulate = |tol: f64| -> Result<Vec<Triangle>, PassError> {
         guarded.reset();
         // A panic is held until the meters are read: a face that ran past
         // its cap is the cause worth naming, not the panic it led to.
-        let meshed = std::panic::catch_unwind(AssertUnwindSafe(|| cshell.robust_triangulation(tol).to_polygon()));
+        let meshed = std::panic::catch_unwind(AssertUnwindSafe(|| {
+            let faces = cshell.robust_triangulation(tol);
+            // #1573: truck's `to_polygon` skips a face it has no polygon
+            // for; each face is kept apart, oriented as `to_polygon` would.
+            let none = faces.faces.iter().position(|f| f.surface.is_none());
+            dropped.borrow_mut().push((tol, none));
+            let polys: Vec<Option<PolygonMesh>> = faces
+                .faces
+                .into_iter()
+                .map(|f| {
+                    f.surface.map(|mut s| {
+                        if !f.orientation {
+                            s.invert();
+                        }
+                        s
+                    })
+                })
+                .collect();
+            polys
+        }));
         if let Some(trip) = guarded.tripped() {
             // A face that may jump is refused even when a coarser pass
             // met: it converges at any tolerance wider than its gap, and
@@ -255,36 +298,9 @@ fn shell_facets(
             let refusal = super::step_guard::refusal(trip, cshell.faces.len(), entity, Some(shell_id), cap);
             return Err(PassError::Unconverged { continuous: trip.continuous, refusal });
         }
-        let meshed = meshed.unwrap_or_else(|panic| std::panic::resume_unwind(panic));
-        let positions = meshed.positions();
-        let mut facets: Vec<Triangle> = Vec::new();
-        for face in meshed.face_iter() {
-            if face.len() < 3 {
-                continue;
-            }
-            let at = |i: usize| -> Option<Point3> {
-                let v = face.get(i)?.pos;
-                let p = positions.get(v)?;
-                let pt = Point3::new(p.x, p.y, p.z);
-                pt.is_finite().then_some(pt)
-            };
-            let Some(a) = at(0) else { continue };
-            for i in 1..face.len() - 1 {
-                let (Some(b), Some(c)) = (at(i), at(i + 1)) else {
-                    continue;
-                };
-                let tri = Triangle::new(a, b, c);
-                // Zero-area facets are tessellation slivers: drop them, they
-                // carry no geometry and would poison the STL-style gates.
-                let n = tri.normal();
-                if n.x != 0.0 || n.y != 0.0 || n.z != 0.0 {
-                    facets.push(tri);
-                    if facets.len() > budget {
-                        return Err(PassError::Over);
-                    }
-                }
-            }
-        }
+        let polys = meshed.unwrap_or_else(|panic| std::panic::resume_unwind(panic));
+        let (facets, ends) = super::step_facets::facets_of(&polys, budget)?;
+        owners.borrow_mut().push((tol, ends));
         Ok(facets)
     };
     // Quality target: ~0.1% of the model extent, floored so tiny parts still
@@ -319,7 +335,18 @@ fn shell_facets(
     // schedule (coarse start, halving toward the target inside the budget)
     // lives in `step_refine`, which also keeps the tolerance of the mesh
     // it actually kept (#864).
-    let kept = super::step_refine::refine(extent, tol_target, budget, triangulate)?;
+    let mut kept = super::step_refine::refine(extent, tol_target, budget, triangulate)?;
+    // #1573: the kept pass's dropped face, then the closed-shell law.
+    let faces = cshell.faces.len();
+    let dropped = dropped.borrow().iter().rev().find(|(t, _)| *t == kept.tol).and_then(|(_, i)| *i);
+    let dropped = dropped.map(|i| match face_ids.as_ref().and_then(|ids| ids.get(i)) {
+        Some(id) => format!("face #{id} (face {} of {faces})", i + 1),
+        None => format!("face {} of {faces}", i + 1),
+    });
+    let ends = owners.borrow_mut().iter_mut().rev().find(|(t, _)| *t == kept.tol).map(|(_, e)| std::mem::take(e));
+    let names = |i: usize| face_ids.as_ref().and_then(|ids| ids.get(i));
+    let seam = super::step_closed::Shell { id: shell_id, faces, closed, mm_per_unit: k };
+    let notes = super::step_closed::judge(&mut kept.facets, ends.as_deref(), kept.tol, &seam, names, dropped)?;
     if kept.tol > wanted {
         // The cause, so the advice fits it: a larger facet budget does
         // nothing for a face that ran out of evaluations (#1568 review).
@@ -335,5 +362,5 @@ fn shell_facets(
             kept.facets.len()
         );
     }
-    Ok((kept.facets, kept.tol))
+    Ok((kept.facets, kept.tol, notes))
 }
