@@ -18,6 +18,19 @@ coolantModes = true; // reads PARAM Coolant (#112/#150): the engine refuses non-
 afterModes = true; // reads PARAM AfterOperation (#110): the engine refuses a stop or home ask for a post without it
 liveTooling = true;  // voices PARAM LiveTool sections (issue #33): the engine refuses them for a post without it
 threadHands = true;  // reads PARAM SpindleDirection (#629): the engine refuses a reverse-spindle thread for a post without it
+workOffsetIndex = true; // reads PARAM WorkOffset as the 1-based offset number (#931)
+workOffsetMax = 6;      // G54..G59; extended offsets not verified for this control (#931)
+// Explain G-code (#1399): what this control's words mean where the mill
+// reading differs (Fanuc lathe G-code system A, from the publicly
+// documented 0i-T vocabulary): G98/G99 are the feed modes, G50 with S is
+// the spindle speed limit (G50 without S, the coordinate setting, is left
+// unexplained), and T0101 is tool 1, offset 1. Read only when Explain is on.
+explainWords = {
+  G98: "FEED PER MINUTE",
+  G99: "FEED PER REVOLUTION",
+  G50: { said: "SPINDLE SPEED LIMIT", takes: "S" }
+};
+explainTool = "station-offset";
 programUnits = "mm inch"; // #902 / #977: writes the document's unit (postOptions.Units), G21 / G20
 
 // Determinism law: no timestamps, no randomness - the same stream
@@ -151,6 +164,7 @@ programUnits = "mm inch"; // #902 / #977: writes the document's unit (postOption
 
 // ---------------------------------------------------------------- state
 var wcsWord = "G54";
+var wcsIndex = 1;          // the offset number wcsWord writes (#931)
 var sRpm = 0;              // S/M3 waits for the section (PARAMs, TOOL, SECTION order)
 var sCss = 0;              // SurfaceSpeed PARAM (m/min), 0 = none stated
 var sMax = 0;              // MaxSpindleSpeed PARAM (#891): the tool's own rpm ceiling, 0 = none
@@ -180,6 +194,7 @@ var liveOk = false;        // the C section engaged (codes stated, C on the mach
 var liveCodes = null;      // the machine's live_tool words for the open section
 var lastC = null;          // the C a C section last commanded
 var lastR = 0, lastZ = 0;  // ... and the station radius / Z it stood at
+var lastPC = 0, lastPR = 0, lastPZ = 0; // ... and the same as POSTED (mm, deg; #1398)
 var liveCRate = 0;         // the machine's stated C rate (deg/min), 0 = unstated
 var liveCTravel = false;   // the machine states a C travel (#906)
 var C_TOL = 0.005;         // mm a C-turned tip may stand off the station (lattice + milli-degree words)
@@ -386,13 +401,25 @@ function onRadiusCompensation() {
   msg("control cutter compensation on a lathe is nose-radius compensation - not supported; choose In computer");
 }
 
+// #931: PARAM WorkOffset arrives as the 1-based offset number (the engine
+// refuses one above workOffsetMax by setup name); the word is ours to write.
+function workOffsetName(n) {  // offset n -> this control's word; "" when it has none
+  return n >= 1 && n <= 6 && n === Math.floor(n) ? "G" + (53 + n) : "";
+}
+function offsetWord(value) {
+  var n = Number(value), w = workOffsetName(n);
+  if (!w) { msg("work offset " + value + " - this post expresses work offsets 1-" + workOffsetMax + " only"); return wcsWord; }
+  wcsIndex = n;
+  return w;
+}
+
 function onParameter(name, value) {
   commentParam(name, value);
   if (name === "OperationName") coolantOp = String(value || "");
   if (name === "LiveTool") { liveAsk = true; return; }
   if (name === "Coolant") { coolantAsk = String(value || "flood"); return; }
   if (name === "AfterOperation") { afterAsk = String(value || ""); return; }
-  if (name === "WorkOffset" && value) wcsWord = String(value);
+  if (name === "WorkOffset" && value) wcsWord = offsetWord(value);
   else if (name === "OriginX" && has(value)) orgX = Number(value);
   else if (name === "OriginY" && has(value)) orgY = Number(value);
   else if (name === "OriginZ" && has(value)) orgZ = Number(value);
@@ -570,6 +597,18 @@ function trim0(s) {
 }
 function fc(v) { return trim0(Number(v).toFixed(3)); }  // degrees, three decimals
 function fm(v) { return trim0(Number(v).toFixed(1)); }  // mm/min, one decimal
+// #1392: a feed held under a machine rate is judged on its POSTED word.
+// fm() rounds to nearest, so a feed within half a step of its cap could
+// post up to 0.05 mm/min over it: then the word is floored to the step
+// at or under the cap. A feed far from its cap posts unchanged.
+function capWord(v, cap) {
+  var w = fm(v);
+  if (!(cap < Infinity)) return w;
+  if (Number(w) <= cap) return w;
+  return fm(Math.floor(cap * 10) / 10);
+}
+// #1398: a length word read back as the control reads it, in mm.
+function posted(s) { return inch ? Number(s) * 25.4 : Number(s); }
 // One straight move of a C section: the tip turned by C onto the station.
 function liveMove(p, rapid) {
   if (!liveOk) return;
@@ -587,6 +626,9 @@ function liveMove(p, rapid) {
     return;
   }
   var r = Math.max(xr, 0);
+  // #1398: the words this move posts (X a diameter, Z origin-relative,
+  // C at 0.001), read back: the caps judge what the control reads.
+  var pr = posted(fu(2 * r)) / 2, pz = posted(fu(p.Z - orgZ)), pc = Number(fc(p.C));
   if (lastC === null) {
     if (!rapid) { refuse("a C-axis section that opens with a cut - the first move must position C"); return; }
     block(["G00", "C" + fc(p.C)]);
@@ -616,15 +658,25 @@ function liveMove(p, rapid) {
     // Under a composite F the control drives X/Z at F * lin / lcmd and
     // C at F * |dc| / lcmd: F is capped so neither outruns what the
     // machine states - the linear part by its fastest stated feed, C
-    // by its stated rate (unstated: no cap the data can justify).
-    var fc_ = f * lcmd / ltrue;
-    var lin = Math.sqrt(dr * dr + dz * dz);
-    var fmax = Number(machine.feedRateMax);
-    if (fmax > 0 && lin > EPS) fc_ = Math.min(fc_, fmax * lcmd / lin);
-    if (liveCRate > 0 && Math.abs(dc) > 1e-9) fc_ = Math.min(fc_, liveCRate * lcmd / Math.abs(dc));
-    block(["G01", xWord(r), zWord(p.Z), "C" + fc(p.C), "F" + fm(fc_)]);
+    // by its stated rate (unstated: no cap the data can justify). The
+    // rule is the prelude's `rotaryFeedCap` (#885), shared by every
+    // post that writes a rotary word on a feed.
+    // #1398: the cap is measured between the POSTED words, never the
+    // unrounded points - rounding can lengthen a short move's X/Z part.
+    var qr = pr - lastPR, qz = pz - lastPZ, qc = pc - lastPC;
+    var lin = Math.sqrt(qr * qr + qz * qz);
+    var capF = rotaryFeedCap(Infinity, lin, [[qc, liveCRate]], "composite", EPS);
+    var fc_ = Math.min(rotaryFeedCap(f * lcmd / ltrue, lin, [[qc, liveCRate]], "composite", EPS), capF);
+    var fw = capWord(fc_, capF);
+    // A word under the F step posts F0: refused by name, never written.
+    if (!(Number(fw) >= 0.1)) {
+      refuse(fc_ >= capF ? "a C-axis feed whose machine-rate cap leaves under 0.1 mm/min - the F word would be F0; state a faster C rate or maximum feed" : "a C-axis feed under 0.1 mm/min - the F word would be F0");
+      return;
+    }
+    block(["G01", xWord(r), zWord(p.Z), "C" + fc(p.C), "F" + fw]);
   }
   lastC = Number(p.C); lastR = r; lastZ = p.Z;
+  lastPC = pc; lastPR = pr; lastPZ = pz;
 }
 
 // The bar feeder's advance (the engine's default comment) in the
@@ -863,6 +915,7 @@ function onCycle() {
   var g = "G83";
   if (p.CycleType === "TAP") g = "G84";
   else if (p.CycleType === "BORE") g = "G85";
+  else if (p.CycleType === "REAM") g = "G85";   // #1445: feed in, feed out at F
   else if (p.CycleType === "BACKBORE") { refuse("back-boring cycle - no such face cycle on a 2-axis lathe"); return; }
   // #1357: the cycle feeds at its own F word; with none the control
   // drills at whatever feed was last modal - refused by name.

@@ -62,6 +62,8 @@ fn burnout(clearance: Option<f64>) -> WireContourOp {
         burnout: clearance,
         taper_deg: 0.0,
         clearance: camcraft_app::operation::DEFAULT_CLEARANCE,
+        four_axis: None,
+        skims: Vec::new(),
     }
 }
 

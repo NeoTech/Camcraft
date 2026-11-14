@@ -12,7 +12,6 @@
 
 use camcraft_app::model;
 use camcraft_app::operation;
-use camcraft_app::schema::WCS_SLOTS;
 use camcraft_app::tools::ToolKind;
 use camcraft_app::{setup, setup_mount};
 
@@ -153,7 +152,7 @@ pub(crate) fn browser_rows(state: &State) -> (Vec<painted::Row>, Vec<Leaf>) {
             let is_active = active.as_deref() == Some(name.as_str());
             let selected = matches!(&t, UiTarget::SetupNode(n, SetupPage::Settings) if *n == name);
             let suffix = if is_active { "active".to_owned() } else { String::new() };
-            push_row(&mut rows, &mut leaves, name.clone(), suffix, painted::Kind::Setup(is_active), None, selected, false, 1, Leaf::Setup(name.clone()));
+            push_row(&mut rows, &mut leaves, name.clone(), suffix, painted::Kind::Setup(is_active), None, selected, !state.setup_displayed(&name), 1, Leaf::Setup(name.clone()));
             setup_children(state, &t, &name, 2, &mut rows, &mut leaves);
         }
     }
@@ -210,9 +209,9 @@ fn setup_children(
     let is_active = ctx.is_none() || setup::active(w).as_deref() == ctx;
     let page_open = |p: SetupPage| matches!(t, UiTarget::SetupNode(n, q) if n == name && *q == p);
     // #342: one WCS per setup - plain "WCS", the word its post writes beside it.
-    let word = WCS_SLOTS.get(setup::wcs_slot(w, ctx)).copied().unwrap_or("G54");
+    let word = setup::wcs_name(w, ctx);
     let wcs_hidden = state.hidden_offsets.contains(&setup::wcs_entity_name(w, ctx));
-    push_row(rows, leaves, "WCS".to_owned(), word.to_owned(), painted::Kind::Wcs, Some(Icon::WorkOffset), is_active && matches!(t, UiTarget::Wcs), wcs_hidden, depth, Leaf::Wcs(name.to_owned()));
+    push_row(rows, leaves, "WCS".to_owned(), word, painted::Kind::Wcs, Some(Icon::WorkOffset), is_active && matches!(t, UiTarget::Wcs), wcs_hidden, depth, Leaf::Wcs(name.to_owned()));
     let stock_hidden = state.hidden_stocks.contains(&setup::stock_entity_name(w, ctx));
     let stock_text = if model::stock_world_aabb_for(w, ctx).is_some() { String::new() } else { "not set".to_owned() };
     push_row(rows, leaves, "Stock".to_owned(), stock_text, painted::Kind::Stock, Some(Icon::Stock), is_active && matches!(t, UiTarget::Stock), stock_hidden, depth, Leaf::Stock(name.to_owned()));

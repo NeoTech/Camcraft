@@ -243,10 +243,11 @@ fn a_tool_that_is_not_centre_cutting_never_plunges_into_a_bore_or_circular() {
         for (ln, links) in link_sets() {
             let bp = BoreParams {
                 holes: vec![
-                    BoreHole { xy: Point2::new(0.0, 0.0), radius: 10.0, top_z: TOP, floor_z: -6.0, through: false, stepped: false },
+                    BoreHole { xy: Point2::new(0.0, 0.0), radius: 8.0, top_z: TOP, floor_z: -6.0, through: false, stepped: false },
                     BoreHole { xy: Point2::new(40.0, 0.0), radius: 6.0, top_z: TOP, floor_z: -4.0, through: false, stepped: false },
                 ],
                 tool_diameter: 6.0,
+                corner_radius: 0.0,
                 stock_to_leave: 0.0,
                 stepdown: 2.0,
                 through_allowance: 0.5,

@@ -94,6 +94,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         mut picked_region,
         mut contour_sel,
         mut drive_chains,
+        mut slot_bound,
         mut prior,
         verify_prior,
         drills_ahead,
@@ -117,6 +118,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         carried_overhang: _,
         op_name: _,
         wire,
+        wire_ruled,
         sinker_gap,
         sinker_pass,
         sinker_wear,
@@ -189,6 +191,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             wire.ok_or_else(|| unreached("wire condition")),
             &hs,
             picks,
+            wire_ruled,
             || region_for_job(&mut picked_region, &mut section_z, &src, &params, &material, None),
             stock,
         );
@@ -559,7 +562,13 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 m_gen,
                 frame.as_ref(),
             )?;
-            let path = machining2d::pocket(
+            // #1449: the holes the program ahead proves open, when asked.
+            let (holes, hole_notes) = if lk.approach.predrilled {
+                super::predrilled_entry::proved_holes(&drills_ahead, d * 0.5, verify_prior.get(), frame.is_some())
+            } else {
+                (Vec::new(), Vec::new())
+            };
+            let mut path = machining2d::pocket_entered(
                 &region,
                 &PocketParams {
                     links: lk,
@@ -580,7 +589,9 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     optimal_load: *optimal_load,
                     blend_turns: *blend_turns,
                 },
+                &holes,
             )?;
+            super::predrilled_entry::say(&mut path, hole_notes);
             (region, path)
         }
         // The roughing twins (M2.4 A) are the pocket's own machinery
@@ -598,6 +609,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             entry,
             helix_radius,
             optimal_load,
+            method,
             ..
         } => {
             let region = region_for_job(
@@ -608,28 +620,31 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 m_gen,
                 frame.as_ref(),
             )?;
-            let path = machining2d::pocket(
-                &region,
-                &PocketParams {
-                    links: lk,
-                    tool_diameter: d,
-                    stepover: *stepover,
-                    stock_to_leave: *stock_to_leave,
-                    clearance_z: hl.clearance,
-                    retract_z: hl.retract,
-                    top_z: req_z(hl.top, "Top of Part Z")?,
-                    bottom_z: req_z(hl.bottom, "Bottom of Part Z")?,
-                    stepdown: *stepdown,
-                    feed: *feed,
-                    plunge_feed: *plunge_feed,
-                    climb: *climb,
-                    strategy: PocketStrategy::Adaptive,
-                    entry: *entry,
-                    helix_radius: *helix_radius,
-                    optimal_load: *optimal_load,
-                    blend_turns: false,
-                },
-            )?;
+            let pp = PocketParams {
+                links: lk,
+                tool_diameter: d,
+                stepover: *stepover,
+                stock_to_leave: *stock_to_leave,
+                clearance_z: hl.clearance,
+                retract_z: hl.retract,
+                top_z: req_z(hl.top, "Top of Part Z")?,
+                bottom_z: req_z(hl.bottom, "Bottom of Part Z")?,
+                stepdown: *stepdown,
+                feed: *feed,
+                plunge_feed: *plunge_feed,
+                climb: *climb,
+                strategy: PocketStrategy::Adaptive,
+                entry: *entry,
+                helix_radius: *helix_radius,
+                optimal_load: *optimal_load,
+                blend_turns: false,
+            };
+            // #1509: the method picks the planner; both cut the same
+            // region, the one the op's source and boundary settings give.
+            let path = match method {
+                machining2d::AdaptiveMethod::Spiral => machining2d::pocket(&region, &pp)?,
+                machining2d::AdaptiveMethod::Trochoidal => machining2d::adaptive_trochoidal(&region, &pp)?,
+            };
             (region, path)
         }
         OpParams::Offset2D {
@@ -1695,6 +1710,12 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             helix_radius,
             ..
         } => {
+            // #1504: picks bound the room the slot may cut in - a slot
+            // too wide, too long or placed past them is refused by name,
+            // never cut across the wall.
+            if let Some(room) = slot_bound.take() {
+                room?.judge(*a, *b, *width)?;
+            }
             let path = machining2d::slot(
                 *a,
                 *b,
@@ -1726,7 +1747,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             )?;
             (region, path)
         }
-        OpParams::TrochoidalSlot { a, b, .. } => {
+        OpParams::TrochoidalSlot { a, b, width, .. } => {
             let tp = super::trochoid_op::trochoid_params(
                 &params,
                 d,
@@ -1735,7 +1756,6 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 req_z(hl.top, "Top of Part Z")?,
                 req_z(hl.bottom, "Bottom of Part Z")?,
             )?;
-            let path = machining2d::trochoidal_slot(&[*a, *b], &tp)?;
             let region = region_for_job(
                     &mut picked_region,
                     &mut section_z,
@@ -1744,6 +1764,13 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 m_gen,
                 frame.as_ref(),
             )?;
+            // #1503: with a selection picked, the slot must fit inside
+            // it - refused by name, never cut across a wall into the
+            // model and reported OK.
+            if matches!(src, SrcRef::Selection(_)) {
+                super::slot_fit::refuse_unfit_slot(params.kind().info().label, *a, *b, *width, &region)?;
+            }
+            let path = machining2d::trochoidal_slot(&[*a, *b], &tp)?;
             (region, path)
         }
         OpParams::Trace {
@@ -2113,6 +2140,8 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     })
                     .collect(),
                 tool_diameter: d,
+                // #1556: the corner sets the reach at a through floor.
+                corner_radius: tool.corner_r,
                 stock_to_leave: *stock_to_leave,
                 stepdown: *stepdown,
                 // The cycles' exit gift, the drilling crate's own
@@ -2928,6 +2957,9 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 model_excess: material.excess,
                 // #1057: the containment kinds' declared rims, read untightened.
                 rims: &rims,
+                // #1408: a turning nose path's verdict turns the work
+                // about the spindle its kernel fitted.
+                lathe_axis: super::turning_axis::lathe_axis_of(&params, &geom, &material.facets),
             };
             // The picks' touching bodies, read as their union
             // (M13.11); empty for one body.
@@ -3218,6 +3250,8 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     // #864: a source imported coarser than promised.
                     model_excess: material.excess,
                     rims: &rims,
+                    // No envelope runs in a plane's frame (finish_tol None).
+                    lathe_axis: None,
                 },
                 &m_gen.bodies,
             );
@@ -3322,8 +3356,14 @@ pub(super) enum DepthLaw {
 /// - The pocket family cuts picked part features (`Section`); a whole-
 ///   model source there is the volume to REMOVE (the region is the
 ///   material, its interior is cut by contract), so no part law applies.
-/// - Slot and Circular cut authored geometry into their source - the
-///   source is the material to remove, not a part to keep.
+/// - Circular, Slot and Trochoidal slot cut geometry typed by hand into
+///   their source: [`authored_law`]. `Section` whenever the source is
+///   the finished part - picked (Slot #1504, Circular #1550, Trochoidal
+///   slot #1593: a ring or channel typed below the picked floor gouges
+///   it) or the whole model (Slot #1537, Circular #1543, Trochoidal slot
+///   #1593: a circle or slot typed through the part's wall gouges what
+///   the job keeps). A Stock source is not part-solid, so the typed
+///   geometry cuts it unjudged.
 /// - Trace, Engrave and 2D Chamfer enter the part by design (the
 ///   engraving, the broken edge); their own modes stand the gouge law
 ///   down for exactly that reason.
@@ -3334,6 +3374,10 @@ pub(super) fn depth_law_of(params: &OpParams, src: &SrcRef, part_solid: bool) ->
     }
     match params {
         OpParams::Contour { .. } | OpParams::Face { .. } => DepthLaw::Section,
+        // #1504 / #1537 / #1543 / #1550 / #1593: a Slot, Trochoidal
+        // slot or Circular on the finished part (picked or whole model)
+        // keeps the part around it; only Stock is cut unjudged.
+        OpParams::Slot { .. } | OpParams::TrochoidalSlot { .. } | OpParams::Circular { .. } => authored_law(src),
         OpParams::Pocket { .. } | OpParams::Adaptive2D { .. } | OpParams::Offset2D { .. }
             if matches!(src, SrcRef::Selection(_)) =>
         {
@@ -3342,6 +3386,25 @@ pub(super) fn depth_law_of(params: &OpParams, src: &SrcRef, part_solid: bool) ->
         OpParams::Drill { cross, .. } if cross.is_empty() => DepthLaw::Contain,
         OpParams::Bore { .. } | OpParams::Thread { .. } => DepthLaw::Contain,
         _ => DepthLaw::None,
+    }
+}
+
+/// The one law of the kinds that cut geometry typed by hand - Circular's
+/// centre and radius, the Slot's and the Trochoidal slot's endpoints and
+/// width - into a finished-part source (#1504, #1537, #1543, #1550,
+/// #1593; Prime Directive). Nothing
+/// about typed geometry says it stays inside the part's own hole or
+/// above its own floor, so the path answers to the part's sections and
+/// solid (`Section`) whether the source is the whole model or a pick:
+/// a circle typed through a wall, or a ring typed below the picked
+/// floor, is a blocking Gouge; a circle inside the modeled hole stays
+/// clean. A Stock source is the material to remove and never reaches
+/// here (`part_solid` is false, `depth_law_of`'s early return); its arm
+/// reads `None` so the function alone stays truthful.
+pub(super) fn authored_law(src: &SrcRef) -> DepthLaw {
+    match src {
+        SrcRef::Entity(_) | SrcRef::Selection(_) => DepthLaw::Section,
+        SrcRef::Stock => DepthLaw::None,
     }
 }
 

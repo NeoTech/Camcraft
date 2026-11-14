@@ -8,6 +8,7 @@
 //! enclosed region is cut free: a die's slug, or the punch itself).
 //! Our own code.
 
+use super::passes::Pass;
 use super::{CutSide, Wire, WireFinding, WireJob, WireVerdict, SLUG_AREA_TOL};
 use crate::geo2d::{Loop, Point2, Region};
 
@@ -80,12 +81,23 @@ struct Scan {
     any: Option<(f64, Point2)>,
 }
 
-fn scan(job: &WireJob<'_>, wire: &Wire, opening: bool) -> Result<Scan, WireFinding> {
+fn scan(job: &WireJob<'_>, wire: &Wire, passes: &[Pass], opening: bool) -> Result<Scan, WireFinding> {
     let unreadable = |why: String| WireFinding::Unreadable(format!("the slug cannot be judged - {why}"));
     // The kerf at one height: the wire's own section there (#536 - a
-    // vertical wire's is the same at every height).
+    // vertical wire's is the same at every height), each pass swept by
+    // its own kerf offset and joined (#538).
     let kerf_at = |z: f64| -> Result<(Region, Region), String> {
-        let kerf = Region::sweep(&[wire.at(z)], job.kerf_offset).map_err(|e| e.to_string())?;
+        let pts = wire.at(z);
+        let mut kerf: Option<Region> = None;
+        for p in passes {
+            let Some(run) = p.of(&pts) else { continue };
+            let r = Region::sweep(&[run.to_vec()], p.k).map_err(|e| e.to_string())?;
+            kerf = Some(match kerf {
+                None => r,
+                Some(acc) => acc.union(&r).map_err(|e| e.to_string())?,
+            });
+        }
+        let kerf = kerf.ok_or_else(|| "the path has no pass".to_owned())?;
         let fill = Region::new(kerf.loops().iter().filter(|l| l.area() > 0.0).cloned().collect()).map_err(|e| e.to_string())?;
         Ok((kerf, fill))
     };
@@ -145,12 +157,12 @@ fn scan(job: &WireJob<'_>, wire: &Wire, opening: bool) -> Result<Scan, WireFindi
 /// Run the slug law (#534) with the hold law (#539): a tabbed cut's
 /// main cut must free nothing and its whole path frees the stated
 /// piece; an untabbed cut's freed piece must be captured.
-pub(super) fn judge(job: &WireJob<'_>, wire: &Wire, opening: bool, v: &mut WireVerdict) {
+pub(super) fn judge(job: &WireJob<'_>, wire: &Wire, passes: &[Pass], opening: bool, v: &mut WireVerdict) {
     if let Some(m) = job.cutoff_from {
         let Some(main) = wire.prefix(m + 1) else {
             return v.findings.push(WireFinding::Unreadable(format!("the tab cut-off's start (move {m}) is past the path")));
         };
-        match scan(job, &main, opening) {
+        match scan(job, &main, passes, opening) {
             Err(f) => return v.findings.push(f),
             Ok(s) => {
                 if let Some((z, at)) = s.any {
@@ -160,7 +172,7 @@ pub(super) fn judge(job: &WireJob<'_>, wire: &Wire, opening: bool, v: &mut WireV
         }
         v.held = true;
     }
-    let s = match scan(job, wire, opening) {
+    let s = match scan(job, wire, passes, opening) {
         Ok(s) => s,
         Err(f) => return v.findings.push(f),
     };

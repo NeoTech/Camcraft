@@ -284,6 +284,7 @@ impl OpParams {
                 entry,
                 helix_radius,
                 optimal_load,
+                method,
                 tilt,
             } => {
                 w(h, *stepover);
@@ -306,6 +307,11 @@ impl OpParams {
                 // M11.4 C: the kind now runs the HSM plan, not rings -
                 // a generation word so every pre-C op goes Stale once.
                 h.write_u8(0xA4);
+                // #1509: written only off the default, so every Spiral
+                // op keeps the digest it had before the choice existed.
+                if *method == crate::machining2d::AdaptiveMethod::Trochoidal {
+                    h.write_u8(0xA5);
+                }
             }
             OpParams::Offset2D {
                 links: _,
@@ -1057,6 +1063,7 @@ impl OpParams {
                     CycleChoice::FloatingTap => 7,
                     CycleChoice::Bore => 5,
                     CycleChoice::BackBore => 6,
+                    CycleChoice::Ream => 8,
                 });
                 // The hole list is params data, so it digests: recognition
                 // output, a typed edit, or a moved model (whose re-
@@ -1510,6 +1517,10 @@ impl OpParams {
                     h.write(b"taper");
                     w(h, p.taper_deg);
                 }
+                // #537: likewise only a stated 4-axis cut.
+                if let Some(f) = &p.four_axis {
+                    super::wire_ruled::digest(f, h);
+                }
             }
             // The sinker burn (#541): every stored number, the datum
             // and the condition id.
@@ -1699,6 +1710,10 @@ impl OpParams {
                 if a.arc_xy {
                     h.write_u8(0xC4);
                 }
+                // #1449: pre-drilled entry - a byte only when on.
+                if a.predrilled {
+                    h.write_u8(0xC7);
+                }
                 // M13.11: control compensation moves what the post
                 // writes - a byte only when on, so every earlier
                 // approach keeps its digest.
@@ -1709,6 +1724,18 @@ impl OpParams {
                 // G41/G42 - its own byte, again only when on.
                 if a.compensation == crate::links::Compensation::Wear {
                     h.write_u8(0xC6);
+                }
+                // #1448: the user's start point - bytes only when set.
+                if let Some(q) = a.start_point {
+                    h.write_u8(0xC7);
+                    w(h, q.x);
+                    w(h, q.y);
+                }
+                // #1473: the exit point - bytes only when set.
+                if let Some(q) = a.exit_point {
+                    h.write_u8(0xC8);
+                    w(h, q.x);
+                    w(h, q.y);
                 }
                 match a.lead_out {
                     None => h.write_u8(0xFF),

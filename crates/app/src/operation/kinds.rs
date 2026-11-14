@@ -794,6 +794,7 @@ fn seed_adaptive2d(c: &Carried) -> OpParams {
         entry: Entry3D::Helix, // M11.3: new pocket-family ops helix in (ramp, then plunge, stand in)
         helix_radius: 1.0,
         optimal_load: crate::load::DEFAULT_OPTIMAL_LOAD,
+        method: crate::machining2d::AdaptiveMethod::Spiral,
         tilt: c.tilt,
     }
 }
@@ -1228,9 +1229,17 @@ fn seed_facing(c: &Carried) -> OpParams {
     OpParams::Facing {
         tolerance: 0.05,
         clearance_z: c.clearance,
-        top_z: c.top,
-        bottom_z: c.bottom,
-        // The one number NOT folded: an infeed is bounded by twice
+        // #1409: the heights are NOT folded either. Face has no floor,
+        // so the fold hands every seed the mill's Bottom of Model
+        // (#214) - and for a Facing that "bottom" is the finished
+        // facing plane: the ladder would climb from the part's floor
+        // and cut the whole part away. A facing removes the allowance
+        // the stock holds above the part, so it runs from the stock's
+        // top down to the part's top; a part already at length has
+        // nothing between the two, and the generator says so.
+        top_z: Height::of(HeightReference::TopOfStock, 0.0),
+        bottom_z: Height::of(HeightReference::TopOfModel, 0.0),
+        // The other number NOT folded: an infeed is bounded by twice
         // the nose's reach (the kernel's law), and the mill default
         // the fold carries would refuse against the house insert's
         // 0.8 mm nose the moment a user created the op. 0.5 is the

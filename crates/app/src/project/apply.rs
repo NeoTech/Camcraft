@@ -541,6 +541,7 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
         skip_stops: file.skip_stops,
         per_op: file.per_op_files,
         smoothing: file.smoothing,
+        explain: file.explain,
         // #596: an absent key leaves the program's unit modal.
         end_units: match file.post_options.as_ref().and_then(|o| o.end_units.as_deref()) {
             None => crate::schema::EndUnits::Leave,
@@ -802,11 +803,13 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
                 let sdto = dto
                     .setup
                     .ok_or_else(|| corrupt("setup entity without a definition"))?;
-                // #196: the picked program offset is a G-word in the file;
-                // an unspellable one is a corrupt file, never a guess.
+                // #196, #931: the picked program offset is a G-word (1-6)
+                // or its 1-based number (7+) in the file; an unreadable one
+                // is a corrupt file, never a guess. The setup's post bounds
+                // it at post time, not here.
                 let work_offset = match sdto.work_offset.as_deref() {
                     None => None,
-                    Some(w) => Some(crate::schema::WCS_SLOTS.iter().position(|s| *s == w).ok_or_else(|| {
+                    Some(w) => Some(super::work_offset_pick(w).ok_or_else(|| {
                         corrupt(format!("setup '{}' picks unknown work offset {w:?}", dto.name))
                     })?),
                 };

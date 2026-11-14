@@ -125,8 +125,11 @@ fn the_users_bore_roughs_adaptive_level_by_level_and_verifies_clean() {
 /// The bore's (moves, planar feeds, arcs) on this platform (issue #980).
 fn bore_path_matches(got: (usize, usize, usize)) -> bool {
     if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
-        // Measured on issue/980-bore-hsm-plan, three release runs, identical.
-        got == (16197, 15458, 1581)
+        // Issue #1402: measured on main 5eeb0370e, release, two runs
+        // identical; every level verifies clean, none falls back, no
+        // planning budget is reached. Before: (16197, 15458, 1581),
+        // measured on issue/980-bore-hsm-plan and stale after #1376.
+        got == (16017, 15360, 1427)
     } else if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
         // Issue #882 (PR #1376): measured by its reviewer at 8cd4c918 on
         // Apple silicon, release, two runs identical; every level
@@ -138,8 +141,6 @@ fn bore_path_matches(got: (usize, usize, usize)) -> bool {
         // fitted arcs (Z 20: 50 microlift returns, 9 rides, 1 retract
         // hop). Every level verifies clean, none falls back, and no
         // planning budget is reached. Before: (15561, 14837, 1561).
-        // Windows remains its previously measured triple; this change
-        // still needs measurement there.
         got == (16029, 15372, 1427)
     } else {
         // Not measured here yet: measure this platform and add its exact

@@ -45,7 +45,7 @@ use egui_kittest::Harness;
 use camcraft_app::model;
 use camcraft_app::operation::{FeatureSel, Height, OpParams, SrcRef};
 use camcraft_app::commands::theme_set;
-use camcraft_app::schema::{ThemeRef, WCS_SLOTS};
+use camcraft_app::schema::ThemeRef;
 use camcraft_app::units::{self, Unit};
 
 use crate::interact;
@@ -79,8 +79,13 @@ fn empty_egui_meshes_are_filtered_before_gpu_submission() {
 }
 
 mod face_origin;
+mod geo_row_hover;
+mod pick_mode;
 mod spindle_row;
 mod stock_size;
+mod setup_settings_page;
+mod machine_page;
+mod tool_list_page;
 mod stock_fit_sides;
 mod raw_stock_row;
 mod layout;
@@ -93,6 +98,10 @@ mod program_units;
 mod gcode_viewer;
 mod first_setup;
 mod structural;
+mod cycle_combo;
+mod radial_step_field;
+// #1509: 2D Adaptive's Method choice on the Passes tab.
+mod adaptive_method;
 // #661: every operation kind wears its own SVG-mastered glyph.
 mod op_icon_table;
 mod tool_icon_wiring;
@@ -116,6 +125,8 @@ mod mcp_live;
 mod setup_post_options;
 // #821: the raised-rotary rows of a setup's Machine page.
 mod setup_rotary;
+// #1494: the setup eye (display only).
+mod setup_eye;
 // #155: Pause / Home entries in the operation list.
 mod program_entry;
 // #371: the tool editor's Body section.
@@ -134,11 +145,16 @@ mod tool_cutter_params;
 // #441: the Theme ribbon door; the Stock page shows stock only.
 mod theme_door;
 mod recent_door;
+// #1431: the browser build's Save, Save As and Post as downloads; the rest refused by name.
+mod browser_files;
+// #1450: a model file dropped on the window.
+mod file_drop;
 // #645: the browser's "Show origin names" switch and the per-user view file.
 mod view_names;
 mod prefs_door;
 // #509: the Fixtures page rows fit the pane.
 mod fixture_rows;
+mod fixtures_page;
 // #864: a reduced-fidelity model says so on its page.
 mod model_fidelity;
 // #1054: the STEP facet budget on the model page.
@@ -147,10 +163,14 @@ mod step_budget;
 mod two_point_marks;
 // #979: the viewport box select.
 mod box_select;
+mod edge_click_modifiers;
 // #1104: the Setups page lists setups only.
 mod setups_declutter;
 // #1206: each setup's own Machine and Post pages pick its own mount.
 mod setup_mount_pages;
+// #1515: a pick on one setup never re-mounts another.
+mod setup_machine_bleed;
+mod setup_post_options_bleed;
 
 /// What the per-frame state of `Shell` is, minus the GPU half: the fields
 /// `shell_layout` touches, so the harness exercises the window's real body.
@@ -978,7 +998,8 @@ fn every_field_lives_on_exactly_one_section() {
                     "Heights",
                     vec!["Clearance Z", "Levels", "Top Z", "Bottom Z", "Stepdown"],
                 ),
-                ("Passes", vec!["Stepover", "Stock to leave", "Optimal load (% of D)"]),
+                // #1512: the load sets the step, so no Stepover row.
+                ("Passes", vec!["Stock to leave", "Optimal load (% of D)"]),
                 ("Lead in / Lead out", vec!["Entry", "Level to level", "Between levels", "Between passes"]),
                 ("Feeds", vec!["Feed", "Plunge feed", "Climb milling"]),
             ],
@@ -1371,7 +1392,10 @@ fn every_registry_kind_gets_its_tab_bar() {
             if has {
                 // #535: a kind that mounts no library tool has no Tool row.
                 assert_eq!(harness.query_by_label("Tool").is_some(), k.mounts_tool(), "{}: the pane opens on the tool row (only of a tool-mounting kind)", k.label);
-                per_tab.push((si, pane_texts(&harness)));
+                // #1514: the pick-mode line is chrome that reads per tab.
+                let mut texts = pane_texts(&harness);
+                texts.retain(|t| !t.starts_with("Picking o"));
+                per_tab.push((si, texts));
             }
         }
         // Chrome: what every open tab shares (heading, tool/source rows,
@@ -1659,7 +1683,7 @@ fn face_mode_click_replaces_geometry_of_the_open_op() {
 #[test]
 fn anchor_click_queues_setwcs() {
     let mut harness = shell_harness();
-    let slot = WCS_SLOTS[0];
+    let slot = "G54";
     let pos0 = {
         let e = model::find_by_name(&harness.state().state.world, slot).expect("seed sets G54");
         let p = model::transform_of(&harness.state().state.world, &e).unwrap_or_default().pos;
@@ -1730,7 +1754,7 @@ fn origin_page_shows_the_anchor_grid_and_arms_pick_mode() {
     harness.get_by_label("SE").click();
     harness.run();
     let want = interact::anchor_points(&harness.state().state)[8].0;
-    let e = model::find_by_name(&harness.state().state.world, WCS_SLOTS[0])
+    let e = model::find_by_name(&harness.state().state.world, "G54")
         .expect("the seed places G54");
     let q = model::transform_of(&harness.state().state.world, &e).unwrap_or_default().pos;
     let got = [q.x, q.y, q.z];
@@ -5079,7 +5103,7 @@ fn vertex_mode_hover_and_click_pick_a_corner() {
     harness.get_by_label("Set origin").click();
     harness.run_steps(2);
     let st = &harness.state().state;
-    let g54 = model::find_by_name(&st.world, WCS_SLOTS[0]).expect("G54");
+    let g54 = model::find_by_name(&st.world, "G54").expect("G54");
     let o = model::transform_of(&st.world, &g54).unwrap_or_default().pos;
     assert!(
         (o.x - corner[0]).abs() + (o.y - corner[1]).abs() + (o.z - corner[2]).abs() < 1e-6,

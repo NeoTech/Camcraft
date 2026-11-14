@@ -10,7 +10,9 @@
 use super::*;
 use crate::state::SetupPage;
 
-const MOVED: [&str; 4] = ["Part alignment", "Lay on a plane", "Part axes", "Work offset"];
+// #771: the orientation section's dropdowns (Axes expanded by default)
+// stand in for the old separate alignment / plane rows.
+const MOVED: [&str; 3] = ["Plane orientation", "Part axes", "Work offset"];
 
 fn cube_path() -> std::path::PathBuf {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/models/cube.stl")

@@ -41,7 +41,7 @@ committed golden is a legal post input.
 | `TORCH ON C<id> OUTER\|INNER\|OPEN [PARENT<id>] [SMALL<f×1000>]` / `TORCH OFF C<id>` | the torch struck before the next motion record / put out after the previous one (#671): the `.cl` v5 `; TORCH` records without their `; ` |
 | `START X <i> Y <i> Z <i>` / `END` | legacy `.cl` position lines: consumed silently (END ends the record span) |
 
-`CYCLE` TYPE ∈ SPOT DRILL PECK DEEP TAP FLOATINGTAP BORE BACKBORE. Word meanings
+`CYCLE` TYPE ∈ SPOT DRILL PECK DEEP TAP FLOATINGTAP BORE BACKBORE REAM. Word meanings
 match the `.cl` v3 `; CYCLE` marker the M1.6 goldens use, and one
 parser reads both: X Y center, Z (or `BZ`) bottom, R (or `RZ`)
 retract/feed plane, `ENTRY` entry plane, Q (or `PECK`) peck, P (or
@@ -97,7 +97,8 @@ behavior only):
 | `FeedReference` | `surface` when set |
 | `ToolNumber` `ToolName` | from `TOOL` |
 | `SpindleSpeed` | rpm (PARAM) |
-| `WorkOffset` `OriginX` `OriginY` `OriginZ` | WCS slot + machine origin (PARAMs) |
+| `WorkOffset` | the setup's work offset as a 1-based NUMBER (PARAM, #931): 1 is the first offset (`G54` on a Fanuc-style control), 6 the sixth. The post writes its own word for it. A script that declares `workOffsetIndex = true` receives the number and states the highest it can express as `workOffsetMax` (6 when unstated); the engine refuses a higher one by setup name. A script without the flag receives the word `G54`..`G59` for offsets 1-6 exactly as before and is refused any offset above 6 by setup name. The stream also reads the legacy words `G54`..`G59` as 1-6 (streams written before #931); any other value is refused by setup name. A script may define `workOffsetName(n)`, what its control calls offset n (`G55`, `G59.1`, `preset 2`) - display only, never the stream |
+| `OriginX` `OriginY` `OriginZ` | the setup's WCS origin, machine coordinates (PARAMs) |
 | `StockXYLeft/Right/Front/Back` `StockZTop` | stock bounds (PARAMs) |
 | `Coolant` | `off` / `mist` / `through-tool` (PARAM, #112) - absent means flood; the post picks the machine's code of that family, refusing by operation name when it states none; a script without `coolantModes = true` is refused any non-flood ask (#150) |
 | `AfterOperation` | `optional-stop` / `stop` / `home` (PARAM, #110) - absent means carry on; the post writes its dialect's M1 / M0 / home move after the section's spindle stop, or refuses by name; a script without `afterModes = true` is refused any stop or home ask by operation name |
@@ -110,9 +111,10 @@ behavior only):
 | `command` | per motion/cycle record: `Rapid` `Linear` `Circular` `Drilling` (the `onCommand` argument); part events set `PartLoading` / `PartUnloading` / `PartTransfer` for their dedicated hooks and never reach `onCommand` |
 | `Advance` | the `PART LOAD` ADVANCE in mm (present only on loads; an unload's properties carry no `Advance` key at all) |
 | `From` `To` | the `PART TRANSFER` stations, 1-based (present only on transfer events) |
+| `SetWorkOffset` | on a probing result (`onProbeResult`, #108): the work offset the measured deviation is written into, **0-based** (0 is the first offset, `G54`; -1 sets none). Not the same count as `WorkOffset`, which is 1-based: work offset n of a section is `SetWorkOffset` n-1 of a probe. A probe can only set offsets 1-6 (`0..=5`) |
 | `Tolerance` | the `PROBE` ask's deviation budget in mm (present only on probe events; the µm lattice word `PROBE <µm>` is its stream spelling) |
 | `CircularDirection` | `CW` / `CCW` (arcs) |
-| `CycleType` | cycle intent delivered to hooks: `SPOT` `DRILL` `PECK` `DEEP` `TAP` `BORE` `BACKBORE`; `FLOATINGTAP` is normalized to `TAP` here and distinguished by `TappingMode` |
+| `CycleType` | cycle intent delivered to hooks: `SPOT` `DRILL` `PECK` `DEEP` `TAP` `BORE` `BACKBORE` `REAM` (feed in, feed out at the same feed, no dwell: G85); `FLOATINGTAP` is normalized to `TAP` here and distinguished by `TappingMode` |
 | `TappingMode` | `rigid` for legacy `TAP`; `floating` only for the explicit `FLOATINGTAP` stream kind |
 | `EntryZ` `Q` `P` `FeedRate` | cycle entry plane, peck mm, dwell s, cutting feed mm/min (`null` for legacy markers) |
 | `ChainFeedRate` | optional-valued engine property: feed on the first subsequent non-rapid move in the expanded cycle chain, mm/min; `null` if absent; legacy posts may use it when cycle `FeedRate` is `null` |
@@ -122,6 +124,7 @@ behavior only):
 | `EdmCondition` `WireSide` | a wire EDM section (#533): the machine's condition id the cut burns with, and `die` / `punch` (commentary). The moves are the wire-centre path (kerf in them, no feed). A script without `wireEdm = true` is refused the section by name |
 | `SinkerCondition` `ElectrodePickup` `EdmOrbit` `EdmOrbitRadius` | a Sinker Burn or Sinker Side Burn (#542, #545), before its section: the machine condition id the op names (absent when it names none), the electrode's pickup offset mm (the tool's `shank_len`), and for an orbit (#544) its geometry (`circular` / `vector` / `planetary`) and radius mm. The sinker post writes the condition and pickup through the machine's `edm.codes` (#290 D5), refuses a condition the machine's `edm.conditions` does not list, and refuses an orbit and a side burn by name (their explicit moves are not a straight burn). A script whose manifest `serves` does not name `sinker_edm` is refused the section by name |
 | `WireTaper` `WireU` `WireV` | a tapered wire section (#536): the stated taper in degrees (before the section), then before each leaning move the upper guide's offset from the lower one, mm; that move's X Y are the lower guide's. Both are computed from the move's pose and the machine's `edm` guide planes |
+| `WireFourAxis` | a 4-axis wire section (#537): the pairing rule in words (`arc length` or `sync points`), before the section; its leaning moves carry `WireU` `WireV` exactly as a tapered section's do, and no `WireTaper` |
 | `Contour` `ContourRole` `ParentContour` `SmallHole` | a `TORCH` record (#671): the contour id; on `onTorchOn` also `outer` / `inner` / `open`, the enclosing contour's id (absent = none) and the small-hole feed factor (absent = not small) |
 
 ## The hook contract

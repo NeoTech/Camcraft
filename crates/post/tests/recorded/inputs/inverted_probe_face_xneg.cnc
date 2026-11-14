@@ -5,7 +5,7 @@ PARAM StartZ 50.000000
 PARAM OperationName Probe1
 PARAM ToolDiameter 4.000000
 PARAM SpindleSpeed 0.000000
-PARAM WorkOffset G54
+PARAM WorkOffset 1.000000
 PARAM OriginX 12.500000
 PARAM OriginY -7.250000
 PARAM OriginZ 3.000000

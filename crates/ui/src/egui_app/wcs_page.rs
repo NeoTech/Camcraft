@@ -80,7 +80,7 @@ pub(super) fn even_row(ui: &mut Ui, labels: &[&str], size: Vec2) -> Option<usize
 }
 
 /// The width each of `n` equal cells takes to fill `avail`.
-fn cell_w(ui: &Ui, avail: f32, n: usize) -> f32 {
+pub(super) fn cell_w(ui: &Ui, avail: f32, n: usize) -> f32 {
     let gaps = ui.spacing().item_spacing.x * n.saturating_sub(1) as f32;
     ((avail - gaps) / n.max(1) as f32).max(24.0)
 }
@@ -248,7 +248,7 @@ fn readout(ui: &mut Ui, state: &mut State, u: Unit) {
         None => format!("{label}: not placed (at the origin)"),
     };
     ui.label(line);
-    ui.label("Work offset: the G54-G59 slot this setup posts. It does not move the origin.");
+    ui.label("Work offset: the offset this setup posts, as its post names it. It does not move the origin.");
 }
 
 pub(super) fn apply_wcs_drafts(state: &mut State) {

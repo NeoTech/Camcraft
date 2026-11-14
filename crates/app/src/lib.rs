@@ -87,12 +87,15 @@ pub mod rotary_stack;
 pub mod schema;
 pub mod script;
 pub mod setup;
+pub mod setup_offsets;
 // #326: the part's alignment per setup.
 pub mod setup_align;
 // #343: each setup's own machine and post, and the one-mount law.
 pub mod setup_mount;
 // #316: transforms between setups and the setup-relative link.
 pub mod setup_relative;
+// #1510: a tilted milling WCS is refused at generation.
+pub mod setup_wcs_tilt;
 pub mod setup_post_options;
 // #1031: a setup's workholding (chuck/collet) rpm limit.
 pub mod setup_workholding;
@@ -111,6 +114,8 @@ pub use camcraft_geometry::geometry::stock;
 pub mod stock_sim;
 // #1094: the model that is only the stock's source is not the part.
 pub mod stock_source;
+// #1538: fit-to-models measures the parts, never the fixtures.
+pub mod stock_fit;
 // #1094: the geometry fingerprint a raw-stock-only mark is checked by.
 pub mod stock_print;
 pub mod stock_export;

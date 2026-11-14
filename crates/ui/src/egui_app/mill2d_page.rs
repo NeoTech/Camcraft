@@ -269,7 +269,11 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
                 });
             }
             if tab == SEC_PASSES {
-                prop_row(ui, "Stepover", |ui| num(ui, u, stepover));
+                // #1512: one radial-step field - Stepover, or the
+                // Optimal load below for the strategies it spaces.
+                if !strategy.steps_by_load() {
+                    prop_row(ui, "Stepover", |ui| num(ui, u, stepover));
+                }
                 prop_row(ui, "Stock to leave", |ui| num(ui, u, stock_to_leave));
                 // M11.1 C: pass corners and row-to-row links round on
                 // one arc inside the cleared area where it is legal.
@@ -297,7 +301,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
                         _ => PocketStrategy::Zigzag,
                     };
                 }
-                if matches!(strategy, PocketStrategy::Adaptive | PocketStrategy::OffsetRings) {
+                if strategy.steps_by_load() {
                     super::load_field::optimal_load_field(ui, optimal_load);
                 }
                 if let Some(note) = &auto_note {
@@ -328,7 +332,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             climb,
             entry,
             helix_radius,
-            optimal_load,
+            optimal_load, method,
             tilt,
         } => roughing2d_pane(
             ui,
@@ -349,7 +353,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             climb,
             entry,
             helix_radius,
-            Some(optimal_load),
+            Some(optimal_load), Some(method),
             links,
             tilt,
         ),
@@ -387,7 +391,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             climb,
             entry,
             helix_radius,
-            None,
+            None, None,
             links,
             tilt,
         ),

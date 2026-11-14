@@ -310,6 +310,10 @@ pub(super) fn selection_geometry_in(
                     loc.rot,
                 );
                 if facing && n.z.abs() < FACE_TILT_MAX_DEG.to_radians().cos() {
+                    // #1510: a face level only in a tilted WCS says why.
+                    if let Some(why) = crate::setup_wcs_tilt::setup_problem(world, setup) {
+                        return Err(GenError::Invalid(format!("{label} is not horizontal - a facing pass needs a floor on the machine, and {why}")));
+                    }
                     return Err(GenError::Invalid(format!(
                         "{label} is not horizontal - a facing pass needs a floor; machine its boundary with a 2D Contour instead"
                     )));

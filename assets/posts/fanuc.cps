@@ -18,6 +18,8 @@ coolantModes = true; // reads PARAM Coolant (#112/#150): the engine refuses non-
 afterModes = true; // reads PARAM AfterOperation (#110): the engine refuses a stop or home ask for a post without it
 axisInversion = true; // verified on the engine's mirrored stream for an inverted X/Y (#374): goldens + equivalence test
 probeAxisInversion = true; // probing blocks verified on the mirrored stream (#392): macro interpreter on a simulated inverted machine
+workOffsetIndex = true; // reads PARAM WorkOffset as the 1-based offset number (#931)
+workOffsetMax = 6;      // G54..G59; G54.1 P extended offsets are an option not verified here (#931)
 millSpindleReverse = true; // reads PARAM MillSpindle (#988): M4 for a left-hand-cut mill; the engine refuses a reverse mill spindle for a post without it
 programUnits = "mm inch"; // #902: writes the document's unit (postOptions.Units), G21 / G20
 
@@ -26,6 +28,7 @@ programUnits = "mm inch"; // #902: writes the document's unit (postOptions.Units
 
 // ---------------------------------------------------------------- state
 var wcsWord = "G54";       // from the WorkOffset PARAM
+var wcsIndex = 1;          // the offset number wcsWord writes (#931)
 var sRpm = 0;              // S/M3 waits for the section: the stream
 var spindleWait = false;   // order is PARAMs, TOOL, SECTION
 var spinRev = false;       // PARAM MillSpindle reverse (#988): this section's spindle runs M4
@@ -48,6 +51,7 @@ var smoothActive = false;   // #616: this section wrote its smoothing words
 var tcpmOn = false;        // G43.4 armed (stage D RTCP): re-armed at tool change
 var lastA = 0, lastB = 0, lastC = 0; // angle words the last block commanded (deg)
 var tiltRefused = false;   // a refusal the gate counts once, not per line
+var rotAt = { A: null, B: null, C: null }; // #885: the angles the control holds (null: not known) - never reset, a G49 turns nothing
 var compG = "";            // G41/G42/G40 pending for the next straight block (M13.11)
 var compD = "";            // the D word riding the engage block
 var compOn = false;        // compensation is engaged (G41/G42 written, no G40 yet)
@@ -441,6 +445,18 @@ function onOpen() {
   unitBlock();
 }
 
+// #931: PARAM WorkOffset arrives as the 1-based offset number (the engine
+// refuses one above workOffsetMax by setup name); the word is ours to write.
+function workOffsetName(n) {  // offset n -> this control's word; "" when it has none
+  return n >= 1 && n <= 6 && n === Math.floor(n) ? "G" + (53 + n) : "";
+}
+function offsetWord(value) {
+  var n = Number(value), w = workOffsetName(n);
+  if (!w) { msg("work offset " + value + " - this post expresses work offsets 1-" + workOffsetMax + " only"); return wcsWord; }
+  wcsIndex = n;
+  return w;
+}
+
 function onParameter(name, value) {
   if (name === "RetractPlane") hopZ = has(value) ? Number(value) : null;  // #1028
   if (name === "Smoothing") { smoothTol = Number(value) || 0; return; }
@@ -450,7 +466,7 @@ function onParameter(name, value) {
   if (name === "MillSpindle") { spinRev = String(value || "") === "reverse"; return; }
   if (name === "Coolant") { coolantAsk = String(value || "flood"); return; }
   if (name === "AfterOperation") { afterAsk = String(value || ""); return; }
-  if (name === "WorkOffset" && value) wcsWord = String(value);
+  if (name === "WorkOffset" && value) wcsWord = offsetWord(value);
   else if (name === "OriginX" && has(value)) orgX = Number(value);
   else if (name === "OriginY" && has(value)) orgY = Number(value);
   else if (name === "OriginZ" && has(value)) orgZ = Number(value);
@@ -619,16 +635,51 @@ function onRapid() {
   var tw = tilt(properties);
   if (tw === null || chainRapid()) return;
   block(["G00"].concat(xyz(properties), tw));
+  heldAngles(properties, tw);
+}
+// #885: a feed that turns a rotary under G43.4. Tool centre point
+// control reads F as the tip's speed relative to the work, the rotaries
+// carried along over the same time (FANUC 30i-B operator's manual, tool
+// center point control), so a short tip move with a large turn would
+// drive the rotary at F * |d| / tip length. The prelude's rotaryFeed
+// caps F at every rotary's stated rate (and the tip at the fastest
+// stated feed); unstated rates cap nothing. The F word, or null when
+// refused by name.
+function feedWord(p, arc) {
+  // Any rotary letter on the record, not A alone: a record that turns only
+  // B or C is capped the same way (#951 review).
+  if (!has(p.A) && !has(p.B) && !has(p.C)) return fw(p.FeedRate);
+  if (typeof rotaryFeed !== "function") return fw(p.FeedRate);
+  var r = rotaryFeed(p, rotAt, ["A", "B", "C"], "path", arc, inch ? 0.00254 : 0.001, [orgX, orgY, orgZ], inch);
+  if (r.refuse) { rotRefuse(r.refuse); return null; }
+  if (!r.capped) return fw(p.FeedRate);
+  var word = rotaryFeedWord(r.feed, inch);  // the post's own unit, as ff() writes F
+  if (!word) { rotRefuse("a feed that turns a rotary over too short a move - the stated rotary rate leaves under 0.1 mm/min"); return null; }
+  return word;
+}
+var rotRefused = {};  // #885: each rate refusal counted once per program, not per line
+function rotRefuse(s) { if (!rotRefused[s]) { rotRefused[s] = true; msg(s); } }
+// The angles the control holds after a block: only the letters the block
+// actually wrote (`tw`, the tilt words) - a word held back as modal
+// leaves the control where the last written one put it.
+function heldAngles(p, tw) {
+  for (var i = 0; i < tw.length; i++) {
+    var L = String(tw[i]).charAt(0);
+    if ((L === "A" || L === "B" || L === "C") && has(p[L])) rotAt[L] = Number(p[L]);
+  }
 }
 function onLinear() {
   startPreamble();
   var tw = tilt(properties);
   if (tw === null || chainCut()) return;
   if (spindleStopped("feed move G01")) return;
+  var fwd = feedWord(properties, false);
+  if (fwd === null) return;
   // The pending comp word rides this straight block (M13.11).
   var cg = compG, cd = compD;
   compG = ""; compD = "";
-  block([compPlaneWord(cg), "G01", cg].concat(xyz(properties), [cd], tw, [fw(properties.FeedRate)]));
+  block([compPlaneWord(cg), "G01", cg].concat(xyz(properties), [cd], tw, [fwd]));
+  heldAngles(properties, tw);
 }
 function onCircular() {
   startPreamble();
@@ -638,11 +689,14 @@ function onCircular() {
   if (spindleStopped("arc move " + (properties.CircularDirection === "CW" ? "G02" : "G03"))) return;
   var p = properties;
   if (compPlaneRefuse(planeOf(p))) return;
+  var fwd = feedWord(p, true);
+  if (fwd === null) return;
   block([
     planeWord(planeOf(p)),
     p.CircularDirection === "CW" ? "G02" : "G03",
     wo("X", p.X, orgX), wo("Y", p.Y, orgY), wo("Z", p.Z, orgZ),
-  ].concat(centerWords(p)).concat(tw, [fw(p.FeedRate)]));
+  ].concat(centerWords(p)).concat(tw, [fwd]));
+  heldAngles(properties, tw);
 }
 
 // ------------------------------------------------------- canned cycles
@@ -705,6 +759,13 @@ function onCycle() {
   else if (p.CycleType === "TAP") g = "G84";
   else if (p.CycleType === "BORE") g = "G86";
   else if (p.CycleType === "BACKBORE") g = "G89";
+  else if (p.CycleType === "REAM") g = "G85";   // #1445: feed in, feed out at F, no dwell
+  else {
+    // #1445: a cycle kind this post does not know is refused by name,
+    // never posted as the G81 default (a rapid out it never asked for).
+    msg("canned cycle " + p.CycleType + " is not known to this post - refused, not posted as another cycle");
+    return;
+  }
   // #1357: a canned cycle feeds at its own F word. Without one the
   // control drills at whatever feed was last modal (or alarms on a zero
   // feed), so a cycle the stream gives no positive feed is refused by name.
@@ -791,10 +852,6 @@ function onProbeGuard() {
     block(["IF[ABS[" + minusU("#" + (5061 + ai), to[ai] - org[ai]) + "]GT" + eps() + "]THEN#3000=3(PROBE HIT ON POSITIONING)"]);
   }
 }
-function slotOf(word) {  // "G55" -> 1
-  var n = Number(String(word).replace(/[^0-9]/g, "")) - 54;
-  return n >= 0 && n <= 5 ? n : 0;
-}
 // #575: no deviation report is written before the offset write. Fanuc's
 // published custom macro B documentation (also the Haas and Mazak EIA
 // macro conventions this post family follows) gives an operator message
@@ -818,7 +875,7 @@ function onProbeResult() {
     block(["IF[ABS[#" + (dev + i) + "]GT" + fu(p.Tolerance) + "]THEN#3000=1(PROBE " + a.Axis + " OUT OF TOLERANCE)"]);
   }
   if (has(p.SetWorkOffset) && p.SetWorkOffset >= 0) {
-    var act = 5221 + 20 * slotOf(wcsWord);
+    var act = 5221 + 20 * (wcsIndex - 1);
     var words = ["G10", "L2", "P" + (Number(p.SetWorkOffset) + 1)];
     for (var j = 0; j < axes.length; j++) {
       var aj = axes[j].Axis === "X" ? 0 : (axes[j].Axis === "Y" ? 1 : 2);

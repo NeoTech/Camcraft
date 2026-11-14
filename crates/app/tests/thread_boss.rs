@@ -10,8 +10,8 @@
 //! handbook thread milling; our own fixtures.
 //!
 //! Gate map (M4.4): covers app::operation (thread_boss, thread_entry,
-//! thread_op, material::detect_holes), app::drilling (recognize_bosses),
-//! app::machining2d (thread_mill), app::commands (operation gates),
+//! thread_op, material::detect_holes), camcraft_motion::drilling (recognize_bosses),
+//! camcraft_motion::machining2d (thread_mill), app::commands (operation gates),
 //! app::posting, app::project (params DTO).
 //! Lane shape (M4.4): all tests here run in seconds.
 
@@ -140,7 +140,7 @@ fn detect_reads_the_bosses_of_an_external_thread_and_holes_of_an_internal_one() 
     let (world, _history) = stud_bare(stud(4.0, Vec::new()));
     let src = SrcRef::Entity("stud".into());
     let found = operation::detect_holes(&world, "Thread1", &external(Vec::new(), None, ThreadHand::Right, true), None, &src);
-    let OpParams::Thread { holes, external: true, .. } = found.expect("the stud's bosses") else {
+    let OpParams::Thread { holes, external: true, .. } = found.expect("the stud's bosses").params else {
         panic!("an external thread comes back external");
     };
     // The Ø8 boss, then the round base it stands on (a round wall is a boss too; the list is the author's to trim).

@@ -29,6 +29,8 @@ use thiserror::Error;
 use crate::geo2d::{COORD_LIMIT, GeoError, Loop, Point2, Region};
 use crate::geometry::{Point3, Triangle};
 
+pub use super::slice_bodies::{material_above_of, material_overhead_of};
+
 /// Cap on `project`'s Z samples - a silhouette converges on far fewer.
 pub const MAX_SAMPLES: usize = 64;
 
@@ -75,7 +77,9 @@ pub enum SliceError {
     Invalid(String),
     #[error("the mesh is open at z = {z}: {dangling} dangling chord ends")]
     Open { z: f64, dangling: usize },
-    #[error("chords meet 3+ ways at z = {z}: non-manifold contact")]
+    #[error(
+        "the model's surfaces meet 3 or more ways at z = {z} (non-manifold contact: solids welded along a shared edge or face, or a shell touching itself) - repair the mesh, or keep each solid a separate closed shell"
+    )]
     NonManifold { z: f64 },
     #[error("flat model: zero Z extent between {min_z} and {max_z}")]
     Flat { min_z: f64, max_z: f64 },
@@ -92,7 +96,21 @@ pub enum SliceError {
 /// leaves ends dangling is retried with the micrometre tolerance weld
 /// (#241: an imported mesh's shared corners need not be bit-identical);
 /// a mesh still open under the tolerance is refused as before.
+///
+/// A soup that meets the plane 3+ ways is retried as the union of its
+/// closed solids (#1407, `slice_bodies`): stacked or touching bodies of
+/// one model section as the solid they stand for; anything else - one
+/// shell touching itself, solids welded along a shared edge - is refused.
 pub fn slice(facets: &[Triangle], z: f64) -> Result<Region, SliceError> {
+    match slice_plain(facets, z) {
+        Err(e @ SliceError::NonManifold { .. }) => {
+            super::slice_bodies::union_section(facets, z, slice_plain).unwrap_or(Err(e))
+        }
+        other => other,
+    }
+}
+
+fn slice_plain(facets: &[Triangle], z: f64) -> Result<Region, SliceError> {
     match slice_with(facets, z, false) {
         Err(SliceError::Open { .. }) => slice_with(facets, z, true),
         other => other,
@@ -379,67 +397,6 @@ pub fn shadow_above(facets: &[Triangle], z: f64) -> Result<Region, SliceError> {
 /// only for a part solid all the way down to the plane.
 pub fn material_overhead(facets: &[Triangle], z: f64) -> Result<Region, SliceError> {
     let cut = material_above(facets, z)?;
-    let hang = shadow_above(facets, z)?;
-    if hang.is_empty() {
-        return Ok(cut);
-    }
-    Ok(cut.union(&hang)?)
-}
-
-/// [`material_above`] of several bodies that TOUCH, read as the union
-/// they stand for (M13.11): `bodies` are index ranges of `facets`, one
-/// per closed solid. Two bodies butted face to face put two coincident
-/// walls of opposite normal into one soup, which the chord graph of
-/// [`slice`] meets as a non-manifold contact and refuses; sliced each on
-/// its own they are two clean sections, and the 2D boolean union of
-/// those sections is the section of the union solid - the same law the
-/// region builders apply to picks across entities. Fewer than two
-/// bodies is the plain call, byte for byte; a body that will not slice
-/// on its own (a self-intersecting shell) still refuses with its own
-/// error - the seam read never widens what counts as manifold. A range
-/// outside `facets` is an input error, never a silent partial read.
-pub fn material_above_of(
-    facets: &[Triangle],
-    bodies: &[std::ops::Range<usize>],
-    z: f64,
-) -> Result<Region, SliceError> {
-    if bodies.len() < 2 {
-        return material_above(facets, z);
-    }
-    let mut acc: Option<Region> = None;
-    for b in bodies {
-        let Some(part) = facets.get(b.clone()) else {
-            return Err(SliceError::Invalid(format!(
-                "body range {}..{} is outside the {} facets",
-                b.start,
-                b.end,
-                facets.len()
-            )));
-        };
-        let r = material_above(part, z)?;
-        if r.is_empty() {
-            continue;
-        }
-        acc = Some(match acc {
-            None => r,
-            Some(a) => a.union(&r)?,
-        });
-    }
-    Ok(acc.unwrap_or_default())
-}
-
-/// [`material_overhead`] over touching bodies ([`material_above_of`]'s
-/// section united with the shadow of the whole soup - the shadow is a
-/// projection of down-facing faces, which a vertical seam never has).
-pub fn material_overhead_of(
-    facets: &[Triangle],
-    bodies: &[std::ops::Range<usize>],
-    z: f64,
-) -> Result<Region, SliceError> {
-    if bodies.len() < 2 {
-        return material_overhead(facets, z);
-    }
-    let cut = material_above_of(facets, bodies, z)?;
     let hang = shadow_above(facets, z)?;
     if hang.is_empty() {
         return Ok(cut);

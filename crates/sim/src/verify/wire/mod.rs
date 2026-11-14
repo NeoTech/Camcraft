@@ -53,6 +53,7 @@
 
 mod dist;
 mod kerf;
+mod passes;
 mod slug;
 #[cfg(test)]
 mod hold_tests;
@@ -118,8 +119,13 @@ pub struct WireSection {
 #[derive(Clone, Debug)]
 pub struct WireJob<'a> {
     pub path: &'a Toolpath,
-    /// Wire radius plus spark gap (mm).
+    /// Wire radius plus spark gap (mm) - the rough (first) pass's.
     pub kerf_offset: f64,
+    /// Each skim pass's own kerf offset (its wire radius plus its own
+    /// spark gap, mm), in cut order (#538); empty is the one pass at
+    /// `kerf_offset`. Every pass starts and ends at the threading
+    /// point, and each move is judged at its own pass's offset.
+    pub skim_offsets: Vec<f64>,
     pub side: CutSide,
     /// The operation's stated start hole; `None` is not stated.
     pub start: Option<Point2>,
@@ -293,9 +299,30 @@ pub fn judge(job: &WireJob<'_>) -> WireVerdict {
         }
     };
     if job.side == CutSide::Open {
+        if !job.skim_offsets.is_empty() {
+            v.findings.push(WireFinding::Unreadable(
+                "an open run states skim passes - an open run is cut once, from the air to its run-out".into(),
+            ));
+            return v;
+        }
         open(job, &wire, k, &mut v);
         return v;
     }
+    // A tabbed cut's skims (#538 x #539) are not cut: the hold law
+    // reads one pass's main cut and its cut-off.
+    if job.cutoff_from.is_some() && !job.skim_offsets.is_empty() {
+        v.findings.push(WireFinding::Unreadable("a tabbed cut states skim passes - skims are cut on an untabbed profile only".into()));
+        return v;
+    }
+    let passes = match passes::split(&wire.pts, k, &job.skim_offsets) {
+        Ok(p) => p,
+        Err(why) => {
+            v.findings.push(WireFinding::Unreadable(why));
+            return v;
+        }
+    };
+    // The threading point clears the widest kerf any pass burns.
+    let k = passes::widest(&passes);
     let Some(start) = job.start else {
         v.findings.push(WireFinding::NoStart);
         return v;
@@ -320,14 +347,14 @@ pub fn judge(job: &WireJob<'_>) -> WireVerdict {
             worst = Some((clear, s.z));
         }
         if gouge.is_none() {
-            gouge = gouge_at(&p, &wire, k, s.z);
+            gouge = passes::gouge_at(&p, &wire, &passes, s.z);
         }
     }
     if let Some((clear, z)) = worst.filter(|(c, _)| *c < k - KERF_TOL) {
         v.findings.push(WireFinding::Threading { z, at: start, clear, need: k });
     }
     v.findings.extend(gouge);
-    slug::judge(job, &wire, opening, &mut v);
+    slug::judge(job, &wire, &passes, opening, &mut v);
     v
 }
 

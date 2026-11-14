@@ -33,12 +33,15 @@ pub mod cnc_torch;
 mod coolant;
 pub mod dialect;
 pub mod engine;
+pub mod explain;
 pub mod invert;
 pub mod js;
 pub mod machine;
 pub mod nose_tip;
 pub mod probe_rec;
 mod program;
+pub mod rotary_cap;
+pub mod work_offset;
 pub mod units;
 
 pub use after_op::AfterOperation;
@@ -99,7 +102,11 @@ pub struct Dump<'a> {
     pub clearance_z: f64,
     pub retract_z: f64,
     pub top_z: f64,
-    pub wcs: &'a str,
+    /// The setup's work offset as its 1-based index (#931: 1 is the
+    /// first offset, `G54` on most controls). The stream carries the
+    /// number; the post writes its own word for it. 0 is no offset and
+    /// the engine refuses it by name.
+    pub wcs: u32,
     pub origin: [f64; 3],
     /// Stock bounds in mm: left, right, front, back (XY), plus top Z.
     pub stock: [f64; 4],
@@ -194,7 +201,7 @@ impl<'a> Default for Dump<'a> {
             clearance_z: 0.0,
             retract_z: 0.0,
             top_z: 0.0,
-            wcs: "G54",
+            wcs: 1,
             origin: [0.0; 3],
             stock: [0.0; 4],
             stock_top_z: 0.0,
@@ -244,7 +251,9 @@ pub fn dump(t: &Toolpath, d: &Dump) -> Vec<Record> {
     out.push(Record::Param { name: "ToolDiameter".into(), value: json!(d.tool_diameter) });
     comment_params(d, &mut out);
     out.push(Record::Param { name: "SpindleSpeed".into(), value: json!(d.rpm) });
-    out.push(Record::Param { name: "WorkOffset".into(), value: json!(d.wcs) });
+    // #931: the stream carries the 1-based offset index; the post maps
+    // it to its word (and the engine refuses one it cannot express).
+    out.push(Record::Param { name: "WorkOffset".into(), value: json!(f64::from(d.wcs)) });
     out.push(Record::Param { name: "OriginX".into(), value: json!(d.origin[0]) });
     out.push(Record::Param { name: "OriginY".into(), value: json!(d.origin[1]) });
     out.push(Record::Param { name: "OriginZ".into(), value: json!(d.origin[2]) });
