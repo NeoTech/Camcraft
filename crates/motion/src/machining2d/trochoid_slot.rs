@@ -192,9 +192,15 @@ pub fn trochoidal_slot(chain: &[Point2], p: &TrochoidParams) -> Result<Toolpath,
     plan_trochoidal_slot(chain, p).map(|pl| pl.path)
 }
 
-/// [`trochoidal_slot`] with the planner's numbers.
+/// [`trochoidal_slot`] with the planner's numbers. A loop band wider
+/// than the tool radius opens its bore (#1589): a helix of radius `b`
+/// clears only the ring `b +- r`, so with `b > r` the plain bore leaves
+/// a post of radius `b - r` at the start that no front arc reaches. A
+/// band of at most the tool radius keeps the plain bore it always
+/// posted (its helix already overlaps at the centre).
 pub fn plan_trochoidal_slot(chain: &[Point2], p: &TrochoidParams) -> Result<TrochoidPlan, GenError> {
-    plan_lane(chain, p, false)
+    let open = p.band()? > 0.5 * p.tool_diameter;
+    plan_lane(chain, p, open)
 }
 
 /// The planner behind [`plan_trochoidal_slot`]; `open` opens the bore
