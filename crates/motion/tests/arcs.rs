@@ -3,12 +3,12 @@
 //! arc moves, chords stay inside the sagitta law's word, and paths with
 //! arcs still chain and stay finite.
 //!
-//! Gate map (M4.4): covers motion::machining2d (contour, fit_arcs).
+//! Gate map (M4.4): covers motion::machining2d (contour, fit_arcs, fit_arcs_sided).
 
 use camcraft_motion::cl::{Move, MoveKind};
 use camcraft_motion::geo2d::{Loop, Point2, Region};
 use camcraft_motion::geometry::Point3;
-use camcraft_motion::machining2d::{ContourParams, Lead, Seg, Side, contour, fit_arcs};
+use camcraft_motion::machining2d::{ContourParams, Lead, Seg, Side, contour, fit_arcs, fit_arcs_sided};
 
 fn p2(x: f64, y: f64) -> Point2 {
     Point2::new(x, y)
@@ -256,5 +256,57 @@ fn a_closed_rim_fits_whole_in_either_direction() {
             "a closed rim is arcs only, turning its own way (ccw {ccw}): {segs:?}"
         );
         assert!(matches!(segs.last(), Some(Seg::Arc { to, .. }) if Some(to) == pts.last()), "the last arc closes on the seam");
+    }
+}
+
+/// The worst amount any vertex of a fitted run stands on the part side
+/// of its arc (#1579): `part_in` when the part is on the centre's side.
+fn worst_part_side(pts: &[Point2], segs: &[Seg], part_in: bool) -> f64 {
+    let mut worst = f64::NEG_INFINITY;
+    let mut i = 0usize;
+    for seg in segs {
+        match seg {
+            Seg::Line(qs) => i += qs.len(),
+            Seg::Arc { center, to, .. } => {
+                let j = (i + 1..pts.len()).find(|&j| pts[j] == *to).expect("arc ends on a vertex");
+                let r = (pts[i].x - center.x).hypot(pts[i].y - center.y);
+                for p in &pts[i..=j] {
+                    let s = (p.x - center.x).hypot(p.y - center.y) - r;
+                    worst = worst.max(if part_in { s } else { -s });
+                }
+                i = j;
+            }
+        }
+    }
+    worst
+}
+
+#[test]
+fn a_sided_fit_never_passes_a_vertex_on_the_part_side() {
+    // #1579: a boss wall tessellated with a radial wobble of 0.04 mm (the
+    // offset of a faceted cylinder rides that much in and out). At tol
+    // 0.1 the two-sided fit may pass a vertex up to 0.05 on the part's
+    // side - the verifier's 0.01 allowance convicts that as a gouge. The
+    // sided fit keeps every vertex on the air side, in both directions.
+    let wobble: Vec<Point2> = ring(p2(0.0, 0.0), 17.0, 96)
+        .iter()
+        .enumerate()
+        .map(|(k, p)| if k % 2 == 1 { p2(p.x * (1.0 - 0.04 / 17.0), p.y * (1.0 - 0.04 / 17.0)) } else { *p })
+        .collect();
+    let mut cw = wobble.clone();
+    cw.reverse();
+    // Around a boss the part is on the centre's side either way: the
+    // climb walk (cw) has the air on its left, the conventional one (ccw)
+    // on its right.
+    for (walk, air_left) in [(&cw, true), (&wobble, false)] {
+        let two = fit_arcs(walk, 0.1);
+        assert!(worst_part_side(walk, &two, true) > 0.01, "the two-sided fit shows the defect");
+        let one = fit_arcs_sided(walk, 0.1, Some(air_left));
+        assert!(one.iter().any(|s| matches!(s, Seg::Arc { .. })), "air_left={air_left}: still fits arcs");
+        let w = worst_part_side(walk, &one, true);
+        eprintln!("air_left={air_left}: worst part-side excursion {w} mm (two-sided {})", worst_part_side(walk, &two, true));
+        // The fit forgives 1e-3 mm (`ARC_SIDE_SLACK`), ten times under the
+        // verifier's 0.01 gouge allowance.
+        assert!(w <= 1e-3 + 1e-9, "air_left={air_left}: a vertex stands {w} mm on the part side");
     }
 }
