@@ -159,6 +159,8 @@ mod fixtures_page;
 mod model_fidelity;
 // #1054: the STEP facet budget on the model page.
 mod step_budget;
+// #1573 review: what a STEP import changed is said on the status line.
+mod import_notes;
 // #709 hand check: both points of a two-point axis stay marked.
 mod two_point_marks;
 // #979: the viewport box select.

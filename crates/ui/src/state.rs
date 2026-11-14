@@ -3913,6 +3913,9 @@ impl State {
         match result {
             Ok(command) => {
                 let name = command.name.clone();
+                // #1573 review: what the importer changed (a STEP face
+                // flipped to agree with its neighbours) is said by name.
+                let changed = if command.notes.is_empty() { String::new() } else { format!(" - {}", command.notes.join("; ")) };
                 let timed = |verb: &str, note: &str| {
                     if secs >= 2.0 {
                         format!("{verb} {name}{note} in {secs:.1}s")
@@ -3940,8 +3943,8 @@ impl State {
                             self.doc_version += 1;
                             self.note_recent_model(file.as_deref());
                             self.status = match &binding {
-                                Some(s) => format!("{verb}; marked as {s}'s fixture"),
-                                None => format!("{verb}; marked as a fixture"),
+                                Some(s) => format!("{verb}; marked as {s}'s fixture{changed}"),
+                                None => format!("{verb}; marked as a fixture{changed}"),
                             };
                         }
                         Err(err) => self.refuse(ErrorScope::Setup, format!("fixture not imported: {err}")),
@@ -3956,7 +3959,7 @@ impl State {
                             self.history.execute(&self.world, upd);
                             self.doc_version += 1;
                             self.note_recent_model(file.as_deref());
-                            self.status = timed("updated", &format!(" ({summary})"));
+                            self.status = format!("{}{changed}", timed("updated", &format!(" ({summary})")));
                         }
                         Err(err) => self.status = format!("import refused: {err}"),
                     }
@@ -3965,7 +3968,7 @@ impl State {
                     self.history.execute(&self.world, command);
                     self.doc_version += 1;
                     self.note_recent_model(file.as_deref());
-                    self.status = timed("imported", "");
+                    self.status = format!("{}{changed}", timed("imported", ""));
                 }
                 // #864: an import kept coarser than promised is said, not
                 // only logged.
