@@ -2062,11 +2062,17 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     // #1635: off the stock, the chain is the one a part
                     // source drills in that stock - the setup's parts are
                     // the solid it measures and keeps, the source stock
-                    // the raw material its mouths stand off.
+                    // the raw material its mouths stand off. #1641: on a
+                    // part source the setup's other parts are kept too.
                     let solids = if part_solid {
-                        super::cross_spindle::Solids { source: &material.facets, stock: stock_facets.as_deref(), kept: &material.facets }
+                        super::cross_spindle::Solids {
+                            source: &material.facets,
+                            stock: stock_facets.as_deref(),
+                            kept: &material.facets,
+                            neighbours: &neighbour_parts,
+                        }
                     } else {
-                        super::cross_spindle::Solids { source: &keep_parts, stock: Some(&material.facets), kept: &keep_parts }
+                        super::cross_spindle::Solids { source: &keep_parts, stock: Some(&material.facets), kept: &keep_parts, neighbours: &[] }
                     };
                     super::cross_spindle::cross_drill(radial, solids, wcs_origin, &cutter, &tool_name, unit)?
                 }
@@ -2891,6 +2897,9 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
     // #1635: a cross drill off the stock answered for the setup's parts
     // in its own radial law (`cross_part`, above); the vertical solid
     // law below would convict the declared cross hole's own wall.
+    // #1641: on a part source its radial law also refuses a chain into
+    // the setup's other parts; the neighbour law below (no wall excused)
+    // stays on it as a second net.
     let parts_crossed = super::keep_law::is_cross_drill(&params);
     // #1595: what a mark may take off the part's surface under the cutter.
     let mark_budget = hl.top.zip(hl.bottom).map_or(0.0, |(t, b)| super::mark_law::budget(t, b, tool.diameter * 0.5));
