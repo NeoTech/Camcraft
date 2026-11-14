@@ -2755,6 +2755,27 @@ fn the_workspace_tabs_switch_workspaces_and_ride_undo() {
         "the switch must say what mounted: {}",
         harness.state().state.status
     );
+    // The current tab is inert: a click mounts nothing and queues nothing.
+    let before = harness.state().state.history.can_undo();
+    let (_, current_tab) = texts
+        .iter()
+        .find(|(t, _)| t == "TURNING")
+        .cloned()
+        .expect("the Turning tab stands on the strip");
+    set_pos(&mut harness, current_tab);
+    button_at(&mut harness, egui::PointerButton::Primary, current_tab, true);
+    button_at(&mut harness, egui::PointerButton::Primary, current_tab, false);
+    harness.run_steps(2);
+    assert_eq!(
+        camcraft_app::machine::kind_of(&harness.state().state.world),
+        Kind::Lathe,
+        "the current tab stays the running workspace",
+    );
+    assert_eq!(
+        harness.state().state.history.can_undo(),
+        before,
+        "the current tab queues nothing (undo depth unchanged)",
+    );
     // The operations follow the workspace (the user's ask): the mill
     // kinds go dark behind the doors...
     assert!(
@@ -4647,13 +4668,90 @@ fn a_fixture_model_reads_as_a_vise_in_the_tree() {
     assert!(!painted::has_eye(painted::Kind::Section));
 }
 
+#[test]
+fn stock_eye_hides_the_viewport_stock_without_removing_it_from_the_document() {
+    let mut harness = shell_harness();
+    harness.run_steps(2);
+    let stock_name = camcraft_app::setup::stock_entity_name(&harness.state().state.world, None);
+    let (_, leaves) = panes::browser_rows(&harness.state().state);
+    let row = leaves.iter().position(|leaf| matches!(leaf, panes::Leaf::Stock(_))).expect("stock row");
+    let eye = egui::pos2(BROWSER_EYE_X, BROWSER_TREE_TOP + (row as f32 + 0.5) * theme::current().row_height);
+    assert!(world::collect(&harness.state().state).parts.iter().any(|part| part.stock));
 
+    set_pos(&mut harness, eye);
+    button_at(&mut harness, egui::PointerButton::Primary, eye, true);
+    button_at(&mut harness, egui::PointerButton::Primary, eye, false);
+    harness.run();
+    let state = &harness.state().state;
+    assert!(state.active_stock_hidden());
+    assert!(model::find_by_name(&state.world, &stock_name).is_some());
+    assert!(!world::collect(state).parts.iter().any(|part| part.stock));
 
+    button_at(&mut harness, egui::PointerButton::Primary, eye, true);
+    button_at(&mut harness, egui::PointerButton::Primary, eye, false);
+    harness.run();
+    assert!(!harness.state().state.active_stock_hidden());
+    assert!(world::collect(&harness.state().state).parts.iter().any(|part| part.stock));
+}
 
+#[test]
+fn selecting_a_post_script_is_a_command_with_the_pane_labels() {
+    // M3.3 A's UI half, headless: the file arm lands a user script in
+    // the world singleton and says so on the status line; the
+    // built-in arm resets; undo puts the previous choice back; and a
+    // script that does not exist is a visible refusal, never a quiet
+    // keep-the-old choice.
+    use camcraft_app::posting;
+    use camcraft_app::schema::PostRef;
 
+    let dir = std::env::temp_dir().join(format!("camcraft-ui-post-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("temp dir");
+    let cps = dir.join("userpost.cps");
+    std::fs::write(&cps, "function onOpen() { writeln(\"(UIPOST-3)\"); }").expect("write cps");
 
+    let mut harness = shell_harness();
+    harness.run();
+    assert_eq!(posting::post_of(&harness.state().state.world), PostRef::Builtin);
 
+    harness
+        .state_mut()
+        .state
+        .pending
+        .push_back(CommandKind::SelectPostFile(cps.clone()));
+    harness.run();
+    {
+        let st = &harness.state().state;
+        assert!(st.status.contains("post:"), "{}", st.status);
+        assert!(matches!(posting::post_of(&st.world), PostRef::File(_)));
+    }
 
+    // Undo the selection - the built-in is back, by the history law.
+    harness.state_mut().state.pending.push_back(CommandKind::Undo);
+    harness.run();
+    assert_eq!(posting::post_of(&harness.state().state.world), PostRef::Builtin);
+
+    // The built-in arm on an already-built-in document refuses visibly
+    // (the "already selected" law), and a missing file names itself.
+    harness
+        .state_mut()
+        .state
+        .pending
+        .push_back(CommandKind::SelectPostBuiltin);
+    harness.run();
+    assert!(
+        harness.state().state.status.contains("post not selected"),
+        "a no-op choice is a stated refusal: {}",
+        harness.state().state.status
+    );
+    harness.state_mut().state.pending.push_back(CommandKind::SelectPostFile(
+        dir.join("gone.cps"),
+    ));
+    harness.run();
+    let st = &harness.state().state;
+    assert!(st.status.contains("post not selected") && st.status.contains("gone.cps"), "{:?}", st.status);
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
 
 
 /// M10.1 C, the ui half of the honest after-state: delete the seed's one
@@ -5204,88 +5302,3 @@ fn a_lathe_over_a_mill_post_offers_the_lathe_post_and_rides_undo() {
 }
 
 
-
-#[test]
-fn stock_eye_hides_the_viewport_stock_without_removing_it_from_the_document() {
-    let mut harness = shell_harness();
-    harness.run_steps(2);
-    let stock_name = camcraft_app::setup::stock_entity_name(&harness.state().state.world, None);
-    let (_, leaves) = panes::browser_rows(&harness.state().state);
-    let row = leaves.iter().position(|leaf| matches!(leaf, panes::Leaf::Stock(_))).expect("stock row");
-    let eye = egui::pos2(BROWSER_EYE_X, BROWSER_TREE_TOP + (row as f32 + 0.5) * theme::current().row_height);
-    assert!(world::collect(&harness.state().state).parts.iter().any(|part| part.stock));
-
-    set_pos(&mut harness, eye);
-    button_at(&mut harness, egui::PointerButton::Primary, eye, true);
-    button_at(&mut harness, egui::PointerButton::Primary, eye, false);
-    harness.run();
-    let state = &harness.state().state;
-    assert!(state.active_stock_hidden());
-    assert!(model::find_by_name(&state.world, &stock_name).is_some());
-    assert!(!world::collect(state).parts.iter().any(|part| part.stock));
-
-    button_at(&mut harness, egui::PointerButton::Primary, eye, true);
-    button_at(&mut harness, egui::PointerButton::Primary, eye, false);
-    harness.run();
-    assert!(!harness.state().state.active_stock_hidden());
-    assert!(world::collect(&harness.state().state).parts.iter().any(|part| part.stock));
-}
-
-#[test]
-fn selecting_a_post_script_is_a_command_with_the_pane_labels() {
-    // M3.3 A's UI half, headless: the file arm lands a user script in
-    // the world singleton and says so on the status line; the
-    // built-in arm resets; undo puts the previous choice back; and a
-    // script that does not exist is a visible refusal, never a quiet
-    // keep-the-old choice.
-    use camcraft_app::posting;
-    use camcraft_app::schema::PostRef;
-
-    let dir = std::env::temp_dir().join(format!("camcraft-ui-post-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).expect("temp dir");
-    let cps = dir.join("userpost.cps");
-    std::fs::write(&cps, "function onOpen() { writeln(\"(UIPOST-3)\"); }").expect("write cps");
-
-    let mut harness = shell_harness();
-    harness.run();
-    assert_eq!(posting::post_of(&harness.state().state.world), PostRef::Builtin);
-
-    harness
-        .state_mut()
-        .state
-        .pending
-        .push_back(CommandKind::SelectPostFile(cps.clone()));
-    harness.run();
-    {
-        let st = &harness.state().state;
-        assert!(st.status.contains("post:"), "{}", st.status);
-        assert!(matches!(posting::post_of(&st.world), PostRef::File(_)));
-    }
-
-    // Undo the selection - the built-in is back, by the history law.
-    harness.state_mut().state.pending.push_back(CommandKind::Undo);
-    harness.run();
-    assert_eq!(posting::post_of(&harness.state().state.world), PostRef::Builtin);
-
-    // The built-in arm on an already-built-in document refuses visibly
-    // (the "already selected" law), and a missing file names itself.
-    harness
-        .state_mut()
-        .state
-        .pending
-        .push_back(CommandKind::SelectPostBuiltin);
-    harness.run();
-    assert!(
-        harness.state().state.status.contains("post not selected"),
-        "a no-op choice is a stated refusal: {}",
-        harness.state().state.status
-    );
-    harness.state_mut().state.pending.push_back(CommandKind::SelectPostFile(
-        dir.join("gone.cps"),
-    ));
-    harness.run();
-    let st = &harness.state().state;
-    assert!(st.status.contains("post not selected") && st.status.contains("gone.cps"), "{:?}", st.status);
-
-    let _ = std::fs::remove_dir_all(&dir);
-}

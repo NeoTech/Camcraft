@@ -1122,11 +1122,12 @@ fn ribbon_tabs(ui: &mut Ui, state: &mut State, pal: &Tokens, strip: Rect, band: 
     }
 }
 
-/// A per-family hue for the Create cells and their section doors: the
-/// workbook-style cue the reference shows (2D one hue, 3D another, drilling
-/// a third, turning a warm one), with our own palette - no asset or
-/// palette lifted from any product. Returns `None` for the command cells;
-/// `painted::cell` falls back to the theme's on-fill ink there.
+/// A per-family hue for the Create cells and their section doors: 2D a
+/// steel blue, 3D a teal, drilling a leaf green, turning warm rust - our
+/// own palette picks, no asset or palette lifted from another product
+/// (the colours are derived from the toolpath families' own hues).
+/// Returns `None` for the command cells; `painted::cell` falls back to
+/// the theme's on-fill ink there.
 fn family_tint(c: Cmd) -> Option<Color32> {
     use camcraft_app::operation::Section;
     let sec = match c {
