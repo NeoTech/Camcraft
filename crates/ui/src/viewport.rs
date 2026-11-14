@@ -1078,6 +1078,14 @@ impl Default for Camera {
     }
 }
 
+/// The distance behind the target the orthographic camera sits at. Its
+/// framing is independent of distance (the half-height is `dist * tan
+/// (fov/2)`), so nothing useful comes of pushing the eye toward the
+/// model - dollying along the view direction with `dist` only swallowed
+/// the model's near faces behind the camera as the zoom shrank. The
+/// ortho `dist` is a zoom factor; the eye stays at a nominal distance.
+pub(crate) const ORTHO_EYE_DIST: f64 = 100.0;
+
 impl Camera {
     pub fn orbit(&mut self, dx: f32, dy: f32) {
         self.yaw -= f64::from(dx) * 0.01;
@@ -1313,11 +1321,16 @@ impl Camera {
 
     #[must_use]
     pub(crate) fn eye(&self) -> [f64; 3] {
+        let d = if self.projection == ProjectionMode::Orthographic {
+            ORTHO_EYE_DIST
+        } else {
+            self.dist
+        };
         let cp = self.pitch.cos();
         [
-            self.target[0] + self.dist * cp * self.yaw.cos(),
-            self.target[1] + self.dist * cp * self.yaw.sin(),
-            self.target[2] + self.dist * self.pitch.sin(),
+            self.target[0] + d * cp * self.yaw.cos(),
+            self.target[1] + d * cp * self.yaw.sin(),
+            self.target[2] + d * self.pitch.sin(),
         ]
     }
 
@@ -1378,7 +1391,11 @@ impl Camera {
                 1.0,
             ],
         ];
-        let near = 0.1f64;
+        // The near plane rides the view distance (minimally far from
+        // the eye): a fixed 0.1 clipped against any part smaller than
+        // half a millimetre near the camera, so zooming magnified cut
+        // the near faces away at the surface.
+        let near = (self.dist * 0.001).clamp(1e-5, 0.1);
         let far = (self.dist * 40.0).max(1000.0);
         let aspect = if aspect.is_finite() && aspect > 1e-6 {
             aspect

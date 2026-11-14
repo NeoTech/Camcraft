@@ -2198,7 +2198,7 @@ mod projection_tests {
                 ],
             )
         };
-        let near = 0.1f64;
+        let near = (cam.dist * 0.001).clamp(1e-5, 0.1);
         let far = (cam.dist * 40.0).max(1000.0);
         assert!((at(near) - 0.0).abs() < 1e-3, "the near plane sits at {}", at(near));
         assert!((at(far) - 1.0).abs() < 1e-3, "the far plane sits at {}", at(far));
@@ -2284,10 +2284,15 @@ mod projection_tests {
         let mp = p.mvp(ASPECT);
         for (nx, ny) in [(-0.9, -0.9), (-0.3, 0.2), (0.0, 0.0), (0.6, 0.85)] {
             let (origin, dir) = o.ray_through([nx, ny], ASPECT).expect("ortho ray");
+            let dd = dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2];
+            let t = ((o.target[0] - origin[0]) * dir[0]
+                + (o.target[1] - origin[1]) * dir[1]
+                + (o.target[2] - origin[2]) * dir[2])
+                / dd;
             let hit = [
-                origin[0] + dir[0] * o.dist,
-                origin[1] + dir[1] * o.dist,
-                origin[2] + dir[2] * o.dist,
+                origin[0] + dir[0] * t,
+                origin[1] + dir[1] * t,
+                origin[2] + dir[2] * t,
             ];
             let a = project(&mo, hit);
             let b = project(&mp, hit);
