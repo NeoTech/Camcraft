@@ -234,12 +234,14 @@ pub(super) fn edit_operation(env: &mut Env, a: &Map<String, Value>) -> Result<Va
 /// The app's Detect holes button over MCP (#312): the operation's
 /// source read for holes now (`operation::detect_holes`, the button's
 /// own rule) and stored as one undoable parameter edit. Answers with
-/// how many axial and radial holes went in.
+/// how many axial and radial holes went in, and (#1556) a sentence per
+/// hole left out because the op cannot make it.
 pub(super) fn detect_holes(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
     let key = find_op(env, req_str(a, "name")?)?;
     let e = model::find_by_name(&env.world, &key).ok_or_else(|| format!("no operation named '{key}'"))?;
     let op = model::operation_of(&env.world, &e).ok_or_else(|| format!("'{key}' is not an operation"))?;
-    let next = operation::detect_holes(&env.world, &key, &op.params, op.setup.as_deref(), &op.src)?;
+    let operation::DetectedHoles { params: next, skipped } =
+        operation::detect_holes(&env.world, &key, &op.params, op.setup.as_deref(), &op.src)?;
     let (holes, radial) = match &next {
         OpParams::Drill { holes, cross, .. } => (holes.len(), cross.len()),
         OpParams::Bore { holes, .. } | OpParams::Thread { holes, .. } => (holes.len(), 0),
@@ -247,7 +249,9 @@ pub(super) fn detect_holes(env: &mut Env, a: &Map<String, Value>) -> Result<Valu
     };
     let cmd = EditOperationParams::new(&env.world, &key, next).map_err(cmd_err)?;
     env.history.execute(&env.world, cmd);
-    Ok(json!({ "operation": key, "holes": holes, "radial_holes": radial, "status": "stale" }))
+    // #1556: each hole the op's kind could not take, named - the GUI's
+    // status line reads the same sentences.
+    Ok(json!({ "operation": key, "holes": holes, "radial_holes": radial, "skipped": skipped, "status": "stale" }))
 }
 
 pub(super) fn delete_operation(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {

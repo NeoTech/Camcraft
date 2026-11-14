@@ -65,6 +65,8 @@ mod law_tests;
 #[cfg(test)]
 mod refusal_focus_tests;
 #[cfg(test)]
+mod detect_holes_note_tests;
+#[cfg(test)]
 mod refusal_ghost_tests;
 #[cfg(test)]
 mod helix_view_tests;
