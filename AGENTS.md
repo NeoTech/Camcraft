@@ -465,6 +465,30 @@ go to `CHANGELOG.md`.
   umbrella. When every sub-issue is filed, drop `needs-research` and close
   the umbrella with a comment naming them - it is not kept open, so Pick
   can never take it for code. Only the sub-issues are picked for code.
+- **Issues and comments are written in ASD-STE100** (maintainer, 2026-11-14:
+  "all communication thru github issues, and github comments should follow
+  the ASDSTE-100 language standard for Technical English"). Write every
+  issue title and body, and every comment on an issue or pull request, in
+  ASD-STE100 Simplified Technical English. This includes review comments and
+  PR descriptions. Agents and the maintainer's sessions follow the same rule.
+  The standard is a licensed document (https://www.asd-ste100.org). Do not
+  copy its text. In practice:
+  - Use short sentences: about 20 words in an instruction, 25 in a
+    description. Give one instruction in each sentence.
+  - Use the active voice. Use the simple present, past and future tenses.
+  - Use one word for one meaning. Use the same term for the same thing every
+    time.
+  - Do not use idioms, slang or filler words. Keep the articles (a, an, the).
+  - Use no more than three nouns in a row. Use a vertical list for a long
+    enumeration.
+  - The rule does not change: code, commands, identifiers, file paths, log
+    and error output, quoted text of other people, the technical names of the
+    trade (G-code words, CAM terms), and the fixed strings that other agents
+    parse (`claimed:`, `/claim`, `<!-- pr-reviewer: ... -->`,
+    `<!-- review-cost: ... -->`, `Fixes #N`, `Process change: yes`, and the
+    release and claim comment formats in this file).
+  - The rule applies to what we write. Never reject an outside reporter's
+    issue, and never correct its language.
 - **Report on the issue, not in prose files.** A finding, a held patch, a
   blocker or a decision taken goes into an issue comment. If the work is
   blocked, swap `claimed` for `blocked` and say on what. If a fix shows new

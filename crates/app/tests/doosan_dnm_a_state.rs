@@ -40,12 +40,14 @@ fn plain_fourth() -> serde_json::Value {
 #[test]
 fn doosan_dnm_writes_a0_after_an_a30_tool() {
     let stream = "\
+PARAM ClearancePlane 5
 TOOL 1 T1
 PARAM SpindleSpeed 6000
 SECTION
 Rapid X 0 Y 0 Z 5000 A 30000
 Feed X 0 Y 0 Z 0 F 100000 A 30000
 ENDSECTION
+PARAM ClearancePlane 5
 TOOL 2 T2
 PARAM SpindleSpeed 6000
 SECTION
@@ -75,6 +77,7 @@ ENDSECTION
 #[test]
 fn doosan_dnm_writes_the_opening_a0_without_tcp() {
     let stream = "\
+PARAM ClearancePlane 5
 TOOL 1 T1
 PARAM SpindleSpeed 6000
 SECTION

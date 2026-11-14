@@ -27,6 +27,7 @@ use crate::entry_arc::{ArcLead, arc_lead_swept, pts_dir, push_arc_lead, seg_dir}
 use crate::geo2d::{Point2, Region};
 use crate::geometry::Point3;
 use crate::links::{helix_turns, plan_zig_capped, push_zig};
+use crate::ring_zig::push_zig_ring;
 
 use super::arcs::{ARC_FIT_TOL, Seg};
 use super::levels::{Cert, Motion};
@@ -220,6 +221,15 @@ pub(super) fn plan_arm(arm: Entry3D, zig: bool, l: &Lvl, leg: Point2, z: f64, pr
                 None => Descent::Sub("the first cut is too short for the entry ramp's angle and length"),
             }
         }
+        // #1609: on a ring (the circular kernel) the chord from the
+        // tool's XY is a steep dive or no move at all - the ring
+        // returns to its own start, so a level change's chord has no
+        // length. The ramp rides the ring at the ramp angle instead
+        // (the transition's, 3 deg by default), as the helix's stand-
+        // down does; a ring too short for it dives at the plunge feed,
+        // named.
+        Entry3D::Ramp if m.ring_zig => ramp_fallback(l, z, prev_z, m)
+            .unwrap_or(Descent::Sub("the ring is too short to ramp at the angle")),
         Entry3D::Ramp if l.cen.chord_ok(leg, e) => {
             // The leg limit takes the chord's last stretch: a piece of
             // the proved chord, re-proved after the lattice snap.
@@ -320,7 +330,11 @@ pub(super) fn push(b: &mut PathBuilder, d: &Descent, l: &Lvl, z: f64, tz: f64, m
                 b.push(MoveKind::Rapid, Point3::new(e.x, e.y, tz), None);
             }
             b.push(MoveKind::Rapid, Point3::new(e.x, e.y, *zf), None);
-            push_zig(b, pre, *n, *zf, z, fd);
+            // #1558: a ring's ramp rides the ring's own arcs.
+            match l.walk.and_then(<[Seg]>::first) {
+                Some(Seg::Arc { center, ccw, .. }) if m.ring_zig => push_zig_ring(b, pre, *center, *ccw, *n, *zf, z, fd),
+                _ => push_zig(b, pre, *n, *zf, z, fd),
+            }
             Vec::new()
         }
         Descent::Helix(h) => {

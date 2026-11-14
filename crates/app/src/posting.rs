@@ -454,6 +454,8 @@ mod wcs_rotation;
 mod wcs_slot;
 #[path = "posting_mounts.rs"]
 mod mounts;
+#[path = "posting_setup_change.rs"]
+mod setup_change;
 #[path = "posting_program.rs"]
 mod program;
 pub use program::{
@@ -558,7 +560,7 @@ fn write_program(out_path: &Path, posted: Posted) -> Result<Posted, String> {
 fn post_script_body(world: &World, cps: &str, label: Option<&str>) -> Result<Posted, String> {
     // #388: the program's one machine (a program over several refuses).
     let mount = mounts::single(world, false)?;
-    let streams = op_streams(world)?;
+    let streams = op_streams_by(world, false)?;
     // #1190: a turning dialect opens only what a lathe may run.
     crate::lathe_voice::at_post(world, streams.iter().map(|(n, _)| n.as_str()), cps, label)?;
     // #1232: and a post writes only for a machine kind it serves.
@@ -782,8 +784,9 @@ pub fn verification_report_by(world: &World, voice: &dyn Fn(Option<&str>) -> pos
     // its own post's maximum - never posted at offset 1.
     problems.extend(crate::setup_offsets::range_problems(world));
     // #389: the setups' post options must agree on what shapes the whole
-    // program (the Output and the thread output) - never posted half one
-    // way. Judged program-wide, ahead of #388's per-mount split.
+    // program (the Output, the thread output and, #1540, the End units) -
+    // never posted half one way. Judged program-wide, ahead of #388's
+    // per-mount split.
     problems.extend(crate::setup_post_options::program_problems(world));
     // #1031/#1174: the work spindle over a setup's workholding maximum,
     // by name - judged for the post dialect each op runs through.
@@ -947,6 +950,14 @@ pub(crate) fn join_streams(streams: Vec<(String, Vec<cnc::Record>)>) -> Vec<cnc:
 /// program order, cycle anchors local to the op - the unit one file per
 /// operation (#111) posts on its own, and [`stream_records`] joins.
 pub fn op_streams(world: &World) -> Result<Vec<(String, Vec<cnc::Record>)>, String> {
+    op_streams_by(world, true)
+}
+
+/// [`op_streams`], with the setup-change stops (#1532) placed for files
+/// grouped as `setup_mount::program_mounts(world, by_post)` groups them:
+/// `false` for an explicit script, which posts every post's setups of a
+/// machine in one file.
+pub(crate) fn op_streams_by(world: &World, by_post: bool) -> Result<Vec<(String, Vec<cnc::Record>)>, String> {
     let ops = program_ops(world)?;
 
     // The T../H.. law (#221): a tool's own number when it has one, else
@@ -964,10 +975,12 @@ pub fn op_streams(world: &World) -> Result<Vec<(String, Vec<cnc::Record>)>, Stri
 
     // #155: Pause / Home entries fold into the gap they stand in; #389:
     // "Skip pauses and homes" is read per op, from its own setup.
-    let afters = crate::program_entry::posted_afters(world, &ops, |e| {
+    let mut afters = crate::program_entry::posted_afters(world, &ops, |e| {
         model::operation_of(world, e)
             .is_some_and(|op| crate::setup_post_options::of(world, op.setup.as_deref()).skip_stops)
     })?;
+    // #1532: a setup change stops for the re-clamp (by default).
+    let changes = setup_change::fold(world, &ops, &mut afters, by_post)?;
     let mut streams = Vec::with_capacity(ops.len());
     for (name, e) in &ops {
         let op = model::operation_of(world, e)
@@ -976,7 +989,9 @@ pub fn op_streams(world: &World) -> Result<Vec<(String, Vec<cnc::Record>)>, Stri
             .ok_or_else(|| format!("{name}: lost its toolpath"))?;
         if let OpParams::WireContour(p) = &op.params {
             let after = afters.get(name).copied().unwrap_or_default();
-            streams.push((name.clone(), wire::stream(world, name, e, &op, &cache, p, after)?));
+            let mut records = wire::stream(world, name, e, &op, &cache, p, after)?;
+            setup_change::ask(&changes, name, &mut records);
+            streams.push((name.clone(), records));
             continue;
         }
         let tool = model::find_by_name(world, &op.tool)
@@ -1104,6 +1119,7 @@ pub fn op_streams(world: &World) -> Result<Vec<(String, Vec<cnc::Record>)>, Stri
         {
             post::ask_reverse_spindle(&mut records);
         }
+        setup_change::ask(&changes, name, &mut records);
         streams.push((name.clone(), records));
     }
     Ok(streams)

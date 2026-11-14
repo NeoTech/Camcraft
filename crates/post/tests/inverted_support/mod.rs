@@ -75,6 +75,8 @@ pub fn probe_records() -> Vec<Record> {
         Record::Param { name: "StockXYRight".into(), value: json!(80.0) },
         Record::Param { name: "StockXYFront".into(), value: json!(0.0) },
         Record::Param { name: "StockXYBack".into(), value: json!(60.0) },
+        // #1633: the section states its clearance, as `post::dump` does.
+        Record::Param { name: "ClearancePlane".into(), value: json!(5.0) },
         Record::Tool { number: 1, name: "6MM END MILL".into() },
         Record::Section { begin: true },
         mv(Rapid, [30.0, 30.0, 5.0], None),
@@ -237,6 +239,9 @@ pub fn controller_events(program: &str, flip: [bool; 3]) -> Vec<Event> {
     let mut ev = Vec::new();
     let (mut pos, mut motion, mut plane, mut in_cycle) = ([0.0f64; 3], 0u32, 17u8, false);
     let mut comp_pending: Option<u32> = None;
+    // #1633: X/Y are unknown until the first traverse; a Z-only move
+    // before it is that traverse's stated height, not a CAM motion.
+    let mut xy_known = false;
     for line in program.lines() {
         let line = line.trim();
         if line.is_empty() || line.starts_with('(') || line.starts_with('%') || line.starts_with('O') {
@@ -282,6 +287,11 @@ pub fn controller_events(program: &str, flip: [bool; 3]) -> Vec<Event> {
             ev.push(Event::Hole([h[0], h[1]]));
             continue;
         }
+        if !xy_known && x.is_none() && y.is_none() {
+            pos[2] = z.unwrap_or(pos[2]);
+            continue;
+        }
+        xy_known = true;
         let end = [x.unwrap_or(pos[0]), y.unwrap_or(pos[1]), z.unwrap_or(pos[2])];
         if let Some(g) = comp_pending.take() {
             assert_eq!(motion, 10, "comp engages on a G1: {line}");

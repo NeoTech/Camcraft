@@ -144,6 +144,7 @@ fn drilling(dwell_reaches_bottom: bool) -> String {
     let drill_bottom = if dwell_reaches_bottom { -6.0 } else { -5.0 };
     cnc::serialize(&[
         R::Param { name: "SpindleSpeed".into(), value: json!(3000) },
+        R::Param { name: "ClearancePlane".into(), value: json!(10.0) }, // #1633, as `post::dump` states it
         R::Tool { number: 4, name: "6MM DRILL".into() },
         R::Section { begin: true },
         mv(MoveKind::Rapid, 10.0, 10.0, 10.0, None),
@@ -167,6 +168,7 @@ fn native_cycles() -> String {
     let mut rs = vec![
         R::Param { name: "WorkOffset".into(), value: json!("G55") },
         R::Param { name: "SpindleSpeed".into(), value: json!(3000) },
+        R::Param { name: "ClearancePlane".into(), value: json!(10.0) }, // #1633, as `post::dump` states it
         R::Tool { number: 4, name: "TAP-M4".into() },
         R::Section { begin: true },
     ];
@@ -260,6 +262,7 @@ fn heidenhain_keeps_the_legacy_no_spindle_tap_refusal_and_maps_presets() {
     let section = |offset: Option<&str>| {
         let mut rs = Vec::new();
         if let Some(word) = offset { rs.push(R::Param { name: "WorkOffset".into(), value: json!(word) }); }
+        rs.push(R::Param { name: "ClearancePlane".into(), value: json!(5.0) }); // #1633
         rs.extend([R::Section { begin: true }, mv(MoveKind::Rapid, 0.0, 0.0, 5.0, None), R::Section { begin: false }]);
         cnc::serialize(&rs)
     };

@@ -20,6 +20,10 @@ pub struct ImportModel {
     /// default (#1054); `None` for the default and for STL/OBJ. It lands
     /// with the mesh, so the model says how to import it again.
     pub facet_budget: Option<u64>,
+    /// What the importer changed on the way (`import::Graded::notes`), for
+    /// the caller to say: the MCP result and the status line. Not part of
+    /// the document; empty for a mesh handed in.
+    pub notes: Vec<String>,
 }
 
 impl ImportModel {
@@ -65,6 +69,7 @@ impl ImportModel {
             .to_string();
         let mut cmd = Self::from_mesh(&name, graded.mesh).with_fidelity(graded.coarse_mm);
         cmd.facet_budget = step_budget::recorded(facet_budget);
+        cmd.notes = graded.notes;
         cmd
     }
 
@@ -74,6 +79,7 @@ impl ImportModel {
             mesh,
             coarse_mm: None,
             facet_budget: None,
+            notes: Vec::new(),
         }
     }
 

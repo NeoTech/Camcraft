@@ -50,6 +50,7 @@ fn app_program(mch: &str, stream: &str) -> (String, Vec<String>) {
 }
 
 const TILTED: &str = "\
+PARAM ClearancePlane 50
 TOOL 1 T1
 PARAM SpindleSpeed 8000
 SECTION

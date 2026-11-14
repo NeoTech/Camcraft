@@ -23,6 +23,7 @@
 mod arc_biarc;
 mod arc_cross;
 mod arc_proof;
+mod arc_side;
 mod arc_leads;
 mod arcs;
 mod blend;
@@ -73,6 +74,7 @@ mod adaptive;
 mod adaptive_method;
 mod adaptive_troch;
 mod rest2d;
+mod chord_clear;
 mod ring;
 mod slots;
 mod slot_room;
@@ -93,7 +95,7 @@ mod thread_tests;
 #[cfg(test)]
 mod thread_pass_tests;
 
-pub use arcs::{fit_arcs, Seg, ARC_FIT_TOL};
+pub use arcs::{fit_arcs, fit_arcs_sided, Seg, ARC_FIT_TOL};
 pub use blend::MIN_BLEND_RADIUS;
 pub use bore::{bore, BoreHole, BoreParams};
 pub use bore_core::{bore_core_gap, bore_floor_reach, bore_leaves_core, cutting_radius_at, max_bore_diameter};

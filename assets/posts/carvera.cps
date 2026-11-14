@@ -232,6 +232,8 @@ function onParameter(name, value) {
   else if (name === "OriginX" && has(value)) orgX = Number(value);
   else if (name === "OriginY" && has(value)) orgY = Number(value);
   else if (name === "OriginZ" && has(value)) orgZ = Number(value);
+  else if (name === "ClearancePlane") clearZ = has(value) ? Number(value) : null;  // #1616
+  else if (name === "RetractPlane") hopZ = has(value) ? Number(value) : null;  // #1616
 }
 
 function onSpindleSpeed() {
@@ -284,6 +286,7 @@ function startPreamble() {
   if (toolWait) {
     toolNote();
     xyUnknown = true;          // the changer moved X and Y
+    changedAt = true;          // #1616: the next traverse leaves the changer X/Y first
     block(["M6", "T" + ni(tNo)]);
     toolWait = false;
   }
@@ -314,25 +317,73 @@ function endPreamble() {
 }
 
 function onSection() { startPreamble(); }
-function onSectionEnd() { endPreamble(); }
+function onSectionEnd() { endPreamble(); clearZ = null; hopZ = null; }  // #1616: the next section states its own planes
 
 // ------------------------------------------------------------- motions
-// X and Y are unknown at the program's start and after a tool change: the
-// first move positions X Y alone at the current (changer-raised) height,
-// and only then does Z come down - never a diagonal from wherever the
-// changer left the spindle. A feed's first move rapids Z to the height
-// the generator says the tool starts from, then feeds the stretch planned.
+// X and Y are unknown at the program's start and after a tool change, so
+// the first move positions X Y alone - never a diagonal from wherever the
+// changer left the spindle - with its height STATED (#1616, the #1614
+// hazard): a Z-only rapid to the section's clearance - its
+// ClearancePlane, else its RetractPlane, never below the move's own Z.
+// A setup that cannot reach it is stopped by the control's Z limit
+// instead of rapiding through the part. A stream that states neither
+// plane has no verified height to traverse at: refused by name.
+// The order depends on where the spindle stands:
+// - at the program's start (no tool change yet): Z first, then X Y, so
+//   the traverse is never made at an unknown height;
+// - right after M6 T: X Y first, at the height the changer leaves the
+//   spindle, then Z. Nothing we have read says where the firmware parks
+//   X/Y after its tool change; a Z-only rapid down to a thin stock's
+//   clearance at that X/Y could meet the tools stored in the rack. The
+//   clearance Z is stated before any descent (M3's option (c),
+//   docs/decisions/1616-first-traverse-clearance.md).
+//   OPEN HAZARD (#1614): this X Y traverse is still made at the changer's
+//   exit height, which is not verified. A long tool can leave the tip
+//   below the part top there, and the traverse then crosses the part.
+//   The hazard stays for the Carvera after M6 until a public source
+//   confirms the firmware's M6 exit position (option b).
+// A feed's first move then rapids Z to the height the generator says the
+// tool starts from, and feeds only the stretch planned.
 var xyUnknown = true;
-function xyFirst(x, y) {
+var changedAt = false;        // #1616: an M6 was written since the last traverse
+var clearZ = null;            // #1616: the section's ClearancePlane, null when unstated
+var hopZ = null;              // #1616: the section's RetractPlane, null when unstated
+var traverseRefused = false;  // #1616: once per program
+var traversedAt = null;       // #1616: the Z the last first-traverse was made at
+function traverseZ(z) {
+  var c = has(clearZ) ? clearZ : (has(hopZ) ? hopZ : null);
+  if (c === null) return null;
+  return has(z) ? Math.max(c, Number(z)) : c;
+}
+function xyFirst(x, y, z) {
   if (!xyUnknown || !has(x) || !has(y)) return;
-  block(["G0", wo("X", x, orgX), wo("Y", y, orgY)]);
+  traversedAt = null;
+  var tz = traverseZ(z);
+  if (tz === null) {
+    if (!traverseRefused) {
+      traverseRefused = true;
+      msg(coolantWho() + "first X/Y traverse with no clearance height stated (no ClearancePlane or RetractPlane) - the post will not rapid X/Y at an unknown height");
+    }
+    return;
+  }
+  if (changedAt) {  // #1616 (c): leave the changer's X/Y at its height first
+    block(["G0", wo("X", x, orgX), wo("Y", y, orgY)]);
+    block(["G0", wo("Z", tz, orgZ)]);
+  } else {
+    block(["G0", wo("Z", tz, orgZ)]);
+    block(["G0", wo("X", x, orgX), wo("Y", y, orgY)]);
+  }
+  traversedAt = tz;
+  changedAt = false;
   xyUnknown = false;
 }
 function startXY(p) {
   if (!xyUnknown) return;
-  if (has(p.StartX) && has(p.StartY)) xyFirst(p.StartX, p.StartY);
-  else xyFirst(p.X, p.Y);
-  if (!xyUnknown && has(p.StartZ) && has(p.Z) && p.StartZ > p.Z) {
+  if (has(p.StartX) && has(p.StartY)) xyFirst(p.StartX, p.StartY, p.StartZ);
+  else xyFirst(p.X, p.Y, p.Z);
+  // #1616: not when the stated traverse height already is it.
+  if (!xyUnknown && has(p.StartZ) && has(p.Z) && p.StartZ > p.Z &&
+      !(has(traversedAt) && Math.abs(traversedAt - p.StartZ) < 1e-9)) {
     block(["G0", wo("Z", p.StartZ, orgZ)]);
   }
 }
@@ -340,7 +391,7 @@ function startXY(p) {
 function onRapid() {
   startPreamble();
   if (!tiltOk(properties)) return;
-  xyFirst(properties.X, properties.Y);
+  xyFirst(properties.X, properties.Y, properties.Z);
   block(["G0"].concat(xyz(properties)));
 }
 function onLinear() {

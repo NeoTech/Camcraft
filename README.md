@@ -179,6 +179,12 @@ the general bug and feature templates for the rest. If a path would gouge or
 collide and the app did not warn you, please say so. Those reports matter
 most.
 
+## Community
+
+Questions and discussion: join the CamCraft Discord server at
+<https://discord.gg/bBWjkAgX5>. Bug reports and feature requests still go to
+the GitHub issues, so the work stays tracked.
+
 ## Contributing
 
 CamCraft is built largely by AI coding agents working under

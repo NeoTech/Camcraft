@@ -154,7 +154,7 @@ The server exposes tools across three modules in `crates/app/src/mcp/` (see `cra
 - `generate { "name"?: string }`: Generate toolpaths for a named operation or all stale operations.
 - `verify { "name"?: string }`: Check toolpaths against safety rules (spindle speed, rapids touching material, shaft collision, machine limits).
 - `render_stock { "width"?: number, "height"?: number, "view"?: "iso" | "top" }`: Render simulated stock to a PNG image with rest/gouge color shading.
-- `post { "output": string, "post"?: string }`: Post-process verified toolpaths into the NC file `output` through a built-in post by name (`"Fanuc"`, `"Haas"`, ...) or a `.cps` path.
+- `post { "output": string, "post"?: string, "between_setups"?: "pause"|"optional-stop"|"continue"|"file-per-setup" }`: Post-process verified toolpaths into the NC file `output` through a built-in post by name (`"Fanuc"`, `"Haas"`, ...) or a `.cps` path. `between_setups` (#1532) first sets what the program does where it changes setup, as an undoable command: `pause` (the default) writes M0 with a comment naming the next setup, `optional-stop` M1, `continue` runs straight on, and `file-per-setup` writes one program per setup beside `output` (the reply's `files` names them).
 
 ---
 

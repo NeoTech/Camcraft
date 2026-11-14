@@ -267,8 +267,8 @@ fn angle_words(program: &str) -> Vec<String> {
 #[test]
 fn rotary_angle_words_are_degrees_in_an_inch_program() {
     // A real stream states its spindle (a cut with it stopped is refused).
-    let rtcp = "TOOL 1 T1\nPARAM SpindleSpeed 6000\nSECTION\nRapid X 0 Y 0 Z 20000 A 37500 B 0 C 0\nFeed X 20000 Y 0 Z 0 F 300000 A 0 B 12250 C 0\nFeed X 25400 Y 5000 Z 0 F 300000 A -45000 B 12250 C 0\nENDSECTION\n";
-    let index = "TOOL 1 T1\nPARAM SpindleSpeed 6000\nSECTION\nRapid X 0 Y 0 Z 10000 A 90000\nFeed X 50000 Y 0 Z -1000 F 400000 A 90000\nRapid X 50000 Y 0 Z 10000 A 127500\nFeed X 0 Y 0 Z -1000 F 400000 A 127500\nENDSECTION\n";
+    let rtcp = "PARAM ClearancePlane 20\nTOOL 1 T1\nPARAM SpindleSpeed 6000\nSECTION\nRapid X 0 Y 0 Z 20000 A 37500 B 0 C 0\nFeed X 20000 Y 0 Z 0 F 300000 A 0 B 12250 C 0\nFeed X 25400 Y 5000 Z 0 F 300000 A -45000 B 12250 C 0\nENDSECTION\n";
+    let index = "PARAM ClearancePlane 10\nTOOL 1 T1\nPARAM SpindleSpeed 6000\nSECTION\nRapid X 0 Y 0 Z 10000 A 90000\nFeed X 50000 Y 0 Z -1000 F 400000 A 90000\nRapid X 50000 Y 0 Z 10000 A 127500\nFeed X 0 Y 0 Z -1000 F 400000 A 127500\nENDSECTION\n";
     let cases: [(&str, &str, &str, &[&str]); 3] = [
         ("fanuc", "assets/machines/tilthead.mch", rtcp, &["A37.5", "B0", "A0", "B12.25", "A-45"]),
         ("doosan-dnm", "assets/machines/tilthead.mch", rtcp, &["A37.5", "B0", "A0", "B12.25", "A-45"]),

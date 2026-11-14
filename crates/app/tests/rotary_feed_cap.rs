@@ -47,6 +47,7 @@ fn plain_fourth(rate: f64) -> Value {
 /// Short tip moves with large turns, a turn with the tip still, a long
 /// move with a small turn, and a tilted arc that turns A.
 const STREAM: &str = "\
+PARAM ClearancePlane 5
 TOOL 1 10MM BALL
 PARAM SpindleSpeed 6000
 SECTION
@@ -200,6 +201,7 @@ fn a_feed_turning_from_an_unknown_angle_is_refused_by_name() {
     // The first tilted record is a feed: the post never placed A, so the
     // turn it commands - and its rate - is unknown.
     let stream = "\
+PARAM ClearancePlane 5
 TOOL 1 T1
 PARAM SpindleSpeed 6000
 SECTION
@@ -254,6 +256,7 @@ fn a_feed_turning_c_alone_holds_the_stated_c_rate() {
         { "letter": "A", "type": "rotary", "direction": [1.0, 0.0, 0.0], "travel": [-120.0, 120.0], "speeds": { "normal": A_RATE } },
         { "letter": "C", "type": "rotary", "direction": [0.0, 0.0, 1.0], "speeds": { "normal": c_rate } } ] } } });
     let stream = "\
+PARAM ClearancePlane 5
 TOOL 1 10MM BALL
 PARAM SpindleSpeed 6000
 SECTION
@@ -348,6 +351,7 @@ fn a_capped_rotary_feed_is_posted_in_the_programs_unit() {
 #[test]
 fn a_work_offset_off_the_output_grid_does_not_hide_a_short_move_from_the_cap() {
     let stream = "\
+PARAM ClearancePlane 5
 TOOL 1 10MM BALL
 PARAM SpindleSpeed 6000
 PARAM OriginX 1
@@ -377,6 +381,7 @@ ENDSECTION
 #[test]
 fn a_rounded_uncapped_feed_never_posts_above_the_cap() {
     let stream = "\
+PARAM ClearancePlane 5
 TOOL 1 10MM BALL
 PARAM SpindleSpeed 6000
 SECTION

@@ -100,7 +100,7 @@ fn in_computer_records_no_span_and_posts_a_centre_path_without_comp_words() {
 }
 
 #[test]
-fn in_control_posts_the_part_contour_under_g42_through_fanuc_to_the_golden() {
+fn in_control_posts_the_part_contour_under_g41_through_fanuc_to_the_golden() {
     let (world, _) = world_with(Compensation::Control);
     let e = model::find_by_name(&world, "Contour1").expect("op");
     let cache = model::toolpath_of(&world, &e).expect("cache");
@@ -118,13 +118,13 @@ fn in_control_posts_the_part_contour_under_g42_through_fanuc_to_the_golden() {
     let pe = model::find_by_name(&plain, "Contour1").expect("op");
     assert_eq!(cache.path.moves.len(), model::toolpath_of(&plain, &pe).expect("cache").path.moves.len());
     let text = stream(&world);
-    assert!(text.contains("COMP RIGHT 3000\n") && text.contains("COMP OFF\n"), "{text}");
+    assert!(text.contains("COMP LEFT 3000\n") && text.contains("COMP OFF\n"), "{text}");
     // The programmed contour is the part's 10 x 10 box - its corners
     // ride the stream verbatim, the centre's 13-off corners do not.
     assert!(text.contains("Feed X 10000 Y 10000 Z"), "{text}");
     let out = engine::run(&post_text("fanuc"), &posting::machine_value(&world), &text).unwrap();
     assert!(out.warnings.is_empty(), "{:?}", out.warnings);
-    assert_eq!(out.program.matches("G42 ").count(), levels.len(), "{}", out.program);
+    assert_eq!(out.program.matches("G41 ").count(), levels.len(), "{}", out.program);
     assert!(out.program.contains(" D01 "), "the tool's register: {}", out.program);
     assert_eq!(out.program.matches("G01 G40 ").count(), levels.len(), "{}", out.program);
     assert!(out.program.contains("X10 Y10 "), "the part corner: {}", out.program);
@@ -141,9 +141,9 @@ fn in_control_posts_the_part_contour_under_g42_through_fanuc_to_the_golden() {
 /// engage block's leading words, the cancel block's, the D word - None
 /// where the tool call's own D selects the edge).
 const DIALECTS: &[(&str, &str, &str, Option<&str>)] = &[
-    ("haas", "G1 G42 ", "G1 G40 ", Some(" D1 ")),
-    ("mazak", "G01 G42 ", "G01 G40 ", Some(" D1 ")),
-    ("sinumerik", "G1 G42 ", "G1 G40 ", None),
+    ("haas", "G1 G41 ", "G1 G40 ", Some(" D1 ")),
+    ("mazak", "G01 G41 ", "G01 G40 ", Some(" D1 ")),
+    ("sinumerik", "G1 G41 ", "G1 G40 ", None),
 ];
 
 #[test]
@@ -160,7 +160,8 @@ fn haas_mazak_and_840d_post_the_part_contour_under_their_own_comp_words_to_the_g
         let p = &out.program;
         assert_eq!(p.matches(engage).count(), spans, "{stem}: {p}");
         assert_eq!(p.matches(cancel).count(), spans, "{stem}: {p}");
-        assert_eq!(p.matches("G41").count(), 0, "{stem}: {p}");
+        // #1555: climb outside (M3) is G41 - never G42.
+        assert_eq!(p.matches("G42").count(), 0, "{stem}: {p}");
         match d {
             Some(d) => assert_eq!(p.matches(d).count(), spans, "{stem}: the D word rides each engage: {p}"),
             None => assert!(
