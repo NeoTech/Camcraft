@@ -87,7 +87,8 @@ pub(super) fn show(
         .order(egui::Order::Foreground)
         .movable(false)
         .show(ui.ctx(), |ui| {
-            let p = ui.painter();
+            ui.expand_to_include_rect(panel);
+            let p = ui.painter().clone();
             p.rect_filled(panel, pal.radius_menu, pal.ink);
             p.rect_stroke(
                 panel,
@@ -96,12 +97,24 @@ pub(super) fn show(
                 egui::StrokeKind::Outside,
             );
             for (k, (row, r)) in rows.iter().enumerate() {
-                let resp = ui.interact(*r, id.with(("theme-row", k)), Sense::click());
                 let (label, current, live) = match row {
                     ThemeRow::Theme(label, pick) => (label.clone(), pick.as_ref() == Some(&theme), true),
                     ThemeRow::VisionCaption => ("Colour vision".to_owned(), false, false),
                     ThemeRow::Vision(mode) => (format!("  {}", mode.label()), *mode == vision, true),
                 };
+                let why = match row {
+                    ThemeRow::Theme(_, pick) if state.browser_build =>
+                        crate::browser_files::refusal(&command_of(pick.as_ref()), false),
+                    _ => None,
+                };
+                let live = live && why.is_none();
+                let resp = ui.add_enabled_ui(live, |ui| {
+                    ui.interact(*r, id.with(("theme-row", k)), Sense::click())
+                }).inner;
+                if !matches!(row, ThemeRow::VisionCaption) {
+                    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, live, &label));
+                }
+                let resp = if let Some(why) = why { resp.on_disabled_hover_text(why) } else { resp };
                 if resp.hovered() && live {
                     p.rect_filled(*r, 0.0, pal.field_hover);
                 }
