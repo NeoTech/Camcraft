@@ -1,5 +1,5 @@
 //! The MCP setup tools (#181): declare and activate setups, place the
-//! active setup's work offset (WCS), pick its posted word, and mount a
+//! active setup's work offset (WCS), pick its offset index, and mount a
 //! machine. Each tool is exactly one existing command run through the
 //! session History, so `undo` walks it; every refusal is the command's
 //! own text, returned as a tool error.
@@ -26,7 +26,7 @@ pub(super) const TOOLS: &[Tool] = &[
     Tool { name: "set_operation_setup", description: "Move an operation into another declared setup (setup null: the implicit first position). The stamp is kept, so the operation reads ok or stale by the staleness law. One undo step. Refused by name: an unknown operation or setup, a move to where it already is.", schema: s_set_operation_setup, run: set_operation_setup },
     Tool { name: "delete_setup", description: "Delete a declared setup with its private stock and WCS; one undo restores them. Refused by name while an operation still machines in it (move or delete it first) or another setup is placed relative to it.", schema: s_setup_name, run: delete_setup },
     Tool { name: "set_wcs", description: "Place the active setup's work coordinate system: an absolute origin, or a point of the stock's bounding box (min/center/max per axis) plus an optional offset. Rotation is a unit quaternion [x, y, z, w]; omitted keeps the current one.", schema: s_set_wcs, run: set_wcs },
-    Tool { name: "set_work_offset", description: "Set the work offset (G54 to G59) the post uses for a declared setup's WCS; null clears it (posts G54). Moves no origin.", schema: s_work_offset, run: set_work_offset },
+    Tool { name: "set_work_offset", description: "Set the work offset the post uses for a declared setup's WCS: index is 1-based (G54-G59 accepted as aliases of 1-6), bounded by the setup's own post - an offset it cannot express is refused by setup name. null clears it (offset 1). Returns index and the post's name for it (word is an alias of name). Moves no origin.", schema: s_work_offset, run: set_work_offset },
     Tool { name: "set_program", description: "State the document's program number (1 to 9999: the O-word O0001-O9999) and program comment (the program's name on Heidenhain and SINUMERIK). An omitted key keeps its value; null clears it (O0001 and the machine's name). One undo step.", schema: s_set_program, run: set_program },
     Tool { name: "set_raw_stock_only", description: "For a stock made from a model (set_stock from_model): say whether that source model is raw stock only - a casting or blank you cut into, not the finished part - so the post's gouge verdict does not judge it (on), or is judged like every model (off, the default). An operation that machines the model judges it again. One undo step.", schema: s_raw_stock_only, run: set_raw_stock_only },
     Tool { name: "load_machine", description: "Mount a machine: a built-in by name or a .mch file, or clear it. With setup, the machine is that setup's own (clear: the setup follows the document's machine again); without, it is the document's.", schema: s_load_machine, run: load_machine },
@@ -174,28 +174,40 @@ fn set_wcs(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
     let mut out = loc_view(&placed);
     out["setup"] = json!(active);
     out["label"] = json!(setup::wcs_label(w, active.as_deref()));
+    out["index"] = json!(crate::setup_offsets::index(w, active.as_deref()));
+    out["name"] = json!(setup::wcs_name(w, active.as_deref()));
     out["word"] = json!(setup::wcs_name(w, active.as_deref()));
     Ok(out)
 }
 
 fn set_work_offset(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
-    let slot = match a.get("word") {
-        None => return Err("\"word\" is required (G54 to G59, or null to clear)".into()),
-        Some(Value::Null) => None,
-        Some(Value::String(s)) => Some(
-            crate::setup_offsets::legacy_slot(s)
-                .ok_or_else(|| format!("unknown work offset '{s}' - the words are G54, G55, G56, G57, G58, G59"))?,
-        ),
-        Some(other) => return Err(format!("\"word\" must be a string or null, got {other}")),
+    // #931: `index` is the 1-based offset; `word` (G54-G59) stays as an
+    // alias of 1-6 for callers written before it. null clears either.
+    let pick = |k: &str| -> Result<Option<Option<u32>>, String> {
+        match a.get(k) {
+            None => Ok(None),
+            Some(Value::Null) => Ok(Some(None)),
+            Some(v) => crate::setup_offsets::parse_index(v).map(|n| Some(Some(n))),
+        }
     };
+    let n = match (pick("index")?, pick("word")?) {
+        (None, None) => return Err("\"index\" is required (1-based work offset, G54-G59 as aliases of 1-6, or null to clear)".into()),
+        (Some(i), None) | (None, Some(i)) => i,
+        (Some(i), Some(w)) if i == w => i,
+        (Some(_), Some(_)) => return Err("\"index\" and \"word\" name different work offsets - give one".into()),
+    };
+    let slot = n.and_then(|n| usize::try_from(n).ok()).map(|n| n.saturating_sub(1));
     let name = setup_or_active(env, a)?
-        .ok_or("no setup is declared - add_setup first (a document without setups posts at G54)")?;
+        .ok_or("no setup is declared - add_setup first (a document without setups posts at work offset 1)")?;
     let cmd = SetSetupWorkOffset::new(&env.world, &name, slot).map_err(cmd_err)?;
     env.history.execute(&env.world, cmd);
     let w = &env.world;
+    let offset_name = setup::wcs_name(w, Some(&name));
     Ok(json!({
         "setup": name,
-        "word": setup::wcs_name(w, Some(&name)),
+        "index": crate::setup_offsets::index(w, Some(&name)),
+        "name": offset_name,
+        "word": offset_name,
         "label": setup::wcs_label(w, Some(&name)),
     }))
 }
@@ -367,13 +379,18 @@ fn s_set_wcs() -> Value {
 }
 
 fn s_work_offset() -> Value {
+    let pick = json!({ "type": ["integer", "string", "null"] });
+    let mut index = pick.clone();
+    index["description"] = json!("The 1-based work offset to post, up to the setup's post's maximum; the words G54-G59 are aliases of 1-6; null clears it (offset 1).");
+    let mut word = pick;
+    word["description"] = json!("Alias of index, kept for older callers: G54-G59 (or a number); null clears it.");
     obj(
         json!({
-            "word": { "type": ["string", "null"], "enum": ["G54", "G55", "G56", "G57", "G58", "G59", null],
-                "description": "The work offset to post (G54 to G59); null clears it." },
+            "index": index,
+            "word": word,
             "setup": { "type": "string", "description": "A declared setup; defaults to the active one." }
         }),
-        &["word"],
+        &[],
     )
 }
 

@@ -113,6 +113,8 @@ fn set_wcs_from_features(env: &mut Env, a: &Map<String, Value>) -> Result<Value,
     let mut out = loc_view(&placed);
     out["setup"] = json!(active);
     out["label"] = json!(setup::wcs_label(w, active.as_deref()));
+    out["index"] = json!(crate::setup_offsets::index(w, active.as_deref()));
+    out["name"] = json!(setup::wcs_name(w, active.as_deref()));
     out["word"] = json!(setup::wcs_name(w, active.as_deref()));
     out["axes"] = json!({ "x": dir(fit.x), "y": dir(fit.y), "z": dir(fit.z) });
     out["angles_deg"] = json!({ "roll": fnum(fit.roll_deg), "pitch": fnum(fit.pitch_deg), "yaw": fnum(fit.yaw_deg) });
