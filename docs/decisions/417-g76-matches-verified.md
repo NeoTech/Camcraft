@@ -67,9 +67,11 @@
     differ by under 1 µm. In an edge case where k - d rounds above the
     last roughing depth, it could add one sub-micron pass.
 
-  None of these moves the finished form; all three should be checked in
-  the PathPilot Hub simulation or on a lathe before the PR is flagged
-  ready.
+  None of these moves the finished form, so none blocks the merge. They
+  cannot be checked in the PathPilot Hub simulation: its lathe is
+  LinuxCNC's one-block `G76 P.. J.. K..`, not Fanuc's two-block G76.
+  They stay open for a run on a Fanuc lathe control (or its vendor's
+  simulator), recorded here and in the PR's "Not exercised".
 - **Record plumbing:** `ThreadCycle.alternating` and `ThreadRec.alternating`.
   The stream line writes `ALT 1` only when set (absent reads 0), so
   every earlier stream keeps its bytes. The post property is
