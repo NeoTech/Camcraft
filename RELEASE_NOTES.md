@@ -174,7 +174,6 @@ went from 16 to 54 (numbers 23 and 27 were not announced):
   new version.
 
 ## Known issues
-- The browser build is a first rung; the file picker is still owed.
 - No installer is built on the cut machine; the zip is the release and the
   published artifact is built by the release workflow from the tag.
 
@@ -212,7 +211,9 @@ decision, 2026-11-12).
   on a web canvas with an awaited GPU start-up and a page built by
   `web/build-app-wasm.sh`. A first rung only, and **not part of the release
   download yet**: the release workflow does not build or attach it, only the
-  manual CI workflow compiles it. The file picker is still owed.
+  manual CI workflow compiles it. File commands were incomplete at this cut.
+  Since then, model and project pickers and project/program downloads were
+  added; unsupported file commands are disabled with a reason (#1431).
 - **C-axis unwind** (#33): continuous C-axis live tooling now unwinds C at
   clear links against the machine's stated C travel. Rotary Contour unwinds;
   Rotary Parallel and Rotary Offset refuse by name where C would need a

@@ -583,3 +583,6 @@ fn the_drop_hint_shows_only_while_a_file_hovers() {
     h.run_steps(2);
     assert!(!painted(&h).iter().any(|(t, _)| t == super::super::file_drop::HINT), "the hint goes when the drag leaves");
 }
+
+#[path = "structural/browser_file_menus.rs"]
+mod browser_file_menus;

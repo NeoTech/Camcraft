@@ -91,7 +91,8 @@ pub(super) fn fixture_menu(ui: &mut Ui, state: &mut State, pal: &Tokens, rect: R
         .order(egui::Order::Foreground)
         .movable(false)
         .show(ui.ctx(), |ui| {
-            let p = ui.painter();
+            ui.expand_to_include_rect(panel);
+            let p = ui.painter().clone();
             p.rect_filled(panel, pal.radius_menu, pal.ink);
             p.rect_stroke(panel, pal.radius_menu, egui::Stroke::new(1.0, pal.border), egui::StrokeKind::Outside);
             for (k, (label, cmd)) in lines.iter().enumerate() {
@@ -99,7 +100,17 @@ pub(super) fn fixture_menu(ui: &mut Ui, state: &mut State, pal: &Tokens, rect: R
                     egui::Pos2::new(anchor.x, anchor.y + k as f32 * pal.row_height),
                     Vec2::new(DROP_W, pal.row_height),
                 );
-                let resp = cmd.as_ref().map(|_| ui.interact(r, ui.id().with(("fixture-menu-row", k)), Sense::click()));
+                let why = cmd.as_ref().and_then(|cmd| {
+                    state.browser_build.then(|| crate::browser_files::refusal(cmd, false)).flatten()
+                });
+                let live = cmd.is_some() && why.is_none();
+                let resp = cmd.as_ref().map(|_| {
+                    let resp = ui.add_enabled_ui(live, |ui| {
+                        ui.interact(r, ui.id().with(("fixture-menu-row", k)), Sense::click())
+                    }).inner;
+                    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, live, label));
+                    if let Some(why) = why { resp.on_disabled_hover_text(why) } else { resp }
+                });
                 if resp.as_ref().is_some_and(egui::Response::hovered) {
                     p.rect_filled(r, 0.0, pal.field_hover);
                 }
@@ -108,7 +119,7 @@ pub(super) fn fixture_menu(ui: &mut Ui, state: &mut State, pal: &Tokens, rect: R
                     egui::Align2::LEFT_CENTER,
                     label,
                     egui::FontId::proportional(pal.font_row),
-                    if cmd.is_some() { pal.text } else { pal.text_dim },
+                    if live { pal.text } else { pal.text_dim },
                 );
                 if resp.is_some_and(|r| r.clicked()) {
                     chosen = Some(k);
