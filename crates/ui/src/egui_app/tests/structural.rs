@@ -88,9 +88,13 @@ fn assert_shell_skeleton(h: &Harness<'static, ShellUi>) {
     let in_browser = |q: egui::Pos2| q.y > b.y && q.x < v.x;
     // #343: each setup owns its WCS, Stock, Machine, Post, Fixtures and
     // Tool list rows; a row paints its name and value as one text.
-    for row in ["Setups", "Setup", "Stock", "Fixtures", "Operations", "Models", "Block", "Tools"] {
+    for row in ["Setups", "SETUP", "Stock", "Fixtures", "MODELS", "Block", "TOOLS"] {
         at_where(&texts, row, in_browser);
     }
+    assert!(
+        texts.iter().any(|(t, q)| t.starts_with("Operations") && in_browser(*q)),
+        "the setup's Operations row must show in the browser"
+    );
     for (name, value) in [("WCS", "G54"), ("Machine", ""), ("Post", ""), ("Tool list", "")] {
         assert!(
             texts.iter().any(|(t, q)| t.starts_with(name) && t.contains(value) && in_browser(*q)),
@@ -106,9 +110,8 @@ fn assert_shell_skeleton(h: &Harness<'static, ShellUi>) {
         let q = at(&texts, t);
         assert!(q.x > v.x && q.x < p.x, "view cube face {t:?} belongs to the viewport");
     }
-    for label in ["Show world origin axes", "Show origin names", "Show all toolpaths", "Shaded", "Wireframe"] {
-        assert!(!disabled(h, label), "viewport control {label:?} must be live");
-    }
+    // View switches live behind the browser's View door now.
+    assert!(h.query_by_label("View").is_some(), "browser View door");
     // Properties: the seed's page, its sections, and the draft law's
     // disabled Apply (nothing staged on a fresh frame).
     assert!(h.get_by_label("Operation: Contour1").rect().min.x > v.x, "the page is the right leaf");
