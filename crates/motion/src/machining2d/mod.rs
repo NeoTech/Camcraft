@@ -73,6 +73,7 @@ mod adaptive;
 mod adaptive_method;
 mod adaptive_troch;
 mod rest2d;
+mod chord_clear;
 mod ring;
 mod slots;
 mod slot_room;
