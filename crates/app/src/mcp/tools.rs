@@ -24,7 +24,7 @@ pub(super) struct Tool {
 const TOOLS: &[Tool] = &[
     Tool { name: "open_project", description: "Open a .camproj project file, replacing the current document and clearing undo history.", schema: s_path, run: open_project },
     Tool { name: "save_project", description: "Save the document as a .camproj file. Without a path, saves over the file last opened or saved.", schema: s_opt_path, run: save_project },
-    Tool { name: "import_model", description: "Import a mesh model (STL, STEP or OBJ) through the app's importers. A name already used by a model updates that model. A STEP model too large to import at full detail answers with reduced_fidelity: how closely its surfaces are approximated, in mm - gouge checks against it are stricter, and its operations are refused at the post when it is too coarse to check; import it again with a larger facet_budget to clear that.", schema: s_import, run: import_model },
+    Tool { name: "import_model", description: "Import a mesh model (STL, STEP or OBJ) through the app's importers. A name already used by a model updates that model. A STEP model too large to import at full detail answers with reduced_fidelity: how closely its surfaces are approximated, in mm - gouge checks against it are stricter, and its operations are refused at the post when it is too coarse to check; import it again with a larger facet_budget to clear that. notes lists what the importer changed, e.g. a STEP face wound against its neighbours that was flipped, by name.", schema: s_import, run: import_model },
     Tool { name: "get_job", description: "The whole document as JSON: setups, stock, work offsets, models (one imported at reduced fidelity carries reduced_fidelity), tools, and operations with their parameters and status.", schema: s_empty, run: job::get_job },
     Tool { name: "list_operation_types", description: "Every operation kind with its parameter fields, JSON types and default values, and the tool kinds it accepts.", schema: s_empty, run: job::list_operation_types },
     Tool { name: "list_tool_catalog", description: "The built-in tool catalog: names and definitions add_tool can copy into the document.", schema: s_empty, run: job::list_tool_catalog },
@@ -50,7 +50,7 @@ const TOOLS: &[Tool] = &[
     Tool { name: "redo", description: "Redo the last undone change.", schema: s_empty, run: edit::redo },
     Tool { name: "generate", description: "Generate toolpaths: one named operation (always regenerated) or, with no name, every operation that is not current.", schema: s_opt_name, run: generate },
     Tool { name: "verify", description: "Verify the job without posting: per-operation status and findings (op, move index, kind, message, whether it blocks the post) plus the program-level post gate. \"ok\" is true only when the post would write: every operation fresh, the gate passed, and no operation's own warning blocking the post (those operations are listed under \"held_by\").", schema: s_opt_name, run: job::verify },
-    Tool { name: "post", description: "Post the program to an NC file through a post processor (a built-in name or a .cps path; default the document's own). Returns the written files, or refuses with the reasons.", schema: s_post, run: post },
+    Tool { name: "post", description: "Post the program to an NC file through a post processor (a built-in name or a .cps path; default the document's own). Returns the written files, or refuses with the reasons. between_setups chooses what the program does at a setup change (pause by default).", schema: s_post, run: post },
     Tool { name: "render_stock", description: "Render the program's simulated stock as a PNG (an image content block), painted by deviation class (clean, rest, gouge, unjudged), optionally with the toolpath over it; plus rest and gouge volume and the bounds of the stock and the rest. Generate first.", schema: render::schema, run: render::render_stock },
 ];
 
@@ -173,6 +173,10 @@ fn generate(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
 
 fn post(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
     let to = req_str(a, "output")?;
+    // #1532: the between-setups choice, set first as its own undo step.
+    if let Some(word) = opt_str(a, "between_setups")? {
+        set_between_setups(env, word)?;
+    }
     let mut opts = json!({ "to": to });
     if let Some(p) = opt_str(a, "post")? {
         opts["cps"] = json!(p);
@@ -184,6 +188,36 @@ fn post(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
         out["files"] = json!([out.get("path").cloned().unwrap_or_else(|| json!(to))]);
     }
     Ok(out)
+}
+
+/// Set the program's between-setups choice (#1532) where the program
+/// reads it: the active setup's own post options when it owns them, else
+/// the document's - through the undoable command, one undo step; the
+/// current choice again changes nothing.
+fn set_between_setups(env: &mut Env, word: &str) -> Result<(), String> {
+    use crate::schema::{BetweenSetups, PostOptions};
+    let want = BetweenSetups::from_word(word).ok_or_else(|| {
+        let words: Vec<&str> = BetweenSetups::ALL.iter().map(|b| b.word()).collect();
+        format!("unknown between_setups '{word}' - one of: {}", words.join(", "))
+    })?;
+    let active = crate::setup::active(&env.world);
+    if let Some(name) = active.as_deref()
+        && let Some(own) = crate::setup_post_options::own(&env.world, Some(name))
+    {
+        if own.between_setups != want {
+            let next = PostOptions { between_setups: want, ..own };
+            let cmd = crate::commands::SetSetupPostOptions::new(&env.world, name, Some(next)).map_err(|e| e.to_string())?;
+            env.history.execute(&env.world, cmd);
+        }
+        return Ok(());
+    }
+    let doc = crate::setup_post_options::document(&env.world);
+    if doc.between_setups != want {
+        let next = PostOptions { between_setups: want, ..doc };
+        let cmd = crate::commands::SetPostOptions::new(&env.world, next).map_err(|e| e.to_string())?;
+        env.history.execute(&env.world, cmd);
+    }
+    Ok(())
 }
 
 // ---- input schemas ----------------------------------------------------
@@ -316,7 +350,12 @@ fn s_post() -> Value {
     obj(
         json!({
             "output": { "type": "string", "description": "The .nc file to write." },
-            "post": { "type": "string", "description": "A built-in post name (Fanuc, Haas, Siemens 840D, Heidenhain, Mazak) or a .cps path." }
+            "post": { "type": "string", "description": "A built-in post name (Fanuc, Haas, Siemens 840D, Heidenhain, Mazak) or a .cps path." },
+            "between_setups": {
+                "type": "string",
+                "enum": ["pause", "optional-stop", "continue", "file-per-setup"],
+                "description": "What the program does where it changes setup (the part re-clamped): pause (M0, the default), optional-stop (M1), continue (run straight on), or file-per-setup (one NC file per setup). Set before posting as its own undo step; omitted keeps the document's choice."
+            }
         }),
         &["output"],
     )

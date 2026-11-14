@@ -10,6 +10,10 @@
 //! subdivision recurses for ever; `bspline_dome.step` is box.step with a
 //! smooth biquadratic dome on top.
 //!
+//! The default-cap pin lives in its own binary, `import_step_guard_default_cap`
+//! (#1605): it runs ~50 s on truck's shared rayon pool, and a cheap pin
+//! in the same process waited behind it.
+//!
 //! Gate map (M4.4): covers app::geometry::import::step,
 //! app::geometry::import::step_guard.
 
@@ -37,6 +41,12 @@ fn within<R: Send + 'static>(limit: Duration, f: impl FnOnce() -> R + Send + 'st
     }
 }
 
+/// The outer hang barrier of the pins whose work is bounded by an
+/// evaluation cap. Measured (#1605, debug): a lowered-cap refusal takes
+/// 0.06 s; the default-cap pin takes 52 s serial. The barrier is 120 s,
+/// far above both, and it is never the bound: the cap is.
+const HANG_BARRIER: Duration = Duration::from_secs(120);
+
 fn volume(m: &Mesh) -> f64 {
     m.facets
         .iter()
@@ -47,27 +57,13 @@ fn volume(m: &Mesh) -> f64 {
         .sum()
 }
 
-/// The default cap, as a user's import runs it: bounded, and named. Since
-/// #1568 raised the cap to 150 M this spends ~10 s in release and ~27 s
-/// in debug (it was 4.5 s debug at 25 M); the lowered-cap pins below cover
-/// the same refusal in milliseconds.
-#[test]
-fn a_face_that_never_converges_is_refused_by_name_within_the_budget() {
-    let started = Instant::now();
-    let r = within(Duration::from_secs(120), || import::load_model(&testdata("bspline_discontinuous.step")));
-    let err = r.expect_err("a surface that never tessellates must be refused").to_string();
-    assert!(
-        err.contains("face #53 (B-spline surface, face 6 of 6 in shell #17)"),
-        "the refusal names the face, its kind and its shell: {err}"
-    );
-    assert!(err.contains("did not converge"), "{err}");
-    assert!(err.contains("import an STL"), "the refusal says what to do: {err}");
-    eprintln!("refused in {:?}", started.elapsed());
-}
-
 #[test]
 fn a_lowered_cap_refuses_the_same_face_at_once() {
-    let r = within(Duration::from_secs(30), || {
+    // The work is bounded by the evaluation cap (100 000 evaluations, 0.06 s
+    // in debug on an idle runner, #1605). The wall-clock limit is only the
+    // hang barrier, so it is set like the default-cap pin's 120 s: a loaded
+    // runner must not turn a finished refusal into a false hang.
+    let r = within(HANG_BARRIER, || {
         step::with_face_eval_cap(100_000, || import::load_model(&testdata("bspline_discontinuous.step")))
     });
     let err = r.expect_err("refused").to_string();
@@ -141,7 +137,8 @@ fn a_finer_pass_that_runs_out_on_a_smooth_face_keeps_the_coarser_mesh() {
 /// not the test), and the finer pass trips: the import is refused by name.
 #[test]
 fn a_finer_pass_that_runs_out_on_a_face_that_may_jump_is_refused() {
-    let r = within(Duration::from_secs(30), || {
+    // The 1 000-evaluation cap is the bound; the barrier is HANG_BARRIER (#1605).
+    let r = within(HANG_BARRIER, || {
         step::with_face_eval_cap(1_000, || import::load_model(&testdata("bspline_discontinuous.step")))
     });
     let err = r.expect_err("a smeared jump is never kept").to_string();

@@ -211,7 +211,8 @@ pub fn collect(world: &World) -> ProjectFile {
         post_options: {
             let o = crate::setup_post_options::document(world);
             (o.threading != crate::schema::ThreadingOutput::default()
-                || o.end_units != crate::schema::EndUnits::default())
+                || o.end_units != crate::schema::EndUnits::default()
+                || o.between_setups != crate::schema::BetweenSetups::default())
             .then(|| PostOptionsDto {
                 threading: match o.threading {
                     crate::schema::ThreadingOutput::G32Passes => None,
@@ -223,6 +224,9 @@ pub fn collect(world: &World) -> ProjectFile {
                     crate::schema::EndUnits::Inch => Some("inch".into()),
                     crate::schema::EndUnits::Millimeters => Some("mm".into()),
                 },
+                // #1532: the default pause writes no key.
+                between_setups: (o.between_setups != crate::schema::BetweenSetups::default())
+                    .then(|| o.between_setups.word().to_owned()),
             })
         },
         post: match crate::posting::document_post_of(world) {

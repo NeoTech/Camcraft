@@ -150,6 +150,11 @@ pub fn as_program(golden: &str, stream: &str) -> String {
     out.push_str(&format!("TOOL {} {}\n", op.tool, op.tool_name));
     out.push_str(&format!("PARAM SpindleSpeed {}\n", op.rpm));
     let rest: Vec<&str> = lines.collect();
+    // #1614: a real section states its clearance plane; the legacy
+    // golden's START height is the generator's clearance.
+    if let Some(z) = rest.iter().find_map(|l| l.strip_prefix("START ")).and_then(|w| w.split_whitespace().nth(2)).and_then(|z| z.parse::<f64>().ok()) {
+        out.push_str(&format!("PARAM ClearancePlane {}\n", z / 1000.0));
+    }
     out.push_str(&with_cycle_feeds(&rest.join("\n")));
     out
 }

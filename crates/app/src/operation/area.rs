@@ -182,6 +182,65 @@ pub(super) fn whole_model_pocket(
     Some(around_part(&part, &stock, &ladder_planes(t - oz, b - oz, stepdown), crate::units::of(world)))
 }
 
+/// The pocket family on the STOCK as its source (#1554): the stock is the
+/// material to remove, but the setup's parts standing in it are not. So
+/// the area to clear is the stock's outline minus every part section
+/// standing at the ladder planes - the same island law as a whole-part
+/// source (#12). `None` where the reading does not apply (not a
+/// pocket-family kind, not a Stock source, no stock facets, no part in
+/// the setup: there the whole stock stays the volume to remove) or where
+/// a height is unresolvable (the generator's refusal of record).
+pub(super) fn stock_pocket(
+    world: &World,
+    setup: Option<&str>,
+    src: &SrcRef,
+    params: &OpParams,
+    frame: Option<&crate::cl::TiltedFrame>,
+) -> Option<Result<Region, GenError>> {
+    let (top, bottom, stepdown) = match params {
+        OpParams::Pocket { top_z, bottom_z, stepdown, .. }
+        | OpParams::Adaptive2D { top_z, bottom_z, stepdown, .. }
+        | OpParams::Offset2D { top_z, bottom_z, stepdown, .. } => (*top_z, *bottom_z, *stepdown),
+        _ => return None,
+    };
+    if !matches!(src, SrcRef::Stock) {
+        return None;
+    }
+    let parts = crate::setup_align::parts_facets_in(world, setup);
+    if parts.is_empty() {
+        return None;
+    }
+    let stock_name = crate::setup::stock_entity_name(world, setup);
+    let stock = model::find_by_name(world, &stock_name).and_then(|e| model::world_facets(world, &e))?;
+    if stock.is_empty() {
+        return None;
+    }
+    let t = resolve_height(world, setup, Some(src), top)?;
+    let b = resolve_height(world, setup, Some(src), bottom)?;
+    let oz = frame.map_or(0.0, |f| f.origin.z);
+    let (parts, stock) = match frame {
+        Some(f) => (f.local_facets(&parts), f.local_facets(&stock)),
+        None => (parts, stock),
+    };
+    let unit = crate::units::of(world);
+    let full = |z: f64| {
+        format!(
+            "a pocket on the stock clears the stock around the setup's parts, and the parts fill the whole \
+             stock outline at Z {} - pick the area to clear, or use the model as the source",
+            units::len(z, unit, 3)
+        )
+    };
+    let planes = ladder_planes(t - oz, b - oz, stepdown);
+    let enclosed = match slice::project(&stock, FOOTPRINT_SAMPLES).map_err(from_slice) {
+        Ok(r) if !r.is_empty() => r,
+        Ok(_) => return None,
+        Err(e) => return Some(Err(e)),
+    };
+    // No part stands in the ladder: the region the source builds itself
+    // stays the answer, byte for byte (every path that cut no part).
+    minus_standing(&enclosed, &parts, &planes, full).transpose()
+}
+
 /// [`whole_model_pocket`]'s pure law: the stock's silhouette minus the
 /// part standing at `planes`. A part that covers the whole stock at a
 /// plane leaves nothing to clear around it - refused by name.

@@ -48,6 +48,7 @@ fn comp_records_round_trip_and_malformed_ones_refuse() {
 const STREAM: &str = "; HSMW-CNC v1
 PARAM OperationName C1
 PARAM SpindleSpeed 8000
+PARAM ClearancePlane 5
 TOOL 2 EM6
 SECTION
 Rapid X -8000 Y 0 Z 5000

@@ -223,6 +223,11 @@ pub struct PostOptionsDto {
     /// (no version step); absent leaves the program's unit modal.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub end_units: Option<String>,
+    /// What the post does between setups (#1532): `"optional-stop"`,
+    /// `"continue"` or `"file-per-setup"`; absent is the default pause
+    /// (M0), additive (no version step).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub between_setups: Option<String>,
 }
 
 /// The file mirror of the `PostRef` singleton (M3.3): exactly the two

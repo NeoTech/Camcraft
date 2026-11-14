@@ -47,6 +47,8 @@ fn two_tool_pocket(tool_a: u32, comp: bool) -> String {
         R::Param { name: "OperationName".into(), value: json!("Pocket1") },
         R::Param { name: "Coolant".into(), value: json!("air") },
         R::Param { name: "SpindleSpeed".into(), value: json!(12000) },
+        // #1616: each section states its clearance, as `post::dump` does.
+        R::Param { name: "ClearancePlane".into(), value: json!(5.0) },
         R::Tool { number: tool_a, name: "3MM FLAT".into() },
         R::Section { begin: true },
         mv(MoveKind::Rapid, 5.0, 5.0, 5.0, None),
@@ -65,6 +67,7 @@ fn two_tool_pocket(tool_a: u32, comp: bool) -> String {
         R::Param { name: "OperationName".into(), value: json!("Corner1") },
         R::Param { name: "Coolant".into(), value: json!("air") },
         R::Param { name: "SpindleSpeed".into(), value: json!(15000) },
+        R::Param { name: "ClearancePlane".into(), value: json!(5.0) },
         R::Tool { number: 3, name: "1MM FLAT".into() },
         R::Section { begin: true },
         mv(MoveKind::Rapid, 20.0, 25.0, 5.0, None),

@@ -244,6 +244,8 @@ fn the_fanuc_dialect_refuses_a_b_on_an_a_only_table() {
             })
         };
         cnc::serialize(&[
+            // #1633: the section states its clearance, as `post::dump` does.
+            cnc::Record::Param { name: "ClearancePlane".into(), value: serde_json::json!(5.0) },
             cnc::Record::Tool { number: 1, name: "EM".into() },
             // #1359: a feed with the spindle stopped is refused by name.
             cnc::Record::Param { name: "SpindleSpeed".into(), value: serde_json::json!(6000) },
@@ -291,6 +293,8 @@ fn the_fanuc_dialect_refuses_a_lone_a_stated_along_minus_x() {
         })
     };
     let stream = cnc::serialize(&[
+        // #1633: the section states its clearance, as `post::dump` does.
+        cnc::Record::Param { name: "ClearancePlane".into(), value: serde_json::json!(5.0) },
         cnc::Record::Tool { number: 1, name: "EM".into() },
         // #1359: a feed with the spindle stopped is refused by name.
         cnc::Record::Param { name: "SpindleSpeed".into(), value: serde_json::json!(6000) },
@@ -322,6 +326,8 @@ fn the_fanuc_dialect_refuses_a_lone_a_stated_along_minus_x() {
 fn tilted(abc: [f64; 3]) -> String {
     let mv = |z: f64| tilted_move(abc, z, camcraft_app::cl::MoveKind::Feed);
     cnc::serialize(&[
+        // #1633: the section states its clearance, as `post::dump` does.
+        cnc::Record::Param { name: "ClearancePlane".into(), value: serde_json::json!(5.0) },
         cnc::Record::Tool { number: 1, name: "EM".into() },
         // #1359: a feed with the spindle stopped is refused by name.
         cnc::Record::Param { name: "SpindleSpeed".into(), value: serde_json::json!(6000) },

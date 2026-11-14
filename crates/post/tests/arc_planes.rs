@@ -278,6 +278,7 @@ fn the_plane_goes_back_to_g17_before_a_cycle_and_at_section_end() {
     let s = cnc::serialize(&[
         // #1359: each section states its spindle (a cut with it stopped
         // is refused by name).
+        R::Param { name: "ClearancePlane".into(), value: serde_json::json!(5.0) }, // #1633
         R::Tool { number: 1, name: "DRILL".into() },
         R::Param { name: "SpindleSpeed".into(), value: serde_json::json!(3000) },
         R::Section { begin: true },

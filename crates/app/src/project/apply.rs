@@ -549,6 +549,12 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
             Some("mm") => crate::schema::EndUnits::Millimeters,
             Some(other) => return Err(corrupt(format!("unknown end units {other:?}"))),
         },
+        // #1532: an absent key is the default pause between setups.
+        between_setups: match file.post_options.as_ref().and_then(|o| o.between_setups.as_deref()) {
+            None => crate::schema::BetweenSetups::default(),
+            Some(w) => crate::schema::BetweenSetups::from_word(w)
+                .ok_or_else(|| corrupt(format!("unknown between-setups choice {w:?}")))?,
+        },
     };
     // The program identity (#258): checked by `SetProgramInfo`'s rules,
     // so a hand-edited value they refuse is a corrupt file, refused

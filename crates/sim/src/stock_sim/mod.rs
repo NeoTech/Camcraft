@@ -73,6 +73,8 @@ mod dexel_box;
 mod dexel_bull;
 mod deviate;
 mod edge_break;
+// #1595: the mark an Engrave or Trace declared.
+mod mark;
 mod display;
 mod dual;
 mod field;
@@ -125,6 +127,9 @@ pub use deviate::{color_classes, deviate, Deviation, DEV_TOL, ProgramSim, SimSur
 pub use dexel::{reach, Dexel};
 pub use dexel_box::{simulate_box, BOX_ARC_REFUSAL};
 pub use edge_break::credit_breaks;
+pub use mark::{credit_marks, Mark};
+// The floor a mark must leave on the part's underside (#1595).
+pub use crate::verify::MARK_FLOOR;
 pub use field::SdfField;
 pub use field_body::Lattice;
 pub use field_carry::{box_signed, CarriedField, Clip, ClipRefusal};

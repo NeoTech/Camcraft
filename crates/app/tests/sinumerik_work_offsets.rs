@@ -29,7 +29,8 @@ fn rapid(z: f64) -> Record {
 
 /// One section per work-offset word, each opening with its word.
 fn stream(words: &[&str]) -> String {
-    let mut rs = vec![param("SpindleSpeed", json!(2000.0)), Record::Tool { number: 1, name: "T1".into() }];
+    // #1633: the section states its clearance, as `post::dump` does.
+    let mut rs = vec![param("SpindleSpeed", json!(2000.0)), param("ClearancePlane", json!(5.0)), Record::Tool { number: 1, name: "T1".into() }];
     for w in words {
         rs.push(param("WorkOffset", json!(w)));
         rs.push(Record::Section { begin: true });

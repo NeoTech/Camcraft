@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf};
 /// Two tools, a cut and a drill cycle: enough to show the lift, the
 /// change and the program's shape.
 const STREAM: &str = "PARAM ClearancePlane 15\nPARAM StockZTop 0\nPARAM SpindleSpeed 18000\nTOOL 3 EM6\nSECTION\nRapid X 0 Y 0 Z 5000\nFeed X 10000 Y 0 Z -1000 F 1500000\nENDSECTION\n\
-                      PARAM SpindleSpeed 12000\nTOOL 4 DRILL5\nSECTION\nCYCLE DRILL X 20000 Y 5000 Z -3000 R 2000 P 1500 F 300000\nENDSECTION\n";
+                      PARAM ClearancePlane 15\nPARAM SpindleSpeed 12000\nTOOL 4 DRILL5\nSECTION\nCYCLE DRILL X 20000 Y 5000 Z -3000 R 2000 P 1500 F 300000\nENDSECTION\n";
 
 fn repo(rel: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../").join(rel)

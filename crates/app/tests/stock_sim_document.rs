@@ -77,7 +77,13 @@ fn faced_doc(at: Point3, model_top: f64) -> (World, History) {
     history.execute(&world, GenerateOperation::new(&world, "Face1").expect("generate face"));
     let e = model::find_by_name(&world, "Face1").expect("op");
     let cache = model::toolpath_of(&world, &e).expect("cache");
-    assert!(cache.warnings.is_empty(), "fixture must generate silent: {:?}", cache.warnings);
+    if model_top <= 18.0 {
+        assert!(cache.warnings.is_empty(), "fixture must generate silent: {:?}", cache.warnings);
+    } else {
+        // #1607: a stock-source face below the part's top is the op's own
+        // gouge too; the sim's verdict is what these tests read.
+        assert!(cache.warnings.iter().any(|w| w.blocks_post()), "the undercut is convicted on the op: {:?}", cache.warnings);
+    }
     (world, history)
 }
 

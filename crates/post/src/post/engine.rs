@@ -198,7 +198,20 @@ pub fn run_program_with(
                 // A post that does not declare `afterModes` would run
                 // straight on past an operator's stop or trip home (#110):
                 // refused by name, a counted warning, never silent.
-                if name == "AfterOperation" && !s.reads_after_operation() {
+                // #1532: the stop of a setup change (its PARAM SetupChange
+                // rides just ahead of the AfterOperation ask) is refused
+                // in the re-clamp's own words, once, not as an op's stop.
+                let setup_change = i > 0
+                    && matches!(records.get(i - 1), Some(Record::Param { name: n, .. }) if n == "SetupChange");
+                if name == "SetupChange" && !s.reads_after_operation() {
+                    let op = base.get("OperationName").and_then(Value::as_str).unwrap_or("");
+                    let who = if op.is_empty() { String::new() } else { format!("operation {op}: ") };
+                    warnings.push(format!(
+                        "{who}the program changes to setup '{}' after it, and this post script does not declare afterModes, so it cannot stop for the re-clamp - choose Run straight on or One file per setup under Between setups, or use a post that reads it",
+                        value.as_str().unwrap_or("")
+                    ));
+                }
+                if name == "AfterOperation" && !s.reads_after_operation() && !setup_change {
                     let op = base.get("OperationName").and_then(Value::as_str).unwrap_or("");
                     let who = if op.is_empty() { String::new() } else { format!("operation {op}: ") };
                     warnings.push(format!(

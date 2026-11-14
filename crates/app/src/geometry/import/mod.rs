@@ -9,6 +9,8 @@ pub mod obj;
 pub mod step;
 pub mod step_budget;
 pub mod step_csys;
+mod step_closed;
+mod step_facets;
 mod step_continuity;
 mod step_diag;
 mod step_division;
@@ -18,6 +20,8 @@ mod step_nearest;
 mod step_pole;
 pub mod step_depth;
 mod step_refine;
+mod step_orient;
+mod step_seams;
 mod step_stretch;
 #[cfg(test)]
 mod step_thread_fixture;
@@ -91,6 +95,10 @@ pub struct Graded {
     /// the promise, and for STL and OBJ - those files ARE the mesh, with
     /// no surface behind them to measure against.
     pub coarse_mm: Option<f64>,
+    /// What the importer changed on the way, one line each (#1573 review:
+    /// a STEP face flipped to agree with its neighbours, by name). Empty
+    /// when it changed nothing, and for STL and OBJ.
+    pub notes: Vec<String>,
 }
 
 /// [`load_model`], with the fidelity the import achieved.
@@ -107,7 +115,7 @@ pub fn load_model_graded_within(path: &Path, budget: usize) -> Result<Graded, Im
         return Err(ImportError::TooLarge);
     }
     if format == Format::Stl {
-        return Ok(Graded { mesh: gate(stl::parse_file(path)?)?, coarse_mm: None });
+        return Ok(Graded { mesh: gate(stl::parse_file(path)?)?, coarse_mm: None, notes: Vec::new() });
     }
     let data = std::fs::read(path)?;
     parse_model_graded_within(&data, format, budget)
@@ -121,15 +129,15 @@ pub fn parse_model_graded(data: &[u8], format: Format) -> Result<Graded, ImportE
 /// [`parse_model_graded`] with a STEP model tessellated inside `budget`
 /// facets - the bytes twin of [`load_model_graded_within`] (#31).
 pub fn parse_model_graded_within(data: &[u8], format: Format, budget: usize) -> Result<Graded, ImportError> {
-    let (mesh, coarse_mm) = match format {
-        Format::Stl => (stl::parse(data)?, None),
-        Format::Obj => (obj::parse(data)?, None),
+    let (mesh, coarse_mm, notes) = match format {
+        Format::Stl => (stl::parse(data)?, None, Vec::new()),
+        Format::Obj => (obj::parse(data)?, None, Vec::new()),
         Format::Step => {
-            let (mesh, chord) = step::parse_with_chord_budget(data, budget)?;
-            (mesh, step::coarse(chord))
+            let (mesh, chord, notes) = step::parse_noted(data, budget)?;
+            (mesh, step::coarse(chord), notes)
         }
     };
-    Ok(Graded { mesh: gate(mesh)?, coarse_mm })
+    Ok(Graded { mesh: gate(mesh)?, coarse_mm, notes })
 }
 
 /// Belt-and-gate: each importer checks finiteness at the parse site, and

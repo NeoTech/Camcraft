@@ -114,6 +114,46 @@ pub(super) fn part_clear(
     ))
 }
 
+/// Refuse by name a part-source cross-drill chain (world frame) whose
+/// drill, shank, holder or rapids enter ANOTHER part the setup holds
+/// (#1641; `keep_law::neighbour_parts`, empty for a one-part setup).
+/// Nothing is excused: the declared holes are the source's own, and a
+/// neighbour's wall on the same line is not a hole this op drills. A
+/// neighbour cut by the op's own chain is never left to the program
+/// sim, which does not judge a posed (radial) chain.
+pub(super) fn neighbours_clear(
+    t: &Toolpath,
+    neighbours: &[Triangle],
+    tool: &Tool,
+    cutter: &verify::Cutter,
+    holes: &[CrossHole],
+) -> Result<(), GenError> {
+    if neighbours.is_empty() {
+        return Ok(());
+    }
+    let cutter = verify::Cutter::judged(&tool.geom(), Some(*cutter));
+    let Some(w) = verify::solid_hits_walled(t, neighbours, &cutter, &law(), &[]).into_iter().next() else {
+        return Ok(());
+    };
+    let (at, what) = match w {
+        Warning::Gouge { at } => (at, "cuts into"),
+        Warning::RapidInStock { at } => (at, "rapids into"),
+        Warning::ShankHit { at, .. } => (at, "rubs its shank or holder on"),
+        _ => (0, "enters"),
+    };
+    let why = "another part the setup holds stands in the drill's line or its approach - the op drills \
+               only its own part's holes; move the hole or the part, or drill the parts in setups of their own";
+    let hole = t.moves.get(at).and_then(|m| hole_of(m.to, holes).or_else(|| hole_of(m.from, holes)));
+    let Some(h) = hole else {
+        return Err(GenError::Invalid(format!("the cross drill {what} a neighbouring part at move {at}: {why}")));
+    };
+    let (o, d) = (h.origin, h.dir);
+    Err(GenError::invalid_at(
+        format!("cross hole at ({}, {}, {}) along ({}, {}, {}) {what} a neighbouring part: {why}", o.x, o.y, o.z, d.x, d.y, d.z),
+        o,
+    ))
+}
+
 /// The hole whose axis line `p` lies on (nearest line, within the
 /// hole's own radius - a plunge rides its line exactly).
 fn hole_of(p: Point3, holes: &[CrossHole]) -> Option<&CrossHole> {

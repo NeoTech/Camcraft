@@ -132,7 +132,10 @@ fn tilted_on(via: Via) -> (World, History) {
     add_tool(&world, &mut h, "EM-0600-4FL");
     h.execute(
         &world,
-        ImportModel::from_mesh("part", cube(Point3::new(0.0, 0.0, -20.0), Point3::new(40.0, 30.0, -10.0))),
+        // #1603: the part is what the stock-source pocket leaves - the
+        // stock's last 10 mm along the tool, so the cut stops on it (a
+        // part filling the stock would be cut, and convicted for it).
+        ImportModel::from_mesh("part", cube(Point3::new(0.0, 0.0, -20.0), Point3::new(10.0, 30.0, -10.0))),
     );
     let loc = Location { pos: Point3::new(20.0, 15.0, -20.0), ..Location::default() };
     h.execute(&world, SetStock::new(&world, StockShape::Box { dx: 40.0, dy: 30.0, dz: 10.0 }, loc).expect("stock"));

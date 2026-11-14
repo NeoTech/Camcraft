@@ -42,7 +42,7 @@ fn doosan_dnm_posts_basic_milling_clean() {
     let mch = dnm_machine();
     // #1359: a real face op states its spindle (a cut with the spindle
     // stopped is refused by name).
-    let stream = read("crates/app/tests/golden/face_square_40x40.cl").replacen('\n', "\nPARAM SpindleSpeed 4500\n", 1);
+    let stream = read("crates/app/tests/golden/face_square_40x40.cl").replacen('\n', "\nPARAM SpindleSpeed 4500\nPARAM ClearancePlane 50\n", 1);
     let out = engine::run(&cps, &mch, &stream).expect("runs clean");
 
     assert!(out.warnings.is_empty(), "unexpected warnings: {:?}", out.warnings);
@@ -74,6 +74,7 @@ fn doosan_dnm_through_spindle_coolant_modes() {
     let stream_tsc = r#"; HSMW-CL v1 scale=0.001mm moves=2
 PARAM Coolant through-tool
 PARAM WorkOffset G54
+PARAM ClearancePlane 50
 TOOL 1 "10mm Flat Endmill"
 PARAM SpindleSpeed 6000
 SECTION FaceTSC
@@ -91,6 +92,7 @@ SECTION END
     let stream_m8 = r#"; HSMW-CL v1 scale=0.001mm moves=2
 PARAM Coolant through-tool
 PARAM WorkOffset G54
+PARAM ClearancePlane 50
 TOOL 1 "10mm Flat Endmill"
 PARAM SpindleSpeed 6000
 SECTION FaceM8
@@ -113,6 +115,7 @@ fn doosan_dnm_rotary_brake_clamp_unclamp() {
     // Rotary table 4th-axis indexing move
     let stream_rotary = r#"; HSMW-CL v1 scale=0.001mm moves=4
 PARAM WorkOffset G54
+PARAM ClearancePlane 50
 TOOL 1 "10mm Endmill"
 PARAM SpindleSpeed 5000
 SECTION RotaryIndex
@@ -153,6 +156,7 @@ fn doosan_dnm_high_speed_smoothing_aicc() {
     // cycle group is refused by name, never swallowed.
     let stream = r#"; HSMW-CL v1 scale=0.001mm moves=8
 PARAM WorkOffset G54
+PARAM ClearancePlane 50
 TOOL 1 "10mm Ball Endmill"
 PARAM SpindleSpeed 8000
 SECTION 3DFinish
@@ -200,6 +204,7 @@ fn doosan_dnm_chip_conveyor() {
 
     let stream = r#"; HSMW-CL v1 scale=0.001mm moves=2
 PARAM WorkOffset G54
+PARAM ClearancePlane 50
 TOOL 1 "12mm Endmill"
 PARAM SpindleSpeed 4000
 SECTION Rough
@@ -227,6 +232,7 @@ fn doosan_dnm_probing_modes() {
     // 1. Standard Fanuc G31 skip probing
     let stream_g31 = r#"; HSMW-CL v1 scale=0.001mm moves=3
 PARAM WorkOffset G54
+PARAM ClearancePlane 50
 TOOL 99 "Touch Probe"
 SECTION ProbeTouch
 GUARD 0 0 5000 F 300000
@@ -270,6 +276,7 @@ fn doosan_dnm_refuses_undeclared_codes_by_name() {
     let stream_tsc = r#"; HSMW-CL v1 scale=0.001mm moves=2
 PARAM Coolant through-tool
 PARAM WorkOffset G54
+PARAM ClearancePlane 50
 TOOL 1 "10mm Flat Endmill"
 PARAM SpindleSpeed 6000
 SECTION FaceTSC
@@ -288,6 +295,7 @@ SECTION END
     // (verified on both generic VMC and Doosan DNM machine definition to ensure no machine-name sniffing)
     let stream_rotary = r#"; HSMW-CL v1 scale=0.001mm moves=2
 PARAM WorkOffset G54
+PARAM ClearancePlane 50
 TOOL 1 "10mm Endmill"
 PARAM SpindleSpeed 5000
 SECTION RotaryIndex
@@ -311,6 +319,7 @@ SECTION END
     // 3. Refusal when probing style is unknown
     let stream_probe = r#"; HSMW-CL v1 scale=0.001mm moves=2
 PARAM WorkOffset G54
+PARAM ClearancePlane 50
 TOOL 99 "Touch Probe"
 SECTION ProbeTouch
 GUARD 0 0 5000 F 300000
@@ -327,6 +336,7 @@ SECTION END
     // 4. Refusal when smoothing level is out of bounds (R1 to R10 required)
     let stream_smooth = r#"; HSMW-CL v1 scale=0.001mm moves=2
 PARAM WorkOffset G54
+PARAM ClearancePlane 50
 TOOL 1 "10mm Ball Endmill"
 PARAM SpindleSpeed 8000
 SECTION Finish
@@ -345,6 +355,7 @@ SECTION END
     // 5. Refusal when chip conveyor is commanded without declared codes
     let stream_cc = r#"; HSMW-CL v1 scale=0.001mm moves=2
 PARAM WorkOffset G54
+PARAM ClearancePlane 50
 TOOL 1 "10mm Endmill"
 PARAM SpindleSpeed 5000
 SECTION Cut
@@ -367,7 +378,7 @@ SECTION END
 fn doosan_dnm_absent_rotary_takes_no_angle_word() {
     let cps = dnm_post();
     let mch = machine::mirror(&parse_mch(&read("assets/machines/tilthead.mch")).expect("tilthead parses"));
-    let stream = "TOOL 1 T1\nPARAM SpindleSpeed 6000\nSECTION\nRapid X 0 Y 0 Z 20000 A 30000 B 0 C 0\nFeed X 20000 Y 0 Z 0 F 300000 A 0 B 30000 C 0\nENDSECTION\n";
+    let stream = "PARAM ClearancePlane 20\nTOOL 1 T1\nPARAM SpindleSpeed 6000\nSECTION\nRapid X 0 Y 0 Z 20000 A 30000 B 0 C 0\nFeed X 20000 Y 0 Z 0 F 300000 A 0 B 30000 C 0\nENDSECTION\n";
     let options = serde_json::json!({ "rotaryBrake": true });
     let out = engine::run_with(&cps, &mch, stream, &options).expect("post");
     assert!(out.warnings.is_empty(), "{:?}", out.warnings);
@@ -385,7 +396,7 @@ fn doosan_dnm_absent_rotary_takes_no_angle_word() {
 fn doosan_dnm_index_names_only_a_stated_rotary() {
     let cps = dnm_post();
     let opts = serde_json::json!({ "rotaryBrake": true });
-    let stream = |a: &str, c: &str| format!("TOOL 1 T1\nPARAM SpindleSpeed 6000\nSECTION\nRapid X 0 Y 0 Z 10000 A {a} C {c}\nFeed X 50000 Y 0 Z -1000 F 400000 A {a} C {c}\nENDSECTION\n");
+    let stream = |a: &str, c: &str| format!("PARAM ClearancePlane 10\nTOOL 1 T1\nPARAM SpindleSpeed 6000\nSECTION\nRapid X 0 Y 0 Z 10000 A {a} C {c}\nFeed X 50000 Y 0 Z -1000 F 400000 A {a} C {c}\nENDSECTION\n");
     let axis = |l: &str, k: char| l.split(' ').any(|w| w.len() > 1 && w.starts_with(k) && w[1..].parse::<f64>().is_ok());
     let out = engine::run_with(&cps, &serde_json::json!({}), &stream("90000", "0"), &opts).expect("post");
     assert_eq!(out.warnings, vec!["indexed move commands A - the machine states no A rotary"]);
@@ -397,5 +408,7 @@ fn doosan_dnm_index_names_only_a_stated_rotary() {
     let out = engine::run_with(&cps, &dnm_machine(), &stream("90000", "0"), &opts).expect("post");
     assert!(out.warnings.is_empty(), "{:?}", out.warnings);
     let moves: Vec<&str> = out.program.lines().filter(|l| l.starts_with("G00") || l.starts_with("G01") || *l == "M10" || *l == "M11").collect();
-    assert_eq!(moves, vec!["M11", "G00 X0 Y0 Z10 A90", "M10", "G01 X50 Y0 Z-1 F400"], "{}", out.program);
+    // #1633: the first traverse's height is stated with the table still
+    // clamped; the index turns on the record itself.
+    assert_eq!(moves, vec!["G00 Z10", "M11", "G00 X0 Y0 Z10 A90", "M10", "G01 X50 Y0 Z-1 F400"], "{}", out.program);
 }
