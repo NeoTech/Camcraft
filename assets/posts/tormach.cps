@@ -23,6 +23,7 @@ capabilities = 1; // reference contract: integer feature mask (bit 1 = milling)
 workOffsetIndex = true; // reads PARAM WorkOffset as the 1-based offset number (#931)
 workOffsetMax = 9;      // LinuxCNC G-code reference: G54-G59.3 select coordinate systems 1-9 (#931)
 programUnits = "mm inch"; // #902: writes the document's unit (postOptions.Units), G21 / G20
+afterModes = true; // #1532: reads PARAM AfterOperation (stop / optional stop) and PARAM SetupChange; a trip home is refused by name
 
 // Determinism law: no timestamps, no randomness - the same stream
 // always posts to the same text (golden files depend on it).
@@ -39,6 +40,8 @@ var cycleSig = "";         // g|Z|R|Q of the open group (modal X Y holes)
 var cycX = 0, cycY = 0, cycR = 0; // the open group's hole XY and R plane (world, #994)
 var seatKnown = false;     // #994: this section moved, so the stream's Start is where the tool is
 var hopZ = null;           // #1028: the section's RetractPlane (its hop), null when unstated
+var afterAsk = "";         // the section's PARAM AfterOperation (#1532), none when unstated
+var setupNext = "";        // the section's PARAM SetupChange (#1532): the setup the program changes to after it
 var coolant = "";          // the M-code this program started, if any
 var sectionOpen = false;   // preamble written (a legacy .cl carries no SECTION)
 var smoothTol = 0;          // #616: the section's PARAM Smoothing, mm (0: none asked)
@@ -336,6 +339,8 @@ function onParameter(name, value) {
   if (name === "Smoothing") { smoothTol = Number(value) || 0; return; }
   if (name === "SmoothingMode") { smoothMode = String(value || ""); return; }
   commentParam(name, value);
+  if (name === "AfterOperation") { afterAsk = String(value || ""); return; }
+  if (name === "SetupChange") { setupNext = clean(value); return; }
   if (name === "WorkOffset" && value) wcsWord = offsetWord(value);
   else if (name === "OriginX" && has(value)) orgX = Number(value);
   else if (name === "OriginY" && has(value)) orgY = Number(value);
@@ -473,6 +478,32 @@ function endPreamble() {
   spindleOn = false;
   probeSection = false;
   kindProbe = false;         // the next section states its own tool kind
+  afterOp();
+}
+
+// The op's after-action (#1532), written once its spindle has stopped:
+// M1 / M0 from PARAM AfterOperation. At a setup change (PARAM
+// SetupChange) Z goes straight up first and a PathPilot (MSG, ..) names
+// the next setup, the way the probe check asks the operator (UM10587
+// ch. 10, M0/M1; LinuxCNC "Messages"). A trip home is not written: the
+// G30 spot is the operator's preset, so it is refused by name.
+function afterOp() {
+  var ask = afterAsk;
+  var next = setupNext;
+  afterAsk = "";
+  setupNext = "";
+  if (!ask) return;
+  if (ask !== "optional-stop" && ask !== "stop") {
+    msg(ask === "home"
+      ? "an operation asks a trip home after it - this post does not write one (the G30 spot is the operator's preset); set it to Pause (M0) or Continue"
+      : "unknown after-operation ask " + ask);
+    return;
+  }
+  if (next) {
+    liftZ();
+    block(["(MSG, SETUP CHANGE - NEXT: " + next + ")"]);
+  }
+  block([ask === "stop" ? "M0" : "M1"]);
 }
 
 function onSection() { seatKnown = false; startPreamble(); }

@@ -42,6 +42,7 @@ var hopZ = null;           // #1028: the section's RetractPlane (its hop), null 
 var coolant = "";          // the M-code this program started, if any
 var coolantAsk = "flood";  // the section's PARAM Coolant (#112), flood when unstated
 var afterAsk = "";         // the section's PARAM AfterOperation (#110), none when unstated
+var setupNext = "";        // the section's PARAM SetupChange (#1532): the setup the program changes to after it
 var homedAt = -1;          // linesWritten() just after a trip home (#504): onClose skips its own home when nothing followed
 var coolantOp = "";        // the section's OperationName, for refusals (#150)
 var sectionOpen = false;   // preamble written (a legacy .cl carries no SECTION)
@@ -466,6 +467,7 @@ function onParameter(name, value) {
   if (name === "MillSpindle") { spinRev = String(value || "") === "reverse"; return; }
   if (name === "Coolant") { coolantAsk = String(value || "flood"); return; }
   if (name === "AfterOperation") { afterAsk = String(value || ""); return; }
+  if (name === "SetupChange") { setupNext = clean(value); return; }
   if (name === "WorkOffset" && value) wcsWord = offsetWord(value);
   else if (name === "OriginX" && has(value)) orgX = Number(value);
   else if (name === "OriginY" && has(value)) orgY = Number(value);
@@ -544,8 +546,17 @@ function startPreamble() {
 // section states its own.
 function afterOp() {
   var ask = afterAsk;
+  var next = setupNext;
   afterAsk = "";
+  setupNext = "";
   if (!ask) return;
+  if (next && (ask === "optional-stop" || ask === "stop")) {
+    // #1532: a setup change - Z up to its reference point, clear of
+    // the part, then say what comes next before the stop.
+    block(["G91", "G28", "Z0"]);
+    block(["G90"]);
+    note("SETUP CHANGE - NEXT: " + next);
+  }
   if (ask === "optional-stop") { block(["M1"]); return; }
   if (ask === "stop") { block(["M0"]); return; }
   if (ask === "home") {

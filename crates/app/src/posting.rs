@@ -454,6 +454,8 @@ mod wcs_rotation;
 mod wcs_slot;
 #[path = "posting_mounts.rs"]
 mod mounts;
+#[path = "posting_setup_change.rs"]
+mod setup_change;
 #[path = "posting_program.rs"]
 mod program;
 pub use program::{
@@ -964,10 +966,12 @@ pub fn op_streams(world: &World) -> Result<Vec<(String, Vec<cnc::Record>)>, Stri
 
     // #155: Pause / Home entries fold into the gap they stand in; #389:
     // "Skip pauses and homes" is read per op, from its own setup.
-    let afters = crate::program_entry::posted_afters(world, &ops, |e| {
+    let mut afters = crate::program_entry::posted_afters(world, &ops, |e| {
         model::operation_of(world, e)
             .is_some_and(|op| crate::setup_post_options::of(world, op.setup.as_deref()).skip_stops)
     })?;
+    // #1532: a setup change stops for the re-clamp (by default).
+    let changes = setup_change::fold(world, &ops, &mut afters)?;
     let mut streams = Vec::with_capacity(ops.len());
     for (name, e) in &ops {
         let op = model::operation_of(world, e)
@@ -976,7 +980,9 @@ pub fn op_streams(world: &World) -> Result<Vec<(String, Vec<cnc::Record>)>, Stri
             .ok_or_else(|| format!("{name}: lost its toolpath"))?;
         if let OpParams::WireContour(p) = &op.params {
             let after = afters.get(name).copied().unwrap_or_default();
-            streams.push((name.clone(), wire::stream(world, name, e, &op, &cache, p, after)?));
+            let mut records = wire::stream(world, name, e, &op, &cache, p, after)?;
+            setup_change::ask(&changes, name, &mut records);
+            streams.push((name.clone(), records));
             continue;
         }
         let tool = model::find_by_name(world, &op.tool)
@@ -1104,6 +1110,7 @@ pub fn op_streams(world: &World) -> Result<Vec<(String, Vec<cnc::Record>)>, Stri
         {
             post::ask_reverse_spindle(&mut records);
         }
+        setup_change::ask(&changes, name, &mut records);
         streams.push((name.clone(), records));
     }
     Ok(streams)

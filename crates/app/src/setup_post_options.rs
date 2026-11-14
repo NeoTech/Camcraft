@@ -82,9 +82,9 @@ pub fn program_problems(world: &World) -> Vec<String> {
             continue;
         }
         let has = of(world, Some(&here));
-        if has.per_op != want.per_op || has.threading != want.threading {
+        if has.per_op != want.per_op || has.threading != want.threading || has.between_setups != want.between_setups {
             out.push(format!(
-                "setup '{here}' posts with other post options (output or threading) than the active setup '{active}' - post the setups one at a time"
+                "setup '{here}' posts with other post options (output, threading or between setups) than the active setup '{active}' - post the setups one at a time"
             ));
         }
         seen.push(here);
