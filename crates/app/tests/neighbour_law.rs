@@ -170,13 +170,18 @@ fn a_cut_on_b_into_its_neighbour_gouges_on_the_op_and_never_posts() {
 fn a_mark_on_b_within_its_budget_clear_of_a_posts_on_both_stocks() {
     // The same 0.3 mm mark with 5 mm between the parts: the flank stays
     // 2 mm off A, the mark is inside B's budget - clean, and it posts.
+    // Whole model or B's top face picked: either way B is the source and
+    // keeps its mark law; only A takes the plain solid law.
     for trace in [false, true] {
-        for rotated in [false, true] {
-            let (world, mut h) = job(CLEAR, rotated);
-            let warns = generated(&world, &mut h, whole_b(), mark(trace, TOP, 7.7));
-            let blocking: Vec<_> = warns.iter().filter(|w| w.blocks_post()).collect();
-            assert!(blocking.is_empty(), "trace {trace} rotated {rotated}: {blocking:?}");
-            assert_posts(&world, &format!("clear-{trace}-{rotated}"));
+        for picked in [false, true] {
+            for rotated in [false, true] {
+                let (world, mut h) = job(CLEAR, rotated);
+                let src = if picked { sel("part", top_face(&world, "part", TOP)) } else { whole_b() };
+                let warns = generated(&world, &mut h, src, mark(trace, TOP, 7.7));
+                let blocking: Vec<_> = warns.iter().filter(|w| w.blocks_post()).collect();
+                assert!(blocking.is_empty(), "trace {trace} picked {picked} rotated {rotated}: {blocking:?}");
+                assert_posts(&world, &format!("clear-{trace}-{picked}-{rotated}"));
+            }
         }
     }
 }
@@ -201,18 +206,22 @@ fn a_pocket_on_bs_own_floor_is_unchanged_beside_a_neighbour() {
     // B's round pocket picked and cleared to its floor, with A 0.7 mm
     // off B's side: the pocket stands 5 mm inside B, nowhere near A, and
     // reads exactly as it does with A far away.
+    // Path and findings alike: the neighbour adds no reading of B.
     let run = |gap: f64, rotated: bool| {
         let (world, mut h) = job(gap, rotated);
         let src = sel("part", top_face(&world, "part", FLOOR));
-        let warns = generated(&world, &mut h, src, pocket(TOP, FLOOR));
-        (world, warns)
+        let (warns, path) = generated_path(&world, &mut h, src, pocket(TOP, FLOOR));
+        (world, warns, path)
     };
     for rotated in [false, true] {
-        let (world, warns) = run(TIGHT, rotated);
+        let (world, warns, path) = run(TIGHT, rotated);
         let blocking: Vec<_> = warns.iter().filter(|w| w.blocks_post()).collect();
         assert!(blocking.is_empty(), "rotated {rotated}: {blocking:?}");
-        let (_, far) = run(CLEAR, rotated);
+        let (_, far, far_path) = run(CLEAR, rotated);
         assert_eq!(warns, far, "rotated {rotated}: the neighbour changes nothing on B's own pocket");
+        assert_eq!(path.moves, far_path.moves, "rotated {rotated}: the same pocket");
+        let low = path.moves.iter().map(|m| m.to.z).fold(f64::INFINITY, f64::min);
+        assert!((low - FLOOR).abs() < 1e-9, "rotated {rotated}: cleared to B's floor: {low}");
         assert_posts(&world, &format!("pocket-{rotated}"));
     }
 }
