@@ -304,6 +304,9 @@ fn a_sided_fit_never_passes_a_vertex_on_the_part_side() {
         let one = fit_arcs_sided(walk, 0.1, Some(air_left));
         assert!(one.iter().any(|s| matches!(s, Seg::Arc { .. })), "air_left={air_left}: still fits arcs");
         let w = worst_part_side(walk, &one, true);
-        assert!(w <= 1e-9, "air_left={air_left}: a vertex stands {w} mm on the part side");
+        eprintln!("air_left={air_left}: worst part-side excursion {w} mm (two-sided {})", worst_part_side(walk, &two, true));
+        // The fit forgives 1e-3 mm (`ARC_SIDE_SLACK`), ten times under the
+        // verifier's 0.01 gouge allowance.
+        assert!(w <= 1e-3 + 1e-9, "air_left={air_left}: a vertex stands {w} mm on the part side");
     }
 }

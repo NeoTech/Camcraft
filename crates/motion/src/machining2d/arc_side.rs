@@ -20,6 +20,41 @@
 
 use crate::geo2d::Point2;
 
+/// How far a vertex may stand on the part side of a fitted arc before
+/// the fit counts it (#1579), in mm. Far above the rounding noise of a
+/// true circle (1e-9 refused exact holes and bores whose vertices sat
+/// 1e-12 off), ten times below the verifier's `GOUGE_TOL` (0.01) - so no
+/// arc passes a vertex near what the verify would hold as a gouge.
+pub(super) const ARC_SIDE_SLACK: f64 = 1e-3;
+
+/// How many refused run ends a sided fit looks past before its run ends
+/// (#1579): see `arcs::fit_arcs_sided`.
+pub(super) const ARC_SIDE_LOOKAHEAD: usize = 4;
+
+/// The circle a run takes on a wall walk whose air is left of travel
+/// when `air_left` is `Some(true)` (`None`: the two-sided `(c, r)` as it
+/// is). The centre is left of travel on a `ccw` arc, so the part is on
+/// the centre's side exactly when the air is not. A vertex within
+/// [`ARC_SIDE_SLACK`] of the two-sided circle (rounding noise on a true
+/// circle) keeps that circle, so an exact bore or boss fits as before;
+/// only a vertex past the slack moves the centre ([`one_sided`], an open
+/// run) or refuses the arc (a `closing` ring, whose circle has no chord
+/// to slide along). `None`: no arc.
+pub(super) fn sided(run: &[Point2], c: Point2, r: f64, ccw: bool, closing: bool, air_left: Option<bool>) -> Option<(Point2, f64)> {
+    let Some(air_left) = air_left else {
+        return Some((c, r));
+    };
+    let part_in = air_left != ccw;
+    if air_side_holds(run, c, r, part_in, ARC_SIDE_SLACK) {
+        Some((c, r))
+    } else if closing {
+        None
+    } else {
+        let (a, b) = (*run.first()?, *run.last()?);
+        one_sided(run, a, b, c, part_in)
+    }
+}
+
 /// The circle through `a` and `b` nearest `(c, _)` that keeps every
 /// point of `run` on the air side: inside or on the circle when the part
 /// lies on the centre's side of the arc (`part_in`, an outside wall), on
@@ -80,5 +115,16 @@ pub(super) fn air_side_holds(run: &[Point2], c: Point2, r: f64, part_in: bool, s
     run.iter().all(|p| {
         let s = (p.x - c.x).hypot(p.y - c.y) - r;
         if part_in { s <= slack } else { s >= -slack }
+    })
+}
+
+/// True when every vertex a sweep split into `k` pieces ends a piece on
+/// (the run's `len * m / k`, `0 < m < k`, as `arcs::fit_arcs_sided`
+/// splits) lies within [`ARC_SIDE_SLACK`] of the circle `(c, r)`.
+pub(super) fn splits_on_circle(run: &[Point2], c: Point2, r: f64, k: usize) -> bool {
+    let last = run.len().saturating_sub(1);
+    (1..k).all(|m| {
+        run.get(last * m / k)
+            .is_some_and(|p| ((p.x - c.x).hypot(p.y - c.y) - r).abs() <= ARC_SIDE_SLACK)
     })
 }

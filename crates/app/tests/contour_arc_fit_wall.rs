@@ -74,5 +74,15 @@ fn coarse_arc_fit_on_a_round_wall_verifies_clean_both_ways() {
             "climb={climb}: the fitted contour must not cross the wall: {:?}",
             cache.warnings
         );
+        // Each arc move ends on its own circle (within the fit's 1e-3 mm
+        // part-side slack): a split piece that ended on a vertex off the
+        // circle bent between the checked vertices and gouged.
+        for m in cache.path.moves.iter() {
+            if let Some(a) = &m.arc {
+                let rf = (m.from.x - a.center.x).hypot(m.from.y - a.center.y);
+                let rt = (m.to.x - a.center.x).hypot(m.to.y - a.center.y);
+                assert!((rf - rt).abs() <= 1e-3 + 1e-6, "climb={climb}: an arc ends {} mm off its circle", (rf - rt).abs());
+            }
+        }
     }
 }

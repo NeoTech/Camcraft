@@ -153,10 +153,20 @@ pub fn fit_arcs_sided(pts: &[Point2], tol: f64, air_left: Option<bool>) -> Vec<S
         let mut best: Option<(usize, Point2, bool, f64)> = None;
         let mut e = s + 2;
         let mut flat = 0;
+        let mut missed = 0;
         while e <= cap {
             match arc_over(&pts[s..=e], tol, air_left) {
                 Over::Fit(center, ccw, total) => {
                     best = Some((e, center, ccw, total));
+                    missed = 0;
+                    e += 1;
+                }
+                // #1579: a sided fit refuses a run that ends on a vertex
+                // short of the circle (a facet's flat) yet takes the run
+                // one or two vertices on (the next corner): look past a
+                // few refusals before the run ends.
+                Over::Fail if air_left.is_some() && best.is_some() && missed < arc_side::ARC_SIDE_LOOKAHEAD => {
+                    missed += 1;
                     e += 1;
                 }
                 // Too straight to have said anything yet: extend, up
@@ -183,7 +193,7 @@ pub fn fit_arcs_sided(pts: &[Point2], tol: f64, air_left: Option<bool>) -> Vec<S
                 // and still honours a genuine fraction: a ratio that
                 // really sits > 5e-7 above an integer wanted another
                 // piece and keeps it.
-                let k = (lattice(total / PI) + 1e-12).ceil().max(1.0) as usize;
+                let k = split_count(total);
                 for m in 1..=k {
                     let idx = if m == k { e } else { s + (e - s) * m / k };
                     segs.push(Seg::Arc {
@@ -201,6 +211,12 @@ pub fn fit_arcs_sided(pts: &[Point2], tol: f64, air_left: Option<bool>) -> Vec<S
         }
     }
     segs
+}
+
+/// How many pieces of at most half a turn a fitted sweep `total` posts
+/// as (see [`fit_arcs_sided`]).
+fn split_count(total: f64) -> usize {
+    (lattice(total / PI) + 1e-12).ceil().max(1.0) as usize
 }
 
 /// What a window of at least 3 points says about sitting on one circle
@@ -287,22 +303,9 @@ pub(super) fn arc_over(run: &[Point2], tol: f64, air_left: Option<bool>) -> Over
         (false, None) => return Over::Fail,
     };
     // #1579: a walk that knows its part's side keeps every vertex on the
-    // air side of its arc. The centre is left of travel on a ccw arc, so
-    // the part is on the centre's side exactly when the air is not.
-    let (c, r) = match air_left {
-        None => (c, r),
-        Some(air_left) => {
-            let part_in = air_left != ccw;
-            let held = if closing {
-                arc_side::air_side_holds(run, c, r, part_in, 1e-9).then_some((c, r))
-            } else {
-                arc_side::one_sided(run, a, b, c, part_in)
-            };
-            match held {
-                Some(cr) => cr,
-                None => return Over::Fail,
-            }
-        }
+    // air side of its arc (`arc_side::sided`).
+    let Some((c, r)) = arc_side::sided(run, c, r, ccw, closing, air_left) else {
+        return Over::Fail;
     };
     if !r.is_finite() || r <= tol {
         return Over::Fail;
@@ -334,6 +337,14 @@ pub(super) fn arc_over(run: &[Point2], tol: f64, air_left: Option<bool>) -> Over
         total += step;
     }
     if total <= 0.0 || total > 2.0 * PI + tol / r {
+        return Over::Fail;
+    }
+    // #1579: a sweep past half a turn posts as pieces that end on interior
+    // vertices (`fit_arcs_sided`). The control and the verifier read each
+    // piece from its own endpoints, so a split vertex off the circle bends
+    // the piece between the checked vertices; a sided fit takes only split
+    // vertices on the circle within the slack.
+    if air_left.is_some() && !arc_side::splits_on_circle(run, c, r, split_count(total)) {
         return Over::Fail;
     }
     Over::Fit(c, ccw, total)
