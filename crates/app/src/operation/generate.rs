@@ -2031,8 +2031,11 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 // refuses it by name, and every standoff is measured
                 // about the spindle the post programs - world Z
                 // through the work offset - not the world origin.
+                // #1635: off the stock, the parts it holds are the
+                // turned work (the raw stock may be a box).
                 if machine_kind == crate::machine::Kind::Lathe {
-                    super::cross_spindle::lathe_reads(&material.facets, wcs_origin)?;
+                    let turned = if part_solid || keep_parts.is_empty() { &material.facets } else { &keep_parts };
+                    super::cross_spindle::lathe_reads(turned, wcs_origin)?;
                 }
                 let radial = drilling::CrossParams {
                     // The clearance/retract planes projected onto the
@@ -2055,7 +2058,18 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     tool: &tool,
                     holes: cross,
                 };
-                super::cross_spindle::cross_drill(radial, &material.facets, stock_facets.as_deref(), wcs_origin, &cutter, &tool_name, unit)?
+                {
+                    // #1635: off the stock, the chain is the one a part
+                    // source drills in that stock - the setup's parts are
+                    // the solid it measures and keeps, the source stock
+                    // the raw material its mouths stand off.
+                    let solids = if part_solid {
+                        super::cross_spindle::Solids { source: &material.facets, stock: stock_facets.as_deref(), kept: &material.facets }
+                    } else {
+                        super::cross_spindle::Solids { source: &keep_parts, stock: Some(&material.facets), kept: &keep_parts }
+                    };
+                    super::cross_spindle::cross_drill(radial, solids, wcs_origin, &cutter, &tool_name, unit)?
+                }
             } else {
                 // M13.5 A: on a plain lathe the Drill kind is the
                 // turret's axial hole - the doors refuse by name a
@@ -2874,6 +2888,10 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
     // #1631: a Drill, Bore or Thread off the stock enters the setup's
     // parts only through the holes they model (the containment law).
     let parts_holed = super::keep_law::is_hole_kind(&params) && !keep_parts.is_empty();
+    // #1635: a cross drill off the stock answered for the setup's parts
+    // in its own radial law (`cross_part`, above); the vertical solid
+    // law below would convict the declared cross hole's own wall.
+    let parts_crossed = super::keep_law::is_cross_drill(&params);
     // #1595: what a mark may take off the part's surface under the cutter.
     let mark_budget = hl.top.zip(hl.bottom).map_or(0.0, |(t, b)| super::mark_law::budget(t, b, tool.diameter * 0.5));
     // #1057: the containment kinds' declared rims, read untightened.
@@ -3145,7 +3163,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // #1603: the pocket family keeps the part - its own mesh
             // for a whole-model source, the setup's parts for a stock one
             // (#1607: every stock-kept kind but the marks and the holes).
-            if let Some(kept) = (depth_law == DepthLaw::Keep).then_some(&material.facets).or((!keep_parts.is_empty() && !parts_marked && !parts_holed).then_some(&keep_parts)) {
+            if let Some(kept) = (depth_law == DepthLaw::Keep).then_some(&material.facets).or((!keep_parts.is_empty() && !parts_marked && !parts_holed && !parts_crossed).then_some(&keep_parts)) {
                 contain_into(&mut warns, &path, kept, &cutter, DepthLaw::Keep, stl, material.excess, &params, &[]);
             }
             // #1631: a hole kind off the stock - the setup's parts by the
@@ -3314,7 +3332,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             }
             // #1603: the keep law in the plane's frame.
             let keep_local = (!keep_parts.is_empty()).then(|| f.local_facets(&keep_parts));
-            if let Some(kept) = (depth_law == DepthLaw::Keep).then_some(&m_gen.facets).or(keep_local.as_ref().filter(|_| !parts_marked && !parts_holed)) {
+            if let Some(kept) = (depth_law == DepthLaw::Keep).then_some(&m_gen.facets).or(keep_local.as_ref().filter(|_| !parts_marked && !parts_holed && !parts_crossed)) {
                 contain_into(&mut warns, &path, kept, &cutter, DepthLaw::Keep, stl, material.excess, &params, &[]);
             }
             // #1631: a hole kind off the stock, in the plane's frame.
