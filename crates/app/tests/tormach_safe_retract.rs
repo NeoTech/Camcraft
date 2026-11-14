@@ -111,7 +111,9 @@ fn a_stated_safe_z_posts_that_z() {
         let out = engine::run_with(&cps(), &m, STREAM, &doc_units(&m)).expect("posts");
         assert!(out.warnings.is_empty(), "{:?}", out.warnings);
         let p = &out.program;
-        assert_eq!(p.matches("G53 G0 Z290\n").count(), 3, "{p}");
+        // Each of the two tool changes: before it, and again after its
+        // G43 (#1596); then the end.
+        assert_eq!(p.matches("G53 G0 Z290\n").count(), 5, "{p}");
         assert!(!p.contains("G53 G0 Z0"), "{p}");
         assert!(!p.lines().any(|l| l == "G30"), "no G30 off the Tormach convention\n{p}");
         assert!(p.contains("(SAFE RETRACT G53 Z290 - STATED BY THE MACHINE)"), "{p}");
@@ -122,7 +124,7 @@ fn a_stated_safe_z_posts_that_z() {
     let m = parse_mch(&inch).expect("parses");
     assert_eq!(m.safe_retract_z, Some(11.5 * 25.4));
     let out = engine::run_with(&cps(), &machine::mirror(&m), STREAM, &doc_units(&machine::mirror(&m))).expect("posts");
-    assert_eq!(out.program.matches("G53 G0 Z11.5\n").count(), 3, "{}", out.program);
+    assert_eq!(out.program.matches("G53 G0 Z11.5\n").count(), 5, "{}", out.program);
 }
 
 /// A non-Tormach machine that states no safe Z is refused by name - the
