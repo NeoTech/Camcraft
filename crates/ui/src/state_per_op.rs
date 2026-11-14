@@ -100,6 +100,12 @@ impl State {
     pub(super) fn post_program_dialog(&mut self) {
         // #258: both pickers open where this document last posted, else
         // beside the saved project (`post_file::for_document`).
+        if self.browser_build {
+            // #1431: the browser downloads the one combined program (a
+            // per-op post was refused before it got here).
+            self.download_program();
+            return;
+        }
         let target = crate::post_file::for_document(self);
         if posting::post_options(&self.world).per_op {
             let mut picker = crate::file_dialog::FileDialog::new().set_title("Post one file per operation into");

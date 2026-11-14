@@ -50,7 +50,8 @@ pub(super) fn options_target_line(name: &str, own: bool) -> String {
 /// The setup's own tool-list export row.
 pub(super) fn tool_list_export(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
     ui.horizontal(|ui| {
-        if ui.button("Export tool list…").clicked() {
+        let why = state.browser_refusal_of(&CommandKind::ToolListExportDialog(None));
+        if crate::browser_files::button(ui, why, "Export tool list…", "") {
             state.pending.push_back(CommandKind::ToolListExportDialog(ctx.map(str::to_owned)));
         }
         ui.label(RichText::new("(this setup's tools: CSV or text)").weak());

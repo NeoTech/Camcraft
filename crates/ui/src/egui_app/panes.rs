@@ -363,6 +363,9 @@ pub(super) fn text_of(c: Cmd, state: &State) -> String {
 /// because the wording is borrowed. Every advertised key is live:
 /// `shortcuts` implements them all, and the pin gesture names itself.
 pub(super) fn tip_of(c: Cmd, state: &State) -> String {
+    if let Some(why) = browser_refusal(c, state) {
+        return why.into();
+    }
     match c {
         Cmd::New => format!("New document\t{}", chord("N")),
         Cmd::Model => format!("Open a mesh model\t{}", chord("O")),
@@ -439,7 +442,25 @@ pub(super) fn tip_of(c: Cmd, state: &State) -> String {
     }
 }
 
+/// #1431: a File cell the browser build cannot run - darkened, its tip
+/// the reason (`browser_files`), the same words the command refuses with.
+pub(super) fn browser_refusal(c: Cmd, state: &State) -> Option<&'static str> {
+    if !state.browser_build {
+        return None;
+    }
+    let action = match c {
+        Cmd::Model => CommandKind::OpenModelDialog,
+        Cmd::Project => CommandKind::OpenProjectDialog,
+        Cmd::Post => CommandKind::PostProgramDialog,
+        _ => return None,
+    };
+    crate::browser_files::refusal(&action, camcraft_app::posting::post_options(&state.world).per_op)
+}
+
 pub(super) fn enabled(c: Cmd, state: &State) -> bool {
+    if browser_refusal(c, state).is_some() {
+        return false;
+    }
     match c {
         Cmd::Undo => state.history.can_undo(),
         Cmd::Redo => state.history.can_redo(),
