@@ -227,7 +227,8 @@ pub(super) fn plan_arm(arm: Entry3D, zig: bool, l: &Lvl, leg: Point2, z: f64, pr
         // length. The ramp rides the ring at the ramp angle instead
         // (the transition's, 3 deg by default), as the helix's stand-
         // down does; a ring too short for it dives at the plunge feed,
-        // named.
+        // named. #1665: the bore's chord runs from the last ring start
+        // to the centre, one ring radius - the same steep dive.
         Entry3D::Ramp if m.ring_zig => ramp_fallback(l, z, prev_z, m)
             .unwrap_or(Descent::Sub("the ring is too short to ramp at the angle")),
         Entry3D::Ramp if l.cen.chord_ok(leg, e) => {

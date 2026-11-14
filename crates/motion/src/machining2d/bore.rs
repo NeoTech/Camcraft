@@ -282,7 +282,14 @@ pub fn bore(p: &BoreParams) -> Result<Toolpath, GenError> {
             .with_entry(p.entry, p.helix_radius)
             .with_arc_radius(p.tool_diameter);
     }
-    let mut motion = motion.with_arc_radius(p.tool_diameter).with_links(p.links, p.helix_radius);
+    // #1665: the bore is a ring ladder. Its ramp entry rides the first
+    // cut (the radial sweep) at the ramp angle, never the chord from the
+    // last ring start to the centre, which is only one ring radius long
+    // and so descends at up to 84 deg on a small hole.
+    let mut motion = motion
+        .with_arc_radius(p.tool_diameter)
+        .with_links(p.links, p.helix_radius)
+        .with_ring_zig();
     let mut b = PathBuilder::approached(Point3::new(0.0, 0.0, p.clearance_z));
 
     for h in &p.holes {
