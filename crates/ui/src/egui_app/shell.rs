@@ -467,14 +467,23 @@ fn viewport_panel(
             viewcube::click(state, h, p);
         }
         if !over_hud && interact::inside_viewport(state, parr(p)) {
-            if mid_press {
-                state.drag = Some(DragMode::Orbit);
-            }
-            if right_press {
-                state.drag = Some(DragMode::Pan);
-            }
-            if left_pressed {
-                *left_press = Some(parr(p));
+            if let Some(tool) = state.nav_tool {
+                // A nav tool owns the drag whatever the button is;
+                // a press remembers nothing, so the release's pick
+                // law sees no press to resolve.
+                if left_pressed || mid_press || right_press {
+                    state.drag = Some(tool);
+                }
+            } else {
+                if mid_press {
+                    state.drag = Some(DragMode::Orbit);
+                }
+                if right_press {
+                    state.drag = Some(DragMode::Pan);
+                }
+                if left_pressed {
+                    *left_press = Some(parr(p));
+                }
             }
         }
         if let (Some(steps), Some(p)) = (wheel, pos)
@@ -491,7 +500,7 @@ fn viewport_panel(
     // frame press+release (fast click) is handled here, not at the press.
     if left_released {
         let press = left_press.take();
-        if state.drag == Some(DragMode::Orbit) {
+        if state.drag.is_some() {
             state.drag = None;
         }
         // #979: a pick box's release adds what it holds, as one command.
@@ -520,6 +529,7 @@ fn viewport_panel(
         match state.drag {
             Some(DragMode::Orbit) => state.cam.orbit(motion.x, motion.y),
             Some(DragMode::Pan) => state.cam.pan(motion.x, motion.y),
+            Some(DragMode::Zoom) => state.cam.zoom(-motion.y * 0.05),
             None => {
                 if let Some(b) = state.pick_box.as_mut()
                     && let Some(p) = pos
@@ -780,6 +790,7 @@ fn viewport_panel(
         let hint = match state.drag {
             Some(DragMode::Orbit) => "orbit",
             Some(DragMode::Pan) => "pan",
+            Some(DragMode::Zoom) => "zoom",
             None => super::viewport_layout::LEGEND,
         };
         if (hot || state.drag.is_some())

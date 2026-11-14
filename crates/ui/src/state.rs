@@ -1242,6 +1242,7 @@ pub fn quat_yaw_deg(q: [f64; 4]) -> f64 {
 pub enum DragMode {
     Orbit,
     Pan,
+    Zoom,
 }
 
 /// Where a Face/Edge viewport pick lands while the Boundary group is
@@ -1487,8 +1488,14 @@ pub struct State {
     /// Viewport image rect in logical screen coords; the shell publishes it
     /// each frame, `interact` hit-tests pointer events against it.
     pub viewport_rect: ([f32; 2], [f32; 2]),
-    /// Live viewport drag (orbit/pan), driven by the shell's pointer layer.
+    /// Live viewport drag (orbit/pan/zoom), driven by the shell's pointer layer.
     pub drag: Option<DragMode>,
+    /// The nav tool latched on the viewport's control ribbon: `None`
+    /// keeps the stock gestures (LMB bends into orbit, MMB orbits, RMB
+    /// pans); `Some` hands the next drag to that tool regardless of
+    /// the mouse button (#1198's tool-mode buttons). View state like
+    /// `drag` - not undoable, never saved.
+    pub nav_tool: Option<DragMode>,
     /// #979: the live box-select rubber band (press point, current point),
     /// logical px. View state like `drag` - its release queues one command.
     pub pick_box: Option<[[f32; 2]; 2]>,
@@ -1972,6 +1979,7 @@ impl State {
             selection_version: 0,
             viewport_rect: ([0.0, 0.0], [0.0, 0.0]),
             drag: None,
+            nav_tool: None,
             pick_box: None,
             hover: None,
             hover_mesh: None,
