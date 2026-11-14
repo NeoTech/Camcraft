@@ -114,6 +114,17 @@ explainTool = "station-offset";
 //    own advice before a tool change), then T<tool><offset> - T0101 -
 //    which indexes the turret or pauses for a manual tool, and applies
 //    the geometry and wear offsets. No M6, no G43 on a PathPilot lathe.
+//  - Around every G30 (#1604): the post never knows where the operator
+//    stored G30, so no two-axis rapid touches it. After G30 the first
+//    point is reached one axis at a time - X first, then Z, when the
+//    point stands outside the stock's diameter; Z first (to the point,
+//    or to the section's ClearancePlane when the point is on the face),
+//    then X, when it stands in front of the face. Before G30 the tool
+//    leaves +X to the stock's diameter, then +Z to the face (or to the
+//    ClearancePlane), so the control's own G30 move starts from the
+//    stock's outer corner. The stock is the section's StockXY* box
+//    (its largest half-width about the axis) and StockZTop (the face).
+//    No stock, or no stated plane where one is needed: refused by name.
 //  - No % fences and no O word (LinuxCNC reads O as a subroutine label);
 //    comments are parenthesized and cleaned of parentheses - LinuxCNC
 //    has no nested comments.
@@ -146,6 +157,12 @@ var pass = null;           // the G33 pass being merged: { r, z0, z, halves, lea
 var drillDwell = 0;        // the open hole's floor dwell, seconds (0 = none)
 var drillFloor = null;     // ... and its floor Z (world mm)
 var drillIgnore = false;   // the open hole was refused: its chain posts nothing
+var stk = null;            // #1604: the section's stock box (world mm) { l, r, f, b, top }, null = none stated
+var clearZ = null;         // #1604: the section's ClearancePlane (world Z), null = none stated
+var fromG30 = false;       // #1604: the tool stands at G30 - the next point is approached axis by axis
+var lastR = null;          // #1604: the last written point: its radius (origin-relative) ...
+var lastZ = null;          // ... and its world Z; null = unknown (at G30, or nothing written yet)
+var departWords = null;    // #1604: the moves that leave the stock before the next G30
 
 // ------------------------------------------------------------ helpers
 function has(v) { return v !== null && v !== undefined && isFinite(v); }
@@ -355,6 +372,8 @@ function onParameter(name, value) {
   else if (name === "SurfaceSpeed" && has(value)) sCss = Number(value);
   else if (name === "MaxSpindleSpeed" && has(value)) sMax = Number(value);
   else if (name === "SpindleDirection") spinRev = String(value || "") === "reverse";
+  else if (name === "ClearancePlane" && has(value)) clearZ = Number(value);
+  else stockParam(name, value);
 }
 
 function onSpindleSpeed() {
@@ -394,14 +413,16 @@ var UNCLAMPED = "constant surface speed (G96) with no rpm clamp - the machine st
 function startPreamble() {
   if (sectionOpen) return;
   sectionOpen = true;
+  if (toolWait) leave();     // #1604: out of the last section's stock before its G30
   opNotes();
   block([wcsWord]);
   if (toolWait) {
     toolNote();
-    block(["G30"]);          // the operator's preset safe spot, then the tool
+    g30();                   // the operator's preset safe spot (#1604: left axis by axis), then the tool
     block([tWord()]);        // T0101: tool 1, geometry 1, wear line 1
     toolWait = false;
   }
+  departWords = null;        // no G30 here: the section goes on from where the last one ended
   if (spindleWait) {
     var m = spinRev ? "M4" : "M3";
     if (spinRev) note("SPINDLE M4 - THREAD HAND NEEDS REVERSE ROTATION - MOUNT THE INSERT FOR M4");
@@ -428,7 +449,7 @@ function afterOp() {
   if (ask === "optional-stop") { block(["M1"]); return; }
   if (ask === "stop") { block(["M0"]); return; }
   if (ask === "home") {
-    block(["G30"]);
+    g30();
     homedAt = linesWritten();
     return;
   }
@@ -449,11 +470,121 @@ function endPreamble() {
   spinRev = false;           // the next section states its own
   sCss = 0;                  // and its own spindle mode: no stale G96 (#772)
   sMax = 0;                  // and its own clamp (#891)
+  departWords = departure(); // #1604: computed in this section's frame, written before a G30
+  stk = null;                // and its own stock and planes (#1604)
+  clearZ = null;
   afterOp();
 }
 
 function onSection() { flushPass(); startPreamble(); }
 function onSectionEnd() { endPreamble(); }
+
+// ---------------------------------------------------- G30 (#1604)
+// LinuxCNC's G30 with no axis words moves every axis to the stored
+// position (params 5181-5189) in one straight line, and the operator
+// stores it - so the post cannot know if the line from or to it
+// crosses the stock. The law: the moves after a G30 and before one are
+// single-axis, and they run only where the stock is not - outside its
+// diameter, or in front of its face. Then the control's own G30 line
+// starts at the stock's outer corner, from which a straight line to
+// any point outside the stock's envelope stays outside it.
+function stockParam(name, value) {
+  var keys = { StockXYLeft: "l", StockXYRight: "r", StockXYFront: "f", StockXYBack: "b", StockZTop: "top" };
+  var k = keys[name];
+  if (!k || !has(value)) return;
+  if (stk === null) stk = {};
+  stk[k] = Number(value);
+}
+// The stock about the spindle axis: { r: its radius, top: its face Z }
+// in world mm, null when the section states no stock box. The radius
+// is the box's largest half-width from the origin - a round bar's own.
+function stockEnv() {
+  var s = stk;
+  if (s === null || !has(s.l) || !has(s.r) || !has(s.f) || !has(s.b) || !has(s.top)) return null;
+  if (!(s.r - s.l > EPS) || !(s.b - s.f > EPS)) return null;   // an empty box: no stock
+  var r = Math.max(Math.abs(s.l - orgX), Math.abs(s.r - orgX), Math.abs(s.f - orgY), Math.abs(s.b - orgY));
+  return { r: r, top: s.top };
+}
+function clearOfFace(env) { return has(clearZ) && clearZ > env.top + EPS ? clearZ : null; }
+var NO_STOCK = "no stock stated - the post orders the moves before and after G30 by the stock's diameter and face; define the setup's stock";
+// The departure goes out in the frame it was computed in: before the
+// next section's notes and work offset word.
+function leave() {
+  var w = departWords || [];
+  for (var i = 0; i < w.length; i++) writeln(w[i]);
+  departWords = null;
+}
+function g30() {
+  leave();
+  block(["G30"]);
+  fromG30 = true;
+  lastR = null; lastZ = null;
+}
+function at(r, z) { lastR = r; if (has(z)) lastZ = Number(z); }
+// The approach from G30 to the section's first point (r, z): X first
+// when the point stands outside the stock's diameter (the Z move then
+// runs outside it), else Z first when it stands in front of the face
+// (the X move then runs in front of it) - to the point's own Z, or, for
+// a point ON the face, to the ClearancePlane first. xw is the point's X
+// word (the G76 drive line rides its own grid). False when refused: the
+// caller writes nothing, and no later move until a point is reached.
+function approach(r, z, xw) {
+  var who = coolantWho() + "the first point after G30";
+  if (!has(z)) { refuse(who + " states no Z - the post will not approach it from an unknown G30"); return false; }
+  var env = stockEnv();
+  if (env === null) { refuse(coolantWho() + NO_STOCK); return false; }
+  if (r > env.r + EPS) {
+    block(["G0", xw]);
+    block(["G0", zWord(z)]);
+  } else {
+    var zc = z > env.top + EPS ? z : clearOfFace(env);
+    if (zc === null) {
+      refuse(who + " stands inside the stock's diameter (" + xWord(env.r) + ") and not in front of its face (" + zWord(env.top)
+        + "), and no ClearancePlane in front of the face is stated - the post will not approach it from G30 across the stock");
+      return false;
+    }
+    block(["G0", zWord(zc)]);
+    block(["G0", xw]);
+    if (Math.abs(zc - z) > EPS) block(["G0", zWord(z)]);
+  }
+  fromG30 = false;
+  at(r, z);
+  return true;
+}
+// The way out before a G30, from the section's last point: +X to the
+// stock's diameter, then +Z to the face - the ClearancePlane when the
+// corner reached is not clear of the stock in either axis. null when
+// nothing was written (the tool is where G30 left it); [] when refused.
+function departure() {
+  if (lastR === null || lastZ === null) return null;
+  var env = stockEnv();
+  if (env === null) { refuse(coolantWho() + NO_STOCK); return []; }
+  var radial = lastR > env.r - EPS, front = lastZ > env.top - EPS;
+  if (!radial && !front) {
+    refuse(coolantWho() + "the section ends inside the stock's envelope (" + xWord(lastR) + " " + zWord(lastZ)
+      + ") - the post cannot tell which way leaves the stock before G30; end the operation outside the stock");
+    return [];
+  }
+  var xd = Math.max(lastR, env.r), zd = Math.max(lastZ, env.top);
+  if (!(xd > env.r + EPS) && !(zd > env.top + EPS)) {
+    zd = clearOfFace(env);
+    if (zd === null) {
+      refuse(coolantWho() + "the section ends on the stock's corner and no ClearancePlane in front of the face is stated - the post will not leave for G30 across the stock");
+      return [];
+    }
+  }
+  var w = [];
+  if (xd > lastR + EPS) w.push("G0 " + xWord(xd));
+  if (zd > lastZ + EPS) w.push("G0 " + zWord(zd));
+  return w;
+}
+// A feed or an arc cannot be the first motion after G30: where it
+// starts is the stored G30, unknown.
+function fedFromG30(what) {
+  if (!fromG30) return false;
+  refuse(coolantWho() + what + " is the first motion after G30 - the post approaches a section's start with rapids only; regenerate the operation");
+  return true;
+}
 
 // ------------------------------------------------------------- motions
 function onRapid() {
@@ -463,7 +594,9 @@ function onRapid() {
   if (posed(p) || inThread || drillIgnore) return;
   var r = radiusOf(p.X, p.Y, "rapid");
   if (r === null) return;
+  if (fromG30) { approach(r, p.Z, xWord(r)); return; }
   block(["G0", xWord(r), zWord(p.Z)]);
+  at(r, p.Z);
 }
 function onLinear() {
   flushPass();
@@ -472,7 +605,9 @@ function onLinear() {
   if (posed(p) || inThread || drillIgnore) return;
   var r = radiusOf(p.X, p.Y, "feed move");
   if (r === null) return;
+  if (fedFromG30("a feed move")) return;
   block(["G1", xWord(r), zWord(p.Z), feedWord(p.FeedRate)]);
+  at(r, p.Z);
   // The hole's floor dwell (the chain has no move for it): G4 P in
   // SECONDS, LinuxCNC's unit, once the feed reaches the floor on axis.
   if (drillDwell > 0 && drillFloor !== null && Math.abs(r) <= EPS && Math.abs(p.Z - drillFloor) <= EPS) {
@@ -490,6 +625,7 @@ function meridianArc(p) {
   var rc = yz ? radiusOf(orgX, c.J, "arc centre") : radiusOf(c.I, orgY, "arc centre");
   if (r0 === null || r1 === null || rc === null) return;
   if (!has(c.K)) { refuse("arc without a K centre word"); return; }
+  if (fedFromG30("an arc")) return;  // #1604
   var cw = p.CircularDirection === "CW";
   if (yz) cw = !cw;                       // the +Y meridian seen from +Y is mirrored
   block([
@@ -498,6 +634,7 @@ function meridianArc(p) {
     "I" + fu(rc - r0), "K" + fu(c.K - p.StartZ),
     feedWord(p.FeedRate),
   ]);
+  at(r1, p.Z);
 }
 
 // An XY arc is a thread half-turn: centre on the axis, one radius at
@@ -517,6 +654,7 @@ function threadHalfTurn(p) {
   ok = ok && Math.abs(rho0 - rho1) <= EPS;
   ok = ok && Math.abs(p.StartX + p.X - 2 * c.I) <= EPS && Math.abs(p.StartY + p.Y - 2 * c.J) <= EPS;
   if (!ok) { flushPass(); refuse("XY arc that is not a thread half-turn about the spindle axis"); return; }
+  if (fedFromG30("a thread half-turn")) { flushPass(); return; }  // #1604
   var dz = p.Z - p.StartZ;
   var lead = 2 * Math.abs(dz);
   if (!(lead > 0)) { flushPass(); refuse("thread half-turn with no lead"); return; }
@@ -560,6 +698,7 @@ function flushPass() {
   pass = null;
   var k = threadLead > 0 ? threadLead : 2 * Math.abs(q.z - q.z0) / q.halves;
   block(["G33", zWord(q.z), "K" + fp(k)]);
+  at(q.r, q.z);
 }
 
 function onCircular() {
@@ -661,7 +800,9 @@ function onThreadCycle() {
   var g = why ? null : g76Grid(p, r0);
   if (g && g.why) why = g.why;
   if (why) { refuse("G76 threading cycle refused - " + why); return; }
-  block(["G0", "X" + gridWord(g.x), zWord(p.Z)]);
+  if (fromG30) { if (!approach(r0, p.Z, "X" + gridWord(g.x))) return; }  // #1604
+  else block(["G0", "X" + gridWord(g.x), zWord(p.Z)]);
+  at(r0, p.Z);                       // G76 ends back at its drive line
   block([
     "G76", "P" + fp(p.Lead), zWord(p.EndZ),
     "I" + gridWord(g.i),
@@ -702,6 +843,6 @@ function onCycle() {
 // just went there, #504), M30 ends and rewinds. No % fence.
 function onClose() {
   endPreamble();
-  if (linesWritten() !== homedAt) block(["G30"]);
+  if (linesWritten() !== homedAt) g30();
   block(["M30"]);
 }

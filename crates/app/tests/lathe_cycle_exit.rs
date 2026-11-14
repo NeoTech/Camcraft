@@ -297,14 +297,27 @@ fn fanuc_lathe_refuses_a_face_cycle_it_cannot_seat_by_name() {
 fn tormach_lathe_adds_no_positioning_move_to_an_off_seat_face_cycle() {
     // #1026: the PathPilot post writes no cycle and no positioning
     // block of its own - every motion line is one of the stream's
-    // moves, in order, so no diagonal the stream does not state.
-    let records = off_seat_stream(Some((15.0, 18.0)), 22.0);
+    // moves, in order, so no diagonal the stream does not state. The
+    // one exception is #1604's G30 law: the first rapid after G30 is
+    // split X then Z, and the tool leaves +X to the stock's diameter
+    // before the closing G30 (a Ø20 bar, its face at Z15, stated here).
+    let mut records = off_seat_stream(Some((15.0, 18.0)), 22.0);
+    let p = |name: &str, v: f64| cnc::Record::Param { name: name.into(), value: serde_json::json!(v) };
+    let stock = [
+        p("StockXYLeft", -10.0),
+        p("StockXYRight", 10.0),
+        p("StockXYFront", -10.0),
+        p("StockXYBack", 10.0),
+        p("StockZTop", 15.0),
+        p("ClearancePlane", 40.0),
+    ];
+    records.splice(0..0, stock);
     let out = engine::run(TORMACH_CPS, &lathe_mch(), &cnc::serialize(&records)).expect("the lathe script runs");
     assert!(out.warnings.is_empty(), "{:?}", out.warnings);
     let motion: Vec<&str> = out.program.lines().filter(|l| l.starts_with("G0 ") || l.starts_with("G1 ")).collect();
     assert_eq!(
         motion,
-        ["G0 X30 Z18", "G0 X0 Z22", "G1 X0 Z10 F0.1", "G0 X0 Z22", "G0 X0 Z40"],
+        ["G0 X30", "G0 Z18", "G0 X0 Z22", "G1 X0 Z10 F0.1", "G0 X0 Z22", "G0 X0 Z40", "G0 X20"],
         "{}",
         out.program
     );
