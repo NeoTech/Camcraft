@@ -3,8 +3,9 @@
 //! Native builds forward to rfd's synchronous dialog, unchanged. A
 //! wasm32 build has no synchronous dialog (the browser only offers an
 //! async `<input type=file>`), so there the pickers answer `None` - the
-//! same "cancelled" the user gets from closing the dialog - and log why,
-//! until the browser shell brings an async picker.
+//! same "cancelled" the user gets from closing the dialog - and log why.
+//! Open model and Open project do not come here in a browser: they ask
+//! `crate::file_pick`'s async picker instead (#31).
 //! Provenance: our own seam; rfd's builder API from its public docs.
 
 use std::path::{Path, PathBuf};
