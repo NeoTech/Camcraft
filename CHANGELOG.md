@@ -10,6 +10,7 @@ v0.8.1).
 
 | Commit | Date | Change | Version |
 |---|---|---|---|
+| 058e14ca0 | 2026-11-14 | The post no longer refuses a legal stock-source drill, bore, thread or cross drill in the part's own modelled hole on a turned stock (#1691, PR #1692) | 0.20.0 |
 | 4f4edcf35 | 2026-11-14 | STEP import meshes rational B-spline thread faces at full fidelity in seconds (about 10 K facets instead of 5-6 M per part, and no hole), splitting each parameter direction only where it is curved (PR #1638) | 0.20.0 |
 | 819ecfc31 | 2026-11-14 | A part moved into, added to, or un-tagged inside an operation's cut after generation no longer posts on a turned stock: the post judges the parts beside each op's source again and refuses by name (#1628, PR #1643) | 0.20.0 |
 | d08e9eda7 | 2026-11-14 | Carvera post: the first X/Y traverse after an `M6` tool change now comes after a `G0 Z` to the clearance height, not before it (#1616, PR #1661) | 0.20.0 |

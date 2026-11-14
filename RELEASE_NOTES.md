@@ -58,7 +58,8 @@ opens, saves and posts**. 117 pull requests merged since 0.19.0.
   the stock is their source. A cut into a part blocks the post (#1543, #1550,
   #1593, #1607, #1631, #1635, #1641).
 - The post judges the parts beside each operation's source again at post time
-  (#1628).
+  (#1628). A legal stock-source Drill, Bore, Thread or cross drill in the
+  part's own modelled hole is no longer refused there (#1691).
 - A Slot or a Trochoidal slot that leaves its picks is refused by name (#1503,
   #1504).
 - A Bore wider than three tool diameters is refused by name (#1556).
