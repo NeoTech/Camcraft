@@ -189,6 +189,10 @@ pub(crate) mod spindle_law;
 pub use spindle_law::{spindle_reading, SpindleReading, SPINDLE_TOL};
 mod rotary_gate;
 mod air_law;
+// #1595: the depth law an Engrave or Trace on the part carries itself.
+pub mod mark_law;
+// #1603: the part a pocket-family op keeps, judged on the op.
+pub mod keep_law;
 // #864: what a kind's gouge laws need of its model's fidelity.
 pub(crate) mod fidelity_law;
 mod top_stock;
