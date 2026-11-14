@@ -171,6 +171,8 @@ mod setup_mount_pages;
 // #1515: a pick on one setup never re-mounts another.
 mod setup_machine_bleed;
 mod setup_post_options_bleed;
+// #1617: a closed STEP solid wound inward is turned outward, and said.
+mod import_outward;
 
 /// What the per-frame state of `Shell` is, minus the GPU half: the fields
 /// `shell_layout` touches, so the harness exercises the window's real body.
