@@ -5,6 +5,11 @@ use super::*;
 use crate::geometry::import::step_thread_fixture::{flank, root};
 use truck_stepio::r#in::alias::{BSplineSurface, KnotVec, ParametricSurface3D, SPHint2D};
 
+/// A meter no test here is meant to run out of.
+fn meter() -> Meter {
+    Meter::new(crate::geometry::import::step_guard::FACE_EVAL_CAP)
+}
+
 fn on_surface_inside(s: &Surface, p: Point3, uv: Option<(f64, f64)>) -> bool {
     let Some(domain) = super::super::step_pole::knot_domain(s) else { return false };
     uv.is_some_and(|uv| inside(uv, domain) && s.subs(uv.0, uv.1).distance(p) <= SAME_POINT)
@@ -21,7 +26,7 @@ fn a_point_on_a_many_turn_flank_is_found_on_its_own_turn() {
         let v = (k as f64 + 0.37) / 40.0;
         let p = s.subs(0.0, v);
         let truck = s.search_nearest_parameter(p, SPHint2D::None, TRIALS);
-        let found = rescue(&s, p, truck);
+        let found = rescue(&s, p, truck, &meter());
         assert!(on_surface_inside(&s, p, found), "v {v}: truck {truck:?} -> {found:?}");
         fixed += usize::from(!on_surface_inside(&s, p, truck));
     }
@@ -41,18 +46,18 @@ fn a_point_on_a_root_band_is_found_inside_the_knot_domain() {
         // The hint a mesher would carry from a neighbouring turn.
         let hint = (0.5, (v - 1.0 / 14.0).max(0.0));
         let truck = s.search_nearest_parameter(p, hint, TRIALS);
-        let found = rescue(&s, p, truck);
+        let found = rescue(&s, p, truck, &meter());
         assert!(on_surface_inside(&s, p, found), "v {v}: truck {truck:?} -> {found:?}");
         fixed += usize::from(!on_surface_inside(&s, p, truck));
     }
     assert!(fixed > 0, "the fixture must reproduce truck's out-of-domain answer on some point");
 }
 
-/// A point the face really does not reach keeps truck's answer: on a flat
-/// unit square, a point past its edge is found on the extended plane,
-/// which no parameter inside the domain matches.
+/// A point the face really does not reach is refused, not answered: on a
+/// flat unit square, a point past its edge is found on the extended plane,
+/// which no parameter inside the domain matches (PR #1638 review item 3).
 #[test]
-fn a_point_off_the_face_keeps_trucks_answer() {
+fn a_point_off_the_face_is_refused_not_answered_outside_the_domain() {
     let k = KnotVec::bezier_knot(1);
     let p = |x: f64, y: f64| Point3::new(x, y, 0.0);
     let cps = vec![vec![p(0.0, 0.0), p(0.0, 1.0)], vec![p(1.0, 0.0), p(1.0, 1.0)]];
@@ -60,10 +65,18 @@ fn a_point_off_the_face_keeps_trucks_answer() {
     let off = Point3::new(1.5, 0.5, 0.0);
     let truck = s.search_nearest_parameter(off, (0.9, 0.5), TRIALS);
     assert!(truck.is_some_and(|(u, _)| u > 1.4), "truck extends the plane: {truck:?}");
-    assert_eq!(rescue(&s, off, truck), truck);
-    // An answer already inside and on the surface is returned untouched.
+    let m = meter();
+    assert_eq!(rescue(&s, off, truck, &m), None);
+    assert_eq!(m.fault(), Some(Fault::Outside));
+    // An answer already inside and on the surface is returned untouched,
+    // and so is an answer inside the domain that no search betters.
+    let m = meter();
     let on = Point3::new(0.25, 0.75, 0.0);
-    assert_eq!(rescue(&s, on, Some((0.25, 0.75))), Some((0.25, 0.75)));
+    assert_eq!(rescue(&s, on, Some((0.25, 0.75)), &m), Some((0.25, 0.75)));
+    let above = Point3::new(0.25, 0.75, 1e-4);
+    let kept = rescue(&s, above, Some((0.25, 0.75)), &m);
+    assert!(kept.is_some_and(|(u, v)| (u - 0.25).abs() < 1e-9 && (v - 0.75).abs() < 1e-9), "{kept:?}");
+    assert_eq!(m.fault(), None);
 }
 
 /// The sample grid has a few samples in every knot span and stays inside
@@ -72,15 +85,18 @@ fn a_point_off_the_face_keeps_trucks_answer() {
 fn the_sample_grid_covers_every_span_within_its_bound() {
     let s = flank(14);
     let Some(domain) = super::super::step_pole::knot_domain(&s) else { panic!("a NURBS has a knot domain") };
-    let (us, vs) = samples(&s, domain);
+    let Some((us, vs)) = samples(&s, domain) else { panic!("141 x 2 knots are inside the bound") };
     assert!(us.len() * vs.len() <= MAX_SAMPLES, "{} x {}", us.len(), vs.len());
     assert!(vs.len() > 140, "every one of the 140 spans is sampled: {}", vs.len());
     assert_eq!((us.first(), us.last()), (Some(&0.0), Some(&1.0)));
+    // The refusal's text names the bound the grid is held to.
+    assert!(Fault::Grid.why().contains(&MAX_SAMPLES.to_string()));
 }
 
 /// Whatever the samples' Newton runs find, the rescue never answers
 /// outside the knot domain: on a flat square, a point on the plane past
-/// its edge draws every run there, and truck's own (bogus) answer stands.
+/// its edge draws every run there, and truck's own (bogus) answer is
+/// refused with the face flagged.
 #[test]
 fn a_rescue_never_answers_outside_the_knot_domain() {
     let k = KnotVec::bezier_knot(1);
@@ -88,7 +104,9 @@ fn a_rescue_never_answers_outside_the_knot_domain() {
     let cps = vec![vec![p(0.0, 0.0), p(0.0, 1.0)], vec![p(1.0, 0.0), p(1.0, 1.0)]];
     let s = Surface::BSplineSurface(Box::new(BSplineSurface::new((k.clone(), k), cps)));
     let bogus = Some((5.0, 0.5));
-    assert_eq!(rescue(&s, Point3::new(1.5, 0.5, 0.0), bogus), bogus);
+    let m = meter();
+    assert_eq!(rescue(&s, Point3::new(1.5, 0.5, 0.0), bogus, &m), None);
+    assert_eq!(m.fault(), Some(Fault::Outside));
 }
 
 /// A root band's point found exactly on an extrapolated ruling (u = 19.5,
@@ -100,7 +118,7 @@ fn an_exact_answer_outside_the_domain_gives_way_to_one_on_the_surface_inside() {
     let v = 0.5;
     let outside = (19.5, v + 1.0 / 14.0);
     let p = s.subs(outside.0, outside.1);
-    let found = rescue(&s, p, Some(outside));
+    let found = rescue(&s, p, Some(outside), &meter());
     assert!(on_surface_inside(&s, p, found), "{found:?}");
 }
 
@@ -113,6 +131,6 @@ fn a_nearer_answer_replaces_a_far_one_off_the_surface() {
     let (u, v) = (0.0, 0.437);
     let p = s.subs(u, v) + s.normal(u, v) * 1e-4;
     let wrong_turn = Some((0.0, v - 1.0 / 14.0));
-    let found = rescue(&s, p, wrong_turn).expect("an answer");
+    let found = rescue(&s, p, wrong_turn, &meter()).expect("an answer");
     assert!((found.1 - v).abs() < 1e-3, "{found:?}");
 }

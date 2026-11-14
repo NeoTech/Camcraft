@@ -53,7 +53,7 @@ face (`step_guard::Metered`), none in truck.
 - **Chosen:** an answer from truck's parameter search that is off the
   surface (farther than truck's 1e-6 acceptance) or outside the knot domain
   is compared with Newton started from the 8 nearest samples of a grid with
-  up to 4 samples in every knot span (at most 4,096 evaluations). The
+  up to 4 samples in every knot span (at most 4,096 evaluations; section 4). The
   nearest answer inside the domain wins when it is on the surface or nearer
   than truck's. A pole is settled by `step_pole` first (#1548), so its
   answer is inside the domain and kept.
@@ -65,6 +65,49 @@ face (`step_guard::Metered`), none in truck.
 - **Dropped:** running the global search for every boundary point (cost;
   truck's local answer is right almost always). Raising truck's presearch
   density (a crate constant we cannot set).
+
+## 4. What the second search refuses (review of PR #1638, items 1-3)
+
+Taken unattended in the takeover of the review items; each takes the option
+that refuses more.
+
+- **The sample grid is capped by a refusal, not by striding.** A face with
+  more knot spans than `MAX_SAMPLES` (4,096, the bound the search already
+  named) covers at one sample a span gets no grid: when one of its boundary
+  points needs the second search, the face is refused by name ("more knot
+  spans than the search may sample"). No new number was chosen.
+  **Dropped:** striding the knots (spans go unsampled, which is the miss
+  the search exists to prevent, and nothing would say so); skipping the
+  search and keeping truck's answer (the unchecked answer is what made the
+  hole).
+  **Cost, owed a reading:** a dense fitted surface (more than about
+  64 x 64 spans) whose edge curves lie more than 1e-6 off it imported
+  before this PR and is now refused. Not measured on real files; if it
+  bites, the bound or the trigger distance is the maintainer's to move.
+- **The second search is charged to the face's evaluation budget (#1536)
+  before it runs:** 1 + 4,096 + 8 x 101 = 4,905 evaluations a search, the
+  most it can take (the grid, 8 Newton runs of 100 trials, the checks),
+  whatever it actually took. About 30,000 searches a face a pass fit in
+  the 150 M cap; past it the face trips and is refused as any runaway. A
+  face already refused in the pass runs no further search.
+  **Dropped:** counting the evaluations truck's Newton really makes (its
+  search runs on the bare surface; wrapping it would meter truck's own
+  first search too, which main never did); a model-scale trigger distance
+  instead (loosens when the search runs - not ours to choose here).
+- **An answer outside the knot domain is never passed on.** When no search
+  finds the point inside the domain and truck's answer is outside it, the
+  search answers nothing and the face is refused by name ("a boundary point
+  lies off the surface, outside its knot domain"). An answer INSIDE the
+  domain that no search betters is kept as truck gave it, as on main.
+  **Dropped:** a logged warning with the answer kept (the mesh would still
+  carry the hole); clamping into the domain (a silent move of a boundary
+  point).
+  **Cost, owed a reading:** a face whose boundary runs past its surface's
+  edge by more than a millionth of the knot span imported before (truck
+  extrapolates) and is now refused. The fixtures of the eight importer
+  suites still import.
+- A faulted face is never "continuous": no coarser pass's mesh is kept for
+  it (`step_refine`), since the coarser pass searched the same boundary.
 
 ## Readings (release, local; the user's files stay local)
 

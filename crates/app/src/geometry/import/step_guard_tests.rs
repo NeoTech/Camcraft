@@ -303,3 +303,77 @@ fn a_metered_face_finds_boundary_points_on_their_own_turn() {
         assert!(got.is_none_or(inside), "root v {v}: an answer outside the domain {got:?}");
     }
 }
+
+/// A flat degree-(1,1) B-spline sheet over the unit square with `n` knot
+/// spans each way, as a one-face shell.
+fn sheet_shell(n: usize, cap: u64) -> Guarded {
+    let mut knots = vec![0.0];
+    knots.extend((0..=n).map(|i| i as f64 / n as f64));
+    knots.push(1.0);
+    let at = |i: usize| i as f64 / n as f64;
+    let cps = (0..=n).map(|i| (0..=n).map(|j| Point3::new(at(i), at(j), 0.0)).collect()).collect();
+    let k = KnotVec::from(knots);
+    let surface = Surface::BSplineSurface(Box::new(BSplineSurface::new((k.clone(), k), cps)));
+    let face = CompressedFace { boundaries: vec![], orientation: true, surface };
+    Guarded::new(CompressedShell { vertices: vec![], edges: vec![], faces: vec![face] }, cap)
+}
+
+/// PR #1638 review item 1: a face with more knot spans than the second
+/// search may sample (300 x 300 here; a file may carry any number) gets no
+/// sample grid at all. A boundary point that needs the second search (1e-4
+/// off the face, a file's own tolerance) refuses the face by name.
+#[test]
+fn a_face_with_more_spans_than_the_search_grid_is_refused_by_name() {
+    use truck_stepio::r#in::alias::SearchNearestParameter;
+    let g = sheet_shell(300, FACE_EVAL_CAP);
+    let got = g.shell.faces[0].surface.search_nearest_parameter(Point3::new(0.5, 0.5, 1e-4), (0.4, 0.4), 100);
+    assert_eq!(g.tripped(), Some(Trip { index: 0, kind: "B-spline surface", continuous: false }));
+    assert_eq!(got, None, "a refused search hands the mesher no parameters");
+    assert_eq!(g.fault(0), Some(Fault::Grid));
+    assert_eq!(g.meters[0].used.load(Ordering::Relaxed), 0, "no sample of the oversized grid is evaluated");
+    let trip = Trip { index: 0, kind: "B-spline surface", continuous: false };
+    let e = Fault::Grid.refusal(&face_name(trip, 1, Some(7), None)).to_string();
+    assert!(e.contains("face #7 (B-spline surface, face 1 of 1) could not be tessellated"), "{e}");
+    assert!(e.contains("knot spans"), "{e}");
+    // A new pass starts clean, and a point on the face needs no second search.
+    g.reset();
+    let on = g.shell.faces[0].surface.search_nearest_parameter(Point3::new(0.5, 0.5, 0.0), (0.4, 0.4), 100);
+    assert!(on.is_some() && g.tripped().is_none(), "{on:?}");
+}
+
+/// PR #1638 review item 2: the second search is charged to the face's
+/// evaluation budget (#1536). Boundary points 1e-4 off a many-turn flank
+/// each need one; past the budget the face trips like any runaway.
+#[test]
+fn second_searches_spend_the_face_budget_and_trip_it() {
+    use crate::geometry::import::step_thread_fixture::flank;
+    use truck_stepio::r#in::alias::{SPHint2D, SearchNearestParameter};
+    let off = |m: &Metered, v: f64| m.inner.subs(0.0, v) + m.inner.normal(0.0, v) * 1e-4;
+    let m = Metered::new(flank(14), FACE_EVAL_CAP);
+    assert!(m.search_nearest_parameter(off(&m, 0.437), SPHint2D::None, 100).is_some());
+    let one = m.meter.used.load(Ordering::Relaxed);
+    assert!(one >= 4_096 && !m.meter.tripped(), "one second search is counted: {one}");
+    let m = Metered::new(flank(14), 50_000);
+    for k in 0..40 {
+        let _ = m.search_nearest_parameter(off(&m, (k as f64 + 0.37) / 40.0), SPHint2D::None, 100);
+    }
+    assert!(m.meter.tripped(), "40 second searches must run a 50,000 budget out");
+    assert!(m.meter.used.load(Ordering::Relaxed) < 50_000 + 2 * one, "a tripped face runs no further search");
+}
+
+/// PR #1638 review item 3: a boundary point whose only answer is outside
+/// the knot domain (here on the extended plane past the sheet's edge) is
+/// never handed to the mesher; the face is refused by name.
+#[test]
+fn a_boundary_point_outside_the_knot_domain_is_refused_not_answered() {
+    use truck_stepio::r#in::alias::SearchNearestParameter;
+    let g = sheet_shell(1, FACE_EVAL_CAP);
+    let got = g.shell.faces[0].surface.search_nearest_parameter(Point3::new(1.5, 0.5, 0.0), (0.9, 0.5), 100);
+    assert_eq!(got, None, "an answer outside the knot domain was returned as valid");
+    assert_eq!(g.tripped(), Some(Trip { index: 0, kind: "B-spline surface", continuous: false }));
+    assert_eq!(g.fault(0), Some(Fault::Outside));
+    let trip = Trip { index: 0, kind: "B-spline surface", continuous: false };
+    let e = Fault::Outside.refusal(&face_name(trip, 1, None, Some(3))).to_string();
+    assert!(e.contains("face 1 of 1 (B-spline surface in shell #3) could not be tessellated"), "{e}");
+    assert!(e.contains("outside its knot domain"), "{e}");
+}

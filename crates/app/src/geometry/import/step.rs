@@ -245,14 +245,22 @@ fn shell_facets(
             // face proven continuous only ran out of evaluations, and
             // `refine` keeps the coarser mesh if there is one (#1568).
             let i = trip.index;
+            let fault = guarded.fault(i);
             tracing::warn!(
-                "step: face {} of shell #{shell_id} ({}, continuous: {}) ran past {cap} evaluations at tol {tol:e}",
+                "step: face {} of shell #{shell_id} ({}, continuous: {}) refused at tol {tol:e}: {}",
                 i + 1,
                 trip.kind,
-                trip.continuous
+                trip.continuous,
+                fault.map_or_else(|| format!("ran past {cap} evaluations"), |f| f.why().to_string())
             );
             let entity = face_ids.as_ref().and_then(|ids| ids.as_slice().get(i).copied());
-            let refusal = super::step_guard::refusal(trip, cshell.faces.len(), entity, Some(shell_id), cap);
+            let faces = cshell.faces.len();
+            // #1602: a boundary search that could not be answered soundly
+            // is refused in its own words, not as a runaway division.
+            let refusal = match fault {
+                Some(f) => f.refusal(&super::step_guard::face_name(trip, faces, entity, Some(shell_id))),
+                None => super::step_guard::refusal(trip, faces, entity, Some(shell_id), cap),
+            };
             return Err(PassError::Unconverged { continuous: trip.continuous, refusal });
         }
         let meshed = meshed.unwrap_or_else(|panic| std::panic::resume_unwind(panic));

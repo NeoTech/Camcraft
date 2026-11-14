@@ -35,7 +35,7 @@
 //! and none is left behind.
 
 use std::ops::Bound;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
 use std::sync::Arc;
 
 use truck_stepio::r#in::alias::{
@@ -43,6 +43,7 @@ use truck_stepio::r#in::alias::{
 };
 use truck_topology::compress::{CompressedFace, CompressedShell};
 
+use super::step_nearest::Fault;
 use super::step_stretch::Stretch;
 use super::ImportError;
 
@@ -77,18 +78,44 @@ pub(super) struct Meter {
     /// so the coarser pass whose mesh a fallback would keep may be the one
     /// that went wild while the finer pass that tripped stayed in range.
     outside: AtomicBool,
+    /// A boundary search of this pass that could not be answered soundly
+    /// (`step_nearest::Fault`, 0 for none): the face is refused by name.
+    fault: AtomicU8,
 }
 
 impl Meter {
-    fn new(cap: u64) -> Self {
-        Self { used: AtomicU64::new(0), cap, outside: AtomicBool::new(false) }
+    pub(super) fn new(cap: u64) -> Self {
+        Self { used: AtomicU64::new(0), cap, outside: AtomicBool::new(false), fault: AtomicU8::new(0) }
     }
     /// Count one evaluation; `false` once the cap is spent.
     fn spend(&self) -> bool {
         self.used.fetch_add(1, Ordering::Relaxed) < self.cap
     }
+    /// Count `n` evaluations done outside `subs` (a boundary search's own
+    /// work, #1602); `false` once the cap is spent. Saturating, never wraps.
+    pub(super) fn spend_many(&self, n: u64) -> bool {
+        let mut used = self.used.load(Ordering::Relaxed);
+        loop {
+            let next = used.saturating_add(n);
+            match self.used.compare_exchange_weak(used, next, Ordering::Relaxed, Ordering::Relaxed) {
+                Ok(_) => return next <= self.cap,
+                Err(now) => used = now,
+            }
+        }
+    }
     fn tripped(&self) -> bool {
         self.used.load(Ordering::Relaxed) > self.cap
+    }
+    /// Refuse the face for a boundary search fault. The first one stands.
+    pub(super) fn flag(&self, fault: Fault) {
+        let _ = self.fault.compare_exchange(0, fault as u8, Ordering::Relaxed, Ordering::Relaxed);
+    }
+    pub(super) fn fault(&self) -> Option<Fault> {
+        Fault::from_code(self.fault.load(Ordering::Relaxed))
+    }
+    /// The pass is refused for this face: out of evaluations, or a fault.
+    pub(super) fn refused(&self) -> bool {
+        self.tripped() || self.fault().is_some()
     }
     /// Spend the whole budget at once: the face's division did not
     /// converge (#1602), so the pass is refused as for a runaway.
@@ -98,6 +125,7 @@ impl Meter {
     /// A new pass: the whole budget again. `outside` stays set.
     fn reset(&self) {
         self.used.store(0, Ordering::Relaxed);
+        self.fault.store(0, Ordering::Relaxed);
     }
 }
 
@@ -105,7 +133,7 @@ impl Meter {
 #[derive(Clone, Debug)]
 pub(super) struct Metered {
     pub(super) inner: Surface,
-    meter: Arc<Meter>,
+    pub(super) meter: Arc<Meter>,
     /// The mesher sees `inner`'s parameters multiplied by this (#1602,
     /// `step_stretch`); every evaluation divides it back out.
     pub(super) stretch: Stretch,
@@ -217,7 +245,7 @@ impl ParameterDivision2D for Metered {
                 // the grid it grew (millions of points down the runaway
                 // seam) would only make it triangulate them first.
                 match division {
-                    Some(division) if !self.meter.tripped() => division,
+                    Some(division) if !self.meter.refused() => division,
                     _ => {
                         let ((u0, u1), (v0, v1)) = range;
                         (vec![u0, u1], vec![v0, v1])
@@ -255,7 +283,8 @@ pub(super) struct Guarded {
     continuous: Vec<bool>,
 }
 
-/// A face that ran past the cap in a pass.
+/// A face that ran past the cap in a pass, or whose boundary search was
+/// refused (`Guarded::fault` then says why).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct Trip {
     /// The face's index in the shell (0-based).
@@ -297,7 +326,7 @@ impl Guarded {
     /// (#1568 review: a proven face tripping beside one that may jump must
     /// not let the fallback keep the jump's smear).
     pub(super) fn tripped(&self) -> Option<Trip> {
-        let mut trips = self.meters.iter().enumerate().filter(|(_, m)| m.tripped()).map(|(i, _)| self.trip(i));
+        let mut trips = self.meters.iter().enumerate().filter(|(_, m)| m.refused()).map(|(i, _)| self.trip(i));
         let first = trips.next()?;
         Some(if first.continuous { trips.find(|t| !t.continuous).unwrap_or(first) } else { first })
     }
@@ -309,8 +338,14 @@ impl Guarded {
             // Proven on the surface's own range only: a face any pass
             // divided outside that range is not covered by the proof.
             continuous: self.continuous.get(index).copied().unwrap_or(false)
-                && self.meters.get(index).is_some_and(|m| !m.outside.load(Ordering::Relaxed)),
+                && self.meters.get(index).is_some_and(|m| !m.outside.load(Ordering::Relaxed) && m.fault().is_none()),
         }
+    }
+
+    /// The boundary search fault of face `index` in this pass, if any. A
+    /// faulted face is never continuous: no coarser mesh of it is kept.
+    pub(super) fn fault(&self, index: usize) -> Option<Fault> {
+        self.meters.get(index).and_then(|m| m.fault())
     }
 }
 
@@ -336,21 +371,26 @@ pub(super) fn face_entities(shell: &truck_stepio::r#in::ShellHolder, faces: usiz
 /// (a finer one falls back to the coarser mesh), so its text says it is
 /// too dense, not broken.
 pub(super) fn refusal(trip: Trip, faces: usize, entity: Option<u64>, shell: Option<u64>, cap: u64) -> ImportError {
-    let Trip { index, kind, continuous } = trip;
-    let face = match entity {
-        Some(id) => format!("face #{id} ({kind}, face {} of {faces}", index + 1),
-        None => format!("face {} of {faces} ({kind}", index + 1),
-    };
-    let shell = shell.map(|s| format!(" in shell #{s}")).unwrap_or_default();
-    let why = if continuous {
+    let face = face_name(trip, faces, entity, shell);
+    let why = if trip.continuous {
         "did not finish within {cap} evaluations at the coarsest tolerance (a continuous surface, too dense to divide)"
     } else {
         "did not converge within {cap} evaluations (a discontinuous or degenerate surface)"
     };
     let why = why.replace("{cap}", &cap.to_string());
     ImportError::Step(format!(
-        "{face}{shell}) could not be tessellated: its surface subdivision {why} - re-export the model, or import an STL"
+        "{face} could not be tessellated: its surface subdivision {why} - re-export the model, or import an STL"
     ))
+}
+
+/// How a refusal names a face: its STEP entity, kind, place and shell.
+pub(super) fn face_name(trip: Trip, faces: usize, entity: Option<u64>, shell: Option<u64>) -> String {
+    let Trip { index, kind, .. } = trip;
+    let shell = shell.map(|s| format!(" in shell #{s}")).unwrap_or_default();
+    match entity {
+        Some(id) => format!("face #{id} ({kind}, face {} of {faces}{shell})", index + 1),
+        None => format!("face {} of {faces} ({kind}{shell})", index + 1),
+    }
 }
 
 #[cfg(test)]

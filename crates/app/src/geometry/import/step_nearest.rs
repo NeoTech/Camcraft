@@ -33,14 +33,25 @@
 //! other answer, or none, is compared with Newton started from the nearest
 //! samples of a grid with a few samples in every knot span, and the nearest
 //! answer INSIDE the knot domain wins when it is on the surface or nearer
-//! than the first. A boundary that really runs off its surface keeps
-//! truck's answer.
+//! than the first. An answer inside the domain that no search betters is
+//! kept as truck gave it.
+//!
+//! What is refused (review of PR #1638), each by name through the face's
+//! meter (`step_guard`), never passed on as an answer:
+//! - a face with more knot spans than the sample grid covers at one sample
+//!   a span (`MAX_SAMPLES`): the grid is not built, so a file cannot buy
+//!   unbounded work or memory with its knot count (`Fault::Grid`);
+//! - an answer outside the knot domain that no search brings inside - the
+//!   state that made the #1602 hole (`Fault::Outside`);
+//! - a face whose second searches spend its evaluation budget: every one
+//!   is charged to the #1536 meter before it runs.
 
 use truck_stepio::r#in::alias::{
     MetricSpace, ParametricSurface, Point3, SPHint2D, SearchNearestParameter, SearchParameter, Surface, D2,
 };
 
-use super::step_guard::Metered;
+use super::step_guard::{Meter, Metered};
+use super::ImportError;
 
 /// truck's acceptance distance for a parameter search (its `TOLERANCE`,
 /// in model units): an answer this near the point is on the surface.
@@ -56,18 +67,67 @@ const TRIALS: usize = 100;
 
 type Domain = ((f64, f64), (f64, f64));
 
+/// Why a face's boundary search is refused (kept in its `Meter`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
+pub(super) enum Fault {
+    /// More knot spans than the sample grid may cover.
+    Grid = 1,
+    /// The only answer is outside the surface's knot domain.
+    Outside = 2,
+}
+
+impl Fault {
+    pub(super) fn from_code(code: u8) -> Option<Self> {
+        match code {
+            1 => Some(Self::Grid),
+            2 => Some(Self::Outside),
+            _ => None,
+        }
+    }
+    pub(super) fn why(self) -> &'static str {
+        match self {
+            Self::Grid => "a boundary point had to be searched for again, and the surface has more knot spans than the search may sample (4096)",
+            Self::Outside => "a boundary point lies off the surface, outside its knot domain",
+        }
+    }
+    /// The refusal for `face` (`step_guard::face_name`).
+    pub(super) fn refusal(self, face: &str) -> ImportError {
+        ImportError::Step(format!("{face} could not be tessellated: {} - re-export the model, or import an STL", self.why()))
+    }
+}
+
+/// What one second search may cost in surface evaluations: the first
+/// answer's check, the sample grid, and Newton's trials from each start
+/// with the check of its answer.
+const RESCUE_COST: u64 = (1 + MAX_SAMPLES + STARTS * (TRIALS + 1)) as u64;
+
 /// truck's answer for `point`, or a nearer one inside the knot domain when
-/// truck's lands off the surface. See the module comment.
-pub(super) fn rescue(surface: &Surface, point: Point3, found: Option<(f64, f64)>) -> Option<(f64, f64)> {
+/// truck's lands off the surface. `None` with a fault flagged on `meter`
+/// when no sound answer can be given. See the module comment.
+pub(super) fn rescue(surface: &Surface, point: Point3, found: Option<(f64, f64)>, meter: &Meter) -> Option<(f64, f64)> {
     let Some(domain) = super::step_pole::knot_domain(surface) else {
         return found;
     };
     let dist = |(u, v): (f64, f64)| surface.subs(u, v).distance(point);
     let first = found.map(dist).filter(|d| d.is_finite());
-    if first.is_some_and(|d| d <= SAME_POINT) && found.is_some_and(|uv| inside(uv, domain)) {
+    let found_inside = found.is_some_and(|uv| inside(uv, domain));
+    if first.is_some_and(|d| d <= SAME_POINT) && found_inside {
         return found;
     }
-    let (us, vs) = samples(surface, domain);
+    // A face already refused in this pass does no more work.
+    if meter.refused() {
+        return None;
+    }
+    let Some((us, vs)) = samples(surface, domain) else {
+        meter.flag(Fault::Grid);
+        return None;
+    };
+    // #1536: the search is the face's work, charged before it runs. Past
+    // the cap the face is refused as for any runaway.
+    if !meter.spend_many(RESCUE_COST) {
+        return None;
+    }
     let mut near: Vec<(f64, (f64, f64))> = Vec::with_capacity(us.len() * vs.len());
     for &u in &us {
         for &v in &vs {
@@ -88,7 +148,12 @@ pub(super) fn rescue(surface: &Surface, point: Point3, found: Option<(f64, f64)>
     match (best, first) {
         (Some((d, uv)), Some(f)) if d <= SAME_POINT || d < f => Some(uv),
         (Some((_, uv)), None) => Some(uv),
-        _ => found,
+        // truck's own answer stands only inside the domain (or as none).
+        _ if found_inside || found.is_none() => found,
+        _ => {
+            meter.flag(Fault::Outside);
+            None
+        }
     }
 }
 
@@ -101,7 +166,8 @@ fn inside((u, v): (f64, f64), ((u0, u1), (v0, v1)): Domain) -> bool {
 
 /// The sample parameters in u and in v: every distinct knot inside the
 /// domain, each span split evenly, as many per span as `MAX_SAMPLES` allows.
-fn samples(surface: &Surface, ((u0, u1), (v0, v1)): Domain) -> (Vec<f64>, Vec<f64>) {
+/// `None` when one sample a span is already more than `MAX_SAMPLES`.
+fn samples(surface: &Surface, ((u0, u1), (v0, v1)): Domain) -> Option<(Vec<f64>, Vec<f64>)> {
     let (uk, vk) = match surface {
         Surface::BSplineSurface(s) => (knots(s.uknot_vec(), u0, u1), knots(s.vknot_vec(), v0, v1)),
         Surface::NurbsSurface(s) => {
@@ -111,11 +177,9 @@ fn samples(surface: &Surface, ((u0, u1), (v0, v1)): Domain) -> (Vec<f64>, Vec<f6
         _ => (vec![u0, u1], vec![v0, v1]),
     };
     let spans = (uk.len().saturating_sub(1).max(1), vk.len().saturating_sub(1).max(1));
-    let mut per = MAX_PER_SPAN;
-    while per > 1 && (spans.0 * per + 1).saturating_mul(spans.1 * per + 1) > MAX_SAMPLES {
-        per -= 1;
-    }
-    (split(&uk, per), split(&vk, per))
+    let grid = |per: usize| spans.0.saturating_mul(per).saturating_add(1).saturating_mul(spans.1.saturating_mul(per).saturating_add(1));
+    let per = (1..=MAX_PER_SPAN).rev().find(|&per| grid(per) <= MAX_SAMPLES)?;
+    Some((split(&uk, per), split(&vk, per)))
 }
 
 /// The distinct knots of `kv` inside `[lo, hi]`, with both ends.
@@ -150,7 +214,7 @@ impl SearchParameter<D2> for Metered {
         // #1548: at a pole the free parameter comes back anywhere.
         let found = super::step_pole::settle(&self.inner, point, previous(hint), found);
         // #1602: an answer outside the knot domain is searched again.
-        let found = rescue(&self.inner, point, Some(found))?;
+        let found = rescue(&self.inner, point, Some(found), &self.meter)?;
         Some(self.stretch.outer(found))
     }
 }
@@ -168,7 +232,7 @@ impl SearchNearestParameter<D2> for Metered {
         let found = found.map(|f| super::step_pole::settle(&self.inner, point, previous(hint), f));
         // #1602: an answer off the surface (a neighbouring turn of a
         // helical strip) or outside the knot domain is searched again.
-        let found = rescue(&self.inner, point, found)?;
+        let found = rescue(&self.inner, point, found, &self.meter)?;
         Some(self.stretch.outer(found))
     }
 }
