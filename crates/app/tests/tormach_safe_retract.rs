@@ -89,13 +89,15 @@ fn the_shipped_tormach_machines_post_byte_identical() {
         let b = engine::run_with(&cps(), &without, STREAM, &doc_units(&without)).expect("posts");
         assert!(a.warnings.is_empty() && b.warnings.is_empty(), "{name}: {:?} {:?}", a.warnings, b.warnings);
         assert_eq!(a.program, b.program, "{name}: byte-identical");
-        assert_eq!(a.program.matches("G53 G0 Z0\nG30\n").count(), 3, "{name}: two changes + the end\n{}", a.program);
+        assert_eq!(a.program.matches("G53 G0 Z0\nG30\n").count(), 2, "{name}: the two changes\n{}", a.program);
+        assert!(a.program.ends_with("G53 G0 Z0\nM30\n"), "{name}: #1594 the end is Z up, no G30\n{}", a.program);
     }
     // No machine at all, and the default VMC: today's retract.
     for m in [Value::Null, serde_json::from_str(&read("assets/machines/3axis-vmc.mch")).expect("json")] {
         let out = engine::run_with(&cps(), &m, STREAM, &doc_units(&m)).expect("posts");
         assert!(out.warnings.is_empty(), "{:?}", out.warnings);
-        assert_eq!(out.program.matches("G53 G0 Z0\nG30\n").count(), 3, "{}", out.program);
+        assert_eq!(out.program.matches("G53 G0 Z0\nG30\n").count(), 2, "{}", out.program);
+        assert!(out.program.ends_with("G53 G0 Z0\nM30\n"), "#1594\n{}", out.program);
     }
 }
 
@@ -143,7 +145,8 @@ fn a_non_tormach_machine_without_a_safe_z_is_refused_by_name() {
     let own = file_form("Tormach 770MX (shop copy)", json!({}));
     let out = engine::run_with(&cps(), &mounted(&own), STREAM, &doc_units(&mounted(&own))).expect("posts");
     assert!(out.warnings.is_empty(), "{:?}", out.warnings);
-    assert_eq!(out.program.matches("G53 G0 Z0\nG30\n").count(), 3, "{}", out.program);
+    assert_eq!(out.program.matches("G53 G0 Z0\nG30\n").count(), 2, "{}", out.program);
+    assert!(out.program.ends_with("G53 G0 Z0\nM30\n"), "#1594\n{}", out.program);
 }
 
 /// A garbled or misplaced `safe_retract` refuses the file naming the axis.

@@ -24,6 +24,7 @@ mod axis_note;
 mod build_info;
 pub mod boundary_draft;
 pub mod box_pick;
+pub mod browser_files;
 pub mod boundary_viz;
 pub mod plate_viz;
 pub mod boundary_summary;
@@ -64,6 +65,8 @@ pub mod wcs_circle_pick;
 mod law_tests;
 #[cfg(test)]
 mod refusal_focus_tests;
+#[cfg(test)]
+mod detect_holes_note_tests;
 #[cfg(test)]
 mod refusal_ghost_tests;
 #[cfg(test)]

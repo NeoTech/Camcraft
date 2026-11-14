@@ -40,6 +40,8 @@ use camcraft_app::{machine, model, posting, project, world::new_world};
 
 #[path = "state_per_op.rs"]
 mod per_op;
+#[path = "state_browser.rs"]
+mod browser;
 #[path = "state_program_info.rs"]
 mod program_info;
 #[path = "state_tool_library.rs"]
@@ -335,6 +337,13 @@ pub enum CommandKind {
     EditOperationParams {
         name: String,
         params: OpParams,
+    },
+    /// Detect holes' list (#1556): the same edit, with a sentence per
+    /// hole left out that the status line names once it is stored.
+    DetectedHoles {
+        name: String,
+        params: OpParams,
+        skipped: Vec<String>,
     },
     /// The same draft with its Boundary group (M11.5): one undo unit.
     EditOperationBoundary {
@@ -1453,6 +1462,10 @@ pub struct State {
     pub status: String,
     /// Last successfully opened or saved project in this window.
     pub project_path: Option<PathBuf>,
+    /// #1431: the browser build - Save, Save As and Post download, and
+    /// the file commands a page cannot run are refused by name. Set from
+    /// the target; the tests turn it on to drive the browser's law.
+    pub browser_build: bool,
     /// #225: the Feeds tab shows the spindle speed as surface (cutting)
     /// speed instead of rpm. View state - never a command, never saved.
     pub spindle_as_vc: bool,
@@ -1942,6 +1955,7 @@ impl State {
             history: History::default(),
             status,
             project_path: None,
+            browser_build: cfg!(target_arch = "wasm32"),
             debug_info_open: false,
             gpu_line: None,
             spindle_as_vc: false,
@@ -2365,13 +2379,14 @@ impl State {
         // (#312), so a click and an agent store the same holes.
         match operation::detect_holes(&self.world, name, current, op.setup.as_deref(), &op.src) {
             Err(why) => self.refuse(ErrorScope::Operation, why),
-            Ok(params) => {
+            Ok(operation::DetectedHoles { params, skipped }) => {
                 if draft {
                     self.op_ui.params = params.clone();
                 }
-                self.pending.push_back(CommandKind::EditOperationParams {
+                self.pending.push_back(CommandKind::DetectedHoles {
                     name: name.to_string(),
                     params,
+                    skipped,
                 });
             }
         }
@@ -2853,6 +2868,11 @@ impl State {
         self.feedback_ghost = None;
         // #107: New, Open and Quit over unsaved changes wait for the
         // prompt's answer instead of discarding the document.
+        // #1431: a file command the browser cannot run says why instead
+        // of doing nothing - before the unsaved prompt, which it never needs.
+        if self.refused_in_browser(&action) {
+            return;
+        }
         let Some(action) = self.hold_if_unsaved(action) else {
             return;
         };
@@ -2902,6 +2922,12 @@ impl State {
                 }
             }
             CommandKind::OpenProjectFile(path) => self.open_project_path(path),
+            CommandKind::SaveProjectDialog if self.browser_build => {
+                self.download_project(false);
+            }
+            CommandKind::SaveProjectAsDialog if self.browser_build => {
+                self.download_project(true);
+            }
             CommandKind::SaveProjectDialog => {
                 if let Some(path) = self.project_path.clone().or_else(|| save_project_dialog(None)) {
                     self.save_project_path(path);
@@ -3222,6 +3248,22 @@ impl State {
                             ErrorScope::Operation,
                             format!("parameters not updated: {err}"),
                         );
+                    }
+                }
+            }
+            CommandKind::DetectedHoles { name, params, skipped } => {
+                match EditOperationParams::new(&self.world, &name, params) {
+                    Ok(command) => {
+                        self.history.execute(&self.world, command);
+                        self.doc_version += 1;
+                        self.status = if skipped.is_empty() {
+                            format!("parameters updated for {name}")
+                        } else {
+                            format!("holes detected for {name}; {}", skipped.join("; "))
+                        };
+                    }
+                    Err(err) => {
+                        self.refuse(ErrorScope::Operation, format!("parameters not updated: {err}"));
                     }
                 }
             }

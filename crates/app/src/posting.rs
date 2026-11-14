@@ -515,7 +515,7 @@ pub fn post_script(world: &World, out_path: &Path, cps: &str) -> Result<Posted, 
 /// the refusal that names a post not serving the machine (#1232).
 fn post_script_as(world: &World, out_path: &Path, cps: &str, label: Option<&str>) -> Result<Posted, String> {
     let started = crate::clock::Instant::now();
-    let posted = post_script_body(world, out_path, cps, label);
+    let posted = post_script_body(world, cps, label).and_then(|p| write_program(out_path, p));
     match &posted {
         Ok(p) => tracing::info!(
             file = %crate::logging::file_name(out_path),
@@ -530,7 +530,32 @@ fn post_script_as(world: &World, out_path: &Path, cps: &str, label: Option<&str>
     posted
 }
 
-fn post_script_body(world: &World, out_path: &Path, cps: &str, label: Option<&str>) -> Result<Posted, String> {
+/// The whole program gate of [`post_setup`] with nothing written (#1431):
+/// the same mount, stream, verification and engine run, the program held
+/// in memory. The browser build hands it to a download, which has no path
+/// to write to; a program over several mounts is refused by name, as the
+/// one-file post refuses it.
+pub fn post_setup_unwritten(world: &World) -> Result<Posted, String> {
+    let (label, cps) = script_of(&mounts::single(world, true)?.post)?;
+    let posted = post_script_body(world, &cps, Some(&label));
+    match &posted {
+        Ok(p) => tracing::info!(bytes = p.program.len(), ops = p.ops, lines = p.lines, "NC program posted, not written"),
+        Err(why) => tracing::warn!("NC program not posted: {why}"),
+    }
+    posted
+}
+
+/// Write a gated program to `out_path`; a failed write removes what it
+/// left, because a half-written program is the silent wrong answer.
+fn write_program(out_path: &Path, posted: Posted) -> Result<Posted, String> {
+    std::fs::write(out_path, posted.program.as_bytes()).map_err(|e| {
+        let _ = std::fs::remove_file(out_path);
+        format!("cannot write {}: {e}", out_path.display())
+    })?;
+    Ok(posted)
+}
+
+fn post_script_body(world: &World, cps: &str, label: Option<&str>) -> Result<Posted, String> {
     // #388: the program's one machine (a program over several refuses).
     let mount = mounts::single(world, false)?;
     let streams = op_streams(world)?;
@@ -567,10 +592,6 @@ fn post_script_body(world: &World, out_path: &Path, cps: &str, label: Option<&st
             out.warnings.join("; ")
         ));
     }
-    std::fs::write(out_path, out.program.as_bytes()).map_err(|e| {
-        let _ = std::fs::remove_file(out_path); // a half-written program is the silent wrong answer
-        format!("cannot write {}: {e}", out_path.display())
-    })?;
     let ops = records
         .iter()
         .filter(|r| matches!(r, cnc::Record::Section { begin: true }))

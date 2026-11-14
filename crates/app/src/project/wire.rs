@@ -254,17 +254,22 @@ pub fn collect(world: &World) -> ProjectFile {
     }
 }
 
-pub fn save(world: &World, path: &Path) -> Result<(), ProjectError> {
-    let file = collect(world);
-    let text = serde_json::to_string_pretty(&file).map_err(|e| {
-        tracing::warn!(file = %crate::logging::file_name(path), "project not saved: {e}");
+/// The project file's text, exactly what [`save`] writes (#1431): the
+/// browser build hands it to a download instead of a path.
+pub fn save_text(world: &World) -> Result<String, ProjectError> {
+    serde_json::to_string_pretty(&collect(world)).map_err(|e| {
+        tracing::warn!("project not saved: {e}");
         corrupt(e.to_string())
-    })?;
+    })
+}
+
+pub fn save(world: &World, path: &Path) -> Result<(), ProjectError> {
+    let text = save_text(world)?;
     if let Err(e) = std::fs::write(path, &text) {
         tracing::warn!(file = %crate::logging::file_name(path), "project not saved: {e}");
         return Err(e.into());
     }
-    tracing::info!(file = %crate::logging::file_name(path), bytes = text.len(), entities = file.entities.len(), "project saved");
+    tracing::info!(file = %crate::logging::file_name(path), bytes = text.len(), "project saved");
     Ok(())
 }
 
