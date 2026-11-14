@@ -26,7 +26,7 @@ Released 2026-11-14.
 A minor release headlined by **a Z clearance law for the posts**, **wire and
 sinker EDM in the UI**, **stricter gouge judgement of 2D operations against the
 parts in the stock**, **a hardened STEP importer**, and **a browser build that
-opens, saves and posts**. 117 pull requests merged since 0.19.0.
+opens, saves and posts**. 118 pull requests merged since 0.19.0.
 
 ## Highlights
 ### Posts and G-code
@@ -122,9 +122,10 @@ regression records. Check the first program on the machine before cutting.
 - The clearance Z law on the Fanuc family, Haas, Mazak, Doosan DNM, Sinumerik
   840D and Heidenhain (#1636, #1633). A G43.4 stream with an unknown rotary pose
   was not run.
-- The clearance Z law on grblHAL, TinyG and Carvera (#1632). The Carvera height
-  after the changer's X/Y exit stays unverified.
-- The Carvera lift after M6 (#1661).
+- The clearance Z law on grblHAL and TinyG (#1632).
+- The Carvera post (#1632, #1661): after `M6` it writes `G0 Z` to the clearance
+  height before the first X/Y traverse. This follows a reading of the public
+  firmware source. No real Carvera ran it.
 - Setup stops and "Between setups" (#1650); the Fanuc and PathPilot programs are
   checked by text only.
 - The Tormach clearance state, partly (#1618): the refusal path was not run on a
