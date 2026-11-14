@@ -1848,16 +1848,18 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
         // 90-degree tool), and its diameter must reach the face's
         // full width - `width / tan(alpha)` of cone height is exactly
         // the corner depth, so the reach door is the whole flute law
-        // for a well-made cone. `side` cannot change the ride - the
-        // cone meets its wall the same circle whether the material
+        // for a well-made cone. `side` cannot change the ride's circle -
+        // the cone meets its wall the same circle whether the material
         // stands inside it (bore) or outside (boss) - it says which
-        // wall the region picks, and the sim judges.
+        // wall the region picks (the sim judges), and so which way
+        // climb travels it (#1555: material right of travel under M3).
         OpParams::Chamfer2D {
             width,
             angle_deg,
             feed,
             plunge_feed,
             climb,
+            side,
             ..
         } => {
             if tool.kind != crate::tools::ToolKind::Taper {
@@ -1911,6 +1913,9 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     feed: *feed,
                     plunge_feed: *plunge_feed,
                     climb: *climb,
+                    // #1555: which side of the picked loops the material
+                    // stands on - the travel climb needs follows from it.
+                    inside: *side == Side::Inside,
                 },
             )?;
             (region, path)
