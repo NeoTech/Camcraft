@@ -286,6 +286,7 @@ function startPreamble() {
   if (toolWait) {
     toolNote();
     xyUnknown = true;          // the changer moved X and Y
+    changedAt = true;          // #1616: the next traverse leaves the changer X/Y first
     block(["M6", "T" + ni(tNo)]);
     toolWait = false;
   }
@@ -319,22 +320,28 @@ function onSection() { startPreamble(); }
 function onSectionEnd() { endPreamble(); clearZ = null; hopZ = null; }  // #1616: the next section states its own planes
 
 // ------------------------------------------------------------- motions
-// X and Y are unknown at the program's start and after a tool change: the
-// first move positions X Y alone at the current (changer-raised) height,
-// and only then does Z come down - never a diagonal from wherever the
-// changer left the spindle. A feed's first move rapids Z to the height
-// the generator says the tool starts from, then feeds the stretch planned.
+// X and Y are unknown at the program's start and after a tool change, so
+// the first move positions X Y alone - never a diagonal from wherever the
+// changer left the spindle - with its height STATED (#1616, the #1614
+// hazard): a Z-only rapid to the section's clearance - its
+// ClearancePlane, else its RetractPlane, never below the move's own Z.
+// A setup that cannot reach it is stopped by the control's Z limit
+// instead of rapiding through the part. A stream that states neither
+// plane has no verified height to traverse at: refused by name.
+// The order depends on where the spindle stands:
+// - at the program's start (no tool change yet): Z first, then X Y, so
+//   the traverse is never made at an unknown height;
+// - right after M6 T: X Y first, at the height the changer leaves the
+//   spindle, then Z. Nothing we have read says where the firmware parks
+//   X/Y after its tool change; a Z-only rapid down to a thin stock's
+//   clearance at that X/Y could meet the tools stored in the rack. The
+//   changer's own exit height is what main always traversed at, so the
+//   new hazard is not added; the clearance Z is stated before any
+//   descent (M3's option (c), docs/decisions/1616-first-traverse-clearance.md).
+// A feed's first move then rapids Z to the height the generator says the
+// tool starts from, and feeds only the stretch planned.
 var xyUnknown = true;
-// #1616 (the #1614 hazard): the height that traverse is made at is
-// STATED, never assumed. Where the changer leaves the spindle is not
-// proof of clearance: a long tool on a high work offset can stand below
-// the part top there, and a bare X Y rapid would cross the part. So the
-// first traverse is preceded by a Z-only rapid to the section's
-// clearance - its ClearancePlane, else its RetractPlane, never below the
-// move's own Z. A setup that cannot reach it is stopped by the
-// control's Z limit instead of rapiding through the part. A stream that
-// states neither plane has no verified height to traverse at: refused
-// by name.
+var changedAt = false;        // #1616: an M6 was written since the last traverse
 var clearZ = null;            // #1616: the section's ClearancePlane, null when unstated
 var hopZ = null;              // #1616: the section's RetractPlane, null when unstated
 var traverseRefused = false;  // #1616: once per program
@@ -355,9 +362,15 @@ function xyFirst(x, y, z) {
     }
     return;
   }
-  block(["G0", wo("Z", tz, orgZ)]);
+  if (changedAt) {  // #1616 (c): leave the changer's X/Y at its height first
+    block(["G0", wo("X", x, orgX), wo("Y", y, orgY)]);
+    block(["G0", wo("Z", tz, orgZ)]);
+  } else {
+    block(["G0", wo("Z", tz, orgZ)]);
+    block(["G0", wo("X", x, orgX), wo("Y", y, orgY)]);
+  }
   traversedAt = tz;
-  block(["G0", wo("X", x, orgX), wo("Y", y, orgY)]);
+  changedAt = false;
   xyUnknown = false;
 }
 function startXY(p) {

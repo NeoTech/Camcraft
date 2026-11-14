@@ -5,6 +5,12 @@
 //! whatever height the tool change left the tip. A long tool on a high
 //! work offset can stand below the part top there. A stream stating
 //! neither plane is refused by name.
+//! The Carvera alone keeps X/Y first right after its `M6` (the changer's
+//! exit height, as before), then states the clearance before any descent:
+//! nothing we have read says where its firmware parks X/Y after a tool
+//! change, and a Z-only rapid down at the rack's X/Y could meet the stored
+//! tools (M3's option (c), docs/decisions/1616-first-traverse-clearance.md).
+//! At a program start with no tool change it states Z first like the rest.
 //! Provenance: our own tests over our own posts and stream format.
 //!
 //! Gate map (M4.4): covers assets/posts/grblhal.cps, assets/posts/tinyg.cps,
@@ -20,12 +26,18 @@ use std::path::{Path, PathBuf};
 /// states none, so `post` gives it one (a homed machine), for the same
 /// lift - otherwise its lift needs the ClearancePlane and the
 /// retract-plane-only stream would be refused for the lift, not the
-/// traverse.
-const POSTS: &[(&str, &str)] = &[
-    ("assets/posts/grblhal.cps", "assets/machines/sienci-altmill-2x4.mch"),
-    ("assets/posts/tinyg.cps", "assets/machines/tinyg-3axis.mch"),
-    ("assets/posts/carvera.cps", "assets/machines/makera-carvera.mch"),
+/// traverse. The flag: X/Y first right after a tool change (the Carvera).
+const POSTS: &[(&str, &str, bool)] = &[
+    ("assets/posts/grblhal.cps", "assets/machines/sienci-altmill-2x4.mch", false),
+    ("assets/posts/tinyg.cps", "assets/machines/tinyg-3axis.mch", false),
+    ("assets/posts/carvera.cps", "assets/machines/makera-carvera.mch", true),
 ];
+
+/// The two traverse lines in the order the post writes them: the Z-only
+/// rapid first, or (right after a Carvera tool change) X/Y first.
+fn traverse<'a>(xy_first: bool, z: &'a str, xy: &'a str) -> [&'a str; 2] {
+    if xy_first { [xy, z] } else { [z, xy] }
+}
 
 fn repo(rel: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../").join(rel)
@@ -82,8 +94,8 @@ fn motions_after_tool_change(program: &str) -> Vec<&str> {
 }
 
 /// The first two motion lines after each tool change: the Z-only rapid
-/// to `want_z` and then X20 Y10 alone.
-fn assert_clearance_first(cps: &str, program: &str, want_z: &str) {
+/// to `want_z` and X20 Y10 alone, in the post's order.
+fn assert_clearance_first(cps: &str, xy_first: bool, program: &str, want_z: &str) {
     let lines: Vec<&str> = program.lines().collect();
     let changes: Vec<usize> = lines
         .iter()
@@ -94,37 +106,36 @@ fn assert_clearance_first(cps: &str, program: &str, want_z: &str) {
     assert_eq!(changes.len(), 2, "{cps}: two tool changes\n{program}");
     for i in changes {
         let mut motions = lines[i..].iter().filter(|l| is_motion(l) && !l.starts_with("G53 "));
-        let (first, second) = (motions.next(), motions.next());
+        let got: Vec<&str> = motions.by_ref().take(2).copied().collect();
         assert_eq!(
-            first,
-            Some(&want_z),
-            "{cps}: the stated clearance first after the tool change\n{program}"
+            got,
+            traverse(xy_first, want_z, "G0 X20 Y10"),
+            "{cps}: the stated clearance and X/Y alone, before any descent\n{program}"
         );
-        assert_eq!(second, Some(&"G0 X20 Y10"), "{cps}: then X/Y alone\n{program}");
     }
 }
 
 #[test]
-fn the_first_traverse_after_a_tool_change_states_the_clearance_z_first() {
-    for (cps, mch) in POSTS {
+fn the_first_traverse_after_a_tool_change_states_the_clearance_z() {
+    for (cps, mch, xy_first) in POSTS {
         let out = post(cps, mch, &two_tools("PARAM ClearancePlane 25.4\nPARAM RetractPlane 12.7\n"));
         assert!(out.warnings.is_empty(), "{cps}: {:?}", out.warnings);
-        assert_clearance_first(cps, &out.program, "G0 Z25.4");
+        assert_clearance_first(cps, *xy_first, &out.program, "G0 Z25.4");
     }
 }
 
 #[test]
 fn the_retract_plane_serves_when_no_clearance_plane_is_stated() {
-    for (cps, mch) in POSTS {
+    for (cps, mch, xy_first) in POSTS {
         let out = post(cps, mch, &two_tools("PARAM RetractPlane 12.7\n"));
         assert!(out.warnings.is_empty(), "{cps}: {:?}", out.warnings);
-        assert_clearance_first(cps, &out.program, "G0 Z12.7");
+        assert_clearance_first(cps, *xy_first, &out.program, "G0 Z12.7");
     }
 }
 
 #[test]
 fn a_first_traverse_with_no_stated_plane_is_refused_by_name() {
-    for (cps, mch) in POSTS {
+    for (cps, mch, _) in POSTS {
         let out = post(cps, mch, &two_tools(""));
         assert!(
             out.warnings
@@ -155,15 +166,11 @@ Rapid 0 0 50800
 Feed 10000 0 -1000 F500000
 ENDSECTION
 ";
-    for (cps, mch) in POSTS {
+    for (cps, mch, xy_first) in POSTS {
         let out = post(cps, mch, s);
         assert!(out.warnings.is_empty(), "{cps}: {:?}", out.warnings);
-        let lines: Vec<&str> = out.program.lines().collect();
-        let xy = lines
-            .iter()
-            .position(|l| *l == "G0 X0 Y0")
-            .unwrap_or_else(|| panic!("{cps}: traverse\n{}", out.program));
-        assert_eq!(lines.get(xy - 1), Some(&"G0 Z50.8"), "{cps}\n{}", out.program);
+        let motions = motions_after_tool_change(&out.program);
+        assert_eq!(motions.get(..2), Some(&traverse(*xy_first, "G0 Z50.8", "G0 X0 Y0")[..]), "{cps}\n{}", out.program);
     }
 }
 
@@ -187,13 +194,13 @@ ENDSECTION
 "
         )
     };
-    for (cps, mch) in POSTS {
+    for (cps, mch, xy_first) in POSTS {
+        let pair = traverse(*xy_first, "G0 Z10", "G0 X20 Y10");
         // Starting at the clearance itself: no second Z rapid.
         let out = post(cps, mch, &stream(10.0));
         assert!(out.warnings.is_empty(), "{cps}: {:?}", out.warnings);
         let motions = motions_after_tool_change(&out.program);
-        assert_eq!(motions.first(), Some(&"G0 Z10"), "{cps}\n{}", out.program);
-        assert_eq!(motions.get(1), Some(&"G0 X20 Y10"), "{cps}\n{}", out.program);
+        assert_eq!(motions.get(..2), Some(&pair[..]), "{cps}\n{}", out.program);
         assert!(
             motions.get(2).is_some_and(|l| l.starts_with("G1 ")),
             "{cps}: no second Z rapid to the same height\n{}",
@@ -203,6 +210,27 @@ ENDSECTION
         let out = post(cps, mch, &stream(5.0));
         assert!(out.warnings.is_empty(), "{cps}: {:?}", out.warnings);
         let motions = motions_after_tool_change(&out.program);
-        assert_eq!(motions.get(..3), Some(&["G0 Z10", "G0 X20 Y10", "G0 Z5"][..]), "{cps}\n{}", out.program);
+        assert_eq!(motions.get(..3), Some(&[pair[0], pair[1], "G0 Z5"][..]), "{cps}\n{}", out.program);
+    }
+}
+
+/// At the program's start with no tool change, every post (the Carvera
+/// too) states the clearance Z before the first X/Y traverse.
+#[test]
+fn at_the_program_start_with_no_tool_change_the_clearance_z_comes_first() {
+    let s = "PARAM SpindleSpeed 6000
+PARAM Coolant off
+PARAM ClearancePlane 25.4
+SECTION
+Rapid 20000 10000 2000
+Feed 20000 10000 -1000 F500000
+ENDSECTION
+";
+    for (cps, mch, _) in POSTS {
+        let out = post(cps, mch, s);
+        assert!(out.warnings.is_empty(), "{cps}: {:?}", out.warnings);
+        assert!(!out.program.lines().any(|l| l.split_whitespace().any(|w| w == "M6")), "{cps}: no tool change\n{}", out.program);
+        let motions: Vec<&str> = out.program.lines().filter(|l| is_motion(l) && !l.starts_with("G53 ")).collect();
+        assert_eq!(motions.get(..2), Some(&["G0 Z25.4", "G0 X20 Y10"][..]), "{cps}\n{}", out.program);
     }
 }

@@ -434,10 +434,11 @@ function onSectionEnd() { endPreamble(); clearZ = null; hopZ = null; }  // #1616
 // ------------------------------------------------------------- motions
 // X and Y are unknown at the program's start and after every tool change
 // (the operator may jog the spindle anywhere at the M0): the first move
-// from there is preceded by a G0 to its X Y alone, at the current -
-// safe, Z-up - height, and only then does Z come down. A rapid positions
-// at its target; a feed or arc at the point the stream says it starts
-// from (the target when the stream names none).
+// from there is preceded by a Z-only G0 to the section's stated
+// clearance (#1616, below), then a G0 to its X Y alone at that height,
+// and only then does Z come down. A rapid positions at its target; a
+// feed or arc at the point the stream says it starts from (the target
+// when the stream names none).
 var xyUnknown = true;
 // #1616 (the #1614 hazard): the height that traverse is made at is
 // STATED, never assumed. The lift before the change is the machine's
@@ -477,9 +478,10 @@ function xyFirst(x, y, z) {
 }
 // A feed or arc as the first move after a tool change starts, in the
 // stream, from the generator's own start point (its clearance height).
-// The tool stands at the lift height, so feeding from there would crawl
-// the whole way down: once X Y are positioned, a rapid takes Z down to
-// that start height and the feed runs only the stretch it planned.
+// The tool stands at the traverse's clearance, so feeding from there
+// would crawl the whole way down: once X Y are positioned, a rapid takes
+// Z down to that start height (unless the traverse is already there) and
+// the feed runs only the stretch it planned.
 function startXY(p) {
   if (!xyUnknown) return true;
   if (!has(p.StartX) || !has(p.StartY) || !has(p.StartZ)) {
