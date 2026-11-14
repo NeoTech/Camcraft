@@ -98,6 +98,7 @@ mod program_units;
 mod gcode_viewer;
 mod first_setup;
 mod structural;
+mod stock_fit;
 mod cycle_combo;
 mod radial_step_field;
 // #1509: 2D Adaptive's Method choice on the Passes tab.
