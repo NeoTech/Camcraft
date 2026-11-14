@@ -52,6 +52,8 @@ fn setup(rpm: f64) -> Vec<Record> {
     vec![
         param("OperationName", json!("Cycle regression")),
         param("SpindleSpeed", json!(rpm)),
+        // #1633: a section states its clearance (the chain's safe hop), as `post::dump` does.
+        param("ClearancePlane", json!(10.0)),
         Record::Tool { number: 4, name: "TAP-M4".into() },
         Record::Section { begin: true },
     ]
@@ -171,6 +173,7 @@ fn g200_uses_surface_relative_q_values_and_keeps_the_explicit_hop() {
         param("SpindleSpeed", json!(3000.0)),
         param("OriginX", json!(100.0)), param("OriginY", json!(200.0)),
         param("OriginZ", json!(50.0)), param("WorkOffset", json!("G55")),
+        param("ClearancePlane", json!(10.0)), // #1633: the chain's safe hop
         Record::Tool { number: 4, name: "TAP-M4".into() },
         Record::Section { begin: true },
     ];
@@ -183,7 +186,10 @@ fn g200_uses_surface_relative_q_values_and_keeps_the_explicit_hop() {
     let g = definition(&bs, "G200");
     assert_qs(g, &[(200,"+2"),(201,"-13"),(206,"+120"),(202,"+13"),(210,"+0"),(203,"-45"),(204,"+2"),(211,"+0.25"),(395,"+0")]);
     assert!(bs.iter().any(|b| b == "G247 Q339=2"), "G55 is house-mapped to preset row 2: {bs:?}");
-    assert!(bs.iter().any(|b| b.contains("G40 G90 X+10 Y+20 Z-43 M99")), "absolute positioning shifts by origin: {bs:?}");
+    assert!(bs.iter().any(|b| b == "G00 X+10 Y+20 Z-43 M99"), "absolute positioning shifts by origin: {bs:?}");
+    // #1633: the section's first motion states its clearance (with G40 G90), then X/Y at it.
+    let z = bs.iter().position(|b| b == "G00 G40 G90 Z-40").unwrap_or_else(|| panic!("{bs:?}"));
+    assert_eq!(bs.get(z + 1).map(String::as_str), Some("G00 X+10 Y+20"), "{bs:?}");
     assert!(bs.iter().any(|b| b == "G00 X+10 Y+20 Z-40"), "the explicit high rapid hop remains: {bs:?}");
     assert_eq!(calls(&bs), 1);
     assert!(!out.program.contains("G80") && !out.program.contains("M89"));
@@ -371,6 +377,7 @@ fn preset_rows_transitions_and_missing_work_offset_keep_the_active_preset() {
     let mut rs = Vec::new();
     for row in &rows {
         if let Some(word) = row { rs.push(param("WorkOffset", json!(word))); }
+        rs.push(param("ClearancePlane", json!(5.0))); // #1633
         rs.push(Record::Section { begin: true });
         rs.push(mv(MoveKind::Rapid, 0.0, 0.0, 5.0, None));
         rs.push(Record::Section { begin: false });
@@ -383,6 +390,7 @@ fn preset_rows_transitions_and_missing_work_offset_keep_the_active_preset() {
     let mut rs = Vec::new();
     for offset in [Some("G55"), Some("G54"), Some("G54")] {
         if let Some(word) = offset { rs.push(param("WorkOffset", json!(word))); }
+        rs.push(param("ClearancePlane", json!(5.0))); // #1633
         rs.push(Record::Section { begin: true });
         rs.push(mv(MoveKind::Rapid, 0.0, 0.0, 5.0, None));
         rs.push(Record::Section { begin: false });
@@ -394,6 +402,7 @@ fn preset_rows_transitions_and_missing_work_offset_keep_the_active_preset() {
     let mut rs = Vec::new();
     for offset in [Some("G55"), None] {
         if let Some(word) = offset { rs.push(param("WorkOffset", json!(word))); }
+        rs.push(param("ClearancePlane", json!(5.0))); // #1633
         rs.push(Record::Section { begin: true });
         rs.push(mv(MoveKind::Rapid, 0.0, 0.0, 5.0, None));
         rs.push(Record::Section { begin: false });

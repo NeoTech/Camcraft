@@ -280,6 +280,8 @@ function workOffsetName(n) {  // offset n -> what the control calls it; "" when 
   return n >= 1 && n <= 6 && n === Math.floor(n) ? "preset " + n : "";
 }
 function onParameter(name, value) {
+  if (name === "ClearancePlane") clearZ = has(value) ? Number(value) : null;  // #1633
+  if (name === "RetractPlane") hopZ = has(value) ? Number(value) : null;  // #1633
   if (name === "Smoothing") { smoothTol = Number(value) || 0; return; }
   if (name === "SmoothingMode") { smoothMode = String(value || ""); return; }
   commentParam(name, value);
@@ -354,6 +356,7 @@ function startPreamble() {
   if (toolWait) {
     toolNote();
     block(["T" + ni(tNo), "G17", spindleWait && sRpm > 0 ? "S" + ff(sRpm) : ""]);
+    xyUnknown = true;          // #1633: the first traverse states its height again
     toolWait = false;
   } else if (spindleWait && sRpm > 0) {
     block(["S" + ff(sRpm)]);
@@ -410,16 +413,63 @@ function endPreamble() {
 }
 
 function onSection() { startPreamble(); }
-function onSectionEnd() { endPreamble(); }
+function onSectionEnd() { endPreamble(); clearZ = null; hopZ = null; }  // #1633: the next section states its own planes
 
 // ------------------------------------------------------------- motions
 // The manual's two-digit G00/G01/G02/G03 (p.752). Native cycles
 // suppress only their replaced axial cuts; safe linking stays explicit.
+// ------------------------------------------------- the first traverse
+// #1633 (#1616's second half; the #1614 hazard): X and Y are unknown at
+// the program's start and after every tool call, and so is the height
+// the change left the tip at - a long tool on a high preset can stand
+// below the part top there, and a first move written as one combined
+// rapid (`G00 G40 G90 X+20 Y+10 Z-3*`) is a straight line from that
+// point, across the part. So the first X/Y traverse is made at a STATED
+// height: a Z-only rapid to the section's clearance - its
+// ClearancePlane, else its RetractPlane, never below the move's own Z -
+// in the manual's own positioning form (`G00 G40 G90 Z+250*`, p. 66;
+// the first motion block carries G40 G90), then X/Y alone at it, then
+// the move as the stream states it. A setup that cannot reach that
+// height is stopped by the control's Z limit instead of rapiding
+// through the part. A stream that states neither plane has no verified
+// height to traverse at: refused by name. This dialect refuses tilted
+// records (tiltOk), so the rapids are in the frame of the section's
+// upright words.
+var clearZ = null;            // #1633: the section's ClearancePlane, null when unstated
+var hopZ = null;              // #1633: the section's RetractPlane, null when unstated
+var xyUnknown = true;         // #1633: at the program's start and after each tool call
+var traverseRefused = false;  // #1633: once per program
+function traverseZ(z) {
+  var c = has(clearZ) ? clearZ : (has(hopZ) ? hopZ : null);
+  if (c === null) return null;
+  return has(z) ? Math.max(c, Number(z)) : c;
+}
+// (x, y, z): a rapid's target (a drilling cycle's hole at its R plane),
+// which the record itself then goes to; or, with `descend`, where the
+// stream says a feed or an arc starts - rapided down to when it lies
+// below the clearance, so the move runs only the stretch planned.
+function xyFirst(x, y, z, descend) {
+  if (!xyUnknown || !has(x) || !has(y)) return;
+  var tz = traverseZ(z);
+  if (tz === null) {
+    if (!traverseRefused) {
+      traverseRefused = true;
+      msg(coolantWho() + "first X/Y traverse with no clearance height stated (no ClearancePlane or RetractPlane) - the post will not rapid X/Y at an unknown height");
+    }
+    return;
+  }
+  motion("G00", [wo("Z", tz, orgZ)]);
+  // A rapid already at the clearance is the traverse itself.
+  if (descend || !has(z) || Math.abs(Number(z) - tz) > 1e-9) motion("G00", [wo("X", x, orgX), wo("Y", y, orgY)]);
+  if (descend && has(z) && Number(z) < tz - 1e-9) motion("G00", [wo("Z", z, orgZ)]);
+  xyUnknown = false;
+}
 function onRapid() {
   startPreamble();
   if (!tiltOk(properties)) return;
   if (inCycle && sameHole(properties) && properties.Z <= cycleR + 1e-6) return;
   inCycle = false; // retain the generator's explicit safe lifts/traverses
+  xyFirst(properties.X, properties.Y, properties.Z, false);  // #1633
   motion("G00", xyz(properties));
 }
 function onLinear() {
@@ -430,6 +480,7 @@ function onLinear() {
     return;
   }
   if (spindleStopped("feed move G01")) return;
+  xyFirst(properties.StartX, properties.StartY, properties.StartZ, true);  // #1633
   motion("G01", xyz(properties).concat([fw(properties.FeedRate)]));
   dwellAtBottom(properties.Z);
 }
@@ -490,6 +541,7 @@ function onCircular() {
   if (!tiltOk(properties)) return;
   if (inCycle) { msg("native drilling cycle cannot replace an arc cutting chain"); return; }
   if (spindleStopped("arc move " + (properties.CircularDirection === "CW" ? "G02" : "G03"))) return;
+  xyFirst(properties.StartX, properties.StartY, properties.StartZ, true);  // #1633
   var p = properties;
   if (p.CircularPlane === "XZ" || p.CircularPlane === "YZ") {
     verticalArc(p);
@@ -631,6 +683,7 @@ function onCycle() {
   var sig = words.join("|");
   if (sig !== cycleSig) { block(words); cycleSig = sig; }
   // G40/G90 accompanies explicit hole positioning, never a cycle definition.
+  xyFirst(p.X, p.Y, p.R, false);  // #1633: over the hole at the clearance first
   motion("G00", [wo("X", p.X, orgX), wo("Y", p.Y, orgY), wo("Z", p.R, orgZ), "M99"]);
 }
 function dwellAtBottom(z) {
