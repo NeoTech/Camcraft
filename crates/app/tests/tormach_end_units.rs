@@ -98,9 +98,9 @@ fn a_mm_program_for_an_inch_control_ends_g20_right_before_m30() {
         let plain = post(METRIC_MCH, g, None);
         let nc = post(METRIC_MCH, g, Some(EndUnits::Inch));
         assert!(plain.contains("G21 G17 G90"), "{g}: a mm program\n{plain}");
-        assert_eq!(tail(&nc, 4), ["G53 G0 Z0", "G30", "G20", "M30"], "{g}\n{nc}");
+        assert_eq!(tail(&nc, 4), ["M5", "G53 G0 Z0", "G20", "M30"], "{g}\n{nc}");
         // Exactly one line added, nothing else touched.
-        let added = plain.replacen("G30\nM30", "G30\nG20\nM30", 1);
+        let added = plain.replacen("G53 G0 Z0\nM30", "G53 G0 Z0\nG20\nM30", 1);
         assert_eq!(nc, added, "{g}: only the G20 line is new");
     }
 }
@@ -109,7 +109,7 @@ fn a_mm_program_for_an_inch_control_ends_g20_right_before_m30() {
 fn an_inch_program_for_a_mm_control_ends_g21_right_before_m30() {
     for g in GOLDENS {
         let nc = post(INCH_MCH, g, Some(EndUnits::Millimeters));
-        assert_eq!(tail(&nc, 4), ["G53 G0 Z0", "G30", "G21", "M30"], "{g}\n{nc}");
+        assert_eq!(tail(&nc, 4), ["M5", "G53 G0 Z0", "G21", "M30"], "{g}\n{nc}");
     }
 }
 

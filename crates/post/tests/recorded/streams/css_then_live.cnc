@@ -5,7 +5,7 @@ PARAM StartZ 16.000000
 PARAM OperationName Face CSS
 PARAM ToolDiameter 0.000000
 PARAM SpindleSpeed 1200.000000
-PARAM WorkOffset G54
+PARAM WorkOffset 1.000000
 PARAM OriginX 0.000000
 PARAM OriginY 0.000000
 PARAM OriginZ 0.000000
@@ -31,7 +31,7 @@ PARAM StartZ 16.000000
 PARAM OperationName Cross mill
 PARAM ToolDiameter 6.000000
 PARAM SpindleSpeed 3000.000000
-PARAM WorkOffset G54
+PARAM WorkOffset 1.000000
 PARAM OriginX 0.000000
 PARAM OriginY 0.000000
 PARAM OriginZ 0.000000

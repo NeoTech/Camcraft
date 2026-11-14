@@ -17,6 +17,9 @@ use super::{ErrorScope, State};
 impl State {
     /// "Export library…": ask where, then write every document tool.
     pub(crate) fn export_tool_library_dialog(&mut self) {
+        if self.refuse_in_browser(crate::browser_files::NO_EXPORT) {
+            return;
+        }
         let Some(path) = crate::file_dialog::FileDialog::new()
             .add_filter("CamCraft Tool Library", &[EXTENSION])
             .set_file_name(format!("tools.{EXTENSION}"))
@@ -29,6 +32,9 @@ impl State {
 
     /// "Import library…": pick a file, then import it.
     pub(crate) fn import_tool_library_dialog(&mut self) {
+        if self.refuse_in_browser(crate::browser_files::NEEDS_PICKER) {
+            return;
+        }
         let picked: Option<PathBuf> = crate::file_dialog::FileDialog::new()
             .add_filter("CamCraft Tool Library", &[EXTENSION, "json"])
             .pick_file();
