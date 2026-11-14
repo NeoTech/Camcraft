@@ -93,8 +93,8 @@ pub struct Graded {
     pub coarse_mm: Option<f64>,
     /// What the importer changed on the way, one line each (#1573 review:
     /// a STEP face flipped to agree with its neighbours, by name; #1617: a
-    /// closed STEP solid wound inward turned outward). Empty when it
-    /// changed nothing, and for STL and OBJ.
+    /// closed solid wound inward turned outward). Empty when it
+    /// changed nothing.
     pub notes: Vec<String>,
 }
 
@@ -112,7 +112,9 @@ pub fn load_model_graded_within(path: &Path, budget: usize) -> Result<Graded, Im
         return Err(ImportError::TooLarge);
     }
     if format == Format::Stl {
-        return Ok(Graded { mesh: gate(stl::parse_file(path)?)?, coarse_mm: None, notes: Vec::new() });
+        let mut mesh = gate(stl::parse_file(path)?)?;
+        let notes = step_outward::turn_outward(&mut mesh).into_iter().collect();
+        return Ok(Graded { mesh, coarse_mm: None, notes });
     }
     let data = std::fs::read(path)?;
     parse_model_graded_within(&data, format, budget)
@@ -127,8 +129,14 @@ pub fn parse_model_graded(data: &[u8], format: Format) -> Result<Graded, ImportE
 /// facets - the bytes twin of [`load_model_graded_within`] (#31).
 pub fn parse_model_graded_within(data: &[u8], format: Format, budget: usize) -> Result<Graded, ImportError> {
     let (mesh, coarse_mm, notes) = match format {
-        Format::Stl => (stl::parse(data)?, None, Vec::new()),
-        Format::Obj => (obj::parse(data)?, None, Vec::new()),
+        Format::Stl | Format::Obj => {
+            let mut mesh = gate(match format {
+                Format::Stl => stl::parse(data)?,
+                _ => obj::parse(data)?,
+            })?;
+            let notes = step_outward::turn_outward(&mut mesh).into_iter().collect();
+            (mesh, None, notes)
+        }
         Format::Step => {
             let (mut mesh, chord, mut notes) = step::parse_noted(data, budget)?;
             // #1617: a closed solid the file winds inward is turned
