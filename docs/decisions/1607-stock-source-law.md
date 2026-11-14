@@ -62,6 +62,26 @@ stock (a from-model stock of the part, the part still in the setup):
   it.
 - `circular_pick_law.rs`: `a_circle_picked_off_the_stock_is_never_judged`
   is now `a_circle_picked_off_the_stock_answers_for_the_part`.
+- `circular_entity_law.rs`: `a_stock_source_still_cuts_the_typed_circle_unjudged`
+  (a circle through the hole's wall off the Stock) is now
+  `a_stock_source_circle_through_the_hole_wall_answers_for_the_part`.
+- `slot_picks.rs`: `with_nothing_picked_the_typed_endpoints_rule_as_before`
+  still asserts the typed slot is cut as typed, through the pocket walls;
+  it now also asserts that cut is a blocking gouge.
+- `posting.rs` (`a_gouging_program_is_refused_by_the_verification_gate`)
+  and `stock_sim_document.rs` (`faced_doc` for the 20 mm model): a
+  stock-source Face below the part's top was asserted to generate
+  silent so the program sim was the only net. It is now the op's own
+  gouge too; the sim's verdict and the post's refusal (led by the sim's
+  clause on the aligned stock) are asserted unchanged.
+
+**Every part, not one.** The law reads every part the setup holds
+(`setup_align::parts_facets_in`), so a stock-source cut is judged
+against each of them: pinned with two parts in one stock
+(`a_stock_source_cut_answers_for_every_part_in_the_stock`, a cut into
+either part convicted). A part-SOURCE op (whole model or pick of part B)
+still reads only its own source's mesh, so it does not judge a
+neighbouring part A; that is outside #1607 (raised in #1615's review).
 
 **Correction to #1543 and #1593:** both say a Stock source, or a pick off
 the setup's stock, "still cuts unjudged". Since #1607 it is judged against
@@ -88,6 +108,8 @@ source is not part-solid, so `depth_law_of` never reaches it).
 the stock's fidelity excess, not each part's; a ring finished to size
 against a coarsely tessellated wall is convicted once the chord sag
 passes the gouge tolerance.
+
+**Goldens:** none change (`golden_cl` and `solid_law_goldens` pass).
 
 **Cost to change later:** one predicate (`keep_law::is_stock_kept_kind`)
 and one branch in `run_job` (mark or solid law for `keep_parts`).
