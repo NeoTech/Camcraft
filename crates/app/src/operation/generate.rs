@@ -3147,11 +3147,10 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // #1595: an Engrave or Trace on the part may lower its
             // surface by the mark budget and no more (`mark_law`);
             // #1607: on a stock source, the setup's parts the same way.
-            let marked = (depth_law == DepthLaw::Mark)
-                .then_some(&material.facets)
-                .or(parts_marked.then_some(&keep_parts))
-                .map(|part| super::mark_law::mark_into(&mut warns, &path, part, &cutter, mark_budget, material.excess))
-                .is_some_and(|n| n > 0);
+            let marked = match (depth_law == DepthLaw::Mark).then_some(&material.facets).or(parts_marked.then_some(&keep_parts)) {
+                Some(part) => super::mark_law::mark_into(&mut warns, &path, part, &cutter, mark_budget, material.excess),
+                None => super::mark_law::Marked::default(),
+            };
             // #985: an external thread's crest ring against every wall
             // that is not the boss it threads, with no thread allowance.
             for w in super::thread_boss::neighbours(&params, &path, &material.facets, &tool) {
@@ -3185,9 +3184,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // The all-air verdict (M13.8): a finish that provably cuts
             // nothing says so by name instead of passing silent.
             let mut path = super::air_law::air_noted(path, mode, &material.facets, stock_top_z, &geom);
-            if marked {
-                path.notes.push(super::mark_law::note(params.kind().info().label, mark_budget, unit));
-            }
+            path.notes.extend(super::mark_law::notes(params.kind().info().label, marked, mark_budget, unit));
             // #104: explain the height mismatch, without replacing any move-level
             // verdict. Tilted, rotary and turning heights are not world-Z tops.
             if stock_aabb.is_some()
@@ -3302,8 +3299,9 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // the setup's parts on a stock source).
             let mut path_world = path_world;
             let mark_part = (depth_law == DepthLaw::Mark).then_some(&m_gen.facets).or(keep_local.as_ref().filter(|_| parts_marked));
-            if mark_part.is_some_and(|part| super::mark_law::mark_into(&mut warns, &path, part, &cutter, mark_budget, material.excess) > 0) {
-                path_world.notes.push(super::mark_law::note(params.kind().info().label, mark_budget, unit));
+            if let Some(part) = mark_part {
+                let marked = super::mark_law::mark_into(&mut warns, &path, part, &cutter, mark_budget, material.excess);
+                path_world.notes.extend(super::mark_law::notes(params.kind().info().label, marked, mark_budget, unit));
             }
             warns.extend(workholding_warnings(
                 &path_world,

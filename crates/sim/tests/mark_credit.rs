@@ -131,3 +131,74 @@ fn a_mark_with_no_budget_declares_nothing() {
         assert_eq!((dev.gouge_cells, dev.max_gouge), before, "{budget}");
     }
 }
+
+/// The review's thin plate (PR #1615): 20 x 20 x 2, Z 0..2.
+fn plate() -> Vec<Triangle> {
+    cube(p(0.0, 0.0, 0.0), p(20.0, 20.0, 2.0)).facets.to_vec()
+}
+
+/// The plate as stock, cut by `ops`; the sharp verdict on it.
+fn plate_cut(ops: &[SimOp]) -> (Dexel, stock_sim::Deviation) {
+    let mut d = Dexel::from_facets(&plate(), 0.125).expect("the plate as stock");
+    stock_sim::simulate(&mut d, ops).expect("the program cuts");
+    let dev = deviate(&d, &plate(), DEV_TOL).expect("verdict");
+    (d, dev)
+}
+
+#[test]
+fn a_budget_deeper_than_the_plate_never_credits_a_cut_through_it() {
+    // Top 2, Bottom -0.9 with a 6 mm cutter states a 2.9 mm "mark" on a
+    // 2 mm plate: `top - budget` lies under the plate's underside, and
+    // before the floor was bound to the part the whole column was
+    // forgiven.
+    let moves = line(10.0, -0.9);
+    let (d, mut dev) = plate_cut(&[op(&moves, false)]);
+    let before = (dev.gouge_cells, dev.max_gouge);
+    assert!(before.0 > 0);
+    credit_marks(&mut dev, &d, &plate(), &[Mark { op: op(&moves, false), budget: 2.9 }]);
+    assert_eq!(dev.gouge_cells, before.0, "every column cut through the plate stays convicted");
+    // Charged under the floor the mark had to leave on the underside.
+    let floor = stock_sim::MARK_FLOOR;
+    assert!((dev.max_gouge - (before.1 - (2.0 - floor))).abs() < 1e-9, "charged {} of {}", dev.max_gouge, before.1);
+    assert!(dev.max_gouge >= floor - 1e-9, "at least the floor itself is gone: {}", dev.max_gouge);
+}
+
+#[test]
+fn a_mark_on_a_thin_plate_is_credited_down_to_the_floor_it_must_leave() {
+    let floor = stock_sim::MARK_FLOOR;
+    // 0.3 mm deep, and down to exactly the floor: both the finished part.
+    for z in [1.7, floor] {
+        let moves = line(10.0, z);
+        let (d, mut dev) = plate_cut(&[op(&moves, false)]);
+        assert!(dev.gouge_cells > 0);
+        credit_marks(&mut dev, &d, &plate(), &[Mark { op: op(&moves, false), budget: 2.9 }]);
+        assert_eq!(dev.gouge_cells, 0, "tip at {z}: worst {} at {:?}", dev.max_gouge, dev.max_gouge_at);
+    }
+    // 0.1 mm of plate left: a breakthrough, charged at what is missing
+    // from the floor.
+    let moves = line(10.0, 0.1);
+    let (d, mut dev) = plate_cut(&[op(&moves, false)]);
+    credit_marks(&mut dev, &d, &plate(), &[Mark { op: op(&moves, false), budget: 2.9 }]);
+    assert!(dev.gouge_cells > 0, "0.1 mm of plate left passed as a mark");
+    assert!((dev.max_gouge - (floor - 0.1)).abs() < 1e-9, "charged {}", dev.max_gouge);
+}
+
+#[test]
+fn a_mark_over_a_void_is_credited_only_down_to_the_roof_it_must_leave() {
+    // A bridge: two feet and a 2 mm deck (Z 6..8) over a tunnel along Y.
+    let mut part = cube(p(0.0, 0.0, 0.0), p(5.0, 20.0, 6.0)).facets.to_vec();
+    part.extend(cube(p(15.0, 0.0, 0.0), p(20.0, 20.0, 6.0)).facets.iter().copied());
+    part.extend(cube(p(0.0, 0.0, 6.0), p(20.0, 20.0, 8.0)).facets.iter().copied());
+    let run = |z: f64| {
+        // Along Y over the middle of the tunnel.
+        let moves = vec![feed(p(10.0, 4.0, z), p(10.0, 16.0, z))];
+        let mut d = Dexel::from_facets(&part, 0.125).expect("the part as stock");
+        stock_sim::simulate(&mut d, &[op(&moves, false)]).expect("cuts");
+        let mut dev = deviate(&d, &part, DEV_TOL).expect("verdict");
+        credit_marks(&mut dev, &d, &part, &[Mark { op: op(&moves, false), budget: 3.0 }]);
+        (dev.gouge_cells, dev.max_gouge)
+    };
+    assert_eq!(run(6.5).0, 0, "1.5 mm into a 2 mm deck leaves 0.5 mm of roof: a mark");
+    let (cells, worst) = run(6.1);
+    assert!(cells > 0 && (worst - (stock_sim::MARK_FLOOR - 0.1)).abs() < 1e-9, "0.1 mm of roof left: {cells} cells, worst {worst}");
+}
