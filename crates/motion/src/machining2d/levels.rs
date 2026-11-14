@@ -121,6 +121,9 @@ pub(super) struct Motion {
     /// Holes the caller proved open (#1449, `predrilled`): read only
     /// when the approach asks for pre-drilled entry.
     pub(super) holes: Vec<super::predrilled::PreHole>,
+    /// Every pass is a ring walked as arcs about one centre (#1558, the
+    /// circular kernel): a zig-zag ramp rides the ring's arcs.
+    pub(super) ring_zig: bool,
 }
 
 impl Motion {
@@ -146,7 +149,14 @@ impl Motion {
             micro: Vec::new(),
             xy_arc: false,
             holes: Vec::new(),
+            ring_zig: false,
         }
+    }
+
+    /// Every pass is a ring of arcs (#1558): ramps ride them.
+    pub(super) fn with_ring_zig(mut self) -> Self {
+        self.ring_zig = true;
+        self
     }
 
     /// The proved pre-drilled holes (#1449).
