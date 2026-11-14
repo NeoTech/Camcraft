@@ -26,7 +26,7 @@
 
 use super::hole_wall::HoleAxis;
 use super::midpose;
-use super::probe::{Cutter, Frame};
+use super::probe::{Atom, Cutter, Frame, Prof};
 use super::solid_index::SolidIndex;
 use super::thread_bore::ThreadBore;
 use super::types::Warning;
@@ -118,11 +118,14 @@ pub fn solid_hits_threaded(
 /// solid is a [`Warning::ShankHit`] on the part whatever its edge does,
 /// and a rapid that enters it with any of the assembly a
 /// [`Warning::RapidInStock`]. The edge of a cutting move is not judged
-/// here, and neither is a straight retract UP the tool's own axis from
-/// where a cutting move left it: it rides the kerf that move made (the
-/// column law's own exemption, [`super`]'s `RapidInStock`), and the
-/// stack was judged there on that move. Fails closed as [`solid_hits`]
-/// does.
+/// here. One pose more is excused, and only that pose: on a straight
+/// retract UP the tool's own axis from where a cutting move left it, the
+/// edge where it already stands - the kerf that move made, which the
+/// mesh does not show and the caller's law judged on that move. The
+/// lift itself is judged ([`rise`]): the shank and holder over all
+/// of it, and the column the edge rises through above its own top, so a
+/// part overhang the retract carries the assembly into is a
+/// `RapidInStock` on the lift. Fails closed as [`solid_hits`] does.
 pub fn stack_hits(path: &Toolpath, facets: &[Triangle], cutter: &Cutter, law: &SolidLaw) -> Vec<Warning> {
     judged(path, facets, cutter, law, &[], &[], true)
 }
@@ -172,7 +175,7 @@ fn judged(
             .map(|(a, b)| midpose::intervals(m, a, b, reach, ARC_SAG))
             .unwrap_or_default();
         let grow_mid = if m.arc.is_some() { ARC_SAG } else { 0.0 };
-        let mut hits = |set: &[super::probe::Atom]| {
+        let mut hits = |set: &[Atom]| {
             !set.is_empty()
                 && (pieces(m, law.step).into_iter().any(|(a, b, grow)| {
                     let fr = Frame::new(a, axis);
@@ -191,6 +194,12 @@ fn judged(
             let lifts = stack_only && axis.is_none() && m.arc.is_none() && m.from.x == m.to.x && m.from.y == m.to.y && m.to.z >= m.from.z;
             let from_cut = i.checked_sub(1).and_then(|j| path.moves.get(j)).is_some_and(|c| c.kind != MoveKind::Rapid && c.to == m.from);
             if lifts && from_cut {
+                // Out of the kerf that cut made: the edge's start pose is
+                // the caller's; everything the lift enters is ours.
+                let (fr, column) = (Frame::new(m.from, None), rise(&edge, m.to.z - m.from.z));
+                if hits(&body) || (!column.is_empty() && index.hits(&fr, [0.0; 3], &column, allow, 0.0, &[], &[])) {
+                    out.push(Warning::RapidInStock { at: i });
+                }
                 continue;
             }
             if hits(&atoms) {
@@ -203,6 +212,24 @@ fn judged(
         }
     }
     out
+}
+
+/// What a cutting edge enters, beyond the pose it starts in, on a
+/// straight lift of `h` up its own axis: the column from its top to
+/// where that top ends, at its largest radius, as an atom to be judged
+/// standing still at the start. Exact for the edge's profile, which
+/// never narrows upward ([`super::probe`]'s atoms): every point under
+/// the top stays inside where the edge stood. Nothing for no edge or no
+/// rise; an unreadable rise is read as the tallest column the index
+/// takes, never as none.
+fn rise(edge: &[Atom], h: f64) -> Vec<Atom> {
+    let top = edge.iter().map(|a| a.z1).fold(0.0, f64::max);
+    let r = edge.iter().map(Atom::rho_max).fold(0.0, f64::max);
+    let h = if h.is_finite() { h } else { f64::MAX };
+    if edge.is_empty() || !(h > 0.0 && r > 0.0) {
+        return Vec::new();
+    }
+    vec![Atom { z0: top, z1: top + h, prof: Prof::Flat(r) }]
 }
 
 /// The holes' axes in `fr`'s XY: those running along its tool axis.
