@@ -10,6 +10,7 @@ pub mod step;
 pub mod step_budget;
 pub mod step_csys;
 mod step_closed;
+mod step_facets;
 mod step_continuity;
 mod step_diag;
 mod step_edge3d;
@@ -17,6 +18,7 @@ mod step_guard;
 mod step_pole;
 pub mod step_depth;
 mod step_refine;
+mod step_seams;
 mod step_units;
 pub mod stl;
 

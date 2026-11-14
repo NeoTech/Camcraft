@@ -7,8 +7,13 @@
 //! it returns no polygon for the blend and the rest of the shell imported
 //! open, with no refusal, before this law.
 //!
+//! `box.step` with one face's `same_sense` flipped is a face wound against
+//! its neighbours: closed geometry, fixed at import, never called open
+//! (#1573 review: two healthy CAD exports were refused that way).
+//!
 //! Gate map (M4.4): covers app::geometry::import::step,
-//! app::geometry::import::step_closed.
+//! app::geometry::import::step_closed, app::geometry::import::step_seams,
+//! app::geometry::import::step_facets.
 
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
@@ -51,7 +56,9 @@ fn a_closed_shell_that_meshes_open_is_refused_by_name() {
     let err = import(bent()).expect_err("a closed shell with a face missing must not import");
     let msg = err.to_string();
     assert!(msg.contains("closed shell #1288 (10 faces) meshes open"), "{msg}");
-    assert!(msg.contains("unmatched edges, the first from ("), "{msg}");
+    assert!(msg.contains("boundary edges lie more than"), "{msg}");
+    assert!(msg.contains("mm from any other face, most on face #"), "{msg}");
+    assert!(msg.contains(" mm; the first from ("), "{msg}");
     assert!(msg.contains("got no mesh from the kernel"), "the dropped face is named: {msg}");
 }
 
@@ -67,6 +74,40 @@ fn a_face_the_kernel_cannot_mesh_is_refused_in_an_open_shell_too() {
     let msg = err.to_string();
     assert!(msg.contains("in shell #1288 could not be tessellated"), "{msg}");
     assert!(msg.contains("returned no mesh for it"), "{msg}");
+}
+
+#[test]
+fn the_outer_shell_of_a_solid_is_closed_whatever_its_keyword() {
+    // A MANIFOLD_SOLID_BREP's outer shell is closed by the schema, even
+    // when the file spells it OPEN_SHELL: the gap is still refused as one.
+    let text = bent().replace("#1288=CLOSED_SHELL(", "#1288=OPEN_SHELL(");
+    assert!(text.contains("#1289=MANIFOLD_SOLID_BREP('',#1288);"), "fixture layout changed");
+    let msg = import(text).expect_err("a solid with a face missing must not import").to_string();
+    assert!(msg.contains("closed shell #1288 (10 faces) meshes open"), "{msg}");
+}
+
+/// Signed volume of a mesh (divergence theorem), as tetrahedra to a point
+/// off every face's plane: positive when it is wound outward, and every
+/// face counts, so one face wound inward changes it.
+fn volume(m: &camcraft_app::geometry::Mesh) -> f64 {
+    let o = camcraft_app::geometry::Point3::new(-3.0, -7.0, -11.0);
+    m.facets.iter().map(|t| (t.a - o).dot((t.b - o).cross(t.c - o)) / 6.0).sum()
+}
+
+#[test]
+fn a_face_wound_against_its_neighbours_imports_flipped_not_refused() {
+    let text = std::fs::read_to_string(model("box.step")).expect("fixture");
+    let face = "#32 = FACE_SURFACE('', (#33), #90, .T.);";
+    assert_eq!(text.matches(face).count(), 1, "fixture layout changed");
+    let good = import(text.clone()).expect("box.step imports");
+    let bound = "#33 = FACE_BOUND('', #34, .T.);";
+    assert_eq!(text.matches(bound).count(), 1, "fixture layout changed");
+    let bad = text.replace(face, "#32 = FACE_SURFACE('', (#33), #90, .F.);").replace(bound, "#33 = FACE_BOUND('', #34, .F.);");
+    let mesh = import(bad).expect("a reversed face is closed geometry: imported, not refused");
+    assert_eq!(mesh.facets.len(), good.facets.len());
+    let (v, w) = (volume(&mesh), volume(&good));
+    assert!(w > 0.0, "box.step is wound outward: {w}");
+    assert!((v - w).abs() <= w * 1e-9, "the reversed face is flipped back outward: {v} vs {w}");
 }
 
 #[test]
