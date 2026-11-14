@@ -121,7 +121,13 @@ programUnits = "mm inch"; // #902 / #977: writes the document's unit (postOption
 //    start point. So d is the finishing pass's own depth (never 0 on a
 //    laid ladder, or the control would cut the root once more than was
 //    verified), and a record the cycle cannot state - alternating
-//    flank infeed, a one-pass thread - is refused by name.
+//    flank infeed, a one-pass thread - is refused by name. The control
+//    reads the ROUNDED words, so d is derived from their own ladder
+//    (g76Allowance): the allowance that makes the rounded Q, Q, P cut
+//    the record's rough pass count, nearest the record's allowance
+//    (inch: R0.0158 where 0.4 mm reads 0.0157 - with Q157 P472, R0.0157
+//    would add a 0.0001 in pass). More than one least increment from
+//    the record's allowance is refused by name.
 //  - Face cycles: G83 (Q peck in whole microns, the 0i-T word; P dwell
 //    in ms), G84 tap, G85 bore, cancelled by G80. A cycle off the
 //    spindle axis and a back-bore are refused - a 2-axis lathe has no
@@ -218,6 +224,7 @@ function fl(v) { return has(v) ? fixed(len(v), inch ? 6 : 4) : "0"; }  // a thre
 // whole ten-thousandths of an inch (the inch least increment) under G20.
 function incr(v) { return Math.round(inch ? Number(v) / 25.4 * 10000 : Number(v) * 1000); }
 function um(v) { return String(incr(v)); }
+function incrLen(n) { return fixed(n / (inch ? 10000 : 1000), inch ? 4 : 3); }  // whole least increments as a length word
 function ff(v) { return has(v) && v > 0 ? String(Math.round(v)) : "0"; }
 function block(words) {
   var a = [];
@@ -837,6 +844,47 @@ function g76Why(p, r0, r1) {
   return null;
 }
 
+// R from the ROUNDED words (PR #517 review). The control works on the
+// posted words, each rounded to the least increment on its own, not on
+// the record's numbers: rung n of its rough ladder reaches
+// max(Q2*sqrt(n), rung n-1 + Q1) and roughing stops at the first rung
+// at or past P2 - R (that pass is cut to P2 - R). The record's own
+// ladder (mm) reaches its last rough depth at rung N, so the control
+// cuts the same N rough passes exactly when rung N-1 < P2 - R <= rung N
+// on the rounded words. R is the allowance in that window nearest the
+// record's finish allowance; one more than one least increment away
+// from it is refused by name - the words would state a pass schedule
+// that was not verified. A string is the refusal reason; a number is R
+// in least increments (same lattice as the P/Q words: 0.001 mm, 0.0001 in).
+function g76Allowance(p) {
+  var target = p.ThreadHeight - p.FinishAllowance;
+  var prev = 0, N = 0, n, a;
+  for (n = 1; n <= 1000; n++) {
+    a = Math.max(p.FirstDepth * Math.sqrt(n), prev + p.MinimumDepth);
+    if (a >= target - EPS) { N = n; break; }
+    prev = a;
+  }
+  if (N === 0) return "the rough ladder takes over 1000 passes";
+  var dd = incr(p.FirstDepth), dmin = incr(p.MinimumDepth), k = incr(p.ThreadHeight), f = incr(p.FinishAllowance);
+  var lo = 0, hi = 0;
+  prev = 0;
+  for (n = 1; n <= N; n++) {
+    a = Math.max(dd * Math.sqrt(n), prev + dmin);
+    lo = prev; hi = a; prev = a;
+  }
+  // Last rough depth (P2 - R, whole increments) the control stops at
+  // after exactly N passes: above rung N-1, at or below rung N.
+  var bottom = Math.floor(lo + 1e-6) + 1, top = Math.floor(hi + 1e-6);
+  var t = Math.min(Math.max(k - f, bottom), top);
+  var d = k - t;
+  if (bottom > top || d < 0 || Math.abs(d - f) > 1) {
+    return "the rounded words cannot state the verified passes: Q" + dd + " (first depth), Q" + dmin + " (minimum depth) and P" + k +
+      " (thread height) make the control cut " + N + " rough passes only with R in " + incrLen(Math.max(k - top, 0)) + ".." + incrLen(Math.max(k - bottom, 0)) +
+      ", and the record's finish allowance is R" + incrLen(f) + " - more than one least increment apart, the control would cut a pass that was not verified";
+  }
+  return d;
+}
+
 // A THREAD record: with G76 chosen, one positioning rapid to the cycle's
 // start point and the two G76 blocks; the passes inside the record are
 // then skipped (the control cuts them). With G32 (the default) nothing
@@ -852,10 +900,12 @@ function onThreadCycle() {
   if (r0 === null || r1 === null) return;
   var why = g76Why(p, r0, r1);
   if (why) { refuse("G76 threading cycle refused - " + why); return; }
+  var d = g76Allowance(p);
+  if (typeof d === "string") { refuse("G76 threading cycle refused - " + d); return; }
   var m = Math.round(p.SpringPasses) + 1;
   var r = Math.round(10 * p.PullOut / p.Lead);
   block(["G00", xWord(r0), zWord(p.Z)]);
-  block(["G76", "P" + pad2(m) + pad2(r) + pad2(Math.round(p.InfeedAngle)), "Q" + um(p.MinimumDepth), "R" + fu(p.FinishAllowance)]);
+  block(["G76", "P" + pad2(m) + pad2(r) + pad2(Math.round(p.InfeedAngle)), "Q" + um(p.MinimumDepth), "R" + incrLen(d)]);
   block(["G76", xWord(r1), zWord(p.EndZ), "P" + um(p.ThreadHeight), "Q" + um(p.FirstDepth), "F" + fl(p.Lead)]);
   inThread = true;
 }
