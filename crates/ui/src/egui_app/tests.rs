@@ -63,7 +63,8 @@ use super::{theme, world};
 /// (its tab strip + cells) plus the browser's own header row, as the
 /// shipping layout resolves them. Pointer tests aim at rows through this
 /// one number; a header change moves it here, once.
-const BROWSER_TREE_TOP: f32 = 150.0;
+// 172 = 150 + the 22 px the ribbon gained with its own tab and caption rows (#1994).
+const BROWSER_TREE_TOP: f32 = 172.0;
 
 
 /// The x of the tree's eye column: the browser pane's right edge less the
@@ -113,6 +114,7 @@ mod gcode_viewer;
 mod first_setup;
 mod work_envelope;
 mod structural;
+mod ribbon_rows;
 mod cycle_combo;
 mod radial_step_field;
 // #1509: 2D Adaptive's Method choice on the Passes tab.

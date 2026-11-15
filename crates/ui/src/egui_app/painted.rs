@@ -43,10 +43,6 @@ use super::theme::Tokens;
 /// The full-texel uv of an uploaded image.
 const UV_FULL: Rect = Rect::from_min_max(Pos2::new(0.0, 0.0), Pos2::new(1.0, 1.0));
 
-/// A calm steel-blue ink for the ribbon's command glyphs - picked for
-/// the light workbench ground, ours in colour and line weight.
-const RIBBON_ICON_INK: Color32 = Color32::from_rgb(0x1F, 0x4E, 0x79);
-
 /// One painted ribbon cell: fixed-size, the bundled glyph centered over a
 /// short caption, tinted background by state, dimmed ink when disabled
 /// (the imgui rule: a disabled cell stays hoverable and greys, it never
@@ -64,7 +60,6 @@ pub fn cell(
     enabled: bool,
     toggled: bool,
     icon: Option<&TextureHandle>,
-    icon_tint: Option<egui::Color32>,
 ) -> Response {
     let resp = ui.interact(rect, id, Sense::click_and_drag());
     let bg = if !enabled {
@@ -93,13 +88,7 @@ pub fn cell(
             Pos2::new(rect.left() + (rect.width() - pal.glyph_px) * 0.5, rect.top()),
             Vec2::splat(pal.glyph_px),
         );
-        let ink = match bg {
-            // Hover/active/selected cells wear the family hue poorly -
-            // fall back to the on-fill ink there. Plain command glyphs
-            // carry our steel-blue tint, picked against the light strip.
-            Some(bg) => super::contrast::on_fill(bg),
-            None => icon_tint.unwrap_or(RIBBON_ICON_INK),
-        };
+        let ink = glyph_ink(pal, bg);
         let tint = if enabled { ink } else { Color32::from_rgba_unmultiplied(ink.r(), ink.g(), ink.b(), 115) };
         painter.image(tex.id(), r, UV_FULL, tint);
     }
@@ -116,6 +105,15 @@ pub fn cell(
         ink,
     );
     resp
+}
+
+/// The ink of a ribbon glyph: the on-fill ink of its cell fill, or of the
+/// strip ground when the cell is plain. On the dark ground that is white;
+/// on the light workbench ground it is the dark on-fill ink, because white
+/// does not show on a near-white strip. No ribbon glyph keeps a colour.
+#[must_use]
+pub fn glyph_ink(pal: &Tokens, bg: Option<Color32>) -> Color32 {
+    super::contrast::on_fill(bg.unwrap_or_else(|| pal.strip_fill()))
 }
 
 /// The smallest ribbon label size (px); below it a label elides instead.
@@ -151,8 +149,8 @@ fn fit_label(
     }
 }
 
-/// A group caption under its cells, centred on `mid_x` in the strip's
-/// bottom band, faint ink. Painted only when it fits inside `width` (the
+/// A group caption in its own row, its top at `row_top`, centred on
+/// `mid_x`, faint ink. Painted only when it fits inside `width` (the
 /// group's own span): a caption wider than its group would run under the
 /// neighbour's, so single-door groups - whose cell already names the
 /// section - skip it (#948). Returns whether it was painted.
@@ -163,7 +161,7 @@ pub fn caption(
     title: &str,
     strip: Rect,
     pal: &Tokens,
-    cell_bottom: f32,
+    row_top: f32,
 ) -> bool {
     let ink = pal.text_dim;
     let mut job = LayoutJob {
@@ -179,7 +177,7 @@ pub fn caption(
     if galley.size().x > width {
         return false;
     }
-    let y = (cell_bottom + 3.0).min(strip.bottom() - galley.size().y);
+    let y = row_top.min(strip.bottom() - galley.size().y);
     ui.painter()
         .galley(Pos2::new(mid_x - galley.size().x * 0.5, y), galley, ink);
     true

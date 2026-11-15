@@ -106,16 +106,29 @@ pub mod clamp {
     }
 }
 
-/// The ribbon strip's height: the cell box plus the caption row and the
-/// pad, so a theme that grows the cells grows the ribbon with them
-/// (66 = 16 + 30 + 20 is today's arithmetic, kept exact at the defaults).
+/// The ribbon strip's height: the tab row, the gap, the cell box, the
+/// caption row and the bottom gap. Each row has its own height, so a
+/// theme that grows the cells grows the ribbon with them (88 at the
+/// defaults).
 #[must_use]
 pub const fn ribbon_h(t: &Tokens) -> f32 {
-    RIBBON_TAB_H + t.cell_h + 20.0
+    RIBBON_TAB_H + RIBBON_CELL_TOP_GAP + t.cell_h + CAPTION_GAP + CAPTION_ROW_H + RIBBON_BOTTOM_GAP
 }
 
-/// The ribbon's workspace tab strip height (above the cell row).
-pub const RIBBON_TAB_H: f32 = 16.0;
+/// The ribbon's workspace tab strip height (above the cell row). The tab
+/// text (11 px) takes about 14 px, so the 24 px band leaves about 5 px
+/// clear above and below it.
+pub const RIBBON_TAB_H: f32 = 24.0;
+/// Clear space between the tab row and the cell box.
+pub const RIBBON_CELL_TOP_GAP: f32 = 4.0;
+/// Clear space between the cell box and the group caption row. The
+/// button labels run about 2 px past the cell box; the rest is clear.
+pub const CAPTION_GAP: f32 = 8.0;
+/// The group caption row's own height (the 10 px caption text, about
+/// 13 px, with room above and below).
+pub const CAPTION_ROW_H: f32 = 18.0;
+/// Clear space between the caption row and the bottom edge of the ribbon.
+pub const RIBBON_BOTTOM_GAP: f32 = 4.0;
 
 impl Tokens {
     /// The imgui shell's numbers, as tokens - unchanged values, now the
