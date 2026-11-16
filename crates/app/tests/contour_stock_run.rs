@@ -11,7 +11,8 @@
 mod area_support;
 
 use area_support::*;
-use camcraft_app::commands::GenerateOperation;
+use camcraft_app::commands::{GenerateOperation, SetStockSourceOnly};
+use camcraft_app::geometry::{Mesh, Triangle};
 use camcraft_app::posting;
 
 /// The open chain of `entity`'s top rim at `top` whose points all
@@ -129,4 +130,96 @@ fn a_stock_run_whose_tool_enters_the_part_is_refused_by_name() {
     assert!(e.contains("cuts the part"), "{e}");
     // Away from the part stays legal.
     assert!(generate(&world, picks, Side::Auto, 0.0).is_ok());
+}
+
+/// Add `TOOL` from the catalog, overridden to a flat endmill of `diameter`.
+fn add_flat_tool(world: &World, h: &mut History, name: &str, diameter: f64) {
+    let mut tool = catalog().into_iter().find(|(n, _)| *n == TOOL).map(|(_, t)| t).expect("catalog");
+    tool.diameter = diameter;
+    tool.corner_r = 0.0;
+    tool.shank_d = diameter;
+    tool.holder_d = diameter;
+    h.execute(world, AddTool::new(world, name, tool).expect("add tool"));
+}
+
+#[test]
+fn auto_on_a_stock_run_with_part_changing_sides_between_levels_is_refused_by_name() {
+    let world = new_world();
+    let mut h = History::default();
+    // Upper half sits south of the stock's north edge (y = 35) over Z [5, 10];
+    // lower half sits north of it over Z [0, 5].
+    h.execute(&world, ImportModel::from_mesh("upper", cube(Point3::new(-20.0, 10.0, 5.0), Point3::new(20.0, 20.0, 10.0))));
+    h.execute(&world, ImportModel::from_mesh("lower", cube(Point3::new(-20.0, 50.0, 0.0), Point3::new(20.0, 60.0, 5.0))));
+    let shape = StockShape::Box { dx: 70.0, dy: 70.0, dz: 10.0 };
+    h.execute(&world, SetStock::new(&world, shape, Location::default()).expect("stock"));
+    add_flat_tool(&world, &mut h, TOOL, 10.0);
+    let (picks, _) = stock_north(&world);
+    let contour_stepped = |side: Side| {
+        let mut p = contour(10.0, 0.0, side);
+        if let OpParams::Contour { stepdown, .. } = &mut p {
+            *stepdown = 5.0;
+        }
+        op(SrcRef::Selection(picks.clone()), p, AreaControls::default())
+    };
+    let e = run(&world, &contour_stepped(Side::Auto)).expect_err("part flips sides between levels");
+    assert!(e.contains("on one side") && e.contains("on the other"), "{e}");
+    assert!(e.contains("Inside") && e.contains("Outside"), "{e}");
+    assert!(run(&world, &contour_stepped(Side::Outside)).is_ok());
+    assert!(run(&world, &contour_stepped(Side::Inside)).is_ok());
+}
+
+#[test]
+fn a_stock_run_with_non_positive_offset_is_refused_by_name() {
+    let world = new_world();
+    let mut h = History::default();
+    let shape = StockShape::Box { dx: 70.0, dy: 70.0, dz: 10.0 };
+    h.execute(&world, SetStock::new(&world, shape, Location::default()).expect("stock"));
+    add_flat_tool(&world, &mut h, TOOL, 0.001);
+    let (picks, _) = stock_north(&world);
+    let e = generate(&world, picks.clone(), Side::Outside, 0.0).expect_err("sub-tolerance offset");
+    assert!(e.contains("open run's offset") && e.contains("it must be positive"), "{e}");
+    assert!(generate(&world, picks, Side::Outside, 0.01).is_ok());
+}
+
+/// A 70 x 70 x 10 slab with a narrow smooth U-cove (width 6 mm at the
+/// mouth, 3 mm at the semicircle bottom) on its north edge, star-shaped
+/// around the origin.
+fn notched_stock_mesh() -> Mesh {
+    let mut pts = vec![(35.0, -35.0), (35.0, 35.0), (3.0, 35.0)];
+    let n = 12;
+    for i in 0..=n {
+        let a = -std::f64::consts::PI * f64::from(i) / f64::from(n);
+        pts.push((1.5 * a.cos(), 20.0 + 1.5 * a.sin()));
+    }
+    pts.extend([(-3.0, 35.0), (-35.0, 35.0), (-35.0, -35.0)]);
+    let p = |(x, y): (f64, f64), z: f64| Point3::new(x, y, z);
+    let mut f = Vec::with_capacity(pts.len() * 4);
+    for i in 0..pts.len() {
+        let (a, b) = (pts[i], pts[(i + 1) % pts.len()]);
+        f.push(Triangle::new(Point3::new(0.0, 0.0, 10.0), p(a, 10.0), p(b, 10.0)));
+        f.push(Triangle::new(Point3::new(0.0, 0.0, 0.0), p(b, 0.0), p(a, 0.0)));
+        f.push(Triangle::new(p(a, 0.0), p(b, 0.0), p(b, 10.0)));
+        f.push(Triangle::new(p(a, 0.0), p(b, 10.0), p(a, 10.0)));
+    }
+    Mesh::from_facets(f)
+}
+
+#[test]
+fn a_stock_run_whose_offset_folds_onto_itself_is_refused_by_name() {
+    let world = new_world();
+    let mut h = History::default();
+    h.execute(&world, ImportModel::from_mesh("cove_src", notched_stock_mesh()));
+    let shape = StockShape::FromModel { source: "cove_src".into() };
+    h.execute(&world, SetStock::new(&world, shape, Location::default()).expect("stock"));
+    h.execute(&world, SetStockSourceOnly::new(&world, true).expect("raw stock only"));
+    add_flat_tool(&world, &mut h, TOOL, 10.0);
+    add_flat_tool(&world, &mut h, "SMALL", 1.0);
+    let name = stock_name(&world);
+    let cove = rim_of(&world, &name, 10.0, |q| q[0].abs() <= 3.0 + 1e-6);
+    let picks = pick(&name, cove);
+    let e = generate(&world, picks.clone(), Side::Outside, 0.0).expect_err("D10 folds inside the cove");
+    assert!(e.contains("folds onto itself"), "{e}");
+    let mut small_op = op(SrcRef::Selection(picks), contour(10.0, 0.0, Side::Outside), AreaControls::default());
+    small_op.tool = "SMALL".into();
+    assert!(run(&world, &small_op).is_ok());
 }

@@ -104,7 +104,8 @@ fn every_pass_runs_to_the_posted_end_z_inside_the_root_pass() {
     // The control runs EVERY pass to D. The kernel lays a shallower pass
     // short of D by (k - depth) x tan(a/2): the control's extra length is
     // that much, at that depth, inside the groove the root pass cuts to
-    // D. No pass ends past D toward the chuck.
+    // D. No pass ends past D toward the chuck. Kept on purpose (#1896):
+    // docs/decisions/1896-thread-pass-ends.md.
     for (end, (_, depth)) in ends.iter().zip(&passes) {
         let short = (k - depth) * tan;
         assert!((end - (end_z + short)).abs() < 1e-3, "pass at {depth}: ends {end}, D {end_z}, short {short}");

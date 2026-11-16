@@ -594,6 +594,10 @@ tests are in `crates/ui/tests/`; they start the real app through
   outputs in `tests/golden/`), stock simulation and post processing. Add fuzz
   tests for the geometry importers and the toolpath generators: degenerate
   input must give an error, never a crash or a hang.
+- **2D toolpath shape-mask tests** (`crates/motion/tests/common/shape_mask.rs`):
+  compare a generated `Toolpath`'s swept disc footprint against the expected
+  `Region` (overcut, leftover, progressive rim engagement, symmetry, stock
+  extension) and write an RGB diff PNG on failure (do not commit the PNG).
 - **GitHub Actions minutes are budgeted** (3000 each month; Windows counts
   2x, macOS 10x).
   - Nothing runs on a PR trigger.

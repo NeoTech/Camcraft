@@ -39,7 +39,7 @@ Blue shows the operation travel; dashed orange shows approach and retract; gray 
 
 ## 3D Pocket
 
-![View of roughing passes at successive levels around a 3D model.](../../../operation-paths.svg#Pocket3D)
+{{ <icon name="op-pocket3d" /> }} ![View of roughing passes at successive levels around a 3D model.](../../../operation-paths.svg#Pocket3D)
 
 **For:** roughing a 3D part level by level, from Top Z down to Bottom Z.
 At each level the tool clears around the material that stands above it,
@@ -100,7 +100,7 @@ so a deep job can refuse even where there appears to be side clearance.
 
 ## 3D Finish
 
-![View of parallel finishing passes following a curved surface.](../../../operation-paths.svg#Finish3D)
+{{ <icon name="op-finish3d" /> }} ![View of parallel finishing passes following a curved surface.](../../../operation-paths.svg#Finish3D)
 
 **For:** finishing 3D surfaces with a ball-nose, to a stated tolerance.
 One kind carries every finishing pattern; choose the pattern by the
@@ -165,7 +165,7 @@ exceed the op's ball".
 
 ## Deburr
 
-![View of a toolpath following exposed edges of a 3D model.](../../../operation-paths.svg#Deburr)
+{{ <icon name="op-deburr" /> }} ![View of a toolpath following exposed edges of a 3D model.](../../../operation-paths.svg#Deburr)
 
 **For:** breaking every exposed edge of the model with a chamfer mill:
 an open model's rim, or a convex crease where two faces meet. The cone

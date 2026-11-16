@@ -108,3 +108,25 @@ fn waterjet_recipe_apply_refuses_invalid_and_accepts_valid_recipe() {
     assert_eq!(tool.cutting.len(), 1);
     assert_eq!(tool.cutting[0].waterjet.unwrap().thickness, 5.0);
 }
+
+#[test]
+fn waterjet_properties_apply_preserves_recipe_refusal() {
+    let _g = snapshot_guard();
+    let mut h = editor();
+    super::super::browser_pane::click(
+        &mut h.state_mut().state, panes::Leaf::Tool(NOZZLE.into()),
+    );
+    h.run_steps(3);
+    super::super::tool_cutting_rows::add_row(&mut h.state_mut().state.tool_ui);
+    h.run_steps(3);
+    assert!(h.state().state.tool_editor.is_none());
+    assert!(h.state().state.tool_ui.to_tool().torch_refusal().is_some());
+    h.get_by_label("Apply").scroll_to_me();
+    h.run_steps(3);
+    assert!(h.get_by_label("Apply").accesskit_node().is_disabled(),
+        "Properties preserves the invalid waterjet recipe refusal");
+    h.state_mut().state.tool_ui.cutting[0].waterjet.as_mut().unwrap().thickness = 5.0;
+    h.run_steps(3);
+    assert!(!h.get_by_label("Apply").accesskit_node().is_disabled(),
+        "Properties accepts a valid waterjet recipe");
+}

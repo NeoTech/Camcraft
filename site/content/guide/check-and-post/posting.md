@@ -6,7 +6,7 @@ aliases = ["guide/posting/"]
 +++
 
 Posting turns the document's operations into an NC program for one
-machine controller. Click **Post** (Ctrl+P, Cmd+P on macOS), choose where to save the
+machine controller. Click {{ <icon name="act-post" /> }} **Post** (Ctrl+P, Cmd+P on macOS), choose where to save the
 program, and CamCraft checks the program, writes it, and opens it in the
 G-code viewer.
 
@@ -55,12 +55,14 @@ these choices with `get_post_options` and `set_post_options`; see
 
 ### Explain G-code
 
-Turn on **Explain G-code** in the post options to append plain-English
+Tick **Explain G-code (add a comment to each block)** on the document or
+setup post page to append plain-English
 comments to supported blocks. Tormach PathPilot milling, Fanuc, Haas,
 Mazak, Doosan DNM and Fanuc Lathe support this option. The comments do
 not change executable words or motion. Fanuc-family posts omit an
 explanation when it would exceed the block length budget. Explain is off
-by default; a post without explanation support refuses the option.
+by default; a post without explanation support refuses the option. The
+program gets longer. The change is one undo step.
 
 ### Stops between setups
 

@@ -43,6 +43,7 @@ pub mod locate_pick;
 pub mod machined;
 mod setup_display;
 mod work_envelope;
+pub mod view_frame;
 pub mod mcp_host;
 pub mod operations;
 pub mod path_lines;

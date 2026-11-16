@@ -81,16 +81,18 @@ fn a_containment_that_puts_the_tool_in_the_part_is_refused_by_name() {
     // The bore's rim at the mouth: a closed chain of radius 12.5.
     let e = model::find_by_name(&world, &name).expect("model");
     let f = model::features_of(&world, &e).expect("features");
-    let rim = feature::chains(&f)
+    let (rim, wall) = feature::chains(&f)
         .into_iter()
-        .find(|c| {
-            let p = feature::chain_points(&f, c);
-            c.closed && p.iter().all(|q| (q[2] - 20.0).abs() < 1e-6 && (q[0].hypot(q[1]) - 12.5).abs() < 0.01)
+        .find_map(|c| {
+            let p = feature::chain_points(&f, &c);
+            (c.closed && p.iter().all(|q| (q[2] - 20.0).abs() < 1e-6 && (q[0].hypot(q[1]) - 12.5).abs() < 0.01))
+                .then_some((FeatureSel::Chain(c.id), p))
         })
-        .map(|c| FeatureSel::Chain(c.id))
         .expect("the bore rim");
     let p = contour(20.0, 10.0, Side::Inside);
-    let (_, clean) = run(&world, &op(sel(&name, rim), p.clone(), AreaControls::default())).expect("default");
+    let (inside, clean) = operation::generate(&world, &op(sel(&name, rim), p.clone(), AreaControls::default()), "")
+        .map(|(t, w)| (t, w.len()))
+        .expect("default");
     assert_eq!(clean, 0, "the bore wall contour is clean from inside");
     let out = AreaControls { containment: Some(Containment::Outside), ..Default::default() };
     // The ring 10 mm into the wall: the part-aware walk keeps only the
@@ -100,12 +102,30 @@ fn a_containment_that_puts_the_tool_in_the_part_is_refused_by_name() {
     let err = run(&world, &op(sel(&name, rim), p, out)).expect_err("refused");
     assert!(err.contains("meets its wall at no level below the part top Z 20.000"), "{err}");
     assert!(err.contains("tool containment"), "{err}");
-    // Auto reads this blind bore's rim as material (its floor fills the
-    // XY silhouette) and resolves to Outside: the same mouth-only pass,
-    // refused by name with the side to set.
-    let err = run(&world, &op(sel(&name, rim), contour(20.0, 10.0, Side::Auto), AreaControls::default()))
-        .expect_err("Auto resolves Outside here");
-    assert!(err.contains("set Side to Inside"), "{err}");
+    // Auto reads the material at the rim's own level (#1933): air inside
+    // the mouth, metal outside it - Inside, the same clean pass of the
+    // bore wall from inside. Before, the floor filled the XY silhouette,
+    // Auto resolved Outside and the pass was refused by name.
+    let (t, warns) = run(&world, &op(sel(&name, rim), contour(20.0, 10.0, Side::Auto), AreaControls::default()))
+        .expect("Auto resolves Inside on a blind bore rim");
+    assert_eq!(warns, 0, "{:?}", t.notes);
+    assert_eq!(t.moves, inside.moves, "Auto takes the Inside pass");
+    // Every cutting move ends one tool radius inside the rim polygon (the
+    // entry's first feed starts in the bore's air, off the wall).
+    let cut: Vec<Point3> = t.moves.iter().filter(|m| m.kind == MoveKind::Feed).map(|m| m.to).collect();
+    assert!(!cut.is_empty(), "Auto cuts the bore wall");
+    for q in &cut {
+        let d = wall
+            .iter()
+            .zip(wall.iter().cycle().skip(1))
+            .map(|(a, b)| {
+                let (ex, ey) = (b[0] - a[0], b[1] - a[1]);
+                let s = (((q.x - a[0]) * ex + (q.y - a[1]) * ey) / (ex * ex + ey * ey)).clamp(0.0, 1.0);
+                (q.x - a[0] - s * ex).hypot(q.y - a[1] - s * ey)
+            })
+            .fold(f64::INFINITY, f64::min);
+        assert!((d - R).abs() < EPS && q.x.hypot(q.y) < 12.5, "tool centre one radius inside the wall: {q:?} at {d}");
+    }
 }
 
 /// A 40 x 40 x 5 plate with a 10 x 10 boss standing to Z 10, in a

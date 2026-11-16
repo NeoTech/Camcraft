@@ -1436,6 +1436,9 @@ pub enum Panel {
     /// The Machines pane (#287): closed by default, opened from the View
     /// door beside the properties pane.
     Machines,
+    /// The in-app AI Chat pane (#1946): closed by default, opened from the
+    /// View door beside the properties pane.
+    AiChat,
 }
 
 /// A dock-layout ask from the View door, applied by the shell on the
@@ -1446,6 +1449,10 @@ pub enum Panel {
 pub enum LayoutRequest {
     /// Close the panel if open, reopen it at its default side if not.
     Toggle(Panel),
+    /// Open and focus a panel without toggling it closed.
+    Show(Panel),
+    /// Open and focus the independent tool library.
+    ToolLibrary,
     /// Rebuild the default three-pane dock.
     Reset,
 }
@@ -1458,6 +1465,7 @@ pub struct PanelsOpen {
     pub browser: bool,
     pub properties: bool,
     pub machines: bool,
+    pub ai_chat: bool,
 }
 
 impl PanelsOpen {
@@ -1467,6 +1475,7 @@ impl PanelsOpen {
             Panel::Browser => self.browser,
             Panel::Properties => self.properties,
             Panel::Machines => self.machines,
+            Panel::AiChat => self.ai_chat,
         }
     }
 }
@@ -1508,6 +1517,9 @@ pub struct State {
     /// #225: the Feeds tab shows the spindle speed as surface (cutting)
     /// speed instead of rpm. View state - never a command, never saved.
     pub spindle_as_vc: bool,
+    /// Catalog filters are temporary view state, outside the document and history.
+    pub tool_catalog_kind: Option<camcraft_app::tools::ToolKind>,
+    pub tool_catalog_name: String,
     /// #899: how the Tool library page's Import treats a name the
     /// document already has. View state - the import itself is the command.
     pub tool_import_mode: camcraft_app::commands::ImportMode,
@@ -1705,6 +1717,12 @@ pub struct State {
     /// #183: the live MCP session's inbox when the app was started with
     /// `--mcp-port` / `CAMCRAFT_MCP_PORT`; drained with `pending`.
     pub mcp: Option<camcraft_app::mcp::Inbox>,
+    /// #1946: in-app AI chat panel state (conversations, worker handle, toggles).
+    pub ai_chat: crate::egui_app::ai_chat::AiChatState,
+    /// Sender used by the AI chat worker to dispatch MCP requests in-process.
+    pub ai_mcp_tx: mpsc::Sender<camcraft_app::mcp::Request>,
+    /// In-process AI chat MCP inbox drained alongside `mcp` inside `mcp_host::pump`.
+    pub ai_mcp_inbox: Option<camcraft_app::mcp::Inbox>,
     pub request_quit: bool,
     /// #107: a New / Open / Quit held back because the document has
     /// unsaved changes; while Some, the shell shows the Save / Don't Save
@@ -2009,6 +2027,7 @@ impl State {
         // here, on the status line - the built-in rows stand regardless.
         let themes = crate::theme_dir::from_process();
         let status = crate::theme_dir::startup_status(&themes, cfg!(target_arch = "wasm32"));
+        let (ai_mcp_tx, ai_mcp_inbox) = camcraft_app::mcp::Inbox::channel();
         State {
             world: new_world(),
             history: History::default(),
@@ -2018,6 +2037,8 @@ impl State {
             debug_info_open: false,
             gpu_line: None,
             spindle_as_vc: false,
+            tool_catalog_kind: None,
+            tool_catalog_name: String::new(),
             tool_import_mode: camcraft_app::commands::ImportMode::default(),
             doc_version: 0,
             selection_version: 0,
@@ -2082,7 +2103,7 @@ impl State {
             view_store: None,
             prefs_store: None,
             import_tool_holders: true,
-            panels_open: PanelsOpen { browser: true, properties: true, machines: false },
+            panels_open: PanelsOpen { browser: true, properties: true, machines: false, ai_chat: false },
             layout_request: None,
             tree_menu: None,
             retype_confirm: None,
@@ -2091,6 +2112,9 @@ impl State {
             pending: VecDeque::new(),
             picker_in_click: false,
             mcp: None,
+            ai_chat: crate::egui_app::ai_chat::AiChatState::new(),
+            ai_mcp_tx,
+            ai_mcp_inbox: Some(ai_mcp_inbox),
             request_quit: false,
             unsaved_prompt: None,
             discard_confirmed: false,
@@ -2878,14 +2902,77 @@ impl State {
         }
     }
 
+    pub fn set_ai_wake(&mut self, wake: crate::egui_app::ai_chat::WakeFn) {
+        self.ai_chat.set_wake(wake);
+    }
+
+    pub(crate) fn submit_ai_prompt(&mut self) {
+        if self.ai_chat.is_running() {
+            return;
+        }
+        // Each turn owns a fresh receiver. Old worker senders cannot reach a later turn.
+        self.reset_ai_inbox();
+        let snapshot = if self.ai_chat.selected_preset().fallback_mode
+            != camcraft_app::mcp::provider::FallbackMode::Native
+        {
+            self.project_snapshot_json()
+        } else {
+            serde_json::Value::Null
+        };
+        self.ai_chat.submit(
+            &self.world,
+            self.selected_operation(),
+            &self.history,
+            &self.ai_mcp_tx,
+            None,
+            snapshot,
+        );
+    }
+
+    fn reset_ai_inbox(&mut self) {
+        let (tx, inbox) = camcraft_app::mcp::Inbox::channel();
+        self.ai_mcp_tx = tx;
+        self.ai_mcp_inbox = Some(inbox);
+    }
+
+    fn reset_ai_document(&mut self) {
+        self.ai_chat.invalidate_document();
+        self.reset_ai_inbox();
+    }
+
+    fn project_snapshot_json(&mut self) -> serde_json::Value {
+        let req = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 0,
+            "method": "tools/call",
+            "params": { "name": "get_job", "arguments": {} }
+        })
+        .to_string();
+        let ans = camcraft_app::mcp::answer_live(
+            &self.world,
+            &mut self.history,
+            self.project_path.as_deref(),
+            &req,
+        );
+        let Some(reply) = ans.reply else {
+            return serde_json::json!({});
+        };
+        serde_json::from_str::<serde_json::Value>(&reply)
+            .ok()
+            .and_then(|v| v.get("result")?.get("structuredContent").cloned())
+            .unwrap_or_else(|| serde_json::json!({}))
+    }
+
     /// Run every queued action, then poll the import worker once. Safe to
     /// call every frame; never blocks.
     pub fn drain_actions(&mut self) {
         while let Some(action) = self.pending.pop_front() {
             self.run(action);
         }
+        self.ai_chat.poll(self.history.done_len());
         // #183: an agent's live calls, after the user's own clicks.
         crate::mcp_host::pump(self);
+        self.ai_chat.poll(self.history.done_len());
         self.poll_import();
         // #31: a file the browser's picker has read since the last frame.
         self.take_picked_files();
@@ -2947,6 +3034,7 @@ impl State {
             CommandKind::OpenModelDialog => self.open_model_dialog(),
             CommandKind::ImportFile(path) => self.import_path(path),
             CommandKind::NewDocument => {
+                self.reset_ai_document();
                 self.abandon_imports();
                 self.project_path = None;
                 self.hidden_stocks.clear();
@@ -3916,7 +4004,7 @@ impl State {
         if !any {
             self.cam = Camera {
                 projection: self.cam.projection,
-                ..Camera::default()
+                ..Camera::default().with_frame(self.cam.frame)
             };
             self.status = String::from("nothing to frame");
             return;
@@ -3930,7 +4018,7 @@ impl State {
             * 3.0f64.sqrt();
         self.cam = Camera {
             projection: self.cam.projection,
-            ..Camera::frame(center, radius)
+            ..Camera::frame(center, radius).with_frame(self.cam.frame)
         };
     }
 
@@ -4254,6 +4342,7 @@ impl State {
         use camcraft_app::commands::{color_vision_of, color_vision_set, theme_set};
         theme_set(&loaded, &theme_of(&self.world));
         color_vision_set(&loaded, color_vision_of(&self.world));
+        self.reset_ai_document();
         self.abandon_imports();
         self.project_path = None;
         self.hidden_stocks.clear();
