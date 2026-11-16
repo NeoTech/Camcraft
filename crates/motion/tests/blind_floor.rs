@@ -185,7 +185,7 @@ fn link_sets(entry: Entry3D) -> [Links; 2] {
 fn a_blind_pocket_never_enters_solid_under_any_ladder() {
     let entries = [Entry3D::Plunge, Entry3D::Ramp, Entry3D::Helix, Entry3D::Arc];
     let strategies = [PocketStrategy::Waterline, PocketStrategy::Zigzag];
-    let (mut runs, mut refused) = (0, 0);
+    let mut runs = 0;
     for d in [3.0, 5.5, 8.0, 12.0] {
         let f = block(d);
         let region = camcraft_motion::geometry::slice::project(&f, 64).expect("silhouette");
@@ -200,24 +200,8 @@ fn a_blind_pocket_never_enters_solid_under_any_ladder() {
                                 );
                                 let p = Pocket3DParams { links, ..params(entry, strategy, stepdown, bottom_z) };
                                 let ladder = if shell { pocket3d_offset } else { pocket3d };
-                                // #2004: no level stands at Top Z. A stepdown that
-                                // passes the hole floor with Bottom under it puts
-                                // no plane in the hole: the old ladder cut only the
-                                // air plane at Top Z there. Nothing can be cut
-                                // without a level under the floor, so the ladder
-                                // refuses by name - and only in that case.
-                                let no_plane_in_hole = stepdown > d && bottom_z < -d - 1e-9;
-                                let t = match ladder(&f, &region, &p) {
-                                    Ok(t) => {
-                                        assert!(!no_plane_in_hole, "{tag}: no plane fits the hole, yet a path came back");
-                                        t
-                                    }
-                                    Err(camcraft_motion::machining2d::GenError::Empty(_)) if no_plane_in_hole => {
-                                        refused += 1;
-                                        continue;
-                                    }
-                                    Err(e) => panic!("{tag}: the hole is always there to cut: {e}"),
-                                };
+                                let t = ladder(&f, &region, &p)
+                                    .unwrap_or_else(|e| panic!("{tag}: the hole is always there to cut: {e}"));
                                 assert!(t.all_finite() && t.is_chained(), "{tag}");
                                 if let Some((i, q)) = first_gouge(&t, d) {
                                     panic!("{tag}: move {i} enters solid at {q:?} ({:?})", t.moves[i]);
@@ -238,7 +222,142 @@ fn a_blind_pocket_never_enters_solid_under_any_ladder() {
             }
         }
     }
-    // d 3 at step 4 under Bottom ZB and ZB - 3: 2 x 4 x 2 x 2 x 2 refusals.
-    assert_eq!(refused, 2 * 4 * 2 * 2 * 2);
-    assert_eq!(runs + refused, 4 * 3 * 3 * 4 * 2 * 2 * 2);
+    assert_eq!(runs, 4 * 3 * 3 * 4 * 2 * 2 * 2);
+}
+
+/// Planar cut Zs (distinct, descending): every horizontal feed move
+/// (or plunge end inside the pocket floor; excludes microlift glides
+/// above the level).
+fn cut_planes(t: &camcraft_motion::cl::Toolpath) -> Vec<f64> {
+    let mut zs: Vec<f64> = t
+        .moves
+        .iter()
+        .filter(|m| m.kind == camcraft_motion::cl::MoveKind::Feed && (m.from.z - m.to.z).abs() < 1e-6)
+        .filter(|m| (m.to.x - m.from.x).hypot(m.to.y - m.from.y) > 1e-6)
+        .map(|m| m.to.z)
+        .collect();
+    zs.sort_by(|a, b| b.total_cmp(a));
+    zs.dedup_by(|a, b| (*a - *b).abs() < 1e-6);
+    zs
+}
+
+/// #2088: a blind hole of depth 3 mm at stepdown 4 mm is shallower than
+/// one stepdown (Top Z 0, first ladder plane -4). It must cut at its
+/// floor (-3.0) in one level, never in air at Top Z and never refused.
+#[test]
+fn a_blind_hole_shallower_than_one_stepdown_is_cut_at_its_floor() {
+    let f = block(3.0);
+    let region = camcraft_motion::geometry::slice::project(&f, 64).expect("silhouette");
+    for bottom_z in [ZB, ZB - 3.0] {
+        for strategy in [PocketStrategy::Waterline, PocketStrategy::Zigzag, PocketStrategy::OffsetRings] {
+            for entry in [Entry3D::Plunge, Entry3D::Ramp, Entry3D::Helix, Entry3D::Arc] {
+                for shell in [false, true] {
+                    let tag = format!("bottom {bottom_z} {strategy:?} {entry:?} shell {shell}");
+                    let p = params(entry, strategy, 4.0, bottom_z);
+                    let t = if shell {
+                        pocket3d_offset(&f, &region, &p)
+                    } else {
+                        pocket3d(&f, &region, &p)
+                    }
+                    .unwrap_or_else(|e| panic!("{tag}: shallow blind hole must cut its floor: {e}"));
+                    assert!(t.all_finite() && t.is_chained(), "{tag}");
+                    assert_eq!(cut_planes(&t), vec![-3.0], "{tag}: one level at floor -3.0");
+                    assert!(first_gouge(&t, 3.0).is_none(), "{tag}: enters solid");
+                    assert!(!t.moves.iter().any(|m| m.from.z.min(m.to.z) < -3.0 - 1e-6), "{tag}: below floor");
+                    assert_eq!(silent(&f, &region, &t), Vec::<Warning>::new(), "{tag}: {:?}", t.notes);
+                }
+            }
+        }
+    }
+    // Rest roughing and Adaptive also cut the shallow floor without gouge.
+    let p_rest = params(Entry3D::Plunge, PocketStrategy::Waterline, 4.0, ZB);
+    let (t_rest, rep) = camcraft_motion::machining3d::pocket3d_with_rest(&f, &region, &p_rest)
+        .expect("rest shallow blind hole");
+    assert_eq!(cut_planes(&t_rest), vec![-3.0]);
+    assert_eq!(rep.gouge_cells, 0);
+    assert_eq!(silent(&f, &region, &t_rest), Vec::<Warning>::new(), "{:?}", t_rest.notes);
+
+    let p_adap = params(Entry3D::Plunge, PocketStrategy::Adaptive, 4.0, ZB);
+    let t_adap = pocket3d(&f, &region, &p_adap).expect("adaptive shallow blind hole");
+    let planes = cut_planes(&t_adap);
+    assert!(planes.iter().any(|&z| (z + 3.0).abs() < 1e-6), "adaptive cuts floor -3.0: {planes:?}");
+    assert!(!planes.iter().any(|&z| z > -0.5 || z < -3.0 - 1e-6), "no air/deep level: {planes:?}");
+    assert_eq!(silent(&f, &region, &t_adap), Vec::<Warning>::new(), "{:?}", t_adap.notes);
+}
+
+/// #2088: when the footprint also reaches open stock around the block
+/// (so the regular ladder has non-empty cuts at -4, -8, -12, -15), the
+/// shallow blind hole at -3.0 inside the block still gets its floor cut.
+#[test]
+fn a_shallow_blind_hole_beside_a_deeper_cut_is_still_cut_at_its_floor() {
+    use camcraft_motion::geo2d::{Loop, Point2};
+    let f = block(3.0);
+    let stock_rect = Region::new(vec![
+        Loop::new(vec![
+            Point2::new(-35.0, -35.0),
+            Point2::new(35.0, -35.0),
+            Point2::new(35.0, 35.0),
+            Point2::new(-35.0, 35.0),
+        ])
+        .unwrap(),
+    ])
+    .unwrap();
+    let p = params(Entry3D::Plunge, PocketStrategy::Waterline, 4.0, ZB);
+    let t = pocket3d(&f, &stock_rect, &p).expect("blind hole + outer stock");
+    let in_hole: Vec<f64> = t
+        .moves
+        .iter()
+        .filter(|m| m.kind == camcraft_motion::cl::MoveKind::Feed && (m.from.z - m.to.z).abs() < 1e-6)
+        .filter(|m| m.to.x.abs() < A && m.to.y.abs() < A && m.from.x.abs() < A && m.from.y.abs() < A)
+        .map(|m| m.to.z)
+        .collect();
+    assert!(!in_hole.is_empty(), "blind hole must be cut: {:?}", t.notes);
+    assert!(in_hole.iter().all(|&z| (z + 3.0).abs() < 1e-6), "hole cut only at floor -3.0: {in_hole:?}");
+    assert_eq!(silent(&f, &stock_rect, &t), Vec::<Warning>::new(), "{:?}", t.notes);
+    // Moves inside the hole never dip below the floor.
+    assert!(
+        !t.moves
+            .iter()
+            .any(|m| m.to.x.abs() < A && m.to.y.abs() < A && m.from.z.min(m.to.z) < -3.0 - 1e-6),
+        "no move below hole floor"
+    );
+}
+
+#[test]
+fn shallow_blind_hole_edge_cases_hold() {
+    use camcraft_motion::geo2d::{Loop, Point2};
+    use camcraft_motion::machining2d::GenError;
+
+    // 1. A blind hole shallower than one stepdown that is narrower than
+    //    the tool names the tool, not "the model fills the pocket".
+    let narrow_f = block(3.0);
+    let narrow_reg = Region::new(vec![
+        Loop::new(vec![
+            Point2::new(-3.0, -3.0),
+            Point2::new(3.0, -3.0),
+            Point2::new(3.0, 3.0),
+            Point2::new(-3.0, 3.0),
+        ])
+        .unwrap(),
+    ])
+    .unwrap();
+    let mut p_wide_tool = params(Entry3D::Plunge, PocketStrategy::Waterline, 4.0, ZB);
+    p_wide_tool.tool_diameter = 20.0;
+    let err = pocket3d(&narrow_f, &narrow_reg, &p_wide_tool).expect_err("too narrow");
+    assert!(
+        matches!(&err, GenError::Empty(msg) if msg.contains("too narrow") && msg.contains("20 mm")),
+        "expected too-narrow refusal, got {err}"
+    );
+
+    // 2. When stock stands over Top Z (material_top 2.0 > top_z 0.0), Top Z
+    //    is cut first, and the shallow blind floor at -3.0 is still cut
+    //    after it without exceeding stepdown 4.0.
+    let f = block(3.0);
+    let region = camcraft_motion::geometry::slice::project(&f, 64).expect("silhouette");
+    let mut p_stock = params(Entry3D::Plunge, PocketStrategy::Waterline, 4.0, ZB);
+    p_stock.links.approach.material_top = Some(2.0);
+    let t = pocket3d(&f, &region, &p_stock).expect("stock over Top Z + shallow floor");
+    assert_eq!(cut_planes(&t), vec![0.0, -3.0]);
+    assert!(first_gouge(&t, 3.0).is_none());
+    assert_eq!(silent(&f, &region, &t), Vec::<Warning>::new(), "{:?}", t.notes);
 }

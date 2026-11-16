@@ -1,7 +1,7 @@
 //! Split from `machining3d.rs` by M5.0.1; structure only.
 
 use super::params::Pocket3DParams;
-use super::rest::EPS;
+use super::rest::{rough_levels, EPS};
 use super::feed::{guard_input, home, sim_of, subtract_upright};
 use super::hsm::Seam;
 use super::ladder::ladder;
@@ -86,7 +86,7 @@ fn run_plain(
     mask: Option<&Columns<'_>>,
 ) -> Result<Toolpath, GenError> {
     guard_input(facets, footprint, p)?;
-    let zs = cut_levels_under(p.top_z, p.links.approach.material_top, p.bottom_z, p.stepdown)?;
+    let zs = rough_levels(facets, footprint, p, mask)?;
     ladder(facets, footprint, p, &zs, None, mask, home(p), shell, None)
 }
 
@@ -233,7 +233,7 @@ fn run_rest(
 ) -> Result<(Toolpath, StockReport), GenError> {
     guard_input(facets, footprint, p)?;
     let r = p.tool_diameter * 0.5;
-    let zs = cut_levels_under(p.top_z, p.links.approach.material_top, p.bottom_z, p.stepdown)?;
+    let zs = rough_levels(facets, footprint, p, mask)?;
     let coarse = ladder(facets, footprint, p, &zs, None, mask, home(p), shell, None)?;
 
     // What the coarse ladder leaves standing, column by column: the
