@@ -213,6 +213,25 @@ pub(super) fn post_crossing_free(
     .0
 }
 
+/// The walks of [`post_crossing_free`] without the path: the fitted
+/// arcs the crossing law lets stand on the posted plain fit. A corner
+/// blend (#1733) rounds these, not the raw fit (#2317): `refuse` can
+/// only map a walk whose every vertex is still on its pass, and a
+/// filleted walk is not - a crossing there would give up every rounded
+/// corner of the pass with it.
+pub(super) fn crossing_free_runs(
+    b: &PathBuilder,
+    passes: &[Vec<Point2>],
+    runs: Vec<Vec<Seg>>,
+    tally: &mut ProofTally,
+    post: impl Fn(&mut PathBuilder, Option<&[Vec<Seg>]>),
+) -> Vec<Vec<Seg>> {
+    crossing_free_from(|| b.clone(), passes, runs, tally, |bb, runs| {
+        post(bb, Some(runs));
+    })
+    .1
+}
+
 /// [`post_crossing_free`] from a bare start, handing back the walks
 /// that survived too: the 3-D ladder (`machining3d::hsm`) posts a level's
 /// walks itself and only asks which arcs the law lets stand.

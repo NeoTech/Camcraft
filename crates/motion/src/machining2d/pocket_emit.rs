@@ -11,7 +11,7 @@ use crate::geo2d::{Point2, Region};
 use crate::geometry::Point3;
 
 use super::adaptive::Return;
-use super::arc_cross::post_crossing_free;
+use super::arc_cross::{crossing_free_runs, post_crossing_free};
 use super::arc_proof::{ProofTally, fit_proved};
 use super::arcs::{ARC_FIT_TOL, Seg, fit_arcs};
 use super::face::GenError;
@@ -89,32 +89,12 @@ pub(super) fn emit_pocket_passes(
         .with_xy_arc(p.links.approach.arc_xy)
         .with_microlift(joins)
         .with_holes(holes);
-    let runs: Option<Vec<Vec<Seg>>> = if p.blend_turns {
-        let legal = Legal { region: center, inside: true, air_left: None };
-        let rho = corner_arc_radius(p.blend_radius, p.tool_diameter).map_err(GenError::Invalid)?;
-        let mut tally = FilletTally::default();
-        let runs = passes
-            .iter()
-            .map(|pass| {
-                let Some((first, rest)) = pass.split_first() else {
-                    return Vec::new();
-                };
-                let walk = match fit {
-                    Some(tol) => fit_pass(pass, tol),
-                    None => vec![Seg::Line(rest.to_vec())],
-                };
-                let (walk, t) = fillet_corners(&walk, *first, rho, ARC_FIT_TOL, &legal);
-                tally.add(t);
-                walk
-            })
-            .collect();
-        for n in tally.notes("pass", fillet_floor(ARC_FIT_TOL)) {
-            b.note(n);
-        }
-        Some(runs)
+    let rho = if p.blend_turns {
+        Some(corner_arc_radius(p.blend_radius, p.tool_diameter).map_err(GenError::Invalid)?)
     } else {
-        fit.map(|tol| passes.iter().map(|p| fit_pass(p, tol)).collect())
+        None
     };
+    let fitted: Option<Vec<Vec<Seg>>> = fit.map(|tol| passes.iter().map(|p| fit_pass(p, tol)).collect());
     let cert = match &room {
         Some(e) => Cert::Stadium { a: e.seed, b: e.seed, h: e.clear, tess: &e.tess },
         None => Cert::Region(center),
@@ -132,16 +112,53 @@ pub(super) fn emit_pocket_passes(
         let cur = b.at();
         b.push(MoveKind::Rapid, Point3::new(cur.x, cur.y, p.clearance_z), None);
     };
-    // #2240: enforce the crossing law on every arc-fitted pocket pass,
-    // including Offset rings (used directly or as Adaptive's fallback) and
-    // Waterline, so arcs across micron-quantized vertices never cross.
-    let hold_fitted = hold_crossings
-        || matches!(
-            strategy,
-            PocketStrategy::Adaptive | PocketStrategy::OffsetRings | PocketStrategy::Waterline
-        );
+    // The crossing law on the posted walks: the HSM plan and rest areas
+    // (`hold_crossings`) hold it on the walks as posted, blends included.
+    let law_on_post = hold_crossings || strategy == PocketStrategy::Adaptive;
+    // #2240: Offset rings and Waterline hold it on their fitted arcs, so
+    // arcs across micron-quantized vertices never cross. #2317: with
+    // blends on, on the plain fit BEFORE the corners are rounded - the
+    // law's refusal maps only a walk whose vertices are still the pass's
+    // own, and on a rounded walk it gave up every blend of the pass (a
+    // blend that lands tangent on a collinear leg of another pass reads
+    // as a crossing at the 1 um center lattice).
+    let law_on_fit = matches!(strategy, PocketStrategy::OffsetRings | PocketStrategy::Waterline);
+    let runs: Option<Vec<Vec<Seg>>> = match rho {
+        Some(rho) => {
+            let fitted = match fitted {
+                Some(runs) if law_on_fit && !law_on_post => {
+                    Some(crossing_free_runs(&b, &passes, runs, &mut proof, post))
+                }
+                f => f,
+            };
+            let legal = Legal { region: center, inside: true, air_left: None };
+            let mut tally = FilletTally::default();
+            let runs = passes
+                .iter()
+                .enumerate()
+                .map(|(i, pass)| {
+                    let Some((first, rest)) = pass.split_first() else {
+                        return Vec::new();
+                    };
+                    let walk = match fitted.as_ref().and_then(|f| f.get(i)) {
+                        Some(segs) => segs.clone(),
+                        None => vec![Seg::Line(rest.to_vec())],
+                    };
+                    let (walk, t) = fillet_corners(&walk, *first, rho, ARC_FIT_TOL, &legal);
+                    tally.add(t);
+                    walk
+                })
+                .collect();
+            for n in tally.notes("pass", fillet_floor(ARC_FIT_TOL)) {
+                b.note(n);
+            }
+            Some(runs)
+        }
+        None => fitted,
+    };
+    let hold_post = law_on_post || (law_on_fit && !p.blend_turns);
     let mut path = match runs {
-        Some(runs) if hold_fitted => post_crossing_free(b, &passes, runs, &mut proof, post),
+        Some(runs) if hold_post => post_crossing_free(b, &passes, runs, &mut proof, post),
         runs => {
             post(&mut b, runs.as_deref());
             b.finish()

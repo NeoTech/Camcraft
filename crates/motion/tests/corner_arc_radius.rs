@@ -198,6 +198,30 @@ fn corners_turn_on_tangent_arcs_of_the_given_radius() {
     }
 }
 
+/// #2317: the crossing law (#2240) and the arc turns stand together.
+/// The law holds on the plain fit before the corners are rounded, so it
+/// never gives a whole pass up to its chords (`could not be proved`);
+/// the blended path still crosses nowhere, by the verifier's own law.
+#[test]
+fn the_crossing_law_keeps_the_arc_turns_and_crosses_nowhere() {
+    for strategy in [PocketStrategy::Waterline, PocketStrategy::OffsetRings] {
+        let region = fixture(strategy);
+        for radius in [Some(1.0), None] {
+            let blended = pocket(&region, &pp(strategy, true, radius)).unwrap();
+            for tol in [0.01, 0.0005] {
+                let crossed = camcraft_motion::verify::crossed_pairs(&blended, tol);
+                assert!(crossed.is_empty(), "{strategy:?} r={radius:?} tol={tol}: crossed {crossed:?}");
+            }
+            let lost: Vec<&String> = blended
+                .notes
+                .iter()
+                .filter(|n| n.starts_with("arc output") && !n.contains(" 0 could not be proved"))
+                .collect();
+            assert!(lost.is_empty(), "{strategy:?} r={radius:?}: a pass gave its arcs up whole: {lost:?}");
+        }
+    }
+}
+
 #[test]
 fn no_arc_turn_cuts_past_the_wall() {
     for strategy in STRATEGIES {
