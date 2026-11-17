@@ -1570,7 +1570,7 @@ pub fn status(ui: &mut Ui, state: &mut State, pal: &Tokens, icons: Option<&IconS
         .into_iter()
         .filter(|(_, e)| {
             model::is_operation(&state.world, e)
-                && operation::status_of(&state.world, e) == operation::OpStatus::Stale
+                && operation::status_shown(&state.world, e) == operation::OpStatus::Stale
         })
         .count();
     let ops_n = model::named_entities(&state.world)

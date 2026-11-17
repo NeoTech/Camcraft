@@ -977,8 +977,8 @@ pub(crate) mod headless {
         state.pending.push_back(CommandKind::FrameAll);
         state.drain_actions();
         let op_ok = model::find_by_name(&state.world, "Contour1")
-            .and_then(|e| model::toolpath_of(&state.world, &e))
-            .map_or(0, |tp| tp.path.moves.len());
+            .and_then(|e| model::with_toolpath(&state.world, &e, |tp| tp.path.moves.len()))
+            .unwrap_or(0);
         if op_ok == 0 {
             return Err(format!(
                 "seed produced no cached toolpath for Contour1 (status: {})",

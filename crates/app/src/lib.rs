@@ -180,3 +180,5 @@ pub mod view;
 // #261: the moves a cached path's warnings name.
 pub mod warned_moves;
 pub mod world;
+// #2201: the world's write revision that display caches key on.
+pub mod world_rev;

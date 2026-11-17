@@ -7,7 +7,7 @@
 //! Provenance: our own frame-cost law over our own shell; no vendor
 //! material consulted.
 
-use camcraft_app::operation::OpType;
+use camcraft_app::operation::{self, OpType};
 
 use super::frame_cost_probe::{N, calls, create, fig8, report, run, still};
 use super::*;
@@ -36,16 +36,18 @@ fn select(h: &mut Harness<'static, ShellUi>, name: &str) {
 }
 
 /// #2201 pins: still frames (the UI pass and the scene) build no toolpath
-/// lines and no solid box after the first.
+/// lines, no solid box and no operation status after the first.
 fn builds_nothing(h: &mut Harness<'static, ShellUi>, name: &str) {
     let lines = crate::path_line_memo::path_line_builds();
     let boxes = crate::solid_aabb_memo::solid_aabb_builds();
+    let statuses = operation::status_builds();
     for _ in 0..3 {
         std::hint::black_box(world::collect(&h.state().state));
         h.step();
     }
     assert_eq!(crate::path_line_memo::path_line_builds() - lines, 0, "{name}: no toolpath line build on a still frame");
     assert_eq!(crate::solid_aabb_memo::solid_aabb_builds() - boxes, 0, "{name}: no solid box build on a still frame");
+    assert_eq!(operation::status_builds() - statuses, 0, "{name}: no operation status computed on a still frame");
 }
 
 #[test]
@@ -85,5 +87,6 @@ fn still_frames_with_many_toolpaths_name_their_costs() {
     for (name, p) in [("f1", &f1), ("f8", &f8), ("g8", &g8), ("n8", &n8)] {
         assert_eq!(calls(p, "scene/collect"), N, "{name}");
         assert_eq!((p.delta.walks, p.delta.digests), (0, 0), "{name}: no chain walk, no digest on a still frame");
+        assert_eq!(p.delta.statuses, 0, "{name}: no operation status computed on a still frame");
     }
 }

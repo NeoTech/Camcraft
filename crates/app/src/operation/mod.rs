@@ -83,6 +83,9 @@ mod trochoid_op;
 mod stamp;
 mod stamp_tool;
 pub use stamp::*;
+// #2201: the status the display shows, memoized on the world revision.
+mod status_memo;
+pub use status_memo::{stale_reason_shown, status_builds, status_shown};
 mod stamp_stock;
 pub use stamp_stock::reads_setup_stock;
 pub(crate) use stamp_stock::write_setup_stock;

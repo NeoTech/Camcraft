@@ -58,7 +58,7 @@ pub(crate) fn report(state: &State) -> String {
     let models = entities.iter().filter(|(_, e)| model::is_model(world, e)).count();
     let tools = entities.iter().filter(|(_, e)| model::is_tool(world, e)).count();
     let ops: Vec<_> = entities.iter().filter(|(_, e)| model::is_operation(world, e)).collect();
-    let status = |s: operation::OpStatus| ops.iter().filter(|(_, e)| operation::status_of(world, e) == s).count();
+    let status = |s: operation::OpStatus| ops.iter().filter(|(_, e)| operation::status_shown(world, e) == s).count();
     lines.push(format!(
         "Document: {} setup(s), {} model(s), {} tool(s), {} operation(s) ({} ok, {} stale, {} never generated)",
         setup::names(world).len(),

@@ -320,11 +320,12 @@ pub(super) fn status_text(state: &State, target: &str) -> (String, super::layout
     let ent = model::find_by_name(&state.world, target);
     let (moves, warnings, notes): (usize, Vec<Warning>, Vec<String>) = ent
         .as_ref()
-        .and_then(|e| model::toolpath_of(&state.world, e))
-        .map(|tp| (tp.path.len(), tp.warnings, tp.path.notes))
+        .and_then(|e| {
+            model::with_toolpath(&state.world, e, |tp| (tp.path.len(), tp.warnings.clone(), tp.path.notes.clone()))
+        })
         .unwrap_or((0, Vec::new(), Vec::new()));
     let blocked = ent.as_ref().and_then(|e| operation::tool_gate::tool_problem_of(&state.world, e));
-    let st = ent.as_ref().map(|e| operation::status_of(&state.world, e));
+    let st = ent.as_ref().map(|e| operation::status_shown(&state.world, e));
     let mut details: Vec<String> = fold_warnings(&warnings);
     details.extend(super::approach_page::entry_status_lines(&notes));
     // #339 slice 4: who the fixture warnings strike, or that no single
@@ -344,7 +345,7 @@ pub(super) fn status_text(state: &State, target: &str) -> (String, super::layout
             // M3.1 C: say which input moved, not just that one did.
             let reason = ent
                 .as_ref()
-                .and_then(|e| operation::stale_reason(&state.world, e))
+                .and_then(|e| operation::stale_reason_shown(&state.world, e))
                 .unwrap_or_else(|| "inputs moved since generation".to_owned());
             (format!("Stale · {reason} · {moves} moves cached{tail}"), Tone::Warn)
         }
@@ -358,8 +359,7 @@ fn status(ui: &mut Ui, state: &mut State, target: &str, pal: &Tokens) {
     // #261: a warning line that names a move frames it on click (the
     // fold lines lead `details`, aligned with `warning_focus`).
     let focus: Vec<Option<[f64; 3]>> = model::find_by_name(&state.world, target)
-        .and_then(|e| model::toolpath_of(&state.world, &e))
-        .map(|tp| crate::path_lines::warning_focus(&tp))
+        .and_then(|e| model::with_toolpath(&state.world, &e, crate::path_lines::warning_focus))
         .unwrap_or_default();
     let links: Vec<bool> = focus.iter().map(Option::is_some).collect();
     let inks = text_inks(ui, &state.world);

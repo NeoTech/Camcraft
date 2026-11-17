@@ -191,9 +191,13 @@ fn write_setup_script_options(world: &World, setup: &str, value: Option<PostScri
         return;
     };
     let view = entity.entity_view(world);
-    view.get::<&mut SetupDef>(|def| {
-        def.post_properties = value;
-    });
+    // Clone and `set`, never a write in place: `set` sends the OnSet
+    // event that moves the world revision (#2201, `world_rev`).
+    let Some(mut def) = view.try_get::<&SetupDef>(Clone::clone) else {
+        return;
+    };
+    def.post_properties = value;
+    view.set(def);
 }
 
 impl Command for SetSetupPostScriptOptions {

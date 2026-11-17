@@ -307,7 +307,7 @@ fn op_row(
             (k.to_string(), op_icon(k))
         })
         .unwrap_or_else(|| (String::new(), Icon::Generate));
-    let status = operation::status_of(w, entity);
+    let status = operation::status_shown(w, entity);
     let tag = match status {
         operation::OpStatus::Never => "never",
         operation::OpStatus::Ok => "ok",

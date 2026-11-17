@@ -35,6 +35,8 @@ pub(super) struct Counts {
     pub(super) patches: u64,
     pub(super) selections: u64,
     pub(super) pick_lines: u64,
+    /// #2201: shown operation statuses computed (`status_shown` misses).
+    pub(super) statuses: u64,
 }
 
 fn counts() -> Counts {
@@ -46,6 +48,7 @@ fn counts() -> Counts {
         patches: model::patch_builds(),
         selections: operation::selection_walks(),
         pick_lines: crate::pick_line_memo::pick_line_builds(),
+        statuses: operation::status_builds(),
     }
 }
 
@@ -156,6 +159,7 @@ pub(super) fn still(h: &mut Harness<'static, ShellUi>) -> Probe {
         patches: after.patches - before.patches,
         selections: after.selections - before.selections,
         pick_lines: after.pick_lines - before.pick_lines,
+        statuses: after.statuses - before.statuses,
     };
     let egui_delay =
         h.output().viewport_output.get(&egui::ViewportId::ROOT).map_or(Duration::MAX, |v| v.repaint_delay);

@@ -175,6 +175,13 @@ pub struct GeomPrintMemo {
     pub hash: [u64; 2],
 }
 
+/// The world's write revision (#2201), a singleton that `world_rev`
+/// installs with each world: an observer moves it on each component
+/// add, set or remove. Display caches key on it; no verdict reads it.
+/// Not serialized; each new world gets its own.
+#[derive(Component, Debug, Clone)]
+pub struct WorldRevision(pub std::sync::Arc<std::sync::atomic::AtomicU64>);
+
 /// Unit tag marking an entity as a work coordinate system origin: a
 /// setup's one WCS (#342), named by `SetupDef::wcs` (`G54` for a document
 /// without setups), its `Location` the transform; there is no payload to
@@ -811,4 +818,6 @@ pub fn register_schema(world: &World) {
     world.component::<SetupDef>();
     world.component::<ActiveSetup>();
     world.component::<FixtureDef>();
+    world.component::<WorldRevision>();
+    crate::world_rev::install(world);
 }

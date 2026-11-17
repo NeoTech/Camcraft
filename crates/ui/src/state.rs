@@ -3697,15 +3697,13 @@ impl State {
                     Ok(command) => {
                         self.history.execute(&self.world, command);
                         self.doc_version += 1;
-                        let cache = model::find_by_name(&self.world, &name)
-                            .and_then(|e| model::toolpath_of(&self.world, &e));
                         // The feed in the summary reads in the document's
                         // unit (M1.1); the path itself is mm law, always.
                         let unit = self.units();
-                        self.status = match cache {
-                            Some(tp) => tp.path.status_summary(&name, tp.warnings.len(), unit),
-                            None => format!("generated {name}"),
-                        };
+                        let summary = model::find_by_name(&self.world, &name).and_then(|e| {
+                            model::with_toolpath(&self.world, &e, |tp| tp.path.status_summary(&name, tp.warnings.len(), unit))
+                        });
+                        self.status = summary.unwrap_or_else(|| format!("generated {name}"));
                     }
                     Err(err) => {
                         self.refuse(ErrorScope::Operation, format!("generate failed: {err}"));
