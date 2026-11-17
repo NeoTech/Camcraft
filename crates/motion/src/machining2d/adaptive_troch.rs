@@ -161,7 +161,9 @@ pub fn adaptive_trochoidal_with(region: &Region, p: &PocketParams, t: &AdaptiveT
     let first_entry = planned.layouts[0].entry;
     let mut bld = PathBuilder::approached(p3(first_entry, p.clearance_z));
     bld.push(MoveKind::Rapid, p3(first_entry, p.clearance_z), None);
-    let mut above = p.top_z;
+    // #1559: over stock carried above the top of the cut, the first
+    // level's entry starts at its plunge height and feeds down.
+    let mut above = p.links.approach.entry_top(p.top_z);
     for (zi, &z) in zs.iter().enumerate() {
         for (li, lay) in planned.layouts.iter().enumerate() {
             if zi > 0 || li > 0 {

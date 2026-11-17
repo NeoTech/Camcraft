@@ -26,3 +26,6 @@ pub use camcraft_cl::cl;
 pub use camcraft_geometry::{geo2d, geometry};
 pub use camcraft_geometry::geometry::{stock, units};
 pub use camcraft_tools::tools;
+
+/// Parametric fixture solids and profile interchange.
+pub mod fixture_profile;

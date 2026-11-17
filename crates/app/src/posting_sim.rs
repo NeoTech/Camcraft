@@ -8,7 +8,8 @@
 //!
 //! The material sim (`stock_sim::simulate_document`) refuses programs
 //! it cannot model - the turn family's half-plane, rotary sectors,
-//! posed (tilted-tool) moves, a rotated stock, a later setup's model
+//! posed (tilted-tool) moves, a stock turned off the machine axes (#2177:
+//! a quarter-turned box is judged), a later setup's model
 //! stock, no stock at all. Before this clause that refusal was dropped
 //! on the floor: the post went ahead and nothing said the material was
 //! never judged. Now the refusal is ALWAYS visible - it rides the post

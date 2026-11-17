@@ -141,5 +141,5 @@ fn graze(b: &mut PathBuilder, eng: &Engage, e2: Point2, z: f64) {
             e2.x, e2.y
         ));
     }
-    feed_down(b, e2, z, p.top_z, eng.m, a.plunge(p.plunge_feed));
+    feed_down(b, e2, z, p.entry_top(), eng.m, a.plunge(p.plunge_feed));
 }

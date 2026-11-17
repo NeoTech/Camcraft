@@ -46,6 +46,62 @@ afterModes = true; // reads PARAM AfterOperation (#110): the engine refuses a st
 workOffsetIndex = true; // reads PARAM WorkOffset as the 1-based offset number (#931)
 workOffsetMax = 6;      // G54..G59; G54.1 P extended offsets are an option not verified here (#931)
 programUnits = "mm inch"; // #902: writes the document's unit (postOptions.Units), G21 / G20
+endUnits = "G20 G21";     // #2189: switches end units before M30 when asked
+
+declaredOptions = {
+  showSequenceNumbers: {
+    type: "enum",
+    title: "Sequence numbers",
+    group: "Format",
+    description: "Where to emit N-word block numbers",
+    choices: [
+      { id: "off", title: "Off" },
+      { id: "every-block", title: "Every block" },
+      { id: "tool-change", title: "On tool change" },
+      { id: "op-start", title: "On operation start" },
+    ],
+    default: "off",
+  },
+  sequenceNumberStart: { type: "integer", title: "First sequence number", group: "Format", description: "Starting N number", min: 1, max: 999999, default: 10 },
+  sequenceNumberIncrement: { type: "integer", title: "Sequence number increment", group: "Format", description: "Step between sequence numbers", min: 1, max: 10000, default: 10 },
+  separateWordsWithSpace: { type: "boolean", title: "Separate words with space", group: "Format", description: "Insert a space between G-code words on a block", default: true },
+  writeMachine: { type: "boolean", title: "Write machine header", group: "Header & comments", description: "Emit a comment naming the machine in the header", default: false },
+  writeToolList: { type: "boolean", title: "Write tool list", group: "Header & comments", description: "Emit a summary comment per tool at program start", default: false },
+  writeVersion: { type: "boolean", title: "Write post version", group: "Header & comments", description: "Emit post version metadata comment in the header", default: false },
+  optionalStop: { type: "boolean", title: "Optional stop (M1)", group: "Behavior", description: "Write M1 before tool changes after the first operation", default: false },
+  safeRetract: {
+    type: "enum",
+    title: "Safe retract method",
+    group: "Behavior",
+    description: "Z retract command before tool changes and at program end",
+    choices: [
+      { id: "G28", title: "G28 reference return" },
+      { id: "G53", title: "G53 machine Z" },
+    ],
+    default: "G28",
+  },
+  useRadiusArcs: { type: "boolean", title: "Use radius (R) arcs", group: "Cycles & arcs", description: "Write R word instead of I/J/K arc centers", default: false },
+  rotaryBrake: { type: "boolean", title: "Use rotary brake codes", group: "Rotary & 4th axis", description: "Command default rotary clamp/unclamp M-codes around indexing moves", default: false },
+  rotaryClamp: { type: "string", title: "Rotary clamp M-code", group: "Rotary & 4th axis", description: "Custom M-code to clamp rotary axis (empty uses machine default)", default: "" },
+  rotaryUnclamp: { type: "string", title: "Rotary unclamp M-code", group: "Rotary & 4th axis", description: "Custom M-code to unclamp rotary axis (empty uses machine default)", default: "" },
+  chipConveyor: { type: "boolean", title: "Chip conveyor", group: "Machine", description: "Start and stop the chip conveyor during the program", default: false },
+  chipConveyorStart: { type: "string", title: "Chip conveyor start code", group: "Machine", description: "Custom M-code to start the chip conveyor", default: "" },
+  chipConveyorStop: { type: "string", title: "Chip conveyor stop code", group: "Machine", description: "Custom M-code to stop the chip conveyor", default: "" },
+  useM8ForTSC: { type: "boolean", title: "Use M8 for through-spindle coolant", group: "Coolant", description: "Fall back to M8 when the machine declares no through-tool code", default: false },
+  smoothingLevel: { type: "integer", title: "AICC smoothing level", group: "Smoothing", description: "Fanuc G5.1 Q1 Rx contour level (1..10)", min: 1, max: 10, default: 5 },
+  probingStyle: {
+    type: "enum",
+    title: "Probing style",
+    group: "Probing",
+    description: "Skip (G31) or optical Inspection Plus macro calls",
+    choices: [
+      { id: "standard", title: "Standard (G31)" },
+      { id: "g31", title: "G31 skip" },
+      { id: "inspection-plus", title: "Inspection Plus (G65 P981x)" },
+    ],
+    default: "standard",
+  },
+};
 
 // #1388: optional explanations; conservative house budgets, not control maxima.
 explains = "paren";
@@ -136,17 +192,91 @@ function ni(v) { return has(v) ? String(Math.round(v)) : "0"; } // integer word 
 function w(letter, v) { return has(v) ? letter + fu(v) : ""; }
 function fw(v) { return has(v) ? "F" + ff(v) : ""; }
 function wa(letter, v) { return has(v) ? letter + fa(v) : ""; } // an angle word
-function block(words) {  // join the non-empty words onto one line
+var seqNum = 0;
+var seqNextForce = false;
+var secStarted = 0;
+var safeRetractRefused = false;
+function optBool(k, def) {
+  return typeof postOptions !== "undefined" && postOptions && typeof postOptions[k] === "boolean" ? postOptions[k] : def;
+}
+function optInt(k, def) {
+  return typeof postOptions !== "undefined" && postOptions && typeof postOptions[k] === "number" && isFinite(postOptions[k]) ? Math.round(postOptions[k]) : def;
+}
+function optStr(k, def) {
+  return typeof postOptions !== "undefined" && postOptions && typeof postOptions[k] === "string" ? postOptions[k] : def;
+}
+function nextSeq() {
+  if (seqNum <= 0) seqNum = optInt("sequenceNumberStart", 10);
+  else seqNum += optInt("sequenceNumberIncrement", 10);
+  return "N" + seqNum;
+}
+function isCommentOnly(a) {
+  return a.length === 1 && String(a[0]).charAt(0) === "(" && String(a[0]).charAt(String(a[0]).length - 1) === ")";
+}
+function rawBlock(words) {
   var a = [];
   for (var i = 0; i < words.length; i++) {
     if (words[i] !== "" && words[i] !== null && words[i] !== undefined) a.push(words[i]);
   }
   if (a.length > 0) {
     var line = a.join(" "), c = explain(a);
+    if (c && line.length + 1 + c.length <= explainBlockMax) line += " " + c;
+    writeln(line);
+  }
+}
+function block(words) {  // join the non-empty words onto one line
+  var a = [];
+  for (var i = 0; i < words.length; i++) {
+    if (words[i] !== "" && words[i] !== null && words[i] !== undefined) a.push(words[i]);
+  }
+  if (a.length > 0) {
+    var commentOnly = isCommentOnly(a);
+    var sep = !commentOnly && !optBool("separateWordsWithSpace", true) ? "" : " ";
+    var body = a.join(sep);
+    var c = explain(a);
+    var prefix = "";
+    if (!commentOnly) {
+      var mode = optStr("showSequenceNumbers", "off");
+      if (mode === "every-block" || ((mode === "tool-change" || mode === "op-start") && seqNextForce)) {
+        prefix = nextSeq() + " ";
+        seqNextForce = false;
+      }
+    }
+    var line = prefix + body;
     // Omit an explanation that does not fit; never cut executable words.
     if (c && line.length + 1 + c.length <= explainBlockMax) line += " " + c;
     writeln(line);
   }
+}
+function writeHeaderExtras() {
+  var nm = (typeof machine !== "undefined" && machine.name) || "";
+  if (optBool("writeMachine", false) && nm) note("MACHINE: " + clean(nm));
+  if (optBool("writeVersion", false)) note("POST: " + clean(description));
+  if (optBool("writeToolList", false) && typeof programTools !== "undefined" && programTools.length) {
+    for (var i = 0; i < programTools.length; i++) {
+      var pt = programTools[i];
+      var desc = [];
+      if (pt.kind) desc.push(clean(String(pt.kind).toUpperCase()));
+      if (has(pt.diameter) && pt.diameter > 0) desc.push("D" + fu(pt.diameter));
+      if (pt.name) desc.push(clean(pt.name));
+      note("T" + ni(pt.number) + (desc.length ? " - " + desc.join(" ") : ""));
+    }
+  }
+}
+function retractHome(xyToo) {
+  if (optStr("safeRetract", "G28") === "G53") {
+    if (typeof machine === "undefined" || !has(machine.safeRetractZ)) {
+      if (!safeRetractRefused) {
+        safeRetractRefused = true;
+        msg("safeRetract G53 requires machine.safeRetractZ in the machine definition - refusing to guess Z0");
+      }
+      return;
+    }
+    block(["G53", "G00", w("Z", machine.safeRetractZ)]);
+    return;
+  }
+  block(["G91", "G28", "Z0"]);
+  if (xyToo) block(["G28", "X0", "Y0"]);
 }
 function xyz(p) { return [wo("X", p.X, orgX), wo("Y", p.Y, orgY), wo("Z", p.Z, orgZ)]; }
 function wo(letter, v, o) { return has(v) ? letter + fu(v - o) : ""; }  // axis word, origin-relative
@@ -358,6 +488,11 @@ function reversedLoneXRotary() {  // the rotary's name, else ""
 function tilt(p) {  // words to append, [] if none, null if refused
   if (!has(p.A)) return [];
   if (typeof machine === "undefined" || machine.rtcp !== true) {
+    var rs = (typeof machine !== "undefined" && machine.rotaries) || [];
+    if (rs.length > 1) {
+      if (!tiltRefused) { tiltRefused = true; msg("tilted move on a multi-axis machine without controller RTCP"); }
+      return null;
+    }
     var rc = getRotaryCodes();
     if (!rc.clamp || !rc.unclamp) {
       if (!rotaryRefused) {
@@ -581,7 +716,8 @@ function onOpen() {
   inch = typeof postOptions !== "undefined" && postOptions.Units === "inch";
   var nm = (typeof machine !== "undefined" && machine.name) || "DOOSAN DNM";
   writeln("%");
-  block([oWord(), "(" + nm + ")"]);
+  rawBlock([oWord(), "(" + nm + ")"]);
+  writeHeaderExtras();
   invertedNotes();
   unitBlock();
 }
@@ -635,16 +771,20 @@ function onToolChange(number, name) {
 function startPreamble() {
   if (sectionOpen) return;
   sectionOpen = true;
+  if (optStr("showSequenceNumbers", "off") === "op-start") seqNextForce = true;
   var touchProbe = spindleWait && !(sRpm > 0);   // a stated speed of 0 (#523)
   opNotes();
   block(["G90", "G17", wcsWord, "G40", "G49", "G80"]);
   if (toolWait) {
+    if (secStarted > 0 && optBool("optionalStop", false)) block(["M1"]);
     toolNote();
+    if (optStr("showSequenceNumbers", "off") === "tool-change") seqNextForce = true;
     block(["T" + pad2(tNo), "M6"]);
     block(["G43", "H" + pad2(tNo)]);
     xyUnknown = true;          // #1633: the first traverse states its height again
     toolWait = false;
   }
+  secStarted += 1;
   if (spindleWait && sRpm > 0) {
     block(["S" + ni(sRpm), "M3"]);
     spindleOn = true;
@@ -692,17 +832,16 @@ function afterOp() {
   if (next !== null && (ask === "optional-stop" || ask === "stop")) {
     // #1647: lift Z before inviting the operator to re-clamp the part.
     if (tcpmOn) { block(["G49"]); tcpmOn = false; }
-    block(["G91", "G28", "Z0"]);
-    block(["G90"]);
+    retractHome(false);
+    if (optStr("safeRetract", "G28") !== "G53") block(["G90"]);
     note("SETUP CHANGE - NEXT: " + (next || "UNNAMED SETUP"));
   }
   if (ask === "optional-stop") { block(["M1"]); return; }
   if (ask === "stop") { block(["M0"]); return; }
   if (ask === "home") {
     if (tcpmOn) { block(["G49"]); tcpmOn = false; }
-    block(["G91", "G28", "Z0"]);
-    block(["G28", "X0", "Y0"]);
-    block(["G90"]);
+    retractHome(true);
+    if (optStr("safeRetract", "G28") !== "G53") block(["G90"]);
     homedAt = linesWritten();
     return;
   }
@@ -913,12 +1052,92 @@ function onCircular() {
     lastA = properties.A;
   }
   if (compPlaneRefuse(planeOf(p))) return;
+  var g = p.CircularDirection === "CW" ? "G02" : "G03";
+  if (optBool("useRadiusArcs", false) && emitArcWithRadius(p, g, tw, fwd)) {
+    heldAngles(properties, tw);
+    return;
+  }
   block([
     planeWord(planeOf(p)),
-    p.CircularDirection === "CW" ? "G02" : "G03",
+    g,
     wo("X", p.X, orgX), wo("Y", p.Y, orgY), wo("Z", p.Z, orgZ),
   ].concat(centerWords(p)).concat(tw, [fwd]));
   heldAngles(properties, tw);
+}
+function emitArcWithRadius(p, g, tw, fwd) {
+  // Keep the original I/J/K arc when it writes rotary angles. Splitting
+  // would put the complete turn on the first segment and invalidate its feed cap.
+  if (tw && tw.length) return false;
+  var c = p.IJKIncrement || {};
+  var axes = p.CircularPlane === "XZ" ? [2, 0, 1] : (p.CircularPlane === "YZ" ? [1, 2, 0] : [0, 1, 2]);
+  var u = axes[0], v = axes[1], h = axes[2];
+  var from = [p.StartX, p.StartY, p.StartZ], to = [p.X, p.Y, p.Z], center = [c.I, c.J, c.K];
+  var org = [orgX, orgY, orgZ];
+  if (!has(from[u]) || !has(from[v]) || !has(to[u]) || !has(to[v]) || !has(center[u]) || !has(center[v])) return false;
+  var du = from[u] - center[u], dv = from[v] - center[v];
+  var r0 = Math.sqrt(du * du + dv * dv);
+  var eu = to[u] - center[u], ev = to[v] - center[v];
+  var r1 = Math.sqrt(eu * eu + ev * ev);
+  if (!(r0 > 0) || !isFinite(r0) || !(r1 > 0) || !isFinite(r1)) return false;
+  var r = (r0 + r1) * 0.5;
+  if (Math.abs(r0 - r1) > Math.min(0.02, Math.max(0.002, r * 0.005))) return false;
+  var a0 = Math.atan2(dv, du), ccw = p.CircularDirection !== "CW";
+  var full = Math.abs(to[u] - from[u]) < 1e-5 && Math.abs(to[v] - from[v]) < 1e-5;
+  var sweep = 2 * Math.PI;
+  if (!full) {
+    var a1 = Math.atan2(ev, eu);
+    sweep = ccw ? a1 - a0 : a0 - a1;
+    if (sweep <= 0) sweep += 2 * Math.PI;
+  }
+  // #2191: near-180 deg arcs lose center accuracy and can put chord > 2R
+  // after rounding; near-360 deg arcs collapse or cannot take one R.
+  // Split into quadrant-sized segments and verify every posted segment.
+  var nearPi = Math.PI / 9;
+  var n = 1;
+  if (full || sweep >= 2 * Math.PI - nearPi) n = 4;
+  else if (Math.abs(sweep - Math.PI) <= nearPi) n = 2;
+  function buildSegs(count) {
+    var segs = [], dir = ccw ? 1 : -1, prev = [from[0], from[1], from[2]];
+    var rSigned = sweep / count > Math.PI + 1e-6 ? -r : r;
+    var rp = Number(fu(r));
+    if (!(rp > 0) || !isFinite(rp)) return null;
+    for (var k = 1; k <= count; k++) {
+      var next;
+      if (k === count) {
+        next = [to[0], to[1], to[2]];
+      } else {
+        var ak = a0 + dir * sweep * (k / count);
+        next = [from[0], from[1], from[2]];
+        next[u] = center[u] + r * Math.cos(ak);
+        next[v] = center[v] + r * Math.sin(ak);
+        if (has(from[h]) && has(to[h])) next[h] = from[h] + (to[h] - from[h]) * (k / count);
+        else if (has(to[h])) next[h] = to[h];
+      }
+      var su = Number(fu(prev[u] - org[u])), sv = Number(fu(prev[v] - org[v]));
+      var pu = Number(fu(next[u] - org[u])), pv = Number(fu(next[v] - org[v]));
+      var qdu = pu - su, qdv = pv - sv;
+      var chord = Math.sqrt(qdu * qdu + qdv * qdv);
+      if (!(chord > 0) || chord > 2 * rp - 1e-7) return null;
+      if (count === 1 && chord > 2 * rp * 0.99) return null;
+      segs.push({ pt: next, rSigned: rSigned });
+      prev = next;
+    }
+    return segs;
+  }
+  var segs = buildSegs(n);
+  if (!segs && n === 1) {
+    segs = buildSegs(Math.max(2, Math.ceil(sweep / (Math.PI / 2))));
+  }
+  if (!segs) return false;
+  for (var i = 0; i < segs.length; i++) {
+    var pt = segs[i].pt;
+    var words = i === 0 ? [planeWord(planeOf(p)), g] : [g];
+    words.push(wo("X", pt[0], orgX), wo("Y", pt[1], orgY), wo("Z", pt[2], orgZ), w("R", segs[i].rSigned));
+    if (i === 0 && tw && tw.length) words = words.concat(tw);
+    words.push(fwd);
+    block(words);
+  }
+  return true;
 }
 
 // ------------------------------------------------------- canned cycles
@@ -991,6 +1210,15 @@ function onCycle() {
   // feed), so a cycle the stream gives no positive feed is refused by name.
   if (!(has(p.FeedRate) && p.FeedRate > 0)) {
     msg("canned cycle " + g + " has no feed rate - refused: without F the control drills at whatever feed was last modal");
+    return;
+  }
+  // #1445: G86 (feed in, spindle stop, rapid out) has no dwell word on
+  // this control (Fanuc's and Haas's published G86 formats are X Y Z R F,
+  // with P only on G82/G88/G89). A P written on G86 is not read, so a
+  // bore dwell is refused by name, never dropped. Sinumerik's ISO mode is
+  // not verified for a G86 P either, so it refuses the same.
+  if (g === "G86" && ms > 0) {
+    msg("canned cycle G86 (bore) has no dwell word on this control - a " + (ms / 1000) + " s dwell is refused, not dropped; set the dwell to 0");
     return;
   }
   if (spindleStopped("canned cycle " + g)) return;
@@ -1137,6 +1365,15 @@ function onProbeResult() {
 }
 
 // ------------------------------------------------------------ footer
+// #2189: Fanuc modal Group 06 unit word (G20 / G21) after the final
+// retract, right before M30, when postOptions.EndUnits asks for the
+// other unit.
+function endUnitsWord() {
+  var want = typeof postOptions !== "undefined" && postOptions ? postOptions.EndUnits : undefined;
+  if (want === "inch" && !inch) return "G20";
+  if (want === "mm" && inch) return "G21";
+  return "";
+}
 function onClose() {
   endPreamble();
   if (chipConveyorStarted) {
@@ -1147,9 +1384,10 @@ function onClose() {
     chipConveyorStarted = false;
   }
   if (linesWritten() !== homedAt) {
-    block(["G91", "G28", "Z0"]);
-    block(["G28", "X0", "Y0"]);
+    retractHome(true);
   }
+  var u = endUnitsWord();
+  if (u) block([u]);
   block(["M30"]);
   writeln("%");
 }

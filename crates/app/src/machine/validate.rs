@@ -102,6 +102,11 @@ pub fn validate_text(text: &str) -> Vec<Refusal> {
     units(&v, &mut out);
     let axes = axis_parts(&v);
     axis_rules(&axes, &mut out);
+    out.extend(
+        super::trunnion_refusals(&v, &axes)
+            .into_iter()
+            .map(|(key, rule)| Refusal::new(key, rule)),
+    );
     for head in head_parts(&v) {
         spindle(head.get("spindle"), &mut out);
         station(head.get("tool_station"), &mut out);

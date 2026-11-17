@@ -253,7 +253,7 @@ pub fn toggle_run(world: &World, picks: &[GeoSel], hit: &GeoSel) -> (Vec<GeoSel>
     let (Some(f), FeatureSel::Chain(hid)) = (found, hit.feature) else {
         return (with(picks, hit), false);
     };
-    let Some(hit_edges) = feature::resolve_chain(&f, hid).map(|c| c.edges) else {
+    let Some(hit_edges) = crate::model::resolve_chain(&f, hid).map(|c| c.edges) else {
         return (with(picks, hit), false);
     };
     let runs = feature::edge_runs(&f);
@@ -306,7 +306,7 @@ pub fn extend_to_loop(world: &World, picks: &[GeoSel]) -> Result<Vec<GeoSel>, St
     let mut want: Vec<u32> = Vec::new();
     for g in &chains {
         let FeatureSel::Chain(id) = g.feature else { continue };
-        let c = feature::resolve_chain(&f, id).ok_or_else(|| format!("{} is no longer in the model - re-pick it", g.feature))?;
+        let c = crate::model::resolve_chain(&f, id).ok_or_else(|| format!("{} is no longer in the model - re-pick it", g.feature))?;
         want.extend(c.edges);
     }
     let map = edge_map(&f);

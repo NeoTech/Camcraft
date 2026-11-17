@@ -1,6 +1,6 @@
 //! The setup's own Settings page, laid out like the WCS page (#1440, after
 //! #739): titled groups - which setup is active, where its stock comes
-//! from, how the part sits, its work offset, the workholding limit (a
+//! from, how the part sits, the WCS-from-features row, the workholding limit (a
 //! turning setup only) and the setup's two actions as equal buttons filling
 //! the pane's width - then one readout line at the foot. With no setups the
 //! page is the one "First setup" group. The groups only frame the pickers
@@ -25,7 +25,7 @@ use super::wcs_page::{cell_w, even_row};
 /// A button row's height (the WCS page's).
 const BUTTON_H: f32 = 24.0;
 /// The group titles, in page order (the structural twin reads them).
-pub(super) const GROUPS: [&str; 5] = ["Active setup", "Stock source", "Part orientation", "Work offset", "This setup"];
+pub(super) const GROUPS: [&str; 5] = ["Active setup", "Stock source", "Part orientation", "Set WCS from features", "This setup"];
 /// The workholding group, drawn for a turning setup (or one that states a limit).
 pub(super) const HOLDING_GROUP: &str = "Workholding";
 /// The group of the page with no setups.
@@ -85,9 +85,9 @@ fn groups(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
         super::setup_relative_pick::picker(ui, state, name);
     });
     group(ui, GROUPS[3], None, |ui| {
-        // Main's reading order: set the WCS from features, then name its slot.
+        // #1648: the work offset picker moved to the WCS page; only the
+        // "set WCS from features" row stays here.
         super::wcs_pick_row::row(ui, state, name); // #701
-        super::setup_wcs_pick::picker(ui, state, name);
     });
     if super::setup_workholding_row::shown(state, name) {
         group(ui, HOLDING_GROUP, None, |ui| super::setup_workholding_row::row(ui, state, name));

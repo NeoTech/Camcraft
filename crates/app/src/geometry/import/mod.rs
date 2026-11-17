@@ -109,6 +109,8 @@ pub struct Graded {
     /// mesh has walls missing there. Only the `*_open` loaders return one;
     /// every other loader refuses such a file by name. `None` for STL/OBJ.
     pub open: Option<String>,
+    /// Raw STEP text preserved for library/project persistence (#744).
+    pub step_source: Option<String>,
 }
 
 impl Graded {
@@ -146,7 +148,7 @@ pub fn load_model_open_within(path: &Path, budget: usize) -> Result<Graded, Impo
     if format == Format::Stl {
         let mut mesh = gate(stl::parse_file(path)?)?;
         let notes = mesh_outward::turn_outward(&mut mesh)?.into_iter().collect();
-        return Ok(Graded { mesh, coarse_mm: None, notes, open: None });
+        return Ok(Graded { mesh, coarse_mm: None, notes, open: None, step_source: None });
     }
     let data = std::fs::read(path)?;
     parse_model_open_within(&data, format, budget)
@@ -183,7 +185,10 @@ pub fn parse_model_open_within(data: &[u8], format: Format, budget: usize) -> Re
             (mesh, step::coarse(chord), notes, open)
         }
     };
-    Ok(Graded { mesh: gate(mesh)?, coarse_mm, notes, open })
+    let step_source = (format == Format::Step)
+        .then(|| std::str::from_utf8(data).ok().map(str::to_owned))
+        .flatten();
+    Ok(Graded { mesh: gate(mesh)?, coarse_mm, notes, open, step_source })
 }
 
 /// Belt-and-gate: each importer checks finiteness at the parse site, and

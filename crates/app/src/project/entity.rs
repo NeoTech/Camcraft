@@ -305,6 +305,15 @@ pub struct SetupDto {
     /// Absent follows the document's.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub post_options: Option<SetupPostOptionsDto>,
+    /// #258: the setup's own per-post script option overrides; absent
+    /// follows the document's (`post_options.script`), additive (no version step).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub post_properties: Option<
+        std::collections::BTreeMap<
+            String,
+            std::collections::BTreeMap<String, crate::post::options::OptionValue>,
+        >,
+    >,
     /// #821: the setup's stated nose-to-rotary-centerline figure, mm,
     /// additive (no version step). Absent states none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -396,6 +405,9 @@ pub struct FixtureDto {
     /// one. Same lenient read.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub accessory: Option<serde_json::Value>,
+    /// Editable 2D profile (spun / extruded, #744); same lenient read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile: Option<serde_json::Value>,
 }
 
 /// An operation as files hold it: definition, the stamp the last generate
@@ -596,6 +608,9 @@ pub struct EntityDto {
     /// reader dropping it loses only the record: the facets are stored.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub facet_budget: Option<u64>,
+    /// Raw STEP text preserved on entities imported from STEP (#744).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub step_source: Option<String>,
     /// Absent means Model; only non-model entities carry the tag.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kind: Option<EntityKind>,
@@ -612,7 +627,7 @@ pub struct EntityDto {
     /// flag without it (an early file, or by hand) loads unmarked.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub raw_stock_print: Option<String>,
-    /// #2015 (v63): the stock's workpiece material word, which picks
+    /// #2015 (v64): the stock's workpiece material word, which picks
     /// the tools' cutting-data rows for its setup. Absent states none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stock_material: Option<super::StockMaterialWord>,

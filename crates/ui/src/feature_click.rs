@@ -150,7 +150,16 @@ pub(crate) fn query_at(state: &State, p: [f32; 2], ask: Ask) -> Option<PickQuery
 /// The one pick under a viewport point, and the selection it stands for.
 pub(crate) fn feature_at(state: &State, p: [f32; 2], ask: Ask) -> Option<(FeaturePick, Option<FeatureSel>)> {
     let q = query_at(state, p, ask)?;
-    pick::pick_selection(&state.world, &q, ask.unit, |name| state.hidden_in_view(name))
+    // #2173: models beat stock at any depth, so while a locate holds the
+    // stock the parts inside it are passed over - else no stock face
+    // round a part could ever be picked.
+    let past_parts = state.locate_pick.as_ref().is_some_and(|d| d.body == camcraft_app::fixture_locate::LocateBody::Stock);
+    pick::pick_selection(&state.world, &q, ask.unit, |name| {
+        state.hidden_in_view(name)
+            || (past_parts
+                && camcraft_app::model::find_by_name(&state.world, name)
+                    .is_some_and(|e| camcraft_app::setup_align::is_part(&state.world, &e)))
+    })
 }
 
 fn hover_of(pick: &FeaturePick, sel: Option<FeatureSel>) -> HoverHit {

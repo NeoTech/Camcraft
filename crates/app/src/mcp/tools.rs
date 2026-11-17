@@ -26,6 +26,7 @@ const TOOLS: &[Tool] = &[
     Tool { name: "save_project", description: "Save the document as a .camproj file. Without a path, saves over the file last opened or saved.", schema: s_opt_path, run: save_project },
     Tool { name: "import_model", description: "Import a mesh model (STL, STEP or OBJ) through the app's importers. A name already used by a model updates that model. A STEP model too large to import at full detail answers with reduced_fidelity: how closely its surfaces are approximated, in mm - gouge checks against it are stricter, and its operations are refused at the post when it is too coarse to check; import it again with a larger facet_budget to clear that. A STEP closed shell that meshes open imports incomplete: reduced_fidelity then says incomplete and names the hole, and every operation on the model is refused at the post. notes lists what the importer changed, e.g. a STEP face wound against its neighbours that was flipped, by name, or a closed STEP solid wound inward that was turned outward.", schema: s_import, run: import_model },
     Tool { name: "get_job", description: "The whole document as JSON: setups, stock, work offsets, models (one imported at reduced fidelity carries reduced_fidelity), tools, and operations with their parameters and status.", schema: s_empty, run: job::get_job },
+    Tool { name: "get_selection", description: "Read currently selected entities, active setup, active operation, viewport pick mode (model, face, edge, vertex), and active geometry picks.", schema: s_empty, run: super::selection::get_selection },
     Tool { name: "list_operation_types", description: "Every operation kind with its parameter fields, JSON types and default values, and the tool kinds it accepts.", schema: s_empty, run: job::list_operation_types },
     Tool { name: "list_tool_catalog", description: "The built-in tool catalog: names and definitions add_tool can copy into the document.", schema: s_empty, run: job::list_tool_catalog },
     Tool { name: "list_holder_library", description: "The built-in holder library: BT30, BT40 and CAT40 holders with ER collet or Weldon side-lock noses, and standalone ER11-ER40 chucks - names set_tool_holder takes, with their dimensions and the shanks they clamp.", schema: s_empty, run: holders::list_holder_library },
@@ -61,6 +62,8 @@ fn all() -> impl Iterator<Item = &'static Tool> {
         .iter()
         .chain(super::setup_tools::TOOLS)
         .chain(super::fixture_tools::TOOLS)
+        .chain(super::fixture_turn_tools::TOOLS)
+        .chain(super::fixture_profile_tools::TOOLS)
         .chain(super::align_tools::TOOLS)
         .chain(super::wcs_circle::TOOLS)
         .chain(super::coolant_tools::TOOLS)
@@ -318,7 +321,7 @@ fn s_add_op() -> Value {
     obj(
         json!({
             "kind": { "type": "string", "description": "Operation kind: label or key from list_operation_types." },
-            "tool": { "type": "string", "description": "A document tool name (add_tool first). Required, except for a kind that mounts no tool (list_operation_types says \"mounts_tool\": false - the Wire Contour): omit it there; naming one is refused." },
+            "tool": { "type": "string", "description": "A document tool name (add_tool first). Required, except for a kind that mounts no tool (list_operation_types says \"mounts_tool\": false): omit it there; naming one is refused." },
             "name": { "type": "string", "description": "Operation name; defaults to the kind's label plus a number." },
             "source": { "type": "string", "description": "\"stock\" (default) or a model name." },
             "params": { "type": "object", "description": "Fields to change from the kind's defaults." }

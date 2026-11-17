@@ -1995,7 +1995,7 @@ fn pocket_refuses_an_open_run() {
     let op = Operation {
         tool: "EM-0600-4FL".into(),
         src: sel("part", open),
-        params: OpParams::Pocket {
+        params: OpParams::Pocket { rest: None,
             blend_radius: None,
             links: camcraft_app::links::Links::PLANAR,
             tilt: None,
@@ -3816,6 +3816,7 @@ fn drilled_block() -> camcraft_app::geometry::Mesh {
 
 fn drill_params(holes: Vec<Hole>, top_z: f64, clearance_z: f64) -> OpParams {
     OpParams::Drill {
+        break_through: None,
         clearance_z: Height::fixed(clearance_z),
         retract_z: None,
         top_z: Height::fixed(top_z),

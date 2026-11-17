@@ -397,6 +397,6 @@ fn a_rotated_stock_refuses_rather_than_guessing() {
         Ok(_) => panic!("a rotated stock must refuse, never guess"),
         Err(e) => e.to_string(),
     };
-    assert!(msg.contains("rotation"), "{msg}");
+    assert!(msg.contains("turned off the machine axes"), "{msg}");
     assert_eq!(status(&world, "B"), OpStatus::Never);
 }

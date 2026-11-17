@@ -195,7 +195,7 @@ pub(super) fn list_operation_types(_env: &mut Env, _a: &Map<String, Value>) -> R
                 "fields": fields,
             });
             if !k.mounts_tool() {
-                kind["note"] = json!("mounts no library tool: add_operation takes no \"tool\" for this kind (the wire is the machine's EDM condition, named in params.condition)");
+                kind["note"] = json!("mounts no library tool: add_operation takes no \"tool\" for this kind");
             }
             kind
         })

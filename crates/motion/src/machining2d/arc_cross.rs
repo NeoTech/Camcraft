@@ -205,11 +205,9 @@ pub(super) fn post_crossing_free(
     tally: &mut ProofTally,
     post: impl Fn(&mut PathBuilder, Option<&[Vec<Seg>]>),
 ) -> Toolpath {
-    let notes = b.notes().to_vec();
-    crossing_free(b.at(), passes, runs, tally, |bb, runs| {
-        for n in &notes {
-            bb.note(n.clone());
-        }
+    // Each retry starts with the same builder, including its pending
+    // opening rapid. A bare cursor loses that clearance-position command.
+    crossing_free_from(|| b.clone(), passes, runs, tally, |bb, runs| {
         post(bb, Some(runs));
     })
     .0
@@ -221,12 +219,22 @@ pub(super) fn post_crossing_free(
 pub(crate) fn crossing_free(
     start: Point3,
     passes: &[Vec<Point2>],
+    runs: Vec<Vec<Seg>>,
+    tally: &mut ProofTally,
+    post: impl Fn(&mut PathBuilder, &[Vec<Seg>]),
+) -> (Toolpath, Vec<Vec<Seg>>) {
+    crossing_free_from(|| PathBuilder::new(start), passes, runs, tally, post)
+}
+
+fn crossing_free_from(
+    builder: impl Fn() -> PathBuilder,
+    passes: &[Vec<Point2>],
     mut runs: Vec<Vec<Seg>>,
     tally: &mut ProofTally,
     post: impl Fn(&mut PathBuilder, &[Vec<Seg>]),
 ) -> (Toolpath, Vec<Vec<Seg>>) {
     let posted = |runs: &[Vec<Seg>]| {
-        let mut bb = PathBuilder::new(start);
+        let mut bb = builder();
         post(&mut bb, runs);
         bb.finish()
     };
@@ -275,9 +283,10 @@ mod tests {
                 b.push(MoveKind::Feed, Point3::new(8.0, 0.0, -1.0 + dz), Some(500.0));
             }
         };
-        let b = PathBuilder::new(Point3::new(6.0, 0.0, -1.0));
+        let b = PathBuilder::approached(Point3::new(6.0, 0.0, -1.0));
         let mut t2 = t;
         let path = post_crossing_free(b, std::slice::from_ref(&pass), runs.clone(), &mut t2, post_at(0.0));
+        assert_eq!(path.moves[0].kind, MoveKind::Rapid, "a crossing retry keeps the opening rapid");
         let arcs = path.moves.iter().filter(|m| m.arc.is_some()).count();
         assert!(arcs < kept && t2.crossed >= 1, "arcs {arcs} of {kept}, {t2:?}");
         assert!(crate::verify::crossed_pairs(&path, 0.01).iter().all(|p| p.iter().all(|&i| path.moves[i].arc.is_none())));

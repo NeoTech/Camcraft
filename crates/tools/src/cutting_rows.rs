@@ -175,6 +175,9 @@ pub fn waterjet_row_for(rows: &[CuttingRow], material: WorkMaterial, thickness: 
 #[must_use]
 pub fn refusal_for_kind(rows: &[CuttingRow], kind: crate::tools::ToolKind) -> Option<String> {
     use crate::tools::ToolKind;
+    if kind == ToolKind::Wire {
+        return (!rows.is_empty()).then(|| "an EDM wire uses machine EDM conditions, not per-material cutting data rows".into());
+    }
     if kind != ToolKind::Waterjet {
         if rows.iter().any(|r| r.waterjet.is_some()) {
             return Some("waterjet cutting data requires a waterjet tool".into());

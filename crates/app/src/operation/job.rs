@@ -166,14 +166,10 @@ pub(super) fn unreached(what: &str) -> GenError {
 /// everything an arm used to refuse at lives on as a stored `Result`
 /// for `run_job` to take at that exact statement.
 pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJob, GenError> {
-    // #532: a wire EDM kind mounts no library tool - the machine's
-    // condition stands in its place, read (and refused by name) here.
+    // #532 / #2011: resolve the mounted library tool (Wire tool for Wire Contour)
+    // and, for Wire Contour, the machine condition pair validated against it.
+    let (tool, body, lathe_body, neck) = super::tool_gate::job_tool(world, op)?;
     let wire = super::wire_op::job_wire(world, op)?;
-    // Tool: the diameter drives the path, the body drives the reach law.
-    let (tool, body, lathe_body, neck) = match &wire {
-        Some((cond, _)) => (super::wire_op::job_tool(cond), None, None, Vec::new()),
-        None => super::tool_gate::job_tool(world, op)?,
-    };
     let setup = op.setup.as_deref();
     // #326: an op this slice has not verified in an aligned setup is
     // refused by name here, at the one door every generation passes -
@@ -263,7 +259,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         _ => None,
     };
     let slot_bound = match (&op.params, &op.src) {
-        (OpParams::Slot { .. }, SrcRef::Selection(items)) if !items.is_empty() => Some(super::slot_pick::slot_bound_of(world, items)),
+        (OpParams::Slot { .. }, SrcRef::Selection(items)) if !items.is_empty() => Some(super::slot_pick::slot_bound_of(world, setup, items)),
         _ => None,
     };
     let drive_chains = match &op.params {

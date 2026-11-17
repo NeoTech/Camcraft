@@ -49,7 +49,10 @@ mod stock_page;
 pub mod colorvision;
 pub mod ground_ink;
 pub mod window_chrome;
+pub(crate) mod post_dialog;
+mod post_dialog_tabs;
 mod post_options;
+mod post_script_options;
 mod program_info;
 pub mod cvd;
 mod app_icon;
@@ -164,6 +167,8 @@ mod trochoid_page;
 mod kind_editors;
 mod mill2d_more_page;
 mod mill2d_page;
+// #1815: 2D Pocket's "Rest machining" group on the Passes tab.
+mod rest_pocket_page;
 mod mill3d_page;
 mod multiaxis_page;
 mod op_page;
@@ -197,6 +202,8 @@ mod fixture_plate_rows;
 mod fixture_modvise_rows;
 pub(crate) mod fixture_accessory_dialog;
 mod fixture_accessory_rows;
+mod fixture_profile_dialog;
+mod fixture_profile_rows;
 pub(crate) mod shell;
 // #31: the winit window, loop and per-frame draw - native only; the
 // browser build keeps `shell` (the shared frame) and refuses `run` below.
@@ -250,6 +257,8 @@ mod fixture_modvise_tests;
 #[cfg(test)]
 mod fixture_accessory_tests;
 #[cfg(test)]
+mod fixture_profile_tests;
+#[cfg(test)]
 mod footer_tests;
 #[cfg(test)]
 mod dialog_tests;
@@ -267,6 +276,8 @@ mod slot_manual_tests;
 mod after_op_tests;
 #[cfg(test)]
 mod program_info_tests;
+#[cfg(test)]
+mod post_dialog_tests;
 #[cfg(test)]
 mod colorvision_tests;
 #[cfg(test)]
@@ -322,6 +333,8 @@ mod gate_route_tests;
 mod sinker_pass_tests;
 #[cfg(test)]
 mod sinker_machine_tests;
+#[cfg(test)]
+mod rest_pocket_tests;
 
 /// Entry for `--ui egui`; returns the process exit code. `--headless`
 /// selects the no-window proof (seeded document, fallback adapter, View3D

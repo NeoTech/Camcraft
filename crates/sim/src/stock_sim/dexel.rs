@@ -59,7 +59,7 @@ impl Dexel {
             stock_z: top_z,
             tiles: vec![None; nx.div_ceil(TILE) * ny.div_ceil(TILE)],
             history: Some(std::sync::Arc::new(super::carry_history::History::block(
-                x0, y0, x0 + nx as f64 * cell, y0 + ny as f64 * cell, top_z, cell,
+                x0, y0, x1, y1, top_z, cell,
             ))),
         })
     }

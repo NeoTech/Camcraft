@@ -15,9 +15,13 @@ use crate::schema::{
 };
 use crate::stock::StockShape;
 
+mod chain_memo;
+mod patch_memo;
 mod geometry;
 
-pub use geometry::{features_of, features_of_local, geometry_signature};
+pub use chain_memo::{chain_walks, resolve_chain};
+pub use patch_memo::{patch_builds, patch_rings, patches};
+pub use geometry::{feature_digests, features_of, features_of_local, features_of_shared, geometry_signature};
 use crate::tools::Tool;
 
 /// Create a named model entity at the origin with no geometry yet.

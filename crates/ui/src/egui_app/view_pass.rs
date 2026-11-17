@@ -87,7 +87,7 @@ pub(crate) fn encode(
         match se.prepare(device, queue, encoder, fv, &state.cam, &mvp, (ew, eh)) {
             Ok(t) => traced = t,
             Err(err) => {
-                state.status += &format!(" | traced stock: {err} - the sheet stands");
+                state.say_once(&format!("the cut stock cannot be drawn, the uncut stock shows: {err}"));
             }
         }
     }

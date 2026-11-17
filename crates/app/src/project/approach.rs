@@ -181,5 +181,6 @@ pub fn approach_from_dto(d: Option<&ApproachDto>) -> Approach {
         start_point: d.start_point.map(|[x, y]| crate::geo2d::Point2::new(x, y)),
         exit_point: d.exit_point.map(|[x, y]| crate::geo2d::Point2::new(x, y)),
         center_cutting: true,
+        material_top: None,
     }
 }

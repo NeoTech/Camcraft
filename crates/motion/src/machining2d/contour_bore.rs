@@ -51,7 +51,7 @@ pub(super) fn bore_entry(b: &mut PathBuilder, eng: &Engage, s: &BoreStep, lead: 
     // The material's top over this level: the plane above, or the top
     // of the cut on the first engagement; descents start that high plus
     // the plunge height (above it: rapid).
-    let mat_top = if s.first || prev_z >= p.clearance_z { p.top_z.min(prev_z) } else { prev_z };
+    let mat_top = if s.first || prev_z >= p.clearance_z { p.entry_top().min(prev_z) } else { prev_z };
     let from = if s.first || prev_z >= p.clearance_z { (mat_top + a.plunge_height).min(prev_z) } else { prev_z };
     // The level's first cut, as the pocket ladders read theirs: the
     // lead-in and the ring from the lead-in's start - where an entry that
@@ -95,7 +95,7 @@ pub(super) fn bore_entry(b: &mut PathBuilder, eng: &Engage, s: &BoreStep, lead: 
         Entry3D::Ramp if a.ramp_zigs() => {
             // M11.3 B: zig-zag at the angle along the lead-in and the
             // ring - every point on a path the room law proved.
-            let zf = if a.ramp_to_depth { (p.top_z + a.plunge_height).min(prev_z) } else { from };
+            let zf = if a.ramp_to_depth { (p.entry_top() + a.plunge_height).min(prev_z) } else { from };
             if zig_onto(b, &path, leg, tz, zf, z, a.ramp_angle, a.ramp_max_len, fd) {
                 None
             } else {
@@ -113,7 +113,7 @@ pub(super) fn bore_entry(b: &mut PathBuilder, eng: &Engage, s: &BoreStep, lead: 
             // angle instead, and where they are too short the dive is
             // named and flown at the plunge feed - never a straight-down
             // feed at the cutting feed.
-            let zf = if a.ramp_to_depth { (p.top_z + a.plunge_height).min(prev_z) } else { from };
+            let zf = if a.ramp_to_depth { (p.entry_top() + a.plunge_height).min(prev_z) } else { from };
             let angle = if !s.first && p.links.transition == Some(Entry3D::Ramp) {
                 level_angle(p.links.ramp_angle)
             } else {

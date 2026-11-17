@@ -89,6 +89,14 @@ fn every_catalog_row_paints_its_kind_glyph() {
     h.run();
     for (name, ct) in tools::catalog() {
         let label = format!("{name}  \u{d8}");
+        if !crate::machine_modes::tool_kind_offered(&h.state().state.world, ct.kind) {
+            assert!(
+                h.query_by_label_contains(&label).is_none(),
+                "unoffered catalog entry {name} ({:?}) stays hidden",
+                ct.kind
+            );
+            continue;
+        }
         h.get_by_label_contains(&label).scroll_to_me();
         h.run();
         h.run();

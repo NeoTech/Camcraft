@@ -252,7 +252,7 @@ fn framed_stock_chamfer_live_refusal_keeps_hint_without_local_move_number() {
     let (world, mut h) = job_without_part(HALF);
     let mut params = chamfer(1.0);
     if let OpParams::Chamfer2D { tilt, .. } = &mut params {
-        *tilt = Some(Tilt { a_deg: 0.0, b_deg: 10.0, origin: [0.0; 3] });
+        *tilt = Some(Tilt { basis_version: 1, a_deg: 0.0, b_deg: 10.0, origin: [0.0; 3] });
     }
     let warns = generated(&world, &mut h, CHAMFER, params);
     assert!(warns.iter().all(|w| !w.blocks_post()), "previously clear chamfer: {warns:?}");

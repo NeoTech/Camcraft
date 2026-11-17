@@ -51,13 +51,17 @@ fn four_corner_residues_are_cut_from_proved_stock_within_the_load() {
     // One entry per corner and depth: a corner is finished before the
     // tool leaves it.
     assert_eq!(r.plunges, 8, "plunges");
+    // Each pass is reached back along the one before it, not by riding
+    // the walls round from the corner's first landing (issue 2109: 967
+    // mm of air feed for 224 mm in cut before, 562 for 328 now).
+    assert!(r.air <= 2.0 * r.cut, "{:.0} mm of air feed for {:.0} mm in cut", r.air, r.cut);
     // The passes stay at the corners: no feed crosses the pocket's middle.
     for m in path.moves.iter().filter(|m| m.kind == MoveKind::Feed) {
         let (dx, dy) = (m.to.x.min(60.0 - m.to.x), m.to.y.min(40.0 - m.to.y));
         assert!(dx < 14.0 && dy < 14.0, "a feed at ({}, {}) is outside the corners", m.to.x, m.to.y);
     }
     assert!(path.notes.iter().any(|n| n.contains("planned on the remaining stock of the earlier operations")));
-    assert!(path.notes.iter().any(|n| n.contains("worst planned load")));
+    assert!(path.notes.iter().any(|n| n.contains("worst planned load") && n.contains("mm out of cut")));
 }
 
 #[test]
@@ -121,6 +125,8 @@ fn an_island_and_disconnected_rest_areas_are_each_entered_from_proved_space() {
     for &(at, _) in &pillars {
         assert!(sim.top_under(at, 0.5) <= BOTTOM + 1e-6, "the pillar at ({}, {}) still stands", at.x, at.y);
     }
+    // (Issue 2109: 955 mm of air feed for 250 mm in cut before, 485 for 388 now.)
+    assert!(r.air <= 1.5 * r.cut, "{:.0} mm of air feed for {:.0} mm in cut", r.air, r.cut);
 }
 
 #[test]
@@ -139,6 +145,12 @@ fn a_neck_the_earlier_tool_could_not_pass_is_cut_through_within_the_load() {
             assert!(sim.top_under(Point2::new(x, y), 0.3) <= BOTTOM + 1e-6, "the neck still stands at ({x}, {y})");
         }
     }
+    // A half loop is reached back along the one before it, and each
+    // mouth of the neck is cut through its phases before the tool
+    // leaves it (issue 2109: 37 plunges a depth and 3445 mm of air feed
+    // for 954 mm in cut before; 10 a depth and 1979 for 1438 now).
+    assert!(r.plunges <= 24, "{} plunges", r.plunges);
+    assert!(r.air <= 1.6 * r.cut, "{:.0} mm of air feed for {:.0} mm in cut", r.air, r.cut);
 }
 
 #[test]
@@ -238,3 +250,4 @@ fn degenerate_input_errors_and_never_panics() {
     }
     let _ = rest_adaptive(&region, &p, &some(&rect(100.0, 100.0, 110.0, 110.0)));
 }
+

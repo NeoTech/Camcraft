@@ -121,6 +121,7 @@ fn hole(x: f64, y: f64, radius: f64, floor_z: f64, through: bool) -> Hole {
 
 fn bore(holes: Vec<Hole>) -> OpParams {
     OpParams::Bore {
+        break_through: None,
         links: camcraft_app::links::Links::PLANAR,
         clearance_z: Height::fixed(25.0),
         retract_z: None,
@@ -138,6 +139,7 @@ fn bore(holes: Vec<Hole>) -> OpParams {
 
 fn thread(holes: Vec<Hole>) -> OpParams {
     OpParams::Thread {
+        break_through: None,
         clearance_z: Height::fixed(25.0),
         retract_z: None,
         top_z: Height::fixed(20.0),
@@ -252,7 +254,7 @@ fn thread_helices_are_timed_by_the_tools_pitch() {
     let drill = Tool { diameter: 20.0, shank_d: 20.0, flute_len: 30.0, ..catalog_tool("DR-0600") };
     let OpParams::Thread { clearance_z, top_z, .. } = thread(vec![]) else { unreachable!() };
     let holes_dr = vec![hole(15.0, 15.0, big, 0.0, false)];
-    let dr = OpParams::Drill { clearance_z, retract_z: None, top_z, bottom_z: None, cycle: camcraft_app::drilling::CycleChoice::Drill,
+    let dr = OpParams::Drill { break_through: None, clearance_z, retract_z: None, top_z, bottom_z: None, cycle: camcraft_app::drilling::CycleChoice::Drill,
         peck: 0.0, dwell: 0.0, feed: 100.0, plunge_feed: 80.0, holes: holes_dr, cross: vec![] };
     let (_w, _h, path) = job_tool("THD", thread_mill(6.0, pitch), "TM-0600", thread(holes.clone()), &[("DR", ("DR-20", Some(drill)), dr)]);
     assert!(path.all_finite());

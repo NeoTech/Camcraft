@@ -95,13 +95,26 @@ use super::*;
 /// must refuse a v61 file rather than post the program as O0001, where
 /// it could overwrite another program in the control's memory.
 /// v62 (#1453): old readers must not discard a tap's thread hand.
-/// v63 (#2015): a tool's cutting data holds an `unknown` row and rows
+/// v63 (#1557): a Drill, Bore or Thread may state its through-hole
+/// break-through (`break_through`). Absent is the kind's default - what
+/// every v62 file posted - so a v62 file steps up unchanged. An old
+/// reader must refuse a v63 file rather than drop a stated break-through
+/// and run the tip its default 1.0 mm past the floor, into what the
+/// user kept it out of.
+/// v64 (#2015): a tool's cutting data holds an `unknown` row and rows
 /// may state a stepdown and a stepover; a setup's stock may state its
 /// workpiece material. An old reader must refuse the file rather than
-/// drop the rows or the stock material the feeds were picked by. A v62
+/// drop the rows or the stock material the feeds were picked by. A v63
 /// file steps up unchanged: each tool's own rpm / feed is its `Unknown`
 /// row (derived at read).
-pub const PROJECT_VERSION: u32 = 63;
+/// v65 (#2133): old readers must not discard the tilted frame basis version.
+/// Version 64 and older tilts retain basis 0; new tilts state basis 1.
+/// v66 (#1962): MachineDto stores AC trunnion chain order, pivot/offset
+/// vectors, zero_offset, rollover, sign_convention, and `controller_rtcp`.
+/// Absent reads as before (v65 steps up unchanged); an old reader must
+/// refuse a v66 file rather than discard `controller_rtcp: false` and
+/// emit G43.4 RTCP from tilt vectors.
+pub const PROJECT_VERSION: u32 = 66;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ProjectError {
@@ -235,6 +248,13 @@ pub struct PostOptionsDto {
     /// (M0), additive (no version step).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub between_setups: Option<String>,
+    /// Per-post declared script option overrides keyed by `post_key` (#258),
+    /// additive (no version step); absent leaves all script defaults intact.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub script: std::collections::BTreeMap<
+        String,
+        std::collections::BTreeMap<String, crate::post::options::OptionValue>,
+    >,
 }
 
 /// The file mirror of the `PostRef` singleton (M3.3): exactly the two
@@ -500,6 +520,8 @@ pub enum ToolKindDto {
     /// `pitch`.
     ThreadMill,
     ThreadMillSingle,
+    /// Wire EDM wire (#2011): additive in the same way.
+    Wire,
 }
 
 impl ToolDto {
@@ -523,6 +545,7 @@ impl ToolDto {
                 ToolKind::Electrode => ToolKindDto::Electrode,
                 ToolKind::ThreadMill => ToolKindDto::ThreadMill,
                 ToolKind::ThreadMillSingle => ToolKindDto::ThreadMillSingle,
+                ToolKind::Wire => ToolKindDto::Wire,
             },
             diameter: t.diameter,
             corner_r: t.corner_r,
@@ -590,6 +613,7 @@ impl ToolDto {
                 ToolKindDto::Electrode => ToolKind::Electrode,
                 ToolKindDto::ThreadMill => ToolKind::ThreadMill,
                 ToolKindDto::ThreadMillSingle => ToolKind::ThreadMillSingle,
+                ToolKindDto::Wire => ToolKind::Wire,
             },
             diameter: self.diameter,
             corner_r: self.corner_r,

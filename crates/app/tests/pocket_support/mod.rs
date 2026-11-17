@@ -105,6 +105,19 @@ pub fn block_with_pocket(big_a: f64, big_b: f64, ring: &[(f64, f64)], floor: f64
     Mesh::from_facets(f)
 }
 
+/// The 40 x 40 x `top` block on [-20, 20]^2 with a radius-`rp` round
+/// pocket (128 chords) sunk to `floor` - the #1585 / #1593 / #1595
+/// fixture.
+pub fn round_pocket_block(rp: f64, floor: f64, top: f64) -> Mesh {
+    let ring: Vec<(f64, f64)> = (0..128)
+        .map(|i| {
+            let a = std::f64::consts::TAU * f64::from(i) / 128.0;
+            (rp * a.cos(), rp * a.sin())
+        })
+        .collect();
+    block_with_pocket(20.0, 20.0, &ring, floor, top)
+}
+
 /// An axis-aligned height field: cell `(i, j)` spans `xs[i]..xs[i+1]` x
 /// `ys[j]..ys[j+1]` and stands `h(i, j)` tall (> 0). Every vertical wall
 /// is split at every height in the field so no edge ends mid-edge

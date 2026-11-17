@@ -16,8 +16,11 @@ pub mod cutting_turn;
 pub mod smoothing;
 pub use camcraft_motion::drilling;
 pub mod fixture;
+// #744: editable spun & extruded fixture profiles + DXF/STEP integration.
+pub mod fixture_profile;
 // #339 slice 6: the user fixture library file.
 pub mod fixture_library;
+pub mod step_source;
 pub mod fixture_carried;
 // #561: locate the part in a fixture (or the fixture on the part) by mates.
 pub mod fixture_clash;
@@ -125,6 +128,8 @@ pub mod stock_export;
 pub mod stock_follow;
 pub mod stock_play;
 pub mod stock_play_worker;
+// #1666: the radius the stock sweeps about the lathe's spindle axis.
+pub mod stock_turn;
 pub mod stock_view;
 pub mod tool_library;
 pub mod tool_list;
@@ -139,6 +144,7 @@ pub use camcraft_tools::orientation;
 pub use camcraft_tools::catalog_fields;
 pub use camcraft_tools::cutting_rows as tool_cutting_rows;
 pub use camcraft_tools::waterjet as waterjet_tools;
+pub use camcraft_tools::wire as wire_tools;
 // #93: the drawn spun profile of a milling holder.
 pub use camcraft_tools::spun;
 // #93 slice 2: the drawn cutter law, and the tool's stored drawn cutter.

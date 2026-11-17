@@ -29,6 +29,8 @@ pub(super) const SOURCES: [&str; 3] = ["Stock box", "Model bounds", "Circle cent
 const CIRCLE: usize = 2;
 /// A button row's height, and the compass cells' size cap.
 const BUTTON_H: f32 = 24.0;
+/// The group holding the setup's work offset picker (#1648; drawn by `pages.rs`).
+pub(super) const OFFSET_GROUP: &str = "Work offset (G54-G59)";
 const CELL_MAX: Vec2 = Vec2::new(72.0, 30.0);
 
 /// The quarter turns, two rows of three: (label, setup axis, sign).

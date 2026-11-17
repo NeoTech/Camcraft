@@ -222,6 +222,9 @@ pub struct Reading {
     /// Stock left standing above the bottom inside the tool's reach (mm^2).
     pub left: f64,
     pub plunges: usize,
+    /// Planar feed in material and feed in air (mm).
+    pub cut: f64,
+    pub air: f64,
 }
 
 /// The laws every rest Adaptive path is held to: the verifier passes;
@@ -273,7 +276,13 @@ pub fn read_leaving(path: &Toolpath, region: &Region, sim: &mut Sim, leave: f64)
         .collect();
     // In reach: what a 4 mm tool's edge gets to, a tenth short of it.
     let reach = region.offset(-(R + leave)).unwrap().offset(R - 0.1).unwrap();
-    Reading { load, left: rest_area(&sim.dex, &reach, BOTTOM).unwrap(), plunges }
+    Reading {
+        load,
+        left: rest_area(&sim.dex, &reach, BOTTOM).unwrap(),
+        plunges,
+        cut: q.cut_len,
+        air: q.air_len + q.lift_len,
+    }
 }
 
 pub fn assert_load_held(r: &Reading) {

@@ -100,9 +100,9 @@ pub(super) fn operation_page(ui: &mut Ui, state: &mut State, name: &str, pal: &T
         } else if cancel_rename {
             state.rename_draft = None;
         }
-        prop_grid(ui, "op_header", |ui| header_rows(ui, state, &target, live.as_ref(), exists));
+        crate::frame_cost::time("ui/properties.op.header", || prop_grid(ui, "op_header", |ui| header_rows(ui, state, &target, live.as_ref(), exists)));
         if exists {
-            status(ui, state, &target, pal);
+            crate::frame_cost::time("ui/properties.op.status", || status(ui, state, &target, pal));
         }
         ui.separator();
         // The named sections (M1.4's tabs): a kind shows only the sections
@@ -112,7 +112,7 @@ pub(super) fn operation_page(ui: &mut Ui, state: &mut State, name: &str, pal: &T
         let tab = super::op_tabs::tab_bar(ui, kind, &mut state.op_tab, pal);
         super::geo_page::pick_mode_line(ui, state);
         if tab == SEC_GEO {
-            super::geo_page::pick_block(ui, state, &target, live_setup.as_deref(), pal);
+            crate::frame_cost::time("ui/properties.op.picks", || super::geo_page::pick_block(ui, state, &target, live_setup.as_deref(), pal));
         }
         // The single-concept tabs ride one titled group; Heights draws
         // one group per height and Lead in / Lead out its own groups.
@@ -122,12 +122,14 @@ pub(super) fn operation_page(ui: &mut Ui, state: &mut State, name: &str, pal: &T
             SEC_MACHINE => Some("Bar feeder"),
             _ => None,
         };
+        let fields = crate::frame_cost::span("ui/properties.op.fields");
         match title {
             Some(t) => {
                 group(ui, t, None, |ui| super::params_page::params_fields(ui, state, tab));
             }
             None => super::params_page::params_fields(ui, state, tab),
         }
+        drop(fields);
         if tab == SEC_FEEDS {
             // M13.2: material, edge, flutes and the suggestion.
             super::feeds_page::cutting_group(ui, state, &target);
@@ -135,16 +137,16 @@ pub(super) fn operation_page(ui: &mut Ui, state: &mut State, name: &str, pal: &T
         if tab == SEC_GEO {
             // The Boundary group (M11.5): how far the area reaches, under
             // the picks that say where it is.
-            super::boundary::boundary_group(ui, state);
+            crate::frame_cost::time("ui/properties.op.boundary", || super::boundary::boundary_group(ui, state));
         }
-        if let Some(note) =
+        if let Some(note) = crate::frame_cost::time("ui/properties.op.unresolved", || {
             unresolved_note(&state.world, live_setup.as_deref(), Some(&state.op_ui.src()), &state.op_ui.params)
-        {
+        }) {
             ui.colored_label(text_inks(ui, &state.world).warn, note);
         }
     });
     ui.set_max_width((out.inner_rect.width() - 12.0).max(120.0));
-    actions(ui, state, &target, live.as_ref(), exists, pal);
+    crate::frame_cost::time("ui/properties.op.actions", || actions(ui, state, &target, live.as_ref(), exists, pal));
 }
 
 /// Tool, Source and Setup as label | control rows of the header grid.

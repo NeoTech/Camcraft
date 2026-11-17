@@ -1002,6 +1002,46 @@ fn pp() -> PocketParams {
     }
 }
 
+// The crossing helper must retain the opening rapid even when entry XY
+// equals the builder cursor. Without it the post starts with a plunge.
+fn assert_pocket_origin_approach(strategy: PocketStrategy) {
+    let mut p = pp();
+    p.strategy = strategy;
+    p.tool_diameter = 8.0;
+    p.stepover = 2.0;
+    p.bottom_z = -1.0;
+    p.stepdown = 1.0;
+    p.links.approach.plunge_height = 0.0;
+    let first = pocket(&rect(-4.0, -4.0, 24.0, 24.0), &p).expect("valid pocket");
+    let entry = first.moves[0].to;
+    assert_eq!(first.moves[0].kind, MoveKind::Rapid);
+    let path = pocket(
+        &rect(-4.0 - entry.x, -4.0 - entry.y, 24.0 - entry.x, 24.0 - entry.y),
+        &p,
+    )
+    .expect("valid translated pocket");
+    let (rapid, plunge) = (&path.moves[0], &path.moves[1]);
+    assert_eq!(rapid.kind, MoveKind::Rapid, "{strategy:?}: {rapid:?}");
+    assert_eq!((rapid.from.x, rapid.from.y, rapid.from.z), (0.0, 0.0, p.clearance_z));
+    assert_eq!(rapid.to, rapid.from, "entry must be at the cursor");
+    assert_eq!(rapid.feed, None);
+    assert_eq!(plunge.kind, MoveKind::Plunge);
+    assert_eq!(plunge.from, rapid.to);
+    assert_eq!(plunge.to.z, p.top_z);
+    assert_eq!(plunge.feed, Some(p.plunge_feed));
+    assert!(path.is_chained() && path.all_finite());
+}
+
+#[test]
+fn offset_rings_at_origin_keeps_opening_rapid() {
+    assert_pocket_origin_approach(PocketStrategy::OffsetRings);
+}
+
+#[test]
+fn waterline_at_origin_keeps_opening_rapid() {
+    assert_pocket_origin_approach(PocketStrategy::Waterline);
+}
+
 fn in_closed(r: &Region, q: (f64, f64)) -> bool {
     let p = Point2::new(q.0, q.1);
     r.contains(p) || on_boundary(r, p)

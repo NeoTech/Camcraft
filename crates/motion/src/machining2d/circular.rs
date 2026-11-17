@@ -248,7 +248,7 @@ pub fn circular(_region: &Region, p: &CircularParams) -> Result<Toolpath, GenErr
             .with_entry(p.entry, p.helix_radius)
             .with_arc_radius(p.tool_diameter);
     }
-    let motion = motion.with_arc_radius(p.tool_diameter).with_links(p.links, p.helix_radius).with_top(p.top_z).with_ring_zig();
+    let motion = motion.with_arc_radius(p.tool_diameter).with_links(p.links, p.helix_radius).with_top(p.links.approach.entry_top(p.top_z)).with_ring_zig();
     let cert = center_region.as_ref().map(Cert::Region);
 
     let mut b = PathBuilder::approached(Point3::new(0.0, 0.0, p.clearance_z));

@@ -25,9 +25,10 @@
 //! Prime Directive: refused by name, never guessed - stock that is not
 //! proved, a cut depth below every proved floor, an entry without
 //! proved clearance, a load or a coverage that cannot be proved, a plan
-//! past its work budget. Every move below the retract plane is a feed
+//! past its work budget or its travel budget (`budget`). Every move below the retract plane is a feed
 //! or a plunge; every plunge stands where the stock proves it clear.
 
+mod budget;
 mod canon;
 mod entry;
 mod leads;
@@ -62,7 +63,7 @@ pub use stock::{REST_STOCK_FILM, RestStock, StockFloor};
 /// Refused by name: stock with no proved floor; a cut depth below every
 /// proved floor; rest material with no proved-clear entry; a pass whose
 /// load cannot be held; coverage that cannot be proved; a plan past its
-/// budget; nothing left to cut.
+/// work or travel budget; nothing left to cut.
 pub fn rest_adaptive(region: &Region, p: &PocketParams, stock: &RestStock) -> Result<Toolpath, GenError> {
     guarded(region, p, stock, Guards::ALL)
 }

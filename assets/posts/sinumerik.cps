@@ -18,6 +18,7 @@ afterModes = true; // reads PARAM AfterOperation (#110): the engine refuses a st
 workOffsetIndex = true; // reads PARAM WorkOffset as the 1-based offset number (#931)
 workOffsetMax = 6;      // G54..G57, G505, G506 (#934); more G505+ frames need the machine's frame count (#931)
 programUnits = "mm inch"; // #902: writes the document's unit (postOptions.Units), G710 / G700
+endUnits = "G700 G710";   // #2189: switches end units before M2 when asked
 
 // Determinism law: no timestamps, no randomness - the same stream
 // always posts to the same text (golden files depend on it).
@@ -705,6 +706,15 @@ function onCycle() {
     msg("canned cycle " + g + " has no feed rate - refused: without F the control drills at whatever feed was last modal");
     return;
   }
+  // #1445: G86 (feed in, spindle stop, rapid out) has no dwell word on
+  // this control (Fanuc's and Haas's published G86 formats are X Y Z R F,
+  // with P only on G82/G88/G89). A P written on G86 is not read, so a
+  // bore dwell is refused by name, never dropped. Sinumerik's ISO mode is
+  // not verified for a G86 P either, so it refuses the same.
+  if (g === "G86" && ms > 0) {
+    msg("canned cycle G86 (bore) has no dwell word on this control - a " + (ms / 1000) + " s dwell is refused, not dropped; set the dwell to 0");
+    return;
+  }
   if (spindleStopped("canned cycle " + g)) return;
   if (!xyFirst(p.X, p.Y, p.R, false)) return;  // #1633: refused - the move is not written
   cycleSeat(p);
@@ -836,6 +846,15 @@ function onProbeResult() {
 // ------------------------------------------------------------ footer
 // Homing rides machine coordinates (G53), not a stored home point; the
 // height is the machine's stated safe Z (#503, safeZ).
+// #2189: Group 13 unit word (G700 inch / G710 mm, lengths and feeds)
+// after the final retract, right before M2, when postOptions.EndUnits
+// asks for the other unit.
+function endUnitsWord() {
+  var want = typeof postOptions !== "undefined" && postOptions ? postOptions.EndUnits : undefined;
+  if (want === "inch" && !inch) return "G700";
+  if (want === "mm" && inch) return "G710";
+  return "";
+}
 function onClose() {
   endPreamble();
   // #504: a trip home with nothing written after it (a trailing Go
@@ -844,5 +863,7 @@ function onClose() {
     var z = safeZ();
     if (z !== null) block(["G53", "Z" + fu(z)]);
   }
+  var u = endUnitsWord();
+  if (u) block([u]);
   block(["M2"]);
 }

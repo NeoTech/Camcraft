@@ -251,7 +251,11 @@ fn contour_impl(region: &Region, p: &ContourParams, part: Option<PartRef<'_>>) -
         } else {
             ap.overlap.min(ring.len)
         };
-        let keeps = if tabbed {
+        let keeps = if tabbed && picked.is_some() {
+            // #1473: the tab windows measured from the picked start, so
+            // every level enters at the pick.
+            ring.tab_keeps_from_start(p.tab_count as usize, p.tab_width)
+        } else if tabbed {
             ring.tab_keeps(p.tab_count as usize, p.tab_width)
         } else {
             vec![(0.0, ring.len)]
@@ -273,7 +277,9 @@ fn contour_impl(region: &Region, p: &ContourParams, part: Option<PartRef<'_>>) -
             // extensions ride the same room (lead_ext).
             let (entry, lead, lead_off) = seam_leads(&walk, &poly, p, &legal, &mut lead_notes);
             let (entry, lead, lead_off) = extend_leads(entry, lead, lead_off, &walk, &poly, p, &legal, &mut lead_notes);
-            if picked.is_some() {
+            if picked.is_some() && k == 0 {
+                // The first window begins at the pick (tabbed levels too);
+                // a later one begins after a tab, the tab law's start.
                 contour_start::lead_held(p, poly[0], &lead)?;
             }
             // The overlap (M11.3 C): the walk retraces its own first
@@ -379,7 +385,7 @@ fn contour_impl(region: &Region, p: &ContourParams, part: Option<PartRef<'_>>) -
                 let cur = b.at();
                 b.push(MoveKind::Feed, Point3::new(cur.x, cur.y, hop_z), Some(p.feed));
                 b.push(MoveKind::Rapid, Point3::new(e2.x, e2.y, hop_z), None);
-                super::contour_link::guard(&mut b, p, e2, lead_top, p.top_z, "the dive past a tab");
+                super::contour_link::guard(&mut b, p, e2, lead_top, p.entry_top(), "the dive past a tab");
                 b.push(MoveKind::Plunge, Point3::new(e2.x, e2.y, lead_top), Some(p.plunge_feed));
             }
             first_entry = false;

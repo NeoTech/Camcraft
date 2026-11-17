@@ -1,0 +1,21 @@
+## #258 - Post options dialog and per-post declared properties
+
+**What was decided.**
+
+- Each post processor (`.cps`) declares its own user-configurable script options in an optional top-level `declaredOptions` object (`type`, `title`, `group`, `description`, `default`, optional `min`/`max` bounds, or `values` choices), parsed by `camcraft_post::post::options`. Host-controlled keys (`Units`, `Threading`, `Smoothing`, `EndUnits`, `Explain`, `BetweenSetups`) are reserved and refused if declared by a script.
+- Shipped milling posts (`fanuc`, `haas`, `mazak`, `doosan-dnm`, `tormach`, `grblhal`, `tinyg`, `carvera`) declare their dialect-appropriate options (`showSequenceNumbers`, `sequenceNumberStart`, `sequenceNumberIncrement`, `separateWordsWithSpace`, `writeMachine`, `writeToolList`, `writeVersion`, `optionalStop`, plus `useRadiusArcs`, `safeRetract`, Doosan DNM modal options, and TinyG `SpindleDwellSeconds`). All existing defaults match prior posted output byte-for-byte; `safeRetract = "G53"` refuses by name when `machine.safeRetractZ` is absent, and `useRadiusArcs` splits full circles into 180° R-arcs.
+- Per-post overrides are stored as `BTreeMap<String, BTreeMap<String, OptionValue>>` keyed by canonical `post_key(&PostRef)` (`"builtin:<name>"` unifying `PostRef::Builtin` and `PostRef::Named("Fanuc")`, or `"file:<path>"`), on both the document `PostScriptOptions` singleton and optional `SetupDef::post_properties`. Saving to `.camproj` adds `post_options.script` and `SetupDto::post_properties` additively without bumping `PROJECT_VERSION`.
+- Switching posts preserves per-post overrides in the map. In multi-setup non-per-op single-file programs sharing a post, `setup_post_options::program_problems` flags resolved script-option disagreements before posting. Switching a setup to follow the document clears both `post_options` and `post_properties` atomically via `SetPostSettings`.
+- On desktop, `CommandKind::PostProgramDialog` opens an in-app `"Post"` window (`State::post_dialog`) with `Settings` (remembered output folder/filename with post dialect extension, program number/comment, built-in post switches, grouped `declaredOptions` + Reset to defaults) and `Operations` tabs, applying changes in one undo unit (`SetPostSettings`) or reporting refusals inline. Browser builds keep `download_program()`. On the `SetupPage::Post` inspector, `"Post script options"` sits in a collapsible section below `options_ownership` so existing switches stay within viewport bounds.
+- Exposed uniformly on MCP (`get_post_options` / `set_post_options` with `script_schema`, `script_options`, and `null` key reset), CLI (`camcraft-cli process --post-option <k=v>`), and JS scripting (`cam.post({ options })`).
+
+**Why.** Hardcoding post properties in the UI or app would break when users load custom `.cps` files and scatter dialect rules across layers; reading `declaredOptions` from the script keeps posts self-describing. Storing per-post maps in project files without bumping `PROJECT_VERSION` preserves compatibility with existing files and snapshots. Keeping `PostProgramDialog` closed by default in `State::new()` leaves golden viewport snapshots undisturbed.
+
+**Considered and dropped.**
+
+- Hardcoding per-post fields in `Schema::PostOptions`. Dropped: cannot support arbitrary user `.cps` files or dialect-specific groups without app code changes.
+- Bumping `PROJECT_VERSION`. Dropped: optional defaulted JSON fields read older files untouched and write no keys when empty.
+- Post-time machine or unit overrides inside the Post dialog, or moving `.mch` machine limits into `postOptions`. Dropped: machine definitions and document units have single sources of truth elsewhere in setup settings.
+- Rendering expanded script-option groups directly inline above `options_ownership` on `SetupPage::Post`. Dropped: vertical height and wide controls pushed `"Explain G-code"` and setup-ownership controls past the narrow Properties pane bounds.
+
+**Cost to change later.** Schema metadata (`DeclaredOption` / `OptionValue`) is confined to `camcraft_post::post::options` and consumed generically across `camcraft-app` and `camcraft-ui`; adding new field kinds requires extending `OptionKind`, validation, and `post_script_options::draw_option_row`.

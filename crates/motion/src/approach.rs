@@ -165,6 +165,15 @@ pub struct Approach {
     /// into the level's solid - the helix, then the ramp, stand in, or
     /// the operation is refused by name.
     pub center_cutting: bool,
+    /// The top of the material standing over the operation's region when
+    /// it is above the top of the cut (#1559): the stock a Top set below
+    /// the faced or raw top carries. Not a saved parameter: the
+    /// application lays it over each generation's copy, read from the
+    /// stock and the program ahead. `Some` starts the first descent at the
+    /// plunge height over it and feeds down through the carried stock to
+    /// the first level - never a rapid into it. `None` (every stored op):
+    /// the top of the cut is the material's top, as before.
+    pub material_top: Option<f64>,
 }
 
 /// The note prefix of a non-centre-cutting fallback.
@@ -228,7 +237,26 @@ impl Approach {
         start_point: None,
         exit_point: None,
         center_cutting: true,
+        material_top: None,
     };
+
+    /// The material's top over the first level (#1559): the top of the
+    /// cut, or the carried stock's top where the application stated one
+    /// above it.
+    #[must_use]
+    pub fn entry_top(&self, top_z: f64) -> f64 {
+        match self.material_top {
+            Some(m) if m.is_finite() && m > top_z => m,
+            _ => top_z,
+        }
+    }
+
+    /// Does the first descent feed through stock above the top of the
+    /// cut (#1559)?
+    #[must_use]
+    pub fn carries_stock(&self, top_z: f64) -> bool {
+        self.entry_top(top_z) > top_z
+    }
 
     #[must_use]
     pub fn is_default(&self) -> bool {

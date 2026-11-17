@@ -1,0 +1,12 @@
+## #1840 - Enable 3D Finish verify gate and fix exposed gouges
+
+**Decided:** Remove ungenerated roughing op `R1` and `EM-0600-4FL` from the `shared_face_bodies_finish` fixture so `verify` executes across all six Z-bands, asserting `gate.skipped` and `gate.not_judged` are absent, zero gouges, `gate.ok == true`, and `S1`'s genuine `shank_hit` collision on 118 mm stock. Fix three 3D finishing bugs exposed by the active verify gate:
+1. Add shallow-edge ellipse curvature sampling (`cos_min^3` with `MAX_CHORD = 0.006`) and exact `theta = 0` slice crossings in `finishing3d::scan`.
+2. Add full-segment overhang and tight-wall column trimming (`finishing3d::rings_overhang`) for 3-axis ring walks (`ColumnLaw` enforces `r - min(tol, 0.005)` everywhere when `tol <= 0.05` and enforces `r - min(tol, 0.005)` strictly against overhead facets above `cz`), leaving 5-axis `swarf` / `swarf_multi` under-equator rings untrimmed.
+3. Cap `raster_pass_spaced` `eps_chord` at `0.005` mm (half `DEV_TOL = 0.01` mm) in `finishing3d::raster`.
+
+**Why:** Removing `R1` revealed genuine gouges on four bands up to `12.69` mm where earlier asserts only saw an empty verify list. Shallow wall edges with few `ds` directions and overhang canopies only checked at ring start vertices allowed cuts to enter walls and ceilings. Off-center convex facet kinks let midpoint-checked chords exceed `DEV_TOL`. Using exact `cos_min^3` curvature keeps dome cap goldens identical, `wall_lim` separation preserves legal `tolerance = 0.1` plateau goldens while catching steep-wall V-notches and overhead solids at `tolerance <= 0.05`, and keeping 5-axis swarf rings untrimmed preserves `swarf_pose_continuity`.
+
+**Dropped:** Keeping all tying maxima (`s >= b - eps`) in `push_support_dir` or unconditionally emitting `theta = 0` ahead of the chord filter broke existing plateau/dome `.cl` goldens. Using `r - 0.005` on coarse `tolerance = 0.1` walls trimmed legal `2.984` mm walls. Trimming 5-axis swarf rings with vertical `+Z` columns broke under-equator swarf toolpaths. Placing overhang trimming inside `support.rs` and `rings.rs` grew files past ~400 lines; isolating `rings_overhang.rs` with `#[path]` avoids editing `finishing3d/mod.rs` (avoiding overlap with PR #1713) and keeps `support.rs` unchanged.
+
+**Cost to change later:** All fixes live inside `camcraft_motion::finishing3d` (`scan.rs`, `rings.rs`, `rings_overhang.rs`, `raster.rs`) and test fixtures (`finish3d_overhang_and_chord.rs`, `shared_face_bodies_finish.rs`). None of the choices alter public APIs or file formats.

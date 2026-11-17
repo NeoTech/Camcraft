@@ -580,7 +580,7 @@ pub(crate) fn feature_segments(
             }
         }
         FeatureSel::Chain(cid) => {
-            let Some(chain) = feature::resolve_chain(&features, cid) else {
+            let Some(chain) = camcraft_app::model::resolve_chain(&features, cid) else {
                 return;
             };
             let pts = feature::chain_points(&features, &chain);
@@ -803,7 +803,9 @@ const GRID_MAX_COORD: f64 = 1.0e9;
 /// Every fifth line is a major one (0.5, 1, 5, 10, 50 ... on a 1-2-5 step).
 const GRID_MAJOR_EVERY: i64 = 5;
 
-/// The Z=0 ground grid: the machine table plane under the part, one line
+/// The ground grid: the floor under the bodies (#2172: at
+/// [`crate::floor::floor_z`], the lowest point of the model, the stock and
+/// the setup's fixtures, so they all stand on it), one line
 /// per 1-2-5 step of `dist / 10`, centred on the camera target and snapped
 /// to round machine coordinates so the spacing reads in whole millimetres
 /// at any zoom. World-space geometry in the overlay buffer, not a
@@ -829,6 +831,7 @@ pub(crate) fn ground_grid_lines(state: &State) -> Vec<[f32; 6]> {
     {
         return Vec::new();
     }
+    let z = crate::floor::floor_z(state);
     let reach = step * GRID_HALF_STEPS as f64;
     let (k0x, k1x) = (
         ((cx - reach) / step).floor() as i64,
@@ -845,12 +848,12 @@ pub(crate) fn ground_grid_lines(state: &State) -> Vec<[f32; 6]> {
     for k in k0y..=k1y {
         let y = k as f64 * step;
         let c = grid_ink(k, ciy);
-        push_line(&mut out, Point3::new(cx - reach, y, 0.0), Point3::new(cx + reach, y, 0.0), c);
+        push_line(&mut out, Point3::new(cx - reach, y, z), Point3::new(cx + reach, y, z), c);
     }
     for k in k0x..=k1x {
         let x = k as f64 * step;
         let c = grid_ink(k, cix);
-        push_line(&mut out, Point3::new(x, cy - reach, 0.0), Point3::new(x, cy + reach, 0.0), c);
+        push_line(&mut out, Point3::new(x, cy - reach, z), Point3::new(x, cy + reach, z), c);
     }
     out
 }
@@ -941,11 +944,12 @@ pub(crate) fn collect_overlay(state: &State) -> Vec<[f32; 6]> {
             }
         }
     }
-    out.extend(toolpath_lines(state));
-    out.extend(region_lines(state));
-    out.extend(height_plane_lines(state));
-    out.extend(crate::work_envelope::envelope_lines(state));
-    out.extend(selection_feature_lines(state));
+    use crate::frame_cost::time;
+    out.extend(time("scene/overlay.toolpaths", || toolpath_lines(state)));
+    out.extend(time("scene/overlay.regions", || region_lines(state)));
+    out.extend(time("scene/overlay.height_planes", || height_plane_lines(state)));
+    out.extend(time("scene/overlay.envelope", || crate::work_envelope::envelope_lines(state)));
+    out.extend(time("scene/overlay.selection_features", || selection_feature_lines(state)).iter().copied());
     capped(out)
 }
 
@@ -1140,7 +1144,7 @@ pub(crate) fn region_lines(state: &State) -> Vec<[f32; 6]> {
             continue; // the region plane's source is gone - draw nothing
                       // rather than an outline at a guessed level
         };
-        if let Some(region) = operation::region_of(&state.world, &op) {
+        if let Some(region) = crate::frame_memo::region_of(&state.world, &name, &op) {
             for l in region.loops() {
                 let pts = l.points();
                 if pts.len() < 3 {
@@ -1191,7 +1195,7 @@ pub(crate) fn shown_regions(state: &State) -> Vec<(f64, Option<Region>)> {
         let Some(op) = model::operation_of(&state.world, &entity) else {
             continue;
         };
-        let region = operation::region_of(&state.world, &op);
+        let region = crate::frame_memo::region_of(&state.world, &name, &op);
         if let Some(z) = operation::region_z(&state.world, op.setup.as_deref(), Some(&op.src), &op.params)
             && (region.is_some() || !operation::chains_of(&state.world, &op).is_empty())
         {
@@ -1682,7 +1686,18 @@ pub(crate) fn height_plane_lines(state: &State) -> Vec<[f32; 6]> {
 /// selection gates as the rest of `collect_overlay`, so picks hold their
 /// place while orbiting. A vanished pick - hidden model, deleted entity,
 /// stale id - draws nothing rather than a ghost, the hover rule again.
-pub(crate) fn selection_feature_lines(state: &State) -> Vec<[f32; 6]> {
+///
+/// #2250: the lines are built when the input changes and read from
+/// [`crate::pick_line_memo`] on other frames.
+pub(crate) fn selection_feature_lines(state: &State) -> std::sync::Arc<[[f32; 6]]> {
+    let items = shown_picks(state);
+    crate::pick_line_memo::lines(state, &items, overlay(Overlay::Pick), || gizmo_len(state), || feature_lines(state, &items))
+}
+
+/// [`selection_feature_lines`] without the memo: one real build, for the
+/// pins that prove a hit equals a fresh build.
+#[cfg(test)]
+pub(crate) fn selection_feature_lines_fresh(state: &State) -> Vec<[f32; 6]> {
     feature_lines(state, &shown_picks(state))
 }
 
@@ -1760,7 +1775,7 @@ fn feature_lines(state: &State, items: &[GeoSel]) -> Vec<[f32; 6]> {
                 }
             }
             FeatureSel::Chain(cid) => {
-                let Some(chain) = feature::resolve_chain(&features, cid) else {
+                let Some(chain) = camcraft_app::model::resolve_chain(&features, cid) else {
                     continue;
                 };
                 let pts = feature::chain_points(&features, &chain);

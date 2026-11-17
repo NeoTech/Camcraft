@@ -310,6 +310,7 @@ fn random_stepdowns_and_floors_never_cut_below_a_floor() {
 
 fn drill_op(bottom: Option<f64>) -> OpParams {
     OpParams::Drill {
+        break_through: None,
         clearance_z: Height::fixed(30.0),
         retract_z: None,
         top_z: Height::fixed(22.0),

@@ -114,9 +114,11 @@ pub fn properties(ui: &mut Ui, state: &mut State, pal: &Tokens) {
                 ui.separator();
                 super::wcs_page::wcs_page(ui, state);
                 // #343: the WCS node's dialog names its post word too.
+                // #1648: the Work offset (G54-G59) control lives here, not on the Setup page.
                 if let Some(name) = active.as_deref() {
-                    ui.separator();
-                    super::setup_wcs_pick::picker(ui, state, name);
+                    super::layout::group(ui, super::wcs_page::OFFSET_GROUP, None, |ui| {
+                        super::setup_wcs_pick::picker(ui, state, name);
+                    });
                 }
                 setup_error(ui, state);
             }

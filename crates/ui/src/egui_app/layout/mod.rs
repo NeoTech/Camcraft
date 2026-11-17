@@ -265,6 +265,7 @@ pub(super) fn view_drop(
                     ViewRow::Panel(pn) => Some(open.get(*pn)),
                     ViewRow::Reset => None,
                 };
+                super::painted::menu_item(&resp, row_label(*row), live, checked);
                 if let Some(on) = checked {
                     let b = Rect::from_center_size(
                         r.left_center() + Vec2::new(14.0, 0.0),

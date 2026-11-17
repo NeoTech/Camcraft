@@ -35,7 +35,7 @@ pub(super) fn explain_switch(ui: &mut Ui, state: &mut State) {
 /// The pass word a lathe post writes when it does not write the cycle:
 /// G32 (Fanuc) or G33 (LinuxCNC / PathPilot); `None` for a post with no
 /// threading option.
-fn pass_word(post: &PostRef) -> Option<&'static str> {
+pub(super) fn pass_word(post: &PostRef) -> Option<&'static str> {
     match post {
         PostRef::Named(n) if n == "Fanuc Lathe" => Some("G32"),
         PostRef::Named(n) if n == "Tormach PathPilot Lathe" => Some("G33"),
@@ -93,19 +93,39 @@ pub(super) fn smoothing_switch(ui: &mut Ui, state: &mut State) {
     }
 }
 
-/// The end-units row (#596), when the document posts through Tormach
-/// PathPilot: the unit the control is left in after M30 (LinuxCNC's
-/// program end does not reset G20 / G21). "Leave" is the default and
-/// posts the program unchanged.
+/// The end-units row (#596, #2189), when the document posts through a
+/// post declaring `endUnits` words (e.g. `G20`/`G21` or `G700`/`G710`):
+/// the unit the control is left in after program end. "Program's unit"
+/// is the default and posts the program unchanged.
 pub(super) fn end_units_picker(ui: &mut Ui, state: &mut State) {
-    if posting::post_of(&state.world) != PostRef::Named("Tormach PathPilot".into()) {
-        return;
-    }
+    let words = posting::end_units_words(&posting::post_of(&state.world))
+        .ok()
+        .flatten();
     let now = posting::post_options(&state.world);
+    let Some((inch_word, mm_word)) = words else {
+        if let Some(asked) = match now.end_units {
+            EndUnits::Inch => Some("Inch"),
+            EndUnits::Millimeters => Some("mm"),
+            EndUnits::Leave => None,
+        } {
+            ui.horizontal(|ui| {
+                ui.label(format!("End in: {asked} (not supported by this post)"));
+                if ui.button("Reset to Program's unit").clicked() {
+                    state.pending.push_back(CommandKind::SetPostOptions(PostOptions {
+                        end_units: EndUnits::Leave,
+                        ..now
+                    }));
+                }
+            });
+        }
+        return;
+    };
+    let inch_label = format!("Inch ({inch_word})");
+    let mm_label = format!("mm ({mm_word})");
     let label = |u: EndUnits| match u {
         EndUnits::Leave => "Program's unit",
-        EndUnits::Inch => "Inch (G20)",
-        EndUnits::Millimeters => "mm (G21)",
+        EndUnits::Inch => inch_label.as_str(),
+        EndUnits::Millimeters => mm_label.as_str(),
     };
     let mut pick: Option<EndUnits> = None;
     ui.horizontal(|ui| {
@@ -120,7 +140,7 @@ pub(super) fn end_units_picker(ui: &mut Ui, state: &mut State) {
                 }
             })
             .response
-            .on_hover_text("the unit the control is left in after the program: M30 does not reset G20/G21, so a mm program on an inch-run control leaves the DRO and MDI in mm unless the unit word is written before M30");
+            .on_hover_text("the unit the control is left in after the program: M30 does not reset the unit word on these controls, so a mm program on an inch-run control leaves the DRO and MDI in mm unless the unit word is written before program end");
     });
     if let Some(u) = pick {
         state.pending.push_back(CommandKind::SetPostOptions(PostOptions { end_units: u, ..now }));

@@ -193,7 +193,7 @@ pub fn slot(a: Point2, b: Point2, p: &SlotParams) -> Result<Toolpath, GenError> 
         None if p.links == Links::PLANAR => None,
         None => stadium_center(a, b, h),
     };
-    motion = motion.with_arc_radius(p.tool_diameter).with_links(p.links, p.helix_radius).with_top(p.top_z);
+    motion = motion.with_arc_radius(p.tool_diameter).with_links(p.links, p.helix_radius).with_top(p.links.approach.entry_top(p.top_z));
     let link_cert = match (&tess, &link_tess) {
         (Some(t), _) | (None, Some(t)) => Some(Cert::Stadium { a, b, h, tess: t }),
         (None, None) => None,
