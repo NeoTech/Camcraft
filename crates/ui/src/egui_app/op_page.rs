@@ -384,7 +384,7 @@ fn actions(ui: &mut Ui, state: &mut State, target: &str, live: Option<&Operation
     // or which edited field the door will refuse (crate::feedback).
     let apply_hint = crate::feedback::apply_hint(live.map(|o| &o.params), &state.op_ui.params, unchanged);
     let has_path =
-        exists && model::find_by_name(&state.world, target).and_then(|e| model::toolpath_of(&state.world, &e)).is_some();
+        exists && model::find_by_name(&state.world, target).is_some_and(|e| model::has_toolpath(&state.world, &e));
     let inks = text_inks(ui, &state.world);
     if let Some(msg) = state.error_for(ErrorScope::Operation).map(str::to_owned) {
         // #261 part 2: a refusal that names its spot is a link that

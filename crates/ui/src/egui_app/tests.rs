@@ -85,6 +85,7 @@ mod geo_row_hover;
 mod selection_frame_cost;
 mod frame_cost_caches;
 mod frame_cost_probe;
+mod frame_cost_ops_probe;
 mod pick_mode;
 mod spindle_row;
 mod stock_size;

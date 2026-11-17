@@ -18,10 +18,12 @@ use crate::stock::StockShape;
 mod chain_memo;
 mod patch_memo;
 mod geometry;
+mod toolpath_read;
 
 pub use chain_memo::{chain_walks, resolve_chain};
 pub use patch_memo::{patch_builds, patch_rings, patches};
 pub use geometry::{feature_digests, features_of, features_of_local, features_of_shared, geometry_signature};
+pub use toolpath_read::{toolpath_nonempty, toolpath_warning_count, with_toolpath};
 use crate::tools::Tool;
 
 /// Create a named model entity at the origin with no geometry yet.

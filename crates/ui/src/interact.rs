@@ -452,7 +452,7 @@ const AXIS_NAMES: [&str; 3] = ["X", "Y", "Z"];
 
 /// Triad extent for the current document (never smaller than 10 mm).
 fn gizmo_len(state: &State) -> f64 {
-    let extent = model::solid_world_aabb(&state.world)
+    let extent = crate::solid_aabb_memo::solid_world_aabb(&state.world)
         .map(|b| {
             (b.max.x - b.min.x)
                 .max(b.max.y - b.min.y)
@@ -1023,24 +1023,9 @@ pub fn toolpath_lines(state: &State) -> Vec<[f32; 6]> {
     // M13.4: the move kinds wear the viewer's colour-vision palette
     // (Off = the three consts above, unchanged).
     let pal = crate::egui_app::colorvision::palette_of(&state.world);
-    for (name, entity) in camcraft_app::setup::operation_order(&state.world) {
-        // Browser-eye hidden: the cache still exists and still posts, it
-        // just does not draw (display state, never a geometry change).
-        if state.hidden_paths.contains(&name) || state.op_hidden_by_setup(&name) {
-            continue;
-        }
-        let Some(cache) = model::toolpath_of(&state.world, &entity) else {
-            continue;
-        };
-        let selected = model::is_selected(&state.world, &entity);
-        if !selected && !state.show_all_paths {
-            continue;
-        }
-        let dim = if selected { 1.0 } else { OTHERS_DIM };
-        // #261: warned moves wear the gouge colour (crate::path_lines).
-        if !crate::path_lines::cache_lines(&mut out, &cache, pal, dim, arm) {
-            return out;
-        }
+    // #2201: each drawn path's lines come from the per-input memo.
+    if !crate::path_line_memo::shown_paths(&mut out, state, pal, arm, OTHERS_DIM) {
+        return out;
     }
     // #261 part 3: and draws the moves it had built as a dashed ghost
     // (crate::refusal_ghost) - off the refusal, never off the operation.
@@ -1069,7 +1054,7 @@ pub(crate) fn arc_segments(m: &camcraft_app::cl::Move) -> Vec<(Point3, Point3)> 
 /// Chevron size follows the document: 1% of the solid extent, floored so
 /// a small part still reads direction.
 fn chevron_arm(state: &State) -> f64 {
-    let extent = model::solid_world_aabb(&state.world)
+    let extent = crate::solid_aabb_memo::solid_world_aabb(&state.world)
         .map(|b| {
             (b.max.x - b.min.x)
                 .max(b.max.y - b.min.y)
@@ -1642,7 +1627,7 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
 /// of the material. Nothing resolvable, or a non-finite pad, leaves the
 /// planes unplaced - never a rectangle of nonsense extent.
 pub(crate) fn plane_rect(state: &State) -> Option<[f64; 4]> {
-    let b = model::stock_world_aabb(&state.world).or_else(|| model::solid_world_aabb(&state.world))?;
+    let b = model::stock_world_aabb(&state.world).or_else(|| crate::solid_aabb_memo::solid_world_aabb(&state.world))?;
     let pad = model::find_by_name(&state.world, &state.op_ui.tool)
         .and_then(|e| model::tool_of(&state.world, &e))
         .map(|t| t.diameter)

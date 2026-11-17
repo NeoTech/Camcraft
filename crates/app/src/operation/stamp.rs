@@ -240,11 +240,10 @@ pub fn status_of(world: &World, entity: &flecs_ecs::prelude::Entity) -> OpStatus
     let Some(op) = model::operation_of(world, entity) else {
         return OpStatus::Never;
     };
-    let Some(cache) = model::toolpath_of(world, entity) else {
+    // A cache with no moves is no cache; read in place (#2201: the tree
+    // and the status bar ask this for every operation on every frame).
+    if !model::toolpath_nonempty(world, entity) {
         return OpStatus::Never;
-    };
-    if cache.path.is_empty() {
-        return OpStatus::Never; // a cache with no moves is no cache
     }
     let name = model::name_of(world, entity).unwrap_or_default();
     match (op.stamp, op_stamp(world, &op, &name)) {

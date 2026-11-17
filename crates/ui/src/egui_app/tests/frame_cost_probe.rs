@@ -17,7 +17,7 @@ use super::*;
 use crate::frame_cost::{self, Cost};
 
 /// Still frames measured per state, after the warm-up frames.
-const N: u32 = 6;
+pub(super) const N: u32 = 6;
 pub(super) const CONTOUR: &str = "Probe contour";
 pub(super) const ADAPTIVE: &str = "Probe adaptive";
 const FACE: &str = "Probe face";
@@ -27,14 +27,14 @@ fn fig8_path() -> std::path::PathBuf {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-struct Counts {
-    regions: u64,
-    walks: u64,
-    digests: u64,
-    slices: u64,
-    patches: u64,
-    selections: u64,
-    pick_lines: u64,
+pub(super) struct Counts {
+    pub(super) regions: u64,
+    pub(super) walks: u64,
+    pub(super) digests: u64,
+    pub(super) slices: u64,
+    pub(super) patches: u64,
+    pub(super) selections: u64,
+    pub(super) pick_lines: u64,
 }
 
 fn counts() -> Counts {
@@ -50,12 +50,12 @@ fn counts() -> Counts {
 }
 
 /// What N still frames of one state cost.
-struct Probe {
-    costs: Vec<Cost>,
+pub(super) struct Probe {
+    pub(super) costs: Vec<Cost>,
     /// `commands`, `scene`, `ui` wall time over the N frames.
     phases: [Duration; 3],
     /// Counter growth over the N frames.
-    delta: Counts,
+    pub(super) delta: Counts,
     /// The redraw delay the window would take after the last frame:
     /// `None` is "sleep until input".
     redraw: Option<Duration>,
@@ -122,7 +122,7 @@ fn open(h: &mut Harness<'static, ShellUi>, t: UiTarget) {
 }
 
 /// Warm up, then measure N frames where nothing changes.
-fn still(h: &mut Harness<'static, ShellUi>) -> Probe {
+pub(super) fn still(h: &mut Harness<'static, ShellUi>) -> Probe {
     h.run_steps(3);
     // The shell collects the scene on each frame; the harness does not.
     // One collect here is the first frame of the new input, so the window
@@ -167,7 +167,7 @@ fn ms(d: Duration) -> f64 {
     d.as_secs_f64() * 1000.0 / f64::from(N)
 }
 
-fn report(state: &str, p: &Probe) {
+pub(super) fn report(state: &str, p: &Probe) {
     println!(
         "== {state}: commands {:.2} ms, scene {:.2} ms, ui {:.2} ms per frame; {:?} per {N} frames; redraw {:?}",
         ms(p.phases[0]),
@@ -183,7 +183,7 @@ fn report(state: &str, p: &Probe) {
     }
 }
 
-fn calls(p: &Probe, name: &str) -> u32 {
+pub(super) fn calls(p: &Probe, name: &str) -> u32 {
     p.costs.iter().find(|c| c.name == name).map_or(0, |c| c.count)
 }
 
