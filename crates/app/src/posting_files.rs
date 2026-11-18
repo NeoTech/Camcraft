@@ -49,6 +49,8 @@ pub const BUILTINS: &[(&str, AssetFile)] = &[
     ("Doosan DNM", AssetFile("doosan-dnm.cps")),
     ("Makera Carvera", AssetFile("carvera.cps")),
     ("Mach4", AssetFile("mach4.cps")),
+    // #2573: Hurco WinMax NC/ISO (ISNC) 3-axis mill dialect.
+    ("Hurco WinMax (NC)", AssetFile("hurco-winmax.cps")),
     ("Fanuc Lathe", AssetFile("fanuc-lathe.cps")),
     ("Tormach PathPilot Lathe", AssetFile("tormach-lathe.cps")),
     // #671: the plasma dialect, from UM10720 §6-7 and the PathPilot
@@ -137,6 +139,8 @@ pub const MACHINES: &[(&str, AssetFile)] = &[
     ("Haas Mini Mill", AssetFile("haas-mini-mill.mch")),
     ("Haas DT-1", AssetFile("haas-dt1.mch")),
     ("Haas DM-1", AssetFile("haas-dm1.mch")),
+    // #2573: Hurco VM10i 3-axis VMC (WinMax ISNC, rigid tapping, 24-tool CAT40).
+    ("Hurco VM10i", AssetFile("hurco-vm10i.mch")),
     // #1135: the empty sinker template (no `edm.codes`); pairs with the
     // "Sinker EDM (ISO)" post, which refuses by name until the user fills the codes.
     ("Sinker EDM 3-axis (template)", AssetFile("sinker-edm.mch")),
@@ -334,6 +338,7 @@ fn embedded(kind: &str, file: &str) -> Option<&'static str> {
         ("posts", "doosan-dnm.cps") => Some(include_str!("../../../assets/posts/doosan-dnm.cps")),
         ("posts", "carvera.cps") => Some(include_str!("../../../assets/posts/carvera.cps")),
         ("posts", "mach4.cps") => Some(include_str!("../../../assets/posts/mach4.cps")),
+        ("posts", "hurco-winmax.cps") => Some(include_str!("../../../assets/posts/hurco-winmax.cps")),
         ("posts", "fanuc-lathe.cps") => Some(include_str!("../../../assets/posts/fanuc-lathe.cps")),
         ("posts", "tormach-lathe.cps") => Some(include_str!("../../../assets/posts/tormach-lathe.cps")),
         ("posts", "tormach-plasma.cps") => Some(include_str!("../../../assets/posts/tormach-plasma.cps")),
@@ -382,6 +387,7 @@ fn embedded(kind: &str, file: &str) -> Option<&'static str> {
         ("machines", "haas-mini-mill.mch") => Some(include_str!("../../../assets/machines/haas-mini-mill.mch")),
         ("machines", "haas-dt1.mch") => Some(include_str!("../../../assets/machines/haas-dt1.mch")),
         ("machines", "haas-dm1.mch") => Some(include_str!("../../../assets/machines/haas-dm1.mch")),
+        ("machines", "hurco-vm10i.mch") => Some(include_str!("../../../assets/machines/hurco-vm10i.mch")),
         ("machines", "sinker-edm.mch") => Some(include_str!("../../../assets/machines/sinker-edm.mch")),
         ("machines", "sodick-alc400g.mch") => Some(include_str!("../../../assets/machines/sodick-alc400g.mch")),
         ("machines", "3axis-vmc.mch") => Some(include_str!("../../../assets/machines/3axis-vmc.mch")),

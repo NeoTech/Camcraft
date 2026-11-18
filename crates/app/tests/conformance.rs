@@ -64,6 +64,7 @@ const POSTS: &[(&str, &str, &str)] = &[
     ("Doosan DNM", "doosan-dnm", "doosan-dnm"),
     ("Makera Carvera", "carvera", "carvera"),
     ("Mach4", "mach4", "mach4"),
+    ("Hurco WinMax (NC)", "hurco-winmax", "hurco-winmax"),
 ];
 
 /// #1357: the Tormach goldens are runnable programs - posted for a real
@@ -464,6 +465,7 @@ const EXTENSIONS: &[(&str, &str)] = &[
     ("doosan-dnm", "nc"),
     ("carvera", "nc"),
     ("mach4", "nc"),
+    ("hurco-winmax", "nc"),
     ("fanuc-lathe", "nc"),
     ("tormach-lathe", "nc"),
     ("tormach-plasma", "nc"),

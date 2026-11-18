@@ -18,7 +18,7 @@ use camcraft_post::post::{cnc, engine};
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 
-const MILL_POSTS: &[&str] = &["fanuc", "haas", "mazak", "doosan-dnm"];
+const MILL_POSTS: &[&str] = &["fanuc", "haas", "mazak", "doosan-dnm", "hurco-winmax"];
 
 /// The address letters whose value is a length or an angle on these
 /// controls - each takes a decimal point.
