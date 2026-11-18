@@ -87,6 +87,8 @@ mod stamp_stock;
 pub use stamp_stock::reads_setup_stock;
 pub(crate) use stamp_stock::write_setup_stock;
 mod material;
+// #2496: a drill makes its own size; a wider hole is named.
+mod drill_size;
 pub use material::*;
 mod material_region;
 pub(crate) use material_region::selection_drives_region;

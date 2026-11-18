@@ -6,7 +6,7 @@ A 100 x 60 x 15 mm clean-room aluminum test plate machined from a 100 x 60 x 20 
 
 1. **Face (`Face1`, `EM-1000-4FL`):** Faces the top 5 mm off the 20 mm stock down to `Z15` (top of the central island).
 2. **2D Pocket (`2D Pocket1`, `EM-0600-4FL`):** Clears the 5 mm shelf around the 60 x 30 mm central island with a helical ramp entry down to `Z10`.
-3. **Drill (`Drill1`, `DR-0600`):** Drills four 6 mm through-holes around the flange at `(±38, ±23)` using `G73` peck drilling (`Fanuc` built-in post).
+3. **Drill (`Drill1`, `DR-0600`):** Drills four 6 mm through-holes around the flange at `(±38, ±23)` using `G83` deep peck drilling (`Fanuc` built-in post).
 
 ## Files
 

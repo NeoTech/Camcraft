@@ -92,6 +92,7 @@ mod stock_size;
 mod stock_material;
 mod setup_settings_page;
 mod machine_page;
+mod setup_user_machines;
 mod tool_list_page;
 mod stock_fit_sides;
 mod raw_stock_row;
@@ -140,6 +141,10 @@ mod plane_face_pick;
 mod one_pick_rule;
 // #692: the user-facing pick-through toggle (off by default) reaches the far side.
 mod pick_through;
+// #1198 b: move handles drag a body - one undo step per drag.
+mod body_drag;
+// #2047: turn rings turn a body - one undo step per drag.
+mod body_turn;
 // #664: a left Setups page disarms its picks.
 mod setup_picks_disarm;
 // #555: real clicks pick the three points of the plane.
@@ -170,6 +175,7 @@ mod tool_body_lathe;
 mod tool_profile;
 // #793: the tool editor's holder library picker.
 mod tool_holder;
+mod tool_holder_reference;
 // #889: the Tool library page's "Import tool holders" toggle.
 mod tool_library_import;
 // #93 slice 2: the Profile tab's drawn cutter.
@@ -205,6 +211,8 @@ mod edge_click_modifiers;
 mod first_ctrl_click;
 // #1104: the Setups page lists setups only.
 mod setups_declutter;
+// #870: the WCS page's footer and its origin in words.
+mod wcs_footer;
 // #1206: each setup's own Machine and Post pages pick its own mount.
 mod setup_mount_pages;
 // #1515: a pick on one setup never re-mounts another.
@@ -218,6 +226,8 @@ mod ribbon_accesskit;
 mod ai_chat;
 // #2011: EDM tool visibility matches selectable machine kinds.
 mod edm_tool_visibility;
+// #1517: 2D Pocket drops Adaptive; migrated un-carriable params carry needs_review.
+mod pocket_no_adaptive;
 
 /// What the per-frame state of `Shell` is, minus the GPU half: the fields
 /// `shell_layout` touches, so the harness exercises the window's real body.
@@ -238,8 +248,13 @@ impl ShellUi {
     /// The birth `Shell::new` has since M-d: a plain empty document, no
     /// seed, no startup command - the window's real shape, rendered.
     fn blank() -> Self {
+        let mut state = State::new();
+        // #2358: the Setup page lists the user machines folder too; a
+        // test never reads the tester's real one (`harness_with_user_dir`
+        // names a temp folder).
+        state.machines_pane.user_dir = Some(None);
         Self {
-            state: State::new(),
+            state,
             dock: build_dock(),
             viewport_points: [1280.0, 649.0],
             left_press: None,
@@ -1861,7 +1876,11 @@ fn anchor_click_queues_setwcs() {
 /// arm pick mode from the checkbox.
 #[test]
 fn origin_page_shows_the_anchor_grid_and_arms_pick_mode() {
-    let mut harness = shell_harness();
+    // #870: the page's origin line made it taller; at 720 px the grid's
+    // bottom row scrolls under the footer, so the window is 900 px.
+    let mut harness = Harness::builder()
+        .with_size(Vec2::new(1280.0, 900.0))
+        .build_ui_state(frame, ShellUi::seeded());
     harness.state_mut().state.ui_target = UiTarget::Wcs;
     harness.run();
     // The draft default highlight is center (anchor_xy 4), so that cell
@@ -5146,7 +5165,25 @@ fn a_lathe_over_a_mill_post_offers_the_lathe_post_and_rides_undo() {
     );
 }
 
+mod dropdown_icon_rows;
+mod dropdown_theme;
 mod review_1710_evidence;
 mod guide_projects;
 mod guide_images;
 
+
+#[test]
+fn clipboard_keeps_review_notes_after_source_is_deleted() {
+    let mut shell = ShellUi::seeded();
+    let source = model::find_by_name(&shell.state.world, "Contour1").expect("source");
+    let mut meta = model::operation_meta_of(&shell.state.world, &source);
+    meta.needs_review = vec!["Legacy rest settings were dropped".into()];
+    source.entity_view(&shell.state.world).set(meta.clone());
+    shell.state.copy_operation("Contour1");
+    shell.state.history.execute(&shell.state.world,
+        camcraft_app::commands::DeleteOperation::new(&shell.state.world, "Contour1").expect("delete source"));
+    shell.state.paste_operation();
+    shell.state.drain_actions();
+    let copy = model::find_by_name(&shell.state.world, "Contour1 Copy").expect("copy");
+    assert_eq!(model::operation_meta_of(&shell.state.world, &copy).needs_review, meta.needs_review);
+}

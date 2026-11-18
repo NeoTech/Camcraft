@@ -185,11 +185,6 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
     if let Some(why) = crate::setup_wcs_tilt::generation_problem(world, op) {
         return Err(GenError::Invalid(why));
     }
-    // #1720: a flipped WCS axis is not carried into a path yet - refused
-    // by name, never cut in the unflipped frame.
-    if let Some(why) = crate::setup_wcs_flip::generation_problem(world, op) {
-        return Err(GenError::Invalid(why));
-    }
     // #763: the one machining-frame seam. Built before the first read;
     // the tilt's own refusal keeps its place below (`checked_frame`,
     // after the heights resolve) exactly where the old head raised it -

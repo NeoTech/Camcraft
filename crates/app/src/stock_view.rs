@@ -156,7 +156,13 @@ pub fn field_view_with(world: &flecs_ecs::prelude::World, texels: f64) -> Result
         let cut = match (&p.rotary, &p.lathe) {
             (_, Some(l)) => stock.simulate_lathe_profile(&p.moves, &l.profile, &l.axis),
             (Some(ax), None) => crate::stock_sim::simulate_rotary_slice(&mut stock, &op, &p.moves, 0, ax, pose_tol).map(|_| ()),
-            (None, None) => stock.simulate_display(std::slice::from_ref(&op)),
+            (None, None) => {
+                if p.drill {
+                    stock.simulate_drill_display(std::slice::from_ref(&op))
+                } else {
+                    stock.simulate_display(std::slice::from_ref(&op))
+                }
+            }
         };
         cut.map_err(|e| format!("the field view could not cut the program: {e}"))?;
     }

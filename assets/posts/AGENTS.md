@@ -77,7 +77,10 @@ output on the engine's mirrored stream (an inverted X / Y: negated
 coordinates, centres and origin, CW/CCW reversed in a plane holding one
 inverted axis, the comp side swapped) is verified by goldens and the
 controller-interpretation test - without it a machine with an inverted
-axis is refused by name. Fanuc and Haas set it. `probeAxisInversion =
+axis is refused by name. Fanuc and Haas set it. The same flag covers a
+flipped WCS axis (#1649, `PARAM WcsFlip`): the engine mirrors that
+section the same way (a helical arc included), and a script that sets
+the flag writes a note that names the flipped axes. `probeAxisInversion =
 true` (#392) says the script's probing blocks on that mirrored stream
 (negated touch target and trip, back-off delta, found expected values)
 are verified by the macro-B interpreter on a simulated inverted machine

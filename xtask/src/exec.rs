@@ -15,23 +15,23 @@ pub struct Run {
     pub root: PathBuf,
     pub label: String,
     pub dry: bool,
-    /// The job budget of the whole run (#2057): a wave's lanes share it, a step alone gets all of it.
+    /// The job budget of the whole run (#2057): the release queue's lanes share it, a step alone gets all of it.
     pub budget: usize,
     budget_note: Option<String>,
-    log_dir: PathBuf,
+    pub(crate) log_dir: PathBuf,
     clock: Instant,
-    done: Vec<Done>,
+    pub(crate) done: Vec<Done>,
     /// HEAD and the working tree when the gate started (#1201); every later reading is compared with it.
-    guard: Reading,
+    pub(crate) guard: Reading,
     /// The VOID line, once the checkout was seen to move; a void run has no verdict.
-    void: Option<String>,
+    pub(crate) void: Option<String>,
 }
 
-struct Done {
-    name: String,
-    ok: bool,
-    secs: u64,
-    note: String,
+pub(crate) struct Done {
+    pub(crate) name: String,
+    pub(crate) ok: bool,
+    pub(crate) secs: u64,
+    pub(crate) note: String,
 }
 
 /// The cargo that launched us (`cargo xtask` sets CARGO), else the one on PATH.
@@ -163,32 +163,13 @@ impl Run {
         }
         println!("{}", crate::budget::header(self.budget, lanes));
         if lanes {
-            let waves = crate::lanes::waves(&plan.steps, crate::budget::lane_limit(self.budget));
-            for (k, wave) in waves.iter().enumerate() {
-                if self.check("before release wave") {
-                    break;
-                }
-                let jobs = crate::budget::per_lane(self.budget, wave.len());
-                println!("-- wave {}: {} lane(s) x -j {jobs}", k + 1, wave.len());
-                let results = std::thread::scope(|scope| {
-                    let handles: Vec<_> = wave.iter().map(|&i| {
-                        let (root, logs, dry) = (&self.root, &self.log_dir, self.dry);
-                        let step = &plan.steps[i];
-                        scope.spawn(move || Self::execute(root, logs, dry, i + 1, step, jobs))
-                    }).collect();
-                    // Join every lane even when one returns an error or panics.
-                    let joined: Vec<_> = handles.into_iter().map(|h| {
-                        h.join().map_err(|_| "gate lane thread failed".to_string()).and_then(|r| r)
-                    }).collect();
-                    joined.into_iter().collect::<Result<Vec<_>, String>>()
-                })?;
-                let build_failed = wave.iter().any(|&i| plan.steps[i].args.iter().any(|a| a == "--no-run"))
-                    && results.iter().any(|d| !d.ok);
-                self.done.extend(results);
-                if build_failed {
-                    break;
-                }
+            if self.budget_note.is_none() && std::env::var_os(crate::budget::ENV).is_none()
+                && let Ok(n) = std::thread::available_parallelism()
+                && n.get() > self.budget
+            {
+                println!("note: this machine has {n} cores; {}={n} lets the gate use them", crate::budget::ENV);
             }
+            self.run_release(plan)?;
         } else {
             for s in &plan.steps {
                 if self.check(&format!("before {}", s.name)) {
@@ -209,20 +190,14 @@ impl Run {
     }
 
     /// Compares the checkout with the start reading. Returns true (and prints VOID) once it has moved.
-    fn check(&mut self, at: &str) -> bool {
+    pub(crate) fn check(&mut self, at: &str) -> bool {
         if self.void.is_some() {
             return true;
         }
         if self.dry {
             return false; // a dry run runs nothing, so the checkout cannot void it (one git call per step)
         }
-        let msg = match checkout::read(&self.root) {
-            Ok(now) => checkout::void_message(&self.guard, &now, at),
-            Err(e) => Some(format!(
-                "VOID: could not read the checkout ({e}) during the gate ({at}) - this run is void, not a verdict on any commit"
-            )),
-        };
-        match msg {
+        match moved(&self.root, &self.guard, at) {
             Some(m) => {
                 println!("{m}");
                 self.void = Some(m);
@@ -239,7 +214,7 @@ impl Run {
     }
 
     /// Runs one step with its `-j` and `--test-threads` set to `jobs` (`budget::scale`).
-    fn execute(root: &Path, log_dir: &Path, dry: bool, n: usize, s: &Step, jobs: usize) -> Result<Done, String> {
+    pub(crate) fn execute(root: &Path, log_dir: &Path, dry: bool, n: usize, s: &Step, jobs: usize) -> Result<Done, String> {
         let args = crate::budget::scale(&s.args, jobs);
         let log = log_dir.join(log_name(n, &s.name));
         let dir = if s.in_ui { root.join("crates").join("ui") } else { root.to_path_buf() };
@@ -270,8 +245,12 @@ impl Run {
             .map(|st| st.code().unwrap_or(-1))
             .map_err(|e| format!("cargo {}: {e}", args.join(" ")))?;
         let secs = t0.elapsed().as_secs();
-        let note = read_log(&std::fs::read_to_string(&log).unwrap_or_default(), code)?;
-        let ok = code == 0;
+        let text = std::fs::read_to_string(&log).unwrap_or_default();
+        let mut note = read_log(&text, code)?;
+        let ok = match s.expect_fail {
+            Some(k) => expect_fail_note(code, &mut note, &text, k),
+            None => code == 0,
+        };
         println!("     {} in {secs}s {note}", if ok { "ok" } else { "FAIL" });
         Ok(Done { name: s.name.clone(), ok, secs, note })
     }
@@ -294,6 +273,56 @@ impl Run {
             return 1;
         }
         i32::from(bad > 0)
+    }
+}
+
+/// A known-fail step (`known_fail`) is ok only when libtest reports `k.test` itself as FAILED (the `read_log`
+/// note `failed: ... [tests: ...]` names it exactly) AND the test's panic block in `log` is the pinned
+/// assert: its `panicked at` line names `k.file` and a message line starts with `k.reason`. A pass, a renamed test, a
+/// compile error, a crash of the test binary (no `test ... FAILED` line) or a failure for another reason (a
+/// planner panic, a gouge warning, another assert) is a FAIL.
+pub fn expect_fail_note(code: i32, note: &mut String, log: &str, k: &crate::known_fail::KnownFail) -> bool {
+    let test = k.test;
+    if code == 0 {
+        *note = "KNOWN FAIL NOW PASSES (or no such test): remove its entry from xtask/src/known_fail.rs".into();
+        return false;
+    }
+    let named = note.starts_with("failed:")
+        && note
+            .split_once("[tests: ")
+            .and_then(|(_, rest)| rest.split_once(']'))
+            .is_some_and(|(list, _)| list.split(", ").any(|t| t == test));
+    if !named {
+        *note = format!("known fail did not fail as a test (crash, compile error or other test): {note}");
+        return false;
+    }
+    let pinned = |(at, msg): (String, String)| at.contains(k.file) && msg.lines().any(|l| l.starts_with(k.reason));
+    if !panic_block(log, test).is_some_and(pinned) {
+        *note = format!("KNOWN FAIL, DIFFERENT REASON (want {:?} at {}): {note}", k.reason, k.file);
+        return false;
+    }
+    *note = format!("known fail, red as expected ({note})");
+    true
+}
+
+/// The `panicked at` line (slashes made `/`) and the message lines after it of the thread named `test`;
+/// the message ends at the next `thread '` line or the `failures:` list.
+fn panic_block(log: &str, test: &str) -> Option<(String, String)> {
+    let head = format!("thread '{test}'");
+    let mut lines = log.lines().skip_while(|l| !(l.starts_with(&head) && l.contains("panicked at ")));
+    let at = lines.next()?.replace('\\', "/");
+    let msg: Vec<&str> = lines.take_while(|l| !l.starts_with("thread '") && !l.starts_with("failures:")).collect();
+    Some((at, msg.join("\n")))
+}
+
+/// The VOID line when the checkout under `root` no longer reads as `guard` (or cannot be read); `None` while
+/// it is unchanged. Shared by the one-at-a-time loop and the release queue's lanes.
+pub(crate) fn moved(root: &Path, guard: &Reading, at: &str) -> Option<String> {
+    match checkout::read(root) {
+        Ok(now) => checkout::void_message(guard, &now, at),
+        Err(e) => Some(format!(
+            "VOID: could not read the checkout ({e}) during the gate ({at}) - this run is void, not a verdict on any commit"
+        )),
     }
 }
 

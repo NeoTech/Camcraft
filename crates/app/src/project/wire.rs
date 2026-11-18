@@ -57,10 +57,13 @@ pub fn collect(world: &World) -> ProjectFile {
                 None
             };
             let stock = model::stock_def_of(world, &entity).map(|s| StockDto::from_shape(&s));
+            // #2016: a library holder is written as its reference.
+            let (holder, body) = crate::tool_body::body_of(world, &entity)
+                .map_or((None, None), |b| super::tool_body_wire::body_to_dto(&b));
             let tool = model::tool_of(world, &entity).map(|t| ToolDto {
                 number: model::tool_number_of(world, &entity),
-                body: crate::tool_body::body_of(world, &entity)
-                    .map(|b| super::tool_body_wire::ToolBodyDto::from_body(&b)),
+                body,
+                holder,
                 cutter: crate::tool_cutter::cutter_of(world, &entity)
                     .map(|c| super::tool_body_wire::spun_to_dto(&c)),
                 ..ToolDto::from_tool(&t)
@@ -103,9 +106,11 @@ pub fn collect(world: &World) -> ProjectFile {
                     mod_jaw: super::modvise_dto::value(d.mod_jaw.as_ref()),
                     profile: d.profile.as_ref().and_then(super::fixture_keys::profile_value),
                 });
+            let op_meta = model::operation_meta_of(world, &entity);
             let operation = model::operation_of(world, &entity).map(|op| OperationDto {
-                label: model::operation_meta_of(world, &entity).label,
-                order: model::operation_meta_of(world, &entity).order,
+                label: op_meta.label,
+                order: op_meta.order,
+                needs_review: op_meta.needs_review,
                 tool: op.tool,
                 src: match &op.src {
                     SrcRef::Stock => SrcDto::Stock,

@@ -125,7 +125,7 @@ pub fn region_z(
     let resolve = |h| fold_height(world, setup, src, frame.as_ref(), h);
     match params {
         OpParams::Face { top_z, cut_z, .. } => top_z
-            .map(&resolve)
+            .map(resolve)
             .unwrap_or_else(|| resolve(*cut_z)),
         OpParams::Contour { top_z, .. }
         | OpParams::Pocket { top_z, .. }

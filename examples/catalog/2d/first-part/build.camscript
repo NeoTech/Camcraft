@@ -9,9 +9,9 @@ cam.call("set_stock", {
   box: { dx: 100.0, dy: 60.0, dz: 20.0 }
 });
 
-cam.call("add_tool", { catalog: "EM-1000-4FL", holder: "none" });
-cam.call("add_tool", { catalog: "EM-0600-4FL", holder: "none" });
 cam.call("add_tool", { catalog: "DR-0600", holder: "none" });
+cam.call("add_tool", { catalog: "EM-0600-4FL", holder: "none" });
+cam.call("add_tool", { catalog: "EM-1000-4FL", holder: "none" });
 
 cam.call("add_operation", {
   kind: "Face",

@@ -33,10 +33,20 @@ pub(super) fn workspace_root() -> PathBuf {
         .to_path_buf()
 }
 
+/// The demo projects' output directory: `CAMCRAFT_GUIDE_PROJECTS_OUT` when
+/// set (the `cargo xtask docs-images` and catalog-media runs), else a
+/// directory of this test process only (#2543). A fixed name under the
+/// shared temp dir is owned by whichever account made it first; on a
+/// runner where another account made it, the save fails with
+/// "Permission denied", and two concurrent runs write the same files.
 pub(super) fn projects_dir() -> PathBuf {
     std::env::var_os("CAMCRAFT_GUIDE_PROJECTS_OUT")
         .map(PathBuf::from)
-        .unwrap_or_else(|| std::env::temp_dir().join("camcraft-guide-projects"))
+        .unwrap_or_else(own_projects_dir)
+}
+
+fn own_projects_dir() -> PathBuf {
+    std::env::temp_dir().join(format!("camcraft-guide-projects-{}", std::process::id()))
 }
 
 fn run<C: Command + 'static>(world: &World, h: &mut History, cmd: Result<C, camcraft_app::commands::CommandError>, label: &str) {
@@ -274,6 +284,22 @@ fn demo_projects_build_and_load_with_valid_paths() {
         let world = World::new();
         let notes = project::load_noted(&world, &path).unwrap_or_else(|e| panic!("load {file}: {e}"));
         assert!(notes.is_empty(), "{file} had reload notes: {notes:?}");
+    }
+    // A directory of this process only: remove it, so that runs leave no files behind.
+    if dir == own_projects_dir() {
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+#[test]
+fn default_projects_dir_belongs_to_this_process() {
+    // #2543: a fixed shared temp path failed on a runner where another account owned it.
+    let dir = own_projects_dir();
+    assert!(dir.starts_with(std::env::temp_dir()));
+    let name = dir.file_name().and_then(|n| n.to_str()).unwrap_or_default();
+    assert_eq!(name, format!("camcraft-guide-projects-{}", std::process::id()));
+    if std::env::var_os("CAMCRAFT_GUIDE_PROJECTS_OUT").is_none() {
+        assert_eq!(projects_dir(), dir);
     }
 }
 

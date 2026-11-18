@@ -623,8 +623,9 @@ function onSectionEnd() { endPreamble(); hopZ = null; clearZ = null; }  // #1028
 //   frame: the tip relative to the work offset turned by -A about X, so
 //   WCS Y0 Z0 must lie on the A centerline (the note at the first index).
 // - Refused by name: a tilt the A axis cannot reach (any B or C), an A
-//   past the stated travel, an indexed arc (a tilted path is chords) and
-//   a tilted move on a machine with no A about X.
+//   past the stated travel, an indexed arc (a tilted path is chords),
+//   a tilted move on a machine with no A about X, and a move with no A
+//   word inside an operation indexed away from A0 (#2473).
 // - An A that changes inside an operation (simultaneous 4-axis, #796) is
 //   posted as wrapped A - see "Simultaneous A" below.
 // - No clamp code: none of the three guides names an M-code; the microARC
@@ -684,7 +685,8 @@ function toolAngle(a0, b0, c0) {
 // A later record whose angle differs turns A inside the section: aNext is
 // then set to the unwrapped target ({a, word}) for onRapid / onLinear to
 // post (turnMove); any other motion (`what` names it) is refused by name
-// when it would turn A.
+// when it would turn A, and so is a record with no A word while the
+// section holds an A other than 0 (#2473).
 var aNext = null;
 function indexFor(p, what) {
   aNext = null;
@@ -712,6 +714,12 @@ function indexFor(p, what) {
     var d = a - aSection;
     d = d - 360 * Math.round(d / 360);
     if (Math.abs(d) <= A_EPS) return true;
+    // #2473: a record with no A word does not state a turn. The stream
+    // reads a move without an axis as "keep the pose" (post::dump), so a
+    // turn to A0 here would swing the part under the tool. Refused by name.
+    if (!tilted) {
+      return aRefuse((what || "move") + inOp() + " states no A angle while the operation holds A" + fa(ax.sign * aSection) + " - the post turns A inside an operation only on a move that states its A angle");
+    }
     if (what) {
       return aRefuse(what + inOp() + " turns A - the post writes a turning A on straight G0 / G1 moves only");
     }
@@ -1283,7 +1291,9 @@ function onCycle() {
     if ((p.CycleType === "PECK" || p.CycleType === "DEEP") && has(p.Q) && p.Q > 0) {
       words.push(w("Q", p.Q));
     }
-    if (dwell > 0 && (g === "G82" || g === "G86" || g === "G89")) words.push("P" + secs(dwell));
+    // #2362: LinuxCNC / PathPilot requires a non-negative P on the first
+    // G86 block of a cycle, even when the dwell is 0 (P0).
+    if (g === "G86" || (dwell > 0 && (g === "G82" || g === "G89"))) words.push("P" + secs(dwell));
     words.push(fw(p.FeedRate));
     block(words);
     cycleSig = sig;

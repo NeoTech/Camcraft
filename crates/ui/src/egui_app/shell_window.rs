@@ -191,6 +191,7 @@ impl Shell {
 
     fn fail(&mut self, el: &ActiveEventLoop, what: &str, err: impl std::fmt::Display) {
         diag_warn!("egui shell: {what}: {err}");
+        camcraft_app::logging::startup_failure(&format!("egui shell: {what}: {err}"));
         self.failed = true;
         self.exit_code = 1;
         el.exit();
@@ -306,11 +307,7 @@ fn refuse_dialog(err: &str) {
     let dialog = rfd::MessageDialog::new()
         .set_level(rfd::MessageLevel::Error)
         .set_title("CamCraft cannot start the viewport")
-        .set_description(format!(
-            "{err}
-
-Try --gpu <adapter name> (or CAMCRAFT_GPU) to choose an adapter, or --gpu-backend dx12|vulkan|gl."
-        ))
+        .set_description(camcraft_app::logging::failure_message(err))
         .set_buttons(rfd::MessageButtons::Ok);
     // #1067: owned by the shell window, so the refusal is in front of the app.
     let dialog = match crate::file_dialog::parent() {

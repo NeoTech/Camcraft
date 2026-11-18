@@ -1,4 +1,4 @@
-//! Mesh file importers (STL, OBJ, STEP, Solidcraft `.sc`). Public API: `load_model` / `parse_*`.
+//! Mesh file importers (STL, OBJ, STEP, Solidcraft `.sc`/`.solidcraft`). Public API: `load_model` / `parse_*`.
 //!
 //! The facet/vertex caps below are enforced before anything large is
 //! allocated. STL (M5.3 E) streams from the file - the size law runs off
@@ -225,7 +225,7 @@ pub fn format_from_path(path: &Path) -> Result<Format, ImportError> {
         "stl" => Ok(Format::Stl),
         "obj" => Ok(Format::Obj),
         "step" | "stp" => Ok(Format::Step),
-        "sc" => Ok(Format::Solidcraft),
+        "sc" | "solidcraft" => Ok(Format::Solidcraft),
         _ => Err(ImportError::Unsupported(
             path.file_name()
                 .map(PathBuf::from)

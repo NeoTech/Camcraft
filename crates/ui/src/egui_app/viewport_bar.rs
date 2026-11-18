@@ -1,7 +1,10 @@
 //! The viewport's bottom control bar (#1198 slice a): a rounded grey
 //! ribbon floating over the bottom edge of the 3D pane, carrying the view
 //! buttons that used to stack under the view cube - frame, iso,
-//! shaded/wireframe, toolpaths and world axes.
+//! shaded/wireframe, toolpaths and world axes - and since slice b the Move
+//! mode that puts drag handles on the selected part (`crate::move_drag`),
+//! since slice c (#2047) the Rotate mode that puts turn rings on it
+//! (`crate::turn_drag`).
 //!
 //! Provenance: the floating button ribbon of interactive 3D CAD viewports,
 //! written from published CAD practice - no vendor material.
@@ -22,9 +25,9 @@ pub(crate) const NAV_PX: f32 = 26.0;
 const NAV_GAP: f32 = 4.0;
 const PAD: f32 = 6.0;
 const BOTTOM_MARGIN: f32 = 10.0;
-/// Ten buttons in a row: the ribbon's width and height, so the layout
+/// Twelve buttons in a row: the ribbon's width and height, so the layout
 /// gate can ask the pane for room (pinned by `bar_fits_its_buttons`).
-pub(crate) const BAR_W: f32 = 10.0 * NAV_PX + 9.0 * NAV_GAP + 2.0 * PAD;
+pub(crate) const BAR_W: f32 = 12.0 * NAV_PX + 11.0 * NAV_GAP + 2.0 * PAD;
 const BAR_H: f32 = NAV_PX + 2.0 * PAD;
 const BAR_RADIUS: f32 = 8.0;
 
@@ -48,6 +51,12 @@ pub(crate) enum Nav {
     /// Viewport picks may reach the far side of the part (#692). Off by
     /// default; when on, a click sends `through: true`.
     PickThrough,
+    /// Move mode (#1198 b): the selected part wears axis handles whose
+    /// balls drag it. Off by default.
+    Move,
+    /// Rotate mode (#2047): the selected part wears turn rings that turn
+    /// it about an axis through its centre. Off by default.
+    Rotate,
     /// Perspective <-> Orthographic, the View door's radios' twin.
     Projection,
     /// Latch the drag onto the orbit tool whatever the button.
@@ -60,7 +69,7 @@ pub(crate) enum Nav {
 
 /// The buttons in bar order. `NAV_COUNT` sizes the ribbon, and a test checks
 /// the two agree.
-pub(crate) const NAV_COUNT: usize = 10;
+pub(crate) const NAV_COUNT: usize = 12;
 pub(crate) const NAVS: [Nav; NAV_COUNT] = [
     Nav::Frame,
     Nav::Iso,
@@ -68,6 +77,8 @@ pub(crate) const NAVS: [Nav; NAV_COUNT] = [
     Nav::Paths,
     Nav::Axes,
     Nav::PickThrough,
+    Nav::Move,
+    Nav::Rotate,
     Nav::Projection,
     Nav::Orbit,
     Nav::Pan,
@@ -78,6 +89,18 @@ pub(crate) const NAVS: [Nav; NAV_COUNT] = [
 #[must_use]
 pub(crate) fn pick_through_label(on: bool) -> &'static str {
     if on { "Pick through: on" } else { "Pick through: off" }
+}
+
+/// The plain-English state line of the Rotate button (#2047).
+#[must_use]
+pub(crate) fn rotate_label(on: bool) -> &'static str {
+    if on { "Rotate: drag a ring on the selected part" } else { "Rotate: off" }
+}
+
+/// The plain-English state line of the Move button (#1198 b).
+#[must_use]
+pub(crate) fn move_label(on: bool) -> &'static str {
+    if on { "Move: drag a ball on the selected part" } else { "Move: off" }
 }
 
 /// The status line the projection button flips the viewer between.
@@ -145,6 +168,22 @@ pub(crate) fn act(state: &mut State, kind: Nav) {
             state.pick_through = !state.pick_through;
             state.status = pick_through_label(state.pick_through).to_string();
         }
+        Nav::Move => {
+            state.move_handles = !state.move_handles;
+            // Leaving Move mode drops a drag in flight - nothing queued.
+            // The two modes never share the part: Move on puts Rotate off.
+            crate::move_drag::cancel(state);
+            crate::turn_drag::cancel(state);
+            state.rotate_handles &= !state.move_handles;
+            state.status = move_label(state.move_handles).to_string();
+        }
+        Nav::Rotate => {
+            state.rotate_handles = !state.rotate_handles;
+            crate::move_drag::cancel(state);
+            crate::turn_drag::cancel(state);
+            state.move_handles &= !state.rotate_handles;
+            state.status = rotate_label(state.rotate_handles).to_string();
+        }
         Nav::Projection => {
             state.cam.projection = match state.cam.projection {
                 ProjectionMode::Perspective => ProjectionMode::Orthographic,
@@ -193,6 +232,8 @@ pub(crate) fn draw(
             Nav::Paths => state.show_all_paths,
             Nav::Axes => state.show_world_axes,
             Nav::PickThrough => state.pick_through,
+            Nav::Move => state.move_handles,
+            Nav::Rotate => state.rotate_handles,
             Nav::Projection => state.cam.projection == ProjectionMode::Orthographic,
             Nav::Orbit => state.nav_tool == Some(DragMode::Orbit),
             Nav::Pan => state.nav_tool == Some(DragMode::Pan),
@@ -206,228 +247,13 @@ pub(crate) fn draw(
             ui.painter().rect_stroke(r, 5.0, stroke, egui::StrokeKind::Inside);
         }
         let s = egui::Stroke::new(1.4, if active { ink.glyph_on } else { ink.glyph_off });
-        let (a, b) = (r.min, r.max);
-        let m = NAV_PX * 0.22;
-        match kind {
-            Nav::Frame => {
-                // Four corner brackets around the button's inset square.
-                let i0 = a + egui::vec2(m * 0.45, m * 0.45);
-                let i1 = b - egui::vec2(m * 0.45, m * 0.45);
-                for (p, dx, dy) in [
-                    (i0, 1.0f32, 1.0f32),
-                    (egui::pos2(i1.x, i0.y), -1.0, 1.0),
-                    (egui::pos2(i0.x, i1.y), 1.0, -1.0),
-                    (i1, -1.0, -1.0),
-                ] {
-                    let hx = egui::vec2(dx * m, 0.0);
-                    let hy = egui::vec2(0.0, dy * m);
-                    ui.painter().line_segment([p + hx, p + hx + hy * 0.62], s);
-                    ui.painter().line_segment([p + hy, p + hx * 0.62 + hy], s);
-                }
-            }
-            Nav::Iso => {
-                // The cube from the house diagonal: hexagon silhouette,
-                // three visible faces' inner edges meeting at the center.
-                let c = r.center();
-                let rr = NAV_PX * 0.30;
-                let hex: Vec<egui::Pos2> = (0..6)
-                    .map(|k| {
-                        let t = std::f64::consts::FRAC_PI_3 * f64::from(k) + 0.261_799;
-                        c + egui::vec2(
-                            (t.cos() * f64::from(rr)) as f32,
-                            (t.sin() * f64::from(rr)) as f32,
-                        )
-                    })
-                    .collect();
-                ui.painter().add(egui::Shape::convex_polygon(
-                    hex.clone(),
-                    egui::Color32::TRANSPARENT,
-                    s,
-                ));
-                for k in [0usize, 2, 4] {
-                    ui.painter().line_segment([c, hex[k]], s);
-                }
-            }
-            Nav::Wire => {
-                let q0 = a + egui::vec2(m * 0.62, m * 0.62);
-                let q1 = b - egui::vec2(m * 0.62, m * 0.62);
-                ui.painter().rect_stroke(
-                    egui::Rect::from_min_max(q0, q1),
-                    1.0,
-                    s,
-                    egui::StrokeKind::Inside,
-                );
-                ui.painter().line_segment([q0, q1], s);
-                ui.painter()
-                    .line_segment([egui::pos2(q1.x, q0.y), egui::pos2(q0.x, q1.y)], s);
-            }
-            Nav::Paths => {
-                // A zigzag toolpath.
-                let p0 = egui::pos2(a.x + m * 0.4, r.center().y);
-                let step = (r.width() - m * 0.8) / 4.0;
-                let pts: Vec<egui::Pos2> = (0..5)
-                    .map(|k| {
-                        p0 + egui::vec2(
-                            step * k as f32,
-                            if k % 2 == 0 { 0.0 } else { -r.height() * 0.20 },
-                        )
-                    })
-                    .collect();
-                ui.painter().add(egui::Shape::line(pts, s));
-            }
-            Nav::Axes => {
-                // The origin triad: an isometric triad, equal arms 120 deg
-                // apart, Z up, X and Y 30 deg below the horizontal; the box
-                // spans y -l..l/2, so the origin sits l/4 below the centre.
-                let l = NAV_PX * 0.32;
-                let (c30, s30) = (l * 0.866, l * 0.5);
-                let o = r.center() + egui::vec2(0.0, l * 0.25);
-                let [x, y, z] = ink.triad;
-                for (dir, col) in [
-                    (egui::vec2(c30, s30), x),
-                    (egui::vec2(-c30, s30), y),
-                    (egui::vec2(0.0, -l), z),
-                ] {
-                    ui.painter()
-                        .line_segment([o, o + dir], egui::Stroke::new(1.4, col));
-                }
-            }
-            Nav::PickThrough => {
-                // A pick ray crossing a bar: the ray runs through, the bar
-                // is the near surface it passes.
-                let c = r.center();
-                let half = r.width() * 0.5 - m;
-                ui.painter().line_segment([c - egui::vec2(half, 0.0), c + egui::vec2(half, 0.0)], s);
-                ui.painter().line_segment([c - egui::vec2(m * 0.4, m), c + egui::vec2(m * 0.4, m)], s);
-            }
-            Nav::Projection => {
-                // The two doors on one viewer: converging bars for
-                // perspective, a plain square for orthographic.
-                let c = r.center();
-                let half = r.width() * 0.5 - m;
-                if matches!(state.cam.projection, ProjectionMode::Orthographic) {
-                    ui.painter().rect_stroke(
-                        egui::Rect::from_center_size(c, egui::vec2(half * 1.7, half * 1.7)),
-                        1.0,
-                        s,
-                        egui::StrokeKind::Inside,
-                    );
-                } else {
-                    let top = c.y - half * 0.8;
-                    let bot = c.y + half * 0.8;
-                    let tip_top = half;
-                    let tip_bot = half * 0.4;
-                    ui.painter().line_segment([egui::pos2(c.x - tip_top, top), egui::pos2(c.x - tip_bot, bot)], s);
-                    ui.painter().line_segment([egui::pos2(c.x + tip_top, top), egui::pos2(c.x + tip_bot, bot)], s);
-                    ui.painter().line_segment([egui::pos2(c.x - tip_top, top), egui::pos2(c.x + tip_top, top)], s);
-                    ui.painter().line_segment([egui::pos2(c.x - tip_bot, bot), egui::pos2(c.x + tip_bot, bot)], s);
-                }
-            }
-            Nav::Orbit => {
-                // The orbit ring with the eye-satellite riding it.
-                let c = r.center();
-                let rad = NAV_PX * 0.27;
-                ui.painter().circle_stroke(c, rad, s);
-                let a = std::f32::consts::FRAC_PI_4;
-                let dot = c + egui::vec2(a.cos() * rad, -a.sin() * rad);
-                ui.painter().circle_filled(dot, 2.4, s.color);
-                ui.painter().arrow(dot, egui::vec2(a.sin(), a.cos()) * 5.0, s);
-            }
-            Nav::Pan => {
-                // A pair of rails bowed out: the move arrows' move.
-                let c = r.center();
-                let l = NAV_PX * 0.24;
-                for (origin, vec) in [
-                    (c, egui::vec2(l, 0.0)),
-                    (c, egui::vec2(-l, 0.0)),
-                    (c, egui::vec2(0.0, l)),
-                    (c, egui::vec2(0.0, -l)),
-                ] {
-                    ui.painter().arrow(origin, vec, s);
-                }
-            }
-            Nav::Zoom => {
-                // A magnifier: ring plus the handle it hangs from.
-                let c = r.center() - egui::vec2(2.5, 2.5);
-                ui.painter().circle_stroke(c, NAV_PX * 0.21, s);
-                ui.painter().line_segment(
-                    [
-                        c + egui::vec2(NAV_PX * 0.15, NAV_PX * 0.15),
-                        c + egui::vec2(NAV_PX * 0.30, NAV_PX * 0.30),
-                    ],
-                    s,
-                );
-            }
-        }
+        glyphs::draw(ui, kind, r, s, ink.triad, state.cam.projection);
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
+#[path = "viewport_bar_tests.rs"]
+mod tests;
 
-    #[test]
-    fn camera_buttons_flip_the_viewer_and_latch_a_tool() {
-        // Projection: flips perspective <-> orthographic, the View
-        // door's radios' true twin.
-        let mut state = State::new();
-        let p0 = state.cam.projection;
-        act(&mut state, Nav::Projection);
-        assert_ne!(state.cam.projection, p0, "the projection must flip");
-        assert!(state.status.contains("orthographic"), "{:?}", state.status);
-        act(&mut state, Nav::Projection);
-        assert_eq!(state.cam.projection, p0, "one more press flips back");
-        // The tool buttons latch once on and once off, and say so.
-        for (nav, tool, word) in [
-            (Nav::Orbit, DragMode::Orbit, "orbit"),
-            (Nav::Pan, DragMode::Pan, "pan"),
-            (Nav::Zoom, DragMode::Zoom, "zoom"),
-        ] {
-            let mut state = State::new();
-            act(&mut state, nav);
-            assert_eq!(state.nav_tool, Some(tool));
-            assert!(state.status.contains(word), "{:?}", state.status);
-            // Latching a different tool replaces the first.
-            act(&mut state, if matches!(nav, Nav::Zoom) { Nav::Orbit } else { Nav::Zoom });
-            assert_ne!(state.nav_tool, Some(tool));
-            // The second press on the same tool latches off.
-            act(&mut state, nav);
-            assert_eq!(state.nav_tool, Some(tool));
-            act(&mut state, nav);
-            assert_eq!(state.nav_tool, None);
-            assert_eq!(state.status, NAV_TOOL_CLEAR);
-        }
-    }
-
-    #[test]
-    fn bar_fits_its_buttons() {
-        assert_eq!(NAVS.len(), NAV_COUNT, "NAV_COUNT sizes the ribbon");
-        let count = NAVS.len() as f32;
-        let width = count * NAV_PX + (count - 1.0) * NAV_GAP + 2.0 * PAD;
-        assert!((BAR_W - width).abs() < 1e-6, "the ribbon is as wide as its buttons");
-        let pane = egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(900.0, 600.0));
-        let bar = bar_rect(pane);
-        assert!((bar.width() - BAR_W).abs() < 1e-6);
-        assert!(
-            (bar.center().x - pane.center().x).abs() < 1e-3,
-            "the ribbon is centred on the bottom edge"
-        );
-        assert!(
-            (bar.max.y - (pane.max.y - BOTTOM_MARGIN)).abs() < 1e-3,
-            "it rests on the bottom edge"
-        );
-        let kids = buttons(bar);
-        assert_eq!(kids.len(), NAVS.len());
-        assert!(kids.iter().all(|(_, r)| bar.contains(r.min) && bar.contains(r.max)));
-        let last = kids.last().map(|(k, r)| (*k, *r));
-        assert_eq!(
-            last.map(|(k, _)| k),
-            NAVS.last().copied(),
-            "the last button is the last in the list"
-        );
-        assert!(
-            last.is_some_and(|(_, r)| bar.contains(r.max)),
-            "the last button sits inside the ribbon"
-        );
-    }
-}
+#[path = "viewport_bar_glyphs.rs"]
+mod glyphs;

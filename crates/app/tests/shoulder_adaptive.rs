@@ -72,6 +72,7 @@ fn a_face_selection_floor_is_the_faces_own_z() {
 }
 
 #[test]
+#[ignore = "heavy lane (release): outside containment over Milling-test.step exceeds 60 s in debug (#2453)"]
 fn containment_outside_clears_past_the_edge_never_the_recess() {
     let (world, name) = milling_test();
     let (c, recess_r) = recess(&world, &name);

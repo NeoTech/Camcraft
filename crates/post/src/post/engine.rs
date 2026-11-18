@@ -122,6 +122,12 @@ pub fn run_program_with(
     // #1386: Explain G-code on a script that states no comment form is
     // refused by name here, before any hook runs.
     let explain_form = super::explain::form(&mut s, options)?;
+    // #1649: a flipped WCS axis mirrors its own sections about the work
+    // origin - the per-setup statement of the #374 mirror below, so the
+    // two compose (a flipped X on an inverted X posts the standard signs).
+    // First, so a flipped and rotated section is refused by that name: the
+    // two passes never change the same section.
+    let records = super::wcs_flip::apply(records, &s)?;
     // #760: a Z-rotated work offset transforms coordinates into WCS XY
     // (before machine axis inversion so Bake mirrors in WCS slides), and
     // checks Control mode declarations (`coordinateRotation`, `wcsRotation`).

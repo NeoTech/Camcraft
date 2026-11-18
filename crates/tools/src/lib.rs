@@ -45,6 +45,8 @@ pub mod cutting_rows;
 pub mod waterjet;
 pub mod wire;
 pub mod tools;
+// #1186: the tool sanity law, said by name.
+pub mod tool_sanity;
 // #891: turning surface speed, feed per rev and the max-rpm clamp.
 pub mod turning_data;
 

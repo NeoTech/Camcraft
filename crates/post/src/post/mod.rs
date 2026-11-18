@@ -51,6 +51,7 @@ pub mod rotary_cap;
 pub mod section_mode;
 pub mod work_offset;
 pub mod units;
+pub mod wcs_flip;
 pub mod wcs_rotate;
 
 pub use after_op::AfterOperation;
@@ -123,6 +124,10 @@ pub struct Dump<'a> {
     pub wcs_yaw: Option<f64>,
     /// #760: true when this section posts in `Control` mode (`G68` / `ROT`).
     pub wcs_rotation_control: bool,
+    /// #1649: the WCS axes that run reversed (X, Y, Z). Any flag writes
+    /// `PARAM WcsFlip` with the letters; none writes nothing, so every
+    /// stream of an unflipped setup stays byte-identical.
+    pub wcs_flip: [bool; 3],
     /// Stock bounds in mm: left, right, front, back (XY), plus top Z.
     pub stock: [f64; 4],
     pub stock_top_z: f64,
@@ -225,6 +230,7 @@ impl<'a> Default for Dump<'a> {
             origin: [0.0; 3],
             wcs_yaw: None,
             wcs_rotation_control: false,
+            wcs_flip: [false; 3],
             stock: [0.0; 4],
             stock_top_z: 0.0,
             stock_turn_radius: None,
@@ -286,6 +292,9 @@ pub fn dump(t: &Toolpath, d: &Dump) -> Vec<Record> {
             name: "WcsRotationMode".into(),
             value: json!(if d.wcs_rotation_control { "control" } else { "bake" }),
         });
+    }
+    if let Some(letters) = wcs_flip::letters(d.wcs_flip) {
+        out.push(Record::Param { name: "WcsFlip".into(), value: json!(letters) });
     }
     out.push(Record::Param { name: "ClearancePlane".into(), value: json!(d.clearance_z) });
     out.push(Record::Param { name: "RetractPlane".into(), value: json!(d.retract_z) });

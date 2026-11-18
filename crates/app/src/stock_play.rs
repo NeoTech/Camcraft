@@ -129,6 +129,7 @@ struct PlayOp {
     ball: bool,
     cone: Option<f64>,
     corner: Option<f64>,
+    drill: bool,
     /// Global index of this op's first move.
     start: usize,
     /// A rotary op's fitted axis: its slices are chorded about it
@@ -197,7 +198,7 @@ impl FieldPlay {
         let mut total = 0usize;
         for p in planned {
             let n = p.moves.len();
-            ops.push(PlayOp { name: p.name, moves: p.moves, radius: p.radius, ball: p.ball, cone: p.cone, corner: p.corner, start: total, rotary: p.rotary, lathe: p.lathe });
+            ops.push(PlayOp { name: p.name, moves: p.moves, radius: p.radius, ball: p.ball, cone: p.cone, corner: p.corner, drill: p.drill, start: total, rotary: p.rotary, lathe: p.lathe });
             total = total.saturating_add(n);
         }
         let (target, target_note) = if let (Some(_), Err(why)) = (&part, &tol) {
@@ -387,7 +388,11 @@ impl FieldPlay {
                     let tol = crate::stock_sim::rotary_pose_tol(self.cur.cell());
                     crate::stock_sim::simulate_rotary_slice(&mut self.cur, &sim, &op.moves, a - op.start, ax, tol).map(|_| ())
                 }
-                (None, None) => self.cur.simulate_display(std::slice::from_ref(&sim)),
+                (None, None) => if op.drill {
+                    self.cur.simulate_drill_display(std::slice::from_ref(&sim))
+                } else {
+                    self.cur.simulate_display(std::slice::from_ref(&sim))
+                },
             };
             cut.map_err(|e| format!("playback could not cut {}: {e}", op.name))?;
             self.moves_cut = self.moves_cut.saturating_add(b - a);

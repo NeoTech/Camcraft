@@ -240,6 +240,13 @@ fn wrap_world() -> World {
     };
     let ball = tool("BN-0600", 0.125, 8000.0, 8.0 * IN);
     h.execute(&world, ok(AddTool::new(&world, "BN 1/8", ball), "ball"));
+    // This fixture's controller table is fixed by the committed wrap golden.
+    // The indexed-only fixture keeps its own T1/T2 table.
+    for (name, number) in [("BN 1/8", 1), ("EM 1/4 3FL", 2), ("EM 1/8 2FL", 3)] {
+        let entity = camcraft_app::model::find_by_name(&world, name).expect("fixture tool");
+        let tool = camcraft_app::model::tool_of(&world, &entity).expect("tool definition");
+        entity.entity_view(&world).set(camcraft_app::schema::ToolDef { tool, number: Some(number) });
+    }
     let created = CreateOperation::new(&world, "WRAP", "BN 1/8", SrcRef::Entity("bar core".into()), wrap);
     h.execute(&world, created.expect("create the wrap op"));
     h.execute(&world, GenerateOperation::new(&world, "WRAP").expect("generate"));
@@ -341,6 +348,26 @@ fn wrap_golden_allows_only_bounded_platform_rounding() {
     assert!(compare_wrap_golden("G0 X0 Y0 Z0.8746 A-42.719", "G0 X0 Y0 Z0.8746 A-42.717").is_err());
     assert!(compare_wrap_golden("G94 G1 A3 F359.999", "G94 G1 A3 F360").is_err());
     assert!(compare_wrap_golden("G1 X0 F1.001", "G1 X0 F1").is_err());
+}
+
+#[test]
+fn wrapped_fixture_keeps_golden_tool_numbers() {
+    let world = wrap_world();
+    let out = std::env::temp_dir().join(format!("camcraft_microarc_numbers_{}.nc", std::process::id()));
+    let posted = camcraft_app::posting::post_setup(&world, &out);
+    let _ = std::fs::remove_file(&out);
+    let nc = posted.expect("the wrapped fixture must post").program;
+    let want = std::fs::read_to_string(repo(WRAP_GOLDEN)).expect("the committed wrap golden");
+    // Pin comments, tool changes and length offsets independently of the
+    // platform-dependent motion-line count tracked by #2483.
+    let table = |program: &str| -> Vec<String> {
+        program.lines().filter(|line| {
+            line.starts_with("(T") && line.as_bytes().get(2).is_some_and(u8::is_ascii_digit)
+                || line.starts_with('T')
+                || line.split_whitespace().any(|word| word.starts_with('H') && word[1..].parse::<u32>().is_ok())
+        }).map(str::to_owned).collect()
+    };
+    assert_eq!(table(&nc), table(&want), "the wrapped fixture must retain its golden T/H table");
 }
 
 #[test]

@@ -16,6 +16,32 @@ fn heavy() -> Vec<Step> {
 }
 
 #[test]
+fn release_plan_runs_heavy_targets_before_debug_suites() {
+    let root = root();
+    for snapshots in [false, true] {
+        let release = plan::release_with(&root, snapshots);
+        let heavy = plan::heavy_steps(&root);
+        for (actual, expected) in release.steps[1..=heavy.len()].iter().zip(&heavy) {
+            assert_eq!(actual, expected, "heavy targets must immediately follow the two builds");
+        }
+        let mut expected = vec![plan::debug_build(plan::ALL_CRATES)];
+        expected.extend(heavy);
+        expected.extend(plan::run_suites(&root, plan::ALL_CRATES, false));
+        expected.push(plan::clippy());
+        if snapshots {
+            // Existing snapshot coverage stays in the plan; the exact commands are pinned elsewhere.
+            expected.extend(release.steps.iter().filter(|s| s.name.contains("snapshot lane")).cloned());
+        }
+        let sorted = |steps: Vec<Step>| {
+            let mut steps = steps;
+            steps.sort_by(|a, b| a.name.cmp(&b.name));
+            steps
+        };
+        assert_eq!(sorted(release.steps), sorted(expected), "reordering must preserve every step and its command");
+    }
+}
+
+#[test]
 fn heavy_lanes_are_one_build_then_one_step_per_target() {
     let steps = heavy();
     assert_eq!(steps[0].name, "heavy build (release --no-run)");
@@ -54,7 +80,15 @@ fn heavy_steps_skip_only_binaries_without_ignored_tests() {
         let mine: Vec<&Step> = all.iter().filter(|s| s.args.contains(&pkg) && !s.args.contains(&"--no-run".to_string())).collect();
         let mut sel: Vec<String> = Vec::new();
         for s in &mine {
-            assert!(s.args.ends_with(&["--".into(), plan::T.into(), "--ignored".into()]), "{}: {:?}", s.name, s.args);
+            // `-- --test-threads=6 [--exact --skip <known fail>...] --ignored` (known_fail, #1950 decision).
+            let tail = s.args.iter().position(|a| a == "--").map(|i| &s.args[i + 1..]).unwrap_or_default();
+            assert!(tail.first().map(String::as_str) == Some(plan::T) && tail.last().map(String::as_str) == Some("--ignored"), "{}: {:?}", s.name, s.args);
+            if s.expect_fail.is_none() {
+                // Only a lane with a known-fail entry carries its `--exact --skip` args; every other lane has none.
+                let label = s.name.split_once("heavy: ").map(|x| x.1).unwrap_or_default();
+                let skip = crate::known_fail::skip_args(d, label);
+                assert_eq!(&tail[1..tail.len() - 1], skip.as_slice(), "{}: {:?}", s.name, s.args);
+            }
             assert!(s.args.contains(&"--release".to_string()) && s.args.contains(&"--no-fail-fast".to_string()));
             let i = s.args.iter().position(|a| a == "--no-fail-fast").unwrap_or(0) + 1;
             let target: Vec<&str> = s.args[i..].iter().take_while(|a| *a != "--").map(String::as_str).collect();

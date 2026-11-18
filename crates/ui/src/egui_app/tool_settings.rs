@@ -305,10 +305,22 @@ pub(super) fn contents(ui: &mut Ui, state: &mut State, wide: bool) {
             num(ui, u, &mut state.tool_ui.shank_d);
             field(ui, "Shank length");
             num(ui, u, &mut state.tool_ui.shank_len);
-            field(ui, "Holder diameter");
-            num(ui, u, &mut state.tool_ui.holder_d);
-            field(ui, "Holder length");
-            num(ui, u, &mut state.tool_ui.holder_len);
+            if let Some((entry, d, len)) = state.editor_library_holder() {
+                // #2016: a library holder sizes itself - the cylinder
+                // every law reads is the entry's, shown, never typed.
+                let from = format!("from the library holder {entry} (Profile tab)");
+                field(ui, "Holder diameter");
+                ui.label(format!("{} {}", units::len(d, u, 3), u.suffix()));
+                ui.label(&from);
+                field(ui, "Holder length");
+                ui.label(format!("{} {}", units::len(len, u, 3), u.suffix()));
+                ui.label(from);
+            } else {
+                field(ui, "Holder diameter");
+                num(ui, u, &mut state.tool_ui.holder_d);
+                field(ui, "Holder length");
+                num(ui, u, &mut state.tool_ui.holder_len);
+            }
             field(ui, "Material group");
             ui.add(
                 TextEdit::singleline(&mut state.tool_ui.material_group)
@@ -328,10 +340,12 @@ pub(super) fn contents(ui: &mut Ui, state: &mut State, wide: bool) {
             // centre-cutting tool; otherwise it helixes, ramps,
             // or the operation is refused by name.
             ui.checkbox(&mut state.tool_ui.center_cutting, "Centre cutting (may plunge into solid)");
-            // #221: the machine's tool-table number - the post's
-            // T and H words. 0 leaves it to the list position.
-            field(ui, "Tool number (0 = list position)");
-            ui.add(egui::DragValue::new(&mut state.tool_ui.number).range(0..=camcraft_app::tool_numbers::MAX));
+            // #221 / #2442: the machine's tool-table number - the post's
+            // T and H words. New tools take the lowest unused number when 0.
+            let min = if exists { 1 } else { 0 };
+            let label = if exists { "Tool number" } else { "Tool number (0 = next free)" };
+            field(ui, label);
+            ui.add(egui::DragValue::new(&mut state.tool_ui.number).range(min..=camcraft_app::tool_numbers::MAX));
         });
         ui.vertical(|ui| {
             // #371: the placed body's envelope rides the profile.
@@ -393,17 +407,27 @@ pub(super) fn contents(ui: &mut Ui, state: &mut State, wide: bool) {
     }
 }
 
-/// #221: queue a `SetToolNumber` when the editor's number differs from the
-/// tool's own (a new tool has none). Rides the same Apply / Add click as
-/// the geometry, but as its own undoable command.
+/// #221 / #2442: queue a `SetToolNumber` when the editor's number differs from
+/// the tool's own (or for a new tool, when the user typed a number other than
+/// the `next_free` number `AddTool` will assign). Rides the same Apply / Add
+/// click as the geometry, as its own undoable command.
 fn push_number_if_changed(state: &mut State, name: &str) {
     let want = (state.tool_ui.number > 0).then_some(state.tool_ui.number);
     let have = model::find_by_name(&state.world, name)
         .and_then(|e| model::tool_number_of(&state.world, &e));
-    if want != have {
+    if have.is_some() {
+        if want != have {
+            state.pending.push_back(CommandKind::SetToolNumber {
+                name: name.to_owned(),
+                number: want,
+            });
+        }
+    } else if let Some(n) = want
+        && Some(n) != camcraft_app::tool_numbers::next_free(&state.world)
+    {
         state.pending.push_back(CommandKind::SetToolNumber {
             name: name.to_owned(),
-            number: want,
+            number: Some(n),
         });
     }
 }

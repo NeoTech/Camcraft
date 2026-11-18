@@ -31,13 +31,6 @@ fn mirrored() -> Value {
     machine::mirror(&parse_mch(text).unwrap_or_else(|e| panic!("{ARC4}: {e}")))
 }
 
-/// The shipped file with the A travel opened up, to follow a count past 360.
-fn wide() -> Value {
-    let mut m = mirrored();
-    m["kinematics"]["static"]["rotaries"][0]["travel"] = json!([-9999.0, 9999.0]);
-    m
-}
-
 /// A metric document, so the expected words are plain mm and mm/min.
 fn run(mch: &Value, stream: &str) -> engine::PostOutput {
     let cps = std::fs::read_to_string(repo("assets/posts/tormach.cps")).expect("the post");
@@ -162,7 +155,7 @@ fn the_microarc_states_its_a_rate() {
 
 #[test]
 fn a_long_xyz_move_takes_its_time_from_the_feed() {
-    let out = run(&wide(), &wrap_stream(361.0));
+    let out = run(&mirrored(), &wrap_stream(361.0));
     assert!(out.warnings.is_empty(), "{:?}", out.warnings);
     let want = inverse_time(50.0, 600.0, 1.0, 360.0);
     assert_eq!(want, 11.999);
@@ -174,7 +167,7 @@ fn a_long_xyz_move_takes_its_time_from_the_feed() {
 
 #[test]
 fn a_mostly_rotary_move_takes_its_time_from_the_a_rate() {
-    let out = run(&wide(), &wrap_stream(361.0));
+    let out = run(&mirrored(), &wrap_stream(361.0));
     let tail = after(&out.program, "G93 G1 X50 Y0 Z0 A1 F11.999");
     // 90 degrees at 360 deg/min is 0.25 min: F4, still in G93 (no word).
     assert_eq!(inverse_time(1.0, 600.0, 90.0, 360.0), 4.0);
@@ -183,7 +176,7 @@ fn a_mostly_rotary_move_takes_its_time_from_the_a_rate() {
 
 #[test]
 fn g94_comes_back_before_an_xyz_only_feed_and_a_turns_in_deg_per_min() {
-    let out = run(&wide(), &wrap_stream(361.0));
+    let out = run(&mirrored(), &wrap_stream(361.0));
     let tail = after(&out.program, "G1 X51 Y0 Z0 A91 F4");
     assert_eq!(
         &tail[1..6],
@@ -224,7 +217,7 @@ fn g94_comes_back_before_a_turning_rapid_after_a_g93_feed() {
 
 #[test]
 fn a_counts_on_through_180_and_360_never_back_through_0() {
-    let out = run(&wide(), &wrap_stream(361.0));
+    let out = run(&mirrored(), &wrap_stream(361.0));
     let a: Vec<f64> = lines(&out.program)
         .iter()
         .flat_map(|l| l.split(' '))
@@ -236,7 +229,7 @@ fn a_counts_on_through_180_and_360_never_back_through_0() {
 
 #[test]
 fn the_next_operation_resets_a_at_the_safe_z() {
-    let out = run(&wide(), &wrap_stream(361.0));
+    let out = run(&mirrored(), &wrap_stream(361.0));
     let tail = after(&out.program, "(OPERATION: TOP - G54)");
     let i = tail.iter().position(|l| *l == "G0 A0").unwrap_or_else(|| panic!("{}", out.program));
     assert_eq!(tail[i - 1], "G53 G0 Z0", "{}", out.program);
@@ -299,8 +292,25 @@ fn a_turning_move_off_the_axis_is_split_onto_its_chord() {
 }
 
 #[test]
+fn shipped_microarc_posts_wrapped_a_past_four_turns() {
+    let mut recs = head();
+    let mut moves = approach();
+    for k in 1..=16 {
+        moves.push(mv(MoveKind::Feed, f64::from(k) * 90.0, [f64::from(k) * 5.0, 0.0, 0.0], Some(600.0)));
+    }
+    moves.push(mv(MoveKind::Feed, 1500.0, [85.0, 0.0, 0.0], Some(600.0)));
+    moves.push(mv(MoveKind::Rapid, 1500.0, [85.0, 0.0, 40.0], None));
+    section(&mut recs, "WRAP", moves);
+    let out = run(&mirrored(), &cnc::serialize(&recs));
+    assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+    assert!(out.program.contains("A1500"), "{}", out.program);
+}
+
+#[test]
 fn a_count_past_the_travel_is_refused_by_name() {
-    let out = run(&mirrored(), &wrap_stream(361.0));
+    let mut bounded = mirrored();
+    bounded["kinematics"]["static"]["rotaries"][0]["travel"] = json!([-360.0, 360.0]);
+    let out = run(&bounded, &wrap_stream(361.0));
     assert!(
         out.warnings.iter().any(|w| w.contains(
             "A361 in operation WRAP is beyond the A axis travel -360..360 degrees - A counts on through 360 (PathPilot does not roll A over)"
@@ -308,14 +318,15 @@ fn a_count_past_the_travel_is_refused_by_name() {
         "{:?}",
         out.warnings
     );
-    // Inside the travel the same job posts.
-    let ok = run(&mirrored(), &wrap_stream(300.0));
-    assert!(ok.warnings.is_empty(), "{:?}", ok.warnings);
+    for (mch, deg) in [(&bounded, 300.0), (&mirrored(), 361.0)] {
+        let ok = run(mch, &wrap_stream(deg));
+        assert!(ok.warnings.is_empty(), "{deg}: {:?}", ok.warnings);
+    }
 }
 
 #[test]
 fn a_machine_with_no_a_rate_is_refused_by_name() {
-    let mut m = wide();
+    let mut m = mirrored();
     m["kinematics"]["static"]["rotaries"][0]["speeds"] = json!({});
     let out = run(&m, &wrap_stream(361.0));
     assert!(

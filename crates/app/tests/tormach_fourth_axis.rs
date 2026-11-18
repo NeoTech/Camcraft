@@ -159,7 +159,7 @@ fn the_microarc_machine_states_an_a_about_x() {
     let a = m.axes.iter().find(|a| a.name == "A").expect("an A axis");
     assert!(a.rotary, "A is a rotary");
     assert_eq!(a.axis, Some([1.0, 0.0, 0.0]), "A turns about X");
-    assert_eq!(a.travel, Some((-360.0, 360.0)), "degrees, never unit-scaled");
+    assert_eq!(a.travel, None, "PathPilot has no A soft limit (continuous rotary)");
     // TD10749 states no rate for the microARC 4; #796 states the feed the
     // PathPilot Hub ran as asked (360 deg/min, never unit-scaled), and no
     // rapid - unstated, never a zero.
@@ -181,7 +181,7 @@ fn the_microarc_machine_states_an_a_about_x() {
     let p = machine::script_props(&machine::mirror(&m));
     assert_eq!(p["rtcp"], true, "the A about X is a tilting rotary");
     assert_eq!(p["rotaries"][0]["name"], "A");
-    assert_eq!(p["rotaries"][0]["travel"], json!([-360.0, 360.0]));
+    assert_eq!(p["rotaries"][0]["travel"], Value::Null);
 }
 
 /// The golden: four faces, each indexed alone with Z up, each posted in
@@ -299,7 +299,7 @@ fn a_tilt_the_a_axis_cannot_reach_is_refused() {
 }
 
 /// The tool angle is read through the axis, so it lies in -180..180 and
-/// the shipped -360..360 holds every face; a machine stating less travel
+/// the shipped machine has no A travel limit; a machine stating less travel
 /// (a table stopped at +-100 degrees) refuses the face underneath.
 #[test]
 fn an_a_past_travel_is_refused() {

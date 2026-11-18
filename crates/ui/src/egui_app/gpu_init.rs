@@ -108,11 +108,12 @@ where
                 continue; // already failed under an earlier mask
             }
             let who = format!("\"{}\" via {}", desc.name, gpu::backend_name(desc.backend));
+            diag_info!("gpu: trying {}", desc.summary());
             match try_adapter(&surface, adapter, size.width, size.height, &who, &mut build) {
                 Ok((device, queue, config, built)) => {
                     diag_info!(
-                        "gpu: using {who} ({}; {:?} {:?} {:?})",
-                        gpu_select::type_name(desc.device_type),
+                        "gpu: using {} ({:?} {:?} {:?})",
+                        desc.summary(),
                         config.format,
                         config.present_mode,
                         config.alpha_mode

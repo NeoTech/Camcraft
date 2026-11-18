@@ -112,8 +112,13 @@ fn edit_number(harness: &mut egui_kittest::Harness<'static, State>, label: &str,
         .find(|n| (n.rect().center().y - row.center().y).abs() < 2.0)
         .expect("a numeric control on the named row")
         .rect();
-    harness.query_all_by(|n| n.role() == Role::SpinButton).find(|n| n.rect() == spin).expect("spin").click();
-    harness.run();
+    // #2516: Enter in the field above moves the focus here with the text
+    // selected; a click on the focused field would only place the cursor.
+    let node = harness.query_all_by(|n| n.role() == Role::SpinButton).find(|n| n.rect() == spin).expect("spin");
+    if !node.is_focused() {
+        node.click();
+        harness.run();
+    }
     harness
         .query_all_by(|n| n.role() == Role::SpinButton)
         .find(|n| (n.rect().top() - spin.top()).abs() < 1.0)
@@ -143,8 +148,12 @@ fn dip_number<'a>(
 }
 
 fn type_dip(h: &mut egui_kittest::Harness<'static, State>, label: &str, value: &str) {
-    dip_number(h, label).click();
-    h.run();
+    // #2516: Enter in the field above moves the focus here with the text
+    // selected; a click on the focused field would only place the cursor.
+    if !dip_number(h, label).is_focused() {
+        dip_number(h, label).click();
+        h.run();
+    }
     dip_number(h, label).type_text(value);
     h.run();
     h.key_press(egui::Key::Enter);

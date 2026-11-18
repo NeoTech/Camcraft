@@ -6,8 +6,9 @@ use std::sync::{Arc, Weak};
 
 use camcraft_app::geometry::{Aabb, Triangle};
 use camcraft_app::model;
-use camcraft_app::operation::{self, Height, SrcRef, Tilt};
-use camcraft_app::schema::{Location, SetupDef};
+use camcraft_app::operation::{self, Height, OpParams, SrcRef, Tilt};
+use camcraft_app::schema::{Location, Operation, SetupDef};
+use camcraft_app::units::Unit;
 use flecs_ecs::prelude::{Entity, World};
 
 struct Mesh(Weak<[Triangle]>);
@@ -74,6 +75,17 @@ impl Key {
 }
 type HeightRead = (Option<SrcRef>, Height, Result<f64, &'static str>);
 
+#[derive(PartialEq)]
+struct AdviceKey {
+    geometry: Key,
+    machine_kind: camcraft_app::machine::Kind,
+    program: Vec<(String, Operation)>,
+    unit: Unit,
+    src: SrcRef,
+    params: OpParams,
+    this: Option<String>,
+}
+
 struct Entry {
     key: Key,
     bounds: Option<Option<Aabb>>,
@@ -82,6 +94,49 @@ struct Entry {
 thread_local! {
     static MEMO: RefCell<Vec<Entry>> = const { RefCell::new(Vec::new()) };
     static BUILDS: Cell<u64> = const { Cell::new(0) };
+    static ADVICE: RefCell<Option<(AdviceKey, Option<String>)>> = const { RefCell::new(None) };
+    static ADVICE_BUILDS: Cell<u64> = const { Cell::new(0) };
+}
+
+/// The draft's display advice follows geometry, machine kind, units and program order,
+/// including suppression changes. It never supplies a generation verdict.
+pub(crate) fn clearance_advice(
+    world: &World,
+    setup: Option<&str>,
+    src: &SrcRef,
+    params: &OpParams,
+    this: Option<&str>,
+) -> Option<String> {
+    let key = AdviceKey {
+        geometry: Key::of(world, setup, params.tilt()),
+        machine_kind: camcraft_app::machine::kind_of_setup(world, setup),
+        program: camcraft_app::program_entry::sequence(world)
+            .into_iter()
+            .filter_map(|(name, entity)| model::operation_of(world, &entity).map(|op| (name, op)))
+            .collect(),
+        unit: camcraft_app::units::of(world),
+        src: src.clone(),
+        params: params.clone(),
+        this: this.map(str::to_owned),
+    };
+    ADVICE.with(|memo| {
+        let mut memo = memo.borrow_mut();
+        if let Some((old, value)) = memo.as_ref()
+            && *old == key
+        {
+            return value.clone();
+        }
+        let _span = crate::frame_cost::span("display/heights.clearance_advice");
+        ADVICE_BUILDS.with(|n| n.set(n.get().saturating_add(1)));
+        let value = operation::clearance_in_stock_advice(world, setup, src, params, this);
+        *memo = Some((key, value.clone()));
+        value
+    })
+}
+
+#[cfg(test)]
+pub(crate) fn advice_builds() -> u64 {
+    ADVICE_BUILDS.with(Cell::get)
 }
 fn with_entry<R>(key: Key, f: impl FnOnce(&mut Entry) -> R) -> R {
     MEMO.with(|memo| {
@@ -158,3 +213,7 @@ pub(crate) fn builds() -> u64 {
 #[cfg(test)]
 #[path = "height_memo_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "height_memo_machine_tests.rs"]
+mod machine_tests;

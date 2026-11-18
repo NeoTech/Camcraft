@@ -23,12 +23,16 @@ pub(crate) fn v_load(env: &mut Env, args: Vec<Value>) -> Result<Value, String> {
     let path = PathBuf::from(arg_str(&args, 0, "a project path")?);
     // Load in isolation: refusal leaves the current document and its undo/redo intact.
     let world = crate::world::new_world();
-    crate::project::load(&world, &path).map_err(|e| e.to_string())?;
+    let notes = crate::project::load_noted(&world, &path).map_err(|e| e.to_string())?;
     env.history = History::default();
     env.world = world;
     env.posted = None;
     env.doc_path = Some(path.clone());
-    Ok(json!({ "path": path.display().to_string(), "operations": ops_view(env) }))
+    let mut out = json!({ "path": path.display().to_string(), "operations": ops_view(env) });
+    if !notes.is_empty() {
+        out["notes"] = json!(notes);
+    }
+    Ok(out)
 }
 
 /// `cam.save(path?)` - write the document. With no path this saves
@@ -216,8 +220,10 @@ pub fn refusal_text(name: &str, e: &crate::commands::CommandError) -> String {
 /// generation status, so it said `true` for a program the post refused.
 fn holds_post(env: &Env, entity: &Entity) -> bool {
     let suppressed = model::operation_of(&env.world, entity).is_some_and(|op| op.suppressed);
+    let needs_review = !model::operation_meta_of(&env.world, entity).needs_review.is_empty();
     !suppressed
-        && model::toolpath_of(&env.world, entity).is_some_and(|t| t.warnings.iter().any(|w| w.blocks_post()))
+        && (needs_review
+            || model::toolpath_of(&env.world, entity).is_some_and(|t| t.warnings.iter().any(|w| w.blocks_post())))
 }
 
 /// `cam.verify(...names)` - what the post would say, without writing:
@@ -415,11 +421,20 @@ fn op_view(env: &Env, name: &str, entity: &Entity, warnings: bool) -> Value {
         "setup": op.as_ref().and_then(|o| o.setup.clone()),
         "status": st_str(status),
     });
+    let tp = model::toolpath_of(&env.world, entity);
     if warnings {
-        let warns: Vec<String> = model::toolpath_of(&env.world, entity)
+        let warns: Vec<String> = tp
+            .as_ref()
             .map(|t| t.warnings.iter().map(|w| w.to_string()).collect())
             .unwrap_or_default();
         row["warnings"] = json!(warns);
+        let review = model::operation_meta_of(&env.world, entity).needs_review;
+        if !review.is_empty() {
+            row["needs_review"] = json!(review);
+        }
+    }
+    if let Some(notes) = tp.filter(|t| !t.path.notes.is_empty()).map(|t| t.path.notes) {
+        row["notes"] = json!(notes);
     }
     row
 }

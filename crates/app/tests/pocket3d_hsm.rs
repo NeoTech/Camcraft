@@ -148,7 +148,7 @@ fn the_users_bore_roughs_adaptive_level_by_level_and_verifies_clean() {
 /// planned from the air, and every level keeps the HSM plan and verifies
 /// clean against the part solid.
 #[test]
-#[ignore = "heavy lane: HSM Adaptive over every whole-model level of the user's STEP, ring and bore, verified (~90 s debug, release tier); the level's debug twin is motion pocket_hsm::ring_tests::the_stock_ring_level_reaches_the_air_planner_with_the_stock"]
+#[ignore = "heavy lane: issue #1950 blocked (maintainer decides), expected red: stock-ring plans exceed optimal load and fall back to Offset rings; HSM Adaptive over every whole-model level of the user's STEP, ring and bore, verified (~90 s debug, release tier); the level's debug twin is motion pocket_hsm::ring_tests::the_stock_ring_level_reaches_the_air_planner_with_the_stock"]
 fn the_users_whole_model_bore_roughs_adaptive_on_each_level() {
     let world = new_world();
     let mut h = History::default();

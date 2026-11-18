@@ -96,11 +96,13 @@ pub mod setup_offsets;
 pub mod setup_align;
 // #343: each setup's own machine and post, and the one-mount law.
 pub mod setup_mount;
+// #870: the WCS origin said in words ("top of stock, front-left corner").
+pub mod setup_origin;
 // #316: transforms between setups and the setup-relative link.
 pub mod setup_relative;
 // #1510: a tilted milling WCS is refused at generation.
 pub mod setup_wcs_tilt;
-// #1720: a flipped WCS axis is stored, and refused at post and generation.
+// #1720, #1649: a flipped WCS axis is stored; the post mirrors X/Y and refuses the rest.
 pub mod setup_wcs_flip;
 pub mod setup_post_options;
 // #1031: a setup's workholding (chuck/collet) rpm limit.

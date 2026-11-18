@@ -233,7 +233,7 @@ pub(super) fn plan_level(
     let r = p.tool_diameter * 0.5;
     let air_entry = seam.is_none()
         && stock.is_some_and(|s| passes.first().and_then(|w| w.first()).is_some_and(|&e| in_air(s, e, r)));
-    if air_entry {
+    if air_entry && p.links.approach.center_cutting {
         b.note_once(AIR_ENTRY);
     }
     Ok(LevelPlan { passes, joins, arcs: Some(runs), helix_r, hsm: true, air_entry })
