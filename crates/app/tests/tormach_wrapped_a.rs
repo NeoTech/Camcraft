@@ -359,3 +359,73 @@ fn posted_trajectory_length_obeys_the_feed_even_for_coincident_world_endpoints()
         }
     }
 }
+
+/// A turning rapid directly after a G93 turning feed must restate G94 so
+/// no G0 move ever executes while G93 inverse-time mode is active, whether
+/// the rapid is unsplit on the axis or split off the axis.
+#[test]
+fn a_turning_rapid_after_g93_restates_g94() {
+    let mut recs = head();
+    let mut w = approach();
+    w.extend([
+        // Enter G93 on the axis.
+        mv(MoveKind::Feed, 10.0, [10.0, 0.0, 0.0], Some(600.0)),
+        // Unsplit turning rapid on the axis: must restate G94 before G0.
+        mv(MoveKind::Rapid, 20.0, [15.0, 0.0, 0.0], None),
+        // Re-enter G93 with a feed move.
+        mv(MoveKind::Feed, 30.0, [20.0, 0.0, 10.0], Some(600.0)),
+        // Split turning rapid off the axis: must restate G94 before its first G0.
+        mv(MoveKind::Rapid, 75.0, [25.0, 0.0, 10.0], None),
+    ]);
+    section(&mut recs, "RAPID_G94", w);
+    let out = run(&mirrored(), &cnc::serialize(&recs));
+    assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+
+    let tail = after(&out.program, "G1 X0 Y0 Z0 F200");
+    let mut g93 = false;
+    let mut turning_rapids = 0;
+    let mut g93_stretches = 0;
+    for (idx, line) in tail.iter().enumerate() {
+        let ws: Vec<&str> = line.split_whitespace().collect();
+        if ws.contains(&"G93") {
+            g93 = true;
+            g93_stretches += 1;
+        }
+        if ws.contains(&"G94") {
+            g93 = false;
+        }
+        if ws.contains(&"G0") && ws.iter().any(|w| w.starts_with('A')) {
+            assert!(!g93, "turning rapid ran in G93: {line}\n{}", out.program);
+            turning_rapids += 1;
+        }
+        if *line == "G0 X15 Y0 Z0 A20" {
+            assert_eq!(tail[idx - 1], "G94", "G94 must immediately precede unsplit turning rapid\n{}", out.program);
+        }
+    }
+    assert!(turning_rapids >= 3, "expected unsplit and split turning rapids\n{}", out.program);
+    assert_eq!(g93_stretches, 2, "expected G93 before and after the first turning rapid\n{}", out.program);
+}
+
+/// Returning A to 0 (`aNext === 0`) must still turn A on both feeds and
+/// rapids, and `aNext` carries no unused `word` field.
+#[test]
+fn turning_back_to_a0_works_and_anext_has_no_dead_word_field() {
+    let cps = std::fs::read_to_string(repo("assets/posts/tormach.cps")).expect("the post");
+    assert!(!cps.contains("word: tw"), "aNext still carries unused word field");
+    assert!(!cps.contains("aNext.word"), "aNext still reads word field");
+
+    let mut recs = head();
+    let mut w = approach();
+    w.extend([
+        mv(MoveKind::Feed, 10.0, [10.0, 0.0, 0.0], Some(600.0)),
+        mv(MoveKind::Feed, 0.0, [20.0, 0.0, 0.0], Some(600.0)),
+        mv(MoveKind::Rapid, 15.0, [25.0, 0.0, 0.0], None),
+        mv(MoveKind::Rapid, 0.0, [30.0, 0.0, 0.0], None),
+    ]);
+    section(&mut recs, "BACK_TO_ZERO", w);
+    let out = run(&mirrored(), &cnc::serialize(&recs));
+    assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+    let tail = after(&out.program, "G1 X0 Y0 Z0 F200");
+    assert!(tail.iter().any(|l| l.starts_with("G1 X20 Y0 Z0 A0 F")), "feed back to A0 missing:\n{}", out.program);
+    assert!(tail.contains(&"G0 X30 Y0 Z0 A0"), "rapid back to A0 missing:\n{}", out.program);
+}

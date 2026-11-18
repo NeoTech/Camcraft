@@ -252,8 +252,11 @@ fn num(t: &str) -> Option<f64> {
 
 /// The wrapped job's trig differs at last-place rounding boundaries across
 /// platforms. Keep topology, mode words, XYZ and ordinary feeds byte exact;
-/// only motion A (one 0.001-degree step) and G93 F (0.04 inverse minutes,
-/// the observed adjacent-step rate-cap swap) have a numeric allowance.
+/// only motion A (one 0.001-degree step per endpoint) and G93 turning F have
+/// a numeric allowance. Since `F = 1 / t` is inverse time and a 0.001-deg
+/// endpoint shift changes `dA` by at most 0.002 deg at 360 deg/min, `|1/a - 1/b|`
+/// shifts by at most `0.002 / 360` minutes plus `0.001` from three-decimal
+/// flooring (about `0.0012` at `F5.335`, `1.50` at `F518.731`).
 fn compare_wrap_golden(actual: &str, expected: &str) -> Result<(), String> {
     let actual: Vec<_> = actual.lines().collect();
     let expected: Vec<_> = expected.lines().collect();
@@ -273,17 +276,21 @@ fn compare_wrap_golden(actual: &str, expected: &str) -> Result<(), String> {
         }
         for (got, want) in got.iter().zip(&want) {
             if got == want { continue; }
-            let tolerance = if turning_motion && got.starts_with('A') && want.starts_with('A') {
-                0.001
+            if turning_motion && got.starts_with('A') && want.starts_with('A') {
+                if !matches!((num(got), num(want)), (Some(a), Some(b))
+                    if a.is_finite() && b.is_finite() && (a - b).abs() <= 0.001 + 1e-10)
+                {
+                    return Err(format!("line {}: {got} != {want} (allowance 0.001)", line + 1));
+                }
             } else if turning_feed && got.starts_with('F') && want.starts_with('F') {
-                0.04
+                let ok = matches!((num(got), num(want)), (Some(a), Some(b))
+                    if a.is_finite() && b.is_finite() && a > 0.0 && b > 0.0
+                        && (a - b).abs() <= 0.001 + (a + 0.001) * (b + 0.001) * (0.002 / 360.0) + 1e-10);
+                if !ok {
+                    return Err(format!("line {}: {got} != {want} (outside 0.002 deg / 360 inverse-time allowance)", line + 1));
+                }
             } else {
                 return Err(format!("line {}: {got} != {want}", line + 1));
-            };
-            if !matches!((num(got), num(want)), (Some(a), Some(b))
-                if a.is_finite() && b.is_finite() && (a - b).abs() <= tolerance + 1e-10)
-            {
-                return Err(format!("line {}: {got} != {want} (allowance {tolerance})", line + 1));
             }
         }
     }
@@ -295,18 +302,33 @@ fn wrap_golden_allows_only_bounded_platform_rounding() {
     let windows = "G93 G1 X0 Y0 Z0 A-41.921 F116.959\nG1 X0 Y0 Z0 A-45 F116.921";
     let linux = "G93 G1 X0 Y0 Z0 A-41.922 F116.921\nG1 X0 Y0 Z0 A-45 F116.959";
     assert!(compare_wrap_golden(linux, windows).is_ok());
+    // Observed Windows platform spread across speed bands (0.049, 0.122, 0.414, 0.749).
+    for (got, want) in [
+        ("G93 G1 X0.0627 Y0 Z0.2851 A218.19 F132.939", "G93 G1 X0.0627 Y0 Z0.2851 A218.189 F132.89"),
+        ("G93 G1 X0.0624 Y-0.0009 Z0.2386 A40.932 F209.668", "G93 G1 X0.0624 Y-0.0009 Z0.2386 A40.933 F209.79"),
+        ("G93 G1 X0.0623 Y0 Z0.286 A63.291 F386.68", "G93 G1 X0.0623 Y0 Z0.286 A63.292 F386.266"),
+        ("G93 G1 X0.0542 Y0 Z0.3088 A65.046 F519.48", "G93 G1 X0.0542 Y0 Z0.3088 A65.045 F518.731"),
+    ] {
+        assert!(compare_wrap_golden(got, want).is_ok(), "rejected {got} vs {want}");
+    }
     for changed in [
         linux.replace("A-41.922", "A-41.923"),
-        linux.replace("F116.921", "F116.918"),
+        linux.replace("F116.921", "F116.88"),
         linux.replace("X0", "X0.0001"),
         linux.replace("G93", "G94"),
         linux.replace("G1", "G0"),
         linux.replace(" A-45", ""),
         format!("{linux}\nM5"),
         linux.replace("F116.921", "FNaN"),
+        linux.replace("F116.921", "F0"),
     ] {
         assert!(compare_wrap_golden(&changed, windows).is_err(), "accepted {changed}");
     }
+    // Slow-line speed errors must be rejected tightly (never a flat 0.75 allowance).
+    assert!(compare_wrap_golden("G93 G1 X-1.5 Y0 Z0.34 A-67.094 F5.337", "G93 G1 X-1.5 Y0 Z0.34 A-67.094 F5.335").is_err());
+    assert!(compare_wrap_golden("G93 G1 X-1.5 Y0 Z0.34 A-67.094 F6.085", "G93 G1 X-1.5 Y0 Z0.34 A-67.094 F5.335").is_err());
+    // Fast-line deltas larger than a 0.002-deg rounding shift are rejected too.
+    assert!(compare_wrap_golden("G93 G1 X0.0542 Y0 Z0.3088 A65.046 F520.25", "G93 G1 X0.0542 Y0 Z0.3088 A65.045 F518.731").is_err());
     assert!(compare_wrap_golden("G0 X0 Y0 Z0.8746 A-42.718", "G0 X0 Y0 Z0.8746 A-42.717").is_ok());
     assert!(compare_wrap_golden("G0 X0 Y0 Z0.8746 A-42.719", "G0 X0 Y0 Z0.8746 A-42.717").is_err());
     assert!(compare_wrap_golden("G94 G1 A3 F359.999", "G94 G1 A3 F360").is_err());
@@ -345,6 +367,9 @@ fn a_wrapped_op_on_the_test_part_posts_wrapped_a() {
         let a = ws.iter().find(|w| w.starts_with('A')).and_then(|w| num(w));
         if let (Some(p), Some(a)) = (last, a) {
             assert!((a - p).abs() <= 180.0, "A unwrapped: {p} -> {a} at {l}");
+        }
+        if ws[0] == "G0" {
+            assert!(!g93, "a rapid never runs in G93: {l}");
         }
         if g93 && let (Some(previous), Some(a)) = (last, a) {
             let feed = ws.iter().find(|w| w.starts_with('F')).and_then(|w| num(w)).expect("G93 F");

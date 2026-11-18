@@ -682,9 +682,9 @@ function toolAngle(a0, b0, c0) {
 // Called before every motion: true when the record may post. Indexes the
 // table at the section's first motion, when its angle is not the held one.
 // A later record whose angle differs turns A inside the section: aNext is
-// then set to the unwrapped target ({a, word}) for onRapid / onLinear to
-// post (turnMove); any other motion (`what` names it) is refused by name
-// when it would turn A.
+// then set to the unwrapped target angle (null when no turn is needed)
+// for onRapid / onLinear to post (turnMove); any other motion (`what`
+// names it) is refused by name when it would turn A.
 var aNext = null;
 function indexFor(p, what) {
   aNext = null;
@@ -722,7 +722,7 @@ function indexFor(p, what) {
     if (ax.travel && (tw < ax.travel[0] - A_EPS || tw > ax.travel[1] + A_EPS)) {
       return aRefuse("A" + fa(tw) + inOp() + " is beyond the A axis travel " + fa(ax.travel[0]) + ".." + fa(ax.travel[1]) + " degrees - A counts on through 360 (PathPilot does not roll A over), so the operation turns too far in one direction");
     }
-    aNext = { a: to, word: tw };
+    aNext = to;
     return true;
   }
   var word = ax.sign * a;
@@ -797,7 +797,7 @@ function g94() { if (g93) { block(["G94"]); g93 = false; } }
 // any motion that will not be a turning move.
 function motionFor(p, what) {
   if (!indexFor(p, what)) return false;
-  if (!aNext) g94();
+  if (aNext === null) g94();
   return true;
 }
 // tip() at an explicit tool angle, and its inverse (machine words back
@@ -867,7 +867,7 @@ function turnMove(p, rapid) {
   var f = Number(p.FeedRate);
   if (!rapid && !(f > 0)) return aRefuse("a feed that turns A" + inOp() + " has no feed rate");
   var s = [Number(p.StartX), Number(p.StartY), Number(p.StartZ)], e = [Number(p.X), Number(p.Y), Number(p.Z)];
-  var a0 = aSection, a1 = aNext.a;
+  var a0 = aSection, a1 = aNext;
   var n = 1;
   while (n < TURN_MAX && !(turnBow(s, e, a0, a1, n) <= TURN_TOL)) n *= 2;
   var bow = turnBow(s, e, a0, a1, n);
@@ -888,6 +888,7 @@ function turnMove(p, rapid) {
     var aw = "A" + fa(ax.sign * b1);
     var dA = Math.abs(Number(fa(ax.sign * b1)) - Number(fa(ax.sign * bPrev)));
     if (rapid) {
+      g94();
       block(["G0", xw, yw, zw, aw]);
     } else if (!(dA > 0)) {                   // the turn rounds away: plain G94
       g94();
@@ -1036,7 +1037,7 @@ function probeSeat() {
 function onRapid() {
   startPreamble();
   if (chainRapid() || !motionFor(properties, "")) return;
-  if (aNext) { turnMove(properties, true); return; }
+  if (aNext !== null) { turnMove(properties, true); return; }
   if (!xyFirst(properties.X, properties.Y, properties.Z)) return;  // #1614: refused - the move is not written
   block(["G0"].concat(xyz(properties)));
 }
@@ -1044,7 +1045,7 @@ function onLinear() {
   startPreamble();
   if (chainCut() || !motionFor(properties, "")) return;
   if (spindleStopped("feed move G1")) return;
-  if (aNext) { turnMove(properties, false); return; }
+  if (aNext !== null) { turnMove(properties, false); return; }
   if (!startXY(properties)) return;  // #1614: refused - the move is not written
   block(["G1"].concat(xyz(properties), [fw(properties.FeedRate)]));
 }

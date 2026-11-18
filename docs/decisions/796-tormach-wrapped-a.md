@@ -71,13 +71,17 @@ output was consulted.
   rounding allowance, which misses the curved path even when its two
   endpoints coincide. Independent dense interpolation tests pin feed and
   A rate against the posted words.
-- **Review fix: narrowly compare the wrapped golden across platforms.**
+- **Review fix: bound the wrapped golden's G93 F in inverse time across platforms.**
   Keep line count, word order, modes, XYZ and ordinary feeds exact. Allow
-  at most 0.001 degree in G0/G1 A and 0.04 inverse minutes in turning G93 F,
-  matching the observed last-place A boundary and adjacent-step F swap
-  (116.959 versus 116.921). Comparator pins reject values outside either
-  bound, changed motion words, changed XYZ, missing words and extra lines.
-  The program's independent A-rate and feed checks remain in place.
-  **Dropped:** replacing the golden with Linux output alone, which merely
-  moves the same boundary failure to another platform; broad numeric
-  tolerances, which could hide motion or mode changes.
+  at most 0.001 degree per endpoint in G0/G1 A, and on turning G93 F allow
+  at most the inverse-time shift caused by that 0.002-degree `dA` rounding
+  spread at 360 deg/min (`|1/got - 1/want| <= 0.002 / 360` min) plus
+  0.001 min^-1 for three-decimal flooring (`0.001 + (got + 0.001) * (want + 0.001) * (0.002 / 360)`).
+  This allows `0.0012` on the slowest `F5.335` line and `~1.50` on `F518.731`
+  (covering the Windows spread `0.049`..`0.749` without relaxing `F5.335`).
+  Turning rapids in `turnMove` also restate `G94` before `G0` so no rapid
+  runs in `G93`. Comparator and post pins reject values outside the
+  inverse-time bound, `F5.335` speed errors, turning rapids in `G93`,
+  changed motion words, changed XYZ, missing words and extra lines.
+  **Dropped:** a flat `0.04` F allowance (smaller than the real inverse-time
+  spread on faster lines) or a flat `0.75` allowance (14% error on `F5.335`).
