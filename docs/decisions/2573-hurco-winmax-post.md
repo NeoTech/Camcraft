@@ -71,3 +71,10 @@ the comparison with the CamCraft path. Local tests do not replace these checks.
 Cost to change later: low (`assets/posts/hurco-winmax.cps`,
 `assets/machines/hurco-vm10i.mch`, two registry entries in
 `crates/app/src/posting_files.rs`, and the test goldens).
+
+- **Decided (PR #2646 conflict fix):** Retain `linuxcnc.cps` and
+  `hurco-winmax.cps` in the cycle-hop matrix. Set its array length to eight.
+  **Why:** Both additions are compatible. Each post needs the cycle-hop checks.
+  **Dropped:** Choosing only one side of the merge conflict.
+  Simulator evidence remains pending. No new load results or path comparisons
+  were supplied for this fix.
