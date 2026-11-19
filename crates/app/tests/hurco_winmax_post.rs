@@ -138,8 +138,8 @@ fn posts_full_app_workflow_contour_pocket_drill_peck_tap_two_tools_two_offsets()
         cycle: CycleChoice::Drill,
         peck: 0.0,
         dwell: 0.0,
-        feed: 250.0,
-        plunge_feed: 250.0,
+        feed: 100.0,
+        plunge_feed: 100.0,
         holes: vec![Hole {
             xy: Point2::new(15.0, 15.0),
             radius: 3.0,
@@ -160,8 +160,8 @@ fn posts_full_app_workflow_contour_pocket_drill_peck_tap_two_tools_two_offsets()
         cycle: CycleChoice::Peck,
         peck: 3.0,
         dwell: 0.0,
-        feed: 200.0,
-        plunge_feed: 200.0,
+        feed: 100.0,
+        plunge_feed: 100.0,
         holes: vec![Hole {
             xy: Point2::new(30.0, 15.0),
             radius: 3.0,
