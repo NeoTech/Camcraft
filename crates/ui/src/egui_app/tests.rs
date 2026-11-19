@@ -1986,6 +1986,23 @@ fn egui_shell_snapshot() {
     harness.snapshot("egui_app");
 }
 
+/// #853: the same frame in Simplified Chinese - the proof that the translated
+/// interface draws with its own font and no label overflows. Release lane for
+/// the same reason as the English golden; run with `--ignored` and
+/// `UPDATE_SNAPSHOTS=1` to regenerate, and it restores English afterwards.
+#[test]
+#[ignore = "release lane (#255): pixel snapshot golden, run and regenerated only at minor/major cuts (gate -Tier release)"]
+fn egui_shell_snapshot_chinese() {
+    let _g = snapshot_guard();
+    let lang = camcraft_i18n::set_lang(camcraft_i18n::Lang::ZhCn);
+    assert_eq!(lang, camcraft_i18n::Lang::ZhCn, "the zh-CN catalogue loaded");
+    let mut harness = shell_harness();
+    crate::egui_app::fonts::install_for(&harness.ctx, camcraft_i18n::Lang::ZhCn);
+    harness.run_steps(3);
+    harness.snapshot("egui_app_zh");
+    camcraft_i18n::set_lang(camcraft_i18n::Lang::En);
+}
+
 /// The pixels are process-global: `theme::current()` is ONE live table
 /// for the whole test binary, and the light golden flips it for its
 /// frames (the sync law is the shipping code, not a test-local poke).
