@@ -4,7 +4,7 @@
 // No vendor post files or proprietary implementations consulted.
 
 description = "Hurco WinMax (NC)";
-vendor = "Hurco";
+vendor = "Camcraft";
 extension = "nc";
 programUnits = "mm inch";
 endUnits = "G20 G21";
@@ -618,6 +618,7 @@ function onRadiusCompensation(mode) {
 
 function onLinear() {
   var p = properties;
+  seatKnown = true;
   startPreamble();
   if (!tiltOk(p)) return;
   if (inCycle) {
@@ -721,6 +722,7 @@ function emitRadiusArc(p, g, planeNum, sx, sy, sz, ex, ey, ez, cx, cy, cz, ccw, 
 
 function onCircular() {
   var p = properties;
+  seatKnown = true;
   startPreamble();
   if (!tiltOk(p)) return;
   if (inCycle) { msg(who() + "circular arc inside canned-cycle group"); return; }
@@ -797,6 +799,32 @@ function onDwell(seconds) {
   if (pw) block(["G04", pw]);
 }
 
+// Seat cycles that have no stream rapid to their hole at the section hop.
+// Start coordinates include the expected position after probing and back-off.
+function cycleSeat(p) {
+  if (!seatKnown) return true;
+  var r = has(p.R) ? Number(p.R) : 0;
+  var away = !(has(p.StartX) && has(p.StartY)) || Math.abs(Number(p.StartX) - Number(p.X)) >= 1e-6 || Math.abs(Number(p.StartY) - Number(p.Y)) >= 1e-6;
+  var lo = has(p.StartZ) && Number(p.StartZ) < r - 1e-6;
+  var hi = !has(p.StartZ) || Number(p.StartZ) > r + 1e-6;
+  if (!away && !lo && !hi) return true;
+  endCycle();
+  if (away) {
+    if (!has(hopZ)) {
+      msg(who() + "a canned cycle is read away from its hole with no rapid to it, and the section states no RetractPlane to traverse at");
+      return false;
+    }
+    var top = Math.max(Number(hopZ), r);
+    var at = has(p.StartZ) ? Number(p.StartZ) : -Infinity;
+    if (at < top - 1e-6) { block(["G00", "Z" + fu(top - orgZ)]); at = top; }
+    block(["G00", "X" + fu(Number(p.X) - orgX), "Y" + fu(Number(p.Y) - orgY)]);
+    if (at > r + 1e-6) block(["G00", "Z" + fu(r - orgZ)]);
+  } else {
+    block(["G00", "Z" + fu(r - orgZ)]);
+  }
+  return true;
+}
+
 function onCycle() {
   var p = properties;
   startPreamble();
@@ -809,6 +837,7 @@ function onCycle() {
   }
   if (!xyFirst(p.X, p.Y, has(p.R) ? p.R : p.Z, false)) return;
   restorePlane();
+  if (!cycleSeat(p)) return;
 
   var kind = String(p.CycleType || "DRILL").toUpperCase();
   var tapMode = String(p.TappingMode || "rigid").toLowerCase();
@@ -890,6 +919,7 @@ function onCycle() {
   }
   cycX = xVal; cycY = yVal; cycR = rVal;
   curX = xVal; curY = yVal; curZ = rVal;
+  seatKnown = true;
 }
 
 function onCycleEnd() {
@@ -907,6 +937,7 @@ function probeAxisInfo(p) {
 
 function onProbeMove() {
   var p = properties;
+  seatKnown = true;
   startPreamble();
   endCycle();
   if (wcsRotActive || Math.abs(wcsRot) > 1e-6) {
@@ -931,6 +962,7 @@ function onProbeMove() {
 
 function onProbeGuard() {
   var p = properties;
+  seatKnown = true;
   startPreamble();
   endCycle();
   if (!xyFirst(p.X, p.Y, p.Z, false)) return;
@@ -945,6 +977,7 @@ function onProbeGuard() {
 
 function onProbeRetreat() {
   var p = properties;
+  seatKnown = true;
   startPreamble();
   endCycle();
   block(["G91", "G01", "X" + fu(num(p.DeltaX, 0)), "Y" + fu(num(p.DeltaY, 0)), "Z" + fu(num(p.DeltaZ, 0)), "F" + ff(Number(p.Feed))]);

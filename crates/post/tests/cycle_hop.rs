@@ -23,7 +23,7 @@
 //! practice, no vendor material.
 //!
 //! Gate map (M4.4): covers assets/posts/fanuc.cps, haas.cps, mazak.cps,
-//! sinumerik.cps, tormach.cps, doosan-dnm.cps (their cycle groups),
+//! sinumerik.cps, tormach.cps, doosan-dnm.cps, hurco-winmax.cps (their cycle groups),
 //! camcraft_post::post::engine, the post binary.
 
 mod recorded;
@@ -32,7 +32,7 @@ use std::process::Command;
 
 /// The posts that write canned-cycle words (Heidenhain and Carvera post
 /// the expanded chain, which is the stream's own path).
-const CYCLE_POSTS: [&str; 6] = ["fanuc.cps", "haas.cps", "mazak.cps", "sinumerik.cps", "tormach.cps", "doosan-dnm.cps"];
+const CYCLE_POSTS: [&str; 7] = ["fanuc.cps", "haas.cps", "mazak.cps", "sinumerik.cps", "tormach.cps", "doosan-dnm.cps", "hurco-winmax.cps"];
 
 const EPS: f64 = 1e-6;
 
@@ -365,8 +365,25 @@ ENDSECTION
 ";
 
 #[test]
-fn a_cycle_read_after_probing_is_seated_at_the_hop() {
+fn a_cycle_read_after_probing_or_cutting_is_seated_at_the_hop() {
     assert_hop_law_from(PROBE_THEN_CYCLE, "probe_then_cycle", true);
+    let probe = "GUARD 10000 10000 5000 F 300000\nTOUCH 10000 10000 -5000 EXPECT 10000 10000 0 F 30000 M -\nRETREAT 0 0 1000 EXPECT 10000 10000 1000 F 300000\n";
+    for movement in ["Plunge X 10000 Y 10000 Z 1000 F 300000\n", "Arc CW X 10000 Y 10000 Z 1000 F 300000 I 20000 J 10000\n"] {
+        let stream = PROBE_THEN_CYCLE.replace(probe, movement).replace("PARAM StartZ 10.000000", "PARAM StartZ 1.000000").replace(" AT 0\n", " AT 1\n").replace(" AT 9\n", " AT 10\n");
+        assert_ne!(stream, PROBE_THEN_CYCLE);
+        assert_hop_law_from(&stream, "cut_then_cycle", true);
+    }
+}
+
+#[test]
+fn a_cycle_read_after_probing_without_a_hop_is_refused_by_name() {
+    let stream = PROBE_THEN_CYCLE.replace("PARAM RetractPlane 3.000000\n", "");
+    for script in CYCLE_POSTS {
+        match post(script, &stream, "probe_no_hop") {
+            Ok(program) => panic!("{script}: a cycle after probing with no hop must be refused:\n{program}"),
+            Err(e) => assert!(e.contains("no RetractPlane to traverse at"), "{script}: refused, but not by name: {e}"),
+        }
+    }
 }
 
 #[test]

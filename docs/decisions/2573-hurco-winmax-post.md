@@ -60,7 +60,9 @@ consulted.
   support on the control.
   **Dropped:** `.fnc` default file extension and silent `G05.2` output.
 
-**Simulator verification pending:** Programs were not checked on the community
+**Simulator verification pending (PR #2646, latest review finding 2):**
+No simulator access, load results, or path comparisons are available in this
+session or on issue #2573. Programs were not checked on the community
 owner's WinMax `09.01.393.30` simulator or on a physical Hurco machine.
 Issue #2573 remains incomplete until each open dialect question has a short
 program checked in that simulator. The issue must record the load result and
