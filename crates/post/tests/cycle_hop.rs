@@ -37,6 +37,13 @@ const CYCLE_POSTS: [&str; 8] = [
     "fanuc.cps", "haas.cps", "mazak.cps", "sinumerik.cps", "tormach.cps", "doosan-dnm.cps", "linuxcnc.cps", "hurco-winmax.cps",
 ];
 
+#[test]
+fn cycle_hop_matrix_retains_linuxcnc_and_hurco() {
+    for script in ["linuxcnc.cps", "hurco-winmax.cps"] {
+        assert!(CYCLE_POSTS.contains(&script), "cycle-hop coverage missing for {script}");
+    }
+}
+
 const EPS: f64 = 1e-6;
 
 #[derive(Default)]
