@@ -36,6 +36,19 @@ consulted.
   `G10 L2` `G54`..`G59` range.
   **Dropped:** 254-offset Fanuc/LinuxCNC expansion beyond documented WinMax ISNC
   limits.
+- **Decided:** Check `#3020` after every `G31` move. Touch moves require
+  `#3020 = 1`. Guard moves require `#3020 = 0`.
+  **Why:** Hurco documents this variable as the contact status of the move.
+  The check applies in both inch and millimeter output.
+  **Dropped:** Comparing the skip position with the expected contact position
+  to determine whether contact occurred.
+- **Decided:** Read the active source offset from `#2501..#2599` for X,
+  `#2601..#2699` for Y, and `#2701..#2799` for Z before the probe update.
+  **Why:** The [Hurco NCPP variable summary](https://support.hurco.com/wp-content/uploads/hurco_mill/NC_Programming/NCPP_Variable_Summary.htm)
+  documents these registers and `#3020`. Each axis has six standard offsets
+  followed by 93 auxiliary offsets. The source offset can differ from the
+  `G10 L2` target.
+  **Dropped:** Fanuc offset registers and a register stride of 20.
 - **Decided:** Use `.nc` extension, note smoothing asks once (`SMOOTHING NOT
   WRITTEN - G05.2/G05.3 REQUIRE NC OPTION`) without emitting `G05.2`/`G05.3`,
   and add `hurco-vm10i.mch` (660 x 406 x 508 mm symmetric program-frame travel,
@@ -47,10 +60,11 @@ consulted.
   support on the control.
   **Dropped:** `.fnc` default file extension and silent `G05.2` output.
 
-**Not exercised:** Programs were not checked on the community owner's WinMax
-`09.01.393.30` simulator or on a physical Hurco machine. Verification comes
-only from published Hurco WinMax ISNC manuals, VM10i spec sheets, golden diffs,
-and an ISNC word-set allowlist check over all generated `.nc` goldens.
+**Simulator verification pending:** Programs were not checked on the community
+owner's WinMax `09.01.393.30` simulator or on a physical Hurco machine.
+Issue #2573 remains incomplete until each open dialect question has a short
+program checked in that simulator. The issue must record the load result and
+the comparison with the CamCraft path. Local tests do not replace these checks.
 
 Cost to change later: low (`assets/posts/hurco-winmax.cps`,
 `assets/machines/hurco-vm10i.mch`, two registry entries in

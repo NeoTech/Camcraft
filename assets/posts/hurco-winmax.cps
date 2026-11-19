@@ -900,9 +900,9 @@ function probeAxisInfo(p) {
   var dx = Math.abs(num(p.X, 0) - num(p.StartX, 0));
   var dy = Math.abs(num(p.Y, 0) - num(p.StartY, 0));
   var dz = Math.abs(num(p.Z, 0) - num(p.StartZ, 0));
-  if (dy >= dx && dy >= dz) return { v: "#5062", exp: num(p.ExpectY, num(p.Y, 0)) - orgY };
-  if (dz > dx && dz > dy) return { v: "#5063", exp: num(p.ExpectZ, num(p.Z, 0)) - orgZ };
-  return { v: "#5061", exp: num(p.ExpectX, num(p.X, 0)) - orgX };
+  if (dy >= dx && dy >= dz) return { v: "#5062" };
+  if (dz > dx && dz > dy) return { v: "#5063" };
+  return { v: "#5061" };
 }
 
 function onProbeMove() {
@@ -916,13 +916,14 @@ function onProbeMove() {
   if (!xyFirst(p.X, p.Y, p.Z, false)) return;
   restorePlane();
   block(["G31", "X" + fu(Number(p.X) - orgX), "Y" + fu(Number(p.Y) - orgY), "Z" + fu(Number(p.Z) - orgZ), "F" + ff(Number(p.Feed))]);
+  // Hurco's NCPP variable summary defines #3020: 1 = touch, 0 = no touch.
+  var lbl = probeLabelNext++;
+  block(["IF[#3020EQ1]GOTO" + lbl]);
+  block(["#3000=2(PROBE NO CONTACT)"]);
+  block(["N" + lbl]);
   var slot = Math.round(num(p.Measure, -1));
   if (slot >= 0) {
     var info = probeAxisInfo(p);
-    var lbl = probeLabelNext++;
-    block(["IF[ABS[" + info.v + "-" + trimNum(info.exp.toFixed(3)) + "]GE0.001]GOTO" + lbl]);
-    block(["#3000=2(PROBE NO CONTACT)"]);
-    block(["N" + lbl]);
     block(["#" + (100 + slot) + "=" + info.v]);
   }
   curX = Number(p.X); curY = Number(p.Y); curZ = Number(p.Z);
@@ -935,6 +936,10 @@ function onProbeGuard() {
   if (!xyFirst(p.X, p.Y, p.Z, false)) return;
   restorePlane();
   block(["G31", "X" + fu(Number(p.X) - orgX), "Y" + fu(Number(p.Y) - orgY), "Z" + fu(Number(p.Z) - orgZ), "F" + ff(Number(p.Feed))]);
+  var lbl = probeLabelNext++;
+  block(["IF[#3020EQ0]GOTO" + lbl]);
+  block(["#3000=1(PROBE UNEXPECTED CONTACT)"]);
+  block(["N" + lbl]);
   curX = Number(p.X); curY = Number(p.Y); curZ = Number(p.Z);
 }
 
@@ -983,11 +988,12 @@ function onProbeResult() {
     msg(who() + "G10 L2 probe offset target " + (target + 1) + " exceeds Hurco WinMax ISNC G54..G59 range (1..6)");
     return;
   }
-  var base = 5201 + wcsIndex * 20;
+  // WinMax stores X offsets in #2501..#2599, Y in #2601..#2699, Z in #2701..#2799.
+  var base = 2500 + Math.max(1, wcsIndex);
   var g10 = ["G10", "L2", "P" + (target + 1)];
   if (setX) g10.push("X[#" + base + "+#190]");
-  if (setY) g10.push("Y[#" + (base + 1) + "+#191]");
-  if (setZ) g10.push("Z[#" + (base + 2) + "+#192]");
+  if (setY) g10.push("Y[#" + (base + 100) + "+#191]");
+  if (setZ) g10.push("Z[#" + (base + 200) + "+#192]");
   block(g10);
   note("SET " + workOffsetName(target + 1) + " FROM PROBE");
 }

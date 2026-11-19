@@ -82,7 +82,7 @@ pub fn assert_isnc_words(program: &str) {
         }
         if trimmed.starts_with("IF[") || trimmed.starts_with('#') {
             assert!(
-                trimmed.starts_with("IF[#506") || trimmed.starts_with("IF[ABS[") || trimmed.starts_with("#3000=") || trimmed.starts_with("#1"),
+                trimmed.starts_with("IF[#3020EQ") || trimmed.starts_with("IF[ABS[") || trimmed.starts_with("#3000=") || trimmed.starts_with("#1"),
                 "unexpected macro line {}: {raw}",
                 idx + 1
             );
