@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
 members = ["crates/app", "crates/cl", "crates/motion", "crates/post", "crates/sim",
-  "crates/tools", "crates/ui", "crates/geometry", "crates/kernel", "xtask"]
+  "crates/tools", "crates/ui", "crates/geometry", "crates/kernel", "crates/i18n", "xtask"]
 
 [workspace.package]
 version = "0.25.0"
@@ -16,6 +16,9 @@ camcraft-tools = { path = "crates/tools" }
 camcraft-post = { path = "crates/post" }
 camcraft-sim = { path = "crates/sim" }
 camcraft-motion = { path = "crates/motion" }
+# #853: interface languages. Its own crate so the UI and the diagnostics seam
+# read one catalogue without a cycle (ui -> app -> i18n).
+camcraft-i18n = { path = "crates/i18n" }
 
 # ECS - alpha bindings, hard-pinned; expect churn on bumps.
 # flecs_alerts is NOT optional: flecs_ecs_sys 0.2.1's bindings.rs references
