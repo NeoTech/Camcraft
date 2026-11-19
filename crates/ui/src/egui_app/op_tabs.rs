@@ -140,7 +140,11 @@ pub(super) fn tab_bar(ui: &mut Ui, kind: OpType, open: &mut usize, pal: &Tokens)
             let sel = tab == i;
             let ink = if sel { contrast::on_fill(pal.accent) } else { ui.visuals().text_color() };
             let font = egui::FontId::proportional(font_px);
-            let galley = ui.ctx().fonts_mut(|f| f.layout_no_wrap((*name).to_owned(), font.clone(), ink));
+            // #853: the tab name is a catalogue string; the strip wraps and
+            // sizes each tab from the drawn text, so a translation only moves
+            // the tab, never clips it.
+            let label = camcraft_i18n::tr(name).into_owned();
+            let galley = ui.ctx().fonts_mut(|f| f.layout_no_wrap(label.clone(), font.clone(), ink));
             let w = pad_x + icon_px + icon_gap + galley.size().x + pad_x;
             let size = Vec2::new(w, tab_h);
             let (rect, resp) = ui.allocate_exact_size(size, egui::Sense::click());
@@ -175,7 +179,7 @@ pub(super) fn tab_bar(ui: &mut Ui, kind: OpType, open: &mut usize, pal: &Tokens)
                 galley,
                 ink,
             );
-            resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, *name));
+            resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, label.clone()));
             if resp.clicked() {
                 tab = i;
             }

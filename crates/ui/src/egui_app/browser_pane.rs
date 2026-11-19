@@ -40,14 +40,14 @@ pub fn browser(ui: &mut Ui, state: &mut State, pal: &Tokens, icons: Option<&Icon
                     .ui(ui, |ui| view_menu(ui, state));
                 ui.separator();
                 if ui
-                    .button("Expand all")
+                    .button(camcraft_i18n::tr_owned("Expand all"))
                     .on_hover_text("Open the Setup, Models and Tools sections")
                     .clicked()
                 {
                     state.browser_expanded = [true; 3];
                 }
                 if ui
-                    .button("Collapse all")
+                    .button(camcraft_i18n::tr_owned("Collapse all"))
                     .on_hover_text("Close the Setup, Models and Tools sections")
                     .clicked()
                 {

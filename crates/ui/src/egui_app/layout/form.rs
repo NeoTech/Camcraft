@@ -46,13 +46,16 @@ fn remember(ui: &Ui, r: &Response) {
 }
 
 fn label_cell(ui: &mut Ui, label: &str) -> Response {
+    // #853: a property row's label is a catalogue string; in English `tr`
+    // hands the same text back, so the gate's label-based tests are unchanged.
+    let label = camcraft_i18n::tr(label);
     let h = ui.spacing().interact_size.y;
     let available = (ui.available_width() - ui.spacing().item_spacing.x).max(0.0);
     // Share spare width with labels while keeping a compact control reachable.
     let width = (available * 0.5).max(LABEL_W).min((available - CTRL_W).max(0.0));
     ui.allocate_ui_with_layout(Vec2::new(width, h), Layout::left_to_right(Align::Center), |ui| {
         ui.set_min_width(width);
-        ui.add(Label::new(label).truncate())
+        ui.add(Label::new(label.as_ref()).truncate())
     })
     .inner
 }
@@ -195,8 +198,11 @@ pub fn group_open<R>(
         }
         // The title folds the group as the arrow does: a header that names
         // a group reads as its handle.
+        // #853: the drawn header is translated; the collapsing id above keeps
+        // the English title, so a language switch does not fold every group.
+        let shown = camcraft_i18n::tr(title);
         title_clicked = ui
-            .add(Label::new(RichText::new(title).strong()).sense(egui::Sense::click()))
+            .add(Label::new(RichText::new(shown.as_ref()).strong()).sense(egui::Sense::click()))
             .on_hover_cursor(egui::CursorIcon::PointingHand)
             .clicked();
     });
@@ -386,11 +392,14 @@ pub fn action_bar(ui: &mut Ui, actions: &[Action<'_>], inks: &BarInks) -> Option
     let mut clicked = None;
     ui.separator();
     let draw = |ui: &mut Ui, i: usize, a: &Action<'_>, clicked: &mut Option<usize>| {
+        // #853: the verb is a catalogue string ("Generate", "Apply" ...); in
+        // English the lookup hands the same word back.
+        let label = camcraft_i18n::tr_owned(a.label);
         let btn = match a.kind {
-            ActionKind::Primary => Button::new(RichText::new(a.label).strong().color(inks.on_accent)).fill(inks.accent),
-            ActionKind::Secondary => Button::new(a.label),
+            ActionKind::Primary => Button::new(RichText::new(label.clone()).strong().color(inks.on_accent)).fill(inks.accent),
+            ActionKind::Secondary => Button::new(label.clone()),
             ActionKind::Destructive => {
-                Button::new(RichText::new(a.label).color(inks.danger)).stroke(egui::Stroke::new(1.0, inks.danger))
+                Button::new(RichText::new(label.clone()).color(inks.danger)).stroke(egui::Stroke::new(1.0, inks.danger))
             }
         };
         let mut r = ui.add_enabled(a.enabled, btn.min_size(Vec2::new(0.0, 24.0)));

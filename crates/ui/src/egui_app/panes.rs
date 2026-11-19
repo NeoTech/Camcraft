@@ -338,7 +338,14 @@ fn door_label(s: operation::Section) -> &'static str {
     }
 }
 
+/// A ribbon cell's caption, translated (#853). The English source is the
+/// catalogue key, so an untranslated cell shows its English word, never a key.
 pub(super) fn text_of(c: Cmd, state: &State) -> String {
+    camcraft_i18n::tr(&text_of_source(c, state)).into_owned()
+}
+
+/// [`text_of`]'s English source - the string the catalogue keys on.
+fn text_of_source(c: Cmd, state: &State) -> String {
     match c {
         // The overflow button wears the section's name plus an
         // ellipsis - "Milling 3D…" reads as "the rest of this is in
@@ -1079,6 +1086,10 @@ fn ribbon_tabs(ui: &mut Ui, state: &mut State, pal: &Tokens, strip: Rect, band: 
     for (kind, caption, machine) in machine_modes::MACHINE_MODES {
         let active = kind == current;
         let ink = if active { pal.text } else { pal.text_dim };
+        // #853: the tab is a catalogue string; the English source is the key,
+        // and the tab's own width follows the drawn text, so a shorter
+        // translation makes a narrower tab - never a clipped one.
+        let caption = camcraft_i18n::tr(caption).into_owned();
         let galley = ui
             .painter()
             .layout_no_wrap(caption.to_uppercase(), font.clone(), ink);
@@ -1087,7 +1098,7 @@ fn ribbon_tabs(ui: &mut Ui, state: &mut State, pal: &Tokens, strip: Rect, band: 
             egui::Pos2::new(x, band.top()),
             egui::Pos2::new(x + w, band.bottom()),
         );
-        let resp = ui.interact(r, ui.id().with(("ribbon-tab", caption)), Sense::click());
+        let resp = ui.interact(r, ui.id().with(("ribbon-tab", caption.as_str())), Sense::click());
         let painter = ui.painter();
         if active {
             painter.rect_filled(
@@ -1117,7 +1128,7 @@ fn ribbon_tabs(ui: &mut Ui, state: &mut State, pal: &Tokens, strip: Rect, band: 
             ink,
         );
         let clicked = resp.clicked();
-        resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, caption));
+        resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, caption.clone()));
         ui.ctx().accesskit_node_builder(resp.id, |b| {
             b.set_role(egui::accesskit::Role::Tab);
             b.set_selected(active);
@@ -1216,7 +1227,8 @@ pub fn ribbon(
     // skipped rather than run under the neighbour's.
     let caption_top = body.top() + pal.ribbon_cell_top_gap + pal.cell_h + pal.ribbon_caption_gap;
     for (mid, width, title) in captions {
-        painted::caption(ui, mid, width, title, body, pal, caption_top);
+        // #853: the group caption is a catalogue string too ("MILLING 2D").
+        painted::caption(ui, mid, width, &camcraft_i18n::tr(title), body, pal, caption_top);
     }
     for dx in dividers {
         painted::divider(ui.painter(), dx, body, pal);
@@ -1277,7 +1289,8 @@ pub fn ribbon(
                                 Cmd::Create(i) => TYPES.get(i).copied().unwrap_or("op"),
                                 other => label_of(other),
                             };
-                            painted::menu_item(&resp, label, en, None);
+                            let label = camcraft_i18n::tr(label);
+                            painted::menu_item(&resp, label.as_ref(), en, None);
                             // The kind's own glyph at the row's left edge,
                             // in the row's ink - the door lists operations
                             // the way the tree shows them. Headless frames
@@ -1661,3 +1674,8 @@ pub use super::browser_pane::browser;
 
 // --------------------------------------------------------------- parameters
 
+
+// #853: the ribbon's translation gates (see `i18n_tests.rs`).
+#[cfg(test)]
+#[path = "i18n_tests.rs"]
+mod i18n_tests;

@@ -166,15 +166,24 @@ fn actions(ui: &mut Ui, state: &mut State, has_machine: bool) {
     if has_machine {
         let size = Vec2::new(cell_w(ui, avail, 3), BUTTON_H);
         let clicked = match why {
-            None => even_row(ui, &["Load other", "Edit", "Clear"], size),
+            None => {
+                let labels = [
+                    camcraft_i18n::tr_owned("Load other"),
+                    camcraft_i18n::tr_owned("Edit"),
+                    camcraft_i18n::tr_owned("Clear"),
+                ];
+                let refs: Vec<&str> = labels.iter().map(String::as_str).collect();
+                even_row(ui, &refs, size)
+            }
             Some(why) => {
                 let mut hit = None;
                 ui.horizontal(|ui| {
-                    if crate::browser_files::button_sized(ui, Some(why), "Load other", "", size) {
+                    let load = camcraft_i18n::tr_owned("Load other");
+                    if crate::browser_files::button_sized(ui, Some(why), &load, "", size) {
                         hit = Some(0);
                     }
-                    for (i, label) in ["Edit", "Clear"].iter().enumerate() {
-                        if ui.add_sized(size, egui::Button::new(*label)).clicked() {
+                    for (i, label) in [camcraft_i18n::tr_owned("Edit"), camcraft_i18n::tr_owned("Clear")].iter().enumerate() {
+                        if ui.add_sized(size, egui::Button::new(label.clone())).clicked() {
                             hit = Some(i + 1);
                         }
                     }

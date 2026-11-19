@@ -41,7 +41,7 @@ pub(super) fn pick_mode_line(ui: &mut Ui, state: &State) {
     if crate::interact::op_pick_locked(state) {
         ui.label(RichText::new("Picking off - selection locked").weak());
     } else {
-        ui.label(RichText::new("Picking on - clicks edit the selection").strong());
+        ui.label(RichText::new(camcraft_i18n::tr_owned("Picking on - clicks edit the selection")).strong());
     }
 }
 
@@ -53,17 +53,17 @@ fn body(ui: &mut Ui, state: &mut State, target: &str, live_setup: Option<&str>, 
     // Viewport pick mode - transient view state: the mode itself is not
     // undoable; what a Face/Edge click changes is.
     ui.horizontal_wrapped(|ui| {
-        ui.label("Click selects:").on_hover_text(click_selects_hint());
+        ui.label(camcraft_i18n::tr_owned("Click selects:")).on_hover_text(click_selects_hint());
         let mut pick_mode = match state.geo_pick {
             GeoPick::Model => 0,
             GeoPick::Face => 1,
             GeoPick::Edge => 2,
             GeoPick::Vertex => 3,
         };
-        ui.radio_value(&mut pick_mode, 0, "Models");
-        ui.radio_value(&mut pick_mode, 1, "Faces");
-        ui.radio_value(&mut pick_mode, 2, "Edges");
-        ui.radio_value(&mut pick_mode, 3, "Vertices");
+        ui.radio_value(&mut pick_mode, 0, camcraft_i18n::tr_owned("Models"));
+        ui.radio_value(&mut pick_mode, 1, camcraft_i18n::tr_owned("Faces"));
+        ui.radio_value(&mut pick_mode, 2, camcraft_i18n::tr_owned("Edges"));
+        ui.radio_value(&mut pick_mode, 3, camcraft_i18n::tr_owned("Vertices"));
         state.geo_pick = match pick_mode {
             1 => GeoPick::Face,
             2 => GeoPick::Edge,
@@ -90,7 +90,7 @@ fn body(ui: &mut Ui, state: &mut State, target: &str, live_setup: Option<&str>, 
                 .to_owned(),
             Err(why) => format!("3-2-1 alignment: {why}"),
         };
-        if ui.add_enabled(aligned.is_ok(), egui::Button::new("Align WCS (3-2-1)").small())
+        if ui.add_enabled(aligned.is_ok(), egui::Button::new(camcraft_i18n::tr_owned("Align WCS (3-2-1)")).small())
             .on_hover_text(&tip)
             .on_disabled_hover_text(&tip)
             .clicked()
@@ -211,7 +211,7 @@ fn chips(ui: &mut Ui, state: &mut State, target: &str, pal: &Tokens) {
                 // M13.4 stage 2 hook: a picked corner can place the WCS
                 // slot chosen in the WCS pane, through SetWcsOrigin.
                 if let Some((entity, id)) = &vertex
-                    && ui.small_button("Set origin").on_hover_text("set the work origin at this vertex").clicked()
+                    && ui.small_button(camcraft_i18n::tr_owned("Set origin")).on_hover_text("set the work origin at this vertex").clicked()
                 {
                     crate::vertex_pick::queue_origin_at_vertex(state, entity, *id);
                 }
@@ -221,8 +221,8 @@ fn chips(ui: &mut Ui, state: &mut State, target: &str, pal: &Tokens) {
                     } else {
                         "set the work origin at this curved face's centroid (a full bore: its axis at mid-height)"
                     };
-                    if ui.small_button("Set origin").on_hover_text(tip).clicked() {
-                        crate::vertex_pick::queue_origin_at_face(state, entity, feat.clone(), false);
+                    if ui.small_button(camcraft_i18n::tr_owned("Set origin")).on_hover_text(tip).clicked() {
+                        crate::vertex_pick::queue_origin_at_face(state, entity, *feat, false);
                     }
                     if t.plane_z.is_some()
                         && ui
@@ -280,7 +280,7 @@ fn chips(ui: &mut Ui, state: &mut State, target: &str, pal: &Tokens) {
             }
         }
     }
-    if ui.small_button("Clear").on_hover_text("drop every pick - the stock bounds the operation again").clicked() {
+    if ui.small_button(camcraft_i18n::tr_owned("Clear")).on_hover_text("drop every pick - the stock bounds the operation again").clicked() {
         state.pending.push_back(CommandKind::EditOperationLinks {
             name: target.to_owned(),
             tool: None,
