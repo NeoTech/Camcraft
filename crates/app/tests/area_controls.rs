@@ -292,6 +292,7 @@ fn a_tilt_with_a_non_finite_angle_still_refuses_by_name_under_a_boundary() {
 
 fn finish_parallel() -> OpParams {
     OpParams::Finish3D {
+        gap_link: camcraft_app::finishing3d::GapLink::Jump,
         pattern: camcraft_app::finishing3d::FinishPattern::Parallel,
         stepover: Some(2.0),
         tolerance: 0.05,

@@ -93,7 +93,7 @@ fn the_profile_tab_names_the_entry_and_the_picker_shows_it() {
     h.run_steps(2);
     h.get_by_label("Profile").click();
     h.run_steps(2);
-    assert!(h.query_all_by_label_contains("landed: library holder BT30 ER20").next().is_some());
+    assert!(h.query_all_by_label_contains("In use: library holder BT30 ER20").next().is_some());
     let d = &h.state().state.tool_profile_ui;
     assert_eq!((d.library.as_deref(), d.gauge, d.projection), (Some("BT30 ER20"), 60.0, 55.0), "the picker shows the tool's holder");
     assert!(!h.get_by_label("Apply holder").accesskit_node().is_disabled());

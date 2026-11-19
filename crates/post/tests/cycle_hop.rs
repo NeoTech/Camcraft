@@ -23,7 +23,8 @@
 //! practice, no vendor material.
 //!
 //! Gate map (M4.4): covers assets/posts/fanuc.cps, haas.cps, mazak.cps,
-//! sinumerik.cps, tormach.cps, doosan-dnm.cps, hurco-winmax.cps (their cycle groups),
+//! sinumerik.cps, tormach.cps, doosan-dnm.cps, linuxcnc.cps, hurco-winmax.cps
+//! (their cycle groups),
 //! camcraft_post::post::engine, the post binary.
 
 mod recorded;
@@ -32,7 +33,9 @@ use std::process::Command;
 
 /// The posts that write canned-cycle words (Heidenhain and Carvera post
 /// the expanded chain, which is the stream's own path).
-const CYCLE_POSTS: [&str; 7] = ["fanuc.cps", "haas.cps", "mazak.cps", "sinumerik.cps", "tormach.cps", "doosan-dnm.cps", "hurco-winmax.cps"];
+const CYCLE_POSTS: [&str; 8] = [
+    "fanuc.cps", "haas.cps", "mazak.cps", "sinumerik.cps", "tormach.cps", "doosan-dnm.cps", "linuxcnc.cps", "hurco-winmax.cps",
+];
 
 const EPS: f64 = 1e-6;
 
@@ -197,7 +200,13 @@ fn post(script: &str, stream: &str, tag: &str) -> Result<String, String> {
     let log = dir.join(format!("{stem}.log"));
     std::fs::write(&input, stream).map_err(|e| e.to_string())?;
     let cps = recorded::repo().join("assets/posts").join(script);
-    let r = Command::new(env!("CARGO_BIN_EXE_post"))
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_post"));
+    if script == "linuxcnc.cps" {
+        // #2303: with no machine there is no stated safe Z, so the
+        // LinuxCNC post retracts with its G30 (Z only) option here.
+        cmd.arg("--option").arg("retractMode=g30");
+    }
+    let r = cmd
         .arg("--log")
         .arg(&log)
         .arg(&cps)

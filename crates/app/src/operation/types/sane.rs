@@ -3,7 +3,7 @@
 use crate::machining2d::PocketStrategy;
 
 use crate::operation::types::params::OpParams;
-use crate::operation::types::sel::lead_sane;
+use crate::operation::types::sel::{lead_sane, FeatureSel};
 
 /// The refusal of pre-drilled entry on a kind that does not read it (#1449).
 pub const PREDRILLED_POCKET_ONLY: &str =
@@ -495,6 +495,13 @@ impl OpParams {
                 bottom_z,
                 feed,
                 plunge_feed,
+                exclude_edges,
+                min_edge_angle_deg,
+                exclude_holes: _,
+                hole_min_diameter,
+                hole_max_diameter,
+                // #1889: the policy is an enum; each value is legal.
+                unreachable: _,
             } => {
                 pos(*width)
                     && clearance_z.is_sane()
@@ -502,6 +509,16 @@ impl OpParams {
                     && bottom_z.is_sane()
                     && pos(*feed)
                     && pos(*plunge_feed)
+                    // #1888: an exclusion is an edge chain; the angle
+                    // is a bend, 0 up to (not) 180; the hole range is
+                    // ordered and never negative, read or not.
+                    && exclude_edges.iter().all(|g| matches!(g.feature, FeatureSel::Chain(_)))
+                    && min_edge_angle_deg.is_finite()
+                    && (0.0..180.0).contains(min_edge_angle_deg)
+                    && hole_min_diameter.is_finite()
+                    && hole_max_diameter.is_finite()
+                    && *hole_min_diameter >= 0.0
+                    && hole_max_diameter >= hole_min_diameter
             }
             OpParams::Contour5D {
                 tolerance,

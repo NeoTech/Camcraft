@@ -56,7 +56,7 @@ use crate::machining2d::{GenError, ARC_FIT_TOL};
 
 use super::axis::{self, Axis};
 use super::retip::{along, radial_at, tip_of};
-use super::rotary_links;
+use super::{rotary_ends, rotary_links};
 use super::tilt::{command_axis, AxisControl};
 
 /// The axis' tilt below which "standing" and "laid" trade places:
@@ -102,6 +102,20 @@ pub fn rotary_parallel(
     p: &Finish3DParams,
     c: &AxisControl,
 ) -> Result<Toolpath, GenError> {
+    rotary_parallel_in(facets, None, p, c)
+}
+
+/// [`rotary_parallel`] on a bar the setup `stock` describes (#2343):
+/// where the stock goes on past an end of the model - the bar in the
+/// chuck - the pass stops at that end's plane and leaves the end face
+/// ([`rotary_ends`]), and a note names the end. None, or stock that
+/// ends with the model, is the plain raster.
+pub fn rotary_parallel_in(
+    facets: &[Triangle],
+    stock: Option<&[Triangle]>,
+    p: &Finish3DParams,
+    c: &AxisControl,
+) -> Result<Toolpath, GenError> {
     let ax = axis::fit(facets)?;
     let flat = 1.0 - ax.dir.dot(UP) * ax.dir.dot(UP);
     if flat < LEAN_MIN * LEAN_MIN {
@@ -140,6 +154,15 @@ pub fn rotary_parallel(
     q.entry_ramp = false;
     let r = p.tool_diameter * 0.5;
     let base = finishing3d::swarf(&local, &q, 1.0, 0.0).map_err(|e| to_world(e, &f, &ax, c, r))?;
+    // #2343: a held end's face is inside the bar - the cut keeps to
+    // the model's side of its plane, before the links are built.
+    let local_stock = stock.map(|s| f.local_facets(s));
+    let window = rotary_ends::held(&local, local_stock.as_deref(), r, p.tolerance)?;
+    let base = match &window {
+        Some(w) => rotary_ends::clip(&base, w),
+        None => base,
+    };
+    let span = window.as_ref().map_or((f64::NEG_INFINITY, f64::INFINITY), |w| (w.lo, w.hi));
     // M13.8: the raster's Z lifts become radial links - out along the
     // radius to the retract cylinder, index, back in along the radius
     // ([`rotary_links`]); the planes read as radii in the laid frame.
@@ -148,12 +171,19 @@ pub fn rotary_parallel(
     // #15: under the sloped-entry law (`entry_ramp`, the centre-cutting
     // guard's retry) each infeed ramps along the pass where the ramp is
     // proved clear of the part; off, every infeed stays a radial plunge.
-    let ramp = p.entry_ramp.then_some(rotary_links::Ramp { deg: p.ramp_angle, facets: &local, tol: p.tolerance });
+    let ramp = p.entry_ramp.then_some(rotary_links::Ramp { deg: p.ramp_angle, facets: &local, tol: p.tolerance, span });
     let base = rotary_links::radial_relink(&base, r, q.clearance_z, hop, rho, p.feed, p.plunge_feed, ramp)
         .map_err(|e| to_world(e, &f, &ax, c, r))?;
     let mut out = posed(&f, &base, &ax, c, r)?;
     if ramp.is_some() {
         out.notes.extend(base.notes.iter().filter(|n| n.starts_with("Rotary Parallel:")).cloned());
+    }
+    for e in window.iter().flat_map(|w| &w.ends) {
+        let at = f.to_world(Point3::new(e.station, 0.0, 0.0));
+        out.notes.push(format!(
+            "Rotary Parallel: the stock goes on {:.3} mm past the end of the model at ({:.3}, {:.3}, {:.3}) - that end face is left, and the tool stops at its plane",
+            e.beyond, at.x, at.y, at.z
+        ));
     }
     Ok(out)
 }

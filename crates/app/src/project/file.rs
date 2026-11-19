@@ -140,7 +140,12 @@ use super::*;
 /// on the stock of a setup. A v70 file has none and steps up unchanged.
 /// An old reader must refuse a v71 file rather than open a setup without
 /// the profiles its operations cut.
-pub const PROJECT_VERSION: u32 = 71;
+/// v72 (#2463): a model may record the file it was imported from and that
+/// file's SHA-256 (`source`): a linked model, imported again when the file
+/// changes. Absent is not linked - what every v71 model was - so a v71
+/// file steps up unchanged. An old reader must refuse a v72 file rather
+/// than save a linked model back unlinked without a word.
+pub const PROJECT_VERSION: u32 = 72;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ProjectError {

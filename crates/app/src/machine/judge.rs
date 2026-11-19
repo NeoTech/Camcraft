@@ -13,39 +13,50 @@
 
 use super::{AxisLimits, Machine, MachineCheck, REPORT_CAP};
 use crate::geometry::Point3;
+use std::f64::consts::{FRAC_PI_2, PI, TAU};
 
-/// The arc's four XY quarter points plus both endpoints; a straight
-/// move's two endpoints. (A quarter is outside the sweep only when
-/// the arc goes the other way around it; checking all four can only
-/// over-report a limit the post would then also cross, never hide a
-/// violation - and over-reporting a REAL stroke is stage C's honest
-/// direction of error.)
+/// A straight move's two endpoints; an arc's two endpoints plus each
+/// quarter point of its circle that the sweep passes (#2710). The
+/// sweep runs from `from` to `to` in `arc.ccw`'s direction, in the
+/// arc's own plane - the reading `cl::plane` gives the post and the
+/// chords - so a quarter point is judged exactly when the tool reaches
+/// it. All four are kept when the reading cannot name a side: the
+/// in-plane endpoints stand within [`SAME_WORD`] (their NC words can
+/// be equal, and a control turns equal endpoints a whole circle), or
+/// the arc is degenerate. The radius is the larger endpoint radius, so
+/// a ramping arc is never under-read.
 pub(super) fn move_extremes(mv: &crate::cl::Move) -> Vec<Point3> {
     let mut v = vec![mv.from, mv.to];
-    // XZ / YZ (M11.2 A): the same four quarters, in the arc's plane.
-    if let Some(arc) = mv.arc.filter(|a| !a.plane.is_xy()) {
-        let pl = arc.plane;
-        let (cu, cv) = pl.center_uv(arc.center);
-        let (u0, v0, _) = pl.uvw(mv.from);
-        let (_, _, w1) = pl.uvw(mv.to);
-        let r = ((u0 - cu).powi(2) + (v0 - cv).powi(2)).sqrt();
-        v.push(pl.point(cu + r, cv, w1));
-        v.push(pl.point(cu - r, cv, w1));
-        v.push(pl.point(cu, cv + r, w1));
-        v.push(pl.point(cu, cv - r, w1));
-        return v;
-    }
-    if let Some(arc) = &mv.arc {
-        let dx = mv.from.x - arc.center.x;
-        let dy = mv.from.y - arc.center.y;
-        let r = (dx * dx + dy * dy).sqrt();
-        v.push(Point3::new(arc.center.x + r, arc.center.y, mv.to.z));
-        v.push(Point3::new(arc.center.x - r, arc.center.y, mv.to.z));
-        v.push(Point3::new(arc.center.x, arc.center.y + r, mv.to.z));
-        v.push(Point3::new(arc.center.x, arc.center.y - r, mv.to.z));
+    let Some(arc) = &mv.arc else { return v };
+    let pl = arc.plane;
+    let (cu, cv) = pl.center_uv(arc.center);
+    let (u0, v0, _) = pl.uvw(mv.from);
+    let (u1, v1, w1) = pl.uvw(mv.to);
+    let ra = ((u0 - cu).powi(2) + (v0 - cv).powi(2)).sqrt();
+    let rb = ((u1 - cu).powi(2) + (v1 - cv).powi(2)).sqrt();
+    let r = ra.max(rb);
+    let a0 = (v0 - cv).atan2(u0 - cu);
+    let a1 = (v1 - cv).atan2(u1 - cu);
+    let d = (if arc.ccw { a1 - a0 } else { a0 - a1 }).rem_euclid(TAU);
+    let whole = (u1 - u0).hypot(v1 - v0) <= SAME_WORD || !d.is_finite() || d <= 0.0;
+    for (q, du, dv) in [(0.0, r, 0.0), (FRAC_PI_2, 0.0, r), (PI, -r, 0.0), (-FRAC_PI_2, 0.0, -r)] {
+        // The quarter's angle past the start, in the travel direction.
+        let t = (if arc.ccw { q - a0 } else { a0 - q }).rem_euclid(TAU);
+        if whole || t <= d + ANGLE_SLACK || t >= TAU - ANGLE_SLACK {
+            v.push(pl.point(cu + du, cv + dv, w1));
+        }
     }
     v
 }
+
+/// In-plane endpoints this close (mm) can post as one point. The
+/// coarsest words are four-decimal inch (0.00254 mm per axis), so
+/// chords below 0.0036 mm can round to one point. Use 0.01 mm for
+/// margin, as `ring_zig::MIN_ARC_CHORD` does.
+const SAME_WORD: f64 = 0.01;
+/// A quarter point within this angle (rad) of an endpoint counts as
+/// swept: float dust must never drop a point that the arc touches.
+const ANGLE_SLACK: f64 = 1e-9;
 
 pub(super) fn slowest_axis(axes: &[AxisLimits], ceil: f64) -> String {
     axes.iter()

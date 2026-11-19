@@ -169,8 +169,8 @@ pub fn cross_holes_of(
 /// with its source's holes, read NOW, written into whichever hole list
 /// the kind has - the drill, the boring ride and the thread mill store
 /// the same `holes` shape - plus the drill's radial list when the
-/// document's machine holds a turret (M5.2 F2; a plain mill asks nothing
-/// of the mesh's sides). `name` only words the refusals. The caller
+/// mesh has directed holes. Detection keeps those findings on a mill;
+/// generation refuses unsupported directions. `name` words the refusals. The caller
 /// commits the result as one undoable `EditOperationParams`, so the
 /// app's Detect holes button and the MCP `detect_holes` tool store the
 /// same list. A Bore op keeps only the holes its tool's one ring clears
@@ -198,8 +198,9 @@ pub fn detect_holes(
         _ => return Err(format!("'{name}' is not a drilling operation")),
     };
     let axial = holes_of(world, setup, src).map_err(|e| e.to_string())?;
-    // #388: the op's own setup's machine, not the active one.
-    let radial = if !is_drill || crate::machine::kind_of_setup(world, setup) == crate::machine::Kind::Mill {
+    // #2601: report directed mouths on every machine. The generator's
+    // machine and mixed-list checks still refuse unsupported work.
+    let radial = if !is_drill {
         Vec::new()
     } else {
         cross_holes_of(world, setup, src).map_err(|e| e.to_string())?

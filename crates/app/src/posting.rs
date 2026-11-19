@@ -966,6 +966,8 @@ pub fn verification_report_by(world: &World, voice: &dyn Fn(Option<&str>) -> pos
     // The limit check (M2.3 D), each op against the machine its own
     // setup mounts (#388): one block per machine, the program's order.
     problems.extend(mounts::machine_problems(world));
+    // #2598: a Drill or Thread op feeding above its tool's stated feed.
+    problems.extend(crate::operation::feed_rating::problems(world));
     // #804: before a work-turning A indexes, the retracted tool tip
     // clears what the stock, parts and turning fixtures sweep about it.
     problems.extend(index_swing::index_swing_problems(world));

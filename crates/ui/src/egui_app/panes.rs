@@ -1612,6 +1612,12 @@ pub fn status(ui: &mut Ui, state: &mut State, pal: &Tokens, icons: Option<&IconS
                 // #2262: a dock tab like the other panels; the shell lands it.
                 state.layout_request = Some(crate::state::LayoutRequest::ToggleDebugInfo);
             }
+            // #1696: the Report door, next to it - opens the window that
+            // fills GitHub's new-issue form in (the forms' promised
+            // in-app "Report an Issue").
+            if super::report::button(ui, icons).clicked() {
+                state.report_open = !state.report_open;
+            }
             // #183: the live MCP server says it is listening.
             if let Some(note) = crate::mcp_host::badge(state) {
                 ui.label(RichText::new(note).color(pal.text_faint).small());

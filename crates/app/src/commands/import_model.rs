@@ -30,6 +30,10 @@ pub struct ImportModel {
     pub hole: Option<String>,
     /// Raw STEP text kept on entities imported from STEP (#744).
     pub step_source: Option<String>,
+    /// The file the mesh was read from and its SHA-256 (#2463): the link
+    /// the UI checks while the project is open. `None` for a mesh handed
+    /// in or a browser pick, which have no file to check again.
+    pub source: Option<crate::schema::ModelSource>,
 }
 
 impl ImportModel {
@@ -46,7 +50,12 @@ impl ImportModel {
     pub fn within(path: &Path, facet_budget: Option<u64>) -> Result<Self, CommandError> {
         let budget = checked_budget(path, facet_budget)?;
         let graded = import::load_model_open_within(path, budget)?;
-        Ok(Self::graded(path, graded, facet_budget))
+        let mut cmd = Self::graded(path, graded, facet_budget);
+        // #2463: the file is read once more for its digest, after the parse.
+        // A file that changes in between records the newer digest; the next
+        // change imports again. An unreadable file now records no link.
+        cmd.source = crate::model_source::read(path).ok();
+        Ok(cmd)
     }
 
     /// [`ImportModel::within`] over bytes already in hand, named by the
@@ -93,6 +102,7 @@ impl ImportModel {
             notes: Vec::new(),
             hole: None,
             step_source: None,
+            source: None,
         }
     }
 
@@ -157,6 +167,7 @@ impl Command for ImportModel {
         crate::model_fidelity::set_budget(world, &entity, self.facet_budget);
         crate::mesh_open::set(world, &entity, self.hole.as_deref());
         crate::step_source::set(world, &entity, self.step_source.as_deref());
+        crate::model_source::set(world, &entity, self.source.as_ref());
     }
 
     fn invert(&self, world: &World) {

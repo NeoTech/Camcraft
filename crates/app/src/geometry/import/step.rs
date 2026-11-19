@@ -270,7 +270,7 @@ fn shell_facets(
     // The first face each pass got no polygon for, and each face's facet
     // range, by the pass's tol (#1573).
     let dropped: std::cell::RefCell<Vec<(f64, Option<usize>)>> = std::cell::RefCell::default();
-    let owners: std::cell::RefCell<Vec<(f64, Vec<usize>)>> = std::cell::RefCell::default();
+    let owners: std::cell::RefCell<Vec<(f64, Vec<usize>, f64)>> = std::cell::RefCell::default();
     let triangulate = |tol: f64| -> Result<Vec<Triangle>, PassError> {
         guarded.reset();
         // A panic is held until the meters are read: a face that ran past
@@ -330,8 +330,11 @@ fn shell_facets(
             return Err(PassError::Unconverged { continuous: trip.continuous, refusal });
         }
         let polys = meshed.unwrap_or_else(|panic| std::panic::resume_unwind(panic));
-        let (facets, ends) = super::step_facets::facets_of(&polys, budget)?;
-        owners.borrow_mut().push((tol, ends));
+        // #2600: a curved face's facets are held to its surface, or their
+        // chord height is carried as the mesh's.
+        let face = |i: usize, p: &PolygonMesh, room: usize| super::step_fit::fit_face(cshell.faces.get(i).map(|f| &f.surface), p, tol, room);
+        let (facets, ends, off) = super::step_facets::facets_of(&polys, budget, face)?;
+        owners.borrow_mut().push((tol, ends, off));
         Ok(facets)
     };
     // Quality target: ~0.1% of the model extent, floored so tiny parts still
@@ -374,7 +377,7 @@ fn shell_facets(
         Some(id) => format!("face #{id} (face {} of {faces})", i + 1),
         None => format!("face {} of {faces}", i + 1),
     });
-    let ends = owners.borrow_mut().iter_mut().rev().find(|(t, _)| *t == kept.tol).map(|(_, e)| std::mem::take(e));
+    let (ends, off) = owners.borrow_mut().iter_mut().rev().find(|(t, ..)| *t == kept.tol).map(|(_, e, off)| (std::mem::take(e), *off)).unzip();
     let names = |i: usize| face_ids.as_ref().and_then(|ids| ids.get(i));
     let seam = super::step_closed::Shell { id: shell_id, faces, closed, mm_per_unit: k };
     let judged = super::step_closed::judge(&mut kept.facets, ends.as_deref(), kept.tol, &seam, names, dropped)?;
@@ -393,5 +396,5 @@ fn shell_facets(
             kept.facets.len()
         );
     }
-    Ok((kept.facets, kept.tol, judged))
+    Ok((kept.facets, kept.tol.max(off.unwrap_or(0.0)), judged))
 }

@@ -279,6 +279,9 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
     };
     let drive_chains = match &op.params {
         OpParams::MultiAxisContour { .. } => Some(drive_chains_of(world, op)),
+        // #1888: the deburr's picked chains ride the same slot - the
+        // WCS yaw turns them with the facets they lie on.
+        OpParams::Deburr { exclude_edges, .. } => Some(super::deburr_picks::chains_of(world, op, exclude_edges)),
         _ => None,
     };
     // #318: an op in a setup whose incoming stock must be carried across

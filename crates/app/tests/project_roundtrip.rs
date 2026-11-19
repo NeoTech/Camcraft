@@ -5146,6 +5146,7 @@ fn the_deburr_params_grammar_round_trips() {
             bottom_z,
             feed,
             plunge_feed,
+            ..
         } = &o.params
         else {
             panic!("deburr params expected, got {:?}", o.params);
@@ -5421,4 +5422,73 @@ fn finish3d_file_without_fill_openings_reads_none() {
     let saved = std::fs::read_to_string(&path).expect("read");
     let _ = std::fs::remove_file(&path);
     assert!(!saved.contains("fill_openings"), "None is absent, not null: {saved}");
+}
+
+fn gap_link_of(world: &flecs_ecs::prelude::World) -> camcraft_app::finishing3d::GapLink {
+    let e = model::find_by_name(world, "F1").expect("op");
+    let o = model::operation_of(world, &e).expect("operation");
+    let OpParams::Finish3D { gap_link, .. } = &o.params else {
+        panic!("finish3d params expected, got {:?}", o.params);
+    };
+    *gap_link
+}
+
+#[test]
+fn finish3d_gap_link_jump_round_trips_through_save_and_load() {
+    // `jump` is written always: it saves, loads and resaves
+    // byte-identically, no version step-up.
+    let world = new_world();
+    project::open(&world, &finish3d_text(", \"gap_link\": \"jump\""))
+        .expect("the jump word must read");
+    assert_eq!(gap_link_of(&world), camcraft_app::finishing3d::GapLink::Jump);
+    let path = tmp_path("gaplink_rt");
+    project::save(&world, &path).expect("save");
+    let first = std::fs::read_to_string(&path).expect("read");
+    let world2 = new_world();
+    project::load(&world2, &path).expect("reload");
+    project::save(&world2, &path).expect("resave");
+    let second = std::fs::read_to_string(&path).expect("reread");
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(
+        gap_link_of(&world2),
+        camcraft_app::finishing3d::GapLink::Jump,
+        "jump saves and loads as jump"
+    );
+    assert!(first.contains("\"gap_link\": \"jump\""), "{first}");
+    assert_eq!(first, second, "the gap link word round-trips byte-identically");
+}
+
+#[test]
+fn finish3d_gap_link_straight_round_trips_through_save_and_load() {
+    // `straight` is the ladder's new word in the same existing
+    // grammar: it saves, loads and resaves byte-identically, no
+    // version step-up.
+    let world = new_world();
+    project::open(&world, &finish3d_text(", \"gap_link\": \"straight\""))
+        .expect("the straight word must read");
+    assert_eq!(gap_link_of(&world), camcraft_app::finishing3d::GapLink::Straight);
+    let path = tmp_path("gaplink_straight_rt");
+    project::save(&world, &path).expect("save");
+    let first = std::fs::read_to_string(&path).expect("read");
+    let world2 = new_world();
+    project::load(&world2, &path).expect("reload");
+    project::save(&world2, &path).expect("resave");
+    let second = std::fs::read_to_string(&path).expect("reread");
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(
+        gap_link_of(&world2),
+        camcraft_app::finishing3d::GapLink::Straight,
+        "straight saves and loads as straight"
+    );
+    assert!(first.contains("\"gap_link\": \"straight\""), "{first}");
+    assert_eq!(first, second, "the gap link word round-trips byte-identically");
+}
+
+#[test]
+fn finish3d_file_without_gap_link_reads_jump() {
+    // A pre-gap-link file never carried the word and still reads,
+    // hopping as it always hopped.
+    let world = new_world();
+    project::open(&world, &finish3d_text("")).expect("a pre-gap-link finish3d file must read");
+    assert_eq!(gap_link_of(&world), camcraft_app::finishing3d::GapLink::Jump, "absent means jump");
 }

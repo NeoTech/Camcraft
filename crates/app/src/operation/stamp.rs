@@ -88,6 +88,9 @@ pub fn current_stamp(
         }
     }
     params.stamp_with(world, setup, Some(src), &mut h);
+    if let OpParams::Deburr { exclude_edges, .. } = params {
+        super::deburr_picks::stamp_inputs(world, setup, src, exclude_edges, &mut h)?;
+    }
     // #326: the setup's part alignment is a moved input for every op of
     // the setup (the parts it machines, verifies against or measures
     // heights from). Written only when one is set, so no stamp of an

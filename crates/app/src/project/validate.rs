@@ -31,6 +31,10 @@ pub(super) fn validate_kind(dto: &EntityDto, kind: EntityKind) -> Result<(), Pro
     if dto.step_source.is_some() && !matches!(kind, EntityKind::Model) {
         return Err(corrupt(format!("'{}' records STEP source but is not a model", dto.name)));
     }
+    // #2463: a source rides a model row only, with a path and a digest.
+    if let Some(src) = &dto.source {
+        src.check(&dto.name, matches!(kind, EntityKind::Model)).map_err(corrupt)?;
+    }
     // #1056: the unknown-fidelity mark rides a mesh row only, and never
     // beside a recorded chord - one entity cannot both know and not know.
     if dto.fidelity_unknown {

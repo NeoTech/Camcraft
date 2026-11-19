@@ -70,13 +70,16 @@ operation is refused. The stock is the setup's stock solid.
 
 Rotary Parallel finishes the whole model, and that includes its two end
 faces, down to the axis. A bar on a rotary is held at one end. If the
-model ends where the bar goes on into the chuck, the pass on that end
-face is a cut through the bar. No setting keeps the pass off an end face
-(issue [#2343](https://github.com/NeoTech/Camcraft/issues/2343)). A tool
-whose flute is too short for that depth is blocked at post by the shank
-check. A tool with a long flute is not. Make the stock as long as the real
-bar, so that the checks see the material that is there, and prove a
-program with an air cut.
+model ends where the bar goes on into the chuck, a pass on that end face
+is a cut through the bar. Rotary Parallel thus reads the stock (issue
+[#2343](https://github.com/NeoTech/Camcraft/issues/2343)). Where the stock
+goes on past an end of the model by more than one tool diameter, the
+centre of the ball does not go past that end: the end face is left, and a
+note on the operation names the end. Where the stock ends with the model,
+or goes on by one tool diameter or less, the end face is cut to the axis.
+Make the stock as long as the real bar, so that CamCraft sees the material
+that is there, and prove a program with an air cut. No setting changes
+this rule.
 
 Rotary Offset takes two turns of the rotary for each level that cuts. The
 shipped microARC 4 file states no A travel limit and permits continuous A
@@ -104,5 +107,5 @@ does not verify the control settings, cables or fixtures of a real machine.
 - A stated rotary position: the axis comes from the mesh.
 - Inverse-time feed in posts other than `tormach.cps`; Tormach supports
   `G93` for simultaneous A-about-X moves only.
-- An axial limit for Rotary Parallel, or a way to leave an end face
-  (issue #2343).
+- A setting for an axial limit of Rotary Parallel. The stock alone decides
+  which end face is left.

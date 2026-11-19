@@ -32,6 +32,7 @@ mod heavy_tests;
 mod icon_font;
 mod icons;
 mod known_fail;
+mod known_fail_scan;
 #[cfg(test)]
 mod known_fail_tests;
 #[cfg(test)]

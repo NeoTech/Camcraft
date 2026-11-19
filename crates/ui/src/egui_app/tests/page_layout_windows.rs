@@ -175,3 +175,24 @@ fn layout_window_gcode() {
     h.run_steps(3);
     assert_window_layout(&h, "G-code - program", &["trace", "G00 G90 G54 X12.5 Y-40. S8000 M3", "M30"]);
 }
+
+/// #2339: the Panel setups window - the save row, the saved list, the
+/// auto-load choice and the reset, top to bottom, inside the window.
+#[test]
+fn layout_window_panel_setups() {
+    let _g = snapshot_guard();
+    let mut h = shell_harness();
+    h.state_mut().state.panel_setups_open = true;
+    h.run_steps(3);
+    assert_window_layout(
+        &h,
+        "Panel setups",
+        &[
+            "Save the open panels as they stand, or put a saved setup back.",
+            "Saved setups",
+            "No saved setups yet.",
+            "Load the last setup when CamCraft starts",
+            "Reset to default",
+        ],
+    );
+}

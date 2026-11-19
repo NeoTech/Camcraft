@@ -35,6 +35,9 @@ pub(super) struct PreparedBand {
     pub prog: Option<Region>,
     pub loops: Vec<Loop>,
     pub plan: Vec<Vec<Point2>>,
+    /// The lead room's region when it is not `center`: `center` with the
+    /// rings that another band cuts on a shared level fenced off (#2677).
+    pub room: Option<Region>,
 }
 
 pub(super) fn prepare_band(region: &Region, p: &ContourParams) -> Result<PreparedBand, GenError> {
@@ -75,7 +78,7 @@ pub(super) fn prepare_band(region: &Region, p: &ContourParams) -> Result<Prepare
             v
         })
         .collect();
-    Ok(PreparedBand { center, prog, loops, plan })
+    Ok(PreparedBand { center, prog, loops, plan, room: None })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -103,7 +106,7 @@ pub(super) fn emit_band(
     // Climb travel keeps the part on the RIGHT on both sides (#1555, see
     // the per-loop flip below), so the air - the only side a fillet may
     // stand on - is left for climb, right for conventional.
-    let legal = Legal { region: &band.center, inside, air_left: Some(p.climb) };
+    let legal = Legal { region: band.room.as_ref().unwrap_or(&band.center), inside, air_left: Some(p.climb) };
     let eng = Engage { p, center: &band.center, cert: &cert, plan: &band.plan, m: &m, legal: &legal };
     let prog = &band.prog;
     let hop = p.retract_z.min(p.clearance_z);

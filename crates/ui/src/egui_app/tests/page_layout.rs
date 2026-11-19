@@ -151,6 +151,9 @@ fn layout_page_wcs() {
         .with_size(Vec2::new(1280.0, 900.0))
         .build_ui_state(frame, ShellUi::seeded());
     let h = page_in(tall, UiTarget::Wcs);
+    for label in ["Pick origin", "Pick X axis", "Pick Y axis", "Pick Z axis", "Clear"] {
+        assert!(h.query_by_label(label).is_some(), "WCS feature table has {label}");
+    }
     // #870: the one "Set origin" sits in the footer, under the page body.
     assert_page_layout(&h, "WCS", &["Turn X+", "Turn X-", "Level", "Bottom", "Pick markers in viewport", "NW", "SW", "Set origin"]);
 }
@@ -180,6 +183,42 @@ fn layout_page_tool() {
         "Tool",
         &["Tool: EM-0600-4FL", "Delete", "Type", "Diameter", "Corner radius", "Flute length"],
     );
+}
+
+/// #2007: the tool page's Profile tab. In a tall window the tab and the
+/// holder rows stand in the leaf in order, and the file buttons stay in
+/// the leaf across. In the default window the points table sits low on
+/// the scrolled page: it keeps all its rows, so the line under it starts
+/// under the last row (before #2007 the table shrank to about two rows).
+#[test]
+fn layout_page_tool_profile() {
+    let _g = snapshot_guard();
+    let tool = || UiTarget::Tool("EM-0600-4FL".into());
+    let profile = |h: &mut H| {
+        h.state_mut().state.tool_profile_ui.column = crate::state::ToolColumn::Profile;
+        h.run_steps(3);
+    };
+    let tall = Harness::builder().with_size(Vec2::new(1280.0, 2400.0)).build_ui_state(frame, ShellUi::seeded());
+    let mut h = page_in(tall, tool());
+    profile(&mut h);
+    assert_page_layout(&h, "Tool profile", &["Tool: EM-0600-4FL", "Profile", "Holder profile", "Parametric", "Apply profile", "Import DXF…"]);
+    let Some(leaf) = super::layout::leaf_rect(&h.state().dock, &Tab::Properties) else {
+        panic!("Tool profile page: the Properties leaf is not laid out");
+    };
+    // The tab row, each remove button of the table and the file buttons.
+    for a in ["Draw holder", "Draw cutter", "×", "Import DXF…", "Export DXF…", "Import STEP…"] {
+        for r in h.query_all_by_label(a).map(|n| n.rect()) {
+            assert!(r.left() >= leaf.left() - 1.0 && r.right() <= leaf.right() + 1.0, "Tool profile page: {a:?} {r:?} leaves the leaf {leaf:?}");
+        }
+    }
+    let mut h = page(tool());
+    profile(&mut h);
+    let below = h.get_by_label("Parametric").rect().bottom();
+    let rows: Vec<egui::Rect> = h.query_all_by_label("×").map(|n| n.rect()).filter(|r| r.top() > below).collect();
+    assert_eq!(rows.len(), h.state().state.tool_profile_ui.points.len(), "one remove button for each point");
+    let last = rows.iter().fold(f32::MIN, |m, r| m.max(r.bottom()));
+    let under = h.query_all_by_label_contains("holder Ø").next().expect("the holder line under the table").rect();
+    assert!(under.top() >= last - 1.0, "Tool profile page: the table hides rows - its last row ends at {last}, the line under it starts at {}", under.top());
 }
 
 #[test]

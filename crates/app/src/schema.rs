@@ -117,6 +117,16 @@ pub struct StepBudget {
 #[derive(Component, Debug, Clone, PartialEq, Eq)]
 pub struct StepSource(pub String);
 
+/// The file a model was imported from and the SHA-256 of the bytes that
+/// were read (#2463): a linked model. While the project is open, a new
+/// hash of that file imports it again under the same name, as one undo
+/// step; operations only go Stale. Absent: not linked.
+#[derive(Component, Debug, Clone, PartialEq, Eq)]
+pub struct ModelSource {
+    pub path: String,
+    pub sha256: String,
+}
+
 /// The hole of a model imported from a STEP closed shell that meshes open
 /// (#1610), said in words: the model rides fidelity unknown
 /// (`ReducedFidelity` at `model_fidelity::UNKNOWN_MM`) and every refusal
@@ -861,6 +871,7 @@ pub fn register_schema(world: &World) {
     world.component::<ReducedFidelity>();
     world.component::<StepBudget>();
     world.component::<StepSource>();
+    world.component::<ModelSource>();
     world.component::<MeshOpen>();
     world.component::<Selected>();
     world.component::<StockDef>();

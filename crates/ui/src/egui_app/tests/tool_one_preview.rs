@@ -133,3 +133,35 @@ fn without_a_body_the_side_preview_has_no_envelope_bands() {
     let mut harness = editor();
     assert_eq!(super::super::tool_body_page::envelope(&mut harness.state_mut().state), None);
 }
+
+/// #2007: the Profile tab adds no second side view. The one preview draws
+/// the drawn holder (as the bands the check sweeps) and the drawn cutter
+/// (as the steel outline) while they validate, before any Apply.
+#[test]
+fn the_profile_tab_draws_its_drafts_in_the_one_preview() {
+    use super::super::tool_profile_page::preview_inputs;
+    let mut harness = editor();
+    harness.get_by_label("Profile").click();
+    harness.run();
+    harness.run();
+    assert_eq!(previews(&harness), (1, 0), "Draw holder: one preview");
+    harness.get_by_label("Custom").click();
+    harness.run();
+    {
+        let st = &mut harness.state_mut().state;
+        st.tool_profile_ui.points[1].r = 40.0;
+        st.tool_profile_ui.points[2].r = 40.0;
+    }
+    harness.run();
+    let (bands, steel) = preview_inputs(&mut harness.state_mut().state, true);
+    let reach = bands.expect("the drawn holder shows").iter().fold(0.0f64, |m, b| m.max(b.2));
+    assert!((reach - 40.0).abs() < 1e-6, "the preview reaches r {reach}, the drawn holder r 40");
+    assert!(steel.is_none(), "Draw holder keeps the cutter from the dimensions");
+    harness.get_by_label("Draw cutter").click();
+    harness.run();
+    harness.run();
+    assert_eq!(previews(&harness), (1, 0), "Draw cutter: one preview");
+    let (bands, steel) = preview_inputs(&mut harness.state_mut().state, true);
+    assert!(steel.is_some_and(|s| s.len() > 2), "the drawn cutter is the steel outline");
+    assert!(bands.is_some_and(|b| !b.is_empty()), "the holder cylinder stands on it as bands");
+}

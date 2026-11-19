@@ -98,7 +98,7 @@ fn contour_impl(region: &Region, p: &ContourParams, part: Option<PartRef<'_>>) -
     // #1448: the user's start point re-sequences its ring instead.
     let pick = contour_start::pick_ring(&refs, p)?;
     let exit = contour_start::pick_exit(&refs, p)?; // #1473
-    let flat = p.levels()?;
+    let flat = p.ring_levels()?;
     let r = p.tool_diameter * 0.5;
     let d = r + p.stock_to_leave;
     // Lead shrinks, refusals and reseated starts, each said once.

@@ -11,15 +11,17 @@ operation, and on some feed moves it turns together with X, Y and Z. For
 *indexed* work, where A stops before each cut, see
 [Your first 4-axis part](@/guide/getting-started/first-4axis-part.md).
 
-**This program is for an air cut only. Do not cut a bar with it.** Rotary
-Parallel finishes the two end faces of the model down to the A centreline.
-At the chuck end, the bar goes on into the jaws, so that pass is a cut
-through the bar (issue
-[#2343](https://github.com/NeoTech/Camcraft/issues/2343)). The guide thus
-ends with a run in the PathPilot simulator and an air cut with no bar in
-the chuck. Those two runs prove what a continuous program must prove first:
-that the control reads the A words, the `G93` feeds and the `G94` return as
-the post wrote them.
+**Air-cut this program before you cut a bar with it.** The guide goes
+through a run in the PathPilot simulator and an air cut with no bar in the
+chuck, and only then a cut. Those two runs prove what a continuous program
+must prove first: that the control reads the A words, the `G93` feeds and
+the `G94` return as the post wrote them.
+
+The bar goes on past the model into the jaws of the chuck. Rotary Parallel
+thus leaves the chuck-side end face of the model: a pass down that face
+would be a cut through the bar (issue
+[#2343](https://github.com/NeoTech/Camcraft/issues/2343)). See
+[The chuck-side end face](#the-chuck-side-end-face).
 
 The continuous output of `tormach.cps` is new (issue
 [#796](https://github.com/NeoTech/Camcraft/issues/796)). It was written
@@ -132,7 +134,8 @@ Choose **Add tool**. The speed and the feeds in this project are the
 example's numbers. They are not a recommendation for your machine, tool or
 material.
 
-The flute is long because of the end faces. See
+The flute is longer than the radius of the bar, 0.375 in, because the tool
+goes down the free end face to the A centreline. See
 [Check it](#check-it).
 
 ## The operation
@@ -166,7 +169,7 @@ These points explain the numbers:
 - **Top and bottom keep the whole bar.** **Bottom Z** is a floor in the
   frame of the bar as it lies. At -0.375 the pass goes all the way round.
 - **The tolerance and the stepover are coarse.** They keep the program
-  short (3213 lines) for a first run. They do not give a good surface.
+  short (3125 lines) for a first run. They do not give a good surface.
 
 These points distinguish the other continuous operations:
 
@@ -187,30 +190,42 @@ Click {{ <icon name="act-show-paths" /> }} **Paths** and look at the toolpath. T
 move of the posted program, with X along the bar and the A angle up the
 page.
 
-![Each move of the program, unrolled: feed loops that run along the bar at one A angle, turn A across an end face, and run back at another angle.](../../../guide-pictures/first-continuous-4axis-paths.svg)
+![Each move of the program, unrolled: feed passes that run along the bar at one A angle, turn A across the free end face, and run back at another angle, with rapids at the chuck-side end.](../../../guide-pictures/first-continuous-4axis-paths.svg)
 
-The feed moves make loops. A loop runs along the bar at one A angle, goes
-past the end of the model, turns A across the end face, and runs back at
-another angle. The first passes are joined by rapids at the clearance
-radius, and those rapids turn A in small steps.
+The feed moves make passes along the bar. A pass runs along the bar at one
+A angle. At the free end it goes past the end of the model, turns A across
+the end face, and runs back at another angle. At the chuck-side end the
+tool stops at X-1.25, goes out to the clearance radius, turns A there by
+rapids in small steps, and comes back in.
 
-**The end faces.** The loops go 1/16 in (the tool radius) past each end of
-the model, and there the tool goes down the end face to the A centreline:
-the program has feed moves at X-1.3125 with Z below 0. At the free end
-this is air. At the chuck end it is the bar. This is the reason for the
-air cut only.
+**The free end face.** At the free end the passes go 1/16 in (the tool
+radius) past the model, and there the tool goes down the end face to the A
+centreline: the program has feed moves at X0.0625 with Z below 0. This is
+air, because the stock ends at X0.
 
-CamCraft has one guard here. With a flute too short to reach the
-centreline, the shank goes into the stock, and the post is blocked:
+### The chuck-side end face
+
+At the chuck end the stock goes on 3/4 in past the model, into the jaws. A
+pass down that end face would be a groove 1/8 in wide from the skin of the
+bar to its centre, and the part would come off the bar. Rotary Parallel
+reads the stock and leaves that end face. The program has no feed move
+past X-1.25, and at X-1.25 the tool stays at the radius of the model. The
+operation says so in a note, in millimetres:
 
 ```text
-post blocked - 23 warning(s): Journal: shank/holder at move 1380 collides with the uncut stock; ...
+Rotary Parallel: the stock goes on 19.050 mm past the end of the model at (-31.750, 0.000, 0.000) - that end face is left, and the tool stops at its plane
 ```
 
-A 1/8 in ball tool with a 1/2 in flute gives this refusal. The example's
-tool has a 5/8 in flute only so that the program posts for the air cut. A
-tool with a long flute passes this check, and then nothing stops the cut
-through the bar.
+The rule is this. Where the stock goes on past an end of the model by more
+than one tool diameter, the centre of the ball does not go past that end
+of the model. Half of the ball goes past it, and there it cuts no deeper
+than the surface of the model. Where the stock ends with the model, or
+goes on by one tool diameter or less, the end face is cut to the
+centreline as at the free end.
+
+CamCraft knows only the stock that you set. Make the stock as long as the
+bar that is out of the jaws. If the stock ends where the model ends,
+CamCraft reads air there and the program cuts through the bar.
 
 When you post, CamCraft also runs these checks:
 
@@ -400,7 +415,7 @@ Check these points, and record the result on issue
 
 - The program loads with no error on a `G93` or `G94` line, and runs to
   `M30`.
-- At line 1520 the A position is 180. On the next lines it goes up to
+- At line 1469 the A position is 180. On the next lines it goes up to
   182.441 and 183.75. It does not go back through 0.
 - The A position stays between -85.708 and 264.23.
 - Line 254, `G93 G1 X-0.0005 Y0 Z0.3399 A8.194 F7.347`, takes about 8
@@ -418,9 +433,9 @@ above. Then take the bar out, and do these steps in order.
    side that faced you (the front) must come to the top. If the back comes
    up, stop: the direction is reversed for this post. Do not run the
    program.
-2. **Empty the chuck.** The program goes to X-1.3125, and the jaws are at
+2. **Empty the chuck.** The program goes to X-1.25, and the jaws are at
    X-2. Make sure that the collet nut clears the chuck body and the jaws
-   at that X with the tool at the A centreline.
+   at that X with the tool at the radius of the bar.
 3. **Know your G30 position.** The tool change goes to the stored G30
    position, and A can turn there. Keep the stored G30 Z at the top of
    travel.
@@ -430,18 +445,27 @@ above. Then take the bar out, and do these steps in order.
    between two passes is at Z0.875.
 5. **Air-cut the whole program.** Keep the chuck empty and the overrides
    low, with a hand on feed hold. Watch the A position go through 180 near
-   line 1520 without a turn back.
-6. **Stop here.** Do not put a bar in the chuck for this program.
+   line 1469 without a turn back.
+6. **Cut only after a good air cut.** If one step above was not as
+   described, stop: do not put a bar in the chuck for this program.
 
 If each step is as described, your machine reads continuous A, `G93` and
 `G94` as the post writes them. Please record the PathPilot version and the
 result on issue #1904.
 
-## Why not cut it
+## Before you cut the bar
 
-On a bar that goes on into the jaws, the pass at X-1.3125 is a groove
-1/8 in wide from the skin of the bar to its centre. A 1/8 in ball tool is
-not made for a cut that deep, and the part comes off the bar at the end of
-it. Rotary Parallel has no setting that keeps the pass off an end face
-(issue [#2343](https://github.com/NeoTech/Camcraft/issues/2343)). When
-that issue is closed, this guide will get a part that you can cut.
+The program leaves the chuck-side end face, so it does not cut through the
+bar. That removes the limit that this guide had before (issue
+[#2343](https://github.com/NeoTech/Camcraft/issues/2343)). No complete
+continuous program has been cut on a machine yet. These points stay with
+you:
+
+- The stock in the project must be the bar that is in the chuck: 3/4 in
+  across, 2 in out of the jaws, with its free end at G54 X0. With a longer
+  or thicker bar, change the stock and generate again.
+- The pass takes 0.035 in from the radius of the bar in one cut. A pass
+  that starts at X-1.25 starts with a plunge into the skin of the bar.
+- The speed and the feeds are the example's numbers. They are not a
+  recommendation.
+- Run the first cut with low overrides and a hand on feed hold.

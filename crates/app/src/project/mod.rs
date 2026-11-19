@@ -1,4 +1,4 @@
-//! Project save/load: `.camproj`, JSON, version 70 (see `PROJECT_VERSION`).
+//! Project save/load: `.camproj`, JSON, version 72 (see `PROJECT_VERSION`).
 //!
 //! Serialization goes through plain DTO structs (deliberately not flecs
 //! reflection): the file format is our public persistence contract and must
@@ -112,6 +112,9 @@ pub use file::*;
 mod params;
 pub use params::*;
 mod entity;
+// #2463: a linked model's source file and its digest.
+mod source_dto;
+pub use source_dto::SourceDto;
 mod vise_dto;
 mod fixture_keys;
 mod plate_dto;
@@ -119,6 +122,8 @@ mod modvise_dto;
 pub use vise_dto::ViseDto;
 mod thread_dto;
 mod break_dto;
+mod unreachable_dto;
+use unreachable_dto::UnreachableDto;
 pub use break_dto::EdgeBreakDto;
 // #416: the threading infeed plan's file mirror.
 mod thread_infeed_dto;

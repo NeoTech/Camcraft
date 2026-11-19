@@ -172,7 +172,7 @@ fn build_demo_world() -> flecs_ecs::prelude::World {
         break_through: None,
         break_through_from: Default::default(),
         clearance_z: top_clr, retract_z: Some(top_ret), top_z: Height::of(HeightReference::TopOfStock, 0.0), bottom_z: None,
-        cycle: CycleChoice::Auto, peck: 4.0, dwell: 0.0, feed: 150.0, plunge_feed: 150.0, holes: Vec::new(), cross: Vec::new(),
+        cycle: CycleChoice::Auto, peck: 4.0, dwell: 0.0, feed: 115.0, plunge_feed: 115.0, holes: Vec::new(), cross: Vec::new(),
     };
     let detected = operation::detect_holes(&world, "Drill1", &drill_base, None, &SrcRef::Entity("router-part".into())).expect("holes");
     h.execute(&world, CreateOperation::new(&world, "Drill1", "DR-0600", SrcRef::Entity("router-part".into()), detected.params).expect("drill op"));

@@ -146,6 +146,8 @@ icon_table! {
     Fixture => "tree-fixture", "icon-fixture";
     /// The status strip's Debug info door (#157).
     DebugInfo => "act-debug-info", "icon-debug-info";
+    /// The status strip's Report door (#1696): the flag on its pole.
+    Report => "act-report", "icon-report";
     /// A setup: the setup sheet with its origin corner.
     Setup => "tree-setup", "icon-setup";
     /// The machine: column, head and spindle over the table.

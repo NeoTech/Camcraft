@@ -62,7 +62,7 @@ impl SetOperationGeometry {
         // A probe's pick seeds its touch (#171) in this same command, so
         // one undo takes back the pick and the seed together; a pick the
         // probe cannot touch is refused here, by name.
-        let params = match crate::operation::probe_from_picks(world, &prev.params, src_items(&src)) {
+        let params = match crate::operation::probe_from_picks(world, prev.setup.as_deref(), &prev.params, src_items(&src)) {
             Some(seeded) => seeded.map_err(CommandError::Invalid)?,
             None => prev.params.clone(),
         };

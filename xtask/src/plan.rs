@@ -35,7 +35,7 @@ pub struct Step {
     pub in_ui: bool,
     /// A known-fail check (`known_fail`): the step is ok only when libtest reports this test as FAILED by
     /// its pinned assert.
-    pub expect_fail: Option<&'static crate::known_fail::KnownFail>,
+    pub expect_fail: Option<crate::known_fail::KnownFail>,
 }
 
 impl Step {
@@ -201,6 +201,7 @@ fn may_run_ignored(root: &Path, d: &str, b: &str) -> bool {
 /// `cargo test --release -p <crate> -- --ignored` runs. Kernel joins the heavy coverage in #1783;
 /// a red step names one binary, and `--only "app heavy: <binary>"` re-runs it alone.
 pub fn heavy_steps(root: &Path) -> Vec<Step> {
+    let entries = crate::known_fail::entries(root);
     let mut out = Vec::new();
     let mut build: Vec<String> = vec!["test".into(), "--release".into(), "-j".into(), J.into()];
     for d in HEAVY_CRATES {
@@ -225,17 +226,17 @@ pub fn heavy_steps(root: &Path) -> Vec<Step> {
             let mut args = vec!["test", "--release", "-j", J, "-p", &p, "--no-fail-fast"];
             args.extend(strs(&sel));
             args.extend(["--", T]);
-            let skip = crate::known_fail::skip_args(d, &label);
+            let skip = crate::known_fail::skip_args(&entries, d, &label);
             args.extend(strs(&skip));
             args.push("--ignored");
             out.push(Step::new(format!("{d} heavy: {label}"), &args, ""));
             // Each skipped test runs alone and must fail: a pass means the skip is stale (#1950 decision).
-            for k in crate::known_fail::of(d, &label) {
+            for k in crate::known_fail::of(&entries, d, &label) {
                 let mut args = vec!["test", "--release", "-j", J, "-p", &p, "--no-fail-fast"];
                 args.extend(strs(&sel));
-                args.extend(["--", T, "--exact", k.test, "--ignored"]);
+                args.extend(["--", T, "--exact", &k.test, "--ignored"]);
                 let mut step = Step::new(crate::known_fail::step_name(k), &args, "");
-                step.expect_fail = Some(k);
+                step.expect_fail = Some(k.clone());
                 out.push(step);
             }
         }
@@ -261,7 +262,7 @@ pub fn release_with(root: &Path, snapshots: bool) -> Plan {
             "--no-snapshots: the ui pixel-snapshot lanes are skipped (Windows-made goldens); run them locally at the cut".into(),
         );
     }
-    plan.notes.extend(crate::known_fail::KNOWN_FAIL.iter().map(crate::known_fail::note));
+    plan.notes.extend(crate::known_fail::entries(root).iter().map(crate::known_fail::note));
     let non_ui: Vec<&str> = ALL_CRATES.iter().copied().filter(|d| *d != "ui").collect();
     let mut build = vec!["test", "-j", J];
     let packages: Vec<String> = ALL_CRATES.iter().map(|d| pkg(d)).collect();

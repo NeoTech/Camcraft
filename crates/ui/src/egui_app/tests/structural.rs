@@ -117,6 +117,9 @@ fn assert_shell_skeleton(h: &Harness<'static, ShellUi>) {
     // Status strip: the status line and the Debug info door.
     let status = h.state().state.status.clone();
     assert!(status.starts_with("generated Contour1"), "seed status: {status}");
+    // #1696: the Report door stands beside it. The window it opens stays
+    // closed by the next pin (no floating window open by default).
+    assert!(h.get_by_label("Report an issue").rect().min.y > 600.0, "the Report door is on the status strip");
     assert!(shows(&status), "the status line paints {status:?}");
     assert!(h.query_by_label("Debug info").is_some(), "the Debug info door");
     // Every floating surface is closed by default.

@@ -224,6 +224,9 @@ pub(super) fn build_3d_world() -> World {
         feed: 900.0, plunge_feed: 250.0, climb: true, ramp: true, min_step: None,
         ramp_angle: 45.0, entry_ramp: false, steep_stepover: None,
         pencil_reference: None, fill_openings: None,
+        // #1713: the guide walkthrough posts without gap links - the
+        // Jump link is the pre-gap-link behaviour, as the text states.
+        gap_link: camcraft_app::finishing3d::GapLink::Jump,
     });
     world
 }

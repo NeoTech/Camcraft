@@ -114,6 +114,8 @@ mod wcs_ui;
 mod view_prefs_ui;
 #[path = "state_prefs.rs"]
 mod prefs_ui;
+#[path = "state_setups.rs"]
+mod setups_ui;
 #[path = "state_step_budget.rs"]
 mod step_budget_ui;
 pub use step_budget_ui::StepBudgetUi;
@@ -578,6 +580,9 @@ pub enum CommandKind {
         setup: Option<String>,
     },
     UntagFixture(String),
+    /// #2463: the Browser's Unlink on a linked model, one undo step: its
+    /// file is no longer checked.
+    UnlinkModel(String),
     /// Whether the steel stands still while a rotary turns the part
     /// (M13.8 (2)): the fixtures page's check row, one undo unit.
     SetFixtureFixed {
@@ -1536,6 +1541,19 @@ pub enum LayoutRequest {
     Reset,
 }
 
+/// A saved-setup ask from the Panel setups window (#2339). The dock lives
+/// beside `State` in the shell, so the window cannot read or swap it: the
+/// window files one ask and the shell answers on the same frame.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PanelSetupAsk {
+    /// Save this frame's arrangement under the typed name.
+    Save(String),
+    /// Put a saved arrangement back.
+    Load(String),
+    /// Forget a saved arrangement.
+    Delete(String),
+}
+
 /// Which closable panels the dock holds this frame - mirrored from the
 /// dock by the shell before the ribbon draws, so the View door's
 /// checkmarks read the truth without the ribbon touching the dock.
@@ -1718,6 +1736,12 @@ pub struct State {
     /// floating). Mirrored from the dock each frame by `layout::settle`;
     /// view state - never a command.
     pub debug_info_open: bool,
+    /// #1696: the Report an issue window is open. View state - never a
+    /// command, never saved.
+    pub report_open: bool,
+    /// #1696: the title typed into the Report window, kept between visits
+    /// so a mis-click does not lose it. View state, never saved.
+    pub report_title: String,
     /// #2262: the frame-rate reading and its log rule, fed once a frame.
     pub frame_rate: crate::egui_app::frame_rate::FrameRate,
     /// #157: the GPU the window came up on (`gpu::describe`'s line),
@@ -1797,6 +1821,18 @@ pub struct State {
     pub panels_open: PanelsOpen,
     /// The View door's pending dock ask (see [`LayoutRequest`]).
     pub layout_request: Option<LayoutRequest>,
+    /// #2339: the saved panel arrangements. Application settings like the
+    /// theme - the screen's, never the project file's.
+    pub panel_setups: camcraft_app::prefs::PanelSetups,
+    /// Where the saved arrangements are written back; `None` (every
+    /// headless State) keeps them in memory only.
+    pub panel_setups_store: Option<PathBuf>,
+    /// The Panel setups window's open flag - a frame fact like the doors.
+    pub panel_setups_open: bool,
+    /// The window's name field, as typed.
+    pub setup_name_draft: String,
+    /// The window's pending dock ask (see [`PanelSetupAsk`]).
+    pub panel_setup_ask: Option<PanelSetupAsk>,
     /// The browser row whose retype menu stands open (M9.1): the op's
     /// name, anchored to its row and recomputed per frame like the
     /// ribbon's dropdowns - a frame fact, not a document fact; the
@@ -1840,6 +1876,8 @@ pub struct State {
     import_started: Option<Instant>,
     /// Imports queued while one is already running (drained FIFO on finish).
     import_queue: VecDeque<PathBuf>,
+    /// #2463: the check of the linked models' files (view state).
+    pub(crate) link_watch: crate::model_link_watch::LinkWatch,
     /// #2257: toolpath generation on a worker, for the viewport's
     /// progress overlay (`crate::gen_worker`).
     pub gen_jobs: crate::gen_worker::GenJobs,
@@ -2152,6 +2190,8 @@ impl State {
             project_path: None,
             browser_build: cfg!(target_arch = "wasm32"),
             debug_info_open: false,
+            report_open: false,
+            report_title: String::new(),
             frame_rate: crate::egui_app::frame_rate::FrameRate::default(),
             gpu_line: None,
             spindle_as_vc: false,
@@ -2228,6 +2268,11 @@ impl State {
             import_tool_holders: true,
             panels_open: PanelsOpen { browser: true, properties: true, machines: false, ai_chat: false },
             layout_request: None,
+            panel_setups: camcraft_app::prefs::PanelSetups::default(),
+            panel_setups_store: None,
+            panel_setups_open: false,
+            setup_name_draft: String::new(),
+            panel_setup_ask: None,
             tree_menu: None,
             retype_confirm: None,
             rename_draft: None,
@@ -2245,6 +2290,7 @@ impl State {
             import_file: None,
             import_started: None,
             import_queue: VecDeque::new(),
+            link_watch: crate::model_link_watch::LinkWatch::default(),
             gen_jobs: crate::gen_worker::GenJobs::default(),
             stock_ui: StockUi::default(),
             wcs_ui: WcsUi {
@@ -3120,6 +3166,8 @@ impl State {
         drop(s);
         let s = span("commands/import+files");
         self.poll_import();
+        // #2463: a linked model whose file changed is imported again.
+        crate::model_link_watch::check(self, Instant::now());
         // #2257: a background generation that finished since the last frame.
         self.poll_generation();
         // #31: a file the browser's picker has read since the last frame.
@@ -3946,6 +3994,14 @@ impl State {
                     self.refuse(ErrorScope::Setup, format!("fixture not unmarked: {err}"));
                 }
             },
+            CommandKind::UnlinkModel(name) => match camcraft_app::commands::SetModelSource::unlink(&self.world, &name) {
+                Ok(command) => {
+                    self.history.execute(&self.world, command);
+                    self.doc_version += 1;
+                    self.status = format!("unlinked {name} - its file is no longer checked");
+                }
+                Err(err) => self.refuse_drop(format!("not unlinked: {err}")),
+            },
             CommandKind::SetFixtureFixed { name, fixed } => {
                 match SetFixtureFixed::new(&self.world, &name, fixed) {
                     Ok(command) => {
@@ -4232,6 +4288,12 @@ impl State {
             .map_or(0.0, |t| t.elapsed().as_secs_f64());
         match result {
             Ok(command) => {
+                // #2463: a file a model is linked to lands on that model,
+                // whatever the file is called.
+                let command = match file.as_deref().and_then(|f| crate::model_link_watch::linked_name(&self.world, f)) {
+                    Some(linked) if linked != command.name => command.renamed(&linked),
+                    _ => command,
+                };
                 let name = command.name.clone();
                 // #1573 review: what the importer changed (a STEP face
                 // flipped to agree with its neighbours) is said by name.
@@ -4273,7 +4335,7 @@ impl State {
                 }
                 if model::find_by_name(&self.world, &name).is_some() {
                     let (coarse, budget, hole) = (command.coarse_mm, command.facet_budget, command.hole);
-                    match UpdateModel::new(&self.world, &name, command.mesh).map(|u| u.with_fidelity(coarse).with_hole(hole).with_budget(budget).with_step_source(command.step_source)) {
+                    match UpdateModel::new(&self.world, &name, command.mesh).map(|u| u.with_fidelity(coarse).with_hole(hole).with_budget(budget).with_step_source(command.step_source).with_source(command.source)) {
                         Ok(upd) => {
                             let summary = upd.changes().describe();
                             self.history.execute(&self.world, upd);

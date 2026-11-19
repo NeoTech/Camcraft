@@ -108,6 +108,8 @@ impl EditOperationParams {
                 prev.params.kind()
             )));
         }
+        // #2599: new angles on a legacy tilt take the current frame basis.
+        let params = params.with_stepped_tilt_basis(&prev.params);
         infeed_plan_gate(world, &params, &prev.tool)?;
         if let Some(why) = params.named_refusal() {
             return Err(CommandError::Invalid(why));
@@ -290,9 +292,10 @@ impl EditOperationLinks {
             if tool != prev.tool {
                 tool_gate(world, &next.params, tool)?;
                 // #890: the new tool's row for the document material
-                // seeds the op's milling feed (same undo step).
+                // seeds the op's milling feed; #2598: a Drill or Thread
+                // op takes the new tool's stated feed (same undo step).
                 if let Some(t) = model::find_by_name(world, tool).and_then(|e| model::tool_of(world, &e))
-                    && let Some(p) = crate::cutting_rows::reseeded_params(&next.params, &t, crate::stock_material::in_force(world, prev.setup.as_deref()))
+                    && let Some(p) = crate::cutting_rows::retargeted_params(&next.params, &t, crate::stock_material::in_force(world, prev.setup.as_deref()))
                 {
                     next.params = p;
                 }

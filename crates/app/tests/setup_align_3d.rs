@@ -143,6 +143,7 @@ fn finish() -> OpParams {
         steep_stepover: None,
         pencil_reference: None,
         fill_openings: None,
+        gap_link: camcraft_app::finishing3d::GapLink::Jump,
     }
 }
 

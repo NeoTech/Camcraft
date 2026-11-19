@@ -152,7 +152,10 @@ behavior only):
   (belt or gear), `[[low, high], ...]` in rpm, `[]` when the file
   states none; `rigidTapping` is `false` only when the `.mch` says the
   spindle cannot rigid-tap (`spindle.rigid_tapping: false`), so a post
-  can refuse a rigid tap cycle by name.
+  can refuse a rigid tap cycle by name; `rigidTappingStated` (#2303) is
+  `true` only when the file states `rigid_tapping: true`, for a post
+  whose rigid tap needs a spindle encoder the machine must state
+  (`linuxcnc.cps`, G33.1).
   `safeRetractZ` (#495) is the Z a post retracts to in MACHINE
   coordinates (`G53 G0 Z..`), mm, from the `.mch` Z part's
   `safe_retract`, or `null` when the file states none - a post that

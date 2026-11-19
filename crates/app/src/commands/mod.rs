@@ -82,6 +82,8 @@ pub mod tool_import;
 // #221: a tool's controller number.
 pub mod tool_number;
 pub mod update_model;
+// #2463: link a model to its source file, or unlink it.
+pub mod model_link;
 // #547: a sinker electrode generated from a cavity's picked faces.
 pub mod electrode;
 
@@ -121,6 +123,7 @@ pub use post_script_options::{
 };
 pub use program_info::SetProgramInfo;
 pub use program_entry::{AddProgramEntry, EditProgramEntry};
+pub use model_link::SetModelSource;
 pub use repair_model::RepairModel;
 pub use ribbon_pins::SetRibbonPins;
 pub use select_entity::SelectEntity;

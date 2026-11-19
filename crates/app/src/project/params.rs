@@ -571,6 +571,12 @@ pub enum ParamsDto {
         /// Absent spells None exactly like `stepover`.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         fill_openings: Option<f64>,
+        /// Absent means `jump` - the retract/clearance hop every
+        /// pre-gap-link file ran. Written always, like `ramp`;
+        /// `jump` and `straight` are new words in an existing
+        /// grammar, so no version step-up.
+        #[serde(default)]
+        gap_link: GapLinkDto,
     },
     /// Declared at v48 with the deburr ride (M2.5 E B). `Deburr`'s
     /// automatic snake_case tag IS the clean word - no rename needed -
@@ -587,6 +593,24 @@ pub enum ParamsDto {
         bottom_z: HeightDto,
         feed: f64,
         plunge_feed: f64,
+        /// #1888, additive: each key is absent at its rest value, so a
+        /// file from before the keys reads as the ride it stored (no
+        /// exclusion, every crease, every hole) and saves unchanged.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        exclude_edges: Vec<GeoSelDto>,
+        #[serde(default, skip_serializing_if = "is_zero_f64")]
+        min_edge_angle_deg: f64,
+        #[serde(default, skip_serializing_if = "is_false")]
+        exclude_holes: bool,
+        #[serde(default, skip_serializing_if = "is_zero_f64")]
+        hole_min_diameter: f64,
+        #[serde(default, skip_serializing_if = "is_zero_f64")]
+        hole_max_diameter: f64,
+        /// #1889: absent in each earlier file, which reads as the
+        /// default (`skip_with_note`). Always written, so that an MCP
+        /// patch and `list_operation_types` see the field.
+        #[serde(default)]
+        unreachable: UnreachableDto,
     },
     /// Declared at v24 with the simultaneous-axis kinds (M5.1 stage
     /// C). The renames state the tags for the familiar reason - the
@@ -1223,6 +1247,36 @@ impl From<crate::finishing3d::FinishPattern> for FinishPatternDto {
             crate::finishing3d::FinishPattern::Blend => FinishPatternDto::Blend,
             crate::finishing3d::FinishPattern::Morph => FinishPatternDto::Morph,
             crate::finishing3d::FinishPattern::Flow => FinishPatternDto::Flow,
+        }
+    }
+}
+
+/// The file mirror of `finishing3d::GapLink`; `default` is `jump`,
+/// the hop every pre-gap-link file ran. `straight` is a new word in
+/// an existing grammar - older files never carried it and still read
+/// unchanged, so no version step-up.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum GapLinkDto {
+    #[default]
+    Jump,
+    Straight,
+}
+
+impl From<GapLinkDto> for crate::finishing3d::GapLink {
+    fn from(v: GapLinkDto) -> Self {
+        match v {
+            GapLinkDto::Jump => crate::finishing3d::GapLink::Jump,
+            GapLinkDto::Straight => crate::finishing3d::GapLink::Straight,
+        }
+    }
+}
+
+impl From<crate::finishing3d::GapLink> for GapLinkDto {
+    fn from(v: crate::finishing3d::GapLink) -> Self {
+        match v {
+            crate::finishing3d::GapLink::Jump => GapLinkDto::Jump,
+            crate::finishing3d::GapLink::Straight => GapLinkDto::Straight,
         }
     }
 }

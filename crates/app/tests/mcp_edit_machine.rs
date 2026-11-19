@@ -59,6 +59,46 @@ fn edm(c: &mut Client) -> Value {
     c.ok("get_job", json!({}))["machine"]["definition"]["edm"].clone()
 }
 
+/// #2602: a kind edit cannot give a mill a turning spindle.
+#[test]
+fn kind_edit_cannot_relabel_a_mill_for_turning() {
+    let mill = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets/machines/tormach-770mx.mch");
+    for setup in [None, Some("Turning")] {
+        let mut c = Client::new();
+        if let Some(name) = setup {
+            c.ok("add_setup", json!({ "name": name }));
+        }
+        let mut load = json!({ "path": mill.display().to_string() });
+        let mut edit = json!({ "patch": { "model": "Edited mill model" } });
+        if let Some(name) = setup {
+            load["setup"] = json!(name);
+            edit["setup"] = json!(name);
+        }
+        c.ok("load_machine", load);
+        let machine = c.ok("edit_machine", edit.clone())["machine"].clone();
+        let before = c.ok("get_job", json!({}));
+        for kind in ["lathe", "turning", "mill-turn"] {
+            edit["patch"] = json!({ "kind": kind });
+            let refusal = c.refused("edit_machine", edit.clone());
+            assert!(refusal.contains("kind") && refusal.contains("turning"), "{refusal}");
+            assert_eq!(c.ok("get_job", json!({})), before, "a refusal changes nothing");
+        }
+        c.ok("undo", json!({}));
+        // This must change the model again: a refusal adds no undo step.
+        edit["patch"] = json!({ "model": "Edited mill model" });
+        assert_eq!(c.ok("edit_machine", edit)["machine"], machine, "the setup keeps its mill definition too");
+    }
+}
+
+#[test]
+fn an_existing_lathe_keeps_its_machine_edits() {
+    let lathe = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets/machines/tormach-15l-slant-pro.mch");
+    let mut c = Client::new();
+    c.ok("load_machine", json!({ "path": lathe.display().to_string() }));
+    let result = c.ok("edit_machine", json!({ "patch": { "kind": "lathe", "model": "Edited lathe model" } }));
+    assert_eq!(result["machine"]["model"], json!("Edited lathe model"));
+}
+
 #[test]
 fn an_edm_edit_is_one_undo_step_and_get_job_reads_it_back() {
     let mut c = Client::new();

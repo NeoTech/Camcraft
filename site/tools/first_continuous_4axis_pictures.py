@@ -185,9 +185,10 @@ def paths_picture():
     body.append(f'<path class="cut" d="M{n(left)} 330 h30"/><text class="small" x="{n(left + 38)}" y="334">feed (G1)</text>')
     body.append(f'<path class="link" d="M{n(left + 130)} 330 h30"/><text class="small" x="{n(left + 168)}" y="334">rapid (G0)</text>')
     return svg(720, 345, "The moves of the program, unrolled",
-               "Loops of feed moves: a straight pass along the bar at one A angle, a turn of A across "
-               "the end face past the end of the model, and a pass back at another angle. One family "
-               "of loops is about A0 and one is about A180.",
+               "Feed moves: a straight pass along the bar at one A angle, a turn of A across "
+               "the free end face past the end of the model, and a pass back at another angle. At the "
+               "chuck-side end the passes stop at the end of the model and rapids turn A. One family "
+               "of passes is about A0 and one is about A180.",
                body)
 
 

@@ -202,7 +202,7 @@ pub fn contour_auto_side_fresh(world: &World, setup: Option<&str>, src: &SrcRef,
 /// [`selection_account`] without the memo: one real walk, for the pins.
 #[must_use]
 pub fn selection_account_fresh(world: &World, setup: Option<&str>, items: &[GeoSel], params: &OpParams) -> (Vec<String>, Option<String>) {
-    if let Some(account) = super::probe_account(world, items, params) {
+    if let Some(account) = super::probe_account(world, setup, items, params) {
         return account;
     }
     let a = Answer::fresh(world, setup, items, params);

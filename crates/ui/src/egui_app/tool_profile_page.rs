@@ -1,37 +1,78 @@
 //! The tool editor's Profile section (#93): a milling tool's holder as a
 //! spun (revolved) half-outline - Parametric (the cylinder its numbers
-//! state) or Custom (a table of points with optional arcs), a flat side
-//! view of cutter, shank and holder with their key dimensions that
-//! follows every keystroke, the live refusal by name, and Apply profile,
-//! which queues the one command. #93 slice 2: Draw cutter switches the
-//! tab to the tool's own cutter, neck and shank (`tool_cutter_page`),
-//! drawn the same way. Turning tools are not spun profiles:
-//! for them the column stays the Body section alone (owner, #93).
+//! state) or Custom (a table of points with optional arcs), the live
+//! refusal by name, and Apply profile, which queues the one command.
+//! #2007: the tool has one preview - the to-scale one beside the fields
+//! (`tool_preview`), which draws the draft of this tab through
+//! [`preview_inputs`]. #93 slice 2: Draw cutter switches the tab to the
+//! tool's own cutter, neck and shank (`tool_cutter_page`). Turning tools
+//! are not spun profiles: for them the column stays the Body section
+//! alone (owner, #93).
 //! Provenance: our own pane over `app::tool_body_view` and
-//! `app::spun`; the side view is the handbook's tool drawing. No vendor
-//! material consulted.
+//! `app::spun`. No vendor material consulted.
 
-use egui::{Align2, Color32, FontId, Pos2, Sense, Shape, Stroke, Ui, Vec2};
+use egui::{Color32, Ui};
 
-use camcraft_app::spun::{SpunPoint, SpunProfile};
+use camcraft_app::cutter_profile;
+use camcraft_app::spun::SpunPoint;
+use camcraft_app::tool_body;
 use camcraft_app::tool_body_view;
-use camcraft_app::tools::Tool;
 use camcraft_app::units::{self, Unit};
 
 use crate::state::{State, ToolColumn, is_spun_kind};
 
-/// The side view's size, logical px.
-const VIEW: Vec2 = Vec2::new(260.0, 230.0);
-const NOTE: Color32 = Color32::from_rgb(0x9E, 0xA8, 0xB8);
-const HOLDER: Color32 = Color32::from_rgb(230, 160, 60);
 pub(super) const BAD: Color32 = Color32::from_rgb(230, 90, 80);
+/// #2007: the points table's height. It is also its least height, so a
+/// table low on a scrolled page does not shrink to a few rows.
+const TABLE_H: f32 = 150.0;
+
+/// Holder bands `(above, len, r)` and a steel outline override.
+pub(super) type PreviewInputs = (Option<Vec<(f64, f64, f64)>>, Option<Vec<(f64, f64)>>);
+
+/// #2007: what the one to-scale preview draws. On the Profile tab a draft
+/// that validates shows at once - the drawn holder as the bands the
+/// collision check sweeps (#2017), the drawn cutter as the steel
+/// outline. Otherwise the landed body, as before. A draft that does not
+/// validate shows the landed state; its refusal stands below the table.
+pub(super) fn preview_inputs(state: &mut State, exists: bool) -> PreviewInputs {
+    if !exists {
+        return (None, None);
+    }
+    // The Body tab's draft follows the landed body each frame, as before
+    // #2007, also while a drawn holder draft shows.
+    state.sync_tool_body_ui();
+    let tool = state.tool_ui.to_tool();
+    let profile_tab = is_spun_kind(state.tool_ui.tool_kind()) && state.tool_profile_ui.column == ToolColumn::Profile;
+    let geom = tool.geom();
+    let bands = |p: Option<&_>| tool_body::stack(&geom, p).bands.iter().map(|q| (q.above, q.len, q.r)).collect::<Vec<_>>();
+    if profile_tab && state.tool_cutter_ui.shown {
+        state.sync_tool_cutter_ui();
+        let steel = cutter_profile::check(&tool, state.tool_cutter_ui.points.clone()).ok().map(|s| s.outline());
+        let body = super::tool_body_page::envelope(state);
+        // The drawn cutter stops at the shank top: the holder cylinder
+        // goes on top of it as bands when no body is landed.
+        let body = match (&steel, body) {
+            (Some(_), None) => Some(bands(None)),
+            (_, b) => b,
+        };
+        return (body, steel);
+    }
+    if profile_tab && state.tool_profile_ui.custom {
+        state.sync_tool_profile_ui();
+        if let Ok(s) = tool_body_view::spun_preview(&tool, &state.tool_profile_ui.points) {
+            return (Some(bands(Some(&s.holder_profile()))), None);
+        }
+    }
+    (super::tool_body_page::envelope(state), None)
+}
 
 /// The editor's third column: Body / Profile tabs for a milling tool,
 /// the Body section alone for a turning tool.
 pub(super) fn third_column(ui: &mut Ui, state: &mut State, exists: bool, u: Unit) {
     let milling = is_spun_kind(state.tool_ui.tool_kind());
     if milling {
-        ui.horizontal(|ui| {
+        // #2007: the tab row wraps in a narrow pane.
+        ui.horizontal_wrapped(|ui| {
             let c = state.tool_profile_ui.column;
             if ui.selectable_label(c == ToolColumn::Body, "Body").on_hover_text("import a holder or assembly mesh").clicked() {
                 state.tool_profile_ui.column = ToolColumn::Body;
@@ -80,49 +121,47 @@ fn profile_section(ui: &mut Ui, state: &mut State, exists: bool, u: Unit) {
     }
     state.sync_tool_profile_ui();
     let landed = state.editor_tool_body();
+    // #2007: plain words - which holder the tool uses now.
     ui.label(match &landed {
         // #2016: a library holder is the entry, not a copy of it.
         Some(b) if b.library.is_some() => format!(
-            "landed: library holder {} - an edited point makes it a drawn profile",
+            "In use: library holder {}. Edit a point to make it a drawn outline.",
             b.library.as_ref().map_or("", |r| r.entry.as_str())
         ),
-        Some(b) if b.spun.is_some() => "landed: a drawn profile".to_owned(),
-        Some(b) => format!("landed: imported body {} - Apply profile replaces it", b.source),
-        None => "landed: the holder cylinder from the numbers".to_owned(),
+        Some(b) if b.spun.is_some() => "In use: a drawn holder outline".to_owned(),
+        Some(b) => format!("In use: the imported holder {}. Apply profile replaces it.", b.source),
+        None => "In use: the holder cylinder from the dimensions".to_owned(),
     });
     let custom = state.tool_profile_ui.custom;
     ui.horizontal(|ui| {
         if ui
             .selectable_label(!custom, "Parametric")
-            .on_hover_text("the holder is the Ø × length cylinder of the numbers, redrawn as they change")
+            .on_hover_text("the holder is a cylinder with the holder diameter and length, redrawn as they change")
             .clicked()
         {
             state.set_profile_custom(false);
         }
-        if ui.selectable_label(custom, "Custom").on_hover_text("edit the outline point by point; number edits leave it alone").clicked() {
+        if ui.selectable_label(custom, "Custom").on_hover_text("edit the outline point by point; changed dimensions leave it alone").clicked() {
             state.set_profile_custom(true);
         }
     });
     points_table(ui, state, u);
     let tool = state.tool_ui.to_tool();
     let points = state.tool_profile_ui.points.clone();
-    let check = if points.is_empty() { Err("no holder - the tool states none".to_owned()) } else { tool_body_view::spun_preview(&tool, &points) };
-    let cutter = camcraft_app::tool_cutter::shown(&tool, state.editor_tool_cutter().as_ref()).map(|c| c.outline()).unwrap_or_default();
-    let holder: Vec<(f64, f64)> = check.as_ref().map_or_else(|_| points.iter().map(|p| (p.z, p.r)).collect(), SpunProfile::outline);
-    side_view(ui, &tool, (&cutter, true), (&holder, check.is_ok()), u);
+    let check = if points.is_empty() { Err("No holder: the tool has none.".to_owned()) } else { tool_body_view::spun_preview(&tool, &points) };
     match &check {
         Ok(s) => {
             state.retire_profile_refusal();
             let top = s.points().last().map_or(0.0, |p| p.z);
             let foot = s.points().first().map_or(0.0, |p| p.z);
             let wide = s.max_radius();
+            let mm = u.suffix();
             ui.label(format!(
-                "holder Ø {} × {} {}, gauge {} {}",
+                "holder Ø {} × {} {mm}, from {} to {} {mm} above the tip",
                 units::len(2.0 * wide, u, 1),
                 units::len(top - foot, u, 1),
-                u.suffix(),
+                units::len(foot, u, 1),
                 units::len(top, u, 1),
-                u.suffix()
             ));
         }
         Err(e) => {
@@ -134,18 +173,19 @@ fn profile_section(ui: &mut Ui, state: &mut State, exists: bool, u: Unit) {
     if ui
         .add_enabled(can, egui::Button::new("Apply profile"))
         .on_hover_text(if state_custom {
-            "land the drawn holder as the tool's body (one undo step)"
+            "use the drawn holder for this tool (one undo step)"
         } else {
-            "drop the landed body: the holder cylinder is judged again (one undo step)"
+            "remove the holder in use: the holder cylinder from the dimensions is checked again (one undo step)"
         })
         .clicked()
     {
         state.queue_apply_tool_profile();
     }
-    ui.small("Revolved body: non-revolved features are enveloped conservatively (never cut away); only the half-profile is editable.");
+    ui.small("The holder is a turned shape: you edit one half of its outline. Parts that are not round are covered by a larger safe shape, never cut away.");
     let has_export = !state.tool_profile_ui.points.is_empty() || landed.is_some();
+    // #2007: the three file buttons wrap in a narrow column.
     let (imp_dxf, exp_dxf, imp_step) = ui
-        .horizontal(|ui| {
+        .horizontal_wrapped(|ui| {
             let imp_dxf = crate::browser_files::button(
                 ui,
                 state.in_browser(crate::browser_files::NEEDS_PICKER),
@@ -202,11 +242,28 @@ pub(super) fn points_grid(ui: &mut Ui, u: Unit, points: &mut [SpunPoint], editab
     let n = points.len();
     let mut insert = None;
     let mut remove = None;
-    egui::ScrollArea::vertical().max_height(150.0).id_salt(id).show(ui, |ui| {
+    // #2007: the least height keeps the rows in view when the table sits
+    // low in the scrolled page - without it egui shrinks a nested scroll
+    // area to the space left in the view, about two rows.
+    egui::ScrollArea::vertical().max_height(TABLE_H).min_scrolled_height(TABLE_H).id_salt(id).show(ui, |ui| {
         ui.add_enabled_ui(editable, |ui| {
-            egui::Grid::new((id, "grid")).num_columns(6).spacing([4.0, 2.0]).show(ui, |ui| {
-                for h in ["#", &format!("z {}", u.suffix()), &format!("r {}", u.suffix()), "arc R", "", ""] {
-                    ui.label(h);
+            // #2007: no 40 px least column width - with it the six columns
+            // overran the 260 px column and pushed "×" out of a narrow pane.
+            egui::Grid::new((id, "grid")).num_columns(6).min_col_width(0.0).spacing([4.0, 2.0]).show(ui, |ui| {
+                let heads = [
+                    ("#".to_owned(), "the point number, from the tip up"),
+                    (format!("height {}", u.suffix()), "the height of the point above the tool tip"),
+                    (format!("radius {}", u.suffix()), "the distance of the point from the tool axis"),
+                    ("arc".to_owned(), "the arc radius of this point; 0 is a straight line"),
+                    (String::new(), ""),
+                    (String::new(), ""),
+                ];
+                for (h, tip) in heads {
+                    if tip.is_empty() {
+                        ui.label(h);
+                    } else {
+                        ui.label(h).on_hover_text(tip).on_disabled_hover_text(tip);
+                    }
                 }
                 ui.end_row();
                 for (i, p) in points.iter_mut().enumerate() {
@@ -243,75 +300,3 @@ pub(super) fn len_cell(ui: &mut Ui, u: Unit, v: &mut f64) {
     }
 }
 
-/// The flat side view: the cutter, neck and shank outline and the
-/// holder outline, each with whether it validates (filled when it
-/// does, a red outline when not), to scale, tip at the bottom, with
-/// the key dimensions.
-pub(super) fn side_view(ui: &mut Ui, tool: &Tool, cutter: (&[(f64, f64)], bool), holder: (&[(f64, f64)], bool), u: Unit) {
-    const PAD: f32 = 16.0;
-    let (resp, painter) = ui.allocate_painter(VIEW, Sense::hover());
-    let rect = resp.rect;
-    painter.rect_filled(rect, 4.0, Color32::from_rgb(24, 26, 31));
-    let ((cutter, cutter_ok), (holder, ok)) = (cutter, holder);
-    let all = || cutter.iter().chain(holder.iter()).filter(|q| q.0.is_finite() && q.1.is_finite());
-    let r_max = all().fold(0.0f64, |a, q| a.max(q.1));
-    let z_max = all().fold(0.0f64, |a, q| a.max(q.0));
-    if r_max <= 0.0 || z_max <= 0.0 {
-        painter.text(rect.center(), Align2::CENTER_CENTER, "enter dimensions", FontId::proportional(11.0), NOTE);
-        return;
-    }
-    // The tool sits left of centre; the right margin holds the labels.
-    let axis_x = rect.min.x + rect.width() * 0.38;
-    let base_y = rect.max.y - PAD;
-    let scale = ((rect.width() * 0.34) / r_max as f32).min((rect.height() - 2.0 * PAD) / z_max as f32).max(f32::EPSILON);
-    let at = |z: f64, r: f64| Pos2::new(axis_x + r as f32 * scale, base_y - z as f32 * scale);
-    painter.line_segment([Pos2::new(axis_x, rect.min.y + 4.0), Pos2::new(axis_x, rect.max.y - 4.0)], Stroke::new(1.0, Color32::from_rgb(70, 74, 84)));
-    let zc = tool.flute_len.max(0.0);
-    let slices = |o: &[(f64, f64)], fill: &dyn Fn(f64) -> Color32| {
-        for w in o.windows(2) {
-            let ((z0, r0), (z1, r1)) = (w[0], w[1]);
-            if z1 > z0 && [z0, z1, r0, r1].iter().all(|v| v.is_finite()) {
-                painter.add(Shape::convex_polygon(vec![at(z0, -r0), at(z0, r0), at(z1, r1), at(z1, -r1)], fill((z0 + z1) * 0.5), Stroke::NONE));
-            }
-        }
-    };
-    if cutter_ok {
-        slices(cutter, &|zm| if zm < zc { Color32::from_rgb(168, 178, 192) } else { Color32::from_rgb(122, 130, 142) });
-    }
-    if ok {
-        slices(holder, &|_| Color32::from_rgba_unmultiplied(230, 160, 60, 90));
-    }
-    let outline = |o: &[(f64, f64)], ink: Color32| {
-        let mut pts: Vec<Pos2> = o.iter().map(|&(z, r)| at(z, r)).collect();
-        pts.extend(o.iter().filter(|q| q.1 > 0.0).rev().map(|&(z, r)| at(z, -r)));
-        if pts.len() >= 2 {
-            painter.add(Shape::closed_line(pts, Stroke::new(1.0, ink)));
-        }
-    };
-    outline(cutter, if cutter_ok { Color32::from_rgb(214, 220, 228) } else { BAD });
-    outline(holder, if ok { HOLDER } else { BAD });
-    // Heights: flute top, the holder's foot (stickout) and top (gauge).
-    let small = FontId::proportional(10.0);
-    let tick = |z: f64, what: &str| {
-        if z.is_finite() && z > 0.0 {
-            let y = base_y - z as f32 * scale;
-            painter.line_segment([Pos2::new(axis_x + 4.0, y), Pos2::new(rect.max.x - 4.0, y)], Stroke::new(0.5, Color32::from_rgb(80, 86, 98)));
-            painter.text(Pos2::new(rect.max.x - 4.0, y - 1.0), Align2::RIGHT_BOTTOM, format!("{what} {}", units::len(z, u, 1)), small.clone(), NOTE);
-        }
-    };
-    tick(zc, "flutes");
-    if let (Some(foot), Some(top)) = (holder.first().map(|q| q.0), holder.last().map(|q| q.0)) {
-        tick(foot, "stickout");
-        tick(top, "gauge");
-    } else {
-        tick(zc + tool.shank_len.max(0.0), "shank");
-    }
-    painter.text(Pos2::new(axis_x, rect.max.y - 2.0), Align2::CENTER_BOTTOM, format!("Ø {}", units::len(tool.diameter, u, 2)), small.clone(), NOTE);
-    painter.text(
-        rect.min + Vec2::new(6.0, 4.0),
-        Align2::LEFT_TOP,
-        format!("shank Ø {} {}", units::len(tool.shank_d, u, 2), u.suffix()),
-        small,
-        NOTE,
-    );
-}

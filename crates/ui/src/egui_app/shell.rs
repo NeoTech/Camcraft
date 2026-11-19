@@ -41,7 +41,7 @@ pub(crate) const VIEW3D_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8
 #[cfg(test)]
 pub(crate) const RIBBON_H: f32 = theme::ribbon_h(&theme::Tokens::DARK);
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub(crate) enum Tab {
     Viewport,
     Browser,
@@ -67,9 +67,9 @@ impl Tab {
 }
 
 /// The default dock lives with the layout law (layout.rs); re-exported
-/// here because the shell and its frame tests build it by this name.
-// #31: only the native window and the tests build it today.
-#[cfg_attr(target_arch = "wasm32", allow(unused_imports))]
+/// here because the web shell and its frame tests build it by this name.
+// #31: the native window starts from `layout::setups::start_dock` (#2339).
+#[allow(unused_imports)]
 pub(crate) use super::layout::build_dock;
 
 
@@ -178,9 +178,14 @@ pub(crate) fn shell_layout(
     // (in-app egui::Window over the dock, None on a fresh State, so
     // snapshots never move until the Setup pane opens it).
     machine_editor::window(ui.ctx(), state);
+    // #1696: the Report an issue window - same window law (closed on a
+    // fresh State, opened from the status strip's Report door).
+    super::report::window(ui.ctx(), state);
     super::post_dialog::window(ui.ctx(), state);
     // #339 slice 6: the fixture library dialogs (None on a fresh State).
     super::fixture_library_dialog::window(ui.ctx(), state);
+    // #2339: the Panel setups window - same window law, closed by default.
+    super::panel_setups::window(ui.ctx(), state);
     // #107: the unsaved-changes prompt, last so it sits over everything.
     unsaved_prompt::window(ui.ctx(), state);
     drop(windows);
@@ -309,11 +314,10 @@ fn viewport_panel(
         let sc = crate::frame_cost::time("ui/viewport.sim_script", || cached_script(state));
         let total = sc.total.max(0.0);
         let unit = camcraft_app::units::of(&state.world);
-        if let Some(sim) = state.sim.as_mut() {
-            // Clamp a stalled frame's dt: a hiccup never teleports the
-            // tool through material.
-            sim.advance(f64::from(ui.input(|i| i.stable_dt).clamp(0.0, 0.1)), total);
-        }
+        // Clamp a stalled frame's dt: a hiccup never teleports the tool
+        // through material. Held while the stock removal is calculated.
+        crate::play_precalc::advance_playhead(state, f64::from(ui.input(|i| i.stable_dt).clamp(0.0, 0.1)), total);
+        let held = crate::play_precalc::holds_playhead(state);
         let mut stop = false;
         ui.horizontal(|ui| {
             let Some(sim) = state.sim.as_mut() else {
@@ -339,7 +343,7 @@ fn viewport_panel(
                 stop = true;
             }
             if total > 0.0 {
-                ui.add(egui::Slider::new(&mut sim.t, 0.0..=total).show_value(false));
+                ui.add_enabled(!held, egui::Slider::new(&mut sim.t, 0.0..=total).show_value(false));
                 egui::ComboBox::from_id_salt("sim_speed")
                     .selected_text(format!("{:.0}x", sim.speed))
                     .show_ui(ui, |ui| {
@@ -1013,20 +1017,29 @@ pub(crate) mod headless {
     use super::wgpu;
     use super::super::world;
 
-    pub(crate) fn run() -> Result<(), String> {
-        let mut state = State::new();
-        world::seed(&mut state);
-        state.pending.push_back(CommandKind::FrameAll);
-        state.drain_actions();
-        let op_ok = model::find_by_name(&state.world, "Contour1")
-            .and_then(|e| model::toolpath_of(&state.world, &e))
-            .map_or(0, |tp| tp.path.moves.len());
-        if op_ok == 0 {
-            return Err(format!(
-                "seed produced no cached toolpath for Contour1 (status: {})",
-                state.status
-            ));
-        }
+    /// `open`: the file named on the command line (#2648), drawn in place
+    /// of the seeded document; `None` runs the seeded proof. Ok carries
+    /// what was drawn, for the run's last line.
+    pub(crate) fn run(open: Option<CommandKind>) -> Result<String, String> {
+        let (state, cam, must_draw, said) = match open {
+            Some(cmd) => {
+                let opened = crate::headless_open::open(cmd)?;
+                let cam = opened.state.cam;
+                (opened.state, cam, opened.has_geometry, opened.said)
+            }
+            None => {
+                let (state, op_ok) = seeded()?;
+                // Same vantage the gpu_render smoke tests use on equivalent parts.
+                let cam = Camera {
+                    target: [0.0, 0.0, 20.0],
+                    yaw: 0.9,
+                    pitch: 0.5,
+                    dist: 160.0,
+                    ..Camera::default()
+                };
+                (state, cam, true, format!("seeded document, command world; Contour1 cached {op_ok} moves"))
+            }
+        };
 
         // Software adapter first, else the hardware one (#615: macOS's
         // Metal has no software fallback).
@@ -1042,14 +1055,6 @@ pub(crate) mod headless {
         view.set_document(&device, &queue, &scene.parts);
         view.set_overlay(&device, &queue, &scene.overlay);
 
-        // Same vantage the gpu_render smoke tests use on equivalent parts.
-        let cam = Camera {
-            target: [0.0, 0.0, 20.0],
-            yaw: 0.9,
-            pitch: 0.5,
-            dist: 160.0,
-            ..Camera::default()
-        };
         let (w, h) = view.extent();
         let mvp = cam.mvp(f64::from(w.max(1)) / f64::from(h.max(1)));
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -1079,14 +1084,29 @@ pub(crate) mod headless {
             })
             .count();
         let total = (w as usize * h as usize).max(1);
-        if changed * 20 < total {
-            // less than 5% of the frame: the seeded stock did not rasterize
+        if must_draw && changed * 20 < total {
+            // less than 5% of the frame: the document did not rasterize
             return Err(format!("readback looks empty ({changed}/{total} changed px)"));
         }
-        diag_info!(
-            "headless snapshot: {w}x{h}, {}% pixels changed; Contour1 cached {op_ok} moves",
-            changed * 100 / total
-        );
-        Ok(())
+        diag_info!("headless snapshot: {w}x{h}, {}% pixels changed", changed * 100 / total);
+        Ok(said)
+    }
+
+    /// The seeded proof document, with Contour1's cached move count.
+    fn seeded() -> Result<(State, usize), String> {
+        let mut state = State::new();
+        world::seed(&mut state);
+        state.pending.push_back(CommandKind::FrameAll);
+        state.drain_actions();
+        let op_ok = model::find_by_name(&state.world, "Contour1")
+            .and_then(|e| model::toolpath_of(&state.world, &e))
+            .map_or(0, |tp| tp.path.moves.len());
+        if op_ok == 0 {
+            return Err(format!(
+                "seed produced no cached toolpath for Contour1 (status: {})",
+                state.status
+            ));
+        }
+        Ok((state, op_ok))
     }
 }

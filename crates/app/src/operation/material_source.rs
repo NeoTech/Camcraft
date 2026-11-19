@@ -87,6 +87,13 @@ pub(super) fn standing_above(material: &Material, z: f64) -> Option<Region> {
     slice::project(&above, FOOTPRINT_SAMPLES).ok()
 }
 
+/// The outline of the material standing at or above the plane `z`
+/// (#2437): [`standing_above`] read 1 um below it, so a face whose top
+/// lies on the plane counts. `None` as there (every hole lifted).
+pub(super) fn standing_at(material: &Material, z: f64) -> Option<Region> {
+    standing_above(material, z - 1e-3)
+}
+
 pub(super) fn region_core(
     material: &Material,
     params: &OpParams,

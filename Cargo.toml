@@ -41,6 +41,19 @@ tracing-subscriber = { version = "0.3", default-features = false, features = ["f
 # and the job-script host (app/script) run the same hard-pinned boa.
 boa_engine = "0.21.1"
 
+# Cancellable AI HTTP requests (#1945): rustls with ring, no system TLS.
+# MIT OR Apache-2.0. Proxy discovery and redirects are disabled in the client.
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-webpki-roots"] }
+tokio = { version = "1", features = ["rt", "time", "net", "macros"] }
+# API keys live only in the OS keychain (macOS Keychain, Windows
+# Credential Manager, freedesktop Secret Service over zbus - pure Rust,
+# no libdbus) or in environment variables (#1945). MIT OR Apache-2.0.
+keyring = "4.2"
+# #1945: endpoint URLs are parsed by the same WHATWG parser reqwest uses, so
+# the host the offline and https laws check is the host the socket opens.
+# Already in the lock (through other crates). MIT OR Apache-2.0.
+url = "2.5"
+
 # Platform + dialog deps shared with the UI stack; imgui retired at M1.4.2
 # M-g (the dear-imgui-* trio left with it).
 # No direct wgpu dep: camcraft-ui uses egui_wgpu::wgpu so types match the
@@ -68,7 +81,9 @@ objc2 = "0.5"
 egui = "=0.36.2"
 egui-winit = "=0.36.2"
 egui-wgpu = "=0.36.2"
-egui_dock = "=0.21.1"
+# "serde": the saved panel arrangement (#2339) is the dock's own tree, so an
+# arrangement keeps its splits, tab order, collapsed leaves and float rects.
+egui_dock = { version = "=0.21.1", features = ["serde"] }
 egui_kittest = { version = "=0.36.2", features = ["wgpu", "snapshot"] }
 # wasm32 only (#31): the browser shell. eframe's web runner owns the canvas,
 # the DOM events and the awaited GPU start-up; wasm-bindgen exports the

@@ -183,6 +183,11 @@ pub fn collect(world: &World) -> ProjectFile {
                 mesh_open: crate::mesh_open::hole_of(world, &entity),
                 facet_budget: crate::model_fidelity::budget_of(world, &entity),
                 step_source: kind.is_none().then(|| crate::step_source::of(world, &entity)).flatten(),
+                source: kind
+                    .is_none()
+                    .then(|| crate::model_source::of(world, &entity))
+                    .flatten()
+                    .map(|s| super::SourceDto::of(&s)),
                 kind,
                 raw_stock_only: mark.is_some(),
                 raw_stock_print: mark.as_ref().map(crate::stock_print::to_text),

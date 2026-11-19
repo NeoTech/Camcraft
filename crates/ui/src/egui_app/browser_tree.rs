@@ -313,7 +313,7 @@ fn op_row(
         operation::OpStatus::Ok => "ok",
         operation::OpStatus::Stale => "STALE",
     };
-    let warns = model::toolpath_of(w, entity).map_or(0, |tp| tp.warnings.len());
+    let warns = model::with_toolpath(w, entity, |tp| tp.warnings.len()).unwrap_or(0);
     let warn_text = match warns {
         0 => String::new(),
         1 => "  1 warning".to_owned(),

@@ -348,9 +348,9 @@ pub(super) fn contents(ui: &mut Ui, state: &mut State, wide: bool) {
             ui.add(egui::DragValue::new(&mut state.tool_ui.number).range(min..=camcraft_app::tool_numbers::MAX));
         });
         ui.vertical(|ui| {
-            // #371: the placed body's envelope rides the profile.
-            let body = if exists { super::tool_body_page::envelope(state) } else { None };
-            super::tool_preview::draw(ui, &preview_tool, u, body.as_deref(), wide);
+            // #371 / #2007: the landed body, or the Profile tab's drafts.
+            let (body, steel) = super::tool_profile_page::preview_inputs(state, exists);
+            super::tool_preview::draw(ui, &preview_tool, u, body.as_deref(), steel.as_deref(), wide);
         });
         ui.vertical(|ui| {
             ui.set_width(if wide { 260.0 } else { ui.available_width().min(260.0) });

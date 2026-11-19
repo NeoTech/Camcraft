@@ -125,6 +125,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             steep_stepover,
             pencil_reference,
             fill_openings,
+            gap_link,
         } => {
             if tab == SEC_HEIGHTS {
                 height_editor(
@@ -234,6 +235,26 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
                         }
                         check_row(ui, "Ramp ring entries", entry_ramp);
                         hint(ui, "on flanks steeper than the split, a ring's first contact slides in along its contact normal instead of dropping; where the normal cannot certify the way in, the plunge stands and the path says why");
+                        let mut link_idx = match gap_link {
+                            camcraft_app::finishing3d::GapLink::Jump => 0,
+                            camcraft_app::finishing3d::GapLink::Straight => 1,
+                        };
+                        let before_link = link_idx;
+                        prop_row(ui, "Gap link", |ui| {
+                            combo(
+                                ui,
+                                "f3_gaplink",
+                                &mut link_idx,
+                                &["Jump", "Straight"],
+                            )
+                        });
+                        if link_idx != before_link {
+                            *gap_link = match link_idx {
+                                1 => camcraft_app::finishing3d::GapLink::Straight,
+                                _ => camcraft_app::finishing3d::GapLink::Jump,
+                            };
+                        }
+                        hint(ui, "Jump: a refused chain hops to retract (or clearance), as always. Straight: one direct link from one side of the gap to the other at the cut's own height, no hop at all - where the model certifies the ball crosses clear; otherwise the hop stands");
                     } else {
                         hint(ui, "geodesic rings ride the surface, not the ladder: each run enters by its own certified plunge, and the sloped-entry laws keep their hands off");
                     }

@@ -145,7 +145,9 @@ fn the_setup_page_is_laid_out_in_groups_like_the_wcs_page() {
     // #1648, #1926: the work offset picker and the feature picks live on the WCS page, not here.
     gone(&h, OFFSET);
     gone(&h, FEATURES);
-    gone(&h, "Pick for WCS");
+    for label in ["Pick origin", "Pick X axis", "Pick Y axis", "Pick Z axis"] {
+        gone(&h, label);
+    }
     gone(&h, "Set WCS from features");
     assert_between(&h, GROUPS[3], foot(&h), &["Delete Setup2", "Open Setup2 fixtures"]);
     // Stock follows its source: a fresh setup's own stock entity, stated at the foot.

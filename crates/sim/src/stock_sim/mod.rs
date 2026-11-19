@@ -91,6 +91,9 @@ mod wall_anchor;
 mod mark;
 mod display;
 mod dual;
+// #2626: the f32 twin of the GPU cell cut and its brick work list.
+mod cut_twin;
+mod cut_twin_work;
 mod field;
 mod field_arc;
 mod field_batch;
@@ -149,6 +152,8 @@ pub use wall_anchor::{models_a_bevel, on_walls};
 pub use mark::{credit_marks, Mark};
 // The floor a mark must leave on the part's underside (#1595).
 pub use crate::verify::MARK_FLOOR;
+pub use cut_twin::{cell_cut, from_ordered_bits, ordered_bits, TileChord, TwinChord, TwinTool, TWIN_ULPS};
+pub use cut_twin_work::{run_twin, twin_cut, twin_work, TwinWork, WorkItem, TWIN_MAX_CELLS_PER_CHORD};
 pub use field::SdfField;
 pub use field_body::Lattice;
 pub use field_carry::{box_signed, CarriedField, Clip, ClipRefusal};

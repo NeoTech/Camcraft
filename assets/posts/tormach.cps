@@ -1269,6 +1269,12 @@ function onCycle() {
     }
     return;
   }
+  // #2609: PathPilot's and LinuxCNC's G73 and G85 formats have no P word.
+  if ((g === "G73" || g === "G85") && dwell > 0) {
+    var cycleName = g === "G73" ? "peck" : "ream";
+    msg("canned cycle " + g + " (" + cycleName + ") dwell is not supported by this post - a " + dwell + " s dwell is refused, not dropped; set the dwell to 0");
+    return;
+  }
   // #2348: PathPilot's and LinuxCNC's G83 formats have no P word.
   if (g === "G83" && dwell > 0) {
     msg("canned cycle G83 (deep peck) dwell is not supported by this post - a " + dwell + " s dwell is refused, not dropped; set the dwell to 0");
@@ -1394,6 +1400,23 @@ function onProbeResult() {
     block(["(DEBUG, PROBE " + a.Axis + " ERROR #" + (dev + i) + (inch ? " IN" : " MM") + ")"]);
   }
   if (has(p.SetWorkOffset) && p.SetWorkOffset >= 0) {
+    // #2683: the write is exact (target = active offset + deviation) only
+    // in unrotated systems. With an XY rotation (R of G10 L2, parameter
+    // 5210 + 20 x the system number) the deviation lies along rotated
+    // axes, and a target with another rotation gets an origin that is
+    // right at this position only. The control holds R, so the program
+    // tests it and ends by name. A Z-only result needs no test.
+    var xy = false;
+    for (var q = 0; q < axes.length; q++) if (axes[q].Axis !== "Z") xy = true;
+    if (xy) {
+      var tgt = Number(p.SetWorkOffset) + 1;
+      var rotA = "[#" + (5210 + 20 * wcsIndex) + " NE 0]";
+      var g = nextO();
+      block([g, "if", tgt === wcsIndex ? rotA : "[" + rotA + " OR [#" + (5210 + 20 * tgt) + " NE 0]]"]);
+      block(["(MSG, PROBE: " + wcsWord + (tgt === wcsIndex ? "" : " OR " + workOffsetName(tgt)) + " XY ROTATION NOT ZERO - NO OFFSET WRITTEN)"]);
+      block(["M2"]);
+      block([g, "endif"]);
+    }
     var words = ["G10", "L20", "P" + (Number(p.SetWorkOffset) + 1)];
     for (var j = 0; j < axes.length; j++) {
       words.push(axes[j].Axis + "[#" + (5420 + probeAxis(axes[j].Axis)) + "-#" + (dev + j) + "]");

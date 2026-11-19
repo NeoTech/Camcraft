@@ -95,7 +95,7 @@ fn a_stock_and_profile_setup_saves_and_loads_with_its_2d_operation() {
     let world = sheet_job();
     let text = saved(&world);
     let (file, row) = file_and_row(&text);
-    assert_eq!(PROJECT_VERSION, 71, "the DXF profile row arrives at v71, after main's v70");
+    const { assert!(PROJECT_VERSION >= 71, "the DXF profile row arrives at v71, after main's v70") };
     assert_eq!(file["version"], json!(PROJECT_VERSION));
     let dto = &file["entities"][row];
     assert_eq!(dto["name"], json!("plate"));

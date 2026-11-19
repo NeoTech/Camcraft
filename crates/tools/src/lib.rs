@@ -43,6 +43,8 @@ pub mod catalog_fields;
 // #890: a tool's cutting data per workpiece material.
 pub mod cutting_rows;
 pub mod waterjet;
+// #1521: a torch's cut-data recipe per material and plate thickness.
+pub mod plasma_cut;
 pub mod wire;
 pub mod tools;
 // #1186: the tool sanity law, said by name.

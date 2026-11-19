@@ -295,6 +295,13 @@ pub fn script_props(m: &Value) -> Value {
             .or(get(m, &["rigidTapping"]))
             .and_then(Value::as_bool)
             .unwrap_or(true),
+        // #2303: true only when the file STATES rigid tapping (a spindle
+        // encoder); `rigidTapping` above reads unstated as "not limited",
+        // which a post that needs the encoder cannot take as a yes.
+        "rigidTappingStated": get(m, &["kinematics", "static", "head", "rigidTapping"])
+            .or(get(m, &["rigidTapping"]))
+            .and_then(Value::as_bool)
+            == Some(true),
         // #495: the machine-coordinate Z a post retracts to (mm), or
         // null when the machine does not state one; `model` is the
         // machine's model name through either door (the mirror's

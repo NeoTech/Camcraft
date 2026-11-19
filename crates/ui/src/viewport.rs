@@ -1128,9 +1128,10 @@ impl Camera {
     /// Ray through an NDC cursor position (x right, y up, -1..1):
     /// (origin, normalized direction), or None on degenerate math.
     /// In [`ProjectionMode::Orthographic`] the ray is parallel to the
-    /// view axis and its origin is the cursor's point on the eye plane
-    /// - the mirror of the ortho box [`Camera::mvp`] draws, so a pick
-    ///   through the same matrix hits what the screen shows (#434).
+    /// view axis and its origin is the cursor's point on the near plane,
+    /// [`Camera::ortho_behind_eye`] behind the eye plane - the mirror of
+    /// the ortho box [`Camera::mvp`] draws, so a pick through the same
+    /// matrix hits what the screen shows (#434), nearer faces included (#2375).
     #[must_use]
     pub fn ray_through(&self, ndc: [f32; 2], aspect: f64) -> Option<([f64; 3], [f64; 3])> {
         let (fx, fy, fz) = self.fwd();
@@ -1147,10 +1148,11 @@ impl Camera {
             let h = self.ortho_half_height();
             let w = h * aspect;
             let e = self.eye();
+            let back = self.ortho_behind_eye();
             let origin = [
-                e[0] + nx * w * rx + ny * h * ux,
-                e[1] + nx * w * ry + ny * h * uy,
-                e[2] + nx * w * rz + ny * h * uz,
+                e[0] + nx * w * rx + ny * h * ux - back * fx,
+                e[1] + nx * w * ry + ny * h * uy - back * fy,
+                e[2] + nx * w * rz + ny * h * uz - back * fz,
             ];
             let dir = [fx, fy, fz];
             if !origin.iter().all(|v| v.is_finite())
@@ -1435,7 +1437,7 @@ impl Camera {
             // the target plane and any nearer geometry would vanish.
             // The near plane reaches far behind the eye plane so nothing
             // inside the visible box clips away.
-            let near = -((self.dist * 20.0).max(1000.0) - ORTHO_EYE_DIST);
+            let near = -self.ortho_behind_eye();
             // Parallel box (#434): half-height is what perspective sees at
             // the target plane, so `dist` keeps spelling zoom and the
             // mode switch never jumps the framing. Depth is linear and
@@ -1473,6 +1475,13 @@ impl Camera {
     #[must_use]
     pub(crate) fn ortho_half_height(&self) -> f64 {
         self.dist * (std::f64::consts::FRAC_PI_6).tan()
+    }
+
+    /// How far the orthographic near plane sits behind the eye plane, mm:
+    /// [`Camera::mvp`] clips there and [`Camera::ray_through`] starts there.
+    #[must_use]
+    pub(crate) fn ortho_behind_eye(&self) -> f64 {
+        (self.dist * 20.0).max(1000.0) - ORTHO_EYE_DIST
     }
 }
 

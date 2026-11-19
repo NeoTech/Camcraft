@@ -710,6 +710,12 @@ function onCycle() {
     msg("canned cycle " + g + " has no feed rate - refused: without F the control drills at whatever feed was last modal");
     return;
   }
+  // #2609: grblHAL follows LinuxCNC's G73 and G85 formats, with no P word.
+  if ((g === "G73" || g === "G85") && dwell > 0) {
+    var cycleName = g === "G73" ? "peck" : "ream";
+    msg("canned cycle " + g + " (" + cycleName + ") dwell is not supported by this post - a " + dwell + " s dwell is refused, not dropped; set the dwell to 0");
+    return;
+  }
   // #2348: grblHAL's code list and the LinuxCNC reference it follows
   // give G83 no P word, so a deep-peck dwell is refused, not dropped.
   if (g === "G83" && dwell > 0) {

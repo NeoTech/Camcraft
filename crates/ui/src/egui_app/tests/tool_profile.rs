@@ -197,17 +197,17 @@ fn profile_tab_states_conservative_envelope_and_half_profile_rules_and_dxf_workf
     }
     assert!(
         harness
-            .query_all_by_label_contains("enveloped conservatively")
+            .query_all_by_label_contains("covered by a larger safe shape, never cut away")
             .next()
             .is_some(),
-        "Profile tab states non-revolved features are enveloped conservatively"
+        "Profile tab states that parts that are not round get a larger safe shape"
     );
     assert!(
         harness
-            .query_all_by_label_contains("only the half-profile is editable")
+            .query_all_by_label_contains("you edit one half of its outline")
             .next()
             .is_some(),
-        "Profile tab states only the half-profile is editable"
+        "Profile tab states that only one half of the outline is edited"
     );
 
     // Pin the import help beside the control; no screenshot or native picker is needed.
@@ -305,3 +305,32 @@ fn body_tab_convert_to_profile_refuses_unaligned_step_and_converts_iso_aligned_s
     assert!(harness.state().state.editor_tool_body().is_some());
 }
 
+/// #2007: the Draw holder view stands in the third column in plain words,
+/// top to bottom: what is in use, the table with its headers, Apply
+/// profile, the file buttons. It has no side view of its own.
+#[test]
+fn tool_profile_structure() {
+    use egui_kittest::kittest::NodeT;
+    let mut harness = shell_harness();
+    harness.run();
+    crate::actions::open_tool_editor(&mut harness.state_mut().state, "EM-0600-4FL");
+    harness.run_steps(2);
+    harness.get_by_label("Profile").click();
+    harness.run_steps(2);
+    let win = harness
+        .query_all_by_role(egui::accesskit::Role::Window)
+        .find(|n| n.accesskit_node().label().as_deref() == Some("Tool: EM-0600-4FL"))
+        .expect("the editor window");
+    let fields_right = win.get_by_label("Shank diameter").rect().max.x;
+    let mut last_y = f32::MIN;
+    for label in ["Holder profile", "In use: the holder cylinder from the dimensions", "Parametric", "height mm", "Apply profile", "Import DXF…"] {
+        let r = win.get_by_label(label).rect();
+        assert!(r.center().y > last_y, "{label:?} must follow the row above it");
+        assert!(r.min.x > fields_right, "{label:?} sits in the third column");
+        last_y = r.center().y;
+    }
+    for head in ["radius mm", "arc"] {
+        assert!(win.query_by_label(head).is_some(), "the table has the {head:?} header");
+    }
+    assert!(win.query_all_by_label_contains("landed").next().is_none(), "no \"landed\" jargon on the page");
+}

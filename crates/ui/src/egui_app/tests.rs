@@ -97,6 +97,7 @@ mod tool_list_page;
 mod stock_fit_sides;
 mod raw_stock_row;
 mod layout;
+mod panel_setups;
 mod machines_pane;
 mod machines_edit;
 mod machine_wire_edm;
@@ -1299,7 +1300,8 @@ fn every_field_lives_on_exactly_one_section() {
             // once more).
             "Deburr",
             vec![
-                ("Geometry", vec!["Break width"]),
+                // #1888 and #1889: keep the edge filters and reach policy.
+                ("Geometry", vec!["Break width", "Minimum edge angle", "Skip round holes", "Exclude the picked edges", "Unreachable edges"]),
                 ("Heights", vec!["Clearance Z", "Window Top Z", "Window Bottom Z"]),
                 ("Feeds", vec!["Feed", "Plunge feed"]),
             ],
@@ -1937,7 +1939,7 @@ fn origin_page_shows_the_anchor_grid_and_arms_pick_mode() {
 /// including the View3D readback and the fallback-adapter law).
 #[test]
 fn headless_run_succeeds() {
-    headless::run().map_err(|err| panic!("egui headless run failed: {err}")).ok();
+    headless::run(None).map_err(|err| panic!("egui headless run failed: {err}")).ok();
 }
 
 /// The churn gate for the migration: one rendered frame of the whole shell,

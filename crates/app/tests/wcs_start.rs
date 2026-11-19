@@ -84,6 +84,7 @@ fn finish() -> OpParams {
         tolerance: 0.05,
         clearance_z: Height::fixed(CLEAR),
         retract_z: None,
+        gap_link: camcraft_motion::finishing3d::GapLink::Jump,
         top_z: Height::fixed(10.0),
         bottom_z: Height::fixed(0.0),
         feed: 500.0,

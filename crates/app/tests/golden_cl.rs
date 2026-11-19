@@ -641,6 +641,7 @@ fn finish3d_waterline_cone() {
     let t = waterline(
         &facets,
         &Finish3DParams {
+            gap_link: camcraft_motion::finishing3d::GapLink::Jump,
             pattern: FinishPattern::Waterline,
             stepover: None,
             tool_diameter: 6.0,
@@ -696,6 +697,7 @@ fn finish3d_scallop_plateau() {
     let t = parallel(
         &facets,
         &Finish3DParams {
+            gap_link: camcraft_motion::finishing3d::GapLink::Jump,
             pattern: FinishPattern::Scallop,
             stepover: None,
             tool_diameter: 6.0,
@@ -749,6 +751,7 @@ fn finish3d_ramp_parallel_plateau() {
     let t = parallel(
         &facets,
         &Finish3DParams {
+            gap_link: camcraft_motion::finishing3d::GapLink::Jump,
             pattern: FinishPattern::Parallel,
             stepover: None,
             tool_diameter: 6.0,
@@ -820,6 +823,7 @@ fn finish3d_radial_dome() {
     let t = radial(
         &facets,
         &Finish3DParams {
+            gap_link: camcraft_motion::finishing3d::GapLink::Jump,
             pattern: FinishPattern::Radial,
             stepover: None,
             tool_diameter: 6.0,
@@ -867,6 +871,7 @@ fn finish3d_spiral_plateau() {
     let t = spiral(
         &facets,
         &Finish3DParams {
+            gap_link: camcraft_motion::finishing3d::GapLink::Jump,
             pattern: FinishPattern::Spiral,
             stepover: None,
             tool_diameter: 6.0,
@@ -914,6 +919,7 @@ fn finish3d_contour_plateau() {
     let t = contour(
         &facets,
         &Finish3DParams {
+            gap_link: camcraft_motion::finishing3d::GapLink::Jump,
             pattern: FinishPattern::Contour,
             stepover: None,
             tool_diameter: 6.0,
@@ -979,6 +985,7 @@ fn finish3d_project_dome() {
     let t = project(
         &facets,
         &Finish3DParams {
+            gap_link: camcraft_motion::finishing3d::GapLink::Jump,
             pattern: FinishPattern::Project,
             stepover: None,
             tool_diameter: 6.0,

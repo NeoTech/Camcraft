@@ -88,7 +88,7 @@ pub struct AreaDto {
     pub open: Option<OpenBoundaryDto>,
 }
 
-fn sel_dto(items: &[GeoSel]) -> Vec<GeoSelDto> {
+pub(super) fn sel_dto(items: &[GeoSel]) -> Vec<GeoSelDto> {
     items
         .iter()
         .map(|g| GeoSelDto {
@@ -103,7 +103,7 @@ fn sel_dto(items: &[GeoSel]) -> Vec<GeoSelDto> {
         .collect()
 }
 
-fn sel_of(items: &[GeoSelDto]) -> Vec<GeoSel> {
+pub(super) fn sel_of(items: &[GeoSelDto]) -> Vec<GeoSel> {
     items
         .iter()
         .map(|g| GeoSel {

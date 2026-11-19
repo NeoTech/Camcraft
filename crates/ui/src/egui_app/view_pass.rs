@@ -136,6 +136,12 @@ pub(crate) fn state_redraw_delay(
     egui_delay: std::time::Duration,
     followup: bool,
 ) -> Option<std::time::Duration> {
+    // #2463: a linked model's file is checked about once a second.
+    let egui_delay = if crate::model_link_watch::wants_ticks(state) {
+        egui_delay.min(crate::model_link_watch::INTERVAL)
+    } else {
+        egui_delay
+    };
     redraw_delay(
         egui_delay,
         followup || !state.pending.is_empty() || state.layout_request.is_some(),

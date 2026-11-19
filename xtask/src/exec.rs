@@ -247,7 +247,7 @@ impl Run {
         let secs = t0.elapsed().as_secs();
         let text = std::fs::read_to_string(&log).unwrap_or_default();
         let mut note = read_log(&text, code)?;
-        let ok = match s.expect_fail {
+        let ok = match &s.expect_fail {
             Some(k) => expect_fail_note(code, &mut note, &text, k),
             None => code == 0,
         };
@@ -278,13 +278,13 @@ impl Run {
 
 /// A known-fail step (`known_fail`) is ok only when libtest reports `k.test` itself as FAILED (the `read_log`
 /// note `failed: ... [tests: ...]` names it exactly) AND the test's panic block in `log` is the pinned
-/// assert: its `panicked at` line names `k.file` and a message line starts with `k.reason`. A pass, a renamed test, a
+/// assert: its `panicked at` line names `k.file` and `k.line`, and a message line starts with `k.reason`. A pass, a renamed test, a
 /// compile error, a crash of the test binary (no `test ... FAILED` line) or a failure for another reason (a
 /// planner panic, a gouge warning, another assert) is a FAIL.
 pub fn expect_fail_note(code: i32, note: &mut String, log: &str, k: &crate::known_fail::KnownFail) -> bool {
-    let test = k.test;
+    let test = &k.test;
     if code == 0 {
-        *note = "KNOWN FAIL NOW PASSES (or no such test): remove its entry from xtask/src/known_fail.rs".into();
+        *note = "KNOWN FAIL NOW PASSES (or no such test): remove its known-fail marker".into();
         return false;
     }
     let named = note.starts_with("failed:")
@@ -296,7 +296,8 @@ pub fn expect_fail_note(code: i32, note: &mut String, log: &str, k: &crate::know
         *note = format!("known fail did not fail as a test (crash, compile error or other test): {note}");
         return false;
     }
-    let pinned = |(at, msg): (String, String)| at.contains(k.file) && msg.lines().any(|l| l.starts_with(k.reason));
+    let pinned = |(at, msg): (String, String)| at.contains(&format!("{}:{}:", k.file, k.line))
+        && msg.lines().any(|l| l.starts_with(&k.reason));
     if !panic_block(log, test).is_some_and(pinned) {
         *note = format!("KNOWN FAIL, DIFFERENT REASON (want {:?} at {}): {note}", k.reason, k.file);
         return false;

@@ -162,6 +162,9 @@ write (the gate), so the released program never carries one.
   power-on height) reads an unstated `safe_retract` as "not homed" and
   lifts in the work offset to the section's `ClearancePlane` instead,
   refused by name when that height is unknown or not above `StockZTop`.
+  `linuxcnc.cps` (#2303) has no known convention at all: its default
+  G53 retract refuses an unstated `safe_retract` (no machine included),
+  and its `retractMode` option offers G28 / G30 (Z only) or none instead.
 - **A length word carries its decimal point (#1836).** A Fanuc-family
   control with parameter 3401#0 DPI=0 reads a word with no point in least
   increments (`Z14` is 0.014 mm). The Fanuc, Fanuc Lathe, Haas, Mazak and
@@ -287,9 +290,17 @@ refused by name; G92 and G41 / G42 are never written. The machine's
 T94 / T89 after each threading, before the C word (the manual's Program
 Example 1 order); unstated, nothing is written and the header says so.
 The tank fill / drain, flushing pump and wire-drive T codes are never
-written. It was not run on a control; what is unconfirmed is in
-`docs/decisions/617-sodick-wire-post.md`. Its golden rides under
-`nc/sodick-wire/` (`sodick_wire_post.rs`).
+written. Skim passes (#2649, from Sodick's 2012 LN1W / LN2W training
+manual) post on their own C words: each skim's C word is written after
+the previous pass's return to the threading point and before the skim's
+first move, with the wire left threaded (one T91, one T90). A skim
+condition id that is not a C word is refused by name. The boolean
+option `approachCondition` (default off) cuts the first approach move
+on `C000` (the manual's "Approach" row) and then selects the
+operation's C word. It was not run on a control; what is unconfirmed is
+in `docs/decisions/617-sodick-wire-post.md` and
+`docs/decisions/2649-sodick-ln-pass-structure.md`. Its goldens ride
+under `nc/sodick-wire/` (`sodick_wire_post.rs`, `sodick_wire_passes.rs`).
 
 ## Adding a post to the app
 

@@ -12,6 +12,7 @@ pub mod step_budget;
 pub mod step_csys;
 mod step_closed;
 mod step_facets;
+mod step_fit;
 mod step_continuity;
 mod step_diag;
 mod step_division;

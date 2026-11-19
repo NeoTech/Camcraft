@@ -131,6 +131,10 @@ pub(super) fn get_job(env: &mut Env, _a: &Map<String, Value>) -> Result<Value, S
             if let Some(b) = crate::model_fidelity::budget_of(w, e) {
                 m["facet_budget"] = json!(b);
             }
+            // #2463: a linked model names its source file and digest.
+            if let Some(s) = crate::model_source::of(w, e) {
+                m["source"] = json!({ "path": s.path, "sha256": s.sha256 });
+            }
             m
         })
         .collect();

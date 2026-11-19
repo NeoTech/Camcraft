@@ -94,13 +94,13 @@ UI_STRINGS = {
 # Bold text that is not a UI label: product names, operation names and lead-ins.
 NOT_UI = {
     "Tormach 770MX", "microARC 4", "Rotary Contour", "Rotary Offset",
-    "This program is for an air cut only. Do not cut a bar with it.",
+    "Air-cut this program before you cut a bar with it.",
     "Mount the machine.", "Pick the post.", "Set the unit.", "Import the model.",
     "Set the stock.", "Check the work offset.", "The clearance is a radius.",
     "Top and bottom keep the whole bar.", "The tolerance and the stepover are coarse.",
-    "The end faces.", "The machine check.", "The radial check.",
+    "The free end face.", "The machine check.", "The radial check.",
     "Check the A direction.", "Empty the chuck.", "Know your G30 position.",
-    "Run the start in single block.", "Air-cut the whole program.", "Stop here.",
+    "Run the start in single block.", "Air-cut the whole program.", "Cut only after a good air cut.",
 }
 # Text the page quotes from a refusal or a note, and the source that holds it.
 QUOTED = {
@@ -113,8 +113,8 @@ QUOTED = {
     "the A axis about X cannot reach it": POST,
     "stock sim did not judge this program": ROOT / "crates/app/src/posting_sim.rs",
     "a rotary program turns the part under a posed tool": ROOT / "crates/app/src/stock_sim_rotary.rs",
-    "post blocked -": ROOT / "crates/app/src/posting.rs",
-    "collides with the uncut stock": ROOT / "crates/app/tests/continuous_4axis_part.rs",
+    "that end face is left, and the tool stops at its plane":
+        ROOT / "crates/motion/src/multiaxis/rotary.rs",
 }
 
 
@@ -293,20 +293,30 @@ class FirstContinuousFourAxisProgram(unittest.TestCase):
         self.assertIn("Line 254, `G93 G1 X-0.0005 Y0 Z0.3399 A8.194 F7.347`", text)
         self.assertEqual(next(i for i, l in enumerate(lines, 1) if "G93" in l.split()), 254,
                          "line 254 is the first G93 line")
-        self.assertTrue(lines[1520 - 1].endswith(" A180 F274.599"))
-        self.assertEqual(lines[1520:1523], ["G94", "G1 A182.441 F360", "G1 A183.75 F360"])
-        self.assertIn("At line 1520 the A position is 180", text)
+        self.assertTrue(lines[1469 - 1].endswith(" A180 F274.599"))
+        self.assertEqual(lines[1469:1472], ["G94", "G1 A182.441 F360", "G1 A183.75 F360"])
+        self.assertIn("At line 1469 the A position is 180", text)
         words = a_words()
         self.assertEqual((min(words), max(words)), (-85.708, 264.23))
         self.assertEqual(text.count("between -85.708 and 264.23"), 3)
         self.assertEqual(words[0], 44.604)
         self.assertEqual(words[-1], 144.336)
         self.assertIn("A at its last angle, 144.336", text)
-        # The end-face fact behind "air cut only".
-        deep = [l for l in lines if " X-1.3125 " in l and "G1" in l
-                and float(next(w for w in l.split() if w[0] == "Z")[1:]) < 0]
-        self.assertTrue(deep, "the program feeds below Z0 at X-1.3125")
-        self.assertIn("feed moves at X-1.3125 with Z below 0", text)
+        # The end-face facts (#2343): the free end face is cut to the
+        # centreline; the chuck-side end face is left.
+        def word(line, letter):
+            return next((float(w[1:]) for w in line.split() if w[0] == letter), None)
+        feeds = [l for l in lines if "G1" in l.split() and word(l, "X") is not None]
+        deep = [l for l in feeds if " X0.0625 " in l and word(l, "Z") < 0]
+        self.assertTrue(deep, "the program feeds below Z0 at X0.0625")
+        self.assertIn("feed moves at X0.0625 with Z below 0", text)
+        self.assertEqual(min(word(l, "X") for l in feeds), -1.25)
+        self.assertIn("The program has no feed move past X-1.25", text)
+        at_end = [word(l, "Z") for l in feeds if word(l, "X") == -1.25 and word(l, "Z") is not None]
+        self.assertGreater(min(at_end), 0.339, "at X-1.25 the tool stays at the radius of the model")
+        notes = entities("operation")["Journal"]["cache"]["notes"]
+        self.assertEqual(len(notes), 1)
+        self.assertIn(notes[0], page())
         # The two timings the page works out.
         self.assertAlmostEqual(60 / 7.347, 8.2, places=1)
         self.assertAlmostEqual((178.689 - 176.25) * 147.601, 360.0, delta=0.5)
@@ -351,13 +361,15 @@ class FirstContinuousFourAxisProgram(unittest.TestCase):
                 self.assertGreater(len(found.group(1).split()), 8, "describe the picture")
         self.assertFalse(list(PICTURES.glob("*.png")), "pictures are drawn, not screenshots")
 
-    def test_page_says_air_cut_only_and_recommends_no_feeds(self):
+    def test_page_says_air_cut_first_and_recommends_no_feeds(self):
         text = flat(page())
-        self.assertIn("**This program is for an air cut only. Do not cut a bar with it.**", text)
+        self.assertIn("**Air-cut this program before you cut a bar with it.**", text)
+        self.assertNotIn("air cut only", text)
+        self.assertIn("CamCraft knows only the stock that you set.", text)
         self.assertIn("issues/2343", text)
         self.assertIn("issues/2344", text)
         self.assertIn("issues/796", text)
-        self.assertIn("Do not put a bar in the chuck for this program.", text)
+        self.assertIn("stop: do not put a bar in the chuck for this program.", text)
         self.assertIn("They are not a recommendation for your machine, tool or material.", text)
         self.assertIn("No complete program has been run in the simulator or on a machine yet.", text)
         for reading in ("Hub reading 1", "Hub reading 2", "Hub reading 3", "Hub reading 4"):

@@ -89,6 +89,8 @@ pub(crate) use stamp_stock::write_setup_stock;
 mod material;
 // #2496: a drill makes its own size; a wider hole is named.
 mod drill_size;
+// #2598: a Drill or Thread op's feed against its tool's stated feed.
+pub mod feed_rating;
 pub use material::*;
 mod material_region;
 pub(crate) use material_region::selection_drives_region;
@@ -133,6 +135,7 @@ mod probe_pick_round;
 pub use probe_pick::{PROBE_AXIS_TOL_DEG, ProbeSeed, probe_account, probe_from_picks, probe_seed, seeded_params};
 pub(crate) use probe::*;
 mod selection;
+mod deburr_picks;
 mod contour_auto_pick;
 pub use selection::*;
 mod picks;

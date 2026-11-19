@@ -7,7 +7,7 @@
 //!
 //! Gate map (M4.4): covers post::post (fanuc.cps, haas.cps, sinumerik.cps,
 //! mazak.cps, heidenhain.cps, doosan-dnm.cps, grblhal.cps, tinyg.cps,
-//! carvera.cps).
+//! carvera.cps, linuxcnc.cps).
 
 use camcraft_app::post::engine;
 use std::path::{Path, PathBuf};
@@ -37,6 +37,7 @@ const POSTS: &[(&str, bool)] = &[
     ("doosan-dnm", true),
     ("hurco-winmax", true),
     ("grblhal", true),
+    ("linuxcnc", true),
     ("tinyg", false),
     ("carvera", false),
 ];

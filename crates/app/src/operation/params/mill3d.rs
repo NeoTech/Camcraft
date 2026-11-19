@@ -99,6 +99,7 @@ impl OpParams {
                 steep_stepover,
                 pencil_reference,
                 fill_openings,
+                gap_link,
             } => {
                 // v16: the pattern chooses a different kinematic (and
                 // the raster fields only answer to Parallel), so they
@@ -176,6 +177,17 @@ impl OpParams {
                     h.write_u8(0x4C);
                     w(h, *s);
                 }
+                // The gap link authors the chain between runs. Only
+                // a non-Jump choice digests (one tag byte plus the
+                // variant), so every op that hops as before keeps
+                // the stamp it had.
+                if *gap_link != crate::finishing3d::GapLink::Jump {
+                    h.write_u8(0x4D);
+                    h.write_u8(match *gap_link {
+                        crate::finishing3d::GapLink::Straight => 2,
+                        crate::finishing3d::GapLink::Jump => 1,
+                    });
+                }
             }
             // The deburr ride digests the one authored number, the
             // window's two planes, the clearance plane it hops to,
@@ -190,12 +202,39 @@ impl OpParams {
                 bottom_z,
                 feed,
                 plunge_feed,
+                exclude_edges,
+                min_edge_angle_deg,
+                exclude_holes,
+                hole_min_diameter,
+                hole_max_diameter,
+                unreachable,
             } => {
                 wh(h, *clearance_z);
                 wh(h, *top_z);
                 wh(h, *bottom_z);
                 for v in [*width, *feed, *plunge_feed] {
                     w(h, v);
+                }
+                // #1888: the edge filters, each digested only off its
+                // rest value - an op from before them keeps its stamp.
+                if *min_edge_angle_deg != 0.0 {
+                    h.write_u8(0x4D);
+                    w(h, *min_edge_angle_deg);
+                }
+                if *exclude_holes {
+                    h.write_u8(0x4E);
+                    w(h, *hole_min_diameter);
+                    w(h, *hole_max_diameter);
+                }
+                for g in exclude_edges {
+                    h.write_u8(0x4F);
+                    h.write(g.entity.as_bytes());
+                    h.write_u64(g.feature.id());
+                }
+                // #1889: only `Refuse` writes a byte, so the stamp of
+                // each earlier Deburr (skip with a note) does not move.
+                if *unreachable == crate::finishing3d::UnreachableEdges::Refuse {
+                    h.write_u8(0x52);
                 }
             }
             _ => {}

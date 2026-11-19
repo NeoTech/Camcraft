@@ -45,7 +45,8 @@ const SAME_EDGE: f64 = 1e-6;
 /// A top loop with no wall within `width` of it under it - a blind
 /// pocket shallower than the chamfer's depth, an island whose wall
 /// stands lower than that depth - refuses by name at that loop: the
-/// tip would ride below the edge's floor, into the part.
+/// tip would ride below the edge's floor, into the material (a part or
+/// the stock, whichever the chamfer's source is - the text fits both, #2521).
 pub fn ride_loops(top: &Region, corner: &Region, width: f64, corner_z: f64) -> Result<Region, GenError> {
     if !(width.is_finite() && width > 0.0 && corner_z.is_finite()) {
         return Err(GenError::Invalid("chamfer width must be positive".into()));
@@ -70,7 +71,7 @@ pub fn ride_loops(top: &Region, corner: &Region, width: f64, corner_z: f64) -> R
                 let at = t.points().first().copied().unwrap_or(Point2::new(0.0, 0.0));
                 return Err(GenError::At {
                     msg: format!(
-                        "the edge near X{:.3} Y{:.3} has no wall under it down to the chamfer's depth Z{corner_z:.3} - a {width} mm chamfer there would ride into the part; lower the width or pick the edges to break",
+                        "the edge near X{:.3} Y{:.3} has no wall under it down to the chamfer's depth Z{corner_z:.3} - a {width} mm chamfer there would ride into the material under it; lower the width or pick the edges to break",
                         at.x, at.y
                     ),
                     at: Point3::new(at.x, at.y, corner_z),
@@ -164,6 +165,9 @@ mod tests {
         let plate = Region::new(vec![rect(-50.0, -30.0, 50.0, 30.0)]).expect("plate");
         let err = ride_loops(&top, &plate, 1.0, 9.0).expect_err("no wall within the width");
         assert!(err.to_string().contains("no wall under it"), "{err}");
+        // #2521: the source may be the stock, so the text names no part.
+        assert!(err.to_string().contains("would ride into the material under it;"), "{err}");
+        assert!(!err.to_string().contains("part"), "a stock-source chamfer has no part to name: {err}");
     }
 
     #[test]

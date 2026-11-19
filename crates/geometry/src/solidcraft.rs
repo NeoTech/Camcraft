@@ -16,6 +16,12 @@ pub enum SolidcraftError {
     Refused(String),
 }
 
+/// SHA-256 of `data` as lowercase hex (#2463): the digest a linked model
+/// records of its source file, so a changed file is told from an unchanged
+/// one. The kernel's FIPS 180-4 implementation; native only, as the kernel.
+#[cfg(not(target_arch = "wasm32"))]
+pub use camcraft_kernel::solidcraft::hex_digest as sha256_hex;
+
 /// Request cooperative cancellation after 300 seconds. The planner has no
 /// cancellation hook, so this is not a deadline for completion.
 #[cfg(not(target_arch = "wasm32"))]

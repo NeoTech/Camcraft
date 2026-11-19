@@ -994,9 +994,6 @@ pub(crate) fn collect_overlay(state: &State) -> Vec<[f32; 6]> {
 pub(crate) const FEED_RGB: [f32; 3] = [0.20, 0.85, 0.35];
 pub(crate) const RAPID_RGB: [f32; 3] = [0.30, 0.50, 0.95];
 pub(crate) const PLUNGE_RGB: [f32; 3] = [0.92, 0.30, 0.25];
-/// Unselected operations under "Show all toolpaths" draw behind the
-/// selected one.
-const OTHERS_DIM: f32 = 0.45;
 /// One direction chevron per this much feed travel.
 const CHEVRON_SPACING: f64 = 10.0;
 /// Vertex budget for the overlay buffer (24 bytes each, ~25 MB). Past it
@@ -1018,58 +1015,8 @@ pub(crate) fn ftoz(v: f64) -> f32 {
     if v.is_finite() { v as f32 } else { 0.0 }
 }
 
-/// The cached CL paths as overlay segments: straight moves as one line in
-/// their kind color with direction chevrons along feed travel, arc moves
-/// as their chord runs. The selected
-/// operation always draws bright; other operations show dimmed only under
-/// "Show all toolpaths", and never at all when hidden by its browser eye.
-/// Staleness is not a display state here - what is drawn is the cache
-/// itself, and the tree's STALE badge is where a stale path is called
-/// out.
-///
-/// Public for the docs-image harness (`crates/ui/tests/docs_images.rs`):
-/// tutorial pictures must carry the app's own path display - same colors,
-/// same chords, same chevrons - never a test-local reconstitution that
-/// can drift from what the viewport actually paints.
-#[must_use]
-pub fn toolpath_lines(state: &State) -> Vec<[f32; 6]> {
-    let mut out = Vec::new();
-    let arm = chevron_arm(state);
-    // M13.4: the move kinds wear the viewer's colour-vision palette
-    // (Off = the three consts above, unchanged).
-    let pal = crate::egui_app::colorvision::palette_of(&state.world);
-    for (name, entity) in camcraft_app::setup::operation_order(&state.world) {
-        // Browser-eye hidden: the cache still exists and still posts, it
-        // just does not draw (display state, never a geometry change).
-        if state.hidden_paths.contains(&name) || state.op_hidden_by_setup(&name) {
-            continue;
-        }
-        let Some(cache) = model::toolpath_of(&state.world, &entity) else {
-            continue;
-        };
-        let selected = model::is_selected(&state.world, &entity);
-        if !selected && !state.show_all_paths {
-            continue;
-        }
-        let dim = if selected { 1.0 } else { OTHERS_DIM };
-        // #261: warned moves wear the gouge colour (crate::path_lines).
-        if !crate::path_lines::cache_lines(&mut out, &cache, pal, dim, arm) {
-            return out;
-        }
-    }
-    // #261 part 3: and draws the moves it had built as a dashed ghost
-    // (crate::refusal_ghost) - off the refusal, never off the operation.
-    if let Some(g) = state.refusal_ghost()
-        && !crate::refusal_ghost::ghost_lines(&mut out, g, pal, arm)
-    {
-        return out;
-    }
-    // #261 part 2: a standing generate refusal marks the spot it names.
-    if let Some(at) = state.refusal_focus() {
-        crate::path_lines::refusal_mark(&mut out, at, pal, arm);
-    }
-    out
-}
+/// #2201: the path lines moved to their cached home.
+pub use crate::path_overlay::toolpath_lines;
 
 /// An arc move as displayed 3-D chords - `Move::segments3`, the one
 /// plane-aware law (M11.2 A). A helical XY arc (the helix entry's half
@@ -1079,19 +1026,6 @@ pub fn toolpath_lines(state: &State) -> Vec<[f32; 6]> {
 /// XZ / YZ arc draws its own vertical chords.
 pub(crate) fn arc_segments(m: &camcraft_app::cl::Move) -> Vec<(Point3, Point3)> {
     m.segments3(DISPLAY_CHORD_TOL)
-}
-
-/// Chevron size follows the document: 1% of the solid extent, floored so
-/// a small part still reads direction.
-fn chevron_arm(state: &State) -> f64 {
-    let extent = model::solid_world_aabb(&state.world)
-        .map(|b| {
-            (b.max.x - b.min.x)
-                .max(b.max.y - b.min.y)
-                .max(b.max.z - b.min.z)
-        })
-        .unwrap_or(0.0);
-    (extent * 0.01).max(0.6)
 }
 
 /// Two trailing wings at each mark: the apex sits on the path and the
