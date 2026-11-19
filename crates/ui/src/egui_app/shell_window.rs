@@ -169,6 +169,10 @@ impl Shell {
         // last one saved or loaded when the user keeps auto-load on.
         state.load_panel_setups();
         let dock_state = layout::setups::start_dock(&mut state);
+        // #853: the interface font of the language in force (no-op in English,
+        // so the English window keeps egui's own face and metrics).
+        let egui_ctx = egui::Context::default();
+        super::fonts::install(&egui_ctx);
         Self {
             window: None,
             window_title: state.window_title(),
@@ -178,7 +182,7 @@ impl Shell {
             config: None,
             renderer: None,
             winit_state: None,
-            egui_ctx: egui::Context::default(),
+            egui_ctx,
             dock_state,
             view: None,
             stock_eye: None,

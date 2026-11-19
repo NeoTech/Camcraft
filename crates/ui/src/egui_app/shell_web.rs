@@ -151,6 +151,8 @@ impl WebShell {
                 .write()
                 .register_native_texture(&rs.device, view.color_view(), wgpu::FilterMode::Linear);
         theme::apply(&cc.egui_ctx);
+        // #853: the interface font of the language in force (no-op in English).
+        super::fonts::install(&cc.egui_ctx);
         // A file the async picker reads wakes the next frame to land it.
         crate::file_pick::set_repaint(&cc.egui_ctx);
 

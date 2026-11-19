@@ -13,6 +13,8 @@ winresource = { version = "0.1", default-features = false }
 
 [dependencies]
 camcraft-app = { workspace = true }
+# #853: the interface language and its catalogue (English is the source).
+camcraft-i18n = { workspace = true }
 flecs_ecs = { workspace = true }
 winit = { workspace = true }
 image = { workspace = true }

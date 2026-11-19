@@ -73,6 +73,8 @@ mod program_info;
 pub mod cvd;
 mod app_icon;
 mod icons;
+// #853: the bundled interface fonts (a translated language installs its own).
+mod fonts;
 mod op_icons;
 mod tool_icons;
 mod layout;
@@ -387,6 +389,15 @@ mod rest_pocket_tests;
 /// command line (#2648); fallback adapter, View3D readback); anything else
 /// opens the windowed shell.
 pub fn run(args: &[String]) -> i32 {
+    // #853: the interface language comes from CAMCRAFT_LANG (a BCP 47 tag).
+    // An unknown tag stays English; a catalogue with a bad line says so once
+    // and still loads the lines it understood.
+    let lang = camcraft_i18n::init_from_env();
+    match camcraft_i18n::report(lang) {
+        Ok(n) => diag_info!("i18n: {} catalogue, {n} strings", lang.catalog_name()),
+        Err(why) => diag_warn!("i18n: {} catalogue refused: {why:?}", lang.catalog_name()),
+    }
+
     // M4.2: the backend pick is validated before anything opens - a bad
     // name refuses by name (exit 2, the `--ui` shape), never silently auto.
     let env = std::env::var("CAMCRAFT_GPU_BACKEND").ok();
