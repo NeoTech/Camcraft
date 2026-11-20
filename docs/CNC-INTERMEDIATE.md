@@ -41,7 +41,7 @@ committed golden is a legal post input.
 | `TORCH ON C<id> OUTER\|INNER\|OPEN [PARENT<id>] [SMALL<f×1000>]` / `TORCH OFF C<id>` | the torch struck before the next motion record / put out after the previous one (#671): the `.cl` v5 `; TORCH` records without their `; ` |
 | `START X <i> Y <i> Z <i>` / `END` | legacy `.cl` position lines: consumed silently (END ends the record span) |
 
-`CYCLE` TYPE ∈ SPOT DRILL PECK DEEP TAP FLOATINGTAP BORE BACKBORE REAM. Word meanings
+`CYCLE` TYPE ∈ SPOT DRILL PECK DEEP TAP FLOATINGTAP BORE BACKBORE REAM FINEBORE. Word meanings
 match the `.cl` v3 `; CYCLE` marker the M1.6 goldens use, and one
 parser reads both: X Y center, Z (or `BZ`) bottom, R (or `RZ`)
 retract/feed plane, `ENTRY` entry plane, Q (or `PECK`) peck, P (or
@@ -117,7 +117,8 @@ behavior only):
 | `SetWorkOffset` | on a probing result (`onProbeResult`, #108): the work offset the measured deviation is written into, **0-based** (0 is the first offset, `G54`; -1 sets none). Not the same count as `WorkOffset`, which is 1-based: work offset n of a section is `SetWorkOffset` n-1 of a probe. A probe can only set offsets 1-6 (`0..=5`) |
 | `Tolerance` | the `PROBE` ask's deviation budget in mm (present only on probe events; the µm lattice word `PROBE <µm>` is its stream spelling) |
 | `CircularDirection` | `CW` / `CCW` (arcs) |
-| `CycleType` | cycle intent delivered to hooks: `SPOT` `DRILL` `PECK` `DEEP` `TAP` `BORE` `BACKBORE` `REAM` (feed in, feed out at the same feed, no dwell: G85); `FLOATINGTAP` is normalized to `TAP` here and distinguished by `TappingMode` |
+| `CycleType` | cycle intent delivered to hooks: `SPOT` `DRILL` `PECK` `DEEP` `TAP` `BORE` `BACKBORE` `REAM` (feed in, feed out at the same feed, no dwell: G85) `FINEBORE` (feed in, dwell, oriented spindle stop, shift, rapid out: G76 on a mill; #1445); `FLOATINGTAP` is normalized to `TAP` here and distinguished by `TappingMode` |
+| `ShiftX` `ShiftY` | on a `FINEBORE` cycle only (#1445): the shift off the wall, mm along X and Y, read by the engine from the cycle's own chain (the lateral rapid at the bottom). `null` when the chain carries none, which the engine also refuses. A script writes the cycle only when it declares `fineBoring = true`; without the flag the engine refuses the cycle by name |
 | `TappingMode` | `rigid` for legacy `TAP`; `floating` only for the explicit `FLOATINGTAP` stream kind |
 | `EntryZ` `Q` `P` `FeedRate` | cycle entry plane, peck mm, dwell s, cutting feed mm/min (`null` for legacy markers) |
 | `ChainFeedRate` | optional-valued engine property: feed on the first subsequent non-rapid move in the expanded cycle chain, mm/min; `null` if absent; legacy posts may use it when cycle `FeedRate` is `null` |
@@ -125,7 +126,7 @@ behavior only):
 | `LinearMovementIncludeOpts` | `{L:[1]}` on plunges (the skip-the-rapid convention) |
 | `PlasmaKerf` `PlasmaCompensation` `PierceHeight` `CutHeight` `PierceDelay` `PlasmaFeed` `PlasmaReversed` | the `PLASMA` header (#671), for the section: kerf mm; `control` (G41/G42 spans follow) / `computer`; pierce and cut height mm and pierce delay s - each ABSENT when unstated (the controller's AutoFS decides); `auto` (the lit moves carry no feed) / `stated`; the reversed cut direction. Cleared at `ENDSECTION` |
 | `EdmCondition` `WireSide` | a wire EDM section (#533): the machine's condition id the cut burns with, and `die` / `punch` (commentary). The moves are the wire-centre path (kerf in them, no feed). A script without `wireEdm = true` is refused the section by name |
-| `SinkerCondition` `ElectrodePickup` `EdmOrbit` `EdmOrbitRadius` | a Sinker Burn or Sinker Side Burn (#542, #545), before its section: the machine condition id the op names (absent when it names none), the electrode's pickup offset mm (the tool's `shank_len`), and for an orbit (#544) its geometry (`circular` / `vector` / `planetary`) and radius mm. The sinker post writes the condition and pickup through the machine's `edm.codes` (#290 D5), refuses a condition the machine's `edm.conditions` does not list, and refuses an orbit and a side burn by name (their explicit moves are not a straight burn). A script whose manifest `serves` does not name `sinker_edm` is refused the section by name |
+| `SinkerCondition` `ElectrodePickup` `EdmOrbit` `EdmOrbitRadius` | a Sinker Burn or Sinker Side Burn (#542, #545), before its section: the machine condition id the op names (absent when it names none), the electrode's pickup offset mm (the tool's `shank_len`), and for an orbit (#544) its geometry (`circular` / `vector` / `planetary`) and radius mm. The sinker post writes the condition and pickup through the machine's `edm.codes` (#290 D5). It refuses a condition absent from `edm.conditions` and any orbit. A Side Burn uses `edm.codes.depth` for its downward plunge and requires `edm.codes.side` for each lateral feed. The `side` template must contain `{x}` `{y}` `{z}` `{f}`. These values state the absolute endpoint in the work offset and the feed, in the document's units. Lateral feeds must follow one X or Y axis at constant Z. A script whose manifest `serves` does not name `sinker_edm` is refused the section by name |
 | `WireTaper` `WireU` `WireV` | a tapered wire section (#536): the stated taper in degrees (before the section), then before each leaning move the upper guide's offset from the lower one, mm; that move's X Y are the lower guide's. Both are computed from the move's pose and the machine's `edm` guide planes |
 | `WireFourAxis` | a 4-axis wire section (#537): the pairing rule in words (`arc length` or `sync points`), before the section; its leaning moves carry `WireU` `WireV` exactly as a tapered section's do, and no `WireTaper` |
 | `WireTaperDialect` `WireCorner` `WirePlane` `WireAngle` | a tapered section on an angle-word machine (#1164, `edm.taper_angle`): `angle`, the control's corner rule (`mitre` or `cone`) and the programmed plane's Z (the work's top), before the section; then before each written move the angle word (the stated taper signed by the machine's `positive` side rule, 0 for the move that stands the wire upright) - that move's X Y are the wire's point on the programmed plane, and no `WireU` `WireV` are sent. The cone rule's turning moves are the control's and are not sent |
@@ -152,7 +153,10 @@ behavior only):
   (belt or gear), `[[low, high], ...]` in rpm, `[]` when the file
   states none; `rigidTapping` is `false` only when the `.mch` says the
   spindle cannot rigid-tap (`spindle.rigid_tapping: false`), so a post
-  can refuse a rigid tap cycle by name.
+  can refuse a rigid tap cycle by name; `rigidTappingStated` (#2303) is
+  `true` only when the file states `rigid_tapping: true`, for a post
+  whose rigid tap needs a spindle encoder the machine must state
+  (`linuxcnc.cps`, G33.1).
   `safeRetractZ` (#495) is the Z a post retracts to in MACHINE
   coordinates (`G53 G0 Z..`), mm, from the `.mch` Z part's
   `safe_retract`, or `null` when the file states none - a post that

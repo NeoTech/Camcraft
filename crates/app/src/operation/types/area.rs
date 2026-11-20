@@ -90,6 +90,7 @@ pub struct AreaControls {
     pub extension: f64,
     pub extra: Vec<ExtraBoundary>,
     pub open: Option<OpenBoundary>,
+    pub do_not_touch: super::avoid::DoNotTouch,
 }
 
 /// Largest offset / extension the door accepts, mm: far past any
@@ -97,6 +98,17 @@ pub struct AreaControls {
 pub const AREA_DISTANCE_MAX: f64 = 10_000.0;
 
 impl AreaControls {
+    /// Any 2D Boundary region control differs from the identity.
+    #[must_use]
+    pub fn has_boundary_edits(&self) -> bool {
+        self.containment.is_some()
+            || self.offset != 0.0
+            || self.corner != CornerStyle::Round
+            || self.extension != 0.0
+            || !self.extra.is_empty()
+            || self.open.is_some()
+    }
+
     /// The identity - nothing stamped, nothing saved, nothing changed.
     #[must_use]
     pub fn is_default(&self) -> bool {
@@ -104,10 +116,15 @@ impl AreaControls {
     }
 
     /// Door sanity, no world: finite in-range distances, no empty pick
-    /// list, and nothing but the identity on a kind without an area.
+    /// list, and nothing but the identity on a kind without support.
     #[must_use]
     pub fn is_sane_for(&self, params: &OpParams) -> bool {
-        if self.is_default() {
+        if !self.do_not_touch.is_default()
+            && (!super::avoid::do_not_touch_applies(params.kind()) || !self.do_not_touch.is_sane())
+        {
+            return false;
+        }
+        if !self.has_boundary_edits() {
             return true;
         }
         if !area_applies(params.kind()) {
@@ -124,7 +141,7 @@ impl AreaControls {
             && self.open.as_ref().is_none_or(|o| !o.picks.is_empty())
     }
 
-    /// Every pick the controls reference (boundaries and the open one),
+    /// Every pick the controls reference (boundaries, open chain, and Do not touch),
     /// for the stamp and the stale-reason walk.
     pub fn picks(&self) -> impl Iterator<Item = &GeoSel> {
         self.extra
@@ -135,6 +152,7 @@ impl AreaControls {
             })
             .flatten()
             .chain(self.open.iter().flat_map(|o| o.picks.iter()))
+            .chain(self.do_not_touch.picks.iter())
     }
 }
 

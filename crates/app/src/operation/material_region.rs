@@ -110,8 +110,8 @@ fn region_turn_core(
                 | OpParams::Pocket3D { .. }
                 | OpParams::Finish3D { .. }
                 // The deburr ride's edges ARE the model's own exposed
-                // boundary - a pick could only disagree with what the
-                // weld already found (M2.5 E B).
+                // boundary (M2.5 E B); its picks name which of them to
+                // break, they bound no area (#1888, `deburr_picks`).
                 | OpParams::Deburr { .. }
                 // The drive-curve contour's picks are the PATH, not a
                 // boundary: the 2D selection walk below would try to
@@ -234,7 +234,8 @@ pub(crate) fn selection_drives_region(params: &OpParams) -> bool {
             | OpParams::Pocket3D { .. }
             | OpParams::Finish3D { .. }
             // The deburr loci are the model's own exposed edges - the
-            // weld finds them, and a pick could only disagree (E B).
+            // weld finds them (E B). Its picks are edges to break, not
+            // a region: the drive-curve contour's answer (#1888).
             | OpParams::Deburr { .. }
             // The 5-axis kinds are mesh-driven like the finish: the
             // rings and raster lines chase the model at every plane,
@@ -248,7 +249,9 @@ pub(crate) fn selection_drives_region(params: &OpParams) -> bool {
             | OpParams::Swarf { .. }
             | OpParams::AdvancedSwarf { .. }
             // The rotary twins ride the fitted axis, not a pick: the
-            // turn's own geometry authors the path (M5.1 E).
+            // turn's own geometry authors the path (M5.1 E). #2848:
+            // picked FACES still bound Rotary Parallel's cut, through
+            // `rotary_picks`, not through this region.
             | OpParams::RotaryContour { .. }
             | OpParams::RotaryParallel { .. }
             // The rough ladder wraps the same axis - its islands come

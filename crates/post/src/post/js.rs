@@ -39,6 +39,11 @@ pub struct Script {
     after_modes: bool,
     /// Explicit floating-holder tapping, rather than legacy rigid TAP (#51).
     floating_tapping: bool,
+    /// The `fineBoring = true` manifest flag (#1445): the script writes
+    /// the fine-boring cycle with an oriented spindle stop and the shift
+    /// words. Without it a fine bore is refused by name - the chain as
+    /// plain moves would shift a turning tool into the finished wall.
+    fine_boring: bool,
     /// The `axisInversion = true` manifest flag (#374): the script's
     /// output is verified (goldens + the equivalence test) on the
     /// engine's mirrored stream for an inverted X / Y axis. Without it a
@@ -105,6 +110,7 @@ impl Script {
             live_tooling: false,
             after_modes: false,
             floating_tapping: false,
+            fine_boring: false,
             axis_inversion: false,
             probe_axis_inversion: false,
             thread_hands: false,
@@ -137,6 +143,10 @@ impl Script {
             .unwrap_or(false);
         s.floating_tapping = s
             .eval("typeof floatingTapping !== \"undefined\" && floatingTapping === true")
+            .map(|v| is_true(&v))
+            .unwrap_or(false);
+        s.fine_boring = s
+            .eval("typeof fineBoring !== \"undefined\" && fineBoring === true")
             .map(|v| is_true(&v))
             .unwrap_or(false);
         s.mill_spindle_reverse = s
@@ -330,6 +340,11 @@ impl Script {
 
     pub fn voices_floating_tapping(&self) -> bool {
         self.floating_tapping
+    }
+
+    /// True when the script declares `fineBoring = true` (#1445).
+    pub fn voices_fine_boring(&self) -> bool {
+        self.fine_boring
     }
 
     /// True when the script declares `axisInversion = true` - verified

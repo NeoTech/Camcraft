@@ -167,7 +167,28 @@ plane itself is inside the stock. In the second case the operation also
 carries the note `Clearance in stock: ...` with the heights.
 
 **Fix.** Raise the clearance height on the operation's Heights tab to the
-stock top or above, or face the stock down first, and regenerate.
+stock top or above, and regenerate. Facing the stock down in an earlier
+operation does not fix a clearance plane that is inside the stock: the
+first move of the operation still has to clear the stock as it was at the
+start (see the next entry).
+
+### `the first rapid (move <n>) comes from an unknown X/Y at the clearance height Z<h>, under the <stock|fixture> top at Z<t> - raise the clearance height above Z<t>`
+
+**Means.** After a tool change the machine does not know where the tool
+stands across the table. It first goes up or down to the clearance height,
+and then moves across to the start of the operation at that height. That
+move can pass over any part of the stock or any fixture. Here the clearance
+height `Z<h>` is lower than the top of the stock or of a fixture (`Z<t>`),
+so the move could run into it. The check reads the whole stock as it was
+at the start and every fixture in the setup, wherever they stand, because
+the place the tool comes from is not known. On a tilted (3+2) operation
+the heights are measured along the tilted tool, from the origin of the
+tilted plane.
+
+**Fix.** Raise the clearance height on the operation's Heights tab above
+`Z<t>`, and regenerate. This also applies to an operation in a pocket that
+an earlier operation already cut: its clearance height must still clear
+the top of the stock as it was at the start, and the top of each fixture.
 
 ### `<shank|holder|spindle housing|rapid|flute> at move <n> strikes a fixture`
 

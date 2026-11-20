@@ -30,6 +30,10 @@ pub struct ImportModel {
     pub hole: Option<String>,
     /// Raw STEP text kept on entities imported from STEP (#744).
     pub step_source: Option<String>,
+    /// The file the mesh was read from and its SHA-256 (#2463): the link
+    /// the UI checks while the project is open. `None` for a mesh handed
+    /// in or a browser pick, which have no file to check again.
+    pub source: Option<crate::schema::ModelSource>,
 }
 
 impl ImportModel {
@@ -45,8 +49,21 @@ impl ImportModel {
     /// it), is refused by name here, before any parsing.
     pub fn within(path: &Path, facet_budget: Option<u64>) -> Result<Self, CommandError> {
         let budget = checked_budget(path, facet_budget)?;
-        let graded = import::load_model_open_within(path, budget)?;
-        Ok(Self::graded(path, graded, facet_budget))
+        // #2689: one read - the link records the digest of the very bytes
+        // the parse used, so a file that changes during the import is seen
+        // as changed by the next check and imported again.
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let (graded, sha256) = import::load_model_open_sourced(path, budget)?;
+            let mut cmd = Self::graded(path, graded, facet_budget);
+            cmd.source = Some(crate::schema::ModelSource { path: path.to_string_lossy().into_owned(), sha256 });
+            Ok(cmd)
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            let graded = import::load_model_open_within(path, budget)?;
+            Ok(Self::graded(path, graded, facet_budget))
+        }
     }
 
     /// [`ImportModel::within`] over bytes already in hand, named by the
@@ -93,6 +110,7 @@ impl ImportModel {
             notes: Vec::new(),
             hole: None,
             step_source: None,
+            source: None,
         }
     }
 
@@ -153,10 +171,12 @@ impl Command for ImportModel {
         // counts from there. ImportModel only ever spawns - a same-named
         // re-import is routed to UpdateModel by the caller, never here.
         model::set_rev(world, &entity, 1);
+        crate::mesh_solids::set(world, &entity, self.mesh.solid_ranges());
         crate::model_fidelity::set(world, &entity, self.coarse_mm);
         crate::model_fidelity::set_budget(world, &entity, self.facet_budget);
         crate::mesh_open::set(world, &entity, self.hole.as_deref());
         crate::step_source::set(world, &entity, self.step_source.as_deref());
+        crate::model_source::set(world, &entity, self.source.as_ref());
     }
 
     fn invert(&self, world: &World) {

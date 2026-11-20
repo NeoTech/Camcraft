@@ -38,7 +38,7 @@ var programNumber = 1;
 // \`comment\` is the document's program comment, "" when it states none.
 var program = { number: 1, numbered: false, comment: "" };
 var postOptions = {};
-var machine = { name: "", rapidRate: 0, feedRateMax: 0, spindleMax: 0, coolants: [], rotaries: [], rtcp: false, units: "mm", spindleRanges: [], rigidTapping: true, safeRetractZ: null, model: "" };
+var machine = { name: "", rapidRate: 0, feedRateMax: 0, spindleMax: 0, coolants: [], rotaries: [], rtcp: false, units: "mm", spindleRanges: [], rigidTapping: true, rigidTappingStated: false, safeRetractZ: null, model: "" };
 function _flushLine() { if (LINE !== "") { _emitLine(LINE); LINE = ""; } }
 function writeln(s) { if (s !== undefined) LINE += String(s); _flushLine(); }
 function write(s) { if (s !== undefined) LINE += String(s); }

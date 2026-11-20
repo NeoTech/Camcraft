@@ -97,7 +97,8 @@ pub(super) fn material_of(
                 excess = excess.max(m.excess);
                 let start = facets.len();
                 facets.extend(m.facets);
-                if facets.len() > start {
+                bodies.extend(m.bodies.iter().map(|b| b.start + start..b.end + start));
+                if m.bodies.is_empty() && facets.len() > start { // #917: or its own solids
                     bodies.push(start..facets.len());
                 }
                 top = top.max(m.top);
@@ -169,8 +170,8 @@ pub fn cross_holes_of(
 /// with its source's holes, read NOW, written into whichever hole list
 /// the kind has - the drill, the boring ride and the thread mill store
 /// the same `holes` shape - plus the drill's radial list when the
-/// document's machine holds a turret (M5.2 F2; a plain mill asks nothing
-/// of the mesh's sides). `name` only words the refusals. The caller
+/// mesh has directed holes. Detection keeps those findings on a mill;
+/// generation refuses unsupported directions. `name` words the refusals. The caller
 /// commits the result as one undoable `EditOperationParams`, so the
 /// app's Detect holes button and the MCP `detect_holes` tool store the
 /// same list. A Bore op keeps only the holes its tool's one ring clears
@@ -198,8 +199,9 @@ pub fn detect_holes(
         _ => return Err(format!("'{name}' is not a drilling operation")),
     };
     let axial = holes_of(world, setup, src).map_err(|e| e.to_string())?;
-    // #388: the op's own setup's machine, not the active one.
-    let radial = if !is_drill || crate::machine::kind_of_setup(world, setup) == crate::machine::Kind::Mill {
+    // #2601: report directed mouths on every machine. The generator's
+    // machine and mixed-list checks still refuse unsupported work.
+    let radial = if !is_drill {
         Vec::new()
     } else {
         cross_holes_of(world, setup, src).map_err(|e| e.to_string())?
@@ -236,6 +238,8 @@ pub(super) fn named_material(world: &World, setup: Option<&str>, name: &str, gon
         .unwrap_or(f64::NAN);
     let mut m = usable(facets, top, name)?;
     m.excess = crate::model_fidelity::excess_of(world, name);
+    // #917: the closed solids of a STEP model, while its facets carry them.
+    m.bodies = crate::mesh_solids::of(world, &entity);
     Ok(m)
 }
 
@@ -262,7 +266,7 @@ pub(super) fn from_slice(e: SliceError) -> GenError {
     }
 }
 
-/// The section at `z`, retried a micron below when the plane grazes a
+/// The section at `z` (#917: the union of `bodies`), retried a micron below when the plane grazes a
 /// vertex or edge (a tangential slice is an error by contract, and a
 /// 1 um shift cannot change what a cutter sees) - or when it comes back
 /// empty: a plane at the very top of an imported mesh whose top corners
@@ -270,12 +274,12 @@ pub(super) fn from_slice(e: SliceError) -> GenError {
 /// and reads "no material" over a part that is plainly there. The
 /// section is only ever taken at Top of Part Z (`section_z_of`), so an
 /// empty answer names that height and the span that would answer.
-pub(super) fn section(facets: &[Triangle], z: f64) -> Result<Region, GenError> {
-    let first = match slice::slice(facets, z) {
+pub(super) fn section(facets: &[Triangle], bodies: &[std::ops::Range<usize>], z: f64) -> Result<Region, GenError> {
+    let first = match slice::slice_of(facets, bodies, z) {
         Ok(r) if !r.is_empty() => return Ok(r),
         other => other,
     };
-    match (first, slice::slice(facets, z - SLICE_NUDGE)) {
+    match (first, slice::slice_of(facets, bodies, z - SLICE_NUDGE)) {
         (_, Ok(r)) if !r.is_empty() => Ok(r),
         // The asked plane was clean, or the nudged one was: nothing is
         // there - say where something is.

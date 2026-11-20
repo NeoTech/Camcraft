@@ -7,6 +7,7 @@
 //! Provenance: our own tests, specced from the issue's "Done means".
 //!
 //! #889: the tool-holder import choice rides the same file.
+//! #1945: so does the AI Chat's offline-only switch - and never a key.
 //!
 //! Gate map (M4.4): covers app::prefs, app::commands (theme, color_vision).
 
@@ -28,13 +29,13 @@ fn dir(tag: &str) -> PathBuf {
 #[test]
 fn the_preferences_survive_a_restart() {
     let path = dir("restart").join(FILE_NAME);
-    let chosen = ViewPrefs { theme: ThemeRef::Named("light".into()), color_vision: ColorVision::Tritan, skip_tool_holders: false };
+    let chosen = ViewPrefs { theme: ThemeRef::Named("light".into()), color_vision: ColorVision::Tritan, skip_tool_holders: false, ai_offline_only: false };
     prefs::save(&path, &chosen).expect("save");
     let (back, note) = prefs::load(&path);
     assert_eq!(back, chosen);
     assert_eq!(note, None);
     // A theme file rides its path; Dark and Off write no key.
-    let file = ViewPrefs { theme: ThemeRef::File("C:/themes/mine.json".into()), color_vision: ColorVision::Off, skip_tool_holders: false };
+    let file = ViewPrefs { theme: ThemeRef::File("C:/themes/mine.json".into()), color_vision: ColorVision::Off, skip_tool_holders: false, ai_offline_only: false };
     prefs::save(&path, &file).expect("save");
     assert_eq!(prefs::load(&path).0, file);
     prefs::save(&path, &ViewPrefs::default()).expect("save");
@@ -74,7 +75,7 @@ fn an_unknown_value_falls_back_alone_and_is_named() {
     )
     .expect("write fixture");
     let (p, note) = prefs::load(&path);
-    assert_eq!(p, ViewPrefs { theme: ThemeRef::Dark, color_vision: ColorVision::Tritan, skip_tool_holders: false }, "the rest survives");
+    assert_eq!(p, ViewPrefs { theme: ThemeRef::Dark, color_vision: ColorVision::Tritan, skip_tool_holders: false, ai_offline_only: false }, "the rest survives");
     assert!(note.expect("named").contains("theme 'solarpunk' is not a built-in"));
     std::fs::write(&path, r#"{"format": "camcraft-prefs/1", "colorVision": "sepia"}"#).expect("write fixture");
     let (p, note) = prefs::load(&path);
@@ -131,4 +132,32 @@ fn the_tool_holder_import_choice_survives_a_restart() {
     let older = format!("{{\"format\":\"{FORMAT}\",\"colorVision\":\"tritan\"}}");
     let (p, _) = ViewPrefs::from_json(&older).expect("an older file reads");
     assert!(!p.skip_tool_holders, "a file without the key imports holders");
+}
+
+/// #1945: "Offline only" survives a restart (written only when on), and
+/// the file has no place for an API key: with every preference set, its
+/// keys are exactly the known ones and none names a key or a secret.
+#[test]
+fn offline_only_survives_and_the_file_stores_zero_keys() {
+    let path = dir("ai").join(FILE_NAME);
+    assert!(!ViewPrefs::default().to_json().contains("aiOfflineOnly"), "off is the absent key");
+    let all = ViewPrefs {
+        theme: ThemeRef::Named("light".into()),
+        color_vision: ColorVision::Tritan,
+        skip_tool_holders: true,
+        ai_offline_only: true,
+    };
+    prefs::save(&path, &all).expect("save");
+    let (back, note) = prefs::load(&path);
+    assert_eq!(note, None);
+    assert_eq!(back, all, "every preference survives");
+    let text = std::fs::read_to_string(&path).expect("read back");
+    let v: serde_json::Value = serde_json::from_str(&text).expect("json");
+    let mut keys: Vec<&str> = v.as_object().expect("object").keys().map(String::as_str).collect();
+    keys.sort_unstable();
+    assert_eq!(keys, ["aiOfflineOnly", "colorVision", "format", "importToolHolders", "theme"]);
+    let lower = text.to_lowercase();
+    for word in ["key", "token", "secret", "password", "bearer"] {
+        assert!(!lower.contains(word), "prefs.json names '{word}': {text}");
+    }
 }

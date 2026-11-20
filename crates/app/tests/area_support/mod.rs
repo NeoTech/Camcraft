@@ -62,6 +62,7 @@ pub fn pocket(top: f64, bottom: f64) -> OpParams {
         blend_turns: false,
         tilt: None,
         links: camcraft_app::links::Links::PLANAR,
+        corner_relief: Default::default(),
     }
 }
 

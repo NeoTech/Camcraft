@@ -77,7 +77,9 @@ output on the engine's mirrored stream (an inverted X / Y: negated
 coordinates, centres and origin, CW/CCW reversed in a plane holding one
 inverted axis, the comp side swapped) is verified by goldens and the
 controller-interpretation test - without it a machine with an inverted
-axis is refused by name. Fanuc and Haas set it. The same flag covers a
+axis is refused by name. Each built-in mill post sets it (#2475: the
+other dialects are verified by the trace test
+`crates/post/tests/wcs_flip_dialects.rs` and its goldens). The same flag covers a
 flipped WCS axis (#1649, `PARAM WcsFlip`): the engine mirrors that
 section the same way (a helical arc included), and a script that sets
 the flag writes a note that names the flipped axes. `probeAxisInversion =
@@ -96,6 +98,18 @@ it (FANUC B-64304EN-1 §3.2 / §3.4). The file-viewer's about box reads
 the text ones, and every shipped post carries them.
 New files: `vendor = "Camcraft"` (the M4.3 naming law — the shipped
 five still carry the old label; do not copy that line's value).
+
+Explain coverage (#1389): Sinumerik declares `explains = "semi"`.
+grblHAL, TinyG, Carvera, PathPilot plasma and lathe, and generic ISO
+wire and sinker EDM declare `"paren"`. These posts append a comment
+only when the complete line fits within 80 characters. They never
+shorten executable words. Machine-supplied EDM codes stay unexplained:
+wire passes `true` as the second `block()` argument, and sinker writes
+them through `emit()`. Heidenhain and Sodick declare no form and refuse
+Explain by name. Heidenhain's comment placement beside its exported
+`*` terminator is unconfirmed. Sodick's `T91` and `T90` are wire
+commands, which the shared tool decoder cannot describe. Do not enable
+either post until its syntax and word meanings have dedicated support.
 
 ## The hook contract
 
@@ -162,6 +176,9 @@ write (the gate), so the released program never carries one.
   power-on height) reads an unstated `safe_retract` as "not homed" and
   lifts in the work offset to the section's `ClearancePlane` instead,
   refused by name when that height is unknown or not above `StockZTop`.
+  `linuxcnc.cps` (#2303) has no known convention at all: its default
+  G53 retract refuses an unstated `safe_retract` (no machine included),
+  and its `retractMode` option offers G28 / G30 (Z only) or none instead.
 - **A length word carries its decimal point (#1836).** A Fanuc-family
   control with parameter 3401#0 DPI=0 reads a word with no point in least
   increments (`Z14` is 0.014 mm). The Fanuc, Fanuc Lathe, Haas, Mazak and
@@ -287,9 +304,17 @@ refused by name; G92 and G41 / G42 are never written. The machine's
 T94 / T89 after each threading, before the C word (the manual's Program
 Example 1 order); unstated, nothing is written and the header says so.
 The tank fill / drain, flushing pump and wire-drive T codes are never
-written. It was not run on a control; what is unconfirmed is in
-`docs/decisions/617-sodick-wire-post.md`. Its golden rides under
-`nc/sodick-wire/` (`sodick_wire_post.rs`).
+written. Skim passes (#2649, from Sodick's 2012 LN1W / LN2W training
+manual) post on their own C words: each skim's C word is written after
+the previous pass's return to the threading point and before the skim's
+first move, with the wire left threaded (one T91, one T90). A skim
+condition id that is not a C word is refused by name. The boolean
+option `approachCondition` (default off) cuts the first approach move
+on `C000` (the manual's "Approach" row) and then selects the
+operation's C word. It was not run on a control; what is unconfirmed is
+in `docs/decisions/617-sodick-wire-post.md` and
+`docs/decisions/2649-sodick-ln-pass-structure.md`. Its goldens ride
+under `nc/sodick-wire/` (`sodick_wire_post.rs`, `sodick_wire_passes.rs`).
 
 ## Adding a post to the app
 

@@ -214,7 +214,7 @@ pub(super) fn build_3d_world() -> World {
         bottom_z: Height::of(HeightReference::BottomOfModel, 0.0),
         stepdown: 2.0, feed: 1200.0, plunge_feed: 300.0, climb: true,
         strategy: PocketStrategy::Waterline, entry: Entry3D::Helix, helix_radius: 1.5,
-        links: Links::ROUGH3D, rest_rough: false, optimal_load: 0.25, feed_opt: false, shell: false,
+        links: Links::ROUGH3D, rest_rough: false, optimal_load: 0.25, feed_opt: false, shell: false, method: camcraft_app::machining2d::AdaptiveMethod::Spiral,
     });
     create_and_gen(&world, &mut h, "3D Finish1", "BN-0600", SrcRef::Entity("Mold".into()), OpParams::Finish3D {
         pattern: FinishPattern::Parallel, stepover: Some(2.0), tolerance: 0.08,
@@ -224,6 +224,9 @@ pub(super) fn build_3d_world() -> World {
         feed: 900.0, plunge_feed: 250.0, climb: true, ramp: true, min_step: None,
         ramp_angle: 45.0, entry_ramp: false, steep_stepover: None,
         pencil_reference: None, fill_openings: None,
+        // #1713: the guide walkthrough posts without gap links - the
+        // Jump link is the pre-gap-link behaviour, as the text states.
+        gap_link: camcraft_app::finishing3d::GapLink::Jump,
     });
     world
 }

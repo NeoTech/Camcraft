@@ -8,7 +8,7 @@ use crate::machining2d::{FaceHoles, Lead, PocketStrategy, RestParams, Side};
 use crate::machining3d::Entry3D;
 
 use super::height::Height;
-use super::sel::OpType;
+use super::sel::{GeoSel, OpType};
 
 /// The 3+2 index of a planar operation (M5.1 stage B): the tool holds
 /// one pose for the whole path - commanded by the RS-274 letters A and
@@ -211,6 +211,9 @@ pub enum OpParams {
         /// described here could not reach (`machining2d::rest_pocket`).
         /// `None` is off - every earlier file, and the plain pocket.
         rest: Option<RestParams>,
+        /// Corner relief (#2400): dogbone or T-bone relief for inside
+        /// corners of closed pockets and square-ended slots.
+        corner_relief: crate::machining2d::CornerRelief,
         /// 3+2 index; see [`OpParams::Face`]'s field.
         tilt: Option<Tilt>,
     },
@@ -258,6 +261,8 @@ pub enum OpParams {
         blend_turns: bool,
         /// The corner arc's radius, mm; `None` is the tool radius.
         blend_radius: Option<f64>,
+        /// Corner relief (#2400): dogbone or T-bone inside-corner relief.
+        corner_relief: crate::machining2d::CornerRelief,
         /// 3+2 index; see [`OpParams::Face`]'s field.
         tilt: Option<Tilt>,
     },
@@ -289,6 +294,8 @@ pub enum OpParams {
         blend_turns: bool,
         /// The corner arc's radius, mm; `None` is the tool radius.
         blend_radius: Option<f64>,
+        /// Corner relief (#2400): dogbone or T-bone inside-corner relief.
+        corner_relief: crate::machining2d::CornerRelief,
         /// 3+2 index; see [`OpParams::Face`]'s field.
         tilt: Option<Tilt>,
     },
@@ -537,6 +544,12 @@ pub enum OpParams {
         /// the programmed feed ([`crate::machining3d::optimize_feed`],
         /// M2.1d). Geometry is untouched; only feed words move.
         feed_opt: bool,
+        /// #1591: how each level is cleared under the `Adaptive`
+        /// strategy - the HSM spiral (every earlier 3D Adaptive, byte
+        /// for byte) or trochoidal loops
+        /// ([`crate::machining3d::pocket3d_trochoidal`]). Not read by
+        /// the other strategies.
+        method: crate::machining2d::AdaptiveMethod,
         /// Rough by OFFSET SHELLS of the model
         /// ([`crate::machining3d::pocket3d_offset`], M2.5 F): the
         /// level ladder keeps its XY plan and its dive superset law,
@@ -626,6 +639,14 @@ pub enum OpParams {
         /// the model itself, byte for byte. See
         /// [`crate::finishing3d::fill_openings`] for the rule.
         fill_openings: Option<f64>,
+        /// The link's author between two runs (the linking menu):
+        /// `Jump` hops to retract/clearance exactly as every older
+        /// file ran; `Straight` links the runs with one direct move
+        /// at their own heights where the exact sweep certifies it,
+        /// and keeps the hop when it cannot. Inert while `ramp`'s
+        /// own diagonal certifies the break.
+        /// See [`crate::finishing3d::GapLink`].
+        gap_link: finishing3d::GapLink,
     },
     /// Deburr (M2.5 E B): the cone-ruled edge break in 3D. The ONE
     /// authored number is `width` - the break's width in the edge's
@@ -652,6 +673,22 @@ pub enum OpParams {
         bottom_z: Height,
         feed: f64,
         plunge_feed: f64,
+        /// Edge chains left out of the ride (#1888): the exposed
+        /// edges on these picks stay sharp. Chains only.
+        exclude_edges: Vec<GeoSel>,
+        /// A convex crease that bends less than this (the angle
+        /// between its face normals, degrees) is a facet seam and is
+        /// skipped (#1888). 0 keeps every crease - what a file from
+        /// before the field ran.
+        min_edge_angle_deg: f64,
+        /// Skip the rims of recognized round holes whose diameter is
+        /// inside `hole_min_diameter..=hole_max_diameter` (#1888).
+        exclude_holes: bool,
+        hole_min_diameter: f64,
+        hole_max_diameter: f64,
+        /// #1889: what an edge out of the cone's reach does - skipped
+        /// with a note (the default), or the operation is refused.
+        unreachable: finishing3d::UnreachableEdges,
     },
     /// Simultaneous 5-axis level finishing (M5.1 stage C): the waterline
     /// ring ladder a [`Self::Finish3D`] Waterline cuts, with a tool-axis

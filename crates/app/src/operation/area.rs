@@ -134,7 +134,9 @@ fn minus_standing(
     if standing.area().abs() < ISLAND_AREA_MIN {
         return Ok(None);
     }
-    Ok(Some(enclosed.difference(&standing)?))
+    // #2766: the two tessellations of a shared wall leave loops of about
+    // 1e-8 mm2 in the difference. They are noise by the same measure.
+    Ok(Some(enclosed.difference(&standing)?.without_slivers(ISLAND_AREA_MIN)))
 }
 
 /// The pocket family on a WHOLE PART source (issue #12): the part is

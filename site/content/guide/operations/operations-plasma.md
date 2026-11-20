@@ -17,8 +17,8 @@ Blue shows the operation travel; dashed orange shows approach and retract; gray 
 ## The machine, the tool and the post
 
 **A plasma table.** Plasma Profile needs a setup whose machine is a
-plasma table, such as the built-in **Tormach 1300PL**; a mill, lathe or
-mill-turn is refused ("a Plasma Profile operation is plasma cutting work;
+plasma table, such as the built-in **Tormach 1300PL**; a mill, a lathe or
+a mill-turn (live tooling) machine is refused ("a Plasma Profile operation is plasma cutting work;
 the setup's machine is a ... - mount a plasma table first"). A plasma
 table in turn takes no other kind ("... the setup's machine is a plasma
 table, which cuts only plasma operations (a Plasma Profile)").

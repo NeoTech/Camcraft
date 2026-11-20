@@ -314,6 +314,15 @@ impl WcsYaw {
         Rot2::new(self.origin, self.yaw_rad).toolpath(path, chord_tol)
     }
 
+    /// Map a generated corner-relief zone back into Setup `S` (`+yaw` about `origin`).
+    pub(crate) fn exit_zone(self, mut z: crate::verify::CornerReliefZone) -> crate::verify::CornerReliefZone {
+        let r = Rot2::new(self.origin, self.yaw_rad);
+        z.corner = r.p2(z.corner);
+        z.start = r.p2(z.start);
+        z.end = r.p2(z.end);
+        z
+    }
+
     /// Map a located refusal or ghost back into Setup `S` (`+yaw` about `origin`).
     pub(super) fn exit_err(self, e: GenError) -> GenError {
         let r = Rot2::new(self.origin, self.yaw_rad);
@@ -324,6 +333,13 @@ impl WcsYaw {
 fn rotate_params(r: &Rot2, params: &mut OpParams) {
     match params {
         OpParams::Circular { center, .. } => *center = r.p2(*center),
+        OpParams::Pocket { corner_relief, .. }
+        | OpParams::Adaptive2D { corner_relief, .. }
+        | OpParams::Offset2D { corner_relief, .. } => {
+            for ov in &mut corner_relief.overrides {
+                ov.at = r.p2(ov.at);
+            }
+        }
         OpParams::Slot { a, b, .. } | OpParams::TrochoidalSlot { a, b, .. } => {
             *a = r.p2(*a);
             *b = r.p2(*b);

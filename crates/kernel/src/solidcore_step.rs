@@ -1,13 +1,13 @@
 //! STEP import on the solidcore side of the seam (M12.1 stage 4, #916):
 //! file bytes -> solids in millimetres + the file's length units +
-//! diagnostics, with a size bound and a time bound. BENCH ONLY: the app
-//! still imports STEP through truck-stepio; this is what the dual-importer
-//! bench (tests/step_agreement.rs) measures against it.
+//! diagnostics, with a size bound and a time bound. Since #917 this is the
+//! app's only STEP model reader (through `camcraft_geometry::step`).
 //! Provenance: calls the public API of solidcore-step (the ISO 10303-21
 //! exchange structure and ISO 10303-42 geometry and topology reader of the
 //! solidcore workspace, Apache-2.0, written from those public standards),
 //! solidcore-convert (`brep::to_kernel_body`) and solidcore (the Apache-2.0
-//! port of NVIDIA's SMLib: cancel token, area integrator), as their rustdoc
+//! port of NVIDIA's SMLib: cancel token, area integrator), with the pcurves
+//! that have no closed form made by [`crate::solidcore_trims`], as their rustdoc
 //! documents them, at the commit pinned in Cargo.toml. No reader internals
 //! are reimplemented here and no HSMWorks material was consulted.
 
@@ -22,9 +22,16 @@ use solidcore_step::{topology, units};
 
 use crate::solidcore_impl::{SolidcoreKernel, VOLUME_ACCURACY, checked, failed};
 use crate::solidcore_import::{HEAL_GAP_LIMIT, vertex_gaps};
+use crate::solidcore_trims::KernelTrims;
+use crate::step_edge_gap::{EdgeGap, EdgeGapCap, raised_edge_gap};
 use crate::{Kernel, KernelError, Measure};
 
-const NAME: &str = "solidcore";
+pub use crate::solidcore_step_import::{StepImport, StepModel, StepSheet, import_step, import_step_model};
+
+pub(crate) const NAME: &str = "solidcore";
+
+/// Why a surface model is not a solid.
+pub const SHEET: &str = "a surface model of open shells, not a closed solid";
 
 /// Largest STEP file the seam hands the reader (64 MiB, the native reader's
 /// bound). The reader's own cap is 512 MiB; it holds the text and every
@@ -80,8 +87,13 @@ pub struct StepRead {
     /// file). Empty: no context states a unit and the reader took
     /// millimetres. Every solid above is already in millimetres.
     pub length_units_mm: Vec<f64>,
-    /// File-level diagnostics (duplicate entity ids, mixed units).
+    /// File-level diagnostics (duplicate entity ids, mixed units, faces
+    /// wound against their neighbours).
     pub notes: Vec<String>,
+    /// The surface models (open shells only): read, not built as solids.
+    pub sheets: Vec<StepSheet>,
+    /// The file's edge-gap cap and the widest gap kept (#2976).
+    pub edge_gap: EdgeGap,
 }
 
 /// The time bound's watcher of the Part 21 parse.
@@ -172,6 +184,7 @@ fn read_guarded(
         p21::Error::Cancelled => timed_out("parsing"),
         other => refused_input(other.to_string()),
     })?;
+    crate::step_curve_guard::check(&ex).map_err(refused_input)?;
     let mut out = StepRead {
         length_units_mm: length_units(&ex).map_err(refused_input)?,
         ..StepRead::default()
@@ -189,10 +202,33 @@ fn read_guarded(
             out.length_units_mm
         ));
     }
-    let read = topology::read_solids(&ex);
+    out.notes.extend(crate::step_face_winding::notes(&ex, stop).map_err(|_| timed_out("checking face winding"))?);
+    // The pcurves with no closed form (a free-form edge on a spline face)
+    // are made by the kernel, each checked by its lift (#917), each edge
+    // held to the cap that the file's stated tolerance sets (#2976).
+    let cap = EdgeGapCap::read(&ex);
+    let (read, measured) = {
+        let trims = KernelTrims::with_cap(&mut k.k, cap);
+        let read = topology::read_solids_with(&ex, &trims);
+        (read, trims.widest_gap_mm())
+    };
     if stop.is_cancelled() {
         return Err(timed_out("reading topology"));
     }
+    // Never a silent widening: an edge kept over the cap of a file that
+    // states no tolerance is noted with its gap and the file's tolerance.
+    if measured > crate::step_edge_gap::MAX_EDGE_GAP_MM {
+        out.notes.push(format!(
+            "an edge lies {measured:.4} mm off its face's surface; the file states a tolerance of {:.4} mm, so the reader accepts up to {:.4} mm",
+            cap.stated_mm.unwrap_or(0.0),
+            cap.cap_mm
+        ));
+    }
+    let raised = read.solids.iter().map(|s| raised_edge_gap(&s.brep)).fold(0.0, f64::max);
+    out.edge_gap = EdgeGap {
+        cap,
+        widest_mm: measured.max(raised),
+    };
     for f in read.failures {
         out.refused.push(StepRefusal {
             item: f.item,
@@ -205,7 +241,11 @@ fn read_guarded(
             return Err(timed_out("building solids"));
         }
         let item = s.item;
-        match build(k, s) {
+        if s.sheet {
+            out.sheets.push(StepSheet { item, name: s.name, record: s.brep, notes: s.notes });
+            continue;
+        }
+        match build_record(k, item, s.name, s.brep, s.notes) {
             Ok(solid) => out.solids.push(solid),
             Err(_) if stop.is_cancelled() => return Err(timed_out("building solids")),
             Err((stage, reason)) => out.refused.push(StepRefusal {
@@ -224,7 +264,7 @@ fn read_guarded(
 /// states none. `Err` names a length unit the reader cannot convert: it
 /// would read such a unit as millimetres without a word (its units module
 /// says so), and a guessed scale is the silent wrong answer, so the seam
-/// refuses the file as crates/app's `step_units` does (#306).
+/// refuses the file as `camcraft_geometry::step_units` does (#306).
 fn length_units(ex: &Exchange) -> Result<Vec<f64>, String> {
     let mut found: Vec<f64> = Vec::new();
     for (id, e) in &ex.entities {
@@ -265,17 +305,6 @@ fn length_units(ex: &Exchange) -> Result<Vec<f64>, String> {
         }
     }
     Ok(found)
-}
-
-/// One record solid as a checked kernel solid. `Err` is `(stage, reason)`.
-fn build(k: &mut SolidcoreKernel, s: topology::Solid) -> Result<StepSolid, (&'static str, String)> {
-    if s.sheet {
-        return Err((
-            "read",
-            "a surface model of open shells, not a closed solid".into(),
-        ));
-    }
-    build_record(k, s.item, s.name, s.brep, s.notes)
 }
 
 /// One B-rep record (mm) from a file as a checked kernel solid: built,
@@ -339,54 +368,5 @@ pub(crate) fn build_record(
         area,
         vertex_gap: gaps.gap,
         notes,
-    })
-}
-
-/// A STEP file imported whole: every solid item of the file is a solid.
-#[derive(Debug)]
-pub struct StepImport {
-    /// The file's solids, in millimetres.
-    pub solids: Vec<StepSolid>,
-    /// See [`StepRead::length_units_mm`].
-    pub length_units_mm: Vec<f64>,
-    /// File-level diagnostics.
-    pub notes: Vec<String>,
-}
-
-/// The importer: [`read_step`], and a model only when EVERY solid item of
-/// the file came through. A file that reads only in part is refused by
-/// name, never handed out with a body missing - a toolpath planned against
-/// a part with a solid left out cuts through it.
-pub fn import_step(
-    k: &mut SolidcoreKernel,
-    bytes: &[u8],
-    stop: &CancelToken,
-) -> Result<StepImport, KernelError> {
-    let read = read_step(k, bytes, stop)?;
-    if let Some(first) = read.refused.first() {
-        return Err(KernelError::InvalidResult {
-            kernel: NAME,
-            op: "import_step",
-            detail: format!(
-                "{} of {} solid item(s) refused; first #{} at {}: {}",
-                read.refused.len(),
-                read.refused.len().saturating_add(read.solids.len()),
-                first.item,
-                first.stage,
-                first.reason
-            ),
-        });
-    }
-    if read.solids.is_empty() {
-        return Err(KernelError::InvalidResult {
-            kernel: NAME,
-            op: "import_step",
-            detail: "the file holds no solid".into(),
-        });
-    }
-    Ok(StepImport {
-        solids: read.solids,
-        length_units_mm: read.length_units_mm,
-        notes: read.notes,
     })
 }

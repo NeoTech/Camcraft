@@ -44,7 +44,7 @@ fn document() -> (World, History) {
     let world = new_world();
     let mut h = History::default();
     h.execute(&world, ImportModel::from_mesh("part", cube(p(40.0, 30.0, 0.0), p(50.0, 40.0, 10.0))));
-    h.execute(&world, ImportModel::from_mesh("vise", Mesh { facets: vise().into() }));
+    h.execute(&world, ImportModel::from_mesh("vise", Mesh::from_facets(vise())));
     h.execute(&world, TagFixture::new(&world, "vise", None).expect("mark the vise"));
     h.execute(&world, CreateSetup::new(&world, None, None).expect("Setup1"));
     let shape = StockShape::Cylinder { diameter: 20.0, height: 20.0 };

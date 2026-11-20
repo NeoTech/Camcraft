@@ -8,7 +8,7 @@ weight = 3
 An operation is one machining step: a tool, an area to cut, and how to cut
 it. The ribbon shows the operation groups the mounted machine can run, so a
 mill document has no turning operations and a lathe document no 3D
-milling. A mill-turn shows both.
+milling. A mill-turn (a lathe with live tooling) shows both.
 
 ## Operation kinds
 

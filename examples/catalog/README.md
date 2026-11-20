@@ -30,5 +30,19 @@ Every case folder `<family>/<case>/` contains:
 
 - `cargo xtask catalog` — rebuild every case's `<case>.camproj` and `<case>.nc` from its `build.camscript`.
 - `cargo xtask catalog --check` — verify all case layouts and check that every `build.camscript` reproduces the committed `<case>.nc` without modifying tracked files.
-- `cargo xtask catalog --screenshots` — render off-screen PNG screenshots via `camcraft-ui` into an images-only branch (`catalog-screenshots` by default, never into the product tree).
+- `cargo xtask catalog --screenshots` — render PNG images via `camcraft-ui` and publish the images-only branch to `origin` (`catalog-screenshots` by default).
 - `cargo xtask catalog --pdf` — build per-case PDFs into `target/catalog-pdf/` using `pandoc` and headless Chrome.
+
+## Catalog images
+
+The screenshot command captures the model without toolpaths, then each operation separately with the same camera.
+It needs a GPU or a software adapter.
+It writes PNG files outside the product tree.
+It publishes them at `catalog/<family>/<case>/0-blank.png` and `catalog/<family>/<case>/<ordinal>-<operation>.png` on the images branch.
+The operation ordinal follows the document order.
+The filename replaces each character outside ASCII letters and digits with `-`.
+A second run without a source change uses the same paths.
+The push uses `origin` and does not force an update.
+If the remote branch has other commits, reconcile them before running the command again.
+
+See the [first-part images](2d/first-part/README.md#images) for the seed case.

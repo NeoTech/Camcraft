@@ -736,14 +736,18 @@ fn an_entry_edit_marks_the_contour_stale_and_the_wall_regen_moves_nothing() {
     assert_eq!(status(&world, "Contour1"), OpStatus::Ok, "and exact");
 }
 
-/// The slot fixture's notes: its Top (Z 0) and its clearance plane (Z 5)
-/// both stand inside the 20 mm block, so the two independent height
-/// warnings (#104, #2121) ride the path - and nothing else.
-fn height_notes_only(notes: &[String]) -> bool {
-    use camcraft_app::operation::{CLEARANCE_STOCK_WARNING, TOP_STOCK_WARNING};
-    notes.len() == 2
-        && notes.iter().filter(|n| n.starts_with(TOP_STOCK_WARNING)).count() == 1
-        && notes.iter().filter(|n| n.starts_with(CLEARANCE_STOCK_WARNING)).count() == 1
+/// The slot fixture's height words: its Top (Z 0) and its clearance
+/// plane (Z 5) both stand inside the 20 mm block, so the two independent
+/// height readings ride the path - and nothing else. The Top is #104's
+/// note; the plane is #2901's first-traverse verdict (the opening rapid
+/// has no X/Y travel now, so no traverse at the plane earns #2121's
+/// "Clearance in stock" note).
+fn height_notes_only(world: &World) -> bool {
+    use camcraft_app::operation::TOP_STOCK_WARNING;
+    use camcraft_app::verify::Warning;
+    let tp = cache(world, "Slot1").expect("cached");
+    let first_low = tp.warnings.iter().filter(|w| matches!(w, Warning::FirstTraverseLow { at: 0, fixture: false, .. })).count();
+    tp.path.notes.len() == 1 && tp.path.notes.iter().filter(|n| n.starts_with(TOP_STOCK_WARNING)).count() == 1 && first_low == 1
 }
 
 #[test]
@@ -773,7 +777,7 @@ fn an_entry_edit_marks_the_slot_stale_and_the_orbit_proves_itself() {
     );
     assert_eq!(status(&world, "Slot1"), OpStatus::Ok);
     let before = cache(&world, "Slot1").expect("cached").path;
-    assert!(height_notes_only(&before.notes), "no entry fallback, only the independent height warnings: {:?}", before.notes);
+    assert!(height_notes_only(&world), "no entry fallback, only the independent height warnings: {:?}", before.notes);
     assert_eq!(
         before.moves.iter().filter(|m| m.arc.is_some()).count(),
         0,
@@ -810,7 +814,7 @@ fn an_entry_edit_marks_the_slot_stale_and_the_orbit_proves_itself() {
         after.moves.iter().any(|m| m.arc.is_some()),
         "a channel this wide certifies the orbit - it must land"
     );
-    assert!(height_notes_only(&after.notes), "a certified orbit adds no entry note; only the height warnings remain: {:?}", after.notes);
+    assert!(height_notes_only(&world), "a certified orbit adds no entry note; only the height warnings remain: {:?}", after.notes);
     assert_ne!(
         before.moves, after.moves,
         "the entry edit changed the path, not just the stamp"
@@ -2014,6 +2018,7 @@ fn pocket_refuses_an_open_run() {
             helix_radius: 1.0,
             optimal_load: camcraft_app::load::DEFAULT_OPTIMAL_LOAD,
             blend_turns: false,
+            corner_relief: Default::default(),
         },
         stamp: None,
         setup: None,
@@ -4065,6 +4070,7 @@ const DOME_RIM_Z: f64 = 20.0 * std::f64::consts::FRAC_1_SQRT_2;
 
 fn finish_params(top_z: f64, bottom_z: f64, tolerance: f64) -> OpParams {
     OpParams::Finish3D {
+        gap_link: camcraft_app::finishing3d::GapLink::Jump,
         pattern: camcraft_app::finishing3d::FinishPattern::Waterline,
         stepover: None,
         tolerance,
@@ -6380,6 +6386,7 @@ fn multiaxis_rough_pocket_twin() -> OpParams {
         optimal_load: camcraft_app::load::DEFAULT_OPTIMAL_LOAD,
         feed_opt: false,
         shell: false,
+        method: camcraft_app::machining2d::AdaptiveMethod::Spiral,
     }
 }
 
@@ -7515,6 +7522,13 @@ fn deburr_params(width: f64, top_z: f64, bottom_z: f64) -> OpParams {
         bottom_z: Height::fixed(bottom_z),
         feed: 500.0,
         plunge_feed: 100.0,
+        // #1888: the edge filters at rest - every exposed edge rides.
+        exclude_edges: Vec::new(),
+        min_edge_angle_deg: 0.0,
+        exclude_holes: false,
+        hole_min_diameter: 0.0,
+        hole_max_diameter: 0.0,
+        unreachable: camcraft_app::finishing3d::UnreachableEdges::SkipWithNote,
     }
 }
 
@@ -7716,16 +7730,27 @@ fn the_deburr_seed_carries_the_heights_and_a_hand_break_width() {
         bottom_z,
         feed,
         plunge_feed,
+        exclude_edges,
+        min_edge_angle_deg,
+        exclude_holes,
+        unreachable,
+        ..
     } = (row.seed)(&carried)
     else {
         panic!("the deburr row must seed deburr params");
     };
+    // #1888: a fresh op leaves no edge out, reads a crease under 40
+    // degrees as a facet seam, and breaks hole rims like any edge.
+    assert!(exclude_edges.is_empty());
+    assert_eq!(min_edge_angle_deg, 40.0);
+    assert!(!exclude_holes);
     assert_eq!(width, 0.5, "a hand-break, not a chamfer");
     assert_eq!(clearance_z, carried.clearance);
     assert_eq!(top_z, carried.top, "the window is the model's own");
     assert_eq!(bottom_z, carried.bottom);
     assert_eq!(feed, 500.0);
     assert_eq!(plunge_feed, 100.0);
+    assert_eq!(unreachable, camcraft_app::finishing3d::UnreachableEdges::SkipWithNote, "#1889: the seed skips with a note");
 }
 
 /// The ride's model: a 40 x 20 x 10 brick standing on the stock floor,

@@ -43,6 +43,7 @@ mod trochoid_level;
 mod trochoid_loops;
 mod trochoid_slot;
 mod contour;
+mod contour_region;
 mod contour_auto;
 mod contour_bore;
 mod contour_chain;
@@ -57,6 +58,8 @@ mod contour_run_stock;
 mod contour_start;
 mod contour_step;
 mod contour_whole;
+mod contour_whole_fence;
+mod contour_whole_reach;
 mod contour_whole_slice;
 mod descent;
 mod descent_dive;
@@ -86,6 +89,7 @@ mod adaptive_method;
 mod adaptive_troch;
 mod adaptive_troch_clean;
 mod adaptive_troch_lanes;
+mod adaptive_troch_level;
 mod adaptive_troch_slice;
 mod rest2d;
 mod rest_anchor;
@@ -93,11 +97,16 @@ mod rest_rings;
 mod chord_clear;
 mod ring;
 mod tab_bridge;
+mod tab_clear;
+mod tab_kerf;
 mod slots;
 mod slot_ends;
 mod slot_room;
 mod unreached;
 mod waterscan;
+mod pocket_avoid;
+mod corner_relief;
+mod corner_relief_spur;
 
 #[cfg(test)]
 #[allow(unused_imports)]
@@ -136,9 +145,15 @@ pub use face_entry::{air_lead, AIR_MARGIN};
 pub use fillet::{fillet_corners, Legal};
 pub use fillet_tally::{corner_arc_radius, fillet_floor, FilletTally};
 pub use levels::{cut_levels, cut_levels_under};
-pub use pocket::{pocket, pocket_entered, PocketParams, PocketStrategy};
+pub use corner_relief::{
+    CornerRelief, CornerReliefChoice, CornerReliefKind, CornerReliefOverride, CornerReliefPlan,
+    InsideCorner, ResolvedRelief, TBoneDirection, capsule_region, inside_corners, plan_corner_reliefs,
+};
+pub use corner_relief_spur::pocket_relief_plan;
+pub use pocket::{pocket, pocket_entered, pocket_entered_with_relief, PocketParams, PocketStrategy};
+pub use pocket_avoid::{pocket_avoid, pocket_avoid_with_relief};
 pub use predrilled::PreHole;
-pub use rest2d::{rest_plan, rest_pocket, rest_strategy, RestParams, RestPlan, REST_FILM, REST_MARGIN, REST_REACH};
+pub use rest2d::{rest_plan, rest_pocket, rest_pocket_with_relief, rest_strategy, RestParams, RestPlan, REST_FILM, REST_MARGIN, REST_REACH};
 pub use ring::{on_boundary, ring_is_circular};
 pub use slots::{chord_clears, slot, trace, SlotParams, TraceParams};
 pub use slot_ends::extended_ends as slot_extended_ends;
@@ -154,6 +169,7 @@ pub use trochoid_slot::{
 };
 pub use thread_mill::{thread_mill, PassSchedule, ThreadHole, ThreadParams, ThreadPasses, MAX_SPRING_PASSES, EXTERNAL_THREAD_DEPTH_PER_PITCH, THREAD_DEPTH_PER_PITCH};
 pub(crate) use pocket::plan_passes;
+pub(crate) use adaptive_troch_level::{TrochLevel, WHO_3D, plan_troch_level, refusal_text as troch_refusal_text};
 pub(crate) use adaptive::PLAN_SAG;
 // The HSM planner's door, its arc proofs and its microlift link, read
 // by the 3-D ladder's per-level port (`machining3d::hsm`, M11.4).

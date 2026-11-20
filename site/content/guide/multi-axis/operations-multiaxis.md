@@ -162,7 +162,7 @@ walls; doubly-curved ground is 5-Axis Parallel work.
 ![Unsafe CamCraft five-axis swarf example with red collision paths along a cylindrical blade](../../../images/guide/op-multiaxis-swarf.png)
 
 **Unsafe example — do not post or machine.** In
-`examples/guide-multiaxis.camproj`, `Swarf1` has **897 shank-hit warnings**
+`examples/guide-multiaxis.camproj`, `Swarf1` has **884 shank-hit warnings**
 (the shank or holder intersects material), **9 rapid-in-stock warnings**
 (rapid moves enter remaining material), and **2 sweep-hit warnings**
 (the tool assembly intersects material during a pose change). The red paths

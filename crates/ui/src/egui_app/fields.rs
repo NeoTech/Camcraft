@@ -176,6 +176,14 @@ pub(crate) fn num_row(ui: &mut Ui, u: Unit, v: &mut f64) {
     }
 }
 
+/// [`num_feed`] inside a `prop_row`, named by that row's label (#1119).
+pub(crate) fn num_feed_row(ui: &mut Ui, u: Unit, v: &mut f64) {
+    let r = num_sized(ui, u, v, 2, &format!(" {}", u.feed_suffix()), CTRL_W);
+    if let Some(l) = super::layout::row_label_id(ui) {
+        r.labelled_by(l);
+    }
+}
+
 /// [`num_plain`] inside a `prop_row`, named by that row's label (#1119).
 pub(crate) fn num_plain_row(ui: &mut Ui, v: &mut f64) {
     let r = plain_drag(ui, v);

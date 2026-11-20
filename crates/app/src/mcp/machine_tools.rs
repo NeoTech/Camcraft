@@ -86,6 +86,11 @@ fn edit_machine(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> 
         return Err(format!("patch refused: {r}"));
     }
     let k = machine::kind(Some(&next));
+    // A kind edit cannot establish a work spindle; load its machine definition instead.
+    let turning = |kind| matches!(kind, machine::Kind::Lathe | machine::Kind::MillTurn);
+    if turning(k) && !turning(machine::kind(Some(&mounted))) {
+        return Err(format!("patch refused: kind: machine '{}' has no established turning capability; load a turning machine file instead", mounted.model));
+    }
     if next.edm.as_ref().is_some_and(|e| !e.fits(k)) {
         return Err(format!("patch refused: edm: states a key this machine kind ({k:?}) does not take (a wire states no sinker key, a sinker no wire key, other kinds no edm section)"));
     }

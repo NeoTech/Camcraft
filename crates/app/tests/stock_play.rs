@@ -117,8 +117,15 @@ fn the_transport_maps_onto_the_plan_by_name() {
     let sc = sim::script([("Face1", &tp)], &tr);
 
     let p0 = progress(&sc, 0.0).expect("a timeline");
-    assert_eq!((p0.op.as_str(), p0.segs_done), ("Face1", 0), "nothing is cut before the first move completes");
-    assert_eq!(play.index_at(&p0), Some(0));
+    // #2901: the opening rapid starts over its own entry - a vertical
+    // rapid on the clearance plane with no X/Y travel. A zero-length
+    // opening takes no time, so it is done at t = 0; it cuts nothing.
+    let m0 = tp.moves[0];
+    let opening_is_free = m0.kind == camcraft_app::cl::MoveKind::Rapid && m0.from == m0.to;
+    let want = usize::from(opening_is_free);
+    assert_eq!((p0.op.as_str(), p0.segs_done), ("Face1", want), "nothing is cut before the first move completes");
+    assert_eq!(play.index_at(&p0), Some(want));
+    assert!(m0.kind == camcraft_app::cl::MoveKind::Rapid, "the plan opens with a rapid, which cuts nothing: {m0:?}");
 
     let end = progress(&sc, sc.total + 1.0).expect("a timeline");
     assert_eq!(play.index_at(&end), Some(play.total()), "the end cuts every move");

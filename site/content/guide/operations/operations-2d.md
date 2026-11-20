@@ -242,7 +242,18 @@ fixed stepover. Choose it over Adaptive when an even offset pattern is
 wanted rather than a constant load.
 
 **Picks:** as Pocket. **Settings:** Stepover 3, Stepdown 5, Stock to leave
-0, Entry Helix radius 1. **Common refusals:** as Pocket.
+0, Entry Helix radius 1.
+
+**Do not touch** (Geometry tab, **Boundaries**): pick faces or edge chains
+to protect from every cut, plunge, ramp, helix, keep-down and rapid link
+across the full tool assembly (flutes, shank and holder). **Clearance**
+sets extra 3D standoff in addition to **Stock to leave**. Protected
+faces and edges stay highlighted in the viewport while the operation is
+selected.
+
+**Common refusals:** as Pocket; picking an item already in the
+operation's machining selection or Include boundary; or leaving no safe
+cutting room around a protected item.
 
 ## Slot
 

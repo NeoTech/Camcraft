@@ -280,6 +280,10 @@ impl Frame {
         [self.local(t.a), self.local(t.b), self.local(t.c)]
     }
 
+    pub(super) fn seg(&self, a: Point3, b: Point3) -> [[f64; 3]; 2] {
+        [self.local(a), self.local(b)]
+    }
+
     /// The world point `h` up the axis from the tip.
     pub(super) fn up(&self, h: f64) -> Point3 {
         Point3::new(self.o.x + self.a[0] * h, self.o.y + self.a[1] * h, self.o.z + self.a[2] * h)

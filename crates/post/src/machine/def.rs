@@ -211,6 +211,10 @@ pub struct Machine {
     /// Unstated reads as "not limited", the unstated-limit law.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rigid_tapping: Option<bool>,
+    /// Whether the spindle can stop oriented (#1445, `spindle.orientation`):
+    /// `Some(false)` refuses a fine-bore cycle by name. Unstated: not limited.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spindle_orientation: Option<bool>,
     /// The builder's codes for C-axis live-tool work (issue #33), or
     /// None - unstated, and a post refuses a C-axis section by name
     /// rather than guess a builder-specific M word.

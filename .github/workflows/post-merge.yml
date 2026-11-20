@@ -107,8 +107,10 @@ jobs:
 
   report:
     # Red or green only: a cancelled run (a newer merge) or a skipped one says nothing.
+    # always() first (#1611): without a status function GitHub adds an implicit
+    # success(), which skips this job when the gate fails - a red main reported nothing.
     needs: gate
-    if: ${{ (needs.gate.result == 'success' || needs.gate.result == 'failure') && needs.gate.outputs.skipped != 'true' && (github.event_name == 'push' || inputs.ref == '' || inputs.ref == 'main') }}
+    if: ${{ always() && (needs.gate.result == 'success' || needs.gate.result == 'failure') && needs.gate.outputs.skipped != 'true' && (github.event_name == 'push' || inputs.ref == '' || inputs.ref == 'main') }}
     runs-on: [self-hosted, camcraft-post-merge]
     timeout-minutes: 10
     permissions:

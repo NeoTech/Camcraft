@@ -255,7 +255,8 @@ fn setup_children(
     push_row(rows, leaves, "Post".to_owned(), post, painted::Kind::Section, Some(Icon::Post), page_open(SetupPage::Post), false, depth, Leaf::Page(name.to_owned(), SetupPage::Post));
 }
 
-fn count(n: usize, word: &str) -> String {
+/// "1 word" / "N words", empty for none (the browser suffixes, #2340's status count).
+pub(super) fn count(n: usize, word: &str) -> String {
     match n {
         0 => String::new(),
         1 => format!("1 {word}"),
@@ -313,7 +314,7 @@ fn op_row(
         operation::OpStatus::Ok => "ok",
         operation::OpStatus::Stale => "STALE",
     };
-    let warns = model::toolpath_of(w, entity).map_or(0, |tp| tp.warnings.len());
+    let warns = model::with_toolpath(w, entity, |tp| tp.warnings.len()).unwrap_or(0);
     let warn_text = match warns {
         0 => String::new(),
         1 => "  1 warning".to_owned(),

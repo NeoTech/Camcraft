@@ -130,7 +130,9 @@ pub(crate) fn ask(state: &State, mods: Mods) -> Ask {
 /// and the pixel radius as world mm (ortho: one scale everywhere;
 /// perspective: per unit of depth, so it holds at the silhouette too).
 /// `through` follows the viewport's pick-through toggle (#692), off by
-/// default: only then can a hidden edge or point be picked.
+/// default: only then can a hidden edge or point be picked. The
+/// "Wireframe, see-through" display mode asks for it too (#2636): it draws
+/// the hidden edges, so a click takes them.
 pub(crate) fn query_at(state: &State, p: [f32; 2], ask: Ask) -> Option<PickQuery> {
     let ([_, y0], [_, y1]) = state.viewport_rect;
     let h = f64::from(y1 - y0);
@@ -144,7 +146,8 @@ pub(crate) fn query_at(state: &State, p: [f32; 2], ask: Ask) -> Option<PickQuery
         }
     };
     let ray = PickRay { origin, dir, projection };
-    Some(PickQuery { ray, radius, radius_per_depth, kinds: ask.kinds, through: state.pick_through })
+    let through = state.pick_through || state.display.sees_through();
+    Some(PickQuery { ray, radius, radius_per_depth, kinds: ask.kinds, through })
 }
 
 /// The one pick under a viewport point, and the selection it stands for.

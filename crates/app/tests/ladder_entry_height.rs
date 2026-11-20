@@ -138,6 +138,7 @@ fn pocket() -> OpParams {
         optimal_load: camcraft_app::load::DEFAULT_OPTIMAL_LOAD,
         blend_turns: false,
         tilt: None,
+        corner_relief: Default::default(),
     }
 }
 

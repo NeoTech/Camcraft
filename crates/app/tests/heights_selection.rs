@@ -105,6 +105,7 @@ fn pocket_from_selection() -> OpParams {
         helix_radius: 1.0,
         optimal_load: camcraft_app::load::DEFAULT_OPTIMAL_LOAD,
         blend_turns: false,
+        corner_relief: Default::default(),
     }
 }
 
@@ -255,6 +256,7 @@ fn creation_and_edits_refuse_a_selection_that_yields_no_height() {
         helix_radius: 1.0,
         optimal_load: camcraft_app::load::DEFAULT_OPTIMAL_LOAD,
         blend_turns: false,
+        corner_relief: Default::default(),
     };
     history.execute(
         &world,
@@ -312,6 +314,7 @@ fn an_edit_to_selection_rides_edit_params_and_undoes() {
         helix_radius: 1.0,
         optimal_load: camcraft_app::load::DEFAULT_OPTIMAL_LOAD,
         blend_turns: false,
+        corner_relief: Default::default(),
     };
     history.execute(
         &world,

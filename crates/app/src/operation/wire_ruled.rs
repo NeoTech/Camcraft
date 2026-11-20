@@ -206,6 +206,7 @@ pub(super) fn generate(
         top_z: top,
         pairing,
         tolerance: four.tolerance,
+        heal_tolerance: 0.0,
         widening: four.widening,
         max_deg: cond.max_taper_deg,
         machine: cond.machine.clone(),

@@ -162,6 +162,7 @@ pub(super) fn geometry_view(env: &Env, key: &str) -> Result<Value, String> {
         "kind": op.params.kind().info().label,
         "source": source,
         "area": super::area::area_view(w, &op.area),
+        "do_not_touch": super::do_not_touch::view(w, &op.area.do_not_touch),
         "area_applies": operation::area_unsupported(op.params.kind()).is_none(),
         "notes": notes,
     }))

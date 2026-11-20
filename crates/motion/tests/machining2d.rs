@@ -750,9 +750,9 @@ fn tabs_hold_the_part_until_the_floor() {
     p.tab_width = 6.0;
     p.tab_height = 2.0;
     let t = contour(&rect(0.0, 0.0, 20.0, 20.0), &p).expect("valid");
-    // Level -3 runs a full ring, -6 runs four subpaths between tabs
-    // (#2004: no air level at Top Z 0).
-    assert_eq!(plunge_xy(&t).len(), 5);
+    // Levels -3 and -4 (the tab top, #2579) run a full ring, -6 runs
+    // four subpaths between tabs (#2004: no air level at Top Z 0).
+    assert_eq!(plunge_xy(&t).len(), 6);
     // Hop motion only at the tabbed level: three retract feeds + rapids.
     let up = t
         .moves
@@ -1974,14 +1974,15 @@ fn contour_tabs_stand_down_the_entry_arms() {
         "the arms stood anyway: {:?}",
         t.notes
     );
-    // No orbit reaches a tabbed plane; the levels above -4 keep their
-    // certified helix entries. (Review of #2480: the tabs sit on the
+    // No orbit reaches a tabbed plane; the levels down to the tab top at
+    // -4 (a level of its own, #2579) keep their certified helix entries:
+    // an orbit that ends at -4 ends on the tab top, not in the tab. (Review of #2480: the tabs sit on the
     // square ring's corners and grow until the neck holds, so the floor
     // level keeps only a short walk round the two other corners, which
     // the arc fit posts as flat arcs - a helix is an arc that descends.)
     assert!(t.moves.iter().any(|m| m.arc.is_some()), "the clean levels lost their arm");
     assert!(
-        t.moves.iter().all(|m| m.arc.is_none() || m.from.z == m.to.z || m.to.z > -4.0),
+        t.moves.iter().all(|m| m.arc.is_none() || m.from.z == m.to.z || m.to.z >= -4.0),
         "a helix descended into a standing tab"
     );
     // At the tabbed plane the dives are the pre-certification lead-in

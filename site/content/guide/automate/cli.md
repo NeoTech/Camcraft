@@ -108,7 +108,11 @@ $ echo $?
 ```
 
 (`cam.log` prints each argument on its own line.) `importTools` takes the
-mode `"add"`, `"update"` or `"replace"`.
+mode `"add"`, `"update"` or `"replace"`, optional `holders`, optional
+`format` (`"auto"`, `"camtools"`, `"pathpilot"` or `"hurco"`), and
+optional `units` (`"mm"` or `"inch"`). `exportTools` also takes optional
+`format` and `units` (or detects PathPilot `.csv` and Hurco `.TCM` from
+the path extension).
 Read [Tools and tool libraries](@/guide/set-up/tools.md) before replacing a
 library. That page explains the supported formats, tool numbers and
 import refusals. Export a copy before a replacement when you need to

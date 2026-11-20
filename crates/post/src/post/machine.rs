@@ -178,6 +178,10 @@ pub fn mirror(m: &crate::machine::Machine) -> Value {
             if let Some(f) = e.flushing {
                 eo.insert("flushing".to_owned(), json!(f.word()));
             }
+            // #2686: the skim passes' flushing, only when stated.
+            if let Some(f) = e.skim_flushing {
+                eo.insert("skim_flushing".to_owned(), json!(f.word()));
+            }
         }
         o.insert("edm".to_owned(), edm);
     }
@@ -295,6 +299,13 @@ pub fn script_props(m: &Value) -> Value {
             .or(get(m, &["rigidTapping"]))
             .and_then(Value::as_bool)
             .unwrap_or(true),
+        // #2303: true only when the file STATES rigid tapping (a spindle
+        // encoder); `rigidTapping` above reads unstated as "not limited",
+        // which a post that needs the encoder cannot take as a yes.
+        "rigidTappingStated": get(m, &["kinematics", "static", "head", "rigidTapping"])
+            .or(get(m, &["rigidTapping"]))
+            .and_then(Value::as_bool)
+            == Some(true),
         // #495: the machine-coordinate Z a post retracts to (mm), or
         // null when the machine does not state one; `model` is the
         // machine's model name through either door (the mirror's

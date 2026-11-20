@@ -1,35 +1,24 @@
-//! Mesh file importers (STL, OBJ, STEP, Solidcraft `.sc`). Public API: `load_model` / `parse_*`.
+//! Mesh file importers (STL, OBJ, STEP, Solidcraft `.sc`/`.solidcraft`). Public API: `load_model` / `parse_*`.
 //!
 //! The facet/vertex caps below are enforced before anything large is
 //! allocated. STL (M5.3 E) streams from the file - the size law runs off
 //! `metadata` before the facet buffer exists; OBJ and STEP stay buffered,
-//! their parsers wanting the whole text in hand.
+//! their parsers wanting the whole text in hand. STEP is read by the
+//! solidcore kernel (#917, `camcraft_geometry::step`).
 
 mod mesh_outward;
 pub mod obj;
 pub mod step;
 pub mod step_budget;
 pub mod step_csys;
-mod step_closed;
-mod step_facets;
-mod step_continuity;
-mod step_diag;
-mod step_division;
-mod step_edge3d;
-mod step_outward;
-mod step_guard;
-mod step_meter;
-mod step_nearest;
-mod step_pole;
 pub mod step_depth;
-mod step_refine;
-mod step_orient;
-mod step_seams;
-mod step_stretch;
-#[cfg(test)]
-mod step_thread_fixture;
-mod step_units;
+mod step_outward;
+#[cfg(not(target_arch = "wasm32"))]
+mod sourced;
 pub mod stl;
+
+#[cfg(not(target_arch = "wasm32"))]
+pub use sourced::load_model_open_sourced;
 
 use std::path::{Path, PathBuf};
 
@@ -106,14 +95,15 @@ pub struct Graded {
     /// the promise, and for STL and OBJ - those files ARE the mesh, with
     /// no surface behind them to measure against.
     pub coarse_mm: Option<f64>,
-    /// What the importer changed on the way, one line each (#1573 review:
-    /// a STEP face flipped to agree with its neighbours, by name; #1617: a
-    /// closed solid wound inward turned outward). Empty when it
-    /// changed nothing.
+    /// What the importer changed or noted on the way, one line each
+    /// (#1617: an STL or OBJ wound inward turned outward; #917: what the
+    /// STEP reader repaired). Empty when it changed nothing.
     pub notes: Vec<String>,
-    /// A STEP closed shell that meshes open, its hole named (#1610): the
-    /// mesh has walls missing there. Only the `*_open` loaders return one;
-    /// every other loader refuses such a file by name. `None` for STL/OBJ.
+    /// A model that meshes open, its hole named (#1610): the mesh has walls
+    /// missing there. Only the `*_open` loaders return one; every other
+    /// loader refuses such a model by name. Since #917 a STEP solid whose
+    /// faces the kernel's mesher leaves out sets it, each such face named
+    /// with its reason; a project that recorded one keeps it (`mesh_open`).
     pub open: Option<String>,
     /// Raw STEP text preserved for library/project persistence (#744).
     pub step_source: Option<String>,
@@ -124,10 +114,17 @@ impl Graded {
     /// the model incomplete.
     fn whole(self) -> Result<Self, ImportError> {
         match &self.open {
-            Some(hole) => Err(step_closed::open_refusal(hole)),
+            Some(hole) => Err(open_refusal(hole)),
             None => Ok(self),
         }
     }
+}
+
+/// The refusal for a mesh with a hole, where the caller cannot land the
+/// model incomplete (a fixture, a tool body, a mesh-only import).
+#[must_use]
+pub(crate) fn open_refusal(hole: &str) -> ImportError {
+    ImportError::Step(format!("{hole} - the model would import with walls missing; re-export the model, or import an STL"))
 }
 
 /// [`load_model`], with the fidelity the import achieved.
@@ -192,11 +189,10 @@ pub fn parse_model_open_within(data: &[u8], format: Format, budget: usize) -> Re
             let notes = mesh_outward::turn_outward(&mut mesh)?.into_iter().collect();
             (mesh, None, notes, None)
         }
+        // #917: solidcore's machining mesh is watertight and outward; a
+        // solid with faces the mesher leaves out keeps its hole named.
         Format::Step => {
-            let (mut mesh, chord, mut notes, open) = step::parse_open(data, budget)?;
-            // #1617: a closed solid the file winds inward is turned
-            // outward, and the import says so.
-            notes.extend(step_outward::turn_outward(&mut mesh));
+            let (mesh, chord, notes, open) = step::parse_open(data, budget)?;
             (mesh, step::coarse(chord), notes, open)
         }
     };
@@ -225,7 +221,7 @@ pub fn format_from_path(path: &Path) -> Result<Format, ImportError> {
         "stl" => Ok(Format::Stl),
         "obj" => Ok(Format::Obj),
         "step" | "stp" => Ok(Format::Step),
-        "sc" => Ok(Format::Solidcraft),
+        "sc" | "solidcraft" => Ok(Format::Solidcraft),
         _ => Err(ImportError::Unsupported(
             path.file_name()
                 .map(PathBuf::from)

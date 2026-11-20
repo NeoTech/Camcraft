@@ -189,7 +189,9 @@ fn world_verts(state: &State, entity: &flecs_ecs::prelude::Entity) -> Vec<[f32; 
 /// [`world_verts`] slid by `by` (shown frame) - the handle drag's preview
 /// (#1198 b): display only, the world is untouched until the release.
 fn world_verts_by(state: &State, entity: &flecs_ecs::prelude::Entity, by: [f64; 3]) -> Vec<[f32; 3]> {
-    let tris = model::facets_of(&state.world, entity).unwrap_or_default();
+    let Some(tris) = model::facets_of(&state.world, entity) else {
+        return Vec::new();
+    };
     // #326: the part where the active setup holds it.
     let mut loc = camcraft_app::setup_align::view_pose(&state.world, entity).unwrap_or_default();
     loc.pos = Point3::new(loc.pos.x + by[0], loc.pos.y + by[1], loc.pos.z + by[2]);
@@ -199,14 +201,19 @@ fn world_verts_by(state: &State, entity: &flecs_ecs::prelude::Entity, by: [f64; 
     {
         loc = camcraft_app::setup_align::compose(turn, loc);
     }
-    let mut verts = Vec::with_capacity(tris.len() * 3);
-    for t in tris.iter() {
-        for p in [t.a, t.b, t.c] {
-            let p = transform_point(p, loc.pos, loc.rot);
-            verts.push([ftoz(p.x), ftoz(p.y), ftoz(p.z)]);
+    // #2201: keyed by the facet allocation and the shown pose, so an idle
+    // frame transforms nothing again.
+    let cached = state.frame_cache.world_verts_cached(&tris, crate::frame_cache::pose_bits(&loc), || {
+        let mut verts = Vec::with_capacity(tris.len() * 3);
+        for t in tris.iter() {
+            for p in [t.a, t.b, t.c] {
+                let p = transform_point(p, loc.pos, loc.rot);
+                verts.push([ftoz(p.x), ftoz(p.y), ftoz(p.z)]);
+            }
         }
-    }
-    verts
+        verts
+    });
+    (*cached).clone()
 }
 
 /// Models (minus browser-eye-hidden), then the stock solid, then the

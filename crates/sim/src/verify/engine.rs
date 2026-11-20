@@ -78,7 +78,13 @@ pub fn verify_bodies(
     }
 
     // (d) Rapids in stock - [`rapids`].
-    rapids::rapids_in_stock(path, cx, &rest, &cutter, &mut warns);
+    let mut rapid_warns = Vec::new();
+    rapids::rapids_in_stock(path, cx, &rest, &cutter, &mut rapid_warns);
+    // #1445: a fine bore's stopped-spindle rapids are read with the
+    // stopped bar, inside the cylinder its own feed in cut. Only law (d)
+    // is acquitted: the solid law's shank and holder collisions remain.
+    super::fine_bore::acquit(path, cx.tool.radius, cx.tool.shank_radius, &mut rapid_warns);
+    warns.extend(rapid_warns);
 
     // (d2) Rapids against fixtures (M3.2 stage B) - the law lives in
     // [`rapids_vs_fixtures`] so the post gate can run it without a

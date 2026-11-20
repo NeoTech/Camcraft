@@ -41,7 +41,7 @@
 //!   so every operation judged against it, and the program verdict, are
 //!   refused by name ([`UNKNOWN_NOTE`]), never tightened by a guess. It
 //!   rides every path the flag rides (copies, clones, undo, save) and only
-//!   a fresh import clears it.
+//!   a fresh import, or a person's vouch (#1339, `model_vouch`), clears it.
 
 use flecs_ecs::core::EntityViewGet;
 use flecs_ecs::prelude::{Entity, World};
@@ -54,8 +54,11 @@ use crate::stock::StockShape;
 use crate::stock_sim::DEV_TOL;
 use crate::verify::excess_floor;
 
-/// What every refusal here says, in the user's words.
-pub const TOO_COARSE: &str = "imported too coarsely to verify; re-import with a larger STEP facet budget";
+/// What every refusal here says, in the user's words. Two causes make a
+/// model coarse: the facet budget (#1054) and edges that lie off their
+/// surfaces (#2976). The document does not record which, so the advice
+/// names both; #2996 adds that record.
+pub const TOO_COARSE: &str = "imported too coarsely to verify; re-import with a larger STEP facet budget, or export the file again with a tighter tolerance";
 
 /// The chord a mesh of unknown fidelity carries (#1056), mm: far past any
 /// verdict tolerance, so every law refuses rather than tightens, and small
@@ -87,8 +90,9 @@ pub fn chord_of(world: &World, entity: &Entity) -> Option<f64> {
     entity.entity_view(world).try_get::<&ReducedFidelity>(|r| r.chord_mm).and_then(step::coarse)
 }
 
-/// Write or clear the flag. For the import/update commands, their undo
-/// and the project loader only - it describes the facets it lands with.
+/// Write or clear the flag. For the import/update commands, the vouch
+/// (#1339), their undo and the project loader only - it describes the
+/// facets it lands with.
 pub fn set(world: &World, entity: &Entity, coarse_mm: Option<f64>) {
     let view = entity.entity_view(world);
     match coarse_mm.and_then(step::coarse) {
@@ -145,42 +149,65 @@ pub fn set_budget(world: &World, entity: &Entity, budget: Option<u64>) {
 /// The reduced-fidelity model behind the entity `name`: itself (a model,
 /// or a stock copy carrying its source's flag, #1056), or - for a stock
 /// copy from a file that predates that - the model it copies.
-fn coarse_source(world: &World, name: &str) -> Option<(String, f64)> {
+fn coarse_source(world: &World, name: &str) -> Option<Coarse> {
     let entity = model::find_by_name(world, name)?;
     let copied = match model::stock_def_of(world, &entity) {
         Some(StockShape::FromModel { source }) => Some(source),
         _ => None,
     };
     // A refusal names the model the facets came from, also once it is
-    // gone: that is what a person re-imports.
+    // gone: that is what a person re-imports. The hole is read off the
+    // entity that carries the sentinel (#1700), falling back to the
+    // source once when a v0.21-v0.24 file marked the copy without one.
     if let Some(c) = chord_of(world, &entity) {
-        return Some((copied.unwrap_or_else(|| name.to_string()), c));
+        let hole = crate::mesh_open::hole_of(world, &entity).or_else(|| {
+            is_unknown(c)
+                .then(|| copied.as_deref().and_then(|s| crate::mesh_open::hole_behind(world, s)))
+                .flatten()
+        });
+        return Some((copied.unwrap_or_else(|| name.to_string()), c, hole));
     }
     let source = copied?;
     let src = model::find_by_name(world, &source)?;
-    chord_of(world, &src).map(|c| (source, c))
+    chord_of(world, &src).map(|c| (source, c, crate::mesh_open::hole_of(world, &src)))
 }
+
+/// The model a mesh's facets came from, its chord, and its hole when it
+/// was imported incomplete (#1610).
+type Coarse = (String, f64, Option<String>);
 
 /// The chord error a stock copied from `source` lands with (#1056): the
 /// source's own, or what a stock it is itself copied from carries.
 #[must_use]
 pub fn chord_behind(world: &World, source: &str) -> Option<f64> {
-    coarse_source(world, source).map(|(_, c)| c)
+    coarse_source(world, source).map(|(_, c, _)| c)
 }
 
 /// The loader's last pass (#1056): a `FromModel` stock from a file that
 /// predates the copy's own flag takes its source's, so deleting that
 /// source later keeps the stock judged as coarse as its facets are.
+/// #1700: a copy marked `fidelity_unknown` without its own hole (written
+/// by v0.21.0-v0.24.0 before the copy carried `mesh_open`) takes its
+/// source's hole too, so a later delete keeps naming it and a re-save
+/// repairs the file.
 pub fn adopt_copies(world: &World) {
     for (_, e) in model::named_entities(world) {
-        if chord_of(world, &e).is_some() {
+        let Some(StockShape::FromModel { source }) = model::stock_def_of(world, &e) else {
             continue;
-        }
-        if let Some(StockShape::FromModel { source }) = model::stock_def_of(world, &e)
-            && let Some(src) = model::find_by_name(world, &source)
+        };
+        let Some(src) = model::find_by_name(world, &source) else {
+            continue;
+        };
+        if chord_of(world, &e).is_none()
             && let Some(c) = chord_of(world, &src)
         {
             set(world, &e, Some(c));
+        }
+        if chord_of(world, &e).is_some_and(is_unknown)
+            && crate::mesh_open::hole_of(world, &e).is_none()
+            && let Some(hole) = crate::mesh_open::hole_of(world, &src)
+        {
+            crate::mesh_open::set(world, &e, Some(&hole));
         }
     }
 }
@@ -189,7 +216,7 @@ pub fn adopt_copies(world: &World) {
 /// mm: its chord error less the cap, 0 at full fidelity.
 #[must_use]
 pub fn excess_of(world: &World, name: &str) -> f64 {
-    coarse_source(world, name).map_or(0.0, |(_, c)| excess(c))
+    coarse_source(world, name).map_or(0.0, |(_, c, _)| excess(c))
 }
 
 /// Whether the excess of `setup`'s stock is known (#1091 reviews): a box
@@ -267,7 +294,7 @@ pub fn facts(world: &World, chord_mm: f64) -> serde_json::Value {
         "approximation_mm": chord_mm,
         "promised_mm": step::CHORD_CAP,
         "note": format!(
-            "{}. Gouge checks against this model are stricter; if it is too coarse to check, its operations are refused at the post. Re-import with a larger STEP facet budget to clear this.",
+            "{}. Gouge checks against this model are stricter; if it is too coarse to check, its operations are refused at the post. Re-import with a larger STEP facet budget, or export the file again with a tighter tolerance, to clear this.",
             summary(world, chord_mm)
         ),
     })
@@ -284,7 +311,7 @@ fn within(world: &World, chord_mm: f64) -> String {
 /// selection) and the setup's stock - the collision laws read clearance
 /// against it (#904; `operation::material::judged_material` is the same
 /// pair at generation).
-fn op_coarse(world: &World, op: &Operation) -> Option<(String, f64)> {
+fn op_coarse(world: &World, op: &Operation) -> Option<Coarse> {
     let mut names = vec![crate::setup::stock_entity_name(world, op.setup.as_deref())];
     match &op.src {
         SrcRef::Stock => {}
@@ -301,14 +328,14 @@ fn op_coarse(world: &World, op: &Operation) -> Option<(String, f64)> {
 /// `None` when it can (full fidelity, or tightened verdicts).
 #[must_use]
 pub fn op_problem(world: &World, name: &str, op: &Operation) -> Option<String> {
-    let (model, chord) = op_coarse(world, op)?;
+    let (model, chord, hole) = op_coarse(world, op)?;
     if is_unknown(chord) {
-        return Some(format!("{name}: model '{model}' was {}", crate::mesh_open::unknown_note(world, &model)));
+        return Some(format!("{name}: model '{model}' was {}", crate::mesh_open::note_for(hole.as_deref())));
     }
     let said = format!("surfaces are approximated to within {}", within(world, chord));
     if !fidelity_law::excess_aware(&op.params) {
         return Some(format!(
-            "{name}: model '{model}' was imported at reduced fidelity ({said}) and this kind of operation cannot be verified against it; re-import with a larger STEP facet budget"
+            "{name}: model '{model}' was imported at reduced fidelity ({said}) and this kind of operation cannot be verified against it; re-import with a larger STEP facet budget, or export the file again with a tighter tolerance"
         ));
     }
     excess_floor(fidelity_law::floor_of(&op.params), excess(chord))

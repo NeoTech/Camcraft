@@ -271,7 +271,7 @@ fn a_banded_rapid_just_under_an_earlier_face_cut_is_convicted() {
     };
     let p = Point3::new;
     let (part, stock) = (cylinder(6.0, -60.0, 10.0), cylinder(10.0, -60.0, 16.0));
-    let ahead = [crate::rest::TurnedAhead { nose: 0.8, moves: vec![mv(MoveKind::Feed, p(11.0, 0.0, 15.8), p(0.0, 0.0, 15.8))] }];
+    let ahead = [crate::rest::TurnedAhead { nose: 0.8, band: 0.0, moves: vec![mv(MoveKind::Feed, p(11.0, 0.0, 15.8), p(0.0, 0.0, 15.8))] }];
     let judge = |c: f64| {
         let path = Toolpath {
             moves: vec![mv(MoveKind::Rapid, p(8.0, 0.0, 25.0), p(8.0, 0.0, c))],

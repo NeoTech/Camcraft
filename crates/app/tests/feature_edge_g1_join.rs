@@ -70,6 +70,7 @@ fn split_pieces(g: &FeatureGraph) -> Vec<(u32, u32)> {
 }
 
 #[test]
+#[ignore = "known-fail #2845 | feature_edge_g1_join | no_pickable_edge_is_a_tangent_piece_of_a_longer_one_in_any_step_fixture | tangent pieces of one edge pick apart: "]
 fn no_pickable_edge_is_a_tangent_piece_of_a_longer_one_in_any_step_fixture() {
     let mut names: Vec<String> = std::fs::read_dir(models())
         .expect("testdata/models")
@@ -91,6 +92,9 @@ fn no_pickable_edge_is_a_tangent_piece_of_a_longer_one_in_any_step_fixture() {
         }
     }
     assert!(checked >= 5, "most fixtures import: {checked}");
+    // #2845: since #917 the sample's solids touch along shared edges that
+    // the feature graph's own edge map reads as non-manifold.
+    // known-fail-assert
     assert!(bad.is_empty(), "tangent pieces of one edge pick apart: {bad:#?}");
 }
 

@@ -8,8 +8,8 @@
 
 use super::*;
 use crate::operation::{
-    AreaControls, BoundaryMode, BoundaryShape, ChainSide, Containment, CornerStyle, ExtraBoundary,
-    OpenBoundary,
+    AreaControls, BoundaryMode, BoundaryShape, ChainSide, Containment, CornerStyle, DoNotTouch,
+    ExtraBoundary, OpenBoundary,
 };
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
@@ -73,6 +73,21 @@ fn is_zero(v: &f64) -> bool {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct DoNotTouchDto {
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub clearance: f64,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub items: Vec<GeoSelDto>,
+}
+
+impl DoNotTouchDto {
+    #[must_use]
+    pub fn is_default(&self) -> bool {
+        *self == DoNotTouchDto::default()
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct AreaDto {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub containment: Option<ContainmentDto>,
@@ -86,9 +101,11 @@ pub struct AreaDto {
     pub extra: Vec<ExtraBoundaryDto>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub open: Option<OpenBoundaryDto>,
+    #[serde(default, skip_serializing_if = "DoNotTouchDto::is_default")]
+    pub do_not_touch: DoNotTouchDto,
 }
 
-fn sel_dto(items: &[GeoSel]) -> Vec<GeoSelDto> {
+pub(super) fn sel_dto(items: &[GeoSel]) -> Vec<GeoSelDto> {
     items
         .iter()
         .map(|g| GeoSelDto {
@@ -103,7 +120,7 @@ fn sel_dto(items: &[GeoSel]) -> Vec<GeoSelDto> {
         .collect()
 }
 
-fn sel_of(items: &[GeoSelDto]) -> Vec<GeoSel> {
+pub(super) fn sel_of(items: &[GeoSelDto]) -> Vec<GeoSel> {
     items
         .iter()
         .map(|g| GeoSel {
@@ -161,6 +178,10 @@ impl AreaDto {
                     ChainSide::Outside => ChainSideDto::Outside,
                 },
             }),
+            do_not_touch: DoNotTouchDto {
+                clearance: a.do_not_touch.clearance,
+                items: sel_dto(&a.do_not_touch.picks),
+            },
         }
     }
 
@@ -200,6 +221,10 @@ impl AreaDto {
                     ChainSideDto::Outside => ChainSide::Outside,
                 },
             }),
+            do_not_touch: DoNotTouch {
+                clearance: self.do_not_touch.clearance,
+                picks: sel_of(&self.do_not_touch.items),
+            },
         }
     }
 }

@@ -224,10 +224,6 @@ pub fn lattice(pts: &[SR], moves: &[BandMove]) -> (Option<(f64, f64)>, Vec<f64>)
         lat.push(sv);
     }
     lat.retain(|s| (d_lo..=d_hi).contains(s));
-    if let Some((w0, w1)) = window {
-        lat.push(w0);
-        lat.push(w1);
-    }
     lat.sort_unstable_by(f64::total_cmp);
     lat.dedup();
     (window, lat)

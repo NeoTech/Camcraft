@@ -250,7 +250,7 @@ impl eframe::App for WebShell {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("egui-shell-web-frame"),
         });
-        view_pass::encode(&mut self.state, &mut self.view, &mut self.stock_eye, device, queue, &mut encoder);
+        view_pass::encode(&mut self.state, &mut self.view, &mut self.stock_eye, device, queue, &mut encoder, scale);
         queue.submit([encoder.finish()]);
         if self.stock_eye.as_ref().is_some_and(StockEye::cpu_pending) {
             ui.ctx().request_repaint();

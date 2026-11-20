@@ -44,6 +44,10 @@ pub const BUILTINS: &[(&str, AssetFile)] = &[
     ("grblHAL", AssetFile("grblhal.cps")),
     // Synthetos TinyG: the other grbl-family controller, no canned cycles, M0 after each tool change.
     ("TinyG", AssetFile("tinyg.cps")),
+    // #2303: stock LinuxCNC (RS274NGC as linuxcnc.org documents it), no PathPilot conventions.
+    ("LinuxCNC", AssetFile("linuxcnc.cps")),
+    // #2481: classic Grbl 1.1 - no canned cycles (drilling as plain moves), M0 tool change, 80-character lines.
+    ("Grbl 1.1", AssetFile("grbl.cps")),
     ("Doosan DNM", AssetFile("doosan-dnm.cps")),
     ("Makera Carvera", AssetFile("carvera.cps")),
     ("Mach4", AssetFile("mach4.cps")),
@@ -101,6 +105,11 @@ pub const MACHINES: &[(&str, AssetFile)] = &[
     ("grblHAL 3-axis", AssetFile("grblhal-3axis.mch")),
     // A generic TinyG router / mill; pairs with the "TinyG" post.
     ("TinyG 3-axis", AssetFile("tinyg-3axis.mch")),
+    // #2303: a generic LinuxCNC mill; pairs with the "LinuxCNC" post. It states no
+    // safe_retract and no rigid_tapping: the user states them for the real machine.
+    ("LinuxCNC 3-axis", AssetFile("linuxcnc-3axis.mch")),
+    // #2481: a generic Grbl 1.1 router / mill; pairs with the "Grbl 1.1" post.
+    ("Grbl 3-axis", AssetFile("grbl-3axis.mch")),
     // #620: the PathPilot routers, each from its own manual / spec sheet
     // (the plain xsTECH from its spec sheet and knowledge base: no manual).
     ("Tormach 24R", AssetFile("tormach-24r.mch")),
@@ -326,6 +335,8 @@ fn embedded(kind: &str, file: &str) -> Option<&'static str> {
         ("posts", "tormach.cps") => Some(include_str!("../../../assets/posts/tormach.cps")),
         ("posts", "grblhal.cps") => Some(include_str!("../../../assets/posts/grblhal.cps")),
         ("posts", "tinyg.cps") => Some(include_str!("../../../assets/posts/tinyg.cps")),
+        ("posts", "linuxcnc.cps") => Some(include_str!("../../../assets/posts/linuxcnc.cps")),
+        ("posts", "grbl.cps") => Some(include_str!("../../../assets/posts/grbl.cps")),
         ("posts", "doosan-dnm.cps") => Some(include_str!("../../../assets/posts/doosan-dnm.cps")),
         ("posts", "carvera.cps") => Some(include_str!("../../../assets/posts/carvera.cps")),
         ("posts", "mach4.cps") => Some(include_str!("../../../assets/posts/mach4.cps")),
@@ -356,6 +367,8 @@ fn embedded(kind: &str, file: &str) -> Option<&'static str> {
         ("machines", "tormach-1100m-plus.mch") => Some(include_str!("../../../assets/machines/tormach-1100m-plus.mch")),
         ("machines", "grblhal-3axis.mch") => Some(include_str!("../../../assets/machines/grblhal-3axis.mch")),
         ("machines", "tinyg-3axis.mch") => Some(include_str!("../../../assets/machines/tinyg-3axis.mch")),
+        ("machines", "linuxcnc-3axis.mch") => Some(include_str!("../../../assets/machines/linuxcnc-3axis.mch")),
+        ("machines", "grbl-3axis.mch") => Some(include_str!("../../../assets/machines/grbl-3axis.mch")),
         ("machines", "tormach-24r.mch") => Some(include_str!("../../../assets/machines/tormach-24r.mch")),
         ("machines", "tormach-xstech-pro.mch") => Some(include_str!("../../../assets/machines/tormach-xstech-pro.mch")),
         ("machines", "tormach-xstech.mch") => Some(include_str!("../../../assets/machines/tormach-xstech.mch")),

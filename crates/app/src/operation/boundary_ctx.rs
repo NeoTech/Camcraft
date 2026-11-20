@@ -28,7 +28,7 @@ pub(super) fn part_solid_of(world: &World, setup: Option<&str>, src: &SrcRef, ma
 /// [`area_ctx`] for a caller holding only the operation (the preview):
 /// tool and material read here, the same reads generation makes.
 pub(super) fn area_ctx_of(world: &World, op: &Operation) -> Option<Result<AreaCtx, GenError>> {
-    if op.area.is_default() {
+    if !op.area.has_boundary_edits() {
         return None;
     }
     let tool = model::find_by_name(world, &op.tool).and_then(|e| model::tool_of(world, &e));
@@ -53,7 +53,7 @@ pub(super) fn area_ctx(
     material: &Material,
     part_solid: bool,
 ) -> Option<Result<AreaCtx, GenError>> {
-    if op.area.is_default() {
+    if !op.area.has_boundary_edits() {
         return None;
     }
     Some(build(world, op, tool_r, material, part_solid))
@@ -300,6 +300,29 @@ pub fn op_stamp(world: &World, op: &Operation, op_name: &str) -> Option<GenStamp
     if let Some(b) = model::stock_world_aabb_for(world, op.setup.as_deref()) {
         for v in [b.min.x, b.min.y, b.min.z, b.max.x, b.max.y, b.max.z] {
             w(&mut h, v);
+        }
+    }
+    if !a.do_not_touch.is_default() {
+        h.write(b"camcraft-do-not-touch-v1");
+        w(&mut h, a.do_not_touch.clearance);
+        h.write_usize(a.do_not_touch.picks.len());
+        for g in &a.do_not_touch.picks {
+            let (tag, id) = match g.feature {
+                FeatureSel::Face(id) => (0u8, id),
+                FeatureSel::Chain(id) => (1, id),
+                FeatureSel::Patch(id) => (2, id),
+                FeatureSel::Vertex(id) => (3, id),
+            };
+            h.write_u8(tag);
+            h.write_u64(id);
+            h.write_usize(g.entity.len());
+            h.write(g.entity.as_bytes());
+            let e = model::find_by_name(world, &g.entity)?;
+            let loc = crate::setup_align::pose_in(world, &e, op.setup.as_deref()).unwrap_or_default();
+            for v in [loc.pos.x, loc.pos.y, loc.pos.z, loc.rot[0], loc.rot[1], loc.rot[2], loc.rot[3]] {
+                h.write(&v.to_bits().to_le_bytes());
+            }
+            h.write_u64(model::geometry_signature(world, &e)?);
         }
     }
     Some(GenStamp(h.finish()))

@@ -36,6 +36,7 @@ capabilities = 1;          // reference contract: integer feature mask
 wireEdm = true;            // voices PARAM EdmCondition (the engine's door)
 afterModes = true;         // reads PARAM AfterOperation (M01 / M00; home refused)
 programUnits = "mm inch"; // #902: writes the document's unit (postOptions.Units), G21 / G20
+explains = "paren"; // #1389: explain ISO words only; machine EDM codes keep their own meanings
 
 // Determinism law: no timestamps, no randomness.
 
@@ -86,12 +87,16 @@ function trim(s) {
 }
 function fu(v) { return trim(Number(inch ? v / 25.4 : v).toFixed(inch ? 4 : 3)); }
 function wo(letter, v, o) { return has(v) ? letter + fu(v - o) : ""; }
-function block(words) {
+function block(words, machineCode) {
   var a = [];
   for (var i = 0; i < words.length; i++) {
     if (words[i] !== "" && words[i] !== null && words[i] !== undefined) a.push(words[i]);
   }
-  if (a.length > 0) writeln(a.join(" "));
+  if (a.length > 0) {
+    var line = a.join(" "), c = machineCode ? "" : explain(a);
+    if (c && line.length + 1 + c.length <= 80) line += " " + c;
+    writeln(line);
+  }
 }
 function msg(s) { if (typeof message === "function") message(s); else writeln("(" + s + ")"); }
 function refuse(key, s) {
@@ -164,6 +169,7 @@ function onOpen() {
   var e = (typeof machine !== "undefined" && machine && machine.edm) || {};
   if (e.tank) note("TANK " + clean(e.tank).toUpperCase() + " IS STATED BUT NOT PROGRAMMED - SET IT AT THE CONTROL");
   if (e.flushing) note("FLUSHING " + clean(e.flushing).toUpperCase() + " IS STATED BUT NOT PROGRAMMED - SET IT AT THE CONTROL");
+  if (e.skim_flushing) note("SKIM FLUSHING " + clean(e.skim_flushing).toUpperCase() + " IS STATED BUT NOT PROGRAMMED - SET IT AT THE CONTROL"); // #2686
   block([inch ? "G20" : "G21", "G90", "G17"]);
 }
 
@@ -267,13 +273,13 @@ function startCut(p) {
     return false;
   }
   block(["G0", wo("X", p.StartX, orgX), wo("Y", p.StartY, orgY)]);
-  if (awt) block([code("thread")]);
+  if (awt) block([code("thread")], true);
   else {
     note(openRun() ? "THREAD THE WIRE AT THE RUN-IN POINT OUTSIDE THE STOCK" : "THREAD THE WIRE AT THE START HOLE");
     block(["M00"]);
   }
-  block([code("condition").split("{id}").join(condition)]);
-  block([code("comp_off")]);
+  block([code("condition").split("{id}").join(condition)], true);
+  block([code("comp_off")], true);
   threaded = true;
   cutZ = has(p.StartZ) ? p.StartZ : null;
   return true;
@@ -290,8 +296,8 @@ function startSkim() {
   }
   skim++;
   note("SKIM " + skim);
-  block([code("condition").split("{id}").join(condition)]);
-  block([code("comp_off")]);
+  block([code("condition").split("{id}").join(condition)], true);
+  block([code("comp_off")], true);
   return true;
 }
 
@@ -338,11 +344,11 @@ function onLinear() {
       return;
     }
     if (ang !== 0 && !tapering) {
-      block([code("taper_on")]);
-      block([code("taper_angle").split("{angle}").join(trim(Number(ang).toFixed(3)))]);
+      block([code("taper_on")], true);
+      block([code("taper_angle").split("{angle}").join(trim(Number(ang).toFixed(3)))], true);
       tapering = true;
     } else if (ang === 0 && tapering) {
-      block([code("taper_off")]);
+      block([code("taper_off")], true);
       tapering = false;
     }
     block(["G1", wo("X", p.X, orgX), wo("Y", p.Y, orgY)]);
@@ -354,10 +360,10 @@ function onLinear() {
       return;
     }
     if (!tapering) {
-      block([code("taper_on")]);
+      block([code("taper_on")], true);
       tapering = true;
     }
-    block(["G1", wo("X", p.X, orgX), wo("Y", p.Y, orgY), code("uv").split("{u}").join(fu(w[0])).split("{v}").join(fu(w[1]))]);
+    block(["G1", wo("X", p.X, orgX), wo("Y", p.Y, orgY), code("uv").split("{u}").join(fu(w[0])).split("{v}").join(fu(w[1]))], true);
     return;
   }
   // No F word: the condition's generator sets the cutting rate.
@@ -393,11 +399,11 @@ function onCycle() {
 function onSectionEnd() {
   // The wire stands upright again (the lead-out's U0 V0) before the
   // taper is switched off.
-  if (tapering) block([code("taper_off")]);
+  if (tapering) block([code("taper_off")], true);
   if (threaded) {
     if (awt) {
-      block([code("cut")]);
-      block([code("tip_disposal")]);
+      block([code("cut")], true);
+      block([code("tip_disposal")], true);
     } else {
       note(openRun() ? "CUT THE WIRE AT THE RUN-OUT POINT" : "CUT THE WIRE");
       block(["M00"]);

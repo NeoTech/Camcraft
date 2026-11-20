@@ -69,6 +69,9 @@ fn setups_view(env: &Env) -> Vec<Value> {
                 "posts_with": crate::posting::post_ref_label(&crate::setup_mount::post_of(w, d)),
                 // #1031: the chuck's or collet's rated maximum rpm.
                 "workholding_max_rpm": s.as_deref().and_then(|n| crate::setup_workholding::of(w, Some(n))).map(fnum),
+                // #1862: what stands for the setup's model - a part, or the
+                // virtual reference of its placed DXF profiles (no solid).
+                "model_reference": super::sketch_tools::model_reference(env, d),
             })
         })
         .collect()
@@ -93,6 +96,8 @@ fn op_full(env: &Env, key: &str, e: &flecs_ecs::prelude::Entity, status: operati
         "warnings": warnings,
         "needs_review": needs_review,
         "params": op.as_ref().map(|o| project::params_to_json(&o.params)),
+        // #1862: an operation on a DXF profile says what it is checked against.
+        "checks_against": op.as_ref().and_then(|o| crate::sketch_model::checked_against(w, o)),
     })
 }
 
@@ -122,9 +127,17 @@ pub(super) fn get_job(env: &mut Env, _a: &Map<String, Value>) -> Result<Value, S
             if let Some(chord) = crate::model_fidelity::chord_of(w, e) {
                 m["reduced_fidelity"] = crate::mesh_open::facts(w, e, chord);
             }
+            // #1339: a mesh a person vouched for says who.
+            if let Some(by) = crate::model_vouch::by_of(w, e) {
+                m["fidelity_vouched"] = crate::model_vouch::facts(&by);
+            }
             // #1054: and one imported under a non-default STEP facet budget.
             if let Some(b) = crate::model_fidelity::budget_of(w, e) {
                 m["facet_budget"] = json!(b);
+            }
+            // #2463: a linked model names its source file and digest.
+            if let Some(s) = crate::model_source::of(w, e) {
+                m["source"] = json!({ "path": s.path, "sha256": s.sha256 });
             }
             m
         })
@@ -151,6 +164,8 @@ pub(super) fn get_job(env: &mut Env, _a: &Map<String, Value>) -> Result<Value, S
         "work_material": super::cutting_tools::material_view(env),
         "setups": setups_view(env),
         "models": models,
+        // #1862: DXF profiles placed on a setup's stock - not models.
+        "profiles": super::sketch_tools::profiles_view(env),
         "tools": tools,
         "operations": ops,
         "machine": machine_view(w),
@@ -236,7 +251,9 @@ pub(super) fn finding(op: &str, w: &Warning) -> Value {
         Warning::HolderHit { at, .. } => ("holder_hit", *at),
         Warning::SweepHit { at, .. } => ("sweep_hit", *at),
         Warning::RapidInStock { at } => ("rapid_in_stock", *at),
+        Warning::FirstTraverseLow { at, .. } => ("first_traverse_low", *at),
         Warning::FixtureHit { at, .. } => ("fixture_hit", *at),
+        Warning::AvoidHit { at, .. } => ("avoid_hit", *at),
         Warning::NonFinite { at } => ("non_finite", *at),
         Warning::Envelope { at, .. } => ("envelope", *at),
         Warning::RestUnjudged { at, .. } => ("rest_unjudged", *at),

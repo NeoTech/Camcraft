@@ -69,6 +69,7 @@ fn judge(t: &Toolpath, region: &Region, model: Option<&[Triangle]>) -> Vec<Warni
         fixtures: &[],
         spindle: None,
         rims: &[],
+        corner_reliefs: &[],
     };
     verify(t, &cx)
 }

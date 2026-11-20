@@ -23,7 +23,7 @@ pub struct Run {
     pub budget: usize,
     budget_note: Option<String>,
     pub(crate) log_dir: PathBuf,
-    clock: Instant,
+    pub(crate) clock: Instant,
     pub(crate) done: Vec<Done>,
     /// HEAD and the working tree when the gate started (#1201); every later reading is compared with it.
     pub(crate) guard: Reading,
@@ -287,6 +287,10 @@ impl Run {
             println!("  summed lane wall time {serial}s (serial estimate; not a serial benchmark)");
         }
         println!("  wall {mins:.1} min, {} step(s), {bad} failed", self.done.len());
+        if self.label == "light" {
+            let red: Vec<String> = self.done.iter().filter(|d| !d.ok).map(|d| d.name.clone()).collect();
+            crate::light::rerun_note(&red).iter().for_each(|l| println!("{l}"));
+        }
         if self.void.is_some() {
             println!("== gate VOID ({}) - the checkout moved during the run; no verdict, re-run on a checkout nobody pulls into", self.label);
             return 1;

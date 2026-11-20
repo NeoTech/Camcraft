@@ -22,7 +22,8 @@ use crate::setup;
 /// The landing half: a spawn or an update of the named model.
 enum Landing {
     Fresh(ImportModel),
-    Update(UpdateModel),
+    /// Boxed: an update also holds the facets and solids it replaced (#917).
+    Update(Box<UpdateModel>),
 }
 
 pub struct ImportFixture {
@@ -60,13 +61,14 @@ impl ImportFixture {
             crate::plate::mount::Unmounts::default()
         };
         let landing = match existing {
-            Some(_) => Landing::Update(
+            Some(_) => Landing::Update(Box::new(
                 UpdateModel::new(world, &name, import.mesh)?
                     .with_fidelity(import.coarse_mm)
                     .with_hole(import.hole.clone())
                     .with_budget(import.facet_budget)
-                    .with_step_source(import.step_source.clone()),
-            ),
+                    .with_step_source(import.step_source.clone())
+                    .with_source(import.source.clone()),
+            )),
             None => Landing::Fresh(import),
         };
         Ok(ImportFixture {

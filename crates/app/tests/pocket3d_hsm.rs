@@ -49,6 +49,7 @@ fn pocket_op(strategy: PocketStrategy) -> OpParams {
         optimal_load: camcraft_app::load::DEFAULT_OPTIMAL_LOAD,
         feed_opt: false,
         shell: false,
+        method: camcraft_app::machining2d::AdaptiveMethod::Spiral,
     }
 }
 
@@ -71,6 +72,11 @@ fn user_job(params: OpParams) -> (World, Toolpath, Vec<String>) {
     let mut h = History::default();
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/models/Milling-test.step");
     let imp = ImportModel::new(&path).expect("the user's STEP imports");
+    // PR #2904 replaces the truck mesh (952 facets) with solidcore's
+    // measured machining mesh. The level regions and fitted arcs use it.
+    if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+        assert_eq!(imp.mesh.facets.len(), 6228, "the mesh behind the Linux path pin");
+    }
     let name = imp.name.clone();
     h.execute(&world, imp);
     let loc = Location { pos: Point3::new(0.0, 0.0, -7.0), ..Default::default() };
@@ -94,6 +100,13 @@ fn the_users_bore_roughs_adaptive_level_by_level_and_verifies_clean() {
     assert!(warns.is_empty(), "every level verifies clean: {warns:?}\nnotes {:?}", path.notes);
     let planar = path.moves.iter().filter(|m| m.kind == MoveKind::Feed && m.from.z == m.to.z).count();
     assert!(planar > 0, "the ladder cuts");
+    let mut levels: Vec<f64> = path.moves.iter()
+        .filter(|m| m.kind == MoveKind::Feed && m.from.z == m.to.z)
+        .map(|m| m.to.z)
+        .collect();
+    levels.sort_by(f64::total_cmp);
+    levels.dedup();
+    assert_eq!(levels, [0.0, 5.0, 10.0, 15.0], "every intended level cuts; no stock-face air level");
     // The HSM plan's arcs ride the levels (or the level says why not).
     let arcs = path.moves.iter().filter(|m| m.arc.is_some() && m.from.z == m.to.z).count();
     let fell: Vec<&String> = path.notes.iter().filter(|n| n.contains("Offset rings cut the level at Z")).collect();
@@ -148,7 +161,7 @@ fn the_users_bore_roughs_adaptive_level_by_level_and_verifies_clean() {
 /// planned from the air, and every level keeps the HSM plan and verifies
 /// clean against the part solid.
 #[test]
-#[ignore = "heavy lane: issue #1950 blocked (maintainer decides), expected red: stock-ring plans exceed optimal load and fall back to Offset rings; HSM Adaptive over every whole-model level of the user's STEP, ring and bore, verified (~90 s debug, release tier); the level's debug twin is motion pocket_hsm::ring_tests::the_stock_ring_level_reaches_the_air_planner_with_the_stock"]
+#[ignore = "known-fail #1950 | pocket3d_hsm | the_users_whole_model_bore_roughs_adaptive_on_each_level | every level keeps the HSM plan"]
 fn the_users_whole_model_bore_roughs_adaptive_on_each_level() {
     let world = new_world();
     let mut h = History::default();
@@ -168,6 +181,7 @@ fn the_users_whole_model_bore_roughs_adaptive_on_each_level() {
     assert!(warns.is_empty(), "every level verifies clean: {warns:?}
 notes {:?}", tp.path.notes);
     let fell: Vec<&String> = tp.path.notes.iter().filter(|n| n.contains("Offset rings cut")).collect();
+    // known-fail-assert
     assert!(fell.is_empty(), "every level keeps the HSM plan: {fell:?}");
     assert!(tp.path.notes.iter().any(|n| n.contains("cut from the air")), "{:?}", tp.path.notes);
     assert!(!tp.path.notes.iter().any(|n| n.contains("planning budget")), "{:?}", tp.path.notes);
@@ -182,18 +196,39 @@ fn bore_path_matches(got: (usize, usize, usize)) -> bool {
         // #1402, main 5eeb0370e.
         got == (4716, 4688, 549)
     } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
-        // Issue #2004 (PR #2013): measured by the cut runner, release, run
-        // 44127297984 at a8bb30f0c; every level verifies clean, none falls
-        // back, and no planning budget is reached. Before: (16029, 15372,
-        // 1427), issue #882.
-        got == (4726, 4698, 549)
+        // PR #2904 (bac4a96c7) changes this fixture's mesh from 952 to
+        // 6228 facets at the same chord cap (decision #917). The fixture
+        // and HSM planner are unchanged; the new mesh changes the level
+        // regions and their proved arc fits. The old truck-mesh reading
+        // was (4726, 4698, 549). With solidcore, all four cutting levels
+        // still verify clean, with no fallback or planning-budget stop.
+        got == (3158, 3130, 1141)
+    } else if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+        // Issue #2371: measured in release on PR #2934 at 48071efd4 and
+        // unmodified main 61a817bed. Every level verifies clean, none
+        // falls back, and no planning budget is reached.
+        got == (3158, 3130, 1141)
     } else {
-        // Not measured here yet (macOS aarch64 included: its pin of issue
-        // #882, (16026, 15382, 1413), went stale with PR #2013, and issue
-        // #2371 owes its new triple). Measure this platform and add its
-        // exact triple above. Until then a band covering both measured ones.
+        // Not measured here yet. Measure this platform and add its exact
+        // triple above. Until then use the existing fallback band.
         let (moves, planar, arcs) = got;
         (4706..=4736).contains(&moves) && (4678..=4708).contains(&planar) && (539..=559).contains(&arcs)
+    }
+}
+
+#[test]
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+fn the_macos_arm64_bore_count_pin_is_exact() {
+    assert!(bore_path_matches((3158, 3130, 1141)));
+    for got in [
+        (3157, 3130, 1141),
+        (3159, 3130, 1141),
+        (3158, 3129, 1141),
+        (3158, 3131, 1141),
+        (3158, 3130, 1140),
+        (3158, 3130, 1142),
+    ] {
+        assert!(!bore_path_matches(got), "the count pin must reject {got:?}");
     }
 }
 

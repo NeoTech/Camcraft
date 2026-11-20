@@ -3,7 +3,7 @@
 use crate::machining2d::PocketStrategy;
 
 use crate::operation::types::params::OpParams;
-use crate::operation::types::sel::lead_sane;
+use crate::operation::types::sel::{lead_sane, FeatureSel};
 
 /// The refusal of pre-drilled entry on a kind that does not read it (#1449).
 pub const PREDRILLED_POCKET_ONLY: &str =
@@ -89,7 +89,15 @@ impl OpParams {
         match self {
             OpParams::SinkerBurn(p) => p.compensation_refusal(),
             OpParams::SinkerSideBurn(p) => p.refusal(),
-            OpParams::Adaptive2D { troch, .. } => troch.refusal(),
+            OpParams::Pocket { corner_relief, .. }
+            | OpParams::Offset2D { corner_relief, .. } => corner_relief.validate().err().map(|e| e.to_string()),
+            OpParams::Adaptive2D { method, troch, corner_relief, .. } => troch.refusal().or_else(|| {
+                if *method == crate::machining2d::AdaptiveMethod::Trochoidal && !corner_relief.is_off() {
+                    Some("corner relief is not available with the Trochoidal method - turn corner relief off or use Spiral".into())
+                } else {
+                    corner_relief.validate().err().map(|e| e.to_string())
+                }
+            }),
             _ => None,
         }
     }
@@ -236,6 +244,7 @@ impl OpParams {
                 helix_radius,
                 strategy,
                 optimal_load,
+                corner_relief,
                 ..
             } => {
                 // The entry family joined the planar pocket at M5.1 H,
@@ -258,6 +267,7 @@ impl OpParams {
                     && (optimal_load.is_finite()
                         && (!matches!(strategy, PocketStrategy::OffsetRings)
                             || crate::load::load_in_door(*optimal_load)))
+                    && corner_relief.validate().is_ok()
             }
             // The twins' doors are the pocket's, read with the
             // strategy already decided (M2.4 A): Adaptive's engagement
@@ -276,7 +286,9 @@ impl OpParams {
                 plunge_feed,
                 helix_radius,
                 optimal_load,
+                method,
                 troch,
+                corner_relief,
                 ..
             } => {
                 pos(*stepover)
@@ -291,6 +303,8 @@ impl OpParams {
                     && pos(*helix_radius)
                     && crate::load::load_in_door(*optimal_load)
                     && troch.is_sane()
+                    && corner_relief.validate().is_ok()
+                    && !(*method == crate::machining2d::AdaptiveMethod::Trochoidal && !corner_relief.is_off())
             }
             OpParams::Offset2D {
                 stepover,
@@ -303,6 +317,7 @@ impl OpParams {
                 feed,
                 plunge_feed,
                 helix_radius,
+                corner_relief,
                 ..
             } => {
                 pos(*stepover)
@@ -315,6 +330,7 @@ impl OpParams {
                     && pos(*feed)
                     && pos(*plunge_feed)
                     && pos(*helix_radius)
+                    && corner_relief.validate().is_ok()
             }
             // The engrave door (M2.4 B) is the trace's verbatim -
             // the twin law says the numbers are asked the same
@@ -495,6 +511,13 @@ impl OpParams {
                 bottom_z,
                 feed,
                 plunge_feed,
+                exclude_edges,
+                min_edge_angle_deg,
+                exclude_holes: _,
+                hole_min_diameter,
+                hole_max_diameter,
+                // #1889: the policy is an enum; each value is legal.
+                unreachable: _,
             } => {
                 pos(*width)
                     && clearance_z.is_sane()
@@ -502,6 +525,16 @@ impl OpParams {
                     && bottom_z.is_sane()
                     && pos(*feed)
                     && pos(*plunge_feed)
+                    // #1888: an exclusion is an edge chain; the angle
+                    // is a bend, 0 up to (not) 180; the hole range is
+                    // ordered and never negative, read or not.
+                    && exclude_edges.iter().all(|g| matches!(g.feature, FeatureSel::Chain(_)))
+                    && min_edge_angle_deg.is_finite()
+                    && (0.0..180.0).contains(min_edge_angle_deg)
+                    && hole_min_diameter.is_finite()
+                    && hole_max_diameter.is_finite()
+                    && *hole_min_diameter >= 0.0
+                    && hole_max_diameter >= hole_min_diameter
             }
             OpParams::Contour5D {
                 tolerance,

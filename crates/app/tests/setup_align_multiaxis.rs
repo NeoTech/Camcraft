@@ -451,12 +451,14 @@ fn all_ten_multiaxis_and_rotary_kinds_stay_refused_on_aligned_mill_turn() {
         assert!(gen_err.contains("not supported yet in an aligned setup on a mill-turn machine"), "{ty:?}: {gen_err}");
     }
 
-    // Mill still names all 27 verified kinds in its Mill-only refusal branch.
+    // Mill still names all 28 verified kinds in its Mill-only refusal
+    // branch (#2285 added Probe): the kind that gets there is one the
+    // mill cannot spin, carried by hand the way a corrupt file could.
     let (wm, _) = document(unturn_xz(cap_facets(true)), TURN, Case::Turned, &stock, true);
-    let probe = Operation {
-        tool: "PRB-0400".into(),
+    let wire = Operation {
+        tool: "EDM-W025".into(),
         src: SrcRef::Entity("part".into()),
-        params: seed_params(OpType::Probe.ordinal()),
+        params: seed_params(OpType::WireContour.ordinal()),
         stamp: None,
         setup: Some("Setup1".into()),
         area: AreaControls::default(),
@@ -464,6 +466,7 @@ fn all_ten_multiaxis_and_rotary_kinds_stay_refused_on_aligned_mill_turn() {
         after: AfterOperation::default(),
         suppressed: false,
     };
-    let mill_err = setup_align::generation_problem(&wm, &probe).expect("Probe refused on aligned mill");
+    let mill_err = setup_align::generation_problem(&wm, &wire).expect("a wireEDM kind is refused on an aligned mill");
     assert!(mill_err.contains("5-Axis Contour") && mill_err.contains("Multi-Axis Contour"), "{mill_err}");
+    assert!(mill_err.contains("Probe,"), "the verified list names Probe: {mill_err}");
 }

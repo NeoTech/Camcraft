@@ -60,6 +60,8 @@ const POSTS: &[(&str, &str, &str)] = &[
     ("Tormach PathPilot", "tormach", "tormach"),
     ("grblHAL", "grblhal", "grblhal"),
     ("TinyG", "tinyg", "tinyg"),
+    ("LinuxCNC", "linuxcnc", "linuxcnc"),
+    ("Grbl 1.1", "grbl", "grbl"),
     ("Doosan DNM", "doosan-dnm", "doosan-dnm"),
     ("Makera Carvera", "carvera", "carvera"),
     ("Mach4", "mach4", "mach4"),
@@ -104,6 +106,10 @@ const REFUSED: &[(&str, &str, &str)] = &[
     ("carvera", "tap_plate", "tapping"),
     ("grblhal", "tap_plate", "tapping"),
     ("tinyg", "tap_plate", "tapping"),
+    // #2303: the generic VMC states no spindle encoder (rigid_tapping),
+    // so LinuxCNC's G33.1 rigid tap is refused by name there.
+    ("linuxcnc", "tap_plate", "rigid tapping (G33.1)"),
+    ("grbl", "tap_plate", "tapping"),
 ];
 
 /// The TURNING dialects (M13.5): their goldens are the lathe
@@ -362,7 +368,7 @@ fn the_synthesized_stream_locks_the_tool_and_spindle_words() {
         // TinyG the same (its drill chains post as plain moves).
         let stream = match *cps_stem {
             "carvera" => synth_stream_with("G55", false),
-            "grblhal" | "tinyg" => synth_stream_with("G55", false),
+            "grblhal" | "tinyg" | "linuxcnc" | "grbl" => synth_stream_with("G55", false),
             _ => synth_stream(),
         };
         let cps = read(&format!("assets/posts/{cps_stem}.cps"));
@@ -458,6 +464,8 @@ const EXTENSIONS: &[(&str, &str)] = &[
     ("tormach", "nc"),
     ("grblhal", "nc"),
     ("tinyg", "gcode"),
+    ("linuxcnc", "ngc"),
+    ("grbl", "nc"),
     ("doosan-dnm", "nc"),
     ("carvera", "nc"),
     ("mach4", "nc"),

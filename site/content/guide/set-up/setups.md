@@ -106,7 +106,8 @@ a gouge; a later setup cannot erase it.
 
 The workspace button on the Setup group mounts a built-in machine for
 Milling, Turning or Mill-turning, and the ribbon shows only the operations
-that machine can run. CamCraft also ships machine files for several
+that machine can run. Mill-turning is a lathe with live tooling, not
+turning on a mill: see [Mill-turn](@/guide/check-and-post/machines.md#mill-turn). CamCraft also ships machine files for several
 Tormach mills, and **View > Panels > Machines** browses, validates and
 edits `.mch` machine files. The pane's kind filter offers **All** and every
 machine kind: Mill, Lathe, Mill-turn, Plasma, Waterjet, Wire EDM and Sinker

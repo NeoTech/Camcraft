@@ -63,6 +63,8 @@ icon_table! {
     Save => "device-floppy", "icon-save";
     /// The project's donation link: Tabler's heart outline (MIT).
     Donate => "heart", "icon-donate";
+    /// The start page (#2384): Tabler's home outline (MIT).
+    Home => "home", "icon-home";
     // The CamCraft actions and tree rows (#661 slice 2): original SVG
     // masters too - `act-*` for the actions, `tree-*` for the browser's
     // setup rows.
@@ -146,6 +148,8 @@ icon_table! {
     Fixture => "tree-fixture", "icon-fixture";
     /// The status strip's Debug info door (#157).
     DebugInfo => "act-debug-info", "icon-debug-info";
+    /// The status strip's Report door (#1696): the flag on its pole.
+    Report => "act-report", "icon-report";
     /// A setup: the setup sheet with its origin corner.
     Setup => "tree-setup", "icon-setup";
     /// The machine: column, head and spindle over the table.

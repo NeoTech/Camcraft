@@ -7,16 +7,20 @@
 //! Provenance: our own page law; the outlines are our own.
 
 use super::*;
-use egui_kittest::kittest::NodeT;
 use camcraft_app::cutter_fit::{self, Neck};
 
 const TOOL: &str = "EM-0600-4FL";
 
 /// The editor on the Profile tab, switched to Draw cutter.
 fn cutter_tab() -> Harness<'static, ShellUi> {
-    let mut harness = shell_harness();
+    // A tall shell: the Properties page and its Apply are on screen at
+    // once, so the test does not fight a scroll.
+    let mut harness = Harness::builder()
+        .with_size(egui::vec2(1280.0, 1400.0))
+        .build_ui_state(super::frame, ShellUi::seeded());
     harness.run();
-    crate::actions::open_tool_editor(&mut harness.state_mut().state, TOOL);
+    harness.state_mut().state.ui_target = UiTarget::Tool(TOOL.into());
+    crate::actions::open_tool_shape_editor(&mut harness.state_mut().state, TOOL);
     harness.run();
     harness.run();
     harness.get_by_label("Profile").click();
@@ -127,13 +131,9 @@ fn the_editors_apply_carries_a_landed_cutter_onto_new_numbers() {
     // drawn outline rides along.
     harness.state_mut().state.tool_ui.diameter = 7.0;
     harness.run();
-    // The editor window's own Apply (the dock has another).
-    harness
-        .query_all_by_role(egui::accesskit::Role::Window)
-        .find(|n| n.accesskit_node().label().as_deref() == Some("Tool: EM-0600-4FL"))
-        .expect("the editor window")
-        .get_by_label("Apply")
-        .click();
+    // #2397: the settings Apply is on the Properties page; the shape
+    // window has no Apply of its own.
+    harness.get_by_label("Apply").click();
     harness.run();
     harness.run();
     let st = &harness.state().state;

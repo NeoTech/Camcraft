@@ -42,7 +42,14 @@ pub(crate) fn menu_rows(state: &State, target: &TreeMenuTarget) -> Vec<(String, 
                 };
                 (label, CommandKind::TagFixture { name: name.clone(), setup })
             };
-            vec![("Fixture".to_owned(), None), (verb.0, Some(verb.1))]
+            let mut rows = vec![("Fixture".to_owned(), None), (verb.0, Some(verb.1))];
+            // #2463: a linked model offers Unlink.
+            if let Some(src) = camcraft_app::model_source::of(w, &e) {
+                let file = std::path::Path::new(&src.path).file_name().map_or(src.path.clone(), |f| f.to_string_lossy().into_owned());
+                rows.push(("Source".to_owned(), None));
+                rows.push((format!("Unlink from {file}"), Some(CommandKind::UnlinkModel(name.clone()))));
+            }
+            rows
         }
         TreeMenuTarget::Fixtures(s) => vec![
             ("Fixtures".to_owned(), None),

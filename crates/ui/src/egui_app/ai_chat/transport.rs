@@ -3,7 +3,9 @@
 
 #[cfg(test)]
 use std::io::Cursor;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
+#[cfg(target_arch = "wasm32")]
+use std::sync::atomic::Ordering;
 
 use camcraft_app::mcp::provider::{
     FallbackMode, Provider, is_read_only_tool, prompt_context, qa_context, tools,
@@ -86,9 +88,12 @@ pub(crate) trait ChatTransport: Send + Sync {
     ) -> Result<TransportOutput, String>;
 }
 
-/// Default offline-safe transport used until an HTTP endpoint transport (#1945) is wired.
+/// Offline-safe transport for the browser build, which links no sockets;
+/// native builds use `transport_http::HttpTransport` (#1945).
+#[cfg(target_arch = "wasm32")]
 pub(crate) struct DefaultTransport;
 
+#[cfg(target_arch = "wasm32")]
 impl ChatTransport for DefaultTransport {
     fn complete(
         &self,

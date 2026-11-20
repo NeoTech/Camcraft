@@ -116,6 +116,7 @@ fn adaptive_with(method: AdaptiveMethod, top: f64, troch: AdaptiveTrochParams) -
         optimal_load: camcraft_app::load::DEFAULT_OPTIMAL_LOAD,
         method,
         troch,
+        corner_relief: Default::default(),
     }
 }
 

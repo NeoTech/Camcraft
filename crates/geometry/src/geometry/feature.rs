@@ -554,14 +554,14 @@ pub fn features_of_facets(facets: &[Triangle]) -> Features {
 pub fn digest_of(facets: &[Triangle]) -> u64 {
     let mut digs: Vec<u64> = Vec::with_capacity(facets.len());
     for tri in facets {
-        let mut corners: Vec<Option<Pos>> = vec![
+        let mut corners: [Option<Pos>; 3] = [
             weld_pos(&[tri.a.x, tri.a.y, tri.a.z]),
             weld_pos(&[tri.b.x, tri.b.y, tri.b.z]),
             weld_pos(&[tri.c.x, tri.c.y, tri.c.z]),
         ];
-        corners.sort_by_key(|c| *c); // None first, then lattice order
+        corners.sort_unstable(); // None first, then lattice order
         let mut h = DefaultHasher::new();
-        corners.hash(&mut h);
+        corners.as_slice().hash(&mut h);
         digs.push(h.finish());
     }
     digs.sort_unstable();
@@ -1026,9 +1026,10 @@ pub struct PatchRing {
 /// so facet and group order cannot move anything.
 #[must_use]
 pub fn patches(features: &Features) -> Vec<Patch> {
+    let (lattice, flat) = patch_lattice(features);
     let mut out: Vec<Patch> = Vec::new();
     for g in patch_groups(features) {
-        let (id, _) = patch_identity(features, &g);
+        let (id, _) = patch_identity_with_lattice(features, &g, &lattice, &flat);
         let mut faces: Vec<FaceId> = g.iter().map(|f| f.id).collect();
         faces.sort_unstable();
         out.push(Patch { id, faces });
@@ -1042,13 +1043,20 @@ pub fn patches(features: &Features) -> Vec<Patch> {
 /// the pick - the caller says "re-pick", it never guesses a successor).
 #[must_use]
 pub fn patch_rings(features: &Features, id: PatchId) -> Option<Vec<PatchRing>> {
+    let (lattice, flat) = patch_lattice(features);
     for g in patch_groups(features) {
-        let (pid, rings) = patch_identity(features, &g);
+        let (pid, rings) = patch_identity_with_lattice(features, &g, &lattice, &flat);
         if pid == id {
             return Some(rings);
         }
     }
     None
+}
+
+fn patch_lattice(features: &Features) -> (Vec<Option<Pos>>, Vec<Pos>) {
+    let lattice: Vec<Option<Pos>> = features.verts.iter().map(weld_pos).collect();
+    let flat: Vec<Pos> = lattice.iter().filter_map(|p| *p).collect();
+    (lattice, flat)
 }
 
 /// Faces grouped by their shared pre-split patch root, keeping only the
@@ -1075,11 +1083,15 @@ fn patch_groups(features: &Features) -> Vec<Vec<&Face>> {
 /// signatures. Total on any input: a vertex too extreme to return to the
 /// lattice skips the segment fold and contributes raw bits instead -
 /// still deterministic, never a panic.
-fn patch_identity(features: &Features, g: &[&Face]) -> (PatchId, Vec<PatchRing>) {
+fn patch_identity_with_lattice(
+    features: &Features,
+    g: &[&Face],
+    lattice: &[Option<Pos>],
+    flat: &[Pos],
+) -> (PatchId, Vec<PatchRing>) {
     let rings = patch_boundary(g);
     let mut h = DefaultHasher::new();
     h.write_u8(b'P');
-    let lattice: Vec<Option<Pos>> = features.verts.iter().map(weld_pos).collect();
     let mut segs: Vec<(Pos, Pos)> = Vec::new();
     let mut flags: Vec<u8> = Vec::new();
     for r in &rings {
@@ -1089,8 +1101,7 @@ fn patch_identity(features: &Features, g: &[&Face]) -> (PatchId, Vec<PatchRing>)
                 .iter()
                 .all(|&v| lattice.get(v as usize).is_some_and(|p| p.is_some()))
         {
-            let flat: Vec<Pos> = lattice.iter().filter_map(|p| *p).collect();
-            ring_segments(&r.verts, &flat, r.closed, &mut segs);
+            ring_segments(&r.verts, flat, r.closed, &mut segs);
         } else {
             for &v in &r.verts {
                 if let Some(p) = features.verts.get(v as usize) {

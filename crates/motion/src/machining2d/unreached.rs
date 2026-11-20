@@ -15,7 +15,7 @@
 //! geometry text) applied to each connected piece apart. No vendor
 //! material consulted.
 
-use crate::geo2d::Region;
+use crate::geo2d::{Loop, Region};
 use crate::units::{self, Unit};
 
 use super::GenError;
@@ -32,15 +32,24 @@ const SLIVER_HALF_WIDTH: f64 = 5e-3;
 /// circular-arc approximation noise, not uncut sharp-corner stock.
 const CORNER_HALF_WIDTH: f64 = 0.03;
 
+/// One fill region for each outer (positive-area) loop. A boolean result
+/// can keep a loop that touches or crosses itself at a micron-wide cusp
+/// (#2849: the leftover of a fine bore beside a stock corner). That loop
+/// is boolean output, not sketch input, so it takes the even-odd reading
+/// of `Region::from_slices` instead of the self-crossing refusal of
+/// `Region::new`; a simple loop gives the same single path either way.
+fn outer_fills(loops: &[Loop]) -> Result<Vec<Region>, GenError> {
+    let mut fills = Vec::new();
+    for l in loops.iter().filter(|l| l.area() > 0.0) {
+        fills.push(Region::from_slices(vec![l.clone()])?);
+    }
+    Ok(fills)
+}
+
 /// Connected material pieces of `region` (each outer loop less any nested
 /// outer loops), dropping narrow tessellation/offset slivers.
 fn connected_pieces(region: &Region) -> Result<Vec<Region>, GenError> {
-    let outers: Vec<Region> = region
-        .loops()
-        .iter()
-        .filter(|l| l.area() > 0.0)
-        .map(|l| Region::new(vec![l.clone()]))
-        .collect::<Result<_, _>>()?;
+    let outers = outer_fills(region.loops())?;
     let mut out = Vec::new();
     for (i, fill) in outers.iter().enumerate() {
         let mut piece = region.intersect(fill)?;
@@ -188,7 +197,7 @@ pub fn unreached_corner_note(
 #[cfg(test)]
 mod law {
     use super::*;
-    use crate::geo2d::{Loop, Point2};
+    use crate::geo2d::Point2;
 
     fn square(x0: f64, y0: f64, x1: f64, y1: f64) -> Loop {
         Loop::new(vec![Point2::new(x0, y0), Point2::new(x1, y0), Point2::new(x1, y1), Point2::new(x0, y1)])
@@ -257,6 +266,36 @@ mod law {
 
         let band = Region::new(vec![square(0.0, 0.0, 50.0, 50.0), square(5.0, 5.0, 45.0, 45.0)]).expect("band");
         assert!(unreached_corners(&band, 6.0, None).expect("band").is_empty());
+    }
+
+    #[test]
+    fn a_micron_bow_tie_cusp_gives_its_lobes_and_no_error() {
+        // A lopsided bow-tie 0.4 mm long and 2 microns high, the size of
+        // the cusp a fine bore leaves beside a stock corner (#2849). Edge
+        // 1-2 crosses edge 3-0 at X 0.0923; the net signed area is
+        // positive, so the loop counts as an outer loop.
+        let bow = Loop::new(vec![
+            Point2::new(0.0, 0.0),
+            Point2::new(0.0, 0.0006),
+            Point2::new(0.4, 0.0),
+            Point2::new(0.4, 0.002),
+        ])
+        .expect("bow-tie");
+        assert!(bow.area() > 0.0, "{}", bow.area());
+        assert!(Region::new(vec![bow.clone()]).is_err(), "the sketch reading refuses it");
+        let fills = outer_fills(std::slice::from_ref(&bow)).expect("no error for a boolean cusp");
+        assert_eq!(fills.len(), 1);
+        // Both lobes: 0.5 * 0.0006 * 0.0923 + 0.5 * 0.002 * 0.3077.
+        let lobes = 0.5 * 0.0006 * (0.0006 / 0.0065) + 0.5 * 0.002 * (0.4 - 0.0006 / 0.0065);
+        assert!((fills[0].area() - lobes).abs() < 1e-7, "{} vs {lobes}", fills[0].area());
+        assert_eq!(fills[0].loops().len(), 2, "two lobes");
+        // A simple loop gives the same fill as the sketch reading.
+        let sq = square(0.0, 0.0, 10.0, 10.0);
+        let same = outer_fills(std::slice::from_ref(&sq)).expect("square");
+        let sketch = Region::new(vec![sq]).expect("square");
+        assert_eq!(same.len(), 1);
+        assert!(same[0].difference(&sketch).expect("diff").is_empty());
+        assert!(sketch.difference(&same[0]).expect("diff").is_empty());
     }
 
     #[test]

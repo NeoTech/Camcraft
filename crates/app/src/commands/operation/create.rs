@@ -84,7 +84,7 @@ impl CreateOperation {
         // exactly. With no setups the name is `None`: the implicit-setup
         // law makes that the first/legacy context byte-identically.
         let setup = crate::setup::active(world);
-        valid_src(world, setup.as_deref(), &src)?;
+        valid_src(world, setup.as_deref(), &src, &params)?;
         // #1504: a Slot created on picks takes the slot that fills them.
         let params = match &src {
             SrcRef::Selection(items) => crate::operation::slot_from_picks(world, setup.as_deref(), &params, items).unwrap_or(params),
@@ -94,8 +94,9 @@ impl CreateOperation {
         if let Some(why) = params.named_refusal() {
             return Err(CommandError::Invalid(why));
         }
-        // #1445: a dwell that is not a time from 0 to the bound, by name.
-        if let Some(why) = params.dwell_refusal() {
+        // #1445: a dwell that is not a time from 0 to the bound, or a fine
+        // bore with no usable shift, by name.
+        if let Some(why) = params.dwell_refusal().or_else(|| params.fine_bore_refusal()) {
             return Err(CommandError::Invalid(why));
         }
         sinker_gate(world, setup.as_deref(), &params)?;
@@ -189,7 +190,7 @@ impl PasteOperation {
         }
         let context = operation.setup.as_deref();
         tool_door(world, &operation.params, &operation.tool)?;
-        valid_src(world, context, &operation.src)?;
+        valid_src(world, context, &operation.src, &operation.params)?;
         infeed_plan_gate(world, &operation.params, &operation.tool)?;
         sinker_gate(world, context, &operation.params)?;
         if let Some(why) = operation.params.named_refusal() {

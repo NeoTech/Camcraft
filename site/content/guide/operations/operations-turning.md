@@ -9,8 +9,21 @@ This page is the reference for the kinds in the **Turning** group of the
 [operations](@/guide/operations/_index.md) ribbon: Facing, Profile Rough,
 Profile Finish, Groove Rough, Groove Finish, Part, Threading, Chamfer,
 Taper, Multi-Pass, Form and Bore. The ribbon shows them on a lathe or
-mill-turn document. For the tabs themselves, see that page; for what a
+mill-turn (live tooling) document. For the tabs themselves, see that page; for what a
 refusal means in general, see [Reading a refusal](@/guide/reference/refusals.md).
+
+> **Two meanings of "mill-turn".**
+>
+> - **Mill-turn (live tooling)**: a lathe, or a multitasking turning
+>   centre, that also mills with driven tools in its turret, usually with
+>   a C axis and sometimes a Y axis. This is the machine kind that
+>   CamCraft calls **Mill-turn**: the built-in `millturn.mch`
+>   (Multitasking 5-axis) and the **Mill-turning** tab on the ribbon.
+> - **Turning on a mill**: a mill used as a lathe. The part turns in the
+>   mill spindle, the lathe tools stand on the table, and each tool has
+>   its own work offset. CamCraft does not support this yet (#2580).
+>
+> In this guide, "mill-turn" always means the live-tooling kind.
 
 Lengths are in mm (inches in an inch document), feeds in mm/min (in/min).
 The defaults below are what a freshly created operation starts with:

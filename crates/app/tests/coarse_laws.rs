@@ -122,7 +122,7 @@ fn fidelity_lines(world: &World) -> Vec<String> {
 }
 
 fn refusal(op: &str, mm: &str) -> String {
-    format!("{op}: model 'bar' was imported too coarsely to verify; re-import with a larger STEP facet budget (surfaces are approximated to within {mm} mm)")
+    format!("{op}: model 'bar' was imported too coarsely to verify; re-import with a larger STEP facet budget, or export the file again with a tighter tolerance (surfaces are approximated to within {mm} mm)")
 }
 
 fn groove_finish(tolerance: f64) -> OpParams {

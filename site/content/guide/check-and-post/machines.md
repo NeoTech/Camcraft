@@ -1,6 +1,6 @@
 +++
 title = "Machine types"
-description = "Mill, router, lathe, mill-turn, plasma and EDM: what each allows and how it changes setups and posting."
+description = "Mill, router, lathe, mill-turn (live tooling), plasma and EDM: what each allows and how it changes setups and posting."
 weight = 3
 aliases = ["guide/machines/"]
 +++
@@ -19,7 +19,7 @@ messages below.
 |---|---|---|---|
 | Mill | Milling 2D, Milling 3D, Drilling, Multi-axis | every milling post | VMC 3-axis, Tilt-head 5-axis, Tormach, Carvera |
 | Lathe | Turning, plus the axial Drill | Fanuc Lathe, Tormach PathPilot Lathe | Turning center 2-axis, Tormach 8L, 15L, 15LX |
-| Mill-turn | milling and turning | every post except plasma | Multitasking 5-axis |
+| Mill-turn (live tooling) | milling and turning | every post except plasma | Multitasking 5-axis |
 | Plasma | Plasma Profile only | Tormach PathPilot Plasma | Tormach 1300PL |
 | Wire / sinker EDM | Wire Contour (wire EDM); Sinker Burn, Side Burn (sinker EDM) | Generic ISO Wire EDM, Sodick Wire EDM (Mark 21); Sinker EDM (ISO) | Sodick ALC400G (complete its EDM data); supply a sinker machine file |
 
@@ -57,6 +57,9 @@ rotary letters and angles.
 Posts: Fanuc (the default), Haas, Siemens 840D, Heidenhain, Mazak,
 Tormach PathPilot, Doosan DNM and Makera Carvera. Machine files:
 `3axis-vmc`, `vmc`, `tilthead`, the Carvera pair and the Tormach mills.
+To exchange tool tables with Tormach PathPilot (`.csv`) or Hurco WinMax
+(`.TCM`), see
+[Machine tool tables](@/guide/set-up/tools.md#machine-tool-tables-tormach-pathpilot-and-hurco-winmax).
 **Doosan DNM 5700** is the 3-axis machine; **Doosan DNM 5700 + rotary
 table** is the separate rotary configuration. Pick the one that matches
 your installed hardware.
@@ -128,6 +131,19 @@ on a lathe setup).
 
 ## Mill-turn
 
+> **Two meanings of "mill-turn".**
+>
+> - **Mill-turn (live tooling)**: a lathe, or a multitasking turning
+>   centre, that also mills with driven tools in its turret, usually with
+>   a C axis and sometimes a Y axis. This is the machine kind that
+>   CamCraft calls **Mill-turn**: the built-in `millturn.mch`
+>   (Multitasking 5-axis) and the **Mill-turning** tab on the ribbon.
+> - **Turning on a mill**: a mill used as a lathe. The part turns in the
+>   mill spindle, the lathe tools stand on the table, and each tool has
+>   its own work offset. CamCraft does not support this yet (#2580).
+>
+> In this guide, "mill-turn" always means the live-tooling kind.
+
 Both families are admitted: turning on the work spindle and milling with
 live tooling on the tool spindle (the C axis). Its posts are every post
 except plasma. For a live-tool move the machine's C rate is what is judged,
@@ -157,7 +173,7 @@ plasma machine file that states a spindle or a rotary is refused. Z is the
 torch lifter, owned by the control (pierce and cut height), so Z depth and
 Z travel are skipped with a named note. XY travel, XY feed and the changer
 count are checked. Only the Plasma Profile operation exists, and it is
-admitted on a plasma table only (not on a mill-turn). A spindle word, a
+admitted on a plasma table only (not on a mill-turn machine). A spindle word, a
 tilted or a turned move is refused, and the plasma laws (cut order,
 crossing, kerf, tip-up) run at the post gate. The 3D stock simulation does
 not run for a torch.

@@ -37,7 +37,7 @@ use crate::cl::{MoveKind, PathBuilder, Toolpath};
 use crate::entry::Entry3D;
 use crate::geo2d::{Loop, Point2, Region};
 use crate::geometry::Point3;
-use crate::links::Links;
+use crate::links::{Link, Links};
 use crate::ring_zig::MIN_ARC_CHORD;
 
 use super::arcs::{ARC_FIT_TOL, Seg};
@@ -248,7 +248,21 @@ pub fn circular(_region: &Region, p: &CircularParams) -> Result<Toolpath, GenErr
             .with_entry(p.entry, p.helix_radius)
             .with_arc_radius(p.tool_diameter);
     }
-    let motion = motion.with_arc_radius(p.tool_diameter).with_links(p.links, p.helix_radius).with_top(p.links.approach.entry_top(p.top_z)).with_ring_zig();
+    let mut links = p.links;
+    if p.entry == Entry3D::Ramp {
+        // #1807: start just above the remaining material, including stock
+        // carried over Top Z; retain a smaller configured entry gap.
+        links.approach.plunge_height = links.approach.plunge_height.min(0.1);
+        if links.level == Link::Clearance
+            && links.arm(p.entry) == Entry3D::Ramp
+            && !links.approach.ramp_to_depth
+        {
+            // A closed ring ends at its next ramp start. Reuse the proved
+            // keep-down link; each new ring still enters from clearance.
+            links.level = Link::KeepDown;
+        }
+    }
+    let motion = motion.with_arc_radius(p.tool_diameter).with_links(links, p.helix_radius).with_top(links.approach.entry_top(p.top_z)).with_ring_zig();
     let cert = center_region.as_ref().map(Cert::Region);
 
     let mut b = PathBuilder::approached(Point3::new(0.0, 0.0, p.clearance_z));

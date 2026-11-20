@@ -71,8 +71,17 @@ fn patched(base: &OpParams, patch: &Value) -> Result<OpParams, String> {
     }
     let mut tagged = Map::new();
     tagged.insert(key.clone(), Value::Object(fields));
-    let next = project::params_from_json(&Value::Object(tagged))
-        .map_err(|e| format!("bad params patch: {e}"))?;
+    let tagged = Value::Object(tagged);
+    let next = project::params_from_json(&tagged).map_err(|e| {
+        let mut context = Vec::new();
+        if e.contains("expected map with a single key") {
+            merged_key_context(&Value::Object(fields_of(base)), &tagged[&key], "", &mut context);
+        }
+        let detail = if context.is_empty() { String::new() } else {
+            format!("; merged object keys: {}; use null to remove unwanted keys before changing shape", context.join("; "))
+        };
+        format!("bad params patch: {e}{detail}")
+    })?;
     let Value::Object(back) = project::params_to_json(&next) else {
         return Err("the patched parameters could not be read back".into());
     };
@@ -82,12 +91,31 @@ fn patched(base: &OpParams, patch: &Value) -> Result<OpParams, String> {
     for (k, v) in patch {
         if *v == Value::Bool(false) && !back.contains_key(k) && flag_kept(&key, &fields_of(base), k) {
             back.insert(k.clone(), Value::Bool(false));
+        } else if k == "corner_relief" && !back.contains_key(k) && corner_relief_kept(&key, &fields_of(base)) {
+            back.insert(k.clone(), v.clone());
         }
     }
     if let Some(path) = lost(patch, &back, "") {
         return Err(format!("bad params patch: unknown field {path} - a {key} operation has no field \"{path}\"; see list_operation_types"));
     }
     Ok(next)
+}
+
+/// Context for a failed enum parse: merge patch can retain a former tag.
+/// These are merged keys, not a claim that every singleton object is an enum.
+fn merged_key_context(base: &Value, merged: &Value, path: &str, out: &mut Vec<String>) {
+    let (Some(base), Some(merged)) = (base.as_object(), merged.as_object()) else {
+        return;
+    };
+    for (key, value) in merged {
+        if let Some(old) = base.get(key) {
+            let child = if path.is_empty() { key.clone() } else { format!("{path}.{key}") };
+            merged_key_context(old, value, &child, out);
+        }
+    }
+    if !path.is_empty() && base.len() == 1 && merged.len() > 1 && base.keys().all(|k| merged.contains_key(k)) {
+        out.push(format!("{path}: {}", merged.keys().cloned().collect::<Vec<_>>().join(", ")));
+    }
 }
 
 /// The kind's field object of `p`, without its tag.
@@ -111,6 +139,16 @@ fn flag_kept(key: &str, fields: &Map<String, Value>, k: &str) -> bool {
     tagged.insert(key.to_owned(), Value::Object(probe));
     project::params_from_json(&Value::Object(tagged))
         .map(|p| fields_of(&p).get(k) == Some(&Value::Bool(true)))
+        .unwrap_or(false)
+}
+
+fn corner_relief_kept(key: &str, fields: &Map<String, Value>) -> bool {
+    let mut probe = fields.clone();
+    probe.insert("corner_relief".into(), serde_json::json!({ "kind": "dogbone" }));
+    let mut tagged = Map::new();
+    tagged.insert(key.to_owned(), Value::Object(probe));
+    project::params_from_json(&Value::Object(tagged))
+        .map(|p| fields_of(&p).contains_key("corner_relief"))
         .unwrap_or(false)
 }
 
@@ -171,7 +209,15 @@ pub(super) fn add_tool(env: &mut Env, a: &Map<String, Value>) -> Result<Value, S
                 .ok_or_else(|| format!("no catalog tool named '{c}' - see list_tool_catalog"))?;
             (Some(c.to_owned()), t)
         }
-        (None, Some(d)) => (None, project::tool_from_json(d).map_err(|e| format!("bad tool definition: {e}"))?),
+        (None, Some(d)) => {
+            // #2016: a definition's own holder reference (a tool library
+            // file's shape) is not read here; dropping it would land the
+            // tool with another holder, so it is refused by name.
+            if d.get("holder").is_some_and(|h| !h.is_null()) {
+                return Err("bad tool definition: its \"holder\" reference is not read by add_tool - name the library holder in add_tool's own \"holder\" (set_tool_holder sets the gauge length and projection)".into());
+            }
+            (None, project::tool_from_json(d).map_err(|e| format!("bad tool definition: {e}"))?)
+        }
         _ => return Err("give exactly one of \"catalog\" or \"definition\"".into()),
     };
     let name = match opt_str(a, "name")? {

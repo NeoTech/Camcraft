@@ -201,6 +201,7 @@ fn the_controls_round_trip_and_are_absent_from_the_file_at_their_default() {
             ExtraBoundary { mode: BoundaryMode::Include, shape: BoundaryShape::Silhouette },
         ],
         open: Some(OpenBoundary { picks: pick("part", north), side: ChainSide::Outside }),
+        ..Default::default()
     };
     let e = model::find_by_name(&world, "P").expect("op");
     let params = model::operation_of(&world, &e).expect("op").params;

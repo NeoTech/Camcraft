@@ -293,6 +293,25 @@ pub fn post_ref_label(post: &PostRef) -> String {
     }
 }
 
+/// The path of the post script a reference runs: for a shipped built-in or
+/// named registry entry, `posting::builtin_post_path` resolves the shipped
+/// `assets/posts/<name>.cps` (issue #2292 shows it in the post section
+/// beside the name). A user file already names itself through
+/// [`post_ref_label`], so it gets no extra row. Nothing for a registry
+/// entry that is gone, since `script_source` refuses it anyway.
+#[must_use]
+pub fn post_path(post: &PostRef) -> Option<String> {
+    let shipped = |name: &str| -> Option<String> {
+        builtin_post_path(name)
+            .map(|p| p.to_string_lossy().to_string())
+    };
+    match post {
+        PostRef::Builtin => BUILTINS.first().and_then(|(name, _)| shipped(name)),
+        PostRef::Named(name) => BUILTINS.iter().find(|(n, _)| *n == name).and_then(|_| shipped(name)),
+        PostRef::File(_) => None,
+    }
+}
+
 /// The script source this document posts with: (label, text). A
 /// `File` post whose text cannot be read, or a `Named` post missing
 /// from the registry, is a refusal naming what is gone - never a
@@ -947,6 +966,8 @@ pub fn verification_report_by(world: &World, voice: &dyn Fn(Option<&str>) -> pos
     // The limit check (M2.3 D), each op against the machine its own
     // setup mounts (#388): one block per machine, the program's order.
     problems.extend(mounts::machine_problems(world));
+    // #2598: a Drill or Thread op feeding above its tool's stated feed.
+    problems.extend(crate::operation::feed_rating::problems(world));
     // #804: before a work-turning A indexes, the retracted tool tip
     // clears what the stock, parts and turning fixtures sweep about it.
     problems.extend(index_swing::index_swing_problems(world));
@@ -976,6 +997,7 @@ pub fn verification_report_by(world: &World, voice: &dyn Fn(Option<&str>) -> pos
     // what came after it). The law and lines live in
     // `operation::probe_problems`.
     problems.extend(crate::operation::probe_problems(world));
+    problems.extend(crate::operation::avoid::live_avoid_problems(world));
     let plasma_line = match (plasma.line, wire.line) {
         (Some(p), Some(w)) => Some(format!("{p}; {w}")),
         (p, w) => p.or(w),
@@ -1132,10 +1154,11 @@ pub fn op_streams(world: &World) -> Result<Vec<(String, Vec<cnc::Record>)>, Stri
 pub(crate) fn op_streams_by(world: &World, by_post: bool) -> Result<Vec<(String, Vec<cnc::Record>)>, String> {
     let ops = program_ops(world)?;
 
-    // The T../H.. law (#221): a tool's own number when it has one, else
-    // its 1-based position among the named tools in document order - and
-    // two tools of one machine posting the same number refuse by name.
-    let tool_numbers = crate::tool_numbers::numbers(world);
+    // The T../H.. law (#221): a tool's own number (#2442: every file and
+    // command gives one; a fixture without one takes the lowest free number,
+    // and none free refuses by name, #2517) - and two tools of one machine
+    // posting the same number refuse by name.
+    let tool_numbers = crate::tool_numbers::numbers(world)?;
     // Judged per machine (#438): two machines are two tool tables.
     if let Some(msg) = crate::tool_numbers::clash_per_machine(world, &ops) {
         return Err(msg);

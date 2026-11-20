@@ -28,6 +28,7 @@ mod coolant_tools;
 // #93 slice 2: a milling tool's drawn cutter outline.
 mod cutter_tools;
 mod cutting_tools;
+mod do_not_touch;
 mod edit;
 mod features;
 mod fixture_profile_tools;
@@ -39,6 +40,8 @@ mod job;
 mod listen;
 mod live;
 mod model_tools;
+// #1862: DXF profiles placed on a setup's stock.
+mod sketch_tools;
 // #45: an operation's display name and its place in its setup.
 mod machine_tools;
 mod order_tools;
@@ -68,7 +71,12 @@ mod tool_number_tools;
 mod wcs_tools;
 // #1720: a setup's WCS flipped axes.
 mod wcs_flip_tools;
+// #2463: link a model to its source file, or unlink it.
+mod model_link_tools;
+// #1339: vouch for a mesh of unknown fidelity.
+mod vouch_tools;
 mod rotary_tools;
+mod thread_infeed_tools;
 mod workholding_tools;
 
 // #183: the same tool table served live from inside the GUI, over a
