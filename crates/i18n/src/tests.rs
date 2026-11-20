@@ -12,6 +12,14 @@ fn the_shipped_chinese_catalogue_reads_clean() {
 }
 
 #[test]
+fn the_source_language_has_nothing_to_report() {
+    // English installs no catalogue; that is the design, not a refusal, so
+    // startup must not warn about it.
+    assert_eq!(report(Lang::En), Ok(0));
+    assert!(report(Lang::ZhCn).expect("the shipped catalogue loads") > 300);
+}
+
+#[test]
 fn english_is_the_source_and_a_miss_is_the_english_string() {
     assert_eq!(tr_in(Lang::En, "Save"), "Save");
     assert_eq!(tr_in(Lang::En, "not a key at all"), "not a key at all");

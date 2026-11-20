@@ -402,9 +402,13 @@ pub fn run(args: &[String]) -> i32 {
         }
     }
     let lang = camcraft_i18n::init_from_env();
-    match camcraft_i18n::report(lang) {
-        Ok(n) => diag_info!("i18n: {} catalogue, {n} strings", lang.catalog_name()),
-        Err(why) => diag_warn!("i18n: {} catalogue refused: {why:?}", lang.catalog_name()),
+    // English is the source and ships no catalogue: saying nothing is the
+    // diagnostic. A translated language reports its size, or why it refused.
+    if !lang.is_source() {
+        match camcraft_i18n::report(lang) {
+            Ok(n) => diag_info!("i18n: {} catalogue, {n} strings", lang.catalog_name()),
+            Err(why) => diag_warn!("i18n: {} catalogue refused: {why:?}", lang.catalog_name()),
+        }
     }
 
     // M4.2: the backend pick is validated before anything opens - a bad

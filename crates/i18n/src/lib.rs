@@ -200,6 +200,11 @@ pub fn shipped(lang: Lang) -> Option<&'static Catalog> {
 /// holds none. Startup prints this once (the diag seam) and the crate's test
 /// refuses a file with any `Err`.
 pub fn report(lang: Lang) -> Result<usize, Vec<String>> {
+    // The source language has no catalogue by design; starting in English is
+    // not a refusal and must not read like one.
+    if lang.is_source() {
+        return Ok(0);
+    }
     match catalog(lang) {
         Ok(c) => {
             let mut refused = c.refused().to_vec();
