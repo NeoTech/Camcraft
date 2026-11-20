@@ -45,6 +45,17 @@ impl State {
             Some(why) => notes.push(format!("colour vision {} not restored: {why}", stored.color_vision.label())),
             None => color_vision_set(&self.world, stored.color_vision),
         }
+        // #853: the pinned language applies before the first frame, unless
+        // CAMCRAFT_LANG named one for this run (an explicit override wins).
+        if !camcraft_i18n::env_override()
+            && let Some(tag) = &stored.language
+        {
+            match camcraft_i18n::Lang::from_tag(tag) {
+                Some(l) if camcraft_i18n::set_lang(l) == l => self.language = Some(l),
+                Some(_) => notes.push(format!("language '{tag}' could not load - following the system locale")),
+                None => notes.push(format!("language '{tag}' is not one this build speaks - following the system locale")),
+            }
+        }
         if !notes.is_empty() {
             self.status = notes.join("; ");
         }
@@ -66,10 +77,25 @@ impl State {
             // #1873: no control sets this path yet (#1876), so a save keeps
             // the path that the file states.
             cadmpeg_path: prefs::load(path).0.cadmpeg_path,
+            language: self.language.map(|l| l.tag().to_owned()),
         };
         // The refusal is logged where it happens (app::prefs::save); the
         // choice in force stays right for this session either way.
         let _ = prefs::save(path, &now);
+    }
+
+    /// Choose the interface language (#853): `None` follows the system
+    /// locale. The pick is the person's, so it is written to the preferences
+    /// file at once and never touches the undo history; the surface reinstalls
+    /// the font and repaints, and every label is looked up again next frame.
+    pub(crate) fn select_language(&mut self, next: Option<camcraft_i18n::Lang>) {
+        let wanted = next.unwrap_or_else(camcraft_i18n::system_lang);
+        let in_force = camcraft_i18n::set_lang(wanted);
+        self.language = next;
+        self.persist_prefs();
+        // The native name is never translated - it names the language in
+        // its own words, so the line reads the same in either language.
+        self.status = format!("language: {}", in_force.native_name());
     }
 
     /// Choose the theme. The cheap existence law (`check_theme`) and the

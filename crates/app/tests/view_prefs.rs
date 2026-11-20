@@ -30,13 +30,27 @@ fn dir(tag: &str) -> PathBuf {
 #[test]
 fn the_preferences_survive_a_restart() {
     let path = dir("restart").join(FILE_NAME);
-    let chosen = ViewPrefs { theme: ThemeRef::Named("light".into()), color_vision: ColorVision::Tritan, skip_tool_holders: false, ai_offline_only: false, cadmpeg_path: None };
+    let chosen = ViewPrefs {
+        theme: ThemeRef::Named("light".into()),
+        color_vision: ColorVision::Tritan,
+        skip_tool_holders: false,
+        ai_offline_only: false,
+        cadmpeg_path: None,
+        language: None,
+    };
     prefs::save(&path, &chosen).expect("save");
     let (back, note) = prefs::load(&path);
     assert_eq!(back, chosen);
     assert_eq!(note, None);
     // A theme file rides its path; Dark and Off write no key.
-    let file = ViewPrefs { theme: ThemeRef::File("C:/themes/mine.json".into()), color_vision: ColorVision::Off, skip_tool_holders: false, ai_offline_only: false, cadmpeg_path: None };
+    let file = ViewPrefs {
+        theme: ThemeRef::File("C:/themes/mine.json".into()),
+        color_vision: ColorVision::Off,
+        skip_tool_holders: false,
+        ai_offline_only: false,
+        cadmpeg_path: None,
+        language: None,
+    };
     prefs::save(&path, &file).expect("save");
     assert_eq!(prefs::load(&path).0, file);
     prefs::save(&path, &ViewPrefs::default()).expect("save");
@@ -76,7 +90,18 @@ fn an_unknown_value_falls_back_alone_and_is_named() {
     )
     .expect("write fixture");
     let (p, note) = prefs::load(&path);
-    assert_eq!(p, ViewPrefs { theme: ThemeRef::Dark, color_vision: ColorVision::Tritan, skip_tool_holders: false, ai_offline_only: false, cadmpeg_path: None }, "the rest survives");
+    assert_eq!(
+        p,
+        ViewPrefs {
+            theme: ThemeRef::Dark,
+            color_vision: ColorVision::Tritan,
+            skip_tool_holders: false,
+            ai_offline_only: false,
+            cadmpeg_path: None,
+            language: None,
+        },
+        "the rest survives"
+    );
     assert!(note.expect("named").contains("theme 'solarpunk' is not a built-in"));
     std::fs::write(&path, r#"{"format": "camcraft-prefs/1", "colorVision": "sepia"}"#).expect("write fixture");
     let (p, note) = prefs::load(&path);
@@ -148,6 +173,7 @@ fn offline_only_survives_and_the_file_stores_zero_keys() {
         skip_tool_holders: true,
         ai_offline_only: true,
         cadmpeg_path: Some("/opt/CAD tools/cadmpeg".into()),
+        language: Some("zh-CN".into()),
     };
     prefs::save(&path, &all).expect("save");
     let (back, note) = prefs::load(&path);
@@ -157,7 +183,7 @@ fn offline_only_survives_and_the_file_stores_zero_keys() {
     let v: serde_json::Value = serde_json::from_str(&text).expect("json");
     let mut keys: Vec<&str> = v.as_object().expect("object").keys().map(String::as_str).collect();
     keys.sort_unstable();
-    assert_eq!(keys, ["aiOfflineOnly", "cadmpegPath", "colorVision", "format", "importToolHolders", "theme"]);
+    assert_eq!(keys, ["aiOfflineOnly", "cadmpegPath", "colorVision", "format", "importToolHolders", "language", "theme"]);
     let lower = text.to_lowercase();
     for word in ["key", "token", "secret", "password", "bearer"] {
         assert!(!lower.contains(word), "prefs.json names '{word}': {text}");
@@ -183,4 +209,32 @@ fn cadmpeg_path_survives_a_restart_and_old_preferences_still_load() {
     let blank = format!("{{\"format\":\"{FORMAT}\",\"cadmpegPath\":\"  \"}}");
     let (p, _) = ViewPrefs::from_json(&blank).expect("a blank path reads");
     assert_eq!(p.cadmpeg_path, None, "a blank path is not set");
+}
+
+/// #853: the interface language is the person's, like the theme: a pin
+/// survives a restart, following the system writes no key at all, and text
+/// that cannot be a tag is named and dropped without losing the rest.
+#[test]
+fn the_language_pick_survives_and_absence_follows_the_system() {
+    let path = dir("language").join(FILE_NAME);
+    assert!(!ViewPrefs::default().to_json().contains("language"), "follow-system is the absent key");
+    let pinned = ViewPrefs { language: Some("zh-CN".into()), ..ViewPrefs::default() };
+    prefs::save(&path, &pinned).expect("save");
+    let (back, note) = prefs::load(&path);
+    assert_eq!(note, None);
+    assert_eq!(back.language.as_deref(), Some("zh-CN"), "the pin survives a restart");
+    prefs::save(&path, &ViewPrefs::default()).expect("save");
+    let text = std::fs::read_to_string(&path).expect("read back");
+    assert!(!text.contains("language"), "no pin, no key: {text}");
+    // A value that cannot be a BCP 47 tag is refused by name; the theme
+    // beside it still loads.
+    std::fs::write(
+        &path,
+        format!(r#"{{"format": "{FORMAT}", "theme": {{"named": "light"}}, "language": "zh CN!"}}"#),
+    )
+    .expect("write fixture");
+    let (p, note) = prefs::load(&path);
+    assert_eq!(p.theme, ThemeRef::Named("light".into()), "the rest survives");
+    assert_eq!(p.language, None);
+    assert!(note.expect("named").contains("'zh CN!' is not a language tag"));
 }

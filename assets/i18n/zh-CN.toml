@@ -498,3 +498,9 @@
 "Machines" = "机床库"
 "AI Chat" = "AI 助手"
 "Debug info" = "调试信息"
+
+# #853: the View door's own rows (the language list lives there).
+"Language" = "语言"
+"Follow system" = "跟随系统"
+"Panel setups..." = "面板方案…"
+"Reset layout" = "重置布局"

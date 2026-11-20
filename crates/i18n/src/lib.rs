@@ -20,9 +20,9 @@
 
 mod parse;
 
-use std::collections::BTreeMap;
 use std::borrow::Cow;
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::cell::Cell;
+use std::collections::BTreeMap;
 use std::sync::OnceLock;
 
 /// A language the interface can speak. The variants are the shipped
@@ -210,15 +210,22 @@ pub fn report(lang: Lang) -> Result<usize, Vec<String>> {
     }
 }
 
-static CURRENT: AtomicU8 = AtomicU8::new(0);
+thread_local! {
+    /// The language in force on this thread. It is a thread-local, not a
+    /// process global: every unit test runs on its own thread, so a test that
+    /// switches language cannot change the labels another test asserts on.
+    /// The interface draws on one thread - the window's - so a session still
+    /// has exactly one language.
+    static CURRENT: Cell<Lang> = const { Cell::new(Lang::En) };
+    /// True when `CAMCRAFT_LANG` named the language: the stored preference
+    /// then must not override it for this run.
+    static FROM_ENV: Cell<bool> = const { Cell::new(false) };
+}
 
 /// The interface language in force.
 #[must_use]
 pub fn lang() -> Lang {
-    match CURRENT.load(Ordering::Relaxed) {
-        1 => Lang::ZhCn,
-        _ => Lang::En,
-    }
+    CURRENT.with(Cell::get)
 }
 
 /// Choose the interface language; returns the one now in force. A language
@@ -226,27 +233,53 @@ pub fn lang() -> Lang {
 /// keys or blanks where its words should be.
 pub fn set_lang(lang: Lang) -> Lang {
     let chosen = if lang.is_source() || catalog(lang).is_ok() { lang } else { Lang::En };
-    CURRENT.store(match chosen {
-        Lang::En => 0,
-        Lang::ZhCn => 1,
-    }, Ordering::Relaxed);
+    CURRENT.with(|c| c.set(chosen));
     chosen
 }
 
+/// True when `CAMCRAFT_LANG` chose the language for this run (an explicit
+/// override; a stored preference must not win over it).
+#[must_use]
+pub fn env_override() -> bool {
+    FROM_ENV.with(Cell::get)
+}
+
+/// The language the operating system asks for, from the POSIX locale
+/// variables (`LC_ALL`, then `LC_MESSAGES`, then `LANG`). `C` and `POSIX` mean
+/// "no locale" and are skipped; anything this build does not speak - or a
+/// platform that sets none of them, such as Windows - is English.
+#[must_use]
+pub fn system_lang() -> Lang {
+    system_lang_from(|k| std::env::var(k).ok())
+}
+
+/// [`system_lang`] over a variable reader, so a test can pose a locale.
+#[must_use]
+fn system_lang_from(get: impl Fn(&str) -> Option<String>) -> Lang {
+    for key in ["LC_ALL", "LC_MESSAGES", "LANG"] {
+        let Some(v) = get(key) else { continue };
+        let v = v.trim();
+        if v.is_empty() || v == "C" || v == "POSIX" {
+            continue;
+        }
+        if let Some(l) = Lang::from_tag(v) {
+            return l;
+        }
+    }
+    Lang::En
+}
+
 /// Read `CAMCRAFT_LANG` (a BCP 47 tag; `zh`, `zh-CN`, `zh_Hans` ...) and set
-/// the language. An unreadable or unknown value leaves English in force and
-/// returns it - the caller logs the value it ignored.
+/// the language, or follow the system locale when it is absent. An unreadable
+/// or unknown value is logged by the caller and the system locale applies.
 pub fn init_from_env() -> Lang {
     let wanted = std::env::var("CAMCRAFT_LANG").ok();
-    match wanted.as_deref().and_then(|v| {
-        if v.trim().is_empty() {
-            Some(Lang::En)
-        } else {
-            Lang::from_tag(v)
+    match wanted.as_deref().and_then(Lang::from_tag) {
+        Some(l) => {
+            FROM_ENV.with(|c| c.set(true));
+            set_lang(l)
         }
-    }) {
-        Some(l) => set_lang(l),
-        None => set_lang(Lang::En),
+        None => set_lang(system_lang()),
     }
 }
 

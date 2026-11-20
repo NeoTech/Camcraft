@@ -52,6 +52,11 @@ pub struct ViewPrefs {
     /// #1873: where the `cadmpeg` program is, when it is not on `PATH`.
     /// `None` searches `PATH`.
     pub cadmpeg_path: Option<String>,
+    /// #853: the interface language as a BCP 47 tag (`en`, `zh-CN`); `None`
+    /// follows the system locale. Kept as text on purpose: the surface owns
+    /// which languages exist, and an unknown tag here is a status note, not
+    /// an unreadable file.
+    pub language: Option<String>,
 }
 
 /// The theme as the file spells it: a built-in name or a path, never one
@@ -82,6 +87,10 @@ struct OnDisk {
     /// #1873: written only when set.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     cadmpeg_path: Option<String>,
+    /// #853: written only when the person pinned a language (absent = follow
+    /// the system locale).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    language: Option<String>,
 }
 
 fn vision_word(c: ColorVision) -> &'static str {
@@ -107,8 +116,16 @@ impl ViewPrefs {
         let import_tool_holders = self.skip_tool_holders.then_some(false);
         let ai_offline_only = self.ai_offline_only.then_some(true);
         let cadmpeg_path = self.cadmpeg_path.clone();
-        let disk =
-            OnDisk { format: FORMAT.to_owned(), theme, color_vision, import_tool_holders, ai_offline_only, cadmpeg_path };
+        let language = self.language.clone();
+        let disk = OnDisk {
+            format: FORMAT.to_owned(),
+            theme,
+            color_vision,
+            import_tool_holders,
+            ai_offline_only,
+            cadmpeg_path,
+            language,
+        };
         serde_json::to_string_pretty(&disk).unwrap_or_else(|e| {
             tracing::warn!("preferences not serialised: {e}");
             String::new()
@@ -150,8 +167,28 @@ impl ViewPrefs {
         let ai_offline_only = disk.ai_offline_only == Some(true);
         // #1873: a blank path is "not set", never a program named "".
         let cadmpeg_path = disk.cadmpeg_path.filter(|p| !p.trim().is_empty());
-        Ok((Self { theme, color_vision, skip_tool_holders, ai_offline_only, cadmpeg_path }, notes))
+        let language = match disk.language {
+            None => None,
+            Some(t) if valid_language_tag(&t) => Some(t),
+            Some(t) => {
+                notes.push(format!("language '{t}' is not a language tag - following the system locale"));
+                None
+            }
+        };
+        Ok((Self { theme, color_vision, skip_tool_holders, ai_offline_only, cadmpeg_path, language }, notes))
     }
+}
+
+/// A loose BCP 47 shape check (`zh-CN`, `en`, `zh_Hans`): the surface decides
+/// which languages exist; this only refuses text that cannot be a tag, so a
+/// corrupt value never reaches the lookup.
+fn valid_language_tag(tag: &str) -> bool {
+    let t = tag.trim();
+    !t.is_empty()
+        && t.len() <= 35
+        && t.split(['-', '_']).all(|part| {
+            !part.is_empty() && part.chars().all(|c| c.is_ascii_alphanumeric())
+        })
 }
 
 /// This process's preferences file, if a config folder resolves.

@@ -499,6 +499,32 @@ fn open_view_menu(harness: &mut Harness<'static, ShellUi>) {
     harness.run_steps(3);
 }
 
+/// #853: the View door carries the language list. A pick swaps the whole
+/// interface on the next frame - the ribbon's own labels included - from a
+/// real pointer event, and is view state like the theme (no command, no
+/// history, no document change).
+#[test]
+fn the_view_door_switches_the_interface_language() {
+    let mut harness = shell_harness();
+    // The ribbon's View door wears "Panels" in the accessibility tree; the
+    // language list hangs at its foot.
+    harness.get_by_role_and_label(egui::accesskit::Role::Button, "Panels").click();
+    harness.run_steps(2);
+    assert!(harness.query_by_label("Follow system").is_some(), "the language list is in the door");
+    harness.get_by_role_and_label(egui::accesskit::Role::MenuItem, "简体中文").click();
+    harness.run_steps(2);
+    assert_eq!(camcraft_i18n::lang(), camcraft_i18n::Lang::ZhCn);
+    assert!(harness.state().state.pending.is_empty(), "a language pick queues no command");
+    // The door stays open where the change was made, now in the words it
+    // switched to; the ribbon behind it is Chinese too.
+    assert!(harness.query_by_label("语言").is_some(), "the door's caption follows");
+    assert!(harness.query_by_label("跟随系统").is_some());
+    assert!(harness.query_by_label("保存").is_some(), "the ribbon follows");
+    // Nothing about the document moved: the pick is the person's.
+    assert_eq!(harness.state().state.language, Some(camcraft_i18n::Lang::ZhCn));
+    camcraft_i18n::set_lang(camcraft_i18n::Lang::En);
+}
+
 /// Port of the spike's `click_toggles_view_state` (M-b's browser pane):
 /// the global view toggles are immediate UI state (AGENTS.md: not
 /// undoable), reached here through a real pointer event, not a poke.

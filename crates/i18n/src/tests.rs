@@ -45,6 +45,39 @@ fn a_system_locale_names_its_language() {
     assert_eq!(Lang::ZhCn.native_name(), "简体中文");
 }
 
+/// #853: when the person has not pinned a language, the system locale
+/// decides - `LC_ALL`, then `LC_MESSAGES`, then `LANG`; `C`/`POSIX` and
+/// values this build does not speak fall through to English.
+#[test]
+fn the_system_locale_names_the_language() {
+    let env = |pairs: &'static [(&'static str, &'static str)]| {
+        move |k: &str| pairs.iter().find(|(n, _)| *n == k).map(|(_, v)| (*v).to_owned())
+    };
+    assert_eq!(system_lang_from(|_: &str| None), Lang::En);
+    // LC_ALL wins over LC_MESSAGES and LANG.
+    assert_eq!(
+        system_lang_from(env(&[
+            ("LC_ALL", "zh_CN.UTF-8"),
+            ("LC_MESSAGES", "en_US.UTF-8"),
+            ("LANG", "en_US.UTF-8"),
+        ])),
+        Lang::ZhCn
+    );
+    assert_eq!(
+        system_lang_from(env(&[("LC_MESSAGES", "zh_CN.UTF-8"), ("LANG", "en_US.UTF-8")])),
+        Lang::ZhCn
+    );
+    assert_eq!(system_lang_from(env(&[("LANG", "zh_CN.UTF-8")])), Lang::ZhCn);
+    // `C`/`POSIX` mean "no locale": the search goes on, and alone they are
+    // English.
+    assert_eq!(system_lang_from(env(&[("LC_ALL", "C"), ("LANG", "zh_CN.UTF-8")])), Lang::ZhCn);
+    assert_eq!(system_lang_from(env(&[("LC_ALL", "C"), ("LANG", "C.UTF-8")])), Lang::En);
+    assert_eq!(system_lang_from(env(&[("LC_ALL", "  "), ("LANG", "POSIX")])), Lang::En);
+    // A locale this build does not speak is English, not an error.
+    assert_eq!(system_lang_from(env(&[("LANG", "fr_FR.UTF-8")])), Lang::En);
+    assert_eq!(system_lang_from(env(&[("LANG", "C.UTF-8")])), Lang::En);
+}
+
 #[test]
 fn the_reader_refuses_a_bad_line_by_number() {
     let cat = Catalog::parse(

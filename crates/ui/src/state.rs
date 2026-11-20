@@ -1912,6 +1912,10 @@ pub struct State {
     /// Where the theme and colour-vision preferences (#877) are written
     /// back; `None` (every headless State) keeps them in memory only.
     pub prefs_store: Option<PathBuf>,
+    /// #853: the interface language this person pinned, `None` = follow the
+    /// system locale. Kept in the preferences file beside the theme; the
+    /// language in force is `camcraft_i18n::lang()`.
+    pub language: Option<camcraft_i18n::Lang>,
     /// #889: the Tool library page's "Import tool holders" - a per-user
     /// preference (kept beside the theme), the `holders` parameter of
     /// the `ImportTools` command an import runs. On by default.
@@ -2386,6 +2390,7 @@ impl State {
             recent_store: None,
             view_store: None,
             prefs_store: None,
+            language: None,
             import_tool_holders: true,
             panels_open: PanelsOpen { browser: true, properties: true, machines: false, ai_chat: false },
             layout_request: None,

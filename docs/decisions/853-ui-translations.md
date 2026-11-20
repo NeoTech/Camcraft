@@ -10,11 +10,17 @@ language (Simplified Chinese) end to end:
   so a miss shows the English string (never a key, never a blank), and a
   rewording in the source degrades to English until a translator follows it.
   Transported CL/G-code/project text never passes through the lookup.
-- The catalogue is `assets/i18n/zh-CN.toml` (467 pairs), checked without a
+- The catalogue is `assets/i18n/zh-CN.toml` (471 pairs), checked without a
   build by `scripts/i18n/check.py`, with a translator's guide beside it.
-- The language comes from `CAMCRAFT_LANG` (BCP 47: `zh`, `zh-CN`,
-  `zh_Hans`). English installs no font and translates no string, so the
-  English window is byte-identical to before.
+- The language follows the system locale on first start (`LC_ALL`, then
+  `LC_MESSAGES`, then `LANG`). The View door carries a **Language** list -
+  *Follow system*, English, 简体中文 - which switches at once and writes the
+  pin to `prefs.json` beside the theme (`language`, absent = follow the
+  system). `CAMCRAFT_LANG` (BCP 47: `zh`, `zh-CN`, `zh_Hans`) overrides both
+  for that run. The picker adds rows to an existing painted door rather than a
+  new ribbon cell, so the English window's pixels do not move. English
+  installs no font and translates no string, so it is byte-identical to
+  before.
 - A translated language installs `NotoSansSC-Regular-Subset.ttf` (Noto Sans
   SC 400, OFL 1.1) first in `Proportional`, so Latin, digits and hanzi in one
   label share one face and one line height. The subset is GB2312 plus
@@ -48,9 +54,9 @@ language (Simplified Chinese) end to end:
 
 - Rewriting call sites to symbolic keys (`ribbon.save`): every string would
   need a name, and a missing one would show a key. Dropped for this pilot.
-- Deriving the language from the system locale automatically: no preference
-  UI exists yet, so the choice would be invisible and untestable. The env
-  var is the door for a pilot; the persisted picker is the next step.
+- A separate languages page or a new ribbon cell: the door already exists and
+  is where panel/view choices live; a new cell would move the English ribbon's
+  pixels for every user, including those who never change language.
 - Shipping the full Noto Sans SC (16 MB) or the whole CJK TTC: the subset
   carries every shipped string, which a test proves by reading the TTF
   `cmap`; a rare hanzi outside GB2312 falls back to a box like any missing

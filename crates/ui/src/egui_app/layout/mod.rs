@@ -193,9 +193,44 @@ pub(crate) enum ViewRow {
     /// #2339: open the Panel setups window (save, load, delete).
     Setups,
     Reset,
+    /// #853: the inert caption over the language rows.
+    LanguageCaption,
+    /// #853: one interface-language choice.
+    Language(LanguageChoice),
 }
 
-const ROWS: [ViewRow; 7] = [
+/// #853: the language choices the door offers. The shipped languages come
+/// from the catalogue's own list, so a new language appears here by existing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum LanguageChoice {
+    /// Follow the operating system's locale.
+    System,
+    /// A pinned language.
+    Fixed(camcraft_i18n::Lang),
+}
+
+impl LanguageChoice {
+    /// What `select_language` is handed: `None` follows the system.
+    pub(crate) fn pick(self) -> Option<camcraft_i18n::Lang> {
+        match self {
+            LanguageChoice::System => None,
+            LanguageChoice::Fixed(l) => Some(l),
+        }
+    }
+
+    /// True when this row is the choice in force: the pinned one, or
+    /// "follow system" while nothing is pinned.
+    fn is_active(self, pinned: Option<camcraft_i18n::Lang>) -> bool {
+        match self {
+            LanguageChoice::System => pinned.is_none(),
+            LanguageChoice::Fixed(l) => pinned == Some(l),
+        }
+    }
+}
+
+/// The door's rows above the language list; the languages themselves come
+/// from `Lang::ALL`, so a new language appears here by existing.
+const ROWS: [ViewRow; 8] = [
     ViewRow::Viewport,
     ViewRow::Panel(Panel::Browser),
     ViewRow::Panel(Panel::Properties),
@@ -203,6 +238,7 @@ const ROWS: [ViewRow; 7] = [
     ViewRow::Panel(Panel::AiChat),
     ViewRow::Setups,
     ViewRow::Reset,
+    ViewRow::LanguageCaption,
 ];
 
 fn row_label(r: ViewRow) -> &'static str {
@@ -214,6 +250,11 @@ fn row_label(r: ViewRow) -> &'static str {
         ViewRow::Panel(Panel::AiChat) => "AI Chat",
         ViewRow::Setups => "Panel setups...",
         ViewRow::Reset => "Reset layout",
+        ViewRow::LanguageCaption => "Language",
+        // A language names itself in its own words, never translated - a
+        // picker a reader cannot read is a picker they cannot use.
+        ViewRow::Language(LanguageChoice::System) => "Follow system",
+        ViewRow::Language(LanguageChoice::Fixed(l)) => l.native_name(),
     }
 }
 
@@ -228,7 +269,15 @@ pub(super) fn view_rows(
     gap: f32,
 ) -> Vec<(ViewRow, Rect)> {
     let left = button.left().min(strip.right() - w).max(strip.left());
-    ROWS.iter()
+    // "Follow system" first, then the languages the catalogue ships.
+    let mut all = ROWS.to_vec();
+    all.push(ViewRow::Language(LanguageChoice::System));
+    all.extend(
+        camcraft_i18n::Lang::ALL
+            .into_iter()
+            .map(|l| ViewRow::Language(LanguageChoice::Fixed(l))),
+    );
+    all.iter()
         .enumerate()
         .map(|(k, r)| {
             (
@@ -262,6 +311,7 @@ pub(super) fn view_drop(
     let w = rows.first().map_or(g.menu_width, |(_, r)| r.width());
     let panel = Rect::from_min_size(top, Vec2::new(w, rows.len() as f32 * pal.row_height));
     let open = state.panels_open;
+    let pinned = state.language;
     let mut chose: Option<ViewRow> = None;
     egui::Area::new(id)
         .fixed_pos(panel.min)
@@ -278,16 +328,22 @@ pub(super) fn view_drop(
             );
             for (k, (row, r)) in rows.iter().enumerate() {
                 let resp = ui.interact(*r, id.with(("view-row", k)), Sense::click());
-                let live = *row != ViewRow::Viewport;
+                // The "always open" line and the language caption are inert:
+                // a press on them is not a choice, so it leaves the door open.
+                let live = !matches!(*row, ViewRow::Viewport | ViewRow::LanguageCaption);
                 if resp.hovered() && live {
                     p.rect_filled(*r, 0.0, pal.field_hover);
                 }
                 let checked = match row {
                     ViewRow::Viewport => Some(true),
                     ViewRow::Panel(pn) => Some(open.get(*pn)),
-                    ViewRow::Setups | ViewRow::Reset => None,
+                    ViewRow::Setups | ViewRow::Reset | ViewRow::LanguageCaption => None,
+                    ViewRow::Language(c) => Some(c.is_active(pinned)),
                 };
-                super::painted::menu_item(&resp, row_label(*row), live, checked);
+                // #853: the door's own words are catalogue strings too, so a
+                // Chinese session reads "跟随系统" rather than English.
+                let label = camcraft_i18n::tr(row_label(*row));
+                super::painted::menu_item(&resp, label.as_ref(), live, checked);
                 if let Some(on) = checked {
                     let b = Rect::from_center_size(
                         r.left_center() + Vec2::new(g.box_center_x, 0.0),
@@ -306,7 +362,7 @@ pub(super) fn view_drop(
                 p.text(
                     r.left_center() + Vec2::new(g.icon_text_x, 0.0),
                     egui::Align2::LEFT_CENTER,
-                    row_label(*row),
+                    label.as_ref(),
                     egui::FontId::proportional(pal.font_row),
                     if live { pal.text } else { pal.text_faint },
                 );
@@ -335,6 +391,15 @@ pub(super) fn view_drop(
             state.layout_request = Some(LayoutRequest::Reset);
             state.ribbon_view_open = false;
         }
+        // #853: switch at once - the catalogue is looked up every frame, so
+        // the new words and the door's own labels are on the next one. The
+        // list stays open so the change is visible where it was picked.
+        Some(ViewRow::Language(c)) => {
+            state.select_language(c.pick());
+            super::fonts::install_for(ui.ctx(), camcraft_i18n::lang());
+            ui.ctx().request_repaint();
+        }
+        Some(ViewRow::LanguageCaption) => {}
         None => {
             let outside = ui.input(|i| {
                 i.pointer.button_pressed(egui::PointerButton::Primary)

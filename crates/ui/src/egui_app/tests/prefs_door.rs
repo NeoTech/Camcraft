@@ -71,6 +71,38 @@ fn a_corrupt_preferences_file_starts_dark_and_says_why() {
     assert!(state.status.contains("preferences ignored"), "{}", state.status);
 }
 
+/// #853: the interface language is the person's too - a pick in the View
+/// door is written at once and survives a restart, and "Follow system"
+/// forgets the pin (the key goes; the locale decides again).
+#[test]
+fn the_language_pick_survives_and_follow_system_clears_it() {
+    let store = temp_dir("language").join(FILE_NAME);
+    let mut state = State::new();
+    state.load_prefs_from(store.clone());
+    assert_eq!(camcraft_i18n::lang(), camcraft_i18n::Lang::En, "a test starts English");
+
+    state.select_language(Some(camcraft_i18n::Lang::ZhCn));
+    assert_eq!(camcraft_i18n::lang(), camcraft_i18n::Lang::ZhCn);
+    assert_eq!(state.status, "language: 简体中文", "the native name, never translated");
+    let text = std::fs::read_to_string(&store).expect("written at once");
+    assert!(text.contains("\"language\": \"zh-CN\""), "{text}");
+
+    // A restart wears the stored language before the first frame.
+    let mut restarted = State::new();
+    restarted.load_prefs_from(store.clone());
+    assert_eq!(camcraft_i18n::lang(), camcraft_i18n::Lang::ZhCn, "the pin is restored");
+    assert_eq!(restarted.language, Some(camcraft_i18n::Lang::ZhCn));
+
+    // "Follow system" returns to the locale and leaves no key behind.
+    restarted.select_language(None);
+    assert_eq!(restarted.language, None);
+    assert_eq!(camcraft_i18n::lang(), camcraft_i18n::system_lang());
+    let text = std::fs::read_to_string(&store).expect("written");
+    assert!(!text.contains("language"), "{text}");
+
+    camcraft_i18n::set_lang(camcraft_i18n::Lang::En);
+}
+
 #[test]
 fn a_headless_state_keeps_its_picks_in_memory() {
     let mut state = State::new();

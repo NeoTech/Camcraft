@@ -51,6 +51,11 @@ fn every_ribbon_string() -> Vec<String> {
     for g in ["File", "Setup", "Modify", "Inspect", "View", "Pinned"] {
         out.push(g.to_owned());
     }
+    // #853: the View door's own rows, where the language list lives (the
+    // language names themselves are native and never translated).
+    for t in ["Language", "Follow system", "Panel setups...", "Reset layout"] {
+        out.push(t.to_owned());
+    }
     // The tree's literal rows (browser_tree's `t(...)` sites) and the tool
     // kind names its rows carry.
     for t in [
