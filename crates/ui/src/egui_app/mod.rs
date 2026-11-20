@@ -389,9 +389,18 @@ mod rest_pocket_tests;
 /// command line (#2648); fallback adapter, View3D readback); anything else
 /// opens the windowed shell.
 pub fn run(args: &[String]) -> i32 {
-    // #853: the interface language comes from CAMCRAFT_LANG (a BCP 47 tag).
-    // An unknown tag stays English; a catalogue with a bad line says so once
-    // and still loads the lines it understood.
+    // #853: the interface language follows the system locale unless
+    // CAMCRAFT_LANG (a BCP 47 tag) names one for this run. An unknown tag is
+    // named once and ignored - the stored preference, or the locale, applies;
+    // a catalogue with a bad line says so and still loads what it understood.
+    if let Some(v) = std::env::var_os("CAMCRAFT_LANG") {
+        let v = v.to_string_lossy();
+        if !v.trim().is_empty() && camcraft_i18n::Lang::from_tag(&v).is_none() {
+            diag_warn!(
+                "i18n: CAMCRAFT_LANG '{v}' is not a language this build speaks - the stored preference applies"
+            );
+        }
+    }
     let lang = camcraft_i18n::init_from_env();
     match camcraft_i18n::report(lang) {
         Ok(n) => diag_info!("i18n: {} catalogue, {n} strings", lang.catalog_name()),
