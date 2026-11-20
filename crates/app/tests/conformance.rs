@@ -64,6 +64,7 @@ const POSTS: &[(&str, &str, &str)] = &[
     ("Doosan DNM", "doosan-dnm", "doosan-dnm"),
     ("Makera Carvera", "carvera", "carvera"),
     ("Mach4", "mach4", "mach4"),
+    ("Mach3", "mach3", "mach3"),
 ];
 
 /// #1357: the Tormach goldens are runnable programs - posted for a real
@@ -104,6 +105,7 @@ fn golden_input(cps_stem: &str, g: &str) -> (serde_json::Value, String) {
 const REFUSED: &[(&str, &str, &str)] = &[
     ("carvera", "tap_plate", "tapping"),
     ("grblhal", "tap_plate", "tapping"),
+    ("mach3", "tap_plate", "tapping"),
     ("tinyg", "tap_plate", "tapping"),
     // #2303: the generic VMC states no spindle encoder (rigid_tapping),
     // so LinuxCNC's G33.1 rigid tap is refused by name there.
@@ -366,7 +368,7 @@ fn the_synthesized_stream_locks_the_tool_and_spindle_words() {
         // TinyG the same (its drill chains post as plain moves).
         let stream = match *cps_stem {
             "carvera" => synth_stream_with("G55", false),
-            "grblhal" | "tinyg" | "linuxcnc" => synth_stream_with("G55", false),
+            "grblhal" | "tinyg" | "linuxcnc" | "mach3" => synth_stream_with("G55", false),
             _ => synth_stream(),
         };
         let cps = read(&format!("assets/posts/{cps_stem}.cps"));
@@ -466,6 +468,7 @@ const EXTENSIONS: &[(&str, &str)] = &[
     ("doosan-dnm", "nc"),
     ("carvera", "nc"),
     ("mach4", "nc"),
+    ("mach3", "nc"),
     ("fanuc-lathe", "nc"),
     ("tormach-lathe", "nc"),
     ("tormach-plasma", "nc"),

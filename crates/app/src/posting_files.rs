@@ -49,6 +49,8 @@ pub const BUILTINS: &[(&str, AssetFile)] = &[
     ("Doosan DNM", AssetFile("doosan-dnm.cps")),
     ("Makera Carvera", AssetFile("carvera.cps")),
     ("Mach4", AssetFile("mach4.cps")),
+    // #2482: Mach3 Mill, 3-axis - canned cycles with G98, T M6 + G43 H, dwell unit by option.
+    ("Mach3", AssetFile("mach3.cps")),
     ("Fanuc Lathe", AssetFile("fanuc-lathe.cps")),
     ("Tormach PathPilot Lathe", AssetFile("tormach-lathe.cps")),
     // #671: the plasma dialect, from UM10720 §6-7 and the PathPilot
@@ -335,6 +337,7 @@ fn embedded(kind: &str, file: &str) -> Option<&'static str> {
         ("posts", "doosan-dnm.cps") => Some(include_str!("../../../assets/posts/doosan-dnm.cps")),
         ("posts", "carvera.cps") => Some(include_str!("../../../assets/posts/carvera.cps")),
         ("posts", "mach4.cps") => Some(include_str!("../../../assets/posts/mach4.cps")),
+        ("posts", "mach3.cps") => Some(include_str!("../../../assets/posts/mach3.cps")),
         ("posts", "fanuc-lathe.cps") => Some(include_str!("../../../assets/posts/fanuc-lathe.cps")),
         ("posts", "tormach-lathe.cps") => Some(include_str!("../../../assets/posts/tormach-lathe.cps")),
         ("posts", "tormach-plasma.cps") => Some(include_str!("../../../assets/posts/tormach-plasma.cps")),
