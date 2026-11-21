@@ -318,6 +318,28 @@ pub enum OpParams {
         /// 3+2 index; see [`OpParams::Face`]'s field.
         tilt: Option<Tilt>,
     },
+    /// V-carve (#1443): a V-bit cuts the picked closed region with its
+    /// tip on the medial axis; the depth at each point is the depth at
+    /// which the cone touches the walls (see
+    /// [`crate::machining2d::v_carve`]). `top_z` is the start depth and
+    /// `top_z - bottom_z` the maximum depth. The cone's angle is the
+    /// tool's, never a second number here.
+    VCarve {
+        clearance_z: Height,
+        /// Hop plane between strokes; None hops to clearance.
+        retract_z: Option<Height>,
+        top_z: Height,
+        bottom_z: Height,
+        stepdown: f64,
+        feed: f64,
+        plunge_feed: f64,
+        /// Clear the floor the cone cannot reach at the maximum depth.
+        flat_clear: bool,
+        /// The distance between two floor passes, mm.
+        flat_stepover: f64,
+        /// 3+2 index; see [`OpParams::Face`]'s field.
+        tilt: Option<Tilt>,
+    },
     /// 2D chamfer (M2.4 B): one ride whose center line stands so the
     /// taper tool's CONE lies on the chamfer face the two authored
     /// numbers state - `width` along the top plane, `angle_deg` off it.
@@ -1346,6 +1368,7 @@ impl OpParams {
             OpParams::Adaptive2D { .. } => OpType::Adaptive2D,
             OpParams::Offset2D { .. } => OpType::Offset2D,
             OpParams::Engrave { .. } => OpType::Engrave,
+            OpParams::VCarve { .. } => OpType::VCarve,
             OpParams::Chamfer2D { .. } => OpType::Chamfer2D,
             OpParams::Circular { .. } => OpType::Circular,
             OpParams::Slot { .. } => OpType::Slot,
@@ -1399,6 +1422,7 @@ impl OpParams {
             | OpParams::Pocket { tilt, .. }
             | OpParams::Adaptive2D { tilt, .. }
             | OpParams::Offset2D { tilt, .. }
+            | OpParams::VCarve { tilt, .. }
             // The M2.4 B trio are planar rides like the five above -
             // the index reads their plane the same way.
             | OpParams::Engrave { tilt, .. }
@@ -1494,6 +1518,7 @@ impl OpParams {
             | OpParams::Pocket { clearance_z, .. }
             | OpParams::Adaptive2D { clearance_z, .. }
             | OpParams::Offset2D { clearance_z, .. }
+            | OpParams::VCarve { clearance_z, .. }
             | OpParams::Engrave { clearance_z, .. }
             | OpParams::Chamfer2D { clearance_z, .. }
             | OpParams::Circular { clearance_z, .. }
@@ -1553,6 +1578,7 @@ impl OpParams {
             | OpParams::Pocket { top_z, .. }
             | OpParams::Adaptive2D { top_z, .. }
             | OpParams::Offset2D { top_z, .. }
+            | OpParams::VCarve { top_z, .. }
             | OpParams::Engrave { top_z, .. }
             | OpParams::Chamfer2D { top_z, .. }
             | OpParams::Circular { top_z, .. }
@@ -1666,6 +1692,7 @@ impl OpParams {
                 f(*bottom_z);
             }
             OpParams::Trace { clearance_z, retract_z, top_z, bottom_z, .. }
+            | OpParams::VCarve { clearance_z, retract_z, top_z, bottom_z, .. }
             // Engrave is the trace's twin (M2.4 B): the same four.
             | OpParams::Engrave { clearance_z, retract_z, top_z, bottom_z, .. } => {
                 f(*clearance_z);

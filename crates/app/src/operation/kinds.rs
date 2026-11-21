@@ -79,6 +79,7 @@ fn feed_of(p: &OpParams) -> f64 {
         | OpParams::Pocket { feed, .. }
         | OpParams::Adaptive2D { feed, .. }
         | OpParams::Offset2D { feed, .. }
+        | OpParams::VCarve { feed, .. }
         // The engrave ride and the chamfer ride feed along the curve
         // like the contour's; the circular ladder feeds along its
         // rings (M2.4 B).
@@ -156,6 +157,7 @@ fn plunge_of(p: &OpParams) -> f64 {
         | OpParams::Pocket { plunge_feed, .. }
         | OpParams::Adaptive2D { plunge_feed, .. }
         | OpParams::Offset2D { plunge_feed, .. }
+        | OpParams::VCarve { plunge_feed, .. }
         // The engrave twin plunges into the line like the trace; the
         // chamfer ride enters over the shoulder at the plunge number;
         // the circular ladder plunges through open disk like the
@@ -296,6 +298,8 @@ fn climb_of(p: &OpParams) -> bool {
         // number says which way the circle runs (M2.4 C).
         OpParams::Bore { climb, .. } | OpParams::Thread { climb, .. } => *climb,
         OpParams::Probe { .. } | OpParams::PlasmaProfile(_) | OpParams::WireContour(_) | OpParams::SinkerBurn(_) | OpParams::SinkerSideBurn(_) => false,
+        // #1443: the cone cuts the two walls at once; no side leads.
+        OpParams::VCarve { .. } => true,
     }
 }
 
@@ -326,6 +330,7 @@ fn stepover_of(p: &OpParams) -> Option<f64> {
         // no spacing to carry; the chamfer is one ride of the cone,
         // the authored wall is the pattern (M2.4 B).
         OpParams::Contour { .. }
+        | OpParams::VCarve { .. }
         | OpParams::Engrave { .. }
         | OpParams::Chamfer2D { .. }
         | OpParams::Trace { .. }
@@ -388,6 +393,7 @@ fn stepdown_of(p: &OpParams) -> Option<f64> {
         | OpParams::Pocket { stepdown, .. }
         | OpParams::Adaptive2D { stepdown, .. }
         | OpParams::Offset2D { stepdown, .. }
+        | OpParams::VCarve { stepdown, .. }
         // The engrave twin steps down through the sheet like the
         // trace; the circular ladder is the pocket's rung law
         // (M2.4 B). The chamfer has no stepdown arm: its depth is
@@ -468,6 +474,7 @@ pub fn top_of(p: &OpParams) -> Option<Height> {
         | OpParams::Pocket { top_z, .. }
         | OpParams::Adaptive2D { top_z, .. }
         | OpParams::Offset2D { top_z, .. }
+        | OpParams::VCarve { top_z, .. }
         // The engrave and circular tops are the pocket family's; the
         // chamfer's top plane is where the cone's apex stands - the
         // ride's only height (M2.4 B).
@@ -539,6 +546,7 @@ pub fn bottom_of(p: &OpParams) -> Option<Height> {
         | OpParams::Pocket { bottom_z, .. }
         | OpParams::Adaptive2D { bottom_z, .. }
         | OpParams::Offset2D { bottom_z, .. }
+        | OpParams::VCarve { bottom_z, .. }
         // The engrave twin and the circular ladder both finish on an
         // authored plane; the chamfer's floor is the wall's own,
         // derived from width and angle - no plane to carry (M2.4 B).
@@ -618,6 +626,7 @@ fn retract_of(p: &OpParams) -> Option<Height> {
         OpParams::Pocket { retract_z, .. }
         | OpParams::Adaptive2D { retract_z, .. }
         | OpParams::Offset2D { retract_z, .. }
+        | OpParams::VCarve { retract_z, .. }
         // The three new kinds hop between loops like their parents:
         // the trace, the contour and the pocket (M2.4 B).
         | OpParams::Engrave { retract_z, .. }
@@ -2447,6 +2456,22 @@ impl KindInfo {
             seed: super::sinker_side_op::seed_sinker_side_burn,
             tool_kinds: tk::ELECTRODE,
         },
+        KindInfo {
+            ty: OpType::VCarve,
+            label: "V-Carve",
+            caption: "V-Carve",
+            tag: 44,
+            // #1443: the tip rides the medial axis inside the picked
+            // region and enters the part by design, as the engrave
+            // ride does: the tangency laws stand down and the mark law
+            // judges the depth. The generator proves the cone inside
+            // the region. `Mode::Carve` is the engrave mode with the
+            // crossing law off: each branch is ridden from two walls.
+            mode: Mode::Carve,
+            section: Section::Mill2D,
+            seed: super::vcarve_op::seed_vcarve,
+            tool_kinds: tk::CONE,
+        },
     ];
 
     /// Whose machine this kind drives - read off the row's section
@@ -2524,6 +2549,7 @@ pub const ALL_LABELS: [&str; KIND_COUNT] = [
     KindInfo::ALL[41].label,
     KindInfo::ALL[42].label,
     KindInfo::ALL[43].label,
+    KindInfo::ALL[44].label,
 ];
 
 impl OpType {
@@ -2593,6 +2619,9 @@ impl OpType {
             OpType::SinkerBurn => 42,
             // #545: the side burn appends (stored ids never move).
             OpType::SinkerSideBurn => 43,
+            // #1443: the V-carve appends (stored ids never move); the
+            // menu lists it in the 2D section by its row.
+            OpType::VCarve => 44,
         }
     }
 

@@ -187,6 +187,7 @@ mod trochoid_page;
 mod kind_editors;
 mod deburr_page;
 mod mill2d_more_page;
+mod vcarve_page;
 mod mill2d_page;
 // #1815: 2D Pocket's "Rest machining" group on the Passes tab.
 mod rest_pocket_page;

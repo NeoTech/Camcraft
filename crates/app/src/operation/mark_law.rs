@@ -80,7 +80,8 @@ pub fn budget(top: f64, bottom: f64, cutter_r: f64) -> f64 {
 /// Whether `params` is a kind the mark law speaks for.
 #[must_use]
 pub fn is_mark_kind(params: &OpParams) -> bool {
-    matches!(params, OpParams::Engrave { .. } | OpParams::Trace { .. })
+    // #1443: a V-carve marks the part as an engrave does.
+    matches!(params, OpParams::Engrave { .. } | OpParams::Trace { .. } | OpParams::VCarve { .. })
 }
 
 /// The mark an operation declares for the program sim (#1595, #1627):

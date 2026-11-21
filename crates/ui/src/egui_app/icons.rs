@@ -87,6 +87,8 @@ icon_table! {
     TrochoidalSlot => "op-trochoidal-slot", "icon-trochoidal-slot";
     Trace => "op-trace", "icon-trace";
     Engrave => "op-engrave", "icon-engrave";
+    /// A V-bit in the groove it cuts (#1443).
+    VCarve => "op-v-carve", "icon-v-carve";
     Chamfer2D => "op-chamfer2d", "icon-chamfer2d";
     Deburr => "op-deburr", "icon-deburr";
     Circular => "op-circular", "icon-circular";

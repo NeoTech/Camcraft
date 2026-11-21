@@ -1304,6 +1304,7 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
         // where the pocket hops, and the chamfer ride between its
         // chains the trace's way (M2.4 B) - all the store-either shape.
         | operation::OpParams::Trace { retract_z, .. }
+        | operation::OpParams::VCarve { retract_z, .. }
         | operation::OpParams::Engrave { retract_z, .. }
         | operation::OpParams::Chamfer2D { retract_z, .. }
         | operation::OpParams::Circular { retract_z, .. }
@@ -1450,6 +1451,7 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
         | operation::OpParams::MultiAxisContour { top_z, bottom_z, .. }
         | operation::OpParams::Slot { top_z, bottom_z, .. }
         | operation::OpParams::TrochoidalSlot { top_z, bottom_z, .. }
+        | operation::OpParams::VCarve { top_z, bottom_z, .. }
         // The engrave twin draws the trace's ladder - first level up
         // top, floor below - and the circular ladder its rings' two
         // rungs: vault or flat, the dome law's stations live between

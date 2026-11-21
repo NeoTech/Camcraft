@@ -259,6 +259,7 @@ pub fn feed_mut(p: &mut OpParams) -> Option<&mut f64> {
         | OpParams::Pocket { feed, .. }
         | OpParams::Adaptive2D { feed, .. }
         | OpParams::Offset2D { feed, .. }
+        | OpParams::VCarve { feed, .. }
         | OpParams::Engrave { feed, .. }
         | OpParams::Chamfer2D { feed, .. }
         | OpParams::Circular { feed, .. }

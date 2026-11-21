@@ -13,6 +13,15 @@ pub enum Mode {
     /// Trace: the cutter center runs on the boundary itself; laws that
     /// assume tangency do not apply.
     Engrave,
+    /// V-carve (#1443): a cone's tip rides the medial axis of the
+    /// region, and each branch of the axis is ridden two times, one
+    /// time from each wall. Engrave's stand-downs apply (the cut is a
+    /// mark inside the region, proved by the generator), and the
+    /// crossing law (a) stands down too: the second ride of a branch
+    /// lies on the first within the chord tolerance, so their chords
+    /// cross at a shared depth by design. That is the pattern, not a
+    /// path defect.
+    Carve,
     /// The cone rides (M2.5 E B): a chamfer mill whose GENERATRIX lies
     /// on the wall - the axis runs exactly on the edge's own XY, and
     /// on a convex crease the virtual tip stands deliberately INSIDE

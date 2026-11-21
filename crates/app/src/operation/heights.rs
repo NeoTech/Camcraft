@@ -137,6 +137,7 @@ pub fn region_z(
         // ride's only height (M2.4 B).
         | OpParams::Adaptive2D { top_z, .. }
         | OpParams::Offset2D { top_z, .. }
+        | OpParams::VCarve { top_z, .. }
         | OpParams::Engrave { top_z, .. }
         | OpParams::Chamfer2D { top_z, .. }
         | OpParams::Circular { top_z, .. }
@@ -266,6 +267,7 @@ pub fn resolve_params_with(
         // and the circular ladder do too (M2.4 B).
         | OpParams::Adaptive2D { clearance_z, retract_z, top_z, bottom_z, .. }
         | OpParams::Offset2D { clearance_z, retract_z, top_z, bottom_z, .. }
+        | OpParams::VCarve { clearance_z, retract_z, top_z, bottom_z, .. }
         | OpParams::Engrave { clearance_z, retract_z, top_z, bottom_z, .. }
         | OpParams::Circular { clearance_z, retract_z, top_z, bottom_z, .. }
         | OpParams::Slot { clearance_z, retract_z, top_z, bottom_z, .. }

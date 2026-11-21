@@ -278,6 +278,30 @@ impl OpParams {
                 wh_opt(h, *retract_z);
                 wt(h, *tilt);
             }
+            // The V-carve (#1443) digests each number the path reads:
+            // the heights, the ladder, the feeds and the floor choice.
+            OpParams::VCarve {
+                clearance_z,
+                retract_z,
+                top_z,
+                bottom_z,
+                stepdown,
+                feed,
+                plunge_feed,
+                flat_clear,
+                flat_stepover,
+                tilt,
+            } => {
+                wh(h, *clearance_z);
+                wh(h, *top_z);
+                wh(h, *bottom_z);
+                for v in [*stepdown, *feed, *plunge_feed, *flat_stepover] {
+                    w(h, v);
+                }
+                h.write_u8(u8::from(*flat_clear));
+                wh_opt(h, *retract_z);
+                wt(h, *tilt);
+            }
             _ => {}
         }
     }

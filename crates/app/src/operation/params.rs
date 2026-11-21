@@ -319,6 +319,7 @@ impl OpParams {
             | OpParams::Slot { .. }
             | OpParams::TrochoidalSlot { .. }
             | OpParams::Trace { .. }
+            | OpParams::VCarve { .. }
             | OpParams::Engrave { .. }
             | OpParams::Chamfer2D { .. }
             | OpParams::Circular { .. } => self.stamp_mill2d(world, setup, src, h),
