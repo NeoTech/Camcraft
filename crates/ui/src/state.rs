@@ -1818,6 +1818,9 @@ pub struct State {
     /// The transport's timeline, built once per `doc_version` (never
     /// per frame: it walks every op's path) - see `shell::cached_script`.
     pub sim_script_cache: Option<(u64, std::sync::Arc<camcraft_app::sim::Script>)>,
+    /// #2608: the operation starts of that timeline, with a `Weak` of the
+    /// script they belong to - see `sim_steps::cached_op_starts`.
+    pub sim_op_starts: Option<(std::sync::Weak<camcraft_app::sim::Script>, std::sync::Arc<camcraft_app::sim::OpStarts>)>,
     /// #743: the revolved mesh of the tool at the playhead, as the
     /// collision laws read it - rebuilt only when its judged outline
     /// changes, emptied when the tool, its operation or the transport
@@ -2327,6 +2330,7 @@ impl State {
             field_view: None,
             field_play: None,
             sim_script_cache: None,
+            sim_op_starts: None,
             sim_tool_cache: std::sync::Mutex::default(),
             move_center: std::sync::Mutex::default(),
             field_mode: None,

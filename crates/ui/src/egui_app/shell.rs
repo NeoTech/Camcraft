@@ -324,6 +324,7 @@ fn viewport_panel(
         // through material. Held while the stock removal is calculated.
         crate::play_precalc::advance_playhead(state, f64::from(ui.input(|i| i.stable_dt).clamp(0.0, 0.1)), total);
         let held = crate::play_precalc::holds_playhead(state);
+        let starts = super::sim_steps::cached_op_starts(state);
         let mut stop = false;
         ui.horizontal(|ui| {
             let Some(sim) = state.sim.as_mut() else {
@@ -349,6 +350,8 @@ fn viewport_panel(
                 stop = true;
             }
             if total > 0.0 {
+                // #2608: step to an operation's start (sim_steps).
+                super::sim_steps::op_step_buttons(ui, sim, &sc, &starts, held);
                 ui.add_enabled(!held, egui::Slider::new(&mut sim.t, 0.0..=total).show_value(false));
                 egui::ComboBox::from_id_salt("sim_speed")
                     .selected_text(format!("{:.0}x", sim.speed))
