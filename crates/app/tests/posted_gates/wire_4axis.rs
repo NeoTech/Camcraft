@@ -109,7 +109,7 @@ pub fn wire_4axis_verdict() -> WireVerdict {
             WireSection { z, part, stock: Some(stock.clone()) }
         })
         .collect();
-    judge(&WireJob { path: &t, kerf_offset: 0.25 * 0.5 + 0.04, skim_offsets: Vec::new(), side: CutSide::Punch, start: Some(start), sections, taper: true, burnout: false, cutoff_from: None, capture: true, verify_tol: 0.0 })
+    judge(&WireJob { path: &t, kerf_offset: 0.25 * 0.5 + 0.04, skim_offsets: Vec::new(), side: CutSide::Punch, start: Some(start), sections, taper: true, burnout: false, cutoff_from: None, capture: true, verify_tol: 0.0, taper_chord: false })
 }
 
 /// The 4-axis punch golden's findings at the wire laws.

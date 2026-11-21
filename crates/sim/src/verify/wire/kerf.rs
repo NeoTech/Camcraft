@@ -68,7 +68,7 @@ impl Reading {
     pub(super) fn close(self, z: f64) -> (Option<WireFinding>, Option<WireUnder>) {
         let (moves, tol, deepest) = (self.moves, self.tol, self.deepest);
         (
-            self.first.map(|(move_no, at, depth)| WireFinding::Gouge { move_no, z, at, depth, moves, tol, deepest }),
+            self.first.map(|(move_no, at, depth)| WireFinding::Gouge { move_no, z, at, depth, moves, tol, deepest, chord: false }),
             self.under.map(|(depth, at)| WireUnder { depth, z, at }),
         )
     }
