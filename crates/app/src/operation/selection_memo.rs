@@ -139,6 +139,12 @@ impl Answer {
     /// One real walk - what every miss runs, and what the pins compare a
     /// hit against.
     pub(super) fn fresh(world: &World, setup: Option<&str>, src: &SrcRef, params: &OpParams) -> Self {
+        if super::wire_sketch::selected(src, params) {
+            return match super::wire_sketch::pick(world, src) {
+                Ok((name, chain)) => Self { notes: vec![format!("Selected DXF chain {} on layer '{}' of '{name}'", chain.id, chain.layer)], refusal: None, inside: None },
+                Err(why) => Self { notes: Vec::new(), refusal: Some(why), inside: None },
+            };
+        }
         if super::contour_sketch::is_sketch_contour(world, src, params) {
             if let Some(why) = crate::sketch_model::source_problem(world, setup, src, params) {
                 return Self { notes: Vec::new(), refusal: Some(why), inside: None };

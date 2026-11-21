@@ -72,6 +72,48 @@ impl CreateOperation {
         src: SrcRef,
         params: OpParams,
     ) -> Result<Self, CommandError> {
+        Self::build(world, name, tool, src, params, false)
+    }
+
+    /// Create a nominal inspection reference. Its empty condition refuses every machining generation.
+    pub fn agie_inspection(
+        world: &World,
+        name: &str,
+        tool: &str,
+        drawing: &str,
+        chain: crate::geometry::sketch_chains::ChainId,
+        start: [f64; 2],
+    ) -> Result<Self, CommandError> {
+        use crate::operation::{FeatureSel, GeoSel, Height, HeightReference, WireContourOp, WireSide};
+        let src = SrcRef::Selection(vec![GeoSel {
+            entity: drawing.into(),
+            feature: FeatureSel::SketchChain(chain),
+        }]);
+        let params = OpParams::WireContour(WireContourOp {
+            condition: String::new(),
+            top_z: Height::of(HeightReference::TopOfStock, 0.0),
+            bottom_z: Height::of(HeightReference::BottomOfStock, 0.0),
+            side: WireSide::Die,
+            start: Some(start),
+            tabs: None,
+            capture: false,
+            taper_deg: 0.0,
+            burnout: None,
+            clearance: crate::operation::DEFAULT_CLEARANCE,
+            skims: Vec::new(),
+            four_axis: None,
+        });
+        Self::build(world, name, tool, src, params, true)
+    }
+
+    fn build(
+        world: &World,
+        name: &str,
+        tool: &str,
+        src: SrcRef,
+        params: OpParams,
+        inspection: bool,
+    ) -> Result<Self, CommandError> {
         if name.is_empty() {
             return Err(CommandError::Invalid("operation name must not be empty".into()));
         }
@@ -116,7 +158,9 @@ impl CreateOperation {
         }
         family_gate(world, setup.as_deref(), &params)?;
         tool_gate(world, &params, tool)?;
-        wire_gate(world, setup.as_deref(), tool, &params)?;
+        if !inspection {
+            wire_gate(world, setup.as_deref(), tool, &params)?;
+        }
         area_gate(world, setup.as_deref(), &src, &params)?;
         let (reordered, order) = append_position(world, setup.as_deref())?;
         // #869: a new op starts on its machine's default coolant - Air on
@@ -125,7 +169,7 @@ impl CreateOperation {
         let coolant = crate::setup_mount::machine_of(world, setup.as_deref())
             .1
             .map_or_else(Default::default, |m| crate::operation::CoolantMode::machine_default(&m.coolants));
-        Ok(CreateOperation {
+        let cmd = CreateOperation {
             name: name.to_string(),
             meta: OperationMeta { label: None, order: Some(order), needs_review: Vec::new() },
             reordered,
@@ -140,7 +184,11 @@ impl CreateOperation {
                 after: Default::default(),
                 suppressed: false,
             },
-        })
+        };
+        if inspection {
+            crate::operation::prepare_inspection(world, &cmd.operation).map_err(CommandError::Invalid)?;
+        }
+        Ok(cmd)
     }
 }
 

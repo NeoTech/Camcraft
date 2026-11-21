@@ -299,9 +299,19 @@ fn actions(ui: &mut Ui, state: &mut State, target: &str, live: Option<&Operation
         // Enabled, but the door will refuse: a safety line, not help.
         ui.colored_label(inks.warn, why);
     }
+    if live.is_some_and(|op| operation::has_agie_inspection_source(op)
+        && matches!(&op.params, operation::OpParams::WireContour(w) if w.condition.is_empty())) {
+        super::layout::hint(ui, "Nominal inspection only. No machining condition is assigned.");
+    }
     let commit_hint = format!("Commit the edited parameters ({} undoes)", chord("Z"));
     let clear_hint = format!("Remove the generated path and keep the operation ({} restores it)", chord("Z"));
     let delete_hint = format!("Delete the operation and its toolpath ({} restores both)", chord("Z"));
+    let inspect = live.filter(|op| operation::has_agie_inspection_source(op))
+        .map(|_| CommandKind::ExportAgieInspection(target.to_owned()));
+    let inspection_refusal = inspect.as_ref().and_then(|cmd| state.browser_refusal_of(cmd)).or_else(|| {
+        (!unchanged || (inspect.is_some() && live.is_some_and(|op| op.src != state.op_ui.src())))
+            .then_some("Apply the changes before exporting")
+    });
     let bar = [
         Action { label: "Generate", kind: ActionKind::Primary, enabled: true, hint: Some("Compute the toolpath (applies pending edits first)"), why_not: None },
         Action {
@@ -332,9 +342,17 @@ fn actions(ui: &mut Ui, state: &mut State, target: &str, live: Option<&Operation
             hint: Some(delete_hint.as_str()),
             why_not: Some("The operation is gone"),
         },
+        Action {
+            label: "Export Agie inspection setup",
+            kind: ActionKind::Secondary,
+            enabled: inspection_refusal.is_none(),
+            hint: Some("Nominal inspection only. Physical stock XY is unknown. The native piece uses zero length, width and working steps."),
+            why_not: inspection_refusal,
+        },
     ];
+    let visible = if inspect.is_some() { &bar[..] } else { &bar[..5] };
     let bar_inks = BarInks { accent: pal.accent, on_accent: super::contrast::on_fill(pal.accent), danger: inks.error };
-    match action_bar(ui, &bar, &bar_inks) {
+    match action_bar(ui, visible, &bar_inks) {
         Some(0) => {
             start_exit_pick::disarm(state);
             state.generate_operation(target);
@@ -346,6 +364,11 @@ fn actions(ui: &mut Ui, state: &mut State, target: &str, live: Option<&Operation
         Some(2) => state.pending.push_back(CommandKind::ClearToolpath(target.to_owned())),
         Some(3) => state.close_operation_editor(target),
         Some(4) => state.pending.push_back(CommandKind::DeleteOperation(target.to_owned())),
+        Some(5) => state.pending.extend(inspect),
         _ => {}
     }
 }
+
+#[cfg(test)]
+#[path = "agie_inspection_tests.rs"]
+mod agie_inspection_tests;

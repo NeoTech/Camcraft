@@ -55,7 +55,7 @@ impl GateKind {
 #[must_use]
 pub fn requires_approval(tool: &str, args: &Value) -> Option<GateKind> {
     match tool {
-        "post" => Some(GateKind::Posting),
+        "post" | "export_agie_inspection" => Some(GateKind::Posting),
         "load_machine" | "edit_machine" => Some(GateKind::MachineEdit),
         "set_setup_post" | "set_workholding_max_rpm" | "set_setup_nose_to_axis" => {
             Some(GateKind::LimitEdit)

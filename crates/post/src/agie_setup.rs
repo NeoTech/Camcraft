@@ -28,6 +28,10 @@
 //! # Ok::<(), camcraft_post::agie_setup::SetupError>(())
 //! ```
 
+mod inspection;
+mod publish;
+pub use inspection::{INSPECTION_RECEIPT, InspectionProfile, InspectionSegment};
+
 /// Setup coordinates for a closed punch with a predrilled 2 mm start hole.
 /// XY coordinates are integer micrometres in the same work frame as the ISO.
 pub struct PunchSetup20<'a> {
@@ -123,9 +127,11 @@ fn mm(value_um: i64) -> String {
 }
 
 fn attribute(lines: &mut Vec<String>, object: &str, context: &str, key: &str, value: &str) {
-    lines.push(format!(
-        "  ok=JE_AttribObject({object},SETATTR,je_piece,{context},{key},{value},je_dim)"
-    ));
+    lines.push(attribute_call(object, context, key, value));
+}
+
+fn attribute_call(object: &str, context: &str, key: &str, value: &str) -> String {
+    format!("  ok=JE_AttribObject({object},SETATTR,je_piece,{context},{key},{value},je_dim)")
 }
 
 fn checked(lines: &mut Vec<String>, command: String) {

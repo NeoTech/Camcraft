@@ -151,6 +151,12 @@ pub enum CommandKind {
     /// Post NC through the save-dialog law (M1.7b): path via rfd, gate
     /// via `posting::post_setup`.
     PostProgramDialog,
+    ExportAgieInspection(String),
+    ImportAgieDrawing,
+    CreateAgieInspection {
+        name: String, tool: String, drawing: String,
+        chain: camcraft_app::geometry::sketch_chains::ChainId, start: [f64; 2], setup: Option<String>,
+    },
     /// The same post at a known path - what the headless tests run.
     PostProgramFile(PathBuf),
     /// One file per operation into a known folder (#111) - the
@@ -3386,6 +3392,11 @@ impl State {
             CommandKind::SaveProjectFile(path) => self.save_project_path(path),
             CommandKind::OpenRecent(kind, path) => self.open_recent(kind, path),
             CommandKind::ClearRecent(kind) => self.clear_recent(kind),
+            CommandKind::ImportAgieDrawing => self.import_agie_drawing(),
+            CommandKind::CreateAgieInspection { name, tool, drawing, chain, start, setup } => {
+                self.create_agie_inspection(name, tool, drawing, chain, start, setup);
+            }
+            CommandKind::ExportAgieInspection(name) => self.export_agie_inspection(&name),
             CommandKind::PostProgramDialog => self.post_program_dialog(),
             CommandKind::PostProgramFile(path) => self.post_program_path(path),
             CommandKind::PostProgramFolder(dir) => self.post_program_folder(dir),

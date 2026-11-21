@@ -841,9 +841,12 @@ dependencies = [
  "camcraft-cl",
  "camcraft-geometry",
  "getrandom 0.3.4",
+ "rustix 1.1.5",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror 2.0.21",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

@@ -150,6 +150,7 @@ pub struct GenJob {
     /// #532: the machine condition a wire EDM kind cuts with (its wire
     /// and gap); `None` for every kind that mounts a library tool.
     pub(super) wire: Option<(super::wire_op::WireCondition, Option<super::wire_op::WireCondition>)>,
+    pub(super) wire_sketch: Option<super::wire_sketch::SelectedWireChain>,
     /// #537: a 4-axis wire cut's two picked profiles.
     pub(super) wire_ruled: Option<Result<super::wire_ruled::RuledPicks, GenError>>,
 
@@ -280,6 +281,9 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
     };
     // #1603: the keep law speaks exactly where that reading does.
     let around_part = super::keep_law::is_keep_kind(&op.params) && matches!(op.src, SrcRef::Entity(_)) && picked_region.is_some();
+    let wire_sketch = super::wire_sketch::selected(&op.src, &op.params)
+        .then(|| super::wire_sketch::resolve(world, op, op_name, &hs))
+        .transpose().map_err(GenError::Invalid)?;
     let wire_ruled = super::wire_ruled::picks_of(world, op);
     let sketch_contour = super::contour_sketch::is_sketch_contour(world, &op.src, &op.params)
         .then(|| super::contour_sketch::resolve_plan(world, &op.src, &op.params));
@@ -287,7 +291,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         // The plasma cut reads its picks the contour's way (#670):
         // closed rings AND open runs, each cut as picked.
         (OpParams::Contour { .. } | OpParams::PlasmaProfile(_) | OpParams::WireContour(_), SrcRef::Selection(items))
-            if wire_ruled.is_none() && sketch_contour.is_none() =>
+            if wire_ruled.is_none() && sketch_contour.is_none() && wire_sketch.is_none() =>
         {
             Some(selection_geometry_impl(world, setup, items, &op.params, None))
         }
@@ -486,6 +490,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
         carried_overhang,
         wire,
         wire_ruled,
+        wire_sketch,
         sinker_gap,
         sinker_pass,
         sinker_wear,

@@ -254,7 +254,11 @@ pub fn current_stamp(
                         ] {
                             w(&mut h, v);
                         }
-                        write_sketch_digest(&sketch, &mut h);
+                        if super::wire_sketch::selected(src, params) {
+                            super::wire_sketch::stamp(world, setup, op_name, &sketch, &mut h);
+                        } else {
+                            write_sketch_digest(&sketch, &mut h);
+                        }
                     } else {
                         let loc = crate::setup_align::pose_in(world, &entity, setup).unwrap_or_default();
                         for v in [

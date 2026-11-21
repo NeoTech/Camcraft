@@ -140,6 +140,7 @@ mod setup_wcs_pick;
 // #870: the WCS page's footer (Set origin beside Close) and origin line.
 mod wcs_footer;
 // #343: a setup's own node pages (settings, machine, post, fixtures, tools).
+mod agie_inspection;
 mod setup_pages;
 mod setup_settings_page;
 mod setup_post_page;

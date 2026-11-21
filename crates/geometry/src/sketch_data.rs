@@ -69,6 +69,7 @@ impl SourceUnits {
 #[derive(Clone, Debug, PartialEq)]
 pub struct SketchData {
     primitives: Vec<LayeredPrimitive>,
+    primitive_signature: u64,
     layers: Vec<String>,
     units: SourceUnits,
     join_tolerance: f64,
@@ -133,6 +134,7 @@ impl SketchData {
             .chain(primitives.iter().map(|p| p.layer.clone()))
             .collect();
         Ok(SketchData {
+            primitive_signature: primitive_signature(&primitives),
             primitives,
             layers: names.into_iter().collect(),
             units,
@@ -146,6 +148,12 @@ impl SketchData {
     /// The primitives, in millimetres, in drawing order.
     pub fn primitives(&self) -> &[LayeredPrimitive] {
         &self.primitives
+    }
+
+    /// Exact geometry and layer membership, in drawing order. Reading this
+    /// immutable signature never visits a primitive.
+    pub fn primitive_signature(&self) -> u64 {
+        self.primitive_signature
     }
 
     /// Every layer name of the drawing's layer table and of its primitives, sorted.
@@ -257,7 +265,8 @@ pub fn bounds(primitives: &[LayeredPrimitive]) -> Option<(Point2, Point2)> {
                 start_angle,
                 sweep_angle,
             } => {
-                let on = |a: f64| Point2::new(center.x + radius * a.cos(), center.y + radius * a.sin());
+                let on =
+                    |a: f64| Point2::new(center.x + radius * a.cos(), center.y + radius * a.sin());
                 add(on(start_angle));
                 add(on(start_angle + sweep_angle));
                 for quarter in 0..4 {
@@ -275,4 +284,88 @@ pub fn bounds(primitives: &[LayeredPrimitive]) -> Option<(Point2, Point2)> {
         }
     }
     range
+}
+
+#[cfg(test)]
+thread_local! {
+    static SIGNATURE_BUILDS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Compute once at the common import and project-load boundary. Store the digest on
+/// the same immutable value as its source so sharing or undo never needs invalidation.
+fn primitive_signature(primitives: &[LayeredPrimitive]) -> u64 {
+    use std::hash::{DefaultHasher, Hash, Hasher};
+    #[cfg(test)]
+    SIGNATURE_BUILDS.with(|n| n.set(n.get() + 1));
+    let mut h = DefaultHasher::new();
+    primitives.len().hash(&mut h);
+    for item in primitives {
+        item.layer.hash(&mut h);
+        match item.primitive {
+            Primitive::Line { start, end } => {
+                h.write_u8(0);
+                [start.x, start.y, end.x, end.y]
+                    .map(f64::to_bits)
+                    .hash(&mut h);
+            }
+            Primitive::Arc {
+                center,
+                radius,
+                start_angle,
+                sweep_angle,
+            } => {
+                h.write_u8(1);
+                [center.x, center.y, radius, start_angle, sweep_angle]
+                    .map(f64::to_bits)
+                    .hash(&mut h);
+            }
+            Primitive::Circle { center, radius } => {
+                h.write_u8(2);
+                [center.x, center.y, radius].map(f64::to_bits).hash(&mut h);
+            }
+        }
+    }
+    h.finish()
+}
+
+#[cfg(test)]
+mod signature_tests {
+    use super::*;
+    use std::cell::Cell;
+
+    #[test]
+    fn primitive_signature_is_built_once_per_drawing_and_reads_exact_coordinates() {
+        let make = |r| {
+            SketchData::from_parts(
+                vec![LayeredPrimitive {
+                    layer: "outline".into(),
+                    primitive: Primitive::Circle {
+                        center: Point2::default(),
+                        radius: r,
+                    },
+                }],
+                vec![],
+                SourceUnits {
+                    stated: Units::Known(Unit::Millimeters),
+                    applied: Unit::Millimeters,
+                },
+                None,
+                ImportSummary::default(),
+            )
+            .expect("circle")
+        };
+        let before = SIGNATURE_BUILDS.with(Cell::get);
+        let original = make(1.0);
+        let same = make(1.0);
+        let edited = make(1.0000001);
+        let shared = std::sync::Arc::new(original);
+        for _ in 0..8 {
+            assert_eq!(
+                shared.clone().primitive_signature(),
+                same.primitive_signature()
+            );
+            assert_ne!(shared.primitive_signature(), edited.primitive_signature());
+        }
+        assert_eq!(SIGNATURE_BUILDS.with(Cell::get), before + 3);
+    }
 }

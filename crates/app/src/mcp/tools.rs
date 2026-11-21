@@ -91,6 +91,7 @@ pub(super) fn all() -> impl Iterator<Item = &'static Tool> {
         .chain(super::sinker_tools::TOOLS)
         .chain(super::machine_tools::TOOLS)
         .chain(super::tool_number_tools::TOOLS)
+        .chain(super::agie_inspection::TOOLS)
         .chain(super::post_options_tools::TOOLS)
         .chain(super::sketch_tools::TOOLS)
         .chain(super::holder_dxf_tools::TOOLS)

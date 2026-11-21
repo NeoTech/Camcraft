@@ -52,6 +52,7 @@ mod pick;
 mod box_pick;
 mod pockets;
 // #1534: document and per-setup post options (`SetPostOptions` / `SetSetupPostOptions`).
+mod agie_inspection;
 mod post_options_tools;
 mod post_offer_view;
 mod render;
