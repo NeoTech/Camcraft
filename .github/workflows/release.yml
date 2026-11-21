@@ -480,6 +480,16 @@ jobs:
           echo '7d77a4220a4f699cba2fc0e0c7859f780e887e269159ad4fab90e11ea16c906f  /tmp/zola.tar.gz' | sha256sum -c -
           tar -xzf /tmp/zola.tar.gz -C /tmp zola
           /tmp/zola --version
+      - name: Site tests
+        # #1832: the Python site tests (site/tests) pin the operation
+        # reference pictures against OpType, the guide navigation, links
+        # and images. Nothing else runs them: a missing section or picture
+        # view fails the site here. They run before version.toml exists, on
+        # the same tree as a local run (site/README.md), and build into
+        # their own temporary folders with this Zola.
+        env:
+          ZOLA: /tmp/zola
+        run: python3 -m unittest discover -s site/tests -v
       - name: Version the site is built from
         # The workspace version is the release's version (the publish job
         # checks the tag names it too); the site's templates read it from
