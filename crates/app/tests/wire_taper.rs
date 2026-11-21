@@ -75,6 +75,8 @@ fn punch_with(text: &str, taper: f64, burnout: Option<f64>) -> (World, Result<()
         tabs: None,
         // The punch drops into a stated capture (#539's hold law).
         capture: true,
+        both_pieces_restrained: false,
+        stock_centered_in_xy_travel: false,
         taper_deg: taper,
         four_axis: None,
         burnout,

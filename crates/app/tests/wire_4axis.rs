@@ -169,6 +169,8 @@ fn wire_op(four_axis: Option<WireFourAxis>) -> WireContourOp {
         tabs: None,
         // The punch drops into a stated capture (#539's hold law).
         capture: true,
+        both_pieces_restrained: false,
+        stock_centered_in_xy_travel: false,
         taper_deg: 0.0,
         burnout: None,
         clearance: camcraft_app::operation::DEFAULT_CLEARANCE,

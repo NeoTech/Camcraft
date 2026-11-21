@@ -104,6 +104,32 @@ fn every_shipped_machine_lists_and_validates_clean() {
     assert!(x.1.contains("-14 .. 14 in"), "{x:?}");
 }
 
+/// AGIE C2.1 (June 2002), sections 1.1 and 5.2. Exercise the catalogue
+/// read used when assigning the machine in the setup picker.
+#[test]
+fn agiecut_classic_2s_exposes_the_sourced_axes_and_wire_sizes() {
+    let entry = library::builtins()
+        .into_iter()
+        .find(|e| e.name == "AGIECUT Classic 2S (template)")
+        .expect("Classic 2S template in the library");
+    assert_eq!(entry.kind, Some(Kind::WireEdm));
+    assert_eq!(entry.units, "mm");
+    let (_, machine) = library::read_for_assign(&entry.source).expect("assignable template");
+    let uv = Some((-70.0, 70.0));
+    let axes: Vec<_> = machine.axes.iter().map(|a| (a.name.as_str(), a.travel, a.rapid)).collect();
+    assert_eq!(axes, [
+        ("X", None, Some(900.0)),
+        ("Y", None, Some(900.0)),
+        ("Z", None, Some(600.0)),
+        ("U", uv, Some(600.0)),
+        ("V", uv, Some(600.0)),
+    ]);
+    let edm = machine.edm.expect("EDM capabilities");
+    assert_eq!(edm.wire_diameters, [0.20, 0.25, 0.30, 0.33]);
+    assert_eq!((edm.lower_guide_z, edm.upper_guide_z, edm.max_taper_deg), (None, None, None));
+    assert!(edm.conditions.is_empty());
+}
+
 /// Every `.mch` in `assets/machines` is a library entry, except the
 /// post-grammar default (`3axis-vmc.mch` is the static mirror form the
 /// post reads, not a checker-grammar machine file).
