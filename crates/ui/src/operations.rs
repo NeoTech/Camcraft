@@ -299,8 +299,10 @@ pub fn fold_warnings_located(warnings: &[Warning]) -> Vec<(String, Option<usize>
             Warning::ProbeSearch { .. } => (214, false),
             // A sinker finish out of order (#543): advisory, its own line.
             Warning::SinkerFinishOrder { .. } => (215, false),
-            // A hole wider than its drill (#2496): advisory, its own line.
-            Warning::DrillUndersize { .. } => (216, false),
+            // A hole wider than its drill (#2496): advisory, its own line,
+            // clear of the avoid range (216..=220) and of 221 (#3040).
+            // 222 is kept for UndercutLift (PR #2836).
+            Warning::DrillUndersize { .. } => (223, false),
             // A lathe holder's rub (#369) splits part from stock too.
             Warning::HolderHit { part, .. } => (212 + *part as u8, false),
         }
@@ -618,6 +620,23 @@ mod warning_fold_tests {
             "warning: shank/holder at move 4 collides with the uncut stock \
              - repeated on 1 more move (to 5)"
         );
+    }
+
+    /// #3040: `DrillUndersize` had the key of the shank `AvoidHit`
+    /// (216), so the advisory line hid a blocking "Do not touch" hit.
+    /// Each avoid part keeps its own line beside the undersize hole.
+    #[test]
+    fn a_drill_undersize_never_hides_an_avoid_hit() {
+        use camcraft_app::verify::FixturePart;
+        let parts = [FixturePart::Shank, FixturePart::Holder, FixturePart::Spindle, FixturePart::Rapid, FixturePart::Flute];
+        let mut w = vec![Warning::DrillUndersize { at: 3, hole_mm: 6.0, drill_mm: 5.0 }];
+        w.extend(parts.iter().enumerate().map(|(i, &part)| Warning::AvoidHit { at: 10 + i, item: 1, part, short_mm: 0.5 }));
+        let folded = fold_warnings(&w);
+        assert_eq!(folded.len(), 1 + parts.len(), "{folded:?}");
+        assert!(folded[0].contains("move 3"), "{folded:?}");
+        for (i, line) in folded[1..].iter().enumerate() {
+            assert!(line.contains(&format!("move {}", 10 + i)) && !line.contains("repeated"), "{folded:?}");
+        }
     }
 
     #[test]
