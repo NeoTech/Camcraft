@@ -8,6 +8,8 @@
 //! kind's own module names its sources); no vendor material or text.
 
 use super::fields::*;
+use super::layout::prop_row_hint;
+use camcraft_app::machining2d::BoreStrategy;
 
 pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut Cx<'_>) {
     let (u, tab, op_ctx) = (cx.u, cx.tab, cx.op_ctx);
@@ -124,11 +126,18 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             tolerance,
             holes,
             break_through,
+            strategy,
         } => {
+            let helical = *strategy != BoreStrategy::Rings;
             if tab == SEC_LEADS {
                 // Each hole opens with the dive at its centre; the
                 // descents between levels and the links are the user's.
-                hint(ui, "each hole opens with a plunge at its centre");
+                // #2830: a helical bore has one level and no dive.
+                if helical {
+                    hint(ui, "each hole opens with a helix on the wall radius from the plunge height; the level links do not apply");
+                } else {
+                    hint(ui, "each hole opens with a plunge at its centre");
+                }
                 lead_page::leads_tab(ui, u, "bore", None, links);
             }
             if tab == SEC_GEO {
@@ -156,10 +165,15 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
                     retract_hop(ui, world, op_ctx.as_deref(), retract_z, top_z, clearance_z, "bore.retract");
                     hole_floor(ui, world, op_ctx.as_deref(), bottom_z, top_z, "bore.bottom");
                     break_through_row(ui, u, break_through, &drill_default(u));
-                    prop_row(ui, "Stepdown", |ui| num(ui, u, stepdown));
+                    if helical {
+                        prop_row_hint(ui, "Helix pitch", "Z per turn of the helix", |ui| num(ui, u, stepdown));
+                    } else {
+                        prop_row(ui, "Stepdown", |ui| num(ui, u, stepdown));
+                    }
                 });
             }
             if tab == SEC_PASSES {
+                bore_strategy_rows(ui, strategy);
                 prop_row(ui, "Stock to leave", |ui| num(ui, u, stock_to_leave));
                 prop_row(ui, "Tolerance", |ui| num(ui, u, tolerance));
                 hint(ui, "the ring is chords to this tolerance - the same fit law the pocket walls keep");
@@ -314,5 +328,23 @@ fn hole_floor(ui: &mut Ui, world: &World, setup: Option<&str>, bottom_z: &mut Op
     match bottom_z {
         Some(b) => height_editor(ui, "Bottom Z", world, setup, b, tag),
         None => hint(ui, "every hole stops at its own floor from the model"),
+    }
+}
+
+/// The Bore strategy (#2830): the ring ladder, or one helix per hole
+/// with an optional spring pass.
+fn bore_strategy_rows(ui: &mut Ui, strategy: &mut BoreStrategy) {
+    const NAMES: [&str; 2] = ["Rings (level by level)", "Helical"];
+    let mut idx = usize::from(*strategy != BoreStrategy::Rings);
+    let before = idx;
+    prop_row_hint(ui, "Strategy", "how the tool cuts each hole", |ui| combo(ui, "bore_strategy", &mut idx, &NAMES));
+    if idx != before {
+        *strategy = if idx == 1 { BoreStrategy::Helical { spring_pass: false } } else { BoreStrategy::Rings };
+    }
+    if let BoreStrategy::Helical { spring_pass } = strategy {
+        check_row(ui, "Spring pass", spring_pass);
+        hint(ui, "one helix on the wall radius to the floor, then a floor circle - holes up to twice the tool diameter");
+    } else {
+        hint(ui, "a dive at the centre, then rings out to the wall at each stepdown");
     }
 }

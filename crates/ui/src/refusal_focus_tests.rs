@@ -35,6 +35,7 @@ fn refused() -> State {
     state.history.execute(&state.world, AddTool::new(&state.world, TOOL, tool).expect("tool"));
     let params = OpParams::Bore {
         break_through: None,
+        strategy: Default::default(),
         links: camcraft_app::links::Links::PLANAR,
         clearance_z: Height::fixed(25.0),
         retract_z: None,

@@ -123,6 +123,7 @@ fn bore_path(entry_angle: f64, climb: bool) -> Toolpath {
         tolerance: 0.01,
         entry: Entry3D::Ramp,
         helix_radius: 1.0,
+        strategy: Default::default(),
         links: links(entry_angle),
     })
     .expect("a legal bore")

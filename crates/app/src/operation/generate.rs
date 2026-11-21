@@ -2556,6 +2556,7 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             tolerance,
             holes,
             break_through,
+            strategy,
             ..
         } => {
             // #1557: the stated break-through, the drill's own by default.
@@ -2600,6 +2601,8 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 tolerance: *tolerance,
                 entry: Entry3D::Plunge,
                 helix_radius: 1.0,
+                // #2830: rings or one helix per hole.
+                strategy: *strategy,
             })?;
             (region, path)
         }

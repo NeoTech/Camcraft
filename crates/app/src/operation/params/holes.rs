@@ -106,12 +106,19 @@ impl OpParams {
                 tolerance,
                 holes,
                 break_through,
+                strategy,
             } => {
                 // #1557: the break-through, written only when stated,
                 // so every older op keeps the digest it was cached under.
                 if let Some(b) = break_through {
                     h.write_u8(0xB7);
                     w(h, *b);
+                }
+                // #2830: the helix, written only when chosen - a ring
+                // ladder keeps the digest it was cached under.
+                if let crate::machining2d::BoreStrategy::Helical { spring_pass } = strategy {
+                    h.write_u8(0xB8);
+                    h.write_u8(u8::from(*spring_pass));
                 }
                 wh(h, *clearance_z);
                 wh(h, *top_z);

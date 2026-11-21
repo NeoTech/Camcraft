@@ -102,6 +102,7 @@ fn part() -> Mesh {
 fn bore() -> OpParams {
     OpParams::Bore {
         break_through: None,
+        strategy: Default::default(),
         links: camcraft_app::links::Links::PLANAR,
         clearance_z: Height::fixed(40.0),
         retract_z: None,

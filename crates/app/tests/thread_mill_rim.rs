@@ -171,6 +171,7 @@ fn open_ahead(world: &World, h: &mut History, thread: &OpParams) {
         h.execute(world, AddTool::new(world, &t, tool).expect("open tool"));
         let bore = OpParams::Bore {
             break_through: hole.through.then_some(1.5),
+            strategy: Default::default(),
             links: camcraft_app::links::Links::PLANAR,
             clearance_z: Height::fixed(hole.entry_z + 10.0),
             retract_z: None,
