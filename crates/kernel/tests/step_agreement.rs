@@ -170,6 +170,7 @@ per_file! {
     step_short_units_degree_cone => "short_units_degree_cone.step",
     step_short_units_inch => "short_units_inch.step",
     step_short_units_metre => "short_units_metre.step",
+    step_sphere_quarter_pole => "sphere_quarter_pole.step",
     step_spline_revolved => "spline_revolved.step",
     step_tool_csys_box_iso13399 => "tool_csys_box_iso13399.step",
     step_tool_csys_degenerate => "tool_csys_degenerate.step",

@@ -38,6 +38,7 @@ mod mesh_bound_blossom;
 mod mesh_bound_spline;
 pub mod mesh_deviation;
 mod mesh_distance;
+mod mesh_pole;
 pub mod mesh_redivide;
 mod mesh_redivide_fill;
 pub mod mesh_weld;

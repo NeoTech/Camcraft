@@ -270,6 +270,15 @@ pub const ROWS: &[Row] = &[
         import: "truck refuses: a shell's mesh is not finite",
         mesh: "off: volume, area",
     },
+    // #3034: a rational B-spline dome that ends in a pole at a vertex. It
+    // was added after #2790, so truck has no recorded reading.
+    Row {
+        file: "sphere_quarter_pole.step",
+        mm_per_unit: 1.0,
+        truck: Truck::NotRecorded,
+        import: "no truck reading; unit agrees",
+        mesh: "watertight, within tolerance",
+    },
     Row {
         file: "spline_revolved.step",
         mm_per_unit: 1.0,
