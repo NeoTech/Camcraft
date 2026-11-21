@@ -298,6 +298,7 @@ fn a_bore_cuts_the_levels_of_its_mode() {
             entry: Entry3D::Plunge,
             helix_radius: 1.0,
             links: links(Links::PLANAR, equal),
+            strategy: Default::default(),
         };
         bore(&p).expect("bore")
     });
