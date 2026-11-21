@@ -203,7 +203,7 @@ pub fn area_unsupported(kind: OpType) -> Option<String> {
             format!("{kind} rides its hole list - edit the holes instead of a boundary")
         }
         OpType::Probe => format!("a {kind} touches its picked feature - there is no area to bound"),
-        OpType::PlasmaProfile => {
+        OpType::PlasmaProfile | OpType::WaterjetProfile => {
             format!("a {kind} cuts its picked contours through the plate - pick the contours instead of a boundary")
         }
         OpType::WireContour => {

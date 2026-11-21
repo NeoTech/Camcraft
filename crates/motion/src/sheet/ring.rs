@@ -1,4 +1,4 @@
-//! Ring helpers for the plasma cut (#670): the kerf offset of one
+//! Ring helpers for the sheet cuts (#670, #1883): the kerf offset of one
 //! contour and the polyline walks the emitter rides - nearest point,
 //! a ring re-started at a point, a stretch along it.
 //!
@@ -11,13 +11,10 @@ use crate::geo2d::{Loop, Point2, Region};
 use crate::machining2d::GenError;
 
 use super::nest::Contour;
+use super::Voice;
 
-pub(super) fn dist(a: Point2, b: Point2) -> f64 {
+pub fn dist(a: Point2, b: Point2) -> f64 {
     (b.x - a.x).hypot(b.y - a.y)
-}
-
-fn invalid(why: String) -> GenError {
-    GenError::Invalid(format!("plasma profile: {why}"))
 }
 
 /// The torch-centre ring of a closed contour: its outline grown by `r`
@@ -25,30 +22,33 @@ fn invalid(why: String) -> GenError {
 /// (a hole - the waste is inside), counter-clockwise. A hole the kerf
 /// cannot enter, or a contour whose offset splits or closes a gap, is
 /// refused by `label` - never an offset that would cut the part.
-pub(super) fn kerf_ring(c: &Contour, r: f64, label: &str) -> Result<Vec<Point2>, GenError> {
+pub fn kerf_ring(c: &Contour, r: f64, label: &str, v: Voice) -> Result<Vec<Point2>, GenError> {
     let ring = Region::new(vec![Loop::new(c.pts.clone())?])?;
     let inner = c.role == ContourRole::Inner;
     let off = ring.offset(if inner { -r } else { r })?;
     let eq_d = 2.0 * (c.area / std::f64::consts::PI).sqrt();
     match off.loops() {
         [one] => Ok(one.points().to_vec()),
-        [] if inner => Err(invalid(format!(
-            "{label} is a hole of about Ø{eq_d:.3} mm - smaller than the kerf ({:.3} mm); the torch cannot cut it without cutting the part",
-            2.0 * r
+        [] if inner => Err(v.invalid(format!(
+            "{label} is a hole of about Ø{eq_d:.3} mm - smaller than the kerf ({:.3} mm); the {} cannot cut it without cutting the part",
+            2.0 * r,
+            v.tool
         ))),
-        _ if inner => Err(invalid(format!(
-            "{label} is a hole that narrows to a gap under the kerf ({:.3} mm) - the torch cannot pass it without cutting the part",
-            2.0 * r
+        _ if inner => Err(v.invalid(format!(
+            "{label} is a hole that narrows to a gap under the kerf ({:.3} mm) - the {} cannot pass it without cutting the part",
+            2.0 * r,
+            v.tool
         ))),
-        _ => Err(invalid(format!(
-            "{label} has a gap or slot narrower than the kerf ({:.3} mm) - the torch cannot form it; widen it or use a narrower kerf",
-            2.0 * r
+        _ => Err(v.invalid(format!(
+            "{label} has a gap or slot narrower than the kerf ({:.3} mm) - the {} cannot form it; widen it or use a narrower kerf",
+            2.0 * r,
+            v.tool
         ))),
     }
 }
 
 /// The nearest point of the closed ring to `p`: (edge index, foot).
-pub(super) fn nearest(ring: &[Point2], p: Point2) -> (usize, Point2) {
+pub fn nearest(ring: &[Point2], p: Point2) -> (usize, Point2) {
     let n = ring.len();
     let mut best = (0usize, ring.first().copied().unwrap_or(p), f64::INFINITY);
     for i in 0..n {
@@ -67,7 +67,7 @@ pub(super) fn nearest(ring: &[Point2], p: Point2) -> (usize, Point2) {
 
 /// The middle of the ring's longest edge: (edge index, point) - the
 /// start a lead meets on a straight, never on a corner.
-pub(super) fn longest_mid(ring: &[Point2]) -> (usize, Point2) {
+pub fn longest_mid(ring: &[Point2]) -> (usize, Point2) {
     let n = ring.len();
     let mut best = (0usize, -1.0f64);
     for i in 0..n {
@@ -83,7 +83,7 @@ pub(super) fn longest_mid(ring: &[Point2]) -> (usize, Point2) {
 /// The closed walk of `ring` from `s` on edge `seg` (s .. back to s),
 /// travelling counter-clockwise when `ccw` (the ring is CCW), else
 /// clockwise. Coincident neighbours are dropped.
-pub(super) fn walk_from(ring: &[Point2], seg: usize, s: Point2, ccw: bool) -> Vec<Point2> {
+pub fn walk_from(ring: &[Point2], seg: usize, s: Point2, ccw: bool) -> Vec<Point2> {
     let n = ring.len();
     let mut out = vec![s];
     let push = |p: Point2, out: &mut Vec<Point2>| {
@@ -106,7 +106,7 @@ pub(super) fn walk_from(ring: &[Point2], seg: usize, s: Point2, ccw: bool) -> Ve
 
 /// The first `len` mm along `walk` (from its start), as points after
 /// the start; capped at the walk's own length.
-pub(super) fn along(walk: &[Point2], len: f64) -> Vec<Point2> {
+pub fn along(walk: &[Point2], len: f64) -> Vec<Point2> {
     let mut out = Vec::new();
     let mut left = len;
     for w in walk.windows(2) {
@@ -127,7 +127,7 @@ pub(super) fn along(walk: &[Point2], len: f64) -> Vec<Point2> {
 }
 
 /// The unit direction a -> b, or +X for coincident points.
-pub(super) fn unit(a: Point2, b: Point2) -> Point2 {
+pub fn unit(a: Point2, b: Point2) -> Point2 {
     let l = dist(a, b);
     if l > 1e-12 && l.is_finite() {
         Point2::new((b.x - a.x) / l, (b.y - a.y) / l)
@@ -137,7 +137,7 @@ pub(super) fn unit(a: Point2, b: Point2) -> Point2 {
 }
 
 /// The area centroid of a ring (its vertex mean when it has no area).
-pub(super) fn centroid(ring: &[Point2]) -> Point2 {
+pub fn centroid(ring: &[Point2]) -> Point2 {
     let n = ring.len();
     let (mut a, mut cx, mut cy) = (0.0, 0.0, 0.0);
     for i in 0..n {

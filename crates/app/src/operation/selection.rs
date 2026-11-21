@@ -189,7 +189,7 @@ pub(super) fn selection_geometry_impl(
     notes: Option<&mut Vec<String>>,
 ) -> Result<SelectionGeometry, GenError> {
     let (loops, mut chains, auto) = selection_geometry_in(world, setup, items, params, notes, None)?;
-    if matches!(params, OpParams::Contour { .. } | OpParams::PlasmaProfile(_) | OpParams::WireContour(_))
+    if matches!(params, OpParams::Contour { .. } | OpParams::PlasmaProfile(_) | OpParams::WaterjetProfile(_) | OpParams::WireContour(_))
         && !chains.is_empty()
     {
         chains = boundary_chains::join_open_runs(chains);
@@ -231,7 +231,7 @@ pub(super) fn selection_geometry_in(
         OpParams::Pocket { .. } | OpParams::Adaptive2D { .. } | OpParams::Offset2D { .. }
     );
     // The plasma profile takes open runs as the contour does (#670).
-    let contour = matches!(params, OpParams::Contour { .. } | OpParams::PlasmaProfile(_) | OpParams::WireContour(_));
+    let contour = matches!(params, OpParams::Contour { .. } | OpParams::PlasmaProfile(_) | OpParams::WaterjetProfile(_) | OpParams::WireContour(_));
     let contour_side = match params {
         OpParams::Contour { side, .. } => *side,
         _ => Side::Auto,

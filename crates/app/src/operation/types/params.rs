@@ -1325,6 +1325,10 @@ pub enum OpParams {
     /// rule and inner-before-outer order (see [`crate::plasma`]). The
     /// plasma table's only kind (#669's family seam).
     PlasmaProfile(super::plasma::PlasmaOp),
+    /// Waterjet profile (#1883): 2D through-cuts of the picked contours
+    /// with an abrasive jet - kerf offset, leads, tabs as uncut gaps and
+    /// inner-before-outer order (see [`crate::waterjet`]).
+    WaterjetProfile(super::waterjet::WaterjetOp),
     /// Wire EDM contour (#532): one closed profile cut by a vertical
     /// wire at the kerf offset of the machine's condition, on a stated
     /// punch / die side, from a stated start hole (see
@@ -1384,6 +1388,7 @@ impl OpParams {
             OpParams::Thread { .. } => OpType::Thread,
             OpParams::Probe { .. } => OpType::Probe,
             OpParams::PlasmaProfile(_) => OpType::PlasmaProfile,
+            OpParams::WaterjetProfile(_) => OpType::WaterjetProfile,
             OpParams::WireContour(_) => OpType::WireContour,
             OpParams::SinkerBurn(_) => OpType::SinkerBurn,
             OpParams::SinkerSideBurn(_) => OpType::SinkerSideBurn,
@@ -1413,7 +1418,7 @@ impl OpParams {
             // The probe touches along the machine's axes (#108); the
             // torch stands vertical over a flat plate (#670); the
             // trochoid carries no index (#220 slice 1).
-            OpParams::Probe { .. } | OpParams::PlasmaProfile(_) | OpParams::TrochoidalSlot { .. } => None,
+            OpParams::Probe { .. } | OpParams::PlasmaProfile(_) | OpParams::WaterjetProfile(_) | OpParams::TrochoidalSlot { .. } => None,
             // The wire stands vertical (#532): a taper is a pose per
             // move (#290 D2, #536), never a 3+2 index.
             OpParams::WireContour(_) => None,
@@ -1489,6 +1494,7 @@ impl OpParams {
     pub fn clearance(&self) -> Height {
         match self {
             OpParams::PlasmaProfile(p) => p.clearance_z,
+            OpParams::WaterjetProfile(p) => p.clearance_z,
             // A wire has no rapids plane (#532): it never lifts out of
             // the work; its travel plane is the workpiece's top.
             OpParams::WireContour(p) => p.top_z,
@@ -1548,6 +1554,7 @@ impl OpParams {
             OpParams::Probe { clearance_z, .. } => *clearance_z,
             // The plasma contours are drawn on the plate's top (#670).
             OpParams::PlasmaProfile(p) => p.top_z,
+            OpParams::WaterjetProfile(p) => p.top_z,
             // The wire's profile is drawn on the workpiece's top (#532).
             OpParams::WireContour(p) => p.top_z,
             // The electrode enters at the work top (#541).
@@ -1623,6 +1630,11 @@ impl OpParams {
         match self {
             OpParams::Probe { clearance_z, .. } => f(*clearance_z),
             OpParams::PlasmaProfile(p) => {
+                f(p.clearance_z);
+                f(p.top_z);
+                f(p.bottom_z);
+            }
+            OpParams::WaterjetProfile(p) => {
                 f(p.clearance_z);
                 f(p.top_z);
                 f(p.bottom_z);

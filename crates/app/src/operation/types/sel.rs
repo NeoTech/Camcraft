@@ -336,6 +336,10 @@ pub enum OpType {
     /// one wall out by a stated amount (see [`crate::sinker_side`]).
     /// Appended: stored kind ids never move.
     SinkerSideBurn,
+    /// Waterjet profile (#1883): the abrasive jet's 2D through-cut of
+    /// picked contours - the waterjet's family (see
+    /// [`crate::waterjet`]). Appended: stored kind ids never move.
+    WaterjetProfile,
 }
 
 impl core::fmt::Display for OpType {

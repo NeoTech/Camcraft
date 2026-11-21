@@ -1,4 +1,4 @@
-//! The plasma contours' roles and nesting (#670): which picked ring is
+//! The sheet contours' roles and nesting (#670): which picked ring is
 //! a part's outer edge and which a hole, which contour each lies in,
 //! and the cut order that never lets a part drop before its holes are
 //! cut - every contour after everything nested inside it.
@@ -12,6 +12,8 @@
 use crate::cl::ContourRole;
 use crate::geo2d::{Loop, Point2, Region};
 use crate::machining2d::GenError;
+
+use super::Voice;
 
 /// The smallest ring area (mm²) that bounds anything: below it a
 /// closed contour is a zero-length or collinear ring.
@@ -33,25 +35,21 @@ pub struct Contour {
     region: Option<Region>,
 }
 
-fn invalid(why: String) -> GenError {
-    GenError::Invalid(format!("plasma profile: {why}"))
-}
-
 /// Read the picks into contours with roles and parents. A closed
 /// contour is an outer edge when the part stands just inside it, a
 /// hole when air does; with no part to ask, nesting parity decides.
-pub(super) fn contours(loops: &[Loop], chains: &[Vec<Point2>], part: &Region) -> Result<Vec<Contour>, GenError> {
+pub fn contours(loops: &[Loop], chains: &[Vec<Point2>], part: &Region, v: Voice) -> Result<Vec<Contour>, GenError> {
     let mut out: Vec<Contour> = Vec::new();
     for (i, l) in loops.iter().enumerate() {
         let n = i + 1;
         let region = Region::new(vec![l.clone()]).map_err(|e| match e {
             crate::geo2d::GeoError::Invalid(w) if w.contains("crosses itself") => {
-                invalid(format!("picked contour {n} crosses itself - a cut path cannot cross its own kerf"))
+                v.invalid(format!("picked contour {n} crosses itself - a cut path cannot cross its own kerf"))
             }
-            e => invalid(format!("picked contour {n} is unusable: {e}")),
+            e => v.invalid(format!("picked contour {n} is unusable: {e}")),
         })?;
         let [ring] = region.loops() else {
-            return Err(invalid(format!(
+            return Err(v.invalid(format!(
                 "picked contour {n} has no area (a zero-length or collinear ring) - there is nothing to cut around"
             )));
         };
@@ -61,14 +59,14 @@ pub(super) fn contours(loops: &[Loop], chains: &[Vec<Point2>], part: &Region) ->
         // only an area: a picked vertex the ring no longer reaches is
         // refused by name, never cut as the plain outline.
         if let Some(q) = dropped_vertex(l.points(), ring.points()) {
-            return Err(invalid(format!(
+            return Err(v.invalid(format!(
                 "picked contour {n} has a picked point the contour no longer reaches, X{:.3} Y{:.3} - a zero-width slit or spike encloses no area, so its kerf would never cut it; pick it as an open run",
                 q.x, q.y
             )));
         }
         let area = ring.area().abs();
         if !(area.is_finite() && area > MIN_AREA) {
-            return Err(invalid(format!(
+            return Err(v.invalid(format!(
                 "picked contour {n} has no area (a zero-length or collinear ring) - there is nothing to cut around"
             )));
         }
@@ -81,7 +79,7 @@ pub(super) fn contours(loops: &[Loop], chains: &[Vec<Point2>], part: &Region) ->
         });
     }
     for (j, c) in chains.iter().enumerate() {
-        out.push(Contour { role: ContourRole::Open, pts: open_run(j + 1, c)?, parent: None, area: 0.0, region: None });
+        out.push(Contour { role: ContourRole::Open, pts: open_run(j + 1, c, v)?, parent: None, area: 0.0, region: None });
     }
     // Parents: the smallest closed ring standing around each contour.
     let closed: Vec<usize> = (0..out.len()).filter(|&k| out[k].region.is_some()).collect();
@@ -142,11 +140,11 @@ fn dropped_vertex(picked: &[Point2], ring: &[Point2]) -> Option<Point2> {
 
 /// An open run, deduplicated and checked: at least one segment of real
 /// length, every point finite, never crossing itself.
-fn open_run(n: usize, c: &[Point2]) -> Result<Vec<Point2>, GenError> {
+fn open_run(n: usize, c: &[Point2], v: Voice) -> Result<Vec<Point2>, GenError> {
     let mut pts: Vec<Point2> = Vec::new();
     for p in c {
         if !(p.x.is_finite() && p.y.is_finite()) {
-            return Err(invalid(format!("open run {n} carries a non-finite point")));
+            return Err(v.invalid(format!("open run {n} carries a non-finite point")));
         }
         if pts.last().is_none_or(|q| (q.x - p.x).hypot(q.y - p.y) > 1e-9) {
             pts.push(*p);
@@ -154,12 +152,12 @@ fn open_run(n: usize, c: &[Point2]) -> Result<Vec<Point2>, GenError> {
     }
     let len: f64 = pts.windows(2).map(|w| (w[1].x - w[0].x).hypot(w[1].y - w[0].y)).sum();
     if pts.len() < 2 || len <= 1e-6 {
-        return Err(invalid(format!("open run {n} has no length - there is nothing to cut along")));
+        return Err(v.invalid(format!("open run {n} has no length - there is nothing to cut along")));
     }
     for i in 0..pts.len() - 1 {
         for j in i + 2..pts.len() - 1 {
             if segments_cross(pts[i], pts[i + 1], pts[j], pts[j + 1]) {
-                return Err(invalid(format!("open run {n} crosses itself - a cut path cannot cross its own kerf")));
+                return Err(v.invalid(format!("open run {n} crosses itself - a cut path cannot cross its own kerf")));
             }
         }
     }
@@ -205,7 +203,7 @@ fn inside_point(pts: &[Point2]) -> Point2 {
 /// island before its hole, a hole before its part's outer edge), runs
 /// and siblings by their lowest-then-leftmost point so the order is
 /// deterministic.
-pub(super) fn cut_order(cs: &[Contour]) -> Vec<usize> {
+pub fn cut_order(cs: &[Contour]) -> Vec<usize> {
     let key = |k: usize| {
         let lo = cs[k].pts.iter().fold((f64::INFINITY, f64::INFINITY), |m, p| (m.0.min(p.y), m.1.min(p.x)));
         (lo, k)

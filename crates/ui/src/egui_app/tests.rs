@@ -2874,6 +2874,8 @@ fn tips_match_the_imgui_table() {
             == camcraft_app::operation::Family::WireEdm;
         let is_sinker = camcraft_app::operation::KindInfo::ALL[i].family()
             == camcraft_app::operation::Family::Sinker;
+        let is_waterjet = camcraft_app::operation::KindInfo::ALL[i].family()
+            == camcraft_app::operation::Family::Waterjet;
         let want = if is_turn {
             "The document's machine is a mill - turning operations do not drive it; mount a lathe or a mill-turn (Setup > Machine)".to_owned()
         } else if is_wire {
@@ -2885,6 +2887,9 @@ fn tips_match_the_imgui_table() {
         } else if is_sinker {
             // #541: nor the electrode's.
             "The document's machine is a mill - sinker EDM operations do not drive it; mount a sinker EDM (Setup > Machine)".to_owned()
+        } else if is_waterjet {
+            // #1883: nor the jet's.
+            "The document's machine is a mill - waterjet operations do not drive it; mount a waterjet (Setup > Machine)".to_owned()
         } else if let Some(reason) = tool_law {
             // M10.1 B: the demo's one flat end mill cannot cut every
             // mill kind - those cells say which tool kind is missing.

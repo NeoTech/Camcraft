@@ -109,6 +109,8 @@ mod probe;
 pub mod probe_op;
 // #670: the Plasma Profile's seed and generation glue.
 pub mod plasma_op;
+// #1883: the Waterjet Profile's seed and generation glue.
+pub mod waterjet_op;
 // #894: the thread-milling operation's door, kernel plan and its two verdict readings.
 pub mod thread_op;
 mod thread_entry;

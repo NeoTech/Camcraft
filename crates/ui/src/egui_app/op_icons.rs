@@ -30,6 +30,8 @@ pub(crate) fn op_icon(kind: OpType) -> Icon {
         OpType::SinkerBurn => Icon::SinkerBurn,
         // #545: a lateral burn of one wall - its own glyph.
         OpType::SinkerSideBurn => Icon::SinkerSideBurn,
+        // #1883: the nozzle and its jet - its own glyph.
+        OpType::WaterjetProfile => Icon::WaterjetProfile,
         OpType::Drill => Icon::Drill,
         OpType::Bore => Icon::Bore,
         OpType::Thread => Icon::Thread,

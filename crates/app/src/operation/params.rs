@@ -372,7 +372,8 @@ impl OpParams {
             OpParams::WireContour { .. }
             | OpParams::SinkerBurn { .. }
             | OpParams::SinkerSideBurn { .. }
-            | OpParams::PlasmaProfile { .. } => self.stamp_cutting(world, setup, src, h),
+            | OpParams::PlasmaProfile { .. }
+            | OpParams::WaterjetProfile { .. } => self.stamp_cutting(world, setup, src, h),
         }
         self.stamp_links(h);
     }

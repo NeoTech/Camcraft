@@ -1057,6 +1057,46 @@ fn plasma_plate_with_holes_matches_golden() {
     write_golden("plasma_plate_with_holes.cl", &text);
 }
 
+/// #1883: a waterjet plate - a 120x80 outline held by two 2 mm tabs on
+/// its long edges, with a Ø30 hole, a Ø4 hole and a 30x10 slot - cut
+/// with a 0.8 mm kerf in the computer: every hole before the outline,
+/// arc leads with the pierce in the scrap (shortened in the Ø4 hole),
+/// the outline as two stretches between its tab gaps, each led in and
+/// out straight so that no lead cuts into a tab's bridge.
+#[test]
+fn waterjet_tabbed_plate_with_holes_matches_golden() {
+    use camcraft_app::waterjet::{waterjet_profile, JetTabs, LeadShape, OpenSide, WaterjetParams};
+    let loops = vec![
+        rect(0.0, 0.0, 120.0, 80.0).loops()[0].clone(),
+        circle(Point2::new(35.0, 40.0), 15.0, 64),
+        circle(Point2::new(80.0, 60.0), 2.0, 32),
+        rect(70.0, 15.0, 100.0, 25.0).loops()[0].clone(),
+    ];
+    let part = Region::new(loops.clone()).unwrap();
+    let p = WaterjetParams {
+        kerf: 0.8,
+        control_comp: false,
+        reversed: false,
+        lead_shape: LeadShape::Arc,
+        lead_in: 3.0,
+        lead_out: 2.0,
+        open_side: OpenSide::Center,
+        tabs: Some(JetTabs { count: 2, width: 2.0, at: vec![Point2::new(60.0, 0.0), Point2::new(60.0, 80.0)] }),
+        pierce_time: 1.5,
+        abrasive_delay: 0.5,
+        linearize: None,
+        feed: 250.0,
+        clearance_z: 10.0,
+        cut_z: 6.0,
+        model_excess: 0.0,
+    };
+    let path = waterjet_profile(&loops, &[], &part, &p).unwrap();
+    assert!(path.notes.iter().any(|n| n.contains("3 hole(s), 2 tab(s)), 5 pierce(s)")), "{:?}", path.notes);
+    let text = gen_to_cltext(&path);
+    assert_eq!(camcraft_app::cl::text::to_text(&path).unwrap(), text);
+    write_golden("waterjet_tabbed_plate_with_holes.cl", &text);
+}
+
 #[test]
 fn trochoid_slot_small_matches_golden() {
     // #220: a D6 in a 10 mm channel, 12 mm long, one level - the bore

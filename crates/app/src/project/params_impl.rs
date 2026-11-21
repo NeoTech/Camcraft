@@ -69,6 +69,7 @@ impl ParamsDto {
         match p {
             OpParams::Probe { .. } => ParamsDto::Probe(ProbeDto::from_params(p)),
             OpParams::PlasmaProfile(op) => ParamsDto::PlasmaProfile(PlasmaDto::from_op(op)),
+            OpParams::WaterjetProfile(op) => ParamsDto::WaterjetProfile(WaterjetDto::from_op(op)),
             OpParams::WireContour(op) => ParamsDto::WireContour(WireContourDto::from_op(op)),
             OpParams::SinkerBurn(op) => ParamsDto::SinkerBurn(SinkerDto::from_op(op)),
             OpParams::SinkerSideBurn(op) => ParamsDto::SinkerSideBurn(SinkerSideDto::from_op(op)),
@@ -1347,6 +1348,7 @@ impl ParamsDto {
         match self {
             ParamsDto::Probe(d) => d.to_params(),
             ParamsDto::PlasmaProfile(d) => d.to_params(),
+            ParamsDto::WaterjetProfile(d) => d.to_params(),
             ParamsDto::WireContour(d) => d.to_params(),
             ParamsDto::SinkerBurn(d) => d.to_params(),
             ParamsDto::SinkerSideBurn(d) => d.to_params(),

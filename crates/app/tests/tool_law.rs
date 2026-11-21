@@ -81,12 +81,16 @@ fn every_kind_names_a_tool_set() {
 fn no_orphan_tool_kinds() {
     for k in every_tool_kind() {
         if k == ToolKind::Waterjet {
-            // #1881 adds the tool and family data seam. Until a waterjet
-            // operation exists, every current operation must refuse it.
-            assert!(
-                KindInfo::ALL.iter().all(|row| !row.accepts(k)),
-                "an existing operation must not machine with a waterjet nozzle"
-            );
+            // #1883: the Waterjet Profile is the one operation that cuts
+            // with a nozzle; every other family refuses it (#1881).
+            for row in KindInfo::ALL {
+                assert_eq!(
+                    row.accepts(k),
+                    row.ty == OpType::WaterjetProfile,
+                    "{:?}: only the Waterjet Profile machines with a waterjet nozzle",
+                    row.ty
+                );
+            }
             continue;
         }
         assert!(

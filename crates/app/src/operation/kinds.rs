@@ -142,6 +142,7 @@ fn feed_of(p: &OpParams) -> f64 {
         OpParams::Probe { fast_feed, .. } => *fast_feed,
         // A blank plasma feed is the controller's (#670): no number.
         OpParams::PlasmaProfile(p) => p.feed.unwrap_or(0.0),
+        OpParams::WaterjetProfile(p) => p.feed,
         // The wire's rate is the control's generator's (#532): no number.
         OpParams::WireContour(_) => 0.0,
         // The sinker's servo feed down (#541).
@@ -218,6 +219,7 @@ fn plunge_of(p: &OpParams) -> f64 {
         // The torch never plunges into solid: it pierces at the
         // controller's height and delay (#670).
         OpParams::PlasmaProfile(p) => p.feed.unwrap_or(0.0),
+        OpParams::WaterjetProfile(p) => p.feed,
         // The wire's rate is the control's generator's (#532): no number.
         OpParams::WireContour(_) => 0.0,
         // The sinker's servo feed down (#541).
@@ -295,7 +297,7 @@ fn climb_of(p: &OpParams) -> bool {
         // The wall ride and the helix choose their flank: the climb
         // number says which way the circle runs (M2.4 C).
         OpParams::Bore { climb, .. } | OpParams::Thread { climb, .. } => *climb,
-        OpParams::Probe { .. } | OpParams::PlasmaProfile(_) | OpParams::WireContour(_) | OpParams::SinkerBurn(_) | OpParams::SinkerSideBurn(_) => false,
+        OpParams::Probe { .. } | OpParams::PlasmaProfile(_) | OpParams::WaterjetProfile(_) | OpParams::WireContour(_) | OpParams::SinkerBurn(_) | OpParams::SinkerSideBurn(_) => false,
     }
 }
 
@@ -378,7 +380,7 @@ fn stepover_of(p: &OpParams) -> Option<f64> {
         // One ride per exposed edge is the deburr answer: the model's
         // own edges are the pattern, nothing tiles (M2.5 E B).
         | OpParams::Deburr { .. } => None,
-        OpParams::Probe { .. } | OpParams::PlasmaProfile(_) | OpParams::WireContour(_) | OpParams::SinkerBurn(_) | OpParams::SinkerSideBurn(_) => None,
+        OpParams::Probe { .. } | OpParams::PlasmaProfile(_) | OpParams::WaterjetProfile(_) | OpParams::WireContour(_) | OpParams::SinkerBurn(_) | OpParams::SinkerSideBurn(_) => None,
     }
 }
 
@@ -455,7 +457,7 @@ fn stepdown_of(p: &OpParams) -> Option<f64> {
         // between the clearance plane and the edge there is no
         // infeed ladder to step (M2.5 E B).
         OpParams::Deburr { .. } => None,
-        OpParams::Probe { .. } | OpParams::PlasmaProfile(_) | OpParams::WireContour(_) | OpParams::SinkerBurn(_) | OpParams::SinkerSideBurn(_) => None,
+        OpParams::Probe { .. } | OpParams::PlasmaProfile(_) | OpParams::WaterjetProfile(_) | OpParams::WireContour(_) | OpParams::SinkerBurn(_) | OpParams::SinkerSideBurn(_) => None,
     }
 }
 
@@ -523,6 +525,7 @@ pub fn top_of(p: &OpParams) -> Option<Height> {
         OpParams::Probe { .. } => None,
         // The plasma cut rides the plate's top (#670).
         OpParams::PlasmaProfile(p) => Some(p.top_z),
+        OpParams::WaterjetProfile(p) => Some(p.top_z),
         // The wire's profile plane: the workpiece's top (#532).
         OpParams::WireContour(p) => Some(p.top_z),
         // The work top the sinker's depth may be read from (#541).
@@ -603,6 +606,7 @@ pub fn bottom_of(p: &OpParams) -> Option<Height> {
         OpParams::Probe { .. } => None,
         // The plate's bottom: the thickness the small-hole rule reads.
         OpParams::PlasmaProfile(p) => Some(p.bottom_z),
+        OpParams::WaterjetProfile(p) => Some(p.bottom_z),
         // The lower programmed plane the wire's moves ride (#532).
         OpParams::WireContour(p) => Some(p.bottom_z),
         // The cavity floor datum no burn passes (#541).
@@ -683,7 +687,7 @@ fn retract_of(p: &OpParams) -> Option<Height> {
         // The deburr ride hops every run to the clearance plane -
         // the kernel's own word, no between-run plane authored (M2.5 E B).
         | OpParams::Deburr { .. } => None,
-        OpParams::Probe { .. } | OpParams::PlasmaProfile(_) | OpParams::WireContour(_) | OpParams::SinkerBurn(_) | OpParams::SinkerSideBurn(_) => None,
+        OpParams::Probe { .. } | OpParams::PlasmaProfile(_) | OpParams::WaterjetProfile(_) | OpParams::WireContour(_) | OpParams::SinkerBurn(_) | OpParams::SinkerSideBurn(_) => None,
     }
 }
 
@@ -1671,13 +1675,15 @@ pub enum Section {
     WireEdm,
     /// The sinker EDM's work (#541): an electrode burned down Z.
     Sinker,
+    /// The waterjet's work (#1883): the abrasive jet's 2D through-cuts.
+    Waterjet,
 }
 
 impl Section {
     /// The catalog's order, which is the ribbon's: the sections appear
     /// left to right in exactly this sequence, each one's kinds in the
     /// registry's own order (the row order is the product order).
-    pub const ORDER: [Section; 8] = [
+    pub const ORDER: [Section; 9] = [
         Section::Mill2D,
         Section::Mill3D,
         Section::Drilling,
@@ -1686,6 +1692,7 @@ impl Section {
         Section::Plasma,
         Section::WireEdm,
         Section::Sinker,
+        Section::Waterjet,
     ];
 
     #[must_use]
@@ -1699,6 +1706,7 @@ impl Section {
             Section::Plasma => "Plasma",
             Section::WireEdm => "Wire EDM",
             Section::Sinker => "Sinker EDM",
+            Section::Waterjet => "Waterjet",
         }
     }
 
@@ -1712,6 +1720,7 @@ impl Section {
             Section::Plasma => Family::Plasma,
             Section::WireEdm => Family::WireEdm,
             Section::Sinker => Family::Sinker,
+            Section::Waterjet => Family::Waterjet,
             _ => Family::Mill,
         }
     }
@@ -1776,7 +1785,8 @@ pub enum Family {
     /// The sinker EDM's electrode work (#541): admitted on a sinker
     /// EDM only.
     Sinker,
-    /// Abrasive waterjet work; operations are added by the following slice.
+    /// Abrasive waterjet work (#1881): admitted on a waterjet only;
+    /// its operation is the waterjet profile (#1883).
     Waterjet,
 }
 
@@ -2448,6 +2458,20 @@ impl KindInfo {
             seed: super::sinker_side_op::seed_sinker_side_burn,
             tool_kinds: tk::ELECTRODE,
         },
+        KindInfo {
+            ty: OpType::WaterjetProfile,
+            label: "Waterjet Profile",
+            caption: "Waterjet Profile",
+            tag: 44,
+            // The jet cuts a kerf through the sheet: the milling laws
+            // have no jet to judge and stand down as for the plasma
+            // cut; the waterjet generator certifies its own kerf and
+            // cover laws (#1883).
+            mode: Mode::Engrave,
+            section: Section::Waterjet,
+            seed: super::waterjet_op::seed_waterjet_profile,
+            tool_kinds: tk::NOZZLE,
+        },
     ];
 
     /// Whose machine this kind drives - read off the row's section
@@ -2525,6 +2549,7 @@ pub const ALL_LABELS: [&str; KIND_COUNT] = [
     KindInfo::ALL[41].label,
     KindInfo::ALL[42].label,
     KindInfo::ALL[43].label,
+    KindInfo::ALL[44].label,
 ];
 
 impl OpType {
@@ -2594,6 +2619,8 @@ impl OpType {
             OpType::SinkerBurn => 42,
             // #545: the side burn appends (stored ids never move).
             OpType::SinkerSideBurn => 43,
+            // #1883: the waterjet profile appends (stored ids never move).
+            OpType::WaterjetProfile => 44,
         }
     }
 

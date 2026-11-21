@@ -144,6 +144,9 @@ mod plasma_dto;
 mod cutting_rows_dto;
 pub use cutting_rows_dto::{CuttingRowDto, MaterialWord, StockMaterialWord};
 pub use plasma_dto::*;
+// #1883: the waterjet profile's file mirror.
+mod waterjet_dto;
+pub use waterjet_dto::*;
 mod wire_edm_dto;
 pub use wire_edm_dto::*;
 // #541: the sinker burn's file mirror.

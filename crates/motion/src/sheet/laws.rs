@@ -1,9 +1,9 @@
-//! The plasma cut's certification laws (#670, #672), run over the moves
+//! The sheet cuts' certification laws (#670, #672, #1883), run over the moves
 //! just laid down, before the path leaves the generator:
 //!
 //! - **Kerf law.** Every lit move of a closed contour keeps its kerf off
 //!   the part: no chord point lies inside the part grown by kerf / 2
-//!   (less [`super::KERF_TOL`], itself less a coarse model's excess while a
+//!   (less [`crate::plasma::KERF_TOL`], itself less a coarse model's excess while a
 //!   positive tolerance is left - #1053). A cut that would reach the part is refused by
 //!   name, never trimmed.
 //! - **Cover law** (#676 decision 12, #672). Every edge of a closed
@@ -29,23 +29,23 @@
 //! (UM10720: kerf ≈ 1.5x the orifice; a feature under the kerf cannot be
 //! cut) and the LinuxCNC Plasma Primer; no vendor implementation read.
 
-use crate::cl::{ContourRole, Toolpath, TorchSpan};
+use crate::cl::{ContourRole, Toolpath};
 use crate::geo2d::{Point2, Region};
 use crate::machining2d::GenError;
 
-use super::emit::FIT_TOL;
 use super::nest::Contour;
 use super::ring::{dist, unit};
+use super::{Lit, Voice};
+
+/// The arc fit's budget on a kerf ring (mm), inside the kerf tolerance:
+/// the chords the laws sample a lit arc by.
+pub const FIT_TOL: f64 = 0.005;
 
 /// How far apart (mm) the contour and the chords are sampled.
 const STEP: f64 = 0.25;
 
-fn invalid(why: String) -> GenError {
-    GenError::Invalid(format!("plasma profile: {why}"))
-}
-
 /// Every lit move of every closed contour keeps its kerf off the part.
-pub(super) fn kerf_law(path: &Toolpath, spans: &[TorchSpan], forbidden: &Region) -> Result<(), GenError> {
+pub fn kerf_law(path: &Toolpath, spans: &[Lit], forbidden: &Region, v: Voice) -> Result<(), GenError> {
     for sp in spans.iter().filter(|s| s.role != ContourRole::Open) {
         for i in sp.on..=sp.off {
             let Some(m) = path.moves.get(i) else { continue };
@@ -55,7 +55,7 @@ pub(super) fn kerf_law(path: &Toolpath, spans: &[TorchSpan], forbidden: &Region)
                     let f = f64::from(j) / f64::from(k);
                     let q = Point2::new(a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f);
                     if forbidden.contains(q) {
-                        return Err(invalid(format!(
+                        return Err(v.invalid(format!(
                             "contour C{}: move {i} would carry the kerf into the part near X{:.3} Y{:.3} - refused",
                             sp.contour, q.x, q.y
                         )));
@@ -68,24 +68,38 @@ pub(super) fn kerf_law(path: &Toolpath, spans: &[TorchSpan], forbidden: &Region)
 }
 
 /// Every edge of every closed contour is reached by its own cut's kerf,
-/// outside the tip zone of its inside corners: `spans[pos]` is the cut
-/// of `cs[order[pos]]`.
-pub(super) fn cover_law(
+/// outside the tip zone of its inside corners: the cut of
+/// `cs[order[pos]]` is every span whose `contour` is `pos` (one for a
+/// plain cut, one per stretch between tabs, #1883). `exempt(pos, q)`
+/// names the edge points left uncut on purpose (a tab's bridge); every
+/// other point is judged. A closed contour with no span is refused.
+#[allow(clippy::too_many_arguments)]
+pub fn cover_law(
     path: &Toolpath,
-    spans: &[TorchSpan],
+    spans: &[Lit],
     cs: &[Contour],
     order: &[usize],
     (kerf, tol): (f64, f64),
+    v: Voice,
+    exempt: &dyn Fn(usize, Point2) -> bool,
 ) -> Result<(), GenError> {
-    // `tol` is [`super::KERF_TOL`], less a coarse model's excess (#1053).
+    // `tol` is [`crate::plasma::KERF_TOL`], less a coarse model's excess (#1053).
     let reach = kerf + tol;
-    for (sp, &k) in spans.iter().zip(order) {
+    for (pos, &k) in order.iter().enumerate() {
         let Some(c) = cs.get(k) else { continue };
-        if c.role == ContourRole::Open || sp.role == ContourRole::Open {
+        if c.role == ContourRole::Open {
             continue;
         }
-        let chords: Vec<(Point2, Point2)> =
-            path.moves.get(sp.on..=sp.off).into_iter().flatten().flat_map(|m| m.chords(FIT_TOL)).collect();
+        let own: Vec<&Lit> = spans.iter().filter(|sp| sp.contour as usize == pos && sp.role != ContourRole::Open).collect();
+        if own.is_empty() {
+            return Err(v.invalid(format!("contour C{pos} lays down no cut - refused")));
+        }
+        let chords: Vec<(Point2, Point2)> = own
+            .iter()
+            .flat_map(|sp| path.moves.get(sp.on..=sp.off).into_iter().flatten())
+            .flat_map(|m| m.chords(FIT_TOL))
+            .collect();
+        let contour = u32::try_from(pos).unwrap_or(u32::MAX);
         let n = c.pts.len();
         let tips: Vec<f64> = (0..n).map(|i| tip_zone(c, i, kerf * 0.5)).collect();
         for i in 0..n {
@@ -99,9 +113,12 @@ pub(super) fn cover_law(
                     continue;
                 }
                 let q = Point2::new(a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f);
+                if exempt(pos, q) {
+                    continue;
+                }
                 let nearest = chords.iter().map(|(s, t)| pt_seg(q, *s, *t)).fold(f64::INFINITY, f64::min);
                 if nearest.is_nan() || nearest > reach {
-                    return Err(invalid(uncovered(sp.contour, c, i, q, kerf)));
+                    return Err(v.invalid(uncovered(contour, c, i, q, kerf, v.tool)));
                 }
             }
         }
@@ -147,7 +164,7 @@ fn inside_corner(role: ContourRole, e1: Point2, e2: Point2) -> bool {
 /// On a slot's floor (an edge with inside corners at both ends) that
 /// nearest edge is beyond the walls, about the slot's depth away, so the
 /// floor's own length - the slot's width - is taken when it is smaller.
-fn uncovered(contour: u32, c: &Contour, i: usize, q: Point2, kerf: f64) -> String {
+fn uncovered(contour: u32, c: &Contour, i: usize, q: Point2, kerf: f64, tool: &str) -> String {
     let n = c.pts.len();
     let (u, a, b, w) = (c.pts[(i + n - 1) % n], c.pts[i], c.pts[(i + 1) % n], c.pts[(i + 2) % n]);
     let floor = inside_corner(c.role, unit(u, a), unit(a, b)) && inside_corner(c.role, unit(a, b), unit(b, w));
@@ -162,13 +179,13 @@ fn uncovered(contour: u32, c: &Contour, i: usize, q: Point2, kerf: f64) -> Strin
         format!("a slot, notch or keyway narrower than the kerf ({kerf:.3} mm)")
     };
     format!(
-        "contour C{contour}: the torch never comes within a kerf of the part edge near X{:.3} Y{:.3} - {what} is bridged by the offset, not cut; widen it past the kerf or use a narrower kerf",
+        "contour C{contour}: the {tool} never comes within a kerf of the part edge near X{:.3} Y{:.3} - {what} is bridged by the offset, not cut; widen it past the kerf or use a narrower kerf",
         q.x, q.y
     )
 }
 
 /// Distance from `p` to segment a-b.
-pub(super) fn pt_seg(p: Point2, a: Point2, b: Point2) -> f64 {
+pub fn pt_seg(p: Point2, a: Point2, b: Point2) -> f64 {
     let (dx, dy) = (b.x - a.x, b.y - a.y);
     let l2 = dx * dx + dy * dy;
     let t = if l2 > 0.0 { (((p.x - a.x) * dx + (p.y - a.y) * dy) / l2).clamp(0.0, 1.0) } else { 0.0 };

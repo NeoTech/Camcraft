@@ -155,6 +155,41 @@ impl OpParams {
                     }
                 }
             }
+            // The waterjet profile (#1883): every stored number, the
+            // optional ones and the tabs with a presence byte.
+            OpParams::WaterjetProfile(p) => {
+                wh(h, p.clearance_z);
+                wh(h, p.top_z);
+                wh(h, p.bottom_z);
+                h.write_u8(u8::from(p.control_comp));
+                h.write_u8(u8::from(p.reversed));
+                h.write_u8(p.lead as u8);
+                h.write_u8(p.open_side as u8);
+                for v in [p.lead_in, p.lead_out, p.feed, p.pierce_time, p.abrasive_delay] {
+                    w(h, v);
+                }
+                for v in [p.kerf, p.linearize] {
+                    match v {
+                        Some(x) => {
+                            h.write_u8(1);
+                            w(h, x);
+                        }
+                        None => h.write_u8(0),
+                    }
+                }
+                match &p.tabs {
+                    Some(t) => {
+                        h.write_u8(1);
+                        h.write_u32(t.count);
+                        w(h, t.width);
+                        for q in &t.at {
+                            w(h, q[0]);
+                            w(h, q[1]);
+                        }
+                    }
+                    None => h.write_u8(0),
+                }
+            }
             _ => {}
         }
     }

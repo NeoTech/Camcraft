@@ -180,6 +180,7 @@ pub(crate) use pockets_page::row_text as pockets_row_text;
 mod probe_page;
 // #670: the Plasma Profile's page.
 mod plasma_page;
+mod waterjet_page;
 mod wire_page;
 // #541: the Sinker Burn's fields.
 mod sinker_page;
@@ -318,6 +319,8 @@ mod pin_tests;
 mod ribbon_icon_tests;
 #[cfg(test)]
 mod plasma_ribbon_tests;
+#[cfg(test)]
+mod waterjet_ribbon_tests;
 #[cfg(test)]
 mod machine_mode_tests;
 #[cfg(test)]

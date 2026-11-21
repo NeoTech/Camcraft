@@ -185,6 +185,13 @@ pub(super) fn family_gate(world: &World, context: Option<&str>, params: &OpParam
             params.kind(),
         )));
     }
+    // #1883: waterjet work needs a waterjet - no mill-turn carries a jet.
+    if family == Family::Waterjet {
+        return Err(CommandError::Invalid(format!(
+            "a {} operation is waterjet work; {clause} - mount a waterjet first",
+            params.kind(),
+        )));
+    }
     // #541: sinker work needs a sinker EDM - nothing else feeds an
     // electrode.
     if family == Family::Sinker {
