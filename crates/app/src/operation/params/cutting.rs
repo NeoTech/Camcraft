@@ -111,6 +111,14 @@ impl OpParams {
                     w(h, p.cavity_x);
                     w(h, p.cavity_y);
                 }
+                if !p.cavity_outline.is_empty() {
+                    h.write(b"cavity_outline");
+                    h.write_usize(p.cavity_outline.len());
+                    for point in &p.cavity_outline {
+                        w(h, point[0]);
+                        w(h, point[1]);
+                    }
+                }
                 // #544: the orbit - bytes only when one is stated, so a
                 // plain plunge's digest does not move.
                 if let Some(o) = &p.orbit {
@@ -133,6 +141,17 @@ impl OpParams {
                     w(h, s.amount);
                     w(h, s.undersize);
                 }
+            }
+            // The slot undercut (#1444): every stored number.
+            OpParams::SlotUndercut(p) => {
+                wh(h, p.clearance_z);
+                digest::wh_opt(world, setup, src, h, p.retract_z);
+                wh(h, p.top_z);
+                wh(h, p.bottom_z);
+                for v in [p.a.x, p.a.y, p.b.x, p.b.y, p.bulge, p.width, p.run_in, p.neck_slot, p.stepover, p.feed, p.plunge_feed] {
+                    w(h, v);
+                }
+                h.write_u8(u8::from(p.climb));
             }
             // The plasma profile (#670): every stored number, the
             // optional ones with a presence byte.

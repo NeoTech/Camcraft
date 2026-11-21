@@ -22,7 +22,8 @@ with a tool.
 
 Every kind checks its tool. Face, Contour, Pocket, Adaptive, Offset, Slot,
 Trochoidal slot, Circular and Bore cut with a flat end mill or bull-nose;
-Trace and Engrave take any mill or a taper tool. A wrong tool is refused by
+Trace and Engrave take any mill or a taper tool; Slot Undercut takes a
+T-slot, keyseat, dovetail or lollipop cutter only. A wrong tool is refused by
 name ("'<tool>' is a <kind>; a <operation> operation cuts with a ..."),
 and a document with no suitable tool is told to add one to the tool
 library.
@@ -328,6 +329,65 @@ when a full-width slotting cut would overload the tool.
 in - cut it as a plain Slot"; "a loop width of ... leaves the channel";
 "a ... mm microlift would feed the return above the clearance plane ...
 use the Retract return to hop higher".
+
+## Slot Undercut
+
+{{ <icon name="op-slot-undercut" /> }}
+
+**For:** the part of a slot that is wider below than at its mouth: a
+T-slot, a keyseat, a dovetail, a round undercut groove. The cutter's head
+is wider than its neck, so it cannot go down into the slot from above. It
+goes down outside the wall, feeds sideways into the slot at depth, cuts
+every pass there, feeds back out the same way and only then lifts.
+
+**Tool:** a T-slot, keyseat, dovetail or lollipop cutter. In the tool
+library the diameter is the head's, the flute length is the head's height,
+and the shank diameter and length are the neck's. A dovetail's tip angle
+is the angle between its bottom face and its flank (60 for a 60 degree
+dovetail). A lollipop's flute length is where the neck leaves the ball.
+
+**Geometry:** typed in. A and B are the ends of the slot's centre line.
+Bulge 0 is a straight slot; any other value makes the centre line an arc
+from A to B (the tangent of a quarter of its angle, positive
+counter-clockwise).
+
+| Tab | Setting | Default |
+|---|---|---|
+| Geometry | A / B | (-20, 0) / (20, 0) |
+| Geometry | Bulge | 0 (straight) |
+| Geometry | Undercut width | 20 |
+| Geometry | Entry run-in | 15 |
+| Geometry | Neck slot width | 0 (nothing above the neck) |
+| Heights | Bottom Z | the undercut's floor (the cutter's tip) |
+| Passes | Stepover | 3 |
+
+The undercut width is measured at the cutter's widest point: the rim of a
+T-slot or keyseat cutter, the tip corner of a dovetail, the equator of a
+lollipop. The first pass runs on the centre line. Each pair of passes
+after it widens the undercut by the stepover.
+
+The entry run-in is the distance from A, back along the slot's line, to
+the point where the cutter goes down and comes up. Put that point outside
+the stock, or in a pocket that an earlier operation cut.
+
+Cut the slot for the neck first, with a Slot operation, and give its width
+as the neck slot width. A dovetail or a keyseat that is open above needs
+no neck slot.
+
+**Checks that hold the post:** a Z move while material stands in or over
+the cutter's head ("moves the undercut cutter in Z with material in or
+over its head"); the neck or the holder in material above the head ("shank/
+holder ... collides with the uncut stock"), which is what a missing or too
+narrow neck slot gives; the head or the neck inside the part.
+
+**Common refusals:** "entry slot ... mm is too narrow for the ... mm cutter
+neck"; "undercut width ... mm is narrower than the ... mm cutter head";
+"Slot Undercut cuts with a T-slot, keyseat, dovetail or lollipop cutter".
+
+**Simulation:** the stock view removes the true head and neck shape, so
+the undercut shows under its roof. The program check that runs before a
+post reads the stock from above and leaves an undercut's stock as it
+stood; the checks above judge the undercut instead.
 
 ## Trace
 

@@ -301,6 +301,8 @@ pub fn fold_warnings_located(warnings: &[Warning]) -> Vec<(String, Option<usize>
             Warning::SinkerFinishOrder { .. } => (215, false),
             // A hole wider than its drill (#2496): advisory, its own line.
             Warning::DrillUndersize { .. } => (216, false),
+            // An undercut cutter's Z move under material (#1444): its own line.
+            Warning::UndercutLift { .. } => (217, false),
             // A lathe holder's rub (#369) splits part from stock too.
             Warning::HolderHit { part, .. } => (212 + *part as u8, false),
         }
@@ -315,6 +317,7 @@ pub fn fold_warnings_located(warnings: &[Warning]) -> Vec<(String, Option<usize>
             | Warning::HolderHit { at, .. }
             | Warning::SweepHit { at, .. }
             | Warning::RapidInStock { at }
+            | Warning::UndercutLift { at }
             | Warning::FirstTraverseLow { at, .. }
             | Warning::FirstTraverseUnderTable { at, .. }
             | Warning::FixtureHit { at, .. }

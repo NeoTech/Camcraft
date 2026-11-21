@@ -143,6 +143,8 @@ pub fn is_stock_kept_kind(params: &OpParams) -> bool {
                 | OpParams::Face { .. }
                 | OpParams::Chamfer2D { .. }
                 | OpParams::Deburr { .. }
+                // #1444: an undercut off the stock keeps the setup's parts.
+                | OpParams::SlotUndercut(_)
         )
 }
 
@@ -242,7 +244,10 @@ pub(super) fn neighbour_parts(
 pub(super) fn is_part_kept_kind(params: &OpParams, src: &SrcRef) -> bool {
     super::generate::depth_law_of(params, src, true) != super::generate::DepthLaw::None
         || is_cross_drill(params)
-        || matches!(params, OpParams::Pocket3D { .. } | OpParams::MultiAxisRough { .. })
+        || matches!(
+            params,
+            OpParams::Pocket3D { .. } | OpParams::MultiAxisRough { .. } | OpParams::SlotUndercut(_)
+        )
 }
 
 /// The models whose meshes an operation's part laws read beyond its own

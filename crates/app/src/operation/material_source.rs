@@ -238,6 +238,8 @@ fn source_region(
             stadium(ea, eb, width * 0.5)
         }
         OpParams::TrochoidalSlot { a, b, width, .. } => stadium(*a, *b, width * 0.5),
+        // #1444: the undercut's authored band about its centreline.
+        OpParams::SlotUndercut(op) => super::slot_undercut_op::footprint(op),
         // The circular ladder's machine area is the AUTHORED disk -
         // the slot's authored-geometry law with a circle for a
         // stadium; the generator refuses a disk that meets no

@@ -2091,6 +2091,26 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             )?;
             (region, path)
         }
+        // #1444: the undercut's Z moves stand at its entry station only.
+        OpParams::SlotUndercut(op) => {
+            let path = super::slot_undercut_op::generate(
+                op,
+                &tool_name,
+                &tool,
+                hl.clearance,
+                hl.retract,
+                req_z(hl.bottom, "Bottom of Part Z")?,
+            )?;
+            let region = region_for_job(
+                &mut picked_region,
+                &mut section_z,
+                &src,
+                &params,
+                m_gen,
+                frame.as_ref(),
+            )?;
+            (region, path)
+        }
         OpParams::TrochoidalSlot { a, b, width, .. } => {
             let tp = super::trochoid_op::trochoid_params(
                 &params,
@@ -3398,6 +3418,21 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                 let prior = crate::stock_sim::Columns::of_grid(dex);
                 verify::acquit_by_prior(&path, &prior, geom.radius, Z_TOL, &mut warns);
             }
+            // #1444: an undercut answers to the part's solid with the
+            // cutter's real head and neck (a stock source: the kept
+            // parts, below), and its Z-move and neck convictions are
+            // re-read against what the program ahead left - a slot cut
+            // earlier for the neck, a pocket cut earlier for the entry.
+            if mode == crate::verify::Mode::Undercut {
+                if part_solid {
+                    contain_into(&mut warns, &path, &material.facets, &cutter, DepthLaw::Keep, stl, material.excess, &params, &[]);
+                }
+                if let Some(dex) = verify_prior.get() {
+                    let prior = crate::stock_sim::Columns::of_grid(dex);
+                    let judged = verify::Cutter::judged(&geom, Some(cutter));
+                    verify::acquit_undercut_by_prior(&path, &judged, &prior, Z_TOL, GOUGE_TOL, &mut warns);
+                }
+            }
             // #2121: a traverse AT the clearance plane is judged too; one
             // the program ahead cleared the stock under is re-read, and
             // one that stands is named (the plane is inside the stock).
@@ -4041,6 +4076,8 @@ pub(super) fn stock_to_leave_of(params: &OpParams) -> f64 {
     match params {
         OpParams::Face { .. }
         | OpParams::Probe { .. }
+        // #1444: the undercut cuts to its wall and floor.
+        | OpParams::SlotUndercut(_)
         | OpParams::PlasmaProfile(_)
         | OpParams::WireContour(_)
         | OpParams::SinkerBurn(_)

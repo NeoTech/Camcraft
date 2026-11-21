@@ -48,15 +48,20 @@ fn each_milling_kind_shows_the_parameters_its_outline_is_drawn_from() {
     for label in ["cutter Ø", "flutes", "shank Ø", "shank length", "Neck"] {
         assert!(harness.query_by_label(label).is_some(), "{label} stands in the cutter view");
     }
-    let tips = ["ball R", "corner R", "point angle °", "cone angle °"];
+    let tips = ["ball R", "corner R", "point angle °", "cone angle °", "flank angle °"];
     assert!(tips.iter().all(|l| harness.query_by_label(l).is_none()), "a flat end mill has no tip parameter");
-    for (kind, tip) in [(1, "ball R"), (2, "corner R"), (3, "point angle °"), (10, "cone angle °")] {
+    for (kind, tip) in [(1, "ball R"), (2, "corner R"), (3, "point angle °"), (10, "cone angle °"), (20, "flank angle °")] {
         harness.state_mut().state.tool_ui.kind = kind;
         if kind == 3 {
             harness.state_mut().state.tool_ui.tip_angle = 118.0;
         }
         if kind == 10 {
             harness.state_mut().state.tool_ui.tip_angle = 90.0;
+        }
+        if kind == 20 {
+            harness.state_mut().state.tool_ui.tip_angle = 60.0;
+            harness.state_mut().state.tool_ui.flute_len = 2.0;
+            harness.state_mut().state.tool_ui.shank_d = 2.0;
         }
         harness.run();
         harness.run();

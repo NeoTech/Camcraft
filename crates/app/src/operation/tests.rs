@@ -221,8 +221,9 @@ fn stamp_follows_every_input() {
     // trochoidal slot, seated after it at 40, to 41 - #532's wire
     // contour, appended as the wire EDM's own section, to 42 - #541's
     // sinker burn, appended as the sinker EDM's own section, to 43 - #545's
-    // sinker side burn, appended behind it, to 44.)
-    assert_eq!(KindInfo::ALL.len(), 44);
+    // sinker side burn, appended behind it, to 44 - #1444's slot
+    // undercut, appended behind it, to 45.)
+    assert_eq!(KindInfo::ALL.len(), 45);
     for (i, row) in KindInfo::ALL.iter().enumerate() {
         assert_eq!(row.ty.ordinal(), i, "row {i} out of step with ordinal");
         assert_eq!(row.tag as usize, i, "digest tag must equal table order");

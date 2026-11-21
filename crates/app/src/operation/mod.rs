@@ -129,6 +129,8 @@ pub mod sinker_faces;
 pub mod sinker_wear_op;
 // #545: the Sinker Side Burn's seed, laws and generation.
 pub mod sinker_side_op;
+// #1444: the Slot Undercut's seed and generation glue.
+pub mod slot_undercut_op;
 // #171: the Probe op seeded from one picked face, edge, vertex or round wall.
 mod probe_pick;
 mod probe_pick_round;

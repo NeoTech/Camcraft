@@ -211,6 +211,7 @@ pub fn area_unsupported(kind: OpType) -> Option<String> {
         }
         OpType::Deburr => format!("{kind} breaks the model's own exposed edges - there is no area to bound"),
         OpType::SinkerBurn | OpType::SinkerSideBurn => format!("a {kind} burns its electrode's own face - there is no area to bound"),
+        OpType::SlotUndercut => format!("a {kind} cuts its authored slot at depth - there is no area to bound"),
         // Mesh-driven with a moving tool axis: the model's own shadow.
         OpType::Contour5D
         | OpType::Parallel5D

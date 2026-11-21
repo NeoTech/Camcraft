@@ -114,6 +114,8 @@ pub struct SinkerDto {
     pub cavity_x: f64,
     #[serde(default, skip_serializing_if = "is_zero")]
     pub cavity_y: f64,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cavity_outline: Vec<[f64; 2]>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub orbit: Option<SinkerOrbitDto>,
     /// #546: additive keys - an older file states none (one layer, no
@@ -153,6 +155,7 @@ impl SinkerDto {
             },
             cavity_x: p.cavity_x,
             cavity_y: p.cavity_y,
+            cavity_outline: p.cavity_outline.clone(),
             layer: p.layer,
             wear_lost: p.wear_lost,
             wear_over: p.wear_over,
@@ -186,6 +189,7 @@ impl SinkerDto {
             },
             cavity_x: self.cavity_x,
             cavity_y: self.cavity_y,
+            cavity_outline: self.cavity_outline.clone(),
             layer: self.layer,
             wear_lost: self.wear_lost,
             wear_over: self.wear_over,

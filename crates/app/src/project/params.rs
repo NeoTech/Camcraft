@@ -1225,6 +1225,8 @@ pub enum ParamsDto {
     SinkerBurn(SinkerDto),
     /// The sinker side burn (#545): appended the same way.
     SinkerSideBurn(SinkerSideDto),
+    /// The slot undercut (#1444): appended the same way.
+    SlotUndercut(SlotUndercutDto),
 }
 
 /// The angle an absent `ramp_angle` means: 45°, the ground the

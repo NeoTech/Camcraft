@@ -22,7 +22,7 @@ pub(super) fn add_poly_for_atoms(
     let f_zlo = verts.iter().map(|v| v[2]).fold(f64::INFINITY, f64::min);
     let f_zhi = verts.iter().map(|v| v[2]).fold(f64::NEG_INFINITY, f64::max);
     for a in atoms {
-        let swept_atom = Atom { z0: z_lo + a.z0, z1: z_hi + a.z1, prof: a.prof };
+        let swept_atom = Atom { z0: z_lo + a.z0, z1: z_hi + a.z1, ..*a };
         let slab_lo = swept_atom.z0 - req;
         let slab_hi = swept_atom.z1 + req;
         if f_zhi < slab_lo || f_zlo > slab_hi {

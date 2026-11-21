@@ -311,6 +311,11 @@ pub enum OpType {
     /// one wall out by a stated amount (see [`crate::sinker_side`]).
     /// Appended: stored kind ids never move.
     SinkerSideBurn,
+    /// Slot undercut (#1444): side-entry passes of a T-slot, keyseat,
+    /// dovetail or lollipop cutter along a slot (see
+    /// [`crate::machining2d::undercut`]). Appended: stored kind ids
+    /// never move.
+    SlotUndercut,
 }
 
 impl core::fmt::Display for OpType {

@@ -296,6 +296,7 @@ fn sinker_electrode_burn_matches_baked_and_side_burn_stays_refused() {
             top_z: Height::of(HeightReference::TopOfModel, 0.0),
             floor_z: Height::fixed(4.0), datum: SinkerDatum::WorkTop, depth: 6.0, x: 4.0, y: -3.0,
             feed: 40.0, condition: "S1".into(), pass: SinkerPass::Rough, cavity_x: 10.2, cavity_y: 6.2,
+            cavity_outline: Vec::new(),
             orbit: None, layer: None, wear_lost: None, wear_over: None,
         };
         h.execute(&w, CreateOperation::new(&w, "SB1", "E-CAV", SrcRef::Entity("die".into()), OpParams::SinkerBurn(burn.clone())).expect("burn"));

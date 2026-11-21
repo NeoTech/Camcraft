@@ -41,6 +41,9 @@ pub struct SinkerBurnOp {
     /// or finish without it is refused by name.
     pub cavity_x: f64,
     pub cavity_y: f64,
+    /// Finished cavity outline relative to the burn point (#1810).
+    /// An empty outline keeps the existing extent law.
+    pub cavity_outline: Vec<[f64; 2]>,
     /// #546: the depth of one burn layer, mm; `None` burns the whole
     /// depth as one layer.
     pub layer: Option<f64>,
@@ -127,6 +130,11 @@ impl SinkerBurnOp {
     /// or a sound pass.
     #[must_use]
     pub fn pass_refusal(&self) -> Option<String> {
+        if !self.cavity_outline.is_empty()
+            && let Some(why) = crate::sinker_undersize::cavity_outline_refusal(&self.cavity_outline)
+        {
+            return Some(why);
+        }
         if self.pass == SinkerPass::Single {
             return None;
         }
@@ -136,6 +144,9 @@ impl SinkerBurnOp {
             return Some(format!(
                 "a sinker {pass} is judged against the finished cavity - state its X and Y size (both above 0)"
             ));
+        }
+        if !self.cavity_outline.is_empty() {
+            return crate::sinker_undersize::cavity_outline_size_refusal(&self.cavity_outline, (self.cavity_x, self.cavity_y));
         }
         None
     }

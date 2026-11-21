@@ -1361,6 +1361,8 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
         // The electrode retracts to its approach plane only (#541).
         | operation::OpParams::SinkerBurn(_)
         | operation::OpParams::SinkerSideBurn(_) => None,
+        // #1444: the undercut's feed-down plane at its entry station.
+        operation::OpParams::SlotUndercut(p) => p.retract_z,
     };
     if let Some(hop) = hop
         && let (Some(r), Some(c)) = (resolve(hop), resolve(draft.clearance()))
@@ -1499,6 +1501,8 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
             burn: operation::SinkerBurnOp { top_z, floor_z: bottom_z, .. },
             ..
         })
+        // #1444: the material top and the undercut's floor.
+        | operation::OpParams::SlotUndercut(operation::SlotUndercutOp { top_z, bottom_z, .. })
         | operation::OpParams::Deburr { top_z, bottom_z, .. } => {
             if let Some(z) = resolve(*top_z) {
                 out.push(HeightPlane {
