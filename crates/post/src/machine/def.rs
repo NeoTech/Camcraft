@@ -228,6 +228,9 @@ pub struct Machine {
     /// post that needs it refuses rather than guess where up is.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub safe_retract_z: Option<f64>,
+    /// `general.operator_side` (#2632): the stated side; `None` takes the kind's default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub operator_side: Option<super::operator_side::OperatorSide>,
     /// The `edm` section of a wire or sinker EDM machine (#530), or
     /// None: unstated.
     #[serde(default, skip_serializing_if = "Option::is_none")]

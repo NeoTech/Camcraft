@@ -1698,6 +1698,11 @@ pub struct State {
     /// The Browser's "Show work envelope" box (#1567): view state, never
     /// saved, never a command; display only.
     pub show_work_envelope: bool,
+    /// The "Show operator side" box (#2632): the arrow and the text at the
+    /// work envelope. View state like the envelope box; on by default.
+    pub show_operator_side: bool,
+    /// The kept operator-side arrow, built when its input changes (#2632).
+    pub operator_side_cache: std::sync::Mutex<crate::operator_side::Cache>,
     pub operation_clipboard: Option<OperationClipboard>,
     /// Expanded state of Setup, Models, Tools, and Operations in the browser.
     pub browser_expanded: [bool; 3],
@@ -2298,6 +2303,8 @@ impl State {
             hidden_paths: Vec::new(),
             shown_setups: Vec::new(),
             show_work_envelope: false,
+            show_operator_side: true,
+            operator_side_cache: std::sync::Mutex::default(),
             operation_clipboard: None,
             browser_expanded: [true; 3],
             cam: Camera::default(),

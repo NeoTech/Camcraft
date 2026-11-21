@@ -13,6 +13,8 @@ pub mod edm_dielectric;
 mod edm_named;
 pub mod edm_taper;
 pub mod envelope;
+mod operator_side;
+pub use operator_side::OperatorSide;
 mod kind;
 mod no_spindle;
 mod parse;

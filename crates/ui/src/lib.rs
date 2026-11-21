@@ -77,6 +77,7 @@ pub mod machined;
 mod setup_display;
 mod floor;
 mod work_envelope;
+mod operator_side;
 pub mod view_frame;
 pub mod mcp_host;
 pub mod operations;

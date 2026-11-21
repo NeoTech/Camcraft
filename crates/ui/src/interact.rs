@@ -773,6 +773,7 @@ pub(crate) fn overlay_labels(state: &State, aspect: f64) -> Vec<([f32; 2], [f32;
             }
         }
     }
+    out.extend(crate::operator_side::label(state, &mvp)); // #2632
     out
 }
 
@@ -984,7 +985,7 @@ pub(crate) fn collect_overlay(state: &State) -> Vec<[f32; 6]> {
     out.extend(time("scene/overlay.toolpaths", || toolpath_lines(state)));
     out.extend(time("scene/overlay.regions", || region_lines(state)));
     out.extend(time("scene/overlay.height_planes", || height_plane_lines(state)));
-    out.extend(time("scene/overlay.envelope", || crate::work_envelope::envelope_lines(state)));
+    out.extend(time("scene/overlay.envelope", || crate::work_envelope::overlay_lines(state)));
     out.extend(time("scene/overlay.selection_features", || selection_feature_lines(state)).iter().copied());
     capped(out)
 }
