@@ -6540,6 +6540,11 @@ fn multiaxis_rough_peels_the_same_ladder_and_poses_its_walls() {
             }
             Some(v) => {
                 posed += 1;
+                // #3129: the Zigzag levels close with a ring round the
+                // 10 x 10 boss, so each ring chord claims the wall. A pose
+                // stays within the ball's reach (r 3) of the boss.
+                let (dx, dy) = ((a.to.x.abs() - 5.0).max(0.0), (a.to.y.abs() - 5.0).max(0.0));
+                assert!(dx.hypot(dy) <= 3.5, "a pose leaked past the boss walls at {:?}", a.to);
                 let l = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
                 assert!((l - 1.0).abs() < 1e-6, "a pose of length {l}");
                 assert!(v.iter().all(|c| c.is_finite()));
@@ -6552,7 +6557,6 @@ fn multiaxis_rough_peels_the_same_ladder_and_poses_its_walls() {
         }
     }
     assert!(posed >= 4, "the boss walls posed nothing: {posed}");
-    assert!(posed <= 20, "poses leaked past the walls: {posed}");
     assert!(
         floor_air >= 1,
         "every floor-row move claimed a wall - the floors must hold their peace"

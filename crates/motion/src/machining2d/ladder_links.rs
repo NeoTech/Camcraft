@@ -194,7 +194,7 @@ pub(super) fn pass_link(b: &mut PathBuilder, lv: &LevelWalk, m: &Motion, cert: O
     {
         let l = Lvl { cen, passes, pass: lv.pass, walk: lv.walk, mat_top };
         let from = (mat_top + m.links.approach.plunge_height).min(plane);
-        let d = if cc { entry_restart(&l, at, z, from, m) } else { restart(&l, at, z, from, m) };
+        let d = if cc { entry_restart(&l, at, z, from, m) } else { restart(b, &l, at, z, from, plane, m) };
         st.level.extend(push(b, &d, &l, z, plane, m));
         return;
     }

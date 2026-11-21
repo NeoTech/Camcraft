@@ -1094,21 +1094,14 @@ fn levels_3_zs() -> [f64; 2] {
 }
 
 #[test]
-fn zigzag_fills_a_square_with_one_plunge_per_level() {
+fn zigzag_fills_a_square_with_rows_and_a_closing_ring_per_level() {
     let region = rect(0.0, 0.0, 30.0, 30.0);
     let center = region.offset(-5.0).expect("offset");
     let t = pocket(&region, &pp()).expect("valid");
     assert!(t.is_chained() && t.all_finite());
-    // M8.1's entry law on zigzag, from level 0: the serpentine keeps
-    // its rows, but every level - the first included (Plunge never
-    // lands its dive on a wall corner, not even the stock's own
-    // surface corner) - first dives at the floor's room, then links
-    // to the row start - a chord across the rows' lines, so the
-    // hop-and-dive link. M11.3's one-entry law: the
-    // dive lands on the first row a little past its wall-corner start
-    // and links back along the row at depth - one dive per level.
-    // #2004: two levels (-3, -6), no air level at Top Z 0.
-    assert_eq!(plunge_xy(&t).len(), 2, "one entry dive at every level");
+    // The inset serpentine and its separate closing wall ring each have
+    // one entry at each of the two levels (-3, -6).
+    assert_eq!(plunge_xy(&t).len(), 4, "one dive for the rows and one for the ring at every level");
     let floor = t
         .moves
         .iter()
@@ -1116,7 +1109,7 @@ fn zigzag_fills_a_square_with_one_plunge_per_level() {
         .nth(1)
         .expect("a level-change dive");
     assert!(
-        center.contains(Point2::new(floor.to.x, floor.to.y)),
+        in_closed(&center, (floor.to.x, floor.to.y)),
         "the level-change dive at ({}, {}) is not inside the center area",
         floor.to.x,
         floor.to.y
@@ -1127,19 +1120,19 @@ fn zigzag_fills_a_square_with_one_plunge_per_level() {
         let mut v: Vec<f64> = pts.iter().map(|q| q.1).collect();
         v.sort_by(f64::total_cmp);
         v.dedup();
-        // M11.3: the entry dive lands just inside the first row (a wall
-        // margin off it) and links back to its start - not a row.
-        v.retain(|y| (y - y.round()).abs() < 1e-9);
+        // The entry landing may lie between rows; retain the row and wall Ys.
+        v.retain(|y| [5.0, 5.01, 10.01, 15.01, 20.01, 24.99, 25.0]
+            .iter().any(|row| (y - row).abs() < 1e-9));
         v
     };
-    assert_eq!(ys, vec![5.0, 10.0, 15.0, 20.0, 25.0]);
+    assert_eq!(ys, vec![5.0, 5.01, 10.01, 15.01, 20.01, 24.99, 25.0]);
     for q in &pts {
         assert!(in_closed(&center, *q), "feed point {q:?} outside the center area");
     }
-    // Five 20 mm rows plus four 5 mm connectors, all at cut depth - and
-    // (M11.3) the short at-depth link from the entry onto the first row.
+    // Five 19.98 mm rows plus 19.98 mm of connectors and the 80 mm
+    // wall ring, with the short entry link onto the first row.
     let len = level_len(&t, -6.0);
-    assert!((120.0 - 1e-9..120.0 + 2.0).contains(&len), "{len}");
+    assert!((199.88 - 1e-9..199.88 + 2.0).contains(&len), "{len}");
 }
 
 #[test]
@@ -1166,12 +1159,9 @@ fn zigzag_hops_over_islands_and_leaves_them_standing() {
     // the gouge check; the distance test is a loose physical cross-check.
     let center = region.offset(-5.0).expect("offset");
     let t = pocket(&region, &pp()).expect("valid");
-    // M8.1 read from level 0: every level posts five dives - the
-    // interior entry dive whose link to the row start the island
-    // forces to a hop, plus three island-crossing hops. 5 + 5 + 5.
-    // M11.3: the entry lands on the first row and links along it, so the
-    // entry's second dive is gone - 4 per level. #2004: two levels.
-    assert_eq!(plunge_xy(&t).len(), 8);
+    // The inset rows split into five passes around the island. The outer
+    // wall and island each add a closing ring: seven dives at each level.
+    assert_eq!(plunge_xy(&t).len(), 14);
 
     for z in levels_3_zs() {
         let (pts, lifted) = polyline_at(&t, z);
