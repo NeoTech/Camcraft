@@ -238,6 +238,11 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
         skim_fields(ui, &mut p.skims, &ids);
         check_row(ui, "Freed piece captured", &mut p.capture);
         hint(ui, "state that the freed piece is caught by a slug catcher, magnet or the machine's slug retention before allowing it to drop");
+        if matches!(side, WireSide::Left | WireSide::Right) {
+            check_row(ui, "Both pieces clamped through all passes", &mut p.both_pieces_restrained);
+            check_row(ui, "Stock centered in installed XY travel", &mut p.stock_centered_in_xy_travel);
+            hint(ui, "Agie open cuts require both clamps to hold independently until all trims finish. Center the stock on both installed travel midpoints and clear the wire corridors at both ends.");
+        }
         tab_fields(ui, u, &mut p.tabs, &ids);
         // #540: no-core burnout - the pocket's interior burnt out by
         // offset rings, the wire at least the clearance from the walls.

@@ -192,9 +192,8 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
     if let Some(why) = crate::setup_wcs_tilt::generation_problem(world, op) {
         return Err(GenError::Invalid(why));
     }
-    // #1862: an operation on a DXF profile, or a 3D kind in a setup
-    // whose model is virtual, is refused by name - never cut for want
-    // of a solid to check against.
+    // A wire punch can resolve one closed DXF source on its own stock.
+    // Other unsupported operations on virtual sources are refused by name.
     if let Some(why) = crate::sketch_model::generation_problem(world, op) {
         return Err(GenError::Invalid(why));
     }
@@ -203,7 +202,11 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
     // after the heights resolve) exactly where the old head raised it -
     // the job's error-order law.
     let opframe = OpFrame::of(op);
-    let material = opframe.material_of(world, &op.src)?;
+    let profile = super::wire_sketch::placed(world, op).map_err(GenError::Invalid)?;
+    let material = match &profile {
+        Some(source) => source.material(),
+        None => opframe.material_of(world, &op.src)?,
+    };
     let part_solid = part_solid_of(world, setup, &op.src, &material);
     // Setup stock, when it is not the source itself: the swarf column
     // around a smaller model (the head read at `generate` - same call).
@@ -271,6 +274,9 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
     let around_part = super::keep_law::is_keep_kind(&op.params) && matches!(op.src, SrcRef::Entity(_)) && picked_region.is_some();
     let wire_ruled = super::wire_ruled::picks_of(world, op);
     let contour_sel = match (&op.params, &op.src) {
+        (OpParams::WireContour(_), SrcRef::Entity(_)) => profile.map(|source| {
+            Ok((vec![source.ring], Vec::new(), crate::machining2d::AutoSide::Outside))
+        }),
         // The plasma cut reads its picks the contour's way (#670):
         // closed rings AND open runs, each cut as picked.
         (OpParams::Contour { .. } | OpParams::PlasmaProfile(_) | OpParams::WireContour(_), SrcRef::Selection(items))
