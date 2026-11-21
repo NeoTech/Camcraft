@@ -30,6 +30,8 @@ pub(crate) mod api;
 mod call;
 // #1862: `cam.importDxf` and the profile view.
 pub(crate) mod dxf;
+// #2679, #2891: `cam.insertText`.
+pub(crate) mod text;
 pub use api::refusal_text;
 mod report;
 #[cfg(test)]
@@ -91,6 +93,7 @@ pub(crate) const VERBS: &[Verb] = &[
     Verb::new("save", -1, api::v_save, "save(path?: string): { path: string }"),
     Verb::new("import", -1, api::v_import, "import(path: string, name?: string | null, facetBudget?: number): { model: string; facets: number; facet_budget?: number; notes?: string[] }"),
     Verb::new("importDxf", -1, dxf::v_import_dxf, "importDxf(path: string, options?: { setup?: string; units?: \"mm\" | \"in\"; join_tol?: number; name?: string }): DxfProfile"),
+    Verb::new("insertText", -1, text::v_insert_text, "insertText(text: string, options: { height: number; position?: [number, number]; angle?: number; letter_spacing?: number; setup?: string; name?: string }): TextProfile"),
     Verb::new("exportTools", -1, api::v_export_tools, "exportTools(path: string, format?: \"auto\" | \"camtools\" | \"pathpilot\" | \"hurco\", units?: \"mm\" | \"inch\"): { path: string; tools: number; format: string }"),
     Verb::new("importTools", -1, api::v_import_tools, "importTools(path: string, mode?: \"add\" | \"update\" | \"replace\", holders?: boolean, format?: \"auto\" | \"camtools\" | \"pathpilot\" | \"hurco\", units?: \"mm\" | \"inch\"): { path: string; format: string; mode: string; added: string[]; renamed: { from: string; to: string }[]; skipped: string[]; updated: string[]; replaced: string[]; removed: string[]; holders: number; holders_left_out: number; summary: string }"),
     Verb::new("operations", 0, api::v_operations, "operations(): OperationInfo[]"),
@@ -352,6 +355,12 @@ interface DxfProfile {
   origin: number[] | null;
   rotation: number[] | null;
   summary?: string;
+}
+
+/** A text engraving profile placed on the stock of a setup. */
+interface TextProfile extends DxfProfile {
+  text: string;
+  height: number;
 }
 
 interface DocumentInfo {
