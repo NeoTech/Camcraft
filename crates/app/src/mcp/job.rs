@@ -264,6 +264,7 @@ pub(super) fn finding(op: &str, w: &Warning) -> Value {
         Warning::ProbeSearch { at, .. } => ("probe_search", *at),
         Warning::SinkerFinishOrder { at, .. } => ("sinker_finish_order", *at),
         Warning::DrillUndersize { at, .. } => ("drill_undersize", *at),
+        Warning::StrategyFallback { at, .. } => ("strategy_fallback", *at),
     };
     json!({
         "op": op,

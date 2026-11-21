@@ -110,7 +110,10 @@ fn a_whole_model_clearing_never_joins_two_corners_across_the_part_that_pinches_t
             assert!(t.moves.iter().any(|m| m.kind == MoveKind::Feed && m.to.z < 10.0 - 1e-6), "{tag}: the corners are cut");
             let (d, at) = closest_to_axis(&t, 10.0);
             assert!(d >= rim + R - 0.02, "{tag}: a cut at ({:.3}, {:.3}, {:.3}) stands {d:.3} from the axis - {:.3} into the disc", at.x, at.y, at.z, rim + R - d);
-            assert_eq!(warns, 0, "{tag}: the op verifies clean");
+            // #3035: the corners ride the rings - Adaptive says so with one
+            // advisory warning; nothing else is flagged.
+            let fell = usize::from(camcraft_app::machining2d::rings_fallbacks(&t.notes) > 0);
+            assert_eq!(warns, fell, "{tag}: the op verifies clean");
         }
     }
 }

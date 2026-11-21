@@ -3584,6 +3584,13 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // #2496: a hole wider than its drill is drilled undersize - named,
             // never binding (a pilot drill is a valid plan).
             super::drill_size::undersize_into(&mut warns, &path, &tool, &params);
+            // #3035: Adaptive areas cut by Offset rings - a warning, not
+            // only a note; advisory (the rings are verified above).
+            let areas = crate::machining2d::rings_fallbacks(&path.notes);
+            if areas > 0 {
+                let at = path.moves.iter().position(|m| m.kind != crate::cl::MoveKind::Rapid).unwrap_or(0);
+                warns.push(Warning::StrategyFallback { at, areas });
+            }
             // The rotary kinds' bands and rapids (M13): `Mode::Rotary`
             // stood the vertical-column laws down; the radial field
             // reads rest material in the frame the work turns in.

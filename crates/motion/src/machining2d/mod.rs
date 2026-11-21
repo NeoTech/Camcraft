@@ -179,4 +179,5 @@ pub(crate) use arc_proof::{ProofTally, fit_proved};
 pub(crate) use arcs::push_segs;
 pub(crate) use microlift::link_at as microlift_link;
 pub(crate) use pocket_hsm::{adaptive_passes, choose_entry, in_air};
+pub use pocket_hsm::{RINGS_FALLBACK, rings_fallbacks};
 pub(crate) use waterscan::chord_crosses_path;
