@@ -778,11 +778,9 @@ fn an_entry_edit_marks_the_slot_stale_and_the_orbit_proves_itself() {
     assert_eq!(status(&world, "Slot1"), OpStatus::Ok);
     let before = cache(&world, "Slot1").expect("cached").path;
     assert!(height_notes_only(&world), "no entry fallback, only the independent height warnings: {:?}", before.notes);
-    assert_eq!(
-        before.moves.iter().filter(|m| m.arc.is_some()).count(),
-        0,
-        "Plunge means no orbit in the file"
-    );
+    // An orbit descends; the planar arcs are the slot's wall lap (#2906).
+    let orbits = |p: &camcraft_app::cl::Toolpath| p.moves.iter().filter(|m| m.arc.is_some() && m.from.z != m.to.z).count();
+    assert_eq!(orbits(&before), 0, "Plunge means no orbit in the file");
 
     let mut edited = slot_params();
     let OpParams::Slot {
@@ -811,7 +809,7 @@ fn an_entry_edit_marks_the_slot_stale_and_the_orbit_proves_itself() {
     assert_eq!(status(&world, "Slot1"), OpStatus::Ok);
     let after = cache(&world, "Slot1").expect("cached").path;
     assert!(
-        after.moves.iter().any(|m| m.arc.is_some()),
+        orbits(&after) > 0,
         "a channel this wide certifies the orbit - it must land"
     );
     assert!(height_notes_only(&world), "a certified orbit adds no entry note; only the height warnings remain: {:?}", after.notes);

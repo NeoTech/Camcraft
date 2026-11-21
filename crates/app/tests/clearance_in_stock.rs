@@ -200,8 +200,15 @@ fn a_slot_traverse_at_a_clearance_plane_inside_the_stock_is_convicted_and_holds_
     let (world, mut history) = bench();
     add(&world, &mut history, "Op2Slot", SrcRef::Stock, slot(LOW));
     let tp = cache(&world, "Op2Slot");
-    assert!(!traverses_convicted(&tp, LOW).is_empty(), "{:?}", tp.warnings);
-    assert!(clearance_note(&tp).is_some(), "{:?}", tp.path.notes);
+    // #2906: the slot cuts its whole channel, round ends included, so its
+    // one lateral traverse (between the levels, inside the channel) rides
+    // over its own cut and is acquitted; before, the uncut crescents of
+    // the round ends stood in its way. The plane is still convicted: the
+    // first traverse (#2901) and the rapid from the plane down into the
+    // stock (move 1), and the post is held.
+    assert!(traverses_convicted(&tp, LOW).is_empty(), "{:?}", tp.warnings);
+    assert!(first_traverse_refused(&tp), "{:?}", tp.warnings);
+    assert!(tp.warnings.contains(&Warning::RapidInStock { at: 1 }), "{:?}", tp.warnings);
     post_is_held(&world, "slot", THROUGH);
 }
 
