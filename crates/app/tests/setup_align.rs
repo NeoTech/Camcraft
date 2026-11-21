@@ -367,7 +367,10 @@ fn the_pocket_and_face_kinds_cut_the_flipped_part_and_post() {
     let path = model::toolpath_of(&world, &e).expect("pocket path");
     // Z 12..20 of the flipped part is solid: the pocket clears the stock
     // around it and never enters where the hole stood as modelled.
-    let inside = path.path.moves.iter().filter(|m| m.to.z < 19.9).find(|m| m.to.x.abs().max(m.to.y.abs()) < 21.9);
+    // The 4 mm tool's center stays 2 mm from the 40 x 40 block. That
+    // is a rounded square: a closing ring at a corner is legal (#3021).
+    let from_block = |x: f64, y: f64| (x.abs() - 20.0).max(0.0).hypot((y.abs() - 20.0).max(0.0));
+    let inside = path.path.moves.iter().filter(|m| m.to.z < 19.9).find(|m| from_block(m.to.x, m.to.y) < 1.9);
     assert!(inside.is_none(), "{inside:?}");
     assert!(path.path.moves.iter().any(|m| m.to.z < 19.9), "the pocket cuts");
     post(&world, "kinds").expect("the flipped program posts");
