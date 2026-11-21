@@ -497,6 +497,7 @@ needs a positive pitch to time its helix against"; "infeed must sit between
 <!-- catalog:examples:start -->
 **Example cases**
 
+- [2d/drill-overfeed](https://github.com/NeoTech/Camcraft/tree/main/examples/catalog/2d/drill-overfeed)
 - [2d/first-part](https://github.com/NeoTech/Camcraft/tree/main/examples/catalog/2d/first-part)
 - [2d/hole-work](https://github.com/NeoTech/Camcraft/tree/main/examples/catalog/2d/hole-work)
 <!-- catalog:examples:end -->

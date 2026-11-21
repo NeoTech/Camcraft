@@ -21,6 +21,9 @@ use support::*;
 #[path = "example_catalog/contract.rs"]
 mod contract;
 
+#[path = "example_catalog/refusal.rs"]
+mod refusal;
+
 /// #2865: three original parts demonstrate the five additional turning kinds.
 #[test]
 fn turning_cases_cover_five_additional_kinds() {
@@ -159,6 +162,9 @@ mod catalog_2d_hole_work {
 
 // #2861: the case 2d/slots, its two case tests and its program pin.
 include!("example_catalog/case_2d_slots.rs");
+
+// #2856: the refusal case 2d/drill-overfeed and its two case tests.
+include!("example_catalog/case_2d_drill_overfeed.rs");
 
 mod catalog_turning_bushing {
     use super::*;

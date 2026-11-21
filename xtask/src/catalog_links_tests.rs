@@ -53,7 +53,7 @@ fn a_case_kind_without_a_guide_heading_refuses_before_writing() {
     fs::create_dir_all(&case_dir).expect("case dir");
     fs::write(
         case_dir.join("case.toml"),
-        "kinds = [\"Face\"]\nmachine = \"mill\"\nexpect = \"top\"\n",
+        "kinds = [\"Face\"]\nmachine = \"mill\"\nexpect = \"post\"\n",
     )
     .expect("metadata");
     let registry = tmp.0.join("crates/app/src/operation");
