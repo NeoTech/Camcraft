@@ -203,6 +203,8 @@ mod thread_infeed_page;
 mod turning_page;
 // #107: Save / Don't Save / Cancel over unsaved changes.
 mod unsaved_prompt;
+// #1874: the length unit of a STEP file that states none.
+pub(crate) mod step_units_prompt;
 mod panes;
 // #441: the ribbon's Theme door and its dropdown.
 mod theme_drop;

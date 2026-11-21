@@ -108,6 +108,8 @@ pub mod wcs_circle_pick;
 #[cfg(test)]
 mod file_pick_tests;
 #[cfg(test)]
+mod step_units_tests;
+#[cfg(test)]
 mod law_tests;
 #[cfg(test)]
 mod ortho_pick_tests;

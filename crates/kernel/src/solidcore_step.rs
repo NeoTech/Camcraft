@@ -26,7 +26,7 @@ use crate::solidcore_trims::KernelTrims;
 use crate::step_edge_gap::{EdgeGap, EdgeGapCap, raised_edge_gap};
 use crate::{Kernel, KernelError, Measure};
 
-pub use crate::solidcore_step_import::{StepImport, StepModel, StepSheet, import_step, import_step_model};
+pub use crate::solidcore_step_import::{StepImport, StepModel, StepSheet, import_step, import_step_model, import_step_model_assuming};
 
 pub(crate) const NAME: &str = "solidcore";
 
@@ -87,6 +87,11 @@ pub struct StepRead {
     /// file). Empty: no context states a unit and the reader took
     /// millimetres. Every solid above is already in millimetres.
     pub length_units_mm: Vec<f64>,
+    /// The millimetres per unit that the caller stated for a file whose
+    /// contexts state no length unit (#1874, [`read_step_assuming`]), when
+    /// the reader used it. `None`: the file states its own unit, or no
+    /// unit was stated. A stated unit is also in `length_units_mm`.
+    pub assumed_mm: Option<f64>,
     /// File-level diagnostics (duplicate entity ids, mixed units, faces
     /// wound against their neighbours).
     pub notes: Vec<String>,
@@ -141,6 +146,20 @@ pub fn read_step(
     bytes: &[u8],
     stop: &CancelToken,
 ) -> Result<StepRead, KernelError> {
+    read_step_assuming(k, bytes, stop, None)
+}
+
+/// [`read_step`], and `assume_mm` millimetres per unit for a file whose
+/// contexts state no length unit (#1874): the caller's unit is written into
+/// the file's unit contexts before the read, so the whole model reads in
+/// it. A file that states its own unit keeps it; `assume_mm` is then not
+/// used. `None` reads a file with no unit at 1 mm per unit, as before.
+pub fn read_step_assuming(
+    k: &mut SolidcoreKernel,
+    bytes: &[u8],
+    stop: &CancelToken,
+    assume_mm: Option<f64>,
+) -> Result<StepRead, KernelError> {
     if bytes.is_empty() {
         return Err(refused_input("empty file".into()));
     }
@@ -156,7 +175,7 @@ pub fn read_step(
         return Err(timed_out("before parsing"));
     }
     let before = k.k.cancel.replace(stop.clone());
-    let guarded = catch_unwind(AssertUnwindSafe(|| read_guarded(k, text, stop)));
+    let guarded = catch_unwind(AssertUnwindSafe(|| read_guarded(k, text, stop, assume_mm)));
     k.k.cancel = before;
     let out = match guarded {
         Ok(r) => r,
@@ -179,6 +198,7 @@ fn read_guarded(
     k: &mut SolidcoreKernel,
     text: &str,
     stop: &CancelToken,
+    assume_mm: Option<f64>,
 ) -> Result<StepRead, KernelError> {
     let mut ex = p21::parse_with(text, Some(&Watch(stop))).map_err(|e| match e {
         p21::Error::Cancelled => timed_out("parsing"),
@@ -188,9 +208,18 @@ fn read_guarded(
     crate::step_units_guard::expand_short_names(&mut ex);
     crate::step_units_guard::check_angle_units(&ex).map_err(refused_input)?;
     crate::step_curve_guard::check(&ex).map_err(refused_input)?;
-    let units = crate::step_length_units::read(&ex).map_err(refused_input)?;
+    let mut units = crate::step_length_units::read(&ex).map_err(refused_input)?;
+    let mut assumed_mm = None;
+    if units.mm.is_empty()
+        && let Some(mm) = assume_mm
+    {
+        crate::step_assumed_unit::assume(&mut ex, mm).map_err(refused_input)?;
+        units = crate::step_length_units::read(&ex).map_err(refused_input)?;
+        assumed_mm = Some(mm);
+    }
     let mut out = StepRead {
         length_units_mm: units.mm.clone(),
+        assumed_mm,
         ..StepRead::default()
     };
     if !ex.duplicates.is_empty() {

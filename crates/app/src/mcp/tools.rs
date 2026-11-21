@@ -24,7 +24,7 @@ pub(super) struct Tool {
 const TOOLS: &[Tool] = &[
     Tool { name: "open_project", description: "Open a .camproj project file, replacing the current document and clearing undo history.", schema: s_path, run: open_project },
     Tool { name: "save_project", description: "Save the document as a .camproj file. Without a path, saves over the file last opened or saved.", schema: s_opt_path, run: save_project },
-    Tool { name: "import_model", description: "Import a mesh model (STL, STEP or OBJ) through the app's importers. A name already used by a model updates that model. A STEP model too large to import at full detail, or one whose file's edges lie off their surfaces, answers with reduced_fidelity: how closely its surfaces are approximated, in mm - gouge checks against it are stricter, and its operations are refused at the post when it is too coarse to check; import it again with a larger facet_budget, or export the file again with a tighter tolerance, to clear that. A STEP closed shell that meshes open imports incomplete: reduced_fidelity then says incomplete and names the hole, and every operation on the model is refused at the post. notes lists what the importer changed, e.g. a STEP face wound against its neighbours that was flipped, by name, or a closed STEP solid wound inward that was turned outward.", schema: s_import, run: import_model },
+    Tool { name: "import_model", description: "Import a mesh model (STL, STEP or OBJ) through the app's importers. A name already used by a model updates that model. A STEP model too large to import at full detail, or one whose file's edges lie off their surfaces, answers with reduced_fidelity: how closely its surfaces are approximated, in mm - gouge checks against it are stricter, and its operations are refused at the post when it is too coarse to check; import it again with a larger facet_budget, or export the file again with a tighter tolerance, to clear that. A STEP closed shell that meshes open imports incomplete: reduced_fidelity then says incomplete and names the hole, and every operation on the model is refused at the post. notes lists what the importer changed, e.g. a STEP face wound against its neighbours that was flipped, by name, or a closed STEP solid wound inward that was turned outward; for a STEP file it also states the length unit the model was read in. A STEP file that states no length unit is refused until units gives one.", schema: s_import, run: import_model },
     Tool { name: "get_job", description: "The whole document as JSON: setups (each with model_reference: a solid part, or the virtual reference of its placed DXF profiles), stock, work offsets, models (one imported at reduced fidelity carries reduced_fidelity), DXF profiles, tools, and operations with their parameters and status (one on a DXF profile says what it checks against).", schema: s_empty, run: job::get_job },
     Tool { name: "get_selection", description: "Read currently selected entities, active setup, active operation, viewport pick mode (model, face, edge, vertex), and active geometry picks.", schema: s_empty, run: super::selection::get_selection },
     Tool { name: "list_operation_types", description: "Every operation kind with its parameter fields, JSON types and default values, and the tool kinds it accepts.", schema: s_empty, run: job::list_operation_types },
@@ -156,7 +156,8 @@ fn save_project(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> 
 fn import_model(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
     let name = opt_str(a, "name")?.map_or(Value::Null, |n| json!(n));
     let budget = a.get("facet_budget").cloned().unwrap_or(Value::Null);
-    api::v_import(env, vec![json!(req_str(a, "path")?), name, budget])
+    let units = opt_str(a, "units")?.map_or(Value::Null, |u| json!(u));
+    api::v_import(env, vec![json!(req_str(a, "path")?), name, budget, units])
 }
 
 fn export_tool_library(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
@@ -296,7 +297,8 @@ fn s_import() -> Value {
         json!({
             "path": { "type": "string", "description": "An .stl, .step/.stp, .obj or Solidcraft .sc/.solidcraft file (a Solidcraft design imports its cached final body)." },
             "name": { "type": "string", "description": "Model name; defaults to the file stem." },
-            "facet_budget": { "type": "integer", "minimum": crate::geometry::import::step_budget::MIN, "maximum": crate::geometry::import::step_budget::CEILING, "description": "STEP facet budget: the most triangles a STEP model may be meshed into (default 30000000). Raise it to import a large model at full detail; STEP files only." }
+            "facet_budget": { "type": "integer", "minimum": crate::geometry::import::step_budget::MIN, "maximum": crate::geometry::import::step_budget::CEILING, "description": "STEP facet budget: the most triangles a STEP model may be meshed into (default 30000000). Raise it to import a large model at full detail; STEP files only." },
+            "units": { "type": "string", "enum": ["mm", "in"], "description": "The length unit of a STEP file that states none. Such a file is refused without it: the model is never read in a guessed unit. A file that states its own unit keeps it, and notes says so. STEP files only." }
         }),
         &["path"],
     )

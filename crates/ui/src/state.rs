@@ -121,9 +121,12 @@ mod prefs_ui;
 mod setups_ui;
 #[path = "state_step_budget.rs"]
 mod step_budget_ui;
+#[path = "state_step_units.rs"]
+mod step_units_ui;
 #[path = "state_vouch.rs"]
 mod vouch_ui;
 pub use step_budget_ui::StepBudgetUi;
+pub use step_units_ui::StepUnitsAsk;
 pub use tool_profile_ui::{ToolColumn, ToolProfileUi, is_spun_kind, parametric_points};
 use flecs_ecs::prelude::World;
 
@@ -166,6 +169,10 @@ pub enum CommandKind {
     /// The answer to the unsaved-changes prompt (#107): New, Open or Quit
     /// over a dirty document is held in `unsaved_prompt` until this lands.
     ResolveUnsaved(crate::unsaved::UnsavedChoice),
+    /// The answer to the length-unit question of a STEP file that states
+    /// none (#1874): import it again in the unit, or (`None`) import
+    /// nothing.
+    ResolveStepUnits(Option<camcraft_app::units::Unit>),
     /// The Setup pane's shape+placement draft; the command itself is built
     /// here, so validation and status reporting live in one place.
     SetStock {
@@ -1958,6 +1965,11 @@ pub struct State {
     /// implicit first setup. Public so tests run the dialog hand-off
     /// without a modal file picker.
     pub import_as_fixture: Option<Option<String>>,
+    /// #1874: a STEP import that waits for its length unit (the prompt
+    /// shows while it is set). View state, never on the history.
+    pub step_units_ask: Option<StepUnitsAsk>,
+    /// #1874: the unit chosen for the next import of that file.
+    pub(crate) step_units_next: Option<(PathBuf, camcraft_app::units::Unit)>,
     /// #1054: the STEP facet budget the next import runs under (an import
     /// setting, not on the history; the import that uses it is).
     pub step_budget: StepBudgetUi,
@@ -2381,6 +2393,8 @@ impl State {
             repair_ui: RepairUi::default(),
             pocket_scan: PocketScan::default(),
             import_as_fixture: None,
+            step_units_ask: None,
+            step_units_next: None,
             step_budget: StepBudgetUi::default(),
             vouch_by: String::new(),
             accessory_sizes: HashMap::new(),
@@ -3432,6 +3446,7 @@ impl State {
             CommandKind::FrameAll => self.frame_all(),
             CommandKind::Quit => self.request_quit = true,
             CommandKind::ResolveUnsaved(choice) => self.resolve_unsaved(choice),
+            CommandKind::ResolveStepUnits(unit) => self.resolve_step_units(unit),
             CommandKind::DeleteByName(name) => match DeleteEntity::new(&self.world, &name) {
                 Ok(command) => {
                     self.history.execute(&self.world, command);
@@ -4339,6 +4354,8 @@ impl State {
         let (tx, rx) = mpsc::channel();
         let worker_path = path.clone();
         let budget = self.step_budget_for(&path);
+        // #1874: the unit chosen for a STEP file that states none.
+        let units = self.take_step_units(&path);
         if let (Some(b), false) = (budget, self.step_budget.explicit) {
             self.status = format!("importing {} under its recorded STEP facet budget of {b}…", file_label(&path));
         }
@@ -4346,7 +4363,7 @@ impl State {
             .name("camcraft-import".to_string())
             .spawn(move || {
                 // No World here: pure file + geometry work, Send across.
-                let result = ImportModel::within(&worker_path, budget);
+                let result = ImportModel::within_in(&worker_path, budget, units);
                 // A dropped rx means the document changed or we are closing;
                 // the command is simply never applied.
                 if tx.send(result).is_err() {
@@ -4358,7 +4375,7 @@ impl State {
             Err(err) => {
                 // Thread exhaustion must not lose the import: run inline.
                 diag_warn!("import: worker spawn failed ({err}); running inline");
-                let result = ImportModel::within(&path, budget);
+                let result = ImportModel::within_in(&path, budget, units);
                 self.finish_import(result);
             }
         }
@@ -4448,6 +4465,14 @@ impl State {
                     self.status = format!("{} - {said}", self.status);
                 }
             }
+            // #1874: a STEP file that states no length unit is never read
+            // in a guessed one: ask for the unit, then import it again.
+            Err(CommandError::Import(camcraft_app::geometry::ImportError::StepUnitsMissing)) if file.is_some() => {
+                let as_fixture = self.import_as_fixture.take();
+                if let Some(path) = file {
+                    self.ask_step_units(path, as_fixture);
+                }
+            }
             Err(err) => {
                 // A refused import-as-fixture must not tag the NEXT import.
                 self.import_as_fixture = None;
@@ -4521,6 +4546,8 @@ impl State {
         self.import_file = None;
         self.import_started = None;
         self.import_as_fixture = None;
+        self.step_units_ask = None;
+        self.step_units_next = None;
     }
 
     /// Mount a `.mch` machine definition on the document (M2.3 C). The

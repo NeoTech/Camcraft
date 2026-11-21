@@ -55,7 +55,9 @@ pub(crate) fn v_save(env: &mut Env, args: Vec<Value>) -> Result<Value, String> {
 /// it as a model entity, by its file stem unless named otherwise (a null
 /// name keeps the stem). `facetBudget` is the STEP facet budget (#1054):
 /// absent or null is the default; out of bounds, or given for a file that
-/// is not STEP, refuses by name. A name that
+/// is not STEP, refuses by name. `units` (#1874) is the length unit,
+/// `"mm"` or `"in"`, for a STEP file that states none: such a file is
+/// refused without it, never read in a guessed unit. A name that
 /// already wears a model updates it (the revision counts, the stale
 /// marks follow); a name that belongs to setup furniture refuses -
 /// an import never overwrites the stock solid by accident.
@@ -68,7 +70,11 @@ pub(crate) fn v_import(env: &mut Env, args: Vec<Value>) -> Result<Value, String>
     // #1185: no budget given -> a re-import keeps the model's recorded one.
     let given_name = arg_opt(&args, 1, "a model name")?;
     let budget = explicit.or_else(|| crate::model_fidelity::reimport_budget(&env.world, &path, given_name.as_deref()));
-    let imp = ImportModel::within(&path, budget).map_err(|e| e.to_string())?;
+    let units = match arg_opt(&args, 3, "a length unit")? {
+        None => None,
+        Some(u) => Some(crate::units::Unit::parse(&u).ok_or_else(|| format!("the length unit must be \"mm\" or \"in\", got \"{u}\""))?),
+    };
+    let imp = ImportModel::within_in(&path, budget, units).map_err(|e| e.to_string())?;
     let name = given_name.unwrap_or_else(|| imp.name.clone());
     let notes = imp.notes.clone();
     if model::find_by_name(&env.world, &name).is_some() {
