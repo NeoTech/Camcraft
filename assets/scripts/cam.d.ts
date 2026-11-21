@@ -129,6 +129,7 @@ interface CamApi {
   save(path?: string): { path: string };  // variadic
   import(path: string, name?: string | null, facetBudget?: number): { model: string; facets: number; facet_budget?: number; notes?: string[] };  // variadic
   importDxf(path: string, options?: { setup?: string; units?: "mm" | "in"; join_tol?: number; name?: string }): DxfProfile;  // variadic
+  importSvg(path: string, options?: { setup?: string; units?: "mm" | "in"; join_tol?: number; name?: string }): DxfProfile;  // variadic
   exportTools(path: string, format?: "auto" | "camtools" | "pathpilot" | "hurco", units?: "mm" | "inch"): { path: string; tools: number; format: string };  // variadic
   importTools(path: string, mode?: "add" | "update" | "replace", holders?: boolean, format?: "auto" | "camtools" | "pathpilot" | "hurco", units?: "mm" | "inch"): { path: string; format: string; mode: string; added: string[]; renamed: { from: string; to: string }[]; skipped: string[]; updated: string[]; replaced: string[]; removed: string[]; holders: number; holders_left_out: number; summary: string };  // variadic
   operations(): OperationInfo[];  // arity 0

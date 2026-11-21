@@ -91,6 +91,7 @@ pub(crate) const VERBS: &[Verb] = &[
     Verb::new("save", -1, api::v_save, "save(path?: string): { path: string }"),
     Verb::new("import", -1, api::v_import, "import(path: string, name?: string | null, facetBudget?: number): { model: string; facets: number; facet_budget?: number; notes?: string[] }"),
     Verb::new("importDxf", -1, dxf::v_import_dxf, "importDxf(path: string, options?: { setup?: string; units?: \"mm\" | \"in\"; join_tol?: number; name?: string }): DxfProfile"),
+    Verb::new("importSvg", -1, dxf::v_import_svg, "importSvg(path: string, options?: { setup?: string; units?: \"mm\" | \"in\"; join_tol?: number; name?: string }): DxfProfile"),
     Verb::new("exportTools", -1, api::v_export_tools, "exportTools(path: string, format?: \"auto\" | \"camtools\" | \"pathpilot\" | \"hurco\", units?: \"mm\" | \"inch\"): { path: string; tools: number; format: string }"),
     Verb::new("importTools", -1, api::v_import_tools, "importTools(path: string, mode?: \"add\" | \"update\" | \"replace\", holders?: boolean, format?: \"auto\" | \"camtools\" | \"pathpilot\" | \"hurco\", units?: \"mm\" | \"inch\"): { path: string; format: string; mode: string; added: string[]; renamed: { from: string; to: string }[]; skipped: string[]; updated: string[]; replaced: string[]; removed: string[]; holders: number; holders_left_out: number; summary: string }"),
     Verb::new("operations", 0, api::v_operations, "operations(): OperationInfo[]"),
