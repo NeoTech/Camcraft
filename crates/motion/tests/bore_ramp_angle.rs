@@ -43,6 +43,7 @@ fn params(diameter: f64, climb: bool) -> BoreParams {
         tolerance: 0.01,
         entry: Entry3D::Ramp,
         helix_radius: 1.0,
+        strategy: Default::default(),
         links: Links::PLANAR,
     }
 }

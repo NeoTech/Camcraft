@@ -277,6 +277,7 @@ fn bore_params(holes: Vec<BoreHole>, dia: f64) -> BoreParams {
         tolerance: 0.01,
         entry: crate::entry::Entry3D::Plunge,
         helix_radius: 0.0,
+        strategy: Default::default(),
     }
 }
 

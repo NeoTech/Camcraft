@@ -4,7 +4,7 @@ use crate::drilling::{CycleChoice, Hole};
 use crate::finishing3d;
 use crate::geo2d::Point2;
 use crate::links::Links;
-use crate::machining2d::{FaceHoles, Lead, PocketStrategy, RestParams, Side};
+use crate::machining2d::{BoreStrategy, FaceHoles, Lead, PocketStrategy, RestParams, Side};
 use crate::machining3d::Entry3D;
 
 use super::height::Height;
@@ -1246,6 +1246,9 @@ pub enum OpParams {
         /// before the option posted; checked at generation against the
         /// stock bottom, refused by name below it.
         break_through: Option<f64>,
+        /// Rings (the level ladder, every file before #2830) or one
+        /// helix per hole. A helical bore reads `stepdown` as its pitch.
+        strategy: BoreStrategy,
     },
     /// Helical thread milling (M2.4 C, reworked by #894): internal
     /// threads in the listed holes - or, `external`, on the listed

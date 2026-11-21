@@ -260,6 +260,7 @@ fn a_tool_that_is_not_centre_cutting_never_plunges_into_a_bore_or_circular() {
                 tolerance: 0.01,
                 entry,
                 helix_radius: 1.5,
+                strategy: Default::default(),
                 links: not_cc(links),
             };
             judge(&format!("bore {entry:?} {ln}"), bore(&bp), 3.0, TOP);

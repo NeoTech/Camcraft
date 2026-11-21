@@ -129,6 +129,8 @@ mod catalog_filters;
 mod cycle_combo;
 mod holes_break_through;
 mod holes_fine_bore;
+// #2830: the Bore strategy (rings or one helix per hole).
+mod bore_strategy;
 mod radial_step_field;
 mod auto_input_manual;
 // #1509: 2D Adaptive's Method choice on the Passes tab.
