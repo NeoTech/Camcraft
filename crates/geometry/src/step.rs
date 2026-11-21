@@ -51,6 +51,8 @@ pub struct StepMesh {
     /// Whether the chord was made coarser because the model's edges lie off
     /// their surfaces (#2976); its note is then the first of `notes`.
     pub loosened: bool,
+    /// True only when file tolerance, without a budget retry, set the chord.
+    pub file_tolerance: bool,
 }
 
 /// How many times a model over the facet budget is meshed again, coarser,
@@ -105,6 +107,7 @@ fn read(data: &[u8], budget: usize, chord_cap: f64, keep_open: bool) -> Result<S
     };
     let mut chord = chord_cap;
     let mut loosened = false;
+    let mut budget_coarsened = false;
     'tries: for _ in 0..=COARSEN_TRIES {
         let mut meshes: Vec<(String, MachiningMesh)> = Vec::new();
         let mut holes: Vec<String> = Vec::new();
@@ -152,11 +155,12 @@ fn read(data: &[u8], budget: usize, chord_cap: f64, keep_open: bool) -> Result<S
         }
         if total <= budget {
             let gap_note = loosened.then(|| import.edge_gap.loose_note(chord));
-            return finish(&import, &meshes, chord, &holes, gap_note);
+            return finish(&import, &meshes, chord, &holes, gap_note, loosened && !budget_coarsened);
         }
         // Facets fall about as the chord rises; `total` may be a lower bound
         // (the count stops at the budget), so the chord at least doubles.
         let ratio = total as f64 / budget.max(1) as f64;
+        budget_coarsened = true;
         chord *= ratio.clamp(2.0, COARSEN_MAX_STEP);
         tracing::warn!("STEP model over its {budget}-facet budget; meshing again at {chord:.4} mm");
     }
@@ -171,6 +175,7 @@ fn finish(
     chord: f64,
     holes: &[String],
     gap_note: Option<String>,
+    file_tolerance: bool,
 ) -> Result<StepMesh, StepError> {
     // One facet range for each solid: solids that share a wall stay apart
     // for the slicer and the winding check (#917). A sheet or a partial
@@ -211,7 +216,7 @@ fn finish(
     };
     let deviation_mm = meshes.iter().map(|(_, m)| m.report.deviation.largest()).fold(0.0, f64::max);
     let open = (!holes.is_empty()).then(|| holes.join("; "));
-    Ok(StepMesh { mesh, chord_mm: chord, deviation_mm, notes, open, loosened })
+    Ok(StepMesh { mesh, chord_mm: chord, deviation_mm, notes, open, loosened, file_tolerance })
 }
 
 /// `closed shell of solid #12 (10 faces) meshes open: face 4 of 10 got no

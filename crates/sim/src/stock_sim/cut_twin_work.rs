@@ -65,6 +65,7 @@ fn twin_tool(tool: &SdfTool) -> Result<TwinTool, StockError> {
         SdfTool::Taper { .. } => Some("taper"),
         SdfTool::Drill { .. } => Some("drill"),
         SdfTool::BullNose { .. } => Some("bull nose"),
+        SdfTool::Dovetail { .. } => Some("dovetail"),
         SdfTool::Lathe { .. } => Some("lathe"),
     };
     if let Some(n) = name {

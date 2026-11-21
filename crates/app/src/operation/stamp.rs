@@ -50,6 +50,38 @@ pub fn current_stamp(
     if super::first_traverse::newly_judged(params) {
         h.write(b"first-traverse-2965");
     }
+    // #3077: the cross drill's first rapid from the turret's index
+    // position is judged now; only its caches read Stale once.
+    if matches!(params, OpParams::Drill { cross, .. } if !cross.is_empty()) {
+        h.write(b"live-traverse-3077");
+    }
+    // #3081: a 3+2 plane whose tool axis points down toward the table
+    // now gets a verdict (it had a note). Only tilted caches read Stale
+    // once; the salt above stays, so no other kind's stamp moves.
+    if params.tilt().is_some() {
+        h.write(b"first-traverse-table-3081");
+    }
+    // #3083: a mill kind on a mill-turn setup answers to the first-
+    // traverse laws now. Only those caches read Stale once; the salt
+    // above stays, so no mill's stamp moves.
+    if super::first_traverse::newly_judged_on(crate::machine::kind_of_setup(world, setup), params) {
+        h.write(b"first-traverse-mill-turn-3083");
+    }
+    // #3096: a rotary kind on a lathe or a mill-turn setup, likewise.
+    if super::rotary_traverse::newly_judged_on(crate::machine::kind_of_setup(world, setup), params) {
+        h.write(b"live-traverse-rotary-3096");
+    }
+    // #3084: a multi-axis or rotary kind read through every pose of its
+    // machine's work-turning rotaries; only those caches read Stale once.
+    if super::first_traverse_posed::newly_judged(world, setup, params) {
+        h.write(b"first-traverse-posed-3084");
+    }
+    // #3100: a user's own post script that declares its rotary order is
+    // taken at its word with a note on the path; a cache made under
+    // another post has no note, so it must read Stale once.
+    if super::first_traverse_posed::post_order(world, setup, params).custom {
+        h.write(b"first-traverse-declared-3100");
+    }
     let w = |h: &mut std::hash::DefaultHasher, v: f64| h.write(&v.to_bits().to_le_bytes());
     super::stamp_tool::write(world, tool_name, params, &mut h)?;
     if let OpParams::WireContour(op) = params {
@@ -158,20 +190,28 @@ pub fn current_stamp(
             h.write_u8(b'E');
             h.write(name.as_bytes());
             let entity = model::find_by_name(world, name)?;
-            // #326: the pose in the setup's frame (as modelled: the
-            // document `Location`, the bytes every older stamp read).
-            let loc = crate::setup_align::pose_in(world, &entity, setup).unwrap_or_default();
-            for v in [loc.pos.x, loc.pos.y, loc.pos.z, loc.rot[0], loc.rot[1], loc.rot[2], loc.rot[3]]
-            {
-                w(&mut h, v);
+            if let Some(sketch) = crate::sketch::sketch_of(world, &entity) {
+                let pose = crate::sketch::world_pose(world, &entity)?;
+                for v in [pose.pos.x, pose.pos.y, pose.pos.z, pose.rot[0], pose.rot[1], pose.rot[2], pose.rot[3]] {
+                    w(&mut h, v);
+                }
+                write_sketch_digest(&sketch, &mut h);
+            } else {
+                // #326: the pose in the setup's frame (as modelled: the
+                // document `Location`, the bytes every older stamp read).
+                let loc = crate::setup_align::pose_in(world, &entity, setup).unwrap_or_default();
+                for v in [loc.pos.x, loc.pos.y, loc.pos.z, loc.rot[0], loc.rot[1], loc.rot[2], loc.rot[3]] {
+                    w(&mut h, v);
+                }
+                // M3.1 A: the revision signature, not count + bounds. Facet
+                // count and AABB are coincidences waiting to happen - a solid
+                // that keeps both while moving material (the diamond where the
+                // cube was) must read Stale, and a re-tessellation of the same
+                // faces must not. Face ids are local-frame content hashes, so
+                // the transform hashed above carries all the placement.
+                h.write_u64(model::geometry_signature(world, &entity)?);
+                crate::model_fidelity::write_stamp(world, &entity, &mut h);
             }
-            // M3.1 A: the revision signature, not count + bounds. Facet
-            // count and AABB are coincidences waiting to happen - a solid
-            // that keeps both while moving material (the diamond where the
-            // cube was) must read Stale, and a re-tessellation of the same
-            // faces must not. Face ids are local-frame content hashes, so
-            // the transform hashed above carries all the placement.
-            h.write_u64(model::geometry_signature(world, &entity)?);
         }
         SrcRef::Selection(items) => {
             // b'L', not b'S': the Stock arm already owns that byte, and a
@@ -180,41 +220,61 @@ pub fn current_stamp(
             h.write_usize(items.len());
             let mut digested: Vec<&str> = Vec::new();
             for g in items {
-                h.write_u8(match g.feature {
+                h.write_u8(match &g.feature {
                     FeatureSel::Face(_) => 0,
                     FeatureSel::Chain(_) => 1,
                     FeatureSel::Patch(_) => 2,
                     FeatureSel::Vertex(_) => 3,
+                    FeatureSel::SketchChain(_) => 4,
+                    FeatureSel::SketchLayer(_) => 5,
                 });
                 h.write_usize(g.entity.len());
                 h.write(g.entity.as_bytes());
-                let id = g.feature.id();
-                h.write_u64(id);
-                // The pick resolves against this entity's LOCAL features
-                // (ids are transform-free) and projects through its
-                // transform, so both belong in the digest. The face-id
-                // signature - M3.1's ids-as-signatures law, the same one
-                // the Entity arm reads - keeps a re-import whose faces
-                // survive fresh (a re-tessellation cannot move a pick),
-                // and any real change moves ids, so it goes stale. Face
-                // ids are content hashes of their facet positions, so a
-                // different mesh that repeats the facet count cannot hide.
+                match &g.feature {
+                    FeatureSel::SketchChain(id) => h.write(&id.0.to_le_bytes()),
+                    FeatureSel::SketchLayer(layer) => {
+                        h.write_usize(layer.len());
+                        h.write(layer.as_bytes());
+                    }
+                    _ => h.write_u64(g.feature.id()),
+                }
                 let entity = model::find_by_name(world, &g.entity)?;
                 if !digested.contains(&g.entity.as_str()) {
                     digested.push(g.entity.as_str());
-                    let loc = crate::setup_align::pose_in(world, &entity, setup).unwrap_or_default();
-                    for v in [
-                        loc.pos.x,
-                        loc.pos.y,
-                        loc.pos.z,
-                        loc.rot[0],
-                        loc.rot[1],
-                        loc.rot[2],
-                        loc.rot[3],
-                    ] {
-                        w(&mut h, v);
+                    if let Some(sketch) = crate::sketch::sketch_of(world, &entity) {
+                        let pose = crate::sketch::world_pose(world, &entity)?;
+                        for v in [
+                            pose.pos.x,
+                            pose.pos.y,
+                            pose.pos.z,
+                            pose.rot[0],
+                            pose.rot[1],
+                            pose.rot[2],
+                            pose.rot[3],
+                        ] {
+                            w(&mut h, v);
+                        }
+                        if super::wire_sketch::selected(src, params) {
+                            super::wire_sketch::stamp(world, setup, op_name, &sketch, &mut h);
+                        } else {
+                            write_sketch_digest(&sketch, &mut h);
+                        }
+                    } else {
+                        let loc = crate::setup_align::pose_in(world, &entity, setup).unwrap_or_default();
+                        for v in [
+                            loc.pos.x,
+                            loc.pos.y,
+                            loc.pos.z,
+                            loc.rot[0],
+                            loc.rot[1],
+                            loc.rot[2],
+                            loc.rot[3],
+                        ] {
+                            w(&mut h, v);
+                        }
+                        h.write_u64(model::geometry_signature(world, &entity)?);
+                        crate::model_fidelity::write_stamp(world, &entity, &mut h);
                     }
-                    h.write_u64(model::geometry_signature(world, &entity)?);
                 }
             }
         }
@@ -326,6 +386,20 @@ pub fn stale_reason(
                 let Some(e) = model::find_by_name(world, &g.entity) else {
                     return Some(format!("'{}' was deleted", g.entity));
                 };
+                if let Some(sketch) = crate::sketch::sketch_of(world, &e) {
+                    let ok = match &g.feature {
+                        FeatureSel::SketchChain(id) => sketch.data.chains().find(*id).is_some(),
+                        FeatureSel::SketchLayer(layer) => sketch.data.layers().iter().any(|l| l == layer),
+                        _ => false,
+                    };
+                    if !ok {
+                        return Some(format!(
+                            "the picked feature of '{}' no longer exists in the DXF profile",
+                            g.entity
+                        ));
+                    }
+                    continue;
+                }
                 let Some(tris) = model::facets_of(world, &e) else {
                     return Some(format!("'{}' no longer carries geometry", g.entity));
                 };
@@ -347,6 +421,7 @@ pub fn stale_reason(
                         crate::geometry::feature::vertex_ids(&features).binary_search(&id).is_ok(),
                         "vertex",
                     ),
+                    FeatureSel::SketchChain(_) | FeatureSel::SketchLayer(_) => (false, "sketch feature"),
                 };
                 if !present {
                     return Some(format!(
@@ -379,4 +454,32 @@ pub fn stale_reason(
         return Some(why);
     }
     Some("the geometry or tool inputs changed since it was generated".into())
+}
+
+fn write_sketch_digest(sketch: &crate::schema::Sketch, h: &mut std::hash::DefaultHasher) {
+    h.write(b"sketch-data");
+    if let Some(s) = &sketch.setup {
+        h.write_u8(1);
+        h.write_usize(s.len());
+        h.write(s.as_bytes());
+    } else {
+        h.write_u8(0);
+    }
+    h.write(&sketch.data.join_tolerance().to_bits().to_le_bytes());
+    let layers = sketch.data.layers();
+    h.write_usize(layers.len());
+    for l in layers {
+        h.write_usize(l.len());
+        h.write(l.as_bytes());
+    }
+    let chains = sketch.data.chains();
+    h.write_usize(chains.closed.len());
+    for c in &chains.closed {
+        h.write(&c.id.0.to_le_bytes());
+    }
+    h.write_usize(chains.open.len());
+    for c in &chains.open {
+        h.write(&c.id.0.to_le_bytes());
+    }
+    h.write_usize(chains.rejected.len());
 }

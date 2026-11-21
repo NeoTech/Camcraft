@@ -83,6 +83,7 @@ fn contour_params() -> OpParams {
         helix_radius: 1.0,
         blend_turns: false,
         links: camcraft_app::links::Links::PLANAR,
+        chain_overrides: Vec::new(),
     }
 }
 
@@ -1094,7 +1095,7 @@ fn stale_reason_asks_for_a_re_pick_when_the_feature_moved() {
         &world,
         "C1",
         "EM-0600-4FL",
-        sel("part", top),
+        sel("part", top.clone()),
         contour_params(),
     );
     history.execute(&world, cmd.expect("create"));
@@ -1832,7 +1833,7 @@ fn a_selected_face_bounds_facing_and_contour() {
         &world,
         "C1",
         "EM-0600-4FL",
-        sel("part", top),
+        sel("part", top.clone()),
         contour_params(),
     );
     history.execute(&world, cmd.expect("create contour on selection"));
@@ -1875,7 +1876,7 @@ fn a_vertical_or_tilted_pick_refuses_with_the_fix_in_the_message() {
     let wall = FeatureSel::Face(wall_face_of(&world, "part"));
     let op = |params: OpParams| Operation {
         tool: "EM-0600-4FL".into(),
-        src: sel("part", wall),
+        src: sel("part", wall.clone()),
         params,
         stamp: None,
         setup: None,
@@ -1911,7 +1912,7 @@ fn closed_chain_rims_bound_and_double_picks_collapse_to_one_loop() {
     let rim = FeatureSel::Chain(rim_chain_of(&world, "disc"));
     let op = Operation {
         tool: "EM-0600-4FL".into(),
-        src: sel("disc", rim),
+        src: sel("disc", rim.clone()),
         params: contour_params(),
         stamp: None,
         setup: None,
@@ -1932,11 +1933,11 @@ fn closed_chain_rims_bound_and_double_picks_collapse_to_one_loop() {
         src: SrcRef::Selection(vec![
             GeoSel {
                 entity: "disc".into(),
-                feature: rim,
+                feature: rim.clone(),
             },
             GeoSel {
                 entity: "disc".into(),
-                feature: rim,
+                feature: rim.clone(),
             },
         ]),
         ..op.clone()
@@ -1958,7 +1959,7 @@ fn closed_chain_rims_bound_and_double_picks_collapse_to_one_loop() {
             .expect("the disc is one planar face")
     });
     let sheet_op = Operation {
-        src: sel("disc", sheet),
+        src: sel("disc", sheet.clone()),
         ..op.clone()
     };
     let r3 = operation::region_of(&world, &sheet_op).expect("the face ring bounds the disc");
@@ -2519,6 +2520,7 @@ fn a_closed_chain_routes_the_boundary_path_not_a_centerline() {
         helix_radius: 1.0,
         blend_turns: false,
         links: camcraft_app::links::Links::PLANAR,
+        chain_overrides: Vec::new(),
     };
     history.execute(
         &world,
@@ -3339,6 +3341,7 @@ fn selection_notes_report_stitching_and_extension() {
         helix_radius: 1.0,
         blend_turns: false,
         links: camcraft_app::links::Links::PLANAR,
+        chain_overrides: Vec::new(),
     };
     let notes = operation::selection_notes(&world, None, &items, &contour);
     assert!(
@@ -3386,6 +3389,7 @@ fn contour_at(side: Side, z: f64) -> OpParams {
         helix_radius: 1.0,
         blend_turns: false,
         links: camcraft_app::links::Links::PLANAR,
+        chain_overrides: Vec::new(),
     }
 }
 
@@ -6536,6 +6540,11 @@ fn multiaxis_rough_peels_the_same_ladder_and_poses_its_walls() {
             }
             Some(v) => {
                 posed += 1;
+                // #3129: the Zigzag levels close with a ring round the
+                // 10 x 10 boss, so each ring chord claims the wall. A pose
+                // stays within the ball's reach (r 3) of the boss.
+                let (dx, dy) = ((a.to.x.abs() - 5.0).max(0.0), (a.to.y.abs() - 5.0).max(0.0));
+                assert!(dx.hypot(dy) <= 3.5, "a pose leaked past the boss walls at {:?}", a.to);
                 let l = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
                 assert!((l - 1.0).abs() < 1e-6, "a pose of length {l}");
                 assert!(v.iter().all(|c| c.is_finite()));
@@ -6548,7 +6557,6 @@ fn multiaxis_rough_peels_the_same_ladder_and_poses_its_walls() {
         }
     }
     assert!(posed >= 4, "the boss walls posed nothing: {posed}");
-    assert!(posed <= 20, "poses leaked past the walls: {posed}");
     assert!(
         floor_air >= 1,
         "every floor-row move claimed a wall - the floors must hold their peace"

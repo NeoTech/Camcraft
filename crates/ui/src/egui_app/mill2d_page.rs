@@ -119,6 +119,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             blend_turns,
             links,
             tilt,
+            chain_overrides,
         } => {
             if tab == SEC_GEO {
                 let mut s_idx = match side {
@@ -136,6 +137,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
                     consequence(ui, note);
                 }
                 prop_row(ui, "Tolerance", |ui| num(ui, u, tolerance));
+                sketch_chain_overrides_ui(ui, world, cx.op_src, chain_overrides);
             }
             if tab == SEC_HEIGHTS {
                 orientation_editor(ui, u, tilt);

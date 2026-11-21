@@ -29,6 +29,7 @@ pub struct SetStock {
     /// promised (#1056): the copy holds the same facets, so it carries
     /// the flag itself and keeps it when the model is deleted or renamed.
     coarse_mm: Option<f64>,
+    file_tolerance: bool,
     /// #1700: the copied model's hole when it was imported incomplete
     /// (`mesh_open`), carried beside the sentinel for the same reason.
     hole: Option<String>,
@@ -42,7 +43,7 @@ pub struct SetStock {
 
 /// A stock as it stood: shape, placement, facets, its own
 /// reduced-fidelity chord (#1056) and its hole (#1700).
-type Prev = (StockShape, Location, std::sync::Arc<[Triangle]>, Option<f64>, Option<String>);
+type Prev = (StockShape, Location, std::sync::Arc<[Triangle]>, Option<f64>, Option<String>, bool);
 
 impl SetStock {
     /// Validates against the world now. `location` places the stock; for
@@ -77,6 +78,10 @@ impl SetStock {
                 crate::mesh_open::hole_behind(world, source),
             ),
             _ => (None, None),
+        };
+        let file_tolerance = match &shape {
+            StockShape::FromModel { source } => crate::model_fidelity::file_tolerance_behind(world, source),
+            _ => false,
         };
         let facets = match &shape {
             StockShape::FromModel { source } => {
@@ -124,6 +129,7 @@ impl SetStock {
                     model::facets_of(world, &entity).unwrap_or_default(),
                     crate::model_fidelity::chord_of(world, &entity),
                     crate::mesh_open::hole_of(world, &entity),
+                    crate::model_fidelity::file_tolerance_of(world, &entity),
                 ))
             }
             None => None,
@@ -135,6 +141,7 @@ impl SetStock {
             location,
             facets,
             coarse_mm,
+            file_tolerance,
             hole,
             prev,
         })
@@ -150,7 +157,7 @@ impl Command for SetStock {
         };
         model::set_transform(world, &entity, self.location);
         model::set_facets(world, &entity, self.facets.clone());
-        crate::model_fidelity::set(world, &entity, self.coarse_mm);
+        crate::model_fidelity::set_with_cause(world, &entity, self.coarse_mm, self.file_tolerance);
         crate::mesh_open::set(world, &entity, self.hole.as_deref());
         entity
             .entity_view(world)
@@ -163,10 +170,10 @@ impl Command for SetStock {
             return; // already undone (idempotent undo path)
         };
         match &self.prev {
-            Some((shape, location, facets, coarse_mm, hole)) => {
+            Some((shape, location, facets, coarse_mm, hole, file_tolerance)) => {
                 model::set_transform(world, &entity, *location);
                 model::set_facets(world, &entity, facets.clone());
-                crate::model_fidelity::set(world, &entity, *coarse_mm);
+                crate::model_fidelity::set_with_cause(world, &entity, *coarse_mm, *file_tolerance);
                 crate::mesh_open::set(world, &entity, hole.as_deref());
                 entity
                     .entity_view(world)

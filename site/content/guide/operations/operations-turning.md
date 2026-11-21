@@ -87,6 +87,12 @@ the tool turning and the work held on C.
 
 ## Facing
 
+<!-- catalog:examples:start -->
+**Example cases**
+
+- [turning/cone-thread](https://github.com/NeoTech/Camcraft/tree/main/examples/catalog/turning/cone-thread)
+<!-- catalog:examples:end -->
+
 {{ <icon name="op-facing" /> }} ![Side view of radial passes facing the end of a rotating bar.](../../../operation-paths.svg#Facing)
 
 **For:** facing the end of the bar square to the axis, stepping in from
@@ -111,6 +117,12 @@ stock"; "the facing ladder would run ... stations - the stepdown is far
 too fine ...".
 
 ## Profile Rough
+
+<!-- catalog:examples:start -->
+**Example cases**
+
+- [turning/cone-thread](https://github.com/NeoTech/Camcraft/tree/main/examples/catalog/turning/cone-thread)
+<!-- catalog:examples:end -->
 
 {{ <icon name="op-profile-rough" /> }} ![Side view of successive roughing passes outside a turned profile.](../../../operation-paths.svg#ProfileRough)
 
@@ -138,6 +150,12 @@ ladder would run ... radial rungs - the stepdown is far too ...".
 
 ## Profile Finish
 
+<!-- catalog:examples:start -->
+**Example cases**
+
+- [turning/cone-thread](https://github.com/NeoTech/Camcraft/tree/main/examples/catalog/turning/cone-thread)
+<!-- catalog:examples:end -->
+
 {{ <icon name="op-profile-finish" /> }} ![Side view of one finishing pass along a turned profile.](../../../operation-paths.svg#ProfileFinish)
 
 **For:** one ride of the insert's nose along the finished profile.
@@ -157,6 +175,12 @@ to turn - the height window holds no length of the bar"; "the turned
 profile has nothing to ride".
 
 ## Groove Rough
+
+<!-- catalog:examples:start -->
+**Example cases**
+
+- [turning/groove-part-off](https://github.com/NeoTech/Camcraft/tree/main/examples/catalog/turning/groove-part-off)
+<!-- catalog:examples:end -->
 
 {{ <icon name="op-groove-rough" /> }} ![Side view of successive blade plunges across a groove.](../../../operation-paths.svg#GrooveRough)
 
@@ -185,6 +209,13 @@ than ... passes - the blade is far too narrow for the window ...".
 
 ## Groove Finish
 
+<!-- catalog:examples:start -->
+**Example cases**
+
+- [turning/cone-thread](https://github.com/NeoTech/Camcraft/tree/main/examples/catalog/turning/cone-thread)
+- [turning/groove-part-off](https://github.com/NeoTech/Camcraft/tree/main/examples/catalog/turning/groove-part-off)
+<!-- catalog:examples:end -->
+
 {{ <icon name="op-groove-finish" /> }} ![Side view of blade plunges to the finished groove floor.](../../../operation-paths.svg#GrooveFinish)
 
 **For:** one plunge per centre to the groove's floor, with no leave.
@@ -200,6 +231,13 @@ Choose it after Groove Rough.
 "nothing to groove - the height window holds no length of the bar".
 
 ## Part
+
+<!-- catalog:examples:start -->
+**Example cases**
+
+- [turning/cone-thread](https://github.com/NeoTech/Camcraft/tree/main/examples/catalog/turning/cone-thread)
+- [turning/groove-part-off](https://github.com/NeoTech/Camcraft/tree/main/examples/catalog/turning/groove-part-off)
+<!-- catalog:examples:end -->
 
 {{ <icon name="op-part-off" /> }} ![Side view of one radial parting path toward the spindle axis.](../../../operation-paths.svg#Part)
 
@@ -228,6 +266,12 @@ end of the bar"; "nothing to part - the parting plane stands in the air
 past the bar's top"; "parting needs a positive stepdown".
 
 ## Threading
+
+<!-- catalog:examples:start -->
+**Example cases**
+
+- [turning/cone-thread](https://github.com/NeoTech/Camcraft/tree/main/examples/catalog/turning/cone-thread)
+<!-- catalog:examples:end -->
 
 {{ <icon name="op-threading" /> }} ![View of synchronized helical threading passes on a rotating bar.](../../../operation-paths.svg#Threading)
 
@@ -276,6 +320,12 @@ the spindle ..."; "the thread would run more than ... turns ...";
 
 ## Chamfer
 
+<!-- catalog:examples:start -->
+**Example cases**
+
+- [turning/contour-finishes](https://github.com/NeoTech/Camcraft/tree/main/examples/catalog/turning/contour-finishes)
+<!-- catalog:examples:end -->
+
 {{ <icon name="op-chamfering" /> }} ![Side view of a turning pass across a modeled chamfer.](../../../operation-paths.svg#Chamfering)
 
 **For:** riding a chamfer the model already has, at a stated angle, with
@@ -296,6 +346,12 @@ a face - facing is its own kind"; "a chamfer of ... degrees is a
 cylinder - the kind only speaks a cone ...".
 
 ## Taper
+
+<!-- catalog:examples:start -->
+**Example cases**
+
+- [turning/taper-finish](https://github.com/NeoTech/Camcraft/tree/main/examples/catalog/turning/taper-finish)
+<!-- catalog:examples:end -->
 
 {{ <icon name="op-taper-turning" /> }} ![Side view of a turning pass along a modeled taper.](../../../operation-paths.svg#TaperTurning)
 
@@ -318,6 +374,12 @@ taper's ends stand on the axis or ..."; "a taper that stands on the axis
 at both ends is a line, not a part ...".
 
 ## Multi-Pass
+
+<!-- catalog:examples:start -->
+**Example cases**
+
+- [turning/contour-finishes](https://github.com/NeoTech/Camcraft/tree/main/examples/catalog/turning/contour-finishes)
+<!-- catalog:examples:end -->
 
 {{ <icon name="op-multipass-turning" /> }} ![Side view of roughing and finishing passes along a turned profile.](../../../operation-paths.svg#MultiPassTurning)
 
@@ -342,6 +404,12 @@ ladders at 64"; the stepdown and stock-to-leave refusals of Profile
 Rough.
 
 ## Form
+
+<!-- catalog:examples:start -->
+**Example cases**
+
+- [turning/bushing](https://github.com/NeoTech/Camcraft/tree/main/examples/catalog/turning/bushing)
+<!-- catalog:examples:end -->
 
 {{ <icon name="op-form-turning" /> }} ![Side view of a form tool plunging into a curved groove.](../../../operation-paths.svg#FormTurning)
 
@@ -368,6 +436,12 @@ station ... stands on the axis or through it - that is a hole, and holes
 are boring work".
 
 ## Bore
+
+<!-- catalog:examples:start -->
+**Example cases**
+
+- [turning/bushing](https://github.com/NeoTech/Camcraft/tree/main/examples/catalog/turning/bushing)
+<!-- catalog:examples:end -->
 
 {{ <icon name="op-boring-turning" /> }} ![Side view of a boring bar following an existing hole wall.](../../../operation-paths.svg#BoringTurning)
 

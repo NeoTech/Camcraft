@@ -115,6 +115,8 @@ mod field_shell;
 mod field_solid;
 mod field_sweep;
 mod field_turn;
+// #1444: the undercut cutter's head and neck solids.
+mod field_undercut;
 mod gouge;
 mod hermite;
 mod kernel;

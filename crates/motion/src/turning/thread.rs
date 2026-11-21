@@ -90,6 +90,23 @@ pub struct ThreadParams {
     pub hand: ThreadHand,
 }
 
+/// The refusal for a model whose thread is HELICAL (issue #3023), or
+/// `None`. The phase law reads a modelled thread as a revolved V
+/// section; a helical one has no such section (and a STEP helix may
+/// not even slice), so it is refused by name before the axis fit and
+/// the slice can refuse it for a reason that names something else.
+pub fn helical_refusal(facets: &[Triangle]) -> Option<GenError> {
+    let hx = crate::multiaxis::axis_helix::helix(facets)?;
+    let hand = if hx.pitch >= 0.0 { "right" } else { "left" };
+    Some(GenError::Invalid(format!(
+        "the model's thread is HELICAL (about a {:.2} pitch, {hand}-hand helix about the \
+         bar's axis) - Threading does not read a helical thread yet; it reads a \
+         modelled thread as a revolved V section. Model the thread as revolved V \
+         grooves at its pitch (no helix) for this operation",
+        hx.pitch.abs()
+    )))
+}
+
 /// Threading: ladder the V from a hair under the blank's crest
 /// down to the root, one helical pass per rung, each pass a full
 /// turn per pitch across the window's lattice of turns.
@@ -138,6 +155,9 @@ pub fn thread_planned_in(
     }
     if let Some(why) = plan.refusal(p.depth, p.infeed, p.form_angle) {
         return Err(GenError::Invalid(why));
+    }
+    if let Some(e) = helical_refusal(facets) {
+        return Err(e);
     }
     let (f, pts, sg, win, _dom, rho_clear) = blade::setup(
         facets,

@@ -331,7 +331,7 @@ fn the_margin_generation_hands_the_law_shrinks_with_a_coarse_models_excess() {
     // shrinks by it and so does the bar's skin - so an axial rapid
     // beside the r 10 bar is convicted from further out on a coarse
     // model, by twice the excess.
-    use crate::operation::fidelity_law::tightened;
+    use crate::operation::fidelity_law::tightened_strict as tightened; // #2996: turning never widens
     use crate::operation::material::GOUGE_TOL;
     let p = Point3::new;
     let params = OpParams::ProfileRough {

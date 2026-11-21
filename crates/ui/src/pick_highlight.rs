@@ -46,6 +46,15 @@ impl PartialEq for Feats {
     }
 }
 
+/// A sketch dataset, compared by allocation.
+struct SketchPtr(Weak<camcraft_app::sketch_data::SketchData>);
+
+impl PartialEq for SketchPtr {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.ptr_eq(&other.0)
+    }
+}
+
 /// One picked model as the build reads it.
 #[derive(PartialEq)]
 struct Body {
@@ -53,12 +62,16 @@ struct Body {
     hidden: bool,
     entity: Option<Entity>,
     features: Option<Feats>,
+    sketch: Option<SketchPtr>,
     pose: Option<Location>,
 }
 
 impl Body {
     fn of(state: &State, name: &str) -> Self {
         let entity = model::find_by_name(&state.world, name);
+        let sketch = camcraft_app::sketch::find(&state.world, name)
+            .map(|(_, s)| SketchPtr(Arc::downgrade(&s.data)));
+        let sketch_pose = entity.and_then(|e| camcraft_app::sketch::world_pose(&state.world, &e));
         Self {
             name: name.to_owned(),
             hidden: state.hidden_in_view(name),
@@ -66,7 +79,11 @@ impl Body {
             features: entity
                 .and_then(|e| model::features_of(&state.world, &e))
                 .map(|f| Feats(Arc::downgrade(&f))),
-            pose: entity.and_then(|e| camcraft_app::setup_align::view_pose(&state.world, &e)),
+            sketch,
+            // A sketch's build reads `sketch::world_pose` (it rides the
+            // stock top), not its local `view_pose`: key on what the build
+            // reads, so a stock move or height change rebuilds (#1864 review).
+            pose: sketch_pose.or_else(|| entity.and_then(|e| camcraft_app::setup_align::view_pose(&state.world, &e))),
         }
     }
 }
@@ -140,6 +157,38 @@ pub(crate) fn row_hover_builds(state: &State) -> u64 {
     lock(state).row_hover_builds
 }
 
+/// Resolve world-space polylines for a `FeatureSel::SketchChain` or `FeatureSel::SketchLayer` pick.
+pub(crate) fn sketch_polylines(
+    world: &flecs_ecs::prelude::World,
+    entity_name: &str,
+    sel: &FeatureSel,
+) -> Vec<WorldPolyline> {
+    let Some((entity, sketch)) = camcraft_app::sketch::find(world, entity_name) else {
+        return Vec::new();
+    };
+    let Some(pose) = camcraft_app::sketch::world_pose(world, &entity) else {
+        return Vec::new();
+    };
+    let chains = match sel {
+        FeatureSel::SketchChain(cid) => sketch.data.chains().find(*cid).into_iter().collect::<Vec<_>>(),
+        FeatureSel::SketchLayer(layer) => sketch.data.chains().by_layer(layer),
+        _ => return Vec::new(),
+    };
+    let mut out = Vec::new();
+    for ch in chains {
+        let pts = ch
+            .sample(0.05)
+            .into_iter()
+            .map(|p| {
+                let w = transform_point(Point3::new(p.x, p.y, 0.0), pose.pos, pose.rot);
+                [w.x, w.y, w.z]
+            })
+            .collect();
+        out.push(WorldPolyline { pts, closed: ch.is_closed() });
+    }
+    out
+}
+
 fn append_feature(
     state: &State,
     item: &GeoSel,
@@ -147,6 +196,10 @@ fn append_feature(
     vertices: &mut Vec<[f64; 3]>,
 ) {
     if state.hidden_in_view(&item.entity) {
+        return;
+    }
+    if matches!(item.feature, FeatureSel::SketchChain(_) | FeatureSel::SketchLayer(_)) {
+        polylines.extend(sketch_polylines(&state.world, &item.entity, &item.feature));
         return;
     }
     let Some(entity) = model::find_by_name(&state.world, &item.entity) else {
@@ -164,9 +217,9 @@ fn append_feature(
             })
             .collect()
     };
-    match item.feature {
+    match &item.feature {
         FeatureSel::Face(fid) => {
-            let Some(face) = features.faces.iter().find(|f| f.id == fid) else {
+            let Some(face) = features.faces.iter().find(|f| f.id == *fid) else {
                 return;
             };
             for l in &face.loops {
@@ -182,7 +235,7 @@ fn append_feature(
             }
         }
         FeatureSel::Chain(cid) => {
-            let Some(chain) = model::resolve_chain(&features, cid) else {
+            let Some(chain) = model::resolve_chain(&features, *cid) else {
                 return;
             };
             let local = feature::chain_points(&features, &chain);
@@ -192,7 +245,7 @@ fn append_feature(
             });
         }
         FeatureSel::Patch(pid) => {
-            let Some(rings) = model::patch_rings(&features, pid) else {
+            let Some(rings) = model::patch_rings(&features, *pid) else {
                 return;
             };
             for r in rings.iter() {
@@ -208,7 +261,7 @@ fn append_feature(
             }
         }
         FeatureSel::Vertex(vid) => {
-            let Some(v) = feature::resolve_vertex(&features, vid)
+            let Some(v) = feature::resolve_vertex(&features, *vid)
                 .and_then(|vi| features.verts.get(vi as usize))
             else {
                 return;
@@ -216,6 +269,7 @@ fn append_feature(
             let w = transform_point(Point3::new(v[0], v[1], v[2]), loc.pos, loc.rot);
             vertices.push([w.x, w.y, w.z]);
         }
+        FeatureSel::SketchChain(_) | FeatureSel::SketchLayer(_) => {}
     }
 }
 
@@ -271,9 +325,9 @@ pub(crate) fn resolved_selected(state: &State) -> Arc<ResolvedHighlights> {
 
 pub(crate) fn resolved_hover(state: &State) -> Arc<ResolvedHighlights> {
     let pick = state.hover.as_ref().and_then(|hit| {
-        hit.feature.map(|feature| GeoSel {
+        hit.feature.as_ref().map(|feature| GeoSel {
             entity: hit.entity.clone(),
-            feature,
+            feature: feature.clone(),
         })
     });
     let key = Key::of(state, pick.into_iter().collect());

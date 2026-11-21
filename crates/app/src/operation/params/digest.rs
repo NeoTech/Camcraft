@@ -211,6 +211,12 @@ impl OpParams {
                     w(h, q.x);
                     w(h, q.y);
                 }
+                // #2012: the equal-steps ladder moves every level - a
+                // byte only when on, so every earlier approach keeps
+                // its digest.
+                if a.equal_steps {
+                    h.write_u8(0xC9);
+                }
                 match a.lead_out {
                     None => h.write_u8(0xFF),
                     Some(Lead::None) => h.write_u8(0),

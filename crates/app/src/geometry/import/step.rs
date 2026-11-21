@@ -88,6 +88,14 @@ pub fn parse_noted(data: &[u8], budget: usize) -> Result<(Mesh, f64, Vec<String>
 /// its hole named (#1610): every left-out face with the mesher's reason.
 /// For the model import, which lands it incomplete; never a whole model.
 pub fn parse_open(data: &[u8], budget: usize) -> Result<(Mesh, f64, Vec<String>, Option<String>), ImportError> {
+    parse_with_cause(data, budget).map(|(mesh, chord, notes, open, _)| (mesh, chord, notes, open))
+}
+
+/// The complete import result, including the recorded reason for its chord.
+pub type GradedStep = (Mesh, f64, Vec<String>, Option<String>, bool);
+
+/// Parse the mesh together with its chord, notes, hole and recorded cause.
+pub fn parse_with_cause(data: &[u8], budget: usize) -> Result<GradedStep, ImportError> {
     // The file's own syntax is checked before the kernel reads it, so the
     // refusals keep their wording: a nesting depth past the cap (#1075),
     // the bad entity by `#id` and line, a string or comment that never
@@ -118,9 +126,9 @@ pub fn parse_open(data: &[u8], budget: usize) -> Result<(Mesh, f64, Vec<String>,
         && let Some(first) = notes.first_mut()
     {
         first.push(' ');
-        first.push_str(loosened_consequence(chord));
+        first.push_str(consequence(chord, read.file_tolerance));
     }
-    Ok((read.mesh, chord, notes, read.open))
+    Ok((read.mesh, chord, notes, read.open, read.file_tolerance))
 }
 
 /// What the fidelity law (#864) does with a model kept at `chord_mm`, in
@@ -129,8 +137,17 @@ pub fn parse_open(data: &[u8], budget: usize) -> Result<(Mesh, f64, Vec<String>,
 /// (`model_fidelity::verdict_tol`), never a second rule.
 #[must_use]
 pub fn loosened_consequence(chord_mm: f64) -> &'static str {
+    consequence(chord_mm, true)
+}
+
+fn consequence(chord_mm: f64, file_tolerance: bool) -> &'static str {
     let excess = crate::model_fidelity::excess(chord_mm);
-    if crate::verify::excess_floor(crate::stock_sim::DEV_TOL, excess).is_none() {
+    if crate::fidelity_note::widened(chord_mm, file_tolerance) {
+        // #2996: judged at its own accuracy, and the program says so.
+        "Gouge checks against this model use a wider true-surface bound than the normal 0.010 mm. \
+         Each posted program states this bound and names this model in its header. \
+         An operation that they cannot check is refused at the post."
+    } else if crate::verify::excess_floor_for(crate::stock_sim::DEV_TOL, excess, file_tolerance).is_none() {
         "A program cannot be posted while this model is in the document. \
          Export the file again with a tighter tolerance to post one."
     } else {

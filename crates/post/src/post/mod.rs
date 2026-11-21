@@ -43,6 +43,7 @@ mod js_host;
 pub mod preview;
 pub mod machine;
 mod machine_rotary;
+mod machine_installation;
 pub mod nose_tip;
 pub mod options;
 mod options_parse;
@@ -133,6 +134,8 @@ pub struct Dump<'a> {
     /// Stock bounds in mm: left, right, front, back (XY), plus top Z.
     pub stock: [f64; 4],
     pub stock_top_z: f64,
+    /// Lower face of the stock envelope in world mm, when provided for a Klartext blank.
+    pub stock_bottom_z: Option<f64>,
     /// #1666: the radius the stock sweeps about the spindle axis (the
     /// world Z line through `origin`), in mm - a round bar's radius, a
     /// square bar's half-diagonal. Stated for turning machines only;
@@ -235,6 +238,7 @@ impl<'a> Default for Dump<'a> {
             wcs_flip: [false; 3],
             stock: [0.0; 4],
             stock_top_z: 0.0,
+            stock_bottom_z: None,
             stock_turn_radius: None,
             warnings: Vec::new(),
             part_load: None,
@@ -306,6 +310,9 @@ pub fn dump(t: &Toolpath, d: &Dump) -> Vec<Record> {
     out.push(Record::Param { name: "StockXYFront".into(), value: json!(d.stock[2]) });
     out.push(Record::Param { name: "StockXYBack".into(), value: json!(d.stock[3]) });
     out.push(Record::Param { name: "StockZTop".into(), value: json!(d.stock_top_z) });
+    if let Some(z) = d.stock_bottom_z {
+        out.push(Record::Param { name: "StockZBottom".into(), value: json!(z) });
+    }
     if let Some(r) = d.stock_turn_radius.filter(|r| r.is_finite() && *r > 0.0) {
         out.push(Record::Param { name: "StockTurnRadius".into(), value: json!(r) });
     }

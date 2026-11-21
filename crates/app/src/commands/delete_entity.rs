@@ -20,6 +20,7 @@ pub struct DeleteEntity {
     /// #864: a reduced-fidelity model comes back flagged - an undo that
     /// dropped the flag would loosen every verdict against it.
     coarse_mm: Option<f64>,
+    file_tolerance: bool,
     /// #1054: the STEP facet budget it was imported under comes back too.
     facet_budget: Option<u64>,
     /// #1610: an incomplete model comes back with its hole named.
@@ -84,6 +85,7 @@ impl DeleteEntity {
             revision: model::rev_of(world, &entity),
             fidelity_vouched: crate::model_vouch::record_of(world, &entity),
             coarse_mm: crate::model_fidelity::chord_of(world, &entity),
+            file_tolerance: crate::model_fidelity::file_tolerance_of(world, &entity),
             facet_budget: crate::model_fidelity::budget_of(world, &entity),
             hole: crate::mesh_open::hole_of(world, &entity),
             solids: crate::mesh_solids::of(world, &entity),
@@ -131,7 +133,7 @@ impl Command for DeleteEntity {
         }
         model::set_rev(world, &entity, self.revision);
         crate::model_vouch::set(world, &entity, self.fidelity_vouched.clone());
-        crate::model_fidelity::set(world, &entity, self.coarse_mm);
+        crate::model_fidelity::set_with_cause(world, &entity, self.coarse_mm, self.file_tolerance);
         crate::model_fidelity::set_budget(world, &entity, self.facet_budget);
         crate::mesh_open::set(world, &entity, self.hole.as_deref());
         crate::mesh_solids::set(world, &entity, &self.solids);

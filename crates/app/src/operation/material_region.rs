@@ -34,6 +34,9 @@ pub(super) struct RegionTurn {
 }
 
 pub(super) fn region_turn_of(world: &World, op: &Operation) -> Option<RegionTurn> {
+    if crate::sketch_model::generation_problem(world, op).is_some() {
+        return None;
+    }
     // The 3+2 index (M5.1 B): a tilted planar op draws the cutting
     // plane's own shadow - the local region through the frame's door,
     // at the plane its `region_height` names. A tilt that commands no
@@ -98,6 +101,14 @@ fn region_turn_core(
     frame: Option<&crate::cl::TiltedFrame>,
     controlled: impl Fn(Option<Region>) -> Option<(Region, f64)>,
 ) -> Option<Laid> {
+    if super::contour_sketch::is_sketch_contour(world, &op.src, &op.params) {
+        if frame.is_some() {
+            return None;
+        }
+        let plan = super::contour_sketch::resolve_plan(world, &op.src, &op.params).ok()?;
+        let (r, turn) = controlled(plan.region().ok()?)?;
+        return Some((r, turn, None));
+    }
     if let SrcRef::Selection(items) = &op.src
         && !matches!(
             op.params,
@@ -146,6 +157,7 @@ fn region_turn_core(
         Some(f) => {
             let local = Material {
                 excess: material.excess,
+        file_tolerance: material.file_tolerance,
                 facets: f.local_facets(&material.facets),
                 top: material.top - f.origin.z,
                 bodies: material.bodies.clone(),
@@ -180,6 +192,11 @@ fn region_turn_core(
 /// a vanished source in `region_of`.
 #[must_use]
 pub fn chains_of(world: &World, op: &Operation) -> Vec<Vec<Point2>> {
+    if super::contour_sketch::is_sketch_contour(world, &op.src, &op.params) {
+        return super::contour_sketch::resolve_plan(world, &op.src, &op.params)
+            .map(|p| p.open_chains())
+            .unwrap_or_default();
+    }
     let SrcRef::Selection(items) = &op.src else {
         return Vec::new();
     };

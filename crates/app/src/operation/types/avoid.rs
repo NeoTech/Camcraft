@@ -38,7 +38,11 @@ impl DoNotTouch {
             && self.clearance >= 0.0
             && self.clearance <= AREA_DISTANCE_MAX
             && self.picks.iter().all(|g| {
-                !g.entity.is_empty() && !matches!(g.feature, FeatureSel::Vertex(_))
+                !g.entity.is_empty()
+                    && !matches!(
+                        g.feature,
+                        FeatureSel::Vertex(_) | FeatureSel::SketchChain(_) | FeatureSel::SketchLayer(_)
+                    )
             })
     }
 }
@@ -70,6 +74,8 @@ pub fn describe_sel(g: &GeoSel) -> String {
         FeatureSel::Patch(_) => "patch",
         FeatureSel::Chain(_) => "edge chain",
         FeatureSel::Vertex(_) => "vertex",
+        FeatureSel::SketchChain(_) => "sketch chain",
+        FeatureSel::SketchLayer(_) => "sketch layer",
     };
     let _ = write!(s, "{} {kind} #{:x}", g.entity, g.feature.id());
     s

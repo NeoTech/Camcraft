@@ -186,7 +186,7 @@ fn horizontal_face(world: &World, name: &str, z: f64) -> FeatureSel {
             continue;
         }
         let ext = pts.iter().map(|p| p[0].abs().max(p[1].abs())).fold(0.0, f64::max);
-        if best.is_none_or(|(b, _)| ext > b) {
+        if best.as_ref().is_none_or(|(b, _)| ext > *b) {
             best = Some((ext, FeatureSel::Face(face.id)));
         }
     }

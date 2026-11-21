@@ -72,6 +72,9 @@ pub const SINKER_POSTS: &[&str] = &["Sinker EDM (ISO)"];
 #[must_use]
 pub fn post_serves(name: &str, kind: crate::machine::Kind) -> bool {
     use crate::machine::Kind;
+    if name == "Heidenhain Klartext" {
+        return kind == Kind::Mill;
+    }
     let lathe_post = LATHE_POSTS.contains(&name);
     let plasma_post = PLASMA_POSTS.contains(&name);
     let wire_post = WIRE_POSTS.contains(&name);
@@ -931,6 +934,8 @@ pub fn verification_report_by(world: &World, voice: &dyn Fn(Option<&str>) -> pos
     // #1031/#1174: the work spindle over a setup's workholding maximum,
     // by name - judged for the post dialect each op runs through.
     problems.extend(crate::setup_workholding::program_problems_by(world, voice));
+    // #3070: a sheet job's allowance floor and clamp plane, by name.
+    problems.extend(crate::sheet_job::program_problems(world));
     // The carried-stock clause (#319): a feed move into carried material
     // outside a setup's declared stock is engagement nothing verified.
     problems.extend(crate::operation::carried_problems(world));
@@ -1179,11 +1184,14 @@ pub(crate) fn op_streams_by(world: &World, by_post: bool) -> Result<Vec<(String,
             Some(a) => ([a.min.x, a.max.x, a.min.y, a.max.y], a.max.z),
             None => ([0.0; 4], 0.0),
         };
-        // #1666: a turning machine's stream states the radius the stock
-        // sweeps about the spindle axis, so a square bar's corners are
-        // known to the post; a mill's stream stays as it was.
+        // An identified controller can describe the complete blank. Preserve legacy
+        // streams for installations without controller identity and never infer a bottom.
+        let (_, machine) = crate::machine::of_setup(world, setup);
+        let stock_bottom_z = machine.as_ref().and_then(|m| m.controller_identity.as_ref())
+            .and(boxz.as_ref()).map(|a| a.min.z);
+        // #1666: only turning machines state the swept stock radius.
         let stock_turn_radius = matches!(
-            crate::machine::kind_of_setup(world, setup),
+            crate::machine::kind(machine.as_ref()),
             crate::machine::Kind::Lathe | crate::machine::Kind::MillTurn
         )
         .then(|| crate::stock_turn::turn_radius_for(world, setup, [origin[0], origin[1]]))
@@ -1281,6 +1289,7 @@ pub(crate) fn op_streams_by(world: &World, by_post: bool) -> Result<Vec<(String,
                     == crate::schema::WcsRotationOutput::Control,
             stock,
             stock_top_z,
+            stock_bottom_z,
             stock_turn_radius,
             // The scallop reading (M13.9) is a quality note: shown on
             // the op, never a WARN record - a WARN record holds the
@@ -1352,6 +1361,11 @@ impl HeightRefs for OpParams {
             OpParams::PlasmaProfile(p) => vec![&p.clearance_z, &p.top_z, &p.bottom_z],
             OpParams::WireContour(p) => vec![&p.top_z, &p.bottom_z],
             OpParams::SinkerBurn(p) | OpParams::SinkerSideBurn(crate::operation::SinkerSideBurnOp { burn: p, .. }) => vec![&p.clearance_z, &p.top_z, &p.floor_z],
+            OpParams::SlotUndercut(p) => {
+                let mut v = vec![&p.clearance_z, &p.top_z, &p.bottom_z];
+                v.extend(p.retract_z.as_ref());
+                v
+            }
             OpParams::Face {
                 clearance_z,
                 cut_z,

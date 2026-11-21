@@ -208,6 +208,8 @@ function joinDash(parts) {  // the non-empty parts, " - " between
   return a.join(" - ");
 }
 function note(s) { block(["; " + s]); }
+// Program notes use this dialect without truncating the stated bound.
+function onComment(s) { note(commentText(s)); }
 function commentParam(name, value) {
   if (name === "SetupName") setupName = clean(value);
   else if (name === "OperationName") opName = clean(value);
@@ -628,6 +630,8 @@ var DWELL_TOL = 1e-6;
 function sameHole(p) {
   return Math.abs(p.X - cycleX) < DWELL_TOL && Math.abs(p.Y - cycleY) < DWELL_TOL;
 }
+// #3102: the top of the documented Q208 range (mm/min), the fastest retract.
+var RETRACT_FEED_MAX = 99999.999;
 function qword(n, v) {
   // Q values may need four decimals (not integer feed rounding, which
   // would change a tap's feed/pitch relation). Numeric ranges checked below.
@@ -724,9 +728,15 @@ function onCycle() {
   if (g === "G205") {
     // Constant chip-break pecks, no decrement or deepened start. A
     // conservative feed re-approach avoids inventing an unverified rapid.
+    // #3102: Q208 (retraction feed) is a number, never the word FMAX. An
+    // iTNC 530 (606425 04) DIN/ISO import refuses the G205 block with
+    // Q208=FMAX. The iTNC 530 cycle manual (670388-25, cycle 205) gives
+    // the range 0..99999.999 and writes Q208=99999 in its own example;
+    // the TNC 640 manual (892905-25) takes the same number. The top of
+    // the range asks for the fastest retract that the control permits.
     words.push(qword(212, 0), qword(205, p.Q), qword(258, 0), qword(259, 0),
       qword(257, p.Q), qword(256, Math.min(1, p.Q)), qword(211, dwell),
-      qword(379, 0), qword(253, feed), "Q208=FMAX", qword(395, 0));
+      qword(379, 0), qword(253, feed), qword(208, RETRACT_FEED_MAX), qword(395, 0));
   } else if (g === "G200") words.push(qword(211, dwell), qword(395, 0));
   // #1359: checked last, so a tap's own named refusals (rpm, pitch)
   // still speak; inCycle stays set, so the hole's chain is swallowed too.

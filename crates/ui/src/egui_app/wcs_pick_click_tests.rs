@@ -64,7 +64,7 @@ fn set_role(h: &mut Harness<'static, State>, role: Role) {
 
 fn pick_of(state: &State, role: Role) -> Option<FeatureSel> {
     let d = state.wcs_pick.as_ref()?;
-    d.picks.iter().find(|(_, r)| *r == role).map(|(g, _)| g.feature)
+    d.picks.iter().find(|(_, r)| *r == role).map(|(g, _)| g.feature.clone())
 }
 
 #[test]
@@ -81,7 +81,7 @@ fn an_armed_row_takes_viewport_picks_from_the_default_model_mode() {
     let top = px(h.state(), [10.0, 10.0, 10.0]);
     h.state_mut().viewport_hot = true;
     interact::update_hover(h.state_mut(), top, false);
-    let lit = h.state().hover.as_ref().and_then(|hh| hh.feature);
+    let lit = h.state().hover.as_ref().and_then(|hh| hh.feature.clone());
     assert!(matches!(lit, Some(FeatureSel::Face(_))), "the hover names the top face: {lit:?}");
 
     // Z: the top face (the box's default role).

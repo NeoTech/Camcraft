@@ -84,6 +84,28 @@ machine` (a turning or plasma operation on a mill), `move <i> tilts the
 tool; <machine> states no tilting rotary`, and `move <i> commands <axis>
 <angle> deg, the travel is <lo>..<hi>`.
 
+## LinuxCNC 3-axis
+
+For a LinuxCNC mill, mount **LinuxCNC 3-axis**
+(`linuxcnc-3axis.mch`) and select the **LinuxCNC** post
+(`linuxcnc.cps`, program extension `.ngc`). This is a generic example:
+check the travel, feeds and spindle limits against the real machine.
+It supports three linear axes; rotary work, tilted moves and control
+compensation G41/G42 are refused.
+
+The default retract is **G53** to the machine's stated `safe_retract` Z.
+The generic file deliberately supplies none: posting refuses until you
+state a safe retract or select a suitable alternative. **G28** and **G30**
+use the controller's stored Z position only. **None** leaves that move to
+the controller or M6 remap. Check those controller settings before use.
+
+The post normally writes G43 H after M6. Turn off **Write G43 H after
+M6** only when the remap applies tool length itself. Path control defaults
+to G64 P with a 0.025 mm blend tolerance; G61 requests exact path.
+Rigid tapping uses G33.1 and requires stated rigid-tapping support and a
+spindle encoder. The generic file makes no such claim. Floating-holder
+tapping uses G84.
+
 ## Router
 
 CamCraft has no separate router kind: a router is a machine file that

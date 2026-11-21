@@ -51,6 +51,7 @@ declaredOptions = {
   useRadiusArcs: { type: "boolean", title: "Use radius (R) arcs", group: "Cycles & arcs", description: "Write R word instead of I/J/K arc centers", default: false },
 };
 afterModes = true; // #1532: reads PARAM AfterOperation (stop / optional stop) and PARAM SetupChange; a trip home is refused by name
+rotariesBeforeTraverse = true; // #3100: each section turns A at the safe Z (G53 G0 Z, then G0 A) before its first X/Y traverse (indexFor, xyFirst); pinned by posting_rotaries_first.rs
 explains = "paren"; // #1387: LinuxCNC parenthesized comments; shared helper keeps them inert
 // Original wording; inherited mill meanings cite RS-274 / LinuxCNC in explain.rs.
 explainWords = {
@@ -300,6 +301,8 @@ function joinDash(parts) {  // the non-empty parts, " - " between
 // would open with one is led by "- ", so user text stays inert.
 var ACTIVE = /^\s*(MSG|DEBUG|PRINT|LOG|LOGOPEN|LOGAPPEND|LOGCLOSE|PROBEOPEN|PROBECLOSE|ABORT|AXIS|PY|PYRUN)\b/i;
 function note(s) { block(["(" + (ACTIVE.test(s) ? "- " + s : s) + ")"]); }
+// Program notes use this dialect without truncating the stated bound.
+function onComment(s) { note(commentText(s)); }
 function commentParam(name, value) {
   if (name === "SetupName") setupName = clean(value);
   else if (name === "OperationName") opName = clean(value);

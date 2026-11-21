@@ -277,6 +277,8 @@ function joinDash(parts) {  // the non-empty parts, " - " between
 // led by "- ", so user text stays a note.
 var ACTIVE = /^\s*msg/i;
 function note(s) { block(["(" + (ACTIVE.test(s) ? "- " + s : s) + ")"]); }
+// Program notes use this dialect without truncating the stated bound.
+function onComment(s) { note(commentText(s)); }
 function commentParam(name, value) {
   if (name === "SetupName") setupName = clean(value);
   else if (name === "OperationName") opName = clean(value);

@@ -52,7 +52,6 @@ Each limit has its own issue. The case can become simpler when they are fixed.
 - **Two models:** Profile Finish reads the thread valleys and the neck step of the finished part as rest, and blocks the post ([#2880](https://github.com/NeoTech/Camcraft/issues/2880)).
 - **G32 passes, not the G76 cycle:** a thread pass cannot start in front of the end face ([#2879](https://github.com/NeoTech/Camcraft/issues/2879)), so a G76 cycle would start inside the part ([#2878](https://github.com/NeoTech/Camcraft/issues/2878)). The G32 passes plunge at feed.
 - **A sharp shoulder:** a fillet at the shoulder sends the profile rides far out of the bar ([#2881](https://github.com/NeoTech/Camcraft/issues/2881)).
-- **Repeated blocks:** the profile rides post runs of identical `G01` blocks ([#2882](https://github.com/NeoTech/Camcraft/issues/2882)).
 - **The verify verdict** says that the lathe stock simulation does not cut threads. The thread is judged by its own operation verdict.
 - **The holders are not judged:** the tools have no modelled body.
 

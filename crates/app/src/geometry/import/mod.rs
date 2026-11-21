@@ -98,6 +98,8 @@ pub struct Graded {
     /// the promise, and for STL and OBJ - those files ARE the mesh, with
     /// no surface behind them to measure against.
     pub coarse_mm: Option<f64>,
+    /// Only file tolerance, without budget coarsening, required the chord.
+    pub file_tolerance: bool,
     /// What the importer changed or noted on the way, one line each
     /// (#1617: an STL or OBJ wound inward turned outward; #917: what the
     /// STEP reader repaired). Empty when it changed nothing.
@@ -154,7 +156,7 @@ pub fn load_model_open_within(path: &Path, budget: usize) -> Result<Graded, Impo
     if format == Format::Stl {
         let mut mesh = gate(stl::parse_file(path)?)?;
         let notes = mesh_outward::turn_outward(&mut mesh)?.into_iter().collect();
-        return Ok(Graded { mesh, coarse_mm: None, notes, open: None, step_source: None });
+        return Ok(Graded { mesh, coarse_mm: None, file_tolerance: false, notes, open: None, step_source: None });
     }
     let data = std::fs::read(path)?;
     parse_model_open_within(&data, format, budget)
@@ -174,7 +176,7 @@ pub fn parse_model_graded_within(data: &[u8], format: Format, budget: usize) -> 
 /// [`parse_model_graded_within`] keeping a closed shell that meshes open,
 /// the bytes twin of [`load_model_open_within`] (#1610).
 pub fn parse_model_open_within(data: &[u8], format: Format, budget: usize) -> Result<Graded, ImportError> {
-    let (mesh, coarse_mm, notes, open) = match format {
+    let (mesh, coarse_mm, notes, open, file_tolerance) = match format {
         // #1456: the machining mesh is watertight and outward, at the chord cap.
         Format::Solidcraft => {
             let (mesh, notes) = camcraft_geometry::solidcraft::parse(data, budget, step::CHORD_CAP)
@@ -182,7 +184,7 @@ pub fn parse_model_open_within(data: &[u8], format: Format, budget: usize) -> Re
                     camcraft_geometry::solidcraft::SolidcraftError::TooLarge => ImportError::TooLarge,
                     camcraft_geometry::solidcraft::SolidcraftError::Refused(reason) => ImportError::Solidcraft(reason),
                 })?;
-            (mesh, None, notes, None)
+            (mesh, None, notes, None, false)
         }
         Format::Stl | Format::Obj => {
             let mut mesh = gate(match format {
@@ -190,19 +192,19 @@ pub fn parse_model_open_within(data: &[u8], format: Format, budget: usize) -> Re
                 _ => obj::parse(data)?,
             })?;
             let notes = mesh_outward::turn_outward(&mut mesh)?.into_iter().collect();
-            (mesh, None, notes, None)
+            (mesh, None, notes, None, false)
         }
         // #917: solidcore's machining mesh is watertight and outward; a
         // solid with faces the mesher leaves out keeps its hole named.
         Format::Step => {
-            let (mesh, chord, notes, open) = step::parse_open(data, budget)?;
-            (mesh, step::coarse(chord), notes, open)
+            let (mesh, chord, notes, open, cause) = step::parse_with_cause(data, budget)?;
+            (mesh, step::coarse(chord), notes, open, cause)
         }
     };
     let step_source = (format == Format::Step)
         .then(|| std::str::from_utf8(data).ok().map(str::to_owned))
         .flatten();
-    Ok(Graded { mesh: gate(mesh)?, coarse_mm, notes, open, step_source })
+    Ok(Graded { mesh: gate(mesh)?, coarse_mm, file_tolerance, notes, open, step_source })
 }
 
 /// Belt-and-gate: each importer checks finiteness at the parse site, and

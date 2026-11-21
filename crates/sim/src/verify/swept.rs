@@ -100,7 +100,9 @@ impl Body {
 /// no height.
 pub(super) fn pen(b: &Body, atom: &Atom, cut_lo: f64, allow: f64, grow: f64, pts: &mut Vec<[f64; 2]>) -> f64 {
     let lo = atom.z0.max(cut_lo).max(b.zlo);
-    let hi = atom.z1.min(b.zhi);
+    // #1444: a cutting top face gets the tip's allowance (`Atom::cap`).
+    let top = if atom.cap { atom.z1 - cut_lo.max(0.0) } else { atom.z1 };
+    let hi = top.min(b.zhi);
     if lo.partial_cmp(&hi).is_none_or(|o| o.is_gt()) {
         return f64::NEG_INFINITY;
     }
@@ -111,7 +113,7 @@ pub(super) fn pen(b: &Body, atom: &Atom, cut_lo: f64, allow: f64, grow: f64, pts
     if hi - lo <= 1e-12 {
         return atom.rho(lo) + grow - d;
     }
-    let bound = atom.rho(hi) + grow - d;
+    let bound = atom.rho_peak(lo, hi) + grow - d;
     if atom.is_flat() || bound <= allow {
         return bound; // exact for a band; clear of the allowance otherwise
     }
@@ -126,7 +128,11 @@ pub(super) fn rho_expanded(atom: &super::probe::Atom, w: f64, m: f64) -> f64 {
         return 0.0;
     }
     match atom.prof {
-        Prof::Flat(r) => {
+        // #1444: an undercut head is read as its circumscribed cylinder.
+        // `Dove` is widest (r) at its bottom and `Ball` has radius r, so
+        // the cylinder holds the head at each Z stretch of `avoid_poly`,
+        // and the keep-out can only over-report, never under-report.
+        Prof::Flat(r) | Prof::Dove { r, .. } | Prof::Ball(r) => {
             if w < atom.z0 {
                 r + (m * m - (atom.z0 - w).powi(2)).max(0.0).sqrt()
             } else if w > atom.z1 {

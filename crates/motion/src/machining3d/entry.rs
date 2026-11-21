@@ -5,14 +5,14 @@ use camcraft_sim::verify::AvoidSpec;
 use super::params::Pocket3DParams;
 use super::rest::EPS;
 use super::feed::{guard_input, home, sim_of, subtract_upright};
-use super::floor_levels::cut_levels;
+use super::floor_levels::{coarse_step, cut_levels};
 use super::hsm::Seam;
 use super::ladder::ladder;
 
 use crate::cl::Toolpath;
 use crate::geo2d::Region;
 use crate::geometry::Triangle;
-use crate::machining2d::{cut_levels_under, AdaptiveMethod, GenError};
+use crate::machining2d::{AdaptiveMethod, GenError, cut_levels_for};
 use crate::stock_sim::{Columns, StockReport};
 /// The per-level cutter plan and its walk, level after level - the 3-D
 /// sibling of `machining2d::pocket`'s run, with the passes recomputed
@@ -117,7 +117,9 @@ pub(super) fn run_plain_with(
     method: AdaptiveMethod,
 ) -> Result<Toolpath, GenError> {
     guard_input(facets, footprint, p)?;
-    let zs = cut_levels(facets, p, p.stepdown)?;
+    // #2012: the regular ladder walks the stepdown of the approach's mode;
+    // #2088's flat floors join it as before.
+    let zs = cut_levels(facets, p, coarse_step(p))?;
     ladder(facets, footprint, p, &zs, None, mask, home(p), shell, None, stock, avoid, method)
 }
 
@@ -203,7 +205,7 @@ pub fn pocket3d_air_split(
         Some(Seam { lo: lo.x, hi: hi.x, period, reach })
     };
     let (sm_air, sm_cut) = (seam_of(air_footprint), seam_of(footprint));
-    let zs = cut_levels_under(p.top_z, p.links.approach.stock_top, p.bottom_z, p.stepdown)?;
+    let zs = cut_levels_for(p.top_z, &p.links.approach, p.bottom_z, p.stepdown)?;
     let k = air_levels(&zs, air_above);
     if k == 0 || air_footprint.is_empty() {
         return ladder(facets, footprint, p, &zs, None, None, home(p), false, sm_cut.as_ref(), None, None, AdaptiveMethod::Spiral);
@@ -328,7 +330,9 @@ pub(super) fn run_rest_with(
 ) -> Result<(Toolpath, StockReport), GenError> {
     guard_input(facets, footprint, p)?;
     let r = p.tool_diameter * 0.5;
-    let zs = cut_levels(facets, p, p.stepdown)?;
+    // #2012: the regular ladder walks the stepdown of the approach's mode;
+    // #2088's flat floors join it as before.
+    let zs = cut_levels(facets, p, coarse_step(p))?;
     let coarse = ladder(facets, footprint, p, &zs, None, mask, home(p), shell, None, None, avoid, method)?;
 
     // What the coarse ladder leaves standing, column by column: the
@@ -350,7 +354,9 @@ pub(super) fn run_rest_with(
     let rest = dex.columns()?;
 
     // The rest ladder: same laws, half the step, rest-shaped targets.
-    let zs_r = cut_levels(facets, p, p.stepdown * 0.5)?;
+    // #2012: half the step of the coarse ladder's own mode, so the rest
+    // planes fall on and between the coarse planes in either mode.
+    let zs_r = cut_levels(facets, p, coarse_step(p) * 0.5)?;
     let start = coarse.moves.last().map_or_else(|| home(p), |m| m.to);
     let mut moves = coarse.moves;
     // The coarse leg's notes join the rest leg's below, in program

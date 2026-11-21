@@ -39,6 +39,17 @@ impl From<TiltDto> for Tilt {
     }
 }
 
+/// #1864: per-chain side and direction override row inside `ParamsDto::Contour`.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct ChainOverrideDto {
+    pub entity: String,
+    pub chain: ChainIdDto,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub side: Option<ChainSideDto>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub reverse: bool,
+}
+
 /// Which point of a twist drill `break_through` is measured from (#2441).
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
@@ -195,6 +206,10 @@ pub enum ParamsDto {
         /// 3+2 index; see the Face arm.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         tilt: Option<TiltDto>,
+        /// #1864: optional per-chain side and direction overrides for DXF
+        /// sketch contours; absent on every pre-v73 file.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        chain_overrides: Vec<ChainOverrideDto>,
     },
     Pocket {
         /// M11.2 level transitions and links: absent is the kind's earlier shape.
@@ -1234,6 +1249,8 @@ pub enum ParamsDto {
     SinkerBurn(SinkerDto),
     /// The sinker side burn (#545): appended the same way.
     SinkerSideBurn(SinkerSideDto),
+    /// The slot undercut (#1444): appended the same way.
+    SlotUndercut(SlotUndercutDto),
 }
 
 /// The angle an absent `ramp_angle` means: 45°, the ground the

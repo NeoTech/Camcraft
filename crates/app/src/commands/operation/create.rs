@@ -29,13 +29,13 @@ pub struct CreateOperation {
 }
 
 /// `(key, before, after)` for each sibling whose position an append pins.
-type Reordered = Vec<(String, OperationMeta, OperationMeta)>;
+pub(in crate::commands) type Reordered = Vec<(String, OperationMeta, OperationMeta)>;
 
 /// Pin every operation of the setup `context` resolves to at its current
 /// program position (0..n) and return those changes with the next free
 /// index `n` - so a new op lands last even when an older project's
 /// siblings carry no stored order (their name order is kept, made explicit).
-fn append_position(world: &World, context: Option<&str>) -> Result<(Reordered, u32), CommandError> {
+pub(in crate::commands) fn append_position(world: &World, context: Option<&str>) -> Result<(Reordered, u32), CommandError> {
     let effective = setup::effective(world, context);
     // #155: the list's Pause / Home entries hold positions too.
     let siblings: Vec<_> = crate::program_entry::sequence(world)
@@ -111,7 +111,7 @@ impl CreateOperation {
         // (AGENTS.md: validate early), not deep in the generator - and
         // so is a From: Selection height its source cannot answer.
         heights_gate(world, setup.as_deref(), &src, &params)?;
-        if let Some(msg) = crate::operation::side_sane(&params, &src) {
+        if let Some(msg) = crate::operation::side_sane(world, &params, &src) {
             return Err(CommandError::Invalid(msg));
         }
         family_gate(world, setup.as_deref(), &params)?;
@@ -200,7 +200,7 @@ impl PasteOperation {
             return Err(CommandError::Invalid("copied operation parameters are not usable".into()));
         }
         heights_gate(world, context, &operation.src, &operation.params)?;
-        if let Some(msg) = crate::operation::side_sane(&operation.params, &operation.src) {
+        if let Some(msg) = crate::operation::side_sane(world, &operation.params, &operation.src) {
             return Err(CommandError::Invalid(msg));
         }
         family_gate(world, context, &operation.params)?;

@@ -85,7 +85,14 @@ function trim(s) {
   if (s.indexOf(".") >= 0) s = s.replace(/0+$/, "").replace(/\.$/, "");
   return s === "-0" ? "0" : s;
 }
-function fu(v) { return trim(Number(inch ? v / 25.4 : v).toFixed(inch ? 4 : 3)); }
+// A dimension word always carries its decimal point (#3206): many wire
+// controls read a number without one in their least input unit, so
+// "X5" would be 5 um there, not 5 mm.
+function pt(s) {
+  s = s.replace(/0+$/, "");
+  return (s === "-0." || s === "-.") ? "0." : s;
+}
+function fu(v) { return pt(Number(inch ? v / 25.4 : v).toFixed(inch ? 4 : 3)); }
 function wo(letter, v, o) { return has(v) ? letter + fu(v - o) : ""; }
 function block(words, machineCode) {
   var a = [];
@@ -111,6 +118,8 @@ function clean(s) {
   return t.length > 48 ? t.substring(0, 48).trim() : t;
 }
 function note(s) { block(["(" + s + ")"]); }
+// Program notes use this dialect without truncating the stated bound.
+function onComment(s) { note(commentText(s)); }
 
 // ------------------------------------------------------------- machine
 function machineName() {
@@ -238,7 +247,7 @@ function onSection() {
       refuse("angtpl" + opName, "machine " + machineName() + ": edm.codes.taper_angle states no {angle} place for the taper angle");
       taperOk = false;
     }
-    note("TAPER " + trim(Number(taper).toFixed(3)) + " DEG BY ANGLE WORD - XY ON THE PROGRAMMED PLANE Z" + (has(plane) ? fu(plane) : "?") + ", CORNERS " + corner.toUpperCase());
+    note("TAPER " + trim(Number(taper).toFixed(3)) + " DEG BY ANGLE WORD - XY ON THE PROGRAMMED PLANE Z" + (has(plane) ? trim(fu(plane)) : "?") + ", CORNERS " + corner.toUpperCase());
   } else if (taper !== 0 || fourAxis !== "") {
     for (var i = 0; i < TAPER_REQUIRED.length; i++) {
       if (code(TAPER_REQUIRED[i]) === null) {
@@ -345,7 +354,7 @@ function onLinear() {
     }
     if (ang !== 0 && !tapering) {
       block([code("taper_on")], true);
-      block([code("taper_angle").split("{angle}").join(trim(Number(ang).toFixed(3)))], true);
+      block([code("taper_angle").split("{angle}").join(pt(Number(ang).toFixed(3)))], true);
       tapering = true;
     } else if (ang === 0 && tapering) {
       block([code("taper_off")], true);

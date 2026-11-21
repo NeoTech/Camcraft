@@ -221,7 +221,7 @@ impl ContourParams {
     /// Cut levels from `top_z` down to `bottom_z`, always ending exactly
     /// at the bottom (same snap rule as facing rows).
     pub(super) fn levels(&self) -> Result<Vec<f64>, GenError> {
-        super::levels::cut_levels_under(self.top_z, self.links.approach.stock_top, self.bottom_z, self.stepdown)
+        super::equal_steps::cut_levels_for(self.top_z, &self.links.approach,self.bottom_z, self.stepdown)
     }
 
     /// [`Self::levels`] for a closed ring, with the tab top as a level

@@ -1,4 +1,4 @@
-//! Project save/load: `.camproj`, JSON, version 73 (see `PROJECT_VERSION`).
+//! Project save/load for the `.camproj` JSON format. See [`PROJECT_VERSION`].
 //!
 //! Serialization goes through plain DTO structs (deliberately not flecs
 //! reflection): the file format is our public persistence contract and must
@@ -151,6 +151,9 @@ mod sinker_dto;
 pub use sinker_dto::*;
 mod trochoid_dto;
 pub use trochoid_dto::*;
+// #1444: the Slot Undercut's file mirror.
+mod undercut_dto;
+pub use undercut_dto::*;
 // #1862: a DXF profile's row.
 mod sketch_dto;
 pub use sketch_dto::{PrimitiveDto, SketchDto};

@@ -723,6 +723,7 @@ fn every_shipped_machine_mounts_and_speaks_its_declaration() {
     use camcraft_app::machine::{Kind, kind};
     let expectations = [
         ("VMC 3-axis", Kind::Mill),
+        ("Fehlmann Picomax 55 (iTNC 530)", Kind::Mill),
         ("Tilt-head 5-axis", Kind::Mill),
         ("Mill-turn", Kind::MillTurn),
         ("Lathe", Kind::Lathe),
@@ -768,6 +769,7 @@ fn every_shipped_machine_mounts_and_speaks_its_declaration() {
         ("Haas DM-1", Kind::Mill),
         ("Sinker EDM 3-axis (template)", Kind::SinkerEdm),
         ("Sodick ALC400G", Kind::WireEdm),
+        ("AGIECUT Classic 2S (template)", Kind::WireEdm),
     ];
     assert_eq!(camcraft_app::posting::shipped_machines().expect("the shipped machines read").len(), expectations.len(), "the pane offers what the tests pin");
     for ((name, text), (want_name, want_kind)) in camcraft_app::posting::shipped_machines().expect("the shipped machines read").iter().zip(expectations) {

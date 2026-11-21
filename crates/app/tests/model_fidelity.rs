@@ -27,8 +27,8 @@ use flecs_ecs::prelude::World;
 use serde_json::{json, Value};
 
 const MILL: &str = "EM-1000-4FL";
-/// A chord error that leaves a positive tolerance (excess 0.007 of 0.01),
-/// and one that leaves none.
+/// A chord error that leaves a positive tolerance (past DEV_TOL, so #2996
+/// takes only the promised 0.005 of 0.01), and one that leaves none.
 const TIGHT: f64 = 0.012;
 const TOO_COARSE: f64 = 0.03;
 
@@ -98,6 +98,7 @@ fn an_over_budget_step_import_is_flagged_and_one_that_fits_is_not() {
     assert_eq!(model_fidelity::excess_of(&world, "full"), 0.0);
 
     let coarse = step::with_facet_budget(2_000, || ImportModel::new(&path)).expect("imports at reduced fidelity");
+    assert!(!coarse.file_tolerance, "a facet budget cannot opt in to the wider law");
     let chord = coarse.coarse_mm.expect("the kept mesh's own chord error rides the command");
     assert!(chord > step::CHORD_CAP && chord.is_finite(), "{chord}");
     h.execute(&world, coarse.renamed("coarse"));
@@ -213,6 +214,7 @@ fn the_program_verdict_tightens_by_the_excess_while_a_tolerance_is_left() {
     // Reduced fidelity with a tolerance left: an exactly finished flat
     // face still posts clean - and the same 0.006 mm is now convicted.
     let tight = faced_brick(Some(TIGHT));
+    // The missing cause record keeps the original budget-model law.
     let tol = model_fidelity::verdict_tol(&tight).expect("a positive tolerance is left");
     assert!((tol - (DEV_TOL - (TIGHT - step::CHORD_CAP))).abs() < 1e-12 && tol > 0.0, "{tol}");
     let e = model::find_by_name(&tight, "OP").expect("op");

@@ -89,6 +89,7 @@ impl OpParams {
         match self {
             OpParams::SinkerBurn(p) => p.compensation_refusal(),
             OpParams::SinkerSideBurn(p) => p.refusal(),
+            OpParams::SlotUndercut(p) => p.refusal(),
             OpParams::Pocket { corner_relief, .. }
             | OpParams::Offset2D { corner_relief, .. } => corner_relief.validate().err().map(|e| e.to_string()),
             OpParams::Adaptive2D { method, troch, corner_relief, .. } => troch.refusal().or_else(|| {
@@ -145,6 +146,8 @@ impl OpParams {
             OpParams::SinkerBurn(p) => p.is_sane(),
             // #545: the side burn's own door.
             OpParams::SinkerSideBurn(p) => p.is_sane(),
+            // #1444: the undercut's own door.
+            OpParams::SlotUndercut(p) => p.is_sane(),
             // The probe's door (#108): every distance and feed a real
             // number, the measure no faster than the seek, the back-off
             // inside the approach, a slot G54..G59 when one is named.
@@ -210,6 +213,7 @@ impl OpParams {
                 tab_width,
                 tab_height,
                 helix_radius,
+                chain_overrides,
                 ..
             } => {
                 // Structural only, the pocket doors' word (M8.2 A): a
@@ -217,7 +221,14 @@ impl OpParams {
                 // Helix does, the generator certifies it against the
                 // bore's wall per level - dive room is the refusal of
                 // record there, said in the path's notes.
-                nneg(*stock_to_leave)
+                let overrides_ok = chain_overrides.iter().enumerate().all(|(i, o)| {
+                    !o.entity.is_empty()
+                        && !chain_overrides[..i]
+                            .iter()
+                            .any(|prev| prev.entity == o.entity && prev.chain == o.chain)
+                });
+                overrides_ok
+                    && nneg(*stock_to_leave)
                     && clearance_z.is_sane()
                     && retract_z.is_sane()
                     && top_z.is_sane()

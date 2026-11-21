@@ -286,6 +286,7 @@ fn render_all_guide_images() {
             stock_to_leave, clearance_z, retract_z, top_z, bottom_z, stepdown,
             feed, plunge_feed, climb, side, lead, tolerance, tab_count, tab_width,
             tab_height, entry, helix_radius, blend_turns, links, tilt,
+            chain_overrides: Vec::new(),
         };
         edit_and_generate(&mut h, "2D Contour1", contour_with_lead(Lead::Arc { radius: 6.0 }));
         let lead_target = first_arc_cut_target(&h, "2D Contour1", false)

@@ -298,3 +298,44 @@ fn open_fixtures_activates_the_setup_and_opens_its_fixtures_page() {
         h.state().state.ui_target
     );
 }
+
+/// #3070: a milling setup's page carries the "Sheet job" checklist between
+/// the part orientation and the setup's actions, the allowance row always
+/// shown; Apply lands ONE undoable `SetSheetJob` (stock, WCS, record),
+/// Clear shows once a job is stated, and one undo puts it all back.
+#[test]
+fn the_sheet_job_checklist_applies_one_undoable_step() {
+    use crate::egui_app::setup_sheet_job_row::{ALLOWANCE_LABEL, APPLY, CLEAR, GROUP};
+    let mut h = setups(1, "Setup1");
+    open(&mut h, "Setup1");
+    assert_group(&h, GROUP, GROUPS[3], &["    Sheet length (X)", ALLOWANCE_LABEL, APPLY]);
+    assert!(top(&h, GROUPS[2]) < top(&h, GROUP), "under the part orientation");
+    assert!(h.query_by_label_contains("No sheet job stated").is_some());
+    gone(&h, CLEAR);
+    h.get_by_label(APPLY).click();
+    h.run_steps(3);
+    let world = &h.state().state.world;
+    let job = camcraft_app::sheet_job::of(world, "Setup1");
+    assert_eq!(job.map(|j| j.allowance), Some(0.3), "the shown allowance, applied: {}", h.state().state.status);
+    assert!(camcraft_app::model::stock_world_aabb_for(world, Some("Setup1")).is_some(), "the sheet is the stock");
+    assert!(h.query_by_label_contains("Stated: Z0 on the sheet top").is_some());
+    assert!(h.query_by_label(CLEAR).is_some(), "Clear shows once stated");
+    let st = &mut h.state_mut().state;
+    assert!(st.history.undo(&st.world), "one undo step");
+    assert_eq!(camcraft_app::sheet_job::of(&st.world, "Setup1"), None);
+    assert!(camcraft_app::model::stock_world_aabb_for(&st.world, Some("Setup1")).is_none(), "the same undo removes the stock it made");
+}
+
+/// #3070: the command sets the ACTIVE setup's stock, so Apply on another
+/// setup's page is refused by name and changes nothing.
+#[test]
+fn the_sheet_job_checklist_refuses_an_inactive_setup() {
+    let mut h = setups(2, "Setup2");
+    open(&mut h, "Setup1");
+    let before = h.state().state.history.done_len();
+    h.get_by_label(crate::egui_app::setup_sheet_job_row::APPLY).click();
+    h.run_steps(3);
+    let st = &h.state().state;
+    assert_eq!(camcraft_app::sheet_job::of(&st.world, "Setup1"), None);
+    assert_eq!(st.history.done_len(), before, "nothing entered the history");
+}

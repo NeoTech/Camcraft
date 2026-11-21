@@ -72,6 +72,7 @@ impl ParamsDto {
             OpParams::WireContour(op) => ParamsDto::WireContour(WireContourDto::from_op(op)),
             OpParams::SinkerBurn(op) => ParamsDto::SinkerBurn(SinkerDto::from_op(op)),
             OpParams::SinkerSideBurn(op) => ParamsDto::SinkerSideBurn(SinkerSideDto::from_op(op)),
+            OpParams::SlotUndercut(op) => ParamsDto::SlotUndercut(SlotUndercutDto::from_op(op)),
             OpParams::TrochoidalSlot { .. } => ParamsDto::TrochoidalSlot(TrochoidDto::from_params(p)),
             OpParams::Face {
                 stepover,
@@ -119,6 +120,7 @@ impl ParamsDto {
                 blend_turns,
                 links,
                 tilt,
+                chain_overrides,
             } => ParamsDto::Contour {
                 stock_to_leave: *stock_to_leave,
                 clearance_z: (*clearance_z).into(),
@@ -158,6 +160,15 @@ impl ParamsDto {
                 ramp_angle: contour_links_dto(links).1,
                 links: contour_links_dto(links).2,
                 tilt: (*tilt).map(Into::into),
+                chain_overrides: chain_overrides
+                    .iter()
+                    .map(|o| ChainOverrideDto {
+                        entity: o.entity.clone(),
+                        chain: ChainIdDto(o.chain),
+                        side: o.side.map(chain_side_dto),
+                        reverse: o.reverse,
+                    })
+                    .collect(),
             },
             OpParams::Pocket {
                 links,
@@ -1343,6 +1354,7 @@ impl ParamsDto {
             ParamsDto::WireContour(d) => d.to_params(),
             ParamsDto::SinkerBurn(d) => d.to_params(),
             ParamsDto::SinkerSideBurn(d) => d.to_params(),
+            ParamsDto::SlotUndercut(d) => d.to_params(),
             ParamsDto::TrochoidalSlot(d) => d.to_params(),
             // Absent v5 keys decode (via serde defaults) to the legacy
             // single-level face, byte-exact; present ones land on the
@@ -1395,6 +1407,7 @@ impl ParamsDto {
                 ramp_angle,
                 links,
                 tilt,
+                chain_overrides,
             } => OpParams::Contour {
                 stock_to_leave: *stock_to_leave,
                 clearance_z: (*clearance_z).into(),
@@ -1436,6 +1449,15 @@ impl ParamsDto {
                 // over them.
                 links: contour_links(*level_link, *ramp_angle, links.as_ref()),
                 tilt: (*tilt).map(Into::into),
+                chain_overrides: chain_overrides
+                    .iter()
+                    .map(|o| crate::operation::ChainOverride {
+                        entity: o.entity.clone(),
+                        chain: o.chain.0,
+                        side: o.side.map(chain_side_of),
+                        reverse: o.reverse,
+                    })
+                    .collect(),
             },
             ParamsDto::Pocket {
                 links,

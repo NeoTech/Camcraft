@@ -112,6 +112,11 @@ const REFUSED: &[(&str, &str, &str)] = &[
     ("grbl", "tap_plate", "tapping"),
 ];
 
+/// This mill requires a named control release and a manual change at full retract.
+/// Its Picomax program is qualified separately in `klartext_builtin` and
+/// `script_heidenhain_klartext`. The generic VMC has neither machine fact.
+const KLARTEXT: (&str, &str) = ("Heidenhain Klartext", "heidenhain-klartext");
+
 /// The TURNING dialects (M13.5): their goldens are the lathe
 /// documents' own streams (`lathe_post.rs`); on a mill golden they
 /// must REFUSE by name - never project a Y move onto a diameter.
@@ -429,6 +434,7 @@ fn every_builtin_registry_entry_compiles() {
     // contract, so spell the registry out here against posting.rs.
     let names: Vec<&str> = camcraft_app::posting::BUILTINS.iter().map(|(n, _)| *n).collect();
     let mut want: Vec<&str> = POSTS.iter().map(|(n, _, _)| *n).collect();
+    want.push(KLARTEXT.0);
     want.extend(LATHE_POSTS.iter().map(|(n, _)| *n));
     want.extend(PLASMA_POSTS.iter().map(|(n, _)| *n));
     want.extend(WIRE_POSTS.iter().map(|(n, _)| *n));
@@ -469,6 +475,7 @@ const EXTENSIONS: &[(&str, &str)] = &[
     ("doosan-dnm", "nc"),
     ("carvera", "nc"),
     ("mach4", "nc"),
+    ("heidenhain-klartext", "H"),
     ("fanuc-lathe", "nc"),
     ("tormach-lathe", "nc"),
     ("tormach-plasma", "nc"),
@@ -487,6 +494,7 @@ fn declared_extension(script: &str) -> Option<&str> {
 #[test]
 fn every_builtin_declares_its_controls_file_extension() {
     let mut stems: Vec<&str> = POSTS.iter().map(|(_, s, _)| *s).collect();
+    stems.push(KLARTEXT.1);
     stems.extend(LATHE_POSTS.iter().map(|(_, s)| *s));
     stems.extend(PLASMA_POSTS.iter().map(|(_, s)| *s));
     stems.extend(WIRE_POSTS.iter().map(|(_, s)| *s));

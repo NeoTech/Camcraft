@@ -63,7 +63,7 @@ pub struct ExtraBoundary {
 /// Which side of an open (or closed) boundary is machined. Inside is the
 /// side that holds more of the operation's own area (what the selection
 /// or source encloses) - the part's side; Outside the other one.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ChainSide {
     Inside,
     Outside,
@@ -211,6 +211,7 @@ pub fn area_unsupported(kind: OpType) -> Option<String> {
         }
         OpType::Deburr => format!("{kind} breaks the model's own exposed edges - there is no area to bound"),
         OpType::SinkerBurn | OpType::SinkerSideBurn => format!("a {kind} burns its electrode's own face - there is no area to bound"),
+        OpType::SlotUndercut => format!("a {kind} cuts its authored slot at depth - there is no area to bound"),
         // Mesh-driven with a moving tool axis: the model's own shadow.
         OpType::Contour5D
         | OpType::Parallel5D

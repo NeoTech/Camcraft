@@ -6,7 +6,7 @@
 //! it reads. The control dialect lives in the script, never here.
 
 use super::cnc::{self, Record};
-use super::js::{is_false, ProgramId, Script};
+use super::js::{is_false, is_true, ProgramId, Script};
 use super::machine;
 use super::PostError;
 use crate::cl::MoveKind;
@@ -108,8 +108,16 @@ pub fn run_program_with(
     options: &Value,
     id: &ProgramId,
 ) -> Result<PostOutput, PostError> {
+    // The transforms and callbacks must see the same checked machine as the CLI.
+    let input = super::machine_installation::checked_input(mch).map_err(PostError::Refused)?;
+    let mch = input.as_ref();
     let records = super::normalize_program_order(cnc::parse(stream)?);
-    let mut s = Script::load(cps)?;
+    let operation = records.iter().find_map(|record| match record {
+        Record::Param { name, value } if name == "OperationName" => value.as_str(),
+        _ => None,
+    }).unwrap_or("unnamed operation");
+    let mut s = Script::load_for_program(cps, records.len(), operation)?;
+    let fail_on_warning = is_true(&s.eval_src("typeof failOnWarning !== 'undefined' && failOnWarning === true")?);
     let mut tool_macros = super::tool_change::Macros::read(&mut s)?;
     // #902: an inch document on a script that cannot write inch.
     if let Some(why) = super::units::refusal(&mut s, options)? {
@@ -133,7 +141,7 @@ pub fn run_program_with(
     // #374: an inverted machine axis - the one place the stream is
     // mirrored into the controller's frame, or refused by name.
     let records = super::invert::apply(records, mch, &s)?;
-    s.set_machine(&machine::script_props(mch))?;
+    s.set_machine(&machine::flatten(mch))?;
     // #542: whether the manifest's `serves` (#1266) names a sinker EDM -
     // the one script that may voice a sinker section (below).
     let serves_sinker = s
@@ -149,6 +157,11 @@ pub fn run_program_with(
         s.arm_explain(f)?;
     }
     s.call("onOpen", "")?;
+    // #2996: the header notes (a model checked at reduced accuracy) are
+    // part of the header, in the script's own comment form.
+    for note in &id.notes {
+        s.call("onComment", &json!(note).to_string())?;
+    }
     let head = s.out_len()?;
 
     let mut warnings = Vec::new();
@@ -580,6 +593,9 @@ pub fn run_program_with(
 
     let (out, msgs) = s.drain()?;
     warnings.extend(msgs);
+    if fail_on_warning && !warnings.is_empty() {
+        return Err(PostError::Refused(warnings.join("; ")));
+    }
     let mut program = String::new();
     for l in &out {
         program.push_str(l);

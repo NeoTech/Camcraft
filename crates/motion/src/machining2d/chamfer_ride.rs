@@ -12,6 +12,7 @@
 //! the cone must touch is the section at the corner depth. Our own law
 //! over this repo's sections; no vendor material consulted.
 
+use crate::cl::TiltedFrame;
 use crate::geo2d::{Loop, Point2, Region};
 use crate::geometry::Point3;
 
@@ -49,8 +50,9 @@ const SAME_EDGE: f64 = 1e-6;
 /// the stock, whichever the chamfer's source is - the text fits both, #2521).
 /// #2887: a top loop bevelled on only part of its length (a modelled
 /// chamfer on one side of a plate) refuses by name too: no whole
-/// outline of it can be ridden.
-pub fn ride_loops(top: &Region, corner: &Region, width: f64, corner_z: f64) -> Result<Region, GenError> {
+/// outline of it can be ridden. `lean` is [`wall_lean`]'s answer: the
+/// only plan move by which a top loop may stand off its whole wall.
+pub fn ride_loops(top: &Region, corner: &Region, width: f64, corner_z: f64, lean: Option<Point2>) -> Result<Region, GenError> {
     if !(width.is_finite() && width > 0.0 && corner_z.is_finite()) {
         return Err(GenError::Invalid("chamfer width must be positive".into()));
     }
@@ -71,7 +73,7 @@ pub fn ride_loops(top: &Region, corner: &Region, width: f64, corner_z: f64) -> R
         // outline to ride - refused by name, whichever way its
         // tessellation would have read it.
         if let Some((c, _)) = wall
-            && let Some((bevel, sharp)) = partly_bevelled(t.points(), c.points(), width)
+            && let Some((bevel, sharp)) = partly_bevelled(t.points(), c.points(), width, lean)
         {
             return Err(GenError::At {
                 msg: format!(
@@ -134,24 +136,28 @@ pub fn ride_loops(top: &Region, corner: &Region, width: f64, corner_z: f64) -> R
 /// sharp))` - a point on each - when the loop has a bevelled segment
 /// AND more than `width` of sharp length: a ride of the wall would
 /// cut the sharp length, a ride of the top loop would stand inside
-/// the part at the bevel. #2936: a loop that is its wall moved whole
-/// (`leans`) carries no bevel at all.
-fn partly_bevelled(top: &[Point2], wall: &[Point2], width: f64) -> Option<(Point2, Point2)> {
-    if wall.is_empty() || leans(top, wall) {
+/// the part at the bevel. #2936: a loop that is its wall moved whole by
+/// the frame's `lean` (`leans`) carries no bevel at all. #2944: a
+/// segment is judged in pieces, cut where a wall vertex stands over it,
+/// so a side that runs on along the wall past its corner (an undercut
+/// lip) reads as the sharp length plus the overhang it is.
+fn partly_bevelled(top: &[Point2], wall: &[Point2], width: f64, lean: Option<Point2>) -> Option<(Point2, Point2)> {
+    if wall.is_empty() || lean.is_some_and(|l| leans(top, wall, l)) {
         return None;
     }
     let mut sharp_len: f64 = 0.0;
     let mut sharp_at: Option<Point2> = None;
     let mut bevel_at: Option<Point2> = None;
-    for (i, &a) in top.iter().enumerate() {
-        let b = top[(i + 1) % top.len()];
-        let mid = Point2::new((a.x + b.x) * 0.5, (a.y + b.y) * 0.5);
-        let d = near(a, wall).max(near(mid, wall)).max(near(b, wall));
-        if d <= SAME_EDGE {
-            sharp_len += (b.x - a.x).hypot(b.y - a.y);
-            sharp_at = sharp_at.or(Some(mid));
-        } else if d > MATCH_SLACK {
-            bevel_at = bevel_at.or(Some(mid));
+    for (i, &p) in top.iter().enumerate() {
+        for (a, b) in pieces(p, top[(i + 1) % top.len()], wall) {
+            let mid = Point2::new((a.x + b.x) * 0.5, (a.y + b.y) * 0.5);
+            let d = near(a, wall).max(near(mid, wall)).max(near(b, wall));
+            if d <= SAME_EDGE {
+                sharp_len += (b.x - a.x).hypot(b.y - a.y);
+                sharp_at = sharp_at.or(Some(mid));
+            } else if d > MATCH_SLACK {
+                bevel_at = bevel_at.or(Some(mid));
+            }
         }
     }
     match (bevel_at, sharp_at) {
@@ -160,24 +166,45 @@ fn partly_bevelled(top: &[Point2], wall: &[Point2], width: f64) -> Option<(Point
     }
 }
 
+/// #2944: the segment `a`-`b` cut at the foot of each vertex of `wall`
+/// that falls strictly inside it, in order from `a` to `b`.
+fn pieces(a: Point2, b: Point2, wall: &[Point2]) -> Vec<(Point2, Point2)> {
+    let (dx, dy) = (b.x - a.x, b.y - a.y);
+    let l2 = dx * dx + dy * dy;
+    let mut ts: Vec<f64> = if l2 > 1e-24 {
+        wall.iter().map(|w| ((w.x - a.x) * dx + (w.y - a.y) * dy) / l2).filter(|t| *t > 1e-9 && *t < 1.0 - 1e-9).collect()
+    } else {
+        Vec::new()
+    };
+    ts.sort_by(f64::total_cmp);
+    let at = |t: f64| Point2::new(a.x + t * dx, a.y + t * dy);
+    let mut out = Vec::with_capacity(ts.len() + 1);
+    let mut from = a;
+    for t in ts {
+        out.push((from, at(t)));
+        from = at(t);
+    }
+    out.push((from, b));
+    out
+}
+
 /// Plan slack of the lean test, mm: the sections stand on a 1e-6 mm
 /// grid, so two copies of one outline disagree by about that much.
 /// Far under `MATCH_SLACK`: no bevelled segment hides in it.
 const LEAN_SLACK: f64 = 1e-4;
 
-/// #2936: `top` is the whole of `wall` moved by one plan vector - the
-/// two sections of a prism whose walls lean in the operation's frame
-/// (a box stock under a tilted frame). No segment of such a loop is a
-/// modelled chamfer: the edge is the same edge all round, and the ride
-/// is the wall at the corner depth. The vector is the move of the area
-/// centroid, which no collinear vertex changes; each segment of each
-/// ring - both ends and the middle - must then stand on the other
-/// ring. A loop bevelled on part of its length is no moved copy of its
-/// wall: its bevelled side moved and its sharp sides did not.
-fn leans(top: &[Point2], wall: &[Point2]) -> bool {
-    let (Some(t), Some(w)) = (centroid(top), centroid(wall)) else {
-        return false;
-    };
+/// #2936: `top` is the whole of `wall` moved by `lean` - the two
+/// sections of a prism whose upright walls lean in the operation's
+/// frame (a box stock under a tilted frame). No segment of such a loop
+/// is a modelled chamfer: the edge is the same edge all round, and the
+/// ride is the wall at the corner depth. Each segment of each ring -
+/// both ends and the middle - must stand on the other ring. A loop
+/// bevelled on part of its length is no moved copy of its wall: its
+/// bevelled side moved and its sharp sides did not. #2944: the move
+/// is the frame's own, never one read off the sections - a bevel on
+/// one side and an equal undercut lip on the other also move the whole
+/// outline, but no upright frame leans a wall.
+fn leans(top: &[Point2], wall: &[Point2], lean: Point2) -> bool {
     let on = |from: &[Point2], to: &[Point2], dx: f64, dy: f64| {
         from.iter().enumerate().all(|(i, &a)| {
             let b = from[(i + 1) % from.len()];
@@ -185,26 +212,24 @@ fn leans(top: &[Point2], wall: &[Point2]) -> bool {
             [a, mid, b].iter().all(|p| near(Point2::new(p.x + dx, p.y + dy), to) <= LEAN_SLACK)
         })
     };
-    let (dx, dy) = (t.x - w.x, t.y - w.y);
-    on(top, wall, -dx, -dy) && on(wall, top, dx, dy)
+    !top.is_empty() && on(top, wall, -lean.x, -lean.y) && on(wall, top, lean.x, lean.y)
 }
 
-/// The area centroid of the closed polyline `ring`; `None` when it
-/// encloses no area or is not finite.
-fn centroid(ring: &[Point2]) -> Option<Point2> {
-    let o = *ring.first()?;
-    let (mut area, mut cx, mut cy) = (0.0, 0.0, 0.0);
-    for (i, &p) in ring.iter().enumerate() {
-        let q = ring[(i + 1) % ring.len()];
-        // About the first vertex: the cross terms stay small.
-        let (ax, ay, bx, by) = (p.x - o.x, p.y - o.y, q.x - o.x, q.y - o.y);
-        let k = ax * by - bx * ay;
-        area += k;
-        cx += (ax + bx) * k;
-        cy += (ay + by) * k;
-    }
-    let c = Point2::new(o.x + cx / (3.0 * area), o.y + cy / (3.0 * area));
-    (area.abs() > 1e-12 && c.x.is_finite() && c.y.is_finite()).then_some(c)
+/// #2944: the plan move, from the corner plane up to the top plane
+/// `depth` above it, of a wall that stands upright in the world, as the
+/// operation's frame reads it. Zero with no frame or an upright one.
+/// `None` when the tool axis lies in the world's XY (an upright wall has
+/// no section there to move): no lean then excuses a moved loop.
+#[must_use]
+pub fn wall_lean(frame: Option<&TiltedFrame>, depth: f64) -> Option<Point2> {
+    let Some(f) = frame else {
+        return Some(Point2::new(0.0, 0.0));
+    };
+    // The world's +Z in the frame is (u.z, v.z, axis.z): climbing
+    // `depth` along the axis climbs `depth / axis.z` along the wall.
+    let k = depth / f.axis[2];
+    let lean = Point2::new(f.u[2] * k, f.v[2] * k);
+    (f.axis[2].abs() > 1e-9 && lean.x.is_finite() && lean.y.is_finite()).then_some(lean)
 }
 
 /// The farthest any vertex of `from` stands from the closed polyline
@@ -236,146 +261,5 @@ fn seg(p: Point2, a: Point2, b: Point2) -> f64 {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn rect(x0: f64, y0: f64, x1: f64, y1: f64) -> Loop {
-        Loop::new(vec![Point2::new(x0, y0), Point2::new(x1, y0), Point2::new(x1, y1), Point2::new(x0, y1)]).expect("rect")
-    }
-
-    #[test]
-    fn a_vertical_wall_rides_its_own_top_loop() {
-        let top = Region::new(vec![rect(-20.0, -10.0, 20.0, 10.0)]).expect("top");
-        let got = ride_loops(&top, &top.clone(), 1.0, 9.0).expect("ride");
-        assert_eq!(got, top);
-    }
-
-    #[test]
-    fn a_modelled_bevel_rides_the_wall_under_it() {
-        // The bevel's top edge 1 mm inside the wall.
-        let top = Region::new(vec![rect(-19.0, -9.0, 19.0, 9.0)]).expect("top");
-        let wall = Region::new(vec![rect(-20.0, -10.0, 20.0, 10.0)]).expect("wall");
-        let got = ride_loops(&top, &wall, 1.0, 9.0).expect("ride");
-        assert_eq!(got, wall);
-    }
-
-    #[test]
-    fn a_wall_farther_than_the_width_refuses_by_name() {
-        let top = Region::new(vec![rect(-19.0, -9.0, 19.0, 9.0)]).expect("top");
-        let plate = Region::new(vec![rect(-50.0, -30.0, 50.0, 30.0)]).expect("plate");
-        let err = ride_loops(&top, &plate, 1.0, 9.0).expect_err("no wall within the width");
-        assert!(err.to_string().contains("no wall under it"), "{err}");
-        // #2521: the source may be the stock, so the text names no part.
-        assert!(err.to_string().contains("would ride into the material under it;"), "{err}");
-        assert!(!err.to_string().contains("part"), "a stock-source chamfer has no part to name: {err}");
-    }
-
-    #[test]
-    fn a_lower_edge_matched_to_no_top_loop_is_left_alone() {
-        let top = Region::new(vec![rect(-20.0, -10.0, 20.0, 10.0)]).expect("top");
-        // A second, lower boss beside the island: its wall is in the
-        // corner section, but no edge of the top plane stands over it.
-        let corner = Region::new(vec![rect(-20.0, -10.0, 20.0, 10.0), rect(30.0, -10.0, 40.0, 10.0)]).expect("corner");
-        let got = ride_loops(&top, &corner, 1.0, 9.0).expect("ride");
-        assert_eq!(got, top);
-    }
-
-    fn hole(x0: f64, y0: f64, x1: f64, y1: f64) -> Loop {
-        Loop::new(vec![Point2::new(x0, y0), Point2::new(x0, y1), Point2::new(x1, y1), Point2::new(x1, y0)]).expect("hole")
-    }
-
-    #[test]
-    fn a_sharp_pocket_beside_a_modelled_bevel_is_left_alone() {
-        // #2596: the outer edge carries a 1 mm bevel, the pocket rim is
-        // sharp. Only the outer wall is ridden.
-        let top = Region::new(vec![rect(-29.0, -19.0, 29.0, 19.0), hole(-10.0, -5.0, 10.0, 5.0)]).expect("top");
-        let corner = Region::new(vec![rect(-30.0, -20.0, 30.0, 20.0), hole(-10.0, -5.0, 10.0, 5.0)]).expect("corner");
-        let got = ride_loops(&top, &corner, 1.0, 9.0).expect("ride");
-        assert_eq!(got, Region::new(vec![rect(-30.0, -20.0, 30.0, 20.0)]).expect("wall"));
-    }
-
-    #[test]
-    fn a_bevelled_pocket_rim_inside_a_sharp_plate_refuses_by_name() {
-        // Alone, the rim would read as a boss and the ride would travel
-        // against its material (#1555): refused, the user picks it.
-        let top = Region::new(vec![rect(-30.0, -20.0, 30.0, 20.0), hole(-9.0, -4.0, 9.0, 4.0)]).expect("top");
-        let corner = Region::new(vec![rect(-30.0, -20.0, 30.0, 20.0), hole(-10.0, -5.0, 10.0, 5.0)]).expect("corner");
-        let err = ride_loops(&top, &corner, 1.0, 9.0).expect_err("an orphan bevelled rim");
-        assert!(err.to_string().contains("pick the edges to break"), "{err}");
-    }
-
-    /// #2887's plate: a 1 mm bevel on the X0 side only, the other three
-    /// sides sharp, and a sharp pocket. `extra` adds a collinear vertex
-    /// on the bevel's top edge.
-    fn one_side_bevelled(extra: bool) -> (Region, Region) {
-        let mut outer = vec![Point2::new(1.0, 0.0), Point2::new(60.0, 0.0), Point2::new(60.0, 40.0), Point2::new(1.0, 40.0)];
-        if extra {
-            outer.push(Point2::new(1.0, 20.0));
-        }
-        let top = Region::new(vec![Loop::new(outer).expect("outer"), hole(20.0, 15.0, 40.0, 25.0)]).expect("top");
-        let corner = Region::new(vec![rect(0.0, 0.0, 60.0, 40.0), hole(20.0, 15.0, 40.0, 25.0)]).expect("corner");
-        (top, corner)
-    }
-
-    #[test]
-    fn a_loop_bevelled_on_one_side_refuses_by_name() {
-        // Vertex gap 0 (both bevel corners lie on the wall's sides): the
-        // old reading was "sharp", the tip riding x = 1 inside the part.
-        let (top, corner) = one_side_bevelled(false);
-        let err = ride_loops(&top, &corner, 1.0, 9.0).expect_err("a partly bevelled loop").to_string();
-        assert!(err.contains("only part of its length"), "{err}");
-        assert!(err.contains("pick the edges to break"), "{err}");
-        assert!(err.contains("near X1.000 Y20.000"), "names the bevelled part: {err}");
-    }
-
-    #[test]
-    fn a_loop_bevelled_on_one_side_refuses_with_an_extra_vertex_too() {
-        // Vertex gap 1: the old reading was "bevelled", the wall ridden
-        // along the three sharp sides as well.
-        let (top, corner) = one_side_bevelled(true);
-        let err = ride_loops(&top, &corner, 1.0, 9.0).expect_err("a partly bevelled loop").to_string();
-        assert!(err.contains("only part of its length"), "{err}");
-        assert!(err.contains("pick the edges to break"), "{err}");
-    }
-
-    #[test]
-    fn a_loop_bevelled_all_round_is_not_partly_bevelled() {
-        let (top, wall) = (rect(-19.0, -9.0, 19.0, 9.0), rect(-20.0, -10.0, 20.0, 10.0));
-        assert_eq!(partly_bevelled(top.points(), wall.points(), 1.0), None);
-        assert_eq!(partly_bevelled(wall.points(), wall.points(), 1.0), None);
-    }
-
-    /// #2936: the sections of a 70 mm box stock in a frame tilted 10
-    /// degrees, 1 mm apart - the corner section and the same outline
-    /// moved by `tan(10 deg)` in Y. The mesh diagonals leave a collinear
-    /// vertex at a different place on each side of each section.
-    fn leaning_box() -> (Region, Region) {
-        let ring = |y0: f64, y1: f64, mids: [f64; 4]| {
-            let p = [(35.0, mids[0]), (35.0, y1), (mids[1], y1), (-35.0, y1), (-35.0, mids[2]), (-35.0, y0), (mids[3], y0), (35.0, y0)];
-            Region::new(vec![Loop::new(p.iter().map(|&(x, y)| Point2::new(x, y)).collect()).expect("ring")]).expect("region")
-        };
-        let top = ring(-33.776662, 37.303201, [3.1953, -22.139987, 1.42424, -21.060124]);
-        let corner = ring(-33.952989, 37.126874, [-6.407086, -18.585993, 3.479512, -24.614117]);
-        (top, corner)
-    }
-
-    #[test]
-    fn a_wall_leaning_in_the_frame_is_not_a_modelled_chamfer() {
-        // No edge of the box carries a chamfer: the whole outline moved.
-        // The ride is the wall at the corner depth, as before #2887.
-        let (top, corner) = leaning_box();
-        let got = ride_loops(&top, &corner, 1.0, 9.0).expect("a leaning box rides its wall");
-        assert_eq!(got, corner);
-    }
-
-    #[test]
-    fn a_moved_outline_with_one_side_bevelled_still_refuses() {
-        // The leaning box with a 1 mm bevel on its X35 side as well:
-        // that side is no part of the lean, and the #2887 refusal holds.
-        let (top, corner) = leaning_box();
-        let bevelled: Vec<Point2> = top.loops()[0].points().iter().map(|p| Point2::new(p.x.min(34.0), p.y)).collect();
-        let top = Region::new(vec![Loop::new(bevelled).expect("ring")]).expect("top");
-        let err = ride_loops(&top, &corner, 1.0, 9.0).expect_err("a partly bevelled loop").to_string();
-        assert!(err.contains("only part of its length"), "{err}");
-    }
-}
+#[path = "chamfer_ride_tests.rs"]
+mod tests;

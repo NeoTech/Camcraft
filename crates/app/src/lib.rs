@@ -52,6 +52,8 @@ pub mod ai;
 pub mod model;
 // #864: models imported coarser than the importer promises.
 pub mod model_fidelity;
+// #2996: what a model checked at reduced accuracy says.
+pub mod fidelity_note;
 pub mod mesh_open;
 pub mod mesh_solids;
 pub mod model_vouch;
@@ -116,6 +118,8 @@ pub mod setup_wcs_flip;
 pub mod setup_post_options;
 // #1031: a setup's workholding (chuck/collet) rpm limit.
 pub mod setup_workholding;
+// #3070: the guided sheet job - stock, Z zero, allowance, clamp plane.
+pub mod sheet_job;
 pub mod setup_sheet;
 // #320: a setup's stock source - its own, or what the setup before leaves.
 pub mod setup_stock;
@@ -153,6 +157,8 @@ pub mod tool_numbers;
 pub use camcraft_tools::tools;
 // #894: the thread mills' form constants, sanity law and pitch door.
 pub use camcraft_tools::thread_mill;
+// #1444: the undercut cutters' record law and profile.
+pub use camcraft_tools::undercut;
 // #630: the lathe tool orientation code (LinuxCNC 1-9) and its control point.
 pub use camcraft_tools::orientation;
 pub use camcraft_tools::catalog_fields;

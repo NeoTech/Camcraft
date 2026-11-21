@@ -61,7 +61,7 @@ pub fn load_model_open_sourced(path: &Path, budget: usize) -> Result<(Graded, St
         // Bytes after the last facet, if the file grew: still the one pass.
         io::copy(&mut src, &mut io::sink())?;
         let notes = mesh_outward::turn_outward(&mut mesh)?.into_iter().collect();
-        let graded = Graded { mesh, coarse_mm: None, notes, open: None, step_source: None };
+        let graded = Graded { mesh, coarse_mm: None, file_tolerance: false, notes, open: None, step_source: None };
         return Ok((graded, src.hash.finish_hex()));
     }
     let mut data = Vec::new();

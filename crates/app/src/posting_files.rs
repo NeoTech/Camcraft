@@ -51,6 +51,7 @@ pub const BUILTINS: &[(&str, AssetFile)] = &[
     ("Doosan DNM", AssetFile("doosan-dnm.cps")),
     ("Makera Carvera", AssetFile("carvera.cps")),
     ("Mach4", AssetFile("mach4.cps")),
+    ("Heidenhain Klartext", AssetFile("heidenhain-klartext.cps")),
     ("Fanuc Lathe", AssetFile("fanuc-lathe.cps")),
     ("Tormach PathPilot Lathe", AssetFile("tormach-lathe.cps")),
     // #671: the plasma dialect, from UM10720 §6-7 and the PathPilot
@@ -78,6 +79,7 @@ pub const BUILTINS: &[(&str, AssetFile)] = &[
 /// label and an install-time default, never a file's identity.
 pub const MACHINES: &[(&str, AssetFile)] = &[
     ("VMC 3-axis", AssetFile("vmc.mch")),
+    ("Fehlmann Picomax 55 (iTNC 530)", AssetFile("fehlmann-picomax55.mch")),
     ("Tilt-head 5-axis", AssetFile("tilthead.mch")),
     ("Mill-turn", AssetFile("millturn.mch")),
     ("Lathe", AssetFile("lathe.mch")),
@@ -148,6 +150,7 @@ pub const MACHINES: &[(&str, AssetFile)] = &[
     // #1501: a Sodick wire EDM, X Y U V travels and taper from Sodick's published
     // ALC series specifications (docs/decisions/1501-sodick-alc400g.md).
     ("Sodick ALC400G", AssetFile("sodick-alc400g.mch")),
+    ("AGIECUT Classic 2S (template)", AssetFile("agiecut-classic-2s.mch")),
 ];
 
 fn post_dir() -> &'static DataFiles {
@@ -331,6 +334,7 @@ fn embedded(kind: &str, file: &str) -> Option<&'static str> {
         ("posts", "haas.cps") => Some(include_str!("../../../assets/posts/haas.cps")),
         ("posts", "sinumerik.cps") => Some(include_str!("../../../assets/posts/sinumerik.cps")),
         ("posts", "heidenhain.cps") => Some(include_str!("../../../assets/posts/heidenhain.cps")),
+        ("posts", "heidenhain-klartext.cps") => Some(include_str!("../../../assets/posts/heidenhain-klartext.cps")),
         ("posts", "mazak.cps") => Some(include_str!("../../../assets/posts/mazak.cps")),
         ("posts", "tormach.cps") => Some(include_str!("../../../assets/posts/tormach.cps")),
         ("posts", "grblhal.cps") => Some(include_str!("../../../assets/posts/grblhal.cps")),
@@ -347,6 +351,7 @@ fn embedded(kind: &str, file: &str) -> Option<&'static str> {
         ("posts", "sodick-wire.cps") => Some(include_str!("../../../assets/posts/sodick-wire.cps")),
         ("posts", "sinker-iso.cps") => Some(include_str!("../../../assets/posts/sinker-iso.cps")),
         ("machines", "vmc.mch") => Some(include_str!("../../../assets/machines/vmc.mch")),
+        ("machines", "fehlmann-picomax55.mch") => Some(include_str!("../../../assets/machines/fehlmann-picomax55.mch")),
         ("machines", "tilthead.mch") => Some(include_str!("../../../assets/machines/tilthead.mch")),
         ("machines", "millturn.mch") => Some(include_str!("../../../assets/machines/millturn.mch")),
         ("machines", "lathe.mch") => Some(include_str!("../../../assets/machines/lathe.mch")),
@@ -391,6 +396,7 @@ fn embedded(kind: &str, file: &str) -> Option<&'static str> {
         ("machines", "haas-dm1.mch") => Some(include_str!("../../../assets/machines/haas-dm1.mch")),
         ("machines", "sinker-edm.mch") => Some(include_str!("../../../assets/machines/sinker-edm.mch")),
         ("machines", "sodick-alc400g.mch") => Some(include_str!("../../../assets/machines/sodick-alc400g.mch")),
+        ("machines", "agiecut-classic-2s.mch") => Some(include_str!("../../../assets/machines/agiecut-classic-2s.mch")),
         ("machines", "3axis-vmc.mch") => Some(include_str!("../../../assets/machines/3axis-vmc.mch")),
         _ => None,
     }

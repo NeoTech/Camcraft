@@ -78,7 +78,7 @@ fn resolve(world: &World, items: &[GeoSel]) -> Result<Picked, GenError> {
                 }
                 all
             }
-            FeatureSel::Chain(_) | FeatureSel::Vertex(_) => {
+            FeatureSel::Chain(_) | FeatureSel::Vertex(_) | FeatureSel::SketchChain(_) | FeatureSel::SketchLayer(_) => {
                 return Err(GenError::Invalid(format!(
                     "{KIND}: {label} is not a face - the passes keep to picked faces of the turned surface; pick faces, or set the geometry to the whole model"
                 )));

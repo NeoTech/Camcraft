@@ -58,6 +58,12 @@ pub const REST_FILM: f64 = 0.02;
 /// all of them inside the pocket's own center area.
 pub const REST_REACH: f64 = 0.05;
 
+/// A corner relief's start may lie this far (mm) outside the rest center
+/// area and still be cut (#3146): the start is a vertex of the pocket's
+/// center area, on the rest center's boundary, and the offsets move that
+/// boundary by up to two arc tolerances (5 um each), as [`REST_MARGIN`].
+const RELIEF_START_TOL: f64 = 0.01;
+
 /// The previous tool, as the user entered it. The generator trusts it:
 /// it cannot see what really cut the pocket.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -241,11 +247,18 @@ pub fn rest_pocket_with_relief(region: &Region, p: &PocketParams, rest: &RestPar
     } else {
         let full_center = non_sliver_center(region, off)?;
         let full_plan = plan_corner_reliefs(region, &full_center, off, relief)?;
-        full_plan
-            .reliefs
-            .into_iter()
-            .filter(|r| plan.center.contains(r.start))
-            .collect()
+        // #3146: a relief starts at a vertex of the center area, which is
+        // on the rest center's boundary where the rest area touches the
+        // corner; a bare point-in-region test drops it by rounding.
+        let reach = plan.center.offset(RELIEF_START_TOL)?;
+        let (kept, dropped): (Vec<_>, Vec<_>) = full_plan.reliefs.into_iter().partition(|r| reach.contains(r.start));
+        for r in &dropped {
+            notes.push(format!(
+                "corner relief at ({:.3}, {:.3}) is not cut: the rest area does not reach that corner",
+                r.corner.x, r.corner.y
+            ));
+        }
+        kept
     };
     let (mut passes, cut_center) = rest_passes(&plan, p.tool_diameter, p.tiling_step(), p.climb)?;
     if p.strategy == PocketStrategy::Zigzag {

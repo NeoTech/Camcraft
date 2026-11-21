@@ -536,7 +536,7 @@ pub(crate) fn gizmos(state: &State) -> Vec<Gizmo> {
 /// nothing - a highlight must never promise a pick the click cannot make.
 #[cfg(test)]
 pub(crate) fn hover_features(state: &State, aspect: f64) -> Vec<([f32; 2], [f32; 2])> {
-    if !aspect.is_finite() || aspect <= 0.0 || state.hover.as_ref().and_then(|h| h.feature).is_none() {
+    if !aspect.is_finite() || aspect <= 0.0 || state.hover.as_ref().and_then(|h| h.feature.as_ref()).is_none() {
         return Vec::new();
     }
     let resolved = crate::pick_highlight::resolved_hover(state);
@@ -575,6 +575,14 @@ pub(crate) fn feature_segments(
     if state.hidden_in_view(entity) {
         return;
     }
+    let mvp = state.cam.mvp(aspect);
+    if matches!(sel, FeatureSel::SketchChain(_) | FeatureSel::SketchLayer(_)) {
+        let id_loc = camcraft_app::schema::Location::default();
+        for poly in crate::pick_highlight::sketch_polylines(&state.world, entity, &sel) {
+            push_poly(&mvp, &id_loc, &poly.pts, poly.closed, out);
+        }
+        return;
+    }
     let Some(found) = model::find_by_name(&state.world, entity) else {
         return;
     };
@@ -582,7 +590,6 @@ pub(crate) fn feature_segments(
         return;
     };
     let loc = camcraft_app::setup_align::view_pose(&state.world, &found).unwrap_or_default(); // #326
-    let mvp = state.cam.mvp(aspect);
     match sel {
         FeatureSel::Face(fid) => {
             let Some(face) = features.faces.iter().find(|f| f.id == fid) else {
@@ -625,6 +632,7 @@ pub(crate) fn feature_segments(
             let w = transform_point(Point3::new(v[0], v[1], v[2]), loc.pos, loc.rot);
             crate::vertex_pick::vertex_marker(&mvp, [w.x, w.y, w.z], aspect, out);
         }
+        FeatureSel::SketchChain(_) | FeatureSel::SketchLayer(_) => {}
     }
 }
 
@@ -1165,8 +1173,14 @@ pub(crate) fn shown_regions(state: &State) -> Vec<(f64, Option<Region>)> {
         let Some(op) = model::operation_of(&state.world, &entity) else {
             continue;
         };
-        let region = crate::frame_memo::region_of(&state.world, &name, &op);
-        if let Some(z) = operation::region_z(&state.world, op.setup.as_deref(), Some(&op.src), &op.params)
+        // A per-frame display read: a sketch Z span may come from the frame memo.
+        let (region, z) = operation::display_heights(|| {
+            (
+                crate::frame_memo::region_of(&state.world, &name, &op),
+                operation::region_z(&state.world, op.setup.as_deref(), Some(&op.src), &op.params),
+            )
+        });
+        if let Some(z) = z
             && (region.is_some() || !operation::chains_of(&state.world, &op).is_empty())
         {
             out.push((z, region));
@@ -1361,6 +1375,8 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
         // The electrode retracts to its approach plane only (#541).
         | operation::OpParams::SinkerBurn(_)
         | operation::OpParams::SinkerSideBurn(_) => None,
+        // #1444: the undercut's feed-down plane at its entry station.
+        operation::OpParams::SlotUndercut(p) => p.retract_z,
     };
     if let Some(hop) = hop
         && let (Some(r), Some(c)) = (resolve(hop), resolve(draft.clearance()))
@@ -1499,6 +1515,8 @@ pub(crate) fn height_planes(state: &State) -> Vec<HeightPlane> {
             burn: operation::SinkerBurnOp { top_z, floor_z: bottom_z, .. },
             ..
         })
+        // #1444: the material top and the undercut's floor.
+        | operation::OpParams::SlotUndercut(operation::SlotUndercutOp { top_z, bottom_z, .. })
         | operation::OpParams::Deburr { top_z, bottom_z, .. } => {
             if let Some(z) = resolve(*top_z) {
                 out.push(HeightPlane {
@@ -1720,6 +1738,22 @@ fn feature_lines(state: &State, items: &[GeoSel]) -> Vec<[f32; 6]> {
         if state.hidden_in_view(&item.entity) {
             continue; // display-off models are transparent to picking and drawing
         }
+        if matches!(item.feature, FeatureSel::SketchChain(_) | FeatureSel::SketchLayer(_)) {
+            for poly in crate::pick_highlight::sketch_polylines(&state.world, &item.entity, &item.feature) {
+                let n = poly.pts.len();
+                if n < 2 || (poly.closed && n < 3) {
+                    continue;
+                }
+                let last = if poly.closed { n } else { n - 1 };
+                for i in 0..last {
+                    let a = Point3::new(poly.pts[i][0], poly.pts[i][1], poly.pts[i][2]);
+                    let q = poly.pts[(i + 1) % n];
+                    let b = Point3::new(q[0], q[1], q[2]);
+                    push_line(&mut out, a, b, overlay(Overlay::Pick));
+                }
+            }
+            continue;
+        }
         let Some(entity) = model::find_by_name(&state.world, &item.entity) else {
             continue;
         };
@@ -1740,9 +1774,9 @@ fn feature_lines(state: &State, items: &[GeoSel]) -> Vec<[f32; 6]> {
                 push_line(out, a, b, overlay(Overlay::Pick));
             }
         };
-        match item.feature {
+        match &item.feature {
             FeatureSel::Face(fid) => {
-                let Some(face) = features.faces.iter().find(|f| f.id == fid) else {
+                let Some(face) = features.faces.iter().find(|f| f.id == *fid) else {
                     continue; // stale id: the model re-meshed since the pick
                 };
                 for l in &face.loops {
@@ -1755,7 +1789,7 @@ fn feature_lines(state: &State, items: &[GeoSel]) -> Vec<[f32; 6]> {
                 }
             }
             FeatureSel::Chain(cid) => {
-                let Some(chain) = camcraft_app::model::resolve_chain(&features, cid) else {
+                let Some(chain) = camcraft_app::model::resolve_chain(&features, *cid) else {
                     continue;
                 };
                 let pts = feature::chain_points(&features, &chain);
@@ -1765,7 +1799,7 @@ fn feature_lines(state: &State, items: &[GeoSel]) -> Vec<[f32; 6]> {
                 // The weld's outline, not the seams inside it: the seam
                 // edges are exactly what the patch dissolved, and
                 // drawing them would advertise strips the pick is not.
-                let Some(rings) = model::patch_rings(&features, pid) else {
+                let Some(rings) = model::patch_rings(&features, *pid) else {
                     continue; // stale id: the model re-meshed since the pick
                 };
                 for r in rings.iter() {
@@ -1779,7 +1813,7 @@ fn feature_lines(state: &State, items: &[GeoSel]) -> Vec<[f32; 6]> {
             }
             FeatureSel::Vertex(vid) => {
                 // A point has no outline: a small 3-axis cross pins it.
-                let Some(v) = feature::resolve_vertex(&features, vid)
+                let Some(v) = feature::resolve_vertex(&features, *vid)
                     .and_then(|vi| features.verts.get(vi as usize))
                 else {
                     continue; // stale id: the model re-meshed since the pick
@@ -1792,6 +1826,7 @@ fn feature_lines(state: &State, items: &[GeoSel]) -> Vec<[f32; 6]> {
                     push_line(&mut out, a, b, overlay(Overlay::Pick));
                 }
             }
+            FeatureSel::SketchChain(_) | FeatureSel::SketchLayer(_) => {}
         }
     }
     out

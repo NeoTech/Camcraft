@@ -1043,6 +1043,7 @@ fn plasma_plate_with_holes_matches_golden() {
         cut_height: None,
         pierce_delay: Some(0.5),
         model_excess: 0.0,
+        file_tolerance: false,
     };
     let path = plasma_profile(&loops, &[], &part, &p).unwrap();
     let text = gen_to_cltext(&path);

@@ -4,6 +4,9 @@ crates/*/tests/golden/** text eol=lf
 crates/*/tests/recorded/** text eol=lf
 crates/*/tests/fixtures/** text eol=lf
 
+# The Agie control reads CRLF records. Preserve the tested native bytes.
+crates/post/tests/golden/agie-setup/* -text whitespace=trailing-space,space-before-tab,cr-at-eol
+
 # Machine definitions and fixture descriptions are included or parsed with LF.
 crates/*/tests/**/*.mch text eol=lf
 assets/machines/**/*.mch text eol=lf

@@ -296,6 +296,10 @@ fn a_rotary_contour_on_a_reduced_model_is_judged_and_past_the_bound_refused_by_n
     let low = rotary(Some(TIGHT), 10.0);
     assert!(blocking(&low, "OP").iter().any(|w| matches!(w, Warning::RapidInStock { .. })), "{:?}", blocking(&low, "OP"));
     assert_eq!(fidelity_lines(&rotary(Some(TOO_COARSE), 25.0)), vec![refusal("OP", "0.030")]);
+    // #2996: the rotary field's allowance also guards the shank, so the
+    // kind never takes the widening: a 0.019 mm model, which a mill kind
+    // posts against, still refuses it by name.
+    assert_eq!(fidelity_lines(&rotary(Some(0.019), 25.0)), vec![refusal("OP", "0.019")]);
 }
 
 // ---- the registry ----------------------------------------------------------
@@ -346,7 +350,8 @@ fn every_kind_is_either_judged_or_refused_for_a_stated_reason_on_a_reduced_model
     // walls, so a reduced model is refused until it reads the excess.
     // SinkerSideBurn (#545): its lateral move is judged against the same
     // walls - refused on a reduced model for the same reason.
-    let refused = [Swarf, AdvancedSwarf, Trace, Engrave, Chamfer2D, Deburr, WireContour, SinkerBurn, SinkerSideBurn];
+    // SlotUndercut (#1444): its undercut law does not read the excess yet.
+    let refused = [Swarf, AdvancedSwarf, Trace, Engrave, Chamfer2D, Deburr, WireContour, SinkerBurn, SinkerSideBurn, SlotUndercut];
     for row in KindInfo::ALL {
         assert_eq!(problem(row.ty, None, None), None, "{:?}: full fidelity is untouched", row.ty);
         let said = problem(row.ty, Some(TIGHT), None);

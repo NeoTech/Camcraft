@@ -101,6 +101,8 @@ pub struct FeatureNamesMemo {
 #[derive(Component, Debug, Clone, Copy, PartialEq)]
 pub struct ReducedFidelity {
     pub chord_mm: f64,
+    /// File tolerance alone caused this chord; false keeps the strict law.
+    pub file_tolerance: bool,
 }
 
 /// A person vouched for this model's mesh while it was of unknown fidelity
@@ -388,6 +390,10 @@ impl ToolBody {
 /// or collet the setup holds the work in; `None`, the default and every
 /// earlier file, states none. Read through [`crate::setup_workholding`];
 /// written only by `SetSetupWorkholdingRpm` and the project loader.
+/// `sheet_job` (#3070) is the guided sheet job's answers (size, Z zero,
+/// through-cut allowance, XY zero, clamp clearance); `None`, the default
+/// and every earlier file, states none. Read through [`crate::sheet_job`];
+/// written only by `SetSheetJob` and the project loader.
 #[derive(Component, Debug, Clone, PartialEq)]
 pub struct SetupDef {
     pub stock: String,
@@ -403,6 +409,7 @@ pub struct SetupDef {
     pub post_properties: Option<PostScriptOptions>,
     pub nose_to_axis: Option<f64>,
     pub workholding_max_rpm: Option<f64>,
+    pub sheet_job: Option<crate::sheet_job::SheetJob>,
 }
 
 /// The M3.2 stage B marker turning a model entity into a FIXTURE: the

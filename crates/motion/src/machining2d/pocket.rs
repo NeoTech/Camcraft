@@ -313,9 +313,15 @@ pub(super) fn pocket_over_with_relief(
         }
         s => (plan_passes(center, p.tiling_step(), p.climb, s)?, s, None, Vec::new()),
     };
-    if hold_crossings && strategy == PocketStrategy::Zigzag {
+    // #3021: rows alone leave a cusp between row ends on every wall and
+    // island; each Zigzag pocket closes with the area's boundary rings.
+    // A blended row turn can cross a ring, so the blends obey the
+    // crossing law as the rest pocket's do.
+    let zigzag = strategy == PocketStrategy::Zigzag;
+    if zigzag {
         passes = rest_passes(center, p.tiling_step(), p.climb)?;
     }
+    let hold_crossings = hold_crossings || zigzag;
     emit_pocket_passes(
         b,
         p,

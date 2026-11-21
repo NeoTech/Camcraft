@@ -184,10 +184,10 @@ fn off_axis(n: Point3) -> String {
 /// or the named reason it cannot make one.
 pub fn probe_seed(world: &World, setup: Option<&str>, sel: &GeoSel) -> Result<ProbeSeed, String> {
     let cx = PickCtx::of(world, &sel.entity, setup)?;
-    match sel.feature {
-        FeatureSel::Face(id) => face_seed(&cx, id),
+    match &sel.feature {
+        FeatureSel::Face(id) => face_seed(&cx, *id),
         FeatureSel::Chain(id) => {
-            let chain = crate::model::resolve_chain(&cx.features, id)
+            let chain = crate::model::resolve_chain(&cx.features, *id)
                 .ok_or("the picked edge is no longer in the model - re-pick it")?;
             if chain.closed {
                 super::probe_pick_round::rim_seed(&cx, &chain)
@@ -195,8 +195,12 @@ pub fn probe_seed(world: &World, setup: Option<&str>, sel: &GeoSel) -> Result<Pr
                 edge_seed(&cx, &chain)
             }
         }
-        FeatureSel::Patch(id) => super::probe_pick_round::wall_seed(&cx, id),
-        FeatureSel::Vertex(id) => corner_seed(&cx, id),
+        FeatureSel::Patch(id) => super::probe_pick_round::wall_seed(&cx, *id),
+        FeatureSel::Vertex(id) => corner_seed(&cx, *id),
+        FeatureSel::SketchChain(_) | FeatureSel::SketchLayer(_) => Err(format!(
+            "{} is a DXF sketch pick, which carries no 3D surface to probe",
+            crate::pick::geo_label(world, sel)
+        )),
     }
 }
 

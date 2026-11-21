@@ -21,7 +21,7 @@ use camcraft_app::commands::{
     ClearToolpath, CreateSetup, DeleteEntity, DeleteFixture, DeleteOperation, DeleteSetup, DeleteTool,
     EditOperationLinks, EditOperationParams, History, ImportModel,
     MoveModel, PasteOperation, RegenerateAll, MarkOperationReviewed, RenameOperation, ReorderOperation, RepairModel, SelectEntity, SetOperationGeometry,
-    SetFixtureFixed, SetOperationSetup, SetStock, SetToolNumber, SetUnits, SetWcsOrigin,
+    SetFixtureFixed, SetOperationSetup, SetToolNumber, SetUnits, SetWcsOrigin,
     SetWorkMaterial, TagFixture, UntagFixture, ImportFixture,
     UpdateModel, theme_of,
 };
@@ -32,6 +32,7 @@ use camcraft_app::operation::{
     self, AreaControls, FeatureSel, GeoSel, Height, HeightReference, OpParams, SrcRef,
 };
 use camcraft_app::schema::{ColorVision, Location, Operation as OperationDef, PostRef, ThemeRef};
+use camcraft_app::geometry::stock_axis::{StockAxis, stock_axis_of};
 use camcraft_app::stock::StockShape;
 use camcraft_app::stock_fit::FitKind as StockFitKind;
 use camcraft_app::tools::{Tool, ToolKind, catalog};
@@ -40,6 +41,9 @@ use camcraft_app::{machine, model, posting, project, world::new_world};
 
 #[path = "state_per_op.rs"]
 mod per_op;
+#[path = "state_stock_pose.rs"]
+mod stock_pose;
+pub use stock_pose::SIM_NOTE_TILTED;
 #[path = "state_browser.rs"]
 mod browser;
 #[path = "state_picked.rs"]
@@ -62,6 +66,8 @@ pub use pockets::PocketScan;
 mod setup_post_options;
 #[path = "state_setup_workholding.rs"]
 mod setup_workholding;
+#[path = "state_sheet_job.rs"]
+mod sheet_job;
 #[path = "state_fixture.rs"]
 mod fixture_view;
 #[path = "state_locate.rs"]
@@ -173,6 +179,13 @@ pub enum CommandKind {
         pos: [f64; 3],
         yaw_deg: f64,
     },
+    /// #2576: the Stock page's Apply - the shape, its place and its whole
+    /// turn (a unit quaternion from the axis choice), one `SetStock`.
+    SetStockPose {
+        shape: StockShape,
+        pos: [f64; 3],
+        rot: [f64; 4],
+    },
     /// #1094: the stock page's "raw stock only" checkbox for a from-model
     /// stock's source model, one undo unit (`SetStockSourceOnly`).
     SetRawStockOnly(bool),
@@ -255,6 +268,8 @@ pub enum CommandKind {
     /// #1031: state (`Some`) or clear a setup's workholding maximum rpm
     /// (`SetSetupWorkholdingRpm`).
     SetSetupWorkholdingRpm { setup: String, max_rpm: Option<f64> },
+    /// #3070: set up (`Some`) or clear the setup's sheet job (`SetSheetJob`).
+    SetSheetJob { setup: String, job: Option<camcraft_app::sheet_job::SheetJob> },
     /// The post's user options (issue #34): the undoable
     /// `SetPostOptions` with the picked value.
     SetPostOptions(camcraft_app::schema::PostOptions),
@@ -805,7 +820,10 @@ pub struct StockUi {
     pub x: f64,
     pub y: f64,
     pub z: f64,
-    pub yaw_deg: f64,
+    /// #2576: which way the stock's own Z runs (Z, X, Y or Custom).
+    pub axis: StockAxis,
+    /// #2576: `[yaw, pitch, roll]` in degrees, read for Custom only.
+    pub angles_deg: [f64; 3],
     pub fit_margin: f64,
     /// #198: fit a box by a separate allowance per side instead of the
     /// one margin.
@@ -829,7 +847,8 @@ impl Default for StockUi {
             x: 0.0,
             y: 0.0,
             z: 0.0,
-            yaw_deg: 0.0,
+            axis: StockAxis::Z,
+            angles_deg: [0.0; 3],
             fit_margin: 2.0,
             fit_per_side: false,
             fit_sides: [2.0; 6],
@@ -1237,6 +1256,10 @@ impl ToolUi {
                 ToolKind::ThreadMillSingle => 15,
                 ToolKind::Waterjet => 16,
                 ToolKind::Wire => 17,
+                ToolKind::TSlot => 18,
+                ToolKind::Keyseat => 19,
+                ToolKind::Dovetail => 20,
+                ToolKind::Lollipop => 21,
             },
             diameter: t.diameter,
             corner_r: t.corner_r,
@@ -1291,6 +1314,10 @@ impl ToolUi {
             15 => ToolKind::ThreadMillSingle,
             16 => ToolKind::Waterjet,
             17 => ToolKind::Wire,
+            18 => ToolKind::TSlot,
+            19 => ToolKind::Keyseat,
+            20 => ToolKind::Dovetail,
+            21 => ToolKind::Lollipop,
             _ => ToolKind::EndMill,
         }
     }
@@ -2514,7 +2541,8 @@ impl State {
                 self.stock_ui.x = loc.pos.x;
                 self.stock_ui.y = loc.pos.y;
                 self.stock_ui.z = loc.pos.z;
-                self.stock_ui.yaw_deg = quat_yaw_deg(loc.rot);
+                // #2576: the whole turn reads back, not only its Z twist.
+                (self.stock_ui.axis, self.stock_ui.angles_deg) = stock_axis_of(loc.rot);
             }
             match model::stock_def_of(&self.world, &entity) {
                 Some(StockShape::Box { dx, dy, dz }) => {
@@ -2778,11 +2806,11 @@ impl State {
             .enumerate()
             .map(|(gi, g)| {
                 let pick_name = camcraft_app::pick::geo_label(&self.world, g);
-                let (mut label, missing) = match g.feature {
+                let (mut label, missing) = match &g.feature {
                     FeatureSel::Face(id) => {
                         let face = model::find_by_name(&self.world, &g.entity)
                             .and_then(|e| model::features_of(&self.world, &e))
-                            .and_then(|f| f.faces.iter().find(|fa| fa.id == id).cloned());
+                            .and_then(|f| f.faces.iter().find(|fa| fa.id == *id).cloned());
                         match face {
                             Some(f) => {
                                 // Which axis the face sits at, on the
@@ -2816,7 +2844,7 @@ impl State {
                         let found = model::find_by_name(&self.world, &g.entity)
                             .and_then(|e| model::features_of(&self.world, &e))
                             .map(|f| {
-                                let c = camcraft_app::model::resolve_chain(&f, id)?;
+                                let c = camcraft_app::model::resolve_chain(&f, *id)?;
                                 let pts = feature::chain_points(&f, &c);
                                 Some((c, pts))
                             })
@@ -2879,11 +2907,11 @@ impl State {
                             .and_then(|e| model::features_of(&self.world, &e))
                             .and_then(|f| {
                                 // #2247: both memoized per feature set.
-                                let strips = model::patches(&f).iter().find(|p| p.id == id)?.faces.len();
+                                let strips = model::patches(&f).iter().find(|p| p.id == *id)?.faces.len();
                                 let mut seen: Vec<Vec<(i64, i64)>> = Vec::new();
                                 let mut closed: Vec<Vec<[f64; 3]>> = Vec::new();
                                 let mut open = false;
-                                for r in model::patch_rings(&f, id)?.iter() {
+                                for r in model::patch_rings(&f, *id)?.iter() {
                                     let pts: Vec<[f64; 3]> = r
                                         .verts
                                         .iter()
@@ -2947,7 +2975,7 @@ impl State {
                         }
                     }
                     FeatureSel::Vertex(id) => {
-                        match crate::vertex_pick::vertex_world(self, &g.entity, id) {
+                        match crate::vertex_pick::vertex_world(self, &g.entity, *id) {
                             Some(p) => (
                                 format!(
                                     "{pick_name} · ({}, {}, {}) {}",
@@ -2958,6 +2986,14 @@ impl State {
                                 ),
                                 false,
                             ),
+                            None => (format!("{pick_name} · missing"), true),
+                        }
+                    }
+                    // #2238 frame cost: the sketch chip text is cached by
+                    // drawing, entity, pick and display unit.
+                    FeatureSel::SketchChain(_) | FeatureSel::SketchLayer(_) => {
+                        match crate::sketch_chip_memo::sketch_chip(&self.world, &g.entity, &g.feature, unit) {
+                            Some((tail, missing)) => (format!("{pick_name} · {tail}"), missing),
                             None => (format!("{pick_name} · missing"), true),
                         }
                     }
@@ -3436,20 +3472,8 @@ impl State {
                 shape,
                 pos,
                 yaw_deg,
-            } => {
-                let location = Location {
-                    pos: Point3::new(pos[0], pos[1], pos[2]),
-                    rot: quat_from_yaw(yaw_deg.to_radians()),
-                };
-                match SetStock::new(&self.world, shape, location) {
-                    Ok(command) => {
-                        self.history.execute(&self.world, command);
-                        self.doc_version += 1;
-                        self.status = String::from("stock set");
-                    }
-                    Err(err) => self.refuse(ErrorScope::Setup, format!("stock not set: {err}")),
-                }
-            }
+            } => self.dispatch_set_stock(shape, pos, quat_from_yaw(yaw_deg.to_radians())),
+            CommandKind::SetStockPose { shape, pos, rot } => self.dispatch_set_stock(shape, pos, rot),
             CommandKind::SetStockMaterial(m) => {
                 match camcraft_app::commands::SetStockMaterial::new(&self.world, m) {
                     Ok(command) => {
@@ -3503,6 +3527,7 @@ impl State {
             CommandKind::SetupOwnPostOptions { setup, own } => self.own_post_options(&setup, own),
             CommandKind::SetupNoseToAxis { setup, value } => self.set_setup_nose(&setup, value),
             CommandKind::SetSetupWorkholdingRpm { setup, max_rpm } => self.set_workholding_rpm(&setup, max_rpm),
+            CommandKind::SetSheetJob { setup, job } => self.set_sheet_job(&setup, job),
             CommandKind::EditMachineDialog => {
                 let (path, m) = machine::of(&self.world);
                 match m {
@@ -4414,7 +4439,7 @@ impl State {
                 }
                 if model::find_by_name(&self.world, &name).is_some() {
                     let (coarse, budget, hole) = (command.coarse_mm, command.facet_budget, command.hole);
-                    match UpdateModel::new(&self.world, &name, command.mesh).map(|u| u.with_fidelity(coarse).with_hole(hole).with_budget(budget).with_step_source(command.step_source).with_source(command.source)) {
+                    match UpdateModel::new(&self.world, &name, command.mesh).map(|u| u.with_fidelity(coarse).with_file_tolerance(command.file_tolerance).with_hole(hole).with_budget(budget).with_step_source(command.step_source).with_source(command.source)) {
                         Ok(upd) => {
                             let summary = upd.changes().describe();
                             self.history.execute(&self.world, upd);

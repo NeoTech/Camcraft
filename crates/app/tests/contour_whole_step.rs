@@ -147,6 +147,7 @@ fn contour_params(top_z: Height, stepdown: f64, tab_width: f64, tab_height: f64)
         blend_turns: false,
         links: camcraft_app::links::Links::PLANAR,
         tilt: None,
+        chain_overrides: Vec::new(),
     }
 }
 

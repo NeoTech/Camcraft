@@ -22,6 +22,7 @@ use camcraft_app::schema::Location;
 use camcraft_app::stock::StockShape;
 use camcraft_app::stock_fit::{self, FitKind};
 use camcraft_app::tools::{self, Tool};
+use camcraft_app::verify::Warning;
 use camcraft_app::vise::{ViseSize, size as vise_size};
 use flecs_ecs::prelude::World;
 
@@ -192,7 +193,7 @@ pub(super) fn build_workholding_world() -> World {
         stepdown: 2.0, feed: 1200.0, plunge_feed: 300.0, climb: true, side: Side::Outside,
         lead: Lead::Arc { radius: 4.0 }, tolerance: 0.01, tab_count: 0, tab_width: 8.0,
         tab_height: 3.0, entry: Entry3D::Plunge, helix_radius: 1.0, blend_turns: false,
-        links: Links::PLANAR, tilt: None,
+        links: Links::PLANAR, tilt: None, chain_overrides: Vec::new(),
     });
     world
 }
@@ -337,6 +338,32 @@ fn indexed_guide_preserves_legacy_basis_and_path() {
         }
     }
     for warning in &expected.warnings {
-        assert!(actual.warnings.contains(warning), "documented warning lost: {warning:?}");
+        assert!(actual.warnings.iter().any(|w| same_warning(warning, w)), "documented warning lost: {warning:?}");
     }
+}
+
+/// #3233: the saved cache predates #2991, which gives a 3+2 first-traverse
+/// warning in the user's frame (`tilted`). The guide documents both forms:
+/// the same stock or fixture top and the same raise, along the tool axis.
+/// Every other warning must come back exactly.
+fn same_warning(saved: &Warning, regenerated: &Warning) -> bool {
+    match (saved, regenerated) {
+        (
+            Warning::FirstTraverseLow { at, height_mm, top_mm, fixture, tilted: false },
+            Warning::FirstTraverseLow { at: a, height_mm: h, top_mm: t, fixture: f, tilted: true },
+        ) => at == a && fixture == f && ((top_mm - height_mm) - (t - h)).abs() <= 0.000_001,
+        _ => saved == regenerated,
+    }
+}
+
+#[test]
+fn a_legacy_first_traverse_warning_matches_only_the_same_raise() {
+    let low = |height_mm, top_mm, fixture, tilted| Warning::FirstTraverseLow { at: 0, height_mm, top_mm, fixture, tilted };
+    let saved = low(10.0, 11.113_929, false, false);
+    assert!(same_warning(&saved, &low(30.0, 31.113_929, false, true)), "the same raise in the user's frame");
+    assert!(!same_warning(&saved, &low(30.0, 32.0, false, true)), "a different raise is lost");
+    assert!(!same_warning(&saved, &low(30.0, 31.113_929, true, true)), "a fixture top is not the stock top");
+    assert!(!same_warning(&saved, &low(30.0, 31.113_929, false, false)), "an upright warning matches only exactly");
+    assert!(!same_warning(&saved, &Warning::FirstTraverseLow { at: 1, height_mm: 30.0, top_mm: 31.113_929, fixture: false, tilted: true }));
+    assert!(same_warning(&saved, &saved.clone()), "an unchanged warning still matches");
 }

@@ -38,6 +38,7 @@ mod stamp_rise;
 mod stamp_tests;
 pub mod axis;
 mod axis_consensus;
+pub mod axis_helix;
 mod axis_point;
 mod axis_poles;
 mod axis_refine;

@@ -23,8 +23,11 @@ refusal text was not true for this model. A legal program was refused.
 
 A loop that carries a bevel on part of its length is never a moved copy of
 its wall. Its bevelled side moves in. Its sharp sides stay. The opposite
-side would have to move out, and a chamfer does not do that. Thus the new
-test cannot hide a case of #2887.
+side would have to move out, and a chamfer does not do that. But an
+undercut lip can move a side out. A bevel on one side and an equal lip on
+the other side give a moved copy (#2944). Thus #2944 takes the move from
+the operation frame, not from the sections. See
+`docs/decisions/2944-chamfer-lean-frame.md`.
 
 The test does not depend on tessellation. The vector is the difference of
 the two area centroids. A collinear vertex does not change an area

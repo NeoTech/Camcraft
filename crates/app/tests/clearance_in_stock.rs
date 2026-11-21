@@ -58,6 +58,7 @@ fn contour(clearance: f64, retract: f64) -> OpParams {
         helix_radius: 1.0,
         blend_turns: false,
         links: camcraft_app::links::Links::PLANAR,
+        chain_overrides: Vec::new(),
     }
 }
 
@@ -142,7 +143,7 @@ fn traverses_convicted(tp: &camcraft_app::schema::Toolpath, plane: f64) -> Vec<u
 
 /// #2901: the first-traverse verdict for the plane `LOW` under the
 /// stock top: the first rapid comes from an unknown X/Y at that plane.
-const FIRST_LOW: Warning = Warning::FirstTraverseLow { at: 0, height_mm: LOW, top_mm: STOCK_TOP, fixture: false };
+const FIRST_LOW: Warning = Warning::FirstTraverseLow { at: 0, height_mm: LOW, top_mm: STOCK_TOP, fixture: false, tilted: false };
 
 fn first_traverse_refused(tp: &camcraft_app::schema::Toolpath) -> bool {
     tp.warnings.contains(&FIRST_LOW)

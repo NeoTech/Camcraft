@@ -48,6 +48,7 @@ pub(crate) fn zones_for_op(world: &World, op: &Operation, op_name: &str) -> Vec<
                 &mut job.stock_aabb,
                 &mut job.picked_region,
                 &mut job.contour_sel,
+                &mut job.sketch_contour,
                 &mut job.drive_chains,
                 &mut job.slot_bound,
                 &mut job.prior,

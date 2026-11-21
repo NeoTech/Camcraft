@@ -125,6 +125,8 @@ fn op_problem(op: &Operation, cache: Option<crate::schema::Toolpath>) -> Option<
         OpParams::WireContour(_)
             | OpParams::SinkerBurn(_)
             | OpParams::SinkerSideBurn(_)
+            // #1444: not verified mirrored (the climb side swaps).
+            | OpParams::SlotUndercut(_)
             | OpParams::RotaryContour { .. }
             | OpParams::RotaryParallel { .. }
             | OpParams::RotaryOffset { .. }

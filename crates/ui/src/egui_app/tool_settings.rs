@@ -219,6 +219,8 @@ pub(super) fn seed_kind(state: &mut State, before: usize) {
     }
     // The thread mills (#894): a form and a pitch.
     super::tool_thread_mill_row::seed(&mut state.tool_ui);
+    // The undercut cutters (#1444): head wider than neck, and dovetail flank angle.
+    super::tool_undercut_row::seed(&mut state.tool_ui);
     // The torch (#670): no spindle, no corner - a kerf. The sinker
     // electrode (#541) and EDM wire (#2011) turn none either.
     if matches!(

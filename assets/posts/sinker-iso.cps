@@ -89,6 +89,8 @@ function clean(s) {
   return t.length > 40 ? t.substring(0, 40).trim() : t;
 }
 function note(s) { if (s) block(["(" + s + ")"]); }
+// Program notes use this dialect without truncating the stated bound.
+function onComment(s) { note(commentText(s)); }
 function machineName() {
   var m = typeof machine !== "undefined" ? machine : null;
   return (m && (m.name || m.model)) || "the machine";

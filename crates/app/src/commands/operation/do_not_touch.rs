@@ -53,7 +53,7 @@ pub(super) fn validate_do_not_touch(
             FeatureSel::Face(id) => features.faces.iter().any(|f| f.id == id),
             FeatureSel::Patch(id) => feature::patches(&features).iter().any(|p| p.id == id),
             FeatureSel::Chain(id) => feature::resolve_chain(&features, id).is_some(),
-            FeatureSel::Vertex(_) => false,
+            FeatureSel::Vertex(_) | FeatureSel::SketchChain(_) | FeatureSel::SketchLayer(_) => false,
         };
         if !found {
             return Err(CommandError::Invalid(format!(

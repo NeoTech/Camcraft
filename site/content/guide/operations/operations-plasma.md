@@ -38,7 +38,34 @@ judged instead by the plasma laws at the post gate (below).
 
 ## Plasma Profile
 
+<!-- catalog:examples:start -->
+**Example cases**
+
+No catalog case yet.
+<!-- catalog:examples:end -->
+
 {{ <icon name="op-plasma-profile" /> }} ![Top view of torch travel from a pierce point along the lead and outer plate profile.](../../../operation-paths.svg#PlasmaProfile)
+
+### Stored torch recipes
+
+A plasma torch can store cut-data recipes by material and exact plate
+thickness. Each recipe states its cut feed and kerf. It can also hold cut,
+pierce and transfer heights, pierce delay, puddle-jump percentage and dwell,
+amperage, arc voltage, pierce capacity and an edge-start flag. Blank
+optional values mean the controller's own table; no cut-chart values are
+supplied or inferred.
+
+Recipes enter through a project, a tool library or an MCP tool definition.
+The tool editor preserves them but has no recipe editor yet. **Stored
+recipes do not set operation parameters, toolpaths or posted output yet.**
+Continue to set the operation or controller table explicitly.
+
+A bad recipe is refused by tool name. Thickness, kerf and feed must be
+positive. Duplicate material-and-thickness entries are refused. A plate
+thicker than the stated pierce capacity requires an edge start. Material
+alone never selects a thickness recipe, and no nearest thickness is used.
+
+### Operation settings
 
 **For:** cutting parts out of flat plate: one through-cut per contour,
 with the kerf offset to the waste side, arc leads, holes before the

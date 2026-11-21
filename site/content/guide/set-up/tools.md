@@ -12,8 +12,8 @@ tool a unique name, and select its type. Enter its cutter, flute, shank,
 holder, speed and feed values. Choose **Add tool** to save it.
 
 To change a document tool, select it in the browser. Its settings show
-directly in the Properties pane: geometry, holder, body and profile,
-cutting data, tool numbers and identification. The setup's Tool list opens
+directly in the Properties pane: geometry, holder, cutting data, tool
+numbers and identification. The setup's Tool list opens
 the same form. Change the fields and choose **Apply**. The Tool list's
 **Edit** button opens the wider editor, and **Close** closes it. Browsing the catalog, **Add**,
 **New tool…** and import and export live in the separate **Tool library**
@@ -38,10 +38,15 @@ the tool: `<operation>: left-hand tap <tool> is not supported by posting`.
 Right-hand output is unchanged. The hand travels with the tool in
 projects, tool libraries and undo.
 
-The tool editor's preview shows the tool body in place of an overlapping
-parameter holder. For a machine-default holder you have not changed, it
-shows the conservative parameter-cylinder floor that the checks use. The
-editor keeps its width when a number is too long for its field.
+Choose **Edit tool shape** to open `Tool shape: <name>`. The holder
+library comes first, followed by the **Body** and **Profile** tabs. Body
+imports and drawn profiles are edited there; Properties keeps the tool's
+settings. **Close** closes the shape window and keeps the tool.
+
+The side preview draws the holder bands used by the collision check.
+For a machine-default holder you have not changed, it includes the
+conservative parameter-cylinder floor that the checks use. The 3D body
+view appears while a Pick button is armed for a tip or axis pick.
 
 A **Waterjet nozzle** is a tool kind for waterjet machines (see
 [Machine types](@/guide/check-and-post/machines.md)).
@@ -70,6 +75,19 @@ holder by its library name, and the Properties show the holder diameter
 and length of that entry. The profile table shows its outline. If you
 edit a point and choose **Apply profile**, the holder becomes a custom
 profile.
+
+The library holder is a reference: its entry name, gauge length and
+projection travel with the tool. A corrected library entry therefore
+reaches tools that name it. An unknown entry or an invalid fit is refused
+by name; CamCraft does not substitute another holder. Applying an
+unchanged outline keeps the reference. Editing a point makes it custom.
+
+**Breaking file change:** holder references require project format
+version 70 or later, and `.camtools` version 4 or later. Older builds
+that support only project version 69 or tool-library version 3 refuse
+these newer files. An older drawn copy loads as a custom profile with
+the same outline. An older holder cylinder keeps its own dimensions;
+neither is silently converted into a library reference.
 
 Check the dimensions against the real assembly. A library entry does not
 measure the holder installed on your machine.
@@ -106,14 +124,28 @@ The combined body is saved with the project and tool library.
 holder cylinder. A turning tool without a body does not have a judged
 holder. Read the operation's warnings and [refusals](@/guide/reference/refusals.md).
 
+## Plasma torch recipes
+
+A plasma torch can carry cutting-data recipes for a material and an exact
+plate thickness. A recipe stores cut feed, kerf and optional pierce and
+height data. Projects, tool libraries and MCP tool definitions preserve
+these rows. The tool page preserves them but does not show them as plain
+material rows or offer a recipe editor yet.
+
+The stored recipe does not change the operation or posted program yet.
+See [Stored torch recipes](@/guide/operations/operations-plasma.md#stored-torch-recipes)
+for the fields, validation and current limits.
+
 ## Import and export
 
 **Export library…** writes all document tools to a `.camtools` file, a
 Tormach PathPilot `.csv` tool table, or a Hurco WinMax `.TCM` library
 (selected by the save filter or extension).
 If the chosen filename has no extension, CamCraft adds `.camtools`.
-The native format is JSON with `format: "camcraft-tools"`, `version: 1`,
+The native format is JSON with `format: "camcraft-tools"`, a `version`,
 `units: "mm"` and a `tools` array of `{name, definition}` records.
+The writer selects the version required by the stored tool data; a
+library with holder references requires at least version 4.
 Lengths in `.camtools` remain millimetres even when the display uses
 inches. Controller tool numbers belong to the document and are not stored
 in `.camtools` definitions.

@@ -100,6 +100,7 @@ behavior only):
 | `WorkOffset` | the setup's work offset as a 1-based NUMBER (PARAM, #931): 1 is the first offset (`G54` on a Fanuc-style control), 6 the sixth. The post writes its own word for it. A script that declares `workOffsetIndex = true` receives the number and states the highest it can express as `workOffsetMax` (6 when unstated); the engine refuses a higher one by setup name. A script without the flag receives the word `G54`..`G59` for offsets 1-6 exactly as before and is refused any offset above 6 by setup name. The stream also reads the legacy words `G54`..`G59` as 1-6 (streams written before #931); any other value is refused by setup name. A script may define `workOffsetName(n)`, what its control calls offset n (`G55`, `G59.1`, `preset 2`) - display only, never the stream |
 | `OriginX` `OriginY` `OriginZ` | the setup's WCS origin, machine coordinates (PARAMs) |
 | `StockXYLeft/Right/Front/Back` `StockZTop` | stock bounds (PARAMs) |
+| `StockZBottom` | optional stock minimum Z in the same frame and units as `StockZTop`; supplied from the setup stock when the machine states its controller identity; the Klartext post uses it to define its blank |
 | `WcsFlip` | the WCS axes that run reversed, as letters (`X`, `Y`, `XY`); absent when no axis is flipped. The engine mirrors the section about the origin before the script reads it: coordinates and arc centres negate, an arc reverses when its plane holds one flipped axis, the compensation side swaps for one flipped XY axis. A flipped `Z`, and a script without `axisInversion = true`, are refused by name (PARAM, #1649) |
 | `StockTurnRadius` | the radius the stock sweeps about the spindle axis (the world Z line through `OriginX/Y`), mm: a round bar's radius, a square bar's half-diagonal; turning machines only, absent on a mill stream (PARAM, #1666) |
 | `Coolant` | `off` / `mist` / `through-tool` (PARAM, #112) - absent means flood; the post picks the machine's code of that family, refusing by operation name when it states none; a script without `coolantModes = true` is refused any non-flood ask (#150) |
@@ -131,6 +132,8 @@ behavior only):
 | `WireFourAxis` | a 4-axis wire section (#537): the pairing rule in words (`arc length` or `sync points`), before the section; its leaning moves carry `WireU` `WireV` exactly as a tapered section's do, and no `WireTaper` |
 | `WireTaperDialect` `WireCorner` `WirePlane` `WireAngle` | a tapered section on an angle-word machine (#1164, `edm.taper_angle`): `angle`, the control's corner rule (`mitre` or `cone`) and the programmed plane's Z (the work's top), before the section; then before each written move the angle word (the stated taper signed by the machine's `positive` side rule, 0 for the move that stands the wire upright) - that move's X Y are the wire's point on the programmed plane, and no `WireU` `WireV` are sent. The cone rule's turning moves are the control's and are not sent |
 | `Contour` `ContourRole` `ParentContour` `SmallHole` | a `TORCH` record (#671): the contour id; on `onTorchOn` also `outer` / `inner` / `open`, the enclosing contour's id (absent = none) and the small-hole feed factor (absent = not small) |
+
+A post that declares `failOnWarning = true` refuses the complete program if the engine or script reports a warning. The standalone post tool then leaves the destination untouched. Informational program header notes can still be written as comments.
 
 ## The hook contract
 
@@ -171,7 +174,11 @@ behavior only):
 - `getProperty(k)` / `setProperty(k, v)` — the `properties` object
 - `message(s)` — counted warning, not text
 - format helpers `formatUnit` / `formatMotion` / `formatFeed`
-- `onComment(s)` — default: `writeln(s)`
+- `onComment(s)` — default: `writeln(s)`; override it to write a valid
+  comment for the controller (see the model-warning example below)
+- `commentText(s)` — cleans comment text without truncation. It replaces
+  comment delimiters with spaces, replaces non-ASCII or control characters
+  with `?`, and collapses whitespace. It does not add comment delimiters.
 - `onPartLoading()` / `onPartUnloading()` / `onPartTransfer()` —
   defaults write the intent as a comment (`(PART LOAD [ADVANCE <mm>])`,
   `(PART UNLOAD)`, `(PART TRANSFER <from>-><to>)`); a script with a
@@ -180,7 +187,42 @@ behavior only):
 - `setLanguageVersion(_v)` — accepted and ignored (the engine decides
   semantics, not the script; a reference-era pragma kept harmless)
 
-The engine calls, in order, if the script defines them: `onOpen`,
+### Model warnings in custom posts
+
+The engine calls `onOpen` first. It then calls `onComment(s)` once for
+each model warning in the program header, before it processes the records.
+The default `onComment` writes bare text. A custom post must select the
+controller's comment form if it outputs these warnings.
+
+For a controller that accepts RS-274 parenthesis comments, use:
+
+```javascript
+function onComment(s) {
+  writeComment(commentText(s));
+}
+```
+
+For example, this hook preserves the complete true-surface bound:
+
+```text
+(Reduced accuracy: model Part was checked to 0.024 mm, not 0.010 mm)
+```
+
+`commentText` preserves the full warning length and its numeric bound.
+Do not use a name cleaner that truncates the warning. Keep both bounds
+and their units. Select delimiters and escaping for the target controller;
+the helper alone does not make every controller's comment form valid.
+
+A custom post can suppress the warning without refusal:
+
+```javascript
+function onComment(s) {}
+```
+
+This suppresses all text sent through `onComment`, including model warnings.
+It does not change the model checks or their bound.
+
+The engine then calls, in order, if the script defines them:
 `onParameter(name, value)` (once per PARAM; `onSpindleSpeed` follows
 the `SpindleSpeed` PARAM), `onToolChange(number, name)` (once per
 `TOOL`), `onSection` / `onSectionEnd` (one per span), then per

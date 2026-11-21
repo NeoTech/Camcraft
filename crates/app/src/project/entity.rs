@@ -326,6 +326,10 @@ pub struct SetupDto {
     /// additive (no version step). Absent - every older file - states none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workholding_max_rpm: Option<f64>,
+    /// #3070: the guided sheet job's answers, additive (no version
+    /// step). Absent - every older file - states none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sheet_job: Option<crate::sheet_job::SheetJob>,
 }
 
 /// A setup's WCS as files hold it. v54 (#342) writes one entity name
@@ -610,6 +614,9 @@ pub struct EntityDto {
     /// and loads as full fidelity.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub coarse_mm: Option<f64>,
+    /// Only file tolerance caused the recorded chord. Missing means strict.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub file_tolerance: bool,
     /// #1056 (v59): this mesh's fidelity is not known - a model or stock
     /// copy from a file saved before CamCraft recorded it. Its operations
     /// are refused at the post until the model is re-imported. Absent is

@@ -53,6 +53,7 @@ fn user_op() -> OpParams {
         blend_turns: true,
         tilt: None,
         links: camcraft_app::links::Links::PLANAR,
+        chain_overrides: Vec::new(),
     }
 }
 

@@ -102,7 +102,7 @@ fn incomplete(hole: &str) -> String {
 pub fn summary(world: &World, entity: &Entity, chord_mm: f64) -> String {
     match hole_of(world, entity) {
         Some(hole) => format!("Incomplete: {hole}. Its operations are refused at the post; {ADVICE}."),
-        None => crate::model_fidelity::summary(world, chord_mm),
+        None => crate::model_fidelity::summary_with_cause(world, chord_mm, crate::model_fidelity::file_tolerance_of(world, entity)),
     }
 }
 
@@ -117,6 +117,6 @@ pub fn facts(world: &World, entity: &Entity, chord_mm: f64) -> serde_json::Value
             "hole": hole,
             "note": summary(world, entity, chord_mm),
         }),
-        None => crate::model_fidelity::facts(world, chord_mm),
+        None => crate::model_fidelity::facts_with_cause(world, chord_mm, crate::model_fidelity::file_tolerance_of(world, entity)),
     }
 }

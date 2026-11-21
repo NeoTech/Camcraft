@@ -83,7 +83,7 @@ pub fn selection_account(
     // picks, the parameters and every world read of the walk. Other
     // refusals stay `region_of`'s and generation's to make, with detail;
     // notes stay as far as the walk got.
-    let a = super::selection_memo::answer(world, setup, items, params);
+    let a = super::selection_memo::answer(world, setup, &SrcRef::Selection(items.to_vec()), params);
     (a.notes, a.refusal)
 }
 

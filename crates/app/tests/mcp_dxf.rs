@@ -158,7 +158,7 @@ fn a_profile_moves_on_the_stock_and_takes_a_2d_operation_but_no_3d_one() {
     assert!(why.contains("'plate' is a DXF profile"), "{why}");
 
     // A 2D operation on the profile is accepted and says what it is checked against.
-    c.ok("add_operation", json!({ "kind": "2D Contour", "tool": "EM-0400-2FL", "source": "plate", "name": "Cut" }));
+    c.ok("add_operation", json!({ "kind": "2D Pocket", "tool": "EM-0400-2FL", "source": "plate", "name": "Cut" }));
     let job = c.ok("get_job", json!({}));
     let checks = job["operations"][0]["checks_against"].as_str().expect("an operation on a profile states its checks");
     assert!(checks.contains("the stock 'Stock'") && checks.contains("the chains of the DXF profile 'plate'"), "{checks}");

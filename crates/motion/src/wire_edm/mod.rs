@@ -351,6 +351,8 @@ fn pass_notes(p: &WireParams, start: Point2, lead: f64, reverse: bool) -> Vec<St
 }
 
 #[cfg(test)]
+mod facet_tests;
+#[cfg(test)]
 mod open_tests;
 #[cfg(test)]
 mod preimage_tests;

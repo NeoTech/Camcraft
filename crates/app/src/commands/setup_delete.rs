@@ -70,6 +70,7 @@ impl DeleteSetup {
                     location: model::transform_of(world, &e).unwrap_or_default(),
                     facets: model::facets_of(world, &e).unwrap_or_default(),
                     coarse_mm: crate::model_fidelity::chord_of(world, &e),
+                    file_tolerance: crate::model_fidelity::file_tolerance_of(world, &e),
                     hole: crate::mesh_open::hole_of(world, &e),
                     material: crate::stock_material::of_entity(world, &e),
                 })
@@ -124,7 +125,7 @@ impl Command for DeleteSetup {
             let e = model::spawn(world, &s.name);
             model::set_transform(world, &e, s.location);
             model::set_facets(world, &e, s.facets.clone());
-            crate::model_fidelity::set(world, &e, s.coarse_mm);
+            crate::model_fidelity::set_with_cause(world, &e, s.coarse_mm, s.file_tolerance);
             crate::mesh_open::set(world, &e, s.hole.as_deref());
             e.entity_view(world).set(StockDef {
                 shape: s.shape.clone(),

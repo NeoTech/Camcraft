@@ -160,7 +160,7 @@ fn layout_shell_light() {
 fn layout_page_stock() {
     let _g = snapshot_guard();
     let h = page(UiTarget::Stock);
-    assert_page_layout(&h, "Stock", &["Shape", "Size", "Position and rotation", "Fit to models", "Apply"]);
+    assert_page_layout(&h, "Stock", &["Shape", "Size", "Position and rotation", "Stock axis", "Fit to models", "Apply"]);
 }
 
 #[test]

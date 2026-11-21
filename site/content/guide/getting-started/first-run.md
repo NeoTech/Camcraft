@@ -81,6 +81,21 @@ the entry reads **No example projects**. The entry is absent when the
 folder is missing and in the browser build. Opening an example asks first
 if you have unsaved changes, as any project open does.
 
+### Open a file from the command line
+
+The desktop executable accepts one file on the command line:
+
+```sh
+camcraft-ui part.step
+camcraft-ui job.camproj
+```
+
+A model file is imported; a project file is opened. Options can accompany
+the path. An unreadable file, an unknown extension or multiple file paths
+produce an `open refused` status message and leave an empty project.
+See [Command line](@/guide/automate/cli.md#open-a-file-in-the-window)
+for supported extensions and the distinction from the headless tool.
+
 ### What you see after opening a document
 
 Opening a document frames the camera on the opened part and stock, so

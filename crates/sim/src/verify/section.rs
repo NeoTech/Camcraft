@@ -8,6 +8,8 @@ use super::types::{Mode, VerifyContext, Warning};
 use crate::cl::{Move, MoveKind, Toolpath};
 use crate::geo2d::{Loop, Point2};
 
+mod radius;
+
 /// Sample spacing of the solid law (b2) along each move, mm - the
 /// operation layer's containment step.
 const SOLID_STEP: f64 = 0.25;
@@ -47,7 +49,7 @@ const ARC_READ_SHARE: f64 = 0.25;
 pub(super) fn judged(mode: Mode) -> bool {
     !matches!(
         mode,
-        Mode::Engrave | Mode::Envelope | Mode::Revolve | Mode::Radial | Mode::Cone | Mode::Rotary
+        Mode::Engrave | Mode::Envelope | Mode::Revolve | Mode::Radial | Mode::Cone | Mode::Rotary | Mode::Undercut
     )
 }
 
@@ -82,13 +84,15 @@ pub(super) fn tangency(
     // them at the plain tolerance, every other loop tightened.
     let rims: Vec<&Loop> = cx.region.loops().iter().filter(|l| cx.is_rim(l)).collect();
     let leave = (-cx.stock_to_leave).max(0.0);
-    let (tight, plain) = ((r - leave - cx.tightened(cx.gouge_tol)).max(0.0), (r - leave - cx.gouge_tol).max(0.0));
-    let floor_of = |l: &Loop| if rims.iter().any(|x| std::ptr::eq(*x, l)) { plain } else { tight };
+    let radius = radius::Radius::new(path, cx);
     let zones = super::corner_relief::valid_zones(cx.corner_reliefs, r, cx.stock_to_leave, cx.gouge_tol, cx.stock);
     for (i, m) in path.moves.iter().enumerate() {
         if m.kind == MoveKind::Rapid {
             continue;
         }
+        let r = radius.at(m);
+        let (tight, plain) = ((r - leave - cx.tightened(cx.gouge_tol)).max(0.0), (r - leave - cx.gouge_tol).max(0.0));
+        let floor_of = |l: &Loop| if rims.iter().any(|x| std::ptr::eq(*x, l)) { plain } else { tight };
         let section = cx.model.map(|f| rest.islands_at(f, m.from.z.min(m.to.z) + lift));
         if let Some(None) = section {
             warns.push(Warning::Gouge { at: i }); // cannot prove the slice

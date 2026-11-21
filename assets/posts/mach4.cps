@@ -71,6 +71,8 @@ function who() { return opName ? "operation " + opName + ": " : (coolantOp ? "op
 function msg(s) { if (typeof message === "function") message(s); else writeln("(MSG: " + s + ")"); }
 function clean(s) { return String(s || "").replace(/[()]/g, " ").replace(/\s+/g, " ").trim(); }
 function note(s) { if (s) block(["(" + clean(s) + ")"]); }
+// Program notes use this dialect without truncating the stated bound.
+function onComment(s) { note(commentText(s)); }
 function block(ws) {
   var xs = [];
   for (var i = 0; i < ws.length; i++) if (ws[i]) xs.push(ws[i]);

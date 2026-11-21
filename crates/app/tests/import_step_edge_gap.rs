@@ -29,8 +29,9 @@ fn a_model_with_edges_off_its_surfaces_lands_flagged_with_its_note() {
         cmd.notes.iter().any(|n| n
             == "This file's edges sit up to 0.018 mm off their surfaces. The file states a tolerance of 0.010 mm. \
                 The model is used at reduced accuracy (0.020 mm). \
-                A program cannot be posted while this model is in the document. \
-                Export the file again with a tighter tolerance to post one."),
+                Gouge checks against this model use a wider true-surface bound than the normal 0.010 mm. \
+                Each posted program states this bound and names this model in its header. \
+                An operation that they cannot check is refused at the post."),
         "{:?}",
         cmd.notes
     );
@@ -54,13 +55,15 @@ fn a_gap_over_the_cap_is_refused_and_tight_fixtures_stay_full_fidelity() {
 
 #[test]
 fn the_note_says_what_the_fidelity_law_does_at_the_chord() {
-    // Past the verdict tolerance (excess 0.015 mm over 0.01 mm): no verdict
-    // is left, and the program gate refuses (`model_fidelity::verdict_tol`).
-    assert!(step::loosened_consequence(0.02).starts_with("A program cannot be posted while this model is in the document."));
-    assert!(step::loosened_consequence(0.01524).starts_with("A program cannot be posted"));
-    // Inside it (excess 0.007 mm): the checks are tightened, not refused.
+    // #2996: file-tolerance widening states the true-surface bound
+    // in the program header; past the limit, nothing is left.
+    assert!(step::loosened_consequence(0.02).starts_with("Gouge checks against this model use a wider true-surface bound"));
+    assert!(step::loosened_consequence(0.01524).starts_with("Gouge checks against this model use a wider true-surface bound"));
+    assert!(step::loosened_consequence(0.021).starts_with("A program cannot be posted while this model is in the document."));
+    assert!(step::loosened_consequence(0.012).starts_with("Gouge checks against this model use a wider true-surface bound"));
+    // Up to DEV_TOL (excess 0.004 mm): the checks are tightened, not refused.
     assert_eq!(
-        step::loosened_consequence(0.012),
+        step::loosened_consequence(0.009),
         "Gouge checks against this model are stricter, and an operation that they cannot check is refused at the post."
     );
 }

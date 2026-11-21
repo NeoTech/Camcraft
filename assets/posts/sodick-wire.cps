@@ -112,7 +112,7 @@ function block(words) {
   }
   if (a.length > 0) writeln(a.join(" "));
 }
-function msg(s) { if (typeof message === "function") message(s); else writeln("(" + s + ")"); }
+function msg(s) { if (typeof message === "function") message(s); else note(s); }
 function refuse(key, s) {
   if (refused[key]) return;
   refused[key] = true;
@@ -124,7 +124,10 @@ function clean(s) {
   t = t.replace(/[()%;\/]/g, " ").replace(/[^\x20-\x7E]/g, "?").replace(/\s+/g, " ").trim();
   return t.length > 48 ? t.substring(0, 48).trim() : t;
 }
-function note(s) { block(["(" + s + ")"]); }
+// #3213: the control rejects hashes, brackets and escapes in every comment.
+function note(s) { block(["(" + String(s).replace(/[#\[\]\\]/g, " ") + ")"]); }
+// Program notes use this dialect without truncating the stated bound.
+function onComment(s) { note(commentText(s)); }
 
 // ------------------------------------------------------------- machine
 function machineName() {

@@ -57,6 +57,7 @@ fn contour_params(comp: Compensation) -> OpParams {
         helix_radius: 1.0,
         blend_turns: false,
         links: Links { approach: Approach { compensation: comp, ..Approach::DEFAULT }, ..Links::PLANAR },
+        chain_overrides: Vec::new(),
     }
 }
 

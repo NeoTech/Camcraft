@@ -19,6 +19,7 @@ mod generate;
 mod geometry;
 mod meta;
 
+pub(in crate::commands) use create::append_position;
 pub(in crate::commands) use gates::sketch_gate;
 pub use clear::ClearToolpath;
 pub use create::{CreateOperation, DeleteOperation, PasteOperation};

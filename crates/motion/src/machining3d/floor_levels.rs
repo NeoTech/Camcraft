@@ -2,7 +2,7 @@
 
 use super::params::Pocket3DParams;
 use crate::geometry::Triangle;
-use crate::machining2d::{GenError, MAX_PASSES, cut_levels_under};
+use crate::machining2d::{GenError, MAX_PASSES, cut_levels_under, ladder_stepdown};
 
 /// Keep the regular ladder and include flat floors above its first lower
 /// plane. The existing per-level material checks still decide where to cut.
@@ -35,4 +35,10 @@ pub(super) fn cut_levels(
         )));
     }
     Ok(zs)
+}
+
+/// The stepdown of the coarse ladder: the approach's ladder mode
+/// (#2012) applied to the operation's stepdown over its own span.
+pub(super) fn coarse_step(p: &Pocket3DParams) -> f64 {
+    ladder_stepdown(&p.links.approach, p.top_z, p.bottom_z, p.stepdown)
 }

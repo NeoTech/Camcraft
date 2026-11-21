@@ -40,9 +40,9 @@ pub fn slot_bound_of(world: &World, setup: Option<&str>, items: &[GeoSel]) -> Re
         };
         let label = crate::pick::geo_label(world, g);
         let gone = || GenError::Invalid(format!("{label} is no longer in the model: re-pick it"));
-        match g.feature {
+        match &g.feature {
             FeatureSel::Face(fid) => {
-                let f = features.faces.iter().find(|f| f.id == fid).ok_or_else(gone)?;
+                let f = features.faces.iter().find(|f| f.id == *fid).ok_or_else(gone)?;
                 for l in f.loops.iter().filter(|l| !matches!(l.kind, LoopKind::Open)) {
                     let pts: Vec<Point2> = l.verts.iter().filter_map(|&vi| features.verts.get(vi as usize)).map(xy).collect();
                     rings.push(Loop::new(pts).map_err(|_| {
@@ -52,7 +52,7 @@ pub fn slot_bound_of(world: &World, setup: Option<&str>, items: &[GeoSel]) -> Re
                 areas += 1;
             }
             FeatureSel::Chain(cid) => {
-                let c = crate::model::resolve_chain(&features, cid).ok_or_else(gone)?;
+                let c = crate::model::resolve_chain(&features, *cid).ok_or_else(gone)?;
                 let pts: Vec<Point2> = feature::chain_points(&features, &c).iter().map(xy).collect();
                 if c.closed {
                     rings.push(Loop::new(pts).map_err(|_| {
@@ -63,7 +63,10 @@ pub fn slot_bound_of(world: &World, setup: Option<&str>, items: &[GeoSel]) -> Re
                     edges.push(pts);
                 }
             }
-            FeatureSel::Patch(_) | FeatureSel::Vertex(_) => {
+            FeatureSel::Patch(_)
+            | FeatureSel::Vertex(_)
+            | FeatureSel::SketchChain(_)
+            | FeatureSel::SketchLayer(_) => {
                 return Err(GenError::Invalid(format!(
                     "{label} is not an edge or a face - a Slot is picked by two opposite straight edges or one floor face"
                 )));

@@ -17,6 +17,12 @@
 //!   laws judge with that smaller tolerance (`VerifyContext::model_excess`
 //!   at generation, [`verdict_tol`] for the program sim): stricter, never
 //!   looser. False gouges on a concave wall are the safe side.
+//! - #2996: only a recorded file-tolerance cause can widen a chord past
+//!   `DEV_TOL`, up to `verify::WIDE_CHORD_LIMIT`. The mesh allowance is
+//!   0.005 mm; the header and model page state the true-surface bound:
+//!   chord plus mesh allowance (`fidelity_note`). Budget and absent causes
+//!   keep the original strict law. Collision bands
+//!   still grow by the whole excess (`verify::band_growth`).
 //! - Once the excess uses a whole tolerance, a tightened law would convict
 //!   every exactly finished flat face - a misleading verdict. The laws
 //!   then read untightened and [`gate_problems`] refuses the operation by
@@ -48,16 +54,13 @@ use flecs_ecs::prelude::{Entity, World};
 
 use crate::geometry::import::{step, step_budget};
 use crate::model;
-use crate::operation::{fidelity_law, SrcRef};
-use crate::schema::{Operation, ReducedFidelity, StepBudget};
+use crate::schema::{ReducedFidelity, StepBudget};
 use crate::stock::StockShape;
-use crate::stock_sim::DEV_TOL;
-use crate::verify::excess_floor;
 
 /// What every refusal here says, in the user's words. Two causes make a
 /// model coarse: the facet budget (#1054) and edges that lie off their
-/// surfaces (#2976). The document does not record which, so the advice
-/// names both; #2996 adds that record.
+/// surfaces (#2976). Missing cause records keep the original strict law;
+/// this general refusal advice names both causes.
 pub const TOO_COARSE: &str = "imported too coarsely to verify; re-import with a larger STEP facet budget, or export the file again with a tighter tolerance";
 
 /// The chord a mesh of unknown fidelity carries (#1056), mm: far past any
@@ -94,14 +97,35 @@ pub fn chord_of(world: &World, entity: &Entity) -> Option<f64> {
 /// (#1339), their undo and the project loader only - it describes the
 /// facets it lands with.
 pub fn set(world: &World, entity: &Entity, coarse_mm: Option<f64>) {
+    set_with_cause(world, entity, coarse_mm, false);
+}
+
+/// The recorded cause, traded with the mesh. Missing records keep the old law.
+#[must_use]
+pub fn file_tolerance_of(world: &World, entity: &Entity) -> bool {
+    entity.entity_view(world).try_get::<&ReducedFidelity>(|r| r.file_tolerance).unwrap_or(false)
+}
+
+/// Write the complete fidelity record; absent or unknown chords cannot widen.
+pub fn set_with_cause(world: &World, entity: &Entity, coarse_mm: Option<f64>, file_tolerance: bool) {
     let view = entity.entity_view(world);
     match coarse_mm.and_then(step::coarse) {
         Some(chord_mm) => {
-            view.set(ReducedFidelity { chord_mm });
+            view.set(ReducedFidelity { chord_mm, file_tolerance: file_tolerance && !is_unknown(chord_mm) });
         }
         None => {
             view.remove(world.component::<ReducedFidelity>());
         }
+    }
+}
+
+/// Fidelity is part of a cached verification's input, including on unchanged facets.
+pub(crate) fn write_stamp(world: &World, entity: &Entity, h: &mut impl std::hash::Hasher) {
+    // Unknown fidelity is refused by name before any verdict is read.
+    if let Some(chord) = chord_of(world, entity).filter(|c| !is_unknown(*c)) {
+        h.write(b"coarse-fidelity-v1");
+        h.write_u64(chord.to_bits());
+        h.write_u8(u8::from(file_tolerance_of(world, entity)));
     }
 }
 
@@ -165,22 +189,34 @@ fn coarse_source(world: &World, name: &str) -> Option<Coarse> {
                 .then(|| copied.as_deref().and_then(|s| crate::mesh_open::hole_behind(world, s)))
                 .flatten()
         });
-        return Some((copied.unwrap_or_else(|| name.to_string()), c, hole));
+        return Some((copied.unwrap_or_else(|| name.to_string()), c, hole, file_tolerance_of(world, &entity)));
     }
     let source = copied?;
     let src = model::find_by_name(world, &source)?;
-    chord_of(world, &src).map(|c| (source, c, crate::mesh_open::hole_of(world, &src)))
+    chord_of(world, &src).map(|c| (source, c, crate::mesh_open::hole_of(world, &src), file_tolerance_of(world, &src)))
 }
 
 /// The model a mesh's facets came from, its chord, and its hole when it
 /// was imported incomplete (#1610).
-type Coarse = (String, f64, Option<String>);
+type Coarse = (String, f64, Option<String>, bool);
 
 /// The chord error a stock copied from `source` lands with (#1056): the
 /// source's own, or what a stock it is itself copied from carries.
 #[must_use]
 pub fn chord_behind(world: &World, source: &str) -> Option<f64> {
-    coarse_source(world, source).map(|(_, c, _)| c)
+    coarse_source(world, source).map(|(_, c, _, _)| c)
+}
+
+/// The cause behind a named model or legacy stock copy.
+#[must_use]
+pub fn file_tolerance_behind(world: &World, name: &str) -> bool {
+    let Some(e) = model::find_by_name(world, name) else { return false; };
+    if chord_of(world, &e).is_some() { return file_tolerance_of(world, &e); }
+    match model::stock_def_of(world, &e) {
+        Some(StockShape::FromModel { source }) => model::find_by_name(world, &source)
+            .is_some_and(|src| file_tolerance_of(world, &src)),
+        _ => false,
+    }
 }
 
 /// The loader's last pass (#1056): a `FromModel` stock from a file that
@@ -201,7 +237,7 @@ pub fn adopt_copies(world: &World) {
         if chord_of(world, &e).is_none()
             && let Some(c) = chord_of(world, &src)
         {
-            set(world, &e, Some(c));
+            set_with_cause(world, &e, Some(c), file_tolerance_of(world, &src));
         }
         if chord_of(world, &e).is_some_and(is_unknown)
             && crate::mesh_open::hole_of(world, &e).is_none()
@@ -216,7 +252,7 @@ pub fn adopt_copies(world: &World) {
 /// mm: its chord error less the cap, 0 at full fidelity.
 #[must_use]
 pub fn excess_of(world: &World, name: &str) -> f64 {
-    coarse_source(world, name).map_or(0.0, |(_, c, _)| excess(c))
+    coarse_source(world, name).map_or(0.0, |(_, c, _, _)| excess(c))
 }
 
 /// Whether the excess of `setup`'s stock is known (#1091 reviews): a box
@@ -270,145 +306,8 @@ pub fn excess(chord_mm: f64) -> f64 {
     (chord_mm - step::CHORD_CAP).max(0.0)
 }
 
-/// The plain-words line the model page and the import report show.
-#[must_use]
-pub fn summary(world: &World, chord_mm: f64) -> String {
-    if is_unknown(chord_mm) {
-        return format!("Fidelity unknown: {UNKNOWN_NOTE}");
-    }
-    format!("Reduced fidelity: surfaces are approximated to within {}", within(world, chord_mm))
-}
 
-/// The same facts for MCP and the script API: the achieved error in mm,
-/// the importer's promise, and the sentence a person would be shown.
-#[must_use]
-pub fn facts(world: &World, chord_mm: f64) -> serde_json::Value {
-    if is_unknown(chord_mm) {
-        return serde_json::json!({
-            "fidelity_unknown": true,
-            "promised_mm": step::CHORD_CAP,
-            "note": format!("Fidelity unknown: this model was {UNKNOWN_NOTE}. Its operations are refused at the post until then."),
-        });
-    }
-    serde_json::json!({
-        "approximation_mm": chord_mm,
-        "promised_mm": step::CHORD_CAP,
-        "note": format!(
-            "{}. Gouge checks against this model are stricter; if it is too coarse to check, its operations are refused at the post. Re-import with a larger STEP facet budget, or export the file again with a tighter tolerance, to clear this.",
-            summary(world, chord_mm)
-        ),
-    })
-}
-
-/// "0.012 mm" in the document's unit.
-fn within(world: &World, chord_mm: f64) -> String {
-    let u = crate::units::of(world);
-    format!("{} {}", crate::units::len(chord_mm, u, 3), u.suffix())
-}
-
-/// The coarsest model an operation is judged against, by name: the
-/// entities its source names (one entity, or every entity of a
-/// selection) and the setup's stock - the collision laws read clearance
-/// against it (#904; `operation::material::judged_material` is the same
-/// pair at generation).
-fn op_coarse(world: &World, op: &Operation) -> Option<Coarse> {
-    let mut names = vec![crate::setup::stock_entity_name(world, op.setup.as_deref())];
-    match &op.src {
-        SrcRef::Stock => {}
-        SrcRef::Entity(n) => names.push(n.clone()),
-        SrcRef::Selection(items) => names.extend(items.iter().map(|g| g.entity.clone())),
-    }
-    names
-        .iter()
-        .filter_map(|n| coarse_source(world, n))
-        .max_by(|a, b| a.1.total_cmp(&b.1))
-}
-
-/// Why `op` cannot be verified against the model it is judged on, or
-/// `None` when it can (full fidelity, or tightened verdicts).
-#[must_use]
-pub fn op_problem(world: &World, name: &str, op: &Operation) -> Option<String> {
-    let (model, chord, hole) = op_coarse(world, op)?;
-    if is_unknown(chord) {
-        return Some(format!("{name}: model '{model}' was {}", crate::mesh_open::note_for(hole.as_deref())));
-    }
-    let said = format!("surfaces are approximated to within {}", within(world, chord));
-    if !fidelity_law::excess_aware(&op.params) {
-        return Some(format!(
-            "{name}: model '{model}' was imported at reduced fidelity ({said}) and this kind of operation cannot be verified against it; re-import with a larger STEP facet budget, or export the file again with a tighter tolerance"
-        ));
-    }
-    excess_floor(fidelity_law::floor_of(&op.params), excess(chord))
-        .is_none()
-        .then(|| format!("{name}: model '{model}' was {TOO_COARSE} ({said})"))
-}
-
-/// The program gate's clause: one line per operation of the program that
-/// cannot be verified against its model, else one for the program when a
-/// part is too coarse for the program verdict. A program the post would
-/// refuse anyway (a stale op) is that refusal's to name.
-#[must_use]
-pub fn gate_problems(world: &World) -> Vec<String> {
-    let Ok(ops) = crate::posting::program_ops(world) else {
-        return Vec::new();
-    };
-    let mut out: Vec<String> = ops
-        .iter()
-        .filter_map(|(name, e)| op_problem(world, name, &model::operation_of(world, e)?))
-        .collect();
-    // A part no operation names is still what the program verdict is read
-    // against: when it is too coarse for that verdict, the program is
-    // refused rather than posted without it.
-    if out.is_empty()
-        && let Err(why) = verdict_tol(world)
-    {
-        out.push(why);
-    }
-    // #1056: a fixture of unknown fidelity has no honest collision box (a
-    // coarse one is grown by its chord, `fixture::steel_box`).
-    out.extend(
-        model::model_entities(world)
-            .into_iter()
-            .filter(|(_, e)| model::is_fixture(world, e) && chord_of(world, e).is_some_and(is_unknown))
-            .map(|(n, _)| format!("fixture '{n}' was {}", crate::mesh_open::unknown_note(world, &n))),
-    );
-    out
-}
-
-/// The tolerance the program sim and the eye's colours judge at (#1056):
-/// `Err` with the gate's own refusal line when an operation of the
-/// program is refused here - so the refusal is what is said, never a
-/// gouge line read off a mesh the gate already called too coarse (an op
-/// whose own floor is below the sim's, or one judged against a coarse
-/// stock the parts do not show) - else [`verdict_tol`].
-pub fn program_tol(world: &World) -> Result<f64, String> {
-    if let Ok(ops) = crate::posting::program_ops(world) {
-        for (name, e) in &ops {
-            if let Some(why) = model::operation_of(world, e).and_then(|op| op_problem(world, name, &op)) {
-                return Err(why);
-            }
-        }
-    }
-    verdict_tol(world)
-}
-
-/// The program sim's verdict tolerance for this document: `DEV_TOL`, less
-/// the worst excess among the parts the verdict is read against. `Err`
-/// names the model once nothing honest is left - the sim then judges
-/// nothing rather than paint a misleading map.
-pub fn verdict_tol(world: &World) -> Result<f64, String> {
-    let worst = model::model_entities(world)
-        .into_iter()
-        .filter(|(_, e)| !model::is_fixture(world, e))
-        .filter_map(|(n, e)| chord_of(world, &e).map(|c| (n, c)))
-        .max_by(|a, b| a.1.total_cmp(&b.1));
-    let Some((name, chord)) = worst else {
-        return Ok(DEV_TOL);
-    };
-    if is_unknown(chord) {
-        return Err(format!("model '{name}' was {}", crate::mesh_open::unknown_note(world, &name)));
-    }
-    excess_floor(DEV_TOL, excess(chord)).ok_or_else(|| {
-        format!("model '{name}' was {TOO_COARSE} (surfaces are approximated to within {})", within(world, chord))
-    })
-}
+mod law;
+mod report;
+pub use law::{gate_problems, op_problem, program_tol, verdict_tol};
+pub use report::{facts, facts_with_cause, summary, summary_with_cause};

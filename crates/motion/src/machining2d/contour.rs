@@ -256,7 +256,10 @@ pub(super) fn emit_band(
                 b.push(MoveKind::Rapid, Point3::new(cur.x, cur.y, p.clearance_z), None);
             }
             let mut arced = false;
-            if wall_arc_on && !tabbed {
+            // #3132: a None lead-in adds no XY travel at the seam - the
+            // wall arc runs back along the seam's tangent like a lead.
+            let no_lead_in = p.lead == Lead::None;
+            if wall_arc_on && !tabbed && !no_lead_in {
                 let z_top = wall_arc_top(p, rz, rzi, hop_z);
                 let first = lead.first().or(walk.first());
                 match wall_arc(b, &eng, e2, z, z_top, hop_z, first) {
@@ -270,6 +273,8 @@ pub(super) fn emit_band(
                         ),
                     ),
                 }
+            } else if wall_arc_on && !tabbed {
+                say(lead_notes, "entry: the arc stands down with no lead-in - its descent would run along the seam like a lead; grazing dive at the ring's start".into());
             } else if wall_arc_on {
                 say(
                     lead_notes,

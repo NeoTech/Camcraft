@@ -16,6 +16,7 @@ pub struct ImportModel {
     /// The chord error of a mesh imported coarser than the STEP importer
     /// promises (#864); `None` at full fidelity. It lands with the mesh.
     pub coarse_mm: Option<f64>,
+    pub file_tolerance: bool,
     /// The STEP facet budget the mesh was made under when it is not the
     /// default (#1054); `None` for the default and for STL/OBJ. It lands
     /// with the mesh, so the model says how to import it again.
@@ -110,6 +111,7 @@ impl ImportModel {
         // its chord rides (an update, a fixture, a stock copy).
         let coarse = if graded.open.is_some() { Some(crate::model_fidelity::UNKNOWN_MM) } else { graded.coarse_mm };
         let mut cmd = Self::from_mesh(&name, graded.mesh).with_fidelity(coarse);
+        cmd.file_tolerance = graded.file_tolerance;
         cmd.facet_budget = step_budget::recorded(facet_budget);
         cmd.notes = graded.notes;
         cmd.hole = graded.open;
@@ -122,6 +124,7 @@ impl ImportModel {
             name: name.to_string(),
             mesh,
             coarse_mm: None,
+            file_tolerance: false,
             facet_budget: None,
             notes: Vec::new(),
             hole: None,
@@ -136,10 +139,18 @@ impl ImportModel {
         ImportModel { name: name.to_string(), ..self }
     }
 
+    /// Record that only the file tolerance required a coarser chord.
+    #[must_use]
+    pub fn with_file_tolerance(mut self, file_tolerance: bool) -> Self {
+        self.file_tolerance = file_tolerance;
+        self
+    }
+
     /// State the fidelity the mesh was imported at (#864).
     #[must_use]
     pub fn with_fidelity(mut self, coarse_mm: Option<f64>) -> Self {
         self.coarse_mm = coarse_mm;
+        self.file_tolerance = false;
         self
     }
 }
@@ -211,7 +222,7 @@ impl Command for ImportModel {
         // re-import is routed to UpdateModel by the caller, never here.
         model::set_rev(world, &entity, 1);
         crate::mesh_solids::set(world, &entity, self.mesh.solid_ranges());
-        crate::model_fidelity::set(world, &entity, self.coarse_mm);
+        crate::model_fidelity::set_with_cause(world, &entity, self.coarse_mm, self.file_tolerance);
         crate::model_fidelity::set_budget(world, &entity, self.facet_budget);
         crate::mesh_open::set(world, &entity, self.hole.as_deref());
         crate::step_source::set(world, &entity, self.step_source.as_deref());

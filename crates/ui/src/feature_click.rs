@@ -193,7 +193,7 @@ pub(crate) fn click(state: &mut State, p: [f32; 2], mods: Mods) {
         return;
     };
     // Mirror the pick in the hover so highlight and click agree.
-    state.hover = Some(hover_of(&found, sel));
+    state.hover = Some(hover_of(&found, sel.clone()));
     if crate::start_exit_pick::collecting(state) {
         crate::start_exit_pick::take(state, &found);
         return;
@@ -239,13 +239,15 @@ pub(crate) fn click(state: &mut State, p: [f32; 2], mods: Mods) {
         return; // #557: the axes rows are open, nothing armed
     }
     let append = mods.command || mods.shift;
-    match (found.target, state.boundary_pick.is_some()) {
+    match (&found.target, state.boundary_pick.is_some()) {
         (PickTarget::Point(_), true) => {
             // A point bounds nothing: refused by name, never drafted.
             let what = camcraft_app::pick::geo_label(&state.world, &pick);
             state.status = format!("{what} is a point - a boundary takes faces or edges");
         }
-        (PickTarget::Edge { .. }, false) => crate::edge_pick::queue_edge_pick(state, pick, mods),
+        (PickTarget::Edge { .. } | PickTarget::SketchChain { .. }, false) => {
+            crate::edge_pick::queue_edge_pick(state, pick, mods)
+        }
         (_, true) => queue_boundary_pick(state, pick, mods),
         _ => queue_feature_pick(state, pick, append),
     }

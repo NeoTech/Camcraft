@@ -219,7 +219,8 @@ fn build_world_geom(state: &State, items: &[GeoSel]) -> WorldGeom {
                     push_world_poly(&loc, &pts, chain.closed, &mut out.edges);
                 }
             }
-            FeatureSel::Vertex(_) => {}
+            // Sketch picks are refused as protection; nothing to draw.
+            FeatureSel::Vertex(_) | FeatureSel::SketchChain(_) | FeatureSel::SketchLayer(_) => {}
         }
     }
     out

@@ -324,7 +324,7 @@ function toolNote() {
 }
 // A WARN record (only a gate-refused program carries one) is voiced as
 // a cleaned comment - never a bare line, never a nested parenthesis.
-function onComment(s) { flushPass(); note(clean(s, 200)); }
+function onComment(s) { flushPass(); note(commentText(s)); }
 // The bar-feeder lifecycle (M5.2): PathPilot states no feeder words, so
 // the intent is a comment, the advance in the program's own unit.
 function onPartLoading() {

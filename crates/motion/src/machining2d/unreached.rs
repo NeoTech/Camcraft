@@ -308,4 +308,27 @@ mod law {
         assert!(unreached_corners(&Region::empty(), 3.0, None).expect("corners").is_empty());
         assert!(unreached_corners(&r, f64::NAN, None).expect("corners").is_empty());
     }
+
+    #[test]
+    fn a_chord_cusp_that_crosses_itself_does_not_stop_the_corner_check() {
+        // #2849: a 25 mm bore as chords. The bore less its swept area is a
+        // cusp a few microns wide at each chord vertex, and a boolean can
+        // return such a cusp as one loop that crosses itself. The check
+        // must run and name no corner: the cusps are arc noise.
+        for (chords, reach, phase) in [(50usize, 2.0, 0.0), (60, 3.0, 0.37), (63, 4.0, 0.0)] {
+            let pts: Vec<Point2> = (0..chords)
+                .map(|i| {
+                    let a = phase + std::f64::consts::TAU * i as f64 / chords as f64;
+                    Point2::new(12.5 * a.cos(), 12.5 * a.sin())
+                })
+                .collect();
+            let bore = Region::new(vec![Loop::new(pts).expect("bore loop")]).expect("bore");
+            let corners = unreached_corners(&bore, reach, None)
+                .unwrap_or_else(|e| panic!("{chords} chords, reach {reach}: {e}"));
+            assert!(corners.is_empty(), "{chords} chords, reach {reach}: {corners:?}");
+            let note = unreached_corner_note(&bore, None, reach * 2.0, 0.0, Unit::Millimeters)
+                .unwrap_or_else(|e| panic!("{chords} chords, reach {reach}: {e}"));
+            assert!(note.is_none(), "{note:?}");
+        }
+    }
 }

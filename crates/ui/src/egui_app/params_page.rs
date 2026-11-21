@@ -33,6 +33,8 @@ pub(super) struct Cx<'a> {
     pub slot_fit: &'a Option<Result<String, String>>,
     /// #1815: diameter of the currently selected tool for seeding rest params.
     pub tool_diameter: Option<f64>,
+    /// #1864: current operation source for per-chain sketch overrides.
+    pub op_src: &'a SrcRef,
     /// #1888: the op's picked features - the Deburr page moves its
     /// edge picks into the exclusion list. Empty for every other kind.
     pub picks: &'a [camcraft_app::operation::GeoSel],
@@ -234,6 +236,7 @@ pub(super) fn params_fields(ui: &mut Ui, state: &mut State, tab: usize) {
         .as_ref()
         .and_then(|t| model::tool_of(&state.world, t))
         .map(|t| t.diameter);
+    let draft_src = state.op_ui.src();
     let picks = if matches!(state.op_ui.params, OpParams::Deburr { .. }) { state.op_ui.geo.clone() } else { Vec::new() };
     let mut cx = Cx {
         u,
@@ -249,6 +252,7 @@ pub(super) fn params_fields(ui: &mut Ui, state: &mut State, tab: usize) {
         circle_fit: &circle_fit,
         slot_fit: &slot_fit,
         tool_diameter,
+        op_src: &draft_src,
         picks: &picks,
     };
     let world = &state.world;
@@ -261,6 +265,7 @@ pub(super) fn params_fields(ui: &mut Ui, state: &mut State, tab: usize) {
     super::wire_page::fields(ui, world, params, &mut cx);
     super::sinker_page::fields(ui, world, params, &mut cx);
     super::trochoid_page::fields(ui, world, params, &mut cx);
+    super::undercut_page::fields(ui, world, params, &mut cx);
     super::mill3d_page::fields(ui, world, params, &mut cx);
     super::multiaxis_page::fields(ui, world, params, &mut cx);
     super::rotary_page::fields(ui, world, params, &mut cx);
