@@ -55,7 +55,7 @@ fn part() -> camcraft_app::geometry::Mesh {
 }
 
 fn prev() -> RestParams {
-    RestParams { previous_tool_diameter: 12.0, previous_corner_radius: 0.0, previous_stock_to_leave: 0.0, allowance: 0.0 }
+    RestParams { source: Default::default(), previous_tool_diameter: 12.0, previous_corner_radius: 0.0, previous_stock_to_leave: 0.0, allowance: 0.0 }
 }
 
 fn pocket(stepover: f64, entry: Entry3D, strategy: PocketStrategy, rest: Option<RestParams>) -> OpParams {

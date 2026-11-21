@@ -320,6 +320,24 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
                     .map(Arc::new),
             )
         }
+        // #2033: a 2D Pocket whose rest area is read from the previous
+        // operations takes the same grid. The stock must be established:
+        // a tilted plane, or an earlier operation without a current
+        // toolpath, is refused by name. Declared material past a carried
+        // grid is no grid: the whole pocket stands.
+        p if super::rest_op::reads_previous_ops(p) => {
+            if frame.is_some() {
+                return Err(GenError::Invalid(format!("{op_name}: {}", super::rest_op::REST_PREVIOUS_TILTED)));
+            }
+            if let Some(why) = super::rest_op::previous_ops_refusal(world, op_name, setup) {
+                return Err(GenError::Invalid(format!("{op_name}: {why}")));
+            }
+            Some(
+                crate::rest::prior_state(world, op_name, setup, tool.diameter * 0.5)
+                    .map(|p| if carried.distrust_prior { crate::rest::PriorState { grid: None, ..p } } else { p })
+                    .map(Arc::new),
+            )
+        }
         _ => None,
     };
     // Verify's prior reading (#96 review): collected here, cut on the

@@ -235,6 +235,11 @@ impl OpParams {
                     for v in [r.previous_tool_diameter, r.previous_corner_radius, r.previous_stock_to_leave, r.allowance] {
                         w(h, v);
                     }
+                    // #2033: written only in previous-operations mode, so
+                    // every entered-tool rest pocket keeps its digest.
+                    if r.source == crate::machining2d::RestSource::PreviousOperations {
+                        h.write_u8(0xD8);
+                    }
                 }
                 write_corner_relief(corner_relief, h);
             }

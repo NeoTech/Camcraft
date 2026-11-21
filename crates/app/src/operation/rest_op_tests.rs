@@ -5,7 +5,7 @@
 
 use std::hash::Hasher;
 
-use crate::machining2d::{PocketStrategy, RestParams};
+use crate::machining2d::{PocketStrategy, RestParams, RestSource};
 use crate::machining3d::Entry3D;
 use crate::operation::{Height, OpParams};
 
@@ -35,7 +35,7 @@ fn pocket(rest: Option<RestParams>) -> OpParams {
 }
 
 const PREV: RestParams =
-    RestParams { previous_tool_diameter: 12.0, previous_corner_radius: 0.0, previous_stock_to_leave: 0.0, allowance: 0.0 };
+    RestParams { source: RestSource::EnteredTool, previous_tool_diameter: 12.0, previous_corner_radius: 0.0, previous_stock_to_leave: 0.0, allowance: 0.0 };
 
 #[test]
 fn the_rest_group_moves_the_stamp() {
@@ -53,6 +53,8 @@ fn the_rest_group_moves_the_stamp() {
         RestParams { previous_corner_radius: 1.0, ..PREV },
         RestParams { previous_stock_to_leave: 0.2, ..PREV },
         RestParams { allowance: 0.1, ..PREV },
+        // #2033: the mode is an input - the two modes never share a path.
+        RestParams { source: RestSource::PreviousOperations, ..PREV },
     ] {
         assert_ne!(on, digest(&pocket(Some(other))), "{other:?} must move the stamp");
     }

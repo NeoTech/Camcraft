@@ -740,7 +740,20 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // #1559: when carried stock stands above the entry, the same
             // generator runs again with the entries lifted to that top
             // (rest or plain: only the entry plane moves, the cut does not).
+            // #2033: in previous-operations mode the rest area is read
+            // from the stock that the program ahead leaves, at every cut
+            // depth; that mode never falls back to the entered tool.
+            let from_ops = rest.is_some_and(|r| r.source == machining2d::RestSource::PreviousOperations);
+            let ahead = if from_ops {
+                Some(prior.take().ok_or_else(|| unreached("previous-operations rest stock"))??)
+            } else {
+                None
+            };
+            let ahead_cols = ahead.as_ref().and_then(|p| p.grid.as_ref()).map(crate::stock_sim::Columns::of_grid);
             let pocket = |pp: &PocketParams| match rest {
+                Some(r) if from_ops => {
+                    machining2d::rest_pocket_previous_with_relief(&region, pp, r, ahead_cols.as_ref(), corner_relief)
+                }
                 Some(r) => machining2d::rest_pocket_with_relief(&region, pp, r, corner_relief),
                 None => machining2d::pocket_entered_with_relief(&region, pp, &holes, corner_relief),
             };

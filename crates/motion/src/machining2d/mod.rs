@@ -93,6 +93,7 @@ mod adaptive_troch_lanes;
 mod adaptive_troch_level;
 mod adaptive_troch_slice;
 mod rest2d;
+mod rest_prior;
 mod rest_anchor;
 mod rest_rings;
 mod chord_clear;
@@ -155,7 +156,13 @@ pub use corner_relief_spur::pocket_relief_plan;
 pub use pocket::{pocket, pocket_entered, pocket_entered_with_relief, PocketParams, PocketStrategy};
 pub use pocket_avoid::{pocket_avoid, pocket_avoid_with_relief};
 pub use predrilled::PreHole;
-pub use rest2d::{rest_plan, rest_pocket, rest_pocket_with_relief, rest_strategy, RestParams, RestPlan, REST_FILM, REST_MARGIN, REST_REACH};
+pub use rest2d::{
+    rest_plan, rest_pocket, rest_pocket_with_relief, rest_strategy, RestParams, RestPlan, RestSource, REST_FILM,
+    REST_MARGIN, REST_NEEDS_STOCK, REST_REACH,
+};
+pub use rest_prior::{
+    rest_plan_stock, rest_pocket_previous, rest_pocket_previous_with_relief, rest_stock_from_columns, PRIOR_Z_TOL,
+};
 pub use ring::{on_boundary, ring_is_circular};
 pub use slots::{chord_clears, slot, trace, SlotParams, TraceParams};
 pub use slot_ends::extended_ends as slot_extended_ends;
