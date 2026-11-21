@@ -155,6 +155,15 @@ fn wire_contour_is_added_with_a_wire_tool_edited_generated_undone_and_redone() {
 }
 
 #[test]
+fn agiecut_template_refuses_a_wire_job_without_an_installed_condition() {
+    let mut client = wire_job("agiecut-template");
+    client.ok("load_machine", json!({ "builtin": "AGIECUT Classic 2S (template)" }));
+    let why = client.refused("add_operation", wire_args("C110"));
+    assert!(why.contains("states no EDM condition") && why.contains("edm.conditions"), "{why}");
+    assert_eq!(client.ok("get_job", json!({}))["operations"], json!([]));
+}
+
+#[test]
 fn wire_contour_refusals_arrive_as_tool_errors_in_the_commands_words() {
     let mut c = wire_job("refuse");
     c.ok("add_tool", json!({ "catalog": "EM-0600-4FL", "holder": "none" }));

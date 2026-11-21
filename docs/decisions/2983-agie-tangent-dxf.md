@@ -1,0 +1,5 @@
+## #2983 – Preserve tangent lines and circular arcs from a placed drawing
+
+Use the oriented curves of one simple closed source chain. A continuous tangent with positive arc sweeps totaling one turn establishes convexity. Check the analytical support of every source arc and line against every edge of the circumscribed preview. Reserve a 0.000002 mm allowance for joint and grid arithmetic within the 0.000025 mm radial bound. Limit the input and the resulting preview before allocating their point arrays.
+
+Use the source endpoints and arc centers in the native file. Check the emitted circular radii, closure and tangent directions in integer grid coordinates. A straight supporting face supplies a clear perpendicular entry and room for the separation. Keep the existing circle and stadium emission paths for their qualified jobs. Inferring curves from tessellated meshes would lose the authoritative radius. A concave drawing or an open path will need a separate kept-side and lead-clearance proof.

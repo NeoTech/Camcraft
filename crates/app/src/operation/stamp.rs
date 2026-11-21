@@ -177,7 +177,11 @@ pub fn current_stamp(
             // cube was) must read Stale, and a re-tessellation of the same
             // faces must not. Face ids are local-frame content hashes, so
             // the transform hashed above carries all the placement.
-            h.write_u64(model::geometry_signature(world, &entity)?);
+            if matches!(params, OpParams::WireContour(_)) && crate::sketch::is_sketch(world, &entity) {
+                super::wire_sketch::stamp(world, &entity, &mut h)?;
+            } else {
+                h.write_u64(model::geometry_signature(world, &entity)?);
+            }
         }
         SrcRef::Selection(items) => {
             // b'L', not b'S': the Stock arm already owns that byte, and a

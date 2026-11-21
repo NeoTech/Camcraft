@@ -1,0 +1,9 @@
+## #2984 - Bind each native Agie work to its requested quality
+
+Keep the saved condition IDs. Define one native quality identity for each supported wire, material and complete quality tuple. Reserve CCB030 and CCB035 for the two Berco Cut 0.25 mm selections. A different tuple requires a different identity. This replaces the work-index names QN2 through QN10. Those names could select an existing quality with different parameters. A synthetic job requested Ra 0.30 under QN2 and the controller displayed 0.70. The same request under a fresh name displayed 0.30.
+
+Register the requested quality once for the piece and assign its returned handle to every work. Existing names can still select stale settings even when the call succeeds. An isolated control selected a stale CCB030 with Ra 0.70 for a new piece requesting 0.30. The post therefore clears the steps and omits automatic cut generation. The operator must inspect each loaded work and generate its steps on the same control after checking the material, wire, height, numeric targets and both visible options. The quality editor does not expose the third requested flag. Keep the geometry, start points and resource identifiers independent. Check the displayed values, working steps and offsets on the control at each qualified stock height. A successful formal check alone does not establish the effective quality or an achieved surface finish.
+
+Keep native posting independent of a resident technology database. A new wire, material, parameter tuple or height needs a controller selection check and a measured envelope before it can be enabled.
+
+Check that every work uses the same condition before applying the single-punch limit for Ra 0.35. The piece registers one quality for all works. A mixed group therefore needs its own diagnostic in either input order. A group that requests Ra 0.35 for every work still receives the single-punch diagnostic.
