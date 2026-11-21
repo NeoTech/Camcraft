@@ -62,6 +62,7 @@ pub const BUILTINS: &[(&str, AssetFile)] = &[
     // #617: the Sodick 2-axis wire post, its words from Sodick's 1998
     // operation manual (Mark 21 / EX21); not verified on a control.
     ("Sodick Wire EDM (Mark 21)", AssetFile("sodick-wire.cps")),
+    (super::agie::POST, AssetFile("agie-native.cps")),
     // #542: the generic ISO-style sinker post; every EDM code is the
     // machine's `edm.codes` (#290 D5). It serves sinker EDMs only.
     ("Sinker EDM (ISO)", AssetFile("sinker-iso.cps")),
@@ -148,6 +149,7 @@ pub const MACHINES: &[(&str, AssetFile)] = &[
     // #1501: a Sodick wire EDM, X Y U V travels and taper from Sodick's published
     // ALC series specifications (docs/decisions/1501-sodick-alc400g.md).
     ("Sodick ALC400G", AssetFile("sodick-alc400g.mch")),
+    ("AGIECUT Classic 2S (template)", AssetFile("agiecut-classic-2s.mch")),
 ];
 
 fn post_dir() -> &'static DataFiles {
@@ -344,6 +346,7 @@ fn embedded(kind: &str, file: &str) -> Option<&'static str> {
         ("posts", "tormach-lathe.cps") => Some(include_str!("../../../assets/posts/tormach-lathe.cps")),
         ("posts", "tormach-plasma.cps") => Some(include_str!("../../../assets/posts/tormach-plasma.cps")),
         ("posts", "wire-iso.cps") => Some(include_str!("../../../assets/posts/wire-iso.cps")),
+        ("posts", "agie-native.cps") => Some(include_str!("../../../assets/posts/agie-native.cps")),
         ("posts", "sodick-wire.cps") => Some(include_str!("../../../assets/posts/sodick-wire.cps")),
         ("posts", "sinker-iso.cps") => Some(include_str!("../../../assets/posts/sinker-iso.cps")),
         ("machines", "vmc.mch") => Some(include_str!("../../../assets/machines/vmc.mch")),
@@ -391,6 +394,7 @@ fn embedded(kind: &str, file: &str) -> Option<&'static str> {
         ("machines", "haas-dm1.mch") => Some(include_str!("../../../assets/machines/haas-dm1.mch")),
         ("machines", "sinker-edm.mch") => Some(include_str!("../../../assets/machines/sinker-edm.mch")),
         ("machines", "sodick-alc400g.mch") => Some(include_str!("../../../assets/machines/sodick-alc400g.mch")),
+        ("machines", "agiecut-classic-2s.mch") => Some(include_str!("../../../assets/machines/agiecut-classic-2s.mch")),
         ("machines", "3axis-vmc.mch") => Some(include_str!("../../../assets/machines/3axis-vmc.mch")),
         _ => None,
     }
