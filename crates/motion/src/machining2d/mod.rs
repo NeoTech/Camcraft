@@ -74,6 +74,7 @@ mod fillet_arc;
 mod fillet_tally;
 mod lead_ext;
 mod lead_fit;
+mod lead_seam;
 mod ladder_links;
 mod levels;
 mod microlift;
