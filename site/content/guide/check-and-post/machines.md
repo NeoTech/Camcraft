@@ -216,10 +216,13 @@ rotary axis`.
 The library includes **Sodick ALC400G** (`sodick-alc400g.mch`): X/Y
 travel is 400/300 mm and U/V travel is 150/150 mm, centred on zero in
 the file. Its stated taper maximum is 25 degrees at 130 mm work height.
-The file supplies no conditions, wire diameter, guide heights, automatic
-threading or EDM codes. Add those from your actual machine and control
-documentation before use. The taper figure alone does not enable taper:
-the missing guide planes cause a nonzero taper edit to be refused.
+The file ships an example starter set (#3214): the conditions `C110`,
+`C120` and `C130`, guide heights 0 and 130 mm, and automatic threading.
+These are not Sodick figures. Replace them with the rows of your
+control's condition table and your machine's guide heights before you
+cut ([Conditions](@/guide/operations/operations-edm.md#wire-edm-the-machine-the-wire-and-the-post)).
+The file supplies no wire diameter list and no EDM codes. The Sodick
+post writes a vertical 2-axis cut only, so it refuses a taper.
 The ALC400G control has not been confirmed to match the Mark 21 post.
 
 Wire Contour runs on a machine file that declares `wire_edm`. The
