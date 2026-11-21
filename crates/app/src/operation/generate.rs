@@ -266,9 +266,28 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
 
     // The area controls (M11.5): the region every arm takes is the
     // controlled one, resolved here once into the slot `region_for_job`
-    // reads first. The Contour selection arm resolves its own (its side
-    // is only known there). Face keeps the band constraints and turn.
-    let contour_sel_arm = matches!((&params, &src), (OpParams::Contour { .. }, SrcRef::Selection(_)));
+    // reads first. Contour and Chamfer selection arms resolve their own
+    // raw loops and runs (an open run has no region). Face keeps the band
+    // constraints and turn.
+    let contour_sel_arm = matches!(
+        (&params, &src),
+        (
+            OpParams::Contour { .. } | OpParams::Chamfer2D { .. },
+            SrcRef::Selection(_)
+        )
+    );
+    if matches!((&params, &src), (OpParams::Chamfer2D { .. }, SrcRef::Selection(_)))
+        && area.is_some()
+        && matches!(
+            contour_sel.as_ref(),
+            Some(Ok((loops, runs, _))) if loops.is_empty() && !runs.is_empty()
+        )
+    {
+        return Err(GenError::Invalid(
+            "the Boundary settings shape an area, and these picks are open chamfer runs - reset them, or pick closed rings"
+                .into(),
+        ));
+    }
     let mut area = area.transpose()?;
     // A Contour under an open boundary rides the chain itself (its arm
     // below, `contour_open`): no area law runs for it.
@@ -2228,31 +2247,81 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
                     width * angle_deg.to_radians().tan()
                 )));
             }
-            let region = region_for_job(
-                    &mut picked_region,
-                    &mut section_z,
-                    &src,
-                    &params,
-                m_gen,
-                frame.as_ref(),
-            )?;
-            let path = machining2d::chamfer(
-                &region,
-                &ChamferParams {
-                    width: *width,
-                    angle_deg: *angle_deg,
-                    clearance_z: hl.clearance,
-                    retract_z: hl.retract,
-                    top_z: req_z(hl.top, "Top of Part Z")?,
-                    feed: *feed,
-                    plunge_feed: *plunge_feed,
-                    climb: *climb,
-                    // #1555: which side of the picked loops the material
-                    // stands on - the travel climb needs follows from it.
-                    inside: *side == Side::Inside,
-                },
-            )?;
-            (region, path)
+            let cp = ChamferParams {
+                width: *width,
+                angle_deg: *angle_deg,
+                clearance_z: hl.clearance,
+                retract_z: hl.retract,
+                top_z: req_z(hl.top, "Top of Part Z")?,
+                feed: *feed,
+                plunge_feed: *plunge_feed,
+                climb: *climb,
+                // #1555: which side of closed picked loops the material
+                // stands on - the travel climb follows from it. Open
+                // chains read their actual wall side in the motion arm.
+                inside: *side == Side::Inside,
+            };
+            match &src {
+                SrcRef::Selection(_) => {
+                    let (loops, runs, _) = contour_sel
+                        .take()
+                        .ok_or_else(|| unreached("chamfer selection geometry"))??;
+                    if loops.is_empty() && runs.is_empty() {
+                        return Err(GenError::Empty(
+                            "nothing in the selection bounds an area or an edge run".into(),
+                        ));
+                    }
+                    let base = if loops.is_empty() {
+                        Region::empty()
+                    } else {
+                        Region::new(loops)?
+                    };
+                    let region = if let Some(ctx) = area.take() {
+                        apply_area_controls(base, Some(&ctx))?
+                    } else {
+                        base
+                    };
+                    let mut path = if region.is_empty() {
+                        Toolpath::new(Vec::new())
+                    } else {
+                        machining2d::chamfer(&region, &cp)?
+                    };
+                    if !runs.is_empty() {
+                        let cut = |facets: &[Triangle],
+                                   bodies: &[std::ops::Range<usize>],
+                                   z: f64| match super::material::section(facets, bodies, z) {
+                            Ok(r) => Ok(Some(r)),
+                            Err(GenError::Empty(_)) => Ok(None),
+                            Err(e) => Err(e),
+                        };
+                        let section_at = |z: f64| cut(&m_gen.facets, &m_gen.bodies, z);
+                        let mut next = machining2d::chamfer_open_runs(&runs, &cp, &section_at)
+                            .map_err(|e| e.after_moves(&path.moves))?;
+                        let notes = std::mem::take(&mut next.notes);
+                        let breaks = std::mem::take(&mut next.breaks);
+                        path = stitch(path, next);
+                        path.breaks.extend(breaks);
+                        for note in notes {
+                            if !path.notes.contains(&note) {
+                                path.notes.push(note);
+                            }
+                        }
+                    }
+                    (region, path)
+                }
+                _ => {
+                    let region = region_for_job(
+                            &mut picked_region,
+                            &mut section_z,
+                            &src,
+                            &params,
+                        m_gen,
+                        frame.as_ref(),
+                    )?;
+                    let path = machining2d::chamfer(&region, &cp)?;
+                    (region, path)
+                }
+            }
         }
         // Circular interpolation (M2.4 B): concentric rings about an
         // authored center - the pocket family's heights and doors

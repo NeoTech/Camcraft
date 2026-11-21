@@ -250,13 +250,19 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
     // arm's own statement in `run_job`.
     let section_z = section_z_of(world, setup, Some(&op.src), &op.params, frame.as_ref());
     let picked_region = match (&op.params, &op.src) {
-        // Contour's Selection pair is resolved as raw geometry below
-        // (its arm never asks for a region first); every other kind
-        // whose picks author the region takes selection_region's
+        // Contour's and 2D Chamfer's Selection pairs are resolved as
+        // raw geometry below (their arms can ride open runs); every
+        // other kind whose picks author the region takes selection_region's
         // answer.
         (params, SrcRef::Selection(items))
             if selection_drives_region(params)
-                && !matches!(params, OpParams::Contour { .. } | OpParams::PlasmaProfile(_) | OpParams::WireContour(_)) =>
+                && !matches!(
+                    params,
+                    OpParams::Contour { .. }
+                        | OpParams::PlasmaProfile(_)
+                        | OpParams::WireContour(_)
+                        | OpParams::Chamfer2D { .. }
+                ) =>
         {
             Some(selection_region(world, setup, items, params, &op.area))
         }
@@ -271,9 +277,16 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
     let around_part = super::keep_law::is_keep_kind(&op.params) && matches!(op.src, SrcRef::Entity(_)) && picked_region.is_some();
     let wire_ruled = super::wire_ruled::picks_of(world, op);
     let contour_sel = match (&op.params, &op.src) {
-        // The plasma cut reads its picks the contour's way (#670):
-        // closed rings AND open runs, each cut as picked.
-        (OpParams::Contour { .. } | OpParams::PlasmaProfile(_) | OpParams::WireContour(_), SrcRef::Selection(items))
+        // The plasma cut and 2D Chamfer read their picks the contour's
+        // way (#670, #2988): closed rings AND open runs, each cut as
+        // picked.
+        (
+            OpParams::Contour { .. }
+                | OpParams::PlasmaProfile(_)
+                | OpParams::WireContour(_)
+                | OpParams::Chamfer2D { .. },
+            SrcRef::Selection(items),
+        )
             if wire_ruled.is_none() =>
         {
             Some(selection_geometry_impl(world, setup, items, &op.params, None))
