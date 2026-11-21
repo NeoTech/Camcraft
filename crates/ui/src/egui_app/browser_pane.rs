@@ -172,7 +172,7 @@ fn ctx(name: &str) -> Option<&str> {
 
 pub(super) fn eye(state: &mut State, leaf: &Leaf) {
     match leaf {
-        Leaf::Model(n) => State::toggle_visibility(&mut state.hidden_models, n),
+        Leaf::Model(n) | Leaf::Sketch(_, n) => State::toggle_visibility(&mut state.hidden_models, n),
         Leaf::Stock(s) => {
             let name = setup::stock_entity_name(&state.world, ctx(s));
             State::toggle_visibility(&mut state.hidden_stocks, &name);
@@ -220,6 +220,13 @@ pub(super) fn click(state: &mut State, leaf: Leaf) {
         Leaf::SetupOps(s) => focus(state, &s),
         Leaf::Model(n) => {
             actions::target(state, UiTarget::Model(n.clone()));
+            state.pending.push_back(CommandKind::Select(Some(n)));
+        }
+        // #1863: a profile opens its Stock page (its placement lives
+        // there) and is selected, so Del deletes it (undoable).
+        Leaf::Sketch(s, n) => {
+            focus(state, &s);
+            actions::target(state, UiTarget::Stock);
             state.pending.push_back(CommandKind::Select(Some(n)));
         }
         // Target only: no Select, so browsing tools never arms Del.

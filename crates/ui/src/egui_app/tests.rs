@@ -89,6 +89,7 @@ mod frame_cost_probe;
 mod pick_mode;
 mod spindle_row;
 mod stock_size;
+mod dxf_profile;
 mod stock_material;
 mod setup_settings_page;
 mod machine_page;

@@ -91,6 +91,9 @@ mod accessory_ui;
 pub use accessory_ui::{AccessoryDraft, AccessorySizeDraft};
 #[path = "state_fixture_profile.rs"]
 mod fixture_profile_ui;
+#[path = "state_sketch.rs"]
+mod sketch_ui;
+pub use sketch_ui::{DxfSource, DxfUnitsPrompt, SketchUi};
 pub use fixture_profile_ui::{FixtureProfileDraft, ProfileEditDraft, ProfileKindChoice};
 #[path = "state_program_entry.rs"]
 mod program_entry;
@@ -727,6 +730,15 @@ pub enum CommandKind {
     },
     /// Export fixture `name`'s profile to ASCII DXF path.
     ExportFixtureDxf { name: String, path: PathBuf },
+    /// #1863: the Stock page's "Add DXF profile…" picker.
+    AddDxfProfileDialog,
+    /// #1863: place a DXF drawing on the active setup's stock - one
+    /// `ImportDxf`; `units` answers a drawing that states none.
+    ImportDxf { source: DxfSource, units: Option<camcraft_app::units::Unit> },
+    /// #1863: the units prompt's answer (`None` - Cancel).
+    ResolveDxfUnits(Option<camcraft_app::units::Unit>),
+    /// #1863: move and turn a DXF profile on its stock top - one `MoveSketch`.
+    MoveSketch { name: String, x: f64, y: f64, angle_deg: f64 },
     /// Part orientation (M5.2 G): a model's full rigid placement -
     /// position plus yaw-pitch-roll degrees (R = Rz ⊗ Ry ⊗ Rx, the
     /// `SetWcs` voice). The world stores a unit quaternion; the
@@ -1685,6 +1697,10 @@ pub struct State {
     /// computed from it keeps running - hiding geometry must never
     /// silently change what the machine does).
     pub hidden_models: Vec<String>,
+    /// #1863: a DXF drawing that states no unit, held for the units prompt.
+    pub dxf_units_prompt: Option<DxfUnitsPrompt>,
+    /// #1863: the Stock page's DXF profile placement drafts.
+    pub sketch_ui: SketchUi,
     /// Stock entities hidden from the viewport by the browser eye.
     pub hidden_stocks: Vec<String>,
     /// Work-offset gizmos hidden by their browser eyes.
@@ -2293,6 +2309,8 @@ impl State {
             geo_row_marked: Vec::new(),
             op_tab: 0,
             hidden_models: Vec::new(),
+            dxf_units_prompt: None,
+            sketch_ui: SketchUi::default(),
             hidden_stocks: Vec::new(),
             hidden_offsets: Vec::new(),
             hidden_paths: Vec::new(),
@@ -4197,6 +4215,10 @@ impl State {
             CommandKind::SetFixtureProfile { name, profile } => self.set_fixture_profile(&name, profile),
             CommandKind::DeriveFixtureProfile { name, axis } => self.derive_fixture_profile(&name, axis),
             CommandKind::ExportFixtureDxf { name, path } => self.export_fixture_dxf_path(&name, path),
+            CommandKind::AddDxfProfileDialog => self.add_dxf_profile_dialog(),
+            CommandKind::ImportDxf { source, units } => self.import_dxf(source, units),
+            CommandKind::ResolveDxfUnits(units) => self.resolve_dxf_units(units),
+            CommandKind::MoveSketch { name, x, y, angle_deg } => self.move_sketch(&name, x, y, angle_deg),
             CommandKind::InsertBuiltinVise { setup, params, fit_stock, pos, yaw_deg } => {
                 self.insert_builtin_vise(setup, &params, fit_stock, pos, yaw_deg);
             }

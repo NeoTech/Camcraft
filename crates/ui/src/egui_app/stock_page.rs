@@ -35,6 +35,9 @@ pub(super) fn stock_page(ui: &mut Ui, state: &mut State) {
         group(ui, "Fit to models", None, |ui| fit_fields(ui, state, u));
     }
     actions(ui, state);
+    // #1863: DXF profiles placed on this stock's top, under the stock's
+    // own actions (those act on the stock, not on its profiles).
+    group(ui, "DXF profiles", None, |ui| super::stock_profiles::profiles_group(ui, state));
 }
 
 /// Units, the shape choice and the models' size it is sized against.

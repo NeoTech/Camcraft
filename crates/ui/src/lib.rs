@@ -68,6 +68,7 @@ pub mod headless_gpu;
 #[cfg(not(target_arch = "wasm32"))]
 mod headless_open;
 pub mod interact;
+pub(crate) mod sketch_overlay;
 mod height_display;
 mod height_memo;
 pub mod locate_pick;
