@@ -394,7 +394,12 @@ pub(super) fn list_features(env: &mut Env, a: &Map<String, Value>) -> Result<Val
         return sketch_features(env, name, e, sketch, a);
     }
     let kinds = wanted_kinds(a, &KINDS)?;
-    let limit = limit_of(a)?;
+    // #1944: compact rows, and a chat-sized page unless `limit` says otherwise.
+    let compact = super::compact::flag(a, "compact")?;
+    let limit = match a.get("limit") {
+        None | Some(Value::Null) if compact => super::compact::COMPACT_LIMIT,
+        _ => limit_of(a)?,
+    };
     // #561: a fixture's faces are pickable too - `locate_part` mates them.
     let e = match model::find_by_name(w, name) {
         Some(e) if model::is_fixture(w, &e) => e,
@@ -418,9 +423,13 @@ pub(super) fn list_features(env: &mut Env, a: &Map<String, Value>) -> Result<Val
             _ => (Vec::new(), 0),
         };
         truncated |= rows.len() < total;
+        let rows = if compact { super::compact::compact_rows(k, rows) } else { rows };
         out[k] = Value::Array(rows);
         out[format!("{k}_total")] = json!(total);
     }
     out["truncated"] = json!(truncated);
+    if compact {
+        out["compact"] = json!(true);
+    }
     Ok(out)
 }

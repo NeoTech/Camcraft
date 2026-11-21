@@ -313,7 +313,8 @@ pub(super) fn s_list_features() -> Value {
             "model": { "type": "string", "description": "Model or DXF profile name (see get_job)." },
             "kinds": { "type": "array", "items": { "type": "string", "enum": ["faces", "chains", "patches", "vertices", "layers"] },
                 "description": "Which feature kinds to list; default all model kinds or sketch chains and layers." },
-            "limit": { "type": "integer", "minimum": 1, "description": "Rows per kind (default 500)." }
+            "limit": { "type": "integer", "minimum": 1, "description": "Rows per kind (default 500; 25 with compact)." },
+            "compact": { "type": "boolean", "description": "Short rows (id, name and the facts a pick is chosen by; counts in place of loops and bounds) for a small context window (default false)." }
         }),
         &["model"],
     )

@@ -113,7 +113,9 @@ fn machine_view(w: &flecs_ecs::prelude::World) -> Value {
     })
 }
 
-pub(super) fn get_job(env: &mut Env, _a: &Map<String, Value>) -> Result<Value, String> {
+pub(super) fn get_job(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
+    // #1944: the short form for a model's context window.
+    let summary = super::compact::flag(a, "summary")?;
     let w = &env.world;
     let models: Vec<Value> = model::model_entities(w)
         .iter()
@@ -158,7 +160,7 @@ pub(super) fn get_job(env: &mut Env, _a: &Map<String, Value>) -> Result<Value, S
         }))
         .collect();
     let ops: Vec<Value> = inventory(env).iter().map(|(k, e, s)| op_full(env, k, e, *s)).collect();
-    Ok(json!({
+    let mut job = json!({
         "document": env.doc_path.as_ref().map(|p| p.display().to_string()),
         // #902: the document's unit - display and posted program.
         "units": super::units_tools::word(w),
@@ -173,7 +175,11 @@ pub(super) fn get_job(env: &mut Env, _a: &Map<String, Value>) -> Result<Value, S
         "machine": machine_view(w),
         "can_undo": env.history.can_undo(),
         "can_redo": env.history.can_redo(),
-    }))
+    });
+    if summary {
+        super::compact::summarize_job(&mut job);
+    }
+    Ok(job)
 }
 
 /// The kind's file key (`"face"`, `"pocket3d"` ...) and its default
@@ -197,7 +203,7 @@ fn json_type(v: &Value) -> &'static str {
     }
 }
 
-pub(super) fn list_operation_types(_env: &mut Env, _a: &Map<String, Value>) -> Result<Value, String> {
+pub(super) fn list_operation_types(_env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
     let kinds: Vec<Value> = KindInfo::ALL
         .iter()
         .enumerate()
@@ -229,6 +235,8 @@ pub(super) fn list_operation_types(_env: &mut Env, _a: &Map<String, Value>) -> R
             kind
         })
         .collect();
+    // #1944: one kind, or one section, for a small context window.
+    let kinds = super::compact::filter_kinds(kinds, a)?;
     Ok(json!({
         "kinds": kinds,
         "note": "Fields absent from the defaults are optional and off; set them in a params patch to turn them on.",
