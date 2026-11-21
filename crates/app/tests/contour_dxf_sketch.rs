@@ -1,6 +1,6 @@
 //! #1864: 2D Contour on DXF sketches - whole-plate nesting, G2/G3 arcs,
 //! layer/chain picking, per-chain side and direction overrides, open-chain
-//! safety, and project v73 roundtrip.
+//! safety, and project v74 roundtrip.
 //!
 //! Gate map (M4.4): covers app::operation (contour_sketch, contour_sketch_pick,
 //! job, generate, types), app::project (file, area, params, wire), app::sketch_model.
@@ -15,7 +15,7 @@ use serde_json::{Value, json};
 use camcraft_app::cl::MoveKind;
 use camcraft_app::commands::{
     AddTool, Command, CommandError, CreateOperation, DxfOptions, EditOperationParams,
-    GenerateOperation, History, ImportDxf, SetStock,
+    GenerateOperation, History, ImportDxf, SetOperationDoNotTouch, SetStock,
 };
 use camcraft_app::geometry::sketch_chains::ChainId;
 use camcraft_app::links::{Approach, Compensation, Links};
@@ -217,7 +217,7 @@ fn whole_plate_auto_nesting_cuts_outer_outside_holes_inside_and_preserves_g2_g3_
 }
 
 #[test]
-fn layer_and_chain_picks_per_chain_overrides_undo_and_project_v73_roundtrip() {
+fn layer_and_chain_picks_per_chain_overrides_undo_and_project_v74_roundtrip() {
     let (dir, world, mut history) = sheet_world("overrides");
     let ids = plate_ids(&world);
 
@@ -282,20 +282,39 @@ fn layer_and_chain_picks_per_chain_overrides_undo_and_project_v73_roundtrip() {
     let max_x = cache.path.moves.iter().filter(|m| m.kind != MoveKind::Rapid).map(|m| m.to.x).fold(f64::NEG_INFINITY, f64::max);
     assert!(max_x < 105.0, "unselected outer rect ({:?}) must not be machined: max_x={max_x}", ids.outer);
 
-    // Save v73 project, reopen into fresh world, and verify SketchLayer, SketchChain & chain_overrides roundtrip intact.
-    let proj_path = dir.join("plate_v73.camproj");
-    project::save(&world, &proj_path).expect("save v73");
-    let saved_json = std::fs::read_to_string(&proj_path).expect("read v73 json");
+    // Save v74 project, reopen into fresh world, and verify SketchLayer, SketchChain & chain_overrides roundtrip intact.
+    let proj_path = dir.join("plate_v74.camproj");
+    project::save(&world, &proj_path).expect("save v74");
+    let saved_json = std::fs::read_to_string(&proj_path).expect("read v74 json");
     let v: Value = serde_json::from_str(&saved_json).expect("parse json");
     assert_eq!(v["version"], json!(project::PROJECT_VERSION));
+    // #1864 on top of #2055: v73 is the do_not_touch format. A v73 reader
+    // must refuse sketch picks and chain overrides, so they need v74.
+    assert!(v["version"].as_u64().is_some_and(|n| n >= 74), "sketch picks need the v74 format barrier");
 
     let fresh = new_world();
-    project::open(&fresh, &saved_json).expect("open v73");
+    project::open(&fresh, &saved_json).expect("open v74");
     let op_fresh_e = model::find_by_name(&fresh, "Cut").expect("reopened op");
     assert_eq!(operation::status_of(&fresh, &op_fresh_e), OpStatus::Ok, "saved toolpath stamp stays fresh on reopen");
     let op_fresh = model::operation_of(&fresh, &op_fresh_e).expect("op component");
     let OpParams::Contour { chain_overrides, .. } = op_fresh.params else { panic!("Contour") };
     assert_eq!(chain_overrides.len(), 3);
+}
+
+#[test]
+fn do_not_touch_refuses_a_sketch_chain_or_layer_by_name() {
+    // #1864 on top of #2055: protection guards model faces and edge chains.
+    // A DXF sketch pick is refused at the command, by name, not skipped.
+    let (_dir, world, mut history) = sheet_world("dnt-sketch");
+    let ids = plate_ids(&world);
+    let params = operation::seed_params(OpType::Offset2D.ordinal());
+    run(&world, &mut history, CreateOperation::new(&world, "Off", TOOL, SrcRef::Stock, params), "create");
+    for feature in [FeatureSel::SketchChain(ids.big_circle), FeatureSel::SketchLayer("holes".into())] {
+        let dnt = operation::DoNotTouch { clearance: 1.0, picks: vec![GeoSel { entity: "plate".into(), feature }] };
+        let err = SetOperationDoNotTouch::new(&world, "Off", dnt).err().expect("sketch pick must be refused");
+        let msg = err.to_string();
+        assert!(msg.contains("sketch pick") && msg.contains("plate"), "{msg}");
+    }
 }
 
 #[test]

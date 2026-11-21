@@ -207,7 +207,7 @@ pub enum ParamsDto {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         tilt: Option<TiltDto>,
         /// #1864: optional per-chain side and direction overrides for DXF
-        /// sketch contours; absent on every pre-v73 file.
+        /// sketch contours; absent on every pre-v74 file.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         chain_overrides: Vec<ChainOverrideDto>,
     },

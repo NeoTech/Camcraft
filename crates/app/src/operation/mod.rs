@@ -97,6 +97,8 @@ pub(crate) use material_region::selection_drives_region;
 mod circle_fit;
 // #1504: the plain Slot's room read off two picked edges or a face.
 mod slot_pick;
+// #1868: the same room read off DXF sketch chains.
+mod slot_sketch;
 pub use slot_pick::{slot_bound_of, slot_fit_of, slot_from_picks};
 pub use circle_fit::{CIRCLE_FIT_TOL, circle_of_region, circular_fit_of};
 mod material_source;

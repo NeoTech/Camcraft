@@ -110,7 +110,7 @@ pub fn source_problem(world: &World, declared: Option<&str>, src: &SrcRef, param
                     ));
                 }
             }
-            if !matches!(params, OpParams::Contour { .. }) {
+            if !matches!(params, OpParams::Contour { .. } | OpParams::Slot { .. } | OpParams::TrochoidalSlot { .. }) {
                 return Some(format!(
                     "'{}' is a DXF profile - an operation takes the whole profile as its source; picked chains of a profile are not supported yet",
                     profiles[0]
@@ -177,6 +177,19 @@ pub fn generation_problem(world: &World, op: &Operation) -> Option<String> {
     }
     if matches!(op.params, OpParams::Contour { .. }) {
         return None;
+    }
+    // #1868: a slot kind reads one picked chain of a profile; the whole
+    // profile names no slot.
+    if matches!(op.params, OpParams::Slot { .. } | OpParams::TrochoidalSlot { .. }) {
+        if matches!(op.src, SrcRef::Selection(_)) {
+            return None;
+        }
+        return source_profiles(world, &op.src).first().map(|name| {
+            format!(
+                "a {} operation on the DXF profile '{name}' needs one picked chain - pick one closed slot outline or one open centerline",
+                op.params.kind()
+            )
+        });
     }
     checked_against(world, op)
         .map(|what| format!("this operation is {what}; a toolpath from the chains of a DXF profile is not generated yet"))

@@ -140,7 +140,10 @@ pub fn slot(a: Point2, b: Point2, p: &SlotParams) -> Result<Toolpath, GenError> 
     let r = p.tool_diameter * 0.5;
     let h = p.width * 0.5 - r - p.stock_to_leave;
     if h < 0.0 {
-        return Err(GenError::Invalid("slot is narrower than the tool".into()));
+        return Err(GenError::Invalid(format!(
+            "slot is narrower than the tool: the slot is {:.3} mm wide ({:.3} mm left on each wall) and the tool is {:.3} mm",
+            p.width, p.stock_to_leave, p.tool_diameter
+        )));
     }
     let u = Point2::new(dx / len, dy / len);
     let n = Point2::new(-u.y, u.x);

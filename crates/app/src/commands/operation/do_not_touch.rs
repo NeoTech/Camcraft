@@ -32,6 +32,13 @@ pub(super) fn validate_do_not_touch(
     }
     for g in &dnt.picks {
         let desc = describe_sel(g);
+        // #1864: a DXF sketch pick is a 2D profile, not a model surface;
+        // protection guards model faces and edge chains only.
+        if matches!(g.feature, FeatureSel::SketchChain(_) | FeatureSel::SketchLayer(_)) {
+            return Err(CommandError::Invalid(format!(
+                "{desc} is a sketch pick - 'Do not touch' protects model faces or edge chains, not DXF sketch chains or layers"
+            )));
+        }
         if matches!(g.feature, FeatureSel::Vertex(_)) {
             return Err(CommandError::Invalid(format!(
                 "{desc} is a vertex - 'Do not touch' protects faces or edge chains, not vertices"

@@ -256,8 +256,13 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
     // that decide which arm runs them; each result surfaces at its
     // arm's own statement in `run_job`.
     let section_z = section_z_of(world, setup, Some(&op.src), &op.params, frame.as_ref());
+    let sketch_slot = super::slot_sketch::is_sketch_slot(world, &op.src, &op.params);
     let picked_region = if super::contour_sketch::is_sketch_contour(world, &op.src, &op.params) {
         None
+    } else if sketch_slot {
+        // #1868: sketch picks bound the slot (`slot_bound`); the region
+        // is the authored stadium, as for a typed slot on the stock.
+        matches!(op.params, OpParams::TrochoidalSlot { .. }).then(|| region_core(&material, &op.params, frame.as_ref(), Ok(0.0)))
     } else {
         match (&op.params, &op.src) {
             // Contour's Selection pair is resolved as raw geometry below
@@ -295,6 +300,7 @@ pub fn collect_job(world: &World, op: &Operation, op_name: &str) -> Result<GenJo
     };
     let slot_bound = match (&op.params, &op.src) {
         (OpParams::Slot { .. }, SrcRef::Selection(items)) if !items.is_empty() => Some(super::slot_pick::slot_bound_of(world, setup, items)),
+        (OpParams::TrochoidalSlot { .. }, SrcRef::Selection(items)) if sketch_slot => Some(super::slot_pick::slot_bound_of(world, setup, items)),
         _ => None,
     };
     let drive_chains = match &op.params {

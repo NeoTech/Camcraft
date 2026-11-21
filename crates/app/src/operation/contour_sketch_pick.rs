@@ -30,7 +30,7 @@ pub struct SketchChainInfo {
     pub auto_side: Option<Side>,
 }
 
-fn transform_chain_pts(pose: Location, pts: &[Point2]) -> Result<Vec<Point2>, GenError> {
+pub(super) fn transform_chain_pts(pose: Location, pts: &[Point2]) -> Result<Vec<Point2>, GenError> {
     let mut out = Vec::with_capacity(pts.len());
     for p in pts {
         let w = transform_point(Point3::new(p.x, p.y, 0.0), pose.pos, pose.rot);
@@ -85,7 +85,7 @@ fn side_word(s: ChainSide) -> &'static str {
     }
 }
 
-fn visit_src_chains(
+pub(super) fn visit_src_chains(
     world: &World,
     src: &SrcRef,
     mut f: impl FnMut(&str, Option<Location>, SketchChainRef<'_>, String) -> Result<(), GenError>,

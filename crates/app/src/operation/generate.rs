@@ -2139,7 +2139,10 @@ fn run_job_arms(job: GenJob) -> Result<(Toolpath, Vec<Warning>), GenError> {
             // #1503: with a selection picked, the slot must fit inside
             // it - refused by name, never cut across a wall into the
             // model and reported OK.
-            if matches!(src, SrcRef::Selection(_)) {
+            // #1868: sketch picks are judged by their slot room instead.
+            if let Some(room) = slot_bound.take() {
+                room?.judge(*a, *b, *width)?;
+            } else if matches!(src, SrcRef::Selection(_)) {
                 super::slot_fit::refuse_unfit_slot(params.kind().info().label, *a, *b, *width, &region)?;
             }
             let path = machining2d::trochoidal_slot(&[*a, *b], &tp)?;
