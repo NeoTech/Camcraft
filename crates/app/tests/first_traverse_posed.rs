@@ -13,6 +13,8 @@
 //!   frame. The dome's 40 x 40 x 12 stock turns up to 23.324, so a
 //!   clearance of 20 (over the block's top 12) is held; 25 passes.
 //! - A work-turning rotary that states no line refuses by name.
+//! - #3127: a table A whose stated pivot moves its line off the WCS
+//!   origin refuses by name; a zero pivot is read as before.
 //!
 //! Provenance: our own machine files and fixtures (the rotary suite's
 //! turned bar, the first-traverse suite's dome); the shop rule "never
@@ -47,6 +49,8 @@ enum Rig {
     /// A rotary Q on the table turns the work about no stated line; B
     /// rides the head.
     Unlined,
+    /// As `TableA`, with A's stated `pivot` (#3127).
+    TableAPivot([f64; 3]),
 }
 
 fn machine_text(rig: Rig) -> String {
@@ -59,7 +63,7 @@ fn machine_text(rig: Rig) -> String {
     let head_b = rot("rb", "B", y, &format!(r#", "parts": [ {head} ]"#));
     let (z_parts, table) = match rig {
         Rig::TwoWork => (head.to_string(), rot("ra", "A", x, &format!(r#", "parts": [ {} ]"#, rot("rb", "B", y, "")))),
-        Rig::TableA => (head_b, rot("ra", "A", x, "")),
+        Rig::TableA | Rig::TableAPivot(_) => (head_b, rot("ra", "A", x, "")),
         Rig::Unlined => (head_b, rot("rq", "Q", "", "")),
     };
     let first = if matches!(rig, Rig::Unlined) { "Q" } else { "A" };
@@ -88,7 +92,10 @@ fn machine_text(rig: Rig) -> String {
 fn world_on(rig: Rig) -> (World, History) {
     let world = camcraft_app::world::new_world();
     let mut h = History::default();
-    let m = parse_mch(&machine_text(rig)).unwrap_or_else(|e| panic!("test machine: {e}"));
+    let mut m = parse_mch(&machine_text(rig)).unwrap_or_else(|e| panic!("test machine: {e}"));
+    if let Rig::TableAPivot(at) = rig {
+        m.axes.iter_mut().filter(|a| a.name == "A").for_each(|a| a.pivot = Some(at));
+    }
     h.execute(&world, LoadMachine::new(&world, "test-posed.mch".into(), Some(m)).expect("machine"));
     h.execute(&world, SetWcsOrigin::new(&world, Location { pos: Point3::ZERO, rot: IDENTITY_Q }).expect("G54 on the lines"));
     let t = catalog().into_iter().find(|(n, _)| *n == BALL).map(|(_, t)| t).expect("catalog");
@@ -235,4 +242,24 @@ fn a_work_turning_rotary_with_no_line_refuses_by_name() {
     for text in ["work-turning rotary Q", "first traverse", "cannot be judged"] {
         assert!(refused.contains(text), "{text}: {refused}");
     }
+}
+
+#[test]
+fn a_table_line_off_the_wcs_origin_refuses_by_name() {
+    // #3127: A's line 40 mm over the WCS origin sweeps the stock higher
+    // than the line through the origin reads; the law refuses.
+    let refused = match contour5d_on(Rig::TableAPivot([0.0, 0.0, 40.0]), 25.0) {
+        Err(e) => e,
+        Ok((_, status, warns)) => panic!("no refusal: {status:?} {warns:?}"),
+    };
+    for text in ["work-turning rotary A", "pivot or offset", "off the WCS origin", "cannot be judged"] {
+        assert!(refused.contains(text), "{text}: {refused}");
+    }
+}
+
+#[test]
+fn a_zero_pivot_reads_the_table_line_through_the_wcs_origin() {
+    let (_, status, warns) = contour5d_on(Rig::TableAPivot([0.0; 3]), 25.0).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(status, OpStatus::Ok);
+    assert_eq!(first_low(&warns), None, "clearance 25 stands over the swept stock: {warns:?}");
 }
