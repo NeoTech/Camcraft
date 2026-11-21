@@ -88,32 +88,20 @@ pub fn wire_verdict(world: &World, e: &Entity) -> Option<Result<WireVerdict, Str
         if matches!(op.src, SrcRef::Stock) {
             return Err("the wire laws judge the kerf against the part, and this cut is taken from the stock - cut it from the part model".into());
         }
-        let material = super::material::material_of(world, setup, &op.src).map_err(|e| e.to_string())?;
-        let stock = model::find_by_name(world, &crate::setup::stock_entity_name(world, setup))
-            .and_then(|s| model::world_facets(world, &s))
-            .filter(|f| !f.is_empty());
         let hs = super::resolve_params(world, setup, Some(&op.src), &op.params)?;
-        // The vertical wire cuts everything between its guides: the op's
-        // planes, the part and the stock, whichever reaches farther.
-        let mut lo = hs.bottom.unwrap_or(f64::INFINITY);
-        let mut hi = hs.top.unwrap_or(f64::NEG_INFINITY);
-        for (a, b) in [z_span(&material.facets), stock.as_deref().and_then(z_span)].into_iter().flatten() {
-            lo = lo.min(a);
-            hi = hi.max(b);
-        }
-        if !(lo.is_finite() && hi.is_finite()) {
-            return Err("the wire laws find no height to judge - neither the planes nor the part resolve".into());
-        }
-        check_guide_span(world, setup, lo, hi)?;
-        let cut = |f: &[Triangle], z: f64, what: &str| {
-            slice::slice(f, z).map_err(|e| format!("the {what}'s section at Z{z:.3} cannot be cut: {e}"))
+        let sections = if super::wire_sketch::selected(&op.src, &op.params) {
+            let name = model::name_of(world, e).ok_or("the selected wire operation has no name")?;
+            let sketch = super::wire_sketch::resolve(world, &op, &name, &hs)?;
+            let part = crate::geo2d::Region::new(vec![sketch.straight_ring(w)?]).map_err(|e| e.to_string())?;
+            let stock = sketch.stock_region()?;
+            sketch.check_path(&cache.path, cond.wire_diameter * 0.5 + cond.gap)?;
+            let (lo, hi) = (sketch.stock.min.z, sketch.stock.max.z);
+            check_guide_span(world, setup, lo, hi)?;
+            // Both sections are constant through the complete analytic prism.
+            [lo, hi].into_iter().map(|z| WireSection { z, part: part.clone(), stock: Some(stock.clone()) }).collect()
+        } else {
+            model_sections(world, &op, &hs)?
         };
-        let mut sections = Vec::new();
-        for z in planes(lo, hi) {
-            let part = cut(&material.facets, z, "part")?;
-            let stock = stock.as_deref().map(|f| cut(f, z, "stock")).transpose()?;
-            sections.push(WireSection { z, part, stock });
-        }
         let side = match w.side {
             WireSide::Die => CutSide::Die,
             WireSide::Punch => CutSide::Punch,
@@ -139,6 +127,36 @@ pub fn wire_verdict(world: &World, e: &Entity) -> Option<Result<WireVerdict, Str
             verify_tol: w.four_axis.as_ref().map_or(0.0, |f| f.verify_tolerance),
         }))
     })())
+}
+
+fn model_sections(world: &World, op: &crate::schema::Operation, hs: &super::ResolvedHeights) -> Result<Vec<WireSection>, String> {
+    let setup = op.setup.as_deref();
+    let material = super::material::material_of(world, setup, &op.src).map_err(|e| e.to_string())?;
+    let stock = model::find_by_name(world, &crate::setup::stock_entity_name(world, setup))
+        .and_then(|s| model::world_facets(world, &s))
+        .filter(|f| !f.is_empty());
+    // The vertical wire cuts everything between its guides: the op's
+    // planes, the part and the stock, whichever reaches farther.
+    let mut lo = hs.bottom.unwrap_or(f64::INFINITY);
+    let mut hi = hs.top.unwrap_or(f64::NEG_INFINITY);
+    for (a, b) in [z_span(&material.facets), stock.as_deref().and_then(z_span)].into_iter().flatten() {
+        lo = lo.min(a);
+        hi = hi.max(b);
+    }
+    if !(lo.is_finite() && hi.is_finite()) {
+        return Err("the wire laws find no height to judge - neither the planes nor the part resolve".into());
+    }
+    check_guide_span(world, setup, lo, hi)?;
+    let cut = |f: &[Triangle], z: f64, what: &str| {
+        slice::slice(f, z).map_err(|e| format!("the {what}'s section at Z{z:.3} cannot be cut: {e}"))
+    };
+    let mut sections = Vec::new();
+    for z in planes(lo, hi) {
+        let part = cut(&material.facets, z, "part")?;
+        let stock = stock.as_deref().map(|f| cut(f, z, "stock")).transpose()?;
+        sections.push(WireSection { z, part, stock });
+    }
+    Ok(sections)
 }
 
 /// Where a tabbed cut's tab cut-off begins in its path (#539): `None`
