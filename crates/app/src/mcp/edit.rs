@@ -8,13 +8,12 @@
 
 use super::tools::{opt_str, req_str};
 use crate::commands::{
-    AddTool, CommandError, HolderPick, CreateOperation, DeleteOperation, EditOperationLinks, EditOperationParams, SetStock,
+    AddTool, CommandError, HolderPick, CreateOperation, DeleteOperation, EditOperationLinks, EditOperationParams,
 };
 use crate::model;
 use crate::operation::{self, KindInfo, OpParams, SrcRef};
 use crate::project;
 use crate::script::{inventory, Env};
-use crate::stock::StockShape;
 
 use serde_json::{json, Map, Value};
 
@@ -249,23 +248,6 @@ pub(super) fn add_tool(env: &mut Env, a: &Map<String, Value>) -> Result<Value, S
         "holder_from": holder.as_ref().map(|_| from),
         "note": note,
     }))
-}
-
-pub(super) fn set_stock(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {
-    let given: Vec<&String> = a.keys().collect();
-    if given.len() != 1 {
-        return Err("give exactly one of \"box\", \"cylinder\" or \"from_model\"".into());
-    }
-    let shape = match (a.get("box"), a.get("cylinder"), opt_str(a, "from_model")?) {
-        (Some(b), None, None) => project::stock_from_json(&json!({ "box": b })),
-        (None, Some(c), None) => project::stock_from_json(&json!({ "cylinder": c })),
-        (None, None, Some(m)) => Ok(StockShape::FromModel { source: m.to_owned() }),
-        _ => Err("give exactly one stock shape".into()),
-    }
-    .map_err(|e| format!("bad stock: {e}"))?;
-    let cmd = SetStock::new(&env.world, shape.clone(), Default::default()).map_err(cmd_err)?;
-    env.history.execute(&env.world, cmd);
-    Ok(json!({ "stock": project::stock_to_json(&shape) }))
 }
 
 pub(super) fn add_operation(env: &mut Env, a: &Map<String, Value>) -> Result<Value, String> {

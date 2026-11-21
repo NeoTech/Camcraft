@@ -85,11 +85,15 @@ impl ImportDxf {
             Some(name) => Some(name.to_owned()),
             None => crate::setup::active(world),
         };
-        if sketch::face_frame(world, setup.as_deref()).is_none() {
-            return Err(CommandError::Invalid(format!(
-                "{} has no stock - make a stock first, then place the DXF profile on it",
-                setup.as_deref().map_or_else(|| "the document".to_owned(), |s| format!("setup '{s}'"))
-            )));
+        match sketch::stock_face(world, setup.as_deref()) {
+            Ok(Some(_)) => {}
+            Ok(None) => {
+                return Err(CommandError::Invalid(format!(
+                    "{} has no stock - make a stock first, then place the DXF profile on it",
+                    setup.as_deref().map_or_else(|| "the document".to_owned(), |s| format!("setup '{s}'"))
+                )));
+            }
+            Err(why) => return Err(CommandError::Invalid(why.into())),
         }
         let doc = dxf::parse(data).map_err(|e| CommandError::Dxf(e.to_string()))?;
         let unit = options.units.map(|u| match u {

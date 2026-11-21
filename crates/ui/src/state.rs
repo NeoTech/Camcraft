@@ -21,7 +21,7 @@ use camcraft_app::commands::{
     ClearToolpath, CreateSetup, DeleteEntity, DeleteFixture, DeleteOperation, DeleteSetup, DeleteTool,
     EditOperationLinks, EditOperationParams, History, ImportModel,
     MoveModel, PasteOperation, RegenerateAll, MarkOperationReviewed, RenameOperation, ReorderOperation, RepairModel, SelectEntity, SetOperationGeometry,
-    SetFixtureFixed, SetOperationSetup, SetStock, SetToolNumber, SetUnits, SetWcsOrigin,
+    SetFixtureFixed, SetOperationSetup, SetToolNumber, SetUnits, SetWcsOrigin,
     SetWorkMaterial, TagFixture, UntagFixture, ImportFixture,
     UpdateModel, theme_of,
 };
@@ -32,6 +32,7 @@ use camcraft_app::operation::{
     self, AreaControls, FeatureSel, GeoSel, Height, HeightReference, OpParams, SrcRef,
 };
 use camcraft_app::schema::{ColorVision, Location, Operation as OperationDef, PostRef, ThemeRef};
+use camcraft_app::geometry::stock_axis::{StockAxis, stock_axis_of};
 use camcraft_app::stock::StockShape;
 use camcraft_app::stock_fit::FitKind as StockFitKind;
 use camcraft_app::tools::{Tool, ToolKind, catalog};
@@ -40,6 +41,9 @@ use camcraft_app::{machine, model, posting, project, world::new_world};
 
 #[path = "state_per_op.rs"]
 mod per_op;
+#[path = "state_stock_pose.rs"]
+mod stock_pose;
+pub use stock_pose::SIM_NOTE_TILTED;
 #[path = "state_browser.rs"]
 mod browser;
 #[path = "state_picked.rs"]
@@ -172,6 +176,13 @@ pub enum CommandKind {
         shape: StockShape,
         pos: [f64; 3],
         yaw_deg: f64,
+    },
+    /// #2576: the Stock page's Apply - the shape, its place and its whole
+    /// turn (a unit quaternion from the axis choice), one `SetStock`.
+    SetStockPose {
+        shape: StockShape,
+        pos: [f64; 3],
+        rot: [f64; 4],
     },
     /// #1094: the stock page's "raw stock only" checkbox for a from-model
     /// stock's source model, one undo unit (`SetStockSourceOnly`).
@@ -805,7 +816,10 @@ pub struct StockUi {
     pub x: f64,
     pub y: f64,
     pub z: f64,
-    pub yaw_deg: f64,
+    /// #2576: which way the stock's own Z runs (Z, X, Y or Custom).
+    pub axis: StockAxis,
+    /// #2576: `[yaw, pitch, roll]` in degrees, read for Custom only.
+    pub angles_deg: [f64; 3],
     pub fit_margin: f64,
     /// #198: fit a box by a separate allowance per side instead of the
     /// one margin.
@@ -829,7 +843,8 @@ impl Default for StockUi {
             x: 0.0,
             y: 0.0,
             z: 0.0,
-            yaw_deg: 0.0,
+            axis: StockAxis::Z,
+            angles_deg: [0.0; 3],
             fit_margin: 2.0,
             fit_per_side: false,
             fit_sides: [2.0; 6],
@@ -2514,7 +2529,8 @@ impl State {
                 self.stock_ui.x = loc.pos.x;
                 self.stock_ui.y = loc.pos.y;
                 self.stock_ui.z = loc.pos.z;
-                self.stock_ui.yaw_deg = quat_yaw_deg(loc.rot);
+                // #2576: the whole turn reads back, not only its Z twist.
+                (self.stock_ui.axis, self.stock_ui.angles_deg) = stock_axis_of(loc.rot);
             }
             match model::stock_def_of(&self.world, &entity) {
                 Some(StockShape::Box { dx, dy, dz }) => {
@@ -3444,20 +3460,8 @@ impl State {
                 shape,
                 pos,
                 yaw_deg,
-            } => {
-                let location = Location {
-                    pos: Point3::new(pos[0], pos[1], pos[2]),
-                    rot: quat_from_yaw(yaw_deg.to_radians()),
-                };
-                match SetStock::new(&self.world, shape, location) {
-                    Ok(command) => {
-                        self.history.execute(&self.world, command);
-                        self.doc_version += 1;
-                        self.status = String::from("stock set");
-                    }
-                    Err(err) => self.refuse(ErrorScope::Setup, format!("stock not set: {err}")),
-                }
-            }
+            } => self.dispatch_set_stock(shape, pos, quat_from_yaw(yaw_deg.to_radians())),
+            CommandKind::SetStockPose { shape, pos, rot } => self.dispatch_set_stock(shape, pos, rot),
             CommandKind::SetStockMaterial(m) => {
                 match camcraft_app::commands::SetStockMaterial::new(&self.world, m) {
                     Ok(command) => {

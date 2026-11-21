@@ -21,6 +21,7 @@ pub mod slice;
 mod slice_bodies;
 mod slice_weld;
 pub mod stock;
+pub mod stock_axis;
 pub mod units;
 
 pub use primitives::{cube, cylinder};

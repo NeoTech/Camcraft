@@ -129,7 +129,7 @@ pub fn facets_in(world: &World, entity: &Entity, declared: Option<&str>) -> Opti
     )
 }
 
-fn bounds(points: impl Iterator<Item = Point3>) -> Option<Aabb> {
+pub(crate) fn bounds(points: impl Iterator<Item = Point3>) -> Option<Aabb> {
     let mut min = [f64::MAX; 3];
     let mut max = [f64::MIN; 3];
     let mut any = false;

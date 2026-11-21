@@ -70,6 +70,8 @@ mod sinker_tools;
 mod units_tools;
 // #1538: Fit to Models over the parts, never the fixtures.
 mod stock_fit_tools;
+// #2576: set_stock, upright or turned.
+mod stock_tools;
 mod tool_number_tools;
 mod wcs_tools;
 // #1720: a setup's WCS flipped axes.
