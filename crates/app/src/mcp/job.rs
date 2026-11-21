@@ -109,7 +109,7 @@ fn machine_view(w: &flecs_ecs::prelude::World) -> Value {
     let (path, m) = crate::machine::document_of(w);
     json!({
         "path": (!path.is_empty()).then_some(path),
-        "definition": m.as_ref().and_then(|m| serde_json::to_value(m).ok()),
+        "definition": m.as_ref().and_then(|m| super::machine_tools::definition(m).ok()),
     })
 }
 
