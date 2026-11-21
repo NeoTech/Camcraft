@@ -88,7 +88,11 @@ pub fn wire_verdict(world: &World, e: &Entity) -> Option<Result<WireVerdict, Str
         if matches!(op.src, SrcRef::Stock) {
             return Err("the wire laws judge the kerf against the part, and this cut is taken from the stock - cut it from the part model".into());
         }
-        let material = super::material::material_of(world, setup, &op.src).map_err(|e| e.to_string())?;
+        let profile = super::wire_sketch::placed(world, &op)?;
+        let material = match &profile {
+            Some(source) => source.material(),
+            None => super::material::material_of(world, setup, &op.src).map_err(|e| e.to_string())?,
+        };
         let stock = model::find_by_name(world, &crate::setup::stock_entity_name(world, setup))
             .and_then(|s| model::world_facets(world, &s))
             .filter(|f| !f.is_empty());
@@ -110,7 +114,10 @@ pub fn wire_verdict(world: &World, e: &Entity) -> Option<Result<WireVerdict, Str
         };
         let mut sections = Vec::new();
         for z in planes(lo, hi) {
-            let part = cut(&material.facets, z, "part")?;
+            let part = match &profile {
+                Some(source) => crate::geo2d::Region::new(vec![source.ring.clone()]).map_err(|e| e.to_string())?,
+                None => cut(&material.facets, z, "part")?,
+            };
             let stock = stock.as_deref().map(|f| cut(f, z, "stock")).transpose()?;
             sections.push(WireSection { z, part, stock });
         }
