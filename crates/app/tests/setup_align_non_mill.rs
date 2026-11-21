@@ -233,7 +233,7 @@ fn wire_edm_2axis_and_4axis_ruled_cut_like_baked() {
         let op = WireContourOp {
             top_z: Height::of(HeightReference::TopOfModel, 0.0),
             bottom_z: Height::of(HeightReference::BottomOfModel, 0.0),
-            condition: "C110".into(), side: WireSide::Punch, start: Some([-25.0, 0.0]), tabs: None, capture: true,
+            condition: "C110".into(), side: WireSide::Punch, start: Some([-25.0, 0.0]), tabs: None, capture: true, both_pieces_restrained: false, stock_centered_in_xy_travel: false,
             taper_deg: 0.0, burnout: None, clearance: camcraft_app::operation::DEFAULT_CLEARANCE, skims: Vec::new(),
             four_axis: four_axis.then(|| WireFourAxis { pairing: WirePairingRule::ArcLength, verify_tolerance: 0.12, ..WireFourAxis::default() }),
         };
