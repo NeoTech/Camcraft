@@ -39,6 +39,8 @@ pub mod orientation;
 // #894: the thread mills - form constants, sanity and the pitch door.
 pub mod thread_mill;
 pub mod thread_hand;
+// #1444: the undercut cutters - T-slot, keyseat, dovetail, lollipop.
+pub mod undercut;
 pub mod catalog_fields;
 // #890: a tool's cutting data per workpiece material.
 pub mod cutting_rows;

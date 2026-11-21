@@ -128,6 +128,10 @@ pub(crate) fn kind_name(k: ToolKind) -> &'static str {
         ToolKind::ThreadMill => "thread mill",
         ToolKind::ThreadMillSingle => "single-form thread mill",
         ToolKind::Wire => "EDM wire",
+        ToolKind::TSlot => "T-slot cutter",
+        ToolKind::Keyseat => "keyseat cutter",
+        ToolKind::Dovetail => "dovetail cutter",
+        ToolKind::Lollipop => "lollipop cutter",
     }
 }
 

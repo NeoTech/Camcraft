@@ -354,6 +354,7 @@ impl OpParams {
             OpParams::WireContour { .. }
             | OpParams::SinkerBurn { .. }
             | OpParams::SinkerSideBurn { .. }
+            | OpParams::SlotUndercut { .. }
             | OpParams::PlasmaProfile { .. } => self.stamp_cutting(world, setup, src, h),
         }
         self.stamp_links(h);

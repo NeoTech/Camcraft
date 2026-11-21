@@ -155,6 +155,8 @@ pub mod tool_numbers;
 pub use camcraft_tools::tools;
 // #894: the thread mills' form constants, sanity law and pitch door.
 pub use camcraft_tools::thread_mill;
+// #1444: the undercut cutters' record law and profile.
+pub use camcraft_tools::undercut;
 // #630: the lathe tool orientation code (LinuxCNC 1-9) and its control point.
 pub use camcraft_tools::orientation;
 pub use camcraft_tools::catalog_fields;

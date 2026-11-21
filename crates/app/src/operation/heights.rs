@@ -185,6 +185,8 @@ pub fn region_z(
         OpParams::WireContour(p) => resolve(p.top_z),
         // The electrode enters at the work top (#541).
         OpParams::SinkerBurn(p) | OpParams::SinkerSideBurn(crate::operation::SinkerSideBurnOp { burn: p, .. }) => resolve(p.top_z),
+        // #1444: the material top over the slot.
+        OpParams::SlotUndercut(p) => resolve(p.top_z),
     }
 }
 
@@ -429,6 +431,14 @@ pub fn resolve_params_with(
             Some(req("Cavity Floor Z", p.floor_z)?),
             None,
             None,
+        ),
+        // #1444: the undercut's floor is its only cut plane.
+        OpParams::SlotUndercut(p) => (
+            req("Clearance Z", p.clearance_z)?,
+            Some(req("Top of Part Z", p.top_z)?),
+            Some(req("Bottom of Part Z", p.bottom_z)?),
+            None,
+            opt("Retract Z", p.retract_z)?,
         ),
     };
     Ok(ResolvedHeights { clearance, top, bottom, face_top, retract })

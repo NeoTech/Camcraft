@@ -120,6 +120,8 @@ mod tool_orientation_row;
 mod thread_page;
 // #894: the thread mills' pitch and form rows.
 mod tool_thread_mill_row;
+// #1444: the undercut cutters' seeding and dovetail flank angle row.
+mod tool_undercut_row;
 // #898: the tool editor's catalog rows (part number, vendor, ...).
 mod tool_catalog_rows;
 mod tool_settings;
@@ -184,6 +186,8 @@ mod wire_page;
 // #541: the Sinker Burn's fields.
 mod sinker_page;
 mod trochoid_page;
+// #1444: the Slot Undercut kind's fields.
+mod undercut_page;
 mod kind_editors;
 mod deburr_page;
 mod mill2d_more_page;

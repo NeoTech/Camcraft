@@ -72,6 +72,7 @@ impl ParamsDto {
             OpParams::WireContour(op) => ParamsDto::WireContour(WireContourDto::from_op(op)),
             OpParams::SinkerBurn(op) => ParamsDto::SinkerBurn(SinkerDto::from_op(op)),
             OpParams::SinkerSideBurn(op) => ParamsDto::SinkerSideBurn(SinkerSideDto::from_op(op)),
+            OpParams::SlotUndercut(op) => ParamsDto::SlotUndercut(SlotUndercutDto::from_op(op)),
             OpParams::TrochoidalSlot { .. } => ParamsDto::TrochoidalSlot(TrochoidDto::from_params(p)),
             OpParams::Face {
                 stepover,
@@ -1340,6 +1341,7 @@ impl ParamsDto {
             ParamsDto::WireContour(d) => d.to_params(),
             ParamsDto::SinkerBurn(d) => d.to_params(),
             ParamsDto::SinkerSideBurn(d) => d.to_params(),
+            ParamsDto::SlotUndercut(d) => d.to_params(),
             ParamsDto::TrochoidalSlot(d) => d.to_params(),
             // Absent v5 keys decode (via serde defaults) to the legacy
             // single-level face, byte-exact; present ones land on the

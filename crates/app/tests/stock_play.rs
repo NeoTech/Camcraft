@@ -319,3 +319,68 @@ fn a_worker_refusal_is_said_by_name_and_drop_joins() {
     w.request(usize::MAX); // clamps to the end
     drop(w); // stops mid-cut and joins: no thread outlives the handle
 }
+
+fn undercut_doc() -> World {
+    use camcraft_app::geo2d::Point2;
+    use camcraft_app::operation::SlotUndercutOp;
+    use camcraft_app::tools::ToolKind;
+
+    let world = new_world();
+    let mut history = History::default();
+    let loc = Location { pos: Point3::ZERO, rot: IDENTITY_Q };
+    let cmd = SetStock::new(&world, StockShape::Box { dx: 20.0, dy: 20.0, dz: 20.0 }, loc);
+    history.execute(&world, cmd.expect("box stock"));
+    let tslot = camcraft_app::undercut::cutter(ToolKind::TSlot, 12.0, 4.0, 4.0, 20.0, 0.0);
+    history.execute(&world, AddTool::new(&world, "TS-12", tslot).expect("t-slot cutter"));
+    let params = OpParams::SlotUndercut(SlotUndercutOp {
+        a: Point2::new(-10.0, 0.0),
+        b: Point2::new(10.0, 0.0),
+        bulge: 0.0,
+        width: 12.0,
+        run_in: 12.0,
+        neck_slot: 5.0,
+        clearance_z: Height::fixed(28.0),
+        retract_z: Some(Height::fixed(24.0)),
+        top_z: Height::fixed(20.0),
+        bottom_z: Height::fixed(6.0),
+        stepover: 4.0,
+        feed: 120.0,
+        plunge_feed: 60.0,
+        climb: true,
+    });
+    let cmd = CreateOperation::new(&world, "Undercut1", "TS-12", SrcRef::Stock, params);
+    history.execute(&world, cmd.expect("create undercut"));
+    history.execute(&world, GenerateOperation::new(&world, "Undercut1").expect("generate undercut"));
+    world
+}
+
+#[test]
+fn playback_removes_undercut_head_and_neck_and_matches_field_view() {
+    let world = undercut_doc();
+    let budget = 20.0 * 20.0 * 20.0 / 0.8;
+    let mut play = FieldPlay::with_budget(&world, false, budget).expect("playback builds");
+    let e = model::find_by_name(&world, "Undercut1").expect("op");
+    let tp = model::toolpath_of(&world, &e).expect("path").path;
+    assert_eq!(play.total(), tp.moves.len(), "PlayIndex counts undercut moves");
+
+    let p = progress(&sim::script([("Undercut1", &tp)], &sim::Traverse::from_machine(&camcraft_app::posting::machine_value(&world))), 0.0)
+        .expect("timeline");
+    // #2901: a zero-length opening rapid takes no time and is done at t = 0.
+    let m0 = tp.moves[0];
+    let opening_is_free = m0.kind == camcraft_app::cl::MoveKind::Rapid && m0.from == m0.to;
+    assert_eq!(play.index_at(&p), Some(usize::from(opening_is_free)));
+
+    let uncut = play.view().stock;
+    assert!(uncut.distance(Point3::new(0.0, 4.0, 8.0)) < 0.0, "cavity starts as stock");
+
+    assert!(play.seek(usize::MAX).expect("cut undercut to end"));
+    let cut = &play.view().stock;
+    assert!(cut.distance(Point3::new(0.0, 4.0, 8.0)) > 0.0, "head removes undercut cavity under roof");
+    assert!(cut.distance(Point3::new(0.0, 0.0, 15.0)) > 0.0, "neck removes material above head");
+    assert!(cut.distance(Point3::new(0.0, 4.5, 15.0)) < 0.0, "roof above overhang stays stock");
+
+    let full = field_view_with(&world, budget).expect("deviate view");
+    assert!(same(&frame(cut), &frame(&full.stock)), "undercut playback end matches field_view");
+    assert!(play.seek(0).expect("rewind"));
+    assert!(same(&frame(&play.view().stock), &frame(&uncut)), "rewind restores uncut stock");
+}

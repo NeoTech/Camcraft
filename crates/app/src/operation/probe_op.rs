@@ -191,6 +191,7 @@ pub fn stylus_cutter(tool: &Tool, stack: Option<&HolderStack>) -> Cutter {
         holder_len: body_len,
         body: None,
         neck: None,
+        undercut: None,
     };
     Cutter { body: stack.and_then(|s| stylus_body(&g, &c, s)), ..c }
 }

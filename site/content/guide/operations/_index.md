@@ -14,7 +14,7 @@ milling. A mill-turn (a lathe with live tooling) shows both.
 
 | Group | Operations |
 |---|---|
-| Milling 2D | Face, Contour, Pocket, Slot, Trochoidal slot, Trace, Adaptive, Offset, Engrave, Chamfer, Circular, Thread |
+| Milling 2D | Face, Contour, Pocket, Slot, Trochoidal slot, Slot Undercut, Trace, Adaptive, Offset, Engrave, Chamfer, Circular, Thread |
 | Milling 3D | 3D Pocket, 3D Finish, Deburr |
 | Drilling | Drill, Bore, Probe |
 | Multi-axis | 5-Axis Contour, 5-Axis Parallel, Swarf, Adv. Swarf, Rotary Contour, Rotary Parallel, Rotary Offset, Multi-Axis Rough, 5-Axis Flow, Multi-Axis Contour |

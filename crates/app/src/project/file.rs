@@ -570,6 +570,14 @@ pub enum ToolKindDto {
     ThreadMillSingle,
     /// Wire EDM wire (#2011): additive in the same way.
     Wire,
+    /// The undercut cutters (#1444): additive words - no older file
+    /// names them. They read the shared keys: `diameter` the head,
+    /// `flute_len` its height, `shank_d` and `shank_len` the neck,
+    /// `tip_angle` the dovetail's flank angle.
+    TSlot,
+    Keyseat,
+    Dovetail,
+    Lollipop,
 }
 
 impl ToolDto {
@@ -594,6 +602,10 @@ impl ToolDto {
                 ToolKind::ThreadMill => ToolKindDto::ThreadMill,
                 ToolKind::ThreadMillSingle => ToolKindDto::ThreadMillSingle,
                 ToolKind::Wire => ToolKindDto::Wire,
+                ToolKind::TSlot => ToolKindDto::TSlot,
+                ToolKind::Keyseat => ToolKindDto::Keyseat,
+                ToolKind::Dovetail => ToolKindDto::Dovetail,
+                ToolKind::Lollipop => ToolKindDto::Lollipop,
             },
             diameter: t.diameter,
             corner_r: t.corner_r,
@@ -663,6 +675,10 @@ impl ToolDto {
                 ToolKindDto::ThreadMill => ToolKind::ThreadMill,
                 ToolKindDto::ThreadMillSingle => ToolKind::ThreadMillSingle,
                 ToolKindDto::Wire => ToolKind::Wire,
+                ToolKindDto::TSlot => ToolKind::TSlot,
+                ToolKindDto::Keyseat => ToolKind::Keyseat,
+                ToolKindDto::Dovetail => ToolKind::Dovetail,
+                ToolKindDto::Lollipop => ToolKind::Lollipop,
             },
             diameter: self.diameter,
             corner_r: self.corner_r,

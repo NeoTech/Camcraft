@@ -17,7 +17,7 @@ use super::fields::{check_row, combo, int_range_row, num_feed, num_plain_row, nu
 use super::layout::{CTRL_W, group_open, prop_row, prop_row_hint, text_row};
 
 /// Tool kind labels, same order as `ToolKind` (mirrors `ToolUi::from_tool`).
-const TOOL_KINDS: [(tools::ToolKind, &str); 18] = [
+const TOOL_KINDS: [(tools::ToolKind, &str); 22] = [
     (tools::ToolKind::EndMill, "End mill"),
     (tools::ToolKind::BallNose, "Ball nose"),
     (tools::ToolKind::BullNose, "Bull nose"),
@@ -40,6 +40,12 @@ const TOOL_KINDS: [(tools::ToolKind, &str); 18] = [
     (tools::ToolKind::Waterjet, "Waterjet nozzle"),
     // #2011: diameter = wire diameter in mm; it turns no spindle.
     (tools::ToolKind::Wire, "EDM wire"),
+    // #1444: the undercut cutters - a head on a narrower neck (the
+    // shank fields); the dovetail's tip angle is its flank angle.
+    (tools::ToolKind::TSlot, "T-slot cutter"),
+    (tools::ToolKind::Keyseat, "Keyseat cutter"),
+    (tools::ToolKind::Dovetail, "Dovetail cutter"),
+    (tools::ToolKind::Lollipop, "Lollipop cutter"),
 ];
 
 /// The settings grid: the groups, in the order the tool reads.
@@ -111,6 +117,8 @@ fn geometry(ui: &mut Ui, state: &mut State) {
     super::tool_orientation_row::orientation_row(ui, state);
     // #894: a thread mill's pitch (range) and form angle.
     super::tool_thread_mill_row::thread_mill_rows(ui, state);
+    // #1444: a dovetail cutter's flank angle.
+    super::tool_undercut_row::dovetail_row(ui, state);
     if state.tool_ui.tool_kind() == tools::ToolKind::BallNose {
         // #263: a ball's corner IS its ball, half the diameter - shown,
         // never edited, since no reader takes any other number.
@@ -126,6 +134,10 @@ fn geometry(ui: &mut Ui, state: &mut State) {
             | tools::ToolKind::Wire
             | tools::ToolKind::ThreadMill
             | tools::ToolKind::ThreadMillSingle
+            | tools::ToolKind::TSlot
+            | tools::ToolKind::Keyseat
+            | tools::ToolKind::Dovetail
+            | tools::ToolKind::Lollipop
     ) {
         prop_row(ui, "Corner radius", |ui| num_row(ui, u, &mut state.tool_ui.corner_r));
     }

@@ -146,6 +146,7 @@ fn feed_of(p: &OpParams) -> f64 {
         OpParams::WireContour(_) => 0.0,
         // The sinker's servo feed down (#541).
         OpParams::SinkerBurn(p) | OpParams::SinkerSideBurn(super::SinkerSideBurnOp { burn: p, .. }) => p.feed,
+        OpParams::SlotUndercut(p) => p.feed,
     }
 }
 
@@ -222,6 +223,7 @@ fn plunge_of(p: &OpParams) -> f64 {
         OpParams::WireContour(_) => 0.0,
         // The sinker's servo feed down (#541).
         OpParams::SinkerBurn(p) | OpParams::SinkerSideBurn(super::SinkerSideBurnOp { burn: p, .. }) => p.feed,
+        OpParams::SlotUndercut(p) => p.plunge_feed,
     }
 }
 
@@ -296,6 +298,7 @@ fn climb_of(p: &OpParams) -> bool {
         // number says which way the circle runs (M2.4 C).
         OpParams::Bore { climb, .. } | OpParams::Thread { climb, .. } => *climb,
         OpParams::Probe { .. } | OpParams::PlasmaProfile(_) | OpParams::WireContour(_) | OpParams::SinkerBurn(_) | OpParams::SinkerSideBurn(_) => false,
+        OpParams::SlotUndercut(p) => p.climb,
     }
 }
 
@@ -379,6 +382,7 @@ fn stepover_of(p: &OpParams) -> Option<f64> {
         // own edges are the pattern, nothing tiles (M2.5 E B).
         | OpParams::Deburr { .. } => None,
         OpParams::Probe { .. } | OpParams::PlasmaProfile(_) | OpParams::WireContour(_) | OpParams::SinkerBurn(_) | OpParams::SinkerSideBurn(_) => None,
+        OpParams::SlotUndercut(p) => Some(p.stepover),
     }
 }
 
@@ -456,6 +460,8 @@ fn stepdown_of(p: &OpParams) -> Option<f64> {
         // infeed ladder to step (M2.5 E B).
         OpParams::Deburr { .. } => None,
         OpParams::Probe { .. } | OpParams::PlasmaProfile(_) | OpParams::WireContour(_) | OpParams::SinkerBurn(_) | OpParams::SinkerSideBurn(_) => None,
+        // One depth: the undercut is cut at its floor (#1444).
+        OpParams::SlotUndercut(_) => None,
     }
 }
 
@@ -527,6 +533,7 @@ pub fn top_of(p: &OpParams) -> Option<Height> {
         OpParams::WireContour(p) => Some(p.top_z),
         // The work top the sinker's depth may be read from (#541).
         OpParams::SinkerBurn(p) | OpParams::SinkerSideBurn(super::SinkerSideBurnOp { burn: p, .. }) => Some(p.top_z),
+        OpParams::SlotUndercut(p) => Some(p.top_z),
     }
 }
 
@@ -607,6 +614,7 @@ pub fn bottom_of(p: &OpParams) -> Option<Height> {
         OpParams::WireContour(p) => Some(p.bottom_z),
         // The cavity floor datum no burn passes (#541).
         OpParams::SinkerBurn(p) | OpParams::SinkerSideBurn(super::SinkerSideBurnOp { burn: p, .. }) => Some(p.floor_z),
+        OpParams::SlotUndercut(p) => Some(p.bottom_z),
     }
 }
 
@@ -684,6 +692,7 @@ fn retract_of(p: &OpParams) -> Option<Height> {
         // the kernel's own word, no between-run plane authored (M2.5 E B).
         | OpParams::Deburr { .. } => None,
         OpParams::Probe { .. } | OpParams::PlasmaProfile(_) | OpParams::WireContour(_) | OpParams::SinkerBurn(_) | OpParams::SinkerSideBurn(_) => None,
+        OpParams::SlotUndercut(p) => p.retract_z,
     }
 }
 
@@ -2447,6 +2456,20 @@ impl KindInfo {
             seed: super::sinker_side_op::seed_sinker_side_burn,
             tool_kinds: tk::ELECTRODE,
         },
+        KindInfo {
+            ty: OpType::SlotUndercut,
+            label: "Slot Undercut",
+            caption: "Undercut",
+            tag: 44,
+            // The head cuts sideways under a roof (#1444): the column
+            // laws stand down for the undercut law - no Z move with
+            // the head under material, no neck through a slot mouth -
+            // and the solid law judges the cutter's real profile.
+            mode: Mode::Undercut,
+            section: Section::Mill2D,
+            seed: super::slot_undercut_op::seed_slot_undercut,
+            tool_kinds: tk::UNDERCUT,
+        },
     ];
 
     /// Whose machine this kind drives - read off the row's section
@@ -2524,6 +2547,7 @@ pub const ALL_LABELS: [&str; KIND_COUNT] = [
     KindInfo::ALL[41].label,
     KindInfo::ALL[42].label,
     KindInfo::ALL[43].label,
+    KindInfo::ALL[44].label,
 ];
 
 impl OpType {
@@ -2593,6 +2617,8 @@ impl OpType {
             OpType::SinkerBurn => 42,
             // #545: the side burn appends (stored ids never move).
             OpType::SinkerSideBurn => 43,
+            // #1444: the slot undercut appends (stored ids never move).
+            OpType::SlotUndercut => 44,
         }
     }
 

@@ -76,6 +76,19 @@ pub enum Mode {
     /// which reads rest material in the frame the work turns in. The
     /// fixture laws stay: boxes, no height field.
     Rotary,
+    /// The undercut cutters (#1444): a head wider than its neck cuts
+    /// SIDEWAYS under a roof, so it clears no column - the stock above
+    /// the head still stands. The column laws would read every pass as
+    /// a cleared kerf (and acquit a lift straight through the roof), so
+    /// the rest model takes no cut from this path; the crossing law (a)
+    /// and the region tangency (b) stand down (passes retrace by design,
+    /// and a 2-D region cannot say an undercut); the solid law (b2)
+    /// judges head and neck against the mesh with the cutter's real
+    /// profile; and the band law (c) hands over to the undercut law
+    /// ([`super::undercut`]): no Z move with the head in or under
+    /// material, no neck or holder band through material above the
+    /// head. Rapids (d) and the fixture laws stay.
+    Undercut,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -355,6 +368,11 @@ pub enum Warning {
     /// pilot drill is a valid plan, so the post is not held, but each such
     /// hole is named.
     DrillUndersize { at: usize, hole_mm: f64, drill_mm: f64 },
+    /// An undercut cutter moves in Z at move `at` while material stands
+    /// in or over its head's footprint (#1444): a lift there drives the
+    /// head into the roof of its own undercut, a dive drives it into
+    /// uncut stock it cannot plunge. Blocking like `Gouge`.
+    UndercutLift { at: usize },
 }
 
 impl Warning {
@@ -467,6 +485,10 @@ impl core::fmt::Display for Warning {
             Warning::SinkerFinishOrder { at, finish_mm, rough_mm } => write!(
                 f,
                 "sinker finish at move {at}: its electrode's undersize {finish_mm:.3} mm per side is not smaller than the rough's {rough_mm:.3} mm - the finish electrode is no larger than the rough and takes nothing off its walls (the post is not held)"
+            ),
+            Warning::UndercutLift { at } => write!(
+                f,
+                "move {at} moves the undercut cutter in Z with material in or over its head (it must enter and leave sideways, clear of the stock)"
             ),
             Warning::AvoidHit { at, item, part, short_mm } => write!(
                 f,

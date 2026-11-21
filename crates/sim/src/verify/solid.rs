@@ -259,7 +259,7 @@ fn rise(edge: &[Atom], h: f64) -> Vec<Atom> {
     if edge.is_empty() || !(h > 0.0 && r > 0.0) {
         return Vec::new();
     }
-    vec![Atom { z0: top, z1: top + h, prof: Prof::Flat(r) }]
+    vec![Atom { z0: top, z1: top + h, prof: Prof::Flat(r), cap: false }]
 }
 
 /// The holes' axes in `fr`'s XY: those running along its tool axis.

@@ -26,6 +26,9 @@ pub use sane::POCKET_ADAPTIVE_RETIRED;
 mod sel;
 mod tilt_basis;
 pub use tilt_basis::CURRENT_TILT_BASIS;
+// #1444: the Slot Undercut's stored parameters.
+mod undercut;
+pub use undercut::SlotUndercutOp;
 mod wire_edm;
 
 pub use area::{
