@@ -14,6 +14,8 @@ pub mod catalog_asset;
 #[cfg(test)]
 mod catalog_asset_tests;
 pub mod cutting;
+// #3068: the router chip-load curve by cutter diameter.
+pub mod cutting_router;
 // #541: the sinker EDM electrode as a tool record.
 pub mod electrode;
 // #1152: the body electrode's outline law.
