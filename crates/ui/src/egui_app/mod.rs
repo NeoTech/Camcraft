@@ -96,6 +96,7 @@ mod spindle_row;
 mod approach_page;
 mod lead_page;
 mod start_exit_rows;
+mod predrilled_page;
 pub(crate) mod op_tabs;
 mod painted;
 mod ribbon_cell;
@@ -369,6 +370,8 @@ mod sinker_pass_tests;
 mod sinker_machine_tests;
 #[cfg(test)]
 mod rest_pocket_tests;
+#[cfg(test)]
+mod predrilled_page_tests;
 
 /// Entry for `--ui egui`; returns the process exit code. `--headless`
 /// selects the no-window proof (seeded document, or the file named on the
