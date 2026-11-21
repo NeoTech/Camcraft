@@ -1,4 +1,4 @@
-//! Project save/load: `.camproj`, JSON, version 74 (see `PROJECT_VERSION`).
+//! Project save/load: `.camproj`, JSON, version 75 (see `PROJECT_VERSION`).
 //!
 //! Serialization goes through plain DTO structs (deliberately not flecs
 //! reflection): the file format is our public persistence contract and must
@@ -127,6 +127,9 @@ mod thread_dto;
 mod break_dto;
 mod unreachable_dto;
 use unreachable_dto::UnreachableDto;
+// #1890: the Deburr break sizing's file words and the v75 chord step.
+mod deburr_break_dto;
+use deburr_break_dto::{break_dto, break_of, default_break_depth, default_passes, BreakModeDto, BreakProfileDto};
 pub use break_dto::EdgeBreakDto;
 // #416: the threading infeed plan's file mirror.
 mod thread_infeed_dto;

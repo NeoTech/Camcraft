@@ -706,6 +706,16 @@ pub enum ParamsDto {
         /// patch and `list_operation_types` see the field.
         #[serde(default)]
         unreachable: UnreachableDto,
+        /// #1890: absent in each file before v75, which reads as one
+        /// Constant Width chamfer pass. Always written.
+        #[serde(default)]
+        break_mode: BreakModeDto,
+        #[serde(default = "default_break_depth")]
+        break_depth: f64,
+        #[serde(default)]
+        break_profile: BreakProfileDto,
+        #[serde(default = "default_passes")]
+        passes: u32,
     },
     /// Declared at v24 with the simultaneous-axis kinds (M5.1 stage
     /// C). The renames state the tags for the familiar reason - the

@@ -27,11 +27,12 @@ fn p3(x: f64, y: f64, z: f64) -> Point3 {
     Point3::new(x, y, z)
 }
 
-/// A 90-deg cone taking a 2-wide break above the z-window; the
-/// rapids plane sits where every op's does.
+/// A 90-deg cone taking a break of chord `2 * sqrt(2)` above the
+/// z-window - a 2 mm setback on each face of a 90-degree edge (#1890);
+/// the rapids plane sits where every op's does.
 fn params(top_z: f64, bottom_z: f64) -> DeburrParams {
     DeburrParams {
-        width: 2.0,
+        width: 2.0 * std::f64::consts::SQRT_2,
         tip_angle_deg: 90.0,
         clearance_z: 20.0,
         top_z,
@@ -43,12 +44,14 @@ fn params(top_z: f64, bottom_z: f64) -> DeburrParams {
         hole_min_diameter: 0.0,
         hole_max_diameter: 0.0,
         unreachable: camcraft_motion::finishing3d::UnreachableEdges::SkipWithNote,
+        sizing: camcraft_motion::finishing3d::DeburrBreak::default(),
     }
 }
 
-/// The tip stands `width / tan(half-angle)` under the edge: at 90
+/// The tip stands `setback / tan(half-angle)` under the edge, and a
+/// 90-degree edge's setback is `width / sqrt(2)` (#1890): at 90
 /// degrees of included angle the half-angle is 45, tan is 1, and the
-/// drop is the width itself. Stated as a number once, here.
+/// drop is the 2 mm setback itself. Stated as a number once, here.
 const DROP: f64 = 2.0;
 
 /// A closed box: x0..x1, y0..y1, z0..z1, every triangle wound
@@ -347,6 +350,8 @@ fn deburr_at_the_wall_corner_is_chamfer_byte_for_byte() {
     // circuit chamfer.rs posts and the same single Z. Byte law, up
     // to the last-bit difference between w * tan(45) and w / tan(45)
     // - quantized to microns, which no real disagreement survives.
+    // #1890: deburr's `width` is the chamfer's chord, so the twin of
+    // chamfer's 2 mm leg is the chord `2 * sqrt(2)` of a 90-deg edge.
     let (w, top_z) = (2.0, 0.0);
     let box_ = box_mesh(0.0, 0.0, 40.0, 20.0, -10.0, top_z);
     // The window at exactly the crease tip's LEVEL isolates the top
@@ -354,7 +359,7 @@ fn deburr_at_the_wall_corner_is_chamfer_byte_for_byte() {
     // segment), the bottom rims stand far below. The level comes from
     // drop(), not the DROP constant - tan(45 deg) is one ulp shy of
     // 1, and an exact-boundary window must be exact.
-    let mut w3 = params(0.0, 0.0);
+    let mut w3 = DeburrParams { width: w * std::f64::consts::SQRT_2, ..params(0.0, 0.0) };
     let level = -w3.drop();
     w3.top_z = level;
     w3.bottom_z = level;

@@ -1158,6 +1158,8 @@ fn seed_deburr(c: &Carried) -> OpParams {
         hole_max_diameter: 10.0,
         // #1889: skip with a note, as each earlier Deburr did.
         unreachable: crate::finishing3d::UnreachableEdges::SkipWithNote,
+        // #1890: one Constant Width chamfer pass.
+        sizing: crate::finishing3d::DeburrBreak::default(),
     }
 }
 

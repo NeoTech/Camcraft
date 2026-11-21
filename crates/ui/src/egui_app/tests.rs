@@ -1317,14 +1317,15 @@ fn every_field_lives_on_exactly_one_section() {
             // labels name the TIP's law, not a cut floor), and the
             // feeds are the ride's - no climb row, the cone follows
             // the edge wherever the weld puts it. There is NO Passes
-            // group: one edge, one pass - the loci are what the weld
-            // exposes, and a stepover could only disagree with the
-            // taxonomy (has_section's exclusion, Chamfer2D's answer
-            // once more).
+            // tab: the loci are what the weld exposes, and a stepover
+            // could only disagree with the taxonomy (has_section's
+            // exclusion, Chamfer2D's answer once more). The pass count
+            // of one break rides Geometry with its size (#1890).
             "Deburr",
             vec![
-                // #1888 and #1889: keep the edge filters and reach policy.
-                ("Geometry", vec!["Break width", "Minimum edge angle", "Skip round holes", "Exclude the picked edges", "Unreachable edges"]),
+                // #1888 and #1889: keep the edge filters and reach policy;
+                // #1890: the break mode, profile and passes ride Geometry.
+                ("Geometry", vec!["Break mode", "Break width", "Break profile", "Number of passes", "Minimum edge angle", "Skip round holes", "Exclude the picked edges", "Unreachable edges"]),
                 ("Heights", vec!["Clearance Z", "Window Top Z", "Window Bottom Z"]),
                 ("Feeds", vec!["Feed", "Plunge feed"]),
             ],

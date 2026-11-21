@@ -541,10 +541,15 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
         // rather than discard protected selections as unknown area fields.
         // v73 -> v74 (#1864): sketch chain/layer picks and per-chain contour
         // overrides arrive; a v73 file has none and steps up unchanged.
+        // v74 -> v75 (#1890): a Deburr width becomes the chamfer chord; the
+        // v74 setback steps up by sqrt(2), its chord on a 90-degree edge.
         notes = super::wcs_one::settle(&mut file, from)?;
         notes.extend(super::fidelity_migrate::settle(&mut file.entities, from));
         if from < 68 {
             super::params_impl::settle_drill_break_through(&mut file.entities);
+        }
+        if from < 75 {
+            super::deburr_break_dto::settle_chord_width(&mut file.entities);
         }
         notes.extend(super::pocket_adaptive_migrate::settle(&mut file.entities, from));
         // v59 -> v60 (#902): the document's unit is its programs' unit;

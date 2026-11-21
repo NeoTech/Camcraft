@@ -653,9 +653,11 @@ pub enum OpParams {
         gap_link: finishing3d::GapLink,
     },
     /// Deburr (M2.5 E B): the cone-ruled edge break in 3D. The ONE
-    /// authored number is `width` - the break's width in the edge's
-    /// own plane - and the tip's depth follows from the tool's cone:
-    /// `drop = width / tan(half-angle)`, stated once in
+    /// authored number is `width` - the chamfer's chord across the
+    /// edge, `w = 2 s sin(theta / 2)` on a wedge `theta` (#1890), or
+    /// the depth under Constant Depth - and the tip's depth follows
+    /// from the edge's setback `s` and the tool's cone:
+    /// `drop = s / tan(half-angle)`, stated once in
     /// [`crate::finishing3d::DeburrParams::drop`] so the door, the
     /// pane and the path cannot disagree (chamfer's derived-floor
     /// grammar, read on a real dihedral). No `bottom_z` to author
@@ -666,8 +668,9 @@ pub enum OpParams {
     /// the kernel's own: every run starts and ends at `clearance_z`
     /// (no retract field exists to author, and none is needed).
     Deburr {
-        /// Break width at the edge plane, mm; > 0 at the door, and
-        /// small enough for the tool's flute is the OTHER door.
+        /// Break width, mm: the chamfer's chord across the edge on
+        /// each wedge angle (#1890); > 0 at the door, and small enough
+        /// for the tool's flute is the OTHER door.
         width: f64,
         clearance_z: Height,
         /// Tip ceiling of the ride: edges whose TIP stands above it
@@ -693,6 +696,9 @@ pub enum OpParams {
         /// #1889: what an edge out of the cone's reach does - skipped
         /// with a note (the default), or the operation is refused.
         unreachable: finishing3d::UnreachableEdges,
+        /// #1890: the break mode (Constant Width or Constant Depth and
+        /// its depth), the profile, and the passes.
+        sizing: finishing3d::DeburrBreak,
     },
     /// Simultaneous 5-axis level finishing (M5.1 stage C): the waterline
     /// ring ladder a [`Self::Finish3D`] Waterline cuts, with a tool-axis

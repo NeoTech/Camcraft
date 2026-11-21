@@ -526,8 +526,11 @@ impl OpParams {
                 hole_max_diameter,
                 // #1889: the policy is an enum; each value is legal.
                 unreachable: _,
+                sizing,
             } => {
                 pos(*width)
+                    // #1890: a positive depth and 1..=100 passes.
+                    && sizing.is_sane()
                     && clearance_z.is_sane()
                     && top_z.is_sane()
                     && bottom_z.is_sane()
