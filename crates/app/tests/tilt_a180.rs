@@ -43,7 +43,7 @@ fn slot_with_tilt(tilt: Option<Tilt>) -> OpParams {
         plunge_feed: 4.0 * IN,
         climb: true,
         entry: Entry3D::Plunge,
-        helix_radius: 1.0,
+        helix_radius: 1.0, blend_turns: false, blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
         tilt,
         extend_start: 0.0,

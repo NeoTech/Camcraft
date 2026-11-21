@@ -102,6 +102,7 @@ mod tab_kerf;
 mod slots;
 mod slot_ends;
 mod slot_room;
+mod slot_turns;
 mod unreached;
 mod waterscan;
 mod pocket_avoid;

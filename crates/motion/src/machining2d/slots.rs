@@ -7,7 +7,7 @@ use crate::geometry::Point3;
 use crate::links::Links;
 
 use super::face::{GenError, band};
-use super::levels::{Cert, Motion, run_levels};
+use super::levels::{Cert, Motion, run_level_walks, run_levels};
 /// Slotting: a straight channel between two XY points, cleared in rows
 /// parallel to its axis. The channel is the stadium swept by a disc of
 /// radius `width / 2` along `a` -> `b`; shrinking a stadium is narrowing
@@ -60,6 +60,12 @@ pub struct SlotParams {
     /// stadium wall (the contour law), not by a static cap: a full-
     /// width slot (h = 0) has no room for any orbit, and says so.
     pub helix_radius: f64,
+    /// Arc turns at the row ends (#1759, `slot_turns`); `false` is
+    /// every earlier slot, unchanged to the byte.
+    pub blend_turns: bool,
+    /// The corner arc's radius, read only with `blend_turns`; `None` is
+    /// the tool radius, a radius is held to `corner_arc_radius`'s door.
+    pub blend_radius: Option<f64>,
     /// Level transitions and links (M11.2 C/D), proved against the
     /// closed-form stadium; [`Links::PLANAR`] is every earlier slot.
     pub links: Links,
@@ -122,7 +128,7 @@ impl SlotParams {
         if self.retract_z.is_some_and(|rz| rz < self.top_z) {
             return Err(GenError::Invalid("retract plane sits inside the material".into()));
         }
-        Ok(())
+        super::slot_turns::door(self)
     }
 }
 
@@ -198,7 +204,11 @@ pub fn slot(a: Point2, b: Point2, p: &SlotParams) -> Result<Toolpath, GenError> 
         (Some(t), _) | (None, Some(t)) => Some(Cert::Stadium { a, b, h, tess: t }),
         (None, None) => None,
     };
-    run_levels(&mut bld, &[pass], &zs, &motion, None, center.as_ref(), link_cert.as_ref());
+    // #1759: the row-end corners on arcs, where asked and proved.
+    let area = if p.blend_turns { stadium_center(a, b, h) } else { None };
+    let turns = super::slot_turns::round(&pass, p, area.as_ref(), &mut bld);
+    let runs = turns.map(|walk| [walk]);
+    run_level_walks(&mut bld, &[pass], &zs, &motion, runs.as_ref().map(|r| r.as_slice()), center.as_ref(), link_cert.as_ref());
     let cur = bld.at();
     bld.push(MoveKind::Rapid, Point3::new(cur.x, cur.y, p.clearance_z), None);
 

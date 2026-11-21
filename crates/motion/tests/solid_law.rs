@@ -307,7 +307,7 @@ fn a_contour_ring_under_an_overhanging_slab_is_a_gouge() {
         tab_height: 1.0,
         entry: Entry3D::Plunge,
         helix_radius: 1.0,
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         links: camcraft_motion::links::Links::PLANAR,
     };
     let t = contour(&region, &p).expect("contour");
@@ -365,7 +365,7 @@ fn a_cavity_ring_under_an_undercut_lip_is_a_gouge() {
         tab_height: 1.0,
         entry: Entry3D::Plunge,
         helix_radius: 1.0,
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         links: camcraft_motion::links::Links::PLANAR,
     };
     let t = contour(&region, &p).expect("contour");

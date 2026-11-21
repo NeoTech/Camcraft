@@ -706,7 +706,7 @@ fn seed_face(c: &Carried) -> OpParams {
         climb: c.climb,
         // Turning-point blends are opt-in (M11.1 A): a fresh face is
         // the sharp serpentine every golden and every saved file knows.
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         // M13.11: a fresh face lifts over its holes - a bore or a boss
         // is bridged in the air; cutting across is the user's choice.
         holes: Default::default(),
@@ -737,7 +737,7 @@ fn seed_contour(c: &Carried) -> OpParams {
         entry: Entry3D::Plunge,
         helix_radius: 1.0,
         // Turning-point blends are opt-in (M11.1 B), as on Face.
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         // Retract and re-enter: the transition every earlier contour
         // posted; staying down is the user's pick on Lead in / Lead out.
         links: crate::links::Links::PLANAR,
@@ -905,7 +905,7 @@ fn seed_slot(c: &Carried) -> OpParams {
         plunge_feed: c.plunge,
         climb: c.climb,
         entry: Entry3D::Plunge,
-        helix_radius: 1.0,
+        helix_radius: 1.0, blend_turns: false, blend_radius: None,
         tilt: c.tilt,
         extend_start: 0.0,
         extend_end: 0.0,

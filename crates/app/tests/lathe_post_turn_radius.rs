@@ -135,7 +135,7 @@ fn a_mill_stream_states_no_turning_radius() {
     history.execute(&world, AddTool::new(&world, "EM-0600-4FL", tool).expect("catalog tool"));
     let face = OpParams::Face {
         holes: Default::default(),
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         tilt: None,
         stepover: 3.0,
         clearance_z: Height::fixed(25.0),

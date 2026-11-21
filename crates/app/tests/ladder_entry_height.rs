@@ -183,7 +183,7 @@ fn contour() -> OpParams {
         tab_height: 0.0,
         entry: Entry3D::Plunge,
         helix_radius: 1.0,
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
     }
 }
@@ -192,7 +192,7 @@ fn contour() -> OpParams {
 fn face() -> OpParams {
     OpParams::Face {
         holes: Default::default(),
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         tilt: None,
         stepover: 5.0,
         clearance_z: Height::fixed(40.0),

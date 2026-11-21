@@ -133,12 +133,18 @@ fn adaptive_troch_passes(ui: &mut Ui, u: Unit, t: &mut camcraft_app::machining2d
 /// while it is on - the radius, `Tool radius` (the `None` every earlier
 /// file holds) or a set value the generator bounds by the tool radius.
 pub(super) fn arc_turn_rows(ui: &mut Ui, u: Unit, label: &str, on: &mut bool, radius: &mut Option<f64>) {
+    arc_turn_rows_auto(ui, u, (label, "Arc radius = tool radius"), on, radius);
+}
+
+/// [`arc_turn_rows`] with the name of what no radius means (#1759: a
+/// Face turns on half the row spacing, not on the tool radius).
+pub(super) fn arc_turn_rows_auto(ui: &mut Ui, u: Unit, (label, auto_label): (&str, &str), on: &mut bool, radius: &mut Option<f64>) {
     check_row(ui, label, on);
     if !*on {
         return;
     }
     let mut auto = radius.is_none();
-    check_row(ui, "Arc radius = tool radius", &mut auto);
+    check_row(ui, auto_label, &mut auto);
     match (auto, radius.as_mut()) {
         (true, _) => *radius = None,
         (false, Some(r)) => prop_row(ui, "Arc radius", |ui| num(ui, u, r)),

@@ -277,7 +277,7 @@ fn render_all_guide_images() {
         let OpParams::Contour {
             stock_to_leave, clearance_z, retract_z, top_z, bottom_z, stepdown,
             feed, plunge_feed, climb, side, tolerance, tab_count, tab_width,
-            tab_height, entry, helix_radius, blend_turns, links, tilt, ..
+            tab_height, entry, helix_radius, blend_turns, blend_radius, links, tilt, ..
         } = base_contour
         else {
             panic!("2D Contour1 should be OpParams::Contour");
@@ -285,7 +285,7 @@ fn render_all_guide_images() {
         let contour_with_lead = |lead: Lead| OpParams::Contour {
             stock_to_leave, clearance_z, retract_z, top_z, bottom_z, stepdown,
             feed, plunge_feed, climb, side, lead, tolerance, tab_count, tab_width,
-            tab_height, entry, helix_radius, blend_turns, links, tilt,
+            tab_height, entry, helix_radius, blend_turns, blend_radius, links, tilt,
         };
         edit_and_generate(&mut h, "2D Contour1", contour_with_lead(Lead::Arc { radius: 6.0 }));
         let lead_target = first_arc_cut_target(&h, "2D Contour1", false)

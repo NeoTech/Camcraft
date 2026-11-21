@@ -67,7 +67,7 @@ fn contour_params() -> OpParams {
         tab_height: 0.0,
         entry: camcraft_app::machining3d::Entry3D::Plunge,
         helix_radius: 1.0,
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
     }
 }
@@ -234,7 +234,7 @@ fn an_unborn_toolpath_refuses_to_post() {
 }
 
 fn face_params() -> OpParams {
-    OpParams::Face { holes: Default::default(), blend_turns: false,
+    OpParams::Face { holes: Default::default(), blend_turns: false, blend_radius: None,
         tilt: None,
         stepover: 3.0,
         clearance_z: Height::fixed(25.0),
@@ -570,7 +570,7 @@ fn a_non_g54_slot_is_what_the_script_writes() {
         SetWcsOrigin::new(&world, Location::default()).expect("place the WCS"),
     );
     history.execute(&world, SetSetupWorkOffset::new(&world, "Setup1", Some(1)).expect("pick G55"));
-    let params = OpParams::Face { holes: Default::default(), blend_turns: false,
+    let params = OpParams::Face { holes: Default::default(), blend_turns: false, blend_radius: None,
         tilt: None,
         stepover: 3.0,
         clearance_z: Height::of(HeightReference::WorkOffset, 25.0),

@@ -127,7 +127,7 @@ fn doc(machine: Machine, len: f64, tilt: Option<(f64, f64)>) -> World {
         plunge_feed: 4.0 * IN,
         climb: true,
         entry: Entry3D::Plunge,
-        helix_radius: 1.0,
+        helix_radius: 1.0, blend_turns: false, blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
         tilt: tilt.map(|(a_deg, b_deg)| Tilt { basis_version: 1, a_deg, b_deg, origin: [0.0; 3] }),
         extend_start: 0.0,

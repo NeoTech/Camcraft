@@ -74,7 +74,7 @@ fn clearance_stock_contour() -> State {
         climb: true, side: Side::Outside, lead: Lead::None, tolerance: 0.01,
         tab_count: 0, tab_width: 0.0, tab_height: 0.0,
         entry: camcraft_app::machining3d::Entry3D::Plunge,
-        helix_radius: 1.0, blend_turns: false,
+        helix_radius: 1.0, blend_turns: false, blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
     });
     state.pending.push_back(CommandKind::SetStock {
@@ -119,7 +119,7 @@ fn clearance_stock_advice_follows_draft_height_and_prior_face_before_generate() 
     let builds = crate::height_memo::advice_builds();
     let state = harness.state_mut();
     let face = OpParams::Face {
-        holes: Default::default(), blend_turns: false, tilt: None,
+        holes: Default::default(), blend_turns: false, blend_radius: None, tilt: None,
         stepover: 4.0, clearance_z: Height::fixed(20.0), cut_z: Height::fixed(5.0),
         top_z: None, stepdown: None, feed: 1200.0, plunge_feed: 300.0, climb: true,
     };

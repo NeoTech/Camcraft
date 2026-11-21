@@ -39,7 +39,7 @@ fn catalog_tool(name: &str) -> camcraft_app::tools::Tool {
 }
 
 fn face_params(cut_z: f64) -> OpParams {
-    OpParams::Face { holes: Default::default(), tilt: None, blend_turns: false,
+    OpParams::Face { holes: Default::default(), tilt: None, blend_turns: false, blend_radius: None,
         stepover: 3.0,
         clearance_z: Height::fixed(25.0),
         cut_z: Height::fixed(cut_z),
@@ -213,7 +213,7 @@ fn missing_pieces_refuse_by_name() {
         tab_height: 0.0,
         entry: camcraft_app::machining3d::Entry3D::Plunge,
         helix_radius: 1.0,
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
     };
     let cmd = CreateOperation::new(&world, "Contour1", "EM-0600-4FL", SrcRef::Entity("part".into()), params);

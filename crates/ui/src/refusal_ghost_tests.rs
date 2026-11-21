@@ -47,7 +47,7 @@ fn refused() -> State {
         plunge_feed: 100.0,
         climb: true,
         entry: Entry3D::Plunge,
-        helix_radius: 1.5,
+        helix_radius: 1.5, blend_turns: false, blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
         tilt: None,
         extend_start: 0.0,

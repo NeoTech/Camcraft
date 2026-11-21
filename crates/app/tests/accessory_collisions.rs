@@ -43,7 +43,7 @@ fn face_world(dz: f64, cut: f64) -> (flecs_ecs::prelude::World, History) {
     let params = OpParams::Face {
         holes: Default::default(),
         tilt: None,
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         stepover: 3.0,
         clearance_z: Height::fixed(dz + 5.0),
         cut_z: Height::fixed(cut),

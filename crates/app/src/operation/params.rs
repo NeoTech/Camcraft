@@ -43,7 +43,7 @@ impl OpParams {
                 feed,
                 plunge_feed,
                 climb,
-                blend_turns,
+                blend_turns, blend_radius,
                 holes,
                 tilt,
             } => {
@@ -70,6 +70,12 @@ impl OpParams {
                 // (sharp) face keeps the digest it was cached under.
                 if *blend_turns {
                     h.write_u8(0xB1);
+                    // #1759: a set radius only, so every earlier
+                    // blended op keeps its digest.
+                    if let Some(r) = blend_radius {
+                        h.write_u8(0xB4);
+                        w(h, *r);
+                    }
                 }
                 // M13.11: the hole law changes the moves only away from
                 // its default, and is written only then - every legacy
@@ -98,7 +104,7 @@ impl OpParams {
                 climb,
                 entry,
                 helix_radius,
-                blend_turns,
+                blend_turns, blend_radius,
                 links: _,
                 tilt,
             } => {
@@ -159,6 +165,12 @@ impl OpParams {
                 // legacy sharp contour keeps its cached digest.
                 if *blend_turns {
                     h.write_u8(0xB1);
+                    // #1759: a set radius only, so every earlier
+                    // blended op keeps its digest.
+                    if let Some(r) = blend_radius {
+                        h.write_u8(0xB4);
+                        w(h, *r);
+                    }
                 }
                 // The level links ride the shared tail below (M11.2).
             }

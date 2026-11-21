@@ -44,7 +44,7 @@ const OPS: [&str; 3] = ["Face1a", "Face1b", "Face2"];
 fn face(cut_z: f64) -> OpParams {
     OpParams::Face {
         holes: Default::default(),
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         tilt: None,
         stepover: 3.0,
         clearance_z: Height::fixed(25.0),

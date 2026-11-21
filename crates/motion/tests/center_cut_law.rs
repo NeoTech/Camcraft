@@ -223,7 +223,7 @@ fn a_tool_that_is_not_centre_cutting_never_plunges_into_a_slot() {
                     plunge_feed: 100.0,
                     climb: true,
                     entry,
-                    helix_radius: 1.5,
+                    helix_radius: 1.5, blend_turns: false, blend_radius: None,
                 };
                 let what = format!("slot w{w} d{d} {entry:?} {ln}");
                 let (a, b) = (Point2::new(0.0, 0.0), Point2::new(40.0, 10.0));

@@ -390,7 +390,7 @@ fn tilt_on_a_picked_selection_refuses_by_name() {
         tab_height: 0.0,
         entry: Entry3D::Plunge,
         helix_radius: 1.0,
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
     };
     // The prismatic control: the same pick on the same part is legal.
@@ -453,7 +453,7 @@ fn an_insane_tilt_refuses_at_the_command_door() {
         .expect("box stock"),
     );
     add_tool(&world, &mut history, "EM-0400-2FL");
-    let face = |tilt: Option<Tilt>| OpParams::Face { holes: Default::default(), blend_turns: false,
+    let face = |tilt: Option<Tilt>| OpParams::Face { holes: Default::default(), blend_turns: false, blend_radius: None,
         tilt,
         stepover: 3.0,
         clearance_z: Height::fixed(25.0),
@@ -558,7 +558,7 @@ fn a_tilt_edit_marks_the_operation_stale_and_undo_restores() {
     add_tool(&world, &mut history, "EM-0400-2FL");
     history.execute(
         &world,
-        CreateOperation::new(&world, "F", "EM-0400-2FL", SrcRef::Stock, OpParams::Face { holes: Default::default(), blend_turns: false,
+        CreateOperation::new(&world, "F", "EM-0400-2FL", SrcRef::Stock, OpParams::Face { holes: Default::default(), blend_turns: false, blend_radius: None,
             tilt: None,
             stepover: 3.0,
             clearance_z: Height::fixed(25.0),
@@ -578,7 +578,7 @@ fn a_tilt_edit_marks_the_operation_stale_and_undo_restores() {
         EditOperationParams::new(
             &world,
             "F",
-            OpParams::Face { holes: Default::default(), blend_turns: false,
+            OpParams::Face { holes: Default::default(), blend_turns: false, blend_radius: None,
                 tilt: Some(Tilt {
                     basis_version: 1,
                     a_deg: 0.0,

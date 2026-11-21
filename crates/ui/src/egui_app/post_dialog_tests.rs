@@ -145,7 +145,7 @@ fn postable_face() -> State {
         .find(|(name, _)| *name == "EM-0400-2FL").expect("catalog tool").1;
     state.history.execute(&state.world, AddTool::new(&state.world, "Mill", tool).expect("tool"));
     let params = OpParams::Face {
-        holes: Default::default(), blend_turns: false, tilt: None, stepover: 3.0,
+        holes: Default::default(), blend_turns: false, blend_radius: None, tilt: None, stepover: 3.0,
         clearance_z: Height::fixed(25.0), cut_z: Height::fixed(19.5), top_z: None,
         stepdown: None, feed: 1200.0, plunge_feed: 300.0, climb: true,
     };

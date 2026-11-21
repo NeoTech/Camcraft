@@ -53,7 +53,7 @@ fn fp(stock_top: Option<f64>) -> FaceParams {
         feed: 1000.0,
         plunge_feed: 300.0,
         climb: true,
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         stock_top,
     }
 }

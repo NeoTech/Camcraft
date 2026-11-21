@@ -192,7 +192,7 @@ fn bore(entry: Entry3D, lead: Lead, links: Links) -> ContourParams {
         tab_height: 0.0,
         entry,
         helix_radius: 1.5,
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         links,
     }
 }

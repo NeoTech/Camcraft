@@ -48,7 +48,7 @@ fn slot(tilt: Tilt) -> OpParams {
         plunge_feed: 200.0,
         climb: true,
         entry: camcraft_app::machining3d::Entry3D::Plunge,
-        helix_radius: 1.0,
+        helix_radius: 1.0, blend_turns: false, blend_radius: None,
         tilt: Some(tilt),
         extend_start: 0.0,
         extend_end: 0.0,
@@ -144,7 +144,7 @@ fn contour(tilt: Tilt) -> OpParams {
         tab_height: 0.0,
         entry: camcraft_app::machining3d::Entry3D::Plunge,
         helix_radius: 1.0,
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         links: camcraft_app::links::Links::PLANAR,
     }
 }

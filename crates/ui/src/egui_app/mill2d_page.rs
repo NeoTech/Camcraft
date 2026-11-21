@@ -24,7 +24,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             feed,
             plunge_feed,
             climb,
-            blend_turns,
+            blend_turns, blend_radius,
             holes,
             tilt,
         } => {
@@ -70,7 +70,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
                 prop_row(ui, "Stepover (Y spacing)", |ui| num(ui, u, stepover));
                 // M11.1 A: row ends turn on one arc where it is legal;
                 // the status line names every turn left sharp.
-                check_row(ui, "Arc turns at row ends", blend_turns);
+                super::kind_editors::arc_turn_rows_auto(ui, u, ("Arc turns at row ends", "Arc radius = half the row spacing"), blend_turns, blend_radius);
                 // M13.11: how a row meets a hole in the faced region.
                 // Lift is safe for a bore and a boss alike; cutting
                 // across air is the user's call, islands stay lifted.
@@ -116,7 +116,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
             tab_height,
             entry,
             helix_radius,
-            blend_turns,
+            blend_turns, blend_radius,
             links,
             tilt,
         } => {
@@ -172,7 +172,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
                 // M11.1 B: air-side corners round on one arc where it
                 // is legal; the status line names every corner left
                 // sharp and the corner rest the rounding leaves.
-                check_row(ui, "Arc turns at corners", blend_turns);
+                super::kind_editors::arc_turn_rows(ui, u, "Arc turns at corners", blend_turns, blend_radius);
             }
             if tab == SEC_LEADS {
                 let mut l_idx = match lead {

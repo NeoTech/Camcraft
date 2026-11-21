@@ -123,7 +123,7 @@ fn extruded_vise_jaw_from_dxf_is_hit_by_rapid_until_edited_below_it() {
     let op = OpParams::Face {
         holes: Default::default(),
         tilt: None,
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         stepover: 4.0,
         clearance_z: Height::fixed(30.0),
         cut_z: Height::fixed(19.5),

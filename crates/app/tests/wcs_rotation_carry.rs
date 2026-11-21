@@ -31,7 +31,7 @@ use camcraft_app::{model, setup_sheet};
 fn face_params(stepover: f64, cut_z: f64, clear_z: f64) -> OpParams {
     OpParams::Face {
         holes: Default::default(),
-        blend_turns: false,
+        blend_turns: false, blend_radius: None,
         tilt: None,
         stepover,
         clearance_z: Height::fixed(clear_z),
