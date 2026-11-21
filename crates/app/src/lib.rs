@@ -62,6 +62,8 @@ pub mod pick;
 pub use camcraft_post::post;
 pub mod path_sig;
 pub mod posting;
+// #2950: the browser's own .mch and .cps files, kept for the session.
+pub mod session_files;
 // #530: the op-family door at post.
 mod posting_family;
 /// Which spindle a lathe post turns for a section, and the door that

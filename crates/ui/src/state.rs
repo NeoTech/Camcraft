@@ -224,6 +224,9 @@ pub enum CommandKind {
     SelectPostBuiltin,
     SelectPostDialog,
     SelectPostFile(PathBuf),
+    /// #2950: the browser's folder picker - every `.mch` and `.cps` of
+    /// one folder joins the session's machine and post lists (read-only).
+    LoadSetupFolderDialog,
     /// Pick a built-in from the shipped registry by NAME (M3.3 B) -
     /// the combo's index is screen furniture; what the document stores
     /// is the name, so a registry re-growth never re-points a saved
@@ -3487,12 +3490,7 @@ impl State {
                 }
                 Err(err) => self.refuse(ErrorScope::Setup, format!("units not set: {err}")),
             },
-            CommandKind::LoadMachineDialog => {
-                let dir = crate::egui_app::machines_pane::user_dir(self);
-                if let Some(path) = pick_machine_file(dir.as_deref()) {
-                    self.load_machine_path(path);
-                }
-            }
+            CommandKind::LoadMachineDialog => self.load_machine_dialog(),
             CommandKind::LoadMachineFile(path) => self.load_machine_path(path),
             // #343: the machine verbs land on the active setup's own
             // machine when it has one (`setup_mount`).
@@ -3524,11 +3522,8 @@ impl State {
             // like every machine verb (`setup_mount`).
             CommandKind::UseCatalogueMachine(source) => self.mount_catalogue(&source),
             CommandKind::SelectPostBuiltin => self.select_post(PostRef::Builtin),
-            CommandKind::SelectPostDialog => {
-                if let Some(path) = pick_post_file() {
-                    self.select_post(PostRef::File(path.display().to_string()));
-                }
-            }
+            CommandKind::SelectPostDialog => self.select_post_dialog(),
+            CommandKind::LoadSetupFolderDialog => self.load_setup_folder_dialog(),
             CommandKind::SelectPostFile(path) => {
                 self.select_post(PostRef::File(path.display().to_string()));
             }

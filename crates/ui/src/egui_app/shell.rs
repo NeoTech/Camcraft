@@ -100,8 +100,11 @@ pub(crate) fn shell_layout(
     state.geo_hover_drawn = state.geo_hover.take();
     state.geo_row_marked.clear();
     panes::shortcuts(ui, state);
-    // #1450: a model file dropped on the window goes through Model's import.
-    super::file_drop::take_drop(ui, state);
+    // #1450: a model file dropped on the window goes through Model's import;
+    // #2950: a drop with a machine or post file goes to those lists instead.
+    if !super::setup_file_drop::take(ui, state) {
+        super::file_drop::take_drop(ui, state);
+    }
     // The live theme, read once per pass: the strips and every pane below
     // share one token table, so the widget path and the painted ink cannot
     // disagree on a retheme (M6.1 A). `ribbon_h` tracks the cell box.

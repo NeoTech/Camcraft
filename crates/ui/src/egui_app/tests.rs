@@ -208,6 +208,8 @@ mod browser_files;
 mod browser_delete;
 // #1450: a model file dropped on the window.
 mod file_drop;
+// #2950: the browser loads .mch and .cps files from a pick, a folder or a drop.
+mod browser_setup_files;
 // #645: the browser's "Show origin names" switch and the per-user view file.
 mod view_names;
 mod prefs_door;

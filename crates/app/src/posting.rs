@@ -303,7 +303,7 @@ pub fn script_of(post: &PostRef) -> Result<(String, String), String> {
         }
         PostRef::Named(name) => Ok((format!("{name} (built-in)"), builtin_post_text(&name)?.to_owned())),
         PostRef::File(path) => {
-            let text = std::fs::read_to_string(&path)
+            let text = crate::session_files::read_post(&path)
                 .map_err(|e| format!("post script {path}: {e}"))?;
             Ok((path, text))
         }
@@ -437,7 +437,7 @@ pub fn resolve_cps(cps: &str) -> Result<(PostRef, String), String> {
         .extension()
         .is_some_and(|e| e.eq_ignore_ascii_case("cps"))
     {
-        let text = std::fs::read_to_string(cps)
+        let text = crate::session_files::read_post(cps)
             .map_err(|e| format!("cannot read post script {cps}: {e}"))?;
         return Ok((PostRef::File(cps.to_owned()), text));
     }
