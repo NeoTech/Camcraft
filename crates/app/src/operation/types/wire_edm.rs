@@ -68,6 +68,10 @@ pub struct WireContourOp {
     /// cut closes. `false` - the default - refuses a cut whose slug
     /// would drop unheld (#534's slug law, #539).
     pub capture: bool,
+    /// Both pieces are independently restrained after a through cutoff, including all trims.
+    pub both_pieces_restrained: bool,
+    /// The operator has centered the stock at the midpoint of the installed XY strokes.
+    pub stock_centered_in_xy_travel: bool,
     /// The constant taper (#536), degrees from vertical: 0 is a
     /// vertical cut; positive widens the profile downward from the top
     /// plane (a die's relief, a drafted punch's base), negative narrows
