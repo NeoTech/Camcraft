@@ -78,3 +78,45 @@ pub(super) fn clearance(p: &Product<'_>, a: Point2, b: Point2) -> (f64, Point2) 
     }
     best
 }
+
+/// The clearance of [`clearance`], signed (#3211): a move that stands in
+/// the product reads minus how far its deepest point stands inside (the
+/// distance to the product's boundary), with that point - so the kerf's
+/// entry there is its reach plus that distance, not the reach alone.
+pub(super) fn entry(p: &Product<'_>, a: Point2, b: Point2) -> (f64, Point2) {
+    let (d, at) = clearance(p, a, b);
+    if d > 0.0 {
+        return (d, at);
+    }
+    let at_t = |t: f64| Point2::new(a.x + t * (b.x - a.x), a.y + t * (b.y - a.y));
+    let inside = |t: f64| {
+        let q = at_t(t);
+        if p.contains(q) { to_boundary(p, q) } else { 0.0 }
+    };
+    // The inside distance changes by at most the walked length (it is
+    // 1-Lipschitz): a coarse walk, then a fine walk around its best.
+    const N: usize = 32;
+    let best_of = |lo: f64, hi: f64| {
+        (0..=N).map(|i| lo + (hi - lo) * i as f64 / N as f64).fold((0.0, lo), |(bd, bt), t| {
+            let dd = inside(t);
+            if dd > bd { (dd, t) } else { (bd, bt) }
+        })
+    };
+    let (coarse, t0) = best_of(0.0, 1.0);
+    let h = 1.0 / N as f64;
+    let (fine, t1) = best_of((t0 - h).max(0.0), (t0 + h).min(1.0));
+    let (deep, t) = if fine > coarse { (fine, t1) } else { (coarse, t0) };
+    if deep > 0.0 { (-deep, at_t(t)) } else { (d, at) }
+}
+
+/// How far `q` stands from the product's boundary.
+fn to_boundary(p: &Product<'_>, q: Point2) -> f64 {
+    let mut best = f64::INFINITY;
+    for l in p.boundary().loops() {
+        let pts = l.points();
+        for i in 0..pts.len() {
+            best = best.min(pp(q, foot(q, pts[i], pts[(i + 1) % pts.len()])));
+        }
+    }
+    if best.is_finite() { best } else { 0.0 }
+}
