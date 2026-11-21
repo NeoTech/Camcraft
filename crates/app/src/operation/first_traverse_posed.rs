@@ -243,13 +243,17 @@ pub(super) fn judge(path: &Toolpath, params: &OpParams, frame: Option<&TiltedFra
     let worked = verify::first_traverse_low_posed(height, &work, up, base, Z_TOL);
     let table = table_top(&turn, posed.fixtures, posed.names, up, base)
         .filter(|t| table_stays(posed.rotaries) && height.is_finite() && height < t - Z_TOL)
-        .map(|top_mm| Warning::FirstTraverseLow { at: 0, height_mm: height, top_mm, fixture: true });
+        .map(|top_mm| Warning::FirstTraverseLow { at: 0, height_mm: height, top_mm, fixture: true, tilted: false });
     let top_of = |w: &Option<Warning>| match w {
         Some(Warning::FirstTraverseLow { top_mm, .. }) => *top_mm,
         _ => f64::NEG_INFINITY,
     };
     let w = if top_of(&table) > top_of(&worked) { table } else { worked };
     let Some(w) = w else { return };
+    // #2991: both posed reads are along the frame's axis from its origin.
+    // In the user's frame and `tilted`, as the first-traverse verdicts
+    // that this one replaces are, so the tops compare in one frame.
+    let w = frame.map_or(w, |f| super::first_traverse::in_user_frame(w, f));
     let Warning::FirstTraverseLow { top_mm, .. } = w else { return };
     warns.retain(|o| !matches!(o, Warning::FirstTraverseLow { top_mm: t, .. } if *t <= top_mm));
     warns.push(w);

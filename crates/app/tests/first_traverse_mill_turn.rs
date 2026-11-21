@@ -108,7 +108,7 @@ fn post(world: &World, tag: &str) -> Result<String, String> {
 
 fn low(warns: &[Warning]) -> Option<(usize, f64, f64, bool)> {
     warns.iter().find_map(|w| match *w {
-        Warning::FirstTraverseLow { at, height_mm, top_mm, fixture } => Some((at, height_mm, top_mm, fixture)),
+        Warning::FirstTraverseLow { at, height_mm, top_mm, fixture, .. } => Some((at, height_mm, top_mm, fixture)),
         _ => None,
     })
 }
@@ -148,7 +148,9 @@ fn a_mill_turn_face_over_a_low_steady_posts_the_bare_program() {
 /// A 60 x 60 x 20 block (x -30..30) indexed B 10 deg about its top
 /// centre on the mill-turn's B: along the tilted axis its high corner
 /// stands 30 sin 10 = 5.209 mm over the plane's zero. A clearance 5 mm
-/// over that zero (Z 25) is under it and refused; Z 30 is clear.
+/// over that zero (Z 25) is under it and refused; Z 30 is clear. The
+/// verdict gives the heights in the user's frame (#2991): the clearance
+/// as set, and the corner over the origin Z 20.
 #[test]
 fn a_mill_turn_3_2_plane_reads_the_stock_top_along_its_tool_axis() {
     let tilt = Tilt { basis_version: 1, a_deg: 0.0, b_deg: 10.0, origin: [0.0, 0.0, 20.0] };
@@ -160,8 +162,8 @@ fn a_mill_turn_3_2_plane_reads_the_stock_top_along_its_tool_axis() {
         if refused {
             let (at, h_mm, top_mm, fixture) = low(&warns).unwrap_or_else(|| panic!("clearance Z{clear}: no verdict in {warns:?}; the path opens {:?}", path.moves.first()));
             assert_eq!((at, fixture), (0, false));
-            assert!((h_mm - (clear - 20.0)).abs() < 1e-6, "the height along the tool axis: {h_mm}");
-            assert!((top_mm - top).abs() < 1e-6, "the tilted block's high corner: {top_mm}, want {top}");
+            assert!((h_mm - clear).abs() < 1e-6, "the clearance height the user set: {h_mm}");
+            assert!((top_mm - (top + 20.0)).abs() < 1e-6, "the tilted block's high corner: {top_mm}, want {}", top + 20.0);
             assert!(posting::post_setup_unwritten(&world).is_err());
         } else {
             assert_eq!(low(&warns), None, "clearance Z{clear}: {warns:?}");

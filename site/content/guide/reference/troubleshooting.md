@@ -190,6 +190,18 @@ tilted plane.
 an earlier operation already cut: its clearance height must still clear
 the top of the stock as it was at the start, and the top of each fixture.
 
+### `the first rapid (move <n>) comes from an unknown position at the clearance height <h> mm, under the <stock|fixture> top at <t> mm (both measured along the tilted tool axis) - raise the clearance height by at least <d> mm`
+
+**Means.** The same check as the entry above, on a tilted (3+2) operation.
+The heights are measured along the tilted tool. `<h>` is the clearance
+height as the operation sets it, and `<t>` is the highest corner of the
+stock or of a fixture, measured the same way. The highest corner is on the
+side that the tilt lifts, so it can be higher than the top of the stock
+when the stock is upright.
+
+**Fix.** Raise the clearance height on the operation's Heights tab by at
+least `<d>` mm, and regenerate.
+
 ### `<shank|holder|spindle housing|rapid|flute> at move <n> strikes a fixture`
 
 **Means.** The tool, holder or a rapid hits a vise, clamp or other fixture

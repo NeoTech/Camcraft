@@ -94,7 +94,7 @@ fn a_far_clamp_over_the_clearance_plane_holds_the_post_by_name() {
     assert_eq!(status, OpStatus::Ok);
     let m = path.moves[0];
     assert!((m.from.x - 150.0).abs() > 20.0 && m.from.x < 100.0, "the path stays far from the clamp: {m:?}");
-    let want = Warning::FirstTraverseLow { at: 0, height_mm: CLEAR, top_mm: 40.0, fixture: true };
+    let want = Warning::FirstTraverseLow { at: 0, height_mm: CLEAR, top_mm: 40.0, fixture: true, tilted: false };
     assert_eq!(warns, vec![want], "only the first-traverse verdict: no struck move, no routed link");
     let err = posting::post_setup_unwritten(&world).expect_err("the program must not post");
     for text in ["Face1", "clearance height Z30.000", "under the fixture top at Z40.000", "raise the clearance height above Z40.000"] {
@@ -121,6 +121,10 @@ fn the_same_clamp_under_the_clearance_plane_posts() {
 /// A 60 x 60 x 20 block (x -30..30) indexed B 10 deg about its top centre: along the
 /// tilted axis its high corner stands 30 sin 10 = 5.209 mm over the
 /// plane's zero. A clearance 5 mm over that zero (Z 25) is under it.
+/// #2991: the verdict names the clearance the user set (25, not the
+/// local 5) and the corner in the same frame (25.209), says that both
+/// are measured along the tilted tool axis, and names the raise - no Z
+/// value the user cannot find on the operation.
 #[test]
 fn a_3_2_plane_reads_the_stock_top_along_its_tool_axis() {
     let tilt = Tilt { basis_version: 1, a_deg: 0.0, b_deg: 10.0, origin: [0.0, 0.0, 20.0] };
@@ -136,15 +140,21 @@ fn a_3_2_plane_reads_the_stock_top_along_its_tool_axis() {
         let (status, path, warns) = generate(&world, &mut h, face(clear, Some(tilt), 19.5));
         assert_eq!(status, OpStatus::Ok);
         let low = warns.iter().find_map(|w| match *w {
-            Warning::FirstTraverseLow { at, height_mm, top_mm, fixture } => Some((at, height_mm, top_mm, fixture)),
+            Warning::FirstTraverseLow { at, height_mm, top_mm, fixture, tilted } => Some((at, height_mm, top_mm, fixture, tilted)),
             _ => None,
         });
         if refused {
-            let (at, h_mm, top_mm, fixture) = low.unwrap_or_else(|| panic!("clearance Z{clear}: no verdict in {warns:?}; the path opens {:?}", path.moves.first()));
-            assert_eq!((at, fixture), (0, false));
-            assert!((h_mm - (clear - 20.0)).abs() < 1e-6, "the height along the tool axis: {h_mm}");
-            assert!((top_mm - top).abs() < 1e-6, "the tilted block's high corner: {top_mm}, want {top}");
-            assert!(posting::post_setup_unwritten(&world).is_err());
+            let (at, h_mm, top_mm, fixture, tilted) = low.unwrap_or_else(|| panic!("clearance Z{clear}: no verdict in {warns:?}; the path opens {:?}", path.moves.first()));
+            assert_eq!((at, fixture, tilted), (0, false, true));
+            assert!((h_mm - clear).abs() < 1e-6, "the clearance the user set: {h_mm}");
+            assert!((top_mm - (top + 20.0)).abs() < 1e-6, "the tilted block's high corner in the same frame: {top_mm}, want {}", top + 20.0);
+            let text = warns.iter().find(|w| matches!(w, Warning::FirstTraverseLow { .. })).map(ToString::to_string).unwrap_or_default();
+            assert!(text.contains("at the clearance height 25.000 mm, under the stock top at 25.209 mm"), "{text}");
+            assert!(text.contains("measured along the tilted tool axis"), "{text}");
+            assert!(text.ends_with("raise the clearance height by at least 0.209 mm"), "{text}");
+            assert!(!text.contains('Z') && !text.contains("X/Y"), "no G-code words: {text}");
+            let refusal = posting::post_setup_unwritten(&world).expect_err("the low first traverse holds the post");
+            assert!(refusal.to_string().contains("raise the clearance height by at least 0.209 mm"), "{refusal}");
         } else {
             assert_eq!(low, None, "clearance Z{clear}: {warns:?}");
         }

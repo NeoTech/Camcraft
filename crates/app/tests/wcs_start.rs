@@ -277,7 +277,7 @@ fn a_clamp_on_the_old_origin_to_entry_line_is_judged_by_the_first_traverse_law_o
     let op = model::find_by_name(&world, "Face1").expect("op");
     assert_eq!(camcraft_app::operation::status_of(&world, &op), OpStatus::Ok);
     let cached = model::toolpath_of(&world, &op).expect("cached path");
-    let first = Warning::FirstTraverseLow { at: 0, height_mm: CLEAR, top_mm: 40.0, fixture: true };
+    let first = Warning::FirstTraverseLow { at: 0, height_mm: CLEAR, top_mm: 40.0, fixture: true, tilted: false };
     assert_eq!(cached.warnings, vec![first], "no fixture verdict on a move the machine never makes");
     assert_eq!(cached.path.moves, t.moves, "the clamp routed a link");
     let err = posting::post_setup_unwritten(&world).expect_err("the clamp over the plane holds the post");

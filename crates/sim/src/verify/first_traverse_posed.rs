@@ -94,7 +94,7 @@ pub fn first_traverse_low_posed(height: f64, work: &PosedWork<'_>, up: [f64; 3],
     let stock = finite_max(&mut work.rides.iter().map(|q| top(*q)));
     let steel = finite_max(&mut work.steel.iter().map(|b| box_top(b, top)));
     let (top, fixture) = if steel > stock { (steel, true) } else { (stock, false) };
-    (top.is_finite() && height < top - z_tol).then_some(Warning::FirstTraverseLow { at: 0, height_mm: height, top_mm: top, fixture })
+    (top.is_finite() && height < top - z_tol).then_some(Warning::FirstTraverseLow { at: 0, height_mm: height, top_mm: top, fixture, tilted: false })
 }
 
 #[cfg(test)]

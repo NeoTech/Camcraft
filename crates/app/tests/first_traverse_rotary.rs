@@ -53,7 +53,7 @@ fn generate(world: &World, h: &mut History, tool: &str, src: &str, p: OpParams) 
 
 fn first_low(warns: &[Warning]) -> Option<(usize, f64, f64, bool)> {
     warns.iter().find_map(|w| match *w {
-        Warning::FirstTraverseLow { at, height_mm, top_mm, fixture } => Some((at, height_mm, top_mm, fixture)),
+        Warning::FirstTraverseLow { at, height_mm, top_mm, fixture, .. } => Some((at, height_mm, top_mm, fixture)),
         _ => None,
     })
 }

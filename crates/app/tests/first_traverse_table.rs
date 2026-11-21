@@ -165,16 +165,20 @@ fn a_head_tilt_plane_that_a_move_from_the_tool_change_height_takes_under_the_tab
     // X +-400: from (400, y, 300) the move along the B 30 axis to a plane
     // 20 mm over the origin ends at Z 300 - (442.49 - 20) cos 30 = -48.6,
     // under the table top. Refused by name, with the height to clear.
+    // #2991: the verdict gives the two heights in the frame the user sets
+    // them in (the local height plus the origin Z), and its text names the
+    // raise, not a Z value.
     let want = table_clear(WIDE, B_DEG);
     assert!((want - 96.077).abs() < 1e-3, "{want}");
     let (world, status, warns, _) = generate_on(Rig::Head, WIDE, B_DEG, 40.0);
     assert_eq!(status, OpStatus::Ok);
     let (h_mm, top_mm, fixture) = low(&warns).unwrap_or_else(|| panic!("no first-traverse verdict: {warns:?}"));
-    assert!((h_mm - 20.0).abs() < 1e-6, "the plane along the tool axis: {h_mm}");
-    assert!((top_mm - want).abs() < 1e-6, "the height to clear along the axis: {top_mm}, want {want}");
+    assert!((h_mm - 40.0).abs() < 1e-6, "the clearance height the user set: {h_mm}");
+    assert!((top_mm - (want + ORIGIN_Z)).abs() < 1e-6, "the height to clear, in the user's frame: {top_mm}, want {}", want + ORIGIN_Z);
     assert!(fixture, "the table is steel, not stock");
     let err = posting::post_setup_unwritten(&world).expect_err("the program must not post");
-    for text in ["Face1", "first rapid (move 0)", &format!("raise the clearance height above Z{want:.3}")] {
+    let raise = format!("raise the clearance height by at least {:.3} mm", want - 20.0);
+    for text in ["Face1", "first rapid (move 0)", "measured along the tilted tool axis", &raise] {
         assert!(err.contains(text), "{text}: {err}");
     }
 }
@@ -205,8 +209,10 @@ fn a_work_turning_rotary_keeps_the_table_under_the_work() {
     let (_, status, warns, notes) = generate_on(Rig::Work, WIDE, B_DEG, 40.0);
     assert_eq!(status, OpStatus::Ok);
     let (h_mm, top_mm, fixture) = low(&warns).unwrap_or_else(|| panic!("no first-traverse verdict: {warns:?}"));
-    assert!((h_mm - 20.0).abs() < 1e-6, "{h_mm}");
-    assert!((top_mm - want).abs() < 1e-6 && !fixture, "the block on its sphere: {top_mm}, want {want}");
+    // #2991: the heights in the user's frame (local + origin Z 20).
+    assert!((h_mm - 40.0).abs() < 1e-6, "the clearance the user set: {h_mm}");
+    assert!((top_mm - (want + ORIGIN_Z)).abs() < 1e-6 && !fixture, "the block on its sphere: {top_mm}, want {}", want + ORIGIN_Z);
+    assert!(warns.iter().any(|w| matches!(w, Warning::FirstTraverseLow { tilted: true, .. })), "a 3+2 verdict is tilted: {warns:?}");
     assert!(!notes.iter().any(|n| n.contains("machine table is not judged")), "{notes:?}");
     let (_, status, warns, _) = generate_on(Rig::Work, WIDE, B_DEG, ORIGIN_Z + 30.0);
     assert_eq!(status, OpStatus::Ok);

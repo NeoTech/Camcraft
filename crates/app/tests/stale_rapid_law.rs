@@ -71,7 +71,7 @@ fn regenerating_the_old_cache_judges_it_under_the_new_law() {
     // top Z 10 - by the first-traverse law: the machine comes to that
     // plane from an X/Y it does not know.
     assert!(
-        tp.warnings.contains(&Warning::FirstTraverseLow { at: 0, height_mm: 8.0, top_mm: 10.0, fixture: false }),
+        tp.warnings.contains(&Warning::FirstTraverseLow { at: 0, height_mm: 8.0, top_mm: 10.0, fixture: false, tilted: false }),
         "the traverse at the plane is convicted now: {:?}",
         tp.warnings
     );

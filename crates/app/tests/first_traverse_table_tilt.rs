@@ -140,8 +140,11 @@ fn a_3_2_plane_under_the_work_a_turning_table_can_leave_turned_up_is_refused_by_
     let (world, status, warns) = face_on(Rig::TableA, 30.0, 0.0, 16.0);
     assert_eq!(status, OpStatus::Ok);
     let (height, top, fixture) = low(&warns).unwrap_or_else(|| panic!("clearance 16: no first-traverse verdict in {warns:?}"));
-    assert!((height - 16.0).abs() < 1e-6, "the post traverses at the clearance: {height}");
-    assert!((top - want).abs() < 1e-6 && !fixture, "the stock edge turned up: {top}, want {want}");
+    // #2991: the heights in the user's frame (local + origin Z 20): the
+    // clearance as typed (36), the edge at 38.735, and `tilted`.
+    assert!((height - (ORIGIN_Z + 16.0)).abs() < 1e-6, "the post traverses at the clearance the user set: {height}");
+    assert!((top - (want + ORIGIN_Z)).abs() < 1e-6 && !fixture, "the stock edge turned up: {top}, want {}", want + ORIGIN_Z);
+    assert!(warns.iter().any(|w| matches!(w, Warning::FirstTraverseLow { tilted: true, .. })), "a 3+2 verdict is tilted: {warns:?}");
     let n = warns.iter().filter(|w| matches!(w, Warning::FirstTraverseLow { .. })).count();
     assert_eq!(n, 1, "one verdict names the highest top: {warns:?}");
     // The verdict blocks the post. (This rig states no nose_to_axis, so
@@ -195,7 +198,8 @@ fn a_users_own_post_is_taken_at_its_declared_order_with_a_note() {
     let (_, _, warns, notes) = face_posted(Rig::TableA, 30.0, 0.0, 16.0, file(&plain));
     let _ = std::fs::remove_dir_all(&dir);
     let (_, top, _) = low(&warns).unwrap_or_else(|| panic!("the plain script reads every pose: {warns:?}"));
-    assert!((top - (1300f64.sqrt() - ORIGIN_Z * 30f64.to_radians().cos())).abs() < 1e-6, "{top}");
+    // #2991: in the user's frame, as the refused case above.
+    assert!((top - (1300f64.sqrt() - ORIGIN_Z * 30f64.to_radians().cos() + ORIGIN_Z)).abs() < 1e-6, "{top}");
     assert!(!notes.iter().any(|n| n.contains("rotariesBeforeTraverse")), "{notes:?}");
 }
 

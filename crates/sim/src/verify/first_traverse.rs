@@ -60,7 +60,7 @@ fn verdict(height: f64, stock_top: f64, fixture_top: f64, z_tol: f64) -> Option<
     let fixture_top = if fixture_top.is_finite() { fixture_top } else { f64::NEG_INFINITY };
     let (top, fixture) = if fixture_top > stock_top { (fixture_top, true) } else { (stock_top, false) };
     (height.is_finite() && top.is_finite() && height < top - z_tol)
-        .then_some(Warning::FirstTraverseLow { at: 0, height_mm: height, top_mm: top, fixture })
+        .then_some(Warning::FirstTraverseLow { at: 0, height_mm: height, top_mm: top, fixture, tilted: false })
 }
 
 /// The unit of `v`, or `None` when it has no finite direction.
@@ -178,14 +178,14 @@ mod tests {
     #[test]
     fn a_start_under_the_stock_top_is_named_with_both_heights() {
         let w = first_traverse_low(&opening(8.0), 10.0, &[], |p| p.z, 1e-6);
-        assert_eq!(w, Some(Warning::FirstTraverseLow { at: 0, height_mm: 8.0, top_mm: 10.0, fixture: false }));
+        assert_eq!(w, Some(Warning::FirstTraverseLow { at: 0, height_mm: 8.0, top_mm: 10.0, fixture: false, tilted: false }));
         assert!(w.is_some_and(|w| w.blocks_post()));
     }
 
     #[test]
     fn a_far_fixture_taller_than_the_start_is_named() {
         let w = first_traverse_low(&opening(15.0), 10.0, &[clamp(12.0), clamp(20.0)], |p| p.z, 1e-6);
-        assert_eq!(w, Some(Warning::FirstTraverseLow { at: 0, height_mm: 15.0, top_mm: 20.0, fixture: true }));
+        assert_eq!(w, Some(Warning::FirstTraverseLow { at: 0, height_mm: 15.0, top_mm: 20.0, fixture: true, tilted: false }));
     }
 
     #[test]
@@ -204,7 +204,33 @@ mod tests {
         let along_x = |p: Point3| p.x;
         assert_eq!(box_top(&clamp(1.0), along_x), 210.0);
         let w = first_traverse_low(&opening(150.0), 100.0, &[clamp(1.0)], along_x, 1e-6);
-        assert_eq!(w, Some(Warning::FirstTraverseLow { at: 0, height_mm: 150.0, top_mm: 210.0, fixture: true }));
+        assert_eq!(w, Some(Warning::FirstTraverseLow { at: 0, height_mm: 150.0, top_mm: 210.0, fixture: true, tilted: false }));
+    }
+
+    /// #2991: a cache saved before the `tilted` field reads as upright,
+    /// with the upright text it had.
+    #[test]
+    fn a_verdict_saved_before_tilted_reads_as_upright() {
+        let old = r#"{"first_traverse_low":{"at":0,"height_mm":8.0,"top_mm":10.0,"fixture":false}}"#;
+        let w: Warning = serde_json::from_str(old).expect("an old cache loads");
+        assert_eq!(w, Warning::FirstTraverseLow { at: 0, height_mm: 8.0, top_mm: 10.0, fixture: false, tilted: false });
+        assert!(w.to_string().contains("raise the clearance height above Z10.000"), "{w}");
+    }
+
+    /// #2991: the 3+2 text says that the heights are along the tilted tool
+    /// axis, names the raise, and has no Z value or axis letters.
+    #[test]
+    fn a_tilted_verdict_names_the_raise_not_a_z_value() {
+        let w = Warning::FirstTraverseLow { at: 0, height_mm: 30.0, top_mm: 31.114, fixture: true, tilted: true };
+        let text = w.to_string();
+        assert_eq!(
+            text,
+            "the first rapid (move 0) comes from an unknown position at the clearance height 30.000 mm, under the \
+             fixture top at 31.114 mm (both measured along the tilted tool axis) - raise the clearance height by at \
+             least 1.114 mm"
+        );
+        let json = serde_json::to_string(&w).expect("serializes");
+        assert_eq!(serde_json::from_str::<Warning>(&json).expect("round trip"), w);
     }
 
     /// #2965: a 40 x 40 square bar along X, turned about the X axis.
@@ -224,7 +250,7 @@ mod tests {
         // Upright the bar's top is Z20, so Z25 clears it; turned 45 deg
         // its edge stands at Z28.284 and the traverse runs through it.
         let w = first_traverse_low_swept(Point3::new(5.0, 0.0, 25.0), [0.0, 0.0, 1.0], NONE, &A, &square_bar(), NO_STEEL, 1e-6);
-        let Some(Warning::FirstTraverseLow { at: 0, height_mm, top_mm, fixture: false }) = w else { panic!("{w:?}") };
+        let Some(Warning::FirstTraverseLow { at: 0, height_mm, top_mm, fixture: false, tilted: false }) = w else { panic!("{w:?}") };
         assert!((height_mm - 25.0).abs() < 1e-12 && (top_mm - top).abs() < 1e-12, "{w:?}");
         assert!(w.is_some_and(|w| w.blocks_post()));
         assert_eq!(first_traverse_low_swept(Point3::new(5.0, 0.0, 30.0), [0.0, 0.0, 1.0], NONE, &A, &square_bar(), NO_STEEL, 1e-6), None);
@@ -259,7 +285,7 @@ mod tests {
         let fixed = SweptSteel { turning: &[], fixed: &[tail] };
         assert_eq!(first_traverse_low_swept(Point3::new(5.0, 0.0, 45.5), up, NONE, &A, &square_bar(), fixed, 1e-6), None);
         let w = first_traverse_low_swept(Point3::new(5.0, 0.0, 40.0), up, NONE, &A, &square_bar(), fixed, 1e-6);
-        assert_eq!(w, Some(Warning::FirstTraverseLow { at: 0, height_mm: 40.0, top_mm: 45.0, fixture: true }));
+        assert_eq!(w, Some(Warning::FirstTraverseLow { at: 0, height_mm: 40.0, top_mm: 45.0, fixture: true, tilted: false }));
     }
 
     #[test]
@@ -269,7 +295,7 @@ mod tests {
         // A radial live tool beside a C axis: no turn stands it upright,
         // so its start is read at its own Z, which a C turn keeps.
         let w = first_traverse_low_swept(Point3::new(30.0, 0.0, 7.0), [1.0, 0.0, 0.0], NONE, &vertical, &[Point3::new(0.0, 0.0, 10.0)], NO_STEEL, 1e-6);
-        assert_eq!(w, Some(Warning::FirstTraverseLow { at: 0, height_mm: 7.0, top_mm: 10.0, fixture: false }));
+        assert_eq!(w, Some(Warning::FirstTraverseLow { at: 0, height_mm: 7.0, top_mm: 10.0, fixture: false, tilted: false }));
         // The same start under a clearance height of 12: the post
         // traverses at Z12, over the top.
         assert_eq!(first_traverse_low_swept(Point3::new(30.0, 0.0, 7.0), [1.0, 0.0, 0.0], 12.0, &vertical, &[Point3::new(0.0, 0.0, 10.0)], NO_STEEL, 1e-6), None);
