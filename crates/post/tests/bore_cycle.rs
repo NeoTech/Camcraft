@@ -30,7 +30,7 @@ use camcraft_post::post::{cnc, dump, engine, Dump};
 use std::path::{Path, PathBuf};
 
 /// Posts that write G86 and have no dwell word on it.
-const NO_DWELL: [&str; 5] = ["fanuc", "haas", "mazak", "doosan-dnm", "sinumerik"];
+const NO_DWELL: [&str; 6] = ["fanuc", "haas", "mazak", "doosan-dnm", "sinumerik", "hurco-winmax"];
 /// Posts that write G86 with a dwell P in seconds.
 const SECONDS: [&str; 3] = ["tormach", "grblhal", "linuxcnc"];
 /// Posts that require a non-negative P on every G86 cycle block (#2362).
