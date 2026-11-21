@@ -228,6 +228,7 @@ fn header_notes_use_each_shipped_dialect_and_keep_the_full_surface_bound() {
         if stem.contains("wire") { mch["kind"] = json!("wire-edm"); }
         if stem.contains("sinker") { mch["kind"] = json!("sinker-edm"); }
         if stem.contains("plasma") { mch["kind"] = json!("plasma"); }
+        if stem.contains("waterjet") { mch["kind"] = json!("waterjet"); }
         let out = engine::run_program_with(
             &std::fs::read_to_string(&p).expect("post reads"), &mch, "", &json!(null), &id,
         ).unwrap_or_else(|e| panic!("{stem}: {e}"));
@@ -258,5 +259,5 @@ fn header_notes_use_each_shipped_dialect_and_keep_the_full_surface_bound() {
         }
         seen += 1;
     }
-    assert_eq!(seen, 19, "every shipped post is checked");
+    assert_eq!(seen, 20, "every shipped post is checked");
 }

@@ -128,12 +128,32 @@ argument semantics in `docs/CNC-INTERMEDIATE.md`):
 | `onComment(text)` | per `WARN` (the PRELUDE default echoes it verbatim) |
 | `onRadiusCompensation(side)` | per `COMP` (M13.11): `"left"` / `"right"` engage G41 / G42 on the NEXT motion record (a straight lead at least a radius long, by the generator's law; `properties.CompensationRadius` is the register's radius), `"off"` cancels (G40) on the next one. The records between are the PART contour - or, when `properties.CompensationType` is `"wear"` (#38), the cutter-centre path with the register holding only the wear delta - so a post that cannot write the words must `message()` a refusal — the engine refuses a script that lacks the hook outright |
 | `onPlasma` / `onTorchOn` / `onTorchOff` | per `PLASMA` header / `TORCH ON` / `TORCH OFF` (#671): a plasma section's kerf and stated heights (`PlasmaKerf`, `PierceHeight`, ... - absent = the controller's AutoFS), then the torch struck before the next motion record and put out after the previous. The engine refuses a script lacking either torch hook when a header arrives, and keeps the torch law (no torch without a header, no ON while lit, no rapid while lit, nothing left lit) - only `tormach-plasma.cps` defines them |
+| `onJetOn` / `onJetOff` | per `JET ON` / `JET OFF` (#1882): the jet opened before the next motion record and closed after the previous, under the section's `WATERJET` header (`WaterjetAbrasive`, `PierceDwell`, `ValveLagDwell` - a dwell is absent when unstated). The engine refuses a script lacking either jet hook when a header arrives, and keeps the jet law (no jet without a header, no ON while open, no rapid while open, nothing left open). It shares no state with the torch law - only `waterjet-iso.cps` defines them |
 | `onThreadCycle` / `onThreadCycleEnd` | per `THREAD` / `THREAD END` (issue #34): a threading cycle's numbers bracket its explicit passes; a script that writes the cycle (G76) skips the passes itself, one that does not define the hooks posts them. `postOptions` (global) carries the document's post options plus resolved `declaredOptions` |
 | `onClose` | once, after all records (retract + `%`-end here) |
 
 ### Declared options (`declaredOptions`) and `programTools` (#258)
 
 A script may define a top-level `declaredOptions` map so the host renders typed per-post properties and validates CLI / MCP / script overrides by name and range. Each entry declares `type` (`"boolean"`, `"integer"`, `"number"`, `"string"`, `"enum"`), required matching `default`, optional `title`, `description`, `group`, bounds (`min`/`max`), and non-empty `choices` (`string` or `{ id, title }`) for `"enum"`. Built-in host keys (`Units`, `Threading`, `Smoothing`, `EndUnits`, `Explain`, `BetweenSetups`) are reserved. Defaults must preserve existing golden output byte-for-byte. Before `onOpen`, the engine also publishes `programTools`, an array of `{ number, name, diameter, kind }` for tools in the stream, so header tool-list comments can summarize every tool up front.
+
+### Sheet-cutting seams (#1882)
+
+- `lineEnding = "lf"` (the default) or `"crlf"`: the end of each program
+  line. The engine reads it when it writes the program, after `onClose`,
+  so `onOpen` may set it from a declared option. Any other value is
+  refused by name.
+- `linearizeArcs = true` writes every arc record as straight chords
+  through `onLinear` (for a control without G2/G3), at the sagitta
+  `chordTolerance` (mm, 0.01 when unstated; a value that is not a
+  positive number is refused by name). The engine reads both after
+  `onOpen`. The chords are `cl::Move::segments3`; the last one ends on
+  the arc's own end point, and every chord line maps to the arc record.
+- `programBounds` (global, before `onOpen`): the XY box of every cutting
+  record (feeds, plunges, arcs at the quarter points they pass, cycle
+  centres) as `{minX, maxX, minY, maxY}` in mm, or `null` when nothing
+  is cut. Rapids do not count.
+- `machine.travel`: the linear axes' stated strokes, `{X, Y, Z}`, each
+  `[min, max]` in mm or `null` when the machine file states none.
 
 Output is only what `writeln`/`write`/`writeBlock` push into `OUT`;
 `message(s)` is a COUNTED WARNING, not text — in-app it blocks the
@@ -275,6 +295,24 @@ no `PLASMA` header, any rpm, coolant, rotary, cycle or Z cutting move,
 and any machine not declared `kind: plasma` (`machine.kind`). Its
 goldens ride under `nc/tormach-plasma/` (`plasma_post.rs`), not the
 milling matrix.
+
+## The waterjet post
+
+`waterjet-iso.cps` (#1882, "Generic ISO abrasive waterjet") serves a
+waterjet table only (`serves = ["waterjet"]`, `machine.kind`). It is not
+a registry entry yet: the app offers it with the Waterjet operation that
+writes the `WATERJET` records (#1883). It writes XY only (a waterjet
+machine states X and Y), opens the water with a declared M number,
+dwells the valve lag (`G4`), starts the abrasive, dwells the pierce,
+cuts, then stops the abrasive before the water. The M numbers, the G4
+word form, G2/G3 or chords, and LF or CR LF are declared options; the
+default M numbers are placeholders. It refuses by name every op with no
+`WATERJET` header, any rpm (S, G95) or surface speed (G96), coolant,
+rotary, cycle or Z cutting move, a cut outside the stated
+`machine.travel`, and any machine not declared `kind: waterjet`. Its
+goldens ride under `crates/post/tests/golden/waterjet/`
+(`waterjet_iso_post.rs`); the decision record is
+`docs/decisions/1882-waterjet-post.md`.
 
 ## The wire EDM post
 

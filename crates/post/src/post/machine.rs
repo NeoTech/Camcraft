@@ -56,11 +56,11 @@ pub fn mirror(m: &crate::machine::Machine) -> Value {
         if let Some(f) = a.feed {
             speeds.insert("normal".to_owned(), json!(f));
         }
-        axes.push(json!({
-            "letter": a.name,
-            "direction": direction,
-            "speeds": Value::Object(speeds),
-        }));
+        let mut axis = json!({ "letter": a.name, "direction": direction, "speeds": Value::Object(speeds) });
+        if let (Some((lo, hi)), Some(o)) = (a.travel, axis.as_object_mut()) {
+            o.insert("travel".to_owned(), json!([lo, hi])); // #1882
+        }
+        axes.push(axis);
     }
     // Rates the script reads as ceilings: the fastest stated axis -
     // and stated axes are LINEAR only. A rotary's deg/min is not a
@@ -148,6 +148,12 @@ pub fn mirror(m: &crate::machine::Machine) -> Value {
         && let Some(o) = out.as_object_mut()
     {
         o.insert("kind".to_owned(), json!("plasma"));
+    }
+    // #1882: a vendor-tree waterjet keeps its kind through the CLI mirror.
+    if crate::machine::kind(Some(m)) == crate::machine::Kind::Waterjet
+        && let Some(o) = out.as_object_mut()
+    {
+        o.insert("kind".to_owned(), json!("waterjet"));
     }
     // #533: a wire or sinker EDM says its kind and its `edm` words (the
     // control's codes, D5, and whether it threads by itself) for the
@@ -277,6 +283,8 @@ pub fn script_props(m: &Value) -> Value {
         "spindleMax": spindle,
         "coolants": coolants,
         "rotaries": rotaries,
+        // #1882: the linear axes' stated strokes, mm ([min, max] or null).
+        "travel": super::machine_travel::linear(m),
         "rtcp": rtcp,
         "signConvention": sign_convention,
         "spindles": spindles.map_or(Value::Null, |n| json!(n)),

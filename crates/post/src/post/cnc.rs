@@ -105,6 +105,14 @@ pub enum Record {
     /// hooks is refused by name - a cut posted without its torch is
     /// a dry run at best, and a mill post's spindle words at worst.
     Torch(super::cnc_torch::TorchRec),
+    /// The waterjet header of a section (#1882): abrasive on or off and
+    /// the stated dwells (`cnc_jet`). It precedes the section's
+    /// `SECTION`, and its properties hold until `ENDSECTION`.
+    Waterjet(super::cnc_jet::WaterjetRec),
+    /// A jet event (#1882): opened before the next motion record, or
+    /// closed after the previous one. A script without the jet hooks is
+    /// refused by name.
+    Jet(super::cnc_jet::JetRec),
 }
 
 /// One feed/rapid/plunge/arc record. Coordinates are millimeters
@@ -309,6 +317,8 @@ impl Record {
             Record::Guard(g) => format!("probe protected move → {}", pos(g.to[0], g.to[1], g.to[2])),
             Record::Plasma(p) => p.label(),
             Record::Torch(t) => t.label(),
+            Record::Waterjet(w) => w.label(),
+            Record::Jet(j) => j.label(),
             Record::Found(f) => match f.set_wcs {
                 Some(w) => format!("probe result · set G{} · tol {:.3} mm", 54 + u32::from(w), f.tol_mm),
                 None => format!("probe result · confirm · tol {:.3} mm", f.tol_mm),
@@ -460,6 +470,8 @@ pub fn serialize(records: &[Record]) -> String {
             Record::Guard(g) => s.push_str(&super::probe_rec::write_guard(g)),
             Record::Plasma(p) => s.push_str(&p.line()),
             Record::Torch(t) => s.push_str(&t.line()),
+            Record::Waterjet(w) => s.push_str(&w.line()),
+            Record::Jet(j) => s.push_str(&j.line()),
         }
     }
     s
@@ -668,6 +680,15 @@ pub fn parse(text: &str) -> Result<Vec<Record>, CncError> {
             }
             if let Some(w) = t.strip_prefix("TORCH ") {
                 out.push(Record::Torch(super::cnc_torch::parse_torch(w).map_err(fail)?));
+                continue;
+            }
+            // #1882: the waterjet records, read in both spellings.
+            if let Some(w) = t.strip_prefix("WATERJET").filter(|w| w.is_empty() || w.starts_with(' ')) {
+                out.push(Record::Waterjet(super::cnc_jet::parse_header(w).map_err(fail)?));
+                continue;
+            }
+            if let Some(w) = t.strip_prefix("JET ") {
+                out.push(Record::Jet(super::cnc_jet::parse_jet(w).map_err(fail)?));
                 continue;
             }
             continue; // any other comment is nothing to the post
@@ -998,6 +1019,14 @@ pub fn parse(text: &str) -> Result<Vec<Record>, CncError> {
                     Record::Plasma(super::cnc_torch::parse_header(words).map_err(fail)?)
                 } else {
                     Record::Torch(super::cnc_torch::parse_torch(words).map_err(fail)?)
+                });
+            }
+            "WATERJET" | "JET" => {
+                let words = line.trim_start()[head.len()..].trim_start();
+                out.push(if head == "WATERJET" {
+                    Record::Waterjet(super::cnc_jet::parse_header(words).map_err(fail)?)
+                } else {
+                    Record::Jet(super::cnc_jet::parse_jet(words).map_err(fail)?)
                 });
             }
             "FOUND" => {
