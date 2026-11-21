@@ -45,6 +45,7 @@ mod pairing;
 mod preimage;
 mod open;
 mod ring;
+mod rounds;
 mod ruled;
 mod ruled_laws;
 mod ruled_widen;
@@ -350,6 +351,8 @@ fn pass_notes(p: &WireParams, start: Point2, lead: f64, reverse: bool) -> Vec<St
     ]
 }
 
+#[cfg(test)]
+mod facet_tests;
 #[cfg(test)]
 mod open_tests;
 #[cfg(test)]

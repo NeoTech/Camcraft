@@ -10,7 +10,9 @@
 //!   the offset from the profile and material the drawing calls cut is
 //!   left standing. Every point of the profile must therefore lie
 //!   within the offset (plus [`COVER_TOL`]) of the path; the worst
-//!   point that does not is refused by name, with its spot.
+//!   point that does not is refused by name, with its spot. A facet
+//!   vertex of a meshed round of radius >= the offset may also stand
+//!   its mitre excess past it (#3208, `rounds`).
 //! - **Kerf law.** No move - the leads included - brings the wire's
 //!   centre nearer the profile than the offset (less [`PATH_TOL`]): the
 //!   kerf never enters the product. The path is built to hold this; the
@@ -25,6 +27,7 @@ use crate::geometry::Point3;
 use crate::machining2d::GenError;
 
 use super::ring::{dist, pt_poly, pt_ring};
+use super::rounds::facet_allowance;
 use super::{WireParams, COVER_TOL, PATH_TOL};
 
 /// The most samples either law reads along the profile or the path.
@@ -113,8 +116,10 @@ fn cover_run_with(
     heal_tolerance: f64,
 ) -> Result<Option<UncutRest>, GenError> {
     let k = p.kerf_offset();
-    let strict = k + COVER_TOL;
-    let reach = k + heal_tolerance.max(COVER_TOL);
+    // A meshed round's facet vertex stands its mitre past the offset
+    // (#3208); the allowance fades along each chord, where the excess
+    // falls off faster than linearly.
+    let allow = facet_allowance(given, given_closed, k);
     let step = step_for(k, perimeter(given, given_closed));
     let mut worst_over: Option<(f64, Point2)> = None;
     let mut worst_healed: Option<(f64, Point2)> = None;
@@ -122,9 +127,12 @@ fn cover_run_with(
         let (a, b) = (given[i], given[j]);
         let len = dist(a, b);
         let steps = (len / step).ceil().clamp(1.0, 65_536.0) as u32;
-        for j in 0..steps {
-            let f = f64::from(j) / f64::from(steps);
+        for s in 0..steps {
+            let f = f64::from(s) / f64::from(steps);
             let q = Point2::new(a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f);
+            let facet = allow[i] * (1.0 - f) + allow[j] * f;
+            let strict = k + COVER_TOL + facet;
+            let reach = k + heal_tolerance.max(COVER_TOL) + facet;
             let d = to(q, path, path_closed);
             // A NaN distance is never "covered".
             if d.is_nan() {
