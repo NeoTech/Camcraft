@@ -541,6 +541,8 @@ pub(super) fn check_and_apply(world: &World, mut file: ProjectFile) -> Result<Ve
         // rather than discard protected selections as unknown area fields.
         // v73 -> v74 (#1864): sketch chain/layer picks and per-chain contour
         // overrides arrive; a v73 file has none and steps up unchanged.
+        // v74 -> v75 (#3181): a machine's controller identity and tool-change
+        // procedure are optional. An older machine keeps both unstated.
         notes = super::wcs_one::settle(&mut file, from)?;
         notes.extend(super::fidelity_migrate::settle(&mut file.entities, from));
         if from < 68 {

@@ -723,6 +723,7 @@ fn every_shipped_machine_mounts_and_speaks_its_declaration() {
     use camcraft_app::machine::{Kind, kind};
     let expectations = [
         ("VMC 3-axis", Kind::Mill),
+        ("Fehlmann Picomax 55 (iTNC 530)", Kind::Mill),
         ("Tilt-head 5-axis", Kind::Mill),
         ("Mill-turn", Kind::MillTurn),
         ("Lathe", Kind::Lathe),

@@ -108,6 +108,9 @@ pub fn run_program_with(
     options: &Value,
     id: &ProgramId,
 ) -> Result<PostOutput, PostError> {
+    // The transforms and callbacks must see the same checked machine as the CLI.
+    let input = super::machine_installation::checked_input(mch).map_err(PostError::Refused)?;
+    let mch = input.as_ref();
     let records = super::normalize_program_order(cnc::parse(stream)?);
     let operation = records.iter().find_map(|record| match record {
         Record::Param { name, value } if name == "OperationName" => value.as_str(),
@@ -137,7 +140,7 @@ pub fn run_program_with(
     // #374: an inverted machine axis - the one place the stream is
     // mirrored into the controller's frame, or refused by name.
     let records = super::invert::apply(records, mch, &s)?;
-    s.set_machine(&machine::script_props(mch))?;
+    s.set_machine(&machine::flatten(mch))?;
     // #542: whether the manifest's `serves` (#1266) names a sinker EDM -
     // the one script that may voice a sinker section (below).
     let serves_sinker = s

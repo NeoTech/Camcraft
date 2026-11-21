@@ -154,7 +154,10 @@ use super::*;
 /// (absent is empty, so a v73 file steps up unchanged). An old reader
 /// must refuse a v74 file rather than drop per-chain side or direction
 /// overrides or reject sketch picks without explanation.
-pub const PROJECT_VERSION: u32 = 74;
+/// v75 (#3181): a machine can record its controller model, exact NC software,
+/// installed options and tool-change procedure. A v74 file leaves them
+/// unstated. Older readers must refuse v75 to prevent losing these facts.
+pub const PROJECT_VERSION: u32 = 75;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ProjectError {

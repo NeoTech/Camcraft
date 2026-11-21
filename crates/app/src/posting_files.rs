@@ -78,6 +78,7 @@ pub const BUILTINS: &[(&str, AssetFile)] = &[
 /// label and an install-time default, never a file's identity.
 pub const MACHINES: &[(&str, AssetFile)] = &[
     ("VMC 3-axis", AssetFile("vmc.mch")),
+    ("Fehlmann Picomax 55 (iTNC 530)", AssetFile("fehlmann-picomax55.mch")),
     ("Tilt-head 5-axis", AssetFile("tilthead.mch")),
     ("Mill-turn", AssetFile("millturn.mch")),
     ("Lathe", AssetFile("lathe.mch")),
@@ -348,6 +349,7 @@ fn embedded(kind: &str, file: &str) -> Option<&'static str> {
         ("posts", "sodick-wire.cps") => Some(include_str!("../../../assets/posts/sodick-wire.cps")),
         ("posts", "sinker-iso.cps") => Some(include_str!("../../../assets/posts/sinker-iso.cps")),
         ("machines", "vmc.mch") => Some(include_str!("../../../assets/machines/vmc.mch")),
+        ("machines", "fehlmann-picomax55.mch") => Some(include_str!("../../../assets/machines/fehlmann-picomax55.mch")),
         ("machines", "tilthead.mch") => Some(include_str!("../../../assets/machines/tilthead.mch")),
         ("machines", "millturn.mch") => Some(include_str!("../../../assets/machines/millturn.mch")),
         ("machines", "lathe.mch") => Some(include_str!("../../../assets/machines/lathe.mch")),

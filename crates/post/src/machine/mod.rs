@@ -14,6 +14,8 @@ mod edm_named;
 pub mod edm_taper;
 pub mod envelope;
 mod kind;
+pub(crate) mod installation;
+pub use installation::{ControllerIdentity, ToolChangeMode};
 mod no_spindle;
 mod parse;
 mod plasma;
