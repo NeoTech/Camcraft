@@ -22,9 +22,8 @@
 //!   solid to cut to.
 //! - **Nothing passes silently.** An operation on a profile states what
 //!   it is checked against ([`checked_against`]): the stock and the
-//!   profile's chains. This build does not yet make a toolpath from the
-//!   chains, so generation refuses by name ([`generation_problem`]) and
-//!   no check can pass for want of a solid.
+//!   profile's chains. The placed wire punch builds its retained prism from
+//!   the verified chain; unsupported sections refuse in [`generation_problem`].
 
 use flecs_ecs::prelude::World;
 
@@ -145,12 +144,16 @@ pub fn checked_against(world: &World, op: &Operation) -> Option<String> {
 }
 
 /// The generation door: an operation the profile law refuses, or one on
-/// a profile (this build makes no toolpath from profile chains yet), is
+/// a profile without a supported chain-based generator, is
 /// refused by name. `None` for every other operation.
 #[must_use]
 pub fn generation_problem(world: &World, op: &Operation) -> Option<String> {
     if let Some(why) = source_problem(world, op.setup.as_deref(), &op.src, &op.params) {
         return Some(why);
+    }
+    if matches!((&op.params, &op.src), (OpParams::WireContour(_), SrcRef::Entity(_))) {
+        // The generator validates the complete placed source and its stock.
+        return None;
     }
     checked_against(world, op)
         .map(|what| format!("this operation is {what}; a toolpath from the chains of a DXF profile is not generated yet"))

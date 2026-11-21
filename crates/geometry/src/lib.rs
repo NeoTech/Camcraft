@@ -26,6 +26,7 @@ pub mod nesting;
 pub mod profile_derive;
 pub mod profile_mesh;
 pub mod sketch_chains;
+pub mod wire_round_profile;
 pub mod solidcraft;
 #[cfg(not(target_arch = "wasm32"))]
 mod kernel_import;
