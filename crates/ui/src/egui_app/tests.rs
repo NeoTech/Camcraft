@@ -103,6 +103,8 @@ mod machines_edit;
 mod machine_wire_edm;
 mod unsaved;
 mod post_refusal;
+#[cfg(not(target_arch = "wasm32"))]
+mod agie_post;
 mod program_units;
 mod gcode_viewer;
 mod first_setup;

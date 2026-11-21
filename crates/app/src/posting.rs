@@ -28,6 +28,9 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 use std::path::Path;
 
+#[path = "posting_agie.rs"]
+pub mod agie;
+
 #[path = "posting_files.rs"]
 mod files;
 pub use files::{
@@ -56,7 +59,7 @@ pub const PLASMA_POSTS: &[&str] = &["Tormach PathPilot Plasma"];
 /// the control's own codes from the machine file, and (#617) the Sodick
 /// dialect with its manual's words. They serve wire EDMs only, and no
 /// cutting post serves one. The first is the default for a wire EDM.
-pub const WIRE_POSTS: &[&str] = &["Generic ISO Wire EDM", "Sodick Wire EDM (Mark 21)"];
+pub const WIRE_POSTS: &[&str] = &["Generic ISO Wire EDM", "Sodick Wire EDM (Mark 21)", agie::POST];
 
 /// The registry entries that speak SINKER EDM (#542): RS-274 motion
 /// with the control's own codes from the machine file, each declaring
@@ -313,6 +316,10 @@ pub fn script_of(post: &PostRef) -> Result<(String, String), String> {
 /// What a successful post says back.
 #[derive(Debug)]
 pub struct Posted {
+    /// The controller files published together for a native multi-file post.
+    pub bundle_files: Vec<std::path::PathBuf>,
+    /// Required checks on the posted native job before the controller generates its steps.
+    pub controller_review: Option<String>,
     pub ops: usize,
     pub lines: usize,
     /// The exact program that was written - the M1.7d viewer shows the
@@ -603,6 +610,9 @@ fn post_script_as(
     extra: Option<&BTreeMap<String, OptionValue>>,
 ) -> Result<Posted, String> {
     let started = crate::clock::Instant::now();
+    if post.is_some_and(agie::is_native) {
+        return agie::post(world, out_path, extra);
+    }
     let posted = post_script_body_with(world, cps, label, post, extra)
         .and_then(|p| write_program(out_path, p));
     match &posted {
@@ -626,6 +636,9 @@ fn post_script_as(
 /// one-file post refuses it.
 pub fn post_setup_unwritten(world: &World) -> Result<Posted, String> {
     let post = mounts::single(world, true)?.post;
+    if agie::is_native(&post) {
+        return Err("Agie native jobs require a job directory on the desktop or CLI".into());
+    }
     let (label, cps) = script_of(&post)?;
     let posted = post_script_body_with(world, &cps, Some(&label), Some(&post), None);
     match &posted {
@@ -709,6 +722,8 @@ fn post_script_body_with(
     let lines = out.program.lines().count();
     let line_pos = viewer_map(&records, &out);
     Ok(Posted {
+        bundle_files: Vec::new(),
+        controller_review: None,
         ops,
         lines,
         program: out.program,

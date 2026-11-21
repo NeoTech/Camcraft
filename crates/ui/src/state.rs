@@ -4734,6 +4734,20 @@ impl State {
                 // A program went out: an earlier refusal no longer
                 // describes the document's post (#265).
                 self.post_refusal = None;
+                if !posted.bundle_files.is_empty() {
+                    self.post_view = None;
+                    self.status = format!(
+                        "Agie job prepared in {} ({} controller files, zero working steps)",
+                        path.display(), posted.bundle_files.len()
+                    );
+                    if let Some(review) = posted.controller_review {
+                        self.status.push_str(&format!(" — {review}"));
+                    }
+                    if let Some(note) = posted.not_judged {
+                        self.status.push_str(&format!(" — {note}"));
+                    }
+                    return;
+                }
                 self.status = format!(
                     "posted {} op(s), {} lines in {} to {}",
                     posted.ops,
