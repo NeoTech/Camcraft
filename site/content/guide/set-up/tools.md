@@ -242,7 +242,7 @@ WinMax 9.01 control still requires verification on the machine.
 
 ## Tool numbering
 
-**Tool number (0 = list position)** sets the machine's controller number.
+**Tool number** sets the machine's controller number.
 Zero means the tool's position in the document tool list, starting at one.
 An explicit number must be between 1 and 99999. A post can impose a smaller
 controller limit. The tool number supplies the posted `T` word and the

@@ -382,7 +382,7 @@ use the Retract return to hop higher".
 No catalog case yet.
 <!-- catalog:examples:end -->
 
-{{ <icon name="op-slot-undercut" /> }}
+{{ <icon name="op-slot-undercut" /> }} ![Section view of the cutter going down outside the wall, feeding sideways under the roof and back out.](../../../operation-paths.svg#SlotUndercut)
 
 **For:** the part of a slot that is wider below than at its mouth: a
 T-slot, a keyseat, a dovetail, a round undercut groove. The cutter's head

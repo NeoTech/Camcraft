@@ -41,6 +41,7 @@ tests that behavior. A declaration does not implement controller support.
 | `workOffsetIndex` | Receives `WorkOffset` as a 1-based number. Without it, offsets 1–6 arrive as `G54`–`G59`. |
 | `workOffsetMax` | Highest supported offset number; default 6. A valid declaration is a whole number from 1 to 255. |
 | `continuousThreading` | Implements chip-break dips as one synchronized chain. The controller manual must support synchronization across consecutive blocks. |
+| `rotariesBeforeTraverse` | `true` says the script turns the rotary axes to each section's pose at the safe Z before the first X/Y traverse. The first-traverse check then reads the work at the operation's own pose. Without it, the check reads every pose that the previous program can leave. A user's own script that declares it gets a note on the path. |
 | `explains` | `"paren"` or `"semi"`. The post must append `explain(...)` to its blocks. |
 | `commentMax` | Maximum explanation comment length, delimiters included; default 60. It must be a whole number from 8 to 255 when Explain is on. |
 | `explainWords` | Optional dialect meanings: text, `""` to omit a meaning, or `{said: "...", takes: "S"}` to include a value word. |
