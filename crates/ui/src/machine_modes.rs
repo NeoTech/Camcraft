@@ -96,7 +96,7 @@ pub(crate) fn set_machine_mode(state: &mut State, kind: MachineKind) {
         state.pending.push_back(CommandKind::LoadBuiltinMachine(
             (*name).to_owned(),
         ));
-        state.status = format!("machine mode: {caption}");
+        state.status = camcraft_i18n::tf("machine mode: {caption}", &[format!("{}", caption)]);
     }
 }
 

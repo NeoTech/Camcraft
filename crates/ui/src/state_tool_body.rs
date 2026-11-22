@@ -192,27 +192,19 @@ impl State {
                         d.axis = axis;
                         d.offset = offset;
                         d.align_note = Some("aligned by ISO 13399 coordinate systems".into());
-                        self.status = format!(
-                            "body {}: {} facets - aligned by ISO 13399 coordinate systems; Apply body",
-                            d.source,
-                            d.facets.len()
-                        );
+                        self.status = camcraft_i18n::tf("body {}: {} facets - aligned by ISO 13399 coordinate systems; Apply body", &[format!("{}", d.source), format!("{}", d.facets.len())]);
                     }
                     Err(why) => {
                         d.axis = [0.0, 0.0, 1.0];
                         d.offset = 0.0;
-                        d.align_note = Some(format!("numeric placement ({why})"));
-                        self.status = format!(
-                            "body {}: {} facets - numeric placement ({why}); set axis and tip, then Apply body",
-                            d.source,
-                            d.facets.len()
-                        );
+                        d.align_note = Some(camcraft_i18n::tf("numeric placement ({why})", &[format!("{}", why)]));
+                        self.status = camcraft_i18n::tf("body {}: {} facets - numeric placement ({why}); set axis and tip, then Apply body", &[format!("{}", d.source), format!("{}", d.facets.len()), format!("{}", why)]);
                     }
                 }
                 d.pick = BodyPickMode::Off;
                 d.preview = None;
             }
-            Err(err) => self.refuse(ErrorScope::Tool, format!("tool body not imported: {err}")),
+            Err(err) => self.refuse(ErrorScope::Tool, camcraft_i18n::tf("tool body not imported: {err}", &[format!("{}", err)])),
         }
     }
 
@@ -245,11 +237,7 @@ impl State {
                     d.offset = o;
                     d.align_note = Some("manual placement".into());
                     let u = self.units();
-                    self.status = format!(
-                        "tip picked: offset {} {} along the axis",
-                        camcraft_app::units::len(o, u, 3),
-                        u.suffix()
-                    );
+                    self.status = camcraft_i18n::tf("tip picked: offset {} {} along the axis", &[format!("{}", camcraft_app::units::len(o, u, 3)), format!("{}", u.suffix())]);
                 }
                 None => self.status = "tip not picked: set a usable axis first".into(),
             },
@@ -257,10 +245,7 @@ impl State {
                 Some(n) => {
                     d.axis = n;
                     d.align_note = Some("manual placement".into());
-                    self.status = format!(
-                        "axis picked: {}",
-                        tool_body_view::axis_label(n).map_or_else(|| format!("({:.3}, {:.3}, {:.3})", n[0], n[1], n[2]), str::to_owned)
-                    );
+                    self.status = camcraft_i18n::tf("axis picked: {}", &[format!("{}", tool_body_view::axis_label(n).map_or_else(|| format!("({:.3}, {:.3}, {:.3})", n[0], n[1], n[2]), str::to_owned))]);
                 }
                 None => self.status = "axis not picked: that facet has no area".into(),
             },
@@ -336,12 +321,12 @@ impl State {
                 self.history.execute(&self.world, command);
                 self.doc_version += 1;
                 self.status = if clearing {
-                    format!("tool {name}: body cleared")
+                    camcraft_i18n::tf("tool {name}: body cleared", &[format!("{}", name)])
                 } else {
-                    format!("tool {name}: body set")
+                    camcraft_i18n::tf("tool {name}: body set", &[format!("{}", name)])
                 };
             }
-            Err(err) => self.refuse(ErrorScope::Tool, format!("tool body not set: {err}")),
+            Err(err) => self.refuse(ErrorScope::Tool, camcraft_i18n::tf("tool body not set: {err}", &[format!("{}", err)])),
         }
     }
 }

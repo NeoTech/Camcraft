@@ -228,7 +228,7 @@ impl AiChatState {
                 mime_type: "image/png".to_owned(),
                 data_base64: encode_base64(&bytes),
             })),
-            Some(Err(err)) => Err(format!("screenshot capture failed: {err}")),
+            Some(Err(err)) => Err(camcraft_i18n::tf("screenshot capture failed: {err}", &[format!("{}", err)])),
             None => Err("screenshot capture unavailable".to_owned()),
         }
     }

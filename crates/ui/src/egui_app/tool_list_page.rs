@@ -70,13 +70,10 @@ fn readout(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
                     }
                 });
         });
-    ui.label(format!(
-        "Setup total: est {} min",
-        camcraft_app::setup_sheet::minutes(camcraft_app::tool_list::setup_minutes(
+    ui.label(camcraft_i18n::tf("Setup total: est {} min", &[format!("{}", camcraft_app::setup_sheet::minutes(camcraft_app::tool_list::setup_minutes(
             &state.world,
             ctx
-        )),
-    ));
+        )))]));
 }
 
 /// The tools this setup's operations use, in program order: number,

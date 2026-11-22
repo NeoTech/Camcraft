@@ -152,12 +152,9 @@ fn profile_controls(ui: &mut Ui, state: &mut State) {
     // #2007: plain words - which holder the tool uses now.
     ui.label(match &landed {
         // #2016: a library holder is the entry, not a copy of it.
-        Some(b) if b.library.is_some() => format!(
-            "In use: library holder {}. Edit a point to make it a drawn outline.",
-            b.library.as_ref().map_or("", |r| r.entry.as_str())
-        ),
+        Some(b) if b.library.is_some() => camcraft_i18n::tf("In use: library holder {}. Edit a point to make it a drawn outline.", &[format!("{}", b.library.as_ref().map_or("", |r| r.entry.as_str()))]),
         Some(b) if b.spun.is_some() => "In use: a drawn holder outline".to_owned(),
-        Some(b) => format!("In use: the imported holder {}. Apply profile replaces it.", b.source),
+        Some(b) => camcraft_i18n::tf("In use: the imported holder {}. Apply profile replaces it.", &[format!("{}", b.source)]),
         None => "In use: the holder cylinder from the dimensions".to_owned(),
     });
     let custom = state.tool_profile_ui.custom;
@@ -245,13 +242,7 @@ fn profile_view(ui: &mut Ui, state: &mut State, u: Unit) {
             let foot = s.points().first().map_or(0.0, |p| p.z);
             let wide = s.max_radius();
             let mm = u.suffix();
-            ui.label(format!(
-                "holder Ø {} × {} {mm}, from {} to {} {mm} above the tip",
-                units::len(2.0 * wide, u, 1),
-                units::len(top - foot, u, 1),
-                units::len(foot, u, 1),
-                units::len(top, u, 1),
-            ));
+            ui.label(camcraft_i18n::tf("holder Ø {} × {} {mm}, from {} to {} {mm} above the tip", &[format!("{}", units::len(2.0 * wide, u, 1)), format!("{}", units::len(top - foot, u, 1)), format!("{}", mm), format!("{}", units::len(foot, u, 1)), format!("{}", units::len(top, u, 1)), format!("{}", mm)]));
         }
         Err(e) => {
             ui.colored_label(BAD, e);

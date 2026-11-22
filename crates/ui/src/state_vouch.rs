@@ -17,11 +17,11 @@ impl State {
                 command.run(&mut self.history, &self.world);
                 self.doc_version += 1;
                 self.status = match copies {
-                    0 => format!("{who} vouched for the mesh of {name}"),
-                    n => format!("{who} vouched for the mesh of {name} and {n} stock copy(ies) of it"),
+                    0 => camcraft_i18n::tf("{who} vouched for the mesh of {name}", &[format!("{}", who), format!("{}", name)]),
+                    n => camcraft_i18n::tf("{who} vouched for the mesh of {name} and {n} stock copy(ies) of it", &[format!("{}", who), format!("{}", name), format!("{}", n)]),
                 };
             }
-            Err(err) => self.refuse(ErrorScope::Setup, format!("{name} not vouched for: {err}")),
+            Err(err) => self.refuse(ErrorScope::Setup, camcraft_i18n::tf("{name} not vouched for: {err}", &[format!("{}", name), format!("{}", err)])),
         }
     }
 }

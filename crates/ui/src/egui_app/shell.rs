@@ -1079,7 +1079,7 @@ pub(crate) mod headless {
                     dist: 160.0,
                     ..Camera::default()
                 };
-                (state, cam, true, format!("seeded document, command world; Contour1 cached {op_ok} moves"))
+                (state, cam, true, camcraft_i18n::tf("seeded document, command world; Contour1 cached {op_ok} moves", &[format!("{}", op_ok)]))
             }
         };
 
@@ -1128,7 +1128,7 @@ pub(crate) mod headless {
         let total = (w as usize * h as usize).max(1);
         if must_draw && changed * 20 < total {
             // less than 5% of the frame: the document did not rasterize
-            return Err(format!("readback looks empty ({changed}/{total} changed px)"));
+            return Err(camcraft_i18n::tf("readback looks empty ({changed}/{total} changed px)", &[format!("{}", changed), format!("{}", total)]));
         }
         diag_info!("headless snapshot: {w}x{h}, {}% pixels changed", changed * 100 / total);
         Ok(said)
@@ -1144,10 +1144,7 @@ pub(crate) mod headless {
             .and_then(|e| model::toolpath_of(&state.world, &e))
             .map_or(0, |tp| tp.path.moves.len());
         if op_ok == 0 {
-            return Err(format!(
-                "seed produced no cached toolpath for Contour1 (status: {})",
-                state.status
-            ));
+            return Err(camcraft_i18n::tf("seed produced no cached toolpath for Contour1 (status: {})", &[format!("{}", state.status)]));
         }
         Ok((state, op_ok))
     }

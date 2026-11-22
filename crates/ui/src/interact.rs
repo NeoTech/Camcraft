@@ -278,12 +278,12 @@ pub fn queue_feature_pick(state: &mut State, pick: GeoSel, append: bool) {
     };
     let what = camcraft_app::pick::geo_label(&state.world, &pick);
     if base.iter().any(|g| g.entity == pick.entity && g.feature == pick.feature) {
-        state.status = format!("{what} is already selected");
+        state.status = camcraft_i18n::tf("{what} is already selected", &[format!("{}", what)]);
         return;
     }
     let mut items = base;
     items.push(pick.clone());
-    state.status = format!("{what} added to {name}");
+    state.status = camcraft_i18n::tf("{what} added to {name}", &[format!("{}", what), format!("{}", name)]);
     state.pending.push_back(CommandKind::SetOperationGeometry { name, items });
 }
 

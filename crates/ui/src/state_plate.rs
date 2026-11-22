@@ -176,11 +176,11 @@ impl State {
                 let name = command.name().to_owned();
                 self.history.execute(&self.world, command);
                 self.doc_version += 1;
-                self.status = format!("placed fixture plate {name}");
+                self.status = camcraft_i18n::tf("placed fixture plate {name}", &[format!("{}", name)]);
                 self.fixture_lib = None;
             }
             Err(err) => {
-                let msg = format!("plate not placed: {err}");
+                let msg = camcraft_i18n::tf("plate not placed: {err}", &[format!("{}", err)]);
                 if let Some(FixtureLibDialog::Plate(d)) = self.fixture_lib.as_mut() {
                     d.error = Some(msg.clone());
                 }
@@ -196,9 +196,9 @@ impl State {
             Ok(command) => {
                 self.history.execute(&self.world, command);
                 self.doc_version += 1;
-                self.status = format!("{fixture} placed at {label} on {plate}");
+                self.status = camcraft_i18n::tf("{fixture} placed at {label} on {plate}", &[format!("{}", fixture), format!("{}", label), format!("{}", plate)]);
             }
-            Err(err) => self.refuse(ErrorScope::Setup, format!("not placed on the plate: {err}")),
+            Err(err) => self.refuse(ErrorScope::Setup, camcraft_i18n::tf("not placed on the plate: {err}", &[format!("{}", err)])),
         }
     }
 
@@ -211,11 +211,11 @@ impl State {
                 self.history.execute(&self.world, command);
                 self.doc_version += 1;
                 self.status = match what {
-                    Some(e) => format!("{name}: a fixture plate, {e}"),
-                    None => format!("{name}: no longer a fixture plate"),
+                    Some(e) => camcraft_i18n::tf("{name}: a fixture plate, {e}", &[format!("{}", name), format!("{}", e)]),
+                    None => camcraft_i18n::tf("{name}: no longer a fixture plate", &[format!("{}", name)]),
                 };
             }
-            Err(err) => self.refuse(ErrorScope::Setup, format!("no plate grid: {err}")),
+            Err(err) => self.refuse(ErrorScope::Setup, camcraft_i18n::tf("no plate grid: {err}", &[format!("{}", err)])),
         }
     }
 }

@@ -226,7 +226,7 @@ fn box_anchor(ui: &mut Ui, state: &mut State) {
     };
     let chosen = SOURCES[state.wcs_ui.anchor_source.min(1)];
     if !chosen.eq_ignore_ascii_case(what) {
-        ui.label(format!("No {chosen} defined - anchoring on {what}."));
+        ui.label(camcraft_i18n::tf("No {chosen} defined - anchoring on {what}.", &[format!("{}", chosen), format!("{}", what)]));
     }
     // One plain row, not the label column: three radios beside a 120 px
     // label would widen the section past a narrow pane.
@@ -291,7 +291,7 @@ pub(super) fn circle_line(state: &State) -> String {
             units::len(c.centre[1], u, 2),
             units::len(c.centre[2], u, 2),
         ),
-        Some(Err(why)) => format!("Not anchored: {why}"),
+        Some(Err(why)) => camcraft_i18n::tf("Not anchored: {why}", &[format!("{}", why)]),
         None => String::from("No circle picked yet."),
     }
 }
@@ -325,7 +325,7 @@ fn readout(ui: &mut Ui, state: &mut State, u: Unit) {
             units::len(loc.pos.z, u, 2),
             quat_yaw_deg(loc.rot)
         ),
-        None => format!("{label}: not placed (at the origin)"),
+        None => camcraft_i18n::tf("{label}: not placed (at the origin)", &[format!("{}", label)]),
     };
     ui.label(line);
     ui.label(camcraft_i18n::tr("Work offset: the offset this setup posts, as its post names it. It does not move the origin."));

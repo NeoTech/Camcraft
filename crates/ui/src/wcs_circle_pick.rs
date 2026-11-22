@@ -76,7 +76,7 @@ fn circle_click(state: &mut State, p: [f32; 2]) {
         return;
     };
     let Some(feature) = sel else {
-        state.status = format!("the pick on '{}' names no edge - try beside it", found.entity);
+        state.status = camcraft_i18n::tf("the pick on '{}' names no edge - try beside it", &[format!("{}", found.entity)]);
         return;
     };
     queue_circle(state, GeoSel { entity: found.entity, feature });
@@ -87,7 +87,7 @@ fn circle_click(state: &mut State, p: [f32; 2]) {
 pub fn queue_vertex(state: &mut State, pick: &GeoSel) {
     match camcraft_app::pick::align::vertex(&state.world, pick) {
         Ok(pos) => queue_origin(state, pos),
-        Err(why) => state.status = format!("origin not placed: {why}"),
+        Err(why) => state.status = camcraft_i18n::tf("origin not placed: {why}", &[format!("{}", why)]),
     }
 }
 

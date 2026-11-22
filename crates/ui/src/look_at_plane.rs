@@ -20,7 +20,7 @@ pub(crate) const MISS: &str = "Look at: no origin axis under the cursor - the vi
 
 /// The status after a pick: the plane and whose origin it is.
 pub(crate) fn done(plane: &str, origin: &str) -> String {
-    format!("Look at: the view faces the {plane} plane of {origin}")
+    camcraft_i18n::tf("Look at: the view faces the {plane} plane of {origin}", &[format!("{}", plane), format!("{}", origin)])
 }
 
 /// The plane that each axis (X, Y, Z) is normal to.

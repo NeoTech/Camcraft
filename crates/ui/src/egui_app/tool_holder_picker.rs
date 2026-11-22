@@ -96,15 +96,7 @@ fn describe_row(r: &PickerRow, u: Unit) -> String {
         PickerRow::Weldon { taper: t, bores } => {
             let l = |v: f64| units::len(v, u, 2);
             let b: Vec<String> = bores.iter().map(|b| format!("Ø{}", l(*b))).collect();
-            format!(
-                "{} {} Ø{} × {} {}; Weldon, bore for the tool's shank: {}",
-                t.name,
-                t.ring,
-                l(t.flange_d),
-                l(t.flange_t),
-                u.suffix(),
-                b.join(", ")
-            )
+            camcraft_i18n::tf("{} {} Ø{} × {} {}; Weldon, bore for the tool's shank: {}", &[format!("{}", t.name), format!("{}", t.ring), format!("{}", l(t.flange_d)), format!("{}", l(t.flange_t)), format!("{}", u.suffix()), format!("{}", b.join(", "))])
         }
     }
 }
@@ -121,10 +113,10 @@ fn describe(e: &HolderEntry, u: Unit) -> String {
             l(er.min_bore),
             l(er.max_bore)
         ),
-        Clamp::Weldon { bore, body_d } => format!("Weldon bore Ø{}, body Ø{}", l(bore), l(body_d)),
+        Clamp::Weldon { bore, body_d } => camcraft_i18n::tf("Weldon bore Ø{}, body Ø{}", &[format!("{}", l(bore)), format!("{}", l(body_d))]),
     };
     match e.taper {
         Some(t) => format!("{} {} Ø{} × {} {}; {nose}", t.name, t.ring, l(t.flange_d), l(t.flange_t), u.suffix()),
-        None => format!("straight-shank chuck {}; {nose}", u.suffix()),
+        None => camcraft_i18n::tf("straight-shank chuck {}; {nose}", &[format!("{}", u.suffix()), format!("{}", nose)]),
     }
 }

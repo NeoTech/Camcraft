@@ -156,7 +156,7 @@ impl State {
     /// The user's Cancel on the overlay.
     pub(crate) fn cancel_generation(&mut self) {
         if let Some(name) = self.gen_jobs.abandon() {
-            self.status = format!("generation of {name} cancelled - its old toolpath stays");
+            self.status = camcraft_i18n::tf("generation of {name} cancelled - its old toolpath stays", &[format!("{}", name)]);
         }
     }
 
@@ -176,7 +176,7 @@ impl State {
             self.gen_jobs.done += 1;
             match outcome {
                 Some(result) => self.land_generation(&name, result, true),
-                None => self.refuse(ErrorScope::Operation, format!("generate failed: {name}: the worker stopped without a result")),
+                None => self.refuse(ErrorScope::Operation, camcraft_i18n::tf("generate failed: {name}: the worker stopped without a result", &[format!("{}", name)])),
             }
         }
         self.start_next_generation();
@@ -219,7 +219,7 @@ impl State {
                 self.gen_jobs.done += 1;
                 match job {
                     Some(job) => self.land_generation(&name, job.finish(), false),
-                    None => self.refuse(ErrorScope::Operation, format!("generate failed: {name}: the worker could not start")),
+                    None => self.refuse(ErrorScope::Operation, camcraft_i18n::tf("generate failed: {name}: the worker could not start", &[format!("{}", name)])),
                 }
             }
         }
@@ -233,7 +233,7 @@ impl State {
             Ok(command) if background && !command.still_current(&self.world) => {
                 self.refuse(
                     ErrorScope::Operation,
-                    format!("generation of {name} discarded: the operation changed while it generated - generate it again"),
+                    camcraft_i18n::tf("generation of {name} discarded: the operation changed while it generated - generate it again", &[format!("{}", name)]),
                 );
             }
             Ok(command) => {
@@ -249,7 +249,7 @@ impl State {
                 };
             }
             Err(err) => {
-                self.refuse(ErrorScope::Operation, format!("generate failed: {err}"));
+                self.refuse(ErrorScope::Operation, camcraft_i18n::tf("generate failed: {err}", &[format!("{}", err)]));
                 // #261 part 2: where the generator refused, if it said.
                 self.feedback_at = err.location().map(|p| [p.x, p.y, p.z]);
                 // Part 3: the moves it had built, drawn as a ghost.

@@ -83,7 +83,7 @@ impl State {
     pub(crate) fn select_line_width(&mut self, next: view::LineWidth) {
         self.line_width = next;
         self.persist_view();
-        self.status = format!("line width: {} pt", next.word());
+        self.status = camcraft_i18n::tf("line width: {} pt", &[format!("{}", next.word())]);
     }
 
     /// #2958: choose the anti-aliasing. A sample count that this graphics
@@ -92,7 +92,7 @@ impl State {
         if !self.samples_offered.contains(&next.samples()) {
             self.refuse(
                 super::ErrorScope::Setup,
-                format!("anti-aliasing {} not selected: this graphics device does not offer it", next.word()),
+                camcraft_i18n::tf("anti-aliasing {} not selected: this graphics device does not offer it", &[format!("{}", next.word())]),
             );
             return;
         }

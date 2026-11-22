@@ -70,14 +70,7 @@ impl FrameWatch {
             .max_by_key(|(_, d)| *d)
             .unwrap_or(("unmarked", total));
         let all: Vec<String> = self.phases.iter().map(|(p, d)| format!("{p} {} ms", d.as_millis())).collect();
-        Some(format!(
-            "gpu: slow frame {} ms (budget {} ms, {} slow so far) - slowest phase \"{worst}\" {} ms [{}]",
-            total.as_millis(),
-            BUDGET.as_millis(),
-            self.slow_frames,
-            wt.as_millis(),
-            all.join(", ")
-        ))
+        Some(camcraft_i18n::tf("gpu: slow frame {} ms (budget {} ms, {} slow so far) - slowest phase \"{worst}\" {} ms [{}]", &[format!("{}", total.as_millis()), format!("{}", BUDGET.as_millis()), format!("{}", self.slow_frames), format!("{}", worst), format!("{}", wt.as_millis()), format!("{}", all.join(", "))]))
     }
 }
 

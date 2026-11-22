@@ -309,8 +309,8 @@ fn post_offer_banner(ui: &mut Ui, state: &mut State) {
     };
     // #2374: the machine's own post, or the post for the mount's kind.
     let line = match offer.why {
-        posting::OfferWhy::Machine => format!("the machine names {name} as its post; switch to it?"),
-        posting::OfferWhy::Kind(serves) => format!("the current post serves a {serves}; switch to {name}?"),
+        posting::OfferWhy::Machine => camcraft_i18n::tf("the machine names {name} as its post; switch to it?", &[format!("{}", name)]),
+        posting::OfferWhy::Kind(serves) => camcraft_i18n::tf("the current post serves a {serves}; switch to {name}?", &[format!("{}", serves), format!("{}", name)]),
     };
     let ink = super::colorvision::text_inks(ui, &state.world).warn;
     super::layout::status_banner(ui, "post_offer", &line, ink, &[]);
@@ -425,7 +425,7 @@ fn setups_page(ui: &mut Ui, state: &mut State) {
             };
             let mut line = format!("    stock {}, WCS {placed}", def.stock);
             if !def.datum_from.is_empty() {
-                line.push_str(&format!(", datum from {}", def.datum_from));
+                line.push_str(&camcraft_i18n::tf(", datum from {}", &[format!("{}", def.datum_from)]));
             }
             ui.label(line);
         }
@@ -479,7 +479,7 @@ pub(crate) fn tool_shape_editor_window(ctx: &egui::Context, state: &mut State) {
     state.sync_tool_ui();
     let exists = state.tool_ui.exists;
     let title = if exists {
-        format!("Tool shape: {}", state.tool_ui.name)
+        camcraft_i18n::tf("Tool shape: {}", &[format!("{}", state.tool_ui.name)])
     } else {
         "Tool shape".to_owned()
     };
@@ -648,7 +648,7 @@ fn model_page(ui: &mut Ui, state: &mut State, name: String) {
     if let Some((who, line)) = &state.repair_ui.last
         && *who == name
     {
-        ui.label(format!("Last repair: {line}"));
+        ui.label(camcraft_i18n::tf("Last repair: {line}", &[format!("{}", line)]));
     }
     let users: Vec<String> = model::named_entities(&state.world)
         .into_iter()
@@ -663,7 +663,7 @@ fn model_page(ui: &mut Ui, state: &mut State, name: String) {
     if users.is_empty() {
         ui.label(camcraft_i18n::tr("No operation uses it as a source."));
     } else {
-        ui.label(format!("Source for: {}", users.join(", ")));
+        ui.label(camcraft_i18n::tf("Source for: {}", &[format!("{}", users.join(", "))]));
     }
     if model::stock_def_of(&state.world, &entity)
         .is_some_and(|s| matches!(s, StockShape::FromModel { source } if source == name))

@@ -75,12 +75,12 @@ impl State {
         let text = match project::save_text(&self.world) {
             Ok(text) => text,
             Err(err) => {
-                self.status = format!("save failed: {err}");
+                self.status = camcraft_i18n::tf("save failed: {err}", &[format!("{}", err)]);
                 return false;
             }
         };
         if let Err(err) = browser_files::offer(&name, text.as_bytes(), "application/json") {
-            self.status = format!("save failed: {err}");
+            self.status = camcraft_i18n::tf("save failed: {err}", &[format!("{}", err)]);
             return false;
         }
         // What the download holds matches the history position (#107).
@@ -99,12 +99,7 @@ impl State {
         match posted {
             Ok(posted) => {
                 self.post_refusal = None;
-                self.status = format!(
-                    "posted {} op(s), {} lines in {} as {name} (downloaded)",
-                    posted.ops,
-                    posted.lines,
-                    posting::unit_word(self.units())
-                );
+                self.status = camcraft_i18n::tf("posted {} op(s), {} lines in {} as {name} (downloaded)", &[format!("{}", posted.ops), format!("{}", posted.lines), format!("{}", posting::unit_word(self.units())), format!("{}", name)]);
                 if let Some(line) = &posted.not_judged {
                     self.status = format!("{} - WARNING: {line}", self.status);
                 }
@@ -120,7 +115,7 @@ impl State {
                 });
             }
             Err(reason) => {
-                self.status = format!("post refused: {reason}");
+                self.status = camcraft_i18n::tf("post refused: {reason}", &[format!("{}", reason)]);
                 self.post_refusal = Some(crate::egui_app::post_refusal::PostRefusal {
                     path: PathBuf::from(name),
                     reason,

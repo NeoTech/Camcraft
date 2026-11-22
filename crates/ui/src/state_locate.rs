@@ -38,7 +38,7 @@ impl State {
                 };
                 self.status = with_warning(moved, warning);
             }
-            Err(err) => self.refuse(ErrorScope::Setup, format!("not located: {err}")),
+            Err(err) => self.refuse(ErrorScope::Setup, camcraft_i18n::tf("not located: {err}", &[format!("{}", err)])),
         }
     }
 }

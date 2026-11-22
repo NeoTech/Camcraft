@@ -65,7 +65,7 @@ pub(super) fn page(ui: &mut Ui, state: &mut State, name: &str, page: SetupPage) 
             }
         }
         SetupPage::Tools => {
-            ui.heading(format!("Tool list - {title}"));
+            ui.heading(camcraft_i18n::tf("Tool list - {title}", &[format!("{}", title)]));
             ui.separator();
             super::tool_list_page::tool_list_page(ui, state, ctx);
         }
@@ -91,7 +91,7 @@ fn editable(ui: &mut Ui, state: &mut State, ctx: Option<&str>) -> bool {
     if setup::active(&state.world).as_deref() == Some(name) {
         return true;
     }
-    ui.label(format!("{name} is not the active setup - activate it to edit its machine, post and fixtures."));
+    ui.label(camcraft_i18n::tf("{name} is not the active setup - activate it to edit its machine, post and fixtures.", &[format!("{}", name)]));
     if ui.button(format!("Activate {name}")).clicked() {
         state.pending.push_back(CommandKind::ActivateSetup(Some(name.to_owned())));
     }
@@ -126,8 +126,8 @@ pub(super) fn ownership(ui: &mut Ui, state: &mut State, ctx: Option<&str>, which
         Mount::Post => "post",
     };
     let mut pick = owns;
-    ui.radio_value(&mut pick, false, format!("Use the document's {word} ({doc})"));
-    ui.radio_value(&mut pick, true, format!("This setup has its own {word}"));
+    ui.radio_value(&mut pick, false, camcraft_i18n::tf("Use the document's {word} ({doc})", &[format!("{}", word), format!("{}", doc)]));
+    ui.radio_value(&mut pick, true, camcraft_i18n::tf("This setup has its own {word}", &[format!("{}", word)]));
     // #1515: say by name where a pick on this page lands - this setup's
     // own mount, or the document's (which every following setup reads).
     let target = match which {
@@ -148,9 +148,7 @@ pub(super) fn ownership(ui: &mut Ui, state: &mut State, ctx: Option<&str>, which
     // row under the visible bottom of a 720 px window. They keep their
     // words and their AccessKit labels; they are drawn small and dimmed,
     // like the machine page's own help line.
-    hint_small(ui, &format!(
-        "Setups with different {word}s post one at a time: a program is written by one post for one machine."
-    ));
+    hint_small(ui, &camcraft_i18n::tf("Setups with different {word}s post one at a time: a program is written by one post for one machine.", &[format!("{}", word)]));
 }
 
 /// Where a machine (`word`) or post picked on setup `name`'s page lands
@@ -158,9 +156,9 @@ pub(super) fn ownership(ui: &mut Ui, state: &mut State, ctx: Option<&str>, which
 /// document's, named as such.
 pub(super) fn target_line(word: &str, name: &str, own: bool) -> String {
     if own {
-        format!("A {word} picked on this page is {name}'s own - no other setup changes.")
+        camcraft_i18n::tf("A {word} picked on this page is {name}'s own - no other setup changes.", &[format!("{}", word), format!("{}", name)])
     } else {
-        format!("A {word} picked on this page sets the document's {word} - every setup without its own uses it.")
+        camcraft_i18n::tf("A {word} picked on this page sets the document's {word} - every setup without its own uses it.", &[format!("{}", word), format!("{}", word)])
     }
 }
 

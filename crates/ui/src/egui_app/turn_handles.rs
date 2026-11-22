@@ -30,7 +30,7 @@ pub(crate) fn draw(ui: &egui::Ui, state: &State, pointer: Option<[f32; 2]>, pane
         let col = if dim { col.gamma_multiply(0.35) } else { col };
         let w = if hot == Some(*axis) { 3.5 } else { 2.0 };
         let line: Vec<egui::Pos2> = pts.iter().map(|p| egui::pos2(p[0], p[1])).collect();
-        let label = format!("Rotate about {}", ["X", "Y", "Z"][*axis]);
+        let label = camcraft_i18n::tf("Rotate about {}", &[format!("{}", ["X", "Y", "Z"][*axis])]);
         let response = ui.interact(egui::Rect::from_points(&line), ui.id().with(("turn_handle", axis)), egui::Sense::hover());
         response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, &label));
         if !enabled {
@@ -39,7 +39,7 @@ pub(crate) fn draw(ui: &egui::Ui, state: &State, pointer: Option<[f32; 2]>, pane
             });
         }
         if under == Some(*axis) {
-            response.on_hover_text(if enabled { format!("{label}: drag the ring. Hold Shift to snap.") } else { turn_drag::edge_on_hint(*axis) });
+            response.on_hover_text(if enabled { camcraft_i18n::tf("{label}: drag the ring. Hold Shift to snap.", &[format!("{}", label)]) } else { turn_drag::edge_on_hint(*axis) });
         }
         ui.painter().add(egui::Shape::line(line.clone(), egui::Stroke::new(w + 2.0, shade)));
         ui.painter().add(egui::Shape::line(line, egui::Stroke::new(w, col)));

@@ -118,6 +118,21 @@ fn escapes_and_comments_read_as_written() {
 }
 
 #[test]
+fn tf_substitutes_arguments_and_falls_back_to_the_template() {
+    // Pinned to English: tf reads the global language.
+    assert_eq!(lang(), Lang::En);
+    // Positional and named placeholders are filled in encounter order.
+    assert_eq!(tf("Cut {} passes", &["3".into()]), "Cut 3 passes");
+    assert_eq!(tf("X {x}, Y {y}", &["1".into(), "2".into()]), "X 1, Y 2");
+    // Literal braces.
+    assert_eq!(tf("{{ok}} {}", &["7".into()]), "{ok} 7");
+    // A miss is the English template itself, still formatted.
+    assert_eq!(tf("no key {}", &["a".into()]), "no key a");
+    // Fewer args than placeholders: the extra placeholder stays as written.
+    assert_eq!(tf("{} / {}", &["1".into()]), "1 / {}");
+}
+
+#[test]
 fn count_keeps_english_plurals_and_translates_the_unit() {
     // `count` reads the global language, so it is pinned to English here:
     // the suite never leaves another language in force.

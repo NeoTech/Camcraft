@@ -64,7 +64,7 @@ pub(crate) fn window(ctx: &egui::Context, state: &mut State) {
                 .show(ui, |ui| {
                     super::error_text::error_text(ui, error_ink, &refusal.reason);
                 });
-            ui.label(format!("Nothing was written to {file}; a program already there is unchanged."));
+            ui.label(camcraft_i18n::tf("Nothing was written to {file}; a program already there is unchanged.", &[format!("{}", file)]));
             if changed_since {
                 ui.label(
                     RichText::new(camcraft_i18n::tr("The document has changed since this post was refused - post again to check it."))

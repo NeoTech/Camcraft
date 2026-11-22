@@ -71,7 +71,7 @@ pub(crate) fn run_windowed(pick: gpu::GpuPick, want: Option<String>, mcp_port: O
             }
             Err(err) => {
                 diag_warn!("mcp: cannot listen on 127.0.0.1:{port}: {err}");
-                shell.state.status = format!("MCP server not started: 127.0.0.1:{port}: {err}");
+                shell.state.status = camcraft_i18n::tf("MCP server not started: 127.0.0.1:{port}: {err}", &[format!("{}", port), format!("{}", err)]);
             }
         }
     }
@@ -209,7 +209,7 @@ impl Shell {
 
     fn fail(&mut self, el: &ActiveEventLoop, what: &str, err: impl std::fmt::Display) {
         diag_warn!("egui shell: {what}: {err}");
-        camcraft_app::logging::startup_failure(&format!("egui shell: {what}: {err}"));
+        camcraft_app::logging::startup_failure(&camcraft_i18n::tf("egui shell: {what}: {err}", &[format!("{}", what), format!("{}", err)]));
         self.failed = true;
         self.exit_code = 1;
         el.exit();

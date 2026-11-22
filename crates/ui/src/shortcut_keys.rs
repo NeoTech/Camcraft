@@ -51,8 +51,8 @@ mod tests {
     #[test]
     fn pick_hints_name_the_command_key() {
         let key = command_key();
-        assert!(crate::egui_app::edge_hint().starts_with(&format!("{key}+click adds")));
+        assert!(crate::egui_app::edge_hint().starts_with(&camcraft_i18n::tf("{key}+click adds", &[format!("{}", key)])));
         assert!(crate::egui_app::click_selects_hint().contains(&format!("{key} adds")));
-        assert!(crate::egui_app::boundary_hints()[2].contains(&format!("{key}-click to add")));
+        assert!(crate::egui_app::boundary_hints()[2].contains(&camcraft_i18n::tf("{key}-click to add", &[format!("{}", key)])));
     }
 }

@@ -70,11 +70,11 @@ fn pairs_mut(state: &mut State) -> Option<&mut Vec<WireSyncPair>> {
 pub fn take(state: &mut State, pick: GeoSel) {
     let FeatureSel::Vertex(id) = pick.feature else {
         let what = camcraft_app::pick::geo_label(&state.world, &pick);
-        state.status = format!("wire sync: {what} is not a vertex - click a corner of a profile");
+        state.status = camcraft_i18n::tf("wire sync: {what} is not a vertex - click a corner of a profile", &[format!("{}", what)]);
         return;
     };
     let Some(w) = crate::vertex_pick::vertex_world(state, &pick.entity, id) else {
-        state.status = format!("wire sync: the vertex of '{}' is no longer in the model", pick.entity);
+        state.status = camcraft_i18n::tf("wire sync: the vertex of '{}' is no longer in the model", &[format!("{}", pick.entity)]);
         return;
     };
     if !w.iter().all(|v| v.is_finite()) {
@@ -90,10 +90,7 @@ pub fn take(state: &mut State, pick: GeoSel) {
     let waiting = half.filter(|_| pairs.last().is_some_and(|p| p.upper.is_some() && p.lower.is_none()));
     if let Some(up) = waiting {
         if up[2] - w[2] <= MIN_DROP {
-            state.status = format!(
-                "wire sync: the lower point (Z{:.3}) must lie below the upper point (Z{:.3}) - click a vertex of the lower profile",
-                w[2], up[2]
-            );
+            state.status = camcraft_i18n::tf("wire sync: the lower point (Z{:.3}) must lie below the upper point (Z{:.3}) - click a vertex of the lower profile", &[format!("{:.3}", w[2]), format!("{:.3}", up[2])]);
             return;
         }
         if let Some(last) = pairs.last_mut() {
@@ -102,16 +99,16 @@ pub fn take(state: &mut State, pick: GeoSel) {
         let n = pairs.len();
         state.wire_sync.half = None;
         state.wire_sync.rulings.push(Ruling { upper: up, lower: w });
-        state.status = format!("wire sync: pair {n} stated - click the upper point of pair {}, or Apply", n + 1);
+        state.status = camcraft_i18n::tf("wire sync: pair {n} stated - click the upper point of pair {}, or Apply", &[format!("{}", n), format!("{}", n + 1)]);
     } else {
         if pairs.len() >= SYNC_PAIRS_MAX {
-            state.status = format!("wire sync: {SYNC_PAIRS_MAX} pairs are the most an operation stores");
+            state.status = camcraft_i18n::tf("wire sync: {SYNC_PAIRS_MAX} pairs are the most an operation stores", &[format!("{}", SYNC_PAIRS_MAX)]);
             return;
         }
         pairs.push(WireSyncPair { upper: Some([w[0], w[1]]), lower: None });
         let n = pairs.len();
         state.wire_sync.half = Some(w);
-        state.status = format!("wire sync: upper point of pair {n} picked - click a vertex of the lower profile");
+        state.status = camcraft_i18n::tf("wire sync: upper point of pair {n} picked - click a vertex of the lower profile", &[format!("{}", n)]);
     }
 }
 
@@ -143,8 +140,8 @@ pub(crate) fn segments(state: &State, aspect: f64) -> Vec<([f32; 2], [f32; 2])> 
 pub fn next_click(sync: &[WireSyncPair]) -> String {
     match sync.last() {
         Some(p) if p.upper.is_some() && p.lower.is_none() => {
-            format!("click the lower point of pair {} (a vertex of the lower profile)", sync.len())
+            camcraft_i18n::tf("click the lower point of pair {} (a vertex of the lower profile)", &[format!("{}", sync.len())])
         }
-        _ => format!("click the upper point of pair {} (a vertex of the upper profile)", sync.len() + 1),
+        _ => camcraft_i18n::tf("click the upper point of pair {} (a vertex of the upper profile)", &[format!("{}", sync.len() + 1)]),
     }
 }

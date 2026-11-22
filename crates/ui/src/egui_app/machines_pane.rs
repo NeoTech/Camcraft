@@ -213,7 +213,7 @@ pub(crate) fn draw(ui: &mut Ui, state: &mut State, pal: &Tokens) {
     match open {
         Some(Ok(d)) => p.editor = Some(MachineFileEditor::new(d)),
         Some(Err(e)) => {
-            super::error_text::error_text(ui, inks.error, &format!("Cannot open: {e}"));
+            super::error_text::error_text(ui, inks.error, &camcraft_i18n::tf("Cannot open: {e}", &[format!("{}", e)]));
         }
         None => {}
     }
@@ -292,13 +292,13 @@ pub(crate) fn draw(ui: &mut Ui, state: &mut State, pal: &Tokens) {
         let r = ui.add_enabled(why.is_none(), egui::Button::new(camcraft_i18n::tr(USE_FOR_SETUP)));
         match &why {
             None => {
-                if r.on_hover_text(format!("Make this the setup's machine ({} undoes it)", chord("Z"))).clicked() {
+                if r.on_hover_text(camcraft_i18n::tf("Make this the setup's machine ({} undoes it)", &[format!("{}", chord("Z"))])).clicked() {
                     assign = Some(e.source.clone());
                 }
             }
             Some(why) => {
-                r.on_disabled_hover_text(format!("Cannot assign: {why}"));
-                ui.add(Label::new(RichText::new(format!("Cannot assign: {why}")).color(pal.text_dim)).wrap());
+                r.on_disabled_hover_text(camcraft_i18n::tf("Cannot assign: {why}", &[format!("{}", why)]));
+                ui.add(Label::new(RichText::new(camcraft_i18n::tf("Cannot assign: {why}", &[format!("{}", why)])).color(pal.text_dim)).wrap());
             }
         }
         ui.add_space(4.0);

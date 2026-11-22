@@ -353,7 +353,7 @@ pub fn tree(
     for (ix, r) in eye_resps {
         let tip = if rows[ix].hidden { "Show" } else { "Hide" };
         r.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, format!("{tip} {}", rows[ix].label)));
-        r.on_hover_text(format!("{tip} in the viewport (view state; geometry still cuts)"));
+        r.on_hover_text(camcraft_i18n::tf("{tip} in the viewport (view state; geometry still cuts)", &[format!("{}", tip)]));
     }
     hit
 }

@@ -58,7 +58,7 @@ impl State {
                 self.doc_version += 1;
                 self.status = String::from("stock set");
             }
-            Err(err) => self.refuse(ErrorScope::Setup, format!("stock not set: {err}")),
+            Err(err) => self.refuse(ErrorScope::Setup, camcraft_i18n::tf("stock not set: {err}", &[format!("{}", err)])),
         }
     }
 }

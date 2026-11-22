@@ -25,7 +25,7 @@ fn main() {
     #[cfg(not(windows))]
     let code = camcraft_ui::run(&args);
     if code != 0 {
-        camcraft_app::logging::startup_failure(&format!("CamCraft stopped with exit code {code}"));
+        camcraft_app::logging::startup_failure(&camcraft_i18n::tf("CamCraft stopped with exit code {code}", &[format!("{}", code)]));
     }
     #[cfg(windows)]
     if code != 0 {

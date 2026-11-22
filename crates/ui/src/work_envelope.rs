@@ -39,7 +39,7 @@ pub(crate) fn tooltip(state: &State) -> String {
     let what = "Outline of the mounted machine travel. Mill boxes stand on the floor under the model, the stock and the fixtures (the grid); X/Y and lathe cylinders use the setup work origin. This display does not change travel checks.";
     match envelope_problem(state) {
         None => what.to_owned(),
-        Some(why) => format!("Nothing to draw: {why}. {what}"),
+        Some(why) => camcraft_i18n::tf("Nothing to draw: {why}. {what}", &[format!("{}", why), format!("{}", what)]),
     }
 }
 

@@ -63,7 +63,7 @@ where
         let target = match unsafe { wgpu::SurfaceTargetUnsafe::from_display_and_window(window, window) } {
             Ok(t) => t,
             Err(e) => {
-                failures.push(format!("window surface handle unavailable ({e})"));
+                failures.push(camcraft_i18n::tf("window surface handle unavailable ({e})", &[format!("{}", e)]));
                 return Err(gpu_select::refusal(&failures, &skipped));
             }
         };
@@ -72,7 +72,7 @@ where
             Ok(s) => s,
             Err(err) => {
                 diag_warn!("gpu: {label}: surface creation failed ({err}) - falling back");
-                failures.push(format!("{label}: surface creation failed ({err})"));
+                failures.push(camcraft_i18n::tf("{label}: surface creation failed ({err})", &[format!("{}", label), format!("{}", err)]));
                 continue;
             }
         };
@@ -88,7 +88,7 @@ where
         }
         if descs.is_empty() {
             diag_warn!("gpu: {label}: no adapters enumerated - falling back");
-            note(&mut skipped, format!("{label}: no adapters enumerated"));
+            note(&mut skipped, camcraft_i18n::tf("{label}: no adapters enumerated", &[format!("{}", label)]));
         }
         let hp = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::HighPerformance,
@@ -155,7 +155,7 @@ where
         ..wgpu::DeviceDescriptor::default()
     };
     let (device, queue) = pollster::block_on(adapter.request_device(&desc))
-        .map_err(|e| format!("device request refused ({e})"))?;
+        .map_err(|e| camcraft_i18n::tf("device request refused ({e})", &[format!("{}", e)]))?;
     let lost = Arc::new(AtomicBool::new(false));
     {
         let (lost, who) = (Arc::clone(&lost), who.to_owned());
@@ -189,7 +189,7 @@ where
     };
     for (what, e) in errs {
         if let Some(e) = e {
-            return Err(format!("{what} during bring-up ({e})"));
+            return Err(camcraft_i18n::tf("{what} during bring-up ({e})", &[format!("{}", what), format!("{}", e)]));
         }
     }
     // A lost device surfaces only via the callback; poll so it can fire.
@@ -198,7 +198,7 @@ where
         return Err("the device was lost during bring-up".into());
     }
     if let Err(e) = polled {
-        return Err(format!("the test frame did not complete ({e})"));
+        return Err(camcraft_i18n::tf("the test frame did not complete ({e})", &[format!("{}", e)]));
     }
     Ok((device, queue, config, built))
 }

@@ -36,12 +36,12 @@ impl State {
             }
             CommandKind::LayPartOnPlane { setup, picks, lay } => {
                 let c = AlignPartToSetup::lay_on_plane(w, &setup, &picks, lay);
-                let done = format!("part laid on {}", camcraft_app::pick::plane_label(lay.plane));
+                let done = camcraft_i18n::tf("part laid on {}", &[format!("{}", camcraft_app::pick::plane_label(lay.plane))]);
                 (setup, c, done, "part not laid on the plane", Draft::Plane)
             }
             CommandKind::LayPartOnPoints { setup, picks, lay } => {
                 let c = AlignPartToSetup::lay_on_points(w, &setup, &picks, lay);
-                let done = format!("part laid on {} through three points", camcraft_app::pick::plane_label(lay.lay.plane));
+                let done = camcraft_i18n::tf("part laid on {} through three points", &[format!("{}", camcraft_app::pick::plane_label(lay.lay.plane))]);
                 (setup, c, done, "part not laid on the three points", Draft::Points)
             }
             CommandKind::AlignPartFromAxes { setup, axes } => {

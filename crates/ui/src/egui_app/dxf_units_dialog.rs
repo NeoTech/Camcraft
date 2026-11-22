@@ -27,20 +27,8 @@ fn fmt(v: f64) -> String {
 /// inches, each with its size in the other unit.
 pub(crate) fn readings(width: f64, height: f64) -> [String; 2] {
     [
-        format!(
-            "Read in millimeters: {} x {} mm ({} x {} in)",
-            fmt(width),
-            fmt(height),
-            fmt(width / MM_PER_IN),
-            fmt(height / MM_PER_IN)
-        ),
-        format!(
-            "Read in inches: {} x {} in ({} x {} mm)",
-            fmt(width),
-            fmt(height),
-            fmt(width * MM_PER_IN),
-            fmt(height * MM_PER_IN)
-        ),
+        camcraft_i18n::tf("Read in millimeters: {} x {} mm ({} x {} in)", &[format!("{}", fmt(width)), format!("{}", fmt(height)), format!("{}", fmt(width / MM_PER_IN)), format!("{}", fmt(height / MM_PER_IN))]),
+        camcraft_i18n::tf("Read in inches: {} x {} in ({} x {} mm)", &[format!("{}", fmt(width)), format!("{}", fmt(height)), format!("{}", fmt(width * MM_PER_IN)), format!("{}", fmt(height * MM_PER_IN))]),
     ]
 }
 
@@ -54,7 +42,7 @@ pub(crate) fn window(ctx: &egui::Context, state: &mut State) {
     let response = Modal::new(Id::new("dxf-units-prompt")).show(ctx, |ui| {
         ui.set_max_width(420.0);
         ui.heading(camcraft_i18n::tr("DXF units"));
-        ui.label(format!("{file} does not state its units. Choose the unit of its coordinates."));
+        ui.label(camcraft_i18n::tf("{file} does not state its units. Choose the unit of its coordinates.", &[format!("{}", file)]));
         ui.add_space(4.0);
         ui.label(mm);
         ui.label(inch);

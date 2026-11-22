@@ -41,7 +41,7 @@ pub(super) fn options_ownership(ui: &mut Ui, state: &mut State, ctx: Option<&str
 /// moves; else the document's, named as such.
 pub(super) fn options_target_line(name: &str, own: bool) -> String {
     if own {
-        format!("A post option changed on this page is {name}'s own - no other setup changes.")
+        camcraft_i18n::tf("A post option changed on this page is {name}'s own - no other setup changes.", &[format!("{}", name)])
     } else {
         "A post option changed on this page sets the document's post options - every setup without its own uses them."
             .to_owned()

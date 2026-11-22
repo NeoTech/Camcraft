@@ -42,7 +42,7 @@ impl State {
             .map_or_else(|_| theme::current(), |(t, _)| t);
         let mut notes: Vec<String> = note.into_iter().collect();
         match colorvision::gate(stored.color_vision, &tokens) {
-            Some(why) => notes.push(format!("colour vision {} not restored: {why}", stored.color_vision.label())),
+            Some(why) => notes.push(camcraft_i18n::tf("colour vision {} not restored: {why}", &[format!("{}", stored.color_vision.label()), format!("{}", why)])),
             None => color_vision_set(&self.world, stored.color_vision),
         }
         // #853: the pinned language applies before the first frame, unless
@@ -52,8 +52,8 @@ impl State {
         {
             match camcraft_i18n::Lang::from_tag(tag) {
                 Some(l) if camcraft_i18n::set_lang(l) == l => self.language = Some(l),
-                Some(_) => notes.push(format!("language '{tag}' could not load - following the system locale")),
-                None => notes.push(format!("language '{tag}' is not one this build speaks - following the system locale")),
+                Some(_) => notes.push(camcraft_i18n::tf("language '{tag}' could not load - following the system locale", &[format!("{}", tag)])),
+                None => notes.push(camcraft_i18n::tf("language '{tag}' is not one this build speaks - following the system locale", &[format!("{}", tag)])),
             }
         }
         if !notes.is_empty() {
@@ -107,11 +107,11 @@ impl State {
         if let ThemeRef::File(path) = &next
             && let Err(why) = &*self.theme_cache.get(Path::new(path))
         {
-            self.refuse(ErrorScope::Setup, format!("theme not selected: {why}"));
+            self.refuse(ErrorScope::Setup, camcraft_i18n::tf("theme not selected: {why}", &[format!("{}", why)]));
             return;
         }
         if let Err(why) = check_theme(&next) {
-            self.refuse(ErrorScope::Setup, format!("theme not selected: {why}"));
+            self.refuse(ErrorScope::Setup, camcraft_i18n::tf("theme not selected: {why}", &[format!("{}", why)]));
             return;
         }
         if theme_of(&self.world) != next {
@@ -127,13 +127,13 @@ impl State {
     /// failing mode is a visible refusal at the pick.
     pub(super) fn select_color_vision(&mut self, next: ColorVision) {
         if let Some(why) = colorvision::gate(next, &theme::current()) {
-            self.refuse(ErrorScope::Setup, format!("colour vision not selected: {why}"));
+            self.refuse(ErrorScope::Setup, camcraft_i18n::tf("colour vision not selected: {why}", &[format!("{}", why)]));
             return;
         }
         if color_vision_of(&self.world) != next {
             color_vision_set(&self.world, next);
             self.persist_prefs();
         }
-        self.status = format!("colour vision: {}", next.label());
+        self.status = camcraft_i18n::tf("colour vision: {}", &[format!("{}", next.label())]);
     }
 }

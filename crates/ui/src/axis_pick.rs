@@ -206,11 +206,7 @@ pub fn hint_stray(state: &mut State) -> bool {
         AxisBy::Edge => "edge",
         AxisBy::Points => "points",
     };
-    state.status = format!(
-        "no axis is being picked - click Pick +Y {} or Pick +X {} first",
-        what(y),
-        what(x)
-    );
+    state.status = camcraft_i18n::tf("no axis is being picked - click Pick +Y {} or Pick +X {} first", &[format!("{}", what(y)), format!("{}", what(x))]);
     true
 }
 
@@ -233,7 +229,7 @@ pub fn take(state: &mut State, pick: GeoSel) {
     let status = match (by, &pick.feature) {
         (AxisBy::Edge, FeatureSel::Chain(_)) => {
             d.slot(axis).picks = vec![pick];
-            format!("{setup}: {words} picked for {}", axis.label())
+            camcraft_i18n::tf("{setup}: {words} picked for {}", &[format!("{}", setup), format!("{}", words), format!("{}", axis.label())])
         }
         // #692: a round edge picked for its centre is a point; any other
         // edge is refused with the reason.
@@ -268,7 +264,7 @@ pub fn point_words(world: &World, g: &GeoSel, unit: Unit) -> String {
             let c: Vec<String> = p.iter().map(|v| units::len(*v, unit, 3)).collect();
             format!("on '{}' ({}) {}", g.entity, c.join(", "), unit.suffix())
         }
-        _ => format!("on '{}' (no longer in the model - re-pick it)", g.entity),
+        _ => camcraft_i18n::tf("on '{}' (no longer in the model - re-pick it)", &[format!("{}", g.entity)]),
     }
 }
 
@@ -304,15 +300,15 @@ pub fn picks_text(world: &World, picks: &[GeoSel], unit: Unit) -> String {
                 } else {
                     String::new()
                 };
-                format!("edge on {on}, {} {suffix} long{dir}", units::len(l, unit, 3))
+                camcraft_i18n::tf("edge on {on}, {} {suffix} long{dir}", &[format!("{}", on), format!("{}", units::len(l, unit, 3)), format!("{}", suffix), format!("{}", dir)])
             }
-            _ => format!("edge on {on} (no longer straight or in the model - re-pick it)"),
+            _ => camcraft_i18n::tf("edge on {on} (no longer straight or in the model - re-pick it)", &[format!("{}", on)]),
         },
         _ => {
             let pts: Vec<String> = coords.iter().filter_map(|c| c.first()).map(at).collect();
             let head = match picks.len() {
-                1 => format!("1 of 2 points on {on}"),
-                n => format!("{n} points on {on}"),
+                1 => camcraft_i18n::tf("1 of 2 points on {on}", &[format!("{}", on)]),
+                n => camcraft_i18n::tf("{n} points on {on}", &[format!("{}", n), format!("{}", on)]),
             };
             if pts.is_empty() { head } else { format!("{head} {} {suffix}", pts.join(" -> ")) }
         }

@@ -70,7 +70,7 @@ pub(super) fn refusal(rpm: Option<f64>, as_vc: bool, d_mm: f64) -> Option<&'stat
 pub(super) fn hold_to_machine(rpm: f64, spindle_max: Option<f64>) -> (f64, Option<String>) {
     match spindle_max {
         Some(hi) if hi.is_finite() && hi > 0.0 && rpm > hi => {
-            (hi.floor(), Some(format!("spindle speed {rpm:.0} rpm held to the machine's maximum {hi:.0}")))
+            (hi.floor(), Some(camcraft_i18n::tf("spindle speed {rpm:.0} rpm held to the machine's maximum {hi:.0}", &[format!("{:.0}", rpm), format!("{:.0}", hi)])))
         }
         _ => (rpm, None),
     }
@@ -89,8 +89,8 @@ pub(super) fn row(ui: &mut Ui, state: &mut State, name: &str, tool: &Tool) {
     };
     let spindle_max = camcraft_app::machine::of(&state.world).1.and_then(|m| m.spindle_max);
     let help = match spindle_max {
-        Some(hi) => format!("edits tool '{name}' - every operation using it; the machine's maximum is {hi:.0} rpm"),
-        None => format!("edits tool '{name}' - every operation using it"),
+        Some(hi) => camcraft_i18n::tf("edits tool '{name}' - every operation using it; the machine's maximum is {hi:.0} rpm", &[format!("{}", name), format!("{:.0}", hi)]),
+        None => camcraft_i18n::tf("edits tool '{name}' - every operation using it", &[format!("{}", name)]),
     };
     let mut flip = false;
     let mut commit = None;

@@ -83,12 +83,7 @@ pub(crate) fn summary(j: &SheetJob) -> String {
         SheetZero::Top => -(j.thickness + j.allowance),
         SheetZero::Spoilboard => -j.allowance,
     };
-    format!(
-        "Z0 on the {}; cuts may go {:.2} mm into the spoilboard (deepest Z{floor:.2}); rapids stay {:.2} mm over the sheet",
-        zero_words(j.z_zero).to_lowercase(),
-        j.allowance,
-        j.clamp_clearance
-    )
+    camcraft_i18n::tf("Z0 on the {}; cuts may go {:.2} mm into the spoilboard (deepest Z{floor:.2}); rapids stay {:.2} mm over the sheet", &[format!("{}", zero_words(j.z_zero).to_lowercase()), format!("{:.2}", j.allowance), format!("{:.2}", floor), format!("{:.2}", j.clamp_clearance)])
 }
 
 /// One setup's checklist.

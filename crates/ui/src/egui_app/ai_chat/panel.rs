@@ -237,9 +237,9 @@ fn draw_transcript(
                     ui.add_space(4.0);
                     ui.horizontal(|ui| {
                         let note = if turn.undone {
-                            format!("Undone ({} changes reverted)", turn.change_count)
+                            camcraft_i18n::tf("Undone ({} changes reverted)", &[format!("{}", turn.change_count)])
                         } else {
-                            format!("{} changes in this turn", turn.change_count)
+                            camcraft_i18n::tf("{} changes in this turn", &[format!("{}", turn.change_count)])
                         };
                         ui.label(RichText::new(note).small().color(pal.text_dim));
                         if ui

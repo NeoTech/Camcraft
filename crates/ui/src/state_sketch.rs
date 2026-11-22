@@ -86,10 +86,10 @@ impl State {
                 self.status = line;
             }
             Err(CommandError::DxfUnitsMissing { width, height }) => {
-                self.status = format!("{}: the drawing states no units - choose Millimeters or Inches", source.label());
+                self.status = camcraft_i18n::tf("{}: the drawing states no units - choose Millimeters or Inches", &[format!("{}", source.label())]);
                 self.dxf_units_prompt = Some(DxfUnitsPrompt { source, width, height });
             }
-            Err(err) => self.refuse(ErrorScope::Setup, format!("DXF profile not placed: {err}")),
+            Err(err) => self.refuse(ErrorScope::Setup, camcraft_i18n::tf("DXF profile not placed: {err}", &[format!("{}", err)])),
         }
     }
 
@@ -101,7 +101,7 @@ impl State {
         };
         match units {
             Some(u) => self.import_dxf(prompt.source, Some(u)),
-            None => self.status = format!("{} not placed: no units chosen", prompt.source.label()),
+            None => self.status = camcraft_i18n::tf("{} not placed: no units chosen", &[format!("{}", prompt.source.label())]),
         }
     }
 
@@ -113,9 +113,9 @@ impl State {
                 self.history.execute(&self.world, cmd);
                 self.doc_version += 1;
                 self.sketch_ui.drafts.remove(name);
-                self.status = format!("placed {name} at X {x}, Y {y}, {angle_deg} deg on the stock top");
+                self.status = camcraft_i18n::tf("placed {name} at X {x}, Y {y}, {angle_deg} deg on the stock top", &[format!("{}", name), format!("{}", x), format!("{}", y), format!("{}", angle_deg)]);
             }
-            Err(err) => self.refuse(ErrorScope::Setup, format!("DXF profile not moved: {err}")),
+            Err(err) => self.refuse(ErrorScope::Setup, camcraft_i18n::tf("DXF profile not moved: {err}", &[format!("{}", err)])),
         }
     }
 }
@@ -131,14 +131,7 @@ pub fn summary_line(name: &str, setup: Option<&str>, data: &SketchData) -> Strin
     let kinds: Vec<String> = data.summary().skipped.iter().map(|(k, n)| format!("{k} {n}")).collect();
     let skipped_text =
         if kinds.is_empty() { format!("{skipped} skipped") } else { format!("{skipped} skipped ({})", kinds.join(", ")) };
-    let rejected = if chains.rejected.is_empty() { String::new() } else { format!(", {} not chained", chains.rejected.len()) };
+    let rejected = if chains.rejected.is_empty() { String::new() } else { camcraft_i18n::tf(", {} not chained", &[format!("{}", chains.rejected.len())]) };
     let layers = data.layers().len();
-    format!(
-        "placed DXF profile {name} on the stock of {}: {:?} {unit_note}, {layers} layer{}, {} closed and {} open chains{rejected}, {skipped_text}",
-        setup.map_or_else(|| "the document".to_owned(), |s| format!("setup {s}")),
-        units.applied,
-        if layers == 1 { "" } else { "s" },
-        chains.closed.len(),
-        chains.open.len(),
-    )
+    camcraft_i18n::tf("placed DXF profile {name} on the stock of {}: {:?} {unit_note}, {layers} layer{}, {} closed and {} open chains{rejected}, {skipped_text}", &[format!("{}", name), format!("{}", setup.map_or_else(|| "the document".to_owned(), |s| format!("setup {s}"))), format!("{:?}", units.applied), format!("{}", unit_note), format!("{}", layers), format!("{}", if layers == 1 { "" } else { "s" }), format!("{}", chains.closed.len()), format!("{}", chains.open.len()), format!("{}", rejected), format!("{}", skipped_text)])
 }

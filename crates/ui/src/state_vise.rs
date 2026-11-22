@@ -144,11 +144,11 @@ impl State {
                 let name = command.name().to_owned();
                 self.history.execute(&self.world, command);
                 self.doc_version += 1;
-                self.status = format!("placed built-in vise {name}");
+                self.status = camcraft_i18n::tf("placed built-in vise {name}", &[format!("{}", name)]);
                 self.fixture_lib = None;
             }
             Err(err) => {
-                let msg = format!("vise not placed: {err}");
+                let msg = camcraft_i18n::tf("vise not placed: {err}", &[format!("{}", err)]);
                 if let Some(FixtureLibDialog::Vise(d)) = self.fixture_lib.as_mut() {
                     d.error = Some(msg.clone());
                 }
@@ -172,9 +172,9 @@ impl State {
                 self.doc_version += 1;
                 self.vise_opening.remove(name);
                 let u = self.units();
-                self.status = format!("{name}: jaws open {}", camcraft_app::units::len(opening, u, 3));
+                self.status = camcraft_i18n::tf("{name}: jaws open {}", &[format!("{}", name), format!("{}", camcraft_app::units::len(opening, u, 3))]);
             }
-            Err(err) => self.refuse(ErrorScope::Setup, format!("vise not changed: {err}")),
+            Err(err) => self.refuse(ErrorScope::Setup, camcraft_i18n::tf("vise not changed: {err}", &[format!("{}", err)])),
         }
     }
 }

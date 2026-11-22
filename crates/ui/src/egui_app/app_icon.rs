@@ -19,7 +19,7 @@ pub fn decode() -> Result<(Vec<u8>, u32, u32), String> {
 
 fn decode_png(png: &[u8]) -> Result<(Vec<u8>, u32, u32), String> {
     let img = image::load_from_memory_with_format(png, image::ImageFormat::Png)
-        .map_err(|e| format!("logotype icon: {e}"))?
+        .map_err(|e| camcraft_i18n::tf("logotype icon: {e}", &[format!("{}", e)]))?
         .into_rgba8();
     let (w, h) = img.dimensions();
     Ok((img.into_raw(), w, h))
@@ -27,7 +27,7 @@ fn decode_png(png: &[u8]) -> Result<(Vec<u8>, u32, u32), String> {
 
 /// The winit window icon; `None` (and a log line) when it cannot be made: the window opens without one.
 pub fn window_icon() -> Option<Icon> {
-    let made = decode().and_then(|(rgba, w, h)| Icon::from_rgba(rgba, w, h).map_err(|e| format!("logotype icon: {e}")));
+    let made = decode().and_then(|(rgba, w, h)| Icon::from_rgba(rgba, w, h).map_err(|e| camcraft_i18n::tf("logotype icon: {e}", &[format!("{}", e)])));
     match made {
         Ok(i) => Some(i),
         Err(e) => {
@@ -40,7 +40,7 @@ pub fn window_icon() -> Option<Icon> {
 /// The 256 px taskbar icon; `None` (and a log line) when it cannot be made.
 #[cfg(windows)]
 pub fn taskbar_icon() -> Option<Icon> {
-    let made = decode_png(PNG_256).and_then(|(rgba, w, h)| Icon::from_rgba(rgba, w, h).map_err(|e| format!("logotype icon: {e}")));
+    let made = decode_png(PNG_256).and_then(|(rgba, w, h)| Icon::from_rgba(rgba, w, h).map_err(|e| camcraft_i18n::tf("logotype icon: {e}", &[format!("{}", e)])));
     match made {
         Ok(i) => Some(i),
         Err(e) => {

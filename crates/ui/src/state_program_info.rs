@@ -13,7 +13,7 @@ impl State {
     pub(super) fn set_program_number(&mut self, text: &str) {
         let number = match posting::parse_program_number(text) {
             Ok(n) => n,
-            Err(err) => return self.refuse(ErrorScope::Setup, format!("program number not set: {err}")),
+            Err(err) => return self.refuse(ErrorScope::Setup, camcraft_i18n::tf("program number not set: {err}", &[format!("{}", err)])),
         };
         let next = ProgramInfo { number, ..posting::program_info(&self.world) };
         self.commit_program_info(next, "program number");
@@ -32,7 +32,7 @@ impl State {
                 self.doc_version += 1;
                 self.status = format!("{what} set");
             }
-            Err(err) => self.refuse(ErrorScope::Setup, format!("{what} not set: {err}")),
+            Err(err) => self.refuse(ErrorScope::Setup, camcraft_i18n::tf("{what} not set: {err}", &[format!("{}", what), format!("{}", err)])),
         }
     }
 }

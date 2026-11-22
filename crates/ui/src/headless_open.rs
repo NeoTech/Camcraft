@@ -46,7 +46,7 @@ pub(crate) fn open(cmd: CommandKind) -> Result<Opened, String> {
         .sum();
     let opened = if project { state.status.starts_with("opened ") } else { facets > 0 };
     if !opened {
-        return Err(format!("{name} did not open: {}", state.status));
+        return Err(camcraft_i18n::tf("{name} did not open: {}", &[format!("{}", name), format!("{}", state.status)]));
     }
     state.pending.push_back(CommandKind::FrameAll);
     state.drain_actions();

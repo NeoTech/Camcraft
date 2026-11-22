@@ -81,8 +81,8 @@ impl State {
             Ok(data) => data,
             Err(why) => {
                 self.status = match purpose {
-                    PickFor::Model => format!("import refused: {name} could not be read: {why}"),
-                    PickFor::Project => format!("open failed: {name} could not be read: {why}"),
+                    PickFor::Model => camcraft_i18n::tf("import refused: {name} could not be read: {why}", &[format!("{}", name), format!("{}", why)]),
+                    PickFor::Project => camcraft_i18n::tf("open failed: {name} could not be read: {why}", &[format!("{}", name), format!("{}", why)]),
                 };
                 return;
             }
@@ -111,7 +111,7 @@ impl State {
     /// afterwards (a browser file has none), so Save asks where.
     fn open_project_bytes(&mut self, name: &str, data: &[u8]) {
         let Ok(text) = std::str::from_utf8(data) else {
-            self.status = format!("open failed: {name} is not a CamCraft project (not text)");
+            self.status = camcraft_i18n::tf("open failed: {name} is not a CamCraft project (not text)", &[format!("{}", name)]);
             return;
         };
         let loaded = camcraft_app::world::new_world();
@@ -126,7 +126,7 @@ impl State {
                     format!("opened {name} - {}", notes.join("; "))
                 };
             }
-            Err(err) => self.status = format!("open failed: {name}: {err}"),
+            Err(err) => self.status = camcraft_i18n::tf("open failed: {name}: {err}", &[format!("{}", name), format!("{}", err)]),
         }
     }
 }

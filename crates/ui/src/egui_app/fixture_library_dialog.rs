@@ -69,7 +69,7 @@ pub(crate) fn window(ctx: &egui::Context, state: &mut State) {
                 ui.label(RichText::new(&path).small());
                 ui.add_space(4.0);
                 if d.fixtures.is_empty() {
-                    ui.label(format!("{} has no fixtures to save.", setup_label(&d.setup)));
+                    ui.label(camcraft_i18n::tf("{} has no fixtures to save.", &[format!("{}", setup_label(&d.setup))]));
                 }
                 for (name, on) in &mut d.fixtures {
                     ui.checkbox(on, name.as_str());
@@ -84,7 +84,7 @@ pub(crate) fn window(ctx: &egui::Context, state: &mut State) {
                 }
                 ui.add_space(8.0);
                 if let Some(taken) = &d.confirm_replace {
-                    ui.label(format!("Replace {} in the library?", taken.join(", ")));
+                    ui.label(camcraft_i18n::tf("Replace {} in the library?", &[format!("{}", taken.join(", "))]));
                     ui.horizontal(|ui| {
                         if ui.button(camcraft_i18n::tr("Replace")).clicked() {
                             act = Some(Act::Save { replace: true });
@@ -150,7 +150,7 @@ pub(crate) fn window(ctx: &egui::Context, state: &mut State) {
                         }
                     }
                 });
-                ui.label(format!("Datum at (into {})", setup_label(&d.setup)));
+                ui.label(camcraft_i18n::tf("Datum at (into {})", &[format!("{}", setup_label(&d.setup))]));
                 egui::Grid::new("fixture-lib-datum").num_columns(2).show(ui, |ui| {
                     for (k, axis) in ["X", "Y", "Z"].iter().enumerate() {
                         let l = ui.label(*axis);
@@ -168,7 +168,7 @@ pub(crate) fn window(ctx: &egui::Context, state: &mut State) {
                 }
                 ui.add_space(8.0);
                 if let Some(name) = d.confirm_delete.clone() {
-                    ui.label(format!("Delete '{name}' from the library? This edits the file and cannot be undone."));
+                    ui.label(camcraft_i18n::tf("Delete '{name}' from the library? This edits the file and cannot be undone.", &[format!("{}", name)]));
                     ui.horizontal(|ui| {
                         if ui.button(camcraft_i18n::tr("Delete")).clicked() {
                             act = Some(Act::Delete(name.clone()));

@@ -31,7 +31,7 @@ pub(super) fn picker(ui: &mut Ui, state: &mut State, name: &str) {
     let carried = ui
         .add_enabled(
             refusal.is_none(),
-            egui::RadioButton::new(now == StockSource::FromPrevious, format!("What {prev} leaves behind")),
+            egui::RadioButton::new(now == StockSource::FromPrevious, camcraft_i18n::tf("What {prev} leaves behind", &[format!("{}", prev)])),
         )
         .on_disabled_hover_text(refusal.clone().unwrap_or_default());
     if carried.clicked() && now != StockSource::FromPrevious {
@@ -47,14 +47,12 @@ pub(super) fn picker(ui: &mut Ui, state: &mut State, name: &str) {
             super::error_text::error_text(
                 ui,
                 ink,
-                &format!(
-                    "The stock simulation cannot use what {prev} leaves behind - {why}. To go on, choose \"Its own stock\" \
-                     for this setup, or hold the part here the way {prev} holds it (flipped over X or Y, or turned about Z, also works)."
-                ),
+                &camcraft_i18n::tf("The stock simulation cannot use what {prev} leaves behind - {why}. To go on, choose \"Its own stock\" \
+                     for this setup, or hold the part here the way {prev} holds it (flipped over X or Y, or turned about Z, also works).", &[format!("{}", prev), format!("{}", why), format!("{}", prev)]),
             );
         }
         (Some(why), StockSource::Own) => {
-            ui.label(RichText::new(format!("Cannot take what {prev} leaves behind: {why}")).weak());
+            ui.label(RichText::new(camcraft_i18n::tf("Cannot take what {prev} leaves behind: {why}", &[format!("{}", prev), format!("{}", why)])).weak());
         }
         (None, StockSource::FromPrevious) => incoming(ui, state, name, &prev),
         (None, StockSource::Own) => {}
@@ -76,24 +74,11 @@ fn incoming(ui: &mut Ui, state: &State, name: &str, prev: &str) {
     match got {
         Ok(i) => {
             let u = state.units();
-            ui.label(format!(
-                "Incoming from {prev}: X {} .. {}, Y {} .. {}, Z {} .. {} {}",
-                units::len(i.min[0], u, 3),
-                units::len(i.max[0], u, 3),
-                units::len(i.min[1], u, 3),
-                units::len(i.max[1], u, 3),
-                units::len(i.min[2], u, 3),
-                units::len(i.max[2], u, 3),
-                u.suffix()
-            ));
-            ui.label(format!(
-                "Incoming volume: {} {} (this setup's Stock node is not cut from)",
-                units::vol(i.volume, u, 1),
-                u.vol_suffix()
-            ));
+            ui.label(camcraft_i18n::tf("Incoming from {prev}: X {} .. {}, Y {} .. {}, Z {} .. {} {}", &[format!("{}", prev), format!("{}", units::len(i.min[0], u, 3)), format!("{}", units::len(i.max[0], u, 3)), format!("{}", units::len(i.min[1], u, 3)), format!("{}", units::len(i.max[1], u, 3)), format!("{}", units::len(i.min[2], u, 3)), format!("{}", units::len(i.max[2], u, 3)), format!("{}", u.suffix())]));
+            ui.label(camcraft_i18n::tf("Incoming volume: {} {} (this setup's Stock node is not cut from)", &[format!("{}", units::vol(i.volume, u, 1)), format!("{}", u.vol_suffix())]));
         }
         Err(why) => {
-            ui.label(RichText::new(format!("Incoming stock not known yet: {why}")).weak());
+            ui.label(RichText::new(camcraft_i18n::tf("Incoming stock not known yet: {why}", &[format!("{}", why)])).weak());
         }
     }
 }

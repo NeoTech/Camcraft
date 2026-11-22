@@ -21,11 +21,11 @@ impl State {
             return;
         }
         let Some(entity) = model::find_by_name(&self.world, name) else {
-            self.refuse(ErrorScope::Setup, format!("part not moved: no part named '{name}'"));
+            self.refuse(ErrorScope::Setup, camcraft_i18n::tf("part not moved: no part named '{name}'", &[format!("{}", name)]));
             return;
         };
         let Some(location) = crate::move_drag::document_target(self, &entity, delta) else {
-            self.refuse(ErrorScope::Setup, format!("part not moved: '{name}' would leave finite space"));
+            self.refuse(ErrorScope::Setup, camcraft_i18n::tf("part not moved: '{name}' would leave finite space", &[format!("{}", name)]));
             return;
         };
         let shown = crate::move_drag::shown_delta(delta, self.units());
@@ -36,7 +36,7 @@ impl State {
     /// through its bounding-box centre, as one `MoveModel`.
     pub(super) fn turn_model_by(&mut self, name: &str, axis: usize, angle_rad: f64) {
         let Some(axis_name) = ["X", "Y", "Z"].get(axis) else {
-            self.refuse(ErrorScope::Setup, format!("part not turned: axis {axis} is not X, Y or Z"));
+            self.refuse(ErrorScope::Setup, camcraft_i18n::tf("part not turned: axis {axis} is not X, Y or Z", &[format!("{}", axis)]));
             return;
         };
         if !angle_rad.is_finite() {
@@ -44,11 +44,11 @@ impl State {
             return;
         }
         let Some(entity) = model::find_by_name(&self.world, name) else {
-            self.refuse(ErrorScope::Setup, format!("part not turned: no part named '{name}'"));
+            self.refuse(ErrorScope::Setup, camcraft_i18n::tf("part not turned: no part named '{name}'", &[format!("{}", name)]));
             return;
         };
         let Some(location) = crate::turn_drag::document_target(self, &entity, axis, angle_rad) else {
-            self.refuse(ErrorScope::Setup, format!("part not turned: '{name}' would leave finite space"));
+            self.refuse(ErrorScope::Setup, camcraft_i18n::tf("part not turned: '{name}' would leave finite space", &[format!("{}", name)]));
             return;
         };
         let shown = crate::turn_drag::shown_angle(angle_rad);
@@ -74,7 +74,7 @@ impl State {
                 }
                 self.status = with_warning(done, warning);
             }
-            Err(err) => self.refuse(ErrorScope::Setup, format!("part not moved: {err}")),
+            Err(err) => self.refuse(ErrorScope::Setup, camcraft_i18n::tf("part not moved: {err}", &[format!("{}", err)])),
         }
     }
 }

@@ -302,7 +302,7 @@ pub(super) fn fields(ui: &mut Ui, world: &World, params: &mut OpParams, cx: &mut
                 // fields greyed but kept, so clearing the picks restores them.
                 let typed = cx.circle_fit.is_none();
                 match cx.circle_fit {
-                    Some(Ok((c, r))) => hint(ui, &format!("From selection: Ø{:.3} at ({:.3}, {:.3})", 2.0 * r, c.x, c.y)),
+                    Some(Ok((c, r))) => hint(ui, &camcraft_i18n::tf("From selection: Ø{:.3} at ({:.3}, {:.3})", &[format!("{:.3}", 2.0 * r), format!("{:.3}", c.x), format!("{:.3}", c.y)])),
                     Some(Err(e)) => hint(ui, e),
                     None => {}
                 }

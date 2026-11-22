@@ -19,7 +19,7 @@ use crate::state::{CommandKind, State};
 /// The choice's words: "Same as Setup1" for no turn, else the preset's.
 fn choice_label(p: AlignPreset, prev: &str) -> String {
     match p {
-        AlignPreset::AsModelled => format!("Same as {prev}"),
+        AlignPreset::AsModelled => camcraft_i18n::tf("Same as {prev}", &[format!("{}", prev)]),
         other => format!("{} from {prev}", other.label()),
     }
 }
@@ -55,11 +55,9 @@ pub(super) fn picker(ui: &mut Ui, state: &mut State, name: &str) {
                 }
             })
             .response
-            .on_hover_text(format!(
-                "This setup is {prev} re-clamped: the part is turned from how {prev} holds it, about the \
+            .on_hover_text(camcraft_i18n::tf("This setup is {prev} re-clamped: the part is turned from how {prev} holds it, about the \
                  centre of its bounds. While linked, changing how {prev} holds the part moves this setup's \
-                 part (and its stock) with it. The work offset is not changed."
-            ));
+                 part (and its stock) with it. The work offset is not changed.", &[format!("{}", prev), format!("{}", prev), format!("{}", prev)]));
     });
     let id = ui.id().with(("setup_relative_draft", name));
     let held = setup_relative::angles(&state.world, name);
@@ -72,7 +70,7 @@ pub(super) fn picker(ui: &mut Ui, state: &mut State, name: &str) {
         }
         if ui
             .button(camcraft_i18n::tr("Apply"))
-            .on_hover_text(format!("Place this setup as {prev} turned about X, then Y, then Z."))
+            .on_hover_text(camcraft_i18n::tf("Place this setup as {prev} turned about X, then Y, then Z.", &[format!("{}", prev)]))
             .clicked()
         {
             queued = Some(CommandKind::SetSetupRelative { setup: name.to_owned(), to: Some(prev.clone()), angles: draft });

@@ -32,9 +32,9 @@ impl State {
                 let warning = command.warning().map(str::to_owned);
                 self.history.execute(&self.world, command);
                 self.doc_version += 1;
-                self.status = with_warning(format!("moved fixture {name}"), warning);
+                self.status = with_warning(camcraft_i18n::tf("moved fixture {name}", &[format!("{}", name)]), warning);
             }
-            Err(err) => self.refuse(ErrorScope::Setup, format!("fixture not moved: {err}")),
+            Err(err) => self.refuse(ErrorScope::Setup, camcraft_i18n::tf("fixture not moved: {err}", &[format!("{}", err)])),
         }
     }
 
@@ -47,7 +47,7 @@ impl State {
                 self.history.execute(&self.world, command);
                 self.doc_version += 1;
                 let about = ["X", "Y", "Z"].get(axis).copied().unwrap_or("?");
-                self.status = with_warning(format!("turned fixture {name} {degrees} degrees about {about}"), warning);
+                self.status = with_warning(camcraft_i18n::tf("turned fixture {name} {degrees} degrees about {about}", &[format!("{}", name), format!("{}", degrees), format!("{}", about)]), warning);
                 if self.fixture_ui.name == name
                     && let Some(loc) = model::find_by_name(&self.world, name).and_then(|e| model::transform_of(&self.world, &e))
                 {
@@ -57,7 +57,7 @@ impl State {
                     self.fixture_ui.yaw_deg = y;
                 }
             }
-            Err(err) => self.refuse(ErrorScope::Setup, format!("fixture not turned: {err}")),
+            Err(err) => self.refuse(ErrorScope::Setup, camcraft_i18n::tf("fixture not turned: {err}", &[format!("{}", err)])),
         }
     }
 }

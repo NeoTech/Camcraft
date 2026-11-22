@@ -32,7 +32,7 @@ impl State {
                     self.doc_version += 1;
                     self.status = format!("{name} added: {}", program_entry::action_label(action));
                 }
-                Err(err) => self.refuse(ErrorScope::Operation, format!("entry not added: {err}")),
+                Err(err) => self.refuse(ErrorScope::Operation, camcraft_i18n::tf("entry not added: {err}", &[format!("{}", err)])),
             },
             EntryVerb::SetAction { name, action } => match EditProgramEntry::with_action(&self.world, &name, action) {
                 Ok(command) => {
@@ -40,7 +40,7 @@ impl State {
                     self.doc_version += 1;
                     self.status = format!("{name}: {}", program_entry::action_label(action));
                 }
-                Err(err) => self.refuse(ErrorScope::Operation, format!("entry not changed: {err}")),
+                Err(err) => self.refuse(ErrorScope::Operation, camcraft_i18n::tf("entry not changed: {err}", &[format!("{}", err)])),
             },
             EntryVerb::Suppress { name, suppressed } => {
                 match EditProgramEntry::with_suppressed(&self.world, &name, suppressed) {
@@ -48,12 +48,12 @@ impl State {
                         self.history.execute(&self.world, command);
                         self.doc_version += 1;
                         self.status = if suppressed {
-                            format!("{name} suppressed: left out of the posted program")
+                            camcraft_i18n::tf("{name} suppressed: left out of the posted program", &[format!("{}", name)])
                         } else {
-                            format!("{name} back in the posted program")
+                            camcraft_i18n::tf("{name} back in the posted program", &[format!("{}", name)])
                         };
                     }
-                    Err(err) => self.refuse(ErrorScope::Operation, format!("suppression not changed: {err}")),
+                    Err(err) => self.refuse(ErrorScope::Operation, camcraft_i18n::tf("suppression not changed: {err}", &[format!("{}", err)])),
                 }
             }
         }

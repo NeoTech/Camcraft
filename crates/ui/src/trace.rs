@@ -139,7 +139,7 @@ impl TracePass {
             mapped_at_creation: false,
         });
         if let Some(err) = scope.pop().await {
-            return Err(format!("trace pass: the device refused the compute kernel ({err})"));
+            return Err(camcraft_i18n::tf("trace pass: the device refused the compute kernel ({err})", &[format!("{}", err)]));
         }
         Ok(TracePass { pipeline, bgl, uniform, scene: None })
     }
@@ -176,10 +176,7 @@ impl TracePass {
             return Err("trace pass: the stock lattice layers disagree with its extent".into());
         }
         if (n as u64).saturating_mul(4) > limit {
-            return Err(format!(
-                "trace pass: the stock lattice needs {} bytes, the device binds at most {limit}",
-                n as u64 * 4
-            ));
+            return Err(camcraft_i18n::tf("trace pass: the stock lattice needs {} bytes, the device binds at most {limit}", &[format!("{}", n as u64 * 4), format!("{}", limit)]));
         }
         if let Some(t) = target {
             let tn = texels(&t.meta).ok_or("trace pass: the target lattice extent overflows")?;

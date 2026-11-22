@@ -124,7 +124,7 @@ pub(super) fn draw_program_section(ui: &mut Ui, dlg: &mut PostDialogState) {
             EndUnits::Leave => None,
         } {
             prop_row(ui, "End units", |ui| {
-                ui.label(format!("{asked} (not supported by this post)"));
+                ui.label(camcraft_i18n::tf("{asked} (not supported by this post)", &[format!("{}", asked)]));
                 if ui.button(camcraft_i18n::tr("Clear to Leave modal")).clicked() {
                     dlg.options.end_units = EndUnits::Leave;
                 }

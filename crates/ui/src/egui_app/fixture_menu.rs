@@ -37,7 +37,7 @@ pub(crate) fn menu_rows(state: &State, target: &TreeMenuTarget) -> Vec<(String, 
                 // activates it first).
                 let setup = setup::active(w);
                 let label = match &setup {
-                    Some(s) => format!("Use as fixture ({s})"),
+                    Some(s) => camcraft_i18n::tf("Use as fixture ({s})", &[format!("{}", s)]),
                     None => "Use as fixture".to_owned(),
                 };
                 (label, CommandKind::TagFixture { name: name.clone(), setup })
@@ -51,7 +51,7 @@ pub(crate) fn menu_rows(state: &State, target: &TreeMenuTarget) -> Vec<(String, 
             if let Some(src) = camcraft_app::model_source::of(w, &e) {
                 let file = std::path::Path::new(&src.path).file_name().map_or(src.path.clone(), |f| f.to_string_lossy().into_owned());
                 rows.push(("Source".to_owned(), None));
-                rows.push((format!("Unlink from {file}"), Some(CommandKind::UnlinkModel(name.clone()))));
+                rows.push((camcraft_i18n::tf("Unlink from {file}", &[format!("{}", file)]), Some(CommandKind::UnlinkModel(name.clone()))));
             }
             rows
         }

@@ -31,14 +31,14 @@ impl State {
         match recognize::pockets_of(&self.world, model) {
             Ok(found) => {
                 self.status = match found.len() {
-                    0 => format!("{model}: no pockets or slots found"),
+                    0 => camcraft_i18n::tf("{model}: no pockets or slots found", &[format!("{}", model)]),
                     n => format!("{model}: {n} pocket(s) / slot(s) found"),
                 };
                 self.pocket_scan = PocketScan { model: model.to_owned(), doc_version: self.doc_version, found };
             }
             Err(e) => {
                 self.pocket_scan = PocketScan::default();
-                self.refuse(ErrorScope::Operation, format!("pockets not detected: {e}"));
+                self.refuse(ErrorScope::Operation, camcraft_i18n::tf("pockets not detected: {e}", &[format!("{}", e)]));
             }
         }
     }
@@ -69,7 +69,7 @@ impl State {
     /// index is gone, there is no tool, or the feature cannot be planned.
     pub(crate) fn create_from_pocket(&mut self, model: &str, i: usize) {
         let Some(p) = self.pocket_scan_for(model).and_then(|f| f.get(i)).cloned() else {
-            self.refuse(ErrorScope::Operation, format!("{model}: detect pockets again - the list is out of date"));
+            self.refuse(ErrorScope::Operation, camcraft_i18n::tf("{model}: detect pockets again - the list is out of date", &[format!("{}", model)]));
             return;
         };
         let Some(tool) = self.pocket_tool(&p) else {
@@ -88,7 +88,7 @@ impl State {
                 self.pending.push_back(CommandKind::Select(Some(name.clone())));
                 self.ui_target = UiTarget::Operation(name);
             }
-            Err(e) => self.refuse(ErrorScope::Operation, format!("operation not created: {e}")),
+            Err(e) => self.refuse(ErrorScope::Operation, camcraft_i18n::tf("operation not created: {e}", &[format!("{}", e)])),
         }
     }
 }

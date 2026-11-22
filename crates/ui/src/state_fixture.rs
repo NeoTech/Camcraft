@@ -56,17 +56,14 @@ impl State {
         };
         let mut out = Vec::new();
         if !s.fixtures.is_empty() {
-            out.push(format!("Strikes fixture: {} - tinted in the viewport while selected", s.fixtures.join(", ")));
+            out.push(camcraft_i18n::tf("Strikes fixture: {} - tinted in the viewport while selected", &[format!("{}", s.fixtures.join(", "))]));
         }
         if !s.unresolved.is_empty() {
             let mut moves: Vec<String> = s.unresolved.iter().take(LISTED_MOVES).map(usize::to_string).collect();
             if s.unresolved.len() > LISTED_MOVES {
                 moves.push(format!("and {} more", s.unresolved.len() - LISTED_MOVES));
             }
-            out.push(format!(
-                "Fixture not resolved for move {}: no single fixture reproduces the hit as the steel stands now - regenerate to re-check",
-                moves.join(", ")
-            ));
+            out.push(camcraft_i18n::tf("Fixture not resolved for move {}: no single fixture reproduces the hit as the steel stands now - regenerate to re-check", &[format!("{}", moves.join(", "))]));
         }
         out
     }

@@ -57,7 +57,7 @@ pub(super) fn form(ui: &mut Ui, state: &mut State) {
     let part = if d.part.is_empty() { "the part" } else { &d.part };
     let title = match d.body {
         LocateBody::Part => format!("Locate {part} in {}", d.fixture),
-        LocateBody::Stock => format!("Locate the stock of {part} in {}", d.fixture),
+        LocateBody::Stock => camcraft_i18n::tf("Locate the stock of {part} in {}", &[format!("{}", part), format!("{}", d.fixture)]),
     };
     ui.label(RichText::new(title).strong());
     // #2173: which body the first pick of each mate is on. A vise holds
@@ -98,7 +98,7 @@ pub(super) fn form(ui: &mut Ui, state: &mut State) {
     prop_row(ui, "Offset Y", |ui| num(ui, u, &mut off.dy));
     prop_row(ui, "Offset Z", |ui| num(ui, u, &mut off.dz));
     let about = match locate_pick::turn_mate(&d) {
-        Some(k) => format!("Turn about mate {k} normal (+ = counter-clockwise looking down the normal):"),
+        Some(k) => camcraft_i18n::tf("Turn about mate {k} normal (+ = counter-clockwise looking down the normal):", &[format!("{}", k)]),
         None => "Turn about setup +Z (+ = counter-clockwise looking down from above):".to_owned(),
     };
     ui.add(Label::new(RichText::new(about).weak()).wrap());
@@ -132,7 +132,7 @@ pub(super) fn form(ui: &mut Ui, state: &mut State) {
     if locate_pick::is_located(&draft, &check) {
         ui.add(Label::new(RichText::new(camcraft_i18n::tr("  Located. Edit Offset or Turn to adjust, then Apply locate again.")).weak()).wrap());
     } else if let Err(why) = &check {
-        ui.add(Label::new(RichText::new(format!("  Not yet: {why}")).weak()).wrap());
+        ui.add(Label::new(RichText::new(camcraft_i18n::tf("  Not yet: {why}", &[format!("{}", why)])).weak()).wrap());
     }
 }
 
@@ -164,7 +164,7 @@ pub(super) fn model_row(ui: &mut Ui, state: &mut State, name: &str) {
     }
     ui.horizontal_wrapped(|ui| {
         for f in &fixtures {
-            arm_button(ui, state, &format!("Locate in {f}…"), f, Some(name));
+            arm_button(ui, state, &camcraft_i18n::tf("Locate in {f}…", &[format!("{}", f)]), f, Some(name));
         }
     });
     if fixtures.iter().any(|f| armed_for(state, f, Some(name))) {

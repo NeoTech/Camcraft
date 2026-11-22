@@ -315,7 +315,7 @@ fn run_turn_steps(
                     ConfirmOutcome::Cancelled => return Ok(true),
                     ConfirmOutcome::Denied => {
                         let refusal = json!({
-                            "content": [{ "type": "text", "text": format!("User denied tool '{}'.", call.name) }],
+                            "content": [{ "type": "text", "text": camcraft_i18n::tf("User denied tool '{}'.", &[format!("{}", call.name)]) }],
                             "isError": true
                         });
                         if let Some(p) = pending_call {
@@ -334,7 +334,7 @@ fn run_turn_steps(
                         let raw = tool_result(input.preset.provider, &call, &refusal);
                         messages.push(TurnMessage {
                             role: "tool".to_owned(),
-                            text: format!("User denied tool '{}'.", call.name),
+                            text: camcraft_i18n::tf("User denied tool '{}'.", &[format!("{}", call.name)]),
                             selection: None,
                             screenshot: None,
                             raw: Some(raw),
@@ -356,7 +356,5 @@ fn run_turn_steps(
             }
         }
     }
-    Err(format!(
-        "stopped after {MAX_TOOL_ROUNDS} tool steps without a final answer"
-    ))
+    Err(camcraft_i18n::tf("stopped after {MAX_TOOL_ROUNDS} tool steps without a final answer", &[format!("{}", MAX_TOOL_ROUNDS)]))
 }

@@ -40,7 +40,7 @@ pub fn arm(state: &mut State, setup: &str) {
         None => state.plane_pick = Some(PlanePick { setup: setup.to_owned(), picks: Vec::new(), picking: true }),
     }
     state.geo_pick = GeoPick::Face;
-    state.status = format!("{setup}: pick a flat face to lay on the plane");
+    state.status = camcraft_i18n::tf("{setup}: pick a flat face to lay on the plane", &[format!("{}", setup)]);
 }
 
 /// Stop collecting; the draft is dropped.
@@ -70,18 +70,16 @@ pub fn take(state: &mut State, pick: GeoSel) {
     state.status = match &pick.feature {
         FeatureSel::Face(_) => {
             draft.picks = vec![pick];
-            format!("{setup}: {what} picked for the plane")
+            camcraft_i18n::tf("{setup}: {what} picked for the plane", &[format!("{}", setup), format!("{}", what)])
         }
         // #738: the kind in words, never the feature's internal id.
-        FeatureSel::Chain(_) => format!(
-            "{setup}: {what} is an edge - an edge cannot set a plane; pick a flat face \
-             (edges set an axis: Part axes)"
-        ),
+        FeatureSel::Chain(_) => camcraft_i18n::tf("{setup}: {what} is an edge - an edge cannot set a plane; pick a flat face \
+             (edges set an axis: Part axes)", &[format!("{}", setup), format!("{}", what)]),
         FeatureSel::Patch(_)
         | FeatureSel::Vertex(_)
         | FeatureSel::SketchChain(_)
         | FeatureSel::SketchLayer(_) => {
-            format!("{setup}: {what} is {} - pick a flat face", crate::pick_words::kind(&pick.feature))
+            camcraft_i18n::tf("{setup}: {what} is {} - pick a flat face", &[format!("{}", setup), format!("{}", what), format!("{}", crate::pick_words::kind(&pick.feature))])
         }
     };
 }

@@ -38,9 +38,7 @@ pub fn parse_backend(s: &str) -> Result<wgpu::Backend, String> {
         "metal" => Ok(wgpu::Backend::Metal),
         "vulkan" => Ok(wgpu::Backend::Vulkan),
         "gl" | "gles" | "opengl" => Ok(wgpu::Backend::Gl),
-        other => Err(format!(
-            "unknown GPU backend '{other}' (expected dx12, metal, vulkan or gl)"
-        )),
+        other => Err(camcraft_i18n::tf("unknown GPU backend '{other}' (expected dx12, metal, vulkan or gl)", &[format!("{}", other)])),
     }
 }
 

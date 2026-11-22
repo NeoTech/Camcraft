@@ -26,23 +26,16 @@ pub fn command(files: &[String]) -> Result<Option<CommandKind>, String> {
         [] => return Ok(None),
         [one] => PathBuf::from(one),
         more => {
-            return Err(format!(
-                "open refused: {} files were given on the command line; give one model or project file",
-                more.len()
-            ));
+            return Err(camcraft_i18n::tf("open refused: {} files were given on the command line; give one model or project file", &[format!("{}", more.len())]));
         }
     };
     let ext = path.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
     let project = ext == PROJECT_EXTENSION;
     if !project && !MODEL_EXTENSIONS.contains(&ext.as_str()) {
-        return Err(format!(
-            "open refused: {} is not a model or project file (read: .{}, .{PROJECT_EXTENSION})",
-            label(&path),
-            MODEL_EXTENSIONS.join(", .")
-        ));
+        return Err(camcraft_i18n::tf("open refused: {} is not a model or project file (read: .{}, .{PROJECT_EXTENSION})", &[format!("{}", label(&path)), format!("{}", MODEL_EXTENSIONS.join(", .")), format!("{}", PROJECT_EXTENSION)]));
     }
     if !path.is_file() {
-        return Err(format!("open refused: {} is not a readable file", label(&path)));
+        return Err(camcraft_i18n::tf("open refused: {} is not a readable file", &[format!("{}", label(&path))]));
     }
     Ok(Some(if project { CommandKind::OpenProjectFile(path) } else { CommandKind::ImportFile(path) }))
 }

@@ -16,11 +16,11 @@ impl State {
                 self.history.execute(&self.world, c);
                 self.doc_version += 1;
                 self.status = match max_rpm {
-                    Some(r) => format!("{setup}: workholding maximum {r:.0} rpm"),
-                    None => format!("{setup} states no workholding maximum rpm"),
+                    Some(r) => camcraft_i18n::tf("{setup}: workholding maximum {r:.0} rpm", &[format!("{}", setup), format!("{:.0}", r)]),
+                    None => camcraft_i18n::tf("{setup} states no workholding maximum rpm", &[format!("{}", setup)]),
                 };
             }
-            Err(err) => self.refuse(ErrorScope::Setup, format!("workholding limit not changed: {err}")),
+            Err(err) => self.refuse(ErrorScope::Setup, camcraft_i18n::tf("workholding limit not changed: {err}", &[format!("{}", err)])),
         }
     }
 }

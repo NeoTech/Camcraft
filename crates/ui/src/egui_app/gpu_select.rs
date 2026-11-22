@@ -135,18 +135,14 @@ pub fn order(
         if a.surface_ok {
             idx.push(i);
         } else {
-            notes.push(format!(
-                "\"{}\" via {}: skipped - cannot present to this window",
-                a.name,
-                super::gpu::backend_name(a.backend)
-            ));
+            notes.push(camcraft_i18n::tf("\"{}\" via {}: skipped - cannot present to this window", &[format!("{}", a.name), format!("{}", super::gpu::backend_name(a.backend))]));
         }
     }
     let want = want.map(str::trim).filter(|w| !w.is_empty());
     if let Some(w) = want
         && !idx.iter().any(|&i| wanted(&adapters[i], w))
     {
-        notes.push(format!("no presentable adapter matches the --gpu/CAMCRAFT_GPU choice \"{w}\" - automatic order"));
+        notes.push(camcraft_i18n::tf("no presentable adapter matches the --gpu/CAMCRAFT_GPU choice \"{w}\" - automatic order", &[format!("{}", w)]));
     }
     idx.sort_by_key(|&i| {
         let a = &adapters[i];

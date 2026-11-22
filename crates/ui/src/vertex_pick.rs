@@ -36,10 +36,10 @@ pub fn queue_origin_at_vertex(state: &mut State, entity: &str, id: VertexId) {
         &camcraft_app::operation::GeoSel { entity: entity.to_owned(), feature: FeatureSel::Vertex(id) },
     );
     let Some(pos) = vertex_world(state, entity, id) else {
-        state.status = format!("{what} is no longer in the model");
+        state.status = camcraft_i18n::tf("{what} is no longer in the model", &[format!("{}", what)]);
         return;
     };
-    state.status = format!("WCS origin set at {what}");
+    state.status = camcraft_i18n::tf("WCS origin set at {what}", &[format!("{}", what)]);
     state.pending.push_back(CommandKind::SetWcs {
         pos,
         roll_deg: state.wcs_ui.roll_deg,
@@ -56,7 +56,7 @@ pub fn queue_origin_at_face(state: &mut State, entity: &str, sel: FeatureSel, z_
     let target = match pick::face_origin(&state.world, entity, sel.clone()) {
         Ok(t) => t,
         Err(why) => {
-            state.status = format!("origin not set: {why}");
+            state.status = camcraft_i18n::tf("origin not set: {why}", &[format!("{}", why)]);
             return;
         }
     };
@@ -81,7 +81,7 @@ pub fn queue_origin_at_face(state: &mut State, entity: &str, sel: FeatureSel, z_
         &state.world,
         &camcraft_app::operation::GeoSel { entity: entity.to_owned(), feature: sel },
     );
-    state.status = format!("WCS origin set on {what}");
+    state.status = camcraft_i18n::tf("WCS origin set on {what}", &[format!("{}", what)]);
     state.pending.push_back(CommandKind::SetWcs {
         pos,
         roll_deg: state.wcs_ui.roll_deg,
@@ -110,7 +110,7 @@ pub fn queue_wcs_321(state: &mut State) {
     let a = match wcs_321_checked(state) {
         Ok(a) => a,
         Err(why) => {
-            state.status = format!("WCS not aligned: {why}");
+            state.status = camcraft_i18n::tf("WCS not aligned: {why}", &[format!("{}", why)]);
             return;
         }
     };

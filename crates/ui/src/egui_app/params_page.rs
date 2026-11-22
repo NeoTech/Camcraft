@@ -149,10 +149,7 @@ pub(super) fn params_fields(ui: &mut Ui, state: &mut State, tab: usize) {
                     camcraft_app::cl::CycleKind::Ream => "Ream (feed in, feed out)",
                     camcraft_app::cl::CycleKind::FineBore => "Fine bore (oriented stop, shift)",
                 };
-                Some(format!(
-                    "Auto -> {name} for this tool and a depth of {}",
-                    units::len(depth, units::of(&state.world), 3)
-                ))
+                Some(camcraft_i18n::tf("Auto -> {name} for this tool and a depth of {}", &[format!("{}", name), format!("{}", units::len(depth, units::of(&state.world), 3))]))
             }
             _ => Some("Auto picks the cycle from the tool and each hole's depth.".into()),
         };

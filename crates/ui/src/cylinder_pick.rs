@@ -48,7 +48,7 @@ pub fn arm(state: &mut State, setup: &str) {
         }
     }
     state.geo_pick = GeoPick::Face;
-    state.status = format!("{setup}: pick the bore's or cylinder's curved wall to name its axis");
+    state.status = camcraft_i18n::tf("{setup}: pick the bore's or cylinder's curved wall to name its axis", &[format!("{}", setup)]);
 }
 
 /// Stop collecting; the draft is dropped.
@@ -78,17 +78,15 @@ pub fn take(state: &mut State, pick: GeoSel) {
     state.status = match &pick.feature {
         FeatureSel::Face(_) | FeatureSel::Patch(_) => {
             draft.pick = Some(pick);
-            format!("{setup}: {what} picked as wall - choose the target axis and Apply")
+            camcraft_i18n::tf("{setup}: {what} picked as wall - choose the target axis and Apply", &[format!("{}", setup), format!("{}", what)])
         }
-        FeatureSel::Chain(_) => format!(
-            "{setup}: {what} is an edge - an edge cannot name a cylinder's axis; pick its curved wall \
-             (edges set an axis: Axes)"
-        ),
+        FeatureSel::Chain(_) => camcraft_i18n::tf("{setup}: {what} is an edge - an edge cannot name a cylinder's axis; pick its curved wall \
+             (edges set an axis: Axes)", &[format!("{}", setup), format!("{}", what)]),
         FeatureSel::Vertex(_) => {
-            format!("{setup}: {what} is a point - pick the bore's or cylinder's curved wall")
+            camcraft_i18n::tf("{setup}: {what} is a point - pick the bore's or cylinder's curved wall", &[format!("{}", setup), format!("{}", what)])
         }
         FeatureSel::SketchChain(_) | FeatureSel::SketchLayer(_) => {
-            format!("{setup}: {what} is a DXF sketch pick - pick a curved wall")
+            camcraft_i18n::tf("{setup}: {what} is a DXF sketch pick - pick a curved wall", &[format!("{}", setup), format!("{}", what)])
         }
     };
 }

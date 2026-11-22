@@ -69,7 +69,7 @@ pub(super) fn body_section(ui: &mut Ui, state: &mut State, exists: bool, u: Unit
     let has_draft = !state.tool_body_ui.facets.is_empty();
     ui.label(match (&landed, has_draft) {
         (Some(src), _) if *src == draft_src => format!("In use: {src}"),
-        (_, true) => format!("Ready to apply: {draft_src} (not applied yet)"),
+        (_, true) => camcraft_i18n::tf("Ready to apply: {draft_src} (not applied yet)", &[format!("{}", draft_src)]),
         _ if state.tool_body_ui.lathe.is_some() => "In use: no body (the holder is not checked for collisions)".to_owned(),
         _ => "In use: the holder cylinder from the dimensions".to_owned(),
     });
@@ -140,15 +140,10 @@ pub(super) fn body_section(ui: &mut Ui, state: &mut State, exists: bool, u: Unit
     placement_view(ui, state);
     let note = match state.tool_body_preview() {
         Some(Ok(b)) => match b.profile() {
-            Some(p) => format!(
-                "Placed from {} to {} {} above the tip",
-                units::len(p.bottom(), u, 1),
-                units::len(p.top(), u, 1),
-                u.suffix()
-            ),
+            Some(p) => camcraft_i18n::tf("Placed from {} to {} {} above the tip", &[format!("{}", units::len(p.bottom(), u, 1)), format!("{}", units::len(p.top(), u, 1)), format!("{}", u.suffix())]),
             None => String::new(),
         },
-        Some(Err(e)) => format!("Placement error: {e}"),
+        Some(Err(e)) => camcraft_i18n::tf("Placement error: {e}", &[format!("{}", e)]),
         None => String::new(),
     };
     if !note.is_empty() {

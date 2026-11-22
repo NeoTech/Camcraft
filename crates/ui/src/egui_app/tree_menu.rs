@@ -219,7 +219,7 @@ pub(super) fn tree_menu(ui: &mut Ui, state: &mut State, pal: &Tokens, rect: Rect
                 let text = if is_current {
                     format!("{label} (current)")
                 } else if armed {
-                    format!("Confirm change to {label}")
+                    camcraft_i18n::tf("Confirm change to {label}", &[format!("{}", label)])
                 } else {
                     (*label).to_owned()
                 };

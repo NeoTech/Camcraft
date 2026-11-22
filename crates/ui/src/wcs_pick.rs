@@ -60,7 +60,7 @@ pub fn arm(state: &mut State, setup: &str) {
         None => state.wcs_pick =
             Some(WcsPick { setup: setup.to_owned(), role: Role::Z, picks: Vec::new(), picking: true }),
     }
-    state.status = format!("{setup}: pick faces, edges, corners or walls for the WCS - each fills the selected WCS row");
+    state.status = camcraft_i18n::tf("{setup}: pick faces, edges, corners or walls for the WCS - each fills the selected WCS row", &[format!("{}", setup)]);
 }
 
 /// Stop collecting; the draft is dropped.
@@ -93,7 +93,7 @@ pub fn take(state: &mut State, pick: GeoSel) {
         Some(i) => draft.picks[i] = (pick, role),
         None => draft.picks.push((pick, role)),
     }
-    state.status = format!("{setup}: {what} picked as {}", role_label(role));
+    state.status = camcraft_i18n::tf("{setup}: {what} picked as {}", &[format!("{}", setup), format!("{}", what), format!("{}", role_label(role))]);
 }
 
 #[cfg(test)]

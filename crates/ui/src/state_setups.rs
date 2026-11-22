@@ -66,7 +66,7 @@ impl State {
     pub(crate) fn remember_setup(&mut self, name: &str) {
         self.panel_setups.last = Some(name.to_owned());
         if let Err(why) = self.persist_panel_setups() {
-            self.status = format!("panel setup choice not written: {why}");
+            self.status = camcraft_i18n::tf("panel setup choice not written: {why}", &[format!("{}", why)]);
         }
     }
 
@@ -74,7 +74,7 @@ impl State {
     pub(crate) fn delete_panel_setup(&mut self, name: &str) -> bool {
         let removed = self.panel_setups.remove(name);
         if removed && let Err(why) = self.persist_panel_setups() {
-            self.status = format!("panel setup not written: {why}");
+            self.status = camcraft_i18n::tf("panel setup not written: {why}", &[format!("{}", why)]);
         }
         removed
     }
@@ -91,7 +91,7 @@ impl State {
             String::from("panel setups: the default layout loads at the next start")
         };
         if let Err(why) = self.persist_panel_setups() {
-            self.status = format!("panel setup choice not written: {why}");
+            self.status = camcraft_i18n::tf("panel setup choice not written: {why}", &[format!("{}", why)]);
         }
     }
 }

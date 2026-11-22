@@ -197,7 +197,7 @@ pub(super) fn corner_relief_rows(
         }
     }
     if !relief.overrides.is_empty() {
-        hint(ui, &format!("{} per-corner overrides active", relief.overrides.len()));
+        hint(ui, &camcraft_i18n::tf("{} per-corner overrides active", &[format!("{}", relief.overrides.len())]));
     }
 }
 

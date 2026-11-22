@@ -36,8 +36,8 @@ pub(super) fn section(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
     ui.label(RichText::new(camcraft_i18n::tr(HEADING)).strong());
     for (r, n) in &noses {
         ui.label(match n {
-            Some(n) => format!("Machine file: {r} {NOSE} {}", shown(*n)),
-            None => format!("Machine file: {r} states no {NOSE}"),
+            Some(n) => camcraft_i18n::tf("Machine file: {r} {NOSE} {}", &[format!("{}", r), format!("{}", NOSE), format!("{}", shown(*n))]),
+            None => camcraft_i18n::tf("Machine file: {r} states no {NOSE}", &[format!("{}", r), format!("{}", NOSE)]),
         });
     }
     let base = noses.iter().filter_map(|(_, n)| *n).fold(f64::INFINITY, f64::min);
@@ -49,15 +49,15 @@ pub(super) fn section(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
         }
         Rise::Stated(_) => {}
         Rise::Stack(s) => {
-            ui.label(format!("Raised by {}: {}", shown(s.thickness), s.describe()));
+            ui.label(camcraft_i18n::tf("Raised by {}: {}", &[format!("{}", shown(s.thickness)), format!("{}", s.describe())]));
             fresh = fresh.map(|b| b - s.thickness).filter(|v| *v > 0.0);
         }
         Rise::Refused(why) => {
-            ui.colored_label(ui.visuals().error_fg_color, format!("Index swing refused: {why}"));
+            ui.colored_label(ui.visuals().error_fg_color, camcraft_i18n::tf("Index swing refused: {why}", &[format!("{}", why)]));
         }
     }
     let Some(name) = ctx else {
-        ui.label(RichText::new(format!("Add a setup to state its measured {NOSE}.")).weak());
+        ui.label(RichText::new(camcraft_i18n::tf("Add a setup to state its measured {NOSE}.", &[format!("{}", NOSE)])).weak());
         return;
     };
     let stated = rotary_stack::stated(&state.world, ctx);
@@ -70,7 +70,7 @@ pub(super) fn section(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
         && base.is_finite()
         && let Err(why) = rotary_stack::check_stated(&state.world, ctx, v, base)
     {
-        ui.colored_label(ui.visuals().error_fg_color, format!("Index swing refused: {why}"));
+        ui.colored_label(ui.visuals().error_fg_color, camcraft_i18n::tf("Index swing refused: {why}", &[format!("{}", why)]));
     }
     if let Some(v) = stated {
         let id = Id::new(("setup_nose_to_axis", name));
@@ -88,6 +88,6 @@ pub(super) fn section(ui: &mut Ui, state: &mut State, ctx: Option<&str>) {
             }
         }
     } else if let Some(f) = fresh {
-        ui.label(RichText::new(format!("The index swing is judged with {NOSE} {}.", shown(f))).weak());
+        ui.label(RichText::new(camcraft_i18n::tf("The index swing is judged with {NOSE} {}.", &[format!("{}", NOSE), format!("{}", shown(f))])).weak());
     }
 }

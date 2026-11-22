@@ -59,12 +59,15 @@ pub(super) fn cut_with_hint(text: &str, max: usize) -> String {
     if !cut {
         return text.to_owned();
     }
-    format!(
+    camcraft_i18n::tf(
         "{kept}\n[truncated by the chat: {} of {} characters shown. Ask for less: \
          get_job {{\"summary\":true}}, list_operation_types {{\"kind\":...}}, \
          list_features {{\"compact\":true}}.]",
-        kept.chars().count(),
-        text.chars().count()
+        &[
+            format!("{}", kept),
+            format!("{}", kept.chars().count()),
+            format!("{}", text.chars().count()),
+        ]
     )
 }
 
@@ -110,9 +113,12 @@ pub(super) fn prior_window(prior: &[ChatTurn]) -> (&[ChatTurn], Option<String>) 
         .flat_map(|t| t.tool_cards.iter().rev())
         .find(|c| c.name == "get_job" && c.status == ToolCardStatus::Succeeded && !c.summary.is_empty())
         .map(|c| {
-            format!(
+            camcraft_i18n::tf(
                 "[Context: {skip} earlier turns were dropped. The latest get_job reply follows.]\n{}\n\n",
-                cut_with_hint(&c.summary, MAX_TOOL_REPLY_CHARS)
+                &[
+                    format!("{}", skip),
+                    format!("{}", cut_with_hint(&c.summary, MAX_TOOL_REPLY_CHARS)),
+                ]
             )
         });
     (kept, job)

@@ -158,7 +158,7 @@ pub fn arm(state: &mut State, fixture: &str, part: Option<&str>) {
     // when the fixture's setup has one.
     let body = if fixture_locate::stock_of(&state.world, fixture).is_some() { LocateBody::Stock } else { LocateBody::Part };
     let d = LocateDraft { fixture: fixture.to_owned(), part: part.unwrap_or_default(), body, ..LocateDraft::default() };
-    state.status = format!("{fixture}: pick a {} face or point, then the {fixture} face or point it sits on", noun(&d));
+    state.status = camcraft_i18n::tf("{fixture}: pick a {} face or point, then the {fixture} face or point it sits on", &[format!("{}", fixture), format!("{}", noun(&d)), format!("{}", fixture)]);
     state.locate_pick = Some(d);
     if !matches!(state.geo_pick, GeoPick::Face | GeoPick::Vertex) {
         state.geo_pick = GeoPick::Face;
@@ -195,7 +195,7 @@ pub fn take(state: &mut State, pick: GeoSel) {
     let Some(d) = state.locate_pick.as_ref() else { return };
     let words = describe(state, &d.fixture, &pick);
     if matches!(pick.feature, FeatureSel::Chain(_) | FeatureSel::Patch(_)) {
-        state.status = format!("{words} is not a mate - pick a flat face or a vertex");
+        state.status = camcraft_i18n::tf("{words} is not a mate - pick a flat face or a vertex", &[format!("{}", words)]);
         return;
     }
     if d.mates.len() >= MAX_MATES && d.half.is_none() {
@@ -217,9 +217,7 @@ pub fn take(state: &mut State, pick: GeoSel) {
             }
             // A ray that meets the steel first cannot reach a part face
             // inside it: say how to get there.
-            None => format!(
-                "pick the {noun}'s face or point first, then {words} - hide the fixture (eye) to pick {noun} faces hidden in it"
-            ),
+            None => camcraft_i18n::tf("pick the {noun}'s face or point first, then {words} - hide the fixture (eye) to pick {noun} faces hidden in it", &[format!("{}", noun), format!("{}", words), format!("{}", noun)]),
         };
         return;
     }
@@ -228,21 +226,21 @@ pub fn take(state: &mut State, pick: GeoSel) {
         state.status = if stock.is_empty() {
             "the fixture's setup has no stock - set the stock first, or choose to locate the part".to_owned()
         } else if pick.entity != stock {
-            format!("'{}' is neither the stock '{stock}' nor the fixture '{fixture}' - pick a stock face or point", pick.entity)
+            camcraft_i18n::tf("'{}' is neither the stock '{stock}' nor the fixture '{fixture}' - pick a stock face or point", &[format!("{}", pick.entity), format!("{}", stock), format!("{}", fixture)])
         } else {
             d.half = Some(pick);
-            format!("{words} - now pick the {fixture} face or point it sits on")
+            camcraft_i18n::tf("{words} - now pick the {fixture} face or point it sits on", &[format!("{}", words), format!("{}", fixture)])
         };
         return;
     }
     state.status = if !is_part {
-        format!("'{}' is neither the part nor the fixture '{fixture}'", pick.entity)
+        camcraft_i18n::tf("'{}' is neither the part nor the fixture '{fixture}'", &[format!("{}", pick.entity), format!("{}", fixture)])
     } else if !d.part.is_empty() && d.part != pick.entity && !d.mates.is_empty() {
-        format!("the mates so far are on '{}' - finish or clear them before picking '{}'", d.part, pick.entity)
+        camcraft_i18n::tf("the mates so far are on '{}' - finish or clear them before picking '{}'", &[format!("{}", d.part), format!("{}", pick.entity)])
     } else {
         d.part.clone_from(&pick.entity);
         d.half = Some(pick);
-        format!("{words} - now pick the {fixture} face or point it sits on")
+        camcraft_i18n::tf("{words} - now pick the {fixture} face or point it sits on", &[format!("{}", words), format!("{}", fixture)])
     };
 }
 
@@ -251,13 +249,13 @@ pub fn take(state: &mut State, pick: GeoSel) {
 #[must_use]
 pub fn next_hint(d: &LocateDraft, check: &Result<(), String>) -> String {
     match (d.half.as_ref(), d.mates.len(), check) {
-        (Some(_), _, _) => format!("pick the {} face or point it sits on", d.fixture),
-        (None, 0, _) => format!("pick a {} face or point in the viewport (the floor mate first)", noun(d)),
+        (Some(_), _, _) => camcraft_i18n::tf("pick the {} face or point it sits on", &[format!("{}", d.fixture)]),
+        (None, 0, _) => camcraft_i18n::tf("pick a {} face or point in the viewport (the floor mate first)", &[format!("{}", noun(d))]),
         (None, _, Err(w)) if w == STILL => {
             "located - edit Offset or Turn to adjust (one more undo step), pick another mate, or Stop locating".into()
         }
-        (None, _, Err(why)) => format!("not yet - {why}; Remove last and re-pick"),
-        (None, n, Ok(())) if n >= MAX_MATES => format!("the {} is fully located - Apply", noun(d)),
+        (None, _, Err(why)) => camcraft_i18n::tf("not yet - {why}; Remove last and re-pick", &[format!("{}", why)]),
+        (None, n, Ok(())) if n >= MAX_MATES => camcraft_i18n::tf("the {} is fully located - Apply", &[format!("{}", noun(d))]),
         (None, 1, Ok(())) => {
             "Apply (one face mate sets height and tilt only), or pick the next mate (the fixed jaw) to place X / Y".into()
         }

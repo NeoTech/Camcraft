@@ -95,7 +95,7 @@ mod tests {
 
     #[test]
     fn plain_takes_the_ids_out_of_a_reason() {
-        let why = format!("{} of 'block' is degenerate - pick another face", FeatureSel::Face(0xccc7c));
+        let why = camcraft_i18n::tf("{} of 'block' is degenerate - pick another face", &[format!("{}", FeatureSel::Face(0xccc7c))]);
         assert_eq!(plain(&why), "face of 'block' is degenerate - pick another face");
         assert_eq!(plain("nothing to strip"), "nothing to strip");
         assert_eq!(plain("x 0xg"), "x 0xg");

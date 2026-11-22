@@ -152,7 +152,7 @@ fn fit_fields(ui: &mut Ui, state: &mut State, u: camcraft_app::units::Unit) {
     prop_grid(ui, "stock_fit_grid", |ui| {
         if per_side {
             for (i, name) in ["-X", "+X", "-Y", "+Y", "Bottom", "Top"].iter().enumerate() {
-                ui.label(format!("Fit margin {name}"));
+                ui.label(camcraft_i18n::tf("Fit margin {name}", &[format!("{}", name)]));
                 num(ui, u, &mut state.stock_ui.fit_sides[i]);
                 ui.end_row();
             }
@@ -179,7 +179,7 @@ fn actions(ui: &mut Ui, state: &mut State) {
     let has_stock =
         model::find_by_name(&state.world, &stock_name).is_some_and(|e| model::is_stock(&state.world, &e));
     if let Some(s) = active.as_deref() {
-        ui.label(RichText::new(format!("Stock of setup {s}.")).small().weak());
+        ui.label(RichText::new(camcraft_i18n::tf("Stock of setup {s}.", &[format!("{}", s)])).small().weak());
     }
     let labels: &[&str] = match (state.stock_ui.shape == 2, has_stock) {
         (true, true) => &["Apply", "Delete"],

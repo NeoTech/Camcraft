@@ -35,7 +35,7 @@ pub(crate) fn row_text(i: usize, p: &Pocket, u: Unit) -> String {
             end_word(s.ends[0]),
             end_word(s.ends[1])
         ),
-        (PocketKind::Open, _) => format!("open pocket ({} open side(s))", p.open_spans.len()),
+        (PocketKind::Open, _) => camcraft_i18n::tf("open pocket ({} open side(s))", &[format!("{}", p.open_spans.len())]),
         _ => String::from("closed pocket"),
     };
     let corner = match p.min_corner_radius {
@@ -74,7 +74,7 @@ pub(super) fn section(ui: &mut Ui, state: &mut State, model: &str) {
         ui.horizontal(|ui| {
             ui.label(text);
             let tip = match tool {
-                Some(t) => format!("Adds a {label} with {t} over this feature (one undo step)"),
+                Some(t) => camcraft_i18n::tf("Adds a {label} with {t} over this feature (one undo step)", &[format!("{}", label), format!("{}", t)]),
                 None => String::from("Add a tool to the document first"),
             };
             if ui.add_enabled(tool.is_some(), egui::Button::new(format!("Create {label}"))).on_hover_text(tip).clicked() {

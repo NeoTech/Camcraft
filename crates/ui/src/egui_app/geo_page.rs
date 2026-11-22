@@ -22,16 +22,13 @@ use super::theme::{Tokens, clamp};
 /// the platform command key (Cmd on macOS), the one the pick reads
 /// (`mods.command`, #1238).
 pub fn edge_hint() -> String {
-    format!("{} adds an edge · Shift+click picks the whole loop", chord("click"))
+    camcraft_i18n::tf("{} adds an edge · Shift+click picks the whole loop", &[format!("{}", chord("click"))])
 }
 
 /// The "Click selects" hover: what each modifier does to a viewport pick.
 pub fn click_selects_hint() -> String {
-    format!(
-        "Click in the viewport - {key} adds; in Edge mode Shift takes the whole loop and Alt one edge. \
-         {key}+drag adds every visible edge (Edge) or face (Face) in a box - hidden ones too with Pick through on: drag right for what lies inside it, left for what it touches.",
-        key = command_key()
-    )
+    camcraft_i18n::tf("Click in the viewport - {key} adds; in Edge mode Shift takes the whole loop and Alt one edge. \
+         {key}+drag adds every visible edge (Edge) or face (Face) in a box - hidden ones too with Pick through on: drag right for what lies inside it, left for what it touches.", &[format!("{}", command_key()), format!("{}", command_key())])
 }
 
 /// #1514: the plain "picking on / off" line under the tab bar. On: viewport
@@ -116,7 +113,7 @@ fn body(ui: &mut Ui, state: &mut State, target: &str, live_setup: Option<&str>, 
     }
     if state.op_ui.src_kind == 1 && !state.op_ui.src_name.is_empty() {
         let n = state.op_ui.src_name.clone();
-        ui.label(format!("Whole of '{n}' - the first pick replaces this."));
+        ui.label(camcraft_i18n::tf("Whole of '{n}' - the first pick replaces this.", &[format!("{}", n)]));
     } else if state.op_ui.src_kind != 2 {
         ui.label(camcraft_i18n::tr("Whole stock contour (default) - picks bound the operation."));
     }

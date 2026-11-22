@@ -69,25 +69,15 @@ fn fit_lines(ui: &mut Ui, u: Unit, d: &ViseDraft) -> Option<ViseAct> {
             let (x, y, z) = (l(at.x), l(at.y), l(at.z));
             let seat = d.params.seat_height();
             if *centred && seat > 0.0 {
-                ui.label(format!(
-                    "Centred on the stock at X {x}, Y {y}; the jaws close on its {} Y width; the stock sits on the grip steps (Z {z}), {} above the vise floor.",
-                    l(*opening),
-                    l(seat)
-                ));
+                ui.label(camcraft_i18n::tf("Centred on the stock at X {x}, Y {y}; the jaws close on its {} Y width; the stock sits on the grip steps (Z {z}), {} above the vise floor.", &[format!("{}", x), format!("{}", y), format!("{}", l(*opening)), format!("{}", z), format!("{}", l(seat))]));
             } else if *centred {
-                ui.label(format!(
-                    "Centred on the stock at X {x}, Y {y}; the jaws close on its {} Y width; the stock sits on the jaw floor (Z {z}).",
-                    l(*opening)
-                ));
+                ui.label(camcraft_i18n::tf("Centred on the stock at X {x}, Y {y}; the jaws close on its {} Y width; the stock sits on the jaw floor (Z {z}).", &[format!("{}", x), format!("{}", y), format!("{}", l(*opening)), format!("{}", z)]));
             } else {
-                ui.label(format!(
-                    "Opens to {} on the stock's Y width; the fixed jaw sits against the stock's +Y side (Y {y}), centred in X ({x}); the stock sits on the jaw floor (Z {z}).",
-                    l(*opening)
-                ));
+                ui.label(camcraft_i18n::tf("Opens to {} on the stock's Y width; the fixed jaw sits against the stock's +Y side (Y {y}), centred in X ({x}); the stock sits on the jaw floor (Z {z}).", &[format!("{}", l(*opening)), format!("{}", y), format!("{}", x), format!("{}", z)]));
             }
         }
         Some(VisePreview::Refused(why)) if d.fit_stock => {
-            ui.colored_label(ui.visuals().error_fg_color, format!("This vise cannot be fitted to the stock: {why}"));
+            ui.colored_label(ui.visuals().error_fg_color, camcraft_i18n::tf("This vise cannot be fitted to the stock: {why}", &[format!("{}", why)]));
         }
         _ => {
             ui.label(RichText::new(camcraft_i18n::tr("The vise grips the stock (set on the Stock page), not the imported model.")).small());

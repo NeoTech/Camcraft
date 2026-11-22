@@ -132,10 +132,7 @@ fn points_lines(ui: &mut Ui, state: &mut State, setup: &str, d: Draft) {
             crate::points_pick::clear(state);
         }
         let tip = match &check {
-            Ok(()) => format!(
-                "Turn the part from where it sits now so the three points' plane lies on {} (one undo step).",
-                pick::plane_label(d.plane)
-            ),
+            Ok(()) => camcraft_i18n::tf("Turn the part from where it sits now so the three points' plane lies on {} (one undo step).", &[format!("{}", pick::plane_label(d.plane))]),
             Err(why) => why.clone(),
         };
         if ui

@@ -45,12 +45,7 @@ impl State {
             Ok(files) => {
                 self.post_last_dir = Some(dir.clone());
                 let lines: usize = files.iter().map(|f| f.posted.lines).sum();
-                self.status = format!(
-                    "posted {} file(s), one per operation, {lines} lines in {} to {}",
-                    files.len(),
-                    posting::unit_word(self.units()),
-                    dir.display()
-                );
+                self.status = camcraft_i18n::tf("posted {} file(s), one per operation, {lines} lines in {} to {}", &[format!("{}", files.len()), format!("{}", lines), format!("{}", posting::unit_word(self.units())), format!("{}", dir.display())]);
                 if let Some(line) = files.first().and_then(|f| f.posted.not_judged.clone()) {
                     self.status = format!("{} - WARNING: {line}", self.status);
                 }
@@ -68,7 +63,7 @@ impl State {
                     });
                 }
             }
-            Err(err) => self.status = format!("post refused: {err}"),
+            Err(err) => self.status = camcraft_i18n::tf("post refused: {err}", &[format!("{}", err)]),
         }
     }
 
@@ -82,7 +77,7 @@ impl State {
                 format!("{file} ({})", f.mount.setups.join(", "))
             })
             .collect();
-        self.status = format!("posted {} file(s) in {}, one per machine and post: {}", files.len(), posting::unit_word(self.units()), names.join("; "));
+        self.status = camcraft_i18n::tf("posted {} file(s) in {}, one per machine and post: {}", &[format!("{}", files.len()), format!("{}", posting::unit_word(self.units())), format!("{}", names.join("; "))]);
         if let Some(line) = files.first().and_then(|f| f.posted.not_judged.clone()) {
             self.status = format!("{} - WARNING: {line}", self.status);
         }

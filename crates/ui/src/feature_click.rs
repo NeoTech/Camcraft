@@ -189,7 +189,7 @@ pub(crate) fn click(state: &mut State, p: [f32; 2], mods: Mods) {
     let ask = ask(state, mods);
     let Some((found, sel)) = feature_at(state, p, ask) else {
         state.hover = None;
-        state.status = format!("no {} under the cursor", ask.noun());
+        state.status = camcraft_i18n::tf("no {} under the cursor", &[format!("{}", ask.noun())]);
         return;
     };
     // Mirror the pick in the hover so highlight and click agree.
@@ -199,7 +199,7 @@ pub(crate) fn click(state: &mut State, p: [f32; 2], mods: Mods) {
         return;
     }
     let Some(feature) = sel else {
-        state.status = format!("the pick on '{}' names no feature - try beside it", found.entity);
+        state.status = camcraft_i18n::tf("the pick on '{}' names no feature - try beside it", &[format!("{}", found.entity)]);
         return;
     };
     let pick = GeoSel { entity: found.entity, feature };
@@ -243,7 +243,7 @@ pub(crate) fn click(state: &mut State, p: [f32; 2], mods: Mods) {
         (PickTarget::Point(_), true) => {
             // A point bounds nothing: refused by name, never drafted.
             let what = camcraft_app::pick::geo_label(&state.world, &pick);
-            state.status = format!("{what} is a point - a boundary takes faces or edges");
+            state.status = camcraft_i18n::tf("{what} is a point - a boundary takes faces or edges", &[format!("{}", what)]);
         }
         (PickTarget::Edge { .. } | PickTarget::SketchChain { .. }, false) => {
             crate::edge_pick::queue_edge_pick(state, pick, mods)

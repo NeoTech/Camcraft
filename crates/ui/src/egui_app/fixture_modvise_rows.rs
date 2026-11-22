@@ -86,7 +86,7 @@ pub(super) fn block_line(ui: &mut Ui, state: &mut State, name: &str) {
     };
     let u = state.units();
     let jaws = if j.insert == JawInsert::Soft { "soft jaws" } else { "hard jaws" };
-    let mut line = format!("Mod vise {} jaw block ({}), {jaws}", j.side.word(), j.size);
+    let mut line = camcraft_i18n::tf("Mod vise {} jaw block ({}), {jaws}", &[format!("{}", j.side.word()), format!("{}", j.size), format!("{}", jaws)]);
     if j.side == JawSide::Adjustable {
         line.push_str(&format!(", slid {} of {}", units::len(j.slide, u, 3), units::len(j.slot_travel, u, 3)));
     }

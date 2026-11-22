@@ -129,7 +129,7 @@ pub fn apply_hint(live: Option<&OpParams>, draft: &OpParams, unchanged: bool) ->
     }
     if let Some(why) = draft.named_refusal() {
         let end = if why.ends_with('.') { "" } else { "." };
-        return Some(format!("Apply will be refused: {why}{end}"));
+        return Some(camcraft_i18n::tf("Apply will be refused: {why}{end}", &[format!("{}", why), format!("{}", end)]));
     }
     if draft.is_sane() {
         return None;
@@ -137,12 +137,9 @@ pub fn apply_hint(live: Option<&OpParams>, draft: &OpParams, unchanged: bool) ->
     let kind = draft.kind();
     let fields = live.map(|l| changed_fields(l, draft)).unwrap_or_default();
     Some(if fields.is_empty() {
-        format!("Apply will be refused: a value is not usable for a {kind} operation (non-finite, or a feed/step that must be positive).")
+        camcraft_i18n::tf("Apply will be refused: a value is not usable for a {kind} operation (non-finite, or a feed/step that must be positive).", &[format!("{}", kind)])
     } else {
-        format!(
-            "Apply will be refused: check {} - the value is not usable for a {kind} operation.",
-            fields.join(", ")
-        )
+        camcraft_i18n::tf("Apply will be refused: check {} - the value is not usable for a {kind} operation.", &[format!("{}", fields.join(", ")), format!("{}", kind)])
     })
 }
 

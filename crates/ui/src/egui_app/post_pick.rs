@@ -48,7 +48,7 @@ pub(super) fn choose<'a>(current: &PostRef, scan: &'a FolderScan) -> PostChoice<
 
 /// The line under the picker when the post folder did not read.
 pub(super) fn folder_problem(why: &str) -> String {
-    format!("The post folder could not be read: {why}")
+    camcraft_i18n::tf("The post folder could not be read: {why}", &[format!("{}", why)])
 }
 
 #[cfg(test)]

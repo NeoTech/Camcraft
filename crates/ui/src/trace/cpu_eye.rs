@@ -110,7 +110,7 @@ impl CpuEye {
                     diag_warn!("cpu eye: threads unsupported ({e}); marching inline");
                     Ok(Self::inline())
                 }
-                Err(e) => Err(format!("cpu eye: the worker would not start: {e}")),
+                Err(e) => Err(camcraft_i18n::tf("cpu eye: the worker would not start: {e}", &[format!("{}", e)])),
             }
         }
     }
@@ -252,7 +252,7 @@ fn march_job(job: CpuJob) -> CpuPicture {
         Some(stock) => {
             let target = job.fv.target.as_ref().and_then(|t| t.field());
             preview(stock, target, &job.cam, job.w, job.h, job.fv.tol)
-                .map_err(|e| format!("the CPU march refused the frame: {e}"))
+                .map_err(|e| camcraft_i18n::tf("the CPU march refused the frame: {e}", &[format!("{}", e)]))
         }
         None => Err("the field view holds no field to march".into()),
     };

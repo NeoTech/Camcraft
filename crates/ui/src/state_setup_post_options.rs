@@ -89,13 +89,13 @@ impl State {
                     self.feedback = None;
                 }
                 self.status = match owner {
-                    Some(s) => format!("post script options set ({s})"),
+                    Some(s) => camcraft_i18n::tf("post script options set ({s})", &[format!("{}", s)]),
                     None => String::from("post script options set"),
                 };
             }
             Err(err) => self.refuse(
                 ErrorScope::Setup,
-                format!("post script options not set: {err}"),
+                camcraft_i18n::tf("post script options not set: {err}", &[format!("{}", err)]),
             ),
         }
     }
@@ -142,7 +142,7 @@ impl State {
                 }
             }
             Err(err) => {
-                let msg = format!("post settings not applied: {err}");
+                let msg = camcraft_i18n::tf("post settings not applied: {err}", &[format!("{}", err)]);
                 if let Some(d) = self.post_dialog.as_mut() {
                     d.error = Some(msg.clone());
                 }
@@ -172,22 +172,22 @@ impl State {
             Ok(c) => {
                 if c.is_empty() {
                     let msg = if own {
-                        format!("setup '{setup}' already has its own post options")
+                        camcraft_i18n::tf("setup '{setup}' already has its own post options", &[format!("{}", setup)])
                     } else {
-                        format!("setup '{setup}' already follows the document's post options")
+                        camcraft_i18n::tf("setup '{setup}' already follows the document's post options", &[format!("{}", setup)])
                     };
-                    self.refuse(ErrorScope::Setup, format!("post options not changed: {msg}"));
+                    self.refuse(ErrorScope::Setup, camcraft_i18n::tf("post options not changed: {msg}", &[format!("{}", msg)]));
                     return;
                 }
                 self.history.execute(&self.world, c);
                 self.doc_version += 1;
                 self.status = if own {
-                    format!("{setup} has its own post options")
+                    camcraft_i18n::tf("{setup} has its own post options", &[format!("{}", setup)])
                 } else {
-                    format!("{setup} follows the document's post options")
+                    camcraft_i18n::tf("{setup} follows the document's post options", &[format!("{}", setup)])
                 };
             }
-            Err(err) => self.refuse(ErrorScope::Setup, format!("post options not changed: {err}")),
+            Err(err) => self.refuse(ErrorScope::Setup, camcraft_i18n::tf("post options not changed: {err}", &[format!("{}", err)])),
         }
     }
 
@@ -198,11 +198,11 @@ impl State {
                 self.history.execute(&self.world, c);
                 self.doc_version += 1;
                 self.status = match value {
-                    Some(v) => format!("{setup} states nose_to_axis {v:.3} mm"),
-                    None => format!("{setup} judges its rotary from the machine's nose_to_axis less its stack"),
+                    Some(v) => camcraft_i18n::tf("{setup} states nose_to_axis {v:.3} mm", &[format!("{}", setup), format!("{:.3}", v)]),
+                    None => camcraft_i18n::tf("{setup} judges its rotary from the machine's nose_to_axis less its stack", &[format!("{}", setup)]),
                 };
             }
-            Err(err) => self.refuse(ErrorScope::Setup, format!("nose_to_axis not changed: {err}")),
+            Err(err) => self.refuse(ErrorScope::Setup, camcraft_i18n::tf("nose_to_axis not changed: {err}", &[format!("{}", err)])),
         }
     }
 
@@ -226,8 +226,8 @@ impl State {
         let text = tool_list_export::for_path(&self.world, setup, path);
         let count = tool_list_export::rows(&self.world, setup).len();
         match std::fs::write(path, text) {
-            Ok(()) => self.status = format!("tool list ({count} tool(s)) written to {}", path.display()),
-            Err(err) => self.status = format!("tool list write failed: {err}"),
+            Ok(()) => self.status = camcraft_i18n::tf("tool list ({count} tool(s)) written to {}", &[format!("{}", count), format!("{}", path.display())]),
+            Err(err) => self.status = camcraft_i18n::tf("tool list write failed: {err}", &[format!("{}", err)]),
         }
     }
 }

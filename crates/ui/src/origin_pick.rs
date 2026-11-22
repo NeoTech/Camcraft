@@ -43,7 +43,7 @@ pub fn arm(state: &mut State, setup: &str) {
         }
     }
     state.geo_pick = GeoPick::Vertex;
-    state.status = format!("{setup}: pick a vertex for the WCS origin");
+    state.status = camcraft_i18n::tf("{setup}: pick a vertex for the WCS origin", &[format!("{}", setup)]);
 }
 
 /// Stop collecting; the draft is dropped.
@@ -73,16 +73,10 @@ pub fn take(state: &mut State, pick: GeoSel) {
     state.status = match &pick.feature {
         FeatureSel::Vertex(_) => {
             draft.pick = Some(pick);
-            format!("{setup}: {what} picked for the origin - Apply places the WCS")
+            camcraft_i18n::tf("{setup}: {what} picked for the origin - Apply places the WCS", &[format!("{}", setup), format!("{}", what)])
         }
-        FeatureSel::Face(_) => format!(
-            "{setup}: {what} is a face - an origin point takes a vertex (or use a box reading)"
-        ),
-        FeatureSel::Chain(_) => format!(
-            "{setup}: {what} is an edge - an origin point takes a vertex (or use a box reading)"
-        ),
-        FeatureSel::Patch(_) | FeatureSel::SketchChain(_) | FeatureSel::SketchLayer(_) => format!(
-            "{setup}: {what} is not a vertex - an origin point takes a vertex"
-        ),
+        FeatureSel::Face(_) => camcraft_i18n::tf("{setup}: {what} is a face - an origin point takes a vertex (or use a box reading)", &[format!("{}", setup), format!("{}", what)]),
+        FeatureSel::Chain(_) => camcraft_i18n::tf("{setup}: {what} is an edge - an origin point takes a vertex (or use a box reading)", &[format!("{}", setup), format!("{}", what)]),
+        FeatureSel::Patch(_) | FeatureSel::SketchChain(_) | FeatureSel::SketchLayer(_) => camcraft_i18n::tf("{setup}: {what} is not a vertex - an origin point takes a vertex", &[format!("{}", setup), format!("{}", what)]),
     };
 }

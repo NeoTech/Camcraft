@@ -77,16 +77,9 @@ pub(super) fn section(ui: &mut Ui, state: &mut State, u: Unit) {
     zone_rows(ui, state, u);
     let note = match state.lathe_body_preview() {
         Some(Ok(b)) => tool_body_lathe_view::extent(b).map_or_else(String::new, |(lo, hi)| {
-            format!(
-                "Placed: radial {} to {}, spindle {} to {} {} from the tip",
-                units::len(lo[0], u, 1),
-                units::len(hi[0], u, 1),
-                units::len(lo[2], u, 1),
-                units::len(hi[2], u, 1),
-                u.suffix()
-            )
+            camcraft_i18n::tf("Placed: radial {} to {}, spindle {} to {} {} from the tip", &[format!("{}", units::len(lo[0], u, 1)), format!("{}", units::len(hi[0], u, 1)), format!("{}", units::len(lo[2], u, 1)), format!("{}", units::len(hi[2], u, 1)), format!("{}", u.suffix())])
         }),
-        Some(Err(e)) => format!("Placement error: {e}"),
+        Some(Err(e)) => camcraft_i18n::tf("Placement error: {e}", &[format!("{}", e)]),
         None => String::new(),
     };
     if !note.is_empty() {

@@ -47,7 +47,7 @@ pub(crate) fn line_label(w: LineWidth) -> String {
 /// Why an anti-aliasing entry cannot be picked on this device, if it cannot.
 pub(crate) fn antialias_refusal(state: &State, a: Antialias) -> Option<String> {
     (!state.samples_offered.contains(&a.samples()))
-        .then(|| format!("This graphics device does not offer {} anti-aliasing.", a.word()))
+        .then(|| camcraft_i18n::tf("This graphics device does not offer {} anti-aliasing.", &[format!("{}", a.word())]))
 }
 
 /// The gap between the menu and the button that opened it.

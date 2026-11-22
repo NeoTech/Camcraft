@@ -153,11 +153,7 @@ impl State {
         d.lathe = Some(LatheDraft::default());
         d.align_note = None;
         d.pick = BodyPickMode::Off;
-        self.status = format!(
-            "body {}: {} facets - set the radial and spindle directions and the tip, then Apply body",
-            d.source,
-            d.facets.len()
-        );
+        self.status = camcraft_i18n::tf("body {}: {} facets - set the radial and spindle directions and the tip, then Apply body", &[format!("{}", d.source), format!("{}", d.facets.len())]);
     }
 
     /// The lathe draft's placement as `SetToolBody::lathe` would read
@@ -191,15 +187,15 @@ impl State {
             (BodyPickMode::Tip, _) => {
                 l.place.tip = hit.vertex;
                 let t = hit.vertex.map(|v| camcraft_app::units::len(v, u, 3));
-                format!("tip picked: ({}, {}, {}) {}", t[0], t[1], t[2], u.suffix())
+                camcraft_i18n::tf("tip picked: ({}, {}, {}) {}", &[format!("{}", t[0]), format!("{}", t[1]), format!("{}", t[2]), format!("{}", u.suffix())])
             }
             (BodyPickMode::Radial, Some(n)) => {
                 l.place.radial = n;
-                format!("radial direction picked: {}", named(n))
+                camcraft_i18n::tf("radial direction picked: {}", &[format!("{}", named(n))])
             }
             (BodyPickMode::Along, Some(n)) => {
                 l.place.along = n;
-                format!("spindle direction picked: {}", named(n))
+                camcraft_i18n::tf("spindle direction picked: {}", &[format!("{}", named(n))])
             }
             (BodyPickMode::Radial | BodyPickMode::Along, None) => "direction not picked: that facet has no area".into(),
         };
@@ -231,9 +227,9 @@ impl State {
             Ok(command) => {
                 self.history.execute(&self.world, command);
                 self.doc_version += 1;
-                self.status = format!("tool {name}: lathe body set");
+                self.status = camcraft_i18n::tf("tool {name}: lathe body set", &[format!("{}", name)]);
             }
-            Err(err) => self.refuse(ErrorScope::Tool, format!("tool body not set: {err}")),
+            Err(err) => self.refuse(ErrorScope::Tool, camcraft_i18n::tf("tool body not set: {err}", &[format!("{}", err)])),
         }
     }
 }

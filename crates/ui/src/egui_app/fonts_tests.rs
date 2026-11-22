@@ -83,6 +83,12 @@ fn the_bundled_font_covers_every_translated_string() {
     let mut missing = Vec::new();
     for (_, value) in cat.entries() {
         for ch in value.chars() {
+            // Newline and tab are layout controls, not painted glyphs: the
+            // English source uses them for menu shortcut alignment and for
+            // multi-line prompt text, and egui handles them without a face.
+            if matches!(ch, '\n' | '\r' | '\t') {
+                continue;
+            }
             if !has_glyph(ttf, ch) {
                 missing.push(ch);
             }

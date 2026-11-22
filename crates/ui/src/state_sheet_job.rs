@@ -15,7 +15,7 @@ impl State {
     /// Set up (`Some`) or clear (`None`) `name`'s sheet job.
     pub(super) fn set_sheet_job(&mut self, name: &str, job: Option<SheetJob>) {
         if setup::active(&self.world).as_deref() != Some(name) {
-            self.refuse(ErrorScope::Setup, format!("sheet job not changed: activate {name} first (the sheet job sets the active setup's stock)"));
+            self.refuse(ErrorScope::Setup, camcraft_i18n::tf("sheet job not changed: activate {name} first (the sheet job sets the active setup's stock)", &[format!("{}", name)]));
             return;
         }
         let cmd = match job {
@@ -27,11 +27,11 @@ impl State {
                 self.history.execute(&self.world, c);
                 self.doc_version += 1;
                 self.status = match job {
-                    Some(j) => format!("{name}: sheet job set, through-cut allowance {:.2} mm", j.allowance),
-                    None => format!("{name} states no sheet job"),
+                    Some(j) => camcraft_i18n::tf("{name}: sheet job set, through-cut allowance {:.2} mm", &[format!("{}", name), format!("{:.2}", j.allowance)]),
+                    None => camcraft_i18n::tf("{name} states no sheet job", &[format!("{}", name)]),
                 };
             }
-            Err(err) => self.refuse(ErrorScope::Setup, format!("sheet job not changed: {err}")),
+            Err(err) => self.refuse(ErrorScope::Setup, camcraft_i18n::tf("sheet job not changed: {err}", &[format!("{}", err)])),
         }
     }
 }

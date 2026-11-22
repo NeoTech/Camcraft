@@ -131,7 +131,7 @@ impl State {
                 let done = format!("machine: {path}");
                 let _ = self.route_machine(MachineVerb::Mount(path, Some(Box::new(m))), &done, "machine not assigned");
             }
-            Err(err) => self.refuse(ErrorScope::Setup, format!("machine not assigned: {err}")),
+            Err(err) => self.refuse(ErrorScope::Setup, camcraft_i18n::tf("machine not assigned: {err}", &[format!("{}", err)])),
         }
     }
 
@@ -149,7 +149,7 @@ impl State {
                 self.doc_version += 1;
                 self.status = format!("post: {}", posting::post_label(&self.world));
             }
-            Err(err) => self.refuse(ErrorScope::Setup, format!("post not selected: {err}")),
+            Err(err) => self.refuse(ErrorScope::Setup, camcraft_i18n::tf("post not selected: {err}", &[format!("{}", err)])),
         }
     }
 
@@ -162,12 +162,12 @@ impl State {
                 self.history.execute(&self.world, c);
                 self.doc_version += 1;
                 self.status = if own {
-                    format!("{setup} has its own machine")
+                    camcraft_i18n::tf("{setup} has its own machine", &[format!("{}", setup)])
                 } else {
-                    format!("{setup} follows the document's machine")
+                    camcraft_i18n::tf("{setup} follows the document's machine", &[format!("{}", setup)])
                 };
             }
-            Err(err) => self.refuse(ErrorScope::Setup, format!("machine not changed: {err}")),
+            Err(err) => self.refuse(ErrorScope::Setup, camcraft_i18n::tf("machine not changed: {err}", &[format!("{}", err)])),
         }
     }
 
@@ -180,12 +180,12 @@ impl State {
                 self.history.execute(&self.world, c);
                 self.doc_version += 1;
                 self.status = if own {
-                    format!("{setup} has its own post")
+                    camcraft_i18n::tf("{setup} has its own post", &[format!("{}", setup)])
                 } else {
-                    format!("{setup} follows the document's post")
+                    camcraft_i18n::tf("{setup} follows the document's post", &[format!("{}", setup)])
                 };
             }
-            Err(err) => self.refuse(ErrorScope::Setup, format!("post not changed: {err}")),
+            Err(err) => self.refuse(ErrorScope::Setup, camcraft_i18n::tf("post not changed: {err}", &[format!("{}", err)])),
         }
     }
 }

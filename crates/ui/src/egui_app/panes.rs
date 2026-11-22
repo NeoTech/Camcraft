@@ -383,22 +383,19 @@ pub(super) fn tip_of(c: Cmd, state: &State) -> String {
         return why.into();
     }
     match c {
-        Cmd::New => format!("New document\t{}", chord("N")),
-        Cmd::Model => format!("Open a mesh model\t{}", chord("O")),
+        Cmd::New => camcraft_i18n::tf("New document\t{}", &[format!("{}", chord("N"))]),
+        Cmd::Model => camcraft_i18n::tf("Open a mesh model\t{}", &[format!("{}", chord("O"))]),
         Cmd::Project => format!("Open a project\t{}", chord("Shift+O")),
-        Cmd::Save => format!("Save the project\t{}", chord("S")),
-        Cmd::SaveAs => format!("Save the project under a new name\t{}", chord("Shift+S")),
-        Cmd::Post => format!("Post NC program (validation gate), then review it\t{}", chord("P")),
+        Cmd::Save => camcraft_i18n::tf("Save the project\t{}", &[format!("{}", chord("S"))]),
+        Cmd::SaveAs => camcraft_i18n::tf("Save the project under a new name\t{}", &[format!("{}", chord("Shift+S"))]),
+        Cmd::Post => camcraft_i18n::tf("Post NC program (validation gate), then review it\t{}", &[format!("{}", chord("P"))]),
         Cmd::Setups => "Setups: create, activate and delete the document's setups".into(),
         Cmd::Stock => "Stock definition".into(),
         Cmd::Origin => "Work offset (WCS)".into(),
         Cmd::Tools => "Tool library".into(),
         // The cell's caption already says which workspace is running;
         // the tip says what a click does, and how to undo it.
-        Cmd::Machine => format!(
-            "Switch the workspace: {} (mounts the kind's built-in machine, undoable)",
-            machine_modes::modes_phrase()
-        ),
+        Cmd::Machine => camcraft_i18n::tf("Switch the workspace: {} (mounts the kind's built-in machine, undoable)", &[format!("{}", machine_modes::modes_phrase())]),
         Cmd::Create(i) => {
             // The tool-less swap first (imgui's law, ribbon.rs:138):
             // an empty tool list is the deeper trouble - nothing
@@ -423,10 +420,7 @@ pub(super) fn tip_of(c: Cmd, state: &State) -> String {
                     let (fword, mword) = (f.work(), f.machine());
                     // #670: plasma work has no mill-turn to fall back on.
                     let or_mt = if matches!(f, camcraft_app::operation::Family::Plasma | camcraft_app::operation::Family::WireEdm | camcraft_app::operation::Family::Sinker) { "" } else { " or a mill-turn" };
-                    format!(
-                        "The document's machine is a {} - {fword} operations do not drive it; mount a {mword}{or_mt} (Setup > Machine)",
-                        machine.word()
-                    )
+                    camcraft_i18n::tf("The document's machine is a {} - {fword} operations do not drive it; mount a {mword}{or_mt} (Setup > Machine)", &[format!("{}", machine.word()), format!("{}", fword), format!("{}", mword), format!("{}", or_mt)])
                 } else if !has_stock(state) {
                     NO_STOCK_TIP.into()
                 } else if let Some(reason) = tool_law_note(i, state) {
@@ -434,11 +428,11 @@ pub(super) fn tip_of(c: Cmd, state: &State) -> String {
                 } else if i == 0 {
                     "Add a Face mill operation\tRight-click to pin/unpin".into()
                 } else {
-                    format!("Add a {} operation\tRight-click to pin/unpin", TYPES[i])
+                    camcraft_i18n::tf("Add a {} operation\tRight-click to pin/unpin", &[format!("{}", TYPES[i])])
                 }
             }
         }
-        Cmd::More(s) => format!("The rest of the {} kinds", s.label()),
+        Cmd::More(s) => camcraft_i18n::tf("The rest of the {} kinds", &[format!("{}", s.label())]),
         Cmd::Undo => format!("Undo\t{}", chord("Z")),
         Cmd::Redo => format!("Redo\t{}", chord("Y")),
         Cmd::Run => "Generate the selected operation".into(),
@@ -539,18 +533,14 @@ fn gate_note(c: Cmd, state: &State) -> Option<String> {
             let f = k.family();
             let (fword, mword) = (f.work(), f.machine());
             let or_mt = if matches!(f, camcraft_app::operation::Family::Plasma | camcraft_app::operation::Family::WireEdm | camcraft_app::operation::Family::Sinker) { "" } else { " or a mill-turn" };
-            Some(format!(
-                "cannot add a {} operation: {fword} operations do not drive the document's {} - mount a {mword}{or_mt} (Setup > Machine)",
-                k.label,
-                machine.word(),
-            ))
+            Some(camcraft_i18n::tf("cannot add a {} operation: {fword} operations do not drive the document's {} - mount a {mword}{or_mt} (Setup > Machine)", &[format!("{}", k.label), format!("{}", fword), format!("{}", machine.word()), format!("{}", mword), format!("{}", or_mt)]))
         }
         None if !has_stock(state) => Some(String::from(
             "cannot add an operation: no stock in the setup - set up stock first (Setup > Stock)",
         )),
         None => tool_law_note(i, state).map(|r| {
             let label = camcraft_app::operation::KindInfo::ALL.get(i).map_or("", |k| k.label);
-            format!("cannot add a {label} operation: {r}")
+            camcraft_i18n::tf("cannot add a {label} operation: {r}", &[format!("{}", label), format!("{}", r)])
         }),
     }
 }
@@ -608,11 +598,11 @@ pub(super) fn follow_gate(c: Cmd, state: &mut State) {
     match gate_route(c, state) {
         Some(GateRoute::Tools) => {
             actions::target(state, UiTarget::Tool(String::new()));
-            state.status = format!("{why} - opened the tool library");
+            state.status = camcraft_i18n::tf("{why} - opened the tool library", &[format!("{}", why)]);
         }
         Some(GateRoute::Stock) => {
             actions::target(state, UiTarget::Stock);
-            state.status = format!("{why} - opened the Stock page");
+            state.status = camcraft_i18n::tf("{why} - opened the Stock page", &[format!("{}", why)]);
         }
         Some(GateRoute::Machine) => {
             state.ribbon_more = None;
@@ -621,7 +611,7 @@ pub(super) fn follow_gate(c: Cmd, state: &mut State) {
             state.ribbon_recent_open = None;
             let setup = camcraft_app::setup::active(&state.world).unwrap_or_default();
             actions::target(state, UiTarget::SetupNode(setup, SetupPage::Machine));
-            state.status = format!("{why} - opened the Machine page");
+            state.status = camcraft_i18n::tf("{why} - opened the Machine page", &[format!("{}", why)]);
         }
         None => state.status = why,
     }
@@ -848,9 +838,7 @@ pub(super) fn toggle_pin(state: &mut State, i: usize) {
         // silently dropped (Prime Directive - the gesture asked for
         // something the law declines, so the law says so).
         None if pins.len() >= MAX_PINS => {
-            state.status = format!(
-                "the ribbon keeps {MAX_PINS} pins - unpin one first (right-click a pinned cell)"
-            );
+            state.status = camcraft_i18n::tf("the ribbon keeps {MAX_PINS} pins - unpin one first (right-click a pinned cell)", &[format!("{}", MAX_PINS)]);
             return;
         }
         None => {
@@ -861,11 +849,11 @@ pub(super) fn toggle_pin(state: &mut State, i: usize) {
     match camcraft_app::commands::SetRibbonPins::new(&state.world, &pins) {
         Ok(command) => {
             state.history.execute(&state.world, command);
-            state.status = format!("{verb} {} on the ribbon", k.caption);
+            state.status = camcraft_i18n::tf("{verb} {} on the ribbon", &[format!("{}", verb), format!("{}", k.caption)]);
         }
         // Unreachable from the toggle (it always changes the list), but a
         // refusal is named, never swallowed.
-        Err(err) => state.status = format!("ribbon pin not changed: {err}"),
+        Err(err) => state.status = camcraft_i18n::tf("ribbon pin not changed: {err}", &[format!("{}", err)]),
     }
 }
 
@@ -1637,7 +1625,7 @@ pub fn status(ui: &mut Ui, state: &mut State, pal: &Tokens, icons: Option<&IconS
                 ui.label(RichText::new(note).color(pal.text_faint).small());
             }
             if stale > 0 {
-                let button = ui.button(format!("Regenerate all stale ({stale})"));
+                let button = ui.button(camcraft_i18n::tf("Regenerate all stale ({stale})", &[format!("{}", stale)]));
                 if button.clicked() {
                     state.pending.push_back(CommandKind::RegenerateAll);
                 }

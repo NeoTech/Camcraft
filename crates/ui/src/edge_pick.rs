@@ -65,7 +65,7 @@ fn toggle(state: &mut State, pick: GeoSel) {
     };
     let what = camcraft_app::pick::geo_label(&state.world, &pick);
     items.remove(i);
-    state.status = format!("{what} removed from {name}");
+    state.status = camcraft_i18n::tf("{what} removed from {name}", &[format!("{}", what), format!("{}", name)]);
     if items.is_empty() {
         state.pending.push_back(CommandKind::EditOperationLinks { name, tool: None, src: Some(SrcRef::Stock) });
     } else {
@@ -121,6 +121,6 @@ fn take_loop(state: &mut State, pick: GeoSel) {
             items.push(r);
         }
     }
-    state.status = format!("{what} closed around its loop ({n} runs) in {name}");
+    state.status = camcraft_i18n::tf("{what} closed around its loop ({n} runs) in {name}", &[format!("{}", what), format!("{}", n), format!("{}", name)]);
     state.pending.push_back(CommandKind::SetOperationGeometry { name, items });
 }

@@ -60,9 +60,9 @@ async fn start(canvas_id: &str) -> Result<(), String> {
         .ok_or_else(|| "this page has no document to draw into".to_string())?;
     let canvas = document
         .get_element_by_id(canvas_id)
-        .ok_or_else(|| format!("the page has no element with id \"{canvas_id}\""))?
+        .ok_or_else(|| camcraft_i18n::tf("the page has no element with id \"{canvas_id}\"", &[format!("{}", canvas_id)]))?
         .dyn_into::<web_sys::HtmlCanvasElement>()
-        .map_err(|_| format!("the element \"{canvas_id}\" is not a <canvas>"))?;
+        .map_err(|_| camcraft_i18n::tf("the element \"{canvas_id}\" is not a <canvas>", &[format!("{}", canvas_id)]))?;
     let runner = eframe::WebRunner::new();
     runner
         .start(
@@ -76,15 +76,13 @@ async fn start(canvas_id: &str) -> Result<(), String> {
         .await
         .map_err(|err| {
             let said = err.as_string().unwrap_or_else(|| format!("{err:?}"));
-            format!("the browser gave no usable graphics adapter or surface ({said})")
+            camcraft_i18n::tf("the browser gave no usable graphics adapter or surface ({said})", &[format!("{}", said)])
         })
 }
 
 /// The shell could not start: say why on the page and in the console.
 fn refuse(why: &str) {
-    let line = format!(
-        "CamCraft cannot start in this browser: {why}. It needs WebGPU or WebGL2 - try a current Chrome, Edge or Firefox."
-    );
+    let line = camcraft_i18n::tf("CamCraft cannot start in this browser: {why}. It needs WebGPU or WebGL2 - try a current Chrome, Edge or Firefox.", &[format!("{}", why)]);
     web_sys::console::error_1(&line.as_str().into());
     report("refused", &line);
 }
@@ -279,7 +277,7 @@ impl eframe::App for WebShell {
         if !self.first_frame_said {
             self.first_frame_said = true;
             let (w, h) = self.view.extent();
-            console_log(&format!("camcraft-web: first frame drawn (viewport target {w}x{h})"));
+            console_log(&camcraft_i18n::tf("camcraft-web: first frame drawn (viewport target {w}x{h})", &[format!("{}", w), format!("{}", h)]));
             report("running", "CamCraft: first frame drawn");
         }
     }

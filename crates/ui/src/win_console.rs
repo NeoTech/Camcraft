@@ -126,15 +126,11 @@ fn show_error(text: &str) {
 
 /// `run` returned non-zero: with no console, nothing of the log is visible, so say so.
 pub fn report_exit_failure(code: i32) {
-    show_error(&format!(
-        "CamCraft could not start or stopped with an error (exit code {code})."
-    ));
+    show_error(&camcraft_i18n::tf("CamCraft could not start or stopped with an error (exit code {code}).", &[format!("{}", code)]));
 }
 
 /// A panic escaped `camcraft_ui::run` (caught by `main`'s `catch_unwind`): show it in the
 /// box when no console is attached. Handled panics inside the app never reach here (#1325).
 pub fn report_panic(text: &str) {
-    show_error(&format!(
-        "CamCraft stopped unexpectedly.\n\n{text}"
-    ));
+    show_error(&camcraft_i18n::tf("CamCraft stopped unexpectedly.\n\n{text}", &[format!("{}", text)]));
 }

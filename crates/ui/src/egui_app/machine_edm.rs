@@ -90,7 +90,7 @@ fn keys(ui: &mut Ui, u: Unit, e: &mut Edm) {
     let mut remove = None;
     for (i, d) in e.wire_diameters.iter_mut().enumerate() {
         ui.horizontal(|ui| {
-            fields::num_named(ui, u, d, &format!("Wire diameter {}", i + 1));
+            fields::num_named(ui, u, d, &camcraft_i18n::tf("Wire diameter {}", &[format!("{}", i + 1)]));
             if ui.button(camcraft_i18n::tr("✖")).on_hover_text(camcraft_i18n::tr("remove this diameter")).clicked() {
                 remove = Some(i);
             }

@@ -19,12 +19,9 @@ pub fn precalc_readout(p: &Precalc) -> Option<String> {
     match p {
         Precalc::Off | Precalc::Ready { .. } => None,
         Precalc::Running { done, total } => {
-            Some(format!("Calculating the stock removal: {}% - playback starts when it is done", pct(*done, *total)))
+            Some(camcraft_i18n::tf("Calculating the stock removal: {}% - playback starts when it is done", &[format!("{}", pct(*done, *total))]))
         }
-        Precalc::Incomplete { done, total, why } => Some(format!(
-            "Stock removal incomplete ({why} at {}%) - the stock after that point is calculated during playback",
-            pct(*done, *total)
-        )),
+        Precalc::Incomplete { done, total, why } => Some(camcraft_i18n::tf("Stock removal incomplete ({why} at {}%) - the stock after that point is calculated during playback", &[format!("{}", why), format!("{}", pct(*done, *total))])),
     }
 }
 
@@ -35,7 +32,7 @@ pub const CANCEL: &str = "Cancel";
 /// it has no toolpath, so nothing after it is shown cut.
 #[must_use]
 pub fn stop_readout(op: &str) -> String {
-    format!("Stock simulation stops before {op}: it has no toolpath. Generate it to see the rest.")
+    camcraft_i18n::tf("Stock simulation stops before {op}: it has no toolpath. Generate it to see the rest.", &[format!("{}", op)])
 }
 
 /// The stop sentence for the running playback, when it stops early.

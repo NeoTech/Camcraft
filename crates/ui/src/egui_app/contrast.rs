@@ -141,38 +141,28 @@ pub fn readable(t: &Tokens) -> Option<String> {
     for (ground, bg) in grounds {
         let r = ratio(t.text, bg);
         if r < BODY {
-            return Some(format!(
-                "text on {ground} reads {r:.1}:1, under the {BODY}:1 floor - an unreadable theme is refused, not rendered"
-            ));
+            return Some(camcraft_i18n::tf("text on {ground} reads {r:.1}:1, under the {BODY}:1 floor - an unreadable theme is refused, not rendered", &[format!("{}", ground), format!("{:.1}", r), format!("{}", BODY)]));
         }
     }
     for (ground, bg) in [("ink", t.ink), ("ink_alt", t.ink_alt)] {
         let r = ratio(t.text_dim, bg);
         if r < BODY {
-            return Some(format!(
-                "text_dim on {ground} reads {r:.1}:1, under the {BODY}:1 floor"
-            ));
+            return Some(camcraft_i18n::tf("text_dim on {ground} reads {r:.1}:1, under the {BODY}:1 floor", &[format!("{}", ground), format!("{:.1}", r), format!("{}", BODY)]));
         }
     }
     for (name, fill) in [("accent", t.accent), ("accent_hover", t.accent_hover)] {
         let r = ratio(on_fill(fill), fill);
         if r < BODY {
-            return Some(format!(
-                "no ink is readable on {name} at {r:.1}:1 - spell a stronger {name}"
-            ));
+            return Some(camcraft_i18n::tf("no ink is readable on {name} at {r:.1}:1 - spell a stronger {name}", &[format!("{}", name), format!("{:.1}", r), format!("{}", name)]));
         }
     }
     let r = ratio(t.ribbon_ink, t.strip_fill());
     if r < BODY {
-        return Some(format!(
-            "ribbon_ink on the ribbon ground reads {r:.1}:1, under the {BODY}:1 floor - the ribbon glyphs would vanish"
-        ));
+        return Some(camcraft_i18n::tf("ribbon_ink on the ribbon ground reads {r:.1}:1, under the {BODY}:1 floor - the ribbon glyphs would vanish", &[format!("{:.1}", r), format!("{}", BODY)]));
     }
     let r = ratio(t.selection_stroke, t.ink_alt);
     if r < UI {
-        return Some(format!(
-            "selection_stroke on ink_alt reads {r:.1}:1, under the {UI}:1 floor for meaningful lines"
-        ));
+        return Some(camcraft_i18n::tf("selection_stroke on ink_alt reads {r:.1}:1, under the {UI}:1 floor for meaningful lines", &[format!("{:.1}", r), format!("{}", UI)]));
     }
     None
 }

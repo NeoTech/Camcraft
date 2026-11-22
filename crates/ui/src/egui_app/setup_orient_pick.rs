@@ -213,7 +213,7 @@ fn cylinder_panel(ui: &mut Ui, state: &mut State, setup: &str) {
         .map(|g| AlignPartToSetup::check_cylinder(&state.world, setup, g, d.target, d.angle, d.flip))
         .unwrap_or_else(|| Err(camcraft_app::commands::CommandError::Invalid("pick the wall first".into())));
     let words = match &check {
-        Ok(()) => format!("applies the wall's axis onto {}", d.target.label()),
+        Ok(()) => camcraft_i18n::tf("applies the wall's axis onto {}", &[format!("{}", d.target.label())]),
         Err(why) => why.to_string(),
     };
     ui.label(RichText::new(format!("      {words}")).weak());
@@ -265,7 +265,7 @@ fn box_panel(ui: &mut Ui, state: &mut State, setup: &str, stock: bool) {
             ),
             None => {
                 if stock {
-                    format!("setup '{setup}' has no stock placed - place one on the Stock page")
+                    camcraft_i18n::tf("setup '{setup}' has no stock placed - place one on the Stock page", &[format!("{}", setup)])
                 } else {
                     "there is no model to read a box from - import one first".to_owned()
                 }

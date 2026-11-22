@@ -173,10 +173,7 @@ pub fn entries(state: &State) -> Vec<Entry> {
             BoundaryShape::Silhouette => (Vec::new(), None, "part silhouette, closed".to_owned()),
         };
         let issue = match &shape {
-            Some(PickShape::Open { .. } | PickShape::Chains { .. }) => Some(format!(
-                "an {} must enclose an area and these picks are an open chain - Shift-click an edge or 'Extend to loop' to close it, or 'Use as open boundary'",
-                role.label()
-            )),
+            Some(PickShape::Open { .. } | PickShape::Chains { .. }) => Some(camcraft_i18n::tf("an {} must enclose an area and these picks are an open chain - Shift-click an edge or 'Extend to loop' to close it, or 'Use as open boundary'", &[format!("{}", role.label())])),
             Some(PickShape::Invalid(why)) => Some(why.clone()),
             _ => None,
         };
@@ -211,11 +208,7 @@ pub fn role_block(state: &State, entry: &Entry, role: Role) -> Option<String> {
         return None;
     }
     if entry.shape.as_ref().is_some_and(PickShape::is_open) {
-        return Some(format!(
-            "these picks are an open chain ({}) - an {} must enclose an area; close it first (Shift-click / Extend to loop)",
-            entry.summary,
-            role.label()
-        ));
+        return Some(camcraft_i18n::tf("these picks are an open chain ({}) - an {} must enclose an area; close it first (Shift-click / Extend to loop)", &[format!("{}", entry.summary), format!("{}", role.label())]));
     }
     None
 }
@@ -376,7 +369,7 @@ pub fn take_pick(state: &mut State, target: BoundaryPick, pick: GeoSel, mods: Pi
     let pick_name = camcraft_app::pick::geo_label(&state.world, &pick);
     if next.is_empty() {
         remove(state, at);
-        state.status = format!("{pick_name} removed - the boundary had no picks left, so it is gone");
+        state.status = camcraft_i18n::tf("{pick_name} removed - the boundary had no picks left, so it is gone", &[format!("{}", pick_name)]);
         return;
     }
     if let Some(p) = picks_mut(state, at) {
@@ -397,7 +390,7 @@ pub fn take_pick(state: &mut State, target: BoundaryPick, pick: GeoSel, mods: Pi
 
 fn take_do_not_touch_pick(state: &mut State, pick: GeoSel, mods: PickMods) {
     if matches!(pick.feature, operation::FeatureSel::Vertex(_)) {
-        state.status = format!("{} of '{}' is a point - 'Do not touch' accepts faces or edges", pick.feature, pick.entity);
+        state.status = camcraft_i18n::tf("{} of '{}' is a point - 'Do not touch' accepts faces or edges", &[format!("{}", pick.feature), format!("{}", pick.entity)]);
         return;
     }
     let src = model::find_by_name(&state.world, &state.op_ui.name)
@@ -418,14 +411,14 @@ fn take_do_not_touch_pick(state: &mut State, pick: GeoSel, mods: PickMods) {
             picks.remove(pos);
             "removed from"
         } else {
-            state.status = format!("{} of '{}' is already protected in Do not touch", pick.feature, pick.entity);
+            state.status = camcraft_i18n::tf("{} of '{}' is already protected in Do not touch", &[format!("{}", pick.feature), format!("{}", pick.entity)]);
             return;
         }
     } else {
         picks.push(pick.clone());
         "added to"
     };
-    state.status = format!("{} of '{}' {verb} Do not touch - Apply commits it", pick.feature, pick.entity);
+    state.status = camcraft_i18n::tf("{} of '{}' {verb} Do not touch - Apply commits it", &[format!("{}", pick.feature), format!("{}", pick.entity), format!("{}", verb)]);
 }
 
 /// Rebuild the machined-area preview when the draft or the document

@@ -123,7 +123,7 @@ impl Composite {
             mapped_at_creation: false,
         });
         if let Some(err) = scope.pop().await {
-            return Err(format!("the device refused the composite pipeline ({err})"));
+            return Err(camcraft_i18n::tf("the device refused the composite pipeline ({err})", &[format!("{}", err)]));
         }
         Ok(Composite { pipeline, bgl, uniform, module, layout, format, samples: 1 })
     }

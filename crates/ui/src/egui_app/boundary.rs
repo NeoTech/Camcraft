@@ -44,10 +44,7 @@ pub fn hints() -> [String; 4] {
     [
         "Include adds the area a closed boundary encloses; Exclude keeps the whole tool out of it.".to_owned(),
         "Open: an open edge chain runs on straight to the stock and splits it - side A holds more of the selection's area, side B is the rest; arrows in the viewport point into the side machined.".to_owned(),
-        format!(
-            "Picking: click an edge to take that one edge, {}-click to add or remove one (removing breaks a picked loop open), Shift-click to close the edges around their face loop, Alt for a single mesh segment; a face adds its loop.",
-            command_key()
-        ),
+        camcraft_i18n::tf("Picking: click an edge to take that one edge, {}-click to add or remove one (removing breaks a picked loop open), Shift-click to close the edges around their face loop, Alt for a single mesh segment; a face adds its loop.", &[format!("{}", command_key())]),
         "The filled area in the viewport is what the operation will machine after Apply.".to_owned(),
     ]
 }
@@ -63,7 +60,7 @@ const EXTEND_HINT: &str = "Carries the area past its exterior edges - edges with
 pub(super) fn boundary_group(ui: &mut Ui, state: &mut State) {
     if let Some(why) = area_unsupported(state.op_ui.params.kind()) {
         state.boundary_pick = None;
-        ui.label(RichText::new(format!("Boundary settings do not apply to it: {why}.")).weak());
+        ui.label(RichText::new(camcraft_i18n::tf("Boundary settings do not apply to it: {why}.", &[format!("{}", why)])).weak());
         return;
     }
     let u = state.units();
@@ -162,7 +159,7 @@ enum Act {
 
 fn apply(state: &mut State, act: Act) {
     let said = match act {
-        Act::Role(at, role) => boundary_draft::set_role(state, at, role).map(|()| format!("boundary is now {}", role.label())),
+        Act::Role(at, role) => boundary_draft::set_role(state, at, role).map(|()| camcraft_i18n::tf("boundary is now {}", &[format!("{}", role.label())])),
         Act::Pick(t) => {
             if t.is_some() && state.geo_pick == GeoPick::Model {
                 state.geo_pick = GeoPick::Edge;
@@ -192,8 +189,8 @@ fn apply(state: &mut State, act: Act) {
         }
     };
     state.status = match said {
-        Ok(s) => format!("{s} - Apply commits it"),
-        Err(why) => format!("boundary not changed: {why}"),
+        Ok(s) => camcraft_i18n::tf("{s} - Apply commits it", &[format!("{}", s)]),
+        Err(why) => camcraft_i18n::tf("boundary not changed: {why}", &[format!("{}", why)]),
     };
 }
 
@@ -229,7 +226,7 @@ fn entry_row(ui: &mut Ui, state: &State, n: usize, e: &Entry, acts: &mut Vec<Act
         consequence(ui, &boundary_summary::side_caption(state, e.role));
         let other = if e.role == Role::OpenA { Role::OpenB } else { Role::OpenA };
         prop_row(ui, "Machined side", |ui| {
-            if ui.small_button(camcraft_i18n::tr("Machine the other side")).on_hover_text(format!("switch to {}", other.label())).clicked() {
+            if ui.small_button(camcraft_i18n::tr("Machine the other side")).on_hover_text(camcraft_i18n::tf("switch to {}", &[format!("{}", other.label())])).clicked() {
                 acts.push(Act::Role(e.at, other));
             }
             ui.label(if e.role == Role::OpenA { "A" } else { "B" });
@@ -295,7 +292,7 @@ fn collecting_line(ui: &mut Ui, state: &State, acts: &mut Vec<Act>) {
         BoundaryPick::DoNotTouch => "Do not touch".to_owned(),
     };
     ui.horizontal_wrapped(|ui| {
-        ui.label(RichText::new(format!("Picking into {what} - viewport clicks fill it, not the selection.")).strong());
+        ui.label(RichText::new(camcraft_i18n::tf("Picking into {what} - viewport clicks fill it, not the selection.", &[format!("{}", what)])).strong());
         if ui.small_button(camcraft_i18n::tr("Done")).clicked() {
             acts.push(Act::Pick(None));
         }

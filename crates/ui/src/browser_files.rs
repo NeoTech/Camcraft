@@ -147,7 +147,7 @@ mod imp {
     }
 
     fn js(what: &str, e: JsValue) -> String {
-        format!("download failed: {what}: {}", e.as_string().unwrap_or_else(|| format!("{e:?}")))
+        camcraft_i18n::tf("download failed: {what}: {}", &[format!("{}", what), format!("{}", e.as_string().unwrap_or_else(|| format!("{e:?}")))])
     }
 
     pub(super) fn offer(name: &str, bytes: &[u8], mime: &str) -> Result<(), String> {

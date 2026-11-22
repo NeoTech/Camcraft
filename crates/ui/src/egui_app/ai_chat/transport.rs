@@ -104,10 +104,7 @@ impl ChatTransport for DefaultTransport {
             return Err("cancelled".to_owned());
         }
         check_offline_policy(req.offline_only, req.preset.endpoint_kind, &req.preset.label)?;
-        Err(format!(
-            "no live transport endpoint is configured for '{}'",
-            req.preset.label
-        ))
+        Err(camcraft_i18n::tf("no live transport endpoint is configured for '{}'", &[format!("{}", req.preset.label)]))
     }
 }
 
@@ -181,9 +178,7 @@ pub(crate) fn check_offline_policy(
     preset_label: &str,
 ) -> Result<(), String> {
     if offline_only && endpoint == EndpointKind::Cloud {
-        return Err(format!(
-            "offline-only mode blocks cloud provider '{preset_label}'"
-        ));
+        return Err(camcraft_i18n::tf("offline-only mode blocks cloud provider '{preset_label}'", &[format!("{}", preset_label)]));
     }
     Ok(())
 }
@@ -296,7 +291,7 @@ pub(crate) fn encode_png_rgba(width: u32, height: u32, rgba: Vec<u8>) -> Result<
         .ok_or_else(|| "screenshot buffer size did not match image dimensions".to_owned())?;
     let mut out = Vec::new();
     img.write_to(&mut Cursor::new(&mut out), image::ImageFormat::Png)
-        .map_err(|e| format!("failed to encode PNG screenshot: {e}"))?;
+        .map_err(|e| camcraft_i18n::tf("failed to encode PNG screenshot: {e}", &[format!("{}", e)]))?;
     Ok(out)
 }
 

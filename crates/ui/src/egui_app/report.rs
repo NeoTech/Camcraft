@@ -207,10 +207,7 @@ pub(crate) fn window(ctx: &Context, state: &mut State) {
         let body = report_body(state);
         let url = issue_url(kind, &state.report_title, &body);
         ctx.open_url(egui::OpenUrl::new_tab(&url));
-        state.status = format!(
-            "{}: camcraft filled the new issue and is copying the window to the clipboard - add the story and paste the picture",
-            kind.button()
-        );
+        state.status = camcraft_i18n::tf("{}: camcraft filled the new issue and is copying the window to the clipboard - add the story and paste the picture", &[format!("{}", kind.button())]);
     }
     state.report_open = open;
 }

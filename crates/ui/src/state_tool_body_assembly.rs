@@ -74,9 +74,9 @@ impl State {
             Ok(command) => {
                 self.history.execute(&self.world, command);
                 self.doc_version += 1;
-                self.status = format!("tool {name}: attached piece");
+                self.status = camcraft_i18n::tf("tool {name}: attached piece", &[format!("{}", name)]);
             }
-            Err(err) => self.refuse(ErrorScope::Tool, format!("piece not attached: {err}")),
+            Err(err) => self.refuse(ErrorScope::Tool, camcraft_i18n::tf("piece not attached: {err}", &[format!("{}", err)])),
         }
     }
 
@@ -85,9 +85,9 @@ impl State {
             Ok(command) => {
                 self.history.execute(&self.world, command);
                 self.doc_version += 1;
-                self.status = format!("tool {name}: removed piece {index}");
+                self.status = camcraft_i18n::tf("tool {name}: removed piece {index}", &[format!("{}", name), format!("{}", index)]);
             }
-            Err(err) => self.refuse(ErrorScope::Tool, format!("piece not removed: {err}")),
+            Err(err) => self.refuse(ErrorScope::Tool, camcraft_i18n::tf("piece not removed: {err}", &[format!("{}", err)])),
         }
     }
 }

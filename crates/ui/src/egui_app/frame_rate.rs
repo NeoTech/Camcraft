@@ -107,21 +107,18 @@ impl FrameRate {
         let mut line = None;
         if changed {
             if due && !self.pending {
-                line = Some(format!("debug info: frame rate {}", describe(fps)));
+                line = Some(camcraft_i18n::tf("debug info: frame rate {}", &[format!("{}", describe(fps))]));
             } else {
                 self.pending = true;
             }
         }
         if self.pending && due && self.moves <= 1 {
             // One step, then steady: that is a new level, not a jumping rate.
-            line = Some(format!("debug info: frame rate {}", describe(fps)));
+            line = Some(camcraft_i18n::tf("debug info: frame rate {}", &[format!("{}", describe(fps))]));
         } else if self.pending && due {
             let iv = &self.iv;
             let mean = iv.sum / f64::from(iv.n.max(1));
-            line = Some(format!(
-                "debug info: frame rate keeps changing - {:.0} to {:.0} fps, mean {:.0} fps over {:.0} s",
-                iv.min, iv.max, mean, iv.secs
-            ));
+            line = Some(camcraft_i18n::tf("debug info: frame rate keeps changing - {:.0} to {:.0} fps, mean {:.0} fps over {:.0} s", &[format!("{:.0}", iv.min), format!("{:.0}", iv.max), format!("{:.0}", mean), format!("{:.0}", iv.secs)]));
         }
         if line.is_some() {
             self.level = Some(fps);
@@ -139,7 +136,7 @@ impl FrameRate {
     pub fn report_line(&self, now: Instant) -> String {
         match self.current {
             Some((fps, at)) if now.saturating_duration_since(at) <= STALE => {
-                format!("Frame rate: {}", describe(fps))
+                camcraft_i18n::tf("Frame rate: {}", &[format!("{}", describe(fps))])
             }
             _ => "Frame rate: idle (the window is not repainting)".to_owned(),
         }
@@ -147,7 +144,7 @@ impl FrameRate {
 }
 
 fn describe(fps: f64) -> String {
-    format!("{fps:.0} fps ({:.1} ms per frame)", 1000.0 / fps.max(1e-6))
+    camcraft_i18n::tf("{fps:.0} fps ({:.1} ms per frame)", &[format!("{:.0}", fps), format!("{:.1}", 1000.0 / fps.max(1e-6))])
 }
 
 #[cfg(test)]

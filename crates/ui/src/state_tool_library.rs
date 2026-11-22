@@ -68,8 +68,8 @@ impl State {
         let written = tool_table::export(&self.world, format, unit)
             .and_then(|text| std::fs::write(path, text).map_err(|e| e.to_string()));
         match written {
-            Ok(()) => self.status = format!("tool library written to {}", path.display()),
-            Err(err) => self.refuse(ErrorScope::Tool, format!("tool library not exported: {err}")),
+            Ok(()) => self.status = camcraft_i18n::tf("tool library written to {}", &[format!("{}", path.display())]),
+            Err(err) => self.refuse(ErrorScope::Tool, camcraft_i18n::tf("tool library not exported: {err}", &[format!("{}", err)])),
         }
     }
 
@@ -89,7 +89,7 @@ impl State {
                 self.doc_version += 1;
                 self.status = summary;
             }
-            Err(err) => self.refuse(ErrorScope::Tool, format!("tool library not imported: {err}")),
+            Err(err) => self.refuse(ErrorScope::Tool, camcraft_i18n::tf("tool library not imported: {err}", &[format!("{}", err)])),
         }
     }
 }

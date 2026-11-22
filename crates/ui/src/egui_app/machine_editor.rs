@@ -206,9 +206,9 @@ fn draw_axes(ui: &mut Ui, u: Unit, m: &mut Machine) {
                 a.travel = if stated { Some((0.0, 1.0)) } else { None };
             }
             if let Some((lo, hi)) = &mut a.travel {
-                fields::num_named(ui, u, lo, &format!("Axis {ax} travel min"));
+                fields::num_named(ui, u, lo, &camcraft_i18n::tf("Axis {ax} travel min", &[format!("{}", ax)]));
                 ui.label(camcraft_i18n::tr(".."));
-                fields::num_named(ui, u, hi, &format!("Axis {ax} travel max"));
+                fields::num_named(ui, u, hi, &camcraft_i18n::tf("Axis {ax} travel max", &[format!("{}", ax)]));
             }
             ui.label(camcraft_i18n::tr("res"));
             opt(ui, |ui, v| fields::num_named(ui, u, v, &format!("Axis {ax} resolution")), &mut a.resolution);
@@ -342,7 +342,7 @@ fn coolant_name(ui: &mut Ui, i: usize, name: &mut String) {
         });
     fields::named(cb.response, &format!("Coolant {} kind", i + 1));
     if !known {
-        fields::named(ui.add(TextEdit::singleline(name).desired_width(90.0).hint_text("name")), &format!("Coolant {} custom name", i + 1));
+        fields::named(ui.add(TextEdit::singleline(name).desired_width(90.0).hint_text("name")), &camcraft_i18n::tf("Coolant {} custom name", &[format!("{}", i + 1)]));
     }
 }
 

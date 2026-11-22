@@ -41,7 +41,7 @@ pub(crate) fn encode(dock: &DockState<Tab>) -> Result<serde_json::Value, String>
             egui_dock::Node::Empty => {}
         }
     }
-    serde_json::to_value(&copy).map_err(|e| format!("the panel arrangement is not writable ({e})"))
+    serde_json::to_value(&copy).map_err(|e| camcraft_i18n::tf("the panel arrangement is not writable ({e})", &[format!("{}", e)]))
 }
 
 /// A rect JSON can read back: an unlaid-out dock's infinite one becomes a
@@ -62,7 +62,7 @@ fn known(rect: egui::Rect) -> egui::Rect {
 /// dock that breaks the permanence law, is refused by name.
 pub(crate) fn decode(value: &serde_json::Value) -> Result<DockState<Tab>, String> {
     let dock: DockState<Tab> = serde_json::from_value(value.clone())
-        .map_err(|e| format!("not a panel arrangement ({e})"))?;
+        .map_err(|e| camcraft_i18n::tf("not a panel arrangement ({e})", &[format!("{}", e)]))?;
     validate(&dock)?;
     Ok(dock)
 }
@@ -81,9 +81,7 @@ fn validate(dock: &DockState<Tab>) -> Result<(), String> {
         }
     }
     if viewports != 1 {
-        return Err(format!(
-            "the arrangement has {viewports} viewports instead of one"
-        ));
+        return Err(camcraft_i18n::tf("the arrangement has {viewports} viewports instead of one", &[format!("{}", viewports)]));
     }
     let rooted = dock
         .get_surface(SurfaceIndex::main())
@@ -114,7 +112,7 @@ pub(crate) fn start_dock(state: &mut State) -> DockState<Tab> {
         Ok(dock) => dock,
         Err(why) => {
             let line =
-                format!("panel setup '{name}' not restored: {why} - the default layout is in use");
+                camcraft_i18n::tf("panel setup '{name}' not restored: {why} - the default layout is in use", &[format!("{}", name), format!("{}", why)]);
             diag_warn!("{line}");
             state.status = line;
             default
@@ -130,12 +128,12 @@ pub(crate) fn apply_ask(state: &mut State, dock: &mut DockState<Tab>, ask: Panel
     match ask {
         PanelSetupAsk::Save(raw) => {
             state.status = match camcraft_app::prefs::setup_name(&raw) {
-                Err(why) => format!("panel setup not saved: {why}"),
+                Err(why) => camcraft_i18n::tf("panel setup not saved: {why}", &[format!("{}", why)]),
                 Ok(name) => match encode(dock) {
-                    Err(why) => format!("panel setup not saved: {why}"),
+                    Err(why) => camcraft_i18n::tf("panel setup not saved: {why}", &[format!("{}", why)]),
                     Ok(json) => match state.save_panel_setup(name, json) {
-                        Ok(()) => format!("panel setup '{name}' saved"),
-                        Err(why) => format!("panel setup not saved: {why}"),
+                        Ok(()) => camcraft_i18n::tf("panel setup '{name}' saved", &[format!("{}", name)]),
+                        Err(why) => camcraft_i18n::tf("panel setup not saved: {why}", &[format!("{}", why)]),
                     },
                 },
             };
@@ -147,26 +145,24 @@ pub(crate) fn apply_ask(state: &mut State, dock: &mut DockState<Tab>, ask: Panel
                     Ok(loaded) => {
                         *dock = loaded;
                         state.remember_setup(&name);
-                        format!("panel setup '{name}' loaded")
+                        camcraft_i18n::tf("panel setup '{name}' loaded", &[format!("{}", name)])
                     }
                     Err(why) => {
                         *dock = build_dock();
-                        format!(
-                            "panel setup '{name}' not loaded: {why} - the default layout is in use"
-                        )
+                        camcraft_i18n::tf("panel setup '{name}' not loaded: {why} - the default layout is in use", &[format!("{}", name), format!("{}", why)])
                     }
                 },
                 None => {
                     *dock = build_dock();
-                    format!("panel setup '{name}' is not saved - the default layout is in use")
+                    camcraft_i18n::tf("panel setup '{name}' is not saved - the default layout is in use", &[format!("{}", name)])
                 }
             };
         }
         PanelSetupAsk::Delete(name) => {
             state.status = if state.delete_panel_setup(&name) {
-                format!("panel setup '{name}' deleted")
+                camcraft_i18n::tf("panel setup '{name}' deleted", &[format!("{}", name)])
             } else {
-                format!("panel setup '{name}' is not saved")
+                camcraft_i18n::tf("panel setup '{name}' is not saved", &[format!("{}", name)])
             };
         }
     }

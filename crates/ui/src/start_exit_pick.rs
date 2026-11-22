@@ -55,7 +55,7 @@ pub(crate) fn act_id() -> egui::Id {
 /// Arm viewport picking for `role` without inventing a coordinate.
 pub fn arm(state: &mut State, role: StartExitRole) {
     state.op_ui.start_exit_pick = Some(role);
-    state.status = format!("Picking {}: click on the part or stock in the viewport", role.label());
+    state.status = camcraft_i18n::tf("Picking {}: click on the part or stock in the viewport", &[format!("{}", role.label())]);
 }
 
 /// Disarm viewport picking.
@@ -67,7 +67,7 @@ pub fn disarm(state: &mut State) {
 pub fn toggle(state: &mut State, role: StartExitRole) {
     if state.op_ui.start_exit_pick == Some(role) {
         disarm(state);
-        state.status = format!("Stopped picking {}", role.label());
+        state.status = camcraft_i18n::tf("Stopped picking {}", &[format!("{}", role.label())]);
     } else {
         arm(state, role);
     }
@@ -94,16 +94,12 @@ pub fn take(state: &mut State, found: &FeaturePick) {
     if model::find_by_name(&state.world, &found.entity)
         .is_some_and(|e| model::is_fixture(&state.world, &e))
     {
-        state.status = format!(
-            "'{}' is a fixture - click on the part or stock for the {}",
-            found.entity,
-            role.label()
-        );
+        state.status = camcraft_i18n::tf("'{}' is a fixture - click on the part or stock for the {}", &[format!("{}", found.entity), format!("{}", role.label())]);
         return;
     }
     let [x, y, z] = found.at;
     if !x.is_finite() || !y.is_finite() || !z.is_finite() {
-        state.status = format!("that pick on '{}' has no finite position", found.entity);
+        state.status = camcraft_i18n::tf("that pick on '{}' has no finite position", &[format!("{}", found.entity)]);
         return;
     }
     let OpParams::Contour { links, tilt, .. } = &mut state.op_ui.params else {
@@ -111,7 +107,7 @@ pub fn take(state: &mut State, found: &FeaturePick) {
         return;
     };
     if tilt.is_some() {
-        state.status = format!("2D Contour: clear tilt before picking the {}", role.label());
+        state.status = camcraft_i18n::tf("2D Contour: clear tilt before picking the {}", &[format!("{}", role.label())]);
         return;
     }
     let pt = Point2::new(x, y);
@@ -120,15 +116,7 @@ pub fn take(state: &mut State, found: &FeaturePick) {
         StartExitRole::Exit => links.approach.exit_point = Some(pt),
     }
     let u = state.units();
-    state.status = format!(
-        "2D Contour {}: ({} {}, {} {}) on '{}' - Apply or Generate to commit",
-        role.label(),
-        units::len(x, u, 3),
-        u.as_str(),
-        units::len(y, u, 3),
-        u.as_str(),
-        found.entity,
-    );
+    state.status = camcraft_i18n::tf("2D Contour {}: ({} {}, {} {}) on '{}' - Apply or Generate to commit", &[format!("{}", role.label()), format!("{}", units::len(x, u, 3)), format!("{}", u.as_str()), format!("{}", units::len(y, u, 3)), format!("{}", u.as_str()), format!("{}", found.entity)]);
 }
 
 /// Screen-space viewport uv segment `([u0, v0], [u1, v1])`.

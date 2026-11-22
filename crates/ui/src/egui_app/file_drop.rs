@@ -33,19 +33,15 @@ pub(super) fn classify(paths: &[PathBuf]) -> Result<PathBuf, String> {
     let [path] = paths else {
         return match paths.len() {
             0 => Err(String::from("drop refused: no file was dropped")),
-            n => Err(format!("drop refused: {n} files were dropped; drop one model file at a time")),
+            n => Err(camcraft_i18n::tf("drop refused: {n} files were dropped; drop one model file at a time", &[format!("{}", n)])),
         };
     };
     let ext = path.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
     if !MESH_EXTENSIONS.contains(&ext.as_str()) {
-        return Err(format!(
-            "drop refused: {} is not a model file (read: .{})",
-            label(path),
-            MESH_EXTENSIONS.join(", .")
-        ));
+        return Err(camcraft_i18n::tf("drop refused: {} is not a model file (read: .{})", &[format!("{}", label(path)), format!("{}", MESH_EXTENSIONS.join(", ."))]));
     }
     if !path.is_file() {
-        return Err(format!("drop refused: {} is not a readable file", label(path)));
+        return Err(camcraft_i18n::tf("drop refused: {} is not a readable file", &[format!("{}", label(path))]));
     }
     Ok(path.clone())
 }
@@ -76,36 +72,30 @@ pub(super) fn take_drop(ui: &Ui, state: &mut State) {
         return;
     }
     let [file] = files.as_slice() else {
-        state.refuse_drop(format!(
-            "drop refused: {} files were dropped; drop one model file at a time",
-            files.len()
-        ));
+        state.refuse_drop(camcraft_i18n::tf("drop refused: {} files were dropped; drop one model file at a time", &[format!("{}", files.len())]));
         return;
     };
     let path = file.path().to_path_buf();
     let name = label(&path);
     let ext = path.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
     if !MESH_EXTENSIONS.contains(&ext.as_str()) {
-        state.refuse_drop(format!(
-            "drop refused: {name} is not a model file (read: .{})",
-            MESH_EXTENSIONS.join(", .")
-        ));
+        state.refuse_drop(camcraft_i18n::tf("drop refused: {name} is not a model file (read: .{})", &[format!("{}", name), format!("{}", MESH_EXTENSIONS.join(", ."))]));
         return;
     }
     #[cfg(not(target_arch = "wasm32"))]
     match file.bytes() {
         Ok(bytes) => match check_drop_bytes(&name, Ok(bytes)) {
             Ok(data) => deliver_model_bytes(ui.ctx(), name, Ok(data)),
-            Err(why) => state.refuse_drop(format!("drop refused: {why}")),
+            Err(why) => state.refuse_drop(camcraft_i18n::tf("drop refused: {why}", &[format!("{}", why)])),
         },
-        Err(why) => state.refuse_drop(format!("drop refused: {name} is not a readable file ({why})")),
+        Err(why) => state.refuse_drop(camcraft_i18n::tf("drop refused: {name} is not a readable file ({why})", &[format!("{}", name), format!("{}", why)])),
     }
     #[cfg(target_arch = "wasm32")]
     {
         if let Some(wf) = file.web_file()
             && let Some(why) = crate::file_pick::too_big(&name, wf.size())
         {
-            state.refuse_drop(format!("drop refused: {why}"));
+            state.refuse_drop(camcraft_i18n::tf("drop refused: {why}", &[format!("{}", why)]));
             return;
         }
         state.status = format!("reading {name}…");

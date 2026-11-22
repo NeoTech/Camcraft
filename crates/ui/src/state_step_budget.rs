@@ -41,7 +41,7 @@ fn parse(text: &str) -> Result<u64, String> {
     let digits: String = text.chars().filter(|c| !matches!(c, '_' | ',' | ' ')).collect();
     let n = digits
         .parse::<u64>()
-        .map_err(|_| format!("{} must be a whole number of facets, got '{}'", step_budget::NAME, text.trim()))?;
+        .map_err(|_| camcraft_i18n::tf("{} must be a whole number of facets, got '{}'", &[format!("{}", step_budget::NAME), format!("{}", text.trim())]))?;
     step_budget::check(n).map(|_| n)
 }
 
@@ -53,7 +53,7 @@ impl State {
         match parse(text) {
             Ok(n) => {
                 self.step_budget = StepBudgetUi { value: n, draft: n.to_string(), error: None, explicit: true };
-                self.status = format!("{}: {n} facets for the next STEP import", step_budget::NAME);
+                self.status = camcraft_i18n::tf("{}: {n} facets for the next STEP import", &[format!("{}", step_budget::NAME), format!("{}", n)]);
                 Ok(n)
             }
             Err(err) => {

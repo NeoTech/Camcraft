@@ -83,7 +83,7 @@ pub(super) fn rows(ui: &mut Ui, state: &mut State, setup: &str) {
         Ok(()) => match pick::in_plane_turn_deg(&state.world, setup, &axes) {
             // An in-plane pair is a plain turn about Z (#557); anything
             // else is the full 3D alignment (#769).
-            Ok(deg) => format!("turns the part {} about Z", deg_words(deg)),
+            Ok(deg) => camcraft_i18n::tf("turns the part {} about Z", &[format!("{}", deg_words(deg))]),
             Err(_) => "aligns the part: +Y and +X along their picks, +Z from the right-hand rule".to_owned(),
         },
     };
@@ -114,7 +114,7 @@ fn axis_row(ui: &mut Ui, state: &mut State, setup: &str, axis: InPlaneAxis) {
         for (b, text) in [(AxisBy::Edge, "Edge"), (AxisBy::Points, "Two points")] {
             if ui
                 .selectable_label(by == b, format!("{name} by {text}"))
-                .on_hover_text(format!("Set {name} from {} - picks at once.", b.noun()))
+                .on_hover_text(camcraft_i18n::tf("Set {name} from {} - picks at once.", &[format!("{}", name), format!("{}", b.noun())]))
                 .clicked()
             {
                 // Choosing a mode arms its pick (#557 hand check).
@@ -128,9 +128,9 @@ fn axis_row(ui: &mut Ui, state: &mut State, setup: &str, axis: InPlaneAxis) {
             AxisBy::Edge => "edge",
             AxisBy::Points => "points",
         };
-        let text = if armed { format!("Stop picking {name}") } else { format!("Pick {name} {what}") };
+        let text = if armed { camcraft_i18n::tf("Stop picking {name}", &[format!("{}", name)]) } else { format!("Pick {name} {what}") };
         if super::pick_button::pick_button(ui, armed, text)
-            .on_hover_text(format!("Click {} in the viewport; it runs along {name}.", by.noun()))
+            .on_hover_text(camcraft_i18n::tf("Click {} in the viewport; it runs along {name}.", &[format!("{}", by.noun()), format!("{}", name)]))
             .clicked()
         {
             if armed {

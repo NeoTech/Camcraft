@@ -30,7 +30,7 @@ fn entry_text(t: &WorkOffsets, slot: Option<usize>) -> String {
     let n = offset_of(slot);
     let label = setup_offsets::entry_label(t, n);
     if n > t.max {
-        format!("{label} - not on this post")
+        camcraft_i18n::tf("{label} - not on this post", &[format!("{}", label)])
     } else {
         label
     }

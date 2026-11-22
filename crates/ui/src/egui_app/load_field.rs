@@ -31,11 +31,7 @@ pub(super) fn optimal_load_field(ui: &mut Ui, load: &mut f64) {
     }
     super::layout::hint(
         ui,
-        &format!(
-            "radial width ae = {:.2}% of the tool diameter - about {:.1}° of cutter contact (acos(1 - 2 ae/D)); rings step by ae",
-            *load * 100.0,
-            degrees_of_load(*load)
-        ),
+        &camcraft_i18n::tf("radial width ae = {:.2}% of the tool diameter - about {:.1}° of cutter contact (acos(1 - 2 ae/D)); rings step by ae", &[format!("{:.2}", *load * 100.0), format!("{:.1}", degrees_of_load(*load))]),
     );
     super::layout::hint(ui, LOAD_SETS_STEP);
 }

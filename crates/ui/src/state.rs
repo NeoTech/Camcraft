@@ -2731,7 +2731,7 @@ impl State {
             if let Some(why) =
                 operation::area_pick_issue(&self.world, setup.as_deref(), &self.op_ui.area, &self.op_ui.params)
             {
-                self.refuse(ErrorScope::Operation, format!("not generated: {why}"));
+                self.refuse(ErrorScope::Operation, camcraft_i18n::tf("not generated: {why}", &[format!("{}", why)]));
                 return;
             }
         }
@@ -2755,14 +2755,14 @@ impl State {
         let Some(entity) = model::find_by_name(&self.world, name) else {
             self.refuse(
                 ErrorScope::Operation,
-                format!("no operation named '{name}'"),
+                camcraft_i18n::tf("no operation named '{name}'", &[format!("{}", name)]),
             );
             return;
         };
         let Some(op) = model::operation_of(&self.world, &entity) else {
             self.refuse(
                 ErrorScope::Operation,
-                format!("'{name}' is not an operation"),
+                camcraft_i18n::tf("'{name}' is not an operation", &[format!("{}", name)]),
             );
             return;
         };
@@ -2990,7 +2990,7 @@ impl State {
                                             unit.area_suffix()
                                         )
                                     }
-                                    None => format!("{pick_name} · open band"),
+                                    None => camcraft_i18n::tf("{pick_name} · open band", &[format!("{}", pick_name)]),
                                 };
                                 (label, false)
                             }
@@ -3086,7 +3086,7 @@ impl State {
 
     pub(crate) fn close_operation_editor(&mut self, name: &str) {
         self.close_property_editor();
-        self.status = format!("closed operation {name}");
+        self.status = camcraft_i18n::tf("closed operation {name}", &[format!("{}", name)]);
     }
 
     /// Close the tool shape editor window and drop its shape drafts
@@ -3101,11 +3101,11 @@ impl State {
 
     pub(crate) fn copy_operation(&mut self, name: &str) {
         let Some(entity) = model::find_by_name(&self.world, name) else {
-            self.status = format!("copy failed: operation '{name}' was not found");
+            self.status = camcraft_i18n::tf("copy failed: operation '{name}' was not found", &[format!("{}", name)]);
             return;
         };
         let Some(operation) = model::operation_of(&self.world, &entity) else {
-            self.status = format!("copy failed: '{name}' is not an operation");
+            self.status = camcraft_i18n::tf("copy failed: '{name}' is not an operation", &[format!("{}", name)]);
             return;
         };
         let label = model::operation_label(&self.world, name, &entity);
@@ -3113,7 +3113,7 @@ impl State {
             label: label.clone(), operation,
             needs_review: model::operation_meta_of(&self.world, &entity).needs_review,
         });
-        self.status = format!("copied operation {label}");
+        self.status = camcraft_i18n::tf("copied operation {label}", &[format!("{}", label)]);
     }
 
     pub(crate) fn paste_operation(&mut self) {
@@ -3465,7 +3465,7 @@ impl State {
                             self.history.execute(&self.world, command);
                             done += 1;
                         }
-                        Err(err) => self.status = format!("delete failed: {err}"),
+                        Err(err) => self.status = camcraft_i18n::tf("delete failed: {err}", &[format!("{}", err)]),
                     }
                 }
                 if done > 0 {
@@ -3489,7 +3489,7 @@ impl State {
                     self.doc_version += 1;
                     self.status = format!("deleted {name}");
                 }
-                Err(err) => self.refuse(ErrorScope::Setup, format!("delete failed: {err}")),
+                Err(err) => self.refuse(ErrorScope::Setup, camcraft_i18n::tf("delete failed: {err}", &[format!("{}", err)])),
             },
             CommandKind::SetStock {
                 shape,
@@ -3503,13 +3503,13 @@ impl State {
                         let ops = command.seeded();
                         self.history.execute(&self.world, command);
                         self.doc_version += 1;
-                        let mut status = format!("stock material: {}", m.map_or("as the document", |m| m.label()));
+                        let mut status = camcraft_i18n::tf("stock material: {}", &[format!("{}", m.map_or("as the document", |m| m.label()))]);
                         if ops > 0 {
-                            status.push_str(&format!(" - cutting data seeded on {ops} operation(s)"));
+                            status.push_str(&camcraft_i18n::tf(" - cutting data seeded on {ops} operation(s)", &[format!("{}", ops)]));
                         }
                         self.status = status;
                     }
-                    Err(err) => self.refuse(ErrorScope::Setup, format!("stock material not set: {err}")),
+                    Err(err) => self.refuse(ErrorScope::Setup, camcraft_i18n::tf("stock material not set: {err}", &[format!("{}", err)])),
                 }
             }
             CommandKind::SetRawStockOnly(on) => {
@@ -3523,7 +3523,7 @@ impl State {
                             "the stock's source model is judged as the part"
                         });
                     }
-                    Err(err) => self.refuse(ErrorScope::Setup, format!("not changed: {err}")),
+                    Err(err) => self.refuse(ErrorScope::Setup, camcraft_i18n::tf("not changed: {err}", &[format!("{}", err)])),
                 }
             }
             CommandKind::SetUnits(next) => match SetUnits::new(&self.world, next) {
@@ -3532,7 +3532,7 @@ impl State {
                     self.doc_version += 1;
                     self.status = format!("units: {}", next.label());
                 }
-                Err(err) => self.refuse(ErrorScope::Setup, format!("units not set: {err}")),
+                Err(err) => self.refuse(ErrorScope::Setup, camcraft_i18n::tf("units not set: {err}", &[format!("{}", err)])),
             },
             CommandKind::LoadMachineDialog => {
                 let dir = crate::egui_app::machines_pane::user_dir(self);
@@ -3644,7 +3644,7 @@ impl State {
                         None => format!("tool {name} added (T{number})"),
                     };
                 }
-                Err(err) => self.refuse(ErrorScope::Tool, format!("tool not added: {err}")),
+                Err(err) => self.refuse(ErrorScope::Tool, camcraft_i18n::tf("tool not added: {err}", &[format!("{}", err)])),
             },
             CommandKind::SetToolNumber { name, number } => {
                 match SetToolNumber::new(&self.world, &name, number) {
@@ -3654,7 +3654,7 @@ impl State {
                         self.doc_version += 1;
                         self.status = format!("tool {name} is now T{n}");
                     }
-                    Err(err) => self.refuse(ErrorScope::Tool, format!("tool number not set: {err}")),
+                    Err(err) => self.refuse(ErrorScope::Tool, camcraft_i18n::tf("tool number not set: {err}", &[format!("{}", err)])),
                 }
             }
             CommandKind::SetToolBody { name, body } => self.run_set_tool_body(&name, body),
@@ -3678,7 +3678,7 @@ impl State {
                         self.doc_version += 1;
                         self.status = format!("tool {name} updated");
                     }
-                    Err(err) => self.refuse(ErrorScope::Tool, format!("tool not updated: {err}")),
+                    Err(err) => self.refuse(ErrorScope::Tool, camcraft_i18n::tf("tool not updated: {err}", &[format!("{}", err)])),
                 }
             }
             CommandKind::SetWorkMaterial(m) => match SetWorkMaterial::new(&self.world, m) {
@@ -3686,37 +3686,32 @@ impl State {
                     let (tools, ops) = command.seeded();
                     self.history.execute(&self.world, command);
                     self.doc_version += 1;
-                    let mut status = format!("workpiece material: {}", m.map_or("not stated", |m| m.label()));
+                    let mut status = camcraft_i18n::tf("workpiece material: {}", &[format!("{}", m.map_or("not stated", |m| m.label()))]);
                     // #890: say what the tools' material rows moved.
                     if tools + ops > 0 {
-                        status.push_str(&format!(" - cutting data seeded on {tools} tool(s), {ops} operation(s)"));
+                        status.push_str(&camcraft_i18n::tf(" - cutting data seeded on {tools} tool(s), {ops} operation(s)", &[format!("{}", tools), format!("{}", ops)]));
                     }
                     self.status = status;
                 }
-                Err(err) => self.refuse(ErrorScope::Operation, format!("material not set: {err}")),
+                Err(err) => self.refuse(ErrorScope::Operation, camcraft_i18n::tf("material not set: {err}", &[format!("{}", err)])),
             },
             CommandKind::ApplyCuttingData(name) => match ApplyCuttingData::new(&self.world, &name) {
                 Ok(command) => {
                     let s = command.suggestion();
                     let u = self.units();
-                    self.status = format!(
-                        "{name}: suggestion applied - {:.0} rpm, {} {}",
-                        s.rpm,
-                        units::feed(s.feed, u),
-                        u.feed_suffix()
-                    );
+                    self.status = camcraft_i18n::tf("{name}: suggestion applied - {:.0} rpm, {} {}", &[format!("{}", name), format!("{:.0}", s.rpm), format!("{}", units::feed(s.feed, u)), format!("{}", u.feed_suffix())]);
                     self.history.execute(&self.world, command);
                     self.doc_version += 1;
                 }
-                Err(err) => self.refuse(ErrorScope::Operation, format!("suggestion not applied: {err}")),
+                Err(err) => self.refuse(ErrorScope::Operation, camcraft_i18n::tf("suggestion not applied: {err}", &[format!("{}", err)])),
             },
             CommandKind::DeleteTool(name) => match DeleteTool::new(&self.world, &name) {
                 Ok(command) => {
                     self.history.execute(&self.world, command);
                     self.doc_version += 1;
-                    self.status = format!("deleted tool {name}");
+                    self.status = camcraft_i18n::tf("deleted tool {name}", &[format!("{}", name)]);
                 }
-                Err(err) => self.refuse(ErrorScope::Tool, format!("tool not deleted: {err}")),
+                Err(err) => self.refuse(ErrorScope::Tool, camcraft_i18n::tf("tool not deleted: {err}", &[format!("{}", err)])),
             },
             CommandKind::CreateOperation {
                 name,
@@ -3732,7 +3727,7 @@ impl State {
                 Err(err) => {
                     self.refuse(
                         ErrorScope::Operation,
-                        format!("operation not created: {err}"),
+                        camcraft_i18n::tf("operation not created: {err}", &[format!("{}", err)]),
                     );
                 }
             },
@@ -3744,9 +3739,9 @@ impl State {
                         self.selection_version = self.selection_version.wrapping_add(1);
                         self.ui_target = UiTarget::Operation(name.clone());
                         self.doc_version += 1;
-                        self.status = format!("pasted operation {name}; generate its toolpath when ready");
+                        self.status = camcraft_i18n::tf("pasted operation {name}; generate its toolpath when ready", &[format!("{}", name)]);
                     }
-                    Err(err) => self.refuse(ErrorScope::Operation, format!("paste failed: {err}")),
+                    Err(err) => self.refuse(ErrorScope::Operation, camcraft_i18n::tf("paste failed: {err}", &[format!("{}", err)])),
                 }
             }
             CommandKind::EditOperationParams { name, params } => {
@@ -3754,12 +3749,12 @@ impl State {
                     Ok(command) => {
                         self.history.execute(&self.world, command);
                         self.doc_version += 1;
-                        self.status = format!("parameters updated for {name}");
+                        self.status = camcraft_i18n::tf("parameters updated for {name}", &[format!("{}", name)]);
                     }
                     Err(err) => {
                         self.refuse(
                             ErrorScope::Operation,
-                            format!("parameters not updated: {err}"),
+                            camcraft_i18n::tf("parameters not updated: {err}", &[format!("{}", err)]),
                         );
                     }
                 }
@@ -3770,13 +3765,13 @@ impl State {
                         self.history.execute(&self.world, command);
                         self.doc_version += 1;
                         self.status = if notes.is_empty() {
-                            format!("parameters updated for {name}")
+                            camcraft_i18n::tf("parameters updated for {name}", &[format!("{}", name)])
                         } else {
-                            format!("holes detected for {name}; {}", notes.join("; "))
+                            camcraft_i18n::tf("holes detected for {name}; {}", &[format!("{}", name), format!("{}", notes.join("; "))])
                         };
                     }
                     Err(err) => {
-                        self.refuse(ErrorScope::Operation, format!("parameters not updated: {err}"));
+                        self.refuse(ErrorScope::Operation, camcraft_i18n::tf("parameters not updated: {err}", &[format!("{}", err)]));
                     }
                 }
             }
@@ -3785,10 +3780,10 @@ impl State {
                     Ok(command) => {
                         self.history.execute(&self.world, command);
                         self.doc_version += 1;
-                        self.status = format!("parameters and boundary updated for {name}");
+                        self.status = camcraft_i18n::tf("parameters and boundary updated for {name}", &[format!("{}", name)]);
                     }
                     Err(err) => {
-                        self.refuse(ErrorScope::Operation, format!("parameters not updated: {err}"));
+                        self.refuse(ErrorScope::Operation, camcraft_i18n::tf("parameters not updated: {err}", &[format!("{}", err)]));
                     }
                 }
             }
@@ -3797,9 +3792,9 @@ impl State {
                     Ok(command) => {
                         self.history.execute(&self.world, command);
                         self.doc_version += 1;
-                        self.status = format!("coolant set to {} for {name}", coolant.label());
+                        self.status = camcraft_i18n::tf("coolant set to {} for {name}", &[format!("{}", coolant.label()), format!("{}", name)]);
                     }
-                    Err(err) => self.refuse(ErrorScope::Operation, format!("coolant not changed: {err}")),
+                    Err(err) => self.refuse(ErrorScope::Operation, camcraft_i18n::tf("coolant not changed: {err}", &[format!("{}", err)])),
                 }
             }
             CommandKind::EditOperationAfter { name, after } => {
@@ -3809,7 +3804,7 @@ impl State {
                         self.doc_version += 1;
                         self.status = format!("after {name}: {}", after.label());
                     }
-                    Err(err) => self.refuse(ErrorScope::Operation, format!("after-action not changed: {err}")),
+                    Err(err) => self.refuse(ErrorScope::Operation, camcraft_i18n::tf("after-action not changed: {err}", &[format!("{}", err)])),
                 }
             }
             CommandKind::SuppressOperation { name, suppressed } => {
@@ -3818,12 +3813,12 @@ impl State {
                         self.history.execute(&self.world, command);
                         self.doc_version += 1;
                         self.status = if suppressed {
-                            format!("{name} suppressed: left out of the posted program")
+                            camcraft_i18n::tf("{name} suppressed: left out of the posted program", &[format!("{}", name)])
                         } else {
-                            format!("{name} back in the posted program")
+                            camcraft_i18n::tf("{name} back in the posted program", &[format!("{}", name)])
                         };
                     }
-                    Err(err) => self.refuse(ErrorScope::Operation, format!("suppression not changed: {err}")),
+                    Err(err) => self.refuse(ErrorScope::Operation, camcraft_i18n::tf("suppression not changed: {err}", &[format!("{}", err)])),
                 }
             }
             CommandKind::SetPerOpOutput(per_op) => self.set_per_op_output(per_op),
@@ -3845,7 +3840,7 @@ impl State {
                     Err(err) => {
                         self.refuse(
                             ErrorScope::Operation,
-                            format!("operation kind not changed: {err}"),
+                            camcraft_i18n::tf("operation kind not changed: {err}", &[format!("{}", err)]),
                         );
                     }
                 }
@@ -3856,10 +3851,10 @@ impl State {
                     Ok(command) => {
                         self.history.execute(&self.world, command);
                         self.doc_version += 1;
-                        self.status = format!("links updated for {name}");
+                        self.status = camcraft_i18n::tf("links updated for {name}", &[format!("{}", name)]);
                     }
                     Err(err) => {
-                        self.refuse(ErrorScope::Operation, format!("links not updated: {err}"));
+                        self.refuse(ErrorScope::Operation, camcraft_i18n::tf("links not updated: {err}", &[format!("{}", err)]));
                     }
                 }
             }
@@ -3868,12 +3863,12 @@ impl State {
                     Ok(command) => {
                         self.history.execute(&self.world, command);
                         self.doc_version += 1;
-                        self.status = format!("geometry selection updated for {name}");
+                        self.status = camcraft_i18n::tf("geometry selection updated for {name}", &[format!("{}", name)]);
                     }
                     Err(err) => {
                         self.refuse(
                             ErrorScope::Operation,
-                            format!("geometry selection not updated: {err}"),
+                            camcraft_i18n::tf("geometry selection not updated: {err}", &[format!("{}", err)]),
                         );
                     }
                 }
@@ -3882,12 +3877,12 @@ impl State {
                 Ok(command) => {
                     self.history.execute(&self.world, command);
                     self.doc_version += 1;
-                    self.status = format!("deleted operation {name}");
+                    self.status = camcraft_i18n::tf("deleted operation {name}", &[format!("{}", name)]);
                 }
                 Err(err) => {
                     self.refuse(
                         ErrorScope::Operation,
-                        format!("operation not deleted: {err}"),
+                        camcraft_i18n::tf("operation not deleted: {err}", &[format!("{}", err)]),
                     );
                 }
             },
@@ -3895,9 +3890,9 @@ impl State {
                 Ok(command) => {
                     self.history.execute(&self.world, command);
                     self.doc_version += 1;
-                    self.status = format!("operation renamed to {label}");
+                    self.status = camcraft_i18n::tf("operation renamed to {label}", &[format!("{}", label)]);
                 }
-                Err(err) => self.refuse(ErrorScope::Operation, format!("rename failed: {err}")),
+                Err(err) => self.refuse(ErrorScope::Operation, camcraft_i18n::tf("rename failed: {err}", &[format!("{}", err)])),
             },
             CommandKind::ReorderOperation { name, target, after } => match ReorderOperation::new(&self.world, &name, &target, after) {
                 Ok(command) => {
@@ -3905,7 +3900,7 @@ impl State {
                     self.doc_version += 1;
                     self.status = format!("operation {name} moved");
                 }
-                Err(err) => self.refuse(ErrorScope::Operation, format!("reorder failed: {err}")),
+                Err(err) => self.refuse(ErrorScope::Operation, camcraft_i18n::tf("reorder failed: {err}", &[format!("{}", err)])),
             },
             CommandKind::MarkOperationReviewed(name) => match MarkOperationReviewed::new(&self.world, &name) {
                 Ok(command) => {
@@ -3913,7 +3908,7 @@ impl State {
                     self.doc_version += 1;
                     self.status = format!("marked {name} reviewed");
                 }
-                Err(err) => self.refuse(ErrorScope::Operation, format!("mark reviewed failed: {err}")),
+                Err(err) => self.refuse(ErrorScope::Operation, camcraft_i18n::tf("mark reviewed failed: {err}", &[format!("{}", err)])),
             },
             CommandKind::GenerateOperation(name) => {
                 // Generation happens in the constructor (a refusal writes
@@ -3926,10 +3921,10 @@ impl State {
                 Ok(command) => {
                     self.history.execute(&self.world, command);
                     self.doc_version += 1;
-                    self.status = format!("cleared the toolpath of {name} - {} restores it", chord("Z"));
+                    self.status = camcraft_i18n::tf("cleared the toolpath of {name} - {} restores it", &[format!("{}", name), format!("{}", chord("Z"))]);
                 }
                 Err(err) => {
-                    self.refuse(ErrorScope::Operation, format!("toolpath not cleared: {err}"))
+                    self.refuse(ErrorScope::Operation, camcraft_i18n::tf("toolpath not cleared: {err}", &[format!("{}", err)]))
                 }
             },
             CommandKind::RegenerateAll => {
@@ -3946,7 +3941,7 @@ impl State {
                     match command.skipped().first() {
                         Some((name, err)) => self.refuse(
                             ErrorScope::Operation,
-                            format!("nothing regenerated - {name}: {err}"),
+                            camcraft_i18n::tf("nothing regenerated - {name}: {err}", &[format!("{}", name), format!("{}", err)]),
                         ),
                         None => self.status = "nothing is stale".to_owned(),
                     }
@@ -3971,10 +3966,10 @@ impl State {
                         let made = command.name().to_owned();
                         self.history.execute(&self.world, command);
                         self.doc_version += 1;
-                        self.status = format!("setup {made} created and active");
+                        self.status = camcraft_i18n::tf("setup {made} created and active", &[format!("{}", made)]);
                     }
                     Err(err) => {
-                        self.refuse(ErrorScope::Setup, format!("setup not created: {err}"));
+                        self.refuse(ErrorScope::Setup, camcraft_i18n::tf("setup not created: {err}", &[format!("{}", err)]));
                     }
                 }
             }
@@ -3982,10 +3977,10 @@ impl State {
                 Ok(command) => {
                     self.history.execute(&self.world, command);
                     self.doc_version += 1;
-                    self.status = format!("deleted setup {name}");
+                    self.status = camcraft_i18n::tf("deleted setup {name}", &[format!("{}", name)]);
                 }
                 Err(err) => {
-                    self.refuse(ErrorScope::Setup, format!("setup not deleted: {err}"));
+                    self.refuse(ErrorScope::Setup, camcraft_i18n::tf("setup not deleted: {err}", &[format!("{}", err)]));
                 }
             },
             CommandKind::ActivateSetup(name) => {
@@ -3999,7 +3994,7 @@ impl State {
                         };
                     }
                     Err(err) => {
-                        self.refuse(ErrorScope::Setup, format!("setup not activated: {err}"));
+                        self.refuse(ErrorScope::Setup, camcraft_i18n::tf("setup not activated: {err}", &[format!("{}", err)]));
                     }
                 }
             }
@@ -4009,10 +4004,10 @@ impl State {
                         self.history.execute(&self.world, command);
                         self.doc_version += 1;
                         let word = camcraft_app::setup::wcs_name(&self.world, Some(&setup));
-                        self.status = format!("{setup} WCS posts as {word}");
+                        self.status = camcraft_i18n::tf("{setup} WCS posts as {word}", &[format!("{}", setup), format!("{}", word)]);
                     }
                     Err(err) => {
-                        self.refuse(ErrorScope::Setup, format!("work offset not changed: {err}"));
+                        self.refuse(ErrorScope::Setup, camcraft_i18n::tf("work offset not changed: {err}", &[format!("{}", err)]));
                     }
                 }
             }
@@ -4033,11 +4028,11 @@ impl State {
                         self.doc_version += 1;
                         self.status = match camcraft_app::setup_relative::describe(&self.world, &setup) {
                             Some(words) => format!("{setup}: {words}"),
-                            None => format!("{setup} is no longer placed relative to another setup"),
+                            None => camcraft_i18n::tf("{setup} is no longer placed relative to another setup", &[format!("{}", setup)]),
                         };
                     }
                     Err(err) => {
-                        self.refuse(ErrorScope::Setup, format!("setup not re-placed: {err}"));
+                        self.refuse(ErrorScope::Setup, camcraft_i18n::tf("setup not re-placed: {err}", &[format!("{}", err)]));
                     }
                 }
             }
@@ -4050,7 +4045,7 @@ impl State {
                         self.status = format!("{setup} stock: {words}");
                     }
                     Err(err) => {
-                        self.refuse(ErrorScope::Setup, format!("stock source not changed: {err}"));
+                        self.refuse(ErrorScope::Setup, camcraft_i18n::tf("stock source not changed: {err}", &[format!("{}", err)]));
                     }
                 }
             }
@@ -4061,19 +4056,14 @@ impl State {
                             let label = camcraft_app::setup::wcs_label(&self.world, Some(&setup));
                             self.history.execute(&self.world, command);
                             self.doc_version += 1;
-                            self.status = format!(
-                                "{setup} {label} origin placed: {:.3} {:.3} {:.3} (rotation kept)",
-                                location.pos.x,
-                                location.pos.y,
-                                location.pos.z
-                            );
+                            self.status = camcraft_i18n::tf("{setup} {label} origin placed: {:.3} {:.3} {:.3} (rotation kept)", &[format!("{}", setup), format!("{}", label), format!("{:.3}", location.pos.x), format!("{:.3}", location.pos.y), format!("{:.3}", location.pos.z)]);
                         }
                         Err(err) => {
-                            self.refuse(ErrorScope::Setup, format!("origin not placed: {err}"));
+                            self.refuse(ErrorScope::Setup, camcraft_i18n::tf("origin not placed: {err}", &[format!("{}", err)]));
                         }
                     },
                     Err(err) => {
-                        self.refuse(ErrorScope::Setup, format!("origin not placed: {err}"));
+                        self.refuse(ErrorScope::Setup, camcraft_i18n::tf("origin not placed: {err}", &[format!("{}", err)]));
                     }
                 }
             }
@@ -4091,7 +4081,7 @@ impl State {
                         );
                     }
                     Err(err) => {
-                        self.refuse(ErrorScope::Operation, format!("setup not moved: {err}"));
+                        self.refuse(ErrorScope::Operation, camcraft_i18n::tf("setup not moved: {err}", &[format!("{}", err)]));
                     }
                 }
             }
@@ -4106,7 +4096,7 @@ impl State {
                         };
                     }
                     Err(err) => {
-                        self.refuse(ErrorScope::Setup, format!("fixture not marked: {err}"));
+                        self.refuse(ErrorScope::Setup, camcraft_i18n::tf("fixture not marked: {err}", &[format!("{}", err)]));
                     }
                 }
             }
@@ -4114,19 +4104,19 @@ impl State {
                 Ok(command) => {
                     self.history.execute(&self.world, command);
                     self.doc_version += 1;
-                    self.status = format!("unmarked {name} - the solid is a plain model again");
+                    self.status = camcraft_i18n::tf("unmarked {name} - the solid is a plain model again", &[format!("{}", name)]);
                 }
                 Err(err) => {
-                    self.refuse(ErrorScope::Setup, format!("fixture not unmarked: {err}"));
+                    self.refuse(ErrorScope::Setup, camcraft_i18n::tf("fixture not unmarked: {err}", &[format!("{}", err)]));
                 }
             },
             CommandKind::UnlinkModel(name) => match camcraft_app::commands::SetModelSource::unlink(&self.world, &name) {
                 Ok(command) => {
                     self.history.execute(&self.world, command);
                     self.doc_version += 1;
-                    self.status = format!("unlinked {name} - its file is no longer checked");
+                    self.status = camcraft_i18n::tf("unlinked {name} - its file is no longer checked", &[format!("{}", name)]);
                 }
-                Err(err) => self.refuse_drop(format!("not unlinked: {err}")),
+                Err(err) => self.refuse_drop(camcraft_i18n::tf("not unlinked: {err}", &[format!("{}", err)])),
             },
             CommandKind::SetFixtureFixed { name, fixed } => {
                 match SetFixtureFixed::new(&self.world, &name, fixed) {
@@ -4134,13 +4124,13 @@ impl State {
                         self.history.execute(&self.world, command);
                         self.doc_version += 1;
                         self.status = if fixed {
-                            format!("{name} is fixed - it does not turn with the part")
+                            camcraft_i18n::tf("{name} is fixed - it does not turn with the part", &[format!("{}", name)])
                         } else {
-                            format!("{name} turns with the part")
+                            camcraft_i18n::tf("{name} turns with the part", &[format!("{}", name)])
                         };
                     }
                     Err(err) => {
-                        self.refuse(ErrorScope::Setup, format!("fixture not changed: {err}"));
+                        self.refuse(ErrorScope::Setup, camcraft_i18n::tf("fixture not changed: {err}", &[format!("{}", err)]));
                     }
                 }
             }
@@ -4153,10 +4143,10 @@ impl State {
                 Ok(command) => {
                     self.history.execute(&self.world, command);
                     self.doc_version += 1;
-                    self.status = format!("deleted fixture {name}");
+                    self.status = camcraft_i18n::tf("deleted fixture {name}", &[format!("{}", name)]);
                 }
                 Err(err) => {
-                    self.refuse(ErrorScope::Setup, format!("fixture not deleted: {err}"));
+                    self.refuse(ErrorScope::Setup, camcraft_i18n::tf("fixture not deleted: {err}", &[format!("{}", err)]));
                 }
             },
             CommandKind::MoveModel {
@@ -4200,7 +4190,7 @@ impl State {
                         };
                         self.status = with_warning(format!("moved {name}"), warning);
                     }
-                    Err(err) => self.refuse(ErrorScope::Setup, format!("part not moved: {err}")),
+                    Err(err) => self.refuse(ErrorScope::Setup, camcraft_i18n::tf("part not moved: {err}", &[format!("{}", err)])),
                 }
             }
             CommandKind::MoveModelBy { name, delta } => self.move_model_by(&name, delta),
@@ -4214,7 +4204,7 @@ impl State {
                         self.repair_ui.last = Some((name.clone(), summary.clone()));
                         self.status = format!("repaired {name}: {summary}");
                     }
-                    Err(err) => self.refuse(ErrorScope::Setup, format!("{name} not repaired: {err}")),
+                    Err(err) => self.refuse(ErrorScope::Setup, camcraft_i18n::tf("{name} not repaired: {err}", &[format!("{}", name), format!("{}", err)])),
                 }
             }
             CommandKind::VouchModelFidelity { name, by } => self.vouch_model(&name, &by),
@@ -4369,7 +4359,7 @@ impl State {
         // it just happens to be off-thread now, so a heavy STEP tessellates
         // while the window keeps painting.
         if self.import_rx.is_some() {
-            self.status = format!("queued {} for import", file_label(&path));
+            self.status = camcraft_i18n::tf("queued {} for import", &[format!("{}", file_label(&path))]);
             self.import_queue.push_back(path);
             return;
         }
@@ -4384,7 +4374,7 @@ impl State {
         let worker_path = path.clone();
         let budget = self.step_budget_for(&path);
         if let (Some(b), false) = (budget, self.step_budget.explicit) {
-            self.status = format!("importing {} under its recorded STEP facet budget of {b}…", file_label(&path));
+            self.status = camcraft_i18n::tf("importing {} under its recorded STEP facet budget of {b}…", &[format!("{}", file_label(&path)), format!("{}", b)]);
         }
         let spawned = std::thread::Builder::new()
             .name("camcraft-import".to_string())
@@ -4456,11 +4446,11 @@ impl State {
                             self.doc_version += 1;
                             self.note_recent_model(file.as_deref());
                             self.status = match &binding {
-                                Some(s) => format!("{verb}; marked as {s}'s fixture{changed}"),
-                                None => format!("{verb}; marked as a fixture{changed}"),
+                                Some(s) => camcraft_i18n::tf("{verb}; marked as {s}'s fixture{changed}", &[format!("{}", verb), format!("{}", s), format!("{}", changed)]),
+                                None => camcraft_i18n::tf("{verb}; marked as a fixture{changed}", &[format!("{}", verb), format!("{}", changed)]),
                             };
                         }
-                        Err(err) => self.refuse(ErrorScope::Setup, format!("fixture not imported: {err}")),
+                        Err(err) => self.refuse(ErrorScope::Setup, camcraft_i18n::tf("fixture not imported: {err}", &[format!("{}", err)])),
                     }
                     return;
                 }
@@ -4474,7 +4464,7 @@ impl State {
                             self.note_recent_model(file.as_deref());
                             self.status = format!("{}{changed}", timed("updated", &format!(" ({summary})")));
                         }
-                        Err(err) => self.status = format!("import refused: {err}"),
+                        Err(err) => self.status = camcraft_i18n::tf("import refused: {err}", &[format!("{}", err)]),
                     }
                 } else {
                     // Fresh model: the spawn path, unchanged.
@@ -4495,7 +4485,7 @@ impl State {
             Err(err) => {
                 // A refused import-as-fixture must not tag the NEXT import.
                 self.import_as_fixture = None;
-                self.status = format!("import refused: {err}");
+                self.status = camcraft_i18n::tf("import refused: {err}", &[format!("{}", err)]);
             }
         }
     }
@@ -4609,7 +4599,7 @@ impl State {
                 }
             }
             Err(why) => {
-                self.status = format!("theme refused: {why} (keeping the current look)");
+                self.status = camcraft_i18n::tf("theme refused: {why} (keeping the current look)", &[format!("{}", why)]);
             }
         }
     }
@@ -4682,7 +4672,7 @@ impl State {
                     format!("opened {} - {}", path.display(), notes.join("; "))
                 };
             }
-            Err(err) => self.status = format!("open failed: {}: {err}", path.display()),
+            Err(err) => self.status = camcraft_i18n::tf("open failed: {}: {err}", &[format!("{}", path.display()), format!("{}", err)]),
         }
     }
 
@@ -4727,7 +4717,7 @@ impl State {
                 self.note_recent(camcraft_app::recent::RecentKind::Project, &path);
                 self.project_path = Some(path);
             }
-            Err(err) => self.status = format!("save failed: {err}"),
+            Err(err) => self.status = camcraft_i18n::tf("save failed: {err}", &[format!("{}", err)]),
         }
     }
 
@@ -4778,13 +4768,7 @@ impl State {
                 // A program went out: an earlier refusal no longer
                 // describes the document's post (#265).
                 self.post_refusal = None;
-                self.status = format!(
-                    "posted {} op(s), {} lines in {} to {}",
-                    posted.ops,
-                    posted.lines,
-                    posting::unit_word(self.units()),
-                    path.display()
-                );
+                self.status = camcraft_i18n::tf("posted {} op(s), {} lines in {} to {}", &[format!("{}", posted.ops), format!("{}", posted.lines), format!("{}", posting::unit_word(self.units())), format!("{}", path.display())]);
                 // A program the material sim refused to judge posts
                 // only on its generator-time verdicts - and says so on
                 // the status line, never silently.
@@ -4811,7 +4795,7 @@ impl State {
             // status line is overwritten by the next click or command.
             Err(err) => {
                 let reason = err.to_string();
-                self.status = format!("post refused: {reason}");
+                self.status = camcraft_i18n::tf("post refused: {reason}", &[format!("{}", reason)]);
                 self.post_refusal = Some(crate::egui_app::post_refusal::PostRefusal {
                     path,
                     reason,
@@ -4832,7 +4816,7 @@ impl State {
             _ => match camcraft_app::stock_view::field_view(&self.world) {
                 Ok(fv) => std::sync::Arc::new(fv),
                 Err(err) => {
-                    self.status = format!("stock export refused: {err}");
+                    self.status = camcraft_i18n::tf("stock export refused: {err}", &[format!("{}", err)]);
                     return;
                 }
             },
@@ -4840,13 +4824,13 @@ impl State {
         let mesh = match self.stock_mesh.get(&fv) {
             Ok(m) => m,
             Err(err) => {
-                self.status = format!("stock export refused: {err}");
+                self.status = camcraft_i18n::tf("stock export refused: {err}", &[format!("{}", err)]);
                 return;
             }
         };
         match std::fs::write(&path, camcraft_app::stock_export::stl_bytes(&mesh)) {
-            Ok(()) => self.status = format!("machined stock: {} facets written to {}", mesh.len(), path.display()),
-            Err(err) => self.status = format!("stock export write failed: {err}"),
+            Ok(()) => self.status = camcraft_i18n::tf("machined stock: {} facets written to {}", &[format!("{}", mesh.len()), format!("{}", path.display())]),
+            Err(err) => self.status = camcraft_i18n::tf("stock export write failed: {err}", &[format!("{}", err)]),
         }
     }
 
@@ -4867,13 +4851,9 @@ impl State {
         }
         match std::fs::write(&path, out) {
             Ok(()) => {
-                self.status = format!(
-                    "{} setup sheet(s) written to {}",
-                    sheets.len(),
-                    path.display()
-                )
+                self.status = camcraft_i18n::tf("{} setup sheet(s) written to {}", &[format!("{}", sheets.len()), format!("{}", path.display())])
             }
-            Err(err) => self.status = format!("sheet write failed: {err}"),
+            Err(err) => self.status = camcraft_i18n::tf("sheet write failed: {err}", &[format!("{}", err)]),
         }
     }
 }

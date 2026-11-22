@@ -41,7 +41,7 @@ pub(super) fn draw(ui: &mut Ui, u: Unit, m: &mut Machine) {
         conditions(ui, u, &mut edm);
         codes(ui, &mut m.edm_codes);
         for p in problems(&edm, &m.edm_codes) {
-            ui.colored_label(ui.visuals().error_fg_color, format!("Apply will refuse: {p}"));
+            ui.colored_label(ui.visuals().error_fg_color, camcraft_i18n::tf("Apply will refuse: {p}", &[format!("{}", p)]));
         }
     });
     if edm != before {
@@ -119,7 +119,7 @@ fn orbits(ui: &mut Ui, e: &mut Edm) {
             o.kind = ORBIT_KINDS.get(k).copied().unwrap_or("circular").to_owned();
             let l = ui.label(format!("Orbit {} word", i + 1));
             ui.add(TextEdit::singleline(&mut o.word).desired_width(80.0).hint_text("control word")).labelled_by(l.id);
-            if ui.button(format!("Remove orbit {}", i + 1)).clicked() {
+            if ui.button(camcraft_i18n::tf("Remove orbit {}", &[format!("{}", i + 1)])).clicked() {
                 remove = Some(i);
             }
         });
@@ -160,7 +160,7 @@ fn conditions(ui: &mut Ui, u: Unit, e: &mut Edm) {
             });
             fields::named(cb.response, &format!("Condition {n} role"));
             c.role = if r == 0 { String::new() } else { CONDITION_ROLES[r - 1].to_owned() };
-            if ui.button(format!("Remove condition {n}")).clicked() {
+            if ui.button(camcraft_i18n::tf("Remove condition {n}", &[format!("{}", n)])).clicked() {
                 remove = Some(i);
             }
         });
@@ -170,7 +170,7 @@ fn conditions(ui: &mut Ui, u: Unit, e: &mut Edm) {
             ui.add_space(24.0);
             // The axial wear rate (#1381): a ratio, so no unit lens. A value
             // outside [0, 1) is named below and refused at Apply.
-            stated_plain(ui, &format!("Condition {n} wear rate"), &mut c.wear, WEAR_SEED);
+            stated_plain(ui, &camcraft_i18n::tf("Condition {n} wear rate", &[format!("{}", n)]), &mut c.wear, WEAR_SEED);
             let l = ui.label(format!("Condition {n} notes"));
             ui.add(TextEdit::singleline(&mut c.notes).desired_width(120.0).hint_text("free text")).labelled_by(l.id);
         });
@@ -216,7 +216,7 @@ fn codes(ui: &mut Ui, codes: &mut BTreeMap<String, String>) {
     }
     let extra: Vec<&str> = codes.keys().map(String::as_str).filter(|k| !SINKER_CODES.iter().any(|(r, _)| r == k)).collect();
     if !extra.is_empty() {
-        ui.label(format!("also states (kept as written): {}", extra.join(", ")));
+        ui.label(camcraft_i18n::tf("also states (kept as written): {}", &[format!("{}", extra.join(", "))]));
     }
 }
 
@@ -233,32 +233,32 @@ pub(super) fn problems(e: &Edm, codes: &BTreeMap<String, String>) -> Vec<String>
     }
     for (i, o) in e.orbits.iter().enumerate() {
         if o.word.trim().is_empty() {
-            out.push(format!("orbit {} states no control word", i + 1));
+            out.push(camcraft_i18n::tf("orbit {} states no control word", &[format!("{}", i + 1)]));
         }
     }
     for (i, c) in e.conditions.iter().enumerate() {
         let n = i + 1;
         if c.id.trim().is_empty() {
-            out.push(format!("condition {n} states no id"));
+            out.push(camcraft_i18n::tf("condition {n} states no id", &[format!("{}", n)]));
         } else if let Some(r) = condition_refusal(c, &e.wire_diameters) {
             out.push(format!("condition {n} {r}"));
         }
         if c.wire_diameter.is_some() {
-            out.push(format!("condition {n} states a wire diameter - a wire field; this is a sinker machine"));
+            out.push(camcraft_i18n::tf("condition {n} states a wire diameter - a wire field; this is a sinker machine", &[format!("{}", n)]));
         }
         if !c.id.trim().is_empty()
             && let Some(d) = e.conditions.iter().skip(n).find(|d| condition_id_key(&d.id) == condition_id_key(&c.id))
         {
             if d.id == c.id {
-                out.push(format!("condition id {:?} is stated twice", c.id));
+                out.push(camcraft_i18n::tf("condition id {:?} is stated twice", &[format!("{:?}", c.id)]));
             } else {
-                out.push(format!("condition ids {:?} and {:?} are one selector (case and leading zeros are ignored)", c.id, d.id));
+                out.push(camcraft_i18n::tf("condition ids {:?} and {:?} are one selector (case and leading zeros are ignored)", &[format!("{:?}", c.id), format!("{:?}", d.id)]));
             }
         }
     }
     for (role, t) in codes {
         if t.trim().is_empty() {
-            out.push(format!("code {role:?} is blank - type the control's word or untick it"));
+            out.push(camcraft_i18n::tf("code {role:?} is blank - type the control's word or untick it", &[format!("{:?}", role)]));
         }
     }
     if let Some(p) = &e.pickup

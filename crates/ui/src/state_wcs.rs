@@ -27,7 +27,7 @@ impl State {
     fn wcs_placed_status(&mut self) {
         self.doc_version += 1;
         let active = camcraft_app::setup::active(&self.world);
-        self.status = format!("{} origin set", camcraft_app::setup::wcs_label(&self.world, active.as_deref()));
+        self.status = camcraft_i18n::tf("{} origin set", &[format!("{}", camcraft_app::setup::wcs_label(&self.world, active.as_deref()))]);
     }
 
     pub(super) fn dispatch_set_wcs(&mut self, pos: [f64; 3], rpy_deg: [f64; 3]) {
@@ -42,7 +42,7 @@ impl State {
                 self.wcs_pick = None; // #701: a landed frame ends the role draft
                 self.wcs_placed_status();
             }
-            Err(err) => self.refuse(ErrorScope::Setup, format!("WCS not set: {err}")),
+            Err(err) => self.refuse(ErrorScope::Setup, camcraft_i18n::tf("WCS not set: {err}", &[format!("{}", err)])),
         }
     }
 
@@ -60,13 +60,7 @@ impl State {
                 self.wcs_pick = None; // #701: a landed frame ends the role draft
                 self.wcs_placed_status();
                 let u = self.units();
-                self.status = format!(
-                    "{} on the centre of {} {} {}",
-                    self.status,
-                    if c.closed { "circle Ø" } else { "arc Ø" },
-                    units::len(c.diameter(), u, 2),
-                    u.suffix()
-                );
+                self.status = camcraft_i18n::tf("{} on the centre of {} {} {}", &[format!("{}", self.status), format!("{}", if c.closed { "circle Ø" } else { "arc Ø" }), format!("{}", units::len(c.diameter(), u, 2)), format!("{}", u.suffix())]);
             }
             Err(err) => {
                 let why = match err {
@@ -74,7 +68,7 @@ impl State {
                     other => other.to_string(),
                 };
                 self.wcs_ui.circle = Some(Err(why.clone()));
-                self.refuse(ErrorScope::Setup, format!("WCS not set: {why}"));
+                self.refuse(ErrorScope::Setup, camcraft_i18n::tf("WCS not set: {why}", &[format!("{}", why)]));
             }
         }
     }
@@ -98,14 +92,14 @@ impl State {
                     })
                     .flatten();
                 self.status = if axes.is_empty() {
-                    format!("{label}: no axis flipped")
+                    camcraft_i18n::tf("{label}: no axis flipped", &[format!("{}", label)])
                 } else if let Some(why) = refused {
-                    format!("{label}: {axes} flipped - the post refuses it: {why}")
+                    camcraft_i18n::tf("{label}: {axes} flipped - the post refuses it: {why}", &[format!("{}", label), format!("{}", axes), format!("{}", why)])
                 } else {
-                    format!("{label}: {axes} flipped - the posted program is mirrored")
+                    camcraft_i18n::tf("{label}: {axes} flipped - the posted program is mirrored", &[format!("{}", label), format!("{}", axes)])
                 };
             }
-            Err(err) => self.refuse(ErrorScope::Setup, format!("WCS flip not set: {err}")),
+            Err(err) => self.refuse(ErrorScope::Setup, camcraft_i18n::tf("WCS flip not set: {err}", &[format!("{}", err)])),
         }
     }
 }

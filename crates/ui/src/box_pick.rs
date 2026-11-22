@@ -98,7 +98,7 @@ pub(crate) fn finish(state: &mut State, b: [[f32; 2]; 2]) {
     let found = picks_in(state, b);
     if found.is_empty() {
         let seen = if state.pick_through { "" } else { "visible " };
-        state.status = format!("no {seen}{what} {how} the box");
+        state.status = camcraft_i18n::tf("no {seen}{what} {how} the box", &[format!("{}", seen), format!("{}", what), format!("{}", how)]);
         return;
     }
     let mut items: Vec<GeoSel> = model::find_by_name(&state.world, &name)
@@ -115,10 +115,10 @@ pub(crate) fn finish(state: &mut State, b: [[f32; 2]; 2]) {
     }
     let added = items.len() - before;
     if added == 0 {
-        state.status = format!("every {what} {how} the box is already selected in {name}");
+        state.status = camcraft_i18n::tf("every {what} {how} the box is already selected in {name}", &[format!("{}", what), format!("{}", how), format!("{}", name)]);
         return;
     }
-    state.status = format!("{added} {what}(s) {how} the box added to {name}");
+    state.status = camcraft_i18n::tf("{added} {what}(s) {how} the box added to {name}", &[format!("{}", added), format!("{}", what), format!("{}", how), format!("{}", name)]);
     state.pending.push_back(CommandKind::SetOperationGeometry { name, items });
 }
 

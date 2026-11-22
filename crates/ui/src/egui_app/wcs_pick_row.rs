@@ -60,7 +60,7 @@ pub(super) fn row(ui: &mut Ui, state: &mut State, setup: &str) {
     let check = align_roles(&state.world, picks);
     let active = setup::active(&state.world).as_deref() == Some(setup);
     let why = if !active {
-        format!("Make {setup} the active setup to set its WCS from features")
+        camcraft_i18n::tf("Make {setup} the active setup to set its WCS from features", &[format!("{}", setup)])
     } else {
         check.as_ref().err().cloned().unwrap_or_default()
     };

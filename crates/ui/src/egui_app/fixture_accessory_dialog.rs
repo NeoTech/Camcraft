@@ -52,7 +52,7 @@ pub(crate) const FIT_STOCK_INSIDE_HINT: &str =
 /// (parallels' "Height (set by the fit)", #812).
 #[must_use]
 pub(crate) fn fit_label(label: &str) -> String {
-    format!("{label} (set by the fit)")
+    camcraft_i18n::tf("{label} (set by the fit)", &[format!("{}", label)])
 }
 
 /// The figure fields of `a` (a step block's step count and a jaw

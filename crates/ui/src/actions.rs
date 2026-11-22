@@ -123,7 +123,7 @@ pub(crate) fn toggle_deviate(state: &mut State) {
         }
         Err(err) => {
             state.program_sim = None;
-            state.status = format!("deviate refused: {err}");
+            state.status = camcraft_i18n::tf("deviate refused: {err}", &[format!("{}", err)]);
         }
     }
 }
@@ -154,7 +154,7 @@ pub(crate) fn ensure_field_view(state: &mut State) {
         return;
     }
     if let Err(err) = follow_playhead(state, judged) {
-        state.say_once(&format!("simulation shows the uncut stock: {err}"));
+        state.say_once(&camcraft_i18n::tf("simulation shows the uncut stock: {err}", &[format!("{}", err)]));
         state.field_play = None;
         state.field_view = Some(Err(err));
     }
@@ -164,7 +164,7 @@ fn walk_whole_program(state: &mut State) {
     match camcraft_app::stock_view::field_view(&state.world) {
         Ok(fv) => {
             if let Some(note) = &fv.target_note {
-                state.status += &format!(" | traced stock unjudged: {note}");
+                state.status += &camcraft_i18n::tf(" | traced stock unjudged: {note}", &[format!("{}", note)]);
             }
             state.field_view = Some(Ok(std::sync::Arc::new(fv)));
             // The viewer's mesh rides the same view (M13.1 owed): one
@@ -172,7 +172,7 @@ fn walk_whole_program(state: &mut State) {
             crate::machined::prime(state);
         }
         Err(err) => {
-            state.say_once(&format!("simulation shows the uncut stock: {err}"));
+            state.say_once(&camcraft_i18n::tf("simulation shows the uncut stock: {err}", &[format!("{}", err)]));
             state.field_view = Some(Err(err));
         }
     }
@@ -201,7 +201,7 @@ fn follow_playhead(state: &mut State, judged: bool) -> Result<(), String> {
         Some(p) => play
             .index()
             .position_at(&p, sc.travelled(t))
-            .ok_or_else(|| format!("{} is on the timeline but not in the posting plan", p.op))?,
+            .ok_or_else(|| camcraft_i18n::tf("{} is on the timeline but not in the posting plan", &[format!("{}", p.op)]))?,
     };
     play.request_at(k, f);
     if let Some(frame) = play.take() {
@@ -238,11 +238,11 @@ pub fn machine_vote(world: &flecs_ecs::prelude::World) -> Option<String> {
     }
     // #669: what the machine's kind put outside the check is said, never
     // silently read as "within limits" (a plasma table's Z and rpm).
-    let skipped = if notes.is_empty() { String::new() } else { format!(" - not judged: {}", notes.join("; ")) };
+    let skipped = if notes.is_empty() { String::new() } else { camcraft_i18n::tf(" - not judged: {}", &[format!("{}", notes.join("; "))]) };
     Some(if problems == 0 {
-        format!("; machine: within limits{skipped}")
+        camcraft_i18n::tf("; machine: within limits{skipped}", &[format!("{}", skipped)])
     } else {
-        format!("; machine: {problems} limit problem(s){}{skipped}", if more > 0 { format!(" (+{more})") } else { String::new() })
+        camcraft_i18n::tf("; machine: {problems} limit problem(s){}{skipped}", &[format!("{}", problems), format!("{}", if more > 0 { format!(" (+{more})") } else { String::new() }), format!("{}", skipped)])
     })
 }
 

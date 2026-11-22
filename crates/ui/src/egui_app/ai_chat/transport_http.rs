@@ -37,10 +37,7 @@ fn endpoint_for(preset_id: &str) -> Option<&'static ProviderEndpoint> {
 fn to_wire(m: &TurnMessage) -> ChatMessage {
     let mut text = m.text.clone();
     if let Some(sel) = &m.selection {
-        text.push_str(&format!(
-            "\n\n[Selection] entities: {:?}; active setup: {:?}; operation: {:?}",
-            sel.selected_entities, sel.active_setup, sel.selected_operation
-        ));
+        text.push_str(&camcraft_i18n::tf("\n\n[Selection] entities: {:?}; active setup: {:?}; operation: {:?}", &[format!("{:?}", sel.selected_entities), format!("{:?}", sel.active_setup), format!("{:?}", sel.selected_operation)]));
     }
     let image = m.screenshot.as_ref().map(|s| Image {
         mime_type: s.mime_type.clone(),
@@ -69,18 +66,14 @@ impl ChatTransport for HttpTransport {
             &req.preset.label,
         )?;
         let def = endpoint_for(&req.preset.id)
-            .ok_or_else(|| format!("no endpoint is known for '{}'", req.preset.label))?;
+            .ok_or_else(|| camcraft_i18n::tf("no endpoint is known for '{}'", &[format!("{}", req.preset.label)]))?;
         let ep = Endpoint::parse(def.base_url)?;
         let key = match def.key {
             None => None,
             Some(name) => {
                 let found = secret::lookup(name, |v| std::env::var(v).ok(), keychain::load)?;
                 let (key, _) = found.ok_or_else(|| {
-                    format!(
-                        "no {} API key: set {} or store one in the OS keychain",
-                        name.label(),
-                        name.env_var()
-                    )
+                    camcraft_i18n::tf("no {} API key: set {} or store one in the OS keychain", &[format!("{}", name.label()), format!("{}", name.env_var())])
                 })?;
                 Some(key)
             }
@@ -103,11 +96,8 @@ impl HttpTransport {
         {
             let caps = probe_ollama_cancellable(&client, ep, &req.model, cancel)?;
             if !caps.tools {
-                return Err(format!(
-                    "model '{}' cannot call tools (Ollama lists no 'tools' capability) - \
-                     choose 'Local Prompt-JSON' or 'Local Q&A (Read-Only)' for it",
-                    req.model
-                ));
+                return Err(camcraft_i18n::tf("model '{}' cannot call tools (Ollama lists no 'tools' capability) - \
+                     choose 'Local Prompt-JSON' or 'Local Q&A (Read-Only)' for it", &[format!("{}", req.model)]));
             }
         }
         let (tools, system) = split_payload(&req.tools_payload);

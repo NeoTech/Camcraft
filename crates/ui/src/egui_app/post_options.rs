@@ -68,7 +68,7 @@ pub(super) fn threading_picker(ui: &mut Ui, state: &mut State) {
                 }
             })
             .response
-            .on_hover_text(format!("How a thread posts: one G76 multi-pass cycle the control runs, or every pass as {pass} moves"));
+            .on_hover_text(camcraft_i18n::tf("How a thread posts: one G76 multi-pass cycle the control runs, or every pass as {pass} moves", &[format!("{}", pass)]));
     });
     if let Some(t) = pick {
         state.pending.push_back(CommandKind::SetPostOptions(PostOptions { threading: t, ..now }));
@@ -109,7 +109,7 @@ pub(super) fn end_units_picker(ui: &mut Ui, state: &mut State) {
             EndUnits::Leave => None,
         } {
             ui.horizontal(|ui| {
-                ui.label(format!("End in: {asked} (not supported by this post)"));
+                ui.label(camcraft_i18n::tf("End in: {asked} (not supported by this post)", &[format!("{}", asked)]));
                 if ui.button(camcraft_i18n::tr("Reset to Program's unit")).clicked() {
                     state.pending.push_back(CommandKind::SetPostOptions(PostOptions {
                         end_units: EndUnits::Leave,

@@ -26,7 +26,7 @@ pub(crate) fn window(ctx: &egui::Context, state: &mut State) {
     let response = Modal::new(Id::new("unsaved-prompt")).show(ctx, |ui| {
         ui.set_max_width(360.0);
         ui.heading(camcraft_i18n::tr("Unsaved changes"));
-        ui.label(format!("Save the changes to {name} before {verb}?"));
+        ui.label(camcraft_i18n::tf("Save the changes to {name} before {verb}?", &[format!("{}", name), format!("{}", verb)]));
         ui.add_space(8.0);
         ui.horizontal(|ui| {
             if ui.button(camcraft_i18n::tr("Save")).clicked() {

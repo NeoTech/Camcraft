@@ -28,9 +28,7 @@ pub(super) fn take(state: &mut State, file: &std::sync::Arc<dyn egui::DroppedFil
     let name = label(&path);
     let active = setup::active(&state.world);
     if sketch::face_frame(&state.world, active.as_deref()).is_none() {
-        state.refuse_drop(format!(
-            "drop refused: {name} is a DXF profile - make a stock first (Setup > Stock), then drop it to place it on the stock top"
-        ));
+        state.refuse_drop(camcraft_i18n::tf("drop refused: {name} is a DXF profile - make a stock first (Setup > Stock), then drop it to place it on the stock top", &[format!("{}", name)]));
         return;
     }
     #[cfg(not(target_arch = "wasm32"))]
@@ -41,13 +39,11 @@ pub(super) fn take(state: &mut State, file: &std::sync::Arc<dyn egui::DroppedFil
         }
         match file.bytes() {
             Ok(data) => state.import_dxf(DxfSource::Bytes { name, data: data.into() }, None),
-            Err(why) => state.refuse_drop(format!("drop refused: {name} is not a readable file ({why})")),
+            Err(why) => state.refuse_drop(camcraft_i18n::tf("drop refused: {name} is not a readable file ({why})", &[format!("{}", name), format!("{}", why)])),
         }
     }
     #[cfg(target_arch = "wasm32")]
-    state.refuse_drop(format!(
-        "drop refused: {name} - placing a dropped DXF profile is not supported in the browser yet; use Setup > Stock > Add DXF profile in the desktop app"
-    ));
+    state.refuse_drop(camcraft_i18n::tf("drop refused: {name} - placing a dropped DXF profile is not supported in the browser yet; use Setup > Stock > Add DXF profile in the desktop app", &[format!("{}", name)]));
 }
 
 #[cfg(test)]

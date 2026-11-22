@@ -75,7 +75,7 @@ pub async fn device_async() -> Result<HeadlessGpu, String> {
             Err(err) => why.push(err),
         }
     }
-    Err(format!("no graphics adapter: {}", why.join("; ")))
+    Err(camcraft_i18n::tf("no graphics adapter: {}", &[format!("{}", why.join("; "))]))
 }
 
 /// For GPU tests: the device, or `Ok(None)` after printing a loud SKIP

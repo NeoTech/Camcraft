@@ -140,7 +140,7 @@ impl State {
         match std::fs::read(&path) {
             Ok(bytes) => self.load_profile_dxf_bytes(&label, &bytes),
             Err(err) => {
-                let msg = format!("DXF read failed for '{}': {err}", path.display());
+                let msg = camcraft_i18n::tf("DXF read failed for '{}': {err}", &[format!("{}", path.display()), format!("{}", err)]);
                 if let Some(FixtureLibDialog::Profile(d)) = self.fixture_lib.as_mut() {
                     d.error = Some(msg.clone());
                 }
@@ -179,10 +179,10 @@ impl State {
                 }
                 d.source_label = Some(file_label.to_owned());
                 d.error = None;
-                self.status = format!("loaded {kind} DXF profile from {file_label}");
+                self.status = camcraft_i18n::tf("loaded {kind} DXF profile from {file_label}", &[format!("{}", kind), format!("{}", file_label)]);
             }
             Err(err) => {
-                let msg = format!("DXF profile not loaded: {err}");
+                let msg = camcraft_i18n::tf("DXF profile not loaded: {err}", &[format!("{}", err)]);
                 d.error = Some(msg.clone());
                 self.refuse(ErrorScope::Setup, msg);
             }
@@ -237,11 +237,11 @@ impl State {
                 let landed = cmd.name().to_owned();
                 self.history.execute(&self.world, cmd);
                 self.doc_version += 1;
-                self.status = format!("placed profile fixture {landed}");
+                self.status = camcraft_i18n::tf("placed profile fixture {landed}", &[format!("{}", landed)]);
                 self.fixture_lib = None;
             }
             Err(err) => {
-                let msg = format!("profile fixture not placed: {err}");
+                let msg = camcraft_i18n::tf("profile fixture not placed: {err}", &[format!("{}", err)]);
                 if let Some(FixtureLibDialog::Profile(d)) = self.fixture_lib.as_mut() {
                     d.error = Some(msg.clone());
                 }
@@ -259,7 +259,7 @@ impl State {
                 if let Some(d) = self.profile_edits.get_mut(name) {
                     d.error = None;
                 }
-                self.status = format!("{name}: fixture profile updated");
+                self.status = camcraft_i18n::tf("{name}: fixture profile updated", &[format!("{}", name)]);
             }
             Err(err) => {
                 let msg = format!("{name}: {err}");
@@ -288,7 +288,7 @@ impl State {
                     None => "spun".to_owned(),
                     Some(ax) => format!("extruded ({})", ax.label()),
                 };
-                self.status = format!("{name}: derived {kind} reference profile");
+                self.status = camcraft_i18n::tf("{name}: derived {kind} reference profile", &[format!("{}", name), format!("{}", kind)]);
             }
             Err(err) => {
                 let msg = format!("{name}: {err}");
@@ -334,21 +334,21 @@ impl State {
 
     fn fixture_dxf_text(&self, name: &str) -> Result<String, String> {
         let entity = model::find_by_name(&self.world, name)
-            .ok_or_else(|| format!("fixture '{name}' not found"))?;
+            .ok_or_else(|| camcraft_i18n::tf("fixture '{name}' not found", &[format!("{}", name)]))?;
         let def = fixture::def_of(&self.world, &entity)
             .ok_or_else(|| format!("'{name}' is not a fixture"))?;
         let profile = def
             .profile
-            .ok_or_else(|| format!("'{name}' has no profile to export as DXF"))?;
+            .ok_or_else(|| camcraft_i18n::tf("'{name}' has no profile to export as DXF", &[format!("{}", name)]))?;
         profile.to_dxf()
     }
 
     fn write_fixture_dxf(&mut self, name: &str, path: &std::path::Path, dxf: &str) {
         match std::fs::write(path, dxf) {
-            Ok(()) => self.status = format!("exported {name} profile DXF to {}", path.display()),
+            Ok(()) => self.status = camcraft_i18n::tf("exported {name} profile DXF to {}", &[format!("{}", name), format!("{}", path.display())]),
             Err(err) => self.refuse(
                 ErrorScope::Setup,
-                format!("DXF export failed for '{}': {err}", path.display()),
+                camcraft_i18n::tf("DXF export failed for '{}': {err}", &[format!("{}", path.display()), format!("{}", err)]),
             ),
         }
     }

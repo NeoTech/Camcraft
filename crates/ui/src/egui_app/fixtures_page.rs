@@ -65,12 +65,7 @@ fn holding(
         ui.separator();
     }
     if let Some(t) = table {
-        ui.label(format!(
-            "Machine/Table  span {} x {}  top Z {}  (from the machine file)",
-            units::len(t.max.x - t.min.x, u, 1),
-            units::len(t.max.y - t.min.y, u, 1),
-            units::len(t.max.z, u, 2),
-        ));
+        ui.label(camcraft_i18n::tf("Machine/Table  span {} x {}  top Z {}  (from the machine file)", &[format!("{}", units::len(t.max.x - t.min.x, u, 1)), format!("{}", units::len(t.max.y - t.min.y, u, 1)), format!("{}", units::len(t.max.z, u, 2))]));
     }
 }
 

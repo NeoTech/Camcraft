@@ -189,11 +189,11 @@ fn scan(args: &[String]) -> Result<Scan, String> {
             _ => (arg.as_str(), None),
         };
         let Some(opt) = find(name) else {
-            return Err(format!("unknown option '{name}'. Run camcraft-ui --help to see the options."));
+            return Err(camcraft_i18n::tf("unknown option '{name}'. Run camcraft-ui --help to see the options.", &[format!("{}", name)]));
         };
         match (opt.value, inline) {
             (None, Some(_)) => {
-                return Err(format!("option '{}' takes no value. Run camcraft-ui --help to see the options.", opt.flag));
+                return Err(camcraft_i18n::tf("option '{}' takes no value. Run camcraft-ui --help to see the options.", &[format!("{}", opt.flag)]));
             }
             // The value follows. Its owner checks it; a value that looks
             // like an option is left to be read as one.
@@ -230,14 +230,14 @@ pub fn help_text() -> String {
         }
         out.push_str(&format!("  {head}\n      {}\n", o.help));
         if let Some(e) = o.env {
-            out.push_str(&format!("      Environment variable: {e}. The option wins over the variable.\n"));
+            out.push_str(&camcraft_i18n::tf("      Environment variable: {e}. The option wins over the variable.\n", &[format!("{}", e)]));
         }
         out.push_str(&format!("      Default: {}\n", o.default));
     }
     out.push_str("\nEnvironment variables:\n");
     for o in OPTIONS {
         if let (Some(e), Some(v)) = (o.env, o.value) {
-            out.push_str(&format!("  {e} {v}\n      Same as {}.\n", o.flag));
+            out.push_str(&camcraft_i18n::tf("  {e} {v}\n      Same as {}.\n", &[format!("{}", e), format!("{}", v), format!("{}", o.flag)]));
         }
     }
     for e in ENV_VARS {

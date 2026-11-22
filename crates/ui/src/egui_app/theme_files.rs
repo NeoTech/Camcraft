@@ -69,11 +69,11 @@ pub fn load(path: &Path) -> Result<Theme, String> {
     let file = std::fs::File::open(path).map_err(|e| format!("{origin}: {e}"))?;
     let mut limited = std::io::Read::take(file, MAX_BYTES + 1);
     std::io::Read::read_to_end(&mut limited, &mut buf)
-        .map_err(|e| format!("{origin}: read failed: {e}"))?;
+        .map_err(|e| camcraft_i18n::tf("{origin}: read failed: {e}", &[format!("{}", origin), format!("{}", e)]))?;
     if buf.len() as u64 > MAX_BYTES {
-        return Err(format!("{origin}: over the {MAX_BYTES}-byte theme budget - refused whole"));
+        return Err(camcraft_i18n::tf("{origin}: over the {MAX_BYTES}-byte theme budget - refused whole", &[format!("{}", origin), format!("{}", MAX_BYTES)]));
     }
-    let text = std::str::from_utf8(&buf).map_err(|_| format!("{origin}: not UTF-8 text"))?;
+    let text = std::str::from_utf8(&buf).map_err(|_| camcraft_i18n::tf("{origin}: not UTF-8 text", &[format!("{}", origin)]))?;
     parse_text(text, &origin)
 }
 
@@ -96,15 +96,12 @@ pub fn discover(dir: &Path) -> (Vec<PathBuf>, Vec<String>) {
                     paths.push(p);
                 }
             }
-            Err(err) => notes.push(format!("{dir:?}: directory entry unreadable: {err}")),
+            Err(err) => notes.push(camcraft_i18n::tf("{dir:?}: directory entry unreadable: {err}", &[format!("{:?}", dir), format!("{}", err)])),
         }
     }
     paths.sort();
     if paths.len() > MAX_LIST {
-        notes.push(format!(
-            "{dir:?}: {} theme files, more than the {MAX_LIST} this build lists - the rest are not shown",
-            paths.len()
-        ));
+        notes.push(camcraft_i18n::tf("{dir:?}: {} theme files, more than the {MAX_LIST} this build lists - the rest are not shown", &[format!("{:?}", dir), format!("{}", paths.len()), format!("{}", MAX_LIST)]));
         paths.truncate(MAX_LIST);
     }
     (paths, notes)
@@ -168,7 +165,7 @@ pub fn resolve(cache: &mut Cache, reference: &ThemeRef) -> Result<(Tokens, Vec<S
         ThemeRef::Named(name) => match name.as_str() {
             "dark" => Ok((Tokens::DARK, Vec::new())),
             "light" => Ok((Tokens::LIGHT, Vec::new())),
-            other => Err(format!("built-in theme {other} is not one of dark, light")),
+            other => Err(camcraft_i18n::tf("built-in theme {other} is not one of dark, light", &[format!("{}", other)])),
         },
         ThemeRef::File(path) => match &*cache.get(Path::new(path)) {
             Ok(theme) => Ok((theme.tokens, theme.notes.clone())),
@@ -181,33 +178,29 @@ pub fn resolve(cache: &mut Cache, reference: &ThemeRef) -> Result<(Tokens, Vec<S
 /// stage's paste-a-theme door) can walk the refusals without a disk.
 pub fn parse_text(text: &str, origin: &str) -> Result<Theme, String> {
     let root: Value =
-        serde_json::from_str(text).map_err(|e| format!("{origin}: not valid JSON: {e}"))?;
+        serde_json::from_str(text).map_err(|e| camcraft_i18n::tf("{origin}: not valid JSON: {e}", &[format!("{}", origin), format!("{}", e)]))?;
     let Value::Object(top) = root else {
-        return Err(format!("{origin}: a theme file is one JSON object at the top level"));
+        return Err(camcraft_i18n::tf("{origin}: a theme file is one JSON object at the top level", &[format!("{}", origin)]));
     };
     match top.get("format") {
         Some(Value::String(f)) if f == FORMAT => {}
         Some(Value::String(f)) => {
-            return Err(format!(
-                "{origin}: format \"{f}\" is not \"{FORMAT}\" - this build cannot read it, refused whole"
-            ));
+            return Err(camcraft_i18n::tf("{origin}: format \"{f}\" is not \"{FORMAT}\" - this build cannot read it, refused whole", &[format!("{}", origin), format!("{}", f), format!("{}", FORMAT)]));
         }
         _ => return Err(format!("{origin}: missing \"format\" (expected \"{FORMAT}\")")),
     }
     let mut notes: Vec<String> = Vec::new();
     for key in top.keys() {
         if !matches!(key.as_str(), "format" | "descriptor" | "base" | "colors" | "geometry") {
-            notes.push(format!(
-                "{origin}: unknown top-level key \"{key}\" ignored (reported, not silently dropped)"
-            ));
+            notes.push(camcraft_i18n::tf("{origin}: unknown top-level key \"{key}\" ignored (reported, not silently dropped)", &[format!("{}", origin), format!("{}", key)]));
         }
     }
     let Some(Value::Object(desc)) = top.get("descriptor") else {
-        return Err(format!("{origin}: missing \"descriptor\" - a theme that cannot name itself is not listed"));
+        return Err(camcraft_i18n::tf("{origin}: missing \"descriptor\" - a theme that cannot name itself is not listed", &[format!("{}", origin)]));
     };
     for key in desc.keys() {
         if !matches!(key.as_str(), "name" | "creator" | "description") {
-            notes.push(format!("{origin}: unknown descriptor key \"{key}\" ignored"));
+            notes.push(camcraft_i18n::tf("{origin}: unknown descriptor key \"{key}\" ignored", &[format!("{}", origin), format!("{}", key)]));
         }
     }
     let name = req_str(desc, "name", MAX_NAME_LEN, origin)?;
@@ -219,23 +212,21 @@ pub fn parse_text(text: &str, origin: &str) -> Result<Theme, String> {
         // Tokens::LIGHT is a real table now, and it is the law that
         // both built-ins are base-able.
         Some(Value::String(b)) if b == "light" => Tokens::LIGHT,
-        Some(Value::String(b)) => return Err(format!("{origin}: unknown theme base \"{b}\"")),
+        Some(Value::String(b)) => return Err(camcraft_i18n::tf("{origin}: unknown theme base \"{b}\"", &[format!("{}", origin), format!("{}", b)])),
         _ => return Err(format!("{origin}: missing \"base\" (\"dark\" or \"light\")")),
     };
     let colors = read_map(&top, "colors", COLOR_NAMES, origin, &mut |k, v| match v {
         Value::String(s) => parse_hex(s)
             .ok_or_else(|| format!("{origin}: colors.{k} is not \"#rrggbb\"/\"#rrggbbaa\" (got \"{s}\")")),
-        Value::Array(_) => Err(format!(
-            "{origin}: colors.{k} carries a ramp array - not implemented in {FORMAT}"
-        )),
-        _ => Err(format!("{origin}: colors.{k} must be a colour string")),
+        Value::Array(_) => Err(camcraft_i18n::tf("{origin}: colors.{k} carries a ramp array - not implemented in {FORMAT}", &[format!("{}", origin), format!("{}", k), format!("{}", FORMAT)])),
+        _ => Err(camcraft_i18n::tf("{origin}: colors.{k} must be a colour string", &[format!("{}", origin), format!("{}", k)])),
     })?;
     let geom = read_map(&top, "geometry", GEOM_NAMES, origin, &mut |k, v| match v {
         Value::Number(n) => match n.as_f64() {
             Some(x) if x.is_finite() => Ok(x),
-            _ => Err(format!("{origin}: geometry.{k} is not a finite number")),
+            _ => Err(camcraft_i18n::tf("{origin}: geometry.{k} is not a finite number", &[format!("{}", origin), format!("{}", k)])),
         },
-        _ => Err(format!("{origin}: geometry.{k} must be a number")),
+        _ => Err(camcraft_i18n::tf("{origin}: geometry.{k} must be a number", &[format!("{}", origin), format!("{}", k)])),
     })?;
     let mut tokens = apply_overlay(base, &colors, &geom);
     // M6.1 D, after the overlay and on the whole table: every accent
@@ -263,27 +254,21 @@ fn read_map<T>(
 ) -> Result<HashMap<String, T>, String> {
     let Some(value) = top.get(field) else { return Ok(HashMap::new()) };
     let Value::Object(map) = value else {
-        return Err(format!("{origin}: \"{field}\" must be an object of name -> value"));
+        return Err(camcraft_i18n::tf("{origin}: \"{field}\" must be an object of name -> value", &[format!("{}", origin), format!("{}", field)]));
     };
     if map.len() > MAX_MAP_ENTRIES {
-        return Err(format!(
-            "{origin}: {field} carries {} entries, past the {MAX_MAP_ENTRIES} cap",
-            map.len()
-        ));
+        return Err(camcraft_i18n::tf("{origin}: {field} carries {} entries, past the {MAX_MAP_ENTRIES} cap", &[format!("{}", origin), format!("{}", field), format!("{}", map.len()), format!("{}", MAX_MAP_ENTRIES)]));
     }
     let other = if field == "colors" { "geometry" } else { "colors" };
     let mut out = HashMap::with_capacity(map.len());
     for (k, v) in map {
         if k.len() > MAX_KEY_LEN {
-            return Err(format!("{origin}: {field} key of {} bytes, past the {MAX_KEY_LEN} cap", k.len()));
+            return Err(camcraft_i18n::tf("{origin}: {field} key of {} bytes, past the {MAX_KEY_LEN} cap", &[format!("{}", origin), format!("{}", field), format!("{}", k.len()), format!("{}", MAX_KEY_LEN)]));
         }
         if !vocab.contains(&k.as_str()) {
-            let mut msg = format!(
-                "{origin}: unknown token \"{k}\" under \"{field}\" - this format's {field} names are: {}",
-                vocab.join(", ")
-            );
+            let mut msg = camcraft_i18n::tf("{origin}: unknown token \"{k}\" under \"{field}\" - this format's {field} names are: {}", &[format!("{}", origin), format!("{}", k), format!("{}", field), format!("{}", field), format!("{}", vocab.join(", "))]);
             if other_vocab(field).contains(&k.as_str()) {
-                msg += &format!(" (\"{k}\" belongs under \"{other}\")");
+                msg += &camcraft_i18n::tf(" (\"{k}\" belongs under \"{other}\")", &[format!("{}", k), format!("{}", other)]);
             }
             return Err(msg);
         }
@@ -304,11 +289,8 @@ fn req_str(
 ) -> Result<String, String> {
     match obj.get(key) {
         Some(Value::String(s)) if s.len() <= max => Ok(s.clone()),
-        Some(Value::String(s)) => Err(format!(
-            "{origin}: descriptor.{key} is {} bytes, past the {max}-byte cap",
-            s.len()
-        )),
-        Some(_) => Err(format!("{origin}: descriptor.{key} must be a string")),
+        Some(Value::String(s)) => Err(camcraft_i18n::tf("{origin}: descriptor.{key} is {} bytes, past the {max}-byte cap", &[format!("{}", origin), format!("{}", key), format!("{}", s.len()), format!("{}", max)])),
+        Some(_) => Err(camcraft_i18n::tf("{origin}: descriptor.{key} must be a string", &[format!("{}", origin), format!("{}", key)])),
         None => Err(format!("{origin}: descriptor.{key} is required")),
     }
 }

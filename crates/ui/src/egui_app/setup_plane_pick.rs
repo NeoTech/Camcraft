@@ -111,10 +111,7 @@ pub(super) fn row(ui: &mut Ui, state: &mut State, setup: &str) {
         ui.horizontal(|ui| {
             ui.label(camcraft_i18n::tr("     "));
             let tip = match &check {
-                Ok(()) => format!(
-                    "Turn the part from where it sits now so the picked face lies on {} (one undo step).",
-                    pick::plane_label(d.plane)
-                ),
+                Ok(()) => camcraft_i18n::tf("Turn the part from where it sits now so the picked face lies on {} (one undo step).", &[format!("{}", pick::plane_label(d.plane))]),
                 Err(why) => why.clone(),
             };
             if ui

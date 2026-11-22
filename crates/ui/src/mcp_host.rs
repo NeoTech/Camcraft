@@ -65,5 +65,5 @@ fn answer_request(state: &mut State, request: camcraft_app::mcp::Request, track_
 /// see the window is open to an agent.
 #[must_use]
 pub fn badge(state: &State) -> Option<String> {
-    state.mcp.as_ref()?.addr().map(|addr| format!("MCP listening on {addr}"))
+    state.mcp.as_ref()?.addr().map(|addr| camcraft_i18n::tf("MCP listening on {addr}", &[format!("{}", addr)]))
 }

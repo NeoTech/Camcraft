@@ -331,10 +331,7 @@ pub fn gate(mode: ColorVision, tokens: &Tokens) -> Option<String> {
     if mode != ColorVision::Off {
         let (name, d) = weakest_pair(mode);
         if d < MIN_DE00 {
-            return Some(format!(
-                "{name} sits {d:.1} apart (CIEDE2000) for {} - under the {MIN_DE00} floor",
-                mode.label()
-            ));
+            return Some(camcraft_i18n::tf("{name} sits {d:.1} apart (CIEDE2000) for {} - under the {MIN_DE00} floor", &[format!("{}", name), format!("{:.1}", d), format!("{}", mode.label()), format!("{}", MIN_DE00)]));
         }
         if let Some(why) = text_gate(mode, tokens) {
             return Some(why);
@@ -355,21 +352,14 @@ pub fn text_gate(mode: ColorVision, tokens: &Tokens) -> Option<String> {
         for (ground, bg) in [("ink", tokens.ink), ("ink_alt", tokens.ink_alt)] {
             let r = contrast::ratio(seen_ink(c, mode), seen_ink(bg, mode));
             if r < contrast::BODY {
-                return Some(format!(
-                    "{role} text on {ground} reads {r:.1}:1 for {}, under the {}:1 floor",
-                    mode.label(),
-                    contrast::BODY
-                ));
+                return Some(camcraft_i18n::tf("{role} text on {ground} reads {r:.1}:1 for {}, under the {}:1 floor", &[format!("{}", role), format!("{}", ground), format!("{:.1}", r), format!("{}", mode.label()), format!("{}", contrast::BODY)]));
             }
         }
     }
     for (name, a, b) in p.text_pairs(tokens) {
         let d = cvd::seen_apart(rgb(a), rgb(b), mode);
         if d < MIN_DE00 {
-            return Some(format!(
-                "{name} sits {d:.1} apart (CIEDE2000) for {} - under the {MIN_DE00} floor",
-                mode.label()
-            ));
+            return Some(camcraft_i18n::tf("{name} sits {d:.1} apart (CIEDE2000) for {} - under the {MIN_DE00} floor", &[format!("{}", name), format!("{:.1}", d), format!("{}", mode.label()), format!("{}", MIN_DE00)]));
         }
     }
     None

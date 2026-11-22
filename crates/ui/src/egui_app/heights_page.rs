@@ -119,7 +119,7 @@ pub(crate) const SETUP_OFFSET_HINT: &str =
 pub(crate) fn setup_offset_text(world: &flecs_ecs::prelude::World, setup: Option<&str>) -> String {
     let word = camcraft_app::setup::wcs_name(world, setup);
     match camcraft_app::setup::effective(world, setup) {
-        Some(s) => format!("WCS ({word})  (from setup {s})"),
+        Some(s) => camcraft_i18n::tf("WCS ({word})  (from setup {s})", &[format!("{}", word), format!("{}", s)]),
         None => format!("WCS ({word})"),
     }
 }

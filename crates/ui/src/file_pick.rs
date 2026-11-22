@@ -107,9 +107,7 @@ pub fn chooser_status(purpose: PickFor, in_click: bool) -> String {
     if in_click {
         ask.to_string()
     } else {
-        format!(
-            "{ask} if no file chooser opened, this browser (Safari) opens one only from a click - click {button} instead of the shortcut"
-        )
+        camcraft_i18n::tf("{ask} if no file chooser opened, this browser (Safari) opens one only from a click - click {button} instead of the shortcut", &[format!("{}", ask), format!("{}", button)])
     }
 }
 
@@ -119,11 +117,7 @@ pub fn too_big(name: &str, size: f64) -> Option<String> {
     // 256 MiB is exact in an f64.
     let limit = BROWSER_READ_LIMIT as f64;
     (!size.is_finite() || size > limit).then(|| {
-        format!(
-            "{name} is {:.0} MiB, over the browser build's {} MiB read limit - open it in the desktop app",
-            size / 1_048_576.0,
-            BROWSER_READ_LIMIT >> 20
-        )
+        camcraft_i18n::tf("{name} is {:.0} MiB, over the browser build's {} MiB read limit - open it in the desktop app", &[format!("{}", name), format!("{:.0}", size / 1_048_576.0), format!("{}", BROWSER_READ_LIMIT >> 20)])
     })
 }
 

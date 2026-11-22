@@ -117,9 +117,9 @@ fn actions(ui: &mut Ui, state: &mut State, name: &str) {
 /// The setup's stock entity and datum source, read live off the world.
 fn readout(ui: &mut Ui, state: &State, name: &str) {
     if let Some(def) = setup::def_of(&state.world, name) {
-        let mut line = format!("Stock entity {}", def.stock);
+        let mut line = camcraft_i18n::tf("Stock entity {}", &[format!("{}", def.stock)]);
         if !def.datum_from.is_empty() {
-            line.push_str(&format!(", datum from {}", def.datum_from));
+            line.push_str(&camcraft_i18n::tf(", datum from {}", &[format!("{}", def.datum_from)]));
         }
         ui.label(RichText::new(line).small().weak());
     }

@@ -72,15 +72,9 @@ impl State {
                 self.history.execute(&self.world, command);
                 self.doc_version += 1;
                 let u = self.units();
-                self.status = format!(
-                    "mod vise on {plate}: fixed at {}, adjustable at {} slid {} {} to the stock",
-                    fit.fixed_at,
-                    fit.adjustable_at,
-                    camcraft_app::units::len(fit.slide, u, 3),
-                    u.suffix()
-                );
+                self.status = camcraft_i18n::tf("mod vise on {plate}: fixed at {}, adjustable at {} slid {} {} to the stock", &[format!("{}", plate), format!("{}", fit.fixed_at), format!("{}", fit.adjustable_at), format!("{}", camcraft_app::units::len(fit.slide, u, 3)), format!("{}", u.suffix())]);
             }
-            Err(err) => self.refuse(ErrorScope::Setup, format!("mod vise not placed: {err}")),
+            Err(err) => self.refuse(ErrorScope::Setup, camcraft_i18n::tf("mod vise not placed: {err}", &[format!("{}", err)])),
         }
     }
 
@@ -97,9 +91,9 @@ impl State {
                 self.history.execute(&self.world, command);
                 self.doc_version += 1;
                 self.mod_jaw_edit.remove(name);
-                self.status = with_warning(format!("{name}: jaw block figures set"), warning);
+                self.status = with_warning(camcraft_i18n::tf("{name}: jaw block figures set", &[format!("{}", name)]), warning);
             }
-            Err(err) => self.refuse(ErrorScope::Setup, format!("jaw block not changed: {err}")),
+            Err(err) => self.refuse(ErrorScope::Setup, camcraft_i18n::tf("jaw block not changed: {err}", &[format!("{}", err)])),
         }
     }
 
@@ -114,15 +108,10 @@ impl State {
                 self.doc_version += 1;
                 self.mod_jaw_edit.remove(adjustable);
                 let u = self.units();
-                let done = format!(
-                    "mod vise re-fitted: {adjustable} at {} slid {} {} to the stock",
-                    fit.adjustable_at,
-                    camcraft_app::units::len(fit.slide, u, 3),
-                    u.suffix()
-                );
+                let done = camcraft_i18n::tf("mod vise re-fitted: {adjustable} at {} slid {} {} to the stock", &[format!("{}", adjustable), format!("{}", fit.adjustable_at), format!("{}", camcraft_app::units::len(fit.slide, u, 3)), format!("{}", u.suffix())]);
                 self.status = with_warning(done, warning);
             }
-            Err(err) => self.refuse(ErrorScope::Setup, format!("mod vise not re-fitted: {err}")),
+            Err(err) => self.refuse(ErrorScope::Setup, camcraft_i18n::tf("mod vise not re-fitted: {err}", &[format!("{}", err)])),
         }
     }
 }

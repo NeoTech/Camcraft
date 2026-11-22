@@ -76,13 +76,13 @@ pub(crate) fn check(state: &mut State, now: Instant) {
                     continue;
                 }
                 state.link_watch.acted.insert(name.clone(), digest);
-                state.status = format!("{name}: its file changed - importing it again");
+                state.status = camcraft_i18n::tf("{name}: its file changed - importing it again", &[format!("{}", name)]);
                 state.pending.push_back(CommandKind::ImportFile(path.into()));
                 return;
             }
             Err(why) => {
                 if state.link_watch.said.insert(name.clone()) {
-                    state.refuse_drop(format!("{name} kept as it is: its linked file {why}"));
+                    state.refuse_drop(camcraft_i18n::tf("{name} kept as it is: its linked file {why}", &[format!("{}", name), format!("{}", why)]));
                 }
             }
         }
@@ -92,7 +92,7 @@ pub(crate) fn check(state: &mut State, now: Instant) {
 /// The digest of the file at `path` when its size or time moved since it
 /// was last read (`None`: unchanged, not read again).
 fn now_digest(watch: &mut LinkWatch, name: &str, path: &Path) -> Result<Option<String>, String> {
-    let meta = std::fs::metadata(path).map_err(|e| format!("{} cannot be read ({e})", path.display()))?;
+    let meta = std::fs::metadata(path).map_err(|e| camcraft_i18n::tf("{} cannot be read ({e})", &[format!("{}", path.display()), format!("{}", e)]))?;
     if !meta.is_file() {
         return Err(format!("{} is not a file", path.display()));
     }

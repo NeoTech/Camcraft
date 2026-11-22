@@ -124,7 +124,7 @@ impl State {
                 self.fixture_lib = None;
             }
             Err(err) => {
-                let msg = format!("accessory not placed: {err}");
+                let msg = camcraft_i18n::tf("accessory not placed: {err}", &[format!("{}", err)]);
                 if let Some(FixtureLibDialog::Accessory(d)) = self.fixture_lib.as_mut() {
                     d.error = Some(msg.clone());
                 }
@@ -142,7 +142,7 @@ impl State {
                 self.accessory_sizes.remove(name);
                 self.status = format!("{name}: resized");
             }
-            Err(err) => self.refuse(ErrorScope::Setup, format!("accessory not changed: {err}")),
+            Err(err) => self.refuse(ErrorScope::Setup, camcraft_i18n::tf("accessory not changed: {err}", &[format!("{}", err)])),
         }
     }
 

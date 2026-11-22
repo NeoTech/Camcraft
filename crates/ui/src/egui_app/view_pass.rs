@@ -77,11 +77,7 @@ pub(crate) fn apply_quality(
     let want = state.antialias.samples();
     let samples = crate::viewport::effective_samples(want, &state.samples_offered);
     if samples != want {
-        state.say_once(&format!(
-            "anti-aliasing {} is not offered by this graphics device - {} samples per pixel are used",
-            state.antialias.word(),
-            samples
-        ));
+        state.say_once(&camcraft_i18n::tf("anti-aliasing {} is not offered by this graphics device - {} samples per pixel are used", &[format!("{}", state.antialias.word()), format!("{}", samples)]));
     }
     if view.set_samples(device, samples) {
         diag_info!("viewport: {samples} samples per pixel");
@@ -120,7 +116,7 @@ pub(crate) fn encode(
         match se.prepare(device, queue, encoder, fv, &state.cam, &mvp, (ew, eh)) {
             Ok(t) => traced = t,
             Err(err) => {
-                state.say_once(&format!("the cut stock cannot be drawn, the uncut stock shows: {err}"));
+                state.say_once(&camcraft_i18n::tf("the cut stock cannot be drawn, the uncut stock shows: {err}", &[format!("{}", err)]));
             }
         }
     }

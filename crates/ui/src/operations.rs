@@ -134,7 +134,7 @@ pub(crate) fn height_echo(
     };
     match crate::height_memo::height(world, setup, src, tilt, *h) {
         Ok(z) => match frame.filter(|f| !f.is_upright()) {
-            Some(f) => format!("(= {} along tool axis)", units::len(z - f.origin.z, units::of(world), 3)),
+            Some(f) => camcraft_i18n::tf("(= {} along tool axis)", &[format!("{}", units::len(z - f.origin.z, units::of(world), 3))]),
             None => format!("(= Z {})", units::len(z, units::of(world), 3)),
         },
         Err(reason) => format!("(unresolved: {reason})"),
@@ -175,12 +175,9 @@ pub(crate) fn retract_note(
 ) -> Option<String> {
     match resolve_all(world, setup, src, tilt, [retract, clearance]) {
         Ok([rz, cz]) => (rz > cz).then(|| {
-            format!(
-                "above clearance - the hop travels at {} (min of the two)",
-                units::len(cz, units::of(world), 3)
-            )
+            camcraft_i18n::tf("above clearance - the hop travels at {} (min of the two)", &[format!("{}", units::len(cz, units::of(world), 3))])
         }),
-        Err(why) => Some(format!("retract vs clearance unresolved: {why}")),
+        Err(why) => Some(camcraft_i18n::tf("retract vs clearance unresolved: {why}", &[format!("{}", why)])),
     }
 }
 
@@ -195,12 +192,9 @@ pub(crate) fn corner_note(
     drop: f64,
 ) -> String {
     match resolve_all(world, setup, src, tilt, [top]) {
-        Ok([tz]) if (tz - drop).is_finite() => format!(
-            "the corner stands at {} - derived: width x tan(angle) below the top plane",
-            units::len(tz - drop, units::of(world), 3)
-        ),
+        Ok([tz]) if (tz - drop).is_finite() => camcraft_i18n::tf("the corner stands at {} - derived: width x tan(angle) below the top plane", &[format!("{}", units::len(tz - drop, units::of(world), 3))]),
         Ok(_) => "the corner is unresolved: width x tan(angle) is not finite".to_owned(),
-        Err(why) => format!("the corner is unresolved: {why}"),
+        Err(why) => camcraft_i18n::tf("the corner is unresolved: {why}", &[format!("{}", why)]),
     }
 }
 
@@ -349,7 +343,7 @@ pub fn fold_warnings_located(warnings: &[Warning]) -> Vec<(String, Option<usize>
         let extra = count - 1;
         if extra > 0 {
             let noun = if extra == 1 { "move" } else { "moves" };
-            line.push_str(&format!(" - repeated on {extra} more {noun} (to {last})"));
+            line.push_str(&camcraft_i18n::tf(" - repeated on {extra} more {noun} (to {last})", &[format!("{}", extra), format!("{}", noun), format!("{}", last)]));
         }
     }
     lines

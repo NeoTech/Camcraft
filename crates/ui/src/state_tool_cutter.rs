@@ -125,7 +125,7 @@ impl State {
                 d.points = points;
                 d.neck_refusal = None;
             }
-            Some(Err(e)) => d.neck_refusal = Some(format!("neck not drawn: {e}")),
+            Some(Err(e)) => d.neck_refusal = Some(camcraft_i18n::tf("neck not drawn: {e}", &[format!("{}", e)])),
         }
         d.fitted = Some(draft);
     }
@@ -194,9 +194,9 @@ impl State {
                 self.history.execute(&self.world, command);
                 self.doc_version += 1;
                 self.status = if clearing {
-                    format!("tool {name}: cutter drawn from its numbers")
+                    camcraft_i18n::tf("tool {name}: cutter drawn from its numbers", &[format!("{}", name)])
                 } else {
-                    format!("tool {name}: cutter profile set")
+                    camcraft_i18n::tf("tool {name}: cutter profile set", &[format!("{}", name)])
                 };
             }
             Err(err) => self.refuse(ErrorScope::Tool, format!("{CUTTER_REFUSED}{err}")),
@@ -210,7 +210,7 @@ impl State {
             Ok(command) => {
                 self.history.execute(&self.world, command);
                 self.doc_version += 1;
-                self.status = format!("tool {name} updated with its cutter profile");
+                self.status = camcraft_i18n::tf("tool {name} updated with its cutter profile", &[format!("{}", name)]);
             }
             Err(err) => self.refuse(ErrorScope::Tool, format!("{RESHAPE_REFUSED}{err}")),
         }

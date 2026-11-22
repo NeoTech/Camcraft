@@ -107,34 +107,34 @@ fn checked_input(
     to_world: impl FnOnce(f64) -> f64,
 ) -> Option<(String, f64)> {
     if raw.is_empty() {
-        state.status = format!("part not {verb}: {noun} is zero");
+        state.status = camcraft_i18n::tf("part not {verb}: {noun} is zero", &[format!("{}", verb), format!("{}", noun)]);
         return None;
     }
     let Ok(parsed) = raw.parse::<f64>() else {
         state.refuse(
             ErrorScope::Setup,
-            format!("part not {verb}: '{raw}' is not a finite number"),
+            camcraft_i18n::tf("part not {verb}: '{raw}' is not a finite number", &[format!("{}", verb), format!("{}", raw)]),
         );
         return None;
     };
     if !parsed.is_finite() {
         state.refuse(
             ErrorScope::Setup,
-            format!("part not {verb}: '{raw}' is not a finite number"),
+            camcraft_i18n::tf("part not {verb}: '{raw}' is not a finite number", &[format!("{}", verb), format!("{}", raw)]),
         );
         return None;
     }
     let world = to_world(parsed);
     if !world.is_finite() {
-        state.refuse(ErrorScope::Setup, format!("part not {verb}: the {noun} must be finite"));
+        state.refuse(ErrorScope::Setup, camcraft_i18n::tf("part not {verb}: the {noun} must be finite", &[format!("{}", verb), format!("{}", noun)]));
         return None;
     }
     let Some((name, _)) = crate::move_drag::one_part(state) else {
-        state.refuse(ErrorScope::Setup, format!("part not {verb}: select one shown part"));
+        state.refuse(ErrorScope::Setup, camcraft_i18n::tf("part not {verb}: select one shown part", &[format!("{}", verb)]));
         return None;
     };
     if world.abs() <= min_abs {
-        state.status = format!("part not {verb}: {noun} is zero");
+        state.status = camcraft_i18n::tf("part not {verb}: {noun} is zero", &[format!("{}", verb), format!("{}", noun)]);
         return None;
     }
     Some((name, world))
@@ -153,7 +153,7 @@ pub(crate) fn apply_move_text(state: &mut State) {
     let axis = state.handle_bar.axis;
     let mut delta = [0.0; 3];
     let Some(slot) = delta.get_mut(axis) else {
-        state.refuse(ErrorScope::Setup, format!("part not moved: axis {axis} is not X, Y or Z"));
+        state.refuse(ErrorScope::Setup, camcraft_i18n::tf("part not moved: axis {axis} is not X, Y or Z", &[format!("{}", axis)]));
         return;
     };
     *slot = mm;
@@ -169,7 +169,7 @@ pub(crate) fn apply_turn_text(state: &mut State) {
     };
     let axis = state.handle_bar.axis;
     if axis > 2 {
-        state.refuse(ErrorScope::Setup, format!("part not turned: axis {axis} is not X, Y or Z"));
+        state.refuse(ErrorScope::Setup, camcraft_i18n::tf("part not turned: axis {axis} is not X, Y or Z", &[format!("{}", axis)]));
         return;
     }
     state.pending.push_back(CommandKind::TurnModelBy { name, axis, angle_rad: rad });
@@ -200,9 +200,9 @@ pub(crate) fn draw(ui: &mut egui::Ui, state: &mut State, rect: egui::Rect) {
             ui.horizontal_centered(|ui| {
                 for (i, letter) in AXIS_NAMES.iter().enumerate() {
                     let tip = if move_mode {
-                        format!("Move along {letter} axis")
+                        camcraft_i18n::tf("Move along {letter} axis", &[format!("{}", letter)])
                     } else {
-                        format!("Turn about {letter} axis")
+                        camcraft_i18n::tf("Turn about {letter} axis", &[format!("{}", letter)])
                     };
                     let btn = crate::egui_app::fields::named(
                         ui.selectable_label(state.handle_bar.axis == i, *letter),

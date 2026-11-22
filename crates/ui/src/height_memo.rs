@@ -152,7 +152,7 @@ pub(crate) fn unresolved_note(
     UNRESOLVED_BUILDS.with(|n| n.set(n.get().saturating_add(1)));
     let note = operation::display_heights(|| operation::resolve_params(world, setup, src, params))
         .err()
-        .map(|why| format!("{why}; set the source up or switch the reference"));
+        .map(|why| camcraft_i18n::tf("{why}; set the source up or switch the reference", &[format!("{}", why)]));
     UNRESOLVED.with(|memo| {
         let mut memo = memo.borrow_mut();
         if memo.len() >= 8 {

@@ -126,7 +126,7 @@ pub(super) fn operation_page(ui: &mut Ui, state: &mut State, name: &str, pal: &T
         }
         if let Some(role) = state.op_ui.start_exit_pick.filter(|_| start_exit_pick::collecting(state)) {
             ui.label(
-                RichText::new(format!("Picking {} - click on the part or stock in the viewport", role.label()))
+                RichText::new(camcraft_i18n::tf("Picking {} - click on the part or stock in the viewport", &[format!("{}", role.label())]))
                     .strong(),
             );
         } else {
@@ -209,7 +209,7 @@ pub(super) fn status_text(state: &State, target: &str) -> (String, super::layout
         n => format!(" · {n} warnings"),
     };
     let (line, tone) = match (blocked, st) {
-        (Some(why), _) => (format!("Blocked · {why} · {moves} moves cached"), Tone::Error),
+        (Some(why), _) => (camcraft_i18n::tf("Blocked · {why} · {moves} moves cached", &[format!("{}", why), format!("{}", moves)]), Tone::Error),
         (None, Some(OpStatus::Never) | None) => ("Status: never generated".to_owned(), Tone::Quiet),
         (None, Some(OpStatus::Ok)) => (format!("OK · {moves} moves{tail}"), if n > 0 { Tone::Warn } else { Tone::Ok }),
         (None, Some(OpStatus::Stale)) => {
@@ -218,7 +218,7 @@ pub(super) fn status_text(state: &State, target: &str) -> (String, super::layout
                 .as_ref()
                 .and_then(|e| operation::stale_reason(&state.world, e))
                 .unwrap_or_else(|| "inputs moved since generation".to_owned());
-            (format!("Stale · {reason} · {moves} moves cached{tail}"), Tone::Warn)
+            (camcraft_i18n::tf("Stale · {reason} · {moves} moves cached{tail}", &[format!("{}", reason), format!("{}", moves), format!("{}", tail)]), Tone::Warn)
         }
     };
     (line, tone, details)
@@ -259,7 +259,7 @@ fn needs_review_banner(ui: &mut Ui, state: &mut State, target: &str) {
     let warn = text_inks(ui, &state.world).warn;
     ui.group(|ui| {
         ui.horizontal_wrapped(|ui| {
-            ui.colored_label(warn, format!("Needs review: {}", notes.join("; ")));
+            ui.colored_label(warn, camcraft_i18n::tf("Needs review: {}", &[format!("{}", notes.join("; "))]));
             if ui
                 .button(camcraft_i18n::tr("Mark reviewed"))
                 .on_hover_text(camcraft_i18n::tr("Clear the migration review warning so this operation can post"))
@@ -299,9 +299,9 @@ fn actions(ui: &mut Ui, state: &mut State, target: &str, live: Option<&Operation
         // Enabled, but the door will refuse: a safety line, not help.
         ui.colored_label(inks.warn, why);
     }
-    let commit_hint = format!("Commit the edited parameters ({} undoes)", chord("Z"));
-    let clear_hint = format!("Remove the generated path and keep the operation ({} restores it)", chord("Z"));
-    let delete_hint = format!("Delete the operation and its toolpath ({} restores both)", chord("Z"));
+    let commit_hint = camcraft_i18n::tf("Commit the edited parameters ({} undoes)", &[format!("{}", chord("Z"))]);
+    let clear_hint = camcraft_i18n::tf("Remove the generated path and keep the operation ({} restores it)", &[format!("{}", chord("Z"))]);
+    let delete_hint = camcraft_i18n::tf("Delete the operation and its toolpath ({} restores both)", &[format!("{}", chord("Z"))]);
     let bar = [
         Action { label: "Generate", kind: ActionKind::Primary, enabled: true, hint: Some("Compute the toolpath (applies pending edits first)"), why_not: None },
         Action {

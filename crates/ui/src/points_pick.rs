@@ -32,7 +32,7 @@ pub fn arm(state: &mut State, setup: &str) {
     crate::wcs_pick::disarm(state); // #701: one draft collects at a time
     state.points_pick = Some(PointsPick { setup: setup.to_owned(), picks: Vec::new() });
     state.geo_pick = GeoPick::Vertex;
-    state.status = format!("{setup}: pick point 1 of the plane");
+    state.status = camcraft_i18n::tf("{setup}: pick point 1 of the plane", &[format!("{}", setup)]);
 }
 
 /// Stop collecting; the draft is dropped.
@@ -44,7 +44,7 @@ pub fn disarm(state: &mut State) {
 pub fn remove_last(state: &mut State) {
     if let Some(d) = state.points_pick.as_mut() {
         d.picks.pop();
-        state.status = format!("{}: pick point {} of the plane", d.setup, d.picks.len() + 1);
+        state.status = camcraft_i18n::tf("{}: pick point {} of the plane", &[format!("{}", d.setup), format!("{}", d.picks.len() + 1)]);
     }
 }
 
@@ -52,7 +52,7 @@ pub fn remove_last(state: &mut State) {
 pub fn clear(state: &mut State) {
     if let Some(d) = state.points_pick.as_mut() {
         d.picks.clear();
-        state.status = format!("{}: pick point 1 of the plane", d.setup);
+        state.status = camcraft_i18n::tf("{}: pick point 1 of the plane", &[format!("{}", d.setup)]);
     }
 }
 
@@ -70,23 +70,23 @@ pub fn take(state: &mut State, pick: GeoSel) {
     let setup = d.setup.clone();
     state.status = match &pick.feature {
         FeatureSel::Chain(_) if no_centre.is_some() => {
-            format!("{setup}: {words}: {} - this row takes three points", no_centre.as_deref().unwrap_or_default())
+            camcraft_i18n::tf("{setup}: {words}: {} - this row takes three points", &[format!("{}", setup), format!("{}", words), format!("{}", no_centre.as_deref().unwrap_or_default())])
         }
         FeatureSel::Vertex(_) | FeatureSel::Chain(_) if d.picks.len() >= 3 => {
-            format!("{setup}: three points are picked - Remove last or Clear to re-pick")
+            camcraft_i18n::tf("{setup}: three points are picked - Remove last or Clear to re-pick", &[format!("{}", setup)])
         }
         FeatureSel::Vertex(_) | FeatureSel::Chain(_) => {
             d.picks.push(pick);
             match d.picks.len() {
-                3 => format!("{setup}: {words} — three points picked for the plane"),
-                n => format!("{setup}: {words} — point {n} picked - pick point {}", n + 1),
+                3 => camcraft_i18n::tf("{setup}: {words} — three points picked for the plane", &[format!("{}", setup), format!("{}", words)]),
+                n => camcraft_i18n::tf("{setup}: {words} — point {n} picked - pick point {}", &[format!("{}", setup), format!("{}", words), format!("{}", n), format!("{}", n + 1)]),
             }
         }
         FeatureSel::Face(_)
         | FeatureSel::Patch(_)
         | FeatureSel::SketchChain(_)
         | FeatureSel::SketchLayer(_) => {
-            format!("{setup}: {words} is a face - this row takes three points (the face row lays a face)")
+            camcraft_i18n::tf("{setup}: {words} is a face - this row takes three points (the face row lays a face)", &[format!("{}", setup), format!("{}", words)])
         }
     };
 }

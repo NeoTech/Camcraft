@@ -36,7 +36,7 @@ pub(super) fn row(ui: &mut Ui, state: &mut State, name: &str) {
     let mut export_dxf = false;
 
     if let Some(step_src) = step {
-        ui.label(format!("STEP solid kept as source ({} bytes)", step_src.len()));
+        ui.label(camcraft_i18n::tf("STEP solid kept as source ({} bytes)", &[format!("{}", step_src.len())]));
         if let Some(d) = state.profile_edits.get_mut(name) {
             ui.horizontal(|ui| {
                 if ui.small_button(camcraft_i18n::tr("Derive spun profile")).clicked() {
@@ -50,9 +50,9 @@ pub(super) fn row(ui: &mut Ui, state: &mut State, name: &str) {
             });
             if let Some(ref p) = world_profile {
                 let summary = match p {
-                    FixtureProfile::Spun { points } => format!("Reference spun profile: {} pts", points.len()),
+                    FixtureProfile::Spun { points } => camcraft_i18n::tf("Reference spun profile: {} pts", &[format!("{}", points.len())]),
                     FixtureProfile::Extruded { points, axis, depth } => {
-                        format!("Reference extruded profile ({}): {} pts, depth {}", axis.label(), points.len(), units::len(*depth, u, 2))
+                        camcraft_i18n::tf("Reference extruded profile ({}): {} pts, depth {}", &[format!("{}", axis.label()), format!("{}", points.len()), format!("{}", units::len(*depth, u, 2))])
                     }
                 };
                 ui.horizontal(|ui| {
@@ -68,7 +68,7 @@ pub(super) fn row(ui: &mut Ui, state: &mut State, name: &str) {
         }
     } else if let Some(d) = state.profile_edits.get_mut(name) {
         let kind = d.profile.kind_label();
-        ui.label(format!("{kind} fixture profile"));
+        ui.label(camcraft_i18n::tf("{kind} fixture profile", &[format!("{}", kind)]));
         match &mut d.profile {
             FixtureProfile::Spun { points } => {
                 spun_points_editor(ui, u, &format!("row-spun-{name}"), points);

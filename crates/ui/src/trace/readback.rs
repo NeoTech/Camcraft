@@ -40,7 +40,7 @@ impl TracePass {
         enc.copy_buffer_to_buffer(&out, 0, &read, 0, out.size());
         queue.submit([enc.finish()]);
         if let Some(err) = pollster::block_on(scope.pop()) {
-            return Err(format!("trace pass: the frame failed validation ({err})"));
+            return Err(camcraft_i18n::tf("trace pass: the frame failed validation ({err})", &[format!("{}", err)]));
         }
         let (tx, rx) = std::sync::mpsc::channel();
         read.slice(..).map_async(wgpu::MapMode::Read, move |r| {
@@ -55,7 +55,7 @@ impl TracePass {
         let raw = read
             .slice(..)
             .get_mapped_range()
-            .map_err(|e| format!("trace pass: readback map failed ({e})"))?;
+            .map_err(|e| camcraft_i18n::tf("trace pass: readback map failed ({e})", &[format!("{}", e)]))?;
         let frame = decode(&raw, w, h);
         drop(raw);
         read.unmap();

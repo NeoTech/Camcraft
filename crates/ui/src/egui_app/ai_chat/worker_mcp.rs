@@ -65,7 +65,7 @@ pub(super) fn wait_confirmation(
             turn_id: input.turn_id,
             id: card_id.to_owned(),
             status: ToolCardStatus::AwaitingConfirmation,
-            summary: format!("Waiting for Allow/Deny ({})", call.name),
+            summary: camcraft_i18n::tf("Waiting for Allow/Deny ({})", &[format!("{}", call.name)]),
         },
     );
     let (decision_tx, decision_rx) = mpsc::channel();
@@ -136,10 +136,10 @@ pub(super) fn dispatch_mcp_call(
         }
         match reply_rx.recv_timeout(POLL_STEP) {
             Ok(Some(line)) => break line,
-            Ok(None) => return Err(format!("tool '{}' returned no JSON-RPC reply", call.name)),
+            Ok(None) => return Err(camcraft_i18n::tf("tool '{}' returned no JSON-RPC reply", &[format!("{}", call.name)])),
             Err(mpsc::RecvTimeoutError::Timeout) => {}
             Err(mpsc::RecvTimeoutError::Disconnected) => {
-                return Err(format!("MCP reply channel dropped for '{}'", call.name));
+                return Err(camcraft_i18n::tf("MCP reply channel dropped for '{}'", &[format!("{}", call.name)]));
             }
         }
     };
@@ -178,7 +178,7 @@ fn parse_mcp_reply(line: &str) -> (Value, bool, String) {
     let parsed: Value = match serde_json::from_str(line) {
         Ok(v) => v,
         Err(err) => {
-            let msg = format!("malformed MCP reply: {err}");
+            let msg = camcraft_i18n::tf("malformed MCP reply: {err}", &[format!("{}", err)]);
             return (
                 json!({ "content": [{ "type": "text", "text": msg }], "isError": true }),
                 true,

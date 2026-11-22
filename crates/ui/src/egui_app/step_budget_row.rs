@@ -16,13 +16,13 @@ use crate::state::State;
 pub(super) fn row(ui: &mut Ui, state: &mut State, entity: &Entity) {
     ui.add_space(6.0);
     let recorded = camcraft_app::model_fidelity::budget_of(&state.world, entity).unwrap_or(step_budget::DEFAULT);
-    ui.label(format!("Imported under a {} of {recorded} facets", step_budget::NAME));
+    ui.label(camcraft_i18n::tf("Imported under a {} of {recorded} facets", &[format!("{}", step_budget::NAME), format!("{}", recorded)]));
     if !state.step_budget.explicit {
-        ui.label(format!("A re-import keeps {recorded} unless a budget is set below"));
+        ui.label(camcraft_i18n::tf("A re-import keeps {recorded} unless a budget is set below", &[format!("{}", recorded)]));
     }
     let mut commit = false;
     ui.horizontal(|ui| {
-        let l = ui.label(format!("{} (next import)", step_budget::NAME));
+        let l = ui.label(camcraft_i18n::tf("{} (next import)", &[format!("{}", step_budget::NAME)]));
         let r = ui.add(TextEdit::singleline(&mut state.step_budget.draft).desired_width(110.0)).labelled_by(l.id);
         commit |= r.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter));
         commit |= ui.button(camcraft_i18n::tr("Set")).clicked();

@@ -186,7 +186,7 @@ impl ChatTurn {
         }
         self.undone = true;
         *doc_version += 1;
-        Ok(format!("undid AI turn ({} changes)", self.change_count))
+        Ok(camcraft_i18n::tf("undid AI turn ({} changes)", &[format!("{}", self.change_count)]))
     }
 }
 

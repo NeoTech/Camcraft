@@ -194,7 +194,7 @@ pub(crate) fn ring_enabled(state: &State, center: [f64; 3], axis: usize) -> bool
 }
 
 pub(crate) fn edge_on_hint(axis: usize) -> String {
-    format!("Orbit the view to turn about {}", ["X", "Y", "Z"].get(axis).copied().unwrap_or("the axis"))
+    camcraft_i18n::tf("Orbit the view to turn about {}", &[format!("{}", ["X", "Y", "Z"].get(axis).copied().unwrap_or("the axis"))])
 }
 
 /// Snap `raw_rad` to the nearest multiple of `step_deg` degrees.
@@ -306,7 +306,7 @@ pub(crate) fn preview_turn(state: &State, name: &str) -> Option<Location> {
 #[must_use]
 pub(crate) fn readout(state: &State) -> Option<String> {
     let d = state.body_turn.as_ref()?;
-    Some(format!("Turn about {}: {}", ["X", "Y", "Z"].get(d.axis)?, shown_angle(d.angle)))
+    Some(camcraft_i18n::tf("Turn about {}: {}", &[format!("{}", ["X", "Y", "Z"].get(d.axis)?), format!("{}", shown_angle(d.angle))]))
 }
 
 /// A signed angle in degrees, one decimal: "+30.0°".

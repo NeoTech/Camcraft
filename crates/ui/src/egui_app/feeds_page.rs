@@ -56,7 +56,7 @@ fn body(ui: &mut Ui, state: &mut State, name: &str, op: &camcraft_app::schema::O
     if let Some(tool) = model::find_by_name(&state.world, &tool_name).and_then(|t| model::tool_of(&state.world, &t)) {
         let tm_names = ["Not stated", ToolMaterial::Hss.label(), ToolMaterial::Carbide.label()];
         let mut tm_idx = tool.tool_material.map_or(0, |m| m as usize + 1);
-        prop_row_hint(ui, "Tool material", &format!("edits tool '{tool_name}' - every operation using it"), |ui| {
+        prop_row_hint(ui, "Tool material", &camcraft_i18n::tf("edits tool '{tool_name}' - every operation using it", &[format!("{}", tool_name)]), |ui| {
             combo(ui, "cut.tool_material", &mut tm_idx, &tm_names)
         });
         let tm = tm_idx.checked_sub(1).and_then(|i| ToolMaterial::ALL.get(i).copied());
@@ -95,19 +95,12 @@ fn body(ui: &mut Ui, state: &mut State, name: &str, op: &camcraft_app::schema::O
         }
         Ok(s) => {
             let thin = s.thinning.map_or(String::new(), |f| {
-                format!(", feed raised x{:.2} for radial chip thinning (hex = fz sin phi)", 1.0 / f)
+                camcraft_i18n::tf(", feed raised x{:.2} for radial chip thinning (hex = fz sin phi)", &[format!("{:.2}", 1.0 / f)])
             });
             // #891: a turning suggestion speaks surface speed and feed
             // per REV, read at the stock's swing diameter.
             let readout = match s.turning {
-                Some(t) => format!(
-                    "Vc {:.0} m/min · f {} {}/rev at Ø {} {}",
-                    s.vc,
-                    units::len(s.fz, u, 3),
-                    u.suffix(),
-                    units::len(t.diameter, u, 1),
-                    u.suffix()
-                ),
+                Some(t) => camcraft_i18n::tf("Vc {:.0} m/min · f {} {}/rev at Ø {} {}", &[format!("{:.0}", s.vc), format!("{}", units::len(s.fz, u, 3)), format!("{}", u.suffix()), format!("{}", units::len(t.diameter, u, 1)), format!("{}", u.suffix())]),
                 None => format!("Vc {:.0} m/min · fz {} {}", s.vc, units::len(s.fz, u, 3), u.suffix()),
             };
             prop_row_hint(

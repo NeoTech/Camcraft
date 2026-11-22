@@ -81,7 +81,7 @@ impl State {
             .clone()
             .or_else(fixture_library::user_dir)
             .map(|d| fixture_library::library_path(&d))
-            .ok_or_else(|| format!("no user fixtures folder (set {} or a home folder)", fixture_library::ENV_VAR))
+            .ok_or_else(|| camcraft_i18n::tf("no user fixtures folder (set {} or a home folder)", &[format!("{}", fixture_library::ENV_VAR)]))
     }
 
     /// Open the save dialog over `setup`'s fixtures; the selected ones
@@ -113,7 +113,7 @@ impl State {
             }
             Err(err) => {
                 draft.rows.clear();
-                draft.error = Some(format!("library not read: {err}"));
+                draft.error = Some(camcraft_i18n::tf("library not read: {err}", &[format!("{}", err)]));
             }
         }
         if !draft.selected.as_ref().is_some_and(|s| draft.rows.iter().any(|r| &r.name == s)) {
@@ -155,11 +155,11 @@ impl State {
             }
             Ok(Err(err)) => {
                 draft.confirm_replace = None;
-                draft.error = Some(format!("not saved: {err}"));
+                draft.error = Some(camcraft_i18n::tf("not saved: {err}", &[format!("{}", err)]));
             }
             Err(err) => {
                 draft.confirm_replace = None;
-                draft.error = Some(format!("not saved: {err}"));
+                draft.error = Some(camcraft_i18n::tf("not saved: {err}", &[format!("{}", err)]));
             }
         }
     }
@@ -176,8 +176,8 @@ impl State {
         draft.confirm_delete = None;
         self.reload_library_rows(&mut draft);
         match done {
-            Ok(()) => self.status = format!("deleted '{name}' from the fixture library"),
-            Err(err) => draft.error = Some(format!("not deleted: {err}")),
+            Ok(()) => self.status = camcraft_i18n::tf("deleted '{name}' from the fixture library", &[format!("{}", name)]),
+            Err(err) => draft.error = Some(camcraft_i18n::tf("not deleted: {err}", &[format!("{}", err)])),
         }
         self.fixture_lib = Some(FixtureLibDialog::Insert(draft));
     }
@@ -204,7 +204,7 @@ impl State {
             .fixture_library_path()
             .and_then(|p| fixture_library::load(&p).map_err(|e| e.to_string()))
             .and_then(|lib| {
-                lib.into_iter().find(|e| e.name == entry).ok_or_else(|| format!("no fixture '{entry}' in the library"))
+                lib.into_iter().find(|e| e.name == entry).ok_or_else(|| camcraft_i18n::tf("no fixture '{entry}' in the library", &[format!("{}", entry)]))
             })
             .and_then(|e| InsertFixture::new(&self.world, &e, setup.as_deref(), pick).map_err(|e| e.to_string()));
         match planned {
@@ -212,11 +212,11 @@ impl State {
                 let name = command.name().to_owned();
                 self.history.execute(&self.world, command);
                 self.doc_version += 1;
-                self.status = format!("inserted fixture {name} from the library");
+                self.status = camcraft_i18n::tf("inserted fixture {name} from the library", &[format!("{}", name)]);
                 self.fixture_lib = None;
             }
             Err(err) => {
-                let msg = format!("fixture '{entry}' not inserted: {err}");
+                let msg = camcraft_i18n::tf("fixture '{entry}' not inserted: {err}", &[format!("{}", entry), format!("{}", err)]);
                 if let Some(FixtureLibDialog::Insert(d)) = self.fixture_lib.as_mut() {
                     d.error = Some(msg.clone());
                 }

@@ -324,6 +324,59 @@ pub fn tr_owned(source: &str) -> String {
     tr(source).into_owned()
 }
 
+/// Translate a `format!`-style template, then substitute its arguments.
+///
+/// The **template** is the catalogue key, so wording (and argument order) can
+/// differ by language: `"Cut {} passes"` becomes `"切削 {} 刀"`. `{}` and
+/// `{name}` placeholders are filled in encounter order from `args`; `{{` /
+/// `}}` are literal braces. A missing key falls back to the English template,
+/// so this never shows a key or a blank. Arguments are already rendered
+/// strings, which keeps the call sites free of runtime format-string parsing.
+///
+/// # Examples
+/// ```
+/// use camcraft_i18n::{set_lang, tf, Lang};
+/// set_lang(Lang::En);
+/// assert_eq!(tf("Cut {} passes", &["3".into()]), "Cut 3 passes");
+/// ```
+#[must_use]
+pub fn tf(template: &str, args: &[String]) -> String {
+    let rendered = tr(template);
+    let mut out = String::with_capacity(rendered.len() + 16);
+    let bytes = rendered.as_bytes();
+    let mut i = 0;
+    let mut next = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'{' {
+            if i + 1 < bytes.len() && bytes[i + 1] == b'{' {
+                out.push('{');
+                i += 2;
+                continue;
+            }
+            if let Some(rel) = rendered[i + 1..].find('}') {
+                let end = i + 1 + rel;
+                if next < args.len() {
+                    out.push_str(&args[next]);
+                } else {
+                    out.push_str(&rendered[i..=end]);
+                }
+                next += 1;
+                i = end + 1;
+                continue;
+            }
+        }
+        if bytes[i] == b'}' && i + 1 < bytes.len() && bytes[i + 1] == b'}' {
+            out.push('}');
+            i += 2;
+            continue;
+        }
+        let ch = rendered[i..].chars().next().expect("index is a char boundary");
+        out.push(ch);
+        i += ch.len_utf8();
+    }
+    out
+}
+
 /// `3 tools` in English, `3 把刀具` in a language whose unit word carries its
 /// own classifier (the catalogue's `tool` entry). `unit` is a catalogue key.
 #[must_use]

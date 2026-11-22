@@ -55,8 +55,8 @@ fn report_with(state: &State, names_only: bool) -> String {
     let profile = if cfg!(debug_assertions) { "debug" } else { "release" };
     let mut lines = vec![
         format!("CamCraft {} ({profile} build)", build_info::VERSION),
-        format!("Build time: {}", build_info::BUILT_UTC),
-        format!("Source commit: {}", build_info::SOURCE_SHA),
+        camcraft_i18n::tf("Build time: {}", &[format!("{}", build_info::BUILT_UTC)]),
+        camcraft_i18n::tf("Source commit: {}", &[format!("{}", build_info::SOURCE_SHA)]),
         format!("Platform: {} {}", std::env::consts::OS, std::env::consts::ARCH),
         format!("GPU: {}", state.gpu_line.as_deref().unwrap_or("none (headless)")),
         format!(
@@ -70,23 +70,14 @@ fn report_with(state: &State, names_only: bool) -> String {
     let machine_file = if path.is_empty() { "none".to_owned() } else { shown(std::path::Path::new(&path)) };
     lines.push(match def {
         Some(m) => format!("Machine: {} {} ({kind}, from {machine_file})", m.vendor, m.model),
-        None => format!("Machine: none stated ({kind})"),
+        None => camcraft_i18n::tf("Machine: none stated ({kind})", &[format!("{}", kind)]),
     });
     let entities = model::named_entities(world);
     let models = entities.iter().filter(|(_, e)| model::is_model(world, e)).count();
     let tools = entities.iter().filter(|(_, e)| model::is_tool(world, e)).count();
     let ops: Vec<_> = entities.iter().filter(|(_, e)| model::is_operation(world, e)).collect();
     let status = |s: operation::OpStatus| ops.iter().filter(|(_, e)| operation::status_of(world, e) == s).count();
-    lines.push(format!(
-        "Document: {} setup(s), {} model(s), {} tool(s), {} operation(s) ({} ok, {} stale, {} never generated)",
-        setup::names(world).len(),
-        models,
-        tools,
-        ops.len(),
-        status(operation::OpStatus::Ok),
-        status(operation::OpStatus::Stale),
-        status(operation::OpStatus::Never),
-    ));
+    lines.push(camcraft_i18n::tf("Document: {} setup(s), {} model(s), {} tool(s), {} operation(s) ({} ok, {} stale, {} never generated)", &[format!("{}", setup::names(world).len()), format!("{}", models), format!("{}", tools), format!("{}", ops.len()), format!("{}", status(operation::OpStatus::Ok)), format!("{}", status(operation::OpStatus::Stale)), format!("{}", status(operation::OpStatus::Never))]));
     lines.push(state.frame_rate.report_line(camcraft_app::clock::Instant::now()));
     // The shared form scrubs the paths of the status (`shared_report`).
     lines.push(format!("Status: {}", or_none(&state.status)));

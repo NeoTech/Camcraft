@@ -89,7 +89,7 @@ pub(crate) fn verdict(n: usize) -> String {
     match n {
         0 => "Validation: passes".to_owned(),
         1 => "Validation: 1 refusal - save blocked".to_owned(),
-        n => format!("Validation: {n} refusals - save blocked"),
+        n => camcraft_i18n::tf("Validation: {n} refusals - save blocked", &[format!("{}", n)]),
     }
 }
 
@@ -129,7 +129,7 @@ fn prompt(ui: &mut Ui, ed: &mut MachineFileEditor, dir: Option<&Path>, out: &mut
         }
         Prompt::SaveAs => {
             let where_ = dir.map_or_else(|| "no user machines folder".to_owned(), |d| d.display().to_string());
-            ui.add(Label::new(RichText::new(format!("Save to {where_}")).color(pal.text_dim)).wrap());
+            ui.add(Label::new(RichText::new(camcraft_i18n::tf("Save to {where_}", &[format!("{}", where_)])).color(pal.text_dim)).wrap());
             ui.horizontal(|ui| {
                 let l = ui.label(camcraft_i18n::tr("File name"));
                 ui.add(TextEdit::singleline(&mut ed.save_as_name).desired_width(160.0))
@@ -148,7 +148,7 @@ fn prompt(ui: &mut Ui, ed: &mut MachineFileEditor, dir: Option<&Path>, out: &mut
             });
         }
         Prompt::Replace(path) => {
-            ui.add(Label::new(format!("{path} exists. Replace it?")).wrap());
+            ui.add(Label::new(camcraft_i18n::tf("{path} exists. Replace it?", &[format!("{}", path)])).wrap());
             ui.horizontal(|ui| {
                 if ui.button(camcraft_i18n::tr("Replace file")).clicked() {
                     let name = ed.save_as_name.clone();

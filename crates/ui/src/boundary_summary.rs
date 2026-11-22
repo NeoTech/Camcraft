@@ -161,40 +161,32 @@ pub fn summarize(state: &State) -> Summary {
     match &a.open {
         Some(o) if fam == Family::Contour => {
             let side = if o.side == ChainSide::Inside { "side A, the side holding more of" } else { "side B, the side holding less of" };
-            let ext = if a.extension > 0.0 { format!(", run on {} past both ends", len(a.extension)) } else { String::new() };
-            out.lines.push(format!(
-                "Contours along the picked open edge as one open pass on {side} {what}: the tool rides beside the edge{ext}, entering and leaving past its ends."
-            ));
+            let ext = if a.extension > 0.0 { camcraft_i18n::tf(", run on {} past both ends", &[format!("{}", len(a.extension))]) } else { String::new() };
+            out.lines.push(camcraft_i18n::tf("Contours along the picked open edge as one open pass on {side} {what}: the tool rides beside the edge{ext}, entering and leaving past its ends.", &[format!("{}", side), format!("{}", what), format!("{}", ext)]));
         }
         Some(o) => {
             let ab = if o.side == ChainSide::Inside { "side A" } else { "side B" };
             let side = match open_side_word(state) {
                 Some(w) => format!("the {w} side ({ab})"),
-                None if o.side == ChainSide::Inside => format!("{ab}, the side holding more of {what},"),
-                None => format!("{ab}, the side holding less of {what},"),
+                None if o.side == ChainSide::Inside => camcraft_i18n::tf("{ab}, the side holding more of {what},", &[format!("{}", ab), format!("{}", what)]),
+                None => camcraft_i18n::tf("{ab}, the side holding less of {what},", &[format!("{}", ab), format!("{}", what)]),
             };
             let chain = boundary_draft::entries(state)
                 .iter()
                 .any(|e| e.role.is_open() && matches!(e.shape, Some(PickShape::Open { .. })));
             let edge = if chain { "the picked open edge" } else { "the picked loop" };
             out.lines.push(match fam {
-                Family::Face => format!(
-                    "{} {what} on {side} of {edge}, up to that edge. Rows run parallel to the edge, starting from the far side and working in toward it.",
-                    verb(fam)
-                ),
-                _ => format!(
-                    "{} {what} on {side} of {edge}, up to that edge; the outer passes start in the air past the stock.",
-                    verb(fam)
-                ),
+                Family::Face => camcraft_i18n::tf("{} {what} on {side} of {edge}, up to that edge. Rows run parallel to the edge, starting from the far side and working in toward it.", &[format!("{}", verb(fam)), format!("{}", what), format!("{}", side), format!("{}", edge)]),
+                _ => camcraft_i18n::tf("{} {what} on {side} of {edge}, up to that edge; the outer passes start in the air past the stock.", &[format!("{}", verb(fam)), format!("{}", what), format!("{}", side), format!("{}", edge)]),
             });
         }
         None => {
             let mut s = format!("{} {what}", verb(fam));
             if includes > 0 {
-                s.push_str(&format!(" plus {includes} included boundar{}", if includes == 1 { "y" } else { "ies" }));
+                s.push_str(&camcraft_i18n::tf(" plus {includes} included boundar{}", &[format!("{}", includes), format!("{}", if includes == 1 { "y" } else { "ies" })]));
             }
             if excludes > 0 {
-                s.push_str(&format!(", keeping the whole tool out of {excludes} excluded boundar{}", if excludes == 1 { "y" } else { "ies" }));
+                s.push_str(&camcraft_i18n::tf(", keeping the whole tool out of {excludes} excluded boundar{}", &[format!("{}", excludes), format!("{}", if excludes == 1 { "y" } else { "ies" })]));
             }
             s.push('.');
             out.lines.push(s);
@@ -207,38 +199,28 @@ pub fn summarize(state: &State) -> Summary {
         && a.extra.iter().all(|b| b.mode == BoundaryMode::Include && matches!(b.shape, BoundaryShape::Picks(_)));
     let noun = if single_loop { "the picked loop" } else { "the boundary" };
     let off = if a.offset != 0.0 { format!(", offset {}", signed(a.offset)) } else { String::new() };
-    let r = tool_radius(state).map_or_else(|| "a tool radius".to_owned(), |r| format!("one tool radius, {}", len(r)));
+    let r = tool_radius(state).map_or_else(|| "a tool radius".to_owned(), |r| camcraft_i18n::tf("one tool radius, {}", &[format!("{}", len(r))]));
     match a.containment {
         Some(Containment::Inside) => {
-            out.lines.push(format!("Tool stays inside {noun}{off}: its edge touches it, its centre runs {r} in."));
+            out.lines.push(camcraft_i18n::tf("Tool stays inside {noun}{off}: its edge touches it, its centre runs {r} in.", &[format!("{}", noun), format!("{}", off), format!("{}", r)]));
             if native_inside(state, fam) == Some(true) && fam != Family::Contour {
-                out.notices.push(format!(
-                    "{kind} already keeps the whole tool inside its area, so Inside changes nothing here - pick On or Outside to reach further."
-                ));
+                out.notices.push(camcraft_i18n::tf("{kind} already keeps the whole tool inside its area, so Inside changes nothing here - pick On or Outside to reach further.", &[format!("{}", kind)]));
             }
         }
-        Some(Containment::On) => out.lines.push(format!("Tool centre rides on {noun}{off}: half the tool passes over it.")),
-        Some(Containment::Outside) => out.lines.push(format!(
-            "Tool passes {noun}{off} until its edge touches it from outside: its centre runs {r} out, so the edge itself is cut clean."
-        )),
+        Some(Containment::On) => out.lines.push(camcraft_i18n::tf("Tool centre rides on {noun}{off}: half the tool passes over it.", &[format!("{}", noun), format!("{}", off)])),
+        Some(Containment::Outside) => out.lines.push(camcraft_i18n::tf("Tool passes {noun}{off} until its edge touches it from outside: its centre runs {r} out, so the edge itself is cut clean.", &[format!("{}", noun), format!("{}", off), format!("{}", r)])),
         None => {
             if a.offset != 0.0 {
                 let how = if a.offset > 0.0 { "grows outward" } else { "shrinks inward" };
-                out.lines.push(format!("The area {how} by {}, all round.", len(a.offset.abs())));
+                out.lines.push(camcraft_i18n::tf("The area {how} by {}, all round.", &[format!("{}", how), format!("{}", len(a.offset.abs()))]));
             }
             out.lines.push(match fam {
                 Family::Face => "Tool as Face cuts: the rows clear the area's whole bounding band, each run overrunning both ends.".to_owned(),
-                Family::Contour if a.open.is_some() => format!(
-                    "Tool edge on the picked edge: its centre runs {r} off it, plus the stock to leave."
-                ),
+                Family::Contour if a.open.is_some() => camcraft_i18n::tf("Tool edge on the picked edge: its centre runs {r} off it, plus the stock to leave.", &[format!("{}", r)]),
                 Family::Contour => "Tool as Contour cuts: it rides the ring on its Side (Passes tab).".to_owned(),
-                Family::Clearing => format!("Tool as {kind} cuts: the whole tool stays inside the area."),
-                Family::Finish => format!(
-                    "Tool as {kind} cuts: the whole-model path is clipped to the area, the centre reaching {r} past its edge; it leaves and re-enters through the clearance plane."
-                ),
-                Family::Ride => format!(
-                    "Tool as {kind} cuts: its centre rides the outline itself; Inside or Outside moves the ride {r} in or out, the offset by its own amount."
-                ),
+                Family::Clearing => camcraft_i18n::tf("Tool as {kind} cuts: the whole tool stays inside the area.", &[format!("{}", kind)]),
+                Family::Finish => camcraft_i18n::tf("Tool as {kind} cuts: the whole-model path is clipped to the area, the centre reaching {r} past its edge; it leaves and re-enters through the clearance plane.", &[format!("{}", kind), format!("{}", r)]),
+                Family::Ride => camcraft_i18n::tf("Tool as {kind} cuts: its centre rides the outline itself; Inside or Outside moves the ride {r} in or out, the offset by its own amount.", &[format!("{}", kind), format!("{}", r)]),
             });
         }
     }
@@ -254,12 +236,9 @@ pub fn summarize(state: &State) -> Summary {
     if a.extension > 0.0 {
         let open = if a.open.is_some() { ", never across the picked open boundary" } else { "" };
         out.lines.push(match fam {
-            Family::Contour if a.open.is_some() => format!(
-                "The pass runs {} past each end of the picked edge's chain, straight on along it.",
-                len(a.extension)
-            ),
-            Family::Face => format!("Runs out to the stock outline and {} past it over the exterior edges{open}.", len(a.extension)),
-            _ => format!("Extends {} past the exterior edges - those with no part material beyond them{open}.", len(a.extension)),
+            Family::Contour if a.open.is_some() => camcraft_i18n::tf("The pass runs {} past each end of the picked edge's chain, straight on along it.", &[format!("{}", len(a.extension))]),
+            Family::Face => camcraft_i18n::tf("Runs out to the stock outline and {} past it over the exterior edges{open}.", &[format!("{}", len(a.extension)), format!("{}", open)]),
+            _ => camcraft_i18n::tf("Extends {} past the exterior edges - those with no part material beyond them{open}.", &[format!("{}", len(a.extension)), format!("{}", open)]),
         });
     }
 
@@ -291,7 +270,7 @@ pub fn side_caption(state: &State, role: Role) -> String {
         "the side holding more of the operation's own area"
     };
     match open_side_word(state) {
-        Some(w) => format!("{ab} machines the {w} side of the edge ({rule}) - the arrows point into it."),
-        None => format!("{ab} machines {rule} - the arrows point into it."),
+        Some(w) => camcraft_i18n::tf("{ab} machines the {w} side of the edge ({rule}) - the arrows point into it.", &[format!("{}", ab), format!("{}", w), format!("{}", rule)]),
+        None => camcraft_i18n::tf("{ab} machines {rule} - the arrows point into it.", &[format!("{}", ab), format!("{}", rule)]),
     }
 }

@@ -54,7 +54,7 @@ fn run_launcher(command: &mut std::process::Command) -> Result<(), String> {
     if status.success() {
         Ok(())
     } else {
-        Err(format!("the browser launcher returned {status}"))
+        Err(camcraft_i18n::tf("the browser launcher returned {status}", &[format!("{}", status)]))
     }
 }
 
@@ -86,7 +86,7 @@ pub(super) fn draw(
             Ok(()) => state.status = "Donate: Opened the donation link in the browser".into(),
             Err(error) => {
                 state.status =
-                    format!("Donate: Could not open the browser: {error}. Open {DONATION_URL}");
+                    camcraft_i18n::tf("Donate: Could not open the browser: {error}. Open {DONATION_URL}", &[format!("{}", error), format!("{}", DONATION_URL)]);
                 diag_warn!("{}", state.status);
             }
         }

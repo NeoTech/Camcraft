@@ -40,7 +40,7 @@ fn condition_field(ui: &mut Ui, label: &str, condition: &mut String, ids: &[Stri
     names.extend(ids.iter().cloned());
     let mut idx = ids.iter().position(|i| i == condition).map_or(0, |i| i + 1);
     if idx == 0 && !condition.is_empty() {
-        names.push(format!("{condition} (not stated by the machine)"));
+        names.push(camcraft_i18n::tf("{condition} (not stated by the machine)", &[format!("{}", condition)]));
         idx = names.len() - 1;
     }
     let was = idx;
@@ -60,13 +60,13 @@ fn skim_fields(ui: &mut Ui, skims: &mut Vec<WireSkim>, ids: &[String]) {
         check_row(ui, &format!("Skim {n} reverse"), &mut skim.reverse);
         prop_row(ui, &format!("Skim {n} order"), |ui| {
             ui.vertical(|ui| {
-                if ui.add_enabled(i > 0, egui::Button::new(format!("Move skim {n} up"))).clicked() {
+                if ui.add_enabled(i > 0, egui::Button::new(camcraft_i18n::tf("Move skim {n} up", &[format!("{}", n)]))).clicked() {
                     swap = Some((i, i.saturating_sub(1)));
                 }
-                if ui.add_enabled(n < len, egui::Button::new(format!("Move skim {n} down"))).clicked() {
+                if ui.add_enabled(n < len, egui::Button::new(camcraft_i18n::tf("Move skim {n} down", &[format!("{}", n)]))).clicked() {
                     swap = Some((i, n));
                 }
-                if ui.button(format!("Remove skim {n}")).clicked() {
+                if ui.button(camcraft_i18n::tf("Remove skim {n}", &[format!("{}", n)])).clicked() {
                     remove = Some(i);
                 }
             });
@@ -113,7 +113,7 @@ fn tab_fields(ui: &mut Ui, u: Unit, tabs: &mut Option<WireTabs>, ids: &[String])
         prop_row(ui, &format!("Tab {} X", i + 1), |ui| num(ui, u, &mut xy[0]));
         prop_row(ui, &format!("Tab {} Y", i + 1), |ui| num(ui, u, &mut xy[1]));
         prop_row(ui, "Tab position", |ui| {
-            if ui.button(format!("Remove tab position {}", i + 1)).clicked() {
+            if ui.button(camcraft_i18n::tf("Remove tab position {}", &[format!("{}", i + 1)])).clicked() {
                 remove = Some(i);
             }
         });
@@ -156,13 +156,13 @@ fn four_axis_fields(ui: &mut Ui, u: Unit, f: &mut WireFourAxis, cx: &mut Cx<'_>)
                     prop_row(ui, &format!("Sync {} {which} Y", i + 1), |ui| num(ui, u, &mut xy[1]));
                 }
                 None => {
-                    if ui.button(format!("State sync {} {which} point", i + 1)).clicked() {
+                    if ui.button(camcraft_i18n::tf("State sync {} {which} point", &[format!("{}", i + 1), format!("{}", which)])).clicked() {
                         *q = Some([0.0, 0.0]);
                     }
                 }
             }
         }
-        if ui.button(format!("Remove sync pair {}", i + 1)).clicked() {
+        if ui.button(camcraft_i18n::tf("Remove sync pair {}", &[format!("{}", i + 1)])).clicked() {
             drop = Some(i);
         }
     }

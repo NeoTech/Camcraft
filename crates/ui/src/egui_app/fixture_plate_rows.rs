@@ -23,12 +23,7 @@ pub(super) fn plate_rows(ui: &mut Ui, state: &mut State, name: &str) {
     let u = state.units();
     if let Some(p) = &def.plate.plate {
         let g = &p.holes;
-        let mut line = format!(
-            "Fixture plate: {}, pitch {} x {}",
-            g.extent(),
-            units::len(g.pitch_x, u, 3),
-            units::len(g.pitch_y, u, 3)
-        );
+        let mut line = camcraft_i18n::tf("Fixture plate: {}, pitch {} x {}", &[format!("{}", g.extent()), format!("{}", units::len(g.pitch_x, u, 3)), format!("{}", units::len(g.pitch_y, u, 3))]);
         if g.stagger.is_some() {
             line.push_str(", staggered");
         }
